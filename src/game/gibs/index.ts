@@ -31,6 +31,9 @@ export interface GibbableDude {
   hp: number;
   id: string;                         // stable identity
   takeDamage(amount: number, impulse: Vec3): void;
+  /** Called by the gib system when this dude is gibbed (damage ≥ GIB_THRESHOLD).
+   *  Implementations should hide the body's sprite immediately — chunks replace it. */
+  onGibbed?(): void;
   kind: 'player' | 'axe-zombie';
 }
 
@@ -130,6 +133,7 @@ export class GibSystem {
 
       if (damage >= GIB_THRESHOLD) {
         this.triggerGib(dude.pos, impulseVec, dude.kind, now);
+        dude.onGibbed?.();
         if (dude.kind === 'player') this.onPlayerGibbed();
         else this.unregisterDude(dude.id);
       } else {

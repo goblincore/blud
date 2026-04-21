@@ -122,9 +122,11 @@ export class ZombieCluster {
 
   update(dt: number, playerPos: { x: number; y: number; z: number }, camera: THREE.Camera): void {
     for (const z of this.zombies) z.update(dt, playerPos, camera);
-    // Reap dead zombies after their brain enters dead state.
+    // Reap dead zombies only once their death animation has completed (or
+    // they've been gibbed — chunks replace the body so the billboard is hidden
+    // immediately). AxeZombie.shouldReap() encodes the grace logic.
     this.zombies = this.zombies.filter((z) => {
-      if (z.brain.state === ZombieState.Dead) {
+      if (z.shouldReap()) {
         this.deps.gibs.unregisterDude(z.id);
         z.despawn();
         return false;

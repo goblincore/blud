@@ -229,26 +229,10 @@ export class ChunkSystem {
       c.mesh.position.set(t.x, t.y, t.z);
       if (camera) c.mesh.lookAt(camera.position);
 
-      const v = c.body.linvel();
-      const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-      // Regular chunks: despawn after settling for 1s.
-      // Head: skip settle-despawn entirely — it stays forever until hard age-out.
-      if (!c.isHead) {
-        if (speed < 0.1) {
-          if (c.settledTime < 0) c.settledTime = now;
-          if (now - c.settledTime > 1.0) {
-            this.despawn(c);
-            this.chunks.splice(i, 1);
-            continue;
-          }
-        } else {
-          c.settledTime = -1;
-        }
-      }
-
-      // Age-out: heads live 60s (you have time to kick them around),
-      // regular chunks 10s (don't clutter the scene).
-      const maxAge = c.isHead ? 60.0 : 10.0;
+      // No settle-despawn for any chunk — user wants gibs to persist. Chunks
+      // stay until the hard age-out cap or until FIFO eviction at capacity.
+      // Heads: 5 min. Regular chunks: 2 min. (Capacity=1024 is the safety net.)
+      const maxAge = c.isHead ? 300.0 : 120.0;
       if (now - c.spawnTime > maxAge) {
         this.despawn(c);
         this.chunks.splice(i, 1);

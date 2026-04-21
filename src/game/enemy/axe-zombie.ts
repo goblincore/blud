@@ -53,6 +53,10 @@ export class AxeZombie implements GibbableDude {
   /** Non-zero while the zombie is flying from an explosion that killed but didn't gib it. */
   private flingVel: Vec3 | null = null;
   private flingTimer = 0;
+  /** Set true once this zombie has been gibbed — cluster reaps it immediately (chunks replace it). */
+  private gibbed = false;
+  /** Wallclock-seconds timestamp when this zombie entered the Dead state. -1 = still alive. */
+  private deathTime = -1;
 
   constructor(
     id: string,
@@ -144,6 +148,9 @@ export class AxeZombie implements GibbableDude {
     const wasAlive = this.brain.state !== ZombieState.Dead;
     this.brain.applyDamage(amount);
     this.hp = this.brain.hp;
+    if (wasAlive && this.brain.state === ZombieState.Dead) {
+      this.deathTime = performance.now() / 1000;
+    }
 
     // Blood-style "blown away but not gibbed" — an explosion that killed the
     // zombie (didn't exceed GIB_THRESHOLD) still flings it with the impulse
@@ -160,6 +167,26 @@ export class AxeZombie implements GibbableDude {
       // Override death anim: explode-death instead of normal-death
       this.anim.play('zombie-death-explode', performance.now() / 1000);
     }
+  }
+
+  /** Marks the zombie as gibbed — cluster reaps immediately (chunks replace the body). */
+  onGibbed(): void {
+    this.gibbed = true;
+    this.anim.object.visible = false;
+  }
+
+  /** Whether the zombie is ready to be reaped by the cluster. True when:
+   *  - gibbed (chunks replace the body), or
+   *  - dead AND fling-and-die animation has completed (so death visuals play through).
+   */
+  shouldReap(): boolean {
+    if (this.gibbed) return true;
+    if (this.brain.state !== ZombieState.Dead || this.deathTime < 0) return false;
+    // Wait for fling-and-die to finish (if flung), else short grace period so
+    // the death animation has time to play through a frame or two.
+    if (this.flingVel && this.flingTimer > 0) return false;
+    const graceSec = this.flingVel ? 0 : 1.5;
+    return performance.now() / 1000 - this.deathTime > graceSec;
   }
 
   despawn(): void {
