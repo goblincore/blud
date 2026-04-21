@@ -28,10 +28,10 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ## Current focus
 
-**M1 landed ✅. M2 in progress — dynamite + gibs + shamblers. Plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md**
+**M1 landed ✅. M2 code merged ✅ — manual playtest pending before M3.**
 
-- M1 plan: docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md — all tasks done, merged d05a306
-- M2 plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md — executing
+- M1 plan: docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md — done, merged `d05a306`
+- M2 plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md — code merged `d721ed7`, 80/80 tests green, build clean. Manual gut-check playtest is the remaining gate before M3.
 
 ---
 
@@ -40,8 +40,8 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 ### Milestones
 
 - `M1`  [x]  **Engine & Movement** — code merged (`d05a306`), 19/19 tests pass, build clean, browser smoke-test confirmed (WASD + mouse-look work)
-- `M2`  [~]  First kill — dynamite + gibs + shamblers. Plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md
-- `M3`  [!]  One-kill feel pass (clay shader, decals, impact FX, audio) — blocked on M2
+- `M2`  [~]  First kill — code merged `d721ed7`, 80/80 tests green. **Manual playtest pending** (throw dynamite → cluster-gib → gut-check). After playtest confirms feel, flip to [x] and start M3 plan.
+- `M3`  [ ]  One-kill feel pass (clay shader, decals fade, impact FX polish, audio pass). **Unblocked once M2 playtest signs off.**
 - `M4`  [!]  Full arsenal (Double-Wide, Dynamite, Cursed Phone) — blocked on M3
 - `M5`  [!]  Full bestiary + **Phase 1 gate** (30min arena = fun) — blocked on M4
 - `M6`  [!]  Chunks & generator (20 Blender chunks + run stitcher) — blocked on M5
