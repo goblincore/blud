@@ -12,3 +12,4 @@ scripts/.venv/
 public/assets/**/*-placeholder.*
 public/assets/**/placeholder/
 public/assets/enemies/*-placeholder/
+assets-source/blood-extracted/
