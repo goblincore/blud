@@ -45,16 +45,37 @@ export const EXPLOSION_STANDARD = {
 export const GIB_THRESHOLD = 160;
 
 // ——— Dynamite throw ————————————————————————————————————
-// source: weapon.cpp:1215 (throw velocity), weapon.cpp:2166-2167 (charge formula)
-// Blood: velocity = mulscale16(throwPower, 0x177777) + 0x66666
-// After shift-16: min = 0x66666 >> 16 = 6.4 BU/tic, max = (0x66666 + 0x177777) >> 16 = 13.86 BU/tic
-// Converted with BU_PER_METER=256, TICS_PER_SECOND=120:
-//   min ≈ 3.0 m/s, max ≈ 6.5 m/s
+// source: weapon.cpp:1215 (ThrowBundle), actor.cpp:7106 (actFireThing), weapon.cpp:2218 (charge formula)
+//
+// Blood: nSpeed = mulscale16(throwPower, 0x177777) + 0x66666
+//        xvel   = mulscale30(nSpeed, cos(ang))
+//        zvel   = mulscale14(nSpeed, slope + (-9460))
+//
+// The xvel path: since cos/sin returns values in [-16384, +16384] (= 2^14),
+// mulscale30(nSpeed, ±16384) == nSpeed >> 16. So the horizontal throw-speed
+// in BU/tic equals nSpeed >> 16:
+//   min = 0x66666   >> 16 =  6.4 BU/tic   (throwPower = 0)
+//   max = 0x1DDDDD  >> 16 = 29.86 BU/tic  (throwPower = 65536, full charge)
+//
+// (An earlier comment here had the max as 13.86 — off by 2× because it did
+// the arithmetic on (0x66666 + 0x177777) >> 16 instead of reading the Build
+// scale-30 correctly. The felt-too-light throw in M2 came from that bug.)
+//
+// Converting BU/tic → m/s with BU_PER_METER=256, TICS_PER_SECOND=120:
+//   min ≈  6.4 * 120 / 256 ≈  3.0 m/s
+//   max ≈ 29.9 * 120 / 256 ≈ 14.0 m/s
+//
+// PITCH BIAS: the a4 argument to actFireThing is `slope + (-9460)`. Blood's
+// slope range is [-16384, +16384] for aim in [-90°, +90°]. The constant
+// -9460 adds a fixed upward lob of arcsin(9460/16384) ≈ 35.3° above the
+// player's aim vector, regardless of where they're looking. Ported as
+// PITCH_LOB_DEG below.
 export const DYNAMITE_COOK = {
-  maxChargeSec: 2.0,          // 240 tics @ 120 TPS
-  minVelocityMps: 3.0,
-  maxVelocityMps: 6.5,
+  maxChargeSec: 2.0,          // 240 tics @ 120 TPS (matches Blood's divscale16 / 240)
+  minVelocityMps: 3.0,        // Blood nSpeed min (0x66666 >> 16) → m/s
+  maxVelocityMps: 14.0,       // Blood nSpeed max (0x1DDDDD >> 16) → m/s
   fuseMaxSec: 2.0,            // fuse starts on press; same envelope as charge
+  pitchLobDeg: 30,            // Blood port ≈ 35°, eased to 30° for our tighter arena scale
 } as const;
 
 // ——— Blood trail (FX_27) ————————————————————————————————

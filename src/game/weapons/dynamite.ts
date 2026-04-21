@@ -32,6 +32,59 @@ export function remainingFuse(cookSec: number): number {
   return DYNAMITE_COOK.fuseMaxSec - cookSec;
 }
 
+/**
+ * Build the throw velocity vector.
+ *
+ * Port of Blood's `actFireThing` dispatch (actor.cpp:7106):
+ *   xvel, yvel = nSpeed * cos/sin(ang)
+ *   zvel       = nSpeed * (slope + -9460)
+ *
+ * We take the player's forward vector (already includes yaw + pitch from look),
+ * rotate it *upward* by `pitchLobDeg` around the player's right axis (so it
+ * stays aim-relative regardless of pitch), then scale by `speed`.
+ *
+ * Result: aiming level → ~30° arc, aiming up → ~30° higher still, aiming
+ * straight down → the lob pulls it back up to ~-60° instead of vertical,
+ * which matches how Blood's throw always has an upward bias on top of aim.
+ */
+export function throwVector(
+  forward: Vec3,
+  speed: number,
+  pitchLobDeg: number = DYNAMITE_COOK.pitchLobDeg,
+): Vec3 {
+  // Normalize forward (caller should pass unit vectors, but guard anyway).
+  const fLen = Math.hypot(forward.x, forward.y, forward.z) || 1;
+  const fx = forward.x / fLen;
+  const fy = forward.y / fLen;
+  const fz = forward.z / fLen;
+
+  // Player's "right" axis is forward × worldUp (Y-up, right-handed):
+  //   (fx, fy, fz) × (0, 1, 0) = (-fz, 0, fx)
+  // Only the horizontal components matter for the right-axis direction.
+  const rLen = Math.hypot(fz, fx) || 1;
+  const rx = -fz / rLen;
+  const rz = fx / rLen;
+
+  // Rotate forward around `right` by +pitchLobDeg (upward).
+  // Rodrigues: v' = v cosθ + (r × v) sinθ + r (r·v)(1 - cosθ)
+  // r·v = rx*fx + 0*fy + rz*fz = (fz*fx + -fx*fz)/rLen = 0, so the last term drops.
+  // r × v = (0*fz - rz*fy, rz*fx - rx*fz, rx*fy - 0*fx)
+  //       = (-rz*fy, rz*fx - rx*fz, rx*fy)
+  const theta = (pitchLobDeg * Math.PI) / 180;
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+
+  const crossX = -rz * fy;
+  const crossY = rz * fx - rx * fz;
+  const crossZ = rx * fy;
+
+  const dx = fx * cosT + crossX * sinT;
+  const dy = fy * cosT + crossY * sinT;
+  const dz = fz * cosT + crossZ * sinT;
+
+  return { x: dx * speed, y: dy * speed, z: dz * speed };
+}
+
 // ——— Projectile (per-shot entity) ——————————————————————
 
 interface DynamiteProjectile {
@@ -55,21 +108,31 @@ export function spawnProjectile(
   fuseLeft: number,
   now: number,
 ): DynamiteProjectile {
+  // Port of Blood thingInfo[kThingArmedTNTStick - kThingBase] (actor.cpp:1998):
+  //   mass=14, clipdist=16, elastic=24576, dmgResist=1600, cstat=256
+  // elastic is Blood's 16.16 fixed-point bounce coefficient: 24576 / 65536 ≈ 0.375.
+  // clipdist=16 BU ≈ 0.0625 m; our ball collider at 0.1 m is a touch larger so it
+  // doesn't tunnel through thin colliders.
+  // Low linear damping so the stick actually carries through its arc — Blood
+  // only applies gravity + xy-airdrag (very small) to thrown things.
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(pos.x, pos.y, pos.z)
-    .setLinearDamping(0.05)
-    .setAngularDamping(0.2);
+    .setLinearDamping(0.02)
+    .setAngularDamping(0.15);
   const body = world.createRigidBody(bodyDesc);
-  const colliderDesc = RAPIER.ColliderDesc.ball(0.1)
-    .setRestitution(0.5)
-    .setFriction(0.6);
+  const colliderDesc = RAPIER.ColliderDesc.ball(0.08)
+    .setRestitution(0.375)
+    .setFriction(0.5)
+    .setDensity(0.4); // lighter than default so the same velocity carries further
   world.createCollider(colliderDesc, body);
   body.setLinvel(vel, true);
-  body.setAngvel({ x: Math.random() * 5, y: Math.random() * 5, z: Math.random() * 5 }, true);
+  // Tumble like a thrown stick — roll around its long axis primarily.
+  body.setAngvel({ x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 2, z: (Math.random() - 0.5) * 12 }, true);
 
   let mesh: THREE.Mesh | null = null;
   if (projectileScene && projectileTexture) {
-    const geom = new THREE.PlaneGeometry(0.35, 0.35);
+    // Stick silhouette: narrow + tall. Blood tile 3423 is ~18×40 px.
+    const geom = new THREE.PlaneGeometry(0.18, 0.4);
     const mat = new THREE.MeshBasicMaterial({
       map: projectileTexture,
       transparent: true,
@@ -145,11 +208,9 @@ export class Dynamite implements Weapon {
     const speed = throwVelocityMps(frac);
     const fuseLeft = Math.max(0, remainingFuse(heldSec));
 
-    const vel = {
-      x: ctx.player.forward.x * speed,
-      y: ctx.player.forward.y * speed + 2.5,  // lob arc: up-bias
-      z: ctx.player.forward.z * speed,
-    };
+    // Blood's throw is aim-relative: forward rotated upward by ~30° around the
+    // player's right axis, then scaled by speed. See throwVector docstring.
+    const vel = throwVector(ctx.player.forward, speed);
     spawnProjectile(ctx.world, ctx.player.handPos, vel, fuseLeft, ctx.now);
 
     this.ammo--;

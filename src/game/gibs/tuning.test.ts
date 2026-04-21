@@ -60,10 +60,19 @@ describe('dynamite tuning', () => {
   it('fuseMaxSec is 2 (cook envelope matches charge envelope)', () => {
     expect(DYNAMITE_COOK.fuseMaxSec).toBe(2.0);
   });
-  it('throw velocity range is ~3 m/s to ~6.5 m/s', () => {
+  it('throw velocity range matches Blood nSpeed >> 16 (F1 port: min ~3 m/s, max ~14 m/s)', () => {
+    // source: weapon.cpp:1215, nSpeed = mulscale16(throwPower, 0x177777) + 0x66666
+    // xvel = mulscale30(nSpeed, cos(ang)) = nSpeed >> 16 when cos(ang) = 16384
+    // min = 0x66666  >> 16 =  6.4 BU/tic → ~3.0 m/s at BU_PER_METER=256, TICS/s=120
+    // max = 0x1DDDDD >> 16 = 29.9 BU/tic → ~14.0 m/s
     expect(DYNAMITE_COOK.minVelocityMps).toBeCloseTo(3.0, 1);
-    expect(DYNAMITE_COOK.maxVelocityMps).toBeCloseTo(6.5, 1);
+    expect(DYNAMITE_COOK.maxVelocityMps).toBeCloseTo(14.0, 1);
     expect(DYNAMITE_COOK.maxVelocityMps).toBeGreaterThan(DYNAMITE_COOK.minVelocityMps);
+  });
+  it('pitchLobDeg exists and is in a plausible range (15–45°)', () => {
+    // Blood's upward lob = arcsin(9460/16384) ≈ 35.3°; we ported to 30° for arena scale.
+    expect(DYNAMITE_COOK.pitchLobDeg).toBeGreaterThanOrEqual(15);
+    expect(DYNAMITE_COOK.pitchLobDeg).toBeLessThanOrEqual(45);
   });
 });
 

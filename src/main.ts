@@ -114,9 +114,11 @@ async function main() {
       console.warn('[blud] animation manifests not loaded, FPV weapons disabled:', err);
       return undefined;
     }),
-    // Flying dynamite projectile sprite (Blood picnum 3467 — lit bundle with fuse flame).
-    // M2 dev note: fallback to a small red+flame canvas if the placeholder is missing.
-    loadTexture('/assets/weapons/dynamite-placeholder/bundle/3467.png').catch(() => {
+    // Flying dynamite projectile sprite — Blood picnum 3423 (kThingArmedTNTStick,
+    // vertical lit-fuse silhouette from tiles013.art). Single stick, not a bundle;
+    // see F1 port (actor.cpp:1998 thingInfo[kThingArmedTNTStick-kThingBase]).
+    // Fallback to a small red+flame canvas if the placeholder is missing.
+    loadTexture('/assets/weapons/dynamite-placeholder/stick/3423.png').catch(() => {
       const c = document.createElement('canvas');
       c.width = 16; c.height = 16;
       const ctx = c.getContext('2d')!;
