@@ -38,6 +38,7 @@ def read_palette_from_rff(rff_path: Path) -> bytes:
     for i in range(num_files):
         entry = fat[i * 48 : (i + 1) * 48]
         offset, size = struct.unpack_from("<II", entry, 16)
+        flags = entry[32]
         ext = entry[33:36]
         name = entry[36:44].rstrip(b"\x00 ")
         try:
@@ -46,16 +47,32 @@ def read_palette_from_rff(rff_path: Path) -> bytes:
         except UnicodeDecodeError:
             continue
         if name_s == "BLOOD" and ext_s == "PAL":
-            print(f"  found BLOOD.PAL @ {offset}  size {size}")
-            return data[offset : offset + 768]
+            print(f"  found BLOOD.PAL @ {offset}  size {size}  flags=0x{flags:02x}")
+            pal = bytearray(data[offset : offset + 768])
+            # RFF v3.1 file-content encryption: if flags bit 0x10
+            # (DICT_CRYPT) is set, first 256 bytes of the file are XOR'd
+            # with (i >> 1) & 0xFF — same key family as the FAT
+            # encryption, but 0-seeded and only over the first 256 bytes.
+            if flags & 0x10:
+                for i2 in range(min(256, len(pal))):
+                    pal[i2] ^= (i2 >> 1) & 0xFF
+                print("  decrypted BLOOD.PAL file content (DICT_CRYPT flag set)")
+            return bytes(pal)
 
     raise ValueError("BLOOD.PAL not found in RFF")
 
 
-def palette_to_rgb(palette_768: bytes) -> bytes:
+def palette_to_rgb(palette_768: bytes, swap_rb: bool = False) -> bytes:
     # Blood's BLOOD.PAL is stored at 8-bit precision per channel — max byte
     # value observed is ~231, well above the 6-bit 0–63 range that
-    # classic Build-engine docs (Shikadi wiki) describe. Use bytes as-is.
+    # classic Build-engine docs describe. Use bytes as-is.
+    if swap_rb:
+        out = bytearray(len(palette_768))
+        for i in range(0, len(palette_768), 3):
+            out[i] = palette_768[i + 2]
+            out[i + 1] = palette_768[i + 1]
+            out[i + 2] = palette_768[i]
+        return bytes(out)
     return bytes(palette_768)
 
 
@@ -137,7 +154,9 @@ def dump_contact_sheet(
         ".cell{display:flex;flex-direction:column;align-items:center;padding:4px;"
         "border:1px solid #333;background:#1a1a1a}"
         ".tile{min-height:48px;display:flex;align-items:center;justify-content:center}"
-        "img{image-rendering:pixelated;background:repeating-linear-gradient(45deg,#222,#222 4px,#2a2a2a 4px,#2a2a2a 8px)}"
+        # Solid dark background for sprite thumbs — no checkerboard, so
+        # transparent pixels don't get visually confused with sprite colors.
+        "img{image-rendering:pixelated;background:#0a0204}"
         ".empty{width:48px;height:48px;background:#0a0a0a}"
         ".n{color:#8cf;margin-top:3px}.s{color:#777;font-size:10px}"
         "a{color:#8cf}"
@@ -159,6 +178,8 @@ def main():
     ap.add_argument("blood_dir", help="Blood data dir (contains BLOOD.RFF + TILES*.ART)")
     ap.add_argument("--out", default="/tmp/blud-sprite-scan")
     ap.add_argument("--art", help="Only process this ART (e.g. tiles010.art)")
+    ap.add_argument("--swap-rb", action="store_true",
+                    help="Swap red/blue channels (palette may be BGR not RGB)")
     args = ap.parse_args()
 
     blood_dir = Path(args.blood_dir)
@@ -168,7 +189,32 @@ def main():
     print(f"reading BLOOD.RFF in {blood_dir}")
     palette = read_palette_from_rff(blood_dir / "BLOOD.RFF")
     (out_dir / "BLOOD.PAL").write_bytes(palette)
-    palette_rgb = palette_to_rgb(palette)
+    palette_rgb = palette_to_rgb(palette, swap_rb=args.swap_rb)
+    print(f"  palette swap_rb={args.swap_rb}")
+
+    # Dump palette swatches for visual verification
+    swatches = []
+    for i in range(256):
+        r, g, b = palette_rgb[i * 3], palette_rgb[i * 3 + 1], palette_rgb[i * 3 + 2]
+        is_transparent = i == 255
+        swatches.append(
+            f'<div class="sw" style="background:rgb({r},{g},{b})" '
+            f'title="idx {i}: rgb({r},{g},{b})">'
+            f'<span class="n">{i}</span></div>'
+        )
+    palette_style = (
+        "body{background:#111;color:#ccc;font:12px ui-monospace,monospace;padding:16px}"
+        ".grid{display:grid;grid-template-columns:repeat(16,40px);gap:2px}"
+        ".sw{width:40px;height:40px;display:flex;align-items:flex-end;"
+        "justify-content:center;position:relative}"
+        ".n{background:rgba(0,0,0,.6);color:#fff;padding:0 2px;font-size:9px}"
+    )
+    (out_dir / "palette.html").write_text(
+        f'<!doctype html><meta charset="utf-8"><title>BLOOD.PAL swatches</title>'
+        f'<style>{palette_style}</style>'
+        f'<h1>BLOOD.PAL — 256 palette entries (swap_rb={args.swap_rb})</h1>'
+        f'<div class="grid">{"".join(swatches)}</div>'
+    )
 
     art_files = sorted(
         {p for p in blood_dir.glob("tiles*.art")}
