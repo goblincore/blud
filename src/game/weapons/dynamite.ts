@@ -1,7 +1,20 @@
 import RAPIER from '@dimforge/rapier3d-compat';
+import * as THREE from 'three';
 import type { Weapon, FrameCtx, ViewCtx, HudCtx } from './types';
 import type { Vec3 } from '../gibs/particles';
 import { DYNAMITE_COOK, EXPLOSION_STANDARD } from '../gibs/tuning';
+
+// ——— Projectile billboard rendering (flying dynamite bundle sprite) ————
+
+let projectileScene: THREE.Scene | null = null;
+let projectileTexture: THREE.Texture | null = null;
+let projectileCamera: THREE.Camera | null = null;
+
+export function configureProjectileRendering(scene: THREE.Scene, tex: THREE.Texture): void {
+  projectileScene = scene;
+  projectileTexture = tex;
+}
+export function setProjectileCamera(cam: THREE.Camera): void { projectileCamera = cam; }
 
 // ——— Pure math (TDD'd) ————————————————————————————————
 
@@ -23,6 +36,7 @@ export function remainingFuse(cookSec: number): number {
 
 interface DynamiteProjectile {
   body: RAPIER.RigidBody;
+  mesh: THREE.Mesh | null;
   fuseLeft: number;
   spawnTime: number;
 }
@@ -53,7 +67,20 @@ export function spawnProjectile(
   body.setLinvel(vel, true);
   body.setAngvel({ x: Math.random() * 5, y: Math.random() * 5, z: Math.random() * 5 }, true);
 
-  const proj: DynamiteProjectile = { body, fuseLeft, spawnTime: now };
+  let mesh: THREE.Mesh | null = null;
+  if (projectileScene && projectileTexture) {
+    const geom = new THREE.PlaneGeometry(0.35, 0.35);
+    const mat = new THREE.MeshBasicMaterial({
+      map: projectileTexture,
+      transparent: true,
+      depthWrite: false,
+    });
+    mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(pos.x, pos.y, pos.z);
+    projectileScene.add(mesh);
+  }
+
+  const proj: DynamiteProjectile = { body, mesh, fuseLeft, spawnTime: now };
   liveProjectiles.push(proj);
   return proj;
 }
@@ -63,9 +90,18 @@ export function updateProjectiles(ctx: FrameCtx, dt: number): void {
   for (let i = liveProjectiles.length - 1; i >= 0; i--) {
     const p = liveProjectiles[i]!;
     p.fuseLeft -= dt;
+    const t = p.body.translation();
+    if (p.mesh) {
+      p.mesh.position.set(t.x, t.y, t.z);
+      if (projectileCamera) p.mesh.lookAt(projectileCamera.position);
+    }
     if (p.fuseLeft <= 0) {
-      const t = p.body.translation();
       ctx.gibs.spawnExplosion({ x: t.x, y: t.y, z: t.z }, EXPLOSION_STANDARD, ctx.now);
+      if (p.mesh) {
+        projectileScene?.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        (p.mesh.material as THREE.Material).dispose();
+      }
       ctx.world.removeRigidBody(p.body);
       liveProjectiles.splice(i, 1);
     }
@@ -73,7 +109,14 @@ export function updateProjectiles(ctx: FrameCtx, dt: number): void {
 }
 
 export function resetProjectiles(world: RAPIER.World): void {
-  for (const p of liveProjectiles) world.removeRigidBody(p.body);
+  for (const p of liveProjectiles) {
+    if (p.mesh) {
+      projectileScene?.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      (p.mesh.material as THREE.Material).dispose();
+    }
+    world.removeRigidBody(p.body);
+  }
   liveProjectiles.length = 0;
 }
 

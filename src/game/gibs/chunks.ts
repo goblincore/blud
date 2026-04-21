@@ -12,6 +12,8 @@ interface Chunk {
   trail: TrailHandle;
   spawnTime: number;
   settledTime: number;    // -1 if not yet settled
+  /** The iconic bouncing zombie head — longer lifetime, no settle-despawn so it can be kicked. */
+  isHead?: boolean;
 }
 
 /** Loaded atlas with the body-chunk textures keyed by picnum. */
@@ -28,8 +30,10 @@ export interface ChunkTextureAtlas {
 export class ChunkSystem {
   private chunks: Chunk[] = [];
 
-  /** Picnums for axe-zombie body chunks — order: head, torso, arm, leg, spare. */
-  private readonly axeZombieChunks = [1267, 1454, 1268, 1269, 1456];
+  /** Picnums for axe-zombie body chunks — order: torso, arm, leg, spine, misc. */
+  private readonly axeZombieChunks = [1454, 1268, 1269, 1456, 1267];
+  /** Picnum for the iconic bouncing zombie head (kickable — Blood signature). */
+  private readonly zombieHeadPicnum = 3405;
 
   constructor(
     private readonly world: RAPIER.World,
@@ -48,12 +52,87 @@ export class ChunkSystem {
     for (let i = 0; i < this.axeZombieChunks.length; i++) {
       this.spawnOne(origin, impulse, this.axeZombieChunks[i]!, i, now);
     }
+    // Bouncing head — the one you can kick around. Larger sphere collider, higher
+    // restitution, no settle-despawn (age-despawn only, longer lifetime).
+    this.spawnHead(origin, impulse, now);
 
     // FIFO-evict if over capacity
     while (this.chunks.length > this.capacity) {
       this.despawn(this.chunks[0]!);
       this.chunks.shift();
     }
+  }
+
+  private spawnHead(origin: Vec3, impulse: Vec3, now: number): void {
+    const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(origin.x, origin.y + 0.3, origin.z)
+      .setLinearDamping(0.4) // more drag so it settles into rolling, not sliding forever
+      .setAngularDamping(0.3);
+    const body = this.world.createRigidBody(bodyDesc);
+
+    // Ball collider — rolls when kicked, pronouncedly bouncy
+    const colliderDesc = RAPIER.ColliderDesc.ball(0.18)
+      .setRestitution(0.65)
+      .setFriction(0.7)
+      .setDensity(0.4);
+    this.world.createCollider(colliderDesc, body);
+
+    // Launch up + slightly back from explosion
+    const up = 4.0 + Math.random() * 2.0;
+    body.setLinvel(
+      {
+        x: impulse.x * 0.008 + (Math.random() - 0.5) * 2,
+        y: up,
+        z: impulse.z * 0.008 + (Math.random() - 0.5) * 2,
+      },
+      true,
+    );
+    body.setAngvel(
+      { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 8 },
+      true,
+    );
+
+    // Larger billboard than regular chunks
+    const geom = new THREE.PlaneGeometry(0.45, 0.45);
+    const tex = this.atlas.get(this.zombieHeadPicnum);
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    this.scene.add(mesh);
+
+    const source: TrailSource = {
+      get pos() {
+        const t = body.translation();
+        return { x: t.x, y: t.y, z: t.z };
+      },
+      get vel() {
+        const v = body.linvel();
+        return { x: v.x, y: v.y, z: v.z };
+      },
+    };
+    const trail = this.particles.emitTrail(source, {
+      tile: BLOOD_TRAIL.tile,
+      hz: BLOOD_TRAIL.emitHz,
+      velScale: BLOOD_TRAIL.velScale,
+      gravity: 6.0,
+      airdrag: 0.5,
+      lifetimeSec: 2.5,
+      size: 0.18,
+      onSurfaceHit: (pos: Vec3, normal: Vec3) => { this.decals?.spawn(pos, normal); },
+    });
+
+    // Mark this chunk as the kickable head: no settle-despawn, longer max age.
+    this.chunks.push({
+      body,
+      mesh,
+      trail,
+      spawnTime: now,
+      settledTime: -1,
+      isHead: true,
+    });
   }
 
   private spawnOne(
@@ -127,10 +206,13 @@ export class ChunkSystem {
       tile: BLOOD_TRAIL.tile,
       hz: BLOOD_TRAIL.emitHz,
       velScale: BLOOD_TRAIL.velScale,
-      gravity: buPerTicSquaredToMpsSquared(BLOOD_TRAIL.gravityBlood),
-      airdrag: 0.5, // hand-tuned starting value; Blood's raw 4096 doesn't map directly
-      lifetimeSec: BLOOD_TRAIL.lifetimeSec,
-      size: 0.08,
+      // NOTE: buPerTicSquaredToMpsSquared(27962) = 1.5M m/s² — particles vanish in one frame.
+      // The Blood rawvalue is in Build's fixed-point format that doesn't translate cleanly;
+      // use real gravity slightly damped for "hang time" feel.
+      gravity: 6.0,
+      airdrag: 0.5, // hand-tuned starting value
+      lifetimeSec: 2.5, // lowered from 4s — sooner cleanup, denser-looking trails
+      size: 0.18, // bumped from 0.08 — 8cm was barely visible at game distance
       onSurfaceHit: (pos: Vec3, normal: Vec3) => {
         this.decals?.spawn(pos, normal);
       },
@@ -149,18 +231,25 @@ export class ChunkSystem {
 
       const v = c.body.linvel();
       const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-      if (speed < 0.1) {
-        if (c.settledTime < 0) c.settledTime = now;
-        if (now - c.settledTime > 1.0) {
-          this.despawn(c);
-          this.chunks.splice(i, 1);
-          continue;
+      // Regular chunks: despawn after settling for 1s.
+      // Head: skip settle-despawn entirely — it stays forever until hard age-out.
+      if (!c.isHead) {
+        if (speed < 0.1) {
+          if (c.settledTime < 0) c.settledTime = now;
+          if (now - c.settledTime > 1.0) {
+            this.despawn(c);
+            this.chunks.splice(i, 1);
+            continue;
+          }
+        } else {
+          c.settledTime = -1;
         }
-      } else {
-        c.settledTime = -1;
       }
 
-      if (now - c.spawnTime > 10.0) {
+      // Age-out: heads live 60s (you have time to kick them around),
+      // regular chunks 10s (don't clutter the scene).
+      const maxAge = c.isHead ? 60.0 : 10.0;
+      if (now - c.spawnTime > maxAge) {
         this.despawn(c);
         this.chunks.splice(i, 1);
       }

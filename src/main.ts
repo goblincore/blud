@@ -8,6 +8,7 @@ import { createPlayer } from './game/player';
 import { createDebugHud } from './ui/debug-hud';
 import { ChargeHud } from './ui/charge-hud';
 import { WeaponRegistry, Dynamite } from './game/weapons';
+import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
 import { ParticlePool } from './game/gibs/particles';
 import { ChunkSystem } from './game/gibs/chunks';
 import { DecalPool } from './game/gibs/decals';
@@ -96,7 +97,7 @@ async function main() {
   });
 
   // ---- Assets
-  const [gibTextures, explosionAtlas, trailTex, animBundle] = await Promise.all([
+  const [gibTextures, explosionAtlas, trailTex, animBundle, dynamiteBundleTex] = await Promise.all([
     loadGibTextures('/assets/gibs-placeholder/manifest.json'),
     loadExplosionAtlas('/assets/vfx/explosion-placeholder/manifest.json'),
     loadTexture('/assets/gibs-placeholder/trail/733-placeholder.png').catch(() => {
@@ -113,7 +114,23 @@ async function main() {
       console.warn('[blud] animation manifests not loaded, FPV weapons disabled:', err);
       return undefined;
     }),
+    // Flying dynamite projectile sprite (Blood picnum 3467 — lit bundle with fuse flame).
+    // M2 dev note: fallback to a small red+flame canvas if the placeholder is missing.
+    loadTexture('/assets/weapons/dynamite-placeholder/bundle/3467.png').catch(() => {
+      const c = document.createElement('canvas');
+      c.width = 16; c.height = 16;
+      const ctx = c.getContext('2d')!;
+      ctx.fillStyle = '#aa2222';
+      ctx.fillRect(2, 4, 12, 8);
+      ctx.fillStyle = '#ff9944';
+      ctx.fillRect(7, 1, 2, 3);
+      return new THREE.CanvasTexture(c);
+    }),
   ]);
+
+  // Projectile billboard rendering for thrown dynamite bundles
+  configureProjectileRendering(scene, dynamiteBundleTex);
+  setProjectileCamera(camera);
 
   // ---- Gib subsystems
   const particles = new ParticlePool(scene, 1024, trailTex);
