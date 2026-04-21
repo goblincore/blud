@@ -14,3 +14,6 @@ public/assets/**/placeholder/
 public/assets/**/*-placeholder/
 assets-source/blood-extracted/
 __pycache__/
+
+# Map research artifacts — dev-only, never ship
+public/assets/map-research/
