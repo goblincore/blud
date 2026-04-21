@@ -1,0 +1,199 @@
+{
+  "name": "dynamite-raise-from-spray",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 6,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3194,
+          "ox": 57,
+          "oy": 4,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -17,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -17,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 89,
+          "oy": 23,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 37,
+          "oy": -26,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 74,
+          "oy": -6,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 22,
+          "oy": -55,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -16,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -16,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 66,
+          "oy": -16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 14,
+          "oy": -65,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -16,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -16,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

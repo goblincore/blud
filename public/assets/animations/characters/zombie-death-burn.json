@@ -1,0 +1,233 @@
+{
+  "name": "zombie-death-burn",
+  "kind": "seq",
+  "loop": false,
+  "baseTile": 2910,
+  "angleStride": 1,
+  "frames": [
+    {
+      "tileOffset": 28,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 29,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 30,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 31,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 34,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 35,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 36,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 32,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 33,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 2,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 3,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 4,
+      "durMs": 117
+    }
+  ]
+}

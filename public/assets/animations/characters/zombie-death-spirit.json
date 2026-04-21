@@ -1,0 +1,49 @@
+{
+  "name": "zombie-death-spirit",
+  "kind": "seq",
+  "loop": false,
+  "baseTile": 1200,
+  "angleStride": 1,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2454,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2455,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2456,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2457,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2458,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2459,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2460,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2461,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2462,
+      "durMs": 150
+    }
+  ]
+}

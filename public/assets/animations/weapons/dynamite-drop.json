@@ -1,0 +1,185 @@
+{
+  "name": "dynamite-drop",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 6,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -46,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -79,
+          "oy": 9,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 21,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 78,
+          "oy": 23,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 17,
+          "oy": -12,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -52,
+          "oy": -37,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -86,
+          "oy": 12,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 9,
+          "oy": -19,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 71,
+          "oy": 30,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 6,
+          "oy": 4,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -60,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -93,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": -4,
+          "oy": -4,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -81,
+          "oy": -6,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -48,
+          "oy": -55,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3219,
+          "ox": -26,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -59,
+          "oy": -20,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3220,
+          "ox": -17,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

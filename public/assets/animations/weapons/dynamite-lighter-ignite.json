@@ -1,0 +1,120 @@
+{
+  "name": "dynamite-lighter-ignite",
+  "kind": "qav",
+  "loop": true,
+  "nFrames": 7,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3211,
+          "ox": -56,
+          "oy": -21,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3211,
+          "ox": -56,
+          "oy": -21,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3216,
+          "ox": -14,
+          "oy": -65,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3217,
+          "ox": -17,
+          "oy": -68,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3218,
+          "ox": -16,
+          "oy": -71,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -16,
+          "oy": -71,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "name": "dynamite-idle",
+  "kind": "qav",
+  "loop": true,
+  "nFrames": 6,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -17,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -17,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -16,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -16,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -16,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 63,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 11,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -16,
+          "oy": -72,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

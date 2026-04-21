@@ -9,7 +9,8 @@ Header (16 bytes):
   int   flags
 
 Each SEQFRAME: 8 bytes (64-bit bitfield, little-endian).
-  Bitfield layout (from seq.h SEQFRAME struct, C bitfield packing on LE):
+  Bitfield layout (from seq.h SEQFRAME struct, C bitfield packing on LE x86).
+  Fields are in struct declaration order, packed LSB-first within the 64-bit word:
     bits  0-11  tile           (12 bits) — low part of tile number
     bit   12    transparent    (1 bit)
     bit   13    transparent2   (1 bit)
@@ -22,22 +23,17 @@ Each SEQFRAME: 8 bytes (64-bit bitfield, little-endian).
     bit   45    trigger        (1 bit)
     bit   46    smoke          (1 bit)
     bit   47    autoaim        (1 bit)
-    bits 44-47  tile2          (4 bits) — NOTE: overlaps with trigger/smoke/autoaim!
-
-  IMPORTANT: The tile2 field (bits 44-47) overlaps with trigger(45), smoke(46),
-  autoaim(47) in the C bitfield declaration. In practice, Blood uses the full
-  tile2 = bits 44-47 for tile number extension. The seqGetTile() function
-  confirms: return pFrame->tile + (pFrame->tile2 << 12).
-  
-  Additional fields (after tile2 in the struct):
     bit   48    pushable       (1 bit)
     bit   49    playSound      (1 bit)
     bit   50    invisible      (1 bit)
     bit   51    xflip          (1 bit)
     bit   52    yflip          (1 bit)
-    bits 53-56  soundRange     (4 bits, NOONE_EXTENSIONS) OR reserved(7 bits)
-    bit   57    surfaceSound   (1 bit, NOONE_EXTENSIONS) OR part of reserved
-    bits 58-59  pal2           (2 bits, NOONE_EXTENSIONS) OR part of reserved
+    bits 53-56  tile2          (4 bits) — high bits of tile number
+    bits 57-60  soundRange     (4 bits, NOONE_EXTENSIONS) OR part of reserved(7 bits)
+    bit   61    surfaceSound   (1 bit, NOONE_EXTENSIONS) OR part of reserved
+    bits 62-63  pal2           (2 bits, NOONE_EXTENSIONS) OR part of reserved
+
+  Tile number = tile + (tile2 << 12) per seqGetTile(). Max tile = 4095 + 15*4096 = 65535.
 """
 from __future__ import annotations
 
@@ -67,13 +63,6 @@ def _unpack_seqframe(raw: int) -> dict[str, Any]:
     yrepeat = (raw >> 24) & 0xFF         # bits 24-31
     shade = _sign_extend_8bit((raw >> 32) & 0xFF)  # bits 32-39 (signed)
     pal = (raw >> 40) & 0x1F             # bits 40-44
-    # tile2 occupies bits 44-47, but trigger/smoke/autoaim are also declared
-    # at bits 45-47. In the C bitfield, these overlap. seqGetTile() uses
-    # tile2 = bits 44-47. We extract tile2 for the full tile computation
-    # and also extract the flag bits individually.
-    tile2 = (raw >> 44) & 0xF            # bits 44-47
-    tile = tile_low | (tile2 << 12)
-
     trigger = (raw >> 45) & 1            # bit 45
     smoke = (raw >> 46) & 1              # bit 46
     autoaim = (raw >> 47) & 1            # bit 47
@@ -82,10 +71,15 @@ def _unpack_seqframe(raw: int) -> dict[str, Any]:
     invisible = (raw >> 50) & 1          # bit 50
     xflip = (raw >> 51) & 1             # bit 51
     yflip = (raw >> 52) & 1             # bit 52
-    # NOONE_EXTENSIONS fields (bits 53-59)
-    sound_range = (raw >> 53) & 0xF      # bits 53-56
-    surface_sound = (raw >> 57) & 1      # bit 57
-    pal2 = (raw >> 58) & 0x3            # bits 58-59
+    # tile2 is declared AFTER yflip in the C struct, so it occupies bits 53-56.
+    # seqGetTile() returns tile + (tile2 << 12).
+    tile2 = (raw >> 53) & 0xF            # bits 53-56
+    tile = tile_low | (tile2 << 12)
+
+    # NOONE_EXTENSIONS fields (bits 57-63)
+    sound_range = (raw >> 57) & 0xF      # bits 57-60
+    surface_sound = (raw >> 61) & 1      # bit 61
+    pal2 = (raw >> 62) & 0x3            # bits 62-63
 
     return {
         "tile": tile,

@@ -1,0 +1,77 @@
+{
+  "name": "zombie-tesla-recoil",
+  "kind": "seq",
+  "loop": false,
+  "baseTile": 3663,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 83
+    }
+  ]
+}

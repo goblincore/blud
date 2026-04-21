@@ -23,13 +23,14 @@ def test_rejects_bad_seq_magic():
 
 
 def test_tile2_extends_tile():
-    """tile2 (bits 44-47) extends the tile number to 16 bits max (tile | tile2 << 12)."""
+    """tile2 (bits 53-56) extends the tile number to 16 bits max (tile | tile2 << 12)."""
     # Build a SEQ with one frame where tile=0xABC (low 12 bits) and tile2=0x7 (high 4)
     # Full tile = 0xABC | (0x7 << 12) = 0x7ABC = 31420
     header = struct.pack("<4sHHHHI", b"SEQ\x1a", 0x300, 1, 8, 0, 0)
     tile_low = 0xABC
     tile_high = 0x7
-    raw = tile_low | (tile_high << 44)
+    # tile2 is at bits 53-56 (after yflip at bit 52) per C struct declaration order
+    raw = tile_low | (tile_high << 53)
     frames = struct.pack("<Q", raw)
     result = parse_seq(header + frames)
     assert result["frames"][0]["tile"] == tile_low | (tile_high << 12)  # 31420
@@ -70,12 +71,13 @@ def test_seqframe_fields():
         ((yrepeat & 0xFF) << 24) |
         (((shade & 0xFF) & 0xFF) << 32) |
         ((pal & 0x1F) << 40)
-        # bits 44-47 left as 0 (tile2=0, trigger=0, smoke=0, autoaim=0)
+        # bits 45-47 left as 0 (trigger=0, smoke=0, autoaim=0)
         | ((pushable & 1) << 48)
         | ((play_sound & 1) << 49)
         | ((invisible & 1) << 50)
         | ((xflip & 1) << 51)
         | ((yflip & 1) << 52)
+        # bits 53-56 left as 0 (tile2=0)
     )
     frames = struct.pack("<Q", raw)
     result = parse_seq(header + frames)
