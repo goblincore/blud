@@ -28,11 +28,12 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ## Current focus
 
-**M1 — Engine & Movement.**
+**M1 landed ✅ — browser smoke-test pending. Next: extract placeholder sprites (A5/A6) and write the M2 plan.**
 
-- Plan: [docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md](docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md)
-- Execution: 11 dispatch tasks queued at `~/.claude/dispatch/plans/2026-04-20-blud-m1-task-{1..11}.md` (status `pending`, serial dependency chain, model `zai/glm-5.1`, harness `pi`).
-- **Next action:** `~/go/bin/dispatch-ui` → <http://localhost:8090> → trigger `task-1`; chain auto-flows.
+- M1 plan: [docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md](docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md)
+- M1 dispatch execution: all 11 tasks `status: done` (exit_code 0) between `2026-04-21T01:48Z` and `02:19Z`. Merged into main as commit `d05a306`.
+- M1 automated verification: **19/19 vitest tests pass** (input, loop, player-motion — all TDD'd) and **`npm run build` succeeds cleanly**.
+- M1 manual verification (`M1.11`): `npm run dev` → click canvas → confirm WASD/mouse-look/jump/collision in the browser. **Not yet done — do this before starting M2.**
 
 ---
 
@@ -40,8 +41,9 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ### Milestones
 
-- `M1`  [ ]  **Engine & Movement** — 11 dispatch tasks pending (checkboxes inside plan file)
-- `M2`  [!]  First kill (revolver + 1 enemy + voxel-gib MVP) — blocked on M1
+- `M1`  [~]  **Engine & Movement** — code merged (`d05a306`), 19/19 tests pass, build clean; browser smoke-test pending (`M1.11` below)
+  - `M1.11` [ ]  Manual browser verification: `npm run dev`, click canvas, confirm WASD walk, mouse-look (pitch clamped), shift-sprint, space-jump, wall/obstacle collision
+- `M2`  [ ]  First kill (revolver + 1 enemy + voxel-gib MVP) — **next plan to write** via `superpowers:writing-plans`
 - `M3`  [!]  One-kill feel pass (clay shader, decals, impact FX, audio) — blocked on M2
 - `M4`  [!]  Full arsenal (Double-Wide, Dynamite, Cursed Phone) — blocked on M3
 - `M5`  [!]  Full bestiary + **Phase 1 gate** (30min arena = fun) — blocked on M4
@@ -80,9 +82,11 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ### P — Process / tooling
 
-- `P1`  [x]  Dispatch-UI setup (11 M1 tasks staged, model/harness verified)
-- `P2`  [ ]  Decide: once M1 lands, write M2 plan via `superpowers:writing-plans` (don't pre-plan M2+)
+- `P1`  [x]  Dispatch-UI setup (11 M1 tasks staged + all completed + merged)
+- `P2`  [ ]  Write M2 plan via `superpowers:writing-plans` once browser smoke-test passes
 - `P3`  [-]  CI / GitHub Actions — defer until there's meaningful code to test
+- `P4`  [ ]  Dependency audit — `npm audit` flagged 6 vulns (1 critical). Skim before M2; probably transitive and safe to ignore for a web build
+- `P5`  [-]  Prune old `dispatch/blud-m1-task-*` branches after M1 smoke-test passes (kept for now as safety-net)
 
 ---
 
