@@ -72,6 +72,10 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `R3`  [x]  Sprite extraction toolchain overview → [docs/dev-notes/2026-04-20-blood-sprite-extraction.md](docs/dev-notes/2026-04-20-blood-sprite-extraction.md)
 - `R4`  [x]  Blood palette canonical decoding → [docs/dev-notes/2026-04-21-blood-palette-decoding.md](docs/dev-notes/2026-04-21-blood-palette-decoding.md)
 
+### F — Feel / physics tuning (transcribe Blood constants into Rapier config)
+
+- `F1`  [ ]  **Dynamite throw arc + gib bounce** — after animation system lands, extract Blood's throw math (weapon.cpp `processTNT` release: pitch angle + velocity decomposition, not our current `vel.y + 2.5` kicker in [src/game/weapons/dynamite.ts:187](src/game/weapons/dynamite.ts:187)) and gib physics constants (actor.cpp gibbing path + `fx.cpp` velocity/bounce coefficients) into [src/game/gibs/tuning.ts](src/game/gibs/tuning.ts) + new `src/game/weapons/tuning.ts`. Apply to Rapier body spawn (restitution, angular/linear damping, initial angvel spread, launch pitch). **Port the numbers, not the engine.** One dispatch task, ~half day. Brainstorm → spec → plan once A10 (animation system) merges.
+
 ### P — Process / tooling
 
 - `P1`  [x]  Dispatch-UI setup (11 M1 tasks staged + all completed + merged)
