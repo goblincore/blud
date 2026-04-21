@@ -53,7 +53,10 @@ def read_palette_from_rff(rff_path: Path) -> bytes:
 
 
 def palette_to_rgb(palette_768: bytes) -> bytes:
-    return bytes(min(255, b << 2) for b in palette_768)
+    # Blood's BLOOD.PAL is stored at 8-bit precision per channel — max byte
+    # value observed is ~231, well above the 6-bit 0–63 range that
+    # classic Build-engine docs (Shikadi wiki) describe. Use bytes as-is.
+    return bytes(palette_768)
 
 
 def read_art_file(art_path: Path):
