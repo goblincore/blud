@@ -134,7 +134,7 @@ async function main() {
 
   // ---- Gib subsystems
   const particles = new ParticlePool(scene, 1024, trailTex);
-  const decals    = new DecalPool(scene, 200, trailTex, 0.25);
+  const decals    = new DecalPool(scene, 2000, trailTex, 0.35);
   const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures!, 1024, decals);
   const explosions = new ExplosionVfx(scene);
   const shake     = new Screenshake();

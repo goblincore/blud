@@ -139,6 +139,10 @@ export class ParticlePool {
         map: texture,
         transparent: true,
         depthWrite: false,
+        // Tint the sprite multiplicatively toward deep blood red. The raw
+        // Blood blood-drop tile (picnum 733) reads pink when rendered with
+        // a default white material color. 0x802020 pushes it back to crimson.
+        color: 0x802020,
       });
       this.mesh = new THREE.InstancedMesh(geom, mat, capacity);
       this.mesh.frustumCulled = false;

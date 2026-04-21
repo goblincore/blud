@@ -229,14 +229,10 @@ export class ChunkSystem {
       c.mesh.position.set(t.x, t.y, t.z);
       if (camera) c.mesh.lookAt(camera.position);
 
-      // No settle-despawn for any chunk — user wants gibs to persist. Chunks
-      // stay until the hard age-out cap or until FIFO eviction at capacity.
-      // Heads: 5 min. Regular chunks: 2 min. (Capacity=1024 is the safety net.)
-      const maxAge = c.isHead ? 300.0 : 120.0;
-      if (now - c.spawnTime > maxAge) {
-        this.despawn(c);
-        this.chunks.splice(i, 1);
-      }
+      // No time-based despawn — chunks stay until FIFO eviction at capacity
+      // (1024). This lets the arena accumulate gore across a play session,
+      // matching Blood's "gib piles stay" feel. Spawning the 1025th chunk
+      // quietly drops the oldest (see spawnChunks FIFO loop).
     }
   }
 
