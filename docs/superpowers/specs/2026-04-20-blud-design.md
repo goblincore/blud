@@ -196,31 +196,78 @@ blud/
 
 ## 10. Milestones
 
+Two phases. **Phase 1 is where the game lives or dies.** Phase 2 is packaging. Expect Phase 1 to eat the majority of calendar time. Do not timebox it — its length is deliberately elastic.
+
+### Phase 1 — Feel Lab *(one featureless test arena; no levels, no generator, no run structure)*
+
 | # | Name | Goal | Rough size |
 |---|---|---|---|
-| **M1** | Engine & movement | Three.js + Rapier + FPS controls + one test room. Walk in a box. | 1–2 wk |
-| **M2** | **Feel gate** | Revolver + Double-Wide + one enemy (Scrollkin) + voxel gib explosion. If it doesn't feel right here, we rework before buildout. | 2–3 wk |
-| **M3** | Content buildout | All 4 weapons, all 4 enemies, iteratively tuned. | 3–4 wk |
-| **M4** | Chunks & generator | Author 20 chunks, build stitcher, run structure + hub loop. | 2–3 wk |
-| **M5** | Boss & polish | Boss fight, screen FX, audio, decals, balance. | 2–3 wk |
-| **M6** | Ship | itch.io build, trailer, polish. | 1–2 wk |
+| **M1** | Engine & movement | Three.js + Rapier + FPS controls + test arena. Walk in a box. | 1–2 wk |
+| **M2** | First kill | Revolver + placeholder Scrollkin + voxel gib MVP. Fire → hit → swap to voxel pile → chunks fly. Ugly but end-to-end. | 1–2 wk |
+| **M3** | One-kill feel pass | Clay shader, blood decals, screen FX, impact audio, animation polish. One weapon + one enemy, but the single kill *feels* right. | 2–3 wk |
+| **M4** | Full arsenal | Double-Wide, Dynamite, Cursed Phone. Primary + alt fire per weapon. Each tuned against a documented feel target. | 3–4 wk |
+| **M5** | Full bestiary | Posting Priest, Deputy Dogg, Gooner Horse. AI, per-enemy gib tuning, mixed-wave behaviour. | 2–3 wk |
 
-**Total:** roughly 3–4 months solo evenings/weekends. M2 is the gate — if the feel isn't there, no amount of content saves the game. Don't skip it.
+**Phase 1 gate:** sit in the arena and kill cultists for 30+ minutes straight. Self-report: *"is this fun just on its own?"* If yes → Phase 2. If no → keep iterating; **do not build levels on top of bad feel.**
+
+### Phase 2 — Game *(structure, content, ship)*
+
+| # | Name | Goal | Rough size |
+|---|---|---|---|
+| **M6** | Chunks & generator | Author 20 chunks in Blender, build stitcher, run loop, hub. | 2–3 wk |
+| **M7** | The Algorithm (boss) | Multi-phase boss fight. | 1–2 wk |
+| **M8** | Polish | Music, audio pass, HUD polish, additional decals, balance. | 2 wk |
+| **M9** | Ship | itch.io build, trailer, external playtest, launch. | 1–2 wk |
+
+**Total rough estimate:** 3–4 months solo evenings/weekends — with ~60% of that in Phase 1, by design. If Phase 1 feels cramped, extend it. That's where the game lives.
 
 ---
 
 ## 11. Verification plan
 
-- **M1 verify:** FPS camera moves, collides with walls, Rapier step runs at 60Hz fixed timestep.
-- **M2 verify (the feel gate):** shoot a Scrollkin in the face with the shotgun → it gibs into voxel chunks that bounce convincingly off the floor and walls, blood decals appear, screen kicks, audio feels wet. Ship this milestone to 3 friends for gut-check.
-- **M3 verify:** each weapon has a documented "feel target" (knockback force, sound, particle signature) and is signed off against it.
-- **M4 verify:** 20 consecutive generated runs complete without stuck/unreachable generation; each run completes in 10–15min.
-- **M5 verify:** full run playthrough front-to-back, recorded, feels like a game.
-- **M6 verify (ship gate):** itch.io web build loads < 10s on broadband, 60fps on target hardware, 3 external playtesters rate "I'd do another run."
+- **M1:** FPS camera moves, collides with walls, Rapier step runs at 60Hz fixed timestep.
+- **M2:** shoot placeholder Scrollkin → gib explosion swaps in → voxel chunks simulated and despawn. Rough, but pipeline is end-to-end.
+- **M3:** one-kill feel pass signed off — record a 30s clip of a single gib kill, self-rate "satisfying," share to 3 friends for gut-check.
+- **M4:** every weapon has a written "feel target" (impulse values, sfx tags, particle signature, primary-vs-alt behaviour) and is signed off against it.
+- **M5 (Phase 1 gate):** 30+ minutes in the arena killing mixed waves feels fun on its own. Do not begin Phase 2 until this passes.
+- **M6:** 20 consecutive generated runs complete without stuck/unreachable generation; each completes in 10–15 min.
+- **M7:** boss is completable and has ≥2 distinct phases.
+- **M8:** full front-to-back run, recorded, feels like a game (not a demo).
+- **M9 (ship gate):** itch.io web build loads <10s on broadband, 60fps on target hardware, 3 external playtesters rate "I'd do another run."
 
 ---
 
-## 12. Open questions / defer list
+## 12. Mining Blood source for tuning values
+
+The existing Blood source ports are a gift for tuning. We use them for **numbers, not code**.
+
+### Sources
+- **NotBlood** — <https://github.com/clipmove/NotBlood> (preferred port)
+- **NBlood** (EDuke32-based) — parent project
+- **BloodGDX** — Java port, often the most readable
+
+All are **GPL-licensed**. We will not vendor code from them into this project. But **numeric constants are data**, and studying a reference implementation to inform design is exactly what reading a paper is. We keep attribution in `docs/tuning-sources.md` noting each value's origin (`<file>:<line>`).
+
+### Values to extract
+- **Enemy HP** for every baseline cultist/zombie/hound/etc.
+- **Weapon damage** — revolver, sawed-off single + double, tommy gun, dynamite (radius + damage curve), voodoo doll, flare gun
+- **Projectile behaviour** — dynamite fuse timer, bounce, flare ignition radius
+- **Spread angles** — sawed-off cone, tommy gun spread
+- **Reload & refire timers** per weapon, per fire mode
+- **Knockback impulses** (Build physics often expresses as velocity deltas)
+- **Corpse decay timers**
+- **Gib thresholds** — single-hit damage that skips dying animation and explodes
+- **Movement speeds** — player walk/run/jump/crouch; enemy AI speeds
+- **AI behaviour timers** — aggression radii, attack cooldowns, pain-chance
+
+### How we use them
+- Translate each value into our unit system (Rapier is SI-ish; Build is not — expect to scale).
+- Log as **starting values** in each weapon/enemy spec. Feel-test tuning may move away from them, and that's fine — they're the starting point, not the law.
+- A subagent research task produces a single `docs/tuning-sources.md` extraction that's ready by the start of M2 so we tune against real numbers from day one.
+
+---
+
+## 13. Open questions / defer list
 
 - Protagonist identity — faceless for v1? Named? Has a voice line on death?
 - Music — commission, license, or freesound-stitch? Defer to M5.
@@ -229,7 +276,7 @@ blud/
 
 ---
 
-## 13. Reference works (mood)
+## 14. Reference works (mood)
 
 - **Blood** (1997) — gibs, pacing, weapon alt-fires, tone
 - **Cruelty Squad** — dirty internet-cursed vibe, tone
