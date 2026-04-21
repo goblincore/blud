@@ -14,6 +14,44 @@ export interface Particle {
   tile: number;          // picnum for diagnostic / atlas lookup
 }
 
+export interface BurstParams {
+  tile: number;
+  count: number;
+  speedMin: number;
+  speedMax: number;
+  gravity: number;     // m/s² (converted from Blood's buPerTicSquared)
+  airdrag: number;
+  lifetimeSec: number;
+  size: number;
+}
+
+/** A moving source whose velocity is sampled on each trail-emit tick. */
+export interface TrailSource {
+  pos: Vec3;
+  vel: Vec3;
+}
+
+export interface TrailParams {
+  tile: number;
+  hz: number;
+  velScale: number;
+  gravity: number;
+  airdrag: number;
+  lifetimeSec: number;
+  size: number;
+  /** Called when a trail particle hits a static surface (decals wiring). */
+  onSurfaceHit?: (pos: Vec3, normal: Vec3) => void;
+}
+
+export interface TrailHandle { stop(): void; }
+
+interface TrailState {
+  source: TrailSource;
+  params: TrailParams;
+  timeSinceEmit: number;
+  stopped: boolean;
+}
+
 /** Pure kinematic update — no allocations, no rendering. */
 export function updateParticle(p: Particle, dt: number): void {
   if (!p.alive) return;
@@ -47,6 +85,7 @@ export function updateParticle(p: Particle, dt: number): void {
 export class ParticlePool {
   private readonly particles: Particle[] = [];
   private head = 0;          // next slot to fill (wraps on eviction)
+  private trails: TrailState[] = [];
 
   private mesh: THREE.InstancedMesh | null = null;
   private dummy = new THREE.Object3D();
@@ -98,12 +137,69 @@ export class ParticlePool {
     return p;
   }
 
+  emitBurst(origin: Vec3, params: BurstParams): void {
+    for (let i = 0; i < params.count; i++) {
+      const p = this.allocate();
+      p.pos.x = origin.x; p.pos.y = origin.y; p.pos.z = origin.z;
+
+      // Random direction on unit sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi   = Math.acos(2 * Math.random() - 1);
+      const sinPhi = Math.sin(phi);
+      const dx = sinPhi * Math.cos(theta);
+      const dy = Math.cos(phi);
+      const dz = sinPhi * Math.sin(theta);
+
+      const speed = params.speedMin + Math.random() * (params.speedMax - params.speedMin);
+      p.vel.x = dx * speed; p.vel.y = dy * speed; p.vel.z = dz * speed;
+
+      p.gravity     = params.gravity;
+      p.airdrag     = params.airdrag;
+      p.lifetimeSec = params.lifetimeSec;
+      p.size        = params.size;
+      p.tile        = params.tile;
+    }
+  }
+
+  emitTrail(source: TrailSource, params: TrailParams): TrailHandle {
+    const state: TrailState = { source, params, timeSinceEmit: 0, stopped: false };
+    this.trails.push(state);
+    return {
+      stop: () => { state.stopped = true; },
+    };
+  }
+
   /** Advance simulation + refresh InstancedMesh matrices. Call per frame. */
   update(dt: number, camera: THREE.Camera | null = null): void {
-    for (const p of this.particles) updateParticle(p, dt);
-    if (!this.mesh) return;
+    // 1. Advance trail timers and emit droplets
+    const interval = (hz: number) => 1 / hz;
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      const t = this.trails[i]!;
+      if (t.stopped) {
+        this.trails.splice(i, 1);
+        continue;
+      }
+      t.timeSinceEmit += dt;
+      while (t.timeSinceEmit >= interval(t.params.hz)) {
+        t.timeSinceEmit -= interval(t.params.hz);
+        const p = this.allocate();
+        p.pos.x = t.source.pos.x; p.pos.y = t.source.pos.y; p.pos.z = t.source.pos.z;
+        p.vel.x = t.source.vel.x * t.params.velScale;
+        p.vel.y = t.source.vel.y * t.params.velScale;
+        p.vel.z = t.source.vel.z * t.params.velScale;
+        p.gravity     = t.params.gravity;
+        p.airdrag     = t.params.airdrag;
+        p.lifetimeSec = t.params.lifetimeSec;
+        p.size        = t.params.size;
+        p.tile        = t.params.tile;
+      }
+    }
 
-    // Billboard each alive instance to face the camera.
+    // 2. Kinematic particle update
+    for (const p of this.particles) updateParticle(p, dt);
+
+    // 3. Refresh InstancedMesh matrices
+    if (!this.mesh) return;
     for (let i = 0; i < this.capacity; i++) {
       const p = this.particles[i]!;
       if (!p.alive) {
