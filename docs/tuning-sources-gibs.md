@@ -266,6 +266,63 @@ Compute: `N = picnum / 256`.
 
 **Total distinct gib picnums: 32** (11 body things + 21 FX sprites).
 
+## Blood-trail emission (the "droplets-behind-flying-gibs" effect)
+
+The trail of blood droplets behind flying body-chunks / blood-chunks is a
+**self-rescheduling event**, not per-frame physics. Source: `callback.cpp:180-192`,
+`fx.cpp:61-119`, `fx.cpp:392-411`.
+
+**Trigger**: when a flying thing (kThingBloodChunks etc.) or bleeding dude is
+created, something calls `evPost(nSprite, 3, 6, kCallbackFXBloodSpurt)` to arm
+the first droplet. See `fx.cpp:411` — the fx-spawn path schedules it.
+
+**Callback `fxBloodSpurt`** (`callback.cpp:180`) does three things:
+1. Spawn an **FX_27 sprite** at the parent's current `(x, y, z)`.
+2. Copy velocity scaled down by 256: `xvel[pFX] = xvel[parent] >> 8` (and y, z).
+   → droplet drifts in the parent's direction but much slower, then falls.
+3. `evPost(nSprite, 3, 6, kCallbackFXBloodSpurt)` — **re-schedules itself 6 tics
+   later**. At 120 TPS that's **20 Hz** emission per flying chunk for its whole
+   life.
+
+The chain terminates naturally when the parent sprite is removed (event queue is
+cleared for freed sprites) or is explicitly killed via
+`evKill(nSprite, OBJ_SPRITE, kCallbackFXBloodSpurt)` (`nnexts.cpp:3500`).
+
+### FX_27 — the trail droplet (from `gFXData[27]`, `fx.cpp:89`)
+
+| field    | value                        |
+| -------- | ---------------------------- |
+| callback | kCallbackFXBloodBits         |
+| seq      | 0 (static sprite)            |
+| flags    | 3                            |
+| gravity  | **27962** (Build units/tic²) |
+| airdrag  | **4096**                     |
+| duration | **480 tics (4 s)**           |
+| picnum   | **733** (tiles002.art)       |
+| xrepeat  | 32                           |
+| yrepeat  | 32                           |
+| cstat    | 0                            |
+| shade    | -16                          |
+| pal      | 0                            |
+
+Compare to **FX_13** (the initial gib burst — `gFXData[13]`, `fx.cpp:75`):
+picnum 2154 (the big chunk), 40×40, gravity 46603 (heavier), airdrag 2048
+(less drag), shade -12. FX_13 is what's sprayed radially at the moment of gib;
+FX_27 is what trails out behind subsequent motion.
+
+**Ceiling-stick** (`fx.cpp:350`): every 8th frame, if an FX_27 hits the ceiling
+and the sector isn't parallax/underwater and `nGoreBehavior > 1`, the droplet
+adheres → permanent blood-spot on the ceiling. Same logic handles in-wall
+splats at `fx.cpp:297`. Vanilla Blood has `nGoreBehavior = 1`, so vanilla does
+**not** stick — it's a NotBlood/modern enhancement. For Blud we should always
+enable stick behaviour (decals are desirable).
+
+### Picnum 733 needs extraction
+
+Picnum 733 lives in `tiles002.art` (range 512–767). We haven't extracted it in
+A5/A6 yet — add to the M2 placeholder asset list alongside dynamite and
+explosion sprites.
+
 ## Gaps / notes
 
 - I did not trace kThingBone (421) — it's a Thing type used for wall-bone
