@@ -28,10 +28,11 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ## Current focus
 
-**M1 landed ✅. M2 code merged ✅ — manual playtest pending before M3.**
+**M1 landed ✅. M2 code merged ✅ — manual playtest pending before M3. Animation system landed as preparatory work for M3.**
 
 - M1 plan: docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md — done, merged `d05a306`
 - M2 plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md — code merged `d721ed7`, 80/80 tests green, build clean. Manual gut-check playtest is the remaining gate before M3.
+- Animation system: docs/superpowers/plans/2026-04-21-blud-animation-system.md — landed, 124/124 tests green. QAV + SEQ data-driven animation replaces approximate frame segmentation. M2 playtest unblocked.
 
 ---
 
@@ -55,14 +56,15 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `A2`  [x]  BLOOD.PAL per-file content decryption (DICT_CRYPT flag `0x10` → XOR first 256 bytes with `(i>>1) & 0xFF`)
 - `A3`  [x]  ART parser with column-major → row-major transpose; palette PNG dump
 - `A4`  [x]  Contact-sheet generator (per-ART HTML, solid dark background, labeled tile numbers)
-- `A5`  [x]  **Extract axe-zombie full sprite set → `public/assets/enemies/zombie-placeholder/`** — 89 frames, tile range **1170–1258** (visually confirmed), covers idle/walk/attack/death. Manifest + per-frame PNGs copied; animation segmentation is approximate and needs SEQ-file verification during M2 billboard wiring.
+- `A5`  [x]  **Extract axe-zombie full sprite set → `public/assets/enemies/zombie-placeholder/`** — 89 frames, tile range **1170–1258** (visually confirmed), covers idle/walk/attack/death. Manifest + per-frame PNGs copied. M3 supersession: new animation system (QAV + SEQ manifests) replaces approximate segmentation; see A10.
 - `A6`  [x]  **Extract gib chunk pool → `public/assets/gibs-placeholder/`** — 27 frames total:
   - Blood chunk family **2154–2158** (5 FX_13 variants)
   - Shared human body chunks: **1267/1268/1269/1454/1456** (head/arm/leg/torso/spine)
   - Severed zombie head rotation **3405–3421** (17 bouncing-head frames)
 - `A9`  [x]  Extract M2 placeholders (dynamite bundle, explosion fireball, blood trail droplet)
-- `A6.5` [ ]  Compose sprite sheets + refine manifest angle/animation metadata once M2 plan defines the billboard loader shape
+- `A6.5` [x]  ~~Compose sprite sheets + refine manifest angle/animation metadata~~ — Superseded by animation system (2026-04-21), see A10.
 - `A7`  [-]  Voxelization pipeline (.vox per enemy for Rapier gib explosion) — **deferred to M2 prep**
+- `A10` [x]  **Animation system port (QAV + SEQ)** — see docs/superpowers/plans/2026-04-21-blud-animation-system.md and docs/dev-notes/2026-04-21-animation-system.md
 - `A8`  [-]  Clay shader / post-process (dither, pixelation, chromatic aberration on hit) — **deferred to M3**
 
 ### R — Research / reference (done — reading list)
