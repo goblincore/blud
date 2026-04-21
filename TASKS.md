@@ -41,8 +41,7 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ### Milestones
 
-- `M1`  [~]  **Engine & Movement** — code merged (`d05a306`), 19/19 tests pass, build clean; browser smoke-test pending (`M1.11` below)
-  - `M1.11` [ ]  Manual browser verification: `npm run dev`, click canvas, confirm WASD walk, mouse-look (pitch clamped), shift-sprint, space-jump, wall/obstacle collision
+- `M1`  [x]  **Engine & Movement** — code merged (`d05a306`), 19/19 tests pass, build clean, browser smoke-test confirmed (WASD + mouse-look work)
 - `M2`  [ ]  First kill (revolver + 1 enemy + voxel-gib MVP) — **next plan to write** via `superpowers:writing-plans`
 - `M3`  [!]  One-kill feel pass (clay shader, decals, impact FX, audio) — blocked on M2
 - `M4`  [!]  Full arsenal (Double-Wide, Dynamite, Cursed Phone) — blocked on M3
@@ -58,18 +57,12 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `A2`  [x]  BLOOD.PAL per-file content decryption (DICT_CRYPT flag `0x10` → XOR first 256 bytes with `(i>>1) & 0xFF`)
 - `A3`  [x]  ART parser with column-major → row-major transpose; palette PNG dump
 - `A4`  [x]  Contact-sheet generator (per-ART HTML, solid dark background, labeled tile numbers)
-- `A5`  [ ]  **Extract axe-zombie walk cycle → `public/assets/enemies/zombie-placeholder/`**
-  - `A5.1` [ ]  Confirm tile range (candidate: **1184–1207** in tiles004.art)
-  - `A5.2` [ ]  Copy tile PNGs; compose sprite sheet (8 angles × N frames)
-  - `A5.3` [ ]  Write JSON metadata (frame size, angle order, animation names, anchor point)
-- `A6`  [ ]  **Extract generic gib pool → `public/assets/gibs-placeholder/`**
-  - Hero tile: **2154** (FX_13 generic blood chunk, tiles008.art) — used by almost every enemy death
-  - Human body chunks: **1267** head, **1268** arm, **1269** leg, **1454** torso, **1456** spine (shared by zombies and cultists)
-  - FX pool (21 tiles): sparks, glass, wood, bubbles — see [docs/tuning-sources-gibs.md](docs/tuning-sources-gibs.md)
-  - `A6.1` [ ]  Copy 5 body chunks
-  - `A6.2` [ ]  Copy hero blood chunk 2154
-  - `A6.3` [ ]  Copy 21 FX tiles
-  - `A6.4` [ ]  Build gib-pool JSON manifest (picnum → local filename → spawn weight)
+- `A5`  [x]  **Extract axe-zombie full sprite set → `public/assets/enemies/zombie-placeholder/`** — 89 frames, tile range **1170–1258** (visually confirmed), covers idle/walk/attack/death. Manifest + per-frame PNGs copied; animation segmentation is approximate and needs SEQ-file verification during M2 billboard wiring.
+- `A6`  [x]  **Extract gib chunk pool → `public/assets/gibs-placeholder/`** — 27 frames total:
+  - Blood chunk family **2154–2158** (5 FX_13 variants)
+  - Shared human body chunks: **1267/1268/1269/1454/1456** (head/arm/leg/torso/spine)
+  - Severed zombie head rotation **3405–3421** (17 bouncing-head frames)
+- `A6.5` [ ]  Compose sprite sheets + refine manifest angle/animation metadata once M2 plan defines the billboard loader shape
 - `A7`  [-]  Voxelization pipeline (.vox per enemy for Rapier gib explosion) — **deferred to M2 prep**
 - `A8`  [-]  Clay shader / post-process (dither, pixelation, chromatic aberration on hit) — **deferred to M3**
 
