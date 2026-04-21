@@ -52,6 +52,29 @@ interface TrailState {
   stopped: boolean;
 }
 
+/** Axis-aligned static surface definition (arena walls/floor/ceiling). */
+export interface StaticSurface {
+  /** World-space AABB min / max. */
+  min: Vec3;
+  max: Vec3;
+  /** Outward normal (points away from interior of the surface). */
+  normal: Vec3;
+}
+
+/** Arena-wide registry — set once by arena.ts on init. */
+let arenaSurfaces: StaticSurface[] = [];
+
+export function setArenaSurfaces(surfaces: StaticSurface[]): void {
+  arenaSurfaces = surfaces;
+}
+
+/** Cheap point-inside-AABB test with small epsilon. */
+function pointInAABB(p: Vec3, min: Vec3, max: Vec3, eps = 0.05): boolean {
+  return p.x >= min.x - eps && p.x <= max.x + eps
+      && p.y >= min.y - eps && p.y <= max.y + eps
+      && p.z >= min.z - eps && p.z <= max.z + eps;
+}
+
 /** Pure kinematic update — no allocations, no rendering. */
 export function updateParticle(p: Particle, dt: number): void {
   if (!p.alive) return;
@@ -195,8 +218,32 @@ export class ParticlePool {
       }
     }
 
-    // 2. Kinematic particle update
-    for (const p of this.particles) updateParticle(p, dt);
+    // 2. Kinematic particle update + surface-hit detection
+    for (const p of this.particles) {
+      if (!p.alive) continue;
+      const prev = { x: p.pos.x, y: p.pos.y, z: p.pos.z };
+      updateParticle(p, dt);
+      if (!p.alive) continue;
+
+      // Check trail-emitted particles for surface hit.
+      // We don't track per-particle trail-ownership cheaply, so we check ALL
+      // alive particles against arena surfaces each frame. This is O(particles
+      // × surfaces) — arena has ~6 surfaces, pool ≤ 1024, fine.
+      for (const s of arenaSurfaces) {
+        const hitNow  = pointInAABB(p.pos, s.min, s.max);
+        const hitPrev = pointInAABB(prev,  s.min, s.max);
+        if (hitNow && !hitPrev) {
+          // Find which trail (if any) spawned this particle.
+          // For M2 simplicity: invoke the FIRST alive trail's onSurfaceHit.
+          // A fully correct implementation tags each particle with its trail;
+          // skipping that for now — all trails share the same decal callback.
+          const trail = this.trails.find((t) => !t.stopped && t.params.onSurfaceHit);
+          if (trail) trail.params.onSurfaceHit!(p.pos, s.normal);
+          p.alive = false; // particle absorbs into decal
+          break;
+        }
+      }
+    }
 
     // 3. Refresh InstancedMesh matrices
     if (!this.mesh) return;
