@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blud</title>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee;
+        font-family: ui-monospace, monospace; }
+      #app { position: fixed; inset: 0; }
+      #hud { position: fixed; top: 8px; left: 8px; pointer-events: none;
+        font-size: 12px; line-height: 1.4; text-shadow: 0 1px 0 #000; }
+      #prompt { position: fixed; inset: 0; display: flex; align-items: center;
+        justify-content: center; pointer-events: none; font-size: 14px; }
+      #prompt.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud"></div>
+    <div id="prompt">click to play</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
