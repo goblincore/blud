@@ -13,3 +13,4 @@ public/assets/**/*-placeholder.*
 public/assets/**/placeholder/
 public/assets/**/*-placeholder/
 assets-source/blood-extracted/
+__pycache__/
