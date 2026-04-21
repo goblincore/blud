@@ -81,16 +81,18 @@ export function resetProjectiles(world: RAPIER.World): void {
 
 export class Dynamite implements Weapon {
   readonly id = 'dynamite';
-  readonly ammoMax = 8;
-  ammo = 8;
+  readonly ammoMax = Number.POSITIVE_INFINITY;
+  ammo = Number.POSITIVE_INFINITY;
 
   private cooking = false;
   private cookStart = 0;
+  private throwingUntil = 0;
 
   onPress(ctx: FrameCtx): void {
-    if (this.ammo <= 0 || this.cooking) return;
+    if (this.ammo <= 0 || this.cooking || ctx.now < this.throwingUntil) return;
     this.cooking = true;
     this.cookStart = ctx.now;
+    ctx.fpAnimator?.play('dynamite-idle', ctx.now);
   }
 
   onRelease(ctx: FrameCtx): void {
@@ -109,6 +111,8 @@ export class Dynamite implements Weapon {
 
     this.ammo--;
     this.cooking = false;
+    this.throwingUntil = ctx.now + 0.3; // throw anim duration
+    ctx.fpAnimator?.restart('dynamite-throw', ctx.now);
   }
 
   onFrame(ctx: FrameCtx, dt: number): void {
@@ -116,6 +120,12 @@ export class Dynamite implements Weapon {
     if (this.cooking && (ctx.now - this.cookStart) >= DYNAMITE_COOK.fuseMaxSec) {
       ctx.gibs.spawnExplosion(ctx.player.pos, EXPLOSION_STANDARD, ctx.now);
       this.cooking = false;
+      ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
+    }
+    // Return to idle after throw animation finishes
+    if (!this.cooking && this.throwingUntil > 0 && ctx.now >= this.throwingUntil) {
+      this.throwingUntil = 0;
+      ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
     }
     updateProjectiles(ctx, dt);
   }

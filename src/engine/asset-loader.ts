@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+export { loadAnimationManifests, type AnimationBundle } from '../animation/manifest-loader';
 import type { ZombieTextureAtlas } from '../game/enemy/axe-zombie';
 import type { ChunkTextureAtlas } from '../game/gibs/chunks';
 import type { ExplosionAtlas } from '../vfx/explosion';

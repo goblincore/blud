@@ -14,7 +14,9 @@ import { DecalPool } from './game/gibs/decals';
 import { ExplosionVfx } from './vfx/explosion';
 import { Screenshake } from './vfx/screenshake';
 import { GibSystem } from './game/gibs';
-import { loadZombieAtlas, loadGibTextures, loadExplosionAtlas, loadTexture } from './engine/asset-loader';
+import { loadZombieAtlas, loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests } from './engine/asset-loader';
+import { FpWeaponAnimator } from './animation/fp-weapon-animator';
+import type { QavManifest } from './animation/qav-schema';
 import type { GibbableDude } from './game/gibs';
 import type { Player as WeaponPlayer, FrameCtx } from './game/weapons/types';
 import type { Vec3 } from './game/gibs/particles';
@@ -93,7 +95,7 @@ async function main() {
   });
 
   // ---- Assets
-  const [zombieAtlas, gibTextures, explosionAtlas, trailTex] = await Promise.all([
+  const [zombieAtlas, gibTextures, explosionAtlas, trailTex, animBundle] = await Promise.all([
     loadZombieAtlas('/assets/enemies/zombie-placeholder/manifest.json'),
     loadGibTextures('/assets/gibs-placeholder/manifest.json'),
     loadExplosionAtlas('/assets/vfx/explosion-placeholder/manifest.json'),
@@ -107,12 +109,16 @@ async function main() {
       const tex = new THREE.CanvasTexture(c);
       return tex;
     }),
+    loadAnimationManifests().catch((err) => {
+      console.warn('[blud] animation manifests not loaded, FPV weapons disabled:', err);
+      return undefined;
+    }),
   ]);
 
   // ---- Gib subsystems
   const particles = new ParticlePool(scene, 1024, trailTex);
   const decals    = new DecalPool(scene, 200, trailTex, 0.25);
-  const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures, 1024, decals);
+  const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures!, 1024, decals);
   const explosions = new ExplosionVfx(scene);
   const shake     = new Screenshake();
 
@@ -145,9 +151,34 @@ async function main() {
     cluster.spawn(4);
   });
 
+  // ---- FPV Weapon Animator
+  let fpAnimator: FpWeaponAnimator | undefined;
+  if (animBundle) {
+    const tileCache = new Map<number, THREE.Texture>();
+    const textureLoader = new THREE.TextureLoader();
+    const getTileTexture = (picnum: number): THREE.Texture => {
+      let t = tileCache.get(picnum);
+      if (!t) {
+        t = textureLoader.load(`assets/blood-tiles/${picnum}.png`);
+        t.magFilter = THREE.NearestFilter;
+        t.minFilter = THREE.NearestFilter;
+        t.colorSpace = THREE.SRGBColorSpace;
+        tileCache.set(picnum, t);
+      }
+      return t;
+    };
+    fpAnimator = new FpWeaponAnimator(
+      camera as THREE.PerspectiveCamera,
+      animBundle.weapons as Record<string, QavManifest>,
+      animBundle.tileMeta,
+      getTileTexture,
+    );
+    fpAnimator.play('dynamite-idle', performance.now() / 1000);
+  }
+
   // ---- Zombie cluster
   const cluster = new ZombieCluster(
-    { scene, world: physics.world, atlas: zombieAtlas, gibs },
+    { scene, world: physics.world, atlas: zombieAtlas!, gibs },
     { x: 0, y: 1, z: -6 },
   );
   cluster.spawn(4);
@@ -175,6 +206,7 @@ async function main() {
       player: weaponPlayer,
       gibs,
       now,
+      fpAnimator,
     });
   });
 
@@ -186,6 +218,7 @@ async function main() {
       player: weaponPlayer,
       gibs,
       now,
+      fpAnimator,
     });
   });
 
@@ -195,6 +228,7 @@ async function main() {
       player: weaponPlayer,
       gibs,
       now: performance.now() / 1000,
+      fpAnimator,
     };
   }
 
@@ -236,6 +270,9 @@ async function main() {
     // Chunk billboard update + despawn
     chunks.update(camera, now);
 
+    // FPV weapon animator tick
+    fpAnimator?.update(now);
+
     // Screenshake offset (additive on camera rotation)
     const off = shake.sampleOffset(realDt);
     camera.rotation.x += off.pitch;
@@ -248,7 +285,7 @@ async function main() {
     chargeHud.setCharge(dyn.chargeFractionAt(now));
   });
 
-  console.log('[blud] M2 boot — dynamite + gibs + zombies');
+  console.log('[blud] M2 boot — dynamite + gibs + zombies + QAV animator');
 }
 
 main().catch((err) => console.error('[blud] boot failed', err));
