@@ -44,7 +44,7 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `M3`  [ ]  One-kill feel pass (clay shader, decals fade, impact FX polish, audio pass). **Unblocked once M2 playtest signs off.**
 - `M4`  [!]  Full arsenal (Double-Wide, Dynamite, Cursed Phone) — blocked on M3
 - `M5`  [!]  Full bestiary + **Phase 1 gate** (30min arena = fun) — blocked on M4
-- `M6`  [!]  Chunks & generator (20 Blender chunks + run stitcher) — blocked on M5
+- `M6`  [!]  Chunks & generator (20 Blender chunks + run stitcher) — blocked on M5. **Pre-work**: `R5` researches Blood `.MAP` binary format + texture/asset co-occurrence patterns so procgen can use Blood-style texture/sprite palettes without rendering Blood geometry verbatim.
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
 - `M8`  [!]  Polish (music, audio pass, balance, HUD) — blocked on M7
 - `M9`  [!]  Ship to itch.io — blocked on M8
@@ -71,10 +71,18 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `R2`  [x]  Gib picnum map (32 tiles across ART files) → [docs/tuning-sources-gibs.md](docs/tuning-sources-gibs.md)
 - `R3`  [x]  Sprite extraction toolchain overview → [docs/dev-notes/2026-04-20-blood-sprite-extraction.md](docs/dev-notes/2026-04-20-blood-sprite-extraction.md)
 - `R4`  [x]  Blood palette canonical decoding → [docs/dev-notes/2026-04-21-blood-palette-decoding.md](docs/dev-notes/2026-04-21-blood-palette-decoding.md)
+- `R5`  [ ]  **Blood `.MAP` format + texture/asset co-occurrence research** — dispatch-run: write minimal Python `.MAP` parser, extract stats from Blood's campaign maps (texture palettes per sector-type, sprite/enemy placement density, sector size distributions, connectivity idioms, light vocabulary). Output: `docs/dev-notes/2026-04-XX-blood-map-research.md` with findings + proposed JSON schema for pattern extraction that M6 procgen can consume. Dispatch plan queued at `~/.claude/dispatch/plans/2026-04-21-blud-map-research.md`, can run in parallel with A10.
 
 ### F — Feel / physics tuning (transcribe Blood constants into Rapier config)
 
 - `F1`  [ ]  **Dynamite throw arc + gib bounce** — after animation system lands, extract Blood's throw math (weapon.cpp `processTNT` release: pitch angle + velocity decomposition, not our current `vel.y + 2.5` kicker in [src/game/weapons/dynamite.ts:187](src/game/weapons/dynamite.ts:187)) and gib physics constants (actor.cpp gibbing path + `fx.cpp` velocity/bounce coefficients) into [src/game/gibs/tuning.ts](src/game/gibs/tuning.ts) + new `src/game/weapons/tuning.ts`. Apply to Rapier body spawn (restitution, angular/linear damping, initial angvel spread, launch pitch). **Port the numbers, not the engine.** One dispatch task, ~half day. Brainstorm → spec → plan once A10 (animation system) merges.
+- `F2`  [ ]  **Broad feel sweep — port Blood constants across systems.** Candidates to transcribe:
+  - **Audio** — SFX-per-event table from `sound.cpp` `dispatchEvent`, pitch/volume variance. Huge missing layer; we have zero audio.
+  - **Palookup hit flash** — damage-taken red flash + fullbright frames on hit. Palette swap, not a shader; cheap.
+  - **AI timing numbers** — chase distance, attack windup, post-hit cooldown (`aizombi.cpp` and per-enemy `ai*.cpp`). Makes enemies *decide* like Blood's do, distinct from HP/damage already in R1.
+  - **Screenshake per event** — explosion magnitudes, weapon kickback, nearby-gib rumble from `view.cpp` tables.
+  - **Blood decals + pools** — growth, merging, fade curve. NotBlood extends; pool behavior is a readability win.
+  Schedule: revisit after M3 playtest; some of these may slot into M3 feel-pass itself rather than waiting. Split into subtasks once prioritized.
 
 ### P — Process / tooling
 
