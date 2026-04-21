@@ -24,6 +24,19 @@ const STATE_ANIM_MAP: Record<ZombieState, string> = {
   [ZombieState.Dead]: 'zombie-death-normal',
 };
 
+/**
+ * Duration of the "blown away" fling when a zombie dies to explosion damage
+ * below GIB_THRESHOLD. Blood's actor.cpp (kDamageExplode path, ~line 3463)
+ * plays nSeq=2 (zombie-death-explode) and applies impulse; the body tumbles
+ * for ~0.6s before settling into a dead sprite. We approximate here by
+ * translating the kinematic body along an exponentially-decaying velocity.
+ */
+const FLING_DURATION_SEC = 0.7;
+/** Per-unit-impulse → m/s conversion for the initial fling velocity.
+ *  Matches the chunk impulse multiplier (0.025) so fling feels proportional
+ *  to gib launch force. */
+const FLING_IMPULSE_SCALE = 0.018;
+
 export class AxeZombie implements GibbableDude {
   readonly id: string;
   readonly kind = 'axe-zombie' as const;
@@ -37,6 +50,9 @@ export class AxeZombie implements GibbableDude {
   private readonly scene: THREE.Scene;
   private facing = { x: 0, z: 1 };
   private prevState: ZombieState = ZombieState.Idle;
+  /** Non-zero while the zombie is flying from an explosion that killed but didn't gib it. */
+  private flingVel: Vec3 | null = null;
+  private flingTimer = 0;
 
   constructor(
     id: string,
@@ -84,14 +100,24 @@ export class AxeZombie implements GibbableDude {
       this.onStateEnter(this.brain.state, performance.now() / 1000);
     }
 
-    // Kinematic move
-    const v = this.brain.desiredVelocity(this.pos, playerPos);
     const t = this.body.translation();
-    this.body.setNextKinematicTranslation({ x: t.x + v.x * dt, y: t.y, z: t.z + v.z * dt });
-
-    // Update facing direction from velocity
-    if (Math.hypot(v.x, v.z) > 0.01) {
-      this.setFacing({ x: v.x, z: v.z });
+    if (this.flingVel && this.flingTimer > 0) {
+      // Blown-away tumble: exponentially decaying impulse translation.
+      const k = this.flingTimer / FLING_DURATION_SEC; // 1 → 0
+      this.body.setNextKinematicTranslation({
+        x: t.x + this.flingVel.x * k * dt,
+        y: t.y, // XZ-only; no vertical fling (no floor physics on kinematic)
+        z: t.z + this.flingVel.z * k * dt,
+      });
+      this.flingTimer = Math.max(0, this.flingTimer - dt);
+    } else {
+      // Kinematic move driven by AI
+      const v = this.brain.desiredVelocity(this.pos, playerPos);
+      this.body.setNextKinematicTranslation({ x: t.x + v.x * dt, y: t.y, z: t.z + v.z * dt });
+      // Update facing direction from velocity (skip when dead)
+      if (this.brain.state !== ZombieState.Dead && Math.hypot(v.x, v.z) > 0.01) {
+        this.setFacing({ x: v.x, z: v.z });
+      }
     }
 
     // Billboard render update
@@ -114,9 +140,26 @@ export class AxeZombie implements GibbableDude {
     this.facing = { x: v.x / m, z: v.z / m };
   }
 
-  takeDamage(amount: number, _impulse: Vec3): void {
+  takeDamage(amount: number, impulse: Vec3): void {
+    const wasAlive = this.brain.state !== ZombieState.Dead;
     this.brain.applyDamage(amount);
     this.hp = this.brain.hp;
+
+    // Blood-style "blown away but not gibbed" — an explosion that killed the
+    // zombie (didn't exceed GIB_THRESHOLD) still flings it with the impulse
+    // vector + plays the explode-death SEQ (NotBlood actor.cpp line 3463:
+    // kDamageExplode → nSeq=2).
+    const impulseMag = Math.hypot(impulse.x, impulse.y, impulse.z);
+    if (wasAlive && this.brain.state === ZombieState.Dead && impulseMag > 50) {
+      this.flingVel = {
+        x: impulse.x * FLING_IMPULSE_SCALE,
+        y: 0,
+        z: impulse.z * FLING_IMPULSE_SCALE,
+      };
+      this.flingTimer = FLING_DURATION_SEC;
+      // Override death anim: explode-death instead of normal-death
+      this.anim.play('zombie-death-explode', performance.now() / 1000);
+    }
   }
 
   despawn(): void {
