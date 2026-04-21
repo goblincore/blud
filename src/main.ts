@@ -14,9 +14,10 @@ import { DecalPool } from './game/gibs/decals';
 import { ExplosionVfx } from './vfx/explosion';
 import { Screenshake } from './vfx/screenshake';
 import { GibSystem } from './game/gibs';
-import { loadZombieAtlas, loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests } from './engine/asset-loader';
+import { loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests } from './engine/asset-loader';
 import { FpWeaponAnimator } from './animation/fp-weapon-animator';
-import type { QavManifest } from './animation/qav-schema';
+import { BillboardAnimator } from './animation/billboard-animator';
+import type { QavManifest, SeqManifest } from './animation/qav-schema';
 import type { GibbableDude } from './game/gibs';
 import type { Player as WeaponPlayer, FrameCtx } from './game/weapons/types';
 import type { Vec3 } from './game/gibs/particles';
@@ -95,8 +96,7 @@ async function main() {
   });
 
   // ---- Assets
-  const [zombieAtlas, gibTextures, explosionAtlas, trailTex, animBundle] = await Promise.all([
-    loadZombieAtlas('/assets/enemies/zombie-placeholder/manifest.json'),
+  const [gibTextures, explosionAtlas, trailTex, animBundle] = await Promise.all([
     loadGibTextures('/assets/gibs-placeholder/manifest.json'),
     loadExplosionAtlas('/assets/vfx/explosion-placeholder/manifest.json'),
     loadTexture('/assets/gibs-placeholder/trail/733-placeholder.png').catch(() => {
@@ -151,9 +151,12 @@ async function main() {
     cluster.spawn(4);
   });
 
-  // ---- FPV Weapon Animator
+  // ---- Animators (FPV weapon + zombie billboard)
   let fpAnimator: FpWeaponAnimator | undefined;
+  let createZombieAnimator: () => BillboardAnimator;
+
   if (animBundle) {
+    // Shared tile texture cache + getter for both FPV and billboard animators
     const tileCache = new Map<number, THREE.Texture>();
     const textureLoader = new THREE.TextureLoader();
     const getTileTexture = (picnum: number): THREE.Texture => {
@@ -167,6 +170,8 @@ async function main() {
       }
       return t;
     };
+
+    // FPV weapon animator
     fpAnimator = new FpWeaponAnimator(
       camera as THREE.PerspectiveCamera,
       animBundle.weapons as Record<string, QavManifest>,
@@ -174,11 +179,25 @@ async function main() {
       getTileTexture,
     );
     fpAnimator.play('dynamite-idle', performance.now() / 1000);
+
+    // Billboard animator factory — each zombie gets its own instance
+    createZombieAnimator = () => new BillboardAnimator(
+      animBundle.characters as Record<string, SeqManifest>,
+      animBundle.tileMeta,
+      getTileTexture,
+    );
+  } else {
+    // Fallback: no-op animator factory when manifests are missing
+    createZombieAnimator = () => new BillboardAnimator(
+      {},
+      {},
+      () => new THREE.Texture(),
+    );
   }
 
   // ---- Zombie cluster
   const cluster = new ZombieCluster(
-    { scene, world: physics.world, atlas: zombieAtlas!, gibs },
+    { scene, world: physics.world, gibs, createAnimator: createZombieAnimator },
     { x: 0, y: 1, z: -6 },
   );
   cluster.spawn(4);

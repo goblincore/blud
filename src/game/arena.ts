@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { AxeZombie, ZombieTextureAtlas } from './enemy/axe-zombie';
+import { AxeZombie } from './enemy/axe-zombie';
 import { ZombieState } from './enemy/ai';
 import type { GibSystem } from './gibs';
 import type { StaticSurface } from './gibs/particles';
@@ -92,8 +92,9 @@ export function registerArenaSurfaces(): void {
 export interface ZombieSpawnDeps {
   scene: THREE.Scene;
   world: RAPIER.World;
-  atlas: ZombieTextureAtlas;
   gibs: GibSystem;
+  /** Factory: creates a new BillboardAnimator for each spawned zombie. */
+  createAnimator: () => import('../animation/billboard-animator').BillboardAnimator;
 }
 
 export class ZombieCluster {
@@ -113,7 +114,7 @@ export class ZombieCluster {
         y: this.center.y,
         z: this.center.z + Math.sin(angle) * radius,
       };
-      const z = AxeZombie.spawn(`zombie-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.atlas, pos);
+      const z = AxeZombie.spawn(`zombie-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
       this.deps.gibs.registerDude(z);
       this.zombies.push(z);
     }
