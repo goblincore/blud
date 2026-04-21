@@ -6,8 +6,34 @@ import type { ExplosionAtlas } from '../vfx/explosion';
 
 const loader = new THREE.TextureLoader();
 
+/**
+ * Load a PNG/JPG as a three.js texture, tagged for sRGB color-space and
+ * nearest-neighbour filtering (pixel-art).
+ *
+ * Three.js r150+ defaults `renderer.outputColorSpace` to sRGB but leaves
+ * individual textures as NoColorSpace. PNG files on disk are sRGB-encoded,
+ * so without tagging each texture's `colorSpace`, three.js treats the byte
+ * values as linear light → renders through linear→sRGB → visually washes
+ * out all sprites (the "white overlay / low contrast" look).
+ *
+ * Nearest filtering is applied because every texture we load here is Blood
+ * pixel-art; bilinear smoothing would blur the retro look.
+ */
 export function loadTexture(url: string): Promise<THREE.Texture> {
-  return new Promise((resolve, reject) => loader.load(url, resolve, undefined, reject));
+  return new Promise((resolve, reject) =>
+    loader.load(
+      url,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        tex.generateMipmaps = false;
+        resolve(tex);
+      },
+      undefined,
+      reject,
+    ),
+  );
 }
 
 export async function loadGibTextures(manifestUrl: string): Promise<ChunkTextureAtlas> {

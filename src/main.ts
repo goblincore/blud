@@ -108,6 +108,7 @@ async function main() {
       ctx.fillStyle = '#cc0000';
       ctx.fillRect(0, 0, 4, 4);
       const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
       return tex;
     }),
     loadAnimationManifests().catch((err) => {
@@ -129,7 +130,9 @@ async function main() {
       ctx.fillRect(2, 4, 12, 8);
       ctx.fillStyle = '#ff9944';
       ctx.fillRect(7, 1, 2, 3);
-      return new THREE.CanvasTexture(c);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
     }),
   ]);
 
