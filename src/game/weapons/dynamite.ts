@@ -131,8 +131,9 @@ export function spawnProjectile(
 
   let mesh: THREE.Mesh | null = null;
   if (projectileScene && projectileTexture) {
-    // Stick silhouette: narrow + tall. Blood tile 3423 is ~18×40 px.
-    const geom = new THREE.PlaneGeometry(0.18, 0.4);
+    // Bundle silhouette: horizontal wrapped-stick bundle with lit fuse.
+    // Blood tile 3433 is ~48×16 px — wider than tall.
+    const geom = new THREE.PlaneGeometry(0.42, 0.18);
     const mat = new THREE.MeshBasicMaterial({
       map: projectileTexture,
       transparent: true,

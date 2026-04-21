@@ -114,11 +114,14 @@ async function main() {
       console.warn('[blud] animation manifests not loaded, FPV weapons disabled:', err);
       return undefined;
     }),
-    // Flying dynamite projectile sprite — Blood picnum 3423 (kThingArmedTNTStick,
-    // vertical lit-fuse silhouette from tiles013.art). Single stick, not a bundle;
-    // see F1 port (actor.cpp:1998 thingInfo[kThingArmedTNTStick-kThingBase]).
-    // Fallback to a small red+flame canvas if the placeholder is missing.
-    loadTexture('/assets/weapons/dynamite-placeholder/stick/3423.png').catch(() => {
+    // Flying dynamite projectile sprite — Blood picnum 3433 (kThingArmedTNTBundle,
+    // the 3-stick bundle with lit fuse from tiles013.art). The PLAYER throws a
+    // BUNDLE, not a single stick: processTNT (weapon.cpp:2172) fires
+    // nClientThrowBundle; single sticks (kThingArmedTNTStick picnum 3422) are
+    // what cultists throw at you. M2 was rendering 3467 which is actually the
+    // spray can (kThingArmedSpray) — fixed here.
+    // See actor.cpp:2015 thingInfo[kThingArmedTNTBundle-kThingBase].
+    loadTexture('/assets/weapons/dynamite-placeholder/bundle/3433.png').catch(() => {
       const c = document.createElement('canvas');
       c.width = 16; c.height = 16;
       const ctx = c.getContext('2d')!;
