@@ -71,7 +71,7 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `R2`  [x]  Gib picnum map (32 tiles across ART files) → [docs/tuning-sources-gibs.md](docs/tuning-sources-gibs.md)
 - `R3`  [x]  Sprite extraction toolchain overview → [docs/dev-notes/2026-04-20-blood-sprite-extraction.md](docs/dev-notes/2026-04-20-blood-sprite-extraction.md)
 - `R4`  [x]  Blood palette canonical decoding → [docs/dev-notes/2026-04-21-blood-palette-decoding.md](docs/dev-notes/2026-04-21-blood-palette-decoding.md)
-- `R5`  [ ]  **Blood `.MAP` format + texture/asset co-occurrence research** — dispatch-run: write minimal Python `.MAP` parser, extract stats from Blood's campaign maps (texture palettes per sector-type, sprite/enemy placement density, sector size distributions, connectivity idioms, light vocabulary). Output: `docs/dev-notes/2026-04-XX-blood-map-research.md` with findings + proposed JSON schema for pattern extraction that M6 procgen can consume. Dispatch plan queued at `~/.claude/dispatch/plans/2026-04-21-blud-map-research.md`, can run in parallel with A10.
+- `R5`  [x]  **Blood `.MAP` format + texture/asset co-occurrence research** — `scripts/map_parser.py` (v7 parser with dbCrypt + X-struct bitstreams), `scripts/analyze_maps.py` (39 maps → patterns.json), `docs/dev-notes/2026-04-21-blood-map-research.md` (findings + JSON schema for M6 procgen). 181 texture families; 8.1% special sectors; heavily looped maps; 72% enemies in large+ sectors.
 
 ### F — Feel / physics tuning (transcribe Blood constants into Rapier config)
 
