@@ -1,0 +1,17 @@
+{
+  "name": "zombie-recoil",
+  "kind": "seq",
+  "loop": false,
+  "baseTile": 1200,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 250
+    },
+    {
+      "tileOffset": 4,
+      "durMs": 250
+    }
+  ]
+}

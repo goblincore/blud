@@ -14,7 +14,10 @@ import { DecalPool } from './game/gibs/decals';
 import { ExplosionVfx } from './vfx/explosion';
 import { Screenshake } from './vfx/screenshake';
 import { GibSystem } from './game/gibs';
-import { loadZombieAtlas, loadGibTextures, loadExplosionAtlas, loadTexture } from './engine/asset-loader';
+import { loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests } from './engine/asset-loader';
+import { FpWeaponAnimator } from './animation/fp-weapon-animator';
+import { BillboardAnimator } from './animation/billboard-animator';
+import type { QavManifest, SeqManifest } from './animation/qav-schema';
 import type { GibbableDude } from './game/gibs';
 import type { Player as WeaponPlayer, FrameCtx } from './game/weapons/types';
 import type { Vec3 } from './game/gibs/particles';
@@ -93,8 +96,7 @@ async function main() {
   });
 
   // ---- Assets
-  const [zombieAtlas, gibTextures, explosionAtlas, trailTex] = await Promise.all([
-    loadZombieAtlas('/assets/enemies/zombie-placeholder/manifest.json'),
+  const [gibTextures, explosionAtlas, trailTex, animBundle] = await Promise.all([
     loadGibTextures('/assets/gibs-placeholder/manifest.json'),
     loadExplosionAtlas('/assets/vfx/explosion-placeholder/manifest.json'),
     loadTexture('/assets/gibs-placeholder/trail/733-placeholder.png').catch(() => {
@@ -107,12 +109,16 @@ async function main() {
       const tex = new THREE.CanvasTexture(c);
       return tex;
     }),
+    loadAnimationManifests().catch((err) => {
+      console.warn('[blud] animation manifests not loaded, FPV weapons disabled:', err);
+      return undefined;
+    }),
   ]);
 
   // ---- Gib subsystems
   const particles = new ParticlePool(scene, 1024, trailTex);
   const decals    = new DecalPool(scene, 200, trailTex, 0.25);
-  const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures, 1024, decals);
+  const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures!, 1024, decals);
   const explosions = new ExplosionVfx(scene);
   const shake     = new Screenshake();
 
@@ -145,9 +151,53 @@ async function main() {
     cluster.spawn(4);
   });
 
+  // ---- Animators (FPV weapon + zombie billboard)
+  let fpAnimator: FpWeaponAnimator | undefined;
+  let createZombieAnimator: () => BillboardAnimator;
+
+  if (animBundle) {
+    // Shared tile texture cache + getter for both FPV and billboard animators
+    const tileCache = new Map<number, THREE.Texture>();
+    const textureLoader = new THREE.TextureLoader();
+    const getTileTexture = (picnum: number): THREE.Texture => {
+      let t = tileCache.get(picnum);
+      if (!t) {
+        t = textureLoader.load(`assets/blood-tiles/${picnum}.png`);
+        t.magFilter = THREE.NearestFilter;
+        t.minFilter = THREE.NearestFilter;
+        t.colorSpace = THREE.SRGBColorSpace;
+        tileCache.set(picnum, t);
+      }
+      return t;
+    };
+
+    // FPV weapon animator
+    fpAnimator = new FpWeaponAnimator(
+      camera as THREE.PerspectiveCamera,
+      animBundle.weapons as Record<string, QavManifest>,
+      animBundle.tileMeta,
+      getTileTexture,
+    );
+    fpAnimator.play('dynamite-idle', performance.now() / 1000);
+
+    // Billboard animator factory — each zombie gets its own instance
+    createZombieAnimator = () => new BillboardAnimator(
+      animBundle.characters as Record<string, SeqManifest>,
+      animBundle.tileMeta,
+      getTileTexture,
+    );
+  } else {
+    // Fallback: no-op animator factory when manifests are missing
+    createZombieAnimator = () => new BillboardAnimator(
+      {},
+      {},
+      () => new THREE.Texture(),
+    );
+  }
+
   // ---- Zombie cluster
   const cluster = new ZombieCluster(
-    { scene, world: physics.world, atlas: zombieAtlas, gibs },
+    { scene, world: physics.world, gibs, createAnimator: createZombieAnimator },
     { x: 0, y: 1, z: -6 },
   );
   cluster.spawn(4);
@@ -175,6 +225,7 @@ async function main() {
       player: weaponPlayer,
       gibs,
       now,
+      fpAnimator,
     });
   });
 
@@ -186,6 +237,7 @@ async function main() {
       player: weaponPlayer,
       gibs,
       now,
+      fpAnimator,
     });
   });
 
@@ -195,6 +247,7 @@ async function main() {
       player: weaponPlayer,
       gibs,
       now: performance.now() / 1000,
+      fpAnimator,
     };
   }
 
@@ -236,6 +289,9 @@ async function main() {
     // Chunk billboard update + despawn
     chunks.update(camera, now);
 
+    // FPV weapon animator tick
+    fpAnimator?.update(now);
+
     // Screenshake offset (additive on camera rotation)
     const off = shake.sampleOffset(realDt);
     camera.rotation.x += off.pitch;
@@ -248,7 +304,7 @@ async function main() {
     chargeHud.setCharge(dyn.chargeFractionAt(now));
   });
 
-  console.log('[blud] M2 boot — dynamite + gibs + zombies');
+  console.log('[blud] M2 boot — dynamite + gibs + zombies + QAV animator');
 }
 
 main().catch((err) => console.error('[blud] boot failed', err));

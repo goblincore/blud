@@ -1,0 +1,37 @@
+{
+  "name": "zombie-stand",
+  "kind": "seq",
+  "loop": true,
+  "baseTile": 1209,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 133
+    }
+  ]
+}

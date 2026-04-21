@@ -1,0 +1,178 @@
+{
+  "name": "dynamite-lower",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 6,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3213,
+          "ox": -54,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3218,
+          "ox": -12,
+          "oy": -57,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 69,
+          "oy": -11,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 17,
+          "oy": -60,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3214,
+          "ox": -52,
+          "oy": -18,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3218,
+          "ox": -14,
+          "oy": -54,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 81,
+          "oy": 2,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 29,
+          "oy": -47,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3214,
+          "ox": -53,
+          "oy": -15,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3217,
+          "ox": -16,
+          "oy": -48,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 93,
+          "oy": 20,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 41,
+          "oy": -29,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3215,
+          "ox": -52,
+          "oy": -5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 102,
+          "oy": 33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 50,
+          "oy": -16,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3215,
+          "ox": -59,
+          "oy": 9,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3192,
+          "ox": 112,
+          "oy": 45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 60,
+          "oy": -4,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3215,
+          "ox": -68,
+          "oy": 22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3193,
+          "ox": 72,
+          "oy": 1,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

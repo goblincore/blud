@@ -1,0 +1,26 @@
+{
+  "weapons": {
+    "dynamite-drop": "weapons/dynamite-drop.json",
+    "dynamite-idle": "weapons/dynamite-idle.json",
+    "dynamite-lighter-ignite": "weapons/dynamite-lighter-ignite.json",
+    "dynamite-lighter-lower": "weapons/dynamite-lighter-lower.json",
+    "dynamite-lower": "weapons/dynamite-lower.json",
+    "dynamite-raise-from-spray": "weapons/dynamite-raise-from-spray.json",
+    "dynamite-raise": "weapons/dynamite-raise.json",
+    "dynamite-throw": "weapons/dynamite-throw.json"
+  },
+  "characters": {
+    "zombie-attack": "characters/zombie-attack.json",
+    "zombie-burn-chase": "characters/zombie-burn-chase.json",
+    "zombie-chase": "characters/zombie-chase.json",
+    "zombie-death-burn": "characters/zombie-death-burn.json",
+    "zombie-death-explode": "characters/zombie-death-explode.json",
+    "zombie-death-gib": "characters/zombie-death-gib.json",
+    "zombie-death-normal": "characters/zombie-death-normal.json",
+    "zombie-death-spirit": "characters/zombie-death-spirit.json",
+    "zombie-idle": "characters/zombie-idle.json",
+    "zombie-recoil": "characters/zombie-recoil.json",
+    "zombie-stand": "characters/zombie-stand.json",
+    "zombie-tesla-recoil": "characters/zombie-tesla-recoil.json"
+  }
+}

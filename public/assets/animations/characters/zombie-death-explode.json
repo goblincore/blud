@@ -1,0 +1,41 @@
+{
+  "name": "zombie-death-explode",
+  "kind": "seq",
+  "loop": false,
+  "baseTile": 1328,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 133
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 133
+    }
+  ]
+}

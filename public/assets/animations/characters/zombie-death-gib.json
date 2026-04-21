@@ -1,0 +1,149 @@
+{
+  "name": "zombie-death-gib",
+  "kind": "seq",
+  "loop": false,
+  "baseTile": 1216,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 167
+    }
+  ]
+}
