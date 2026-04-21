@@ -5,6 +5,7 @@ import { createInputState, attachInput } from './engine/input';
 import { initPhysics } from './physics/world';
 import { buildArena } from './game/arena';
 import { createPlayer } from './game/player';
+import { createDebugHud } from './ui/debug-hud';
 
 async function main() {
   const mount = document.getElementById('app')!;
@@ -28,7 +29,12 @@ async function main() {
     player.update(dt, input);
   }
 
-  setRenderCallback((realDt) => scheduler.tick(realDt, fixedStep));
+  const hud = createDebugHud(document.getElementById('hud')!);
+
+  setRenderCallback((realDt) => {
+    scheduler.tick(realDt, fixedStep);
+    hud.update(realDt, player.position());
+  });
 
   console.log('[blud] boot');
 }
