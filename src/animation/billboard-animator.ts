@@ -8,14 +8,19 @@ export class BillboardAnimator {
   private mesh: THREE.Mesh;
   private currentAnim: SeqManifest | null = null;
   private playbackStart = 0;
+  private lastPicnum = -1;
+  /** Blood pixels per world-meter. 64 → a 125-px-tall zombie tile ≈ 1.95m tall. */
+  private readonly pixelsPerUnit: number;
 
   constructor(
     private characterAnims: Record<string, SeqManifest>,
     private tileMeta: TileMetaMap,
     private getTexture: TileTextureGetter,
-    scale = 1.8,
+    pixelsPerUnit = 64,
   ) {
-    const geom = new THREE.PlaneGeometry(scale * 0.75, scale);
+    this.pixelsPerUnit = pixelsPerUnit;
+    // Placeholder geometry — resized on first update() to match the live tile.
+    const geom = new THREE.PlaneGeometry(1, 1);
     const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.1 });
     this.mesh = new THREE.Mesh(geom, mat);
     this.mesh.frustumCulled = false;
@@ -63,14 +68,28 @@ export class BillboardAnimator {
     );
 
     const picnum = anim.baseTile + tileOffset * anim.angleStride + variant;
-    const tex = this.getTexture(picnum);
-    const mat = this.mesh.material as THREE.MeshBasicMaterial;
-    if (mat.map !== tex) { mat.map = tex; mat.needsUpdate = true; }
+    if (picnum !== this.lastPicnum) {
+      const tex = this.getTexture(picnum);
+      const mat = this.mesh.material as THREE.MeshBasicMaterial;
+      mat.map = tex; mat.needsUpdate = true;
+      // Resize plane to the tile's real pixel dimensions so zombies preserve
+      // their aspect ratio (tall billboards stay tall).
+      const meta = this.tileMeta[String(picnum)];
+      if (meta) {
+        const wWorld = meta.w / this.pixelsPerUnit;
+        const hWorld = meta.h / this.pixelsPerUnit;
+        (this.mesh.geometry as THREE.PlaneGeometry).dispose();
+        this.mesh.geometry = new THREE.PlaneGeometry(wWorld, hWorld);
+      }
+      this.lastPicnum = picnum;
+    }
 
     this.mesh.scale.x = Math.abs(this.mesh.scale.x) * (flipX ? -1 : 1);
-    // Billboard: face the camera on the Y axis.
-    this.mesh.position.set(spritePos.x, spritePos.y, spritePos.z);
-    this.mesh.lookAt(cameraPos.x, spritePos.y, cameraPos.z);
+    // Billboard: feet at spritePos; raise by half-height so the rigid body
+    // center aligns with the sprite's vertical center (not its feet).
+    const geomH = (this.mesh.geometry as THREE.PlaneGeometry).parameters.height;
+    this.mesh.position.set(spritePos.x, spritePos.y + geomH / 2 - 0.5, spritePos.z);
+    this.mesh.lookAt(cameraPos.x, this.mesh.position.y, cameraPos.z);
     this.mesh.visible = true;
   }
 

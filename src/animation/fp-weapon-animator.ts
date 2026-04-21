@@ -37,8 +37,12 @@ export class FpWeaponAnimator {
   private lastFrameIdx = -1;
   private readonly distance: number;
   private readonly pixelsPerUnit: number;
-  /** Y anchor offset (tuned so weapon hand sits at bottom-center of view). */
+  /** Y anchor offset (tuned so weapon hand sits low on the screen, Blood-style). */
   private readonly anchorY: number;
+  /** Running view-bob phase (radians). */
+  private bobPhase = 0;
+  /** Per-frame horizontal speed input for bob amplitude. Updated by setWalkSpeed(). */
+  private walkSpeed = 0;
 
   constructor(
     private camera: THREE.PerspectiveCamera,
@@ -49,9 +53,8 @@ export class FpWeaponAnimator {
   ) {
     this.distance = opts.distance ?? 0.6;
     this.pixelsPerUnit = opts.pixelsPerUnit ?? 200;
-    // anchorY = -0.28: positions the hand near the bottom-center of the FOV
-    // at distance=0.6. Tuned by eye against the original hand-picked fp-weapon.ts.
-    this.anchorY = -0.28;
+    // anchorY sits the hand low on screen (Blood-style bottom-center FPV).
+    this.anchorY = -0.55;
 
     this.meshes = [];
     for (let i = 0; i < MAX_LAYERS; i++) {
@@ -83,6 +86,9 @@ export class FpWeaponAnimator {
     this.lastFrameIdx = -1;
   }
 
+  /** Set current player horizontal speed (m/s). Drives view bob amplitude. */
+  setWalkSpeed(mps: number): void { this.walkSpeed = mps; }
+
   /** Force restart an animation (even if same name). Used for state re-entry. */
   restart(name: string, nowSec: number): void {
     this.currentAnim = null; // clear so play() picks it up fresh
@@ -90,15 +96,23 @@ export class FpWeaponAnimator {
   }
 
   /** Per-frame update. Call from render loop. */
-  update(nowSec: number): void {
+  update(nowSec: number, dt = 1 / 60): void {
     const anim = this.currentAnim;
     if (!anim) {
       for (const m of this.meshes) m.visible = false;
       return;
     }
+    // View bob: advance phase at a walk-speed-proportional rate; amplitude fades
+    // to zero when stationary. Y-bob is ~sin(2x) and X-bob is ~sin(x) so the
+    // hand traces a figure-8 (classic FPS bob).
+    const walkAmount = Math.min(this.walkSpeed / 5, 1); // full bob at 5 m/s
+    this.bobPhase += dt * (6 + walkAmount * 6); // 1-2 Hz
+    const bobY = walkAmount * 0.018 * Math.sin(this.bobPhase * 2);
+    const bobX = walkAmount * 0.012 * Math.sin(this.bobPhase);
+
     const elapsedMs = (nowSec - this.playbackStart) * 1000;
     const idx = pickFrameIndex(anim.frames, elapsedMs, anim.loop);
-    if (idx === this.lastFrameIdx) return; // no change
+    const frameChanged = idx !== this.lastFrameIdx;
     this.lastFrameIdx = idx;
 
     const frame = anim.frames[idx]!;
@@ -125,25 +139,23 @@ export class FpWeaponAnimator {
         continue;
       }
 
-      // Size the plane to the tile's real pixel dimensions × scale.
-      const wWorld = (meta.w / this.pixelsPerUnit) * layer.scale;
-      const hWorld = (meta.h / this.pixelsPerUnit) * layer.scale;
-      (mesh.geometry as THREE.PlaneGeometry).dispose();
-      mesh.geometry = new THREE.PlaneGeometry(wWorld, hWorld);
+      // Only rebuild geometry + texture when the frame actually advanced.
+      if (frameChanged) {
+        const wWorld = (meta.w / this.pixelsPerUnit) * layer.scale;
+        const hWorld = (meta.h / this.pixelsPerUnit) * layer.scale;
+        (mesh.geometry as THREE.PlaneGeometry).dispose();
+        mesh.geometry = new THREE.PlaneGeometry(wWorld, hWorld);
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.map = this.getTexture(layer.tile);
+        mat.needsUpdate = true;
+        mesh.scale.x = layer.flipX ? -1 : 1;
+      }
 
-      // Position: QAV ox/oy are pixels from center-bottom anchor.
-      // Convert to camera-space:
-      //   x = (ox / BLOOD_VIEW_W) * viewportHalfWidth
-      //   y = anchorY - (oy / BLOOD_VIEW_H) * viewportHalfHeight
-      // Y is flipped because Blood's oy goes positive-up from bottom.
-      const x = (layer.ox / BLOOD_VIEW_W) * halfW * 2;
-      const y = this.anchorY - (layer.oy / BLOOD_VIEW_H) * halfH * 2;
+      // Position every frame (so bob applies smoothly even when frame hasn't changed).
+      // QAV ox/oy are pixels from center-bottom anchor; convert to camera-space.
+      const x = (layer.ox / BLOOD_VIEW_W) * halfW * 2 + bobX;
+      const y = this.anchorY - (layer.oy / BLOOD_VIEW_H) * halfH * 2 + bobY;
       mesh.position.set(x, y, -this.distance);
-
-      const mat = mesh.material as THREE.MeshBasicMaterial;
-      mat.map = this.getTexture(layer.tile);
-      mat.needsUpdate = true;
-      mesh.scale.x = layer.flipX ? -1 : 1;
       mesh.visible = true;
     }
   }

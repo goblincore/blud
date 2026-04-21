@@ -296,6 +296,9 @@ async function main() {
     if (prompt) prompt.classList.add('hidden');
   }, { once: true });
 
+  // Last-frame player position for walk-speed estimate (drives FPV bob).
+  let lastPlayerPos = player.position().clone();
+
   setRenderCallback((realDt) => {
     scheduler.tick(realDt, fixedStep);
 
@@ -310,8 +313,14 @@ async function main() {
     // Chunk billboard update + despawn
     chunks.update(camera, now);
 
-    // FPV weapon animator tick
-    fpAnimator?.update(now);
+    // FPV weapon animator tick + walk-speed bob
+    const p = player.position();
+    const horizSpeed = realDt > 0
+      ? Math.hypot(p.x - lastPlayerPos.x, p.z - lastPlayerPos.z) / realDt
+      : 0;
+    lastPlayerPos.copy(p);
+    fpAnimator?.setWalkSpeed(horizSpeed);
+    fpAnimator?.update(now, realDt);
 
     // Screenshake offset (additive on camera rotation)
     const off = shake.sampleOffset(realDt);

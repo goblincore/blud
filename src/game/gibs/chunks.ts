@@ -144,13 +144,13 @@ export class ChunkSystem {
   ): void {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(origin.x, origin.y, origin.z)
-      .setLinearDamping(0.1)
-      .setAngularDamping(0.2);
+      .setLinearDamping(0.04)  // less drag — Blood chunks keep flying
+      .setAngularDamping(0.1);
     const body = this.world.createRigidBody(bodyDesc);
 
     const colliderDesc = RAPIER.ColliderDesc.capsule(0.05, 0.08)
-      .setRestitution(0.35)
-      .setFriction(0.5);
+      .setRestitution(0.55)    // bouncier — Blood chunks skip off floors
+      .setFriction(0.35);
     this.world.createCollider(colliderDesc, body);
 
     // Radial outward direction plus explosion impulse
@@ -158,23 +158,23 @@ export class ChunkSystem {
     const theta = (index / count) * Math.PI * 2 + Math.random() * 0.8;
     const radial = {
       x: Math.cos(theta),
-      y: 0.5 + Math.random() * 0.5,     // up-biased
+      y: 0.8 + Math.random() * 0.8,   // stronger up-bias — chunks arc high
       z: Math.sin(theta),
     };
-    const radialSpeed = 2.5 + Math.random() * 2.0;
+    const radialSpeed = 5.0 + Math.random() * 4.0;   // 5-9 m/s (was 2.5-4.5)
     body.setLinvel(
       {
-        x: radial.x * radialSpeed + impulse.x * 0.01,
-        y: radial.y * radialSpeed + impulse.y * 0.01,
-        z: radial.z * radialSpeed + impulse.z * 0.01,
+        x: radial.x * radialSpeed + impulse.x * 0.025, // 2.5× impulse influence
+        y: radial.y * radialSpeed + impulse.y * 0.025,
+        z: radial.z * radialSpeed + impulse.z * 0.025,
       },
       true,
     );
     body.setAngvel(
       {
-        x: (Math.random() - 0.5) * 10,
-        y: (Math.random() - 0.5) * 10,
-        z: (Math.random() - 0.5) * 10,
+        x: (Math.random() - 0.5) * 18, // faster tumble
+        y: (Math.random() - 0.5) * 18,
+        z: (Math.random() - 0.5) * 18,
       },
       true,
     );
