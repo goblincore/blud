@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import type { Vec3, TrailSource, TrailHandle } from './particles';
 import { ParticlePool } from './particles';
+import type { DecalPool } from './decals';
 import { BLOOD_TRAIL, buPerTicSquaredToMpsSquared } from './tuning';
 
 /** A single body-chunk: Rapier dynamic body + billboard sprite + trail handle. */
@@ -36,6 +37,7 @@ export class ChunkSystem {
     private readonly particles: ParticlePool,
     private readonly atlas: ChunkTextureAtlas,
     private readonly capacity = 1024,
+    private readonly decals?: DecalPool,
   ) {}
 
   /**
@@ -129,6 +131,9 @@ export class ChunkSystem {
       airdrag: 0.5, // hand-tuned starting value; Blood's raw 4096 doesn't map directly
       lifetimeSec: BLOOD_TRAIL.lifetimeSec,
       size: 0.08,
+      onSurfaceHit: (pos: Vec3, normal: Vec3) => {
+        this.decals?.spawn(pos, normal);
+      },
     });
 
     this.chunks.push({ body, mesh, trail, spawnTime: now, settledTime: -1 });
