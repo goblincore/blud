@@ -67,6 +67,7 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `A6.5` [x]  ~~Compose sprite sheets + refine manifest angle/animation metadata~~ — Superseded by animation system (2026-04-21), see A10.
 - `A7`  [-]  Voxelization pipeline (.vox per enemy for Rapier gib explosion) — **deferred to M2 prep**
 - `A10` [x]  **Animation system port (QAV + SEQ)** — see docs/superpowers/plans/2026-04-21-blud-animation-system.md and docs/dev-notes/2026-04-21-animation-system.md
+- `A11` [x]  **Arena reskin — Blood 'crypt stone' family** — picnums 449 (floor, rusty stone), 458 (walls, grey striated), 273 (obstacles, bloody stone). Extracted from tiles001.art per R5 findings. Open-sky (no ceiling) + dusky-red gradient skybox matching Blood/Weird-West mood. Landed 2026-04-21.
 - `A8`  [-]  Clay shader / post-process (dither, pixelation, chromatic aberration on hit) — **deferred to M3**
 
 ### R — Research / reference (done — reading list)

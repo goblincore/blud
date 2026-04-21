@@ -3,7 +3,7 @@ import { createRenderer } from './engine/renderer';
 import { createScheduler } from './engine/loop';
 import { createInputState, attachInput } from './engine/input';
 import { initPhysics } from './physics/world';
-import { buildArena, registerArenaSurfaces, ZombieCluster, GameOverOverlay } from './game/arena';
+import { buildArena, installSkybox, registerArenaSurfaces, ZombieCluster, GameOverOverlay } from './game/arena';
 import { createPlayer } from './game/player';
 import { createDebugHud } from './ui/debug-hud';
 import { ChargeHud } from './ui/charge-hud';
@@ -78,7 +78,12 @@ const FIXED_DT = 1 / 60;
 
 async function main() {
   const mount = document.getElementById('app')!;
-  const { scene, camera, canvas, setRenderCallback } = createRenderer(mount);
+  const { renderer, scene, camera, canvas, setRenderCallback } = createRenderer(mount);
+
+  // Skybox — dusky-red gradient, matches fog + clear color for a seamless
+  // horizon fade. Call before buildArena so fog color is set when arena
+  // geometry is queried by distance.
+  installSkybox(scene, renderer);
 
   // ---- Physics
   const physics = await initPhysics();

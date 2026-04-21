@@ -5,17 +5,74 @@ import { ZombieState } from './enemy/ai';
 import type { GibSystem } from './gibs';
 import type { StaticSurface } from './gibs/particles';
 import { setArenaSurfaces } from './gibs/particles';
+import { loadTexture } from '../engine/asset-loader';
 
-// ——— Arena geometry (M1) ——————————————————————————————————
+// ——— Arena geometry (M1 + crypt-stone reskin) ——————————————————————
+
+/**
+ * Arena textures (Blood 'crypt stone' family, per R5 map research findings —
+ * see docs/dev-notes/2026-04-21-blood-map-research.md).
+ *
+ * Resolves async after buildArena returns; materials start with a placeholder
+ * tint and swap in the real texture once loaded (no flash, just an upgrade).
+ */
+async function loadArenaTextures(): Promise<{
+  floor: THREE.Texture; wall: THREE.Texture; obstacle: THREE.Texture;
+}> {
+  const base = '/assets/arena-placeholder/';
+  const [floor, wall, obstacle] = await Promise.all([
+    loadTexture(base + '449.png'),
+    loadTexture(base + '458.png'),
+    loadTexture(base + '273.png'),
+  ]);
+  // All three are 128×128 seamless Blood tiles. Configure for repeat across
+  // large surfaces — the floor is 40m so we tile aggressively.
+  for (const t of [floor, wall, obstacle]) {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+  }
+  return { floor, wall, obstacle };
+}
 
 export function buildArena(scene: THREE.Scene, world: RAPIER.World): void {
   const floorSize = 40;
   const wallHeight = 4;
   const wallThick = 0.5;
+  const TEX_METERS_PER_REPEAT = 2; // one 128×128 tile covers ~2m of geometry
 
+  // Start with solid-color materials so the arena is valid immediately —
+  // textures swap in once loaded.
   const floorMat = new THREE.MeshStandardMaterial({ color: 0x3a2a2a });
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x5a3a36 });
   const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a });
+
+  loadArenaTextures().then(({ floor: fTex, wall: wTex, obstacle: oTex }) => {
+    // Repeat settings per material — each material gets its own cloned texture
+    // so the repeat counts can differ (otherwise all walls would share one).
+    const floorRepeats = floorSize / TEX_METERS_PER_REPEAT;
+    const wallRepeatsX = (floorSize + wallThick) / TEX_METERS_PER_REPEAT;
+    const wallRepeatsY = wallHeight / TEX_METERS_PER_REPEAT;
+
+    const ft = fTex.clone(); ft.needsUpdate = true;
+    ft.repeat.set(floorRepeats, floorRepeats);
+    floorMat.map = ft;
+    floorMat.color.set(0xffffff); // white so texture reads true
+    floorMat.needsUpdate = true;
+
+    const wt = wTex.clone(); wt.needsUpdate = true;
+    wt.repeat.set(wallRepeatsX, wallRepeatsY);
+    wallMat.map = wt;
+    wallMat.color.set(0xffffff);
+    wallMat.needsUpdate = true;
+
+    const ot = oTex.clone(); ot.needsUpdate = true;
+    ot.repeat.set(1.5, 1.5);
+    obstacleMat.map = ot;
+    obstacleMat.color.set(0xffffff);
+    obstacleMat.needsUpdate = true;
+  }).catch((err) => {
+    console.warn('[blud] arena textures failed to load, keeping solid colors:', err);
+  });
 
   const floor = new THREE.Mesh(new THREE.BoxGeometry(floorSize, 0.5, floorSize), floorMat);
   floor.position.y = -0.25;
@@ -55,19 +112,70 @@ export function buildArena(scene: THREE.Scene, world: RAPIER.World): void {
   }
 }
 
+// ——— Skybox —————————————————————————————————————————————————
+
+/**
+ * Basic dusky gradient skybox — replaces the flat dark background. Matches
+ * Blud's Weird-West × brainrot-horror setting with a stormy purple-red dusk.
+ *
+ * Returns the horizon color so the caller can match fog + clear-color for
+ * a seamless edge where distant geometry fades into the sky.
+ */
+export function installSkybox(scene: THREE.Scene, renderer: THREE.WebGLRenderer): { horizonColor: number } {
+  const c = document.createElement('canvas');
+  // Equirectangular layout: width = 2 × height. Small res is fine for a
+  // smooth gradient — Three.js will upscale at runtime.
+  c.width = 1024;
+  c.height = 512;
+  const ctx = c.getContext('2d')!;
+
+  // Vertical gradient: zenith (top) → horizon (middle) → nadir (bottom).
+  // Colors hand-picked for the Blud mood — deep purple/black at zenith,
+  // bruised red at horizon, a touch brighter just above for atmospheric lift.
+  const g = ctx.createLinearGradient(0, 0, 0, c.height);
+  g.addColorStop(0.00, '#0a0510');   // zenith: near-black purple
+  g.addColorStop(0.35, '#2a1218');   // upper sky: bruised plum
+  g.addColorStop(0.50, '#4a1a1c');   // horizon: dusky red
+  g.addColorStop(0.62, '#2a1218');   // just below horizon: back to plum (ground haze)
+  g.addColorStop(1.00, '#0a0510');   // nadir (rarely seen under arena floor)
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+
+  scene.background = tex;
+
+  // Horizon color drives fog + renderer clear so the arena fades into the
+  // sky cleanly at distance. 0x4a1a1c matches the gradient's horizon stop.
+  const horizonColor = 0x4a1a1c;
+  if (scene.fog && scene.fog instanceof THREE.Fog) {
+    scene.fog.color.set(horizonColor);
+  }
+  renderer.setClearColor(horizonColor);
+
+  return { horizonColor };
+}
+
 // ——— Static surface AABBs —————————————————————————————————
 
-/** Compute the 6 inner faces of the arena box (floor + 4 walls + ceiling). */
+/**
+ * Compute the 5 decal-receiving inner faces of the arena (floor + 4 walls).
+ *
+ * Ceiling is intentionally omitted — there's no ceiling mesh (the arena is
+ * open to the skybox), so decals "above" would float in midair.
+ */
 export function arenaStaticSurfaces(): StaticSurface[] {
   const s = 20; // half of floorSize (40)
   const h = 4;  // wallHeight
 
-  // Each surface is an AABB + inward-facing normal
   return [
     // Floor (normal up)
     { min: { x: -s, y: -0.5, z: -s }, max: { x: s, y: 0, z: s }, normal: { x: 0, y: 1, z: 0 } },
-    // Ceiling (normal down)
-    { min: { x: -s, y: h, z: -s }, max: { x: s, y: h + 0.5, z: s }, normal: { x: 0, y: -1, z: 0 } },
     // North wall (normal +Z, into arena)
     { min: { x: -s, y: -0.5, z: s }, max: { x: s, y: h, z: s + 0.5 }, normal: { x: 0, y: 0, z: -1 } },
     // South wall (normal -Z, into arena)
