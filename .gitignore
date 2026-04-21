@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.superpowers/
+.vite/
+
+# dev tooling
+scripts/.venv/
+
+# Extracted Blood assets are dev-only placeholders — never commit.
+public/assets/**/*-placeholder.*
+public/assets/**/placeholder/
+public/assets/enemies/*-placeholder/
