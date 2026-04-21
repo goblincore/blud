@@ -169,6 +169,10 @@ async function main() {
   });
 
   // ---- Animators (FPV weapon + zombie billboard)
+  // FpWeaponAnimator parents its meshes to the camera; the camera must be in
+  // the scene graph for those children to render. Rapier's character controller
+  // owns camera position but doesn't add it to the scene.
+  scene.add(camera);
   let fpAnimator: FpWeaponAnimator | undefined;
   let createZombieAnimator: () => BillboardAnimator;
 
