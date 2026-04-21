@@ -28,11 +28,13 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ## Current focus
 
-**M1 landed ✅. M2 code merged ✅ — manual playtest pending before M3. Animation system landed as preparatory work for M3.**
+**M1–M2 landed ✅. R5 merged ✅. F1 dynamite port ✅. Next: R5.1 vision pass + M3 planning.**
 
 - M1 plan: docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md — done, merged `d05a306`
-- M2 plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md — code merged `d721ed7`, 80/80 tests green, build clean. Manual gut-check playtest is the remaining gate before M3.
-- Animation system: docs/superpowers/plans/2026-04-21-blud-animation-system.md — landed, 124/124 tests green. QAV + SEQ data-driven animation replaces approximate frame segmentation. M2 playtest unblocked.
+- M2 plan: docs/superpowers/plans/2026-04-21-blud-m2-first-kill.md — code merged `d721ed7`, playtest signed off 2026-04-21 after F1 port (throw math + single-bundle sprite + sRGB fix).
+- Animation system: docs/superpowers/plans/2026-04-21-blud-animation-system.md — landed, 124/124 tests green.
+- R5 research: docs/dev-notes/2026-04-21-blood-map-research.md — merged `4c0a0cf`. 39-map parse + 181 texture families + theme template schema for M6.
+- F1 feel-port: `18fca04` + follow-ups. Real Blood throw math (14 m/s max, 30° pitch-lob) + correct bundle sprite (picnum 3433) + three.js sRGB color-space fix. Playtest feels good.
 
 ---
 
@@ -41,8 +43,8 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 ### Milestones
 
 - `M1`  [x]  **Engine & Movement** — code merged (`d05a306`), 19/19 tests pass, build clean, browser smoke-test confirmed (WASD + mouse-look work)
-- `M2`  [~]  First kill — code merged `d721ed7`, 80/80 tests green. **Manual playtest pending** (throw dynamite → cluster-gib → gut-check). After playtest confirms feel, flip to [x] and start M3 plan.
-- `M3`  [ ]  One-kill feel pass (clay shader, decals fade, impact FX polish, audio pass). **Unblocked once M2 playtest signs off.**
+- `M2`  [x]  **First kill** — code merged `d721ed7`, playtest signed off 2026-04-21. 131/131 tests green. F1 dynamite port + sRGB color fix landed in follow-ups.
+- `M3`  [ ]  One-kill feel pass (clay shader, decals fade, impact FX polish, audio pass). **Next up — write plan via `superpowers:writing-plans`.**
 - `M4`  [!]  Full arsenal (Double-Wide, Dynamite, Cursed Phone) — blocked on M3
 - `M5`  [!]  Full bestiary + **Phase 1 gate** (30min arena = fun) — blocked on M4
 - `M6`  [!]  Chunks & generator (20 Blender chunks + run stitcher) — blocked on M5. **Pre-work**: `R5` researches Blood `.MAP` binary format + texture/asset co-occurrence patterns so procgen can use Blood-style texture/sprite palettes without rendering Blood geometry verbatim.
@@ -78,7 +80,8 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 
 ### F — Feel / physics tuning (transcribe Blood constants into Rapier config)
 
-- `F1`  [ ]  **Dynamite throw arc + gib bounce** — after animation system lands, extract Blood's throw math (weapon.cpp `processTNT` release: pitch angle + velocity decomposition, not our current `vel.y + 2.5` kicker in [src/game/weapons/dynamite.ts:187](src/game/weapons/dynamite.ts:187)) and gib physics constants (actor.cpp gibbing path + `fx.cpp` velocity/bounce coefficients) into [src/game/gibs/tuning.ts](src/game/gibs/tuning.ts) + new `src/game/weapons/tuning.ts`. Apply to Rapier body spawn (restitution, angular/linear damping, initial angvel spread, launch pitch). **Port the numbers, not the engine.** One dispatch task, ~half day. Brainstorm → spec → plan once A10 (animation system) merges.
+- `F1`  [x]  **Dynamite throw arc + bundle sprite + sRGB fix** — landed in session 2026-04-21. Ported Blood's `actFireThing` math: min/max velocity 3–14 m/s (was 3–6.5 — tuning comment had wrong interpretation of `mulscale30(nSpeed, cos)`); pitch-relative 30° upward lob via `throwVector()` (was a flat `+2.5` y-kicker). Swapped projectile from wrongly-labelled spray can (3467) → correct `kThingArmedTNTBundle` picnum 3433. Tuned projectile physics toward Blood `thingInfo[19]` (restitution=0.375, lower damping, smaller ball collider, lighter density). Also fixed a three.js r150+ sRGB color-space mismatch that was washing out all sprites loaded via the shared `loadTexture()` path. Commits: `18fca04` + follow-ups.
+- `F1.gibs` [ ]  **Gib physics constants port** — separated from F1 — still TODO. Extract `actor.cpp` gibbing-path constants + `fx.cpp` velocity/bounce coefficients into `src/game/gibs/tuning.ts`. Current gib launch/damping/restitution numbers are hand-tuned during the M2 playtest salvage; Blood's values might feel different.
 - `F2`  [ ]  **Broad feel sweep — port Blood constants across systems.** Candidates to transcribe:
   - **Audio** — SFX-per-event table from `sound.cpp` `dispatchEvent`, pitch/volume variance. Huge missing layer; we have zero audio.
   - **Palookup hit flash** — damage-taken red flash + fullbright frames on hit. Palette swap, not a shader; cheap.
