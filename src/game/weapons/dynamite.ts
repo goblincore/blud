@@ -186,15 +186,16 @@ export function resetProjectiles(world: RAPIER.World): void {
 
 // ——— Weapon implementation ————————————————————————————
 
-type DynPhase = 'idle' | 'raising' | 'igniting' | 'cooking' | 'throwing';
+// Blood QAV mapping (see docs/dev-notes/2026-04-22-notblood-source-reference.md):
+//   dynamite-raise   = BUNUP2 (10 frames, 420ms) — raise + lighter-flick + ignite + bundle reveal, all in one continuous animation.
+//                      Fuse is visually lit by the final frame (tile 3219). No separate ignite state.
+//   dynamite-idle    = BUNIDLE (6 frames, loops) — cooking-state hold, fuse lit, flame tiles cycle.
+//                      (Ideally we'd play BUNFUSE here for the authentic fuse-burndown visual — see P7 in TASKS.md.)
+//   dynamite-throw   = BUNTHRO (17 frames, 714ms)
+type DynPhase = 'idle' | 'raising' | 'cooking' | 'throwing';
 
-// Phase durations sourced from QAV manifests (frames × durMs per frame):
-//   dynamite-raise:           10 frames × 42ms ≈ 420ms (trimmed to 300ms for responsiveness)
-//   dynamite-lighter-ignite:   7 frames × 42ms ≈ 294ms
-//   dynamite-throw:            8 frames × 42ms ≈ 336ms
 const PHASE_DURATIONS = {
-  raisingMs: 300,
-  ignitingMs: 294,
+  raisingMs: 420,   // let BUNUP2 play to completion so the ignite visual finishes
   throwingMs: 336,
 } as const;
 
@@ -207,10 +208,11 @@ export class Dynamite implements Weapon {
   private phaseEnteredAt = 0;
   private cookStart = 0;
   private pendingRelease = false;
-  private fuseLit = false;
 
   phase(): DynPhase { return this._phase; }
-  isFuseLit(): boolean { return this.fuseLit; }
+
+  /** True once the BUNUP2 animation completes — visually and behaviorally, the fuse is lit from `cooking` onward. */
+  isFuseLit(): boolean { return this._phase === 'cooking' || this._phase === 'throwing'; }
 
   onPress(ctx: FrameCtx): void {
     if (this.ammo <= 0) return;
@@ -219,9 +221,9 @@ export class Dynamite implements Weapon {
   }
 
   onRelease(ctx: FrameCtx): void {
-    // Release during raising/igniting is queued — Blood drops the stick on raise-complete
-    // if the fuse hasn't been lit yet (no-op), or throws at min charge if fuse was lit mid-ignite.
-    if (this._phase === 'raising' || this._phase === 'igniting') {
+    // Released while BUNUP2 is still playing: queue the release so it resolves on raise-complete.
+    // On raise end we honor it by throwing at min charge (fuse-just-lit = ~max remaining fuse).
+    if (this._phase === 'raising') {
       this.pendingRelease = true;
       return;
     }
@@ -236,17 +238,7 @@ export class Dynamite implements Weapon {
     switch (this._phase) {
       case 'raising':
         if (elapsedMs >= PHASE_DURATIONS.raisingMs) {
-          if (this.pendingRelease) {
-            this.pendingRelease = false;
-            this.enter('idle', ctx);
-          } else {
-            this.enter('igniting', ctx);
-          }
-        }
-        break;
-      case 'igniting':
-        if (elapsedMs >= PHASE_DURATIONS.ignitingMs) {
-          this.fuseLit = true;
+          // BUNUP2 finished — fuse is now visually lit. Start the cook clock and either throw (if release queued) or cook.
           this.cookStart = ctx.now;
           if (this.pendingRelease) {
             this.pendingRelease = false;
@@ -281,9 +273,6 @@ export class Dynamite implements Weapon {
       case 'raising':
         ctx.fpAnimator?.restart('dynamite-raise', ctx.now);
         break;
-      case 'igniting':
-        ctx.fpAnimator?.restart('dynamite-lighter-ignite', ctx.now);
-        break;
       case 'cooking':
         ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
         break;
@@ -291,7 +280,6 @@ export class Dynamite implements Weapon {
         ctx.fpAnimator?.restart('dynamite-throw', ctx.now);
         break;
       case 'idle':
-        this.fuseLit = false;
         this.pendingRelease = false;
         ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
         break;
@@ -306,7 +294,6 @@ export class Dynamite implements Weapon {
     const vel = throwVector(ctx.player.forward, speed);
     spawnProjectile(ctx.world, ctx.player.handPos, vel, fuseLeft, ctx.now);
     this.ammo--;
-    this.fuseLit = false;
     this.enter('throwing', ctx);
   }
 

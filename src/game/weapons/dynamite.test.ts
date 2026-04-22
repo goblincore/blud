@@ -95,8 +95,12 @@ describe('throwVector (Blood pitch-biased lob port)', () => {
 });
 
 // ———————————————————————————————————————————————————————————————————————
-// FSM tests — 5-state machine (idle → raising → igniting → cooking → throwing)
-// Cook timer starts at IGNITING→COOKING, not onPress.
+// FSM tests — 4-state machine (idle → raising → cooking → throwing)
+// Blood's BUNUP2 animation (dynamite-raise, 420ms) handles raise + lighter-flick +
+// ignite + bundle reveal as one continuous visual. Fuse is considered lit once
+// raising completes; cook timer starts at raising→cooking transition.
+// See docs/dev-notes/2026-04-22-notblood-source-reference.md for the canonical
+// Blood state machine this mirrors.
 // ———————————————————————————————————————————————————————————————————————
 
 function makeCtx(now: number): FrameCtx {
@@ -127,7 +131,6 @@ function makeCtx(now: number): FrameCtx {
 }
 
 describe('Dynamite FSM', () => {
-  // Keep projectile list clean between FSM tests so overcook/throw paths don't leak.
   function freshDyn(): Dynamite {
     resetProjectiles(makeCtx(0).world);
     return new Dynamite();
@@ -138,54 +141,44 @@ describe('Dynamite FSM', () => {
     expect(d.phase()).toBe('idle');
   });
 
-  it('onPress IDLE → RAISING; fuse NOT lit', () => {
+  it('onPress IDLE → RAISING; fuse NOT lit yet', () => {
     const d = freshDyn();
     d.onPress(makeCtx(0));
     expect(d.phase()).toBe('raising');
     expect(d.isFuseLit()).toBe(false);
   });
 
-  it('RAISING auto-advances to IGNITING after raiseMs', () => {
+  it('RAISING auto-advances to COOKING after raiseMs; fuse LIT at transition', () => {
     const d = freshDyn();
     d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.35), 0.35); // raiseMs ≈ 300ms + buffer
-    expect(d.phase()).toBe('igniting');
-  });
-
-  it('IGNITING auto-advances to COOKING after igniteMs; fuse LIT at transition', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.35), 0.35); // raising → igniting
-    d.onFrame(makeCtx(0.80), 0.45); // igniting (~294ms) → cooking
+    d.onFrame(makeCtx(0.45), 0.45); // raiseMs = 420ms + small buffer
     expect(d.phase()).toBe('cooking');
     expect(d.isFuseLit()).toBe(true);
   });
 
-  it('cook timer resets at COOKING entry (NOT at press)', () => {
+  it('cook timer starts at raising→cooking transition (NOT at press)', () => {
     const d = freshDyn();
-    d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.35), 0.35);
-    d.onFrame(makeCtx(0.80), 0.45); // cooking starts here
-    d.onFrame(makeCtx(1.80), 1.0);  // 1s into cooking
-    expect(d.chargeFractionAt(1.80)).toBeCloseTo(0.5, 1);
+    d.onPress(makeCtx(0));           // t=0 press
+    d.onFrame(makeCtx(0.45), 0.45);  // t=0.45 raising→cooking (cook timer STARTS here)
+    // At t=1.45 (1s into cooking), chargeFraction should be ~0.5 of 2s maxCharge.
+    d.onFrame(makeCtx(1.45), 1.0);
+    expect(d.chargeFractionAt(1.45)).toBeCloseTo(0.5, 1);
   });
 
-  it('release during RAISING → no-op, returns to IDLE, no projectile', () => {
+  it('release during RAISING is queued; on raise-end throws at min charge (fuse just lit)', () => {
     const d = freshDyn();
     const ammoBefore = d.ammo;
     d.onPress(makeCtx(0));
-    d.onRelease(makeCtx(0.15));     // before raiseMs elapses
-    // Trigger the tail of raising so the queued release can drop us back to idle
-    d.onFrame(makeCtx(0.35), 0.20);
-    expect(d.phase()).toBe('idle');
-    expect(d.ammo).toBe(ammoBefore);
+    d.onRelease(makeCtx(0.2));       // before raiseMs elapses
+    d.onFrame(makeCtx(0.45), 0.25);  // raise completes → queued release fires → throw
+    expect(d.phase()).toBe('throwing');
+    expect(d.ammo).toBe(ammoBefore - 1);
   });
 
   it('release during COOKING → THROWING phase', () => {
     const d = freshDyn();
     d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.35), 0.35);
-    d.onFrame(makeCtx(0.80), 0.45); // cooking
+    d.onFrame(makeCtx(0.45), 0.45);  // cooking
     d.onRelease(makeCtx(1.0));
     expect(d.phase()).toBe('throwing');
   });
@@ -193,19 +186,17 @@ describe('Dynamite FSM', () => {
   it('THROWING phase ends after throwMs → IDLE', () => {
     const d = freshDyn();
     d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.35), 0.35);
-    d.onFrame(makeCtx(0.80), 0.45);
+    d.onFrame(makeCtx(0.45), 0.45);
     d.onRelease(makeCtx(1.0));
-    d.onFrame(makeCtx(1.5), 0.5);   // throwMs ≈ 336ms
+    d.onFrame(makeCtx(1.5), 0.5);    // throwMs ≈ 336ms
     expect(d.phase()).toBe('idle');
   });
 
   it('overcook during COOKING → self-explode, phase returns to IDLE', () => {
     const d = freshDyn();
     d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.35), 0.35);
-    d.onFrame(makeCtx(0.80), 0.45); // cooking from t=0.80
-    d.onFrame(makeCtx(0.80 + 2.01), 2.01); // past fuseMaxSec (2s)
+    d.onFrame(makeCtx(0.45), 0.45);       // cooking from t=0.45
+    d.onFrame(makeCtx(0.45 + 2.01), 2.01); // past fuseMaxSec (2s)
     expect(d.phase()).toBe('idle');
   });
 });
