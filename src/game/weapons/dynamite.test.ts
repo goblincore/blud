@@ -95,10 +95,13 @@ describe('throwVector (Blood pitch-biased lob port)', () => {
 });
 
 // ———————————————————————————————————————————————————————————————————————
-// FSM tests — 4-state machine (idle → raising → cooking → throwing)
-// Blood's BUNUP2 animation (dynamite-raise, 420ms) handles raise + lighter-flick +
-// ignite + bundle reveal as one continuous visual. Fuse is considered lit once
-// raising completes; cook timer starts at raising→cooking transition.
+// FSM tests — 4-state machine: equipping → idle → cooking → throwing
+//
+// Blood's BUNUP2 (dynamite-raise, 420ms) is the weapon-equip animation — hands
+// rise, lighter flicks, flame meets wick, bundle settles. It plays ONCE on
+// equip, not on every trigger press. Subsequent trigger presses transition
+// idle → cooking directly, so there's no weapon-swap animation between shots.
+//
 // See docs/dev-notes/2026-04-22-notblood-source-reference.md for the canonical
 // Blood state machine this mirrors.
 // ———————————————————————————————————————————————————————————————————————
@@ -130,73 +133,90 @@ function makeCtx(now: number): FrameCtx {
   };
 }
 
+/** Construct a Dynamite and drive it past the equip animation so `idle` is reached.
+ *  Returns the dynamite and the post-equip time (equipEnd) the caller can start from. */
+function equipped(): { d: Dynamite; equipEnd: number } {
+  resetProjectiles(makeCtx(0).world);
+  const d = new Dynamite();
+  d.onFrame(makeCtx(0), 0);        // lazy-init: enters 'equipping', phaseEnteredAt=0
+  d.onFrame(makeCtx(0.45), 0.45);  // equippingMs=420ms elapsed → idle
+  return { d, equipEnd: 0.45 };
+}
+
 describe('Dynamite FSM', () => {
-  function freshDyn(): Dynamite {
+  it('starts in EQUIPPING (before any onFrame)', () => {
     resetProjectiles(makeCtx(0).world);
-    return new Dynamite();
-  }
-
-  it('starts in IDLE', () => {
-    const d = freshDyn();
-    expect(d.phase()).toBe('idle');
-  });
-
-  it('onPress IDLE → RAISING; fuse NOT lit yet', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));
-    expect(d.phase()).toBe('raising');
+    const d = new Dynamite();
+    expect(d.phase()).toBe('equipping');
     expect(d.isFuseLit()).toBe(false);
   });
 
-  it('RAISING auto-advances to COOKING after raiseMs; fuse LIT at transition', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.45), 0.45); // raiseMs = 420ms + small buffer
-    expect(d.phase()).toBe('cooking');
+  it('EQUIPPING auto-advances to IDLE after equippingMs', () => {
+    resetProjectiles(makeCtx(0).world);
+    const d = new Dynamite();
+    d.onFrame(makeCtx(0), 0);        // lazy-init
+    d.onFrame(makeCtx(0.45), 0.45);  // past equippingMs=420ms
+    expect(d.phase()).toBe('idle');
     expect(d.isFuseLit()).toBe(true);
   });
 
-  it('cook timer starts at raising→cooking transition (NOT at press)', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));           // t=0 press
-    d.onFrame(makeCtx(0.45), 0.45);  // t=0.45 raising→cooking (cook timer STARTS here)
-    // At t=1.45 (1s into cooking), chargeFraction should be ~0.5 of 2s maxCharge.
-    d.onFrame(makeCtx(1.45), 1.0);
-    expect(d.chargeFractionAt(1.45)).toBeCloseTo(0.5, 1);
+  it('onPress during EQUIPPING is a no-op (player can\'t shoot during equip)', () => {
+    resetProjectiles(makeCtx(0).world);
+    const d = new Dynamite();
+    d.onFrame(makeCtx(0), 0);  // lazy-init, phase=equipping
+    d.onPress(makeCtx(0.1));
+    expect(d.phase()).toBe('equipping');
   });
 
-  it('release during RAISING is queued; on raise-end throws at min charge (fuse just lit)', () => {
-    const d = freshDyn();
+  it('onPress during IDLE → COOKING; cook timer starts immediately (no raise replay)', () => {
+    const { d, equipEnd } = equipped();
+    d.onPress(makeCtx(equipEnd + 0.01));
+    expect(d.phase()).toBe('cooking');
+    // 1s into cooking → chargeFraction = 0.5 (maxChargeSec = 2s).
+    d.onFrame(makeCtx(equipEnd + 0.01 + 1.0), 1.0);
+    expect(d.chargeFractionAt(equipEnd + 0.01 + 1.0)).toBeCloseTo(0.5, 1);
+  });
+
+  it('onRelease during COOKING → THROWING; ammo decrements', () => {
+    const { d, equipEnd } = equipped();
     const ammoBefore = d.ammo;
-    d.onPress(makeCtx(0));
-    d.onRelease(makeCtx(0.2));       // before raiseMs elapses
-    d.onFrame(makeCtx(0.45), 0.25);  // raise completes → queued release fires → throw
+    d.onPress(makeCtx(equipEnd + 0.01));
+    d.onRelease(makeCtx(equipEnd + 0.5));
     expect(d.phase()).toBe('throwing');
     expect(d.ammo).toBe(ammoBefore - 1);
   });
 
-  it('release during COOKING → THROWING phase', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.45), 0.45);  // cooking
-    d.onRelease(makeCtx(1.0));
-    expect(d.phase()).toBe('throwing');
+  it('THROWING auto-advances to IDLE after throwingMs (NOT back to equipping)', () => {
+    const { d, equipEnd } = equipped();
+    d.onPress(makeCtx(equipEnd + 0.01));
+    d.onRelease(makeCtx(equipEnd + 0.5));
+    d.onFrame(makeCtx(equipEnd + 0.5 + 0.4), 0.4);  // throwingMs=336ms elapsed
+    expect(d.phase()).toBe('idle');
+    expect(d.isFuseLit()).toBe(true);
   });
 
-  it('THROWING phase ends after throwMs → IDLE', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.45), 0.45);
-    d.onRelease(makeCtx(1.0));
-    d.onFrame(makeCtx(1.5), 0.5);    // throwMs ≈ 336ms
+  it('second press after throw goes idle → cooking directly (no re-equip)', () => {
+    const { d, equipEnd } = equipped();
+    d.onPress(makeCtx(equipEnd + 0.01));
+    d.onRelease(makeCtx(equipEnd + 0.5));
+    d.onFrame(makeCtx(equipEnd + 0.9), 0.4);   // throwing → idle
+    d.onPress(makeCtx(equipEnd + 1.0));
+    expect(d.phase()).toBe('cooking');          // straight to cooking — no equipping replay
+  });
+
+  it('onRelease during IDLE is a no-op', () => {
+    const { d, equipEnd } = equipped();
+    const ammoBefore = d.ammo;
+    d.onRelease(makeCtx(equipEnd + 0.1));
     expect(d.phase()).toBe('idle');
+    expect(d.ammo).toBe(ammoBefore);
   });
 
   it('overcook during COOKING → self-explode, phase returns to IDLE', () => {
-    const d = freshDyn();
-    d.onPress(makeCtx(0));
-    d.onFrame(makeCtx(0.45), 0.45);       // cooking from t=0.45
-    d.onFrame(makeCtx(0.45 + 2.01), 2.01); // past fuseMaxSec (2s)
+    const { d, equipEnd } = equipped();
+    const press = equipEnd + 0.01;
+    d.onPress(makeCtx(press));
+    d.onFrame(makeCtx(press + 2.01), 2.01);  // past fuseMaxSec (2s)
     expect(d.phase()).toBe('idle');
   });
 });

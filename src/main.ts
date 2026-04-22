@@ -224,7 +224,8 @@ async function main() {
       animBundle.tileMeta,
       getTileTexture,
     );
-    fpAnimator.play('dynamite-idle', performance.now() / 1000);
+    // Don't pre-play here — Dynamite's lazy init on first onFrame plays the
+    // equip animation (BUNUP2 'dynamite-raise'), then transitions to idle.
 
     // Billboard animator factory — each zombie gets its own instance
     createZombieAnimator = () => new BillboardAnimator(

@@ -187,16 +187,19 @@ export function resetProjectiles(world: RAPIER.World): void {
 // ——— Weapon implementation ————————————————————————————
 
 // Blood QAV mapping (see docs/dev-notes/2026-04-22-notblood-source-reference.md):
-//   dynamite-raise     = BUNUP2 (10 frames, 420ms) — raise + lighter-flick + ignite + bundle reveal, all in one continuous animation.
-//                        Fuse is visually lit by the final frame (tile 3219). No separate ignite state.
+//   dynamite-raise     = BUNUP2 (10 frames, 420ms) — weapon-equip animation: hands rise
+//                        into view, lighter flicks, flame meets wick, bundle settles into
+//                        hold pose. Plays ONCE on equip (not on every trigger press).
+//   dynamite-idle      = BUNIDLE (6 frames, loops) — idle holding pose, fuse visually lit,
+//                        waiting for trigger press.
 //   dynamite-fuse-burn = BUNFUSE (66 frames, time-scaled to 1980ms to fit our 2s fuseMaxSec) —
-//                        authentic fuse-burndown with sparks appearing near the end; non-looping so the
-//                        animation visibly climaxes right before the state machine self-explodes.
+//                        authentic fuse-burndown with sparks appearing near the end; non-looping so
+//                        the animation visibly climaxes right before the state machine self-explodes.
 //   dynamite-throw     = BUNTHRO (17 frames, 714ms)
-type DynPhase = 'idle' | 'raising' | 'cooking' | 'throwing';
+type DynPhase = 'equipping' | 'idle' | 'cooking' | 'throwing';
 
 const PHASE_DURATIONS = {
-  raisingMs: 420,   // let BUNUP2 play to completion so the ignite visual finishes
+  equippingMs: 420,  // BUNUP2 runtime
   throwingMs: 336,
 } as const;
 
@@ -205,48 +208,45 @@ export class Dynamite implements Weapon {
   readonly ammoMax = Number.POSITIVE_INFINITY;
   ammo = Number.POSITIVE_INFINITY;
 
-  private _phase: DynPhase = 'idle';
-  private phaseEnteredAt = 0;
+  // New weapon instance always starts by equipping — either at game boot or
+  // (future) on weapon-switch from another weapon. Lazy-inits in onFrame.
+  private _phase: DynPhase = 'equipping';
+  private phaseEnteredAt = -1;  // sentinel: lazy-init on first onFrame
   private cookStart = 0;
-  private pendingRelease = false;
 
   phase(): DynPhase { return this._phase; }
 
-  /** True once the BUNUP2 animation completes — visually and behaviorally, the fuse is lit from `cooking` onward. */
-  isFuseLit(): boolean { return this._phase === 'cooking' || this._phase === 'throwing'; }
+  /** Fuse is visually lit from the moment BUNUP2 completes (end of equipping) onward. */
+  isFuseLit(): boolean {
+    return this._phase === 'idle' || this._phase === 'cooking' || this._phase === 'throwing';
+  }
 
   onPress(ctx: FrameCtx): void {
     if (this.ammo <= 0) return;
+    // Trigger only works from idle — during equipping, throwing, or cooking it's a no-op.
     if (this._phase !== 'idle') return;
-    this.enter('raising', ctx);
+    this.cookStart = ctx.now;
+    this.enter('cooking', ctx);
   }
 
   onRelease(ctx: FrameCtx): void {
-    // Released while BUNUP2 is still playing: queue the release so it resolves on raise-complete.
-    // On raise end we honor it by throwing at min charge (fuse-just-lit = ~max remaining fuse).
-    if (this._phase === 'raising') {
-      this.pendingRelease = true;
-      return;
-    }
-    if (this._phase === 'cooking') {
-      this.doThrow(ctx);
-    }
+    if (this._phase !== 'cooking') return;
+    this.doThrow(ctx);
   }
 
   onFrame(ctx: FrameCtx, dt: number): void {
+    // Lazy init: first frame we see, enter the starting phase properly so the animator
+    // gets the equip animation and phaseEnteredAt gets a valid timestamp.
+    if (this.phaseEnteredAt < 0) {
+      this.enter(this._phase, ctx);
+    }
+
     const elapsedMs = (ctx.now - this.phaseEnteredAt) * 1000;
 
     switch (this._phase) {
-      case 'raising':
-        if (elapsedMs >= PHASE_DURATIONS.raisingMs) {
-          // BUNUP2 finished — fuse is now visually lit. Start the cook clock and either throw (if release queued) or cook.
-          this.cookStart = ctx.now;
-          if (this.pendingRelease) {
-            this.pendingRelease = false;
-            this.doThrow(ctx);
-          } else {
-            this.enter('cooking', ctx);
-          }
+      case 'equipping':
+        if (elapsedMs >= PHASE_DURATIONS.equippingMs) {
+          this.enter('idle', ctx);
         }
         break;
       case 'cooking': {
@@ -271,18 +271,17 @@ export class Dynamite implements Weapon {
     this._phase = next;
     this.phaseEnteredAt = ctx.now;
     switch (next) {
-      case 'raising':
+      case 'equipping':
         ctx.fpAnimator?.restart('dynamite-raise', ctx.now);
+        break;
+      case 'idle':
+        ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
         break;
       case 'cooking':
         ctx.fpAnimator?.restart('dynamite-fuse-burn', ctx.now);
         break;
       case 'throwing':
         ctx.fpAnimator?.restart('dynamite-throw', ctx.now);
-        break;
-      case 'idle':
-        this.pendingRelease = false;
-        ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
         break;
     }
   }
