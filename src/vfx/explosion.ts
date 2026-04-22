@@ -39,6 +39,12 @@ export class ExplosionVfx {
    * Spawn a fireball at `pos`. `sizeM` is the rendered quad half-**height** in
    * meters (vertical half-size of the mushroom cloud; width follows the tile
    * aspect). Standard dynamite ≈ 1.5 m half-height; small stick ≈ 0.8 m.
+   *
+   * `pos` is the detonation point and becomes the sprite's **bottom**, not its
+   * center. Blood's mushroom-cloud tiles fill the top ~60% of the sprite and
+   * the bottom is smoke/embers; center-anchoring would bury half the sprite
+   * under the floor on ground bursts. Bottom-anchoring makes the cloud bloom
+   * upward from the blast point — correct for both floor and air bursts.
    */
   spawn(pos: { x: number; y: number; z: number }, sizeM: number, atlas: ExplosionAtlas): void {
     // Unit quad — actual dimensions applied via mesh.scale so we can track the
@@ -51,7 +57,7 @@ export class ExplosionVfx {
       depthWrite: false,
     });
     const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.set(pos.x, pos.y, pos.z);
+    mesh.position.set(pos.x, pos.y + sizeM, pos.z);
     const aspect0 = atlas.aspect(0);
     mesh.scale.set(sizeM * 2 * aspect0, sizeM * 2, 1);
     this.scene.add(mesh);
