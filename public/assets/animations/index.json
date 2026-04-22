@@ -1,6 +1,7 @@
 {
   "weapons": {
     "dynamite-drop": "weapons/dynamite-drop.json",
+    "dynamite-fuse-burn": "weapons/dynamite-fuse-burn.json",
     "dynamite-idle": "weapons/dynamite-idle.json",
     "dynamite-lighter-ignite": "weapons/dynamite-lighter-ignite.json",
     "dynamite-lighter-lower": "weapons/dynamite-lighter-lower.json",

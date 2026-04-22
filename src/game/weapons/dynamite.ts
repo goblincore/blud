@@ -187,11 +187,12 @@ export function resetProjectiles(world: RAPIER.World): void {
 // ——— Weapon implementation ————————————————————————————
 
 // Blood QAV mapping (see docs/dev-notes/2026-04-22-notblood-source-reference.md):
-//   dynamite-raise   = BUNUP2 (10 frames, 420ms) — raise + lighter-flick + ignite + bundle reveal, all in one continuous animation.
-//                      Fuse is visually lit by the final frame (tile 3219). No separate ignite state.
-//   dynamite-idle    = BUNIDLE (6 frames, loops) — cooking-state hold, fuse lit, flame tiles cycle.
-//                      (Ideally we'd play BUNFUSE here for the authentic fuse-burndown visual — see P7 in TASKS.md.)
-//   dynamite-throw   = BUNTHRO (17 frames, 714ms)
+//   dynamite-raise     = BUNUP2 (10 frames, 420ms) — raise + lighter-flick + ignite + bundle reveal, all in one continuous animation.
+//                        Fuse is visually lit by the final frame (tile 3219). No separate ignite state.
+//   dynamite-fuse-burn = BUNFUSE (66 frames, time-scaled to 1980ms to fit our 2s fuseMaxSec) —
+//                        authentic fuse-burndown with sparks appearing near the end; non-looping so the
+//                        animation visibly climaxes right before the state machine self-explodes.
+//   dynamite-throw     = BUNTHRO (17 frames, 714ms)
 type DynPhase = 'idle' | 'raising' | 'cooking' | 'throwing';
 
 const PHASE_DURATIONS = {
@@ -274,7 +275,7 @@ export class Dynamite implements Weapon {
         ctx.fpAnimator?.restart('dynamite-raise', ctx.now);
         break;
       case 'cooking':
-        ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
+        ctx.fpAnimator?.restart('dynamite-fuse-burn', ctx.now);
         break;
       case 'throwing':
         ctx.fpAnimator?.restart('dynamite-throw', ctx.now);

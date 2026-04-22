@@ -1,0 +1,2774 @@
+{
+  "name": "dynamite-fuse-burn",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 66,
+  "frames": [
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 64,
+          "oy": -17,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 12,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -17,
+          "oy": -73,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 53,
+          "oy": -15,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 1,
+          "oy": -64,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -17,
+          "oy": -73,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 53,
+          "oy": -15,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 1,
+          "oy": -64,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": -27,
+          "oy": -76,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -50,
+          "oy": -22,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -17,
+          "oy": -70,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 59,
+          "oy": -8,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 7,
+          "oy": -57,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": -18,
+          "oy": -68,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -56,
+          "oy": -18,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -23,
+          "oy": -66,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 71,
+          "oy": 3,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 19,
+          "oy": -46,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": -2,
+          "oy": -56,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -63,
+          "oy": -7,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -29,
+          "oy": -56,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 9,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -46,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 11,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 13,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 10,
+          "oy": -37,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 12,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 13,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 9,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 11,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 13,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 11,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 12,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 16,
+          "oy": -42,
+          "scale": 0.8125,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 13,
+          "oy": -44,
+          "scale": 0.8125,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 13,
+          "oy": -41,
+          "scale": 0.9375,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 14,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 10,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 11,
+          "oy": -38,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 14,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 10,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 12,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 14,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 11,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 14,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 16,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 13,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 14,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 16,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 13,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 18,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 14,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 16,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 18,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 15,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 16,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 19,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 16,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 19,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 21,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 19,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 22,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 24,
+          "oy": -41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 21,
+          "oy": -37,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 23,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 25,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 22,
+          "oy": -46,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 24,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 27,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 25,
+          "oy": -47,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 26,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 28,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 24,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 28,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 27,
+          "oy": -35,
+          "scale": 0.6875,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 39,
+          "oy": -43,
+          "scale": 0.625,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 29,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 28,
+          "oy": -33,
+          "scale": 0.6875,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 38,
+          "oy": -46,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 28,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 27,
+          "oy": -32,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 35,
+          "oy": -47,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 28,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 23,
+          "oy": -30,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 39,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 31,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 23,
+          "oy": -32,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 43,
+          "oy": -50,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -45,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 30,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 25,
+          "oy": -30,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 42,
+          "oy": -48,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -46,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 30,
+          "oy": -42,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 22,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 45,
+          "oy": -51,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3220,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 32,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 23,
+          "oy": -29,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 45,
+          "oy": -47,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3221,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 32,
+          "oy": -43,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3196,
+          "ox": 24,
+          "oy": -30,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 41,
+          "oy": -48,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 30,
+      "layers": [
+        {
+          "tile": 3192,
+          "ox": 85,
+          "oy": 16,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3194,
+          "ox": 33,
+          "oy": -33,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3219,
+          "ox": -42,
+          "oy": -44,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3212,
+          "ox": -75,
+          "oy": 5,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 32,
+          "oy": -40,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3197,
+          "ox": 23,
+          "oy": -29,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3195,
+          "ox": 43,
+          "oy": -47,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

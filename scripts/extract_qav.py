@@ -4,15 +4,17 @@
 Usage: python -m scripts.extract_qav <blood.rff> --out <dir> [--ids 5,6,7]
        python -m scripts.extract_qav <blood.rff> --out <dir> --only dynamite-idle
 
-QAV IDs for dynamite (from NotBlood weapon.cpp processTNT + WeaponRaise/WeaponLower):
-  5  = lighter ignite / equip
-  7  = lighter lower / put-away
-  16 = TNT raise (from spray can lighter)
-  18 = TNT raise (normal, not from spray can)
-  19 = TNT lower (normal)
-  20 = TNT idle holding (continuous display via weaponQav)
-  22 = TNT drop bundle (alt-fire drop)
-  23 = TNT throw (fire button release)
+QAV IDs for dynamite (verified by reading NotBlood weapon.cpp + parsing BLOOD.RFF
+QAV binaries — see docs/dev-notes/2026-04-22-notblood-source-reference.md):
+  5  = BUNUP / lighter ignite (spray-can standalone — NOT used for TNT flow)
+  7  = dynamite lower variant (BUNDOWN2, fuse extinguishes)
+  16 = TNT raise from spray can (BUNUP — short, fuse already lit)
+  18 = TNT raise normal (BUNUP2 — raise + flick + ignite + bundle reveal, 10 frames)
+  19 = TNT lower (BUNDOWN, fuse stays lit)
+  20 = TNT idle holding loop (BUNIDLE — short 6-frame calm loop)
+  21 = TNT fuse-burn cooking (BUNFUSE — 66 frames, sparks near end, callbackId=2 at frame 65 for self-explode)
+  22 = TNT drop bundle (BUNDROP)
+  23 = TNT throw (BUNTHRO)
 """
 from __future__ import annotations
 import argparse
@@ -31,6 +33,7 @@ QAV_NAMES_BY_ID: dict[int, str] = {
     18: "dynamite-raise",
     19: "dynamite-lower",
     20: "dynamite-idle",
+    21: "dynamite-fuse-burn",
     22: "dynamite-drop",
     23: "dynamite-throw",
 }
