@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1 + P6 + P7 merged. Task 7 (fuse-burn cycle + screen spin), Task 8 (explosion aspect + timing + bottom anchor), Task 9 (10-event audio wiring via dispatch) all landed. **Next: Task 10 (ambient mix — wind + thunder; live tuning in browser), then Task 11 palette-dither shader.**
+**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1+2 + P6 + P7 merged; Task 7 (fuse cycle + spin), Task 8 (explosion aspect/timing/anchor), Task 9 (10-event audio), SFX map fix (231802e) all landed. Ambient parked at mute (f035f75→8f79a6e — 1WIND baked too hot). **Next session: Task 11 palette-dither shader (biggest remaining visual impact), then Task 10 proper ambient (normalize 1WIND.wav via `ffmpeg -filter:a loudnorm` OR swap for quieter AMB* candidate; 845 samples available), then Tasks 12-15.**
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
