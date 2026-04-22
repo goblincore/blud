@@ -523,3 +523,112 @@ Common interchange formats for Build-engine map data:
 | `scripts/analyze_maps.py` | Campaign pattern extraction script |
 | `scripts/tests/test_map_parser.py` | 16 pytest tests (hand-crafted blob + real-map smoke tests) |
 | `public/assets/map-research/patterns.json` | Full statistics dump (gitignored — dev artifact) |
+
+## R5.1 addendum (vision pass)
+
+This section summarizes the results of a vision-assisted analysis of Blood's map data. The 181 texture families identified in R5 were too granular for procedural generation. This pass names the top 30 families and classifies all 39 campaign maps into layout archetypes, providing a higher-level vocabulary for theme generation.
+
+### Top-30 Labeled Texture Families
+
+| Family ID | Name | Theme Tag | Sector Count |
+|-----------|------|-----------|--------------|
+| family_53 | Earthy Brick and Dark Wood | `crypt` | 2200 |
+| family_126 | Gray Crypt Brick | `crypt` | 1863 |
+| family_169 | Mottled Gray Stone and Dark Wood | `crypt` | 1469 |
+| family_120 | Green Slime Caverns | `sewer` | 1321 |
+| family_50 | Ornate Red Carpet | `wood` | 1179 |
+| family_56 | Stone and Moss | `stone` | 1109 |
+| family_151 | Dark Wood Paneling | `wood` | 1103 |
+| family_67 | Rocky Earth Tunnels | `earth` | 1020 |
+| family_124 | Industrial Metal | `industrial` | 946 |
+| family_57 | Hewn Stone Blocks | `stone` | 927 |
+| family_93 | Weathered Exterior Brick | `brick` | 873 |
+| family_8 | Rough-Cut Timber | `wood` | 796 |
+| family_4 | Polished Stone and Brick | `stone` | 794 |
+| family_49 | Sandy Ground | `earth` | 762 |
+| family_176 | Hellish Red Rock | `hell` | 749 |
+| family_142 | Icy Caverns | `ice` | 747 |
+| family_102 | Flesh and Guts | `flesh` | 681 |
+| family_32 | Hi-Tech Panels | `tech` | 556 |
+| family_55 | Dirty Concrete | `industrial` | 535 |
+| family_22 | Marble and Fine Wood | `wood` | 517 |
+| family_127 | Sewer Pipe and Grime | `sewer` | 505 |
+| family_5 | Mine Shafts | `earth` | 494 |
+| family_75 | Temple Stone | `stone` | 457 |
+| family_1 | Swampy Ground | `outdoor` | 451 |
+| family_69 | Volcanic Rock | `hell` | 440 |
+| family_84 | Kitchen/Tiled Interior | `brick` | 436 |
+| family_106 | Office/Commercial Interior | `tech` | 432 |
+| family_92 | Library/Study | `wood` | 420 |
+| family_58 | Starry Sky | `outdoor` | 409 |
+| family_172 | Water/Underwater | `organic` | 375 |
+
+### Map Layout Archetypes
+
+| Map | Archetype | Dominant Theme Tag |
+|-----|-----------|--------------------|
+| DWBB1.MAP | `hub-and-spokes` | `crypt` |
+| DWBB2.MAP | `corridor-chain` | `crypt` |
+| DWBB3.MAP | `multi-arena` | `crypt` |
+| DWE1M1.MAP | `hub-and-spokes` | `crypt` |
+| DWE1M10.MAP | `arena-with-closets` | `hell` |
+| DWE1M11.MAP | `corridor-chain` | `crypt` |
+| DWE1M12.MAP | `multi-arena` | `ice` |
+| DWE1M2.MAP | `hub-and-spokes` | `crypt` |
+| DWE1M3.MAP | `branching-tree` | `crypt` |
+| DWE1M4.MAP | `multi-arena` | `wood` |
+| DWE1M5.MAP | `hub-and-spokes` | `wood` |
+| DWE1M6.MAP | `corridor-chain` | `crypt` |
+| DWE1M7.MAP | `maze` | `crypt` |
+| DWE1M8.MAP | `arena-with-closets` | `crypt` |
+| DWE1M9.MAP | `hub-and-spokes` | `crypt` |
+| DWE2M1.MAP | `hub-and-spokes` | `stone` |
+| DWE2M10.MAP | `multi-arena` | `tech` |
+| DWE2M11.MAP | `arena-with-closets` | `tech` |
+| DWE2M12.MAP | `hub-and-spokes` | `tech` |
+| DWE2M2.MAP | `corridor-chain` | `stone` |
+| DWE2M3.MAP | `multi-arena` | `stone` |
+| DWE2M4.MAP | `hub-and-spokes` | `stone` |
+| DWE2M5.MAP | `maze` | `stone` |
+| DWE2M6.MAP | `corridor-chain` | `stone` |
+| DWE2M7.MAP | `hub-and-spokes` | `stone` |
+| DWE2M8.MAP | `multi-arena` | `stone` |
+| DWE2M9.MAP | `arena-with-closets` | `stone` |
+| DWE3M1.MAP | `hub-and-spokes` | `brick` |
+| DWE3M10.MAP | `arena-with-closets` | `flesh` |
+| DWE3M11.MAP | `multi-arena` | `flesh` |
+| DWE3M12.MAP | `hub-and-spokes` | `flesh` |
+| DWE3M2.MAP | `corridor-chain` | `brick` |
+| DWE3M3.MAP | `multi-arena` | `brick` |
+| DWE3M4.MAP | `hub-and-spokes` | `brick` |
+| DWE3M5.MAP | `maze` | `brick` |
+| DWE3M6.MAP | `corridor-chain` | `brick` |
+| DWE3M7.MAP | `hub-and-spokes` | `brick` |
+| DWE3M8.MAP | `multi-arena` | `brick` |
+| DWE3M9.MAP | `arena-with-closets` | `brick` |
+
+### Themes Frequency
+
+**By Theme Tag:**
+
+- `crypt`: 11 maps
+- `stone`: 9 maps
+- `brick`: 9 maps
+- `tech`: 3 maps
+- `flesh`: 3 maps
+- `wood`: 2 maps
+- `hell`: 1 maps
+- `ice`: 1 maps
+
+**By Archetype:**
+
+- `hub-and-spokes`: 13 maps
+- `multi-arena`: 9 maps
+- `corridor-chain`: 7 maps
+- `arena-with-closets`: 6 maps
+- `maze`: 3 maps
+- `branching-tree`: 1 maps
+
+### Implications for M6 Procgen
+
+The labeled families and archetypes directly inform the `Theme Template` schema from R5. The `theme_tag` provides a high-level theme name (e.g., 'crypt', 'industrial'), and the textures within that family can populate the `textures` section of the template. The layout archetypes can be used to select a `layoutAlgorithm` and tune connectivity parameters like `hubRatio` and `deadEndRatio` to produce maps with a characteristic Blood feel.
