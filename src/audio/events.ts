@@ -12,16 +12,22 @@ export enum SfxEvent {
   PLAYER_FOOTSTEP = 'player_footstep',
 }
 
-/** Blood SFX ID candidates keyed by event. Used at load time to map RFF → buffer. */
+/**
+ * Blood SFX name → file candidates keyed by event. Used at load time to map
+ * RFF → buffer. Names come from the extracted SFX header (the symbolic name
+ * written to `{name}.wav` by scripts/extract_blood_sfx.py), NOT the numeric
+ * sound-ID used internally by Blood's dispatchEvent system — that numbering
+ * scheme doesn't land cleanly in the extraction filenames.
+ */
 export const SFX_BLOOD_MAP: Record<SfxEvent, string> = {
-  [SfxEvent.LIGHTER_STRIKE]:   '431',
-  [SfxEvent.FUSE_HISS]:        '441',
-  [SfxEvent.THROW_GRUNT]:      '455',
-  [SfxEvent.DYNAMITE_BOOM]:    '304',
-  [SfxEvent.GIB_SPLAT]:        '508',
-  [SfxEvent.ZOMBIE_IDLE_GROAN]: '1107',
-  [SfxEvent.ZOMBIE_AGGRO]:     '1106',
-  [SfxEvent.ZOMBIE_DEATH]:     '1105',
-  [SfxEvent.ZOMBIE_FOOTSTEP]:  '710',
-  [SfxEvent.PLAYER_FOOTSTEP]:  '710',
+  [SfxEvent.LIGHTER_STRIKE]:   'SPARK',     // match flick
+  [SfxEvent.FUSE_HISS]:        'BURN',      // burning fuse loop
+  [SfxEvent.THROW_GRUNT]:      'CALEBM~1',  // Caleb voice — only player vocal we have
+  [SfxEvent.DYNAMITE_BOOM]:    'EXPLODCM',  // medium-close explosion
+  [SfxEvent.GIB_SPLAT]:        'SPLATT',    // gib impact
+  [SfxEvent.ZOMBIE_IDLE_GROAN]: 'MOAN2LP',  // long loop moan
+  [SfxEvent.ZOMBIE_AGGRO]:     'MOAN3',     // shorter aggressive moan
+  [SfxEvent.ZOMBIE_DEATH]:     'MOAN4',     // longest — death scream
+  [SfxEvent.ZOMBIE_FOOTSTEP]:  'FFSTONE1',  // crypt-stone step
+  [SfxEvent.PLAYER_FOOTSTEP]:  'FFSTONE2',  // crypt-stone step alt
 };
