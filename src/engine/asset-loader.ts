@@ -57,9 +57,17 @@ export async function loadExplosionAtlas(manifestUrl: string): Promise<Explosion
   const frames = await Promise.all(
     manifest.frames.map((f: { file: string }) => loadTexture(baseDir + f.file)),
   );
+  const clamp = (i: number) => Math.min(Math.max(i, 0), frames.length - 1);
+  const aspectOf = (tex: THREE.Texture): number => {
+    const img = tex.image as { width?: number; height?: number } | undefined;
+    const w = img?.width ?? 1;
+    const h = img?.height ?? 1;
+    return h > 0 ? w / h : 1;
+  };
   return {
     frameCount: frames.length,
     frameDurationMs: manifest.frameDurationMs ?? 67,
-    get: (i: number) => frames[Math.min(i, frames.length - 1)],
+    get: (i: number) => frames[clamp(i)]!,
+    aspect: (i: number) => aspectOf(frames[clamp(i)]!),
   };
 }
