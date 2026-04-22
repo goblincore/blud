@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — theme preview</title>
+<style>
+  body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #info {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #444;
+    max-width: 360px; line-height: 1.5;
+  }
+  #info h1 { margin: 0 0 4px; font-size: 14px; }
+  #info code { background: #2a1a20; padding: 1px 4px; }
+  .err { color: #ff6464; }
+</style>
+</head>
+<body>
+  <div id="info">
+    <h1>theme preview</h1>
+    <div id="family-info">loading…</div>
+    <div style="margin-top:6px;opacity:.7;font-size:11px;">
+      query param: <code>?family=family_126</code> (default crypt)
+    </div>
+  </div>
+  <div id="app"></div>
+  <script type="module" src="/src/dev/theme-preview.ts"></script>
+</body>
+</html>
