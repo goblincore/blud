@@ -14,6 +14,10 @@ import { ChunkSystem } from './game/gibs/chunks';
 import { DecalPool } from './game/gibs/decals';
 import { ExplosionVfx } from './vfx/explosion';
 import { Screenshake } from './vfx/screenshake';
+import { DEFAULT_POST_FX, isDevPanelEnabled } from './vfx/post-fx/config';
+import { createPostFxComposer } from './vfx/post-fx/composer';
+import { PostFxBus } from './vfx/post-fx/post-fx-bus';
+import { mountDevPanel } from './vfx/post-fx/dev-panel';
 import { GibSystem } from './game/gibs';
 import { loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests } from './engine/asset-loader';
 import { FpWeaponAnimator } from './animation/fp-weapon-animator';
@@ -78,7 +82,7 @@ const FIXED_DT = 1 / 60;
 
 async function main() {
   const mount = document.getElementById('app')!;
-  const { renderer, scene, camera, canvas, setRenderCallback } = createRenderer(mount);
+  const { renderer, scene, camera, canvas, setRenderCallback, setDrawFn } = createRenderer(mount);
 
   // Skybox — dusky-red gradient, matches fog + clear color for a seamless
   // horizon fade. Call before buildArena so fog color is set when arena
@@ -228,6 +232,24 @@ async function main() {
       () => new THREE.Texture(),
     );
   }
+
+  // ---- Post-FX
+  const postFxBus = new PostFxBus(DEFAULT_POST_FX.ca.baseline);
+  const composer = createPostFxComposer(renderer, scene, camera, postFxBus, DEFAULT_POST_FX);
+  setDrawFn(() => composer.render(0, performance.now() / 1000));
+
+  let devPanelUnmount: (() => void) | null = null;
+  if (isDevPanelEnabled()) devPanelUnmount = mountDevPanel(document.body, DEFAULT_POST_FX);
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'F9') {
+      if (devPanelUnmount) { devPanelUnmount(); devPanelUnmount = null; }
+      else devPanelUnmount = mountDevPanel(document.body, DEFAULT_POST_FX);
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    composer.setSize(renderer.domElement.width, renderer.domElement.height);
+  });
 
   // ---- Zombie cluster
   const cluster = new ZombieCluster(
