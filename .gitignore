@@ -17,3 +17,6 @@ __pycache__/
 
 # Map research artifacts — dev-only, never ship
 public/assets/map-research/
+
+# Dev-only Blood SFX placeholders — never ship
+public/assets/audio-placeholder/
