@@ -18,10 +18,11 @@ export function createAudioEngine(camera: THREE.Camera): AudioEngine {
   sfxGain.connect(listener.gain);
 
   const ambientGain = ctx.createGain();
-  // Ambient bed is meant to be "brooding background", not foreground — keep it
-  // well under SFX. 0.12 puts 1WIND at a barely-there whisper; raise toward
-  // 0.2 if the arena feels dead during long idle stretches.
-  ambientGain.gain.value = 0.12;
+  // Ambient is muted pending proper mix tuning (Task 10). 1WIND.wav is baked
+  // very hot out of Blood's RFF and even at 0.12 still dominated the mix
+  // during playtest. Raise via devtools (`audioEngine.ambientGain.gain.value`)
+  // once SFX balance is verified, then write the final value back here.
+  ambientGain.gain.value = 0;
   ambientGain.connect(listener.gain);
 
   return { listener, ctx, sfxGain, ambientGain };
