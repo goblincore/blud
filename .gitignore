@@ -18,6 +18,9 @@ __pycache__/
 # Map research artifacts — dev-only, never ship
 public/assets/map-research/
 
+# Baked palette LUT — regenerated from BLOOD.RFF via scripts/build_palette_lut.py
+public/assets/post-fx/
+
 # Dev-only Blood SFX placeholders — never ship.
 # Two patterns: the directory (real extraction) AND the bare path (for when a
 # dispatch worktree runs and its helper code symlinks back to main's extraction).

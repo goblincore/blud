@@ -48,6 +48,7 @@ class PlayerGibAdapter implements GibbableDude {
   constructor(
     private readonly getPos: () => THREE.Vector3,
     private readonly getForward: () => THREE.Vector3,
+    private readonly bus?: PostFxBus,
   ) {}
 
   get pos(): Vec3 {
@@ -55,9 +56,12 @@ class PlayerGibAdapter implements GibbableDude {
     return { x: p.x, y: p.y, z: p.z };
   }
 
-  takeDamage(_amount: number, _impulse: Vec3): void {
-    // Player HP tracking — for M2, overcook = instant gib so this is mostly unused
-    this.hp -= _amount;
+  takeDamage(amount: number, _impulse: Vec3): void {
+    this.hp -= amount;
+    // CA spike that decays back to baseline over 0.4s. Scales lightly with
+    // damage — 0.015 floor so a glancing hit still reads, cap near 0.025.
+    const intensity = 0.015 + 0.01 * Math.min(amount / 60, 1);
+    this.bus?.triggerDamagePulse(intensity, 0.4, performance.now() / 1000);
   }
 }
 
@@ -196,12 +200,19 @@ async function main() {
   const explosions = new ExplosionVfx(scene);
   const shake     = new Screenshake();
 
+  // ---- Post-FX bus (constructed early so PlayerGibAdapter can fire damage pulses)
+  const postFxBus = new PostFxBus(DEFAULT_POST_FX.ca.baseline);
+
   // ---- Player adapters
-  const playerGib = new PlayerGibAdapter(player.position, () => {
-    const d = new THREE.Vector3();
-    camera.getWorldDirection(d);
-    return d;
-  });
+  const playerGib = new PlayerGibAdapter(
+    player.position,
+    () => {
+      const d = new THREE.Vector3();
+      camera.getWorldDirection(d);
+      return d;
+    },
+    postFxBus,
+  );
   const weaponPlayer = new WeaponPlayerAdapter(player.position, camera);
 
   // ---- Game-over overlay
@@ -271,8 +282,7 @@ async function main() {
     );
   }
 
-  // ---- Post-FX
-  const postFxBus = new PostFxBus(DEFAULT_POST_FX.ca.baseline);
+  // ---- Post-FX composer (bus already constructed above)
   const composer = createPostFxComposer(renderer, scene, camera, postFxBus, DEFAULT_POST_FX);
   setDrawFn(() => composer.render(0, performance.now() / 1000));
 

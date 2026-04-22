@@ -26,9 +26,10 @@ export class DecalPool {
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
-      // Tint to deep blood red (same as particle trail) — otherwise the raw
-      // Blood droplet tile reads as pink against the arena floor.
-      color: 0x802020,
+      // Tint to blood red (same as particle trail) — otherwise the raw Blood
+      // droplet tile reads as pink. Bumped 0x802020 → 0xc02020 so the
+      // palette-dither snap lands in BLOOD.PAL's bright-red cluster.
+      color: 0xc02020,
     });
     for (let i = 0; i < capacity; i++) {
       const m = new THREE.Mesh(geom, mat);
