@@ -85,6 +85,7 @@ export async function loadSfxRegistry(
   const events: SfxEvent[] = Object.values(SfxEvent);
   await Promise.all(events.map(async (event) => {
     const bloodId = SFX_BLOOD_MAP[event];
+    if (!bloodId) return;
     try {
       const res = await fetch(`${basePath}/${bloodId}.wav`);
       if (!res.ok) return;

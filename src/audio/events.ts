@@ -22,7 +22,7 @@ export enum SfxEvent {
 export const SFX_BLOOD_MAP: Record<SfxEvent, string> = {
   [SfxEvent.LIGHTER_STRIKE]:   'SPARK',     // match flick
   [SfxEvent.FUSE_HISS]:        'BURN',      // burning fuse loop
-  [SfxEvent.THROW_GRUNT]:      'CALEBM~1',  // Caleb voice — only player vocal we have
+  [SfxEvent.THROW_GRUNT]:      '',          // disabled — CALEBM~1 has a monster vocal mixed into the same file
   [SfxEvent.DYNAMITE_BOOM]:    'EXPLODCM',  // medium-close explosion
   [SfxEvent.GIB_SPLAT]:        'SPLATT',    // gib impact
   [SfxEvent.ZOMBIE_IDLE_GROAN]: 'MOAN2LP',  // long loop moan
