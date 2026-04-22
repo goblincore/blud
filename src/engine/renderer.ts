@@ -6,6 +6,8 @@ export interface RendererHandle {
   camera: THREE.PerspectiveCamera;
   canvas: HTMLCanvasElement;
   setRenderCallback(cb: (dtSec: number) => void): void;
+  /** Swap the default renderer.render for a custom draw (e.g. EffectComposer). */
+  setDrawFn(fn: () => void): void;
 }
 
 /** Max render resolution (retro + performance). Canvas is stretched to fit window via CSS. */
@@ -66,12 +68,13 @@ export function createRenderer(mount: HTMLElement): RendererHandle {
 
   let lastTime = performance.now();
   let cb: (dtSec: number) => void = () => {};
+  let drawFn: () => void = () => renderer.render(scene, camera);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
     lastTime = now;
     cb(dt);
-    renderer.render(scene, camera);
+    drawFn();
   });
 
   return {
@@ -80,5 +83,6 @@ export function createRenderer(mount: HTMLElement): RendererHandle {
     camera,
     canvas: renderer.domElement,
     setRenderCallback(fn) { cb = fn; },
+    setDrawFn(fn) { drawFn = fn; },
   };
 }
