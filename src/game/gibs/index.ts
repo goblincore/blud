@@ -13,6 +13,8 @@ import {
   GIB_BURST,
   BU_PER_METER,
   buPerTicSquaredToMpsSquared,
+  ZOMBIE_GIB_PROFILE,
+  type GibProfile,
 } from './tuning';
 
 export interface ExplosionInfo {
@@ -35,6 +37,8 @@ export interface GibbableDude {
    *  Implementations should hide the body's sprite immediately — chunks replace it. */
   onGibbed?(): void;
   kind: 'player' | 'axe-zombie';
+  /** M3: per-enemy gib customization. Required on all dudes. */
+  gibProfile: GibProfile;
 }
 
 // ——— Pure falloff math (exported for TDD) ——————————————
@@ -132,7 +136,7 @@ export class GibSystem {
       console.log(`[gibs]   ${dude.kind} ${dude.id} at dist=${dist.toFixed(2)}m → damage=${damage.toFixed(0)} (gib@${GIB_THRESHOLD})`);
 
       if (damage >= GIB_THRESHOLD) {
-        this.triggerGib(dude.pos, impulseVec, dude.kind, now);
+        this.triggerGib(dude.pos, impulseVec, dude.gibProfile, now);
         dude.onGibbed?.();
         if (dude.kind === 'player') this.onPlayerGibbed();
         else this.unregisterDude(dude.id);
@@ -142,19 +146,18 @@ export class GibSystem {
     }
   }
 
-  triggerGib(pos: Vec3, impulse: Vec3, kind: GibbableDude['kind'], now: number): void {
-    console.log(`[gibs] GIB! ${kind} at (${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)})`);
-    this.chunks.spawnChunks(pos, impulse, now);
+  triggerGib(pos: Vec3, impulse: Vec3, profile: GibProfile, now: number): void {
+    console.log(`[gibs] GIB! at (${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)})`);
+    this.chunks.spawnChunks(pos, impulse, profile, now);
+    const burstCount = profile.chunkCount.max * 2;
     this.particles.emitBurst(pos, {
       tile: GIB_BURST.tile,
-      count: GIB_BURST.count * 2, // double count for denser spray
+      count: burstCount,
       speedMin: GIB_BURST.speedMin,
       speedMax: GIB_BURST.speedMax,
-      // Real gravity rather than the buPerTicSquaredToMpsSquared conversion
-      // (which yields ~2.6M m/s² from Blood's raw 46603 — particles vanish).
       gravity: 9.8,
       airdrag: 0.3,
-      lifetimeSec: 2.0, // down from 4s; Blood burst is denser-and-shorter feel
+      lifetimeSec: 2.0,
       size: 0.5,
     });
   }

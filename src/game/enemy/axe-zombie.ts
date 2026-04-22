@@ -1,7 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { ZombieBrain, ZombieState } from './ai';
-import { AXE_ZOMBIE } from '../gibs/tuning';
+import { AXE_ZOMBIE, ZOMBIE_GIB_PROFILE } from '../gibs/tuning';
+import type { GibProfile } from '../gibs/tuning';
 import { BillboardAnimator } from '../../animation/billboard-animator';
 import type { Vec3 } from '../gibs/particles';
 
@@ -40,6 +41,7 @@ const FLING_IMPULSE_SCALE = 0.018;
 export class AxeZombie implements GibbableDude {
   readonly id: string;
   readonly kind = 'axe-zombie' as const;
+  readonly gibProfile: GibProfile = ZOMBIE_GIB_PROFILE;
 
   hp: number = AXE_ZOMBIE.hp;
   readonly brain = new ZombieBrain({ hp: AXE_ZOMBIE.hp, speed: AXE_ZOMBIE.speed });

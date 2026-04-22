@@ -103,6 +103,59 @@ export const GIB_BURST = {
   tile: 2154,
 } as const;
 
+// ——— Gib profile ————————————————————————————————————————
+// M3 infrastructure for per-enemy death customization. Each enemy type
+// declares a profile; GibSystem reads it at gib time for spawn counts +
+// flesh/bone weights. M5 enemies plug in without refactoring ChunkSystem.
+
+export interface ChunkRange { min: number; max: number }
+
+export interface GibProfile {
+  /** Flesh tier picnums — torso/arm/leg/spine/misc sprites. */
+  fleshPicnums: number[];
+  /** Bone tier picnums — clean bones, decorative skull/femur sprites. */
+  bonePicnums: number[];
+  /** Probability [0,1] a single chunk roll picks from bonePicnums. */
+  boneWeight: number;
+  /** Count of body-part chunks to spawn (uniform int in [min,max]). */
+  bodyPartCount: ChunkRange;
+  /** Count of FX_13 blood particles to spray (used by GibSystem). */
+  chunkCount: ChunkRange;
+}
+
+/** Pick a single chunk picnum biased by profile.boneWeight. */
+export function pickChunkPicnum(profile: GibProfile, rng: () => number): number {
+  if (profile.bonePicnums.length > 0 && rng() < profile.boneWeight) {
+    return profile.bonePicnums[Math.floor(rng() * profile.bonePicnums.length)]!;
+  }
+  const flesh = profile.fleshPicnums;
+  return flesh[Math.floor(rng() * flesh.length)]!;
+}
+
+/** Uniform int in [range.min, range.max]. */
+export function rollChunkCount(range: ChunkRange, rng: () => number): number {
+  if (range.min === range.max) return range.min;
+  return range.min + Math.floor(rng() * (range.max - range.min + 1));
+}
+
+/** Blood-derived flesh picnums for humanoid enemies (torso, arm, leg, spine, misc). */
+export const HUMANOID_FLESH_PICNUMS = [1454, 1268, 1269, 1456, 1267] as const;
+
+/**
+ * Bone-tier picnums — filled by Task 5 after visual extraction. Empty list here
+ * means Task 4 only wires the flesh path; boneWeight stays at 0 until Task 5
+ * populates BONE_PICNUMS and bumps the weight to 0.2.
+ */
+export const BONE_PICNUMS: number[] = [];
+
+export const ZOMBIE_GIB_PROFILE: GibProfile = {
+  fleshPicnums: [...HUMANOID_FLESH_PICNUMS],
+  bonePicnums: BONE_PICNUMS,
+  boneWeight: 0,              // bumped to 0.2 in Task 5
+  bodyPartCount: { min: 2, max: 4 },
+  chunkCount: { min: 8, max: 14 },
+};
+
 // ——— Axe zombie ————————————————————————————————————
 // source: docs/tuning-sources.md R1 (aizomba.cpp + dudeInfo[axeZombie])
 // Starting values — these are our best read from NotBlood; feel-tune in Task 12 if needed.
