@@ -18,8 +18,11 @@ __pycache__/
 # Map research artifacts — dev-only, never ship
 public/assets/map-research/
 
-# Dev-only Blood SFX placeholders — never ship
+# Dev-only Blood SFX placeholders — never ship.
+# Two patterns: the directory (real extraction) AND the bare path (for when a
+# dispatch worktree runs and its helper code symlinks back to main's extraction).
 public/assets/audio-placeholder/
+public/assets/audio-placeholder
 
 # Dispatch worktree artifacts (see CLAUDE.md — .claude lives outside the repo)
 .claude

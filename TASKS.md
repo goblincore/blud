@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1 dispatch + P6 + P7 merged. Task 7 landed: fuse-burn cycle + screen-space spin. Task 8 landed: explosion aspect + 100ms/frame (500ms Blood lifetime). **Next: retrigger dispatch Task 9 (audio wiring); then Phase 3-5 tuning.**
+**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1 + P6 + P7 merged. Task 7 (fuse-burn cycle + screen spin), Task 8 (explosion aspect + timing + bottom anchor), Task 9 (10-event audio wiring via dispatch) all landed. **Next: Task 10 (ambient mix — wind + thunder; live tuning in browser), then Task 11 palette-dither shader.**
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
