@@ -18,7 +18,10 @@ export function createAudioEngine(camera: THREE.Camera): AudioEngine {
   sfxGain.connect(listener.gain);
 
   const ambientGain = ctx.createGain();
-  ambientGain.gain.value = 0.6;
+  // Ambient bed is meant to be "brooding background", not foreground — keep it
+  // well under SFX. 0.12 puts 1WIND at a barely-there whisper; raise toward
+  // 0.2 if the arena feels dead during long idle stretches.
+  ambientGain.gain.value = 0.12;
   ambientGain.connect(listener.gain);
 
   return { listener, ctx, sfxGain, ambientGain };
