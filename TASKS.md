@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1+2 + P6 + P7 merged; Task 7 (fuse cycle + spin), Task 8 (explosion aspect/timing/anchor), Task 9 (10-event audio), SFX map fix (231802e) all landed. Ambient parked at mute (f035f75→8f79a6e — 1WIND baked too hot). **Next session: Task 11 palette-dither shader (biggest remaining visual impact), then Task 10 proper ambient (normalize 1WIND.wav via `ffmpeg -filter:a loudnorm` OR swap for quieter AMB* candidate; 845 samples available), then Tasks 12-15.**
+**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phases 1+2+4 + P6 + P7 merged. Tasks 7/8/9 + SFX map fix + Task 11 (palette-dither) + Task 12 (damage-pulse CA) + Task 13 (scanlines+barrel) all landed (`6c59491`). THROW_GRUNT disabled (`b5fa380` — CALEBM~1 had a bleed). Ambient parked at mute (1WIND baked too hot). **Next session: Task 14 bone-weight playtest (kill ~10 zombies, count bone:flesh ratio; bump/drop [boneWeight](src/game/gibs/tuning.ts:157) from 0.2 if outside 15-25%), then Task 15 M3 acceptance. Optional: Task 10 proper ambient (normalize 1WIND via `ffmpeg -filter:a loudnorm` OR swap for quieter AMB*).**
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
