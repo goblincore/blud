@@ -19,9 +19,13 @@ import { createPostFxComposer } from './vfx/post-fx/composer';
 import { PostFxBus } from './vfx/post-fx/post-fx-bus';
 import { mountDevPanel } from './vfx/post-fx/dev-panel';
 import { GibSystem } from './game/gibs';
-import { loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests } from './engine/asset-loader';
+import { loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests, loadSfxRegistry, loadAmbientBuffers } from './engine/asset-loader';
 import { FpWeaponAnimator } from './animation/fp-weapon-animator';
 import { BillboardAnimator } from './animation/billboard-animator';
+import { createAudioEngine } from './audio/engine';
+import { Sfx } from './audio/sfx';
+import { SfxEvent } from './audio/events';
+import { Ambient } from './audio/ambient';
 import type { QavManifest, SeqManifest } from './animation/qav-schema';
 import type { GibbableDude } from './game/gibs';
 import type { GibProfile } from './game/gibs/tuning';
@@ -113,6 +117,25 @@ async function main() {
     spawn: new THREE.Vector3(0, 2, 0),
   });
 
+  // Camera must be in the scene graph before AudioListener is added to it
+  // (required for positional audio), and before FPV weapon meshes are parented.
+  scene.add(camera);
+
+  // Audio engine + SFX registry
+  const audioEngine = createAudioEngine(camera);
+  const sfxRegistry = await loadSfxRegistry(audioEngine);
+  const sfx = new Sfx(audioEngine, sfxRegistry);
+  const ambientPromise = loadAmbientBuffers(audioEngine).then(
+    (bufs) => new Ambient(audioEngine, bufs.wind, bufs.spike, { minSec: 20, maxSec: 40 }),
+  );
+
+  const startAudioOnce = () => {
+    if (audioEngine.ctx.state === 'suspended') audioEngine.ctx.resume();
+    ambientPromise.then((a) => a.start(performance.now() / 1000));
+    canvas.removeEventListener('click', startAudioOnce);
+  };
+  canvas.addEventListener('click', startAudioOnce);
+
   // Fallback placeholder for any missing dynamite bundle frame.
   const dynamiteFallback = (): THREE.Texture => {
     const c = document.createElement('canvas');
@@ -169,6 +192,7 @@ async function main() {
   const particles = new ParticlePool(scene, 1024, trailTex);
   const decals    = new DecalPool(scene, 2000, trailTex, 0.35);
   const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures!, 1024, decals);
+  chunks.setSfx(sfx);
   const explosions = new ExplosionVfx(scene);
   const shake     = new Screenshake();
 
@@ -202,10 +226,7 @@ async function main() {
   });
 
   // ---- Animators (FPV weapon + zombie billboard)
-  // FpWeaponAnimator parents its meshes to the camera; the camera must be in
-  // the scene graph for those children to render. Rapier's character controller
-  // owns camera position but doesn't add it to the scene.
-  scene.add(camera);
+  // Camera was added to the scene earlier (before AudioEngine construction).
   let fpAnimator: FpWeaponAnimator | undefined;
   let createZombieAnimator: () => BillboardAnimator;
 
@@ -274,6 +295,7 @@ async function main() {
     { x: 0, y: 1, z: -6 },
   );
   cluster.spawn(4);
+  cluster.setSfx(sfx);
 
   // ---- Weapon + HUD
   const weapons = new WeaponRegistry();
@@ -299,6 +321,7 @@ async function main() {
       gibs,
       now,
       fpAnimator,
+      sfx,
     });
   });
 
@@ -311,6 +334,7 @@ async function main() {
       gibs,
       now,
       fpAnimator,
+      sfx,
     });
   });
 
@@ -321,6 +345,7 @@ async function main() {
       gibs,
       now: performance.now() / 1000,
       fpAnimator,
+      sfx,
     };
   }
 
@@ -348,8 +373,10 @@ async function main() {
     if (prompt) prompt.classList.add('hidden');
   }, { once: true });
 
-  // Last-frame player position for walk-speed estimate (drives FPV bob).
+  // Last-frame player position for walk-speed estimate (drives FPV bob)
+  // + footstep audio accumulator.
   let lastPlayerPos = player.position().clone();
+  let playerDistAccum = 0;
 
   setRenderCallback((realDt) => {
     scheduler.tick(realDt, fixedStep);
@@ -371,6 +398,18 @@ async function main() {
       ? Math.hypot(p.x - lastPlayerPos.x, p.z - lastPlayerPos.z) / realDt
       : 0;
     lastPlayerPos.copy(p);
+
+    // Player footstep audio — fire every ~0.8m of horizontal travel
+    if (horizSpeed > 0.5) {
+      playerDistAccum += horizSpeed * realDt;
+      if (playerDistAccum >= 0.8) {
+        sfx.play(SfxEvent.PLAYER_FOOTSTEP);
+        playerDistAccum = 0;
+      }
+    } else {
+      playerDistAccum = 0;
+    }
+
     fpAnimator?.setWalkSpeed(horizSpeed);
     fpAnimator?.update(now, realDt);
 

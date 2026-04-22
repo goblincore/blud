@@ -5,6 +5,8 @@ import { AXE_ZOMBIE, ZOMBIE_GIB_PROFILE } from '../gibs/tuning';
 import type { GibProfile } from '../gibs/tuning';
 import { BillboardAnimator } from '../../animation/billboard-animator';
 import type { Vec3 } from '../gibs/particles';
+import { SfxEvent } from '../../audio/events';
+import type { Sfx } from '../../audio/sfx';
 
 /** Interface implemented by any enemy that can be gibbed by explosions. */
 export interface GibbableDude {
@@ -44,7 +46,18 @@ export class AxeZombie implements GibbableDude {
   readonly gibProfile: GibProfile = ZOMBIE_GIB_PROFILE;
 
   hp: number = AXE_ZOMBIE.hp;
-  readonly brain = new ZombieBrain({ hp: AXE_ZOMBIE.hp, speed: AXE_ZOMBIE.speed });
+  private _sfx: Sfx | null = null;
+  readonly brain = new ZombieBrain(
+    { hp: AXE_ZOMBIE.hp, speed: AXE_ZOMBIE.speed },
+    {
+      onAggroTransition: () => this._sfx?.play(SfxEvent.ZOMBIE_AGGRO, this.pos),
+      onIdleGroan: () => this._sfx?.play(SfxEvent.ZOMBIE_IDLE_GROAN, this.pos),
+      onFootstep: () => this._sfx?.play(SfxEvent.ZOMBIE_FOOTSTEP, this.pos),
+    },
+  );
+
+  /** Wire the SFX engine for zombie sounds. */
+  setSfx(sfx: Sfx): void { this._sfx = sfx; }
 
   private readonly anim: BillboardAnimator;
   private readonly body: RAPIER.RigidBody;
@@ -168,6 +181,9 @@ export class AxeZombie implements GibbableDude {
       this.flingTimer = FLING_DURATION_SEC;
       // Override death anim: explode-death instead of normal-death
       this.anim.play('zombie-death-explode', performance.now() / 1000);
+    } else if (wasAlive && this.brain.state === ZombieState.Dead && impulseMag <= 50) {
+      // Normal (non-explode) death — play death SFX
+      this._sfx?.play(SfxEvent.ZOMBIE_DEATH, this.pos);
     }
   }
 

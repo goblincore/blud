@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Weapon, FrameCtx, ViewCtx, HudCtx } from './types';
 import type { Vec3 } from '../gibs/particles';
 import { DYNAMITE_COOK, EXPLOSION_STANDARD } from '../gibs/tuning';
+import { SfxEvent } from '../../audio/events';
 
 // ——— Projectile billboard rendering (flying dynamite bundle sprite) ————
 //
@@ -231,6 +232,7 @@ export function updateProjectiles(ctx: FrameCtx, dt: number): void {
       }
     }
     if (p.fuseLeft <= 0) {
+      ctx.sfx?.play(SfxEvent.DYNAMITE_BOOM, { x: t.x, y: t.y, z: t.z });
       ctx.gibs.spawnExplosion({ x: t.x, y: t.y, z: t.z }, EXPLOSION_STANDARD, ctx.now);
       if (p.mesh) {
         projectileScene?.remove(p.mesh);
@@ -284,6 +286,7 @@ export class Dynamite implements Weapon {
   private _phase: DynPhase = 'equipping';
   private phaseEnteredAt = -1;  // sentinel: lazy-init on first onFrame
   private cookStart = 0;
+  private _fuseHissSrc: AudioBufferSourceNode | null = null;
 
   phase(): DynPhase { return this._phase; }
 
@@ -341,18 +344,29 @@ export class Dynamite implements Weapon {
   private enter(next: DynPhase, ctx: FrameCtx): void {
     this._phase = next;
     this.phaseEnteredAt = ctx.now;
+    // Stop looping fuse hiss on any phase exit (throwing / idle / overcook explosion)
+    if (next === 'throwing' || next === 'idle') {
+      this._fuseHissSrc?.stop();
+      this._fuseHissSrc = null;
+    }
     switch (next) {
       case 'equipping':
         ctx.fpAnimator?.restart('dynamite-raise', ctx.now);
+        ctx.sfx?.play(SfxEvent.LIGHTER_STRIKE);
         break;
       case 'idle':
         ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
         break;
       case 'cooking':
         ctx.fpAnimator?.restart('dynamite-fuse-burn', ctx.now);
+        {
+          const src = ctx.sfx?.play(SfxEvent.FUSE_HISS) ?? null;
+          if (src) { src.loop = true; this._fuseHissSrc = src; }
+        }
         break;
       case 'throwing':
         ctx.fpAnimator?.restart('dynamite-throw', ctx.now);
+        ctx.sfx?.play(SfxEvent.THROW_GRUNT);
         break;
     }
   }

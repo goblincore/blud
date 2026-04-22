@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import type { AudioEngine } from '../audio/engine';
+import { decodeAudio } from '../audio/engine';
+import { SfxEvent, SFX_BLOOD_MAP } from '../audio/events';
+import { SfxRegistry } from '../audio/sfx-registry';
 
 export { loadAnimationManifests, type AnimationBundle } from '../animation/manifest-loader';
 import type { ChunkTextureAtlas } from '../game/gibs/chunks';
@@ -70,4 +74,45 @@ export async function loadExplosionAtlas(manifestUrl: string): Promise<Explosion
     get: (i: number) => frames[clamp(i)]!,
     aspect: (i: number) => aspectOf(frames[clamp(i)]!),
   };
+}
+
+/** Load all SFX buffers into a registry. Missing files are silently skipped. */
+export async function loadSfxRegistry(
+  engine: AudioEngine,
+  basePath = '/assets/audio-placeholder/sfx',
+): Promise<SfxRegistry> {
+  const registry = new SfxRegistry();
+  const events: SfxEvent[] = Object.values(SfxEvent);
+  await Promise.all(events.map(async (event) => {
+    const bloodId = SFX_BLOOD_MAP[event];
+    try {
+      const res = await fetch(`${basePath}/${bloodId}.wav`);
+      if (!res.ok) return;
+      const data = await res.arrayBuffer();
+      const buf = await decodeAudio(engine, data);
+      registry.set(event, buf);
+    } catch (err) {
+      console.warn(`[audio] failed to load ${event} (${bloodId})`, err);
+    }
+  }));
+  return registry;
+}
+
+/** Load ambient loop buffers (wind + thunder spike). Missing files return null. */
+export async function loadAmbientBuffers(
+  engine: AudioEngine,
+  basePath = '/assets/audio-placeholder/ambient',
+): Promise<{ wind: AudioBuffer | null; spike: AudioBuffer | null }> {
+  const fetchDecode = async (name: string): Promise<AudioBuffer | null> => {
+    try {
+      const r = await fetch(`${basePath}/${name}`);
+      if (!r.ok) return null;
+      return await decodeAudio(engine, await r.arrayBuffer());
+    } catch { return null; }
+  };
+  const [wind, spike] = await Promise.all([
+    fetchDecode('wind.wav'),
+    fetchDecode('thunder.wav'),
+  ]);
+  return { wind, spike };
 }

@@ -9,6 +9,13 @@ export enum ZombieState {
   Dead = 'dead',
 }
 
+/** Callback hooks for brain → gameplay SFX wiring. */
+export interface BrainHooks {
+  onAggroTransition?: () => void;
+  onIdleGroan?: () => void;
+  onFootstep?: () => void;
+}
+
 export class ZombieBrain {
   state: ZombieState = ZombieState.Idle;
   hp: number;
@@ -20,8 +27,13 @@ export class ZombieBrain {
   private hitPending = false;
   private readonly aggroRadiusM = AXE_ZOMBIE.aggroRadiusM;
   private readonly meleeRangeM  = AXE_ZOMBIE.meleeRange;
+  private nextGroanAt = 0;
+  private distAccum = 0;
 
-  constructor(init: { hp: number; speed: number }) {
+  constructor(
+    init: { hp: number; speed: number },
+    private readonly hooks?: BrainHooks,
+  ) {
     this.hp = init.hp;
     this.speed = init.speed;
   }
@@ -34,6 +46,7 @@ export class ZombieBrain {
       return;
     }
 
+    const prev = this.state;
     this.attackCooldownSec = Math.max(0, this.attackCooldownSec - dt);
 
     if (this.state === ZombieState.Stagger) {
@@ -54,7 +67,15 @@ export class ZombieBrain {
 
     if (this.state === ZombieState.Idle) {
       if (d < this.aggroRadiusM) this.state = ZombieState.Chase;
-      else return; // still outside aggro — stay idle
+      else {
+        // Idle groan scheduler
+        const nowSec = performance.now() / 1000;
+        if (nowSec >= this.nextGroanAt) {
+          this.hooks?.onIdleGroan?.();
+          this.nextGroanAt = nowSec + 8 + Math.random() * 12;
+        }
+        return; // still outside aggro — stay idle
+      }
     }
 
     if (d < this.meleeRangeM) {
@@ -70,6 +91,21 @@ export class ZombieBrain {
       }
     } else {
       this.state = ZombieState.Chase;
+    }
+
+    // Aggro transition hook
+    if (prev === ZombieState.Idle && this.state === ZombieState.Chase) {
+      this.hooks?.onAggroTransition?.();
+    }
+
+    // Footstep hook — count distance while chasing
+    if (this.state === ZombieState.Chase) {
+      const v = this.desiredVelocity(self, player);
+      this.distAccum += Math.hypot(v.x, v.z) * dt;
+      if (this.distAccum >= 0.8) {
+        this.hooks?.onFootstep?.();
+        this.distAccum = 0;
+      }
     }
   }
 

@@ -6,6 +6,7 @@ import type { GibSystem } from './gibs';
 import type { StaticSurface } from './gibs/particles';
 import { setArenaSurfaces } from './gibs/particles';
 import { loadTexture } from '../engine/asset-loader';
+import type { Sfx } from '../audio/sfx';
 
 // ——— Arena geometry (M1 + crypt-stone reskin) ——————————————————————
 
@@ -208,11 +209,18 @@ export interface ZombieSpawnDeps {
 export class ZombieCluster {
   private zombies: AxeZombie[] = [];
   private nextId = 0;
+  private _sfx: Sfx | null = null;
 
   constructor(
     private readonly deps: ZombieSpawnDeps,
     private readonly center: { x: number; y: number; z: number },
   ) {}
+
+  /** Wire SFX engine for all zombies (existing + future spawns). */
+  setSfx(sfx: Sfx): void {
+    this._sfx = sfx;
+    for (const z of this.zombies) z.setSfx(sfx);
+  }
 
   spawn(count = 4, radius = 1.5): void {
     for (let i = 0; i < count; i++) {
@@ -223,6 +231,7 @@ export class ZombieCluster {
         z: this.center.z + Math.sin(angle) * radius,
       };
       const z = AxeZombie.spawn(`zombie-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
+      if (this._sfx) z.setSfx(this._sfx);
       this.deps.gibs.registerDude(z);
       this.zombies.push(z);
     }

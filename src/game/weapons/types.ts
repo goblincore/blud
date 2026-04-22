@@ -2,6 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Vec3 } from '../gibs/particles';
 import type { GibSystem } from '../gibs';
 import type { FpWeaponAnimator } from '../../animation/fp-weapon-animator';
+import type { Sfx } from '../../audio/sfx';
 
 export interface Player {
   pos: Vec3;
@@ -16,6 +17,7 @@ export interface FrameCtx {
   gibs: GibSystem;
   now: number;          // seconds since game start (monotonic)
   fpAnimator?: FpWeaponAnimator;
+  sfx?: Sfx;
 }
 
 export interface ViewCtx { /* M2: extended later for first-person rendering */ }

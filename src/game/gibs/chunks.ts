@@ -4,6 +4,8 @@ import type { Vec3, TrailSource, TrailHandle } from './particles';
 import { ParticlePool } from './particles';
 import type { DecalPool } from './decals';
 import { BLOOD_TRAIL, buPerTicSquaredToMpsSquared, pickChunkPicnum, rollChunkCount, type GibProfile } from './tuning';
+import type { Sfx } from '../../audio/sfx';
+import { SfxEvent } from '../../audio/events';
 
 /** A single body-chunk: Rapier dynamic body + billboard sprite + trail handle. */
 interface Chunk {
@@ -29,9 +31,13 @@ export interface ChunkTextureAtlas {
  */
 export class ChunkSystem {
   private chunks: Chunk[] = [];
+  private sfx: Sfx | null = null;
 
   /** Picnum for the iconic bouncing zombie head (kickable — Blood signature). */
   private readonly zombieHeadPicnum = 3405;
+
+  /** Wire the SFX engine for gib splat sounds. */
+  setSfx(sfx: Sfx): void { this.sfx = sfx; }
 
   constructor(
     private readonly world: RAPIER.World,
@@ -220,6 +226,7 @@ export class ChunkSystem {
     });
 
     this.chunks.push({ body, mesh, trail, spawnTime: now, settledTime: -1 });
+    this.sfx?.play(SfxEvent.GIB_SPLAT, origin);
   }
 
   /** Update chunk transforms + check for settle/age despawn. Called per frame. */
