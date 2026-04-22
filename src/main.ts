@@ -24,6 +24,7 @@ import { FpWeaponAnimator } from './animation/fp-weapon-animator';
 import { BillboardAnimator } from './animation/billboard-animator';
 import type { QavManifest, SeqManifest } from './animation/qav-schema';
 import type { GibbableDude } from './game/gibs';
+import type { GibProfile } from './game/gibs/tuning';
 import type { Player as WeaponPlayer, FrameCtx } from './game/weapons/types';
 import type { Vec3 } from './game/gibs/particles';
 
@@ -32,6 +33,13 @@ class PlayerGibAdapter implements GibbableDude {
   readonly id = 'player';
   readonly kind = 'player' as const;
   hp = 100;
+  readonly gibProfile: GibProfile = {
+    fleshPicnums: [1454, 1268, 1269, 1456, 1267],
+    bonePicnums: [],
+    boneWeight: 0,
+    bodyPartCount: { min: 2, max: 4 },
+    chunkCount: { min: 8, max: 14 },
+  };
 
   constructor(
     private readonly getPos: () => THREE.Vector3,

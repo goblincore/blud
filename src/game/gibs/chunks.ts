@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Vec3, TrailSource, TrailHandle } from './particles';
 import { ParticlePool } from './particles';
 import type { DecalPool } from './decals';
-import { BLOOD_TRAIL, buPerTicSquaredToMpsSquared } from './tuning';
+import { BLOOD_TRAIL, buPerTicSquaredToMpsSquared, pickChunkPicnum, rollChunkCount, type GibProfile } from './tuning';
 
 /** A single body-chunk: Rapier dynamic body + billboard sprite + trail handle. */
 interface Chunk {
@@ -30,8 +30,6 @@ export interface ChunkTextureAtlas {
 export class ChunkSystem {
   private chunks: Chunk[] = [];
 
-  /** Picnums for axe-zombie body chunks — order: torso, arm, leg, spine, misc. */
-  private readonly axeZombieChunks = [1454, 1268, 1269, 1456, 1267];
   /** Picnum for the iconic bouncing zombie head (kickable — Blood signature). */
   private readonly zombieHeadPicnum = 3405;
 
@@ -48,9 +46,11 @@ export class ChunkSystem {
    * Spawn 5 body-chunks at `origin`, launched radially + augmented by `impulse`.
    * `impulse` vector's magnitude should be in physics impulse units (kg·m/s).
    */
-  spawnChunks(origin: Vec3, impulse: Vec3, now: number): void {
-    for (let i = 0; i < this.axeZombieChunks.length; i++) {
-      this.spawnOne(origin, impulse, this.axeZombieChunks[i]!, i, now);
+  spawnChunks(origin: Vec3, impulse: Vec3, profile: GibProfile, now: number, rng: () => number = Math.random): void {
+    const count = rollChunkCount(profile.bodyPartCount, rng);
+    for (let i = 0; i < count; i++) {
+      const picnum = pickChunkPicnum(profile, rng);
+      this.spawnOne(origin, impulse, picnum, i, count, now);
     }
     // Bouncing head — the one you can kick around. Larger sphere collider, higher
     // restitution, no settle-despawn (age-despawn only, longer lifetime).
@@ -140,6 +140,7 @@ export class ChunkSystem {
     impulse: Vec3,
     picnum: number,
     index: number,
+    totalCount: number,
     now: number,
   ): void {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
@@ -154,7 +155,7 @@ export class ChunkSystem {
     this.world.createCollider(colliderDesc, body);
 
     // Radial outward direction plus explosion impulse
-    const count = this.axeZombieChunks.length;
+    const count = totalCount;
     const theta = (index / count) * Math.PI * 2 + Math.random() * 0.8;
     const radial = {
       x: Math.cos(theta),
