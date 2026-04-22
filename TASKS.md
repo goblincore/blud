@@ -98,6 +98,7 @@ Subtasks append `.N`: `A5.1`, `A5.2`.
 - `P3`  [-]  CI / GitHub Actions — defer until there's meaningful code to test
 - `P4`  [ ]  Dependency audit — `npm audit` flagged 6 vulns (1 critical). Skim before M2; probably transitive and safe to ignore for a web build
 - `P5`  [-]  Prune old `dispatch/blud-m1-task-*` branches after M1 smoke-test passes (kept for now as safety-net)
+- `P6`  [ ]  **Theme-preview schema merge** — `analyze_maps.py` emits raw R5 (`campaignSummary`/`globalStats`/`perMap`); `generate_labels.py` emits `labels.json` (30 vision-tagged families); but [theme-preview.ts](src/dev/theme-preview.ts) + [validate_patterns_schema.py](scripts/validate_patterns_schema.py) expect a merged `{texture_families, map_archetypes}` shape that no script produces. Write a small `scripts/build_theme_patterns.py` that joins raw families with `labels.json` + computes weighted picnums, emitting the expected schema to `public/assets/map-research/patterns.json` (or rename to avoid collision). R5.1 sidecar — not on M3 critical path.
 
 ---
 

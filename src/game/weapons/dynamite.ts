@@ -186,69 +186,139 @@ export function resetProjectiles(world: RAPIER.World): void {
 
 // ——— Weapon implementation ————————————————————————————
 
+type DynPhase = 'idle' | 'raising' | 'igniting' | 'cooking' | 'throwing';
+
+// Phase durations sourced from QAV manifests (frames × durMs per frame):
+//   dynamite-raise:           10 frames × 42ms ≈ 420ms (trimmed to 300ms for responsiveness)
+//   dynamite-lighter-ignite:   7 frames × 42ms ≈ 294ms
+//   dynamite-throw:            8 frames × 42ms ≈ 336ms
+const PHASE_DURATIONS = {
+  raisingMs: 300,
+  ignitingMs: 294,
+  throwingMs: 336,
+} as const;
+
 export class Dynamite implements Weapon {
   readonly id = 'dynamite';
   readonly ammoMax = Number.POSITIVE_INFINITY;
   ammo = Number.POSITIVE_INFINITY;
 
-  private cooking = false;
+  private _phase: DynPhase = 'idle';
+  private phaseEnteredAt = 0;
   private cookStart = 0;
-  private throwingUntil = 0;
+  private pendingRelease = false;
+  private fuseLit = false;
+
+  phase(): DynPhase { return this._phase; }
+  isFuseLit(): boolean { return this.fuseLit; }
 
   onPress(ctx: FrameCtx): void {
-    if (this.ammo <= 0 || this.cooking || ctx.now < this.throwingUntil) return;
-    this.cooking = true;
-    this.cookStart = ctx.now;
-    ctx.fpAnimator?.play('dynamite-idle', ctx.now);
+    if (this.ammo <= 0) return;
+    if (this._phase !== 'idle') return;
+    this.enter('raising', ctx);
   }
 
   onRelease(ctx: FrameCtx): void {
-    if (!this.cooking) return;
+    // Release during raising/igniting is queued — Blood drops the stick on raise-complete
+    // if the fuse hasn't been lit yet (no-op), or throws at min charge if fuse was lit mid-ignite.
+    if (this._phase === 'raising' || this._phase === 'igniting') {
+      this.pendingRelease = true;
+      return;
+    }
+    if (this._phase === 'cooking') {
+      this.doThrow(ctx);
+    }
+  }
+
+  onFrame(ctx: FrameCtx, dt: number): void {
+    const elapsedMs = (ctx.now - this.phaseEnteredAt) * 1000;
+
+    switch (this._phase) {
+      case 'raising':
+        if (elapsedMs >= PHASE_DURATIONS.raisingMs) {
+          if (this.pendingRelease) {
+            this.pendingRelease = false;
+            this.enter('idle', ctx);
+          } else {
+            this.enter('igniting', ctx);
+          }
+        }
+        break;
+      case 'igniting':
+        if (elapsedMs >= PHASE_DURATIONS.ignitingMs) {
+          this.fuseLit = true;
+          this.cookStart = ctx.now;
+          if (this.pendingRelease) {
+            this.pendingRelease = false;
+            this.doThrow(ctx);
+          } else {
+            this.enter('cooking', ctx);
+          }
+        }
+        break;
+      case 'cooking': {
+        const heldSec = ctx.now - this.cookStart;
+        if (heldSec >= DYNAMITE_COOK.fuseMaxSec) {
+          ctx.gibs.spawnExplosion(ctx.player.pos, EXPLOSION_STANDARD, ctx.now);
+          this.enter('idle', ctx);
+        }
+        break;
+      }
+      case 'throwing':
+        if (elapsedMs >= PHASE_DURATIONS.throwingMs) {
+          this.enter('idle', ctx);
+        }
+        break;
+    }
+
+    updateProjectiles(ctx, dt);
+  }
+
+  private enter(next: DynPhase, ctx: FrameCtx): void {
+    this._phase = next;
+    this.phaseEnteredAt = ctx.now;
+    switch (next) {
+      case 'raising':
+        ctx.fpAnimator?.restart('dynamite-raise', ctx.now);
+        break;
+      case 'igniting':
+        ctx.fpAnimator?.restart('dynamite-lighter-ignite', ctx.now);
+        break;
+      case 'cooking':
+        ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
+        break;
+      case 'throwing':
+        ctx.fpAnimator?.restart('dynamite-throw', ctx.now);
+        break;
+      case 'idle':
+        this.fuseLit = false;
+        this.pendingRelease = false;
+        ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
+        break;
+    }
+  }
+
+  private doThrow(ctx: FrameCtx): void {
     const heldSec = ctx.now - this.cookStart;
     const frac = chargeFraction(heldSec);
     const speed = throwVelocityMps(frac);
     const fuseLeft = Math.max(0, remainingFuse(heldSec));
-
-    // Blood's throw is aim-relative: forward rotated upward by ~30° around the
-    // player's right axis, then scaled by speed. See throwVector docstring.
     const vel = throwVector(ctx.player.forward, speed);
     spawnProjectile(ctx.world, ctx.player.handPos, vel, fuseLeft, ctx.now);
-
     this.ammo--;
-    this.cooking = false;
-    this.throwingUntil = ctx.now + 0.3; // throw anim duration
-    ctx.fpAnimator?.restart('dynamite-throw', ctx.now);
+    this.fuseLit = false;
+    this.enter('throwing', ctx);
   }
 
-  onFrame(ctx: FrameCtx, dt: number): void {
-    // Over-cook self-gib
-    if (this.cooking && (ctx.now - this.cookStart) >= DYNAMITE_COOK.fuseMaxSec) {
-      ctx.gibs.spawnExplosion(ctx.player.pos, EXPLOSION_STANDARD, ctx.now);
-      this.cooking = false;
-      ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
-    }
-    // Return to idle after throw animation finishes
-    if (!this.cooking && this.throwingUntil > 0 && ctx.now >= this.throwingUntil) {
-      this.throwingUntil = 0;
-      ctx.fpAnimator?.restart('dynamite-idle', ctx.now);
-    }
-    updateProjectiles(ctx, dt);
-  }
+  chargeFraction(): number { return 0; }
 
-  chargeFraction(): number {
-    if (!this.cooking) return 0;
-    // Static snapshot — HUD should prefer chargeFractionAt(now)
-    return 0;
-  }
-
-  /** Live fraction (HUD uses this; we expose it cleanly). */
   chargeFractionAt(now: number): number {
-    if (!this.cooking) return 0;
+    if (this._phase !== 'cooking') return 0;
     return chargeFraction(now - this.cookStart);
   }
 
-  isCooking(): boolean { return this.cooking; }
+  isCooking(): boolean { return this._phase === 'cooking'; }
 
-  renderView(_ctx: ViewCtx): void { /* wired in Task 11 */ }
-  renderHud(_ctx: HudCtx): void { /* wired in Task 11 */ }
+  renderView(_ctx: ViewCtx): void { /* handled by fpAnimator */ }
+  renderHud(_ctx: HudCtx): void { /* handled by ChargeHud */ }
 }
