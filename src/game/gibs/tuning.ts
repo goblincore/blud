@@ -146,12 +146,15 @@ export const HUMANOID_FLESH_PICNUMS = [1454, 1268, 1269, 1456, 1267] as const;
  * means Task 4 only wires the flesh path; boneWeight stays at 0 until Task 5
  * populates BONE_PICNUMS and bumps the weight to 0.2.
  */
-export const BONE_PICNUMS: number[] = [];
+// Picnums chosen from Blood tiles001.art. 421 = kThingBone (canonical diagonal bone),
+// 446 = skull-with-candle decoration, 447 = small skull.
+// See public/assets/gibs-placeholder/bone/ for the PNGs.
+export const BONE_PICNUMS: number[] = [421, 446, 447];
 
 export const ZOMBIE_GIB_PROFILE: GibProfile = {
   fleshPicnums: [...HUMANOID_FLESH_PICNUMS],
   bonePicnums: BONE_PICNUMS,
-  boneWeight: 0,              // bumped to 0.2 in Task 5
+  boneWeight: 0.2,
   bodyPartCount: { min: 2, max: 4 },
   chunkCount: { min: 8, max: 14 },
 };
