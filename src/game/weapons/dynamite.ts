@@ -5,14 +5,34 @@ import type { Vec3 } from '../gibs/particles';
 import { DYNAMITE_COOK, EXPLOSION_STANDARD } from '../gibs/tuning';
 
 // ——— Projectile billboard rendering (flying dynamite bundle sprite) ————
+//
+// Authentic Blood behavior (see docs/dev-notes/2026-04-22-notblood-source-reference.md,
+// "Thrown TNT projectile in flight" section):
+//   - Thrown bundle is a face-aligned billboard (cstat=256, no alignment flags).
+//   - pSprite->ang is set once at spawn and never updated — no tumble.
+//   - "Liveness" comes from SEQ-driven picnum cycling through fuse-burn frames
+//     (bundle frames 3432→3435; stick frames 3422→3427).
+//
+// Blud deviation: in addition to authentic fuse-frame cycling, we add a mild
+// screen-space spin (around the camera-forward axis, i.e. the mesh's local +Z
+// after lookAt) for modern trajectory readability. This preserves the 2D-sprite
+// aesthetic — the bundle always faces the camera, it just rotates in the
+// screen plane.
 
 let projectileScene: THREE.Scene | null = null;
-let projectileTexture: THREE.Texture | null = null;
+let projectileFrames: THREE.Texture[] = [];
 let projectileCamera: THREE.Camera | null = null;
 
-export function configureProjectileRendering(scene: THREE.Scene, tex: THREE.Texture): void {
+/**
+ * Configure the shared resources used by all live projectiles.
+ *
+ * @param frames Ordered list of fuse-burn frame textures, from "just-thrown"
+ *   (full fuse) to "about-to-detonate" (fuse exhausted). Blood bundle order:
+ *   3432 → 3433 → 3434 → 3435. A single-element array is valid (no cycling).
+ */
+export function configureProjectileRendering(scene: THREE.Scene, frames: THREE.Texture[]): void {
   projectileScene = scene;
-  projectileTexture = tex;
+  projectileFrames = frames;
 }
 export function setProjectileCamera(cam: THREE.Camera): void { projectileCamera = cam; }
 
@@ -30,6 +50,23 @@ export function throwVelocityMps(chargeFrac: number): number {
 
 export function remainingFuse(cookSec: number): number {
   return DYNAMITE_COOK.fuseMaxSec - cookSec;
+}
+
+/**
+ * Select which fuse-burn frame to show given remaining fuse.
+ *
+ * Maps fuse-remaining fraction to a frame index: full fuse → frame 0, no fuse
+ * left → last frame. Matches Blood SEQ progression for bundle tiles
+ * 3432 (fresh) → 3435 (about to detonate).
+ *
+ * Pure function, TDD'd.
+ */
+export function fuseFrameIndex(fuseLeft: number, fuseMax: number, numFrames: number): number {
+  if (numFrames <= 1) return 0;
+  if (fuseMax <= 0) return numFrames - 1;
+  const frac = Math.max(0, Math.min(1, fuseLeft / fuseMax));
+  const idx = Math.floor((1 - frac) * numFrames);
+  return Math.min(idx, numFrames - 1);
 }
 
 /**
@@ -91,6 +128,10 @@ interface DynamiteProjectile {
   body: RAPIER.RigidBody;
   mesh: THREE.Mesh | null;
   fuseLeft: number;
+  fuseMax: number;        // for frame-cycle math; captured at spawn
+  spinRate: number;       // rad/s, signed — screen-space spin
+  spinPhase: number;      // cumulative rad; applied after lookAt each frame
+  lastFrameIdx: number;   // last-applied texture index, to skip redundant swaps
   spawnTime: number;
 }
 
@@ -117,8 +158,7 @@ export function spawnProjectile(
   // only applies gravity + xy-airdrag (very small) to thrown things.
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(pos.x, pos.y, pos.z)
-    .setLinearDamping(0.02)
-    .setAngularDamping(0.15);
+    .setLinearDamping(0.02);
   const body = world.createRigidBody(bodyDesc);
   const colliderDesc = RAPIER.ColliderDesc.ball(0.08)
     .setRestitution(0.375)
@@ -126,16 +166,17 @@ export function spawnProjectile(
     .setDensity(0.4); // lighter than default so the same velocity carries further
   world.createCollider(colliderDesc, body);
   body.setLinvel(vel, true);
-  // Tumble like a thrown stick — roll around its long axis primarily.
-  body.setAngvel({ x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 2, z: (Math.random() - 0.5) * 12 }, true);
+  // Authentic Blood projectile has no body rotation (sprite is face-aligned
+  // and pSprite->ang never updates in flight). Screen-space spin is applied
+  // to the mesh in updateProjectiles; the body stays rotationally inert.
 
   let mesh: THREE.Mesh | null = null;
-  if (projectileScene && projectileTexture) {
+  if (projectileScene && projectileFrames.length > 0) {
     // Bundle silhouette: horizontal wrapped-stick bundle with lit fuse.
     // Blood tile 3433 is ~48×16 px — wider than tall.
     const geom = new THREE.PlaneGeometry(0.42, 0.18);
     const mat = new THREE.MeshBasicMaterial({
-      map: projectileTexture,
+      map: projectileFrames[0]!,
       transparent: true,
       depthWrite: false,
     });
@@ -144,7 +185,20 @@ export function spawnProjectile(
     projectileScene.add(mesh);
   }
 
-  const proj: DynamiteProjectile = { body, mesh, fuseLeft, spawnTime: now };
+  // Screen-space spin: ~115–230°/s, random sign. Mild enough to read as
+  // kinetic tumble without making the sprite strobe.
+  const spinRate = (2 + Math.random() * 2) * (Math.random() < 0.5 ? 1 : -1);
+
+  const proj: DynamiteProjectile = {
+    body,
+    mesh,
+    fuseLeft,
+    fuseMax: Math.max(fuseLeft, DYNAMITE_COOK.fuseMaxSec),
+    spinRate,
+    spinPhase: 0,
+    lastFrameIdx: -1,
+    spawnTime: now,
+  };
   liveProjectiles.push(proj);
   return proj;
 }
@@ -154,10 +208,27 @@ export function updateProjectiles(ctx: FrameCtx, dt: number): void {
   for (let i = liveProjectiles.length - 1; i >= 0; i--) {
     const p = liveProjectiles[i]!;
     p.fuseLeft -= dt;
+    p.spinPhase += p.spinRate * dt;
     const t = p.body.translation();
     if (p.mesh) {
       p.mesh.position.set(t.x, t.y, t.z);
-      if (projectileCamera) p.mesh.lookAt(projectileCamera.position);
+      if (projectileCamera) {
+        // Billboard: face the camera (authentic Blood face-alignment).
+        p.mesh.lookAt(projectileCamera.position);
+        // Then spin in screen plane — mesh's local +Z now points at the
+        // camera, so rotateZ is a rotation around the camera-forward axis.
+        p.mesh.rotateZ(p.spinPhase);
+      }
+      // Cycle fuse-burn frame: full fuse → frame 0, exhausted → last frame.
+      if (projectileFrames.length > 1) {
+        const idx = fuseFrameIndex(p.fuseLeft, p.fuseMax, projectileFrames.length);
+        if (idx !== p.lastFrameIdx) {
+          const mat = p.mesh.material as THREE.MeshBasicMaterial;
+          mat.map = projectileFrames[idx]!;
+          mat.needsUpdate = true;
+          p.lastFrameIdx = idx;
+        }
+      }
     }
     if (p.fuseLeft <= 0) {
       ctx.gibs.spawnExplosion({ x: t.x, y: t.y, z: t.z }, EXPLOSION_STANDARD, ctx.now);

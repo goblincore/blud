@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chargeFraction, throwVelocityMps, remainingFuse, throwVector, Dynamite, resetProjectiles } from './dynamite';
+import { chargeFraction, throwVelocityMps, remainingFuse, fuseFrameIndex, throwVector, Dynamite, resetProjectiles } from './dynamite';
 import type { FrameCtx } from './types';
 import { DYNAMITE_COOK } from '../gibs/tuning';
 
@@ -40,6 +40,41 @@ describe('remainingFuse', () => {
   });
   it('is negative if released past fuseMax — caller detonates in-flight at 0', () => {
     expect(remainingFuse(DYNAMITE_COOK.fuseMaxSec + 1)).toBeLessThan(0);
+  });
+});
+
+describe('fuseFrameIndex (Blood SEQ picnum cycle for thrown bundle)', () => {
+  it('returns 0 for single-frame degenerate case', () => {
+    expect(fuseFrameIndex(1, 2, 1)).toBe(0);
+    expect(fuseFrameIndex(0, 2, 1)).toBe(0);
+  });
+  it('full fuse → frame 0 (fresh)', () => {
+    expect(fuseFrameIndex(2.0, 2.0, 4)).toBe(0);
+  });
+  it('zero fuse → last frame (about to detonate)', () => {
+    expect(fuseFrameIndex(0, 2.0, 4)).toBe(3);
+  });
+  it('negative fuse clamps to last frame', () => {
+    expect(fuseFrameIndex(-0.5, 2.0, 4)).toBe(3);
+  });
+  it('monotone-decreasing: later in flight = higher (or equal) frame index', () => {
+    const f = (t: number) => fuseFrameIndex(t, 2.0, 4);
+    // t = fuseLeft going 2.0 → 0 means time elapsed 0 → 2.0
+    expect(f(2.0)).toBeLessThanOrEqual(f(1.5));
+    expect(f(1.5)).toBeLessThanOrEqual(f(1.0));
+    expect(f(1.0)).toBeLessThanOrEqual(f(0.5));
+    expect(f(0.5)).toBeLessThanOrEqual(f(0));
+  });
+  it('partitions fuse range evenly across frames', () => {
+    // With 4 frames and fuseMax=2.0, each frame covers 0.5s.
+    // frac<0.25 → 0, 0.25-0.5 → 1, 0.5-0.75 → 2, 0.75+ → 3
+    expect(fuseFrameIndex(2.0, 2.0, 4)).toBe(0);   // frac=1 → elapsed frac=0 → 0
+    expect(fuseFrameIndex(1.5, 2.0, 4)).toBe(1);   // elapsed frac=0.25 → 1
+    expect(fuseFrameIndex(1.0, 2.0, 4)).toBe(2);   // elapsed frac=0.5 → 2
+    expect(fuseFrameIndex(0.5, 2.0, 4)).toBe(3);   // elapsed frac=0.75 → 3
+  });
+  it('zero fuseMax → last frame (degenerate)', () => {
+    expect(fuseFrameIndex(0, 0, 4)).toBe(3);
   });
 });
 

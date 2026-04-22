@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1 dispatch (audio scaffold, SFX extractor, post-fx composer, GibProfile, bone tier) + P6 + P7 merged. Dynamite FSM now equipping→idle→cooking→throwing. **Next: Task 7 (projectile tumble), Task 8 (explosion sprite fix).**
+**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phase 1 dispatch + P6 + P7 merged. Dynamite FSM equipping→idle→cooking→throwing. Task 7 landed: fuse-burn frame cycle (3432→3435) + screen-space spin. **Next: Task 8 (explosion sprite fix).**
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)

@@ -113,8 +113,22 @@ async function main() {
     spawn: new THREE.Vector3(0, 2, 0),
   });
 
+  // Fallback placeholder for any missing dynamite bundle frame.
+  const dynamiteFallback = (): THREE.Texture => {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#aa2222';
+    ctx.fillRect(2, 4, 12, 8);
+    ctx.fillStyle = '#ff9944';
+    ctx.fillRect(7, 1, 2, 3);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+
   // ---- Assets
-  const [gibTextures, explosionAtlas, trailTex, animBundle, dynamiteBundleTex] = await Promise.all([
+  const [gibTextures, explosionAtlas, trailTex, animBundle, dynamiteBundleFrames] = await Promise.all([
     loadGibTextures('/assets/gibs-placeholder/manifest.json'),
     loadExplosionAtlas('/assets/vfx/explosion-placeholder/manifest.json'),
     loadTexture('/assets/gibs-placeholder/trail/733-placeholder.png').catch(() => {
@@ -132,29 +146,23 @@ async function main() {
       console.warn('[blud] animation manifests not loaded, FPV weapons disabled:', err);
       return undefined;
     }),
-    // Flying dynamite projectile sprite — Blood picnum 3433 (kThingArmedTNTBundle,
-    // the 3-stick bundle with lit fuse from tiles013.art). The PLAYER throws a
-    // BUNDLE, not a single stick: processTNT (weapon.cpp:2172) fires
-    // nClientThrowBundle; single sticks (kThingArmedTNTStick picnum 3422) are
-    // what cultists throw at you. M2 was rendering 3467 which is actually the
-    // spray can (kThingArmedSpray) — fixed here.
-    // See actor.cpp:2015 thingInfo[kThingArmedTNTBundle-kThingBase].
-    loadTexture('/assets/weapons/dynamite-placeholder/bundle/3433.png').catch(() => {
-      const c = document.createElement('canvas');
-      c.width = 16; c.height = 16;
-      const ctx = c.getContext('2d')!;
-      ctx.fillStyle = '#aa2222';
-      ctx.fillRect(2, 4, 12, 8);
-      ctx.fillStyle = '#ff9944';
-      ctx.fillRect(7, 1, 2, 3);
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
-    }),
+    // Flying dynamite bundle fuse-burn frames — Blood SEQ-driven picnum cycle
+    // for kThingArmedTNTBundle (picnum base 3433). Authentic Blood cycles
+    // tiles 3432 (fresh fuse) → 3435 (about to detonate) as the fuse burns
+    // down. See actor.cpp:2015 thingInfo[kThingArmedTNTBundle-kThingBase] and
+    // docs/dev-notes/2026-04-22-notblood-source-reference.md § "Thrown TNT
+    // projectile in flight".
+    //
+    // The player throws a BUNDLE (weapon.cpp:2172 processTNT fires
+    // nClientThrowBundle); single sticks (kThingArmedTNTStick picnum 3422) are
+    // what cultists throw at you.
+    Promise.all([3432, 3433, 3434, 3435].map((n) =>
+      loadTexture(`/assets/weapons/dynamite-placeholder/bundle/${n}.png`).catch(dynamiteFallback)
+    )),
   ]);
 
   // Projectile billboard rendering for thrown dynamite bundles
-  configureProjectileRendering(scene, dynamiteBundleTex);
+  configureProjectileRendering(scene, dynamiteBundleFrames);
   setProjectileCamera(camera);
 
   // ---- Gib subsystems
