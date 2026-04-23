@@ -7,6 +7,7 @@ import { buildArena, installSkybox, registerArenaSurfaces, ZombieCluster, GameOv
 import { createPlayer } from './game/player';
 import { createDebugHud } from './ui/debug-hud';
 import { ChargeHud } from './ui/charge-hud';
+import { PauseMenu } from './ui/pause-menu';
 import { WeaponRegistry, Dynamite } from './game/weapons';
 import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
 import { ParticlePool } from './game/gibs/particles';
@@ -311,6 +312,9 @@ async function main() {
   const weapons = new WeaponRegistry();
   const chargeHud = new ChargeHud(document.body);
 
+  // ---- Pause menu
+  const pauseMenu = new PauseMenu(document.body, canvas, DEFAULT_POST_FX, audioEngine.sfxGain);
+
   // ---- R key: quick respawn cluster
   window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'r') {
@@ -389,6 +393,9 @@ async function main() {
   let playerDistAccum = 0;
 
   setRenderCallback((realDt) => {
+    // Skip game simulation when paused (still renders frozen frame)
+    if (pauseMenu.paused) return;
+
     scheduler.tick(realDt, fixedStep);
 
     const now = performance.now() / 1000;
