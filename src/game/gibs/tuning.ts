@@ -171,3 +171,28 @@ export const AXE_ZOMBIE = {
   aggroRadiusM: 40,           // when within this distance the zombie chases
   gibThresholdOverride: undefined as number | undefined, // use global GIB_THRESHOLD
 } as const;
+
+// ——— Flare gun ————————————————————————————————
+export const FLARE_GUN = {
+  raisingMs: 300,         // hold time before fire (no charge mechanic)
+  muzzleVelMps: 25,       // initial projectile speed along camera-forward
+  gravityMps2: 9.81,      // arc gravity (Y-axis down)
+  ammoMax: 10,            // starting flare count
+} as const;
+
+// ——— Burn (applied by stuck flares) ————————
+// source: Blood actor.cpp fire/burn damage paths (kDamageBurn); generic
+// DOT mechanic found across Blood's actor type handlers.
+export const BURN = {
+  durationSec: 6,                 // stuck flare burn lifetime
+  dpsPerFlare: 8,                 // HP/s drained by each attached flare
+  panicSpeedMultiplier: 1.4,      // burning enemy thrashes at 1.4x base speed
+  panicTargetRerollSec: 0.4,      // re-roll panic direction every 0.4s
+  panicTargetRadiusM: 3,          // panic target picked within 3m of enemy
+} as const;
+
+// ——— Wave runner ——————————————————————————
+export const WAVE_PRESETS = {
+  breatherSec: 1.5,               // pause between waves once cleared
+  zombieToughHpMultiplier: 2,     // 'zombie-tough' = 2x axe-zombie hp
+} as const;
