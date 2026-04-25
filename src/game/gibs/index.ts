@@ -36,7 +36,7 @@ export interface GibbableDude {
   /** Called by the gib system when this dude is gibbed (damage ≥ GIB_THRESHOLD).
    *  Implementations should hide the body's sprite immediately — chunks replace it. */
   onGibbed?(): void;
-  kind: 'player' | 'axe-zombie';
+  kind: 'player' | 'axe-zombie' | 'cultist-shotgun';
   /** M3: per-enemy gib customization. Required on all dudes. */
   gibProfile: GibProfile;
 }

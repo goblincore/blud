@@ -1,4 +1,4 @@
-export type EnemyKind = 'zombie' | 'zombie-tough';
+export type EnemyKind = 'zombie' | 'zombie-tough' | 'cultist-shotgun';
 
 export interface Wave {
   spawnDelayMs: number;
