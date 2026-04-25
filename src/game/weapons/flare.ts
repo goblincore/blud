@@ -58,6 +58,16 @@ export class FlareGun implements Weapon {
 
   phase(): FlarePhase { return this._phase; }
 
+  /** Called by main.ts when the player switches TO the flare gun. */
+  equip(ctx: FrameCtx): void {
+    ctx.fpAnimator?.restart('flare-raise', ctx.now);
+  }
+
+  /** Called by main.ts when the player switches AWAY from the flare gun. */
+  unequip(ctx: FrameCtx): void {
+    ctx.fpAnimator?.restart('flare-lower', ctx.now);
+  }
+
   chargeFraction(): number {
     if (this._phase !== 'raising') return 0;
     return 0; // no charge mechanic — raising is a fixed delay, not variable
@@ -66,6 +76,7 @@ export class FlareGun implements Weapon {
   onPress(ctx: FrameCtx): void {
     if (this.ammo <= 0) return;
     if (this._phase !== 'idle') return;
+    ctx.fpAnimator?.restart('flare-fire', ctx.now);
     this._phase = 'raising';
     this.phaseEnteredAt = ctx.now;
     ctx.sfx?.play(SfxEvent.FLARE_SHOOT);
@@ -145,6 +156,7 @@ export class FlareGun implements Weapon {
     if (hit) {
       this.spawnStuckFlare?.(hit.pos, hit.body);
       ctx.sfx?.play(SfxEvent.FLARE_IMPACT, hit.pos);
+      ctx.fpAnimator?.restart('flare-idle', ctx.now);
       this.projectile = null;
       this._phase = 'idle';
       this.phaseEnteredAt = ctx.now;
@@ -154,6 +166,7 @@ export class FlareGun implements Weapon {
     // World-bounds escape: silently extinguish if projectile has traveled too far
     if (dist > FLARE_MAX_RANGE_M) {
       console.warn('[flare] projectile left world bounds — extinguishing');
+      ctx.fpAnimator?.restart('flare-idle', ctx.now);
       this.projectile = null;
       this._phase = 'idle';
       this.phaseEnteredAt = ctx.now;
@@ -173,7 +186,7 @@ export class FlareGun implements Weapon {
   }
 
   renderView(_ctx: ViewCtx): void {
-    // TODO: bundle sprite billboard, similar to dynamite — placeholder OK for first pass
+    // handled by fpAnimator
   }
 
   renderHud(_ctx: HudCtx): void {
