@@ -12,6 +12,7 @@ function makeP(overrides: Partial<Particle> = {}): Particle {
     age: 0,
     size: 1.0,
     tile: 0,
+    kind: 'default' as const,
     ...overrides,
   };
 }

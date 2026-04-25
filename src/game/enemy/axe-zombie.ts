@@ -7,6 +7,9 @@ import { BillboardAnimator } from '../../animation/billboard-animator';
 import type { Vec3 } from '../gibs/particles';
 import { SfxEvent } from '../../audio/events';
 import type { Sfx } from '../../audio/sfx';
+import { StuckFlare } from '../weapons/stuck-flare';
+import { startSmokeColumn, emitSmokeBurst } from '../../vfx/smoke-particles';
+import type { TrailHandle, ParticlePool } from '../gibs/particles';
 
 /** Interface implemented by any enemy that can be gibbed by explosions. */
 export interface GibbableDude {
@@ -25,6 +28,7 @@ const STATE_ANIM_MAP: Record<ZombieState, string> = {
   [ZombieState.Attack]: 'zombie-attack',
   [ZombieState.Stagger]: 'zombie-recoil',
   [ZombieState.Dead]: 'zombie-death-normal',
+  [ZombieState.Burning]: 'zombie-recoil', // TODO: add dedicated burn-thrash anim
 };
 
 /**
@@ -47,17 +51,30 @@ export class AxeZombie implements GibbableDude {
 
   hp: number = AXE_ZOMBIE.hp;
   private _sfx: Sfx | null = null;
+  private _particlePool: ParticlePool | null = null;
+
+  // ——— Stuck-flare state ————————————————————————
+  private stuckFlares: StuckFlare[] = [];
+  private smokeHandles: TrailHandle[] = [];
+
   readonly brain = new ZombieBrain(
     { hp: AXE_ZOMBIE.hp, speed: AXE_ZOMBIE.speed },
     {
       onAggroTransition: () => this._sfx?.play(SfxEvent.ZOMBIE_AGGRO, this.pos),
       onIdleGroan: () => this._sfx?.play(SfxEvent.ZOMBIE_IDLE_GROAN, this.pos),
       onFootstep: () => this._sfx?.play(SfxEvent.ZOMBIE_FOOTSTEP, this.pos),
+      onCharredDeath: () => {
+        this._particlePool && emitSmokeBurst(this._particlePool, this.pos);
+        // TODO: tint death sprite for charred effect (requires shader work)
+      },
     },
   );
 
   /** Wire the SFX engine for zombie sounds. */
   setSfx(sfx: Sfx): void { this._sfx = sfx; }
+
+  /** Wire the particle pool for smoke emission from stuck flares. */
+  setParticlePool(pool: ParticlePool): void { this._particlePool = pool; }
 
   private readonly anim: BillboardAnimator;
   private readonly body: RAPIER.RigidBody;
@@ -109,14 +126,61 @@ export class AxeZombie implements GibbableDude {
     return { x: t.x, y: t.y, z: t.z };
   }
 
+  /**
+   * Attach a stuck flare to this enemy. Starts a smoke column that follows
+   * the flare's position each frame.
+   */
+  attachFlare(flare: StuckFlare): void {
+    this.stuckFlares.push(flare);
+    if (this._particlePool) {
+      const h = startSmokeColumn(this._particlePool, () => flare.pos);
+      this.smokeHandles.push(h);
+    }
+  }
+
   /** Update AI, movement, and animation state transitions. */
   update(dt: number, playerPos: Vec3, camera: THREE.Camera): void {
+    const now = performance.now() / 1000;
+
+    // ——— Process stuck flares —————————————————————
+    for (let i = this.stuckFlares.length - 1; i >= 0; i--) {
+      const flare = this.stuckFlares[i]!;
+      const alive = flare.update(now);
+      if (!alive) {
+        // Expired — emit final smoke burst and clean up
+        if (this._particlePool) {
+          emitSmokeBurst(this._particlePool, flare.pos);
+        }
+        this.smokeHandles[i]?.stop();
+        this.stuckFlares.splice(i, 1);
+        this.smokeHandles.splice(i, 1);
+      }
+    }
+
+    // Apply per-frame DoT damage from all stuck flares
+    let burnDamage = 0;
+    for (const flare of this.stuckFlares) {
+      burnDamage += flare.damageThisTick(dt);
+    }
+    if (burnDamage > 0) {
+      this.brain.applyDamage(burnDamage);
+      this.hp = this.brain.hp;
+    }
+
+    // Update stuck-flare count → brain decides Burning entry/exit
+    this.brain.setStuckFlareCount(this.stuckFlares.length);
+
+    // ——— Normal brain update ————————————————————
     const prev = this.brain.state;
     this.brain.update(dt, this.pos, playerPos);
 
     // Detect state change → trigger new animation
     if (this.brain.state !== prev) {
-      this.onStateEnter(this.brain.state, performance.now() / 1000);
+      this.onStateEnter(this.brain.state, now);
+      // Track death time for reap scheduling (handles both takeDamage and burn-DoT deaths)
+      if (this.brain.state === ZombieState.Dead && this.deathTime < 0) {
+        this.deathTime = now;
+      }
     }
 
     const t = this.body.translation();
@@ -140,7 +204,6 @@ export class AxeZombie implements GibbableDude {
     }
 
     // Billboard render update
-    const now = performance.now() / 1000;
     const trans = this.body.translation();
     this.anim.update(
       now,
@@ -208,6 +271,16 @@ export class AxeZombie implements GibbableDude {
   }
 
   despawn(): void {
+    // Clean up stuck flares: stop smoke columns, emit final burst
+    for (const h of this.smokeHandles) h.stop();
+    if (this._particlePool) {
+      for (const f of this.stuckFlares) {
+        emitSmokeBurst(this._particlePool, f.pos);
+      }
+    }
+    this.stuckFlares.length = 0;
+    this.smokeHandles.length = 0;
+
     this.scene.remove(this.anim.object);
     this.anim.dispose();
     this.world.removeRigidBody(this.body);
