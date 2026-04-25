@@ -15,6 +15,12 @@
     "flare-raise": "weapons/flare-raise.json"
   },
   "characters": {
+    "cultist-shotgun-chase": "characters/cultist-shotgun-chase.json",
+    "cultist-shotgun-death-gib": "characters/cultist-shotgun-death-gib.json",
+    "cultist-shotgun-death-normal": "characters/cultist-shotgun-death-normal.json",
+    "cultist-shotgun-fire": "characters/cultist-shotgun-fire.json",
+    "cultist-shotgun-idle": "characters/cultist-shotgun-idle.json",
+    "cultist-shotgun-recoil": "characters/cultist-shotgun-recoil.json",
     "zombie-attack": "characters/zombie-attack.json",
     "zombie-burn-chase": "characters/zombie-burn-chase.json",
     "zombie-chase": "characters/zombie-chase.json",
