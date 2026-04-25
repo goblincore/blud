@@ -8,7 +8,11 @@
     "dynamite-lower": "weapons/dynamite-lower.json",
     "dynamite-raise-from-spray": "weapons/dynamite-raise-from-spray.json",
     "dynamite-raise": "weapons/dynamite-raise.json",
-    "dynamite-throw": "weapons/dynamite-throw.json"
+    "dynamite-throw": "weapons/dynamite-throw.json",
+    "flare-fire": "weapons/flare-fire.json",
+    "flare-idle": "weapons/flare-idle.json",
+    "flare-lower": "weapons/flare-lower.json",
+    "flare-raise": "weapons/flare-raise.json"
   },
   "characters": {
     "zombie-attack": "characters/zombie-attack.json",
