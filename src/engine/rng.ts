@@ -48,14 +48,14 @@ export class SeededRng {
       throw new Error('Cannot pick from empty array');
     }
     const index = this.nextInt(0, arr.length - 1);
-    return arr[index];
+    return arr[index]!;
   }
 
   shuffle<T>(arr: T[]): T[] {
     const arrCopy = [...arr];
     for (let i = arrCopy.length - 1; i > 0; i--) {
       const j = this.nextInt(0, i);
-      [arrCopy[i], arrCopy[j]] = [arrCopy[j], arrCopy[i]];
+      [arrCopy[i], arrCopy[j]] = [arrCopy[j]!, arrCopy[i]!];
     }
     return arrCopy;
   }

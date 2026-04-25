@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { createRenderer } from './engine/renderer';
 import { createScheduler } from './engine/loop';
 import { createInputState, attachInput } from './engine/input';
@@ -9,6 +10,12 @@ import { createDebugHud } from './ui/debug-hud';
 import { ChargeHud } from './ui/charge-hud';
 import { PauseMenu } from './ui/pause-menu';
 import { WeaponRegistry, Dynamite } from './game/weapons';
+import { FlareGun } from './game/weapons/flare';
+import { StuckFlare } from './game/weapons/stuck-flare';
+import { updateSmokeColumns } from './vfx/smoke-particles';
+import { WaveRunner } from './game/encounter/wave-runner';
+import { WARMUP_ROUND } from './game/encounter/encounters';
+import type { EnemyKind } from './game/encounter/encounters';
 import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
 import { ParticlePool } from './game/gibs/particles';
 import { ChunkSystem } from './game/gibs/chunks';
@@ -29,6 +36,7 @@ import { SfxEvent } from './audio/events';
 import { Ambient } from './audio/ambient';
 import type { QavManifest, SeqManifest } from './animation/qav-schema';
 import type { GibbableDude } from './game/gibs';
+import type { ParticlePool as PPool } from './game/gibs/particles';
 import type { GibProfile } from './game/gibs/tuning';
 import type { Player as WeaponPlayer, FrameCtx } from './game/weapons/types';
 import type { Vec3 } from './game/gibs/particles';
@@ -231,6 +239,7 @@ async function main() {
     chunks.reset();
     decals.reset();
     shake.reset();
+    stuckFlareRegistry.length = 0;
     playerGib.hp = 100;
     // Reset player position — re-create player body
     player.update(0, input); // no-op to satisfy interface; player stays where they are
@@ -307,6 +316,66 @@ async function main() {
   );
   cluster.spawn(4);
   cluster.setSfx(sfx);
+  cluster.setParticlePool(particles);
+
+  // ——— Stuck-flare global registry —————————————————
+  const stuckFlareRegistry: StuckFlare[] = [];
+  let flareIdCounter = 0;
+
+  // ——— Flare gun ———————————————————————————————————
+  const flareGun = new FlareGun();
+  flareGun.spawnStuckFlare = (pos, attachedBody) => {
+    const flare = new StuckFlare(`flare-${flareIdCounter++}`, pos, attachedBody, performance.now() / 1000);
+    stuckFlareRegistry.push(flare);
+    // If attached to an enemy's body, find the enemy and attach the flare
+    if (attachedBody) {
+      for (const z of cluster.getZombies()) {
+        if (z.rigidBody.handle === attachedBody.handle) {
+          z.attachFlare(flare);
+          break;
+        }
+      }
+    }
+  };
+  flareGun.raycastFn = (from, dir, maxDist) => {
+    // Normalize direction for the ray
+    const dLen = Math.hypot(dir.x, dir.y, dir.z);
+    if (dLen < 0.0001) return null;
+    const rayDir = { x: dir.x / dLen, y: dir.y / dLen, z: dir.z / dLen };
+    const ray = new RAPIER.Ray(
+      { x: from.x, y: from.y, z: from.z },
+      rayDir,
+    );
+    const hit = physics.world.castRayAndGetNormal(ray, maxDist, true);
+    if (hit) {
+      const toi = hit.timeOfImpact;
+      const hitPoint = {
+        x: from.x + rayDir.x * toi,
+        y: from.y + rayDir.y * toi,
+        z: from.z + rayDir.z * toi,
+      };
+      const body = hit.collider.parent();
+      return { pos: hitPoint, body };
+    }
+    return null;
+  };
+
+  // ——— Wave runner ————————————————————————————————
+  const waveRunner = new WaveRunner(WARMUP_ROUND, {
+    pickSpawnPos: () => {
+      // Pick one of 4 perimeter points around the arena
+      const points = [
+        { x: 15, y: 1, z: 0 },
+        { x: -15, y: 1, z: 0 },
+        { x: 0, y: 1, z: 15 },
+        { x: 0, y: 1, z: -15 },
+      ];
+      return points[Math.floor(Math.random() * points.length)]!;
+    },
+    spawn: (kind, pos) => {
+      cluster.spawnOne(kind, pos);
+    },
+  });
 
   // ---- Weapon + HUD
   const weapons = new WeaponRegistry();
@@ -315,13 +384,31 @@ async function main() {
   // ---- Pause menu
   const pauseMenu = new PauseMenu(document.body, canvas, DEFAULT_POST_FX, audioEngine.sfxGain);
 
-  // ---- R key: quick respawn cluster
+  // ---- R key: start wave runner round
   window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'r') {
+    if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey) {
+      // Only start if idle, victory, or defeat
+      if (waveRunner.state() === 'active' || waveRunner.state() === 'breather') return;
       cluster.reset();
       chunks.reset();
       decals.reset();
-      cluster.spawn(4);
+      stuckFlareRegistry.length = 0;
+      waveRunner.start(performance.now() / 1000);
+    }
+  });
+
+  // ---- Shift+F: fire flare gun
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'F' && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      const now = performance.now() / 1000;
+      flareGun.onPress({
+        world: physics.world,
+        player: weaponPlayer,
+        gibs,
+        now,
+        fpAnimator,
+        sfx,
+      });
     }
   });
 
@@ -373,10 +460,25 @@ async function main() {
     // Weapon tick (fuse countdown, projectile physics)
     const fctx = frameCtx();
     weapons.current.onFrame(fctx, dt);
+    flareGun.onFrame(fctx, dt);
 
     // Zombie AI + movement
     const ppos = player.position();
     cluster.update(dt, { x: ppos.x, y: ppos.y, z: ppos.z }, camera);
+
+    // ——— Stuck-flare registry tick ————————————
+    const now = performance.now() / 1000;
+    for (let i = stuckFlareRegistry.length - 1; i >= 0; i--) {
+      const f = stuckFlareRegistry[i]!;
+      const alive = f.update(now);
+      if (!alive) {
+        stuckFlareRegistry.splice(i, 1);
+      }
+    }
+
+    // ——— Wave runner tick —————————————————————
+    const playerAlive = playerGib.hp > 0;
+    waveRunner.update(dt, now, playerAlive, cluster.aliveCount());
   }
 
   const hud = createDebugHud(document.getElementById('hud')!);
@@ -401,6 +503,7 @@ async function main() {
     const now = performance.now() / 1000;
 
     // Particle sim + render
+    updateSmokeColumns(particles, realDt); // smoke from stuck flares
     particles.update(realDt, camera);
 
     // Explosion VFX

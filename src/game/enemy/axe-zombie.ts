@@ -121,6 +121,9 @@ export class AxeZombie implements GibbableDude {
     return new AxeZombie(id, world, scene, body, anim);
   }
 
+  /** The RAPIER rigid body — exposed for collision matching in main.ts. */
+  get rigidBody(): RAPIER.RigidBody { return this.body; }
+
   get pos(): Vec3 {
     const t = this.body.translation();
     return { x: t.x, y: t.y, z: t.z };

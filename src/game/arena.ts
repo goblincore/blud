@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { AxeZombie } from './enemy/axe-zombie';
+import type { EnemyKind } from './encounter/encounters';
+import { WAVE_PRESETS } from './gibs/tuning';
 import { ZombieState } from './enemy/ai';
 import type { GibSystem } from './gibs';
 import type { StaticSurface } from './gibs/particles';
@@ -210,6 +212,7 @@ export class ZombieCluster {
   private zombies: AxeZombie[] = [];
   private nextId = 0;
   private _sfx: Sfx | null = null;
+  private _particlePool: import('./gibs/particles').ParticlePool | null = null;
 
   constructor(
     private readonly deps: ZombieSpawnDeps,
@@ -222,6 +225,12 @@ export class ZombieCluster {
     for (const z of this.zombies) z.setSfx(sfx);
   }
 
+  /** Wire particle pool for smoke emission from stuck flares. */
+  setParticlePool(pool: import('./gibs/particles').ParticlePool): void {
+    this._particlePool = pool;
+    for (const z of this.zombies) z.setParticlePool(pool);
+  }
+
   spawn(count = 4, radius = 1.5): void {
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2;
@@ -230,11 +239,32 @@ export class ZombieCluster {
         y: this.center.y,
         z: this.center.z + Math.sin(angle) * radius,
       };
-      const z = AxeZombie.spawn(`zombie-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
-      if (this._sfx) z.setSfx(this._sfx);
-      this.deps.gibs.registerDude(z);
-      this.zombies.push(z);
+      this.spawnOne('zombie', pos);
     }
+  }
+
+  /** Spawn a single enemy of the given kind at a specific position. */
+  spawnOne(kind: EnemyKind, pos: { x: number; y: number; z: number }): AxeZombie {
+    const z = AxeZombie.spawn(`zombie-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
+    if (kind === 'zombie-tough') {
+      z.hp *= WAVE_PRESETS.zombieToughHpMultiplier;
+      z.brain.hp = z.hp;
+    }
+    if (this._sfx) z.setSfx(this._sfx);
+    if (this._particlePool) z.setParticlePool(this._particlePool);
+    this.deps.gibs.registerDude(z);
+    this.zombies.push(z);
+    return z;
+  }
+
+  /** Number of alive zombies. */
+  aliveCount(): number {
+    return this.zombies.length;
+  }
+
+  /** Access the zombie array for collision matching. */
+  getZombies(): readonly AxeZombie[] {
+    return this.zombies;
   }
 
   update(dt: number, playerPos: { x: number; y: number; z: number }, camera: THREE.Camera): void {
