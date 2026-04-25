@@ -1,0 +1,20 @@
+{
+  "name": "flare-idle",
+  "kind": "qav",
+  "loop": true,
+  "nFrames": 1,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 57,
+          "oy": -30,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "name": "flare-raise",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 6,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 82,
+          "oy": 37,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 80,
+          "oy": 24,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 74,
+          "oy": 11,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 70,
+          "oy": 1,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 66,
+          "oy": -9,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 61,
+          "oy": -20,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+{
+  "name": "flare-fire",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 8,
+  "frames": [
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 56,
+          "oy": -31,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3172,
+          "ox": 40,
+          "oy": -56,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3168,
+          "ox": 18,
+          "oy": -74,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3171,
+          "ox": 56,
+          "oy": -31,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3173,
+          "ox": 31,
+          "oy": -56,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3169,
+          "ox": 10,
+          "oy": -69,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3174,
+          "ox": 86,
+          "oy": -57,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3170,
+          "ox": 0,
+          "oy": -77,
+          "scale": 1.0,
+          "flipX": false
+        },
+        {
+          "tile": 3174,
+          "ox": 91,
+          "oy": -59,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3174,
+          "ox": 97,
+          "oy": -47,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3175,
+          "ox": 82,
+          "oy": -39,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3175,
+          "ox": 68,
+          "oy": -30,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 67,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 57,
+          "oy": -30,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "name": "flare-lower",
+  "kind": "qav",
+  "loop": false,
+  "nFrames": 5,
+  "frames": [
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 61,
+          "oy": -20,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 67,
+          "oy": -5,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 70,
+          "oy": 7,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 74,
+          "oy": 21,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    },
+    {
+      "durMs": 42,
+      "layers": [
+        {
+          "tile": 3171,
+          "ox": 79,
+          "oy": 41,
+          "scale": 1.0,
+          "flipX": false
+        }
+      ]
+    }
+  ]
+}

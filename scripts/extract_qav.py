@@ -36,6 +36,12 @@ QAV_NAMES_BY_ID: dict[int, str] = {
     21: "dynamite-fuse-burn",
     22: "dynamite-drop",
     23: "dynamite-throw",
+    # Flare pistol QAVs — single-pistol mode (no kPwUpTwoGuns powerup)
+    # source: NotBlood weapon.cpp WeaponRaise(41) / WeaponLower(44) / processFire(43) / weaponQav idle(42)
+    41: "flare-raise",
+    42: "flare-idle",
+    43: "flare-fire",
+    44: "flare-lower",
 }
 
 
