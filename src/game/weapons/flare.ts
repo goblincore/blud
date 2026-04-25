@@ -44,8 +44,8 @@ const FLARE_MAX_RANGE_M = 60;
 
 export class FlareGun implements Weapon {
   readonly id = 'flare';
-  readonly ammoMax = FLARE_GUN.ammoMax;
-  ammo = this.ammoMax;
+  readonly ammoMax: number = FLARE_GUN.ammoMax;
+  ammo: number = this.ammoMax;
 
   private _phase: FlarePhase = 'idle';
   private phaseEnteredAt: number = -1;

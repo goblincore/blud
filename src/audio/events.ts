@@ -10,6 +10,9 @@ export enum SfxEvent {
   ZOMBIE_DEATH = 'zombie_death',
   ZOMBIE_FOOTSTEP = 'zombie_footstep',
   PLAYER_FOOTSTEP = 'player_footstep',
+  FLARE_SHOOT = 'flare_shoot',
+  FLARE_IMPACT = 'flare_impact',
+  FLARE_BURN_LOOP = 'flare_burn_loop',
 }
 
 /**
@@ -30,4 +33,7 @@ export const SFX_BLOOD_MAP: Record<SfxEvent, string> = {
   [SfxEvent.ZOMBIE_DEATH]:     'MOAN4',     // longest — death scream
   [SfxEvent.ZOMBIE_FOOTSTEP]:  'FFSTONE1',  // crypt-stone step
   [SfxEvent.PLAYER_FOOTSTEP]:  'FFSTONE2',  // crypt-stone step alt
+  [SfxEvent.FLARE_SHOOT]:      '',           // TODO: find a fire-shot whoosh SFX (FLARE1.wav placeholder)
+  [SfxEvent.FLARE_IMPACT]:     '',           // TODO: find a flare-hit sfx (FLAREHIT.wav placeholder)
+  [SfxEvent.FLARE_BURN_LOOP]:  '',           // TODO: looping crackle (FLAREBRN.wav placeholder)
 };
