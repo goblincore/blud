@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M4 flare gun landed** — flare gun (Shift+F) + 5-wave warmup runner (R) + burning brain state + procedural smoke all committed in `eb4a3ee..6000486`. See `docs/superpowers/specs/2026-04-25-blud-m4-flare-gun-design.md`. **Next: M4 playtest** — human verifies flare arc, stuck-flare smoke, burning zombie panic, wave runner pacing. M3 bone-weight playtest + acceptance still pending as pre-req.
+**M5-A shotgun cultist landed** — cultist enemy with CultistBrain FSM (Idle/Chase/Aim/Fire/Recoil/Dead), pellet projectile (swept raycast, cone spread), ZombieCluster spawns both AxeZombie and ShotgunCultist, debug T-key for solo testing. See `docs/superpowers/specs/2026-04-25-blud-shotgun-cultist.md`. **Next: M5-B weapon-switching** (parallel dispatch), then manual playtest of M4 + M5-A.
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
@@ -36,7 +36,8 @@ Key reference docs (open these before touching their area):
 - `M3`  [x]  One-kill feel pass — `6c59491`; bone-weight + acceptance pending playtest
 - `M4`  [~]  Full arsenal — flare gun + wave runner landed (`eb4a3ee..6000486`), more weapons next
 - [x] M4-FPV: Flare gun FPV asset port + hotkeys (1/2/Q switch, Shift+F quick-equip)
-- `M5`  [!]  Full bestiary + Phase 1 gate (30min arena = fun) — blocked on M4
+- `M5`  [~]  Full bestiary + Phase 1 gate (30min arena = fun) — first enemy M5-A landed
+- [x] M5-A: Shotgun cultist with pellet projectile + minimal AI
 - `M6`  [!]  Chunks & generator (Blender chunks + run stitcher) — blocked on M5
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
 - `M8`  [!]  Polish (music, balance, HUD) — blocked on M7
@@ -71,6 +72,11 @@ Key reference docs (open these before touching their area):
 - `F2.flare.charred-death` [ ] Charred-corpse death sprite for burn-killed enemies (placeholder = normal death sprite).
 - `F2.flare.sfx` [ ] Replace `FLARE_BURN_LOOP` placeholder with a real looping crackle sample.
 - `F2.flare.cap` [ ] Cap max concurrent flares per enemy if stacking-too-many proves cheesy in playtest.
+- `F2.cultist.gibs` [ ] Cultist-specific gib palette (blood color, flesh picnums) — currently reuses ZOMBIE_GIB_PROFILE.
+- `F2.cultist.dodge` [ ] Dodge/strafe behavior (NotBlood `cultistDodge` / `aiMoveDodge`).
+- `F2.cultist.search` [ ] Search-after-LOS state for cultist (scans area when player breaks LOS).
+- `F2.cultist.los` [ ] Real LOS raycast for cultist; currently uses distance-only approximation.
+- `F2.cultist.sfx` [ ] Replace placeholder cultist SFX (reuses zombie aggro/death sounds).
 
 ## Process / tooling
 
