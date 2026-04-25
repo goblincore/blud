@@ -90,8 +90,16 @@ export class ZombieBrain {
     if (this.stuckFlareCount > 0 && this.state !== ZombieState.Burning) {
       this.prevState = this.state;
       this.state = ZombieState.Burning;
-      this.panicTarget = null;
-      this.panicTargetRerolledAt = 0;
+      // Set initial panic target immediately so desiredVelocity is non-zero
+      // from the first frame.
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * BURN.panicTargetRadiusM;
+      this.panicTarget = {
+        x: self.x + Math.cos(angle) * dist,
+        y: self.y,
+        z: self.z + Math.sin(angle) * dist,
+      };
+      this.panicTargetRerolledAt = nowSec;
       this.hooks?.onBurningStart?.();
     }
 
