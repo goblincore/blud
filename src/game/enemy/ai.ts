@@ -1,4 +1,4 @@
-import { AXE_ZOMBIE } from '../gibs/tuning';
+import { AXE_ZOMBIE, BURN } from '../gibs/tuning';
 import type { Vec3 } from '../gibs/particles';
 
 export enum ZombieState {
@@ -7,6 +7,7 @@ export enum ZombieState {
   Attack = 'attack',
   Stagger = 'stagger',
   Dead = 'dead',
+  Burning = 'burning',
 }
 
 /** Callback hooks for brain → gameplay SFX wiring. */
@@ -14,6 +15,28 @@ export interface BrainHooks {
   onAggroTransition?: () => void;
   onIdleGroan?: () => void;
   onFootstep?: () => void;
+  onBurningStart?: () => void;
+  onBurningEnd?: () => void;
+  onCharredDeath?: () => void;
+}
+
+// ——— Pure math (TDD'd) ———————————————————————————
+
+/**
+ * Determine the next brain state given burning context.
+ * Extracted as a pure function for testability.
+ */
+export function nextStateGivenBurningContext(
+  current: ZombieState,
+  hp: number,
+  stuckFlareCount: number,
+  prevState: ZombieState,
+): ZombieState {
+  if (hp <= 0) return ZombieState.Dead;
+  if (stuckFlareCount > 0) return ZombieState.Burning;
+  // No flares attached
+  if (current === ZombieState.Burning) return prevState; // restore
+  return current;
 }
 
 export class ZombieBrain {
@@ -30,6 +53,12 @@ export class ZombieBrain {
   private nextGroanAt = 0;
   private distAccum = 0;
 
+  // ——— Burning state ———————————————————————————
+  private stuckFlareCount = 0;
+  private prevState: ZombieState = ZombieState.Idle;
+  private panicTarget: Vec3 | null = null;
+  private panicTargetRerolledAt = 0;
+
   constructor(
     init: { hp: number; speed: number },
     private readonly hooks?: BrainHooks,
@@ -38,12 +67,55 @@ export class ZombieBrain {
     this.speed = init.speed;
   }
 
+  /** Called each frame by the concrete enemy with the current stuck flare count. */
+  setStuckFlareCount(count: number): void {
+    this.stuckFlareCount = count;
+  }
+
   update(dt: number, self: Vec3, player: Vec3): void {
     if (this.state === ZombieState.Dead) return;
 
+    const nowSec = performance.now() / 1000;
+
     if (this.hp <= 0) {
+      if (this.state === ZombieState.Burning) {
+        this.hooks?.onCharredDeath?.();
+      }
       this.state = ZombieState.Dead;
       return;
+    }
+
+    // ——— Burning state transitions —————————————————
+    // Enter Burning when flares are stuck and we're not already burning.
+    if (this.stuckFlareCount > 0 && this.state !== ZombieState.Burning) {
+      this.prevState = this.state;
+      this.state = ZombieState.Burning;
+      this.panicTarget = null;
+      this.panicTargetRerolledAt = 0;
+      this.hooks?.onBurningStart?.();
+    }
+
+    // Exit Burning when all flares expired.
+    if (this.stuckFlareCount === 0 && this.state === ZombieState.Burning) {
+      this.state = this.prevState;
+      this.panicTarget = null;
+      this.hooks?.onBurningEnd?.();
+    }
+
+    // ——— Burning behaviour ————————————————————————
+    if (this.state === ZombieState.Burning) {
+      // Re-roll panic target periodically
+      if (nowSec - this.panicTargetRerolledAt >= BURN.panicTargetRerollSec) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * BURN.panicTargetRadiusM;
+        this.panicTarget = {
+          x: self.x + Math.cos(angle) * dist,
+          y: self.y,
+          z: self.z + Math.sin(angle) * dist,
+        };
+        this.panicTargetRerolledAt = nowSec;
+      }
+      return; // don't run normal attack/chase logic while burning
     }
 
     const prev = this.state;
@@ -69,7 +141,6 @@ export class ZombieBrain {
       if (d < this.aggroRadiusM) this.state = ZombieState.Chase;
       else {
         // Idle groan scheduler
-        const nowSec = performance.now() / 1000;
         if (nowSec >= this.nextGroanAt) {
           this.hooks?.onIdleGroan?.();
           this.nextGroanAt = nowSec + 8 + Math.random() * 12;
@@ -111,6 +182,19 @@ export class ZombieBrain {
 
   desiredVelocity(self: Vec3, player: Vec3): Vec3 {
     if (this.state === ZombieState.Dead || this.state === ZombieState.Attack) return { x: 0, y: 0, z: 0 };
+
+    // Burning — panic-thrash toward random nearby target at increased speed
+    if (this.state === ZombieState.Burning) {
+      if (!this.panicTarget) return { x: 0, y: 0, z: 0 };
+      const dx = this.panicTarget.x - self.x;
+      const dy = this.panicTarget.y - self.y;
+      const dz = this.panicTarget.z - self.z;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (len < 0.01) return { x: 0, y: 0, z: 0 };
+      const panicSpeed = this.speed * BURN.panicSpeedMultiplier;
+      return { x: (dx / len) * panicSpeed, y: 0, z: (dz / len) * panicSpeed };
+    }
+
     const dx = player.x - self.x;
     const dy = player.y - self.y;
     const dz = player.z - self.z;
@@ -123,8 +207,12 @@ export class ZombieBrain {
   applyDamage(amount: number): void {
     this.hp -= amount;
     if (this.hp <= 0) {
+      if (this.state === ZombieState.Burning) {
+        this.hooks?.onCharredDeath?.();
+      }
       this.state = ZombieState.Dead;
-    } else {
+    } else if (this.state !== ZombieState.Burning) {
+      // Don't stagger out of Burning — the panic-thrash IS the stagger
       this.state = ZombieState.Stagger;
       this.staggerSec = 0.25;
     }
