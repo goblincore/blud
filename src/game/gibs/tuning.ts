@@ -172,6 +172,31 @@ export const AXE_ZOMBIE = {
   gibThresholdOverride: undefined as number | undefined, // use global GIB_THRESHOLD
 } as const;
 
+// ——— Shotgun cultist —————————————————————————————
+// source: NotBlood dude.cpp dudeInfo[2] (kDudeCultistShotgun=202),
+// aicult.cpp cultistSFire (60 tic delay = 0.5s), weapon.cpp shotgun fire dmg
+export const SHOTGUN_CULTIST = {
+  hp: 40,
+  walkSpeedMps: 2.3,           // BU/tic 34952 → m/s
+  aggroRadiusM: 18,            // half of see-dist (cultist sees better than zombie)
+  fireRangeM: 12,              // stops moving and fires when within
+  fireWindupSec: 0.5,          // 60 tics @ 120 TPS — how long Aim phase lasts
+  fireCooldownSec: 1.5,        // delay after Recoil before next Fire
+  recoilDurationSec: 0.4,      // how long Recoil phase lasts
+} as const;
+
+// ——— Shotgun blast (pellet projectile) ———————————
+// source: NotBlood weapon.cpp shotgun fire dmg;
+// aicult.cpp cultistSFire pellet spread
+// TODO: cultist-specific gib palette (F2 follow-up) — reuse ZOMBIE_GIB_PROFILE for now
+export const SHOTGUN_BLAST = {
+  pelletCount: 7,              // canonical Blood shotgun pellet count
+  pelletSpeedMps: 55,
+  pelletMaxRangeM: 25,
+  pelletDamage: 12,            // per pellet — 7 × 12 = 84 max if all hit
+  spreadConeDeg: 14,           // half-angle of the pellet cone
+} as const;
+
 // ——— Flare gun ————————————————————————————————
 export const FLARE_GUN = {
   raisingMs: 300,         // hold time before fire (no charge mechanic)

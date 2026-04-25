@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { AxeZombie } from './enemy/axe-zombie';
+import { ShotgunCultist } from './enemy/shotgun-cultist';
 import type { EnemyKind } from './encounter/encounters';
 import { WAVE_PRESETS } from './gibs/tuning';
 import { ZombieState } from './enemy/ai';
 import type { GibSystem } from './gibs';
-import type { StaticSurface } from './gibs/particles';
+import type { StaticSurface, ParticlePool } from './gibs/particles';
 import { setArenaSurfaces } from './gibs/particles';
 import { loadTexture } from '../engine/asset-loader';
 import type { Sfx } from '../audio/sfx';
@@ -209,26 +210,28 @@ export interface ZombieSpawnDeps {
 }
 
 export class ZombieCluster {
-  private zombies: AxeZombie[] = [];
+  private zombies: (AxeZombie | ShotgunCultist)[] = [];
   private nextId = 0;
   private _sfx: Sfx | null = null;
-  private _particlePool: import('./gibs/particles').ParticlePool | null = null;
+  private _particlePool: ParticlePool | null = null;
 
   constructor(
     private readonly deps: ZombieSpawnDeps,
     private readonly center: { x: number; y: number; z: number },
   ) {}
 
-  /** Wire SFX engine for all zombies (existing + future spawns). */
+  /** Wire SFX engine for all enemies (existing + future spawns). */
   setSfx(sfx: Sfx): void {
     this._sfx = sfx;
     for (const z of this.zombies) z.setSfx(sfx);
   }
 
-  /** Wire particle pool for smoke emission from stuck flares. */
-  setParticlePool(pool: import('./gibs/particles').ParticlePool): void {
+  /** Wire particle pool for smoke emission from stuck flares (axe-zombies only). */
+  setParticlePool(pool: ParticlePool): void {
     this._particlePool = pool;
-    for (const z of this.zombies) z.setParticlePool(pool);
+    for (const z of this.zombies) {
+      if (z instanceof AxeZombie) z.setParticlePool(pool);
+    }
   }
 
   spawn(count = 4, radius = 1.5): void {
@@ -244,7 +247,15 @@ export class ZombieCluster {
   }
 
   /** Spawn a single enemy of the given kind at a specific position. */
-  spawnOne(kind: EnemyKind, pos: { x: number; y: number; z: number }): AxeZombie {
+  spawnOne(kind: EnemyKind, pos: { x: number; y: number; z: number }): AxeZombie | ShotgunCultist {
+    if (kind === 'cultist-shotgun') {
+      const c = ShotgunCultist.spawn(`cultist-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
+      if (this._sfx) c.setSfx(this._sfx);
+      this.deps.gibs.registerDude(c);
+      this.zombies.push(c);
+      return c;
+    }
+
     const z = AxeZombie.spawn(`zombie-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
     if (kind === 'zombie-tough') {
       z.hp *= WAVE_PRESETS.zombieToughHpMultiplier;
@@ -257,21 +268,19 @@ export class ZombieCluster {
     return z;
   }
 
-  /** Number of alive zombies. */
+  /** Number of alive enemies. */
   aliveCount(): number {
     return this.zombies.length;
   }
 
-  /** Access the zombie array for collision matching. */
-  getZombies(): readonly AxeZombie[] {
+  /** Access the zombie/cultist array for collision matching. */
+  getZombies(): readonly (AxeZombie | ShotgunCultist)[] {
     return this.zombies;
   }
 
   update(dt: number, playerPos: { x: number; y: number; z: number }, camera: THREE.Camera): void {
     for (const z of this.zombies) z.update(dt, playerPos, camera);
-    // Reap dead zombies only once their death animation has completed (or
-    // they've been gibbed — chunks replace the body so the billboard is hidden
-    // immediately). AxeZombie.shouldReap() encodes the grace logic.
+    // Reap dead enemies once their death animation has completed
     this.zombies = this.zombies.filter((z) => {
       if (z.shouldReap()) {
         this.deps.gibs.unregisterDude(z.id);
