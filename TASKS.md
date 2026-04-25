@@ -35,6 +35,7 @@ Key reference docs (open these before touching their area):
 - `M2`  [x]  First kill + F1 dynamite port — `d721ed7`, playtest 2026-04-21
 - `M3`  [x]  One-kill feel pass — `6c59491`; bone-weight + acceptance pending playtest
 - `M4`  [~]  Full arsenal — flare gun + wave runner landed (`eb4a3ee..6000486`), more weapons next
+- [x] M4-FPV: Flare gun FPV asset port + hotkeys (1/2/Q switch, Shift+F quick-equip)
 - `M5`  [!]  Full bestiary + Phase 1 gate (30min arena = fun) — blocked on M4
 - `M6`  [!]  Chunks & generator (Blender chunks + run stitcher) — blocked on M5
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
