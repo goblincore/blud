@@ -290,6 +290,19 @@ export class Dynamite implements Weapon {
 
   phase(): DynPhase { return this._phase; }
 
+  /** Called by WeaponRegistry when switching TO the dynamite. Resets to equipping phase. */
+  equip(ctx: FrameCtx): void {
+    this._fuseHissSrc?.stop();
+    this._fuseHissSrc = null;
+    this.enter('equipping', ctx);
+  }
+
+  /** Called by WeaponRegistry when switching AWAY from the dynamite. Kills fuse hiss. */
+  unequip(_ctx: FrameCtx): void {
+    this._fuseHissSrc?.stop();
+    this._fuseHissSrc = null;
+  }
+
   /** Fuse is visually lit from the moment BUNUP2 completes (end of equipping) onward. */
   isFuseLit(): boolean {
     return this._phase === 'idle' || this._phase === 'cooking' || this._phase === 'throwing';

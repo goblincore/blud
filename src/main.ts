@@ -9,8 +9,7 @@ import { createPlayer } from './game/player';
 import { createDebugHud } from './ui/debug-hud';
 import { ChargeHud } from './ui/charge-hud';
 import { PauseMenu } from './ui/pause-menu';
-import { WeaponRegistry, Dynamite } from './game/weapons';
-import { FlareGun } from './game/weapons/flare';
+import { WeaponRegistry, Dynamite, FlareGun } from './game/weapons';
 import { StuckFlare } from './game/weapons/stuck-flare';
 import { updateSmokeColumns } from './vfx/smoke-particles';
 import { WaveRunner } from './game/encounter/wave-runner';
@@ -322,44 +321,6 @@ async function main() {
   const stuckFlareRegistry: StuckFlare[] = [];
   let flareIdCounter = 0;
 
-  // ——— Flare gun ———————————————————————————————————
-  const flareGun = new FlareGun();
-  flareGun.spawnStuckFlare = (pos, attachedBody) => {
-    const flare = new StuckFlare(`flare-${flareIdCounter++}`, pos, attachedBody, performance.now() / 1000);
-    stuckFlareRegistry.push(flare);
-    // If attached to an enemy's body, find the enemy and attach the flare
-    if (attachedBody) {
-      for (const z of cluster.getZombies()) {
-        if (z.rigidBody.handle === attachedBody.handle) {
-          z.attachFlare(flare);
-          break;
-        }
-      }
-    }
-  };
-  flareGun.raycastFn = (from, dir, maxDist) => {
-    // Normalize direction for the ray
-    const dLen = Math.hypot(dir.x, dir.y, dir.z);
-    if (dLen < 0.0001) return null;
-    const rayDir = { x: dir.x / dLen, y: dir.y / dLen, z: dir.z / dLen };
-    const ray = new RAPIER.Ray(
-      { x: from.x, y: from.y, z: from.z },
-      rayDir,
-    );
-    const hit = physics.world.castRayAndGetNormal(ray, maxDist, true);
-    if (hit) {
-      const toi = hit.timeOfImpact;
-      const hitPoint = {
-        x: from.x + rayDir.x * toi,
-        y: from.y + rayDir.y * toi,
-        z: from.z + rayDir.z * toi,
-      };
-      const body = hit.collider.parent();
-      return { pos: hitPoint, body };
-    }
-    return null;
-  };
-
   function frameCtx(): FrameCtx {
     return {
       world: physics.world,
@@ -369,24 +330,6 @@ async function main() {
       fpAnimator,
       sfx,
     };
-  }
-
-  // ——— Active FPV weapon ——————————————————————————
-  type ActiveFpv = 'dynamite' | 'flare';
-  let activeFpv: ActiveFpv = 'dynamite';
-
-  function setActiveFpv(target: ActiveFpv): void {
-    if (target === activeFpv) return;
-    const ctx = frameCtx();
-    if (activeFpv === 'flare') flareGun.unequip(ctx);
-    // dynamite has no explicit equip/unequip method — its raise anim is
-    // played whenever we restart it. mirror that approach.
-    activeFpv = target;
-    if (target === 'flare') {
-      flareGun.equip(ctx);
-    } else {
-      fpAnimator?.restart('dynamite-raise', ctx.now);
-    }
   }
 
   // ——— Wave runner ————————————————————————————————
@@ -408,6 +351,43 @@ async function main() {
 
   // ---- Weapon + HUD
   const weapons = new WeaponRegistry();
+
+  // ——— Configure FlareGun external hooks (spawn stuck flares, raycast) ———
+  const flareGun = weapons.getFlareGun();
+  flareGun.spawnStuckFlare = (pos, attachedBody) => {
+    const flare = new StuckFlare(`flare-${flareIdCounter++}`, pos, attachedBody, performance.now() / 1000);
+    stuckFlareRegistry.push(flare);
+    if (attachedBody) {
+      for (const z of cluster.getZombies()) {
+        if (z.rigidBody.handle === attachedBody.handle) {
+          z.attachFlare(flare);
+          break;
+        }
+      }
+    }
+  };
+  flareGun.raycastFn = (from, dir, maxDist) => {
+    const dLen = Math.hypot(dir.x, dir.y, dir.z);
+    if (dLen < 0.0001) return null;
+    const rayDir = { x: dir.x / dLen, y: dir.y / dLen, z: dir.z / dLen };
+    const ray = new RAPIER.Ray(
+      { x: from.x, y: from.y, z: from.z },
+      rayDir,
+    );
+    const hit = physics.world.castRayAndGetNormal(ray, maxDist, true);
+    if (hit) {
+      const toi = hit.timeOfImpact;
+      const hitPoint = {
+        x: from.x + rayDir.x * toi,
+        y: from.y + rayDir.y * toi,
+        z: from.z + rayDir.z * toi,
+      };
+      const body = hit.collider.parent();
+      return { pos: hitPoint, body };
+    }
+    return null;
+  };
+
   const chargeHud = new ChargeHud(document.body);
 
   // ---- Pause menu
@@ -429,26 +409,9 @@ async function main() {
   // ---- 1/2/Q: weapon-switch hotkeys
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === '1') setActiveFpv('dynamite');
-    else if (e.key === '2') setActiveFpv('flare');
-    else if (e.key.toLowerCase() === 'q') {
-      setActiveFpv(activeFpv === 'dynamite' ? 'flare' : 'dynamite');
-    }
-  });
-
-  // ---- Shift+F: fire flare gun (quick-equip if needed)
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'F' && e.shiftKey && !e.ctrlKey && !e.metaKey) {
-      if (activeFpv !== 'flare') {
-        // Quick-equip then fire on a short delay (let the raise anim play).
-        setActiveFpv('flare');
-        setTimeout(() => {
-          flareGun.onPress(frameCtx());
-        }, 250); // matches flare-raise total duration approximately (6f × 42ms ≈ 252ms)
-      } else {
-        flareGun.onPress(frameCtx());
-      }
-    }
+    if (e.key === '1') weapons.setSlot(1, frameCtx());
+    else if (e.key === '2') weapons.setSlot(2, frameCtx());
+    else if (e.key.toLowerCase() === 'q') weapons.toggle(frameCtx());
   });
 
   // ---- Weapon input
@@ -486,9 +449,9 @@ async function main() {
     player.update(dt, input);
 
     // Weapon tick (fuse countdown, projectile physics)
+    // Single onFrame call — weapons.current now ticks whichever weapon is held.
     const fctx = frameCtx();
     weapons.current.onFrame(fctx, dt);
-    flareGun.onFrame(fctx, dt);
 
     // Zombie AI + movement
     const ppos = player.position();
@@ -569,8 +532,8 @@ async function main() {
 
     // HUD
     hud.update(realDt, player.position());
-    const dyn = weapons.current as Dynamite;
-    chargeHud.setCharge(dyn.chargeFractionAt(now));
+    const w = weapons.current;
+    chargeHud.setCharge(w instanceof Dynamite ? w.chargeFractionAt(now) : 0);
   });
 
   console.log('[blud] M2 boot — dynamite + gibs + zombies + QAV animator');
