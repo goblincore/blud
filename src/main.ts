@@ -12,6 +12,10 @@ import { PauseMenu } from './ui/pause-menu';
 import { WeaponRegistry, Dynamite } from './game/weapons';
 import { FlareGun } from './game/weapons/flare';
 import { StuckFlare } from './game/weapons/stuck-flare';
+import { AxeZombie } from './game/enemy/axe-zombie';
+import { ShotgunCultist } from './game/enemy/shotgun-cultist';
+import { Pellet, pelletDirInCone } from './game/enemy/shotgun-pellet';
+import { SHOTGUN_BLAST } from './game/gibs/tuning';
 import { updateSmokeColumns } from './vfx/smoke-particles';
 import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
@@ -240,6 +244,7 @@ async function main() {
     decals.reset();
     shake.reset();
     stuckFlareRegistry.length = 0;
+    pelletRegistry.length = 0;
     playerGib.hp = 100;
     // Reset player position — re-create player body
     player.update(0, input); // no-op to satisfy interface; player stays where they are
@@ -322,6 +327,25 @@ async function main() {
   const stuckFlareRegistry: StuckFlare[] = [];
   let flareIdCounter = 0;
 
+  // ——— Pellet global registry —————————————————————
+  const pelletRegistry: Pellet[] = [];
+
+  // ——— Spawn pellets from cultist fire ——————————
+  function spawnPellets(origin: Vec3, dir: Vec3): void {
+    const now = performance.now() / 1000;
+    for (let i = 0; i < SHOTGUN_BLAST.pelletCount; i++) {
+      const pelletDir = pelletDirInCone(dir, i, SHOTGUN_BLAST.pelletCount, SHOTGUN_BLAST.spreadConeDeg);
+      const pellet = new Pellet(
+        origin,
+        pelletDir,
+        SHOTGUN_BLAST.pelletSpeedMps,
+        now,
+        SHOTGUN_BLAST.pelletDamage,
+      );
+      pelletRegistry.push(pellet);
+    }
+  }
+
   // ——— Flare gun ———————————————————————————————————
   const flareGun = new FlareGun();
   flareGun.spawnStuckFlare = (pos, attachedBody) => {
@@ -331,7 +355,7 @@ async function main() {
     if (attachedBody) {
       for (const z of cluster.getZombies()) {
         if (z.rigidBody.handle === attachedBody.handle) {
-          z.attachFlare(flare);
+          if (z instanceof AxeZombie) z.attachFlare(flare);
           break;
         }
       }
@@ -402,7 +426,13 @@ async function main() {
       return points[Math.floor(Math.random() * points.length)]!;
     },
     spawn: (kind, pos) => {
-      cluster.spawnOne(kind, pos);
+      const enemy = cluster.spawnOne(kind, pos);
+      if (enemy instanceof ShotgunCultist) {
+        enemy.brain.hooks = {
+          ...enemy.brain.hooks,
+          onFire: (origin: Vec3, dir: Vec3) => spawnPellets(origin, dir),
+        };
+      }
     },
   });
 
@@ -422,7 +452,30 @@ async function main() {
       chunks.reset();
       decals.reset();
       stuckFlareRegistry.length = 0;
+      pelletRegistry.length = 0;
       waveRunner.start(performance.now() / 1000);
+    }
+  });
+
+  // TODO M5: remove debug T-key once mixed waves land
+  // ---- T key: spawn one shotgun cultist at a perimeter point
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 't' && !e.ctrlKey && !e.metaKey) {
+      const points = [
+        { x: 15, y: 1, z: 0 },
+        { x: -15, y: 1, z: 0 },
+        { x: 0, y: 1, z: 15 },
+        { x: 0, y: 1, z: -15 },
+      ];
+      const pos = points[Math.floor(Math.random() * points.length)]!;
+      const cultist = cluster.spawnOne('cultist-shotgun', pos);
+      if (cultist instanceof ShotgunCultist) {
+        cultist.brain.hooks = {
+          ...cultist.brain.hooks,
+          onFire: (origin: Vec3, dir: Vec3) => spawnPellets(origin, dir),
+        };
+      }
+      console.log('[blud] spawned cultist at', pos);
     }
   });
 
@@ -501,6 +554,45 @@ async function main() {
       const alive = f.update(now);
       if (!alive) {
         stuckFlareRegistry.splice(i, 1);
+      }
+    }
+
+    // ——— Pellet registry tick ——————————————————
+    // Get player rigid body for hit detection (player body handle = 0 from player.ts)
+    const playerBody = (player as any)._body as RAPIER.RigidBody | null;
+    const pelletRaycastFn = (from: Vec3, dir: Vec3, maxDist: number) => {
+      const dLen = Math.hypot(dir.x, dir.y, dir.z);
+      if (dLen < 0.0001) return null;
+      const rayDir = { x: dir.x / dLen, y: dir.y / dLen, z: dir.z / dLen };
+      const ray = new RAPIER.Ray(
+        { x: from.x, y: from.y, z: from.z },
+        rayDir,
+      );
+      const hit = physics.world.castRayAndGetNormal(ray, maxDist, true);
+      if (hit) {
+        const toi = hit.timeOfImpact;
+        return {
+          pos: { x: from.x + rayDir.x * toi, y: from.y + rayDir.y * toi, z: from.z + rayDir.z * toi },
+          body: hit.collider.parent(),
+        };
+      }
+      return null;
+    };
+    for (let i = pelletRegistry.length - 1; i >= 0; i--) {
+      const pellet = pelletRegistry[i]!;
+      const alive = pellet.update(now, pelletRaycastFn, (dmg, imp) => weaponPlayer.takeDamage(dmg, imp), playerBody);
+      if (!alive) pelletRegistry.splice(i, 1);
+    }
+
+    // ——— Cultist line-of-sight update —————————
+    for (const z of cluster.getZombies()) {
+      if (z instanceof ShotgunCultist) {
+        // Approximate LOS: true if within fire range (real raycast is F2)
+        const dx = z.pos.x - ppos.x;
+        const dy = z.pos.y - ppos.y;
+        const dz = z.pos.z - ppos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        z.setLineOfSight(dist <= 15); // generous — refines with raycast in F2
       }
     }
 
