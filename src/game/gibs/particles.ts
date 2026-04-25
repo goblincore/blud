@@ -2,6 +2,8 @@ import * as THREE from 'three';
 
 export interface Vec3 { x: number; y: number; z: number; }
 
+export type ParticleKind = 'smoke' | 'default';
+
 export interface Particle {
   alive: boolean;
   pos: Vec3;
@@ -12,6 +14,7 @@ export interface Particle {
   age: number;
   size: number;          // world-space size (meters)
   tile: number;          // picnum for diagnostic / atlas lookup
+  kind: ParticleKind;    // discriminator for type-specific rendering/update
 }
 
 export interface BurstParams {
@@ -130,6 +133,7 @@ export class ParticlePool {
         age: 0,
         size: 1,
         tile: 0,
+        kind: 'default',
       });
     }
 
@@ -161,6 +165,7 @@ export class ParticlePool {
     p.alive = true;
     p.age = 0;
     p.vel = { x: 0, y: 0, z: 0 };
+    p.kind = 'default';
     this.head = (this.head + 1) % this.capacity;
     return p;
   }
