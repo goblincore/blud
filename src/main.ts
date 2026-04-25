@@ -360,6 +360,35 @@ async function main() {
     return null;
   };
 
+  function frameCtx(): FrameCtx {
+    return {
+      world: physics.world,
+      player: weaponPlayer,
+      gibs,
+      now: performance.now() / 1000,
+      fpAnimator,
+      sfx,
+    };
+  }
+
+  // ——— Active FPV weapon ——————————————————————————
+  type ActiveFpv = 'dynamite' | 'flare';
+  let activeFpv: ActiveFpv = 'dynamite';
+
+  function setActiveFpv(target: ActiveFpv): void {
+    if (target === activeFpv) return;
+    const ctx = frameCtx();
+    if (activeFpv === 'flare') flareGun.unequip(ctx);
+    // dynamite has no explicit equip/unequip method — its raise anim is
+    // played whenever we restart it. mirror that approach.
+    activeFpv = target;
+    if (target === 'flare') {
+      flareGun.equip(ctx);
+    } else {
+      fpAnimator?.restart('dynamite-raise', ctx.now);
+    }
+  }
+
   // ——— Wave runner ————————————————————————————————
   const waveRunner = new WaveRunner(WARMUP_ROUND, {
     pickSpawnPos: () => {
@@ -397,18 +426,28 @@ async function main() {
     }
   });
 
-  // ---- Shift+F: fire flare gun
+  // ---- 1/2/Q: weapon-switch hotkeys
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === '1') setActiveFpv('dynamite');
+    else if (e.key === '2') setActiveFpv('flare');
+    else if (e.key.toLowerCase() === 'q') {
+      setActiveFpv(activeFpv === 'dynamite' ? 'flare' : 'dynamite');
+    }
+  });
+
+  // ---- Shift+F: fire flare gun (quick-equip if needed)
   window.addEventListener('keydown', (e) => {
     if (e.key === 'F' && e.shiftKey && !e.ctrlKey && !e.metaKey) {
-      const now = performance.now() / 1000;
-      flareGun.onPress({
-        world: physics.world,
-        player: weaponPlayer,
-        gibs,
-        now,
-        fpAnimator,
-        sfx,
-      });
+      if (activeFpv !== 'flare') {
+        // Quick-equip then fire on a short delay (let the raise anim play).
+        setActiveFpv('flare');
+        setTimeout(() => {
+          flareGun.onPress(frameCtx());
+        }, 250); // matches flare-raise total duration approximately (6f × 42ms ≈ 252ms)
+      } else {
+        flareGun.onPress(frameCtx());
+      }
     }
   });
 
@@ -438,17 +477,6 @@ async function main() {
       sfx,
     });
   });
-
-  function frameCtx(): FrameCtx {
-    return {
-      world: physics.world,
-      player: weaponPlayer,
-      gibs,
-      now: performance.now() / 1000,
-      fpAnimator,
-      sfx,
-    };
-  }
 
   // ---- Scheduler
   const scheduler = createScheduler({ stepSec: FIXED_DT, maxStepsPerTick: 5 });
