@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M3 in flight** — plan at [docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md](docs/superpowers/plans/2026-04-21-blud-m3-feel-pass.md). Phases 1+2+4 + P6 + P7 merged. Tasks 7/8/9 + SFX map fix + Task 11 (palette-dither) + Task 12 (damage-pulse CA) + Task 13 (scanlines+barrel) all landed (`6c59491`). THROW_GRUNT disabled (`b5fa380` — CALEBM~1 had a bleed). Ambient parked at mute (1WIND baked too hot). **Next session: Task 14 bone-weight playtest (kill ~10 zombies, count bone:flesh ratio; bump/drop [boneWeight](src/game/gibs/tuning.ts:157) from 0.2 if outside 15-25%), then Task 15 M3 acceptance. Optional: Task 10 proper ambient (normalize 1WIND via `ffmpeg -filter:a loudnorm` OR swap for quieter AMB*).**
+**M4 flare gun landed** — flare gun (Shift+F) + 5-wave warmup runner (R) + burning brain state + procedural smoke all committed in `eb4a3ee..6000486`. See `docs/superpowers/specs/2026-04-25-blud-m4-flare-gun-design.md`. **Next: M4 playtest** — human verifies flare arc, stuck-flare smoke, burning zombie panic, wave runner pacing. M3 bone-weight playtest + acceptance still pending as pre-req.
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
@@ -33,8 +33,8 @@ Key reference docs (open these before touching their area):
 
 - `M1`  [x]  Engine & Movement — `d05a306`
 - `M2`  [x]  First kill + F1 dynamite port — `d721ed7`, playtest 2026-04-21
-- `M3`  [~]  One-kill feel pass — in flight (plan above)
-- `M4`  [!]  Full arsenal (Double-Wide, Cursed Phone, etc) — blocked on M3
+- `M3`  [x]  One-kill feel pass — `6c59491`; bone-weight + acceptance pending playtest
+- `M4`  [~]  Full arsenal — flare gun + wave runner landed (`eb4a3ee..6000486`), more weapons next
 - `M5`  [!]  Full bestiary + Phase 1 gate (30min arena = fun) — blocked on M4
 - `M6`  [!]  Chunks & generator (Blender chunks + run stitcher) — blocked on M5
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
@@ -63,6 +63,13 @@ Key reference docs (open these before touching their area):
 - `F1`       [x]  Dynamite throw arc + bundle sprite + sRGB fix — `18fca04` + follow-ups
 - `F1.gibs`  [ ]  Port `actor.cpp` + `fx.cpp` gib constants into `src/game/gibs/tuning.ts`
 - `F2`       [ ]  Broad feel sweep — audio table, palookup hit flash, AI timing, screenshake, decal growth. Revisit after M3 playtest; split into subtasks once prioritized.
+- `F2.bone-visibility` [ ] Bones are 20% per spec but visually indistinct through palette dither + scanlines; needs bigger scale, brighter tone, or different treatment.
+- `F2.dynamite-throw-distance` [ ] Feels too heavy vs NotBlood reference; investigate `DYNAMITE_COOK.maxVelocityMps` tuning.
+- `F2.blood-trails-density` [ ] Sparser than NotBlood reference; investigate trail spawn rate in particles.ts.
+- `F2.cascade-gibs` [ ] NotBlood spawns smaller secondary gibs when chunks hit ground; requires source-code dig.
+- `F2.flare.charred-death` [ ] Charred-corpse death sprite for burn-killed enemies (placeholder = normal death sprite).
+- `F2.flare.sfx` [ ] Replace `FLARE_BURN_LOOP` placeholder with a real looping crackle sample.
+- `F2.flare.cap` [ ] Cap max concurrent flares per enemy if stacking-too-many proves cheesy in playtest.
 
 ## Process / tooling
 
