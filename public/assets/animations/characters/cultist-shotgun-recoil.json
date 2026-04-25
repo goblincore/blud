@@ -1,0 +1,17 @@
+{
+  "name": "cultist-shotgun-recoil",
+  "kind": "seq",
+  "loop": true,
+  "baseTile": 2825,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 20,
+      "durMs": 250
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 250
+    }
+  ]
+}

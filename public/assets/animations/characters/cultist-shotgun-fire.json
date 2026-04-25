@@ -1,0 +1,17 @@
+{
+  "name": "cultist-shotgun-fire",
+  "kind": "seq",
+  "loop": true,
+  "baseTile": 2820,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 100
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 100
+    }
+  ]
+}

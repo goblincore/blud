@@ -41,6 +41,14 @@ SEQ_NAMES_BY_ID: dict[int, str] = {
     4363: "zombie-stand",
     4365: "zombie-death-burn",
     4366: "zombie-death-spirit",
+    # Shotgun cultist SEQs (seqStartId=11520, from NotBlood aicult.cpp AISTATE seq offsets)
+    # offsets: 0=idle, 1=death-normal, 2=death-gib, 5=recoil, 6=shotgun-fire, 9=chase
+    11520: "cultist-shotgun-idle",
+    11521: "cultist-shotgun-death-normal",
+    11522: "cultist-shotgun-death-gib",
+    11525: "cultist-shotgun-recoil",
+    11526: "cultist-shotgun-fire",
+    11529: "cultist-shotgun-chase",
 }
 
 
