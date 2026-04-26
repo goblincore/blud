@@ -1,0 +1,33 @@
+{
+  "name": "cultist-burn-chase",
+  "kind": "seq",
+  "loop": true,
+  "baseTile": 3321,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 2,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 3,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 4,
+      "durMs": 117
+    },
+    {
+      "tileOffset": 5,
+      "durMs": 117
+    }
+  ]
+}
