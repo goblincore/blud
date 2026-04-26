@@ -205,6 +205,27 @@ export const FLARE_GUN = {
   ammoMax: 10,            // starting flare count
 } as const;
 
+// ——— Tommygun cultist ———————————————————————————
+// source: NotBlood dude.cpp dudeInfo[1] (kDudeCultistTommy=201),
+// aicult.cpp cultistTFire (stateTicks=0 → continuous fire)
+export const TOMMY_CULTIST = {
+  hp: 40,
+  walkSpeedMps: 2.3,           // frontSpeed 46603 (same as shotgun cultist)
+  aggroRadiusM: 18,
+  fireRangeM: 12,
+  fireWindupSec: 0.5,          // 60 tics @ 120 TPS (same aim cadence as shotgun)
+  recoilDurationSec: 0.4,      // how long Recoil phase lasts after taking damage
+} as const;
+
+// ——— Tommygun bullet (kVectorBullet) ——————————
+// source: NotBlood weapon.cpp kVectorBullet dmg=7;
+// spread: Random3(1200) horizontal jitter at 5120 units → half-angle
+export const TOMMY_BULLET = {
+  damage: 7,
+  // atan(1200 / 5120) * 180/π ≈ 13.2° half-angle cone
+  spreadHalfAngleDeg: Math.atan(1200 / 5120) * (180 / Math.PI),
+} as const;
+
 // ——— Burn (applied by stuck flares) ————————
 // source: Blood actor.cpp fire/burn damage paths (kDamageBurn); generic
 // DOT mechanic found across Blood's actor type handlers.
