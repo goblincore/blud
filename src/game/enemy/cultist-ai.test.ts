@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { CultistBrain, CultistState, pelletSpread, withinFireRange, pelletEndPos } from './cultist-ai';
-import { SHOTGUN_CULTIST, SHOTGUN_BLAST, BURN } from '../gibs/tuning';
+import { CultistBrain, CultistState, pelletSpread, withinFireRange, pelletEndPos, applyHorizontalJitter } from './cultist-ai';
+import { SHOTGUN_CULTIST, SHOTGUN_BLAST, BURN, TOMMY_CULTIST, TOMMY_BULLET } from '../gibs/tuning';
 
 const INIT = { hp: SHOTGUN_CULTIST.hp, speed: SHOTGUN_CULTIST.walkSpeedMps };
 
@@ -369,5 +369,219 @@ describe('CultistBrain', () => {
     b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
     expect(b.state).toBe(CultistState.Burning);
     expect(hooks.onBurningStart).toHaveBeenCalledOnce();
+  });
+});
+
+// ——— Tommygun cultist brain tests ——————————————————
+
+const TOMMY_INIT = { hp: TOMMY_CULTIST.hp, speed: TOMMY_CULTIST.walkSpeedMps, fireMode: 'tommy' as const };
+
+describe('TOMMY_CULTIST constant', () => {
+  it('has expected tuning values', () => {
+    expect(TOMMY_CULTIST.hp).toBe(40);
+    expect(TOMMY_CULTIST.walkSpeedMps).toBe(2.3);
+    expect(TOMMY_CULTIST.aggroRadiusM).toBe(18);
+    expect(TOMMY_CULTIST.fireRangeM).toBe(12);
+    expect(TOMMY_CULTIST.fireWindupSec).toBe(0.5);
+    expect(TOMMY_CULTIST.recoilDurationSec).toBe(0.4);
+  });
+
+  it('TOMMY_BULLET has damage 7', () => {
+    expect(TOMMY_BULLET.damage).toBe(7);
+  });
+
+  it('TOMMY_BULLET spread half-angle is atan(1200/5120) in degrees', () => {
+    const expected = Math.atan(1200 / 5120) * (180 / Math.PI);
+    expect(TOMMY_BULLET.spreadHalfAngleDeg).toBeCloseTo(expected, 4);
+  });
+});
+
+describe('applyHorizontalJitter', () => {
+  it('returns original direction when halfAngleDeg is 0', () => {
+    const dir = { x: 1, y: 0, z: 0 };
+    const result = applyHorizontalJitter(dir, 0);
+    expect(result.x).toBeCloseTo(1, 6);
+    expect(result.y).toBe(0);
+    expect(result.z).toBeCloseTo(0, 6);
+  });
+
+  it('returns a direction within the half-angle cone', () => {
+    const dir = { x: 1, y: 0, z: 0 };
+    const halfAngle = 15; // degrees
+    // With rng=1.0 → max positive angle: +15°
+    const rightMax = applyHorizontalJitter(dir, halfAngle, () => 1.0);
+    // With rng=0.0 → max negative angle: -15°
+    const leftMax = applyHorizontalJitter(dir, halfAngle, () => 0.0);
+
+    // Both should be unit vectors (Y=0 plane)
+    expect(Math.hypot(rightMax.x, rightMax.z)).toBeCloseTo(1, 6);
+    expect(Math.hypot(leftMax.x, leftMax.z)).toBeCloseTo(1, 6);
+
+    // Right max: rotated +15° → z should be positive (sin of +15°)
+    expect(rightMax.z).toBeGreaterThan(0);
+    // Left max: rotated -15° → z should be negative (sin of -15°)
+    expect(leftMax.z).toBeLessThan(0);
+  });
+
+  it('produces different directions for different rng values', () => {
+    const dir = { x: 1, y: 0, z: 0 };
+    const a = applyHorizontalJitter(dir, 30, () => 0.3);
+    const b = applyHorizontalJitter(dir, 30, () => 0.9);
+    // They should differ on at least one component
+    const differs = Math.abs(a.x - b.x) > 1e-6 || Math.abs(a.z - b.z) > 1e-6;
+    expect(differs).toBe(true);
+  });
+
+  it('preserves Y component', () => {
+    const dir = { x: 0.6, y: 0.8, z: 0 };
+    const result = applyHorizontalJitter(dir, 20, () => 0.5);
+    expect(result.y).toBeCloseTo(0.8, 6);
+  });
+});
+
+describe('CultistBrain — tommy fire mode', () => {
+  it('starts in Idle with fireMode tommy', () => {
+    const b = new CultistBrain(TOMMY_INIT);
+    expect(b.fireMode).toBe('tommy');
+    expect(b.state).toBe(CultistState.Idle);
+    expect(b.hp).toBe(TOMMY_CULTIST.hp);
+  });
+
+  it('defaults to shotgun fireMode when not specified', () => {
+    const b = new CultistBrain({ hp: 40, speed: 2.3 });
+    expect(b.fireMode).toBe('shotgun');
+  });
+
+  it('Aim → Fire (not Recoil) for tommy after windup', () => {
+    let fakeNow = 0;
+    const b = new CultistBrain(TOMMY_INIT, undefined, () => fakeNow);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    expect(b.state).toBe(CultistState.Aim);
+
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire
+    expect(b.state).toBe(CultistState.Fire); // NOT Recoil
+  });
+
+  it('fires onFire on every update while in Fire state', () => {
+    const hooks = { onFire: vi.fn() };
+    let fakeNow = 0;
+    const b = new CultistBrain(TOMMY_INIT, hooks, () => fakeNow);
+
+    // Navigate to Fire state
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire
+    expect(b.state).toBe(CultistState.Fire);
+
+    // Fire 5 more ticks — should call onFire each time
+    const callsBefore = hooks.onFire.mock.calls.length;
+    for (let i = 0; i < 5; i++) {
+      fakeNow += 0.016;
+      b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);
+    }
+    expect(hooks.onFire.mock.calls.length).toBe(callsBefore + 5);
+  });
+
+  it('exits Fire → Chase when player leaves fireRangeM', () => {
+    let fakeNow = 0;
+    const b = new CultistBrain(TOMMY_INIT, undefined, () => fakeNow);
+
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire
+    expect(b.state).toBe(CultistState.Fire);
+
+    // Player moves out of fire range
+    fakeNow = 0.6;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }, true);
+    expect(b.state).toBe(CultistState.Chase);
+  });
+
+  it('exits Fire → Chase when LOS lost', () => {
+    let fakeNow = 0;
+    const b = new CultistBrain(TOMMY_INIT, undefined, () => fakeNow);
+
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire
+    expect(b.state).toBe(CultistState.Fire);
+
+    // LOS lost
+    fakeNow = 0.6;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Chase);
+  });
+
+  it('applyDamage forces Recoil while in Fire', () => {
+    let fakeNow = 0;
+    const b = new CultistBrain(TOMMY_INIT, undefined, () => fakeNow);
+
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire
+    expect(b.state).toBe(CultistState.Fire);
+
+    b.applyDamage(5);
+    expect(b.state).toBe(CultistState.Recoil);
+  });
+
+  it('applies per-shot jitter (onFire called with varying directions)', () => {
+    const dirs: Array<{ x: number; z: number }> = [];
+    const hooks = {
+      onFire: vi.fn((_origin: any, dir: any) => {
+        dirs.push({ x: dir.x, z: dir.z });
+      }),
+    };
+    let fakeNow = 0;
+    const b = new CultistBrain(TOMMY_INIT, hooks, () => fakeNow);
+
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire
+    expect(b.state).toBe(CultistState.Fire);
+
+    dirs.length = 0;
+    // Fire 3 more ticks — directions should vary (since Math.random is different each time)
+    for (let i = 0; i < 3; i++) {
+      fakeNow += 0.016;
+      b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);
+    }
+
+    expect(dirs.length).toBe(3);
+    // At least one pair should differ (probabilistic, but 3 samples with float rng
+    // is essentially certain to vary — if this flakes, the jitter is broken)
+    const allSame = dirs.every(
+      d => Math.abs(d.x - dirs[0]!.x) < 1e-6 && Math.abs(d.z - dirs[0]!.z) < 1e-6,
+    );
+    expect(allSame).toBe(false);
+  });
+
+  it('shotgun path unchanged with fireMode=shotgun', () => {
+    // Sanity: construct with explicit shotgun fireMode and verify Aim→Fire→Recoil path
+    let fakeNow = 0;
+    let fired = false;
+    const hooks = {
+      onFire: vi.fn(() => { fired = true; }),
+    };
+    const b = new CultistBrain(
+      { hp: SHOTGUN_CULTIST.hp, speed: SHOTGUN_CULTIST.walkSpeedMps, fireMode: 'shotgun' },
+      hooks,
+      () => fakeNow,
+    );
+
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Chase→Aim
+    fakeNow = 0.5;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);  // Aim→Fire→Recoil
+
+    expect(fired).toBe(true);
+    expect(b.state).toBe(CultistState.Recoil); // shotgun path: Fire→Recoil same frame
   });
 });

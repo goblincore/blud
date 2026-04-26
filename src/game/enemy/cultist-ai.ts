@@ -1,4 +1,4 @@
-import { SHOTGUN_CULTIST, SHOTGUN_BLAST, BURN } from '../gibs/tuning';
+import { SHOTGUN_CULTIST, SHOTGUN_BLAST, BURN, TOMMY_CULTIST, TOMMY_BULLET } from '../gibs/tuning';
 import type { Vec3 } from '../gibs/particles';
 
 export enum CultistState {
@@ -10,6 +10,9 @@ export enum CultistState {
   Dead = 'dead',
   Burning = 'burning',
 }
+
+/** Fire mode — controls behaviour in Aim→Fire and Fire states. */
+export type FireMode = 'shotgun' | 'tommy';
 
 /** Callback hooks for brain → gameplay SFX wiring. */
 export interface CultistHooks {
@@ -56,12 +59,38 @@ export function pelletEndPos(spawn: Vec3, dir: Vec3, t: number, speed: number): 
   };
 }
 
+/**
+ * Apply random horizontal jitter (rotate around world-up Y axis) to a
+ * direction vector. `halfAngleDeg` is the half-angle of the spread cone.
+ *
+ * Optionally inject `rng` for deterministic testing.
+ */
+export function applyHorizontalJitter(
+  dir: Vec3,
+  halfAngleDeg: number,
+  rng: () => number = Math.random,
+): Vec3 {
+  // Random angle in [-halfAngleDeg, +halfAngleDeg]
+  const angleDeg = (rng() * 2 - 1) * halfAngleDeg;
+  const angleRad = angleDeg * (Math.PI / 180);
+  const cosA = Math.cos(angleRad);
+  const sinA = Math.sin(angleRad);
+  // Rotate dir around Y axis (right-hand rule: +angle = counterclockwise when looking from +Y)
+  return {
+    x: dir.x * cosA - dir.z * sinA,
+    y: dir.y,
+    z: dir.x * sinA + dir.z * cosA,
+  };
+}
+
 // ——— Brain FSM ——————————————————————————————————
 
 export class CultistBrain {
   state: CultistState = CultistState.Idle;
   hp: number;
   readonly speed: number;
+  /** (a) fireMode field — shotgun vs tommy differ only in Fire state behaviour. */
+  readonly fireMode: FireMode;
 
   private aimEnteredAt = -1;
   private recoilEnteredAt = -1;
@@ -76,13 +105,14 @@ export class CultistBrain {
   private fireDir: Vec3 = { x: 0, y: 0, z: 0 };
 
   constructor(
-    init: { hp: number; speed: number },
+    init: { hp: number; speed: number; fireMode?: FireMode },
     hooks?: CultistHooks,
     private readonly getNowSec: () => number = () => performance.now() / 1000,
   ) {
     this._hooks = hooks ?? {};
     this.hp = init.hp;
     this.speed = init.speed;
+    this.fireMode = init.fireMode ?? 'shotgun';
   }
 
   private _hooks: CultistHooks;
@@ -176,21 +206,39 @@ export class CultistBrain {
           break;
         }
         if (nowSec - this.aimEnteredAt >= SHOTGUN_CULTIST.fireWindupSec) {
-          // Fire immediately (one-frame state: Aim→Fire→Recoil in same update)
-          this.fireDir = direction(self, player);
-          this._hooks.onFire?.(self, this.fireDir);
-          this.state = CultistState.Recoil;
-          this.recoilEnteredAt = nowSec;
-          this._hooks.onRecoil?.();
+          if (this.fireMode === 'tommy') {
+            // Tommy: enter continuous Fire state (no one-shot burst)
+            this.state = CultistState.Fire;
+          } else {
+            // Shotgun: one-frame state — Aim→Fire→Recoil in same update
+            this.fireDir = direction(self, player);
+            this._hooks.onFire?.(self, this.fireDir);
+            this.state = CultistState.Recoil;
+            this.recoilEnteredAt = nowSec;
+            this._hooks.onRecoil?.();
+          }
         }
         break;
       }
 
       case CultistState.Fire: {
-        // Fire is an instantaneous state — if we somehow land here (e.g.
-        // from applyDamage hitting between Aim→Fire), transition to Recoil.
-        this.state = CultistState.Recoil;
-        this.recoilEnteredAt = nowSec;
+        if (this.fireMode === 'tommy') {
+          // Continuous fire — one bullet per update call
+          const d = distance(self, player);
+          if (d > TOMMY_CULTIST.fireRangeM || !this.hasLineOfSight) {
+            this.state = CultistState.Chase;
+            break;
+          }
+          const baseDir = direction(self, player);
+          const jitteredDir = applyHorizontalJitter(baseDir, TOMMY_BULLET.spreadHalfAngleDeg);
+          this._hooks.onFire?.(self, jitteredDir);
+          // Stay in Fire — continuous until player leaves range/LOS or takes damage
+        } else {
+          // Shotgun: Fire is an instantaneous state — if we somehow land here
+          // (e.g. from applyDamage hitting between Aim→Fire), transition to Recoil.
+          this.state = CultistState.Recoil;
+          this.recoilEnteredAt = nowSec;
+        }
         break;
       }
 
