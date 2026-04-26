@@ -1,0 +1,19 @@
+# Structured chain-of-thought grammar.
+#
+# Forces the model's <think> block into a fixed terse structure.
+# Source: andthattoo/structured-cot (HumanEval+ result: 22× fewer think
+# tokens, +0.6 pp accuracy on Qwen3.6-35B-A3B). For lil/blud agentic
+# workloads this is a partly-novel application — paper benched single-turn
+# code gen, we're testing multi-turn tool-use.
+#
+# The think section requires the model to commit to GOAL/APPROACH/EDGE
+# before emitting code or any tool call. After </think> any content is
+# allowed (so multi-turn tool-call envelopes still work).
+#
+# llama.cpp GBNF parser quirks: each rule on its own line, hex escapes
+# (\x09 \x0A \x0D), no \- or \+ in character classes.
+
+root  ::= think rest
+think ::= "<think>\n" "GOAL: " line "APPROACH: " line "EDGE: " line "</think>\n\n"
+line  ::= [^\n]+ "\n"
+rest  ::= [\x09\x0A\x0D\x20-\x7E]+
