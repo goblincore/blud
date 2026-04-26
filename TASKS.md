@@ -37,8 +37,9 @@ Key reference docs (open these before touching their area):
 - `M4`  [~]  Full arsenal — flare gun + wave runner landed (`eb4a3ee..6000486`), more weapons next
 - [x] M4-FPV: Flare gun FPV asset port + hotkeys (1/2/Q switch, Shift+F quick-equip)
 - `M5-B` [x]  Single-fire-button weapon switching (1/2/Q slot swap; left-click fires current) — `1a142ad..3b3786d`
-- `M5`  [~]  Full bestiary + Phase 1 gate (30min arena = fun) — first enemy M5-A landed
+- `M5`  [~]  Full bestiary + Phase 1 gate (30min arena = fun) — first enemy M5-A landed; M5-C landed
 - [x] M5-A: Shotgun cultist with pellet projectile + minimal AI
+- [x] M5-C: NotBlood-faithful flare burn behavior + projectile graphic + cultist anim gap fix
 - `M6`  [!]  Chunks & generator (Blender chunks + run stitcher) — blocked on M5
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
 - `M8`  [!]  Polish (music, balance, HUD) — blocked on M7
@@ -70,7 +71,7 @@ Key reference docs (open these before touching their area):
 - `F2.dynamite-throw-distance` [ ] Feels too heavy vs NotBlood reference; investigate `DYNAMITE_COOK.maxVelocityMps` tuning.
 - `F2.blood-trails-density` [ ] Sparser than NotBlood reference; investigate trail spawn rate in particles.ts.
 - `F2.cascade-gibs` [ ] NotBlood spawns smaller secondary gibs when chunks hit ground; requires source-code dig.
-- `F2.flare.charred-death` [ ] Charred-corpse death sprite for burn-killed enemies (placeholder = normal death sprite).
+- `F2.flare.charred-death` [-] Charred-corpse death sprite for burn-killed enemies — burn-death sprites now play; charred-corpse corpse-persistence art deferred.
 - `F2.flare.sfx` [ ] Replace `FLARE_BURN_LOOP` placeholder with a real looping crackle sample.
 - `F2.flare.cap` [ ] Cap max concurrent flares per enemy if stacking-too-many proves cheesy in playtest.
 - `F2.cultist.gibs` [ ] Cultist-specific gib palette (blood color, flesh picnums) — currently reuses ZOMBIE_GIB_PROFILE.

@@ -20,6 +20,7 @@ import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
 import type { EnemyKind } from './game/encounter/encounters';
 import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
+import { configureProjectileRendering as configureFlareProjectileRendering, setProjectileCamera as setFlareProjectileCamera } from './game/weapons/flare';
 import { ParticlePool } from './game/gibs/particles';
 import { ChunkSystem } from './game/gibs/chunks';
 import { DecalPool } from './game/gibs/decals';
@@ -287,6 +288,10 @@ async function main() {
       animBundle.tileMeta,
       getTileTexture,
     );
+
+    // Flare projectile billboard rendering (tile 2424 from kMissileFlareRegular)
+    configureFlareProjectileRendering({ scene, getTileTexture });
+    setFlareProjectileCamera(camera);
   } else {
     // Fallback: no-op animator factory when manifests are missing
     createZombieAnimator = () => new BillboardAnimator(
@@ -391,6 +396,7 @@ async function main() {
       for (const z of cluster.getZombies()) {
         if (z.rigidBody.handle === attachedBody.handle) {
           if (z instanceof AxeZombie) z.attachFlare(flare);
+          else if (z instanceof ShotgunCultist) z.attachFlare(flare);
           break;
         }
       }

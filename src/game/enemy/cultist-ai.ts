@@ -1,4 +1,4 @@
-import { SHOTGUN_CULTIST, SHOTGUN_BLAST } from '../gibs/tuning';
+import { SHOTGUN_CULTIST, SHOTGUN_BLAST, BURN } from '../gibs/tuning';
 import type { Vec3 } from '../gibs/particles';
 
 export enum CultistState {
@@ -8,6 +8,7 @@ export enum CultistState {
   Fire = 'fire',
   Recoil = 'recoil',
   Dead = 'dead',
+  Burning = 'burning',
 }
 
 /** Callback hooks for brain → gameplay SFX wiring. */
@@ -18,6 +19,8 @@ export interface CultistHooks {
   onRecoil?: () => void;
   onIdleGroan?: () => void;
   onDeath?: () => void;
+  onBurningStart?: () => void;
+  onCharredDeath?: () => void;
 }
 
 // ——— Pure math (TDD'd) ———————————————————————————
@@ -65,6 +68,10 @@ export class CultistBrain {
   private nextGroanAt = 0;
   private hasLineOfSight = false;
 
+  // ——— Burning state ———————————————————————————
+  private stuckFlareCount = 0;
+  private _isFlareIgnited = false;
+
   /** Direction toward player at the moment of firing — used by onFire hook. */
   private fireDir: Vec3 = { x: 0, y: 0, z: 0 };
 
@@ -82,6 +89,16 @@ export class CultistBrain {
   get hooks(): CultistHooks { return this._hooks; }
   set hooks(h: CultistHooks) { this._hooks = h; }
 
+  /** Called by the concrete enemy each frame with the current stuck flare count. */
+  setStuckFlareCount(count: number): void {
+    this.stuckFlareCount = count;
+  }
+
+  /** Called by the concrete enemy each frame — true when any stuck flare has ignited. */
+  setIsFlareIgnited(ignited: boolean): void {
+    this._isFlareIgnited = ignited;
+  }
+
   /**
    * Called each frame by the concrete enemy.
    * @param dt delta time in seconds
@@ -95,9 +112,32 @@ export class CultistBrain {
     const nowSec = this.getNowSec();
     this.hasLineOfSight = lineOfSight;
 
+    // ——— Burning state transitions —————————————————
+    // Enter Burning when flares are stuck and at least one has ignited.
+    if (this.stuckFlareCount > 0 && this._isFlareIgnited && this.state !== CultistState.Burning) {
+      this.state = CultistState.Burning;
+      this._hooks.onBurningStart?.();
+      return; // skip normal AI this frame
+    }
+
+    // Exit Burning when all flares expired (fire went out)
+    if (this.stuckFlareCount === 0 && this.state === CultistState.Burning) {
+      this.state = CultistState.Chase;
+    }
+
     if (this.hp <= 0) {
+      const wasBurning = this.state === CultistState.Burning;
+      if (wasBurning) {
+        this._hooks.onCharredDeath?.();
+      }
       this.state = CultistState.Dead;
       this._hooks.onDeath?.();
+      return;
+    }
+
+    // ——— Burning behaviour ————————————————————————
+    if (this.state === CultistState.Burning) {
+      // Sprint toward player, no firing
       return;
     }
 
@@ -171,6 +211,17 @@ export class CultistBrain {
   desiredVelocity(self: Vec3, player: Vec3): Vec3 {
     if (this.state === CultistState.Dead) return { x: 0, y: 0, z: 0 };
 
+    // Burning: sprint toward player at 1.4× speed
+    if (this.state === CultistState.Burning) {
+      const dx = player.x - self.x;
+      const dy = player.y - self.y;
+      const dz = player.z - self.z;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (len < 1e-6) return { x: 0, y: 0, z: 0 };
+      const burnSpeed = this.speed * BURN.panicSpeedMultiplier;
+      return { x: (dx / len) * burnSpeed, y: 0, z: (dz / len) * burnSpeed };
+    }
+
     // Only move during Chase — cultist plants feet to fire
     if (this.state !== CultistState.Chase) return { x: 0, y: 0, z: 0 };
 
@@ -191,10 +242,16 @@ export class CultistBrain {
   applyDamage(amount: number): void {
     this.hp -= amount;
     if (this.hp <= 0) {
+      const wasBurning = this.state === CultistState.Burning;
+      if (wasBurning) {
+        this._hooks.onCharredDeath?.();
+      }
       this.state = CultistState.Dead;
       this._hooks.onDeath?.();
       return;
     }
+    // While Burning: just decrement HP, no Recoil interruption
+    if (this.state === CultistState.Burning) return;
     // Don't trigger Recoil if already Dead or already Recoil
     if (this.state === CultistState.Dead || this.state === CultistState.Recoil) return;
     this.state = CultistState.Recoil;

@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { burnRemainingSec, dotDamageThisFrame, isExpired, StuckFlare } from './stuck-flare';
 import { BURN } from '../gibs/tuning';
 
+const NOW = 10;
+const DT = 0.016;
+
 describe('burnRemainingSec', () => {
   it('returns full duration at spawn time', () => {
     const rem = burnRemainingSec(10, 10, 6);
@@ -78,31 +81,54 @@ describe('StuckFlare', () => {
     expect(flare.isExtinguished()).toBe(true);
   });
 
-  it('damageThisTick() returns dt*dps while attached and burning', () => {
+  it('isIgnited() returns false before ignite delay', () => {
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, NOW);
+    expect(flare.isIgnited(NOW + 0.3)).toBe(false); // 0.3 < 0.6
+  });
+
+  it('isIgnited() returns true after ignite delay', () => {
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, NOW);
+    expect(flare.isIgnited(NOW + 0.7)).toBe(true); // 0.7 >= 0.6
+  });
+
+  it('isIgnited() returns true at and after ignite delay boundary', () => {
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, NOW);
+    // Use a clean value to avoid IEEE 754 float-edge issues (10.6 - 10 ≠ exactly 0.6)
+    expect(flare.isIgnited(NOW + 0.61)).toBe(true);
+    expect(flare.isIgnited(NOW + 0.59)).toBe(false);
+  });
+
+  it('damageThisTick() returns 0 before ignition', () => {
     const body = mockBody(0, 0, 0);
-    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, 10);
-    const dmg = flare.damageThisTick(0.016);
-    expect(dmg).toBeCloseTo(BURN.dpsPerFlare * 0.016, 5);
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, NOW);
+    expect(flare.damageThisTick(DT, NOW + 0.3)).toBe(0);
+  });
+
+  it('damageThisTick() returns dt*dps after ignition', () => {
+    const body = mockBody(0, 0, 0);
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, NOW);
+    const dmg = flare.damageThisTick(DT, NOW + 0.7);
+    expect(dmg).toBeCloseTo(BURN.dpsPerFlare * DT, 5);
   });
 
   it('damageThisTick() returns 0 when detached (no body)', () => {
-    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, 10);
-    expect(flare.damageThisTick(0.016)).toBe(0);
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, NOW);
+    expect(flare.damageThisTick(DT, NOW + 1.0)).toBe(0);
   });
 
   it('damageThisTick() returns 0 when extinguished', () => {
     const body = mockBody(0, 0, 0);
-    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, 10);
-    flare.update(16); // expire
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, NOW);
+    flare.update(NOW + 20); // expire
     expect(flare.isExtinguished()).toBe(true);
-    expect(flare.damageThisTick(0.016)).toBe(0);
+    expect(flare.damageThisTick(DT, NOW + 20)).toBe(0);
   });
 
-  it('damageThisTick() still returns damage when detach() is called but body was set (conservative: detach clears body)', () => {
+  it('damageThisTick() returns 0 when detach() is called but body was set', () => {
     const body = mockBody(0, 0, 0);
-    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, 10);
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, NOW);
     flare.detach();
-    expect(flare.damageThisTick(0.016)).toBe(0);
+    expect(flare.damageThisTick(DT, NOW + 1.0)).toBe(0);
   });
 
   it('detach() clears body but flare continues burning at last position', () => {
@@ -123,9 +149,10 @@ describe('StuckFlare', () => {
 
   it('multiple flares on same body stack additively', () => {
     const body = mockBody(0, 0, 0);
-    const f1 = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, 10);
-    const f2 = new StuckFlare('f2', { x: 0, y: 0, z: 0 }, body, 10);
-    const totalDmg = f1.damageThisTick(1.0) + f2.damageThisTick(1.0);
+    const ignitedNow = NOW + 0.7;
+    const f1 = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, body, NOW);
+    const f2 = new StuckFlare('f2', { x: 0, y: 0, z: 0 }, body, NOW);
+    const totalDmg = f1.damageThisTick(1.0, ignitedNow) + f2.damageThisTick(1.0, ignitedNow);
     expect(totalDmg).toBe(BURN.dpsPerFlare * 2);
   });
 });

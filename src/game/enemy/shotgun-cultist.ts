@@ -7,6 +7,9 @@ import { BillboardAnimator } from '../../animation/billboard-animator';
 import type { Vec3 } from '../gibs/particles';
 import { SfxEvent } from '../../audio/events';
 import type { Sfx } from '../../audio/sfx';
+import { StuckFlare } from '../weapons/stuck-flare';
+import { startSmokeColumn, emitSmokeBurst } from '../../vfx/smoke-particles';
+import type { TrailHandle, ParticlePool } from '../gibs/particles';
 
 /** Interface implemented by any enemy that can be gibbed by explosions. */
 export interface GibbableDude {
@@ -28,6 +31,7 @@ const STATE_ANIM_MAP: Record<CultistState, string> = {
   [CultistState.Fire]: 'cultist-shotgun-fire',
   [CultistState.Recoil]: 'cultist-shotgun-recoil',
   [CultistState.Dead]: 'cultist-shotgun-death-normal',
+  [CultistState.Burning]: 'cultist-burn-chase',
 };
 
 // ——— Fling constants (mirror AxeZombie) ————————————
@@ -42,6 +46,11 @@ export class ShotgunCultist implements GibbableDude {
 
   hp: number = SHOTGUN_CULTIST.hp;
   private _sfx: Sfx | null = null;
+  private _particlePool: ParticlePool | null = null;
+
+  // ——— Stuck-flare state ————————————————————————
+  private stuckFlares: StuckFlare[] = [];
+  private smokeHandles: TrailHandle[] = [];
 
   readonly brain = new CultistBrain(
     { hp: SHOTGUN_CULTIST.hp, speed: SHOTGUN_CULTIST.walkSpeedMps },
@@ -114,6 +123,9 @@ export class ShotgunCultist implements GibbableDude {
   /** Wire the SFX engine. */
   setSfx(sfx: Sfx): void { this._sfx = sfx; }
 
+  /** Wire the particle pool for smoke emission from stuck flares. */
+  setParticlePool(pool: ParticlePool): void { this._particlePool = pool; }
+
   /** The RAPIER rigid body — exposed for collision matching in main.ts. */
   get rigidBody(): RAPIER.RigidBody { return this.body; }
 
@@ -127,16 +139,59 @@ export class ShotgunCultist implements GibbableDude {
     this._hasLos = hasLos;
   }
 
+  /**
+   * Attach a stuck flare to this cultist. Starts a smoke column that follows
+   * the flare's position each frame.
+   */
+  attachFlare(flare: StuckFlare): void {
+    this.stuckFlares.push(flare);
+    if (this._particlePool) {
+      const h = startSmokeColumn(this._particlePool, () => flare.pos);
+      this.smokeHandles.push(h);
+    }
+  }
+
   /** Update AI, movement, and animation state transitions. */
   update(dt: number, playerPos: Vec3, camera: THREE.Camera): void {
     const now = performance.now() / 1000;
+
+    // ——— Process stuck flares —————————————————————
+    for (let i = this.stuckFlares.length - 1; i >= 0; i--) {
+      const flare = this.stuckFlares[i]!;
+      const alive = flare.update(now);
+      if (!alive) {
+        // Expired — emit final smoke burst and clean up
+        if (this._particlePool) {
+          emitSmokeBurst(this._particlePool, flare.pos);
+        }
+        this.smokeHandles[i]?.stop();
+        this.stuckFlares.splice(i, 1);
+        this.smokeHandles.splice(i, 1);
+      }
+    }
+
+    // Apply per-frame DoT damage from all stuck flares
+    let burnDamage = 0;
+    for (const flare of this.stuckFlares) {
+      burnDamage += flare.damageThisTick(dt, now);
+    }
+    if (burnDamage > 0) {
+      this.brain.applyDamage(burnDamage);
+      this.hp = this.brain.hp;
+    }
+
+    // Update stuck-flare count + ignition state → brain decides Burning entry/exit
+    this.brain.setStuckFlareCount(this.stuckFlares.length);
+    const anyIgnited = this.stuckFlares.some(f => f.isIgnited(now));
+    this.brain.setIsFlareIgnited(anyIgnited);
+
     const prev = this.brain.state;
 
     this.brain.update(dt, this.pos, playerPos, this._hasLos);
 
     // Detect state change → trigger new animation
     if (this.brain.state !== prev) {
-      this.onStateEnter(this.brain.state, now);
+      this.onStateEnter(this.brain.state, now, prev);
       // Track death time for reap scheduling
       if (this.brain.state === CultistState.Dead && this.deathTime < 0) {
         this.deathTime = now;
@@ -177,7 +232,12 @@ export class ShotgunCultist implements GibbableDude {
     );
   }
 
-  private onStateEnter(state: CultistState, now: number): void {
+  private onStateEnter(state: CultistState, now: number, prevState?: CultistState): void {
+    // Burn-death: when transitioning Dead from Burning, play burn-death sprite
+    if (state === CultistState.Dead && prevState === CultistState.Burning) {
+      this.anim.play('cultist-burn-death', now);
+      return;
+    }
     this.anim.play(STATE_ANIM_MAP[state], now);
   }
 
@@ -223,6 +283,16 @@ export class ShotgunCultist implements GibbableDude {
   }
 
   despawn(): void {
+    // Clean up stuck flares: stop smoke columns, emit final burst
+    for (const h of this.smokeHandles) h.stop();
+    if (this._particlePool) {
+      for (const f of this.stuckFlares) {
+        emitSmokeBurst(this._particlePool, f.pos);
+      }
+    }
+    this.stuckFlares.length = 0;
+    this.smokeHandles.length = 0;
+
     this.scene.remove(this.anim.object);
     this.anim.dispose();
     this.world.removeRigidBody(this.body);

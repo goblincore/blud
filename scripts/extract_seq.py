@@ -49,6 +49,11 @@ SEQ_NAMES_BY_ID: dict[int, str] = {
     11525: "cultist-shotgun-recoil",
     11526: "cultist-shotgun-fire",
     11529: "cultist-shotgun-chase",
+    # Burning cultist SEQs (seqStartId=12544, from NotBlood aiburn.cpp + dudeInfo[40])
+    # offsets: 1=death1, 2=death2, 3=burn-chase/attack/goto/search (all states use seq 3)
+    12545: "cultist-burn-death",
+    12546: "cultist-burn-death-gib",
+    12547: "cultist-burn-chase",
 }
 
 

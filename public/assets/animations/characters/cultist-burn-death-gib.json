@@ -1,0 +1,121 @@
+{
+  "name": "cultist-burn-death-gib",
+  "kind": "seq",
+  "loop": true,
+  "baseTile": 3784,
+  "angleStride": 5,
+  "frames": [
+    {
+      "tileOffset": 0,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 0,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    },
+    {
+      "tileOffset": 1,
+      "durMs": 142
+    }
+  ]
+}

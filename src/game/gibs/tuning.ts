@@ -211,6 +211,7 @@ export const FLARE_GUN = {
 export const BURN = {
   durationSec: 6,                 // stuck flare burn lifetime
   dpsPerFlare: 8,                 // HP/s drained by each attached flare
+  igniteDelaySec: 0.6,            // flare sticks → smoke → ignite after this delay
   panicSpeedMultiplier: 1.4,      // burning enemy thrashes at 1.4x base speed
   panicTargetRerollSec: 0.4,      // re-roll panic direction every 0.4s
   panicTargetRadiusM: 3,          // panic target picked within 3m of enemy
