@@ -69,9 +69,18 @@ export class StuckFlare {
     return true;
   }
 
-  /** Damage to apply this frame to the attached body (or 0 if no body). */
-  damageThisTick(dt: number): number {
+  /**
+   * True when the flare has ignited (past the initial smoke-only delay).
+   * Before ignition: smoke only, no DoT. After ignition: DoT begins, sprite swap triggers.
+   */
+  isIgnited(now: number): boolean {
+    return (now - this.spawnTime) >= BURN.igniteDelaySec;
+  }
+
+  /** Damage to apply this frame to the attached body (or 0 if no body or not yet ignited). */
+  damageThisTick(dt: number, now: number): number {
     if (!this.attachedBody || this.extinguished) return 0;
+    if (!this.isIgnited(now)) return 0;
     return dotDamageThisFrame(dt, BURN.dpsPerFlare);
   }
 

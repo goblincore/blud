@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { CultistBrain, CultistState, pelletSpread, withinFireRange, pelletEndPos } from './cultist-ai';
-import { SHOTGUN_CULTIST, SHOTGUN_BLAST } from '../gibs/tuning';
+import { SHOTGUN_CULTIST, SHOTGUN_BLAST, BURN } from '../gibs/tuning';
 
 const INIT = { hp: SHOTGUN_CULTIST.hp, speed: SHOTGUN_CULTIST.walkSpeedMps };
 
@@ -268,5 +268,106 @@ describe('CultistBrain', () => {
     b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
     expect(b.state).toBe(CultistState.Dead);
     expect(hooks.onDeath).toHaveBeenCalledOnce();
+  });
+
+  // ——— Burning state tests ————————————————————————
+
+  it('enters Burning when stuckFlareCount > 0 and flare is ignited', () => {
+    const b = new CultistBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    expect(b.state).toBe(CultistState.Chase);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Burning);
+  });
+
+  it('does NOT enter Burning when stuckFlareCount > 0 but flare is NOT ignited', () => {
+    const b = new CultistBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(false);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Chase); // stays in Chase
+  });
+
+  it('Burning → Dead when hp <= 0 (one-way)', () => {
+    const b = new CultistBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.state).toBe(CultistState.Burning);
+
+    b.applyDamage(SHOTGUN_CULTIST.hp + 5); // lethal
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Dead);
+  });
+
+  it('Burning → Chase when all flares expire', () => {
+    const b = new CultistBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.state).toBe(CultistState.Burning);
+
+    b.setStuckFlareCount(0); // flare expired/extinguished
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Chase);
+  });
+
+  it('desiredVelocity in Burning is walkSpeedMps * 1.4 toward player', () => {
+    const b = new CultistBrain(INIT);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.state).toBe(CultistState.Burning);
+
+    const self = { x: 0, y: 0, z: 0 };
+    const player = { x: 3, y: 0, z: 4 };
+    const v = b.desiredVelocity(self, player);
+    const mag = Math.hypot(v.x, v.z);
+    expect(mag).toBeCloseTo(SHOTGUN_CULTIST.walkSpeedMps * BURN.panicSpeedMultiplier, 3);
+    expect(v.x).toBeGreaterThan(0); // toward player +X
+    expect(v.z).toBeGreaterThan(0); // toward player +Z
+  });
+
+  it('does not re-coil when taking damage while Burning', () => {
+    const b = new CultistBrain(INIT);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.state).toBe(CultistState.Burning);
+
+    b.applyDamage(5);
+    expect(b.state).toBe(CultistState.Burning); // stays Burning, no Recoil
+    expect(b.hp).toBe(SHOTGUN_CULTIST.hp - 5);
+  });
+
+  it('triggers onCharredDeath when dying from Burning', () => {
+    const hooks = { onCharredDeath: vi.fn(), onDeath: vi.fn() };
+    const b = new CultistBrain(INIT, hooks);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.state).toBe(CultistState.Burning);
+
+    b.applyDamage(SHOTGUN_CULTIST.hp + 5);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Dead);
+    expect(hooks.onCharredDeath).toHaveBeenCalledOnce();
+    expect(hooks.onDeath).toHaveBeenCalledOnce();
+  });
+
+  it('triggers onBurningStart when entering Burning', () => {
+    const hooks = { onBurningStart: vi.fn() };
+    const b = new CultistBrain(INIT, hooks);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Burning);
+    expect(hooks.onBurningStart).toHaveBeenCalledOnce();
   });
 });

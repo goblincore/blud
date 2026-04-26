@@ -28,7 +28,7 @@ const STATE_ANIM_MAP: Record<ZombieState, string> = {
   [ZombieState.Attack]: 'zombie-attack',
   [ZombieState.Stagger]: 'zombie-recoil',
   [ZombieState.Dead]: 'zombie-death-normal',
-  [ZombieState.Burning]: 'zombie-recoil', // TODO: add dedicated burn-thrash anim
+  [ZombieState.Burning]: 'zombie-burn-chase',
 };
 
 /**
@@ -163,7 +163,7 @@ export class AxeZombie implements GibbableDude {
     // Apply per-frame DoT damage from all stuck flares
     let burnDamage = 0;
     for (const flare of this.stuckFlares) {
-      burnDamage += flare.damageThisTick(dt);
+      burnDamage += flare.damageThisTick(dt, now);
     }
     if (burnDamage > 0) {
       this.brain.applyDamage(burnDamage);
@@ -179,7 +179,7 @@ export class AxeZombie implements GibbableDude {
 
     // Detect state change → trigger new animation
     if (this.brain.state !== prev) {
-      this.onStateEnter(this.brain.state, now);
+      this.onStateEnter(this.brain.state, now, prev);
       // Track death time for reap scheduling (handles both takeDamage and burn-DoT deaths)
       if (this.brain.state === ZombieState.Dead && this.deathTime < 0) {
         this.deathTime = now;
@@ -216,7 +216,12 @@ export class AxeZombie implements GibbableDude {
     );
   }
 
-  private onStateEnter(state: ZombieState, now: number): void {
+  private onStateEnter(state: ZombieState, now: number, prevState?: ZombieState): void {
+    // Burn-death: when transitioning Dead from Burning, play burn-death sprite
+    if (state === ZombieState.Dead && prevState === ZombieState.Burning) {
+      this.anim.play('zombie-death-burn', now);
+      return;
+    }
     this.anim.play(STATE_ANIM_MAP[state], now);
   }
 
