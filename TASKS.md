@@ -40,6 +40,7 @@ Key reference docs (open these before touching their area):
 - `M5`  [~]  Full bestiary + Phase 1 gate (30min arena = fun) — first enemy M5-A landed; M5-C landed
 - [x] M5-A: Shotgun cultist with pellet projectile + minimal AI
 - [x] M5-C: NotBlood-faithful flare burn behavior + projectile graphic + cultist anim gap fix
+- [x] M5-D: NotBlood fidelity pass — flare burn-death + dynamite + gib taxonomy (see [findings](docs/dev-notes/2026-04-26-notblood-fidelity-research.md))
 - `M6`  [!]  Chunks & generator (Blender chunks + run stitcher) — blocked on M5
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
 - `M8`  [!]  Polish (music, balance, HUD) — blocked on M7
@@ -68,8 +69,9 @@ Key reference docs (open these before touching their area):
 - `F1.gibs`  [ ]  Port `actor.cpp` + `fx.cpp` gib constants into `src/game/gibs/tuning.ts`
 - `F2`       [ ]  Broad feel sweep — audio table, palookup hit flash, AI timing, screenshake, decal growth. Revisit after M3 playtest; split into subtasks once prioritized.
 - `F2.bone-visibility` [ ] Bones are 20% per spec but visually indistinct through palette dither + scanlines; needs bigger scale, brighter tone, or different treatment.
-- `F2.dynamite-throw-distance` [ ] Feels too heavy vs NotBlood reference; investigate `DYNAMITE_COOK.maxVelocityMps` tuning.
+- `F2.dynamite-throw-distance` [x] Velocities match NotBlood (3-14 m/s); fuse reduced to 1.5s for snappier feel (M5-D).
 - `F2.blood-trails-density` [ ] Sparser than NotBlood reference; investigate trail spawn rate in particles.ts.
+- `F2.zombie-burn-drop` [ ] Powerup drop on burn-melt — deferred per M5-D Phase 1 findings (NotBlood doesn't do this).
 - `F2.cascade-gibs` [ ] NotBlood spawns smaller secondary gibs when chunks hit ground; requires source-code dig.
 - `F2.flare.charred-death` [-] Charred-corpse death sprite for burn-killed enemies — burn-death sprites now play; charred-corpse corpse-persistence art deferred.
 - `F2.flare.sfx` [ ] Replace `FLARE_BURN_LOOP` placeholder with a real looping crackle sample.
