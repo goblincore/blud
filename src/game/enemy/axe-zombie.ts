@@ -76,6 +76,9 @@ export class AxeZombie implements GibbableDude {
   /** Wire the particle pool for smoke emission from stuck flares. */
   setParticlePool(pool: ParticlePool): void { this._particlePool = pool; }
 
+  /** Called when burn-death visual sequence should fire (gibs + ground flame). */
+  onBurnDeath?: (pos: Vec3, now: number) => void;
+
   private readonly anim: BillboardAnimator;
   private readonly body: RAPIER.RigidBody;
   private readonly world: RAPIER.World;
@@ -183,6 +186,9 @@ export class AxeZombie implements GibbableDude {
       // Track death time for reap scheduling (handles both takeDamage and burn-DoT deaths)
       if (this.brain.state === ZombieState.Dead && this.deathTime < 0) {
         this.deathTime = now;
+        if (prev === ZombieState.Burning) {
+          this.onBurnDeath?.(this.pos, now);
+        }
       }
     }
 

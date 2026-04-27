@@ -16,6 +16,7 @@ import {
   ZOMBIE_GIB_PROFILE,
   type GibProfile,
 } from './tuning';
+import { LAUNCHED_CORPSE } from './launched-corpse';
 
 export interface ExplosionInfo {
   radius: number;       // Build units
@@ -88,7 +89,11 @@ const RADIUS_SCALE_FACTOR = 8;
  * zombies (> 160 threshold), tapering below threshold near the edge for
  * "hurt but not gibbed" outer ring.
  */
-const DAMAGE_TICK_STACK = 8;
+/** Blood's kExplosionStandard applies 20 damage over 60 ticks (500ms @ 120 TPS) =
+ *  total 1200 damage. Blud collapses multi-tick into single shot. 12× gives
+ *  point-blank damage ≈ 240 which reliably gibs zombies (> 160 threshold),
+ *  with a mid-ring for "hurt but not gibbed." */
+const DAMAGE_TICK_STACK = 12;
 
 export class GibSystem {
   private dudes: GibbableDude[] = [];
@@ -104,6 +109,8 @@ export class GibSystem {
     private readonly screenshake: Screenshake,
     /** Called when a player-gib occurs — main.ts shows game-over overlay. */
     private readonly onPlayerGibbed: () => void,
+    /** Called when a launched-corpse outcome triggers (impulse above threshold). */
+    public onLaunchedCorpse?: (pos: Vec3, impulse: Vec3, now: number) => void,
   ) {}
 
   registerDude(d: GibbableDude): void { this.dudes.push(d); }
@@ -136,7 +143,18 @@ export class GibSystem {
       console.log(`[gibs]   ${dude.kind} ${dude.id} at dist=${dist.toFixed(2)}m → damage=${damage.toFixed(0)} (gib@${GIB_THRESHOLD})`);
 
       if (damage >= GIB_THRESHOLD) {
-        this.triggerGib(dude.pos, impulseVec, dude.gibProfile, now);
+        const impulseMag = impulseVec.x * impulseVec.x + impulseVec.y * impulseVec.y + impulseVec.z * impulseVec.z;
+        const impulseLen = Math.sqrt(impulseMag);
+
+        // Launched-corpse outcome: above impulse threshold → head gib + tumbling corpse
+        // This is a Blud-original embellishment; NotBlood always full-gibs on explosion death.
+        if (impulseLen >= LAUNCHED_CORPSE.impulseThreshold && this.onLaunchedCorpse) {
+          // Single head gib only (less chunks than full gib)
+          this.chunks.spawnChunks(dude.pos, impulseVec, { ...dude.gibProfile, bodyPartCount: { min: 1, max: 1 } }, now);
+          this.onLaunchedCorpse(dude.pos, impulseVec, now);
+        } else {
+          this.triggerGib(dude.pos, impulseVec, dude.gibProfile, now);
+        }
         dude.onGibbed?.();
         if (dude.kind === 'player') this.onPlayerGibbed();
         else this.unregisterDude(dude.id);

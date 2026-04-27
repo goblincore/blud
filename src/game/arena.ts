@@ -6,7 +6,7 @@ import type { EnemyKind } from './encounter/encounters';
 import { WAVE_PRESETS } from './gibs/tuning';
 import { ZombieState } from './enemy/ai';
 import type { GibSystem } from './gibs';
-import type { StaticSurface, ParticlePool } from './gibs/particles';
+import type { StaticSurface, ParticlePool, Vec3 } from './gibs/particles';
 import { setArenaSurfaces } from './gibs/particles';
 import { loadTexture } from '../engine/asset-loader';
 import type { Sfx } from '../audio/sfx';
@@ -231,7 +231,13 @@ export class ZombieCluster {
     this._particlePool = pool;
     for (const z of this.zombies) {
       if (z instanceof AxeZombie) z.setParticlePool(pool);
+      if (z instanceof ShotgunCultist) z.setParticlePool(pool);
     }
+  }
+
+  /** Wire burn-death callback (gibs + ground flame) for all enemies. */
+  setBurnDeathCallback(cb: (pos: Vec3, now: number) => void): void {
+    for (const z of this.zombies) z.onBurnDeath = cb;
   }
 
   spawn(count = 4, radius = 1.5): void {
@@ -251,6 +257,7 @@ export class ZombieCluster {
     if (kind === 'cultist-shotgun') {
       const c = ShotgunCultist.spawn(`cultist-${this.nextId++}`, this.deps.world, this.deps.scene, this.deps.createAnimator(), pos);
       if (this._sfx) c.setSfx(this._sfx);
+      if (this._particlePool) c.setParticlePool(this._particlePool);
       this.deps.gibs.registerDude(c);
       this.zombies.push(c);
       return c;

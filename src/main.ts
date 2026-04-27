@@ -14,11 +14,13 @@ import { StuckFlare } from './game/weapons/stuck-flare';
 import { AxeZombie } from './game/enemy/axe-zombie';
 import { ShotgunCultist } from './game/enemy/shotgun-cultist';
 import { Pellet, pelletDirInCone } from './game/enemy/shotgun-pellet';
-import { SHOTGUN_BLAST } from './game/gibs/tuning';
+import { SHOTGUN_BLAST, ZOMBIE_GIB_PROFILE } from './game/gibs/tuning';
 import { updateSmokeColumns } from './vfx/smoke-particles';
 import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
 import type { EnemyKind } from './game/encounter/encounters';
+import { GroundFlameManager } from './game/gibs/ground-flame';
+import { LaunchedCorpseManager, type LaunchedCorpseDeps } from './game/gibs/launched-corpse';
 import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
 import { configureProjectileRendering as configureFlareProjectileRendering, setProjectileCamera as setFlareProjectileCamera } from './game/weapons/flare';
 import { ParticlePool } from './game/gibs/particles';
@@ -228,36 +230,7 @@ async function main() {
   );
   const weaponPlayer = new WeaponPlayerAdapter(player.position, camera);
 
-  // ---- Game-over overlay
-  let gameOverOverlay!: GameOverOverlay;
-  const gibs = new GibSystem(
-    physics.world, scene, particles, chunks, decals,
-    explosions, explosionAtlas, shake,
-    () => { gameOverOverlay.show(); },
-  );
-  gibs.registerDude(playerGib);
-
-  gameOverOverlay = new GameOverOverlay(document.body, () => {
-    // Full restart: clear gib state, respawn cluster, reset player
-    cluster.reset();
-    chunks.reset();
-    decals.reset();
-    shake.reset();
-    clearStuckFlares();
-    pelletRegistry.length = 0;
-    playerGib.hp = 100;
-    // Reset player position — re-create player body
-    player.update(0, input); // no-op to satisfy interface; player stays where they are
-    cluster.spawn(4);
-  });
-
-  // ---- Animators (FPV weapon + zombie billboard)
-  // Camera was added to the scene earlier (before AudioEngine construction).
-  let fpAnimator: FpWeaponAnimator | undefined;
-  let createZombieAnimator: () => BillboardAnimator;
-
-  // Shared tile texture cache + getter — hoisted so stuck-flare billboard
-  // creation can access it (outside the animBundle block).
+  // ---- Shared tile texture cache + getter (needed by ground flames, launched corpses, etc.)
   const tileCache = new Map<number, THREE.Texture>();
   const textureLoader = new THREE.TextureLoader();
   const getTileTexture = (picnum: number): THREE.Texture => {
@@ -271,6 +244,49 @@ async function main() {
     }
     return t;
   };
+
+  // ---- Game-over overlay
+  let gameOverOverlay!: GameOverOverlay;
+  const gibs = new GibSystem(
+    physics.world, scene, particles, chunks, decals,
+    explosions, explosionAtlas, shake,
+    () => { gameOverOverlay.show(); },
+  );
+  gibs.registerDude(playerGib);
+
+  // ---- Ground flames (persistent flame at burn-death position)
+  const groundFlames = new GroundFlameManager();
+
+  // ---- Launched corpse manager (above-threshold explosion kills)
+  const launchedCorpses = new LaunchedCorpseManager();
+
+  // Wire the gib system's launched-corpse callback — uses getTileTexture
+  // lazy-initialized after the tile cache is set up below.
+  gibs.onLaunchedCorpse = (pos, impulse, now) => {
+    const deps: LaunchedCorpseDeps = { world: physics.world, scene, getTileTexture };
+    launchedCorpses.spawn(pos, impulse, 1454, now, deps); // tile 1454 = flesh chunk (placeholder corpse)
+  };
+
+  gameOverOverlay = new GameOverOverlay(document.body, () => {
+    // Full restart: clear gib state, respawn cluster, reset player
+    cluster.reset();
+    chunks.reset();
+    decals.reset();
+    shake.reset();
+    clearStuckFlares();
+    groundFlames.clear(scene);
+    launchedCorpses.clear({ world: physics.world, scene, getTileTexture });
+    pelletRegistry.length = 0;
+    playerGib.hp = 100;
+    // Reset player position — re-create player body
+    player.update(0, input); // no-op to satisfy interface; player stays where they are
+    cluster.spawn(4);
+  });
+
+  // ---- Animators (FPV weapon + zombie billboard)
+  // Camera was added to the scene earlier (before AudioEngine construction).
+  let fpAnimator: FpWeaponAnimator | undefined;
+  let createZombieAnimator: () => BillboardAnimator;
 
   if (animBundle) {
 
@@ -328,6 +344,16 @@ async function main() {
   cluster.spawn(4);
   cluster.setSfx(sfx);
   cluster.setParticlePool(particles);
+
+  // Wire burn-death callback: spawn gibs + ground flame
+  const burnDeathFlameTex = getTileTexture(2424); // reuse flare tile for ground flame
+  const onBurnDeath = (pos: Vec3, now: number) => {
+    // Spawn smaller gib burst for burn-death
+    gibs.triggerGib(pos, { x: 0, y: 1, z: 0 }, ZOMBIE_GIB_PROFILE, now);
+    // Spawn persistent ground flame
+    groundFlames.spawn(pos, now, burnDeathFlameTex, scene);
+  };
+  cluster.setBurnDeathCallback(onBurnDeath);
 
   // ——— Stuck-flare global registry —————————————————
   const stuckFlareRegistry: StuckFlare[] = [];
@@ -464,6 +490,8 @@ async function main() {
       chunks.reset();
       decals.reset();
       clearStuckFlares();
+      groundFlames.clear(scene);
+      launchedCorpses.clear({ world: physics.world, scene, getTileTexture });
       pelletRegistry.length = 0;
       waveRunner.start(performance.now() / 1000);
     }
@@ -630,6 +658,12 @@ async function main() {
     // Particle sim + render
     updateSmokeColumns(particles, realDt); // smoke from stuck flares
     particles.update(realDt, camera);
+
+    // Ground flames (persistent after burn-death)
+    groundFlames.update(now, camera);
+
+    // Launched corpses (above-threshold explosion kills)
+    launchedCorpses.update(now, camera, { world: physics.world, scene, getTileTexture });
 
     // Explosion VFX
     explosions.update(realDt * 1000, camera);

@@ -126,6 +126,9 @@ export class ShotgunCultist implements GibbableDude {
   /** Wire the particle pool for smoke emission from stuck flares. */
   setParticlePool(pool: ParticlePool): void { this._particlePool = pool; }
 
+  /** Called when burn-death visual sequence should fire (gibs + ground flame). */
+  onBurnDeath?: (pos: Vec3, now: number) => void;
+
   /** The RAPIER rigid body — exposed for collision matching in main.ts. */
   get rigidBody(): RAPIER.RigidBody { return this.body; }
 
@@ -195,6 +198,9 @@ export class ShotgunCultist implements GibbableDude {
       // Track death time for reap scheduling
       if (this.brain.state === CultistState.Dead && this.deathTime < 0) {
         this.deathTime = now;
+        if (prev === CultistState.Burning) {
+          this.onBurnDeath?.(this.pos, now);
+        }
       }
       // Gib death anim override
       if (this.brain.state === CultistState.Dead && this.flingVel && this.flingTimer > 0) {

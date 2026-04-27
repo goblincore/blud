@@ -57,8 +57,8 @@ describe('dynamite tuning', () => {
   it('maxChargeSec is 2 (240 tics @ 120 TPS)', () => {
     expect(DYNAMITE_COOK.maxChargeSec).toBe(2.0);
   });
-  it('fuseMaxSec is 2 (cook envelope matches charge envelope)', () => {
-    expect(DYNAMITE_COOK.fuseMaxSec).toBe(2.0);
+  it('fuseMaxSec is 1.5 (shorter fuse for snappier feel, closer to Blood weaponTimer)', () => {
+    expect(DYNAMITE_COOK.fuseMaxSec).toBe(1.5);
   });
   it('throw velocity range matches Blood nSpeed >> 16 (F1 port: min ~3 m/s, max ~14 m/s)', () => {
     // source: weapon.cpp:1215, nSpeed = mulscale16(throwPower, 0x177777) + 0x66666

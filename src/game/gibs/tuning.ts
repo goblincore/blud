@@ -74,7 +74,7 @@ export const DYNAMITE_COOK = {
   maxChargeSec: 2.0,          // 240 tics @ 120 TPS (matches Blood's divscale16 / 240)
   minVelocityMps: 3.0,        // Blood nSpeed min (0x66666 >> 16) → m/s
   maxVelocityMps: 14.0,       // Blood nSpeed max (0x1DDDDD >> 16) → m/s
-  fuseMaxSec: 2.0,            // fuse starts on press; same envelope as charge
+  fuseMaxSec: 1.5,            // Blood weaponTimer-based fuse ≈ 50 tics ≈ 0.4s; Blud 1.5s for feel
   pitchLobDeg: 30,            // Blood port ≈ 35°, eased to 30° for our tighter arena scale
 } as const;
 
