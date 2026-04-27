@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { burnRemainingSec, dotDamageThisFrame, isExpired, StuckFlare } from './stuck-flare';
 import { BURN } from '../gibs/tuning';
+import * as THREE from 'three';
 
 const NOW = 10;
 const DT = 0.016;
@@ -154,5 +155,50 @@ describe('StuckFlare', () => {
     const f2 = new StuckFlare('f2', { x: 0, y: 0, z: 0 }, body, NOW);
     const totalDmg = f1.damageThisTick(1.0, ignitedNow) + f2.damageThisTick(1.0, ignitedNow);
     expect(totalDmg).toBe(BURN.dpsPerFlare * 2);
+  });
+});
+
+describe('StuckFlare billboard tracking', () => {
+  function mockBody(x: number, y: number, z: number) {
+    return {
+      translation: () => ({ x, y, z }),
+    } as any;
+  }
+
+  it('getRenderPos returns body position with Y offset', () => {
+    const body = mockBody(3, 1, 5);
+    const flare = new StuckFlare('f1', { x: 3, y: 1, z: 5 }, body, 10);
+    flare.update(11);
+    const rp = flare.getRenderPos();
+    expect(rp.x).toBe(3);
+    expect(rp.y).toBe(1.6); // 1.0 + 0.6 offset
+    expect(rp.z).toBe(5);
+  });
+
+  it('getRenderPos works without attached body (world-space position)', () => {
+    const flare = new StuckFlare('f1', { x: 10, y: 2, z: 0 }, null, 10);
+    const rp = flare.getRenderPos();
+    expect(rp.x).toBe(10);
+    expect(rp.y).toBe(2.6);
+    expect(rp.z).toBe(0);
+  });
+
+  it('disposeMesh cleans up mesh geometry and material', () => {
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, 10);
+    const geom = new THREE.PlaneGeometry(1, 1);
+    const mat = new THREE.MeshBasicMaterial();
+    const mesh = new THREE.Mesh(geom, mat);
+    const geomDispose = vi.spyOn(geom, 'dispose');
+    const matDispose = vi.spyOn(mat, 'dispose');
+    flare.mesh = mesh;
+    flare.disposeMesh();
+    expect(flare.mesh).toBeNull();
+    expect(geomDispose).toHaveBeenCalledTimes(1);
+    expect(matDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('mesh starts as null', () => {
+    const flare = new StuckFlare('f1', { x: 0, y: 0, z: 0 }, null, 10);
+    expect(flare.mesh).toBeNull();
   });
 });

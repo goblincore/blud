@@ -243,7 +243,7 @@ async function main() {
     chunks.reset();
     decals.reset();
     shake.reset();
-    stuckFlareRegistry.length = 0;
+    clearStuckFlares();
     pelletRegistry.length = 0;
     playerGib.hp = 100;
     // Reset player position — re-create player body
@@ -256,21 +256,23 @@ async function main() {
   let fpAnimator: FpWeaponAnimator | undefined;
   let createZombieAnimator: () => BillboardAnimator;
 
+  // Shared tile texture cache + getter — hoisted so stuck-flare billboard
+  // creation can access it (outside the animBundle block).
+  const tileCache = new Map<number, THREE.Texture>();
+  const textureLoader = new THREE.TextureLoader();
+  const getTileTexture = (picnum: number): THREE.Texture => {
+    let t = tileCache.get(picnum);
+    if (!t) {
+      t = textureLoader.load(`assets/blood-tiles/${picnum}.png`);
+      t.magFilter = THREE.NearestFilter;
+      t.minFilter = THREE.NearestFilter;
+      t.colorSpace = THREE.SRGBColorSpace;
+      tileCache.set(picnum, t);
+    }
+    return t;
+  };
+
   if (animBundle) {
-    // Shared tile texture cache + getter for both FPV and billboard animators
-    const tileCache = new Map<number, THREE.Texture>();
-    const textureLoader = new THREE.TextureLoader();
-    const getTileTexture = (picnum: number): THREE.Texture => {
-      let t = tileCache.get(picnum);
-      if (!t) {
-        t = textureLoader.load(`assets/blood-tiles/${picnum}.png`);
-        t.magFilter = THREE.NearestFilter;
-        t.minFilter = THREE.NearestFilter;
-        t.colorSpace = THREE.SRGBColorSpace;
-        tileCache.set(picnum, t);
-      }
-      return t;
-    };
 
     // FPV weapon animator
     fpAnimator = new FpWeaponAnimator(
@@ -329,6 +331,15 @@ async function main() {
 
   // ——— Stuck-flare global registry —————————————————
   const stuckFlareRegistry: StuckFlare[] = [];
+  const clearStuckFlares = () => {
+    for (const f of stuckFlareRegistry) {
+      if (f.mesh) {
+        scene.remove(f.mesh);
+        f.disposeMesh();
+      }
+    }
+    stuckFlareRegistry.length = 0;
+  };
   let flareIdCounter = 0;
 
   // ——— Pellet global registry —————————————————————
@@ -392,6 +403,21 @@ async function main() {
   flareGun.spawnStuckFlare = (pos, attachedBody) => {
     const flare = new StuckFlare(`flare-${flareIdCounter++}`, pos, attachedBody, performance.now() / 1000);
     stuckFlareRegistry.push(flare);
+
+    // Create visible billboard — tile 2424 (kMissileFlareRegular), bright, no shadow occlusion.
+    const flareTex = getTileTexture(2424);
+    const mat = new THREE.MeshBasicMaterial({
+      map: flareTex,
+      transparent: true,
+      depthWrite: false,
+    });
+    const geom = new THREE.PlaneGeometry(0.3, 0.3);
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.frustumCulled = false;
+    mesh.position.set(pos.x, pos.y + 0.6, pos.z);
+    scene.add(mesh);
+    flare.mesh = mesh;
+
     if (attachedBody) {
       for (const z of cluster.getZombies()) {
         if (z.rigidBody.handle === attachedBody.handle) {
@@ -437,7 +463,7 @@ async function main() {
       cluster.reset();
       chunks.reset();
       decals.reset();
-      stuckFlareRegistry.length = 0;
+      clearStuckFlares();
       pelletRegistry.length = 0;
       waveRunner.start(performance.now() / 1000);
     }
@@ -522,7 +548,17 @@ async function main() {
       const f = stuckFlareRegistry[i]!;
       const alive = f.update(now);
       if (!alive) {
+        // Remove billboard mesh from scene
+        if (f.mesh) {
+          scene.remove(f.mesh);
+          f.disposeMesh();
+        }
         stuckFlareRegistry.splice(i, 1);
+      } else if (f.mesh) {
+        // Track the enemy position + billboard-face camera
+        const rp = f.getRenderPos();
+        f.mesh.position.set(rp.x, rp.y, rp.z);
+        f.mesh.lookAt(camera.position);
       }
     }
 

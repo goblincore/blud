@@ -1,4 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
+import * as THREE from 'three';
 import type { Vec3 } from '../gibs/particles';
 import { BURN } from '../gibs/tuning';
 
@@ -43,6 +44,9 @@ export class StuckFlare {
   readonly duration: number = BURN.durationSec;
   private extinguished = false;
 
+  /** Billboard mesh — created externally (main.ts), owned and cleaned up here. */
+  mesh: THREE.Mesh | null = null;
+
   constructor(
     id: string,
     pos: Vec3,
@@ -67,6 +71,20 @@ export class StuckFlare {
       return false;
     }
     return true;
+  }
+
+  /** Get the render position: enemy center + small Y offset so the flare sits in the body. */
+  getRenderPos(): Vec3 {
+    return { x: this.pos.x, y: this.pos.y + 0.6, z: this.pos.z };
+  }
+
+  /** Dispose the billboard mesh. Called when the flare is cleaned up. */
+  disposeMesh(): void {
+    if (this.mesh) {
+      this.mesh.geometry.dispose();
+      (this.mesh.material as THREE.Material).dispose();
+      this.mesh = null;
+    }
   }
 
   /**
