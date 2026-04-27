@@ -1,0 +1,30 @@
+Add a Tommy-gun fire mode to the existing CultistBrain in `src/game/enemy/cultist-ai.ts`.
+
+Background: M5-A landed the SHOTGUN cultist — pellet burst (5 pellets, 14° cone, ~0.5s recoil between shots, dmg-per-pellet from SHOTGUN_BLAST in `src/game/gibs/tuning.ts`). NotBlood actually has TWO base cultist variants. This task ports the second one — the Tommygun cultist (kDudeCultistTommy, type=201) — into the same `cultist-ai.ts` framework so a level can spawn either.
+
+NotBlood reference values (already extracted into `docs/tuning-sources.md` — grep that file first; the C++ source itself is locally cloned at `/Users/donny/Documents/Raze/NotBlood/source/blood/src/{aicult,weapon,actor,dude}.cpp` if you need it, do NOT try to web-fetch raw.githubusercontent.com — those URLs 404):
+- HP: 40 (same as shotgun cultist)
+- Front speed: 46603, Side: 34952 (same scale as the shotgun cultist's `frontSpeed = 46603`)
+- See distance: 51200 Build units (same as existing). Use the same Build→meters convention the existing cultist code uses.
+- Hinder damage: 8 HP cumulative, Alert chance: 32768/65536 ≈ 50%
+- Bullet (`kVectorBullet`): dmg = 7, used by AI Tommygun fire path
+- Fire cadence (NotBlood `aicult.cpp`): `cultistTFire = 0` ⇒ continuous (one bullet every game-frame, ~30 Hz) — NOT a discrete burst.
+- Spread (NotBlood `weapon.cpp:1394-1402`): per-shot jitter `Random3(1200)` horizontal Build units. Convert to a half-angle in degrees at the same nominal 5120-unit reference distance the rest of the code uses.
+
+Required architectural decision: extend `CultistBrain` to support both fire modes cleanly. Three reasonable options — pick the one that fits the existing code best and write a one-sentence justification as a code comment:
+  (a) `fireMode: 'shotgun' | 'tommy'` field plus branching in the Fire state,
+  (b) inject a `FirePolicy` strategy object into the brain,
+  (c) subclass `CultistBrain` into `ShotgunCultistBrain` / `TommyCultistBrain`.
+
+Acceptance:
+1. The Tommy path fires one bullet per game-frame while in the `Fire` state (no pellet burst, no recoil-locked pause between shots), each bullet doing 7 dmg, with per-shot horizontal jitter as a half-angle-in-degrees computed from `Random3(1200)` at 5120 units.
+2. The shotgun path is unchanged — all existing tests in `src/game/enemy/cultist-ai.test.ts` still pass.
+3. New tests for the Tommy path (in the same test file) verify: dmg=7 is plumbed through the `onFire` hook (or wherever damage is propagated), jitter is per-shot not per-burst, and at 30 Hz update we get one bullet per tick once in `Fire` state.
+4. Export an `INIT` constant or factory for spawning a Tommy cultist (HP 40, walk speed mapped from front=46603, etc.) so callers in the spawner can use it. Naming: follow the existing `SHOTGUN_CULTIST` pattern in `src/game/gibs/tuning.ts` — i.e. add a `TOMMY_CULTIST` sibling.
+5. Write a one-line code comment near the architectural choice naming which option (a/b/c) you took and why.
+
+Verify with:
+- `npx vitest run src/game/enemy/cultist-ai.test.ts`  → must pass, including all pre-existing tests.
+- `npx tsc --noEmit`  → must compile cleanly.
+
+Do NOT delete any existing tests. Do NOT add new dependencies. Do NOT touch the spawner / `ZombieCluster` / `cultist.ts` files in this task — wiring Tommy into the spawner is out of scope; scope is only the brain + tuning constant + tests.
