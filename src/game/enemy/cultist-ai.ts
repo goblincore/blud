@@ -146,6 +146,13 @@ export class CultistBrain {
     // Enter Burning when flares are stuck and at least one has ignited.
     if (this.stuckFlareCount > 0 && this._isFlareIgnited && this.state !== CultistState.Burning) {
       this.state = CultistState.Burning;
+      // Mirror NotBlood actor.cpp:3000-3070: pSprite->type swap to
+      // kDudeBurningCultist resets HP to dudeInfo[40].startHealth=25.
+      // We don't have a type system, so we just clamp HP. This makes the
+      // DoT-driven death actually fire within the flare's burn window.
+      if (this.hp > BURN.cultistBurnResetHp) {
+        this.hp = BURN.cultistBurnResetHp;
+      }
       this._hooks.onBurningStart?.();
       return; // skip normal AI this frame
     }

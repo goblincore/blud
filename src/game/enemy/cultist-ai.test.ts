@@ -282,6 +282,31 @@ describe('CultistBrain', () => {
     expect(b.state).toBe(CultistState.Burning);
   });
 
+  it('clamps HP to BURN.cultistBurnResetHp on Burning entry (NotBlood swap-reset semantics)', async () => {
+    const { BURN } = await import('../gibs/tuning');
+    const b = new CultistBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    expect(b.hp).toBe(SHOTGUN_CULTIST.hp); // full HP at start
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.state).toBe(CultistState.Burning);
+    expect(b.hp).toBe(BURN.cultistBurnResetHp);
+  });
+
+  it('does NOT clamp UP if HP is already below the burn-reset cap', async () => {
+    const { BURN } = await import('../gibs/tuning');
+    const b = new CultistBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
+    b.applyDamage(SHOTGUN_CULTIST.hp - 5); // leave HP at 5
+    expect(b.hp).toBe(5);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
+    expect(b.hp).toBe(5); // not raised to BURN.cultistBurnResetHp
+    expect(b.hp).toBeLessThan(BURN.cultistBurnResetHp);
+  });
+
   it('does NOT enter Burning when stuckFlareCount > 0 but flare is NOT ignited', () => {
     const b = new CultistBrain(INIT);
     b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // Idle→Chase
@@ -340,9 +365,11 @@ describe('CultistBrain', () => {
     b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false); // → Burning
     expect(b.state).toBe(CultistState.Burning);
 
+    // Burning entry clamped HP to BURN.cultistBurnResetHp.
+    const hpAtBurnEntry = b.hp;
     b.applyDamage(5);
     expect(b.state).toBe(CultistState.Burning); // stays Burning, no Recoil
-    expect(b.hp).toBe(SHOTGUN_CULTIST.hp - 5);
+    expect(b.hp).toBe(hpAtBurnEntry - 5);
   });
 
   it('triggers onCharredDeath when dying from Burning', () => {

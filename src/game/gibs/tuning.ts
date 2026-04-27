@@ -75,6 +75,11 @@ export const DYNAMITE_COOK = {
   minVelocityMps: 3.0,        // Blood nSpeed min (0x66666 >> 16) → m/s
   maxVelocityMps: 14.0,       // Blood nSpeed max (0x1DDDDD >> 16) → m/s
   fuseMaxSec: 1.5,            // Blood weaponTimer-based fuse ≈ 50 tics ≈ 0.4s; Blud 1.5s for feel
+                              // (used by alt-fire / drop / overcook self-explode; NOT primary throw)
+  impactSafetyFuseSec: 5.0,   // Primary-fire impact-detonate: this is the in-flight fallback timeout
+                              // for projectiles that never hit anything. Generous so a fully-cooked
+                              // throw can clear the arena before fallback. Mirrors NotBlood's
+                              // weapon.cpp:1221 Impact=1 path where fuseTime=-1 disables timed fuse.
   pitchLobDeg: 30,            // Blood port ≈ 35°, eased to 30° for our tighter arena scale
 } as const;
 
@@ -121,6 +126,13 @@ export interface GibProfile {
   bodyPartCount: ChunkRange;
   /** Count of FX_13 blood particles to spray (used by GibSystem). */
   chunkCount: ChunkRange;
+  /**
+   * Spawn the iconic kickable bouncing zombie head as part of this profile's
+   * gib burst. Default true for the zombie profile (Blood signature). Cultists
+   * and other non-zombie enemies should set this false — it looks weird seeing
+   * a zombie head fly out of a cultist corpse.
+   */
+  spawnsKickableHead: boolean;
 }
 
 /** Pick a single chunk picnum biased by profile.boneWeight. */
@@ -157,6 +169,21 @@ export const ZOMBIE_GIB_PROFILE: GibProfile = {
   boneWeight: 0.2,
   bodyPartCount: { min: 2, max: 4 },
   chunkCount: { min: 8, max: 14 },
+  spawnsKickableHead: true, // Blood signature — kickable zombie head
+};
+
+/**
+ * Cultist gib profile — same flesh/bone picnums as zombie for now (F2.cultist.gibs
+ * will eventually give cultists their own palette), but `spawnsKickableHead` is
+ * disabled because cultists are not zombies and shouldn't drop zombie heads.
+ */
+export const CULTIST_GIB_PROFILE: GibProfile = {
+  fleshPicnums: [...HUMANOID_FLESH_PICNUMS],
+  bonePicnums: BONE_PICNUMS,
+  boneWeight: 0.2,
+  bodyPartCount: { min: 2, max: 4 },
+  chunkCount: { min: 8, max: 14 },
+  spawnsKickableHead: false,
 };
 
 // ——— Axe zombie ————————————————————————————————————
@@ -241,6 +268,9 @@ export const BURN = {
   panicTargetRerollSec: 0.4,      // re-roll panic direction every 0.4s
   panicTargetRadiusM: 3,          // panic target picked within 3m of enemy
   zombieBurnSpeedMul: 0.8,        // burning zombie walks at 0.80× normal speed toward player
+  cultistBurnResetHp: 25,         // HP cap on Burning state entry — mirrors NotBlood
+                                  // dudeInfo[40].startHealth=25 for kDudeBurningCultist.
+                                  // Without this, full-HP cultists outlast the 5.4s burn window.
   groundFlameLifetimeSec: 4.0,    // ground-flame visual duration after burn-death
   groundFlameFadeSec: 0.5,        // ground-flame fade-out window (last N seconds)
   groundFlameSizeM: 0.6,          // ground-flame billboard size

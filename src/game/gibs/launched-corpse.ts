@@ -41,6 +41,7 @@ export class LaunchedCorpse {
   private mesh: THREE.Mesh;
   private spawnTime: number;
   private settleCount = 0;
+  private settled = false;
   private expired = false;
 
   constructor(
@@ -112,8 +113,12 @@ export class LaunchedCorpse {
     this.mesh.position.set(t.x, t.y, t.z);
     this.mesh.lookAt(camera.position);
 
-    // Settle check: after minAge, count frames where linear velocity < restingThreshold
-    if (age >= LAUNCHED_CORPSE.minAgeSec) {
+    // Settle detection — once the body has been near-resting for settleFrames
+    // consecutive ticks (after the minAge tumbling window), we consider it
+    // "settled" and stop simulating motion. The MESH stays in the scene as a
+    // corpse decal until maxAgeSec; previously we disposed on settle, which made
+    // the corpse vanish ~1s after impact and was the visibility regression.
+    if (!this.settled && age >= LAUNCHED_CORPSE.minAgeSec) {
       const linvel = this.body.linvel();
       const speed = Math.hypot(linvel.x, linvel.y, linvel.z);
       if (speed < LAUNCHED_CORPSE.restingVelocityMps) {
@@ -123,9 +128,11 @@ export class LaunchedCorpse {
       }
 
       if (this.settleCount >= LAUNCHED_CORPSE.settleFrames) {
-        // Settled: remove dynamic body, leave mesh at rest position
-        this.expired = true;
-        return false;
+        // Freeze the body in place so it stops simulating; mesh stays visible.
+        this.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+        this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        this.settled = true;
       }
     }
 

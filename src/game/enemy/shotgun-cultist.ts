@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { CultistBrain, CultistState, type CultistHooks } from './cultist-ai';
-import { SHOTGUN_CULTIST, ZOMBIE_GIB_PROFILE } from '../gibs/tuning';
+import { SHOTGUN_CULTIST, CULTIST_GIB_PROFILE } from '../gibs/tuning';
 import type { GibProfile } from '../gibs/tuning';
 import { BillboardAnimator } from '../../animation/billboard-animator';
 import type { Vec3 } from '../gibs/particles';
@@ -42,7 +42,7 @@ const FLING_IMPULSE_SCALE = 0.018;
 export class ShotgunCultist implements GibbableDude {
   readonly id: string;
   readonly kind = 'cultist-shotgun' as const;
-  readonly gibProfile: GibProfile = ZOMBIE_GIB_PROFILE; // TODO M5.F2: cultist-specific palette
+  readonly gibProfile: GibProfile = CULTIST_GIB_PROFILE; // F2.cultist.gibs: still uses zombie picnums; flag-only divergence (no kickable head)
 
   hp: number = SHOTGUN_CULTIST.hp;
   private _sfx: Sfx | null = null;

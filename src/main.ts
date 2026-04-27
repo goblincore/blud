@@ -58,6 +58,7 @@ class PlayerGibAdapter implements GibbableDude {
     boneWeight: 0,
     bodyPartCount: { min: 2, max: 4 },
     chunkCount: { min: 8, max: 14 },
+    spawnsKickableHead: false, // player gibs shouldn't drop a zombie head
   };
 
   constructor(
@@ -264,7 +265,11 @@ async function main() {
   // lazy-initialized after the tile cache is set up below.
   gibs.onLaunchedCorpse = (pos, impulse, now) => {
     const deps: LaunchedCorpseDeps = { world: physics.world, scene, getTileTexture };
-    launchedCorpses.spawn(pos, impulse, 1454, now, deps); // tile 1454 = flesh chunk (placeholder corpse)
+    // Tile 2910 = zombie burn-death first frame (a humanoid death-pose sprite that
+    // IS served from public/assets/blood-tiles/). Tile 1454 isn't served there; it
+    // lives under public/assets/gibs-placeholder/ behind a different loader, which
+    // is why the original wiring rendered an invisible corpse.
+    launchedCorpses.spawn(pos, impulse, 2910, now, deps);
   };
 
   gameOverOverlay = new GameOverOverlay(document.body, () => {

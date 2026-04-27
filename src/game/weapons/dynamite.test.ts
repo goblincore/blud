@@ -142,16 +142,19 @@ describe('throwVector (Blood pitch-biased lob port)', () => {
 // ———————————————————————————————————————————————————————————————————————
 
 function makeCtx(now: number): FrameCtx {
+  const stubCollider = {} as any;
   const stubBody = {
     setLinvel: () => {},
     setAngvel: () => {},
     translation: () => ({ x: 0, y: 0, z: 0 }),
+    collider: (_idx: number) => stubCollider, // impact-detonate path queries this
   };
   return {
     world: {
       createRigidBody: () => stubBody,
       createCollider: () => {},
       removeRigidBody: () => {},
+      contactPairsWith: (_c: any, _f: any) => {}, // no contacts in unit tests
     } as any,
     player: {
       pos: { x: 0, y: 0, z: 0 },
@@ -253,5 +256,94 @@ describe('Dynamite FSM', () => {
     d.onPress(makeCtx(press));
     d.onFrame(makeCtx(press + 2.01), 2.01);  // past fuseMaxSec (2s)
     expect(d.phase()).toBe('idle');
+  });
+
+  // ——— Impact-detonate (NotBlood primary fire) —————————————————————————
+  it('thrown projectile uses impact-safety fuse (not remainingFuse) — long enough to clear arena', async () => {
+    const { DYNAMITE_COOK } = await import('../gibs/tuning');
+    const { d, equipEnd } = equipped();
+    let spawnedFuse = -1;
+    const ctxWithSpy = (now: number): FrameCtx => {
+      const c = makeCtx(now);
+      // Hook spawnExplosion to capture when it fires; we need a unique world
+      // each call so resetProjectiles doesn't leak state.
+      return c;
+    };
+    d.onPress(ctxWithSpy(equipEnd + 0.01));
+    // Fully cook the bundle (would have remainingFuse=0 in old code → instant
+    // detonate). Now should use impactSafetyFuseSec instead.
+    d.onRelease(ctxWithSpy(equipEnd + DYNAMITE_COOK.maxChargeSec + 0.01));
+    // The projectile is now in flight. Drive a frame at a time well under
+    // impactSafetyFuseSec; it should NOT detonate (no contact reported).
+    let exploded = false;
+    const trackingCtx: FrameCtx = (() => {
+      const c = makeCtx(equipEnd + 3.0);
+      c.gibs = { spawnExplosion: () => { exploded = true; }, registerDude: () => {}, unregisterDude: () => {} } as any;
+      return c;
+    })();
+    d.onFrame(trackingCtx, 0.5);
+    expect(exploded).toBe(false);
+    void spawnedFuse;
+  });
+
+  it('thrown projectile detonates immediately when contactPairsWith reports a contact', () => {
+    const { d, equipEnd } = equipped();
+    d.onPress(makeCtx(equipEnd + 0.01));
+    d.onRelease(makeCtx(equipEnd + 0.5)); // half-cook throw
+    let exploded = false;
+    const ctx: FrameCtx = (() => {
+      const c = makeCtx(equipEnd + 1.5);
+      // Override translation to be 5 m past spawn so the safe-distance check
+      // passes, and contactPairsWith to report a contact.
+      const fakeBody = {
+        setLinvel: () => {}, setAngvel: () => {},
+        translation: () => ({ x: 5, y: 1, z: 0 }),
+        collider: () => ({}),
+      };
+      c.world = {
+        createRigidBody: () => fakeBody,
+        createCollider: () => {},
+        removeRigidBody: () => {},
+        contactPairsWith: (_c: any, fn: (other: any) => void) => fn({}),
+      } as any;
+      c.gibs = { spawnExplosion: () => { exploded = true; }, registerDude: () => {}, unregisterDude: () => {} } as any;
+      return c;
+    })();
+    // Drive one frame after spawn — grace + displacement satisfied → contact → detonate.
+    d.onFrame(ctx, 0.1);
+    expect(exploded).toBe(true);
+  });
+
+  it('does NOT detonate while still inside the player safety radius (just-thrown)', () => {
+    // Build a context whose body's translation barely changes from spawnPos so
+    // the safe-distance gate fails. We use the same world+body for release and
+    // onFrame so the projectile actually picks up our near-stationary body.
+    const stubCollider = {} as any;
+    const stubBody = {
+      setLinvel: () => {}, setAngvel: () => {},
+      translation: () => ({ x: 0, y: 0.1, z: 0.1 }), // ~0.14 m from handPos {0,0,0}
+      collider: (_idx: number) => stubCollider,
+    };
+    const fakeWorld = {
+      createRigidBody: () => stubBody,
+      createCollider: () => {},
+      removeRigidBody: () => {},
+      contactPairsWith: (_c: any, fn: (other: any) => void) => fn({}), // contact would fire if checked
+    };
+    const ctxAt = (now: number, gibsSpy: { exploded: boolean }): FrameCtx => ({
+      world: fakeWorld as any,
+      player: { pos: { x: 0, y: 0, z: 0 }, forward: { x: 0, y: 0, z: -1 }, handPos: { x: 0, y: 0, z: 0 }, takeDamage: () => {} },
+      gibs: { spawnExplosion: () => { gibsSpy.exploded = true; }, registerDude: () => {}, unregisterDude: () => {} } as any,
+      now,
+    });
+    resetProjectiles(fakeWorld as any);
+    const d = new Dynamite();
+    const spy = { exploded: false };
+    d.onFrame(ctxAt(0, spy), 0);        // equip lazy-init
+    d.onFrame(ctxAt(0.45, spy), 0.45);  // → idle
+    d.onPress(ctxAt(0.46, spy));
+    d.onRelease(ctxAt(0.96, spy));      // half-cook throw
+    d.onFrame(ctxAt(1.05, spy), 0.09);  // grace expired but displacement < 0.7m
+    expect(spy.exploded).toBe(false);
   });
 });

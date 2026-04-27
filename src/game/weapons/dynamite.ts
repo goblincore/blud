@@ -134,6 +134,11 @@ interface DynamiteProjectile {
   spinPhase: number;      // cumulative rad; applied after lookAt each frame
   lastFrameIdx: number;   // last-applied texture index, to skip redundant swaps
   spawnTime: number;
+  spawnPos: Vec3;         // captured at spawn — used to gate impact checks behind a
+                          // displacement threshold so the projectile doesn't self-detonate
+                          // on the player's own collider when it spawns inside the hand.
+  impactMode: boolean;    // true: detonate on first collider contact (NotBlood primary fire);
+                          // false: pure fuse-countdown (used by selfExplode at-feet drop).
 }
 
 /** Global registry of live dynamite projectiles; ticked each frame from dynamite.ts */
@@ -142,6 +147,18 @@ const liveProjectiles: DynamiteProjectile[] = [];
 /**
  * Spawn a dynamite projectile. Called by Dynamite.onRelease and Dynamite.selfExplode.
  * If `fuseLeft` is ≤ 0 the projectile detonates on the first tick (in-flight = 0 s).
+ *
+ * `impactMode` (default true) routes through NotBlood's primary-fire path: the
+ * projectile detonates on first collider contact after a 50 ms grace period
+ * (so the projectile clears the player's hand). The fuse timer becomes a
+ * safety-timeout — projectiles that miss everything still detonate eventually.
+ * Set `impactMode=false` for pure fuse-countdown drops (alt-fire path / suicide
+ * bomb / future ProxBomb-style variants).
+ *
+ * Source: NotBlood weapon.cpp:2728 sets fuseTime=-1 from idle-state-3-bShoot
+ * (primary fire), which routes ThrowBundle through `pXSprite->Impact = 1`
+ * (weapon.cpp:1221). The fuse-cooked path is only reached via the shoot2-then-shoot1
+ * combo (state 5 → state 6 with fuseTime=0).
  */
 export function spawnProjectile(
   world: RAPIER.World,
@@ -149,6 +166,7 @@ export function spawnProjectile(
   vel: Vec3,
   fuseLeft: number,
   now: number,
+  impactMode: boolean = true,
 ): DynamiteProjectile {
   // Port of Blood thingInfo[kThingArmedTNTStick - kThingBase] (actor.cpp:1998):
   //   mass=14, clipdist=16, elastic=24576, dmgResist=1600, cstat=256
@@ -199,17 +217,47 @@ export function spawnProjectile(
     spinPhase: 0,
     lastFrameIdx: -1,
     spawnTime: now,
+    spawnPos: { x: pos.x, y: pos.y, z: pos.z },
+    impactMode,
   };
   liveProjectiles.push(proj);
   return proj;
 }
 
-/** Advance all projectiles; detonate any whose fuse hit zero. Call per fixed step. */
+/**
+ * Grace gates before contactPairsWith is checked. Without these, the projectile
+ * would self-detonate the moment it overlaps the player's own collider on spawn.
+ * Both must be satisfied: 50 ms minimum age AND 0.7 m minimum displacement from
+ * spawn position. Either alone could miss edge cases (player standing still →
+ * displacement check could pass while still inside the player capsule; or an
+ * enemy 0.5 m away → time-grace could expire before displacement check would).
+ */
+const IMPACT_GRACE_SEC = 0.05;
+const IMPACT_SAFE_DIST_SQ = 0.7 * 0.7;
+
+/** Advance all projectiles; detonate any whose fuse hit zero or that hit something. Call per fixed step. */
 export function updateProjectiles(ctx: FrameCtx, dt: number): void {
   for (let i = liveProjectiles.length - 1; i >= 0; i--) {
     const p = liveProjectiles[i]!;
     p.fuseLeft -= dt;
     p.spinPhase += p.spinRate * dt;
+
+    // Impact-detonate check (NotBlood primary-fire mode). Once the projectile
+    // has cleared both the time grace AND the displacement-from-spawn safety
+    // radius, the first time Rapier reports any contact pair on the projectile's
+    // collider, force fuse to 0 so the existing detonate path below fires.
+    if (p.impactMode && p.fuseLeft > 0 && (ctx.now - p.spawnTime) >= IMPACT_GRACE_SEC) {
+      const trans = p.body.translation();
+      const dx = trans.x - p.spawnPos.x;
+      const dy = trans.y - p.spawnPos.y;
+      const dz = trans.z - p.spawnPos.z;
+      if (dx*dx + dy*dy + dz*dz >= IMPACT_SAFE_DIST_SQ) {
+        const collider = p.body.collider(0);
+        let hasContact = false;
+        ctx.world.contactPairsWith(collider, () => { hasContact = true; });
+        if (hasContact) p.fuseLeft = 0;
+      }
+    }
     const t = p.body.translation();
     if (p.mesh) {
       p.mesh.position.set(t.x, t.y, t.z);
@@ -388,9 +436,14 @@ export class Dynamite implements Weapon {
     const heldSec = ctx.now - this.cookStart;
     const frac = chargeFraction(heldSec);
     const speed = throwVelocityMps(frac);
-    const fuseLeft = Math.max(0, remainingFuse(heldSec));
+    // Primary-fire = impact-detonate (NotBlood weapon.cpp:2728 → ThrowBundle's
+    // pXSprite->Impact=1 path). Cook still drives throw velocity; the in-flight
+    // fuse is repurposed as a safety timeout — if the bundle misses everything,
+    // it still detonates after IMPACT_SAFETY_FUSE_SEC. 5s is generous and lets
+    // a fully-cooked-then-thrown bundle clear the entire arena before fallback.
+    const fuseLeft = DYNAMITE_COOK.impactSafetyFuseSec;
     const vel = throwVector(ctx.player.forward, speed);
-    spawnProjectile(ctx.world, ctx.player.handPos, vel, fuseLeft, ctx.now);
+    spawnProjectile(ctx.world, ctx.player.handPos, vel, fuseLeft, ctx.now, /*impactMode*/ true);
     this.ammo--;
     this.enter('throwing', ctx);
   }

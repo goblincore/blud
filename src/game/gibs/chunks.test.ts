@@ -17,6 +17,7 @@ const PROFILE: GibProfile = {
   boneWeight: 0.2,
   bodyPartCount: { min: 2, max: 4 },
   chunkCount: { min: 8, max: 14 },
+  spawnsKickableHead: true,
 };
 
 describe('pickChunkPicnum', () => {

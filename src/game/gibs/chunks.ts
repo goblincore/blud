@@ -60,7 +60,10 @@ export class ChunkSystem {
     }
     // Bouncing head — the one you can kick around. Larger sphere collider, higher
     // restitution, no settle-despawn (age-despawn only, longer lifetime).
-    this.spawnHead(origin, impulse, now);
+    // Gated on profile.spawnsKickableHead — only zombies drop the iconic head.
+    if (profile.spawnsKickableHead) {
+      this.spawnHead(origin, impulse, now);
+    }
 
     // FIFO-evict if over capacity
     while (this.chunks.length > this.capacity) {
