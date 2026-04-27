@@ -229,6 +229,10 @@ export const TOMMY_BULLET = {
 // ——— Burn (applied by stuck flares) ————————
 // source: Blood actor.cpp fire/burn damage paths (kDamageBurn); generic
 // DOT mechanic found across Blood's actor type handlers.
+//
+// Zombie burn speed: NotBlood kDudeBurningZombieAxe frontSpeed=46603 vs
+// kDudeZombieAxeNormal frontSpeed=58254 → 0.80× normal speed.
+// (dude.cpp:1187 / dude.cpp:181; ai.cpp:321 aiMoveForward multiplier)
 export const BURN = {
   durationSec: 6,                 // stuck flare burn lifetime
   dpsPerFlare: 8,                 // HP/s drained by each attached flare
@@ -236,6 +240,10 @@ export const BURN = {
   panicSpeedMultiplier: 1.4,      // burning enemy thrashes at 1.4x base speed
   panicTargetRerollSec: 0.4,      // re-roll panic direction every 0.4s
   panicTargetRadiusM: 3,          // panic target picked within 3m of enemy
+  zombieBurnSpeedMul: 0.8,        // burning zombie walks at 0.80× normal speed toward player
+  groundFlameLifetimeSec: 4.0,    // ground-flame visual duration after burn-death
+  groundFlameFadeSec: 0.5,        // ground-flame fade-out window (last N seconds)
+  groundFlameSizeM: 0.6,          // ground-flame billboard size
 } as const;
 
 // ——— Wave runner ——————————————————————————

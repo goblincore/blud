@@ -56,8 +56,6 @@ export class ZombieBrain {
   // ——— Burning state ———————————————————————————
   private stuckFlareCount = 0;
   private prevState: ZombieState = ZombieState.Idle;
-  private panicTarget: Vec3 | null = null;
-  private panicTargetRerolledAt = 0;
 
   constructor(
     init: { hp: number; speed: number },
@@ -90,39 +88,18 @@ export class ZombieBrain {
     if (this.stuckFlareCount > 0 && this.state !== ZombieState.Burning) {
       this.prevState = this.state;
       this.state = ZombieState.Burning;
-      // Set initial panic target immediately so desiredVelocity is non-zero
-      // from the first frame.
-      const angle = Math.random() * Math.PI * 2;
-      const dist = Math.random() * BURN.panicTargetRadiusM;
-      this.panicTarget = {
-        x: self.x + Math.cos(angle) * dist,
-        y: self.y,
-        z: self.z + Math.sin(angle) * dist,
-      };
-      this.panicTargetRerolledAt = nowSec;
       this.hooks?.onBurningStart?.();
     }
 
     // Exit Burning when all flares expired.
     if (this.stuckFlareCount === 0 && this.state === ZombieState.Burning) {
       this.state = this.prevState;
-      this.panicTarget = null;
       this.hooks?.onBurningEnd?.();
     }
 
     // ——— Burning behaviour ————————————————————————
+    // Walk toward player at reduced speed (NotBlood faithful: 0.80×).
     if (this.state === ZombieState.Burning) {
-      // Re-roll panic target periodically
-      if (nowSec - this.panicTargetRerolledAt >= BURN.panicTargetRerollSec) {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = Math.random() * BURN.panicTargetRadiusM;
-        this.panicTarget = {
-          x: self.x + Math.cos(angle) * dist,
-          y: self.y,
-          z: self.z + Math.sin(angle) * dist,
-        };
-        this.panicTargetRerolledAt = nowSec;
-      }
       return; // don't run normal attack/chase logic while burning
     }
 
@@ -191,16 +168,15 @@ export class ZombieBrain {
   desiredVelocity(self: Vec3, player: Vec3): Vec3 {
     if (this.state === ZombieState.Dead || this.state === ZombieState.Attack) return { x: 0, y: 0, z: 0 };
 
-    // Burning — panic-thrash toward random nearby target at increased speed
+    // Burning — walk toward player at reduced speed (NotBlood: 0.80×)
     if (this.state === ZombieState.Burning) {
-      if (!this.panicTarget) return { x: 0, y: 0, z: 0 };
-      const dx = this.panicTarget.x - self.x;
-      const dy = this.panicTarget.y - self.y;
-      const dz = this.panicTarget.z - self.z;
+      const dx = player.x - self.x;
+      const dy = player.y - self.y;
+      const dz = player.z - self.z;
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (len < 0.01) return { x: 0, y: 0, z: 0 };
-      const panicSpeed = this.speed * BURN.panicSpeedMultiplier;
-      return { x: (dx / len) * panicSpeed, y: 0, z: (dz / len) * panicSpeed };
+      if (len < 1e-6) return { x: 0, y: 0, z: 0 };
+      const burnSpeed = this.speed * BURN.zombieBurnSpeedMul;
+      return { x: (dx / len) * burnSpeed, y: 0, z: (dz / len) * burnSpeed };
     }
 
     const dx = player.x - self.x;

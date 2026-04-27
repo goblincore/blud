@@ -155,6 +155,7 @@ export class CultistBrain {
       this.state = CultistState.Chase;
     }
 
+    // HP check — applies regardless of state (including Burning)
     if (this.hp <= 0) {
       const wasBurning = this.state === CultistState.Burning;
       if (wasBurning) {
@@ -167,7 +168,8 @@ export class CultistBrain {
 
     // ——— Burning behaviour ————————————————————————
     if (this.state === CultistState.Burning) {
-      // Sprint toward player, no firing
+      // Sprint toward player, no firing. HP is checked above — DoT applied
+      // by the concrete enemy (shotgun-cultist.ts) between frames.
       return;
     }
 

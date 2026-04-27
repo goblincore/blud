@@ -131,34 +131,7 @@ describe('ZombieBrain — Burning state', () => {
     expect(hooks.onCharredDeath).toHaveBeenCalledOnce();
   });
 
-  it('generates panic target on entry and re-rolls after panicTargetRerollSec', () => {
-    const b = new ZombieBrain(INIT);
-    const self = { x: 0, y: 0, z: 0 };
-    const player = { x: 10, y: 0, z: 0 };
-    b.setStuckFlareCount(1);
-
-    // First update enters Burning and sets initial panic target
-    b.update(0.016, self, player);
-    expect(b.state).toBe(ZombieState.Burning);
-
-    // desiredVelocity should be non-zero (panic target within 3m)
-    const v1 = b.desiredVelocity(self, player);
-    const mag1 = Math.hypot(v1.x, v1.z);
-    expect(mag1).toBeGreaterThan(0);
-    expect(mag1).toBeCloseTo(AXE_ZOMBIE.speed * BURN.panicSpeedMultiplier, 3);
-
-    // Advance past re-roll cadence
-    for (let t = 0; t < BURN.panicTargetRerollSec + 0.1; t += 0.016) {
-      b.update(0.016, self, player);
-    }
-
-    // Velocity should still be non-zero (new panic target)
-    const v2 = b.desiredVelocity(self, player);
-    const mag2 = Math.hypot(v2.x, v2.z);
-    expect(mag2).toBeGreaterThan(0);
-  });
-
-  it('panic speed multiplier is applied', () => {
+  it('Burning state walks toward player at reduced speed (NotBlood: 0.80×)', () => {
     const b = new ZombieBrain(INIT);
     const self = { x: 0, y: 0, z: 0 };
     const player = { x: 10, y: 0, z: 0 };
@@ -167,8 +140,29 @@ describe('ZombieBrain — Burning state', () => {
     expect(b.state).toBe(ZombieState.Burning);
 
     const v = b.desiredVelocity(self, player);
+    // Direction should be toward player (positive x)
+    expect(v.x).toBeGreaterThan(0);
+    expect(v.y).toBe(0);
+    expect(v.z).toBeCloseTo(0, 5);
+    // Magnitude = speed * zombieBurnSpeedMul (0.8), less than normal walk speed
     const mag = Math.hypot(v.x, v.z);
-    expect(mag).toBeCloseTo(AXE_ZOMBIE.speed * BURN.panicSpeedMultiplier, 3);
+    expect(mag).toBeCloseTo(AXE_ZOMBIE.speed * BURN.zombieBurnSpeedMul, 3);
+    expect(mag).toBeLessThan(AXE_ZOMBIE.speed);
+    expect(mag).toBeGreaterThan(0);
+  });
+
+  it('Burning state velocity scales with player distance (direction, not magnitude)', () => {
+    const b = new ZombieBrain(INIT);
+    const self = { x: 0, y: 0, z: 0 };
+    b.setStuckFlareCount(1);
+    b.update(0.016, self, { x: 10, y: 0, z: 0 });
+    expect(b.state).toBe(ZombieState.Burning);
+
+    // When player is far, direction points toward player, magnitude is fixed
+    const v = b.desiredVelocity(self, { x: 0, y: 0, z: 100 });
+    expect(v.z).toBeGreaterThan(0);
+    const mag = Math.hypot(v.x, v.z);
+    expect(mag).toBeCloseTo(AXE_ZOMBIE.speed * BURN.zombieBurnSpeedMul, 3);
   });
 
   it('does not stagger out of Burning on non-lethal damage', () => {

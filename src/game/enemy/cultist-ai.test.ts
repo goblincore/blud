@@ -370,6 +370,41 @@ describe('CultistBrain', () => {
     expect(b.state).toBe(CultistState.Burning);
     expect(hooks.onBurningStart).toHaveBeenCalledOnce();
   });
+
+  it('Burning cultist dies from incremental DoT over multiple frames (death cap)', () => {
+    const b = new CultistBrain(INIT);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Burning);
+
+    const initialHp = b.hp;
+    // Simulate DoT at 8 HP/s: 0.133 HP per frame at 60fps
+    for (let t = 0; t < 6.0; t += 0.016) {
+      if (b.state === CultistState.Dead) break;
+      b.applyDamage(BURN.dpsPerFlare * 0.016);
+      // Keep flare alive for the entire loop
+      b.setStuckFlareCount(1);
+      b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    }
+    expect(b.state).toBe(CultistState.Dead);
+    expect(b.hp).toBeLessThan(initialHp);
+  });
+
+  it('Burning cultist HP decreases over time from DoT', () => {
+    const b = new CultistBrain(INIT);
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.state).toBe(CultistState.Burning);
+
+    const hp0 = b.hp;
+    // Apply 0.5s of DoT
+    b.applyDamage(BURN.dpsPerFlare * 0.5);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, false);
+    expect(b.hp).toBeCloseTo(hp0 - BURN.dpsPerFlare * 0.5, 5);
+    expect(b.state).toBe(CultistState.Burning); // still burning, not dead yet
+  });
 });
 
 // ——— Tommygun cultist brain tests ——————————————————
