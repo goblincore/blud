@@ -193,3 +193,63 @@ describe('ZombieBrain — Burning state', () => {
     expect(b.state).toBe(ZombieState.Burning);
   });
 });
+
+describe('ZombieBrain Launched state', () => {
+  it('launch() moves an alive brain into Launched', () => {
+    const b = new ZombieBrain(INIT);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }); // → Chase
+    b.launch();
+    expect(b.state).toBe(ZombieState.Launched);
+  });
+
+  it('launch() is a no-op when Dead', () => {
+    const b = new ZombieBrain(INIT);
+    b.applyDamage(9999);
+    b.launch();
+    expect(b.state).toBe(ZombieState.Dead);
+  });
+
+  it('AI is suspended while Launched (update does not change state)', () => {
+    const b = new ZombieBrain(INIT);
+    b.launch();
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }); // melee range
+    expect(b.state).toBe(ZombieState.Launched);
+  });
+
+  it('desiredVelocity is zero while Launched', () => {
+    const b = new ZombieBrain(INIT);
+    b.launch();
+    const v = b.desiredVelocity({ x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 });
+    expect(v).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('land() transitions Launched → Stagger, then recovers to Chase', () => {
+    const b = new ZombieBrain(INIT);
+    b.launch();
+    b.land();
+    expect(b.state).toBe(ZombieState.Stagger);
+    // stagger expires after staggerSec
+    b.update(1.0, { x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 });
+    expect(b.state).toBe(ZombieState.Chase);
+  });
+
+  it('land() is a no-op when not Launched', () => {
+    const b = new ZombieBrain(INIT);
+    b.land();
+    expect(b.state).toBe(ZombieState.Idle);
+  });
+
+  it('non-fatal damage while Launched stays Launched (no stagger interrupt)', () => {
+    const b = new ZombieBrain(INIT);
+    b.launch();
+    b.applyDamage(5);
+    expect(b.state).toBe(ZombieState.Launched);
+  });
+
+  it('fatal damage while Launched → Dead', () => {
+    const b = new ZombieBrain(INIT);
+    b.launch();
+    b.applyDamage(9999);
+    expect(b.state).toBe(ZombieState.Dead);
+  });
+});

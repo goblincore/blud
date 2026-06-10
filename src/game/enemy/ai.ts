@@ -8,6 +8,8 @@ export enum ZombieState {
   Stagger = 'stagger',
   Dead = 'dead',
   Burning = 'burning',
+  /** Airborne from explosion concussion — AI suspended until landing. */
+  Launched = 'launched',
 }
 
 /** Callback hooks for brain → gameplay SFX wiring. */
@@ -70,6 +72,19 @@ export class ZombieBrain {
     this.stuckFlareCount = count;
   }
 
+  /** Explosion concussion threw this zombie airborne (alive). No-op if Dead. */
+  launch(): void {
+    if (this.state === ZombieState.Dead) return;
+    this.state = ZombieState.Launched;
+  }
+
+  /** Ballistic flight ended — recover through a brief stagger. */
+  land(): void {
+    if (this.state !== ZombieState.Launched) return;
+    this.state = ZombieState.Stagger;
+    this.staggerSec = 0.3;
+  }
+
   update(dt: number, self: Vec3, player: Vec3): void {
     if (this.state === ZombieState.Dead) return;
 
@@ -82,6 +97,10 @@ export class ZombieBrain {
       this.state = ZombieState.Dead;
       return;
     }
+
+    // Airborne — AI suspended; the entity integrates ballistic motion and
+    // calls land() when the body reaches the ground.
+    if (this.state === ZombieState.Launched) return;
 
     // ——— Burning state transitions —————————————————
     // Enter Burning when flares are stuck and we're not already burning.
@@ -166,7 +185,11 @@ export class ZombieBrain {
   }
 
   desiredVelocity(self: Vec3, player: Vec3): Vec3 {
-    if (this.state === ZombieState.Dead || this.state === ZombieState.Attack) return { x: 0, y: 0, z: 0 };
+    if (
+      this.state === ZombieState.Dead ||
+      this.state === ZombieState.Attack ||
+      this.state === ZombieState.Launched
+    ) return { x: 0, y: 0, z: 0 };
 
     // Burning — walk toward player at reduced speed (NotBlood: 0.80×)
     if (this.state === ZombieState.Burning) {
@@ -195,8 +218,9 @@ export class ZombieBrain {
         this.hooks?.onCharredDeath?.();
       }
       this.state = ZombieState.Dead;
-    } else if (this.state !== ZombieState.Burning) {
-      // Don't stagger out of Burning — the panic-thrash IS the stagger
+    } else if (this.state !== ZombieState.Burning && this.state !== ZombieState.Launched) {
+      // Don't stagger out of Burning (panic-thrash IS the stagger) or
+      // Launched (mid-air — landing handles recovery)
       this.state = ZombieState.Stagger;
       this.staggerSec = 0.25;
     }

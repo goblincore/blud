@@ -29,6 +29,7 @@ const STATE_ANIM_MAP: Record<ZombieState, string> = {
   [ZombieState.Stagger]: 'zombie-recoil',
   [ZombieState.Dead]: 'zombie-death-normal',
   [ZombieState.Burning]: 'zombie-burn-chase',
+  [ZombieState.Launched]: 'zombie-recoil',
 };
 
 /**
