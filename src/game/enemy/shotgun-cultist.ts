@@ -1,8 +1,9 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { CultistBrain, CultistState, type CultistHooks } from './cultist-ai';
-import { SHOTGUN_CULTIST, CULTIST_GIB_PROFILE } from '../gibs/tuning';
+import { SHOTGUN_CULTIST, CULTIST_GIB_PROFILE, EXPLOSION_LAUNCH, CORPSE } from '../gibs/tuning';
 import type { GibProfile } from '../gibs/tuning';
+import { stepBallistic, type BallisticMotion } from './ballistic';
 import { BillboardAnimator } from '../../animation/billboard-animator';
 import type { Vec3 } from '../gibs/particles';
 import { SfxEvent } from '../../audio/events';
@@ -17,7 +18,7 @@ export interface GibbableDude {
   readonly kind: string;
   hp: number;
   pos: Vec3;
-  takeDamage(amount: number, impulse: Vec3): void;
+  takeDamage(amount: number, vel: Vec3): void;
   despawn(): void;
 }
 
@@ -35,10 +36,6 @@ const STATE_ANIM_MAP: Record<CultistState, string> = {
   [CultistState.Launched]: 'cultist-shotgun-recoil',
 };
 
-// ——— Fling constants (mirror AxeZombie) ————————————
-
-const FLING_DURATION_SEC = 0.7;
-const FLING_IMPULSE_SCALE = 0.018;
 
 export class ShotgunCultist implements GibbableDude {
   readonly id: string;
@@ -82,8 +79,8 @@ export class ShotgunCultist implements GibbableDude {
   private readonly scene: THREE.Scene;
   private facing = { x: 0, z: 1 };
   private prevState: CultistState = CultistState.Idle;
-  private flingVel: Vec3 | null = null;
-  private flingTimer = 0;
+  /** Airborne ballistic motion from explosion concussion (alive or dead). */
+  private ballistic: BallisticMotion | null = null;
   private gibbed = false;
   private deathTime = -1;
 
@@ -203,22 +200,28 @@ export class ShotgunCultist implements GibbableDude {
           this.onBurnDeath?.(this.pos, now);
         }
       }
-      // Gib death anim override
-      if (this.brain.state === CultistState.Dead && this.flingVel && this.flingTimer > 0) {
-        this.anim.play('cultist-shotgun-death-gib', now);
-      }
     }
 
     const t = this.body.translation();
-    if (this.flingVel && this.flingTimer > 0) {
-      // Blown-away tumble
-      const k = this.flingTimer / FLING_DURATION_SEC;
-      this.body.setNextKinematicTranslation({
-        x: t.x + this.flingVel.x * k * dt,
-        y: t.y,
-        z: t.z + this.flingVel.z * k * dt,
-      });
-      this.flingTimer = Math.max(0, this.flingTimer - dt);
+    if (this.ballistic) {
+      // Airborne — integrate ballistic motion (NotBlood ConcussSprite throws
+      // dudes alive or dead; the death anim plays on the flying body).
+      const step = stepBallistic(
+        { x: t.x, y: t.y, z: t.z },
+        this.ballistic,
+        dt,
+        EXPLOSION_LAUNCH.gravityMps2,
+      );
+      this.body.setNextKinematicTranslation(step.pos);
+      this.ballistic.vel = step.vel;
+      if (step.landed) {
+        this.ballistic = null;
+        this.brain.land(); // no-op if Dead — corpse just rests where it fell
+        // land() runs AFTER this frame's prev/state anim diff — trigger explicitly
+        if (this.brain.state === CultistState.Recoil) {
+          this.anim.play('cultist-shotgun-recoil', now);
+        }
+      }
     } else {
       // Kinematic move driven by AI
       const v = this.brain.desiredVelocity(this.pos, playerPos);
@@ -253,24 +256,30 @@ export class ShotgunCultist implements GibbableDude {
     this.facing = { x: v.x / m, z: v.z / m };
   }
 
-  takeDamage(amount: number, impulse: Vec3): void {
+  takeDamage(amount: number, vel: Vec3): void {
     const wasAlive = this.brain.state !== CultistState.Dead;
     this.brain.applyDamage(amount);
     this.hp = this.brain.hp;
-    if (wasAlive && this.brain.state === CultistState.Dead) {
-      this.deathTime = performance.now() / 1000;
-    }
+    const died = wasAlive && this.brain.state === CultistState.Dead;
+    if (died) this.deathTime = performance.now() / 1000;
 
-    // Flung-but-not-gibbed: explosion that killed but didn't gib
-    const impulseMag = Math.hypot(impulse.x, impulse.y, impulse.z);
-    if (wasAlive && this.brain.state === CultistState.Dead && impulseMag > 50) {
-      this.flingVel = {
-        x: impulse.x * FLING_IMPULSE_SCALE,
-        y: 0,
-        z: impulse.z * FLING_IMPULSE_SCALE,
-      };
-      this.flingTimer = FLING_DURATION_SEC;
-      this.anim.play('cultist-shotgun-death-gib', performance.now() / 1000);
+    // Concussion launch — NotBlood ConcussSprite applies velocity to dudes
+    // alive or dead, decoupled from damage outcome.
+    const speed = Math.hypot(vel.x, vel.y, vel.z);
+    if (speed >= EXPLOSION_LAUNCH.minLaunchSpeedMps) {
+      // Keep the original floor height if re-launched mid-flight — otherwise the
+      // body would "land" at its current altitude instead of the ground.
+      const groundY = this.ballistic?.groundY ?? this.body.translation().y;
+      this.ballistic = { vel: { x: vel.x, y: vel.y, z: vel.z }, groundY };
+      if (died) {
+        // Sub-160 explosion kill: death anim plays on the flying body
+        this.anim.play('cultist-shotgun-death-gib', performance.now() / 1000);
+      } else if (this.brain.state !== CultistState.Dead) {
+        this.brain.launch();
+        // launch() happens between frames — the update() prev/state diff never
+        // sees it, so trigger the airborne anim explicitly
+        this.anim.play('cultist-shotgun-recoil', performance.now() / 1000);
+      }
     }
   }
 
@@ -280,13 +289,21 @@ export class ShotgunCultist implements GibbableDude {
     this.anim.object.visible = false;
   }
 
-  /** Whether the cultist is ready to be reaped by the cluster. */
+  /** Dead-but-not-gibbed — a persistent, re-gibbable corpse. */
+  get isCorpse(): boolean {
+    return this.brain.state === CultistState.Dead && !this.gibbed;
+  }
+
+  /** Wallclock seconds when this cultist died (-1 if alive). Used by the corpse cap. */
+  getDeathTime(): number { return this.deathTime; }
+
+  /** Ready to be reaped: gibbed immediately, or a corpse past its lifetime
+   *  (corpses persist as re-gibbable props — cap enforced by the cluster). */
   shouldReap(): boolean {
     if (this.gibbed) return true;
     if (this.brain.state !== CultistState.Dead || this.deathTime < 0) return false;
-    if (this.flingVel && this.flingTimer > 0) return false;
-    const graceSec = this.flingVel ? 0 : 1.5;
-    return performance.now() / 1000 - this.deathTime > graceSec;
+    if (this.ballistic) return false; // still flying
+    return performance.now() / 1000 - this.deathTime > CORPSE.reapAfterSec;
   }
 
   despawn(): void {
