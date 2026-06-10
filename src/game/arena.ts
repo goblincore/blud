@@ -3,7 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { AxeZombie } from './enemy/axe-zombie';
 import { ShotgunCultist } from './enemy/shotgun-cultist';
 import type { EnemyKind } from './encounter/encounters';
-import { WAVE_PRESETS } from './gibs/tuning';
+import { WAVE_PRESETS, CORPSE } from './gibs/tuning';
 import { ZombieState } from './enemy/ai';
 import type { GibSystem } from './gibs';
 import type { StaticSurface, ParticlePool, Vec3 } from './gibs/particles';
@@ -271,6 +271,7 @@ export class ZombieCluster {
     if (this._sfx) z.setSfx(this._sfx);
     if (this._particlePool) z.setParticlePool(this._particlePool);
     this.deps.gibs.registerDude(z);
+    z.onHeadPop = (pos) => this.deps.gibs.popHead(pos, performance.now() / 1000);
     this.zombies.push(z);
     return z;
   }
@@ -296,6 +297,20 @@ export class ZombieCluster {
       }
       return true;
     });
+
+    // Corpse cap — corpses persist as re-gibbable props (NotBlood feel), but
+    // force-reap the oldest beyond the cap so the arena doesn't fill up.
+    const corpses = this.zombies.filter((z) => z.isCorpse);
+    if (corpses.length > CORPSE.maxCorpses) {
+      corpses.sort((a, b) => a.getDeathTime() - b.getDeathTime());
+      const excess = corpses.slice(0, corpses.length - CORPSE.maxCorpses);
+      for (const z of excess) {
+        this.deps.gibs.unregisterDude(z.id);
+        z.despawn();
+        const idx = this.zombies.indexOf(z);
+        if (idx !== -1) this.zombies.splice(idx, 1);
+      }
+    }
   }
 
   reset(): void {
