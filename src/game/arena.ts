@@ -300,7 +300,9 @@ export class ZombieCluster {
 
     // Corpse cap — corpses persist as re-gibbable props (NotBlood feel), but
     // force-reap the oldest beyond the cap so the arena doesn't fill up.
-    const corpses = this.zombies.filter((z) => z.isCorpse);
+    // Exclude airborne bodies — yanking a mid-flight corpse out of the array
+    // would leave it frozen at its last physics position.
+    const corpses = this.zombies.filter((z) => z.isCorpse && !z.isAirborne);
     if (corpses.length > CORPSE.maxCorpses) {
       corpses.sort((a, b) => a.getDeathTime() - b.getDeathTime());
       const excess = corpses.slice(0, corpses.length - CORPSE.maxCorpses);

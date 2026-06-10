@@ -107,5 +107,12 @@ export class StuckFlare {
     this.attachedBody = null;
   }
 
+  /** Put the flare out immediately (e.g. the body it was stuck to got gibbed —
+   *  the fire goes with it). The registry drops it on the next update(). */
+  extinguish(): void {
+    this.extinguished = true;
+    this.attachedBody = null;
+  }
+
   isExtinguished(): boolean { return this.extinguished; }
 }

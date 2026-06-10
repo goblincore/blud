@@ -104,14 +104,6 @@ export function concussionVelocity(origin: Vec3, target: Vec3, impulseMag: numbe
  */
 const RADIUS_SCALE_FACTOR = 8;
 
-/**
- * Blood's explosion applies damage over `repeat` tics (80 for kExplosionStandard)
- * — total damage at blast center ≈ 20 × 80 = 1600, vastly above GIB_THRESHOLD=160.
- * We collapse Blood's multi-tick damage into a single shot with this multiplier
- * as a rough equivalent; 8× gives close-range damage ≈ 240 which reliably gibs
- * zombies (> 160 threshold), tapering below threshold near the edge for
- * "hurt but not gibbed" outer ring.
- */
 /** Blood's kExplosionStandard applies 20 damage over 60 ticks (500ms @ 120 TPS) =
  *  total 1200 damage. Blud collapses multi-tick into single shot. 12× gives
  *  point-blank damage ≈ 240 which reliably gibs zombies (> 160 threshold),

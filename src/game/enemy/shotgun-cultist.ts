@@ -288,12 +288,18 @@ export class ShotgunCultist implements GibbableDude {
   onGibbed(): void {
     this.gibbed = true;
     this.anim.object.visible = false;
+    // Body torn apart — the fire goes with it (kills the orphan flame that
+    // otherwise keeps burning at the last body position for its full 6s).
+    for (const f of this.stuckFlares) f.extinguish();
   }
 
   /** Dead-but-not-gibbed — a persistent, re-gibbable corpse. */
   get isCorpse(): boolean {
     return this.brain.state === CultistState.Dead && !this.gibbed;
   }
+
+  /** Still in ballistic flight (alive launch or flung corpse). */
+  get isAirborne(): boolean { return this.ballistic !== null; }
 
   /** Wallclock seconds when this cultist died (-1 if alive). Used by the corpse cap. */
   getDeathTime(): number { return this.deathTime; }
@@ -308,6 +314,11 @@ export class ShotgunCultist implements GibbableDude {
   }
 
   despawn(): void {
+    // Detach stuck flares BEFORE freeing the Rapier body — the global flare
+    // registry still updates them, and translation() on a freed handle traps
+    // Rapier WASM (2026-04-28 playtest game-freeze).
+    for (const f of this.stuckFlares) f.detach();
+
     // Clean up stuck flares: stop smoke columns, emit final burst
     for (const h of this.smokeHandles) h.stop();
     if (this._particlePool) {
