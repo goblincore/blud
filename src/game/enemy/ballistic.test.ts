@@ -10,7 +10,7 @@ describe('stepBallistic', () => {
     expect(r.landed).toBe(false);
     expect(r.pos.x).toBeCloseTo(0.4, 5);
     expect(r.vel.y).toBeCloseTo(6 - G * 0.1, 5);   // gravity applied
-    expect(r.pos.y).toBeCloseTo((6 - G * 0.1) * 0.1, 5);
+    expect(r.pos.y).toBeCloseTo((6 - G * 0.1) * 0.1, 5); // semi-implicit Euler: NEW vy is used for position (not old vy)
   });
 
   it('does not land while ascending from ground level', () => {
@@ -26,6 +26,19 @@ describe('stepBallistic', () => {
     expect(r.landed).toBe(true);
     expect(r.pos.y).toBe(1.0);
     expect(r.vel).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('does not land when pos is at groundY but velocity is upward', () => {
+    const m: BallisticMotion = { vel: { x: 0, y: 1, z: 0 }, groundY: 0.5 };
+    const r = stepBallistic({ x: 0, y: 0.5, z: 0 }, m, 0.016, G);
+    expect(r.landed).toBe(false);
+  });
+
+  it('does not tunnel at a large dt (120ms lag frame)', () => {
+    const m: BallisticMotion = { vel: { x: 0, y: -20, z: 0 }, groundY: 0 };
+    const r = stepBallistic({ x: 0, y: 1.0, z: 0 }, m, 0.12, G);
+    expect(r.landed).toBe(true);
+    expect(r.pos.y).toBe(0); // clamped, not negative
   });
 
   it('full flight eventually lands at groundY', () => {
