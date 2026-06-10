@@ -18,7 +18,7 @@ export interface GibbableDude {
   readonly kind: string;
   hp: number;
   pos: Vec3;
-  takeDamage(amount: number, impulse: Vec3): void;
+  takeDamage(amount: number, vel: Vec3): void;
   despawn(): void;
 }
 
@@ -249,8 +249,10 @@ export class AxeZombie implements GibbableDude {
     // alive or dead, decoupled from damage outcome.
     const speed = Math.hypot(vel.x, vel.y, vel.z);
     if (speed >= EXPLOSION_LAUNCH.minLaunchSpeedMps) {
-      const ty = this.body.translation().y;
-      this.ballistic = { vel: { x: vel.x, y: vel.y, z: vel.z }, groundY: ty };
+      // Keep the original floor height if re-launched mid-flight — otherwise the
+      // body would "land" at its current altitude instead of the ground.
+      const groundY = this.ballistic?.groundY ?? this.body.translation().y;
+      this.ballistic = { vel: { x: vel.x, y: vel.y, z: vel.z }, groundY };
       if (died) {
         // Sub-160 explosion kill: NotBlood converts to kDamageFall — death anim
         // plays on the flying body, which lands and persists as a corpse.
