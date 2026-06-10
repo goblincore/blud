@@ -703,4 +703,17 @@ describe('CultistBrain Launched state', () => {
     b.applyDamage(9999);
     expect(b.state).toBe(CultistState.Dead);
   });
+
+  it('flares stuck while Launched do not enter Burning until after landing', () => {
+    let now = 0;
+    const b = new CultistBrain(INIT, undefined, () => now);
+    b.launch();
+    b.setStuckFlareCount(1);
+    b.setIsFlareIgnited(true);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);
+    expect(b.state).toBe(CultistState.Launched); // no Burning mid-air
+    b.land();
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);
+    expect(b.state).toBe(CultistState.Burning); // ignites after landing
+  });
 });
