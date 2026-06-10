@@ -647,3 +647,60 @@ describe('CultistBrain — tommy fire mode', () => {
     expect(b.state).toBe(CultistState.Recoil); // shotgun path: Fire→Recoil same frame
   });
 });
+
+describe('CultistBrain Launched state', () => {
+  const INIT = { hp: 40, speed: 2.3 };
+
+  it('launch() moves an alive brain into Launched', () => {
+    const b = new CultistBrain(INIT);
+    b.launch();
+    expect(b.state).toBe(CultistState.Launched);
+  });
+
+  it('launch() is a no-op when Dead', () => {
+    const b = new CultistBrain(INIT);
+    b.applyDamage(9999);
+    b.launch();
+    expect(b.state).toBe(CultistState.Dead);
+  });
+
+  it('AI is suspended while Launched', () => {
+    const b = new CultistBrain(INIT);
+    b.launch();
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);
+    expect(b.state).toBe(CultistState.Launched);
+  });
+
+  it('desiredVelocity is zero while Launched', () => {
+    const b = new CultistBrain(INIT);
+    b.launch();
+    expect(b.desiredVelocity({ x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }))
+      .toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('land() transitions Launched → Recoil', () => {
+    let now = 0;
+    const b = new CultistBrain(INIT, undefined, () => now);
+    b.launch();
+    b.land();
+    expect(b.state).toBe(CultistState.Recoil);
+    // recoil expires → Chase
+    now = 1.0;
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, true);
+    expect(b.state).toBe(CultistState.Chase);
+  });
+
+  it('non-fatal damage while Launched stays Launched', () => {
+    const b = new CultistBrain(INIT);
+    b.launch();
+    b.applyDamage(5);
+    expect(b.state).toBe(CultistState.Launched);
+  });
+
+  it('fatal damage while Launched → Dead', () => {
+    const b = new CultistBrain(INIT);
+    b.launch();
+    b.applyDamage(9999);
+    expect(b.state).toBe(CultistState.Dead);
+  });
+});

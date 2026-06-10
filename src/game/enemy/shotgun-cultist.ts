@@ -32,6 +32,7 @@ const STATE_ANIM_MAP: Record<CultistState, string> = {
   [CultistState.Recoil]: 'cultist-shotgun-recoil',
   [CultistState.Dead]: 'cultist-shotgun-death-normal',
   [CultistState.Burning]: 'cultist-burn-chase',
+  [CultistState.Launched]: 'cultist-shotgun-recoil',
 };
 
 // ——— Fling constants (mirror AxeZombie) ————————————

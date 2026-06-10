@@ -9,6 +9,8 @@ export enum CultistState {
   Recoil = 'recoil',
   Dead = 'dead',
   Burning = 'burning',
+  /** Airborne from explosion concussion — AI suspended until landing. */
+  Launched = 'launched',
 }
 
 /** Fire mode — controls behaviour in Aim→Fire and Fire states. */
@@ -129,6 +131,19 @@ export class CultistBrain {
     this._isFlareIgnited = ignited;
   }
 
+  /** Explosion concussion threw this cultist airborne (alive). No-op if Dead. */
+  launch(): void {
+    if (this.state === CultistState.Dead) return;
+    this.state = CultistState.Launched;
+  }
+
+  /** Ballistic flight ended — recover through Recoil. */
+  land(): void {
+    if (this.state !== CultistState.Launched) return;
+    this.state = CultistState.Recoil;
+    this.recoilEnteredAt = this.getNowSec();
+  }
+
   /**
    * Called each frame by the concrete enemy.
    * @param dt delta time in seconds
@@ -144,7 +159,8 @@ export class CultistBrain {
 
     // ——— Burning state transitions —————————————————
     // Enter Burning when flares are stuck and at least one has ignited.
-    if (this.stuckFlareCount > 0 && this._isFlareIgnited && this.state !== CultistState.Burning) {
+    // Defer while airborne — landing handles recovery first.
+    if (this.stuckFlareCount > 0 && this._isFlareIgnited && this.state !== CultistState.Burning && this.state !== CultistState.Launched) {
       this.state = CultistState.Burning;
       // Mirror NotBlood actor.cpp:3000-3070: pSprite->type swap to
       // kDudeBurningCultist resets HP to dudeInfo[40].startHealth=25.
@@ -172,6 +188,10 @@ export class CultistBrain {
       this._hooks.onDeath?.();
       return;
     }
+
+    // Airborne — AI suspended; the entity integrates ballistic motion and
+    // calls land() when the body reaches the ground.
+    if (this.state === CultistState.Launched) return;
 
     // ——— Burning behaviour ————————————————————————
     if (this.state === CultistState.Burning) {
@@ -309,6 +329,8 @@ export class CultistBrain {
     }
     // While Burning: just decrement HP, no Recoil interruption
     if (this.state === CultistState.Burning) return;
+    // Mid-air: no Recoil interrupt — landing handles recovery
+    if (this.state === CultistState.Launched) return;
     // Don't trigger Recoil if already Dead or already Recoil
     if (this.state === CultistState.Dead || this.state === CultistState.Recoil) return;
     this.state = CultistState.Recoil;
