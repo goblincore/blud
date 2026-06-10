@@ -29,6 +29,7 @@ export interface ChunkTextureAtlas {
  *  (actor.cpp:3196: GetSpriteExtents top, vel (xvel/2, yvel/2, -0xccccc)). */
 export interface HeadLaunch {
   origin: Vec3;
+  /** Launch velocity in m/s — set directly on the Rapier body via setLinvel. */
   vel: Vec3;
 }
 
@@ -59,6 +60,7 @@ export class ChunkSystem {
   /**
    * Spawn body-chunks at `origin`, launched radially + augmented by `launchVel`
    * (the explosion's concussion velocity for this dude, in m/s).
+   * @param headLaunch Optional explicit origin+velocity for the kickable head. When omitted, a default is derived from launchVel (half-inherit + up-kick).
    */
   spawnChunks(
     origin: Vec3,
@@ -80,9 +82,9 @@ export class ChunkSystem {
       const h = headLaunch ?? {
         origin: { x: origin.x, y: origin.y + 0.3, z: origin.z },
         vel: {
-          x: launchVel.x * 0.5 + (Math.random() - 0.5) * 2,
-          y: 4.0 + Math.random() * 2.0,
-          z: launchVel.z * 0.5 + (Math.random() - 0.5) * 2,
+          x: launchVel.x * 0.5 + (rng() - 0.5) * 2,
+          y: 4.0 + rng() * 2.0,
+          z: launchVel.z * 0.5 + (rng() - 0.5) * 2,
         },
       };
       this.spawnHeadChunk(h.origin, h.vel, now);
