@@ -32,7 +32,7 @@ export interface GibbableDude {
   pos: Vec3;
   hp: number;
   id: string;                         // stable identity
-  takeDamage(amount: number, impulse: Vec3): void;
+  takeDamage(amount: number, vel: Vec3): void;
   /** Called by the gib system when this dude is gibbed (damage ≥ GIB_THRESHOLD).
    *  Implementations should hide the body's sprite immediately — chunks replace it. */
   onGibbed?(): void;
@@ -137,6 +137,12 @@ export class GibSystem {
   registerDude(d: GibbableDude): void { this.dudes.push(d); }
   unregisterDude(id: string): void {
     this.dudes = this.dudes.filter((d) => d.id !== id);
+  }
+
+  /** Drop all registered dudes except the player (the player adapter is
+   *  registered once at boot and survives restarts). */
+  reset(): void {
+    this.dudes = this.dudes.filter((d) => d.kind === 'player');
   }
 
   spawnExplosion(pos: Vec3, info: ExplosionInfo, now: number): void {

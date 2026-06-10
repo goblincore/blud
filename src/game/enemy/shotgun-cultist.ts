@@ -78,7 +78,6 @@ export class ShotgunCultist implements GibbableDude {
   private readonly world: RAPIER.World;
   private readonly scene: THREE.Scene;
   private facing = { x: 0, z: 1 };
-  private prevState: CultistState = CultistState.Idle;
   /** Airborne ballistic motion from explosion concussion (alive or dead). */
   private ballistic: BallisticMotion | null = null;
   private gibbed = false;

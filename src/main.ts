@@ -260,6 +260,7 @@ async function main() {
   gameOverOverlay = new GameOverOverlay(document.body, () => {
     // Full restart: clear gib state, respawn cluster, reset player
     cluster.reset();
+    gibs.reset();
     chunks.reset();
     decals.reset();
     shake.reset();
@@ -476,6 +477,7 @@ async function main() {
       // Only start if idle, victory, or defeat
       if (waveRunner.state() === 'active' || waveRunner.state() === 'breather') return;
       cluster.reset();
+      gibs.reset();
       chunks.reset();
       decals.reset();
       clearStuckFlares();

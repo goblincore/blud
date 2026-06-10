@@ -76,7 +76,6 @@ export class AxeZombie implements GibbableDude {
   private readonly world: RAPIER.World;
   private readonly scene: THREE.Scene;
   private facing = { x: 0, z: 1 };
-  private prevState: ZombieState = ZombieState.Idle;
   /** Airborne ballistic motion from explosion concussion (alive or dead). */
   private ballistic: BallisticMotion | null = null;
   /** Set true once this zombie has been gibbed — cluster reaps it immediately (chunks replace it). */
