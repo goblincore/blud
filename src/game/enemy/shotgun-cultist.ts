@@ -193,6 +193,8 @@ export class ShotgunCultist implements GibbableDude {
     if (this.brain.state !== prev) {
       this.onStateEnter(this.brain.state, now, prev);
       // Track death time for reap scheduling
+      // deathTime may already be stamped by takeDamage (explosion deaths) — the
+      // < 0 guard makes this the fallback for DoT/other deaths, not an overwrite.
       if (this.brain.state === CultistState.Dead && this.deathTime < 0) {
         this.deathTime = now;
         if (prev === CultistState.Burning) {

@@ -20,7 +20,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**M5-A shotgun cultist landed** — cultist enemy with CultistBrain FSM (Idle/Chase/Aim/Fire/Recoil/Dead), pellet projectile (swept raycast, cone spread), ZombieCluster spawns both AxeZombie and ShotgunCultist, debug T-key for solo testing. See `docs/superpowers/specs/2026-04-25-blud-shotgun-cultist.md`. **Next: M5-B weapon-switching** (parallel dispatch), then manual playtest of M4 + M5-A.
+**Explosion-outcomes pass landed (2026-06-10)** — NotBlood-faithful three-tier dynamite outcomes: survivors launched airborne (Launched brain state + kinematic ballistics), sub-160 kills become flung intact corpses that persist and re-gib, full gibs spawn the head from head height alongside a 4-7 chunk burst, 25% head-pop on normal zombie deaths, LaunchedCorpseManager deleted. **Next: manual playtest** (acceptance checklist in the plan's Task 10), then continue M5 bestiary.
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
@@ -67,6 +67,7 @@ Key reference docs (open these before touching their area):
 
 - `F1`       [x]  Dynamite throw arc + bundle sprite + sRGB fix — `18fca04` + follow-ups
 - `F1.gibs`  [ ]  Port `actor.cpp` + `fx.cpp` gib constants into `src/game/gibs/tuning.ts`
+- `F1.explosion-outcomes` [x] NotBlood three-tier explosion outcomes (launched-alive, flung corpse, corpse re-gib, head-pop) — spec [docs/superpowers/specs/2026-06-10-explosion-outcomes-design.md](docs/superpowers/specs/2026-06-10-explosion-outcomes-design.md)
 - `F2`       [ ]  Broad feel sweep — audio table, palookup hit flash, AI timing, screenshake, decal growth. Revisit after M3 playtest; split into subtasks once prioritized.
 - `F2.bone-visibility` [ ] Bones are 20% per spec but visually indistinct through palette dither + scanlines; needs bigger scale, brighter tone, or different treatment.
 - `F2.dynamite-throw-distance` [x] Velocities match NotBlood (3-14 m/s); fuse reduced to 1.5s for snappier feel (M5-D).
