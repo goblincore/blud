@@ -44,6 +44,34 @@ export const EXPLOSION_STANDARD = {
 // source: R1 NotBlood gib-threshold extraction (single-hit dmg ≥ 160 ⇒ skip death, gib directly)
 export const GIB_THRESHOLD = 160;
 
+// ——— Concussion launch (explosion physics on dudes) ————————————
+// source: NotBlood actor.cpp:2677 ConcussSprite — adds velocity (incl. vertical)
+// to every kPhysMove sprite in explosion proximity, alive or dead, decoupled
+// from damage. Magnitude scales with size/mass/dist²; we collapse the
+// mass/size term (all current dudes are human-sized) into velocityScale.
+export const EXPLOSION_LAUNCH = {
+  velocityScale: 0.012,     // impulse(≤900) × falloff → m/s; point-blank ≈ 10.8 m/s
+  upwardBias: 0.5,          // added to normalized radial dir y before re-normalize
+                            // (ConcussSprite z-term: ground blast kicks dudes upward)
+  minLaunchSpeedMps: 2.0,   // below this no ballistic launch — just normal stagger
+  gravityMps2: 18,          // heavier than real — Blood bodies arc fast, land hard
+  headSpawnHeightM: 1.4,    // head gib spawns at sprite top (NotBlood GetSpriteExtents top)
+  headVelInherit: 0.5,      // head inherits half body velocity (NotBlood xvel>>1)
+  headUpKickMps: 5.0,       // NotBlood zvel -0xccccc up-kick equivalent (explosion gib)
+  headPopChance: 0.25,      // Chance(0x4000) — normal-death head-pop signature
+  headPopUpKickMps: 3.5,    // gentler up-kick for the normal-death head-pop
+} as const;
+
+// ——— Corpse persistence ————————————————————————————————
+// source: NotBlood actor.cpp:7887 DudeToGibCallback1 — dead dude becomes a
+// kThingBloodChunks THING with health 8 (thingInfo[26]) and full gib
+// vulnerability (data4=319). It persists and re-gibs on any later explosion.
+export const CORPSE = {
+  hp: 8,                    // documented for fidelity; Blud re-gibs corpses unconditionally
+  maxCorpses: 12,           // cluster cap — oldest corpse force-reaped beyond this
+  reapAfterSec: 30,         // corpse lifetime before reap
+} as const;
+
 // ——— Dynamite throw ————————————————————————————————————
 // source: weapon.cpp:1215 (ThrowBundle), actor.cpp:7106 (actFireThing), weapon.cpp:2218 (charge formula)
 //
@@ -167,7 +195,7 @@ export const ZOMBIE_GIB_PROFILE: GibProfile = {
   fleshPicnums: [...HUMANOID_FLESH_PICNUMS],
   bonePicnums: BONE_PICNUMS,
   boneWeight: 0.2,
-  bodyPartCount: { min: 2, max: 4 },
+  bodyPartCount: { min: 4, max: 7 }, // NotBlood gibHuman = 7 chunks (gib.cpp:188)
   chunkCount: { min: 8, max: 14 },
   spawnsKickableHead: true, // Blood signature — kickable zombie head
 };

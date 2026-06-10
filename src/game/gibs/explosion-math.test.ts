@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { falloffDamage, falloffImpulse, radialImpulseVector } from './index';
-import { EXPLOSION_STANDARD } from './tuning';
+import { falloffDamage, falloffImpulse, radialImpulseVector, concussionVelocity } from './index';
+import { EXPLOSION_STANDARD, EXPLOSION_LAUNCH } from './tuning';
 
 describe('explosion damage falloff', () => {
   it('at distance 0, damage is full (damage + damageRange)', () => {
@@ -51,5 +51,33 @@ describe('radialImpulseVector', () => {
     expect(v.x).toBe(0);
     expect(v.y).toBe(0);
     expect(v.z).toBe(0);
+  });
+});
+
+describe('concussionVelocity', () => {
+  const origin = { x: 0, y: 0, z: 0 };
+
+  it('returns straight-up velocity at zero distance (degenerate direction)', () => {
+    const v = concussionVelocity(origin, { x: 0, y: 0, z: 0 }, 900);
+    expect(v.x).toBe(0);
+    expect(v.z).toBe(0);
+    expect(v.y).toBeCloseTo(900 * EXPLOSION_LAUNCH.velocityScale, 5);
+  });
+
+  it('magnitude equals impulse × velocityScale', () => {
+    const v = concussionVelocity(origin, { x: 3, y: 0, z: 4 }, 900);
+    const mag = Math.hypot(v.x, v.y, v.z);
+    expect(mag).toBeCloseTo(900 * EXPLOSION_LAUNCH.velocityScale, 5);
+  });
+
+  it('always has a positive upward component (ground blast kicks up)', () => {
+    const v = concussionVelocity(origin, { x: 5, y: 0, z: 0 }, 450);
+    expect(v.y).toBeGreaterThan(0);
+  });
+
+  it('points away from the blast in XZ', () => {
+    const v = concussionVelocity(origin, { x: -2, y: 0, z: 7 }, 450);
+    expect(v.x).toBeLessThan(0);
+    expect(v.z).toBeGreaterThan(0);
   });
 });

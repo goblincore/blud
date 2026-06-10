@@ -14,6 +14,7 @@ import {
   BU_PER_METER,
   buPerTicSquaredToMpsSquared,
   ZOMBIE_GIB_PROFILE,
+  EXPLOSION_LAUNCH,
   type GibProfile,
 } from './tuning';
 import { LAUNCHED_CORPSE } from './launched-corpse';
@@ -66,6 +67,26 @@ export function radialImpulseVector(origin: Vec3, target: Vec3, magnitude: numbe
   const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
   if (len < 1e-6) return { x: 0, y: 0, z: 0 };
   return { x: (dx / len) * magnitude, y: (dy / len) * magnitude, z: (dz / len) * magnitude };
+}
+
+/**
+ * Concussion launch velocity for a dude in explosion range — NotBlood
+ * ConcussSprite (actor.cpp:2677): radial direction with an upward bias
+ * (ground blast kicks dudes up), magnitude in m/s. Applied to alive dudes
+ * AND corpses — physics is decoupled from damage.
+ */
+export function concussionVelocity(origin: Vec3, target: Vec3, impulseMag: number): Vec3 {
+  const speed = impulseMag * EXPLOSION_LAUNCH.velocityScale;
+  const dx = target.x - origin.x;
+  const dy = target.y - origin.y;
+  const dz = target.z - origin.z;
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (len < 1e-6) return { x: 0, y: speed, z: 0 };
+  const ux = dx / len;
+  const uy = dy / len + EXPLOSION_LAUNCH.upwardBias;
+  const uz = dz / len;
+  const ulen = Math.sqrt(ux * ux + uy * uy + uz * uz);
+  return { x: (ux / ulen) * speed, y: (uy / ulen) * speed, z: (uz / ulen) * speed };
 }
 
 // ——— Orchestrator ———————————————————————————————————
