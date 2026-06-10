@@ -24,6 +24,14 @@ export interface ChunkTextureAtlas {
   get(picnum: number): THREE.Texture;
 }
 
+/** Explicit spawn origin + velocity for the head gib — NotBlood launches the
+ *  head from the sprite TOP at half the body's velocity plus an up-kick
+ *  (actor.cpp:3196: GetSpriteExtents top, vel (xvel/2, yvel/2, -0xccccc)). */
+export interface HeadLaunch {
+  origin: Vec3;
+  vel: Vec3;
+}
+
 /**
  * Rapier body-part flight system. ONLY file that changes for M3 voxel swap:
  * replace billboard PlaneGeometry with voxel meshes loaded from .vox files;
@@ -49,20 +57,35 @@ export class ChunkSystem {
   ) {}
 
   /**
-   * Spawn 5 body-chunks at `origin`, launched radially + augmented by `impulse`.
-   * `impulse` vector's magnitude should be in physics impulse units (kg·m/s).
+   * Spawn body-chunks at `origin`, launched radially + augmented by `launchVel`
+   * (the explosion's concussion velocity for this dude, in m/s).
    */
-  spawnChunks(origin: Vec3, impulse: Vec3, profile: GibProfile, now: number, rng: () => number = Math.random): void {
+  spawnChunks(
+    origin: Vec3,
+    launchVel: Vec3,
+    profile: GibProfile,
+    now: number,
+    rng: () => number = Math.random,
+    headLaunch?: HeadLaunch,
+  ): void {
     const count = rollChunkCount(profile.bodyPartCount, rng);
     for (let i = 0; i < count; i++) {
       const picnum = pickChunkPicnum(profile, rng);
-      this.spawnOne(origin, impulse, picnum, i, count, now);
+      this.spawnOne(origin, launchVel, picnum, i, count, now);
     }
     // Bouncing head — the one you can kick around. Larger sphere collider, higher
     // restitution, no settle-despawn (age-despawn only, longer lifetime).
     // Gated on profile.spawnsKickableHead — only zombies drop the iconic head.
     if (profile.spawnsKickableHead) {
-      this.spawnHead(origin, impulse, now);
+      const h = headLaunch ?? {
+        origin: { x: origin.x, y: origin.y + 0.3, z: origin.z },
+        vel: {
+          x: launchVel.x * 0.5 + (Math.random() - 0.5) * 2,
+          y: 4.0 + Math.random() * 2.0,
+          z: launchVel.z * 0.5 + (Math.random() - 0.5) * 2,
+        },
+      };
+      this.spawnHeadChunk(h.origin, h.vel, now);
     }
 
     // FIFO-evict if over capacity
@@ -72,9 +95,11 @@ export class ChunkSystem {
     }
   }
 
-  private spawnHead(origin: Vec3, impulse: Vec3, now: number): void {
+  /** Spawn the iconic kickable zombie head at an explicit origin + velocity.
+   *  Public: also used for the 25% normal-death head-pop (GibSystem.popHead). */
+  spawnHeadChunk(origin: Vec3, vel: Vec3, now: number): void {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(origin.x, origin.y + 0.3, origin.z)
+      .setTranslation(origin.x, origin.y, origin.z)
       .setLinearDamping(0.4) // more drag so it settles into rolling, not sliding forever
       .setAngularDamping(0.3);
     const body = this.world.createRigidBody(bodyDesc);
@@ -86,16 +111,7 @@ export class ChunkSystem {
       .setDensity(0.4);
     this.world.createCollider(colliderDesc, body);
 
-    // Launch up + slightly back from explosion
-    const up = 4.0 + Math.random() * 2.0;
-    body.setLinvel(
-      {
-        x: impulse.x * 0.008 + (Math.random() - 0.5) * 2,
-        y: up,
-        z: impulse.z * 0.008 + (Math.random() - 0.5) * 2,
-      },
-      true,
-    );
+    body.setLinvel({ x: vel.x, y: vel.y, z: vel.z }, true);
     body.setAngvel(
       { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 8 },
       true,
@@ -146,7 +162,7 @@ export class ChunkSystem {
 
   private spawnOne(
     origin: Vec3,
-    impulse: Vec3,
+    launchVel: Vec3,
     picnum: number,
     index: number,
     totalCount: number,
@@ -174,9 +190,10 @@ export class ChunkSystem {
     const radialSpeed = 5.0 + Math.random() * 4.0;   // 5-9 m/s (was 2.5-4.5)
     body.setLinvel(
       {
-        x: radial.x * radialSpeed + impulse.x * 0.025, // 2.5× impulse influence
-        y: radial.y * radialSpeed + impulse.y * 0.025,
-        z: radial.z * radialSpeed + impulse.z * 0.025,
+        // chunks inherit 60% of the dude's concussion velocity atop the radial burst
+        x: radial.x * radialSpeed + launchVel.x * 0.6,
+        y: radial.y * radialSpeed + launchVel.y * 0.6,
+        z: radial.z * radialSpeed + launchVel.z * 0.6,
       },
       true,
     );
