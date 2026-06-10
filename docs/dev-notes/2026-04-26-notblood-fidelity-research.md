@@ -7,6 +7,22 @@ tags: [blud, notblood, burn-death, dynamite, gib-taxonomy, investigation]
 
 # NotBlood Fidelity Research — Burn-Death, Dynamite, Gib Taxonomy
 
+> [!] **CORRECTION (2026-06-10):** Two conclusions in this doc are wrong; see
+> [2026-06-10-explosion-outcomes-design.md](../superpowers/specs/2026-06-10-explosion-outcomes-design.md)
+> for the corrected source dig.
+>
+> 1. **§3.4/§3.5 "Launched corpse does not exist in NotBlood" — wrong.** It exists
+>    emergently: `ConcussSprite` (actor.cpp:2677) applies velocity (incl. vertical)
+>    to every `kPhysMove` sprite in radius — alive dudes, corpses, things — decoupled
+>    from damage. Survivors are launched airborne alive; explode-kills < 160 damage
+>    convert to `kDamageFall` (normal death anim) while the body keeps its concussion
+>    velocity → intact tumbling corpse, which persists as a re-gibbable
+>    `kThingBloodChunks` thing with health 8 (`DudeToGibCallback1`, actor.cpp:7887).
+> 2. **§2.3 explosion table mislabels the `explodeInfo` columns** (struct order is
+>    `repeat, dmg, dmgRng, radius, dmgType, ...` — actor.h:136). Standard TNT is
+>    radius=**150** (not 80) and concussion/dmgType=**900** (not impulse=150).
+>    Blud's radius=150/impulse=900 already matched the source exactly.
+
 Sources read:
 - `/Users/donny/Documents/Raze/NotBlood/source/blood/src/aiburn.cpp` — all 246 lines; burning-enemy AISTATEs
 - `/Users/donny/Documents/Raze/NotBlood/source/blood/src/actor.cpp` — `actKillDude` (3010-3488), `actDamageSprite` (3501-3603), `actExplodeSprite` (5951-6100), `actKickObject` (4055-4060), `actFireThing` (7106-7140), `MoveThing` (4438-4500), burn processing loop (4220-4235), `explodeInfo[]` (2288-2360)
