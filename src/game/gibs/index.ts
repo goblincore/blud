@@ -65,7 +65,7 @@ export function radialImpulseVector(origin: Vec3, target: Vec3, magnitude: numbe
   const dy = target.y - origin.y;
   const dz = target.z - origin.z;
   const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  if (len < 1e-6) return { x: 0, y: 0, z: 0 };
+  if (len < 1e-6) return { x: 0, y: 0, z: 0 }; // zero is right for impulse; concussionVelocity deliberately differs (straight-up)
   return { x: (dx / len) * magnitude, y: (dy / len) * magnitude, z: (dz / len) * magnitude };
 }
 

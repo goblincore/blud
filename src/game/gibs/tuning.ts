@@ -66,8 +66,8 @@ export const EXPLOSION_LAUNCH = {
 // source: NotBlood actor.cpp:7887 DudeToGibCallback1 — dead dude becomes a
 // kThingBloodChunks THING with health 8 (thingInfo[26]) and full gib
 // vulnerability (data4=319). It persists and re-gibs on any later explosion.
+// (NotBlood gives the corpse-thing health 8; Blud re-gibs corpses unconditionally instead, so no hp field here.)
 export const CORPSE = {
-  hp: 8,                    // documented for fidelity; Blud re-gibs corpses unconditionally
   maxCorpses: 12,           // cluster cap — oldest corpse force-reaped beyond this
   reapAfterSec: 30,         // corpse lifetime before reap
 } as const;
