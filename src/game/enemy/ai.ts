@@ -100,6 +100,8 @@ export class ZombieBrain {
 
     // Airborne — AI suspended; the entity integrates ballistic motion and
     // calls land() when the body reaches the ground.
+    // NOTE: Burning entry is intentionally deferred while airborne — flares
+    // stuck mid-flight ignite the Burning state on the first update after landing.
     if (this.state === ZombieState.Launched) return;
 
     // ——— Burning state transitions —————————————————

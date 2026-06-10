@@ -252,4 +252,15 @@ describe('ZombieBrain Launched state', () => {
     b.applyDamage(9999);
     expect(b.state).toBe(ZombieState.Dead);
   });
+
+  it('flares stuck while Launched do not enter Burning until after landing', () => {
+    const b = new ZombieBrain(INIT);
+    b.launch();
+    b.setStuckFlareCount(1);
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 });
+    expect(b.state).toBe(ZombieState.Launched); // suspended — no Burning mid-air
+    b.land();
+    b.update(0.016, { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 });
+    expect(b.state).toBe(ZombieState.Burning); // ignites on first grounded update
+  });
 });
