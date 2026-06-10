@@ -20,7 +20,6 @@ import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
 import type { EnemyKind } from './game/encounter/encounters';
 import { GroundFlameManager } from './game/gibs/ground-flame';
-import { LaunchedCorpseManager, type LaunchedCorpseDeps } from './game/gibs/launched-corpse';
 import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
 import { configureProjectileRendering as configureFlareProjectileRendering, setProjectileCamera as setFlareProjectileCamera } from './game/weapons/flare';
 import { ParticlePool } from './game/gibs/particles';
@@ -258,20 +257,6 @@ async function main() {
   // ---- Ground flames (persistent flame at burn-death position)
   const groundFlames = new GroundFlameManager();
 
-  // ---- Launched corpse manager (above-threshold explosion kills)
-  const launchedCorpses = new LaunchedCorpseManager();
-
-  // Wire the gib system's launched-corpse callback — uses getTileTexture
-  // lazy-initialized after the tile cache is set up below.
-  gibs.onLaunchedCorpse = (pos, impulse, now) => {
-    const deps: LaunchedCorpseDeps = { world: physics.world, scene, getTileTexture };
-    // Tile 2910 = zombie burn-death first frame (a humanoid death-pose sprite that
-    // IS served from public/assets/blood-tiles/). Tile 1454 isn't served there; it
-    // lives under public/assets/gibs-placeholder/ behind a different loader, which
-    // is why the original wiring rendered an invisible corpse.
-    launchedCorpses.spawn(pos, impulse, 2910, now, deps);
-  };
-
   gameOverOverlay = new GameOverOverlay(document.body, () => {
     // Full restart: clear gib state, respawn cluster, reset player
     cluster.reset();
@@ -280,7 +265,6 @@ async function main() {
     shake.reset();
     clearStuckFlares();
     groundFlames.clear(scene);
-    launchedCorpses.clear({ world: physics.world, scene, getTileTexture });
     pelletRegistry.length = 0;
     playerGib.hp = 100;
     // Reset player position — re-create player body
@@ -496,7 +480,6 @@ async function main() {
       decals.reset();
       clearStuckFlares();
       groundFlames.clear(scene);
-      launchedCorpses.clear({ world: physics.world, scene, getTileTexture });
       pelletRegistry.length = 0;
       waveRunner.start(performance.now() / 1000);
     }
@@ -666,9 +649,6 @@ async function main() {
 
     // Ground flames (persistent after burn-death)
     groundFlames.update(now, camera);
-
-    // Launched corpses (above-threshold explosion kills)
-    launchedCorpses.update(now, camera, { world: physics.world, scene, getTileTexture });
 
     // Explosion VFX
     explosions.update(realDt * 1000, camera);

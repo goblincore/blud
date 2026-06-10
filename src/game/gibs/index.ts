@@ -17,8 +17,6 @@ import {
   EXPLOSION_LAUNCH,
   type GibProfile,
 } from './tuning';
-import { LAUNCHED_CORPSE } from './launched-corpse';
-
 export interface ExplosionInfo {
   radius: number;       // Build units
   damage: number;
@@ -38,6 +36,10 @@ export interface GibbableDude {
   /** Called by the gib system when this dude is gibbed (damage ≥ GIB_THRESHOLD).
    *  Implementations should hide the body's sprite immediately — chunks replace it. */
   onGibbed?(): void;
+  /** True when dead-but-not-gibbed — a persistent corpse. Corpses re-gib
+   *  unconditionally on any explosion contact (NotBlood: kThingBloodChunks
+   *  thing with health 8, actor.cpp:7887). */
+  readonly isCorpse?: boolean;
   kind: 'player' | 'axe-zombie' | 'cultist-shotgun';
   /** M3: per-enemy gib customization. Required on all dudes. */
   gibProfile: GibProfile;
@@ -130,8 +132,6 @@ export class GibSystem {
     private readonly screenshake: Screenshake,
     /** Called when a player-gib occurs — main.ts shows game-over overlay. */
     private readonly onPlayerGibbed: () => void,
-    /** Called when a launched-corpse outcome triggers (impulse above threshold). */
-    public onLaunchedCorpse?: (pos: Vec3, impulse: Vec3, now: number) => void,
   ) {}
 
   registerDude(d: GibbableDude): void { this.dudes.push(d); }
@@ -158,36 +158,47 @@ export class GibSystem {
       // Damage scaled by Blood's tick-stack equivalent (see DAMAGE_TICK_STACK)
       const linearFall = 1 - dist / radiusM;
       const damage = (info.damage + info.damageRange) * DAMAGE_TICK_STACK * linearFall;
-      const impulseMag = info.impulse * linearFall;
-      const impulseVec = radialImpulseVector(pos, dude.pos, impulseMag);
+      // NotBlood ConcussSprite: physics decoupled from damage — every dude in
+      // range gets launch velocity, alive or dead (m/s, with upward bias).
+      const launchVel = concussionVelocity(pos, dude.pos, info.impulse * linearFall);
 
-      console.log(`[gibs]   ${dude.kind} ${dude.id} at dist=${dist.toFixed(2)}m → damage=${damage.toFixed(0)} (gib@${GIB_THRESHOLD})`);
+      console.log(`[gibs]   ${dude.kind} ${dude.id} at dist=${dist.toFixed(2)}m → damage=${damage.toFixed(0)} (gib@${GIB_THRESHOLD})${dude.isCorpse ? ' [corpse]' : ''}`);
 
-      if (damage >= GIB_THRESHOLD) {
-        const impulseMag = impulseVec.x * impulseVec.x + impulseVec.y * impulseVec.y + impulseVec.z * impulseVec.z;
-        const impulseLen = Math.sqrt(impulseMag);
-
-        // Launched-corpse outcome: above impulse threshold → head gib + tumbling corpse
-        // This is a Blud-original embellishment; NotBlood always full-gibs on explosion death.
-        if (impulseLen >= LAUNCHED_CORPSE.impulseThreshold && this.onLaunchedCorpse) {
-          // Single head gib only (less chunks than full gib)
-          this.chunks.spawnChunks(dude.pos, impulseVec, { ...dude.gibProfile, bodyPartCount: { min: 1, max: 1 } }, now);
-          this.onLaunchedCorpse(dude.pos, impulseVec, now);
-        } else {
-          this.triggerGib(dude.pos, impulseVec, dude.gibProfile, now);
-        }
+      if (dude.isCorpse) {
+        // Corpse re-gib: NotBlood corpses are kThingBloodChunks things (hp 8) —
+        // any explosion contact bursts them, no 160 threshold.
+        this.triggerGib(dude.pos, launchVel, dude.gibProfile, now);
+        dude.onGibbed?.();
+        this.unregisterDude(dude.id);
+      } else if (damage >= GIB_THRESHOLD) {
+        this.triggerGib(dude.pos, launchVel, dude.gibProfile, now);
         dude.onGibbed?.();
         if (dude.kind === 'player') this.onPlayerGibbed();
         else this.unregisterDude(dude.id);
       } else {
-        dude.takeDamage(damage, impulseVec);
+        // Sub-threshold: dude takes damage + the concussion velocity. If it
+        // dies, the entity flings the corpse ballistically (NotBlood sub-160
+        // kDamageFall conversion) and STAYS registered as a re-gibbable corpse.
+        dude.takeDamage(damage, launchVel);
       }
     }
   }
 
-  triggerGib(pos: Vec3, impulse: Vec3, profile: GibProfile, now: number): void {
+  triggerGib(pos: Vec3, launchVel: Vec3, profile: GibProfile, now: number): void {
     console.log(`[gibs] GIB! at (${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)})`);
-    this.chunks.spawnChunks(pos, impulse, profile, now);
+    // NotBlood actor.cpp:3196 — head gib spawns at the sprite TOP with
+    // (xvel/2, yvel/2, -0xccccc up-kick), alongside the body-chunk burst.
+    const headLaunch = profile.spawnsKickableHead
+      ? {
+          origin: { x: pos.x, y: pos.y + EXPLOSION_LAUNCH.headSpawnHeightM, z: pos.z },
+          vel: {
+            x: launchVel.x * EXPLOSION_LAUNCH.headVelInherit,
+            y: EXPLOSION_LAUNCH.headUpKickMps,
+            z: launchVel.z * EXPLOSION_LAUNCH.headVelInherit,
+          },
+        }
+      : undefined;
+    this.chunks.spawnChunks(pos, launchVel, profile, now, Math.random, headLaunch);
     const burstCount = profile.chunkCount.max * 2;
     this.particles.emitBurst(pos, {
       tile: GIB_BURST.tile,
@@ -198,6 +209,30 @@ export class GibSystem {
       airdrag: 0.3,
       lifetimeSec: 2.0,
       size: 0.5,
+    });
+  }
+
+  /** Blood signature: 25% of normal zombie deaths pop the head off with a
+   *  blood burst (NotBlood actor.cpp:3205, Chance(0x4000) + GIBTYPE_27). */
+  popHead(pos: Vec3, now: number): void {
+    this.chunks.spawnHeadChunk(
+      { x: pos.x, y: pos.y + EXPLOSION_LAUNCH.headSpawnHeightM, z: pos.z },
+      {
+        x: (Math.random() - 0.5) * 1.5,
+        y: EXPLOSION_LAUNCH.headPopUpKickMps,
+        z: (Math.random() - 0.5) * 1.5,
+      },
+      now,
+    );
+    this.particles.emitBurst(pos, {
+      tile: GIB_BURST.tile,
+      count: 6,
+      speedMin: 1.5,
+      speedMax: 4.0,
+      gravity: 9.8,
+      airdrag: 0.3,
+      lifetimeSec: 1.5,
+      size: 0.4,
     });
   }
 }
