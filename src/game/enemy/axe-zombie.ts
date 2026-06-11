@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { ZombieBrain, ZombieState } from './ai';
-import { AXE_ZOMBIE, ZOMBIE_GIB_PROFILE, EXPLOSION_LAUNCH, CORPSE } from '../gibs/tuning';
+import { AXE_ZOMBIE, ZOMBIE_GIB_PROFILE, EXPLOSION_LAUNCH, CORPSE, BALLISTIC_BOUNDS } from '../gibs/tuning';
 import type { GibProfile } from '../gibs/tuning';
 import { stepBallistic, type BallisticMotion } from './ballistic';
 import { BillboardAnimator } from '../../animation/billboard-animator';
@@ -70,6 +70,10 @@ export class AxeZombie implements GibbableDude {
   onBurnDeath?: (pos: Vec3, now: number) => void;
   /** Called on the 25% normal-death head-pop (Blood signature). Wired by the cluster. */
   onHeadPop?: (pos: Vec3) => void;
+
+  /** Called when a launched body lands hard enough to burst (impactGibSpeedMps).
+   *  Wired by the cluster to a full gib. */
+  onImpactGib?: (pos: Vec3) => void;
 
   private readonly anim: BillboardAnimator;
   private readonly body: RAPIER.RigidBody;
@@ -192,16 +196,27 @@ export class AxeZombie implements GibbableDude {
     if (this.ballistic) {
       // Airborne — integrate ballistic motion (NotBlood ConcussSprite throws
       // dudes alive or dead; the death anim plays on the flying body).
+      const impactSpeed = Math.hypot(
+        this.ballistic.vel.x, this.ballistic.vel.y, this.ballistic.vel.z,
+      );
       const step = stepBallistic(
         { x: t.x, y: t.y, z: t.z },
         this.ballistic,
         dt,
         EXPLOSION_LAUNCH.gravityMps2,
+        BALLISTIC_BOUNDS,
+        EXPLOSION_LAUNCH.wallRestitution,
       );
       this.body.setNextKinematicTranslation(step.pos);
       this.ballistic.vel = step.vel;
       if (step.landed) {
         this.ballistic = null;
+        // Hard landing bursts the body, alive or dead — NotBlood fall/impact
+        // damage gibbing ("launched across the room, falls, gibs").
+        if (impactSpeed >= EXPLOSION_LAUNCH.impactGibSpeedMps) {
+          this.onImpactGib?.(this.pos);
+          return;
+        }
         this.brain.land(); // no-op if Dead — corpse just rests where it fell
         // land() runs AFTER this frame's prev/state anim diff — trigger explicitly
         // (same state-change-invisible-to-diff trap as the M5-D onBurnDeath bug)

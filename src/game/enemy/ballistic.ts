@@ -18,12 +18,24 @@ export interface BallisticStep {
   landed: boolean;
 }
 
-/** One integration step. Pure — caller stores the returned vel back into motion. */
+/** Axis-aligned XZ walls a launched body reflects off (NotBlood dudes bounce
+ *  off room geometry when concussed across it). */
+export interface BallisticBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** One integration step. Pure — caller stores the returned vel back into motion.
+ *  With `bounds`, the body reflects off the XZ walls at `restitution` bounciness. */
 export function stepBallistic(
   pos: Vec3,
   motion: BallisticMotion,
   dt: number,
   gravityMps2: number,
+  bounds?: BallisticBounds,
+  restitution = 0.45,
 ): BallisticStep {
   const vy = motion.vel.y - gravityMps2 * dt;
   const next = {
@@ -31,6 +43,14 @@ export function stepBallistic(
     y: pos.y + vy * dt,
     z: pos.z + motion.vel.z * dt,
   };
+  let vx = motion.vel.x;
+  let vz = motion.vel.z;
+  if (bounds) {
+    if (next.x > bounds.maxX) { next.x = bounds.maxX; vx = -vx * restitution; }
+    else if (next.x < bounds.minX) { next.x = bounds.minX; vx = -vx * restitution; }
+    if (next.z > bounds.maxZ) { next.z = bounds.maxZ; vz = -vz * restitution; }
+    else if (next.z < bounds.minZ) { next.z = bounds.minZ; vz = -vz * restitution; }
+  }
   if (vy <= 0 && next.y <= motion.groundY) {
     return {
       pos: { x: next.x, y: motion.groundY, z: next.z },
@@ -38,5 +58,5 @@ export function stepBallistic(
       landed: true,
     };
   }
-  return { pos: next, vel: { x: motion.vel.x, y: vy, z: motion.vel.z }, landed: false };
+  return { pos: next, vel: { x: vx, y: vy, z: vz }, landed: false };
 }

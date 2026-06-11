@@ -50,7 +50,8 @@ export const GIB_THRESHOLD = 160;
 // from damage. Magnitude scales with size/mass/dist²; we collapse the
 // mass/size term (all current dudes are human-sized) into velocityScale.
 export const EXPLOSION_LAUNCH = {
-  velocityScale: 0.016,     // impulse(≤900) → m/s; point-blank ≈ 14.4 m/s
+  velocityScale: 0.028,     // impulse(≤900) → m/s; point-blank ≈ 25 m/s — NotBlood
+                            // launches read VIOLENT: a survivor crosses the room
   upwardBias: 0.5,          // added to normalized radial dir y before re-normalize
                             // (ConcussSprite z-term: ground blast kicks dudes upward)
   falloffFloor: 0.45,       // launch speed never drops below this fraction of point-blank.
@@ -59,16 +60,28 @@ export const EXPLOSION_LAUNCH = {
                             // which is what makes edge SURVIVORS fly comically. Without a
                             // floor, the survive-window (damage < hp) and launch-window
                             // (speed ≥ min) never overlap → launched-alive unreachable.
-  minUpKickMps: 5.0,        // vertical-kick floor on every concussion launch — guarantees
+  minUpKickMps: 6.0,        // vertical-kick floor on every concussion launch — guarantees
                             // a readable slapstick arc (NotBlood's z-kick reads near-
                             // constant because the dz term is compressed >>4)
   minLaunchSpeedMps: 2.0,   // below this no ballistic launch — just normal stagger
   gravityMps2: 14,          // still heavier than real, but floaty enough to read the arc
+  impactGibSpeedMps: 13,    // landing harder than this bursts the body (alive or dead) —
+                            // NotBlood's fall/impact damage gibbing on hard landings
+  wallRestitution: 0.45,    // launched bodies bounce off arena walls with this bounciness
   headSpawnHeightM: 1.4,    // head gib spawns at sprite top (NotBlood GetSpriteExtents top)
   headVelInherit: 0.5,      // head inherits half body velocity (NotBlood xvel>>1)
   headUpKickMps: 5.0,       // NotBlood zvel -0xccccc up-kick equivalent (explosion gib)
   headPopChance: 0.25,      // Chance(0x4000) — normal-death head-pop signature
   headPopUpKickMps: 3.5,    // gentler up-kick for the normal-death head-pop
+} as const;
+
+// ——— Ballistic arena bounds ————————————————————————————
+// M1 arena is a 40×40 box (arena.ts floorSize=40, walls at ±20). Launched
+// bodies reflect off the walls — NotBlood dudes bounce off geometry when
+// concussed across a room. Inset by body radius so sprites don't clip walls.
+export const BALLISTIC_BOUNDS = {
+  minX: -19.5, maxX: 19.5,
+  minZ: -19.5, maxZ: 19.5,
 } as const;
 
 // ——— Corpse persistence ————————————————————————————————

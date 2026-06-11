@@ -56,3 +56,35 @@ describe('stepBallistic', () => {
     expect(pos.x).toBeGreaterThan(1);   // travelled horizontally
   });
 });
+
+describe('stepBallistic wall bounce', () => {
+  const bounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
+
+  it('reflects off the +X wall with restitution', () => {
+    const m: BallisticMotion = { vel: { x: 20, y: 5, z: 0 }, groundY: 0 };
+    const r = stepBallistic({ x: 9.5, y: 1, z: 0 }, m, 0.1, G, bounds, 0.5);
+    expect(r.pos.x).toBe(10);            // clamped to the wall
+    expect(r.vel.x).toBeCloseTo(-10, 5); // reflected at 0.5 restitution
+    expect(r.landed).toBe(false);
+  });
+
+  it('reflects off the -Z wall', () => {
+    const m: BallisticMotion = { vel: { x: 0, y: 5, z: -30 }, groundY: 0 };
+    const r = stepBallistic({ x: 0, y: 1, z: -9 }, m, 0.1, G, bounds, 0.5);
+    expect(r.pos.z).toBe(-10);
+    expect(r.vel.z).toBeCloseTo(15, 5);
+  });
+
+  it('no bounce when inside bounds', () => {
+    const m: BallisticMotion = { vel: { x: 5, y: 5, z: 5 }, groundY: 0 };
+    const r = stepBallistic({ x: 0, y: 1, z: 0 }, m, 0.1, G, bounds, 0.5);
+    expect(r.vel.x).toBe(5);
+    expect(r.vel.z).toBe(5);
+  });
+
+  it('works without bounds (backwards compatible)', () => {
+    const m: BallisticMotion = { vel: { x: 50, y: 5, z: 0 }, groundY: 0 };
+    const r = stepBallistic({ x: 9.5, y: 1, z: 0 }, m, 0.1, G);
+    expect(r.pos.x).toBeCloseTo(14.5, 5); // sails right past where a wall would be
+  });
+});

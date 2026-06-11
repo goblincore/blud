@@ -259,6 +259,7 @@ export class ZombieCluster {
       if (this._sfx) c.setSfx(this._sfx);
       if (this._particlePool) c.setParticlePool(this._particlePool);
       this.deps.gibs.registerDude(c);
+      c.onImpactGib = (pos) => this.impactGib(c, pos);
       this.zombies.push(c);
       return c;
     }
@@ -272,8 +273,17 @@ export class ZombieCluster {
     if (this._particlePool) z.setParticlePool(this._particlePool);
     this.deps.gibs.registerDude(z);
     z.onHeadPop = (pos) => this.deps.gibs.popHead(pos, performance.now() / 1000);
+    z.onImpactGib = (pos) => this.impactGib(z, pos);
     this.zombies.push(z);
     return z;
+  }
+
+  /** Hard-landing burst: a launched body (alive or dead) hit the ground above
+   *  impactGibSpeedMps — full gib at the landing spot (NotBlood fall damage).
+   *  onGibbed marks it for reaping; the reap loop unregisters next update. */
+  private impactGib(e: AxeZombie | ShotgunCultist, pos: { x: number; y: number; z: number }): void {
+    this.deps.gibs.triggerGib(pos, { x: 0, y: 3, z: 0 }, e.gibProfile, performance.now() / 1000);
+    e.onGibbed();
   }
 
   /** Number of alive enemies. */

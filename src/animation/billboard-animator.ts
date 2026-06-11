@@ -85,10 +85,12 @@ export class BillboardAnimator {
     }
 
     this.mesh.scale.x = Math.abs(this.mesh.scale.x) * (flipX ? -1 : 1);
-    // Billboard: feet at spritePos; raise by half-height so the rigid body
-    // center aligns with the sprite's vertical center (not its feet).
+    // Anchor the sprite's BOTTOM at the floor: enemy bodies keep their center
+    // at y=1.0 over a floor at y=0, so feet = spritePos.y - 1.0. The old -0.5
+    // constant left every sprite hovering 0.5m — barely readable on tall
+    // walking sprites, blatant on a prone corpse tile.
     const geomH = (this.mesh.geometry as THREE.PlaneGeometry).parameters.height;
-    this.mesh.position.set(spritePos.x, spritePos.y + geomH / 2 - 0.5, spritePos.z);
+    this.mesh.position.set(spritePos.x, spritePos.y + geomH / 2 - 1.0, spritePos.z);
     this.mesh.lookAt(cameraPos.x, this.mesh.position.y, cameraPos.z);
     this.mesh.visible = true;
   }
