@@ -50,11 +50,20 @@ export const GIB_THRESHOLD = 160;
 // from damage. Magnitude scales with size/mass/dist²; we collapse the
 // mass/size term (all current dudes are human-sized) into velocityScale.
 export const EXPLOSION_LAUNCH = {
-  velocityScale: 0.012,     // impulse(≤900) × falloff → m/s; point-blank ≈ 10.8 m/s
+  velocityScale: 0.016,     // impulse(≤900) → m/s; point-blank ≈ 14.4 m/s
   upwardBias: 0.5,          // added to normalized radial dir y before re-normalize
                             // (ConcussSprite z-term: ground blast kicks dudes upward)
+  falloffFloor: 0.45,       // launch speed never drops below this fraction of point-blank.
+                            // NotBlood ConcussSprite is inverse-square with a 0x40000
+                            // baseline — velocity stays strong out to the radius edge,
+                            // which is what makes edge SURVIVORS fly comically. Without a
+                            // floor, the survive-window (damage < hp) and launch-window
+                            // (speed ≥ min) never overlap → launched-alive unreachable.
+  minUpKickMps: 5.0,        // vertical-kick floor on every concussion launch — guarantees
+                            // a readable slapstick arc (NotBlood's z-kick reads near-
+                            // constant because the dz term is compressed >>4)
   minLaunchSpeedMps: 2.0,   // below this no ballistic launch — just normal stagger
-  gravityMps2: 18,          // heavier than real — Blood bodies arc fast, land hard
+  gravityMps2: 14,          // still heavier than real, but floaty enough to read the arc
   headSpawnHeightM: 1.4,    // head gib spawns at sprite top (NotBlood GetSpriteExtents top)
   headVelInherit: 0.5,      // head inherits half body velocity (NotBlood xvel>>1)
   headUpKickMps: 5.0,       // NotBlood zvel -0xccccc up-kick equivalent (explosion gib)

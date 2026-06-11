@@ -1,7 +1,7 @@
 {
   "name": "cultist-burn-death",
   "kind": "seq",
-  "loop": true,
+  "loop": false,
   "baseTile": 3784,
   "angleStride": 5,
   "frames": [

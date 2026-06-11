@@ -3,39 +3,35 @@
   "kind": "seq",
   "loop": false,
   "baseTile": 1328,
-  "angleStride": 5,
+  "angleStride": 1,
   "frames": [
     {
       "tileOffset": 0,
-      "durMs": 133
-    },
-    {
-      "tileOffset": 0,
-      "durMs": 133
-    },
-    {
-      "tileOffset": 0,
-      "durMs": 133
-    },
-    {
-      "tileOffset": 0,
-      "durMs": 133
-    },
-    {
-      "tileOffset": 0,
-      "durMs": 133
+      "durMs": 110
     },
     {
       "tileOffset": 1,
-      "durMs": 133
+      "durMs": 110
     },
     {
-      "tileOffset": 1,
-      "durMs": 133
+      "tileOffset": 2,
+      "durMs": 110
     },
     {
-      "tileOffset": 1,
-      "durMs": 133
+      "tileOffset": 3,
+      "durMs": 110
+    },
+    {
+      "tileOffset": 4,
+      "durMs": 110
+    },
+    {
+      "tileOffset": 5,
+      "durMs": 110
+    },
+    {
+      "tileOffset": 6,
+      "durMs": 110
     }
   ]
 }

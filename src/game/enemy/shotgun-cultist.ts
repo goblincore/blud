@@ -170,6 +170,11 @@ export class ShotgunCultist implements GibbableDude {
       }
     }
 
+    // Capture pre-damage state BEFORE the DoT block — a Burning→Dead transition
+    // happens synchronously inside applyDamage and is invisible to the diff
+    // below if prev is captured after it (M5-D onBurnDeath dead-code bug).
+    const prev = this.brain.state;
+
     // Apply per-frame DoT damage from all stuck flares
     let burnDamage = 0;
     for (const flare of this.stuckFlares) {
@@ -184,8 +189,6 @@ export class ShotgunCultist implements GibbableDude {
     this.brain.setStuckFlareCount(this.stuckFlares.length);
     const anyIgnited = this.stuckFlares.some(f => f.isIgnited(now));
     this.brain.setIsFlareIgnited(anyIgnited);
-
-    const prev = this.brain.state;
 
     this.brain.update(dt, this.pos, playerPos, this._hasLos);
 
@@ -273,14 +276,19 @@ export class ShotgunCultist implements GibbableDude {
       const groundY = this.ballistic?.groundY ?? this.body.translation().y;
       this.ballistic = { vel: { x: vel.x, y: vel.y, z: vel.z }, groundY };
       if (died) {
-        // Sub-160 explosion kill: death anim plays on the flying body
-        this.anim.play('cultist-shotgun-death-gib', performance.now() / 1000);
+        // Sub-160 explosion kill: NotBlood converts to kDamageFall — the NORMAL
+        // death anim plays on the intact flying body (gib anim is for gib deaths).
+        this.anim.play('cultist-shotgun-death-normal', performance.now() / 1000);
       } else if (this.brain.state !== CultistState.Dead) {
         this.brain.launch();
         // launch() happens between frames — the update() prev/state diff never
         // sees it, so trigger the airborne anim explicitly
         this.anim.play('cultist-shotgun-recoil', performance.now() / 1000);
       }
+    } else if (died) {
+      // Normal death — anim played explicitly; the synchronous state change is
+      // invisible to update()'s prev/state diff (SFX comes from the onDeath hook).
+      this.anim.play('cultist-shotgun-death-normal', performance.now() / 1000);
     }
   }
 

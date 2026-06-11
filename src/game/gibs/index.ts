@@ -83,12 +83,18 @@ export function concussionVelocity(origin: Vec3, target: Vec3, impulseMag: numbe
   const dy = target.y - origin.y;
   const dz = target.z - origin.z;
   const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  if (len < 1e-6) return { x: 0, y: speed, z: 0 };
+  if (len < 1e-6) return { x: 0, y: Math.max(speed, EXPLOSION_LAUNCH.minUpKickMps), z: 0 };
   const ux = dx / len;
   const uy = dy / len + EXPLOSION_LAUNCH.upwardBias;
   const uz = dz / len;
   const ulen = Math.sqrt(ux * ux + uy * uy + uz * uz);
-  return { x: (ux / ulen) * speed, y: (uy / ulen) * speed, z: (uz / ulen) * speed };
+  return {
+    x: (ux / ulen) * speed,
+    // Vertical-kick floor: every concussion launch gets a readable arc
+    // (NotBlood's z-kick reads near-constant — slapstick is the point).
+    y: Math.max((uy / ulen) * speed, EXPLOSION_LAUNCH.minUpKickMps),
+    z: (uz / ulen) * speed,
+  };
 }
 
 // ——— Orchestrator ———————————————————————————————————
@@ -158,14 +164,20 @@ export class GibSystem {
       const damage = (info.damage + info.damageRange) * DAMAGE_TICK_STACK * linearFall;
       // NotBlood ConcussSprite: physics decoupled from damage — every dude in
       // range gets launch velocity, alive or dead (m/s, with upward bias).
-      const launchVel = concussionVelocity(pos, dude.pos, info.impulse * linearFall);
+      // Velocity falloff has a FLOOR (unlike damage): NotBlood's inverse-square
+      // baseline keeps concussion strong at the radius edge, so survivors out
+      // there still fly — the slapstick launched-alive outcome.
+      const launchFall =
+        EXPLOSION_LAUNCH.falloffFloor + (1 - EXPLOSION_LAUNCH.falloffFloor) * linearFall;
+      const launchVel = concussionVelocity(pos, dude.pos, info.impulse * launchFall);
 
       console.log(`[gibs]   ${dude.kind} ${dude.id} at dist=${dist.toFixed(2)}m → damage=${damage.toFixed(0)} (gib@${GIB_THRESHOLD})${dude.isCorpse ? ' [corpse]' : ''}`);
 
       if (dude.isCorpse) {
         // Corpse re-gib: NotBlood corpses are kThingBloodChunks things (hp 8) —
-        // any explosion contact bursts them, no 160 threshold.
-        this.triggerGib(dude.pos, launchVel, dude.gibProfile, now);
+        // any explosion contact bursts them, no 160 threshold. No head: the
+        // corpse-thing gib in the source doesn't spawn another zombie head.
+        this.triggerGib(dude.pos, launchVel, { ...dude.gibProfile, spawnsKickableHead: false }, now);
         dude.onGibbed?.();
         this.unregisterDude(dude.id);
       } else if (damage >= GIB_THRESHOLD) {

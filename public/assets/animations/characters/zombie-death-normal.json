@@ -3,27 +3,23 @@
   "kind": "seq",
   "loop": false,
   "baseTile": 1205,
-  "angleStride": 5,
+  "angleStride": 1,
   "frames": [
     {
       "tileOffset": 0,
-      "durMs": 183
+      "durMs": 150
     },
     {
-      "tileOffset": 0,
-      "durMs": 183
+      "tileOffset": 2,
+      "durMs": 150
     },
     {
-      "tileOffset": 0,
-      "durMs": 183
+      "tileOffset": 3,
+      "durMs": 150
     },
     {
-      "tileOffset": 0,
-      "durMs": 183
-    },
-    {
-      "tileOffset": 0,
-      "durMs": 183
+      "tileOffset": 4,
+      "durMs": 150
     }
   ]
 }

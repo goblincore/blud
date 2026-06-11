@@ -81,3 +81,16 @@ describe('concussionVelocity', () => {
     expect(v.z).toBeGreaterThan(0);
   });
 });
+
+describe('concussionVelocity vertical-kick floor', () => {
+  it('weak far-field launches still get the minimum up-kick (slapstick arc)', () => {
+    // impulse 200 → speed 3.2 m/s; raw y ≈ 1.4 — must clamp to minUpKickMps
+    const v = concussionVelocity({ x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, 200);
+    expect(v.y).toBe(EXPLOSION_LAUNCH.minUpKickMps);
+  });
+
+  it('strong launches keep their natural (larger) vertical component', () => {
+    const v = concussionVelocity({ x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, 900);
+    expect(v.y).toBeGreaterThan(EXPLOSION_LAUNCH.minUpKickMps);
+  });
+});

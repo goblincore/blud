@@ -1,24 +1,24 @@
 {
-  "name": "cultist-shotgun-death-normal",
+  "name": "zombie-death-headpop",
   "kind": "seq",
   "loop": false,
-  "baseTile": 2583,
-  "angleStride": 5,
+  "baseTile": 1205,
+  "angleStride": 1,
   "frames": [
     {
-      "tileOffset": 69,
-      "durMs": 150
-    },
-    {
-      "tileOffset": 70,
-      "durMs": 150
-    },
-    {
-      "tileOffset": 0,
-      "durMs": 150
-    },
-    {
       "tileOffset": 1,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 2,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 3,
+      "durMs": 150
+    },
+    {
+      "tileOffset": 4,
       "durMs": 150
     }
   ]

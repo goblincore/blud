@@ -158,6 +158,11 @@ export class AxeZombie implements GibbableDude {
     for (const flare of this.stuckFlares) {
       burnDamage += flare.damageThisTick(dt, now);
     }
+    // Capture pre-damage state BEFORE the DoT block — a Burning→Dead transition
+    // happens synchronously inside applyDamage and was invisible to the diff
+    // below when prev was captured after it (the M5-D onBurnDeath dead-code bug:
+    // the burn-death visual never fired on a real DoT death).
+    const prev = this.brain.state;
     if (burnDamage > 0) {
       this.brain.applyDamage(burnDamage);
       this.hp = this.brain.hp;
@@ -167,7 +172,6 @@ export class AxeZombie implements GibbableDude {
     this.brain.setStuckFlareCount(this.stuckFlares.length);
 
     // ——— Normal brain update ————————————————————
-    const prev = this.brain.state;
     this.brain.update(dt, this.pos, playerPos);
 
     // Detect state change → trigger new animation
@@ -255,9 +259,10 @@ export class AxeZombie implements GibbableDude {
       const groundY = this.ballistic?.groundY ?? this.body.translation().y;
       this.ballistic = { vel: { x: vel.x, y: vel.y, z: vel.z }, groundY };
       if (died) {
-        // Sub-160 explosion kill: NotBlood converts to kDamageFall — death anim
-        // plays on the flying body, which lands and persists as a corpse.
-        this.anim.play('zombie-death-explode', performance.now() / 1000);
+        // Sub-160 explosion kill: NotBlood converts to kDamageFall — the NORMAL
+        // death anim plays on the intact flying body (the burst anim is for
+        // actual gib deaths), which lands and persists as a prone corpse.
+        this.anim.play('zombie-death-normal', performance.now() / 1000);
         this._sfx?.play(SfxEvent.ZOMBIE_DEATH, this.pos);
       } else if (this.brain.state !== ZombieState.Dead) {
         this.brain.launch();
@@ -266,12 +271,16 @@ export class AxeZombie implements GibbableDude {
         this.anim.play('zombie-recoil', performance.now() / 1000);
       }
     } else if (died) {
-      // Normal (non-explosion) death
+      // Normal (non-explosion) death. Anim played explicitly — the state change
+      // happened synchronously above, invisible to update()'s prev/state diff.
       this._sfx?.play(SfxEvent.ZOMBIE_DEATH, this.pos);
       // Blood signature: 25% of normal zombie deaths pop the head off
       // (NotBlood actor.cpp:3205, Chance(0x4000))
       if (this.gibProfile.spawnsKickableHead && Math.random() < EXPLOSION_LAUNCH.headPopChance) {
         this.onHeadPop?.(this.pos);
+        this.anim.play('zombie-death-headpop', performance.now() / 1000);
+      } else {
+        this.anim.play('zombie-death-normal', performance.now() / 1000);
       }
     }
   }

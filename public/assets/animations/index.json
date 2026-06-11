@@ -30,6 +30,7 @@
     "zombie-death-burn": "characters/zombie-death-burn.json",
     "zombie-death-explode": "characters/zombie-death-explode.json",
     "zombie-death-gib": "characters/zombie-death-gib.json",
+    "zombie-death-headpop": "characters/zombie-death-headpop.json",
     "zombie-death-normal": "characters/zombie-death-normal.json",
     "zombie-death-spirit": "characters/zombie-death-spirit.json",
     "zombie-idle": "characters/zombie-idle.json",

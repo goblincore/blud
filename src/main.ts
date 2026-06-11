@@ -338,8 +338,15 @@ async function main() {
   // Wire burn-death callback: spawn gibs + ground flame
   const burnDeathFlameTex = getTileTexture(2424); // reuse flare tile for ground flame
   const onBurnDeath = (pos: Vec3, now: number) => {
-    // Spawn smaller gib burst for burn-death
-    gibs.triggerGib(pos, { x: 0, y: 1, z: 0 }, ZOMBIE_GIB_PROFILE, now);
+    // Spawn smaller gib burst for burn-death. Head only 50% of the time —
+    // NotBlood gates the burning-zombie head gib on Chance(0x8000)
+    // (actor.cpp kDudeBurningZombieAxe case).
+    gibs.triggerGib(
+      pos,
+      { x: 0, y: 1, z: 0 },
+      { ...ZOMBIE_GIB_PROFILE, spawnsKickableHead: Math.random() < 0.5 },
+      now,
+    );
     // Spawn persistent ground flame
     groundFlames.spawn(pos, now, burnDeathFlameTex, scene);
   };
