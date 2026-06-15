@@ -2,6 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { ZombieBrain, ZombieState } from './ai';
 import { AXE_ZOMBIE, ZOMBIE_GIB_PROFILE, EXPLOSION_LAUNCH, CORPSE, BALLISTIC_BOUNDS } from '../gibs/tuning';
+import { resolveDeathOutcome, KDamage } from '../notblood/death-outcome';
+import { KDude } from '../notblood/notblood-tables.gen';
 import type { GibProfile } from '../gibs/tuning';
 import { stepBallistic, type BallisticMotion } from './ballistic';
 import { BillboardAnimator } from '../../animation/billboard-animator';
@@ -289,9 +291,20 @@ export class AxeZombie implements GibbableDude {
       // Normal (non-explosion) death. Anim played explicitly — the state change
       // happened synchronously above, invisible to update()'s prev/state diff.
       this._sfx?.play(SfxEvent.ZOMBIE_DEATH, this.pos);
-      // Blood signature: 25% of normal zombie deaths pop the head off
-      // (NotBlood actor.cpp:3205, Chance(0x4000))
-      if (this.gibProfile.spawnsKickableHead && Math.random() < EXPLOSION_LAUNCH.headPopChance) {
+      // Head-pop DECISION routed through the pure resolveDeathOutcome port of
+      // NotBlood actKillDude (Chance(0x4000), zombie-only on deathSeq 1).
+      // takeDamage is only called from GibSystem.spawnExplosion with sub-160
+      // explosion damage; the module demotes that to kDamageFall (deathSeq 1),
+      // so outcome.headPop fires ~25% for zombies — identical to the inline roll
+      // it replaces (gibProfile.spawnsKickableHead ∧ Math.random()<0.25).
+      const outcome = resolveDeathOutcome({
+        dudeType: KDude.kDudeZombieAxeNormal,
+        damageType: KDamage.kDamageExplode, // actual source; module demotes sub-160 → fall
+        damage: amount,
+        isCorpse: false,
+        rng: Math.random,
+      });
+      if (outcome.headPop) {
         this.onHeadPop?.(this.pos);
         this.anim.play('zombie-death-headpop', performance.now() / 1000);
       } else {

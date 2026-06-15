@@ -17,6 +17,8 @@ import {
   EXPLOSION_LAUNCH,
   type GibProfile,
 } from './tuning';
+import { resolveDeathOutcome, KDamage, type DeathOutcomeConfig } from '../notblood/death-outcome';
+import { KDude } from '../notblood/notblood-tables.gen';
 export interface ExplosionInfo {
   radius: number;       // Build units
   damage: number;
@@ -116,6 +118,25 @@ const RADIUS_SCALE_FACTOR = 8;
  *  with a mid-ring for "hurt but not gibbed." */
 const DAMAGE_TICK_STACK = 12;
 
+/** Map a Blud dude kind to its NotBlood kDude* value so the pure
+ *  resolveDeathOutcome DECISION (corpse re-gib, sub-160 demote, zombie
+ *  head-spawn) can run source-faithfully. The player is not a NotBlood dude —
+ *  aliased to a non-zombie type so the module's `isZombie` head-spawn gate is
+ *  false (matches PlayerGibAdapter.spawnsKickableHead=false). */
+function dudeTypeForKind(kind: GibbableDude['kind']): number {
+  switch (kind) {
+    case 'axe-zombie': return KDude.kDudeZombieAxeNormal;
+    case 'cultist-shotgun': return KDude.kDudeCultistShotgun;
+    case 'player': return KDude.kDudeCultistShotgun; // not a dude — non-zombie alias (no head)
+  }
+}
+
+/** Blud deviations from source-faithful actKillDude, applied at the GibSystem
+ *  edge. Explosion deaths are source-faithful here — the only decision-level
+ *  Blud deviation (burnHeadChance) belongs to the burn-death path wired in
+ *  main.ts (onBurnDeath), not to this explosion AOE path. */
+const BLUD_DEATH_CONFIG: DeathOutcomeConfig = {};
+
 export class GibSystem {
   private dudes: GibbableDude[] = [];
 
@@ -173,22 +194,45 @@ export class GibSystem {
 
       console.log(`[gibs]   ${dude.kind} ${dude.id} at dist=${dist.toFixed(2)}m → damage=${damage.toFixed(0)} (gib@${GIB_THRESHOLD})${dude.isCorpse ? ' [corpse]' : ''}`);
 
-      if (dude.isCorpse) {
-        // Corpse re-gib: NotBlood corpses are kThingBloodChunks things (hp 8) —
-        // any explosion contact bursts them, no 160 threshold. No head: the
-        // corpse-thing gib in the source doesn't spawn another zombie head.
-        this.triggerGib(dude.pos, launchVel, { ...dude.gibProfile, spawnsKickableHead: false }, now);
-        dude.onGibbed?.();
-        this.unregisterDude(dude.id);
-      } else if (damage >= GIB_THRESHOLD) {
-        this.triggerGib(dude.pos, launchVel, dude.gibProfile, now);
+      // — Death/gib DECISION routed through the pure resolveDeathOutcome port of
+      //   NotBlood actKillDude: the corpse re-gib (kThingBloodChunks), the
+      //   sub-160 explode→kDamageFall demotion, and the zombie head-spawn
+      //   (GIBTYPE_27) all live there now. damageType=kDamageExplode because this
+      //   IS an explosion; the module demotes sub-160 hits itself. The EFFECTS
+      //   (chunk burst, concussion launch, SFX) stay here — Blud physics.
+      //   (The outcome's source-faithful gibSpawns are NOT fed to ChunkSystem:
+      //   their raw BU/tic velocities read ~300km/s and need a calibration pass;
+      //   triggerGib's profile-based spawning IS the playtested chunk feel.)
+      const outcome = resolveDeathOutcome(
+        {
+          dudeType: dudeTypeForKind(dude.kind),
+          damageType: KDamage.kDamageExplode,
+          damage,
+          isCorpse: dude.isCorpse ?? false,
+          rng: Math.random,
+        },
+        BLUD_DEATH_CONFIG,
+      );
+
+      if (outcome.gibbed) {
+        // spawnsHead (zombie-only) drives the kickable-head gate; corpses and
+        // non-zombies never spawn one. Overrides the profile flag so the
+        // decision is single-sourced in the pure module (matches every kind:
+        // zombie profile already true, cultist/player already false, corpse
+        // forced false).
+        this.triggerGib(
+          dude.pos,
+          launchVel,
+          { ...dude.gibProfile, spawnsKickableHead: outcome.spawnsHead },
+          now,
+        );
         dude.onGibbed?.();
         if (dude.kind === 'player') this.onPlayerGibbed();
         else this.unregisterDude(dude.id);
       } else {
-        // Sub-threshold: dude takes damage + the concussion velocity. If it
-        // dies, the entity flings the corpse ballistically (NotBlood sub-160
-        // kDamageFall conversion) and STAYS registered as a re-gibbable corpse.
+        // Sub-threshold (demoted to kDamageFall): dude takes damage + the
+        // concussion velocity. If it dies, the entity flings the corpse
+        // ballistically and STAYS registered as a re-gibgable corpse.
         dude.takeDamage(damage, launchVel);
       }
     }
