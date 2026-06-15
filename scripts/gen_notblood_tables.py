@@ -4,12 +4,13 @@
 Parses NotBlood's C headers (``common_game.h``, ``actor.h``) into a generated
 TypeScript module ``src/game/notblood/notblood-tables.gen.ts``.
 
-This task (Task 2) ships only the **foundation**: comment stripping, C ``enum``
-resolution (with implicit-increment + name-reference resolution), a brace-aware
-aggregate tokenizer (``split_top_level_aggregates`` / ``flatten_scalars``), and
-emission of the ``KDamage`` / ``KDude`` / ``KThing`` enums. Later tasks append
-the data tables (``dudeInfo``, ``explodeInfo``, ``thingInfo``, ``gibList``, …)
-at the ``# TABLES`` TODO marker below.
+Task 2 shipped the foundation (comment stripping, C ``enum`` resolution,
+brace-aware aggregate tokenizer, enum emission). This task (Task 3) adds
+**struct-field binding with arity guards** and parses the ``dudeInfo`` /
+``explodeInfo`` / ``thingInfo`` aggregate tables from the C source, emitting
+them verbatim in native Build units. Each row's scalar count is checked against
+the struct's field list — the guard that would have caught the original
+``explodeInfo`` column-misread. Later tasks append ``gibList`` and friends.
 
 Values are kept verbatim in native Build units (no unit conversion here) so a
 future deterministic 120-tic netcode core is a clean swap.
@@ -248,6 +249,141 @@ def flatten_scalars(group: str, symbols: Optional[Dict[str, int]] = None) -> Lis
 
 
 # ---------------------------------------------------------------------------
+# Struct field binding + data tables
+# ---------------------------------------------------------------------------
+# kDamageMax = 7 (KDamage.kDamageMax). The DUDEINFO/THINGINFO structs size
+# several fixed arrays by it (dude.h:51-52, actor.h:86); we hardcode 7 to
+# match the struct layout rather than depend on a parsed constant.
+_KDAMAGE_MAX = 7
+
+# Each table's ordered field list. A plain ``str`` consumes one scalar; a
+# ``(name, length)`` tuple consumes ``length`` scalars into a list (the nested
+# fixed arrays in DUDEINFO: nGibType[3], startDamage[7], curDamage[7]).
+FIELD_SPECS = {
+    "explodeInfo": [
+        "repeat", "dmg", "dmgRng", "radius", "dmgType", "burnTime",
+        "ticks", "quakeEffect", "flashEffect",
+    ],
+    "thingInfo": [
+        "startHealth", "mass", "clipdist", "flags", "elastic", "dmgResist",
+        "cstat", "picnum", "shade", "pal", "xrepeat", "yrepeat",
+        ("dmgControl", _KDAMAGE_MAX),
+    ],
+    "dudeInfo": [
+        "seqStartID", "startHealth", "mass", "at6", "clipdist", "eyeHeight",
+        "aimHeight", "hearDist", "seeDist", "periphery", "meleeDist",
+        "fleeHealth", "hinderDamage", "changeTarget", "changeTargetKin",
+        "alertChance", "lockOut", "frontSpeed", "sideSpeed", "backSpeed",
+        "angSpeed",
+        ("nGibType", 3),
+        ("startDamage", _KDAMAGE_MAX),
+        ("curDamage", _KDAMAGE_MAX),
+        "at8c", "at90",
+    ],
+}
+
+# table name -> (relative source path, C array symbol to anchor on).
+TABLE_SOURCES = {
+    "explodeInfo": ("actor.cpp", "explodeInfo"),
+    "thingInfo": ("actor.cpp", "thingInfo"),
+    "dudeInfo": ("dude.cpp", "dudeInfo"),
+}
+
+# Populated by build_tables(); lowercase enum-name keys for programmatic access
+# (e.g. ``ENUMS["kDude"]["kDudeZombieAxeNormal"]``). build_enum_payload keeps
+# the capitalized keys used for TS const emission.
+ENUMS: Dict[str, Dict[str, int]] = {}
+
+
+class ArityError(Exception):
+    """Raised when a row's scalar count != its struct's expected field count."""
+
+
+_DEFINE_RE = re.compile(
+    r"^\s*#\s*define\s+([A-Za-z_][A-Za-z_0-9]*)\s+(.+?)\s*$", re.MULTILINE
+)
+
+
+def parse_numeric_defines(src: str) -> Dict[str, int]:
+    """Parse simple ``#define NAME <int>`` macros into ``{name: int}``.
+
+    Handles decimal / hex literals and an optional unary minus and a single
+    surrounding paren pair. Macro-function defines (``#define F(x) ...``) and
+    non-numeric values are skipped. Used to resolve preprocessor constants the
+    data tables reference (e.g. ``kAng90`` = 512) that are not enum members.
+    """
+    out: Dict[str, int] = {}
+    for name, expr in _DEFINE_RE.findall(src):
+        value = expr.strip()
+        if value.startswith("(") and value.endswith(")"):
+            value = value[1:-1].strip()
+        if not re.fullmatch(r"-?(?:0[xX][0-9a-fA-F]+|\d+)", value):
+            continue
+        try:
+            out[name] = _resolve_enum_value(value, {})
+        except ValueError:
+            continue
+    return out
+
+
+def bind_struct(field_specs, scalars):
+    """Bind a flat list of scalars to ordered struct fields, packing arrays.
+
+    ``field_specs`` entries are either a plain field name (consumes one scalar)
+    or a ``(name, length)`` tuple (consumes ``length`` scalars into a list).
+    Raises :class:`ArityError` if the scalar count does not match the total
+    expected — this is the guard that catches a column-misread (e.g. an
+    explodeInfo row parsed with the wrong field list).
+    """
+    expected = 0
+    for spec in field_specs:
+        expected += spec[1] if isinstance(spec, tuple) else 1
+    values = list(scalars)
+    if len(values) != expected:
+        raise ArityError(
+            f"arity mismatch: expected {expected} scalars for {field_specs!r}, "
+            f"got {len(values)}"
+        )
+    result: Dict[str, object] = {}
+    i = 0
+    for spec in field_specs:
+        if isinstance(spec, tuple):
+            name, length = spec
+            result[name] = values[i : i + length]
+            i += length
+        else:
+            result[spec] = values[i]
+            i += 1
+    return result
+
+
+def extract_array_body(src: str, name: str) -> str:
+    """Return the inner aggregate body of a ``name[...] = { ... }`` initializer.
+
+    ``src`` should already be comment-stripped. Anchors on the array's
+    ``name[...] =`` assignment (the ``[...]`` may be empty, a literal size, or a
+    constant expression such as ``kDudeMax-kDudeBase``), then balances braces
+    from the following ``{`` to its matching ``}`` and returns the text between.
+    """
+    m = re.search(r"\b" + re.escape(name) + r"\b\s*\[[^\]]*\]\s*=", src)
+    if m is None:
+        raise ValueError(f"array initializer {name!r} not found in source")
+    brace_open = src.find("{", m.end())
+    if brace_open == -1:
+        raise ValueError(f"no '{{' after array initializer {name!r}")
+    depth = 0
+    for j in range(brace_open, len(src)):
+        ch = src[j]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return src[brace_open + 1 : j]
+    raise ValueError(f"unbalanced braces in array initializer {name!r}")
+
+
+# ---------------------------------------------------------------------------
 # TS emission
 # ---------------------------------------------------------------------------
 def _emit_const(name: str, mapping: Dict[str, int]) -> str:
@@ -285,7 +421,78 @@ def build_enum_payload(notblood_src: Path) -> Dict[str, Dict[str, int]]:
     return {"KDamage": kdamage, "KDude": kdude, "KThing": kthing}
 
 
-# TODO(Task 3/4): append dudeInfo / explodeInfo / thingInfo / gibList tables here.
+def build_tables(notblood_src: Optional[Path] = None) -> Dict[str, List[dict]]:
+    """Parse the dudeInfo / explodeInfo / thingInfo aggregate tables.
+
+    Parses the enums first (storing them in the module-level :data:`ENUMS` with
+    lowercase keys), then locates each array initializer, splits it into rows,
+    and binds each row via :func:`bind_struct` against its :data:`FIELD_SPECS`
+    entry (raising :class:`ArityError` on any scalar-count mismatch). Returns the
+    three bound tables keyed by name. Values are kept verbatim in native Build
+    units — no conversion happens here.
+    """
+    src_dir = notblood_src or resolve_src_dir()
+    enum_payload = build_enum_payload(src_dir)
+    ENUMS.clear()
+    ENUMS.update({
+        "kDamage": enum_payload["KDamage"],
+        "kDude": enum_payload["KDude"],
+        "kThing": enum_payload["KThing"],
+    })
+    # Merged symbol table for scalar resolution. The tables mostly use
+    # literals/casts, but a few rows reference enum members or preprocessor
+    # constants (e.g. dudeInfo's last row uses ``kAng90`` = 512). Pull every
+    # enum member plus the numeric ``#define``s from the data-bearing headers.
+    merged_symbols: Dict[str, int] = {}
+    for section in ENUMS.values():
+        merged_symbols.update(section)
+    for rel_path in ("common_game.h", "actor.h", "blood.h"):
+        header = src_dir / rel_path
+        if header.is_file():
+            merged_symbols.update(parse_numeric_defines(strip_comments(header.read_text())))
+
+    tables: Dict[str, List[dict]] = {}
+    for table_name, (rel_path, array_name) in TABLE_SOURCES.items():
+        raw = strip_comments((src_dir / rel_path).read_text())
+        body = extract_array_body(raw, array_name)
+        rows = []
+        for group in split_top_level_aggregates(body):
+            scalars = flatten_scalars(group, merged_symbols)
+            rows.append(bind_struct(FIELD_SPECS[table_name], scalars))
+        tables[table_name] = rows
+    return tables
+
+
+def _emit_table(name: str, rows: List[dict]) -> str:
+    """Emit a list-of-dict table as ``export const <Name> = [...] as const;``.
+
+    Array fields render as inline ``key: [v1, v2, ...]``; scalars as
+    ``key: v``. Field order follows struct layout (Python dicts preserve
+    insertion order from :func:`bind_struct`).
+    """
+    lines = [f"export const {name} = ["]
+    for row in rows:
+        parts = []
+        for key, value in row.items():
+            if isinstance(value, list):
+                parts.append(f"{key}: [{', '.join(str(x) for x in value)}]")
+            else:
+                parts.append(f"{key}: {value}")
+        lines.append("    { " + ", ".join(parts) + " },")
+    lines.append("] as const;")
+    return "\n".join(lines)
+
+
+def _emit_get_dude_info() -> str:
+    """Emit the typed accessor mirroring C ``getDudeInfo`` (index ``type - kDudeBase``)."""
+    return (
+        "export function getDudeInfo(type: number) {\n"
+        "  return dudeInfo[type - KDude.kDudeBase];\n"
+        "}"
+    )
+
+
+# TODO(Task 4): append gibList (GIBFX/GIBTHING symbol linking) here.
 
 _TS_HEADER = """\
 // Auto-generated by scripts/gen_notblood_tables.py — DO NOT EDIT BY HAND.
@@ -294,15 +501,28 @@ _TS_HEADER = """\
 """
 
 
-def render_ts(payload: Dict[str, Dict[str, int]]) -> str:
-    """Render the full generated TS module text."""
+def render_ts(payload: Dict[str, Dict[str, int]],
+              tables: Optional[Dict[str, List[dict]]] = None) -> str:
+    """Render the full generated TS module text.
+
+    Enums are always emitted. When ``tables`` is provided, the dudeInfo /
+    explodeInfo / thingInfo aggregates and the ``getDudeInfo`` accessor are
+    appended (Task 3+); otherwise a TODO marker is left for later gen tasks.
+    """
     blocks = [_TS_HEADER]
     for name in ("KDamage", "KDude", "KThing"):
         blocks.append(_emit_const(name, payload[name]))
-    blocks.append(
-        "\n// TODO(Task 3/4): dudeInfo / explodeInfo / thingInfo / gibList "
-        "tables appended here by later gen tasks."
-    )
+    if tables:
+        blocks.append(_emit_table("explodeInfo", tables["explodeInfo"]))
+        blocks.append(_emit_table("dudeInfo", tables["dudeInfo"]))
+        blocks.append(_emit_table("thingInfo", tables["thingInfo"]))
+        blocks.append(_emit_get_dude_info())
+        blocks.append("\n// TODO(Task 4): gibList table appended here by a later gen task.")
+    else:
+        blocks.append(
+            "\n// TODO(Task 3/4): dudeInfo / explodeInfo / thingInfo / gibList "
+            "tables appended here by later gen tasks."
+        )
     return "\n\n".join(blocks) + "\n"
 
 
@@ -316,12 +536,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not notblood_src.is_dir():
         print(f"error: NotBlood source dir not found: {notblood_src}", file=sys.stderr)
         return 1
-    payload = build_enum_payload(notblood_src)
-    text = render_ts(payload)
+    tables = build_tables(notblood_src)
+    enum_payload = {
+        "KDamage": ENUMS["kDamage"],
+        "KDude": ENUMS["kDude"],
+        "KThing": ENUMS["kThing"],
+    }
+    text = render_ts(enum_payload, tables)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(text)
-    print(f"wrote {OUT_PATH}  (KDamage={len(payload['KDamage'])} "
-          f"KDude={len(payload['KDude'])} KThing={len(payload['KThing'])})")
+    print(f"wrote {OUT_PATH}  (KDamage={len(enum_payload['KDamage'])} "
+          f"KDude={len(enum_payload['KDude'])} KThing={len(enum_payload['KThing'])} "
+          f"explodeInfo={len(tables['explodeInfo'])} "
+          f"dudeInfo={len(tables['dudeInfo'])} "
+          f"thingInfo={len(tables['thingInfo'])})")
     return 0
 
 

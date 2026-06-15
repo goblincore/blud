@@ -33,3 +33,24 @@ def test_split_aggregates_handles_nesting_and_casts():
     assert len(items) == 2
     flat = g.flatten_scalars(items[0])
     assert flat == [1, 2, 3, 4, 5]
+
+
+def test_explodeInfo_standard_row():
+    tables = g.build_tables()  # parses everything; returns dict
+    std = tables["explodeInfo"][1]
+    assert std == {"repeat": 80, "dmg": 20, "dmgRng": 10, "radius": 150,
+                   "dmgType": 900, "burnTime": 0, "ticks": 60,
+                   "quakeEffect": 160, "flashEffect": 60}
+
+
+def test_dudeInfo_zombie_gibtype():
+    tables = g.build_tables()
+    z = tables["dudeInfo"][g.ENUMS["kDude"]["kDudeZombieAxeNormal"] - 200]
+    assert z["nGibType"] == [15, -1, -1]
+    assert z["startHealth"] == 60
+
+
+def test_arity_guard_rejects_wrong_column_count():
+    import pytest
+    with pytest.raises(g.ArityError):
+        g.bind_struct(["repeat", "dmg", "dmgRng"], g.flatten_scalars("{ 1, 2 }"))
