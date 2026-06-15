@@ -67,6 +67,32 @@ export interface GibSpawn {
   vz: number;
 }
 
+/**
+ * Blud deviations from source-faithful `actKillDude`. All flags are OPTIONAL:
+ * when omitted (or the whole config is omitted) the resolver is fully
+ * source-faithful. Each flag documents exactly which outcome it alters so a
+ * reader can't mistake a deliberate Blud deviation for a bug.
+ *
+ * See docs/superpowers/specs/2026-06-10-explosion-outcomes-design.md for the
+ * full list of Blud deviations; only those that change the *decision* (not the
+ * entity-side effects) live here. The unit conversion (BU/tic→m/s), head
+ * launch height, impact-gib, and corpse persistence are entity/GibSystem-side
+ * and out of scope for the pure core.
+ */
+export interface DeathOutcomeConfig {
+  /**
+   * Probability in [0, 1] that a normal zombie dying to BURN damage pops its
+   * head. BLUD DEVIATION: source-faithful burn deaths (kDamageBurn → deathSeq
+   * 3) never pop a head — the head-pop path only fires on deathSeq 1 (fall /
+   * default). Blud mirrors the *already-burning* zombie variant
+   * (kDudeBurningZombieAxe, `Chance(0x8000)` = 50%, actor.cpp) by popping one
+   * on ordinary zombies killed by burn damage. Omit / set 0 for
+   * source-faithful behavior (no burn head-pop).
+   * @default 0 (source-faithful)
+   */
+  burnHeadChance?: number;
+}
+
 export interface DeathOutcome {
   /** Body bursts into chunks now. */
   gibbed: boolean;
@@ -175,9 +201,13 @@ function spawnBodyChunks(dudeType: number, rng: Rng): GibSpawn[] {
  *
  * Faithful to NotBlood `actKillDude` + the `actDamageSprite` sub-160 demotion.
  * Pure: no Three/Rapier/global-state access — all randomness via the injected
- * {@link Rng}.
+ * {@link Rng}. The optional {@link DeathOutcomeConfig} carries documented Blud
+ * deviations; omitted = source-faithful.
  */
-export function resolveDeathOutcome(input: DeathInput): DeathOutcome {
+export function resolveDeathOutcome(
+  input: DeathInput,
+  config: DeathOutcomeConfig = {},
+): DeathOutcome {
   const { dudeType, damageType, damage, isCorpse, rng } = input;
   const isZombie = dudeType === KDude.kDudeZombieAxeNormal;
 
@@ -220,7 +250,20 @@ export function resolveDeathOutcome(input: DeathInput): DeathOutcome {
   // Normal death (fall / burn / spirit / default). The body persists as an
   // intact corpse. NotBlood kDudeZombieAxeNormal nSeq==1 path pops the head on
   // `Chance(0x4000)` with a blood spurt (actor.cpp:3214); other dudes just die.
-  const headPop = isZombie && deathSeq(damageTypeResolved, dudeType) === 1 && chance(rng, 0x4000);
+  // Source-faithful: only deathSeq 1 (fall / default) pops — burn (seq 3) does
+  // not. The BLUD DEVIATION below adds an optional burn head-pop.
+  const normalHeadPop = isZombie && deathSeq(damageTypeResolved, dudeType) === 1 && chance(rng, 0x4000);
+  // BLUD DEVIATION (config.burnHeadChance): pop a head on burn death. The
+  // `> 0` short-circuit keeps the default (0) path rng-draw-free and bit-for-bit
+  // identical to a source-faithful call, so config with burnHeadChance=0 (or
+  // omitted) never alters any other outcome.
+  const burnHeadChance = config.burnHeadChance ?? 0;
+  const burnHeadPop =
+    burnHeadChance > 0 &&
+    isZombie &&
+    damageTypeResolved === KDamage.kDamageBurn &&
+    rng() < burnHeadChance;
+  const headPop = normalHeadPop || burnHeadPop;
 
   return {
     gibbed: false,
