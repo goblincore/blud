@@ -218,5 +218,36 @@ export function getDudeInfo(type: number) {
   return dudeInfo[type - KDude.kDudeBase];
 }
 
-
-// TODO(Task 4): gibList table appended here by a later gen task.
+export const gibList = [
+    { fx: [{ at0: 18, at1: 0, chance: 65536, at9: 3, atd: 200, at11: 400 }, { at0: 31, at1: 0, chance: 32768, at9: 5, atd: 200, at11: 400 }], fxCount: 2, things: null, thingsCount: 0, at10: 300 },
+    { fx: [{ at0: 18, at1: 0, chance: 65536, at9: 8, atd: 200, at11: 400 }], fxCount: 1, things: null, thingsCount: 0, at10: 300 },
+    { fx: [{ at0: 16, at1: 0, chance: 65536, at9: 12, atd: 500, at11: 1000 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 17, at1: 0, chance: 65536, at9: 12, atd: 500, at11: 1000 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 30, at1: 0, chance: 65536, at9: 12, atd: 500, at11: 1000 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 14, at1: 0, chance: 65536, at9: 8, atd: 500, at11: 1000 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 15, at1: 0, chance: 65536, at9: 8, atd: 500, at11: 1000 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 13, at1: 0, chance: 65536, at9: 8, atd: 90, at11: 600 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 25, at1: 0, chance: 65536, at9: 8, atd: 200, at11: 400 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 24, at1: 0, chance: 65536, at9: 8, atd: 200, at11: 400 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 23, at1: 0, chance: 65536, at9: 8, atd: 200, at11: 400 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 31, at1: 0, chance: 65536, at9: 15, atd: 200, at11: 400 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 18, at1: 0, chance: 65536, at9: 15, atd: 200, at11: 400 }, { at0: 31, at1: 0, chance: 65536, at9: 10, atd: 200, at11: 400 }], fxCount: 2, things: null, thingsCount: 0, at10: 300 },
+    { fx: [{ at0: 18, at1: 0, chance: 65536, at9: 5, atd: 200, at11: 400 }, { at0: 20, at1: 0, chance: 53248, at9: 5, atd: 200, at11: 400 }, { at0: 21, at1: 0, chance: 53248, at9: 5, atd: 200, at11: 400 }, { at0: 19, at1: 0, chance: 53248, at9: 5, atd: 200, at11: 400 }, { at0: 22, at1: 0, chance: 53248, at9: 5, atd: 200, at11: 400 }], fxCount: 5, things: null, thingsCount: 0, at10: 300 },
+    { fx: [{ at0: 16, at1: 0, chance: 65536, at9: 8, atd: 500, at11: 1000 }, { at0: 17, at1: 0, chance: 65536, at9: 8, atd: 500, at11: 1000 }, { at0: 14, at1: 0, chance: 65536, at9: 8, atd: 500, at11: 1000 }], fxCount: 3, things: null, thingsCount: 0, at10: 0 },
+    { fx: null, fxCount: 0, things: [{ at0: 425, tile: 1454, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1454, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1267, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1267, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1268, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1269, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1456, chance: 917504, atc: 300, at10: 900 }], thingsCount: 7, at10: 0 },
+    { fx: [{ at0: 18, at1: 0, chance: 32768, at9: 7, atd: 200, at11: 400 }, { at0: 30, at1: 0, chance: 65536, at9: 7, atd: 500, at11: 1000 }, { at0: 13, at1: 0, chance: 65536, at9: 10, atd: 90, at11: 600 }, { at0: 14, at1: 0, chance: 32768, at9: 7, atd: 500, at11: 1000 }], fxCount: 4, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 28, at1: 0, chance: 32768, at9: 15, atd: 128, at11: -128 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 13, at1: 0, chance: 45056, at9: 8, atd: 90, at11: 600 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 46, at1: 0, chance: 65536, at9: 10, atd: 300, at11: 800 }, { at0: 31, at1: 0, chance: 32768, at9: 10, atd: 200, at11: 1000 }], fxCount: 2, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 47, at1: 0, chance: 65536, at9: 12, atd: 300, at11: 600 }, { at0: 14, at1: 0, chance: 65536, at9: 8, atd: 500, at11: 1000 }], fxCount: 2, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 44, at1: 0, chance: 45056, at9: 8, atd: 400, at11: 800 }, { at0: 45, at1: 0, chance: 45056, at9: 8, atd: 300, at11: 800 }, { at0: 14, at1: 0, chance: 45056, at9: 6, atd: 500, at11: 1000 }], fxCount: 3, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 49, at1: 0, chance: 65536, at9: 4, atd: 80, at11: 300 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 50, at1: 0, chance: 65536, at9: 4, atd: 80, at11: 0 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 50, at1: 0, chance: 65536, at9: 20, atd: 800, at11: -40 }, { at0: 15, at1: 0, chance: 65536, at9: 15, atd: 400, at11: 10 }], fxCount: 2, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 32, at1: 0, chance: 65536, at9: 8, atd: 100, at11: 0 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: [{ at0: 56, at1: 0, chance: 65536, at9: 8, atd: 100, at11: 0 }], fxCount: 1, things: null, thingsCount: 0, at10: 0 },
+    { fx: null, fxCount: 0, things: [{ at0: 427, tile: 3405, chance: 917504, atc: 0, at10: 0 }], thingsCount: 1, at10: 0 },
+    { fx: null, fxCount: 0, things: [{ at0: 425, tile: 2405, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 2405, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 2404, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1268, chance: 32768, atc: 300, at10: 900 }, { at0: 425, tile: 1269, chance: 32768, atc: 300, at10: 900 }, { at0: 425, tile: 1456, chance: 32768, atc: 300, at10: 900 }], thingsCount: 6, at10: 0 },
+    { fx: null, fxCount: 0, things: [{ at0: 425, tile: 1326, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1268, chance: 32768, atc: 300, at10: 900 }, { at0: 425, tile: 1269, chance: 32768, atc: 300, at10: 900 }, { at0: 425, tile: 1456, chance: 32768, atc: 300, at10: 900 }], thingsCount: 4, at10: 0 },
+    { fx: null, fxCount: 0, things: [{ at0: 425, tile: 1369, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1361, chance: 917504, atc: 300, at10: 900 }, { at0: 425, tile: 1268, chance: 32768, atc: 300, at10: 900 }, { at0: 425, tile: 1269, chance: 32768, atc: 300, at10: 900 }, { at0: 425, tile: 1456, chance: 32768, atc: 300, at10: 900 }], thingsCount: 5, at10: 0 },
+] as const;

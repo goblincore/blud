@@ -54,3 +54,21 @@ def test_arity_guard_rejects_wrong_column_count():
     import pytest
     with pytest.raises(g.ArityError):
         g.bind_struct(["repeat", "dmg", "dmgRng"], g.flatten_scalars("{ 1, 2 }"))
+
+
+def test_gibList_human_linked():
+    # gibList[15] = { NULL, 0, gibHuman, 7, 0 } (gib.cpp:242)
+    # gibHuman[0] = { 425, 1454, ... } -> GIBTHING.at4 (picnum/tile) = 1454
+    tables = g.build_tables()
+    entry = tables["gibList"][15]
+    assert entry["things"] is not None and len(entry["things"]) == 7
+    assert entry["things"][0]["tile"] == 1454  # GIBTHING.at4 = picnum
+
+
+def test_gibList_axezombie_head():
+    # gibList[27] = { NULL, 0, gibAxeZombieHead, 1, 0 } (gib.cpp:254)
+    # gibAxeZombieHead[0] = { 427, 3405, ... } -> GIBTHING.at4 (tile) = 3405
+    tables = g.build_tables()
+    entry = tables["gibList"][27]
+    assert len(entry["things"]) == 1
+    assert entry["things"][0]["tile"] == 3405

@@ -280,6 +280,11 @@ FIELD_SPECS = {
         ("curDamage", _KDAMAGE_MAX),
         "at8c", "at90",
     ],
+    # gib.cpp named-array structs. GIBFX.at0 is an FX_ID enum member (resolved
+    # via the FX_* symbol table); the rest are plain ints. GIBTHING.at4 is the
+    # picnum (tile) -- named `tile` for readability per the plan.
+    "GIBFX": ["at0", "at1", "chance", "at9", "atd", "at11"],
+    "GIBTHING": ["at0", "tile", "chance", "atc", "at10"],
 }
 
 # table name -> (relative source path, C array symbol to anchor on).
@@ -421,6 +426,72 @@ def build_enum_payload(notblood_src: Path) -> Dict[str, Dict[str, int]]:
     return {"KDamage": kdamage, "KDude": kdude, "KThing": kthing}
 
 
+def _parse_named_arrays(
+    src: str, type_name: str, field_specs: Sequence, symbols: Dict[str, int]
+) -> Dict[str, List[dict]]:
+    """Parse every ``<type_name> name[] = { ... }`` initializer into ``{name: rows}``.
+
+    gib.cpp declares several sibling arrays of the same struct type
+    (``GIBFX gibFxGlassT[]``, ``GIBTHING gibHuman[]``, ...) rather than one
+    flat table. This finds each by its C type keyword, extracts the body via
+    :func:`extract_array_body`, and binds rows with :func:`bind_struct`. FX_*
+    and other named members in the rows resolve through ``symbols``.
+    """
+    names = re.findall(
+        r"\b" + re.escape(type_name) + r"\b\s+([A-Za-z_]\w*)\s*\[[^\]]*\]\s*=",
+        src,
+    )
+    table: Dict[str, List[dict]] = {}
+    for name in dict.fromkeys(names):  # dedupe, preserve first-seen order
+        body = extract_array_body(src, name)
+        rows = []
+        for group in split_top_level_aggregates(body):
+            scalars = flatten_scalars(group, symbols)
+            rows.append(bind_struct(field_specs, scalars))
+        table[name] = rows
+    return table
+
+
+def _parse_gib_list(
+    src: str,
+    gib_fx: Dict[str, List[dict]],
+    gib_things: Dict[str, List[dict]],
+) -> List[dict]:
+    """Parse ``gibList[]`` and resolve its GIBFX/GIBTHING pointer references.
+
+    Each C row is ``{ fxPtr, fxCount, thingsPtr, thingsCount, at10 }`` where the
+    pointers are either ``NULL`` or the name of a sibling array parsed by
+    :func:`_parse_named_arrays`. The emitted row carries the *linked* rows
+    directly under ``fx`` / ``things`` (``null`` when ``NULL``) plus the raw
+    counts and ``at10`` so nothing from the C struct is dropped. An unknown
+    array name raises :class:`KeyError`.
+    """
+    body = extract_array_body(src, "gibList")
+    rows: List[dict] = []
+    for group in split_top_level_aggregates(body):
+        inner = group.strip()
+        if inner.startswith("{") and inner.endswith("}"):
+            inner = inner[1:-1]
+        tokens = [t.strip() for t in _split_top_level_commas(inner) if t.strip()]
+        if len(tokens) != 5:
+            raise ArityError(
+                f"gibList row must have 5 fields "
+                f"(fx, fxCount, things, thingsCount, at10), got {len(tokens)}: "
+                f"{tokens!r}"
+            )
+        fx_ref, fx_count, things_ref, things_count, at10 = tokens
+        fx = None if fx_ref == "NULL" else gib_fx[fx_ref]
+        things = None if things_ref == "NULL" else gib_things[things_ref]
+        rows.append({
+            "fx": fx,
+            "fxCount": int(fx_count),
+            "things": things,
+            "thingsCount": int(things_count),
+            "at10": int(at10),
+        })
+    return rows
+
+
 def build_tables(notblood_src: Optional[Path] = None) -> Dict[str, List[dict]]:
     """Parse the dudeInfo / explodeInfo / thingInfo aggregate tables.
 
@@ -446,6 +517,12 @@ def build_tables(notblood_src: Optional[Path] = None) -> Dict[str, List[dict]]:
     merged_symbols: Dict[str, int] = {}
     for section in ENUMS.values():
         merged_symbols.update(section)
+    # FX_ID enum (fx.h) -- resolution only, not emitted as a top-level const.
+    # GIBFX.at0 references FX_* members (FX_0 = 0, FX_1 = 1, ...).
+    fx_header = src_dir / "fx.h"
+    if fx_header.is_file():
+        fx_enum = parse_enum(strip_comments(fx_header.read_text()), anchor="FX_NONE")
+        merged_symbols.update({k: v for k, v in fx_enum.items() if k.startswith("FX")})
     for rel_path in ("common_game.h", "actor.h", "blood.h"):
         header = src_dir / rel_path
         if header.is_file():
@@ -460,24 +537,50 @@ def build_tables(notblood_src: Optional[Path] = None) -> Dict[str, List[dict]]:
             scalars = flatten_scalars(group, merged_symbols)
             rows.append(bind_struct(FIELD_SPECS[table_name], scalars))
         tables[table_name] = rows
+
+    # gib.cpp: parse the named GIBFX / GIBTHING arrays into symbol tables, then
+    # parse gibList[] resolving each NULL / named-array reference into the
+    # linked rows. GIBTHING.at4 (picnum) is emitted as `tile`.
+    gib_raw = strip_comments((src_dir / "gib.cpp").read_text())
+    gib_fx = _parse_named_arrays(gib_raw, "GIBFX", FIELD_SPECS["GIBFX"], merged_symbols)
+    gib_things = _parse_named_arrays(gib_raw, "GIBTHING", FIELD_SPECS["GIBTHING"], merged_symbols)
+    tables["gibList"] = _parse_gib_list(gib_raw, gib_fx, gib_things)
     return tables
+
+
+def _render_value(v: object) -> str:
+    """Render a parsed table value (scalar / list / dict / None) as TS source.
+
+    Used by :func:`_emit_table` so the same emitter handles flat scalar tables,
+    nested fixed-array fields, and gibList's linked GIBFX/GIBTHING sub-arrays
+    (lists of dicts, or ``null`` for an unresolved ``NULL`` pointer).
+    """
+    if v is None:
+        return "null"
+    if isinstance(v, bool):  # before int: bool subclasses int
+        return "true" if v else "false"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_render_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        parts = [f"{k}: {_render_value(val)}" for k, val in v.items()]
+        return "{ " + ", ".join(parts) + " }"
+    raise TypeError(f"cannot render value of type {type(v).__name__}: {v!r}")
 
 
 def _emit_table(name: str, rows: List[dict]) -> str:
     """Emit a list-of-dict table as ``export const <Name> = [...] as const;``.
 
-    Array fields render as inline ``key: [v1, v2, ...]``; scalars as
-    ``key: v``. Field order follows struct layout (Python dicts preserve
-    insertion order from :func:`bind_struct`).
+    Each row renders ``key: <value>`` where value goes through
+    :func:`_render_value` -- scalars, fixed-array fields, and gibList's linked
+    sub-arrays (lists of dicts / null) all emit correctly. Field order follows
+    struct layout (Python dicts preserve insertion order from
+    :func:`bind_struct` / :func:`_parse_gib_list`).
     """
     lines = [f"export const {name} = ["]
     for row in rows:
-        parts = []
-        for key, value in row.items():
-            if isinstance(value, list):
-                parts.append(f"{key}: [{', '.join(str(x) for x in value)}]")
-            else:
-                parts.append(f"{key}: {value}")
+        parts = [f"{key}: {_render_value(value)}" for key, value in row.items()]
         lines.append("    { " + ", ".join(parts) + " },")
     lines.append("] as const;")
     return "\n".join(lines)
@@ -491,8 +594,6 @@ def _emit_get_dude_info() -> str:
         "}"
     )
 
-
-# TODO(Task 4): append gibList (GIBFX/GIBTHING symbol linking) here.
 
 _TS_HEADER = """\
 // Auto-generated by scripts/gen_notblood_tables.py — DO NOT EDIT BY HAND.
@@ -517,7 +618,7 @@ def render_ts(payload: Dict[str, Dict[str, int]],
         blocks.append(_emit_table("dudeInfo", tables["dudeInfo"]))
         blocks.append(_emit_table("thingInfo", tables["thingInfo"]))
         blocks.append(_emit_get_dude_info())
-        blocks.append("\n// TODO(Task 4): gibList table appended here by a later gen task.")
+        blocks.append(_emit_table("gibList", tables["gibList"]))
     else:
         blocks.append(
             "\n// TODO(Task 3/4): dudeInfo / explodeInfo / thingInfo / gibList "
@@ -549,7 +650,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           f"KDude={len(enum_payload['KDude'])} KThing={len(enum_payload['KThing'])} "
           f"explodeInfo={len(tables['explodeInfo'])} "
           f"dudeInfo={len(tables['dudeInfo'])} "
-          f"thingInfo={len(tables['thingInfo'])})")
+          f"thingInfo={len(tables['thingInfo'])} "
+          f"gibList={len(tables['gibList'])})")
     return 0
 
 
