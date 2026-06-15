@@ -16,6 +16,16 @@
  * `{ vx, vy, vz }` field layout and the Build z-axis sign (Build -z = up).
  * Remapping into Three.js space (vz → +y, XZ plane) is an entity/GibSystem
  * concern, NOT done here, so the adapter stays a trivially-auditable edge.
+ *
+ * ⚠️ UNIT CAVEAT — NOT YET WIRED INTO THE LIVE CHUNK PATH. `resolveDeathOutcome`'s
+ * gibSpawns velocities come from `spread()` = `(field << 18) / 120`, which is
+ * Blood's raw FIXED-POINT velocity (e.g. ±655360 for atc=300), NOT plain
+ * Build-units-per-tic. Feeding those straight through `buPerTicToMps` here yields
+ * absurd speeds (~300 km/s) — which is exactly why GibSystem currently keeps its
+ * playtested radial chunk burst and does NOT consume gibSpawns (see index.ts).
+ * Before wiring gibSpawns into ChunkSystem, FIRST resolve the unit semantics:
+ * either descale spread() to true BU/tic, or replace this conversion with the
+ * correct fixed-point→m/s factor. Until then this adapter is unused machinery.
  */
 
 import { buPerTicToMps } from '../gibs/tuning';

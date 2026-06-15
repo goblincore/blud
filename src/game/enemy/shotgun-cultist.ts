@@ -2,8 +2,6 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { CultistBrain, CultistState, type CultistHooks } from './cultist-ai';
 import { SHOTGUN_CULTIST, CULTIST_GIB_PROFILE, EXPLOSION_LAUNCH, CORPSE, BALLISTIC_BOUNDS } from '../gibs/tuning';
-import { resolveDeathOutcome, KDamage } from '../notblood/death-outcome';
-import { KDude } from '../notblood/notblood-tables.gen';
 import type { GibProfile } from '../gibs/tuning';
 import { stepBallistic, type BallisticMotion } from './ballistic';
 import { BillboardAnimator } from '../../animation/billboard-animator';
@@ -303,20 +301,10 @@ export class ShotgunCultist implements GibbableDude {
         this.anim.play('cultist-shotgun-recoil', performance.now() / 1000);
       }
     } else if (died) {
-      // Normal (non-explosion) death. Routed through the pure resolveDeathOutcome
-      // port of NotBlood actKillDude for pipeline consistency with the zombie —
-      // single-sources the sub-160 explode→fall demotion + becomesCorpse flag.
-      // Cultists are NOT zombies (isZombie=false in the module), so outcome.headPop
-      // is ALWAYS false: no kickable head, no head-pop signature (the zombie's 25%
-      // Chance(0x4000) pop is zombie-only; cultists have no head-pop anim). SFX
-      // comes from the onDeath hook.
-      resolveDeathOutcome({
-        dudeType: KDude.kDudeCultistShotgun,
-        damageType: KDamage.kDamageExplode, // actual source; module demotes sub-160 → fall
-        damage: amount,
-        isCorpse: false,
-        rng: Math.random,
-      });
+      // Normal (non-explosion) death. Unlike the zombie, the cultist has no
+      // head-pop or kickable-head outcome (resolveDeathOutcome's head paths are
+      // zombie-only — isZombie=false here), so there's no decision to consult:
+      // just play the death anim. SFX comes from the onDeath hook.
       this.anim.play('cultist-shotgun-death-normal', performance.now() / 1000);
     }
   }
