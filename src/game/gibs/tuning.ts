@@ -1,15 +1,21 @@
 /**
  * Tuning constants for M2 gib/weapon systems.
  *
- * Every constant below is sourced from the NotBlood repository
- * (/Users/donny/Documents/Raze/NotBlood/source/blood/src/) with an explicit
- * source-file citation. When feel-tuning drifts a value from Blood's, keep
- * the original as a sibling `// blood: ...` comment so the delta is visible.
+ * Raw NotBlood values (HP, explosion stats, gib counts) are derived from the
+ * generated tables in `../notblood/notblood-tables.gen.ts` (codegen from the C
+ * aggregate tables — see scripts/gen_notblood_tables.py). Each derivation cites
+ * the raw table + index it pulls from.
+ *
+ * Constants that do NOT have a raw source — Blud feel values, formula-derived
+ * ports, and deliberate deviations from NotBlood — stay as documented local
+ * literals with a comment noting they are NOT derived.
  *
  * See also:
  *  - docs/tuning-sources.md     (R1 — enemy HP, damage, explosion, weapon timers)
  *  - docs/tuning-sources-gibs.md (R2 — gib picnums + FX_27 trail mechanic)
  */
+
+import { explodeInfo, dudeInfo, gibList, KDude } from '../notblood/notblood-tables.gen';
 
 // ——— Unit conversion ————————————————————————————————————
 
@@ -30,25 +36,31 @@ export function buPerTicSquaredToMpsSquared(buPerTicSquared: number): number {
 }
 
 // ——— Explosion (kExplosionStandard — TNT Bundle) ————————————————
-// source: actor.cpp:2300-2310 (explodeInfo[1]); docs/tuning-sources.md:456
+// Derived from explodeInfo[1] (raw C aggregate; source: actor.cpp:2300-2310).
+// Build-unit values — radius converted to meters at query time.
+const STD = explodeInfo[1]; // kExplosionStandard
 export const EXPLOSION_STANDARD = {
-  radius: 150,        // Build units — converted to meters at query time (radius / BU_PER_METER)
-  damage: 20,
-  damageRange: 10,    // actual ∈ [damage - range, damage + range]
-  impulse: 900,
-  lifetimeTics: 60,
-  quake: 160,
-  flash: 60,
+  radius: STD.radius,        // 150 BU — converted to meters at query time (radius / BU_PER_METER)
+  damage: STD.dmg,           // 20
+  damageRange: STD.dmgRng,   // 10 — actual ∈ [damage - range, damage + range]
+  impulse: STD.dmgType,      // 900 — NOTE: the C field is misnamed "dmgType";
+                             // for explosions it holds the ConcussSprite impulse.
+  lifetimeTics: STD.ticks,   // 60
+  quake: STD.quakeEffect,    // 160
+  flash: STD.flashEffect,    // 60
 } as const;
 
-// source: R1 NotBlood gib-threshold extraction (single-hit dmg ≥ 160 ⇒ skip death, gib directly)
+// NOT in the aggregate tables — this is a control-flow constant from
+// actKillDude (single-hit dmg ≥ 160 ⇒ skip death, gib directly). It will be
+// sourced from the resolveDeathOutcome port (later task); kept as a literal here.
 export const GIB_THRESHOLD = 160;
 
 // ——— Concussion launch (explosion physics on dudes) ————————————
-// source: NotBlood actor.cpp:2677 ConcussSprite — adds velocity (incl. vertical)
-// to every kPhysMove sprite in explosion proximity, alive or dead, decoupled
-// from damage. Magnitude scales with size/mass/dist²; we collapse the
-// mass/size term (all current dudes are human-sized) into velocityScale.
+// NOT derived from the tables — Blud feel values porting NotBlood actor.cpp:2677
+// ConcussSprite, which adds velocity (incl. vertical) to every kPhysMove sprite
+// in explosion proximity, alive or dead, decoupled from damage. Magnitude scales
+// with size/mass/dist²; we collapse the mass/size term (all current dudes are
+// human-sized) into velocityScale.
 export const EXPLOSION_LAUNCH = {
   velocityScale: 0.028,     // impulse(≤900) → m/s; point-blank ≈ 25 m/s — NotBlood
                             // launches read VIOLENT: a survivor crosses the room
@@ -76,26 +88,30 @@ export const EXPLOSION_LAUNCH = {
 } as const;
 
 // ——— Ballistic arena bounds ————————————————————————————
-// M1 arena is a 40×40 box (arena.ts floorSize=40, walls at ±20). Launched
-// bodies reflect off the walls — NotBlood dudes bounce off geometry when
-// concussed across a room. Inset by body radius so sprites don't clip walls.
+// NOT derived — Blud-specific arena geometry. M1 arena is a 40×40 box
+// (arena.ts floorSize=40, walls at ±20). Launched bodies reflect off the walls —
+// NotBlood dudes bounce off geometry when concussed across a room. Inset by
+// body radius so sprites don't clip walls.
 export const BALLISTIC_BOUNDS = {
   minX: -19.5, maxX: 19.5,
   minZ: -19.5, maxZ: 19.5,
 } as const;
 
 // ——— Corpse persistence ————————————————————————————————
-// source: NotBlood actor.cpp:7887 DudeToGibCallback1 — dead dude becomes a
-// kThingBloodChunks THING with health 8 (thingInfo[26]) and full gib
-// vulnerability (data4=319). It persists and re-gibs on any later explosion.
-// (NotBlood gives the corpse-thing health 8; Blud re-gibs corpses unconditionally instead, so no hp field here.)
+// NOT derived — Blud feel values. Source mechanic: NotBlood actor.cpp:7887
+// DudeToGibCallback1 turns a dead dude into a kThingBloodChunks THING with
+// health 8 (thingInfo[26]) and full gib vulnerability (data4=319); it persists
+// and re-gibs on any later explosion. (NotBlood gives the corpse-thing health
+// 8; Blud re-gibs corpses unconditionally instead, so no hp field here.)
 export const CORPSE = {
   maxCorpses: 12,           // cluster cap — oldest corpse force-reaped beyond this
   reapAfterSec: 30,         // corpse lifetime before reap
 } as const;
 
 // ——— Dynamite throw ————————————————————————————————————
-// source: weapon.cpp:1215 (ThrowBundle), actor.cpp:7106 (actFireThing), weapon.cpp:2218 (charge formula)
+// NOT derived from tables — ported from Blood formulas (weapon.cpp:1215
+// ThrowBundle, actor.cpp:7106 actFireThing, weapon.cpp:2218 charge formula).
+// The tables module doesn't carry these; they live as inline arithmetic in C.
 //
 // Blood: nSpeed = mulscale16(throwPower, 0x177777) + 0x66666
 //        xvel   = mulscale30(nSpeed, cos(ang))
@@ -134,7 +150,9 @@ export const DYNAMITE_COOK = {
 } as const;
 
 // ——— Blood trail (FX_27) ————————————————————————————————
-// source: callback.cpp:180-192 (fxBloodSpurt scheduling) + fx.cpp:89 (gFXData[27])
+// NOT derived from tables — source is fx.cpp:89 (gFXData[27]) which the gen
+// script does not emit (only explodeInfo/dudeInfo/thingInfo/gibList are codegen'd).
+// Values ported from callback.cpp:180-192 (fxBloodSpurt scheduling) + fx.cpp:89.
 export const BLOOD_TRAIL = {
   emitHz: 20,                 // 6 tics @ 120 TPS → 20 Hz
   velScale: 1 / 256,          // Blood: xvel >> 8 = 1/256 inheritance
@@ -146,7 +164,8 @@ export const BLOOD_TRAIL = {
 } as const;
 
 // ——— Gib-moment radial burst (FX_13) ————————————————————
-// source: fx.cpp:75 (gFXData[13]) — the main blood-chunk spray at the gib instant
+// NOT derived from tables — source is fx.cpp:75 (gFXData[13], the main
+// blood-chunk spray at the gib instant) which the gen script does not emit.
 export const GIB_BURST = {
   count: 10,                  // starting target: 10 particles per gib
   speedMin: 3.0,              // m/s radial spread (Blood-equivalent rough target)
@@ -200,7 +219,10 @@ export function rollChunkCount(range: ChunkRange, rng: () => number): number {
   return range.min + Math.floor(rng() * (range.max - range.min + 1));
 }
 
-/** Blood-derived flesh picnums for humanoid enemies (torso, arm, leg, spine, misc). */
+// Flesh picnums for humanoid enemies (torso, arm, leg, spine, misc). These are
+// the deduped tiles of gibList[15] (gibHuman: 1454, 1267, 1268, 1269, 1456),
+// kept as a curated literal rather than derived because the selection order
+// matters for pickChunkPicnum's RNG indexing (a straight dedupe would reorder).
 export const HUMANOID_FLESH_PICNUMS = [1454, 1268, 1269, 1456, 1267] as const;
 
 /**
@@ -213,11 +235,17 @@ export const HUMANOID_FLESH_PICNUMS = [1454, 1268, 1269, 1456, 1267] as const;
 // See public/assets/gibs-placeholder/bone/ for the PNGs.
 export const BONE_PICNUMS: number[] = [421, 446, 447];
 
+// gibHuman (gibList[15]) is the human gib set: zombie nGibType[0] = 15.
+// Its thing list has 7 body-part entries — the source count for a full gib.
+const GIB_HUMAN_PART_COUNT = gibList[15].things?.length ?? 7; // 7
+
 export const ZOMBIE_GIB_PROFILE: GibProfile = {
   fleshPicnums: [...HUMANOID_FLESH_PICNUMS],
   bonePicnums: BONE_PICNUMS,
   boneWeight: 0.2,
-  bodyPartCount: { min: 4, max: 7 }, // NotBlood gibHuman = 7 chunks (gib.cpp:188)
+  bodyPartCount: { min: 4, max: GIB_HUMAN_PART_COUNT }, // max derived from gibHuman
+                             // (gib.cpp:188); min is a Blud feel value (fewer
+                             // chunks on partial gibs) — NOT derived.
   chunkCount: { min: 8, max: 14 },
   spawnsKickableHead: true, // Blood signature — kickable zombie head
 };
@@ -226,6 +254,8 @@ export const ZOMBIE_GIB_PROFILE: GibProfile = {
  * Cultist gib profile — same flesh/bone picnums as zombie for now (F2.cultist.gibs
  * will eventually give cultists their own palette), but `spawnsKickableHead` is
  * disabled because cultists are not zombies and shouldn't drop zombie heads.
+ * bodyPartCount is a deliberate Blud deviation (2-4) from the raw gibHuman
+ * count (7) — cultists spawn fewer chunks; NOT derived.
  */
 export const CULTIST_GIB_PROFILE: GibProfile = {
   fleshPicnums: [...HUMANOID_FLESH_PICNUMS],
@@ -237,11 +267,12 @@ export const CULTIST_GIB_PROFILE: GibProfile = {
 };
 
 // ——— Axe zombie ————————————————————————————————————
-// source: docs/tuning-sources.md R1 (aizomba.cpp + dudeInfo[axeZombie])
-// Starting values — these are our best read from NotBlood; feel-tune in Task 12 if needed.
+// hp derived from dudeInfo[kDudeZombieAxeNormal] (raw C aggregate; dude.cpp).
+// Movement/timing values are Blud feel — NOT derived.
+const ZOMBIE = dudeInfo[KDude.kDudeZombieAxeNormal - KDude.kDudeBase]!;
 export const AXE_ZOMBIE = {
-  hp: 60,                     // dudeInfo[axeZombie].startHealth
-  meleeDamage: 10,            // aizomba.cpp hit damage
+  hp: ZOMBIE.startHealth,       // 60 (raw)
+  meleeDamage: 10,              // aizomba.cpp hit damage — Blud feel value
   meleeRange: 1.5,            // m — ~sprite reach
   attackCooldownSec: 1.0,     // between swings
   speed: 3.0,                 // m/s — walk speed (shambler pace)
@@ -250,10 +281,11 @@ export const AXE_ZOMBIE = {
 } as const;
 
 // ——— Shotgun cultist —————————————————————————————
-// source: NotBlood dude.cpp dudeInfo[2] (kDudeCultistShotgun=202),
-// aicult.cpp cultistSFire (60 tic delay = 0.5s), weapon.cpp shotgun fire dmg
+// hp derived from dudeInfo[kDudeCultistShotgun] (raw C aggregate; dude.cpp).
+// Fire/timing values are Blud feel ports of aicult.cpp — NOT derived.
+const CULTIST_SHOTGUN = dudeInfo[KDude.kDudeCultistShotgun - KDude.kDudeBase]!;
 export const SHOTGUN_CULTIST = {
-  hp: 40,
+  hp: CULTIST_SHOTGUN.startHealth, // 40 (raw)
   walkSpeedMps: 2.3,           // BU/tic 34952 → m/s
   aggroRadiusM: 18,            // half of see-dist (cultist sees better than zombie)
   fireRangeM: 12,              // stops moving and fires when within
@@ -263,8 +295,8 @@ export const SHOTGUN_CULTIST = {
 } as const;
 
 // ——— Shotgun blast (pellet projectile) ———————————
-// source: NotBlood weapon.cpp shotgun fire dmg;
-// aicult.cpp cultistSFire pellet spread
+// NOT derived from tables — Blud feel ports of NotBlood weapon.cpp shotgun fire
+// dmg + aicult.cpp cultistSFire pellet spread. The tables module has no weapon fields.
 // TODO: cultist-specific gib palette (F2 follow-up) — reuse ZOMBIE_GIB_PROFILE for now
 export const SHOTGUN_BLAST = {
   pelletCount: 7,              // canonical Blood shotgun pellet count
@@ -274,7 +306,8 @@ export const SHOTGUN_BLAST = {
   spreadConeDeg: 14,           // half-angle of the pellet cone
 } as const;
 
-// ——— Flare gun ————————————————————————————————
+// ——— Flare gun ————————————————————————————
+// NOT derived — Blud-specific weapon feel values (no raw table source).
 export const FLARE_GUN = {
   raisingMs: 300,         // hold time before fire (no charge mechanic)
   muzzleVelMps: 25,       // initial projectile speed along camera-forward
@@ -283,10 +316,11 @@ export const FLARE_GUN = {
 } as const;
 
 // ——— Tommygun cultist ———————————————————————————
-// source: NotBlood dude.cpp dudeInfo[1] (kDudeCultistTommy=201),
-// aicult.cpp cultistTFire (stateTicks=0 → continuous fire)
+// hp derived from dudeInfo[kDudeCultistTommy] (raw C aggregate; dude.cpp).
+// Fire/timing values are Blud feel ports of aicult.cpp — NOT derived.
+const CULTIST_TOMMY = dudeInfo[KDude.kDudeCultistTommy - KDude.kDudeBase]!;
 export const TOMMY_CULTIST = {
-  hp: 40,
+  hp: CULTIST_TOMMY.startHealth, // 40 (raw)
   walkSpeedMps: 2.3,           // frontSpeed 46603 (same as shotgun cultist)
   aggroRadiusM: 18,
   fireRangeM: 12,
@@ -295,8 +329,8 @@ export const TOMMY_CULTIST = {
 } as const;
 
 // ——— Tommygun bullet (kVectorBullet) ——————————
-// source: NotBlood weapon.cpp kVectorBullet dmg=7;
-// spread: Random3(1200) horizontal jitter at 5120 units → half-angle
+// NOT derived from tables — source is weapon.cpp kVectorBullet dmg=7 + spread
+// formula (Random3(1200) horizontal jitter at 5120 units → half-angle).
 export const TOMMY_BULLET = {
   damage: 7,
   // atan(1200 / 5120) * 180/π ≈ 13.2° half-angle cone
@@ -304,12 +338,9 @@ export const TOMMY_BULLET = {
 } as const;
 
 // ——— Burn (applied by stuck flares) ————————
-// source: Blood actor.cpp fire/burn damage paths (kDamageBurn); generic
-// DOT mechanic found across Blood's actor type handlers.
-//
-// Zombie burn speed: NotBlood kDudeBurningZombieAxe frontSpeed=46603 vs
-// kDudeZombieAxeNormal frontSpeed=58254 → 0.80× normal speed.
-// (dude.cpp:1187 / dude.cpp:181; ai.cpp:321 aiMoveForward multiplier)
+// NOT derived from tables — Blud feel values porting Blood actor.cpp fire/burn
+// damage paths (kDamageBurn); generic DOT mechanic found across Blood's actor
+// type handlers. The tables module has no burn-specific fields.
 export const BURN = {
   durationSec: 6,                 // stuck flare burn lifetime
   dpsPerFlare: 8,                 // HP/s drained by each attached flare
@@ -318,15 +349,19 @@ export const BURN = {
   panicTargetRerollSec: 0.4,      // re-roll panic direction every 0.4s
   panicTargetRadiusM: 3,          // panic target picked within 3m of enemy
   zombieBurnSpeedMul: 0.8,        // burning zombie walks at 0.80× normal speed toward player
-  cultistBurnResetHp: 25,         // HP cap on Burning state entry — mirrors NotBlood
-                                  // dudeInfo[40].startHealth=25 for kDudeBurningCultist.
-                                  // Without this, full-HP cultists outlast the 5.4s burn window.
+                                  // (kDudeBurningZombieAxe frontSpeed 46603 vs normal 58254)
+  cultistBurnResetHp: 25,         // DELIBERATE DEVIATION — Blud HP cap on Burning state
+                                  // entry. The raw NotBlood value is 30
+                                  // (dudeInfo[40].startHealth for kDudeBurningCultist;
+                                  // actor.cpp:3036 heals to it on burn transition), but 25
+                                  // is kept so full-HP cultists don't outlast the burn window.
   groundFlameLifetimeSec: 4.0,    // ground-flame visual duration after burn-death
   groundFlameFadeSec: 0.5,        // ground-flame fade-out window (last N seconds)
   groundFlameSizeM: 0.6,          // ground-flame billboard size
 } as const;
 
 // ——— Wave runner ——————————————————————————
+// NOT derived — Blud-specific wave pacing feel values.
 export const WAVE_PRESETS = {
   breatherSec: 1.5,               // pause between waves once cleared
   zombieToughHpMultiplier: 2,     // 'zombie-tough' = 2x axe-zombie hp
