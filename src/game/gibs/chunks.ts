@@ -97,6 +97,37 @@ export class ChunkSystem {
     }
   }
 
+  /** Spawn body chunks from source-faithful NotBlood gib table entries.
+   *  Each entry carries its own tile (picnum) and per-chunk velocity in Three.js
+   *  m/s — the caller (GibSystem) has already axis-remapped Build→Three
+   *  (vz → +y, Build -z = up) and applied the GIB_CHUNK_VELOCITY_SCALE feel
+   *  knob. Mirrors GibThing's one-sprite-per-thing spawn with independent random
+   *  spread per chunk (gib.cpp:409-414). Tile mapping passes the gib picnum
+   *  straight to the atlas: the human gib tiles (1454/1267/1268/1269/1456) are
+   *  the same picnums the atlas already serves for HUMANOID_FLESH_PICNUMS, and
+   *  atlas.get falls back to the first texture on an unknown picnum (no throw).
+   *  @param headLaunch Optional kickable head — caller-gated (zombie only). */
+  spawnChunksFromGibs(
+    origin: Vec3,
+    gibs: { picnum: number; vel: Vec3 }[],
+    now: number,
+    headLaunch?: HeadLaunch,
+  ): void {
+    for (const g of gibs) {
+      this.spawnChunkBody(origin, g.vel, g.picnum, now);
+    }
+    // Kickable head — gated on headLaunch presence, mirroring spawnChunks'
+    // spawnsKickableHead gate (caller decides; zombies only).
+    if (headLaunch) {
+      this.spawnHeadChunk(headLaunch.origin, headLaunch.vel, now);
+    }
+    // FIFO-evict if over capacity (identical to spawnChunks)
+    while (this.chunks.length > this.capacity) {
+      this.despawn(this.chunks[0]!);
+      this.chunks.shift();
+    }
+  }
+
   /** Spawn the iconic kickable zombie head at an explicit origin + velocity.
    *  Public: also used for the 25% normal-death head-pop (GibSystem.popHead). */
   spawnHeadChunk(origin: Vec3, vel: Vec3, now: number): void {
@@ -170,6 +201,33 @@ export class ChunkSystem {
     totalCount: number,
     now: number,
   ): void {
+    // Radial outward direction plus explosion impulse (the hand-tuned Blud feel
+    // burst — the non-explosion gib path; explosion gibs use spawnChunksFromGibs).
+    const count = totalCount;
+    const theta = (index / count) * Math.PI * 2 + Math.random() * 0.8;
+    const radial = {
+      x: Math.cos(theta),
+      y: 0.8 + Math.random() * 0.8,   // stronger up-bias — chunks arc high
+      z: Math.sin(theta),
+    };
+    const radialSpeed = 5.0 + Math.random() * 4.0;   // 5-9 m/s (was 2.5-4.5)
+    // chunks inherit 60% of the dude's concussion velocity atop the radial burst
+    const vel: Vec3 = {
+      x: radial.x * radialSpeed + launchVel.x * 0.6,
+      y: radial.y * radialSpeed + launchVel.y * 0.6,
+      z: radial.z * radialSpeed + launchVel.z * 0.6,
+    };
+    this.spawnChunkBody(origin, vel, picnum, now);
+  }
+
+  /**
+   * Shared body-chunk factory: Rapier dynamic body + capsule collider + billboard
+   * sprite + blood trail. Used by BOTH the hand-tuned radial burst (spawnOne) and
+   * the source-faithful gib-table path (spawnChunksFromGibs) so there is zero
+   * visual/physics drift between them. The only argument that differs is the
+   * explicit launch velocity in m/s (already in Three.js space, y-up).
+   */
+  private spawnChunkBody(origin: Vec3, vel: Vec3, picnum: number, now: number): void {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(origin.x, origin.y, origin.z)
       .setLinearDamping(0.04)  // less drag — Blood chunks keep flying
@@ -181,24 +239,7 @@ export class ChunkSystem {
       .setFriction(0.35);
     this.world.createCollider(colliderDesc, body);
 
-    // Radial outward direction plus explosion impulse
-    const count = totalCount;
-    const theta = (index / count) * Math.PI * 2 + Math.random() * 0.8;
-    const radial = {
-      x: Math.cos(theta),
-      y: 0.8 + Math.random() * 0.8,   // stronger up-bias — chunks arc high
-      z: Math.sin(theta),
-    };
-    const radialSpeed = 5.0 + Math.random() * 4.0;   // 5-9 m/s (was 2.5-4.5)
-    body.setLinvel(
-      {
-        // chunks inherit 60% of the dude's concussion velocity atop the radial burst
-        x: radial.x * radialSpeed + launchVel.x * 0.6,
-        y: radial.y * radialSpeed + launchVel.y * 0.6,
-        z: radial.z * radialSpeed + launchVel.z * 0.6,
-      },
-      true,
-    );
+    body.setLinvel({ x: vel.x, y: vel.y, z: vel.z }, true);
     body.setAngvel(
       {
         x: (Math.random() - 0.5) * 18, // faster tumble

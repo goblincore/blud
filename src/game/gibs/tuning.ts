@@ -177,6 +177,15 @@ export const GIB_BURST = {
   tile: 2154,
 } as const;
 
+// ——— Source-faithful gib chunk velocity scale ————————————————
+// Blud feel knob (NOT derived). Multiplies the m/s velocities that come from the
+// NotBlood gibSpawns table (death-outcome.ts spawnBodyChunks → outcome-adapter
+// gibSpawnToMps) before they drive ChunkSystem bodies. 1.0 = pure source-faithful
+// (the project owner's chosen default; raw NotBlood is fast — up to ~75 m/s
+// horizontal, ~225 m/s vertical from the gibHuman atc/at10 spread bounds).
+// Dial DOWN after playtest if chunks fly too hot.
+export const GIB_CHUNK_VELOCITY_SCALE = 1.0;
+
 // ——— Gib profile ————————————————————————————————————————
 // M3 infrastructure for per-enemy death customization. Each enemy type
 // declares a profile; GibSystem reads it at gib time for spawn counts +

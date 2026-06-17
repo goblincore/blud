@@ -15,9 +15,11 @@ import {
   buPerTicSquaredToMpsSquared,
   ZOMBIE_GIB_PROFILE,
   EXPLOSION_LAUNCH,
+  GIB_CHUNK_VELOCITY_SCALE,
   type GibProfile,
 } from './tuning';
 import { resolveDeathOutcome, KDamage, type DeathOutcomeConfig } from '../notblood/death-outcome';
+import { gibSpawnToMps } from '../notblood/outcome-adapter';
 import { KDude } from '../notblood/notblood-tables.gen';
 export interface ExplosionInfo {
   radius: number;       // Build units
@@ -199,10 +201,10 @@ export class GibSystem {
       //   sub-160 explode→kDamageFall demotion, and the zombie head-spawn
       //   (GIBTYPE_27) all live there now. damageType=kDamageExplode because this
       //   IS an explosion; the module demotes sub-160 hits itself. The EFFECTS
-      //   (chunk burst, concussion launch, SFX) stay here — Blud physics.
-      //   (The outcome's source-faithful gibSpawns are NOT fed to ChunkSystem:
-      //   their raw BU/tic velocities read ~300km/s and need a calibration pass;
-      //   triggerGib's profile-based spawning IS the playtested chunk feel.)
+      //   (chunk burst via gibSpawns, concussion launch, SFX) stay here — Blud
+      //   physics. The outcome's source-faithful gibSpawns now drive ChunkSystem:
+      //   gibSpawnToMps descales the MoveThing xvel>>12 integration by /4096, then
+      //   the velocities are axis-remapped Build→Three and feel-scaled here.
       const outcome = resolveDeathOutcome(
         {
           dudeType: dudeTypeForKind(dude.kind),
@@ -215,17 +217,56 @@ export class GibSystem {
       );
 
       if (outcome.gibbed) {
-        // spawnsHead (zombie-only) drives the kickable-head gate; corpses and
-        // non-zombies never spawn one. Overrides the profile flag so the
-        // decision is single-sourced in the pure module (matches every kind:
-        // zombie profile already true, cultist/player already false, corpse
-        // forced false).
-        this.triggerGib(
-          dude.pos,
-          launchVel,
-          { ...dude.gibProfile, spawnsKickableHead: outcome.spawnsHead },
-          now,
-        );
+        // Source-faithful body chunks: convert the NotBlood gibSpawns (raw Build
+        // xvel/yvel/zvel fields → m/s via gibSpawnToMps, which descales the
+        // MoveThing xvel>>12 integration by /4096), then axis-remap Build→Three
+        // and apply the GIB_CHUNK_VELOCITY_SCALE feel knob. Mirrors GibThing's
+        // one-sprite-per-thing spawn (gib.cpp:409-414). NOTE the load-bearing
+        // sign-flip: Build is -z = up, Three.js is +y = up, so three.y = -vz;
+        // the two horizontal axes are symmetric random spreads so the x/z
+        // assignment is cosmetic — get the y flip right or chunks dive into the
+        // floor instead of arcing up.
+        const gibs = outcome.gibSpawns.map((spawn) => {
+          const mps = gibSpawnToMps(spawn);
+          return {
+            picnum: mps.tile,
+            vel: {
+              x: mps.vx * GIB_CHUNK_VELOCITY_SCALE,
+              y: -mps.vz * GIB_CHUNK_VELOCITY_SCALE, // Build -z=up → Three +y
+              z: mps.vy * GIB_CHUNK_VELOCITY_SCALE,
+            } as Vec3,
+          };
+        });
+        // Kickable head — still derived from the concussion launch velocity +
+        // EXPLOSION_LAUNCH, gated on outcome.spawnsHead (zombie explode death
+        // only; corpses + cultists + player never). Mirrors triggerGib's
+        // headLaunch so the head is identical across paths.
+        const headLaunch = outcome.spawnsHead
+          ? {
+              origin: { x: dude.pos.x, y: dude.pos.y + EXPLOSION_LAUNCH.headSpawnHeightM, z: dude.pos.z },
+              vel: {
+                x: launchVel.x * EXPLOSION_LAUNCH.headVelInherit,
+                y: EXPLOSION_LAUNCH.headUpKickMps,
+                z: launchVel.z * EXPLOSION_LAUNCH.headVelInherit,
+              },
+            }
+          : undefined;
+        this.chunks.spawnChunksFromGibs(dude.pos, gibs, now, headLaunch);
+        // FX_13 blood-particle spray — the separate gFXData[13] fx, NOT part of
+        // gibSpawns. Kept alongside the source-faithful chunks (values match the
+        // triggerGib radial path so the spray is identical).
+        const burstCount = dude.gibProfile.chunkCount.max * 2;
+        this.particles.emitBurst(dude.pos, {
+          tile: GIB_BURST.tile,
+          count: burstCount,
+          speedMin: GIB_BURST.speedMin,
+          speedMax: GIB_BURST.speedMax,
+          gravity: 9.8,
+          airdrag: 0.3,
+          lifetimeSec: 2.0,
+          size: 0.5,
+        });
+        console.log(`[gibs] GIB! at (${dude.pos.x.toFixed(1)},${dude.pos.y.toFixed(1)},${dude.pos.z.toFixed(1)})`);
         dude.onGibbed?.();
         if (dude.kind === 'player') this.onPlayerGibbed();
         else this.unregisterDude(dude.id);
