@@ -18,7 +18,7 @@ const WALK_SPEED = 6;
 const RUN_SPEED = 9;
 const JUMP_VELOCITY = 8.5;
 const MOUSE_SENSITIVITY = 0.0022;
-const EYE_HEIGHT = 1.55;
+const EYE_HEIGHT = 1.75; // eye above feet (tunable feel value; 1.55 read as too short vs ~1.95m enemy sprites)
 const BODY_RADIUS = 0.3;
 const BODY_HALF_HEIGHT = 0.7; // total capsule height = 2*(radius + halfHeight) = 2
 

@@ -466,6 +466,29 @@ async function main() {
   // ——— Configure FlareGun external hooks (spawn stuck flares, raycast) ———
   const flareGun = weapons.getFlareGun();
   flareGun.spawnStuckFlare = (pos, attachedBody) => {
+    // NotBlood actor.cpp:3884-3896 — a flare STICKS only to flesh (a dude). A flare
+    // that hits a wall, floor, or any non-dude gibs into a spark and vanishes; it
+    // does NOT create a persistent floating flare. So resolve the enemy this hit
+    // body belongs to first, and only stick if it's one.
+    let enemy: AxeZombie | ShotgunCultist | null = null;
+    if (attachedBody) {
+      for (const z of cluster.getZombies()) {
+        if (z.rigidBody.handle === attachedBody.handle) { enemy = z; break; }
+      }
+    }
+
+    if (!enemy) {
+      // Geometry / miss — brief spark and vanish (mirrors NotBlood's GibSprite on
+      // a non-flesh impact). No StuckFlare is created, so nothing floats.
+      particles.emitBurst(pos, {
+        tile: 2424, count: 8, speedMin: 2.0, speedMax: 5.0,
+        gravity: 9.8, airdrag: 0.3, lifetimeSec: 0.35, size: 0.12,
+      });
+      return;
+    }
+
+    // Flesh hit — stick the flare to the dude (persists until death; the host
+    // extinguishes it on death — see AxeZombie/ShotgunCultist.update) and ignite.
     const flare = new StuckFlare(`flare-${flareIdCounter++}`, pos, attachedBody, performance.now() / 1000);
     stuckFlareRegistry.push(flare);
 
@@ -483,15 +506,8 @@ async function main() {
     scene.add(mesh);
     flare.mesh = mesh;
 
-    if (attachedBody) {
-      for (const z of cluster.getZombies()) {
-        if (z.rigidBody.handle === attachedBody.handle) {
-          if (z instanceof AxeZombie) z.attachFlare(flare);
-          else if (z instanceof ShotgunCultist) z.attachFlare(flare);
-          break;
-        }
-      }
-    }
+    if (enemy instanceof AxeZombie) enemy.attachFlare(flare);
+    else if (enemy instanceof ShotgunCultist) enemy.attachFlare(flare);
   };
   flareGun.raycastFn = (from, dir, maxDist) => {
     const dLen = Math.hypot(dir.x, dir.y, dir.z);
