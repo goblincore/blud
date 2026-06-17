@@ -60,13 +60,15 @@ describe('dynamite tuning', () => {
   it('fuseMaxSec is 1.5 (shorter fuse for snappier feel, closer to Blood weaponTimer)', () => {
     expect(DYNAMITE_COOK.fuseMaxSec).toBe(1.5);
   });
-  it('throw velocity range matches Blood nSpeed >> 16 (F1 port: min ~3 m/s, max ~14 m/s)', () => {
-    // source: weapon.cpp:1215, nSpeed = mulscale16(throwPower, 0x177777) + 0x66666
-    // xvel = mulscale30(nSpeed, cos(ang)) = nSpeed >> 16 when cos(ang) = 16384
-    // min = 0x66666  >> 16 =  6.4 BU/tic → ~3.0 m/s at BU_PER_METER=256, TICS/s=120
-    // max = 0x1DDDDD >> 16 = 29.9 BU/tic → ~14.0 m/s
-    expect(DYNAMITE_COOK.minVelocityMps).toBeCloseTo(3.0, 1);
-    expect(DYNAMITE_COOK.maxVelocityMps).toBeCloseTo(14.0, 1);
+  it('throw velocity range is tuned to the source-simulated RANGE (min ~3 m, full ~68 m)', () => {
+    // CORRECTED 2026-06-17: Blood's Cos() reads costable[] (2^30), NOT sintable
+    // (2^14), so xvel ≈ nSpeed (not nSpeed>>16). The thrown bundle is a kThing
+    // (MoveThing x+=xvel>>12/tic, light airdrag, gravity) — simulating that exact
+    // integer trajectory gives a full-charge RANGE ≈ 68 m at 256 BU/m (min ≈ 3 m).
+    // We match the source RANGE (Blud uses a Rapier body + sane gravity, range ∝ v²),
+    // so the old 14 m/s (~17 m) roughly doubles. See DYNAMITE_COOK comment.
+    expect(DYNAMITE_COOK.minVelocityMps).toBeCloseTo(6.0, 1);
+    expect(DYNAMITE_COOK.maxVelocityMps).toBeCloseTo(28.0, 1);
     expect(DYNAMITE_COOK.maxVelocityMps).toBeGreaterThan(DYNAMITE_COOK.minVelocityMps);
   });
   it('pitchLobDeg exists and is in a plausible range (15–45°)', () => {

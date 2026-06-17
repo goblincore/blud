@@ -114,22 +114,27 @@ export const CORPSE = {
 // The tables module doesn't carry these; they live as inline arithmetic in C.
 //
 // Blood: nSpeed = mulscale16(throwPower, 0x177777) + 0x66666
-//        xvel   = mulscale30(nSpeed, cos(ang))
+//        xvel   = mulscale30(nSpeed, Cos(ang))   // Cos = costable[] (trig.h)
 //        zvel   = mulscale14(nSpeed, slope + (-9460))
 //
-// The xvel path: since cos/sin returns values in [-16384, +16384] (= 2^14),
-// mulscale30(nSpeed, ±16384) == nSpeed >> 16. So the horizontal throw-speed
-// in BU/tic equals nSpeed >> 16:
-//   min = 0x66666   >> 16 =  6.4 BU/tic   (throwPower = 0)
-//   max = 0x1DDDDD  >> 16 = 29.86 BU/tic  (throwPower = 65536, full charge)
+// CORRECTED 2026-06-17 (range felt far too short vs NotBlood). The OLD comment
+// assumed Cos returns ±2^14 (the `sintable`), giving xvel ≈ nSpeed>>16 ≈ 30 →
+// ~14 m/s. WRONG: Blood's Cos()/Sin() (trig.h) read `costable[]`, the 2^30
+// high-precision table (costable[0] = 0x40000000). So mulscale30(nSpeed, Cos≈2^30)
+// ≈ nSpeed. The thrown bundle is a kThing moved by MoveThing as `x += xvel>>12`
+// per tic (actor.cpp:4423), with light airdrag (actAirDrag a2=128 ≈ 0.2%/tic,
+// actor.cpp:6298) and gravity zvel+=58254/tic while airborne.
 //
-// (An earlier comment here had the max as 13.86 — off by 2× because it did
-// the arithmetic on (0x66666 + 0x177777) >> 16 instead of reading the Build
-// scale-30 correctly. The felt-too-light throw in M2 came from that bug.)
-//
-// Converting BU/tic → m/s with BU_PER_METER=256, TICS_PER_SECOND=120:
-//   min ≈  6.4 * 120 / 256 ≈  3.0 m/s
-//   max ≈ 29.9 * 120 / 256 ≈ 14.0 m/s
+// Simulating that exact integer trajectory (see /tmp dyn_sim) gives the real
+// horizontal RANGE, at Blud's 256 BU/m render scale:
+//   min charge  ≈   3 m
+//   half charge ≈  25 m
+//   full charge ≈  68 m   (clears the 40 m arena — "throws a lot further")
+// Blud's prior 14 m/s reached only ~17 m at full charge. NOTE we match the
+// source RANGE, not its raw launch speed: Blood's physics scale ≠ its render
+// scale (the sim's launch speeds/gravity read absurd in metres), and Blud's
+// dynamite is a Rapier body under sane world gravity, so range ∝ v². The source
+// is ~4× our old range → ~2× the launch velocity (below).
 //
 // PITCH BIAS: the a4 argument to actFireThing is `slope + (-9460)`. Blood's
 // slope range is [-16384, +16384] for aim in [-90°, +90°]. The constant
@@ -138,8 +143,8 @@ export const CORPSE = {
 // PITCH_LOB_DEG below.
 export const DYNAMITE_COOK = {
   maxChargeSec: 2.0,          // 240 tics @ 120 TPS (matches Blood's divscale16 / 240)
-  minVelocityMps: 3.0,        // Blood nSpeed min (0x66666 >> 16) → m/s
-  maxVelocityMps: 14.0,       // Blood nSpeed max (0x1DDDDD >> 16) → m/s
+  minVelocityMps: 6.0,        // tuned so min-charge range ≈ 3 m (source-simulated; range ∝ v²)
+  maxVelocityMps: 28.0,       // tuned so full-charge range ≈ 68 m (source-simulated; was 14 → ~17 m)
   fuseMaxSec: 1.5,            // Blood weaponTimer-based fuse ≈ 50 tics ≈ 0.4s; Blud 1.5s for feel
                               // (used by alt-fire / drop / overcook self-explode; NOT primary throw)
   impactSafetyFuseSec: 5.0,   // Primary-fire impact-detonate: this is the in-flight fallback timeout
