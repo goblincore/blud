@@ -20,7 +20,12 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**Explosion-outcomes pass landed (2026-06-10)** — NotBlood-faithful three-tier dynamite outcomes: survivors launched airborne (Launched brain state + kinematic ballistics), sub-160 kills become flung intact corpses that persist and re-gib, full gibs spawn the head from head height alongside a 4-7 chunk burst, 25% head-pop on normal zombie deaths, LaunchedCorpseManager deleted. **Next: manual playtest** (acceptance checklist in the plan's Task 10), then continue M5 bestiary.
+**NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
+
+**Next session — pick up (prioritized):**
+1. **Exercise the new pipeline (low-risk, proves value):** fix the `gibSpawns` velocity unit semantics (Blood fixed-point — see the caveat in `src/game/notblood/outcome-adapter.ts`) and wire it into ChunkSystem for source-faithful gib composition; OR port one new behavior on the pipeline+tables (e.g. `F2.cultist.dodge` / `F2.cultist.search`, or a new bestiary enemy).
+2. **120-tic deterministic core** (deferred big foundation) — now tic-clock-ready by design; prereq for the planned multiplayer netcode and makes future AI/weapon ports verbatim. Best as its own dedicated session (touches every system; full feel re-playtest). Context in the dualmem `port-vs-recreate` decision memory + Obsidian `Claude Notes/Blud/2026-06-10-port-vs-recreate-thinking.md`.
+3. **M5 bestiary + Phase 1 gate** — 30-min arena = fun playtest before any level code.
 
 Key reference docs (open these before touching their area):
 - Design spec — [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
