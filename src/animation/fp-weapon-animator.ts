@@ -43,6 +43,10 @@ export class FpWeaponAnimator {
   private bobPhase = 0;
   /** Per-frame horizontal speed input for bob amplitude. Updated by setWalkSpeed(). */
   private walkSpeed = 0;
+  /** Last-applied view-bob offset in camera space (x=right, y=up). Exposed via
+   *  getBobOffset() so weapon spawn origins can track the swaying gun sprite. */
+  private bobX = 0;
+  private bobY = 0;
 
   constructor(
     private camera: THREE.PerspectiveCamera,
@@ -89,6 +93,16 @@ export class FpWeaponAnimator {
   /** Set current player horizontal speed (m/s). Drives view bob amplitude. */
   setWalkSpeed(mps: number): void { this.walkSpeed = mps; }
 
+  /**
+   * Current view-bob offset in camera space (x = screen-right, y = screen-up),
+   * matching what the last update() applied to the gun sprite. Weapon spawn
+   * origins add this in the same camera space so projectiles track the gun
+   * while walking / strafing. Returns {0,0} before the first update().
+   */
+  getBobOffset(): { x: number; y: number } {
+    return { x: this.bobX, y: this.bobY };
+  }
+
   /** Force restart an animation (even if same name). Used for state re-entry. */
   restart(name: string, nowSec: number): void {
     this.currentAnim = null; // clear so play() picks it up fresh
@@ -107,8 +121,10 @@ export class FpWeaponAnimator {
     // hand traces a figure-8 (classic FPS bob).
     const walkAmount = Math.min(this.walkSpeed / 5, 1); // full bob at 5 m/s
     this.bobPhase += dt * (6 + walkAmount * 6); // 1-2 Hz
-    const bobY = walkAmount * 0.018 * Math.sin(this.bobPhase * 2);
-    const bobX = walkAmount * 0.012 * Math.sin(this.bobPhase);
+    this.bobY = walkAmount * 0.018 * Math.sin(this.bobPhase * 2);
+    this.bobX = walkAmount * 0.012 * Math.sin(this.bobPhase);
+    const bobX = this.bobX;
+    const bobY = this.bobY;
 
     const elapsedMs = (nowSec - this.playbackStart) * 1000;
     const idx = pickFrameIndex(anim.frames, elapsedMs, anim.loop);

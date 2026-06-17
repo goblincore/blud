@@ -34,6 +34,7 @@ import { mountDevPanel } from './vfx/post-fx/dev-panel';
 import { GibSystem } from './game/gibs';
 import { loadGibTextures, loadExplosionAtlas, loadTexture, loadAnimationManifests, loadSfxRegistry, loadAmbientBuffers } from './engine/asset-loader';
 import { FpWeaponAnimator } from './animation/fp-weapon-animator';
+import { muzzleWorldPosition, type CameraBasis } from './game/weapons/muzzle-pos';
 import { BillboardAnimator } from './animation/billboard-animator';
 import { createAudioEngine } from './audio/engine';
 import { Sfx } from './audio/sfx';
@@ -82,10 +83,19 @@ class PlayerGibAdapter implements GibbableDude {
 
 /** Adapter: M1 player → Weapon Player interface. */
 class WeaponPlayerAdapter implements WeaponPlayer {
+  /** Optional view-bob provider (the FPV animator); wired after the animator
+   *  is constructed. Returns the bob in camera space (x=right, y=up). */
+  private bobProvider: (() => { x: number; y: number }) | undefined;
+
   constructor(
     private readonly getPos: () => THREE.Vector3,
     private readonly cam: THREE.PerspectiveCamera,
   ) {}
+
+  /** Wire the FPV animator's view-bob so the muzzle tracks the gun sprite. */
+  setBobProvider(fn: () => { x: number; y: number }): void {
+    this.bobProvider = fn;
+  }
 
   get pos(): Vec3 {
     const p = this.getPos();
@@ -99,15 +109,44 @@ class WeaponPlayerAdapter implements WeaponPlayer {
   }
 
   get handPos(): Vec3 {
-    // Approximate hand position: slightly below eye level, offset right
-    const p = this.getPos();
-    return { x: p.x + 0.2, y: p.y + 1.3, z: p.z };
+    // Anchor the muzzle to the *camera basis* (not world axes) so it rotates
+    // with yaw/pitch and stays under the first-person gun sprite while
+    // strafing. The camera's world matrix columns give an orthonormal basis;
+    // updateWorldMatrix ensures it reflects the current position/rotation set
+    // during this fixed step (before the renderer would refresh it).
+    this.cam.updateWorldMatrix(true, false);
+    const e = this.cam.matrixWorld.elements;
+    const basis: CameraBasis = {
+      right: { x: e[0], y: e[1], z: e[2] },     // local +X (screen-right)
+      up: { x: e[4], y: e[5], z: e[6] },        // local +Y (screen-up)
+      forward: { x: -e[8], y: -e[9], z: -e[10] }, // local -Z (look dir)
+    };
+    const eye = this.cam.position; // eye = body + EYE_HEIGHT (set in player.update)
+    const bob = this.bobProvider?.() ?? { x: 0, y: 0 };
+    return muzzleWorldPosition(
+      { x: eye.x, y: eye.y, z: eye.z },
+      basis,
+      HAND_MUZZLE_LATERAL,
+      HAND_MUZZLE_VERTICAL,
+      HAND_MUZZLE_FORWARD,
+      bob,
+    );
   }
 
   takeDamage(_amount: number, _impulse: Vec3): void {
     // Player damage — overcook = gib via GibSystem directly
   }
 }
+
+// ——— FPV muzzle tuning ————————————————————————————
+// Hand/muzzle offset in *camera* space, relative to the eye (camera origin).
+// The lateral/vertical rotate with the camera so the muzzle tracks the
+// first-person gun sprite when turning/strafing (see muzzle-pos.ts).
+// Old world-space handPos was body.y + 1.3 with eye at body.y + 1.55, so the
+// muzzle sat 0.25 m below eye — preserved here as VERTICAL = -0.25.
+const HAND_MUZZLE_LATERAL = 0.2; // screen-right of eye
+const HAND_MUZZLE_VERTICAL = -0.25; // below eye
+const HAND_MUZZLE_FORWARD = 0.5; // toward the gun muzzle (gun renders at ~0.6 m)
 
 const FIXED_DT = 1 / 60;
 
@@ -287,6 +326,9 @@ async function main() {
       animBundle.tileMeta,
       getTileTexture,
     );
+    // Wire the animator's view-bob into the weapon adapter so the flare /
+    // dynamite muzzle origin tracks the swaying gun sprite while walking.
+    weaponPlayer.setBobProvider(() => fpAnimator?.getBobOffset() ?? { x: 0, y: 0 });
     // Don't pre-play here — Dynamite's lazy init on first onFrame plays the
     // equip animation (BUNUP2 'dynamite-raise'), then transitions to idle.
 
