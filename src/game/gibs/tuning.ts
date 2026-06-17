@@ -322,6 +322,13 @@ export const FLARE_GUN = {
   muzzleVelMps: 25,       // initial projectile speed along camera-forward
   gravityMps2: 9.81,      // arc gravity (Y-axis down)
   ammoMax: 10,            // starting flare count
+  // Safety fallback (defense in depth), NOT the primary despawn. A flare that
+  // threads through all geometry can never live longer than this. The
+  // per-frame floor/wall collision (flare.ts segment sweep) is the primary
+  // despawn — matching NotBlood MoveMissile, where the floor hit is the
+  // natural end (Blood has no flare timeout). 8s comfortably exceeds the
+  // ~4.5s flight time of a max-range arc.
+  maxLifetimeSec: 8,
 } as const;
 
 // ——— Tommygun cultist ———————————————————————————

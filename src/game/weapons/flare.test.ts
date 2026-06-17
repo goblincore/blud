@@ -6,6 +6,7 @@ import {
   FlareGun,
 } from './flare';
 import type { FrameCtx } from './types';
+import type { Vec3 } from '../gibs/particles';
 import { FLARE_GUN } from '../gibs/tuning';
 
 describe('flareArcPosition', () => {
@@ -221,5 +222,100 @@ describe('FlareGun FSM', () => {
     expect(f.chargeFraction()).toBe(0);
     f.onPress(makeCtx(1));
     expect(f.chargeFraction()).toBe(0); // even during raising
+  });
+});
+
+// ——— Per-frame segment-sweep collision (2026-06-17 flare-stuck fix) —————————
+// Regression: flares fired upward that hit nothing used to freeze midair
+// because collision was a single spawn→current chord raycast. Once the arc
+// passed its apex and the chord stopped pointing at the floor, the flare
+// sailed through the ground and never resolved. Fix: per-frame segment sweep
+// (prevPos→newPos), mirroring NotBlood MoveMissile's frame-by-frame clipmove.
+
+describe('FlareGun projectile segment-sweep collision', () => {
+  /** makeCtx with a custom (upward) aim. */
+  function makeCtxUp(now: number, forward: Vec3): FrameCtx {
+    const c = makeCtx(now);
+    c.player.forward = forward;
+    return c;
+  }
+
+  /**
+   * Floor raycast modeled as continuous-collision-detection: a hit is only
+   * reported when a SHORT per-frame sweep crosses the floor plane. A long
+   * spawn→current chord (the bug) is rejected (maxDist too large) — which is
+   * exactly why arcing flares missed the floor in production. Matches the
+   * production raycastFn signature (from, dir, maxDist) → hit|null.
+   */
+  function makeFloorRaycast(floorY = 0) {
+    return (from: Vec3, dir: Vec3, maxDist: number): { pos: Vec3; body: null } | null => {
+      if (maxDist > 3) return null; // reject long chords (CCD sweeps short segments)
+      const endY = from.y + dir.y * maxDist;
+      if (from.y > floorY && endY <= floorY && dir.y < 0) {
+        const frac = (floorY - from.y) / (dir.y * maxDist);
+        return {
+          pos: {
+            x: from.x + dir.x * maxDist * frac,
+            y: floorY,
+            z: from.z + dir.z * maxDist * frac,
+          },
+          body: null,
+        };
+      }
+      return null;
+    };
+  }
+
+  it('arcing flare that hits nothing lands on the floor (segment sweep), not frozen midair', () => {
+    const f = new FlareGun();
+    // ~60° elevation: horizontal range (~56m) stays under FLARE_MAX_RANGE_M so
+    // the world-bounds guard can't steal the despawn — the floor hit must.
+    const forward: Vec3 = { x: 0, y: 0.866, z: -0.5 };
+    const mkCtx = (now: number) => makeCtxUp(now, forward);
+
+    f.onFrame(mkCtx(0), 0);
+
+    let stuckAt: Vec3 | null = null;
+    f.spawnStuckFlare = (pos) => { stuckAt = pos; };
+    f.raycastFn = makeFloorRaycast(0);
+
+    f.onPress(mkCtx(1));
+    f.onFrame(mkCtx(1.4), 0.4); // past raisingMs → projectile (spawnTime = 1.4)
+    expect(f.phase()).toBe('projectile');
+
+    let landedAt = -1;
+    for (let t = 1.5; t < 1.4 + FLARE_GUN.maxLifetimeSec; t += 0.05) {
+      f.onFrame(mkCtx(t), 0.05);
+      if (f.phase() === 'idle') { landedAt = t; break; }
+    }
+
+    // It must leave the projectile phase (the bug left it stuck forever)…
+    expect(landedAt).toBeGreaterThan(-1);
+    // …via collision, well before the lifetime safety net kicks in…
+    expect(landedAt).toBeLessThan(1.4 + FLARE_GUN.maxLifetimeSec);
+    // …landing on the floor (y≈0), spawning a StuckFlare.
+    expect(stuckAt).not.toBeNull();
+    expect(stuckAt!.y).toBeCloseTo(0, 1);
+    expect(f.hasProjectile()).toBe(false);
+  });
+
+  it('lifetime safety net extinguishes a flare that never collides (defense in depth)', () => {
+    const f = new FlareGun();
+    f.onFrame(makeCtx(0), 0);
+    f.raycastFn = () => null; // threads through all geometry — never collides
+    let stuck = false;
+    f.spawnStuckFlare = () => { stuck = true; };
+
+    f.onPress(makeCtx(1));
+    f.onFrame(makeCtx(1.4), 0.4); // → projectile (spawnTime = 1.4)
+
+    // Jump one frame past the max lifetime. The lifetime check runs first in
+    // advanceProjectile (before collision/range), so the safety net
+    // deterministically extinguishes — a flare can never live forever.
+    f.onFrame(makeCtx(1.4 + FLARE_GUN.maxLifetimeSec + 0.5), 0.5);
+
+    expect(f.phase()).toBe('idle');
+    expect(f.hasProjectile()).toBe(false);
+    expect(stuck).toBe(false); // extinguished, not stuck
   });
 });

@@ -36,6 +36,8 @@ interface FlareProjectile {
   spawnPos: Vec3;
   vel: Vec3;
   spawnTime: number;
+  /** Previous frame's position — origin of the per-frame segment-sweep collision. */
+  lastPos: Vec3;
 }
 
 /** Maximum travel distance before the projectile is extinguished (void-collision). */
@@ -163,6 +165,7 @@ export class FlareGun implements Weapon {
       spawnPos: { ...ctx.player.handPos },
       vel,
       spawnTime: ctx.now,
+      lastPos: { ...ctx.player.handPos },
     };
     this.ammo--;
     this._phase = 'projectile';
@@ -178,6 +181,16 @@ export class FlareGun implements Weapon {
   private advanceProjectile(ctx: FrameCtx, _dt: number): void {
     if (!this.projectile) return;
     const t = ctx.now - this.projectile.spawnTime;
+
+    // Lifetime safety net (defense in depth): guarantee a flare can never
+    // live forever even if it threads through all geometry. The per-frame
+    // floor/wall collision below is the PRIMARY despawn; this is secondary.
+    if (t > FLARE_GUN.maxLifetimeSec) {
+      console.warn('[flare] projectile exceeded max lifetime — extinguishing');
+      this.extinguish(ctx);
+      return;
+    }
+
     const newPos = flareArcPosition(
       this.projectile.spawnPos,
       this.projectile.vel,
@@ -192,43 +205,42 @@ export class FlareGun implements Weapon {
       this.projectileMesh.visible = true;
     }
 
-    // Sweep collision: raycast from spawn to current position.
-    const dirVec = {
-      x: newPos.x - this.projectile.spawnPos.x,
-      y: newPos.y - this.projectile.spawnPos.y,
-      z: newPos.z - this.projectile.spawnPos.z,
+    // Per-frame SEGMENT SWEEP: raycast from the previous frame's position to
+    // the current one. This mirrors NotBlood's frame-by-frame clipmove
+    // (actor.cpp MoveMissile) so a descending arc actually intersects the
+    // floor/walls it falls into. The old spawn→current chord stopped pointing
+    // at the floor once the arc passed its apex, so the flare sailed through
+    // the ground and never resolved.
+    const lastPos = this.projectile.lastPos;
+    const segVec = {
+      x: newPos.x - lastPos.x,
+      y: newPos.y - lastPos.y,
+      z: newPos.z - lastPos.z,
     };
-    const dist = Math.hypot(dirVec.x, dirVec.y, dirVec.z);
+    const segLen = Math.hypot(segVec.x, segVec.y, segVec.z);
 
-    // World-bounds escape guard: if barely moved, skip raycast
-    if (dist < 0.001) return;
-
-    const dir = {
-      x: dirVec.x / dist,
-      y: dirVec.y / dist,
-      z: dirVec.z / dist,
-    };
-
-    const hit = this.raycastFn?.(this.projectile.spawnPos, dir, dist);
-    if (hit) {
-      this.spawnStuckFlare?.(hit.pos, hit.body);
-      ctx.sfx?.play(SfxEvent.FLARE_IMPACT, hit.pos);
-      this.hideProjectileMesh();
-      ctx.fpAnimator?.restart('flare-idle', ctx.now);
-      this.projectile = null;
-      this._phase = 'idle';
-      this.phaseEnteredAt = ctx.now;
-      return;
+    if (segLen >= 1e-4) {
+      const segDir = { x: segVec.x / segLen, y: segVec.y / segLen, z: segVec.z / segLen };
+      const hit = this.raycastFn?.(lastPos, segDir, segLen);
+      if (hit) {
+        this.spawnStuckFlare?.(hit.pos, hit.body);
+        ctx.sfx?.play(SfxEvent.FLARE_IMPACT, hit.pos);
+        this.extinguish(ctx);
+        return;
+      }
+      this.projectile.lastPos = newPos;
     }
 
-    // World-bounds escape: silently extinguish if projectile has traveled too far
-    if (dist > FLARE_MAX_RANGE_M) {
+    // World-bounds escape: silently extinguish if the projectile has traveled
+    // too far from its spawn (secondary to collision + lifetime).
+    const distFromSpawn = Math.hypot(
+      newPos.x - this.projectile.spawnPos.x,
+      newPos.y - this.projectile.spawnPos.y,
+      newPos.z - this.projectile.spawnPos.z,
+    );
+    if (distFromSpawn > FLARE_MAX_RANGE_M) {
       console.warn('[flare] projectile left world bounds — extinguishing');
-      this.hideProjectileMesh();
-      ctx.fpAnimator?.restart('flare-idle', ctx.now);
-      this.projectile = null;
-      this._phase = 'idle';
-      this.phaseEnteredAt = ctx.now;
+      this.extinguish(ctx);
     }
   }
 
@@ -247,6 +259,15 @@ export class FlareGun implements Weapon {
       (this.projectileMesh.material as THREE.Material).dispose();
       this.projectileMesh = null;
     }
+  }
+
+  /** Teardown shared by every despawn path (collision / range / lifetime). */
+  private extinguish(ctx: FrameCtx): void {
+    this.hideProjectileMesh();
+    ctx.fpAnimator?.restart('flare-idle', ctx.now);
+    this.projectile = null;
+    this._phase = 'idle';
+    this.phaseEnteredAt = ctx.now;
   }
 
   /** True if there is an active projectile in flight. */
