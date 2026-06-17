@@ -23,7 +23,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
 **Next session — pick up (prioritized):**
-1. **Exercise the new pipeline — IN PROGRESS (awaiting playtest):** `gibSpawns` now drive ChunkSystem (unit bug fixed: adapter descales by `/4096` for MoveThing `xvel>>12`). **Manual playtest needed** — dial `GIB_CHUNK_VELOCITY_SCALE` (default 1.0) to taste; OR port one new behavior on the pipeline+tables (e.g. `F2.cultist.dodge` / `F2.cultist.search`, or a new bestiary enemy).
+1. **Exercise the new pipeline — DONE + playtested (`a1e6b1d`, 2026-06-17):** `gibSpawns` drive ChunkSystem (unit bug fixed: adapter descales by `/4096` for MoveThing `xvel>>12`); `GIB_CHUNK_VELOCITY_SCALE=1.0` kept, feels good. Pipeline proven. Three playtest BUGS logged under Feel/physics: `F2.flare.stuck`, `F2.flare.strafe-origin`, `F2.cultist.burn-death-sprite`. Next: clear those, OR port a new behavior on the pipeline+tables (`F2.cultist.dodge` / `F2.cultist.search`, or a new bestiary enemy).
 2. **120-tic deterministic core** (deferred big foundation) — now tic-clock-ready by design; prereq for the planned multiplayer netcode and makes future AI/weapon ports verbatim. Best as its own dedicated session (touches every system; full feel re-playtest). Context in the dualmem `port-vs-recreate` decision memory + Obsidian `Claude Notes/Blud/2026-06-10-port-vs-recreate-thinking.md`.
 3. **M5 bestiary + Phase 1 gate** — 30-min arena = fun playtest before any level code.
 
@@ -72,7 +72,7 @@ Key reference docs (open these before touching their area):
 ## Feel / physics tuning
 
 - `F1`       [x]  Dynamite throw arc + bundle sprite + sRGB fix — `18fca04` + follow-ups
-- `F1.gibs`  [~]  Source-faithful `gibSpawns` now drive ChunkSystem body chunks (adapter descales by `/4096` for the MoveThing `xvel>>12` integration; axis-remapped Build→Three). `GIB_CHUNK_VELOCITY_SCALE=1.0` is the playtest calibration knob (`src/game/gibs/tuning.ts`). **Manual playtest pending.**
+- `F1.gibs`  [x]  Source-faithful `gibSpawns` drive ChunkSystem body chunks (adapter descales by `/4096` for the MoveThing `xvel>>12` integration; axis-remapped Build→Three). `GIB_CHUNK_VELOCITY_SCALE=1.0` kept — playtested good (`a1e6b1d`). Knob in `src/game/gibs/tuning.ts` if ever re-tuned.
 - `F1.explosion-outcomes` [x] NotBlood three-tier explosion outcomes (launched-alive, flung corpse, corpse re-gib, head-pop) — spec [docs/superpowers/specs/2026-06-10-explosion-outcomes-design.md](docs/superpowers/specs/2026-06-10-explosion-outcomes-design.md)
 - `F2`       [ ]  Broad feel sweep — audio table, palookup hit flash, AI timing, screenshake, decal growth. Revisit after M3 playtest; split into subtasks once prioritized.
 - `F2.bone-visibility` [ ] Bones are 20% per spec but visually indistinct through palette dither + scanlines; needs bigger scale, brighter tone, or different treatment.
@@ -81,6 +81,9 @@ Key reference docs (open these before touching their area):
 - `F2.zombie-burn-drop` [ ] Powerup drop on burn-melt — deferred per M5-D Phase 1 findings (NotBlood doesn't do this).
 - `F2.cascade-gibs` [ ] NotBlood spawns smaller secondary gibs when chunks hit ground; requires source-code dig.
 - `F2.flare.charred-death` [-] Charred-corpse death sprite for burn-killed enemies — burn-death sprites now play; charred-corpse corpse-persistence art deferred.
+- `F2.flare.stuck` [ ] BUG (2026-06-17 playtest): flares that hit nothing freeze in midair at trajectory end instead of falling/despawning. Research NotBlood flare-projectile end-of-life behavior (gravity? despawn timer? stick-to-geometry only?).
+- `F2.flare.strafe-origin` [ ] BUG (2026-06-17 playtest): flare spawn origin doesn't track the FPV gun sprite when strafing — muzzle point lags the visible gun. Likely muzzle-offset computed from camera without the strafe/view-bob sprite offset.
+- `F2.cultist.burn-death-sprite` [ ] BUG (2026-06-17 playtest): after a cultist burn-death the death anim plays on a non-cultist sprite (wrong manifest/picnum swap). Verify cultist burn-death frames vs the swapped sprite.
 - `F2.flare.sfx` [ ] Replace `FLARE_BURN_LOOP` placeholder with a real looping crackle sample.
 - `F2.flare.cap` [ ] Cap max concurrent flares per enemy if stacking-too-many proves cheesy in playtest.
 - `F2.cultist.gibs` [ ] Cultist-specific gib palette (blood color, flesh picnums) — currently reuses ZOMBIE_GIB_PROFILE.
