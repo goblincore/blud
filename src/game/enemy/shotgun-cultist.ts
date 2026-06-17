@@ -262,9 +262,15 @@ export class ShotgunCultist implements GibbableDude {
   }
 
   private onStateEnter(state: CultistState, now: number, prevState?: CultistState): void {
-    // Burn-death: when transitioning Dead from Burning, play burn-death sprite
+    // Burn-death: when transitioning Dead from Burning, the cultist falls with its
+    // own real death sprite. The dedicated 'cultist-burn-death' manifest points at
+    // baseTile 3784 — a substitute (PRIS-family) extraction that renders a
+    // different character; the genuine charred-cultist burn-death SEQs
+    // (Blood 12559/12560) are missing from BLOOD.RFF, so no charred-cultist art
+    // exists yet. Use the real cultist death anim as an interim until proper
+    // charred-corpse art is extracted (tracked by F2.flare.charred-death).
     if (state === CultistState.Dead && prevState === CultistState.Burning) {
-      this.anim.play('cultist-burn-death', now);
+      this.anim.play(STATE_ANIM_MAP[CultistState.Dead], now);
       return;
     }
     this.anim.play(STATE_ANIM_MAP[state], now);
