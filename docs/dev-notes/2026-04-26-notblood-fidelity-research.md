@@ -22,6 +22,14 @@ tags: [blud, notblood, burn-death, dynamite, gib-taxonomy, investigation]
 >    `repeat, dmg, dmgRng, radius, dmgType, ...` — actor.h:136). Standard TNT is
 >    radius=**150** (not 80) and concussion/dmgType=**900** (not impulse=150).
 >    Blud's radius=150/impulse=900 already matched the source exactly.
+> 3. **§1.1 burning-dude HP rows are off by one** (caught 2026-06-15 by the
+>    `dudeInfo` codegen, `scripts/gen_notblood_tables.py`). `kDudeBurningCultist`
+>    (type 240, `dudeInfo[40]`) is `seqStartID 4096, startHealth **30**` — NOT
+>    `12544 / 25` (that's `kDudeBurningInnocent`, index 39). The raw burning-cultist
+>    HP is **30**, not 25. Blud's `BURN.cultistBurnResetHp` stays **25** as a
+>    deliberate feel deviation (so cultists don't outlast the burn window) — no
+>    behavior change, just corrected provenance. Trust the generated tables
+>    (`src/game/notblood/notblood-tables.gen.ts`) over this doc's hand-read numbers.
 
 Sources read:
 - `/Users/donny/Documents/Raze/NotBlood/source/blood/src/aiburn.cpp` — all 246 lines; burning-enemy AISTATEs
