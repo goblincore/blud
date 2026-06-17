@@ -144,6 +144,14 @@ export class AxeZombie implements GibbableDude {
   update(dt: number, playerPos: Vec3, camera: THREE.Camera): void {
     const now = performance.now() / 1000;
 
+    // NotBlood actor.cpp:6887 — a stuck flare is removed when its host dies; it
+    // does NOT linger floating at chest height above the prone corpse. Extinguish
+    // on death by any cause (burn DoT / explosion / melee); the loop below then
+    // drops it (final smoke burst + cleanup) on this same frame.
+    if (this.brain.state === ZombieState.Dead) {
+      for (const f of this.stuckFlares) f.extinguish();
+    }
+
     // ——— Process stuck flares —————————————————————
     for (let i = this.stuckFlares.length - 1; i >= 0; i--) {
       const flare = this.stuckFlares[i]!;

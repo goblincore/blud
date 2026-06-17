@@ -87,7 +87,13 @@ export function createPlayer(opts: PlayerOptions): Player {
       y: pos.y + applied.y,
       z: pos.z + applied.z,
     };
-    camera.position.set(newPos.x, newPos.y + EYE_HEIGHT, newPos.z);
+    // EYE_HEIGHT is measured from the FEET. The capsule center sits half its
+    // total extent (BODY_HALF_HEIGHT + BODY_RADIUS = 1.0 m) above the feet, so
+    // anchor the eye to the feet — adding EYE_HEIGHT to the body CENTER would
+    // double-count that 1 m and float the eye ~2.55 m up, making the player
+    // tower over human-scale enemies (~1.95 m sprites).
+    const feetY = newPos.y - (BODY_HALF_HEIGHT + BODY_RADIUS);
+    camera.position.set(newPos.x, feetY + EYE_HEIGHT, newPos.z);
     camera.rotation.order = 'YXZ';
     camera.rotation.set(pitch, yaw, 0);
   }
