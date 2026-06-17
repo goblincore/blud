@@ -81,9 +81,11 @@ Key reference docs (open these before touching their area):
 - `F2.zombie-burn-drop` [ ] Powerup drop on burn-melt — deferred per M5-D Phase 1 findings (NotBlood doesn't do this).
 - `F2.cascade-gibs` [ ] NotBlood spawns smaller secondary gibs when chunks hit ground; requires source-code dig.
 - `F2.flare.charred-death` [-] Charred-corpse death sprite for burn-killed enemies — burn-death sprites now play; charred-corpse corpse-persistence art deferred.
-- `F2.flare.stuck` [ ] BUG (2026-06-17 playtest): flares that hit nothing freeze in midair at trajectory end instead of falling/despawning. Research NotBlood flare-projectile end-of-life behavior (gravity? despawn timer? stick-to-geometry only?).
-- `F2.flare.strafe-origin` [ ] BUG (2026-06-17 playtest): flare spawn origin doesn't track the FPV gun sprite when strafing — muzzle point lags the visible gun. Likely muzzle-offset computed from camera without the strafe/view-bob sprite offset.
-- `F2.cultist.burn-death-sprite` [ ] BUG (2026-06-17 playtest): after a cultist burn-death the death anim plays on a non-cultist sprite (wrong manifest/picnum swap). Verify cultist burn-death frames vs the swapped sprite.
+- `F2.flare.stuck` [x] Flares that hit nothing now arc down and land (per-frame segment-sweep collision + lifetime net) instead of freezing midair — `72f27d2`. NOTE: landed flare visually floats — see `F2.world-scale-anchor`.
+- `F2.flare.strafe-origin` [x] Flare muzzle origin tracks the FPV gun when strafing (handPos from camera basis + view-bob) — `72f27d2`. Playtest-confirmed.
+- `F2.cultist.burn-death-sprite` [x] Cultist burn-death plays the real cultist death sprite (repointed off the substitute PRIS art) — `72f27d2`. Playtest-confirmed.
+- `F2.world-scale-anchor` [ ] BUG (2026-06-17 playtest): player eye sits too high / sprites float above the floor (enemies read much shorter than player; landed flares hover). Pre-existing ground-anchor/eye-height/floor-Y mismatch — investigate player EYE_HEIGHT vs enemy billboard ground anchor vs floor plane Y vs flare ground anchor.
+- `F2.flare.stuck-on-death` [ ] BUG (2026-06-17 playtest): a flare stuck to an enemy stays floating at chest height after the enemy collapses/dies instead of following the body down / dropping to the corpse. Research NotBlood flare-on-dude-death behavior (does the stuck flare move to the corpse, detach to floor, or extinguish?) and port it.
 - `F2.flare.sfx` [ ] Replace `FLARE_BURN_LOOP` placeholder with a real looping crackle sample.
 - `F2.flare.cap` [ ] Cap max concurrent flares per enemy if stacking-too-many proves cheesy in playtest.
 - `F2.cultist.gibs` [ ] Cultist-specific gib palette (blood color, flesh picnums) — currently reuses ZOMBIE_GIB_PROFILE.
