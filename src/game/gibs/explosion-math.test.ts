@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { falloffDamage, falloffImpulse, radialImpulseVector, concussionVelocity } from './index';
-import { EXPLOSION_STANDARD, EXPLOSION_LAUNCH } from './tuning';
+import { falloffDamage, falloffImpulse, radialImpulseVector, concussionVelocity, isAirBurst } from './index';
+import { EXPLOSION_STANDARD, EXPLOSION_LAUNCH, GROUND_BURST_THRESHOLD_M } from './tuning';
 
 describe('explosion damage falloff', () => {
   it('at distance 0, damage is full (damage + damageRange)', () => {
@@ -79,6 +79,30 @@ describe('concussionVelocity', () => {
     const v = concussionVelocity(origin, { x: -2, y: 0, z: 7 }, 450);
     expect(v.x).toBeLessThan(0);
     expect(v.z).toBeGreaterThan(0);
+  });
+});
+
+describe('isAirBurst — air vs ground explosion SEQ selection', () => {
+  // Ports NotBlood actExplodeSprite florhit branch: a detonation resting on the
+  // floor plays the ground SEQ (dome→mushroom); one in open air plays the air
+  // SEQ (compact fireball).
+  const T = GROUND_BURST_THRESHOLD_M;
+
+  it('a detonation resting on the floor is a GROUND burst', () => {
+    expect(isAirBurst(0.08, T)).toBe(false); // dynamite ball at rest ~0.08 m above floor
+  });
+
+  it('a detonation high above the floor is an AIR burst', () => {
+    expect(isAirBurst(1.2, T)).toBe(true); // hit a zombie torso mid-arc
+  });
+
+  it('no floor found below (raycast missed) is an AIR burst', () => {
+    expect(isAirBurst(null, T)).toBe(true);
+  });
+
+  it('exactly at the threshold counts as ground (boundary is inclusive)', () => {
+    expect(isAirBurst(T, T)).toBe(false);
+    expect(isAirBurst(T + 0.001, T)).toBe(true);
   });
 });
 

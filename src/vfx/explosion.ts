@@ -40,13 +40,21 @@ export class ExplosionVfx {
    * meters (vertical half-size of the mushroom cloud; width follows the tile
    * aspect). Standard dynamite ≈ 1.5 m half-height; small stick ≈ 0.8 m.
    *
-   * `pos` is the detonation point and becomes the sprite's **bottom**, not its
-   * center. Blood's mushroom-cloud tiles fill the top ~60% of the sprite and
-   * the bottom is smoke/embers; center-anchoring would bury half the sprite
-   * under the floor on ground bursts. Bottom-anchoring makes the cloud bloom
-   * upward from the blast point — correct for both floor and air bursts.
+   * `anchor` controls where `pos` sits on the sprite:
+   *  - `'bottom'` (ground bursts): `pos` is the sprite's bottom. Blood's ground
+   *    SEQ (dome→mushroom) blooms *up* from the floor, so bottom-anchoring keeps
+   *    the base pinned at the blast point and the column rising above it.
+   *  - `'center'` (air bursts): `pos` is the sprite's center. The air SEQ is a
+   *    compact, roughly round fireball with no rising stem, so it should sit
+   *    centered on the mid-air detonation point rather than blooming upward
+   *    (which would read as floating above the hit).
    */
-  spawn(pos: { x: number; y: number; z: number }, sizeM: number, atlas: ExplosionAtlas): void {
+  spawn(
+    pos: { x: number; y: number; z: number },
+    sizeM: number,
+    atlas: ExplosionAtlas,
+    anchor: 'bottom' | 'center' = 'bottom',
+  ): void {
     // Unit quad — actual dimensions applied via mesh.scale so we can track the
     // texture aspect as it varies across animation frames (Blood's tiles
     // breathe from 95×122 → 102×128 over the 5-frame mushroom cycle).
@@ -57,7 +65,8 @@ export class ExplosionVfx {
       depthWrite: false,
     });
     const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.set(pos.x, pos.y + sizeM, pos.z);
+    const anchorOffsetY = anchor === 'center' ? 0 : sizeM;
+    mesh.position.set(pos.x, pos.y + anchorOffsetY, pos.z);
     const aspect0 = atlas.aspect(0);
     mesh.scale.set(sizeM * 2 * aspect0, sizeM * 2, 1);
     this.scene.add(mesh);

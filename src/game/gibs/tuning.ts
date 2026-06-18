@@ -55,6 +55,15 @@ export const EXPLOSION_STANDARD = {
 // sourced from the resolveDeathOutcome port (later task); kept as a literal here.
 export const GIB_THRESHOLD = 160;
 
+// NOT derived — Blud feel value porting NotBlood actExplodeSprite's florhit
+// branch (actor.cpp ~5995): florhit==0 ⇒ air SEQ (compact fireball), else
+// ground SEQ (dome→mushroom). NotBlood's florhit is a binary "rested on the
+// floor this move"; Blud approximates it with the detonation's distance to the
+// nearest static floor below — at-or-under this many meters reads as a ground
+// burst. ~0.6 m comfortably catches a dynamite ball at rest (~0.08 m above the
+// floor) and mid-bounce, while a chest-height airburst on an enemy (~1 m) is air.
+export const GROUND_BURST_THRESHOLD_M = 0.6;
+
 // ——— Concussion launch (explosion physics on dudes) ————————————
 // NOT derived from the tables — Blud feel values porting NotBlood actor.cpp:2677
 // ConcussSprite, which adds velocity (incl. vertical) to every kPhysMove sprite

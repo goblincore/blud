@@ -209,9 +209,13 @@ async function main() {
   };
 
   // ---- Assets
-  const [gibTextures, explosionAtlas, trailTex, animBundle, dynamiteBundleFrames] = await Promise.all([
+  const [gibTextures, groundExplosionAtlas, airExplosionAtlas, trailTex, animBundle, dynamiteBundleFrames] = await Promise.all([
     loadGibTextures('/assets/gibs-placeholder/manifest.json'),
-    loadExplosionAtlas('/assets/vfx/explosion-placeholder/manifest.json'),
+    // NotBlood dynamite plays two explosion SEQs by floor contact: ground
+    // (dome→mushroom, SEQ 3) when it rests on the floor, air (compact fireball,
+    // SEQ 4) mid-air. GibSystem picks between them per detonation.
+    loadExplosionAtlas('/assets/vfx/explosion-ground-placeholder/manifest.json'),
+    loadExplosionAtlas('/assets/vfx/explosion-air-placeholder/manifest.json'),
     loadTexture('/assets/gibs-placeholder/trail/733-placeholder.png').catch(() => {
       // Fallback: create a 1x1 red pixel texture if trail sprite is missing
       const c = document.createElement('canvas');
@@ -288,7 +292,7 @@ async function main() {
   let gameOverOverlay!: GameOverOverlay;
   const gibs = new GibSystem(
     physics.world, scene, particles, chunks, decals,
-    explosions, explosionAtlas, shake,
+    explosions, groundExplosionAtlas, airExplosionAtlas, shake,
     () => { gameOverOverlay.show(); },
   );
   gibs.registerDude(playerGib);

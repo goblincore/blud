@@ -16,6 +16,7 @@ import {
   ZOMBIE_GIB_PROFILE,
   EXPLOSION_LAUNCH,
   GIB_CHUNK_VELOCITY_SCALE,
+  GROUND_BURST_THRESHOLD_M,
   type GibProfile,
 } from './tuning';
 import { resolveDeathOutcome, KDamage, type DeathOutcomeConfig } from '../notblood/death-outcome';
@@ -101,6 +102,18 @@ export function concussionVelocity(origin: Vec3, target: Vec3, impulseMag: numbe
   };
 }
 
+/**
+ * Air-vs-ground explosion animation selection — ports NotBlood actExplodeSprite's
+ * `florhit` branch (actor.cpp ~5995): a detonation that came to rest on the floor
+ * plays the ground SEQ (dome→mushroom), one in open air plays the air SEQ
+ * (compact fireball). `floorDistM` is the distance to the nearest static floor
+ * below the blast (`null` = no floor found → treat as air). At-or-under
+ * `thresholdM` is a ground burst.
+ */
+export function isAirBurst(floorDistM: number | null, thresholdM: number): boolean {
+  return floorDistM === null || floorDistM > thresholdM;
+}
+
 // ——— Orchestrator ———————————————————————————————————
 
 /**
@@ -149,7 +162,10 @@ export class GibSystem {
     private readonly chunks: ChunkSystem,
     private readonly decals: DecalPool,
     private readonly explosionVfx: ExplosionVfx,
-    private readonly explosionAtlas: ExplosionAtlas,
+    /** Dome→mushroom SEQ, played when the blast rests on the floor. */
+    private readonly groundExplosionAtlas: ExplosionAtlas,
+    /** Compact fireball SEQ, played for mid-air detonations. */
+    private readonly airExplosionAtlas: ExplosionAtlas,
     private readonly screenshake: Screenshake,
     /** Called when a player-gib occurs — main.ts shows game-over overlay. */
     private readonly onPlayerGibbed: () => void,
@@ -166,10 +182,28 @@ export class GibSystem {
     this.dudes = this.dudes.filter((d) => d.kind === 'player');
   }
 
+  /** Distance from `pos` straight down to the nearest STATIC floor, or null if
+   *  none within range. Kinematic (dudes) and dynamic (the still-live dynamite
+   *  body, corpses) colliders are excluded so only world geometry counts —
+   *  mirrors NotBlood's florhit, which tracks floor contact only. */
+  private floorDistanceBelow(pos: Vec3): number | null {
+    const ray = new RAPIER.Ray({ x: pos.x, y: pos.y, z: pos.z }, { x: 0, y: -1, z: 0 });
+    const hit = this.world.castRay(
+      ray,
+      50, // max 50 m down — beyond any arena drop
+      true,
+      RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC | RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC,
+    );
+    return hit ? hit.timeOfImpact : null;
+  }
+
   spawnExplosion(pos: Vec3, info: ExplosionInfo, now: number): void {
-    // VFX — radius scaled up for spatial feel (see RADIUS_SCALE_FACTOR note)
+    // VFX — radius scaled up for spatial feel (see RADIUS_SCALE_FACTOR note).
+    // Air vs ground SEQ + anchor chosen from floor proximity (NotBlood florhit).
     const radiusM = (info.radius / BU_PER_METER) * RADIUS_SCALE_FACTOR;
-    this.explosionVfx.spawn(pos, radiusM * 0.6, this.explosionAtlas);
+    const air = isAirBurst(this.floorDistanceBelow(pos), GROUND_BURST_THRESHOLD_M);
+    const atlas = air ? this.airExplosionAtlas : this.groundExplosionAtlas;
+    this.explosionVfx.spawn(pos, radiusM * 0.6, atlas, air ? 'center' : 'bottom');
     // Screenshake — map Blood quake (0-255) to ~1-4 magnitude range
     this.screenshake.shake(info.quake / 40, 0.3);
     console.log(`[gibs] explosion at (${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}) radius=${radiusM.toFixed(1)}m dudes=${this.dudes.length}`);
