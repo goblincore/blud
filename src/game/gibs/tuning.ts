@@ -64,6 +64,14 @@ export const GIB_THRESHOLD = 160;
 // floor) and mid-bounce, while a chest-height airburst on an enemy (~1 m) is air.
 export const GROUND_BURST_THRESHOLD_M = 0.6;
 
+// NOT derived — VISUAL-ONLY scale for the explosion sprite, decoupled from the
+// gameplay AOE radius. The fireball's rendered half-HEIGHT (meters) is the
+// scaled AOE radiusM × this factor; width follows the tile aspect. Tuned down
+// from the old 0.6 (which read ~5.6 m tall, ~3× a zombie) after the SEQ-faithful
+// atlases — the real Blood SEQ tiles fill the frame far more than the old
+// sparse mushroom, so the same factor looked oversized. Playtest knob.
+export const EXPLOSION_VFX_HEIGHT_SCALE = 0.42;
+
 // ——— Concussion launch (explosion physics on dudes) ————————————
 // NOT derived from the tables — Blud feel values porting NotBlood actor.cpp:2677
 // ConcussSprite, which adds velocity (incl. vertical) to every kPhysMove sprite

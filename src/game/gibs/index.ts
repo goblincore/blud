@@ -17,6 +17,7 @@ import {
   EXPLOSION_LAUNCH,
   GIB_CHUNK_VELOCITY_SCALE,
   GROUND_BURST_THRESHOLD_M,
+  EXPLOSION_VFX_HEIGHT_SCALE,
   type GibProfile,
 } from './tuning';
 import { resolveDeathOutcome, KDamage, type DeathOutcomeConfig } from '../notblood/death-outcome';
@@ -203,7 +204,7 @@ export class GibSystem {
     const radiusM = (info.radius / BU_PER_METER) * RADIUS_SCALE_FACTOR;
     const air = isAirBurst(this.floorDistanceBelow(pos), GROUND_BURST_THRESHOLD_M);
     const atlas = air ? this.airExplosionAtlas : this.groundExplosionAtlas;
-    this.explosionVfx.spawn(pos, radiusM * 0.6, atlas, air ? 'center' : 'bottom');
+    this.explosionVfx.spawn(pos, radiusM * EXPLOSION_VFX_HEIGHT_SCALE, atlas, air ? 'center' : 'bottom');
     // Screenshake — map Blood quake (0-255) to ~1-4 magnitude range
     this.screenshake.shake(info.quake / 40, 0.3);
     console.log(`[gibs] explosion at (${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}) radius=${radiusM.toFixed(1)}m dudes=${this.dudes.length}`);
