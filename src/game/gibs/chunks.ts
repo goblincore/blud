@@ -175,10 +175,10 @@ export class ChunkSystem {
       tile: BLOOD_TRAIL.tile,
       hz: BLOOD_TRAIL.emitHz,
       velScale: BLOOD_TRAIL.velScale,
-      gravity: 6.0,
-      airdrag: 0.5,
-      lifetimeSec: 2.5,
-      size: 0.18,
+      gravity: BLOOD_TRAIL.gravity,
+      airdrag: BLOOD_TRAIL.airdrag,
+      lifetimeSec: BLOOD_TRAIL.lifetimeSec,
+      size: BLOOD_TRAIL.size,
       onSurfaceHit: (pos: Vec3, normal: Vec3) => { this.decals?.spawn(pos, normal); },
     });
 
@@ -272,17 +272,17 @@ export class ChunkSystem {
         return { x: v.x, y: v.y, z: v.z };
       },
     };
+    // Trail params single-sourced from BLOOD_TRAIL (tuning.ts). NOTE: the raw
+    // Blood gravity/airdrag are fixed-point and don't convert cleanly, so
+    // BLOOD_TRAIL.gravity/airdrag are hand-tuned hang-time values, not derived.
     const trail = this.particles.emitTrail(source, {
       tile: BLOOD_TRAIL.tile,
       hz: BLOOD_TRAIL.emitHz,
       velScale: BLOOD_TRAIL.velScale,
-      // NOTE: buPerTicSquaredToMpsSquared(27962) = 1.5M m/s² — particles vanish in one frame.
-      // The Blood rawvalue is in Build's fixed-point format that doesn't translate cleanly;
-      // use real gravity slightly damped for "hang time" feel.
-      gravity: 6.0,
-      airdrag: 0.5, // hand-tuned starting value
-      lifetimeSec: 2.5, // lowered from 4s — sooner cleanup, denser-looking trails
-      size: 0.18, // bumped from 0.08 — 8cm was barely visible at game distance
+      gravity: BLOOD_TRAIL.gravity,
+      airdrag: BLOOD_TRAIL.airdrag,
+      lifetimeSec: BLOOD_TRAIL.lifetimeSec,
+      size: BLOOD_TRAIL.size,
       onSurfaceHit: (pos: Vec3, normal: Vec3) => {
         this.decals?.spawn(pos, normal);
       },

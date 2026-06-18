@@ -176,13 +176,23 @@ export const DYNAMITE_COOK = {
 // script does not emit (only explodeInfo/dudeInfo/thingInfo/gibList are codegen'd).
 // Values ported from callback.cpp:180-192 (fxBloodSpurt scheduling) + fx.cpp:89.
 export const BLOOD_TRAIL = {
-  emitHz: 20,                 // 6 tics @ 120 TPS → 20 Hz
+  // — Source-faithful (NotBlood FX_27, callback.cpp:180-192 + fx.cpp:89) —
+  emitHz: 20,                 // 6 tics @ 120 TPS → 20 Hz (per flying chunk)
   velScale: 1 / 256,          // Blood: xvel >> 8 = 1/256 inheritance
-  gravityBlood: 27962,        // BU/tic² (raw Blood value, kept for reference)
-  airdragBlood: 4096,         // raw Blood airdrag coefficient
-  lifetimeSec: 4.0,           // 480 tics @ 120 TPS
-  sizePx: 32,                 // 32×32 sprite (Blood xrepeat/yrepeat)
+  lifetimeSec: 4.0,           // 480 tics @ 120 TPS — restored as the RUNTIME value:
+                              // chunks.ts had hardcoded 2.5s, which made fewer
+                              // droplets alive at once → trails read SPARSER than
+                              // the NotBlood reference. 4s (source) keeps them dense.
   tile: 733,
+  // — Raw Blood fixed-point refs (do NOT feed to runtime physics; see warning) —
+  gravityBlood: 27962,        // BU/tic² raw
+  airdragBlood: 4096,         // raw airdrag coefficient
+  sizePx: 32,                 // 32×32 sprite (Blood xrepeat/yrepeat)
+  // — Runtime/feel values used by the renderer (raw Blood values don't convert
+  //   cleanly; hand-tuned for hang-time + on-screen density) —
+  gravity: 5.0,               // was 6.0 — slightly more hang so droplets linger
+  airdrag: 0.5,
+  size: 0.22,                 // was 0.18 — reads denser at game distance
 } as const;
 
 // ——— Gib-moment radial burst (FX_13) ————————————————————
