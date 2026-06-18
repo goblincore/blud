@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Particle, updateParticle, ParticlePool, BurstParams, TrailParams } from './particles';
+import { Particle, updateParticle, ParticlePool, BurstParams, TrailParams, bloodSplatPositions } from './particles';
+import { mulberry32 } from '../rng';
 
 function makeP(overrides: Partial<Particle> = {}): Particle {
   return {
@@ -13,6 +14,7 @@ function makeP(overrides: Partial<Particle> = {}): Particle {
     size: 1.0,
     tile: 0,
     kind: 'default' as const,
+    leavesSplat: false,
     ...overrides,
   };
 }
@@ -167,5 +169,69 @@ describe('emitTrail', () => {
     // First alive particle should have vel.x ≈ 256 * (1/256) = 1 m/s
     const first = (pool as any).particles.find((p: any) => p.alive);
     expect(first.vel.x).toBeCloseTo(1.0, 3);
+  });
+});
+
+describe('bloodSplatPositions (cascade — NotBlood fxBloodBits FX_48/FX_36)', () => {
+  const UP = { x: 0, y: 1, z: 0 };
+
+  it('floor splat: offsets within spread in XZ and drops to the floor (y≈0)', () => {
+    const rng = mulberry32(1234);
+    const pos = { x: 5, y: 1.4, z: -3 }; // particle expired mid-air
+    const out = bloodSplatPositions(rng, pos, UP, 0.3, 0); // 0 → never a second
+    expect(out.length).toBe(1);
+    expect(Math.hypot(out[0]!.x - pos.x, out[0]!.z - pos.z)).toBeLessThanOrEqual(0.3 + 1e-9);
+    expect(out[0]!.y).toBeCloseTo(0, 6); // dropped to floor, not floating at 1.4
+  });
+
+  it('second pool spawns when the chance roll passes (≈31% at 0x5000)', () => {
+    const rng = mulberry32(7);
+    // with full chance (0x10000 = 100%) every call yields 2
+    const always = bloodSplatPositions(mulberry32(7), { x: 0, y: 0, z: 0 }, UP, 0.3, 0x10000);
+    expect(always.length).toBe(2);
+    // with zero chance, always 1
+    const never = bloodSplatPositions(rng, { x: 0, y: 0, z: 0 }, UP, 0.3, 0);
+    expect(never.length).toBe(1);
+  });
+
+  it('wall splat (non-floor normal): no XZ offset, keeps the hit point', () => {
+    const rng = mulberry32(99);
+    const pos = { x: 2, y: 1.2, z: 4 };
+    const wall = { x: 1, y: 0, z: 0 };
+    const out = bloodSplatPositions(rng, pos, wall, 0.3, 0);
+    expect(out[0]!).toEqual(pos);
+  });
+
+  it('is deterministic for a given seed', () => {
+    const a = bloodSplatPositions(mulberry32(42), { x: 1, y: 2, z: 3 }, UP, 0.5, 0x5000);
+    const b = bloodSplatPositions(mulberry32(42), { x: 1, y: 2, z: 3 }, UP, 0.5, 0x5000);
+    expect(a).toEqual(b);
+  });
+});
+
+describe('blood-settle handler — particle death triggers the cascade', () => {
+  it('fires for a leavesSplat particle when it expires, with the floor normal', () => {
+    const pool = new ParticlePool(null as any, 8, null as any);
+    const calls: Array<{ pos: any; normal: any }> = [];
+    pool.setBloodSettleHandler((pos, normal) => calls.push({ pos: { ...pos }, normal: { ...normal } }));
+    pool.emitBurst({ x: 0, y: 0.2, z: 0 }, {
+      tile: 1, count: 1, speedMin: 0, speedMax: 0, gravity: 0, airdrag: 0,
+      lifetimeSec: 0.1, size: 1, leavesSplat: true,
+    });
+    pool.update(0.2); // exceeds lifetime → particle dies this frame
+    expect(calls.length).toBe(1);
+    expect(calls[0]!.normal).toEqual({ x: 0, y: 1, z: 0 });
+  });
+
+  it('does NOT fire for a non-splat particle', () => {
+    const pool = new ParticlePool(null as any, 8, null as any);
+    let fired = 0;
+    pool.setBloodSettleHandler(() => { fired++; });
+    pool.emitBurst({ x: 0, y: 0.2, z: 0 }, {
+      tile: 1, count: 1, speedMin: 0, speedMax: 0, gravity: 0, airdrag: 0,
+      lifetimeSec: 0.1, size: 1, leavesSplat: false,
+    });
+    pool.update(0.2);
+    expect(fired).toBe(0);
   });
 });

@@ -300,6 +300,7 @@ export class GibSystem {
           airdrag: 0.3,
           lifetimeSec: 2.0,
           size: 0.5,
+          leavesSplat: true, // burst chunks stamp floor splats on settle (cascade)
         });
         console.log(`[gibs] GIB! at (${dude.pos.x.toFixed(1)},${dude.pos.y.toFixed(1)},${dude.pos.z.toFixed(1)})`);
         dude.onGibbed?.();
@@ -339,6 +340,7 @@ export class GibSystem {
       airdrag: 0.3,
       lifetimeSec: 2.0,
       size: 0.5,
+      leavesSplat: true, // burst chunks stamp floor splats on settle (cascade)
     });
   }
 

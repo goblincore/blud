@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { chance, type Rng } from '../rng';
 
 export interface Vec3 { x: number; y: number; z: number; }
 
@@ -15,6 +16,9 @@ export interface Particle {
   size: number;          // world-space size (meters)
   tile: number;          // picnum for diagnostic / atlas lookup
   kind: ParticleKind;    // discriminator for type-specific rendering/update
+  /** Blood particle: on settle/death it leaves a floor blood splat (NotBlood
+   *  fxBloodBits cascade — see ParticlePool.setBloodSettleHandler). */
+  leavesSplat: boolean;
 }
 
 export interface BurstParams {
@@ -26,6 +30,8 @@ export interface BurstParams {
   airdrag: number;
   lifetimeSec: number;
   size: number;
+  /** When true, each burst particle leaves a floor splat on death (cascade). */
+  leavesSplat?: boolean;
 }
 
 /** A moving source whose velocity is sampled on each trail-emit tick. */
@@ -42,8 +48,8 @@ export interface TrailParams {
   airdrag: number;
   lifetimeSec: number;
   size: number;
-  /** Called when a trail particle hits a static surface (decals wiring). */
-  onSurfaceHit?: (pos: Vec3, normal: Vec3) => void;
+  /** When true, each emitted droplet leaves a floor splat on death (cascade). */
+  leavesSplat?: boolean;
 }
 
 export interface TrailHandle { stop(): void; }
@@ -102,6 +108,36 @@ export function updateParticle(p: Particle, dt: number): void {
 }
 
 /**
+ * NotBlood blood-splat cascade (fxBloodBits, callback.cpp:435). When a blood
+ * particle (gib-burst chunk FX_13 or trail droplet FX_27) settles, it drops to
+ * the floor and stamps a splat decal at a random nearby offset, with a
+ * `secondChanceFixed16` chance (Blood Chance(0x5000) ≈ 31%) of a second pool.
+ *
+ * Pure: returns the splat position(s); the caller spawns the decals. Offsets
+ * are in the surface plane — XZ for a floor splat (normal ≈ up), where the y is
+ * also dropped to the floor (the particle may have expired in mid-air). For a
+ * wall hit (non-floor normal) the hit point is kept as-is (no offset).
+ */
+export function bloodSplatPositions(
+  rng: Rng,
+  pos: Vec3,
+  normal: Vec3,
+  spreadM: number,
+  secondChanceFixed16: number,
+): Vec3[] {
+  const onFloor = normal.y > 0.5;
+  const sample = (): Vec3 => {
+    if (!onFloor) return { x: pos.x, y: pos.y, z: pos.z };
+    const angle = rng() * Math.PI * 2;
+    const dist = rng() * spreadM;
+    return { x: pos.x + Math.cos(angle) * dist, y: 0, z: pos.z + Math.sin(angle) * dist };
+  };
+  const out: Vec3[] = [sample()];
+  if (chance(rng, secondChanceFixed16)) out.push(sample());
+  return out;
+}
+
+/**
  * Pool of particles rendered as a single InstancedMesh (billboarded to camera).
  * Fixed capacity; FIFO-evicts oldest when full.
  *
@@ -115,6 +151,14 @@ export class ParticlePool {
 
   private mesh: THREE.InstancedMesh | null = null;
   private dummy = new THREE.Object3D();
+
+  /** Invoked when a `leavesSplat` particle dies (lifetime end OR surface hit).
+   *  Wired in main.ts to stamp the NotBlood fxBloodBits floor-splat cascade. */
+  private bloodSettleHandler?: (pos: Vec3, normal: Vec3) => void;
+
+  setBloodSettleHandler(fn: (pos: Vec3, normal: Vec3) => void): void {
+    this.bloodSettleHandler = fn;
+  }
 
   constructor(
     private readonly scene: THREE.Scene | null,
@@ -134,6 +178,7 @@ export class ParticlePool {
         size: 1,
         tile: 0,
         kind: 'default',
+        leavesSplat: false,
       });
     }
 
@@ -166,6 +211,7 @@ export class ParticlePool {
     p.age = 0;
     p.vel = { x: 0, y: 0, z: 0 };
     p.kind = 'default';
+    p.leavesSplat = false;
     this.head = (this.head + 1) % this.capacity;
     return p;
   }
@@ -191,6 +237,7 @@ export class ParticlePool {
       p.lifetimeSec = params.lifetimeSec;
       p.size        = params.size;
       p.tile        = params.tile;
+      p.leavesSplat = params.leavesSplat ?? false;
     }
   }
 
@@ -225,31 +272,35 @@ export class ParticlePool {
         p.lifetimeSec = t.params.lifetimeSec;
         p.size        = t.params.size;
         p.tile        = t.params.tile;
+        p.leavesSplat = t.params.leavesSplat ?? false;
       }
     }
 
-    // 2. Kinematic particle update + surface-hit detection
+    // 2. Kinematic particle update + surface-hit / settle detection.
+    // A blood particle (leavesSplat) that DIES this frame — by surface contact
+    // OR by lifetime expiry — stamps the floor-splat cascade (NotBlood
+    // fxBloodBits) via bloodSettleHandler. Surface hits pass the surface normal
+    // (oriented splat); lifetime deaths use the up normal (floor pool).
+    const UP: Vec3 = { x: 0, y: 1, z: 0 };
     for (const p of this.particles) {
       if (!p.alive) continue;
       const prev = { x: p.pos.x, y: p.pos.y, z: p.pos.z };
       updateParticle(p, dt);
-      if (!p.alive) continue;
 
-      // Check trail-emitted particles for surface hit.
-      // We don't track per-particle trail-ownership cheaply, so we check ALL
-      // alive particles against arena surfaces each frame. This is O(particles
-      // × surfaces) — arena has ~6 surfaces, pool ≤ 1024, fine.
+      // Lifetime expiry this frame.
+      if (!p.alive) {
+        if (p.leavesSplat) this.bloodSettleHandler?.(p.pos, UP);
+        continue;
+      }
+
+      // Surface contact: check ALL alive particles against arena surfaces each
+      // frame. O(particles × surfaces) — arena has ~6 surfaces, pool ≤ 1024.
       for (const s of arenaSurfaces) {
         const hitNow  = pointInAABB(p.pos, s.min, s.max);
         const hitPrev = pointInAABB(prev,  s.min, s.max);
         if (hitNow && !hitPrev) {
-          // Find which trail (if any) spawned this particle.
-          // For M2 simplicity: invoke the FIRST alive trail's onSurfaceHit.
-          // A fully correct implementation tags each particle with its trail;
-          // skipping that for now — all trails share the same decal callback.
-          const trail = this.trails.find((t) => !t.stopped && t.params.onSurfaceHit);
-          if (trail) trail.params.onSurfaceHit!(p.pos, s.normal);
-          p.alive = false; // particle absorbs into decal
+          if (p.leavesSplat) this.bloodSettleHandler?.(p.pos, s.normal);
+          p.alive = false; // particle absorbs into the splat
           break;
         }
       }

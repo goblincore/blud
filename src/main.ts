@@ -14,7 +14,7 @@ import { StuckFlare } from './game/weapons/stuck-flare';
 import { AxeZombie } from './game/enemy/axe-zombie';
 import { ShotgunCultist } from './game/enemy/shotgun-cultist';
 import { Pellet, pelletDirInCone } from './game/enemy/shotgun-pellet';
-import { SHOTGUN_BLAST, ZOMBIE_GIB_PROFILE } from './game/gibs/tuning';
+import { SHOTGUN_BLAST, ZOMBIE_GIB_PROFILE, BLOOD_SPLAT } from './game/gibs/tuning';
 import { updateSmokeColumns } from './vfx/smoke-particles';
 import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
@@ -22,7 +22,8 @@ import type { EnemyKind } from './game/encounter/encounters';
 import { GroundFlameManager } from './game/gibs/ground-flame';
 import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
 import { configureProjectileRendering as configureFlareProjectileRendering, setProjectileCamera as setFlareProjectileCamera } from './game/weapons/flare';
-import { ParticlePool } from './game/gibs/particles';
+import { ParticlePool, bloodSplatPositions } from './game/gibs/particles';
+import { mulberry32 } from './game/rng';
 import { ChunkSystem } from './game/gibs/chunks';
 import { DecalPool } from './game/gibs/decals';
 import { ExplosionVfx } from './vfx/explosion';
@@ -253,6 +254,14 @@ async function main() {
   // ---- Gib subsystems
   const particles = new ParticlePool(scene, 1024, trailTex);
   const decals    = new DecalPool(scene, 2000, trailTex, 0.35);
+  // Blood-splat cascade (NotBlood fxBloodBits): a settling blood particle
+  // stamps a floor splat at a random offset, ~31% chance of a second pool.
+  const splatRng = mulberry32(0x5b100d);
+  particles.setBloodSettleHandler((pos, normal) => {
+    for (const sp of bloodSplatPositions(splatRng, pos, normal, BLOOD_SPLAT.spreadM, BLOOD_SPLAT.secondChance)) {
+      decals.spawn(sp, normal);
+    }
+  });
   const chunks    = new ChunkSystem(physics.world, scene, particles, gibTextures!, 1024, decals);
   chunks.setSfx(sfx);
   const explosions = new ExplosionVfx(scene);

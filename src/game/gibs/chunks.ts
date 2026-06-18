@@ -179,7 +179,7 @@ export class ChunkSystem {
       airdrag: BLOOD_TRAIL.airdrag,
       lifetimeSec: BLOOD_TRAIL.lifetimeSec,
       size: BLOOD_TRAIL.size,
-      onSurfaceHit: (pos: Vec3, normal: Vec3) => { this.decals?.spawn(pos, normal); },
+      leavesSplat: true, // droplets stamp floor splats on settle (cascade)
     });
 
     // Mark this chunk as the kickable head: no settle-despawn, longer max age.
@@ -283,9 +283,7 @@ export class ChunkSystem {
       airdrag: BLOOD_TRAIL.airdrag,
       lifetimeSec: BLOOD_TRAIL.lifetimeSec,
       size: BLOOD_TRAIL.size,
-      onSurfaceHit: (pos: Vec3, normal: Vec3) => {
-        this.decals?.spawn(pos, normal);
-      },
+      leavesSplat: true, // droplets stamp floor splats on settle (cascade)
     });
 
     this.chunks.push({ body, mesh, trail, spawnTime: now, settledTime: -1 });

@@ -195,6 +195,21 @@ export const BLOOD_TRAIL = {
   size: 0.22,                 // was 0.18 — reads denser at game distance
 } as const;
 
+// ——— Blood-splat cascade (FX_48/FX_36 via fxBloodBits) ————————————
+// NOT derived from tables — source is callback.cpp:435 (fxBloodBits): every
+// settling blood particle (FX_13 burst chunk + FX_27 trail droplet) stamps a
+// floor splat at a random nearby offset, with a Chance(0x5000) (~31%) second
+// pool. Blud maps both to decals (DecalPool); the persistent ×200 "pool"
+// duration of FX_36 doesn't translate (Blud decals are FIFO), so the second
+// splat is just an extra decal. Splat SFX deferred (per-droplet would spam).
+export const BLOOD_SPLAT = {
+  spreadM: 0.35,              // random floor offset radius (Blood: Random(16)<<4 BU ≈ small;
+                             // widened slightly past source for denser ground coverage)
+  secondChance: 0xB000,      // DELIBERATE feel deviation: source is Chance(0x5000) (~31%);
+                             // raised to ~69% so most settling droplets leave a second
+                             // pool → denser ground gore (playtest-tuned). Knob.
+} as const;
+
 // ——— Gib-moment radial burst (FX_13) ————————————————————
 // NOT derived from tables — source is fx.cpp:75 (gFXData[13], the main
 // blood-chunk spray at the gib instant) which the gen script does not emit.
