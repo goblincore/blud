@@ -32,7 +32,8 @@ export function chance(r: SimRng, fixed16: number): boolean {
   return random(r) < fixed16 / 0x10000;
 }
 
-/** Uniform integer in [0, n). Requires n > 0. */
+/** Uniform integer in [0, n). Requires n > 0. Unbiased (float-scaled, mirroring
+ *  Blood's rand()*n>>15) — avoids the modulo bias of nextU32()%n. */
 export function randomInt(r: SimRng, n: number): number {
-  return nextU32(r) % n;
+  return Math.floor(random(r) * n);
 }

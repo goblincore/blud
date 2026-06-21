@@ -27,6 +27,14 @@ describe('hashSimState', () => {
     expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
 
+  it('changes when a body velocity differs', () => {
+    const a = createSimState(5);
+    const b = createSimState(5);
+    a.bodies.push({ x: 0, y: 0, z: 0, vx: 1, vy: 0, vz: 0 });
+    b.bodies.push({ x: 0, y: 0, z: 0, vx: 2, vy: 0, vz: 0 });
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
+
   it('returns an unsigned 32-bit integer', () => {
     const h = hashSimState(createSimState(5));
     expect(Number.isInteger(h)).toBe(true);
