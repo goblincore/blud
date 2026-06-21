@@ -27,7 +27,8 @@ export const EMPTY_INPUT: InputCommand = {
 };
 
 /** Sim → cosmetic notifications. Discriminated union; later plans add variants
- *  (e.g. { kind: 'explosion'; x; y; z }, { kind: 'gib'; ... }). The cosmetic
- *  layer consumes these; the sim never reads them back. */
+ *  (e.g. { kind: 'gib'; ... }). The cosmetic layer consumes these; the sim
+ *  never reads them back. */
 export type SimEvent =
-  | { kind: 'noop' };
+  | { kind: 'noop' }
+  | { kind: 'explosion'; x: number; y: number; z: number; air: boolean };

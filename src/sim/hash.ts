@@ -24,6 +24,12 @@ export function hashSimState(s: SimState): number {
   const p = s.player;
   mix(p.x); mix(p.y); mix(p.z); mix(p.vy);
   mix(p.yaw); mix(p.pitch); mix(p.grounded ? 1 : 0); mix(p.prevButtons);
+  mix(p.hp);
+
+  for (const pr of s.projectiles) {
+    mix(pr.x); mix(pr.y); mix(pr.z); mix(pr.vx); mix(pr.vy); mix(pr.vz);
+    mix(pr.fuseTics); mix(pr.impactMode ? 1 : 0);
+  }
 
   return h >>> 0;
 }

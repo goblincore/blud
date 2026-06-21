@@ -12,10 +12,11 @@ export interface PlayerState {
   yaw: number; pitch: number;      // Blood angle units
   grounded: boolean;
   prevButtons: number;             // for deterministic jump edge-detection
+  hp: number;                      // hit points (added plan 3: explosion-vs-player target)
 }
 
 export function createPlayerState(): PlayerState {
-  return { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: 0, grounded: true, prevButtons: 0 };
+  return { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: 0, grounded: true, prevButtons: 0, hp: 100 };
 }
 
 const WALK = metersPerSecToFp(6);
