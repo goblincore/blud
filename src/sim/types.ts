@@ -1,0 +1,29 @@
+// src/sim/types.ts
+/** Generic integer kinematic body: position (BU) + velocity (BU/tic). Player,
+ *  projectiles, and dudes compose this in later plans. */
+export interface KinematicBody {
+  x: number; y: number; z: number;    // position, Build units (integer)
+  vx: number; vy: number; vz: number; // velocity, BU/tic (integer)
+}
+
+/** Per-tic input — the ONLY thing a future lockstep transport sends. Aim is an
+ *  absolute Blood angle [0, 2048). Sampled at render rate, quantized per tic. */
+export interface InputCommand {
+  moveForward: number; // -1 | 0 | 1 (scaled to BU/tic in the player plan)
+  moveStrafe: number;  // -1 | 0 | 1
+  aimAngle: number;    // absolute Blood angle units [0, 2048)
+  buttons: number;     // bitfield of BTN_*
+}
+
+export const BTN_FIRE = 1 << 0;
+export const BTN_SWITCH = 1 << 1;
+
+export const EMPTY_INPUT: InputCommand = {
+  moveForward: 0, moveStrafe: 0, aimAngle: 0, buttons: 0,
+};
+
+/** Sim → cosmetic notifications. Discriminated union; later plans add variants
+ *  (e.g. { kind: 'explosion'; x; y; z }, { kind: 'gib'; ... }). The cosmetic
+ *  layer consumes these; the sim never reads them back. */
+export type SimEvent =
+  | { kind: 'noop' };
