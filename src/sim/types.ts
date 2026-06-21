@@ -6,20 +6,24 @@ export interface KinematicBody {
   vx: number; vy: number; vz: number; // velocity, BU/tic (integer)
 }
 
-/** Per-tic input — the ONLY thing a future lockstep transport sends. Aim is an
- *  absolute Blood angle [0, 2048). Sampled at render rate, quantized per tic. */
+/** Per-tic input — the ONLY thing a future lockstep transport sends. Aim is
+ *  absolute Blood angle [0, 2048); the input sampler accumulates mouse delta and
+ *  clamps pitch before quantizing into these per-tic values. */
 export interface InputCommand {
-  moveForward: number; // -1 | 0 | 1 (scaled to BU/tic in the player plan)
+  moveForward: number; // -1 | 0 | 1
   moveStrafe: number;  // -1 | 0 | 1
-  aimAngle: number;    // absolute Blood angle units [0, 2048)
+  aimYaw: number;      // absolute Blood angle units [0, 2048)
+  aimPitch: number;    // absolute Blood angle units, clamped to the pitch limit
   buttons: number;     // bitfield of BTN_*
 }
 
 export const BTN_FIRE = 1 << 0;
 export const BTN_SWITCH = 1 << 1;
+export const BTN_JUMP = 1 << 2;
+export const BTN_SPRINT = 1 << 3;
 
 export const EMPTY_INPUT: InputCommand = {
-  moveForward: 0, moveStrafe: 0, aimAngle: 0, buttons: 0,
+  moveForward: 0, moveStrafe: 0, aimYaw: 0, aimPitch: 0, buttons: 0,
 };
 
 /** Sim → cosmetic notifications. Discriminated union; later plans add variants
