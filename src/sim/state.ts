@@ -1,6 +1,7 @@
 // src/sim/state.ts
 import { createRng, type SimRng } from './rng';
 import type { KinematicBody } from './types';
+import { createPlayerState, type PlayerState } from './player';
 
 /** The entire deterministic simulation state. Plain serializable data only —
  *  no class instances, no Rapier handles, no closures — so it can be hashed and
@@ -10,8 +11,9 @@ export interface SimState {
   tic: number;
   rng: SimRng;
   bodies: KinematicBody[];
+  player: PlayerState;
 }
 
 export function createSimState(seed: number): SimState {
-  return { tic: 0, rng: createRng(seed), bodies: [] };
+  return { tic: 0, rng: createRng(seed), bodies: [], player: createPlayerState() };
 }

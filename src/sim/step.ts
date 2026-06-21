@@ -1,18 +1,18 @@
 // src/sim/step.ts
 import type { SimState } from './state';
 import type { InputCommand, SimEvent } from './types';
+import { stepPlayer } from './player';
+import type { SimAABB } from './geometry';
 
 /**
  * Advance the simulation by exactly one 120 Hz tic. PURE with respect to the
  * outside world: no Math.random, no Date/performance.now, no Rapier, no DOM.
  * Mutates `state` in place (cheap; rollback uses cloneSimState to snapshot) and
  * returns the cosmetic events produced this tic.
- *
- * `input` is consumed starting in the player plan (movement/aim/buttons).
  */
-export function stepSim(state: SimState, input: InputCommand): SimEvent[] {
-  void input; // applied to the player in plan 2
+export function stepSim(state: SimState, input: InputCommand, geo: SimAABB[]): SimEvent[] {
   state.tic++;
+  stepPlayer(state.player, input, geo);
 
   // Integer kinematic integration (BU/tic). Order is array order → stable.
   for (const b of state.bodies) {
