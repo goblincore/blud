@@ -58,6 +58,11 @@ export class WeaponRegistry {
     this.setSlot(this._currentSlot === 1 ? 2 : 1, ctx);
   }
 
+  /** Expose the Dynamite instance for one-time configuration (throwHook). */
+  getDynamite(): Dynamite {
+    return this.slots[1] as Dynamite;
+  }
+
   /** Expose the FlareGun instance for one-time configuration (spawnStuckFlare, raycastFn). */
   getFlareGun(): FlareGun {
     return this.slots[2] as FlareGun;

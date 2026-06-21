@@ -15,13 +15,15 @@ import { StuckFlare } from './game/weapons/stuck-flare';
 import { AxeZombie } from './game/enemy/axe-zombie';
 import { ShotgunCultist } from './game/enemy/shotgun-cultist';
 import { Pellet, pelletDirInCone } from './game/enemy/shotgun-pellet';
-import { SHOTGUN_BLAST, ZOMBIE_GIB_PROFILE, BLOOD_SPLAT } from './game/gibs/tuning';
+import { SHOTGUN_BLAST, ZOMBIE_GIB_PROFILE, BLOOD_SPLAT, EXPLOSION_STANDARD } from './game/gibs/tuning';
 import { updateSmokeColumns } from './vfx/smoke-particles';
 import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
 import type { EnemyKind } from './game/encounter/encounters';
 import { GroundFlameManager } from './game/gibs/ground-flame';
-import { configureProjectileRendering, setProjectileCamera } from './game/weapons/dynamite';
+import { configureProjectileRendering, setProjectileCamera, fuseFrameIndex } from './game/weapons/dynamite';
+import { THROW } from './sim/projectile';
+import { fpToMeters } from './sim/fp';
 import { configureProjectileRendering as configureFlareProjectileRendering, setProjectileCamera as setFlareProjectileCamera } from './game/weapons/flare';
 import { ParticlePool, bloodSplatPositions } from './game/gibs/particles';
 import { mulberry32 } from './game/rng';
@@ -578,6 +580,75 @@ async function main() {
     return null;
   };
 
+  // ——— Configure Dynamite throw hook (routes throw into the deterministic sim) ———
+  const dynamite = weapons.getDynamite();
+  dynamite.throwHook = (speedMps, impact) => {
+    // Eye position and aim angles come from the sim / input sampler (closure capture).
+    // The sim runner converts to fp internally.
+    const pr = sim.playerRender();
+    sim.spawnProjectile(
+      pr.xMeters, pr.eyeYMeters, pr.zMeters,
+      aimYaw, aimPitch, speedMps,
+      impact ? THROW.impactSafetyFuseTics : THROW.fuseMaxTics,
+      impact,
+    );
+  };
+
+  // ——— Sim projectile billboard registry ————————————————————————
+  // Three.js billboard meshes driven by sim.projectileRenders(). Created/removed to
+  // match the sim projectile list. Spin is applied after lookAt (screen-space rotation).
+  interface ProjMeshEntry {
+    mesh: THREE.Mesh;
+    spinPhase: number;
+    spinRate: number;
+    lastFrameIdx: number;
+  }
+  const projMeshes: ProjMeshEntry[] = [];
+
+  function syncProjectileBillboards(): void {
+    const renders = sim.projectileRenders();
+    // Grow the mesh pool to match renders
+    while (projMeshes.length < renders.length) {
+      const geom = new THREE.PlaneGeometry(0.42, 0.18);
+      const mat = new THREE.MeshBasicMaterial({
+        map: dynamiteBundleFrames[0]!,
+        transparent: true,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      const spinRate = (2 + Math.random() * 2) * (Math.random() < 0.5 ? 1 : -1);
+      projMeshes.push({ mesh, spinPhase: 0, spinRate, lastFrameIdx: -1 });
+    }
+    // Shrink the mesh pool (projectiles detonated)
+    while (projMeshes.length > renders.length) {
+      const entry = projMeshes.pop()!;
+      scene.remove(entry.mesh);
+      entry.mesh.geometry.dispose();
+      (entry.mesh.material as THREE.Material).dispose();
+    }
+    // Update positions + billboard orientation + fuse-burn frame
+    for (let i = 0; i < renders.length; i++) {
+      const r = renders[i]!;
+      const entry = projMeshes[i]!;
+      entry.mesh.position.set(r.xMeters, r.yMeters, r.zMeters);
+      entry.mesh.lookAt(camera.position);
+      entry.spinPhase += entry.spinRate * (1 / 60); // approximate frame dt for spin
+      entry.mesh.rotateZ(entry.spinPhase);
+      // Fuse-burn frame cycling (Blood SEQ 3432→3435)
+      if (dynamiteBundleFrames.length > 1) {
+        const idx = fuseFrameIndex(r.fuseTics, r.fuseMaxTics, dynamiteBundleFrames.length);
+        if (idx !== entry.lastFrameIdx) {
+          const mat = entry.mesh.material as THREE.MeshBasicMaterial;
+          mat.map = dynamiteBundleFrames[idx]!;
+          mat.needsUpdate = true;
+          entry.lastFrameIdx = idx;
+        }
+      }
+    }
+  }
+
   const chargeHud = new ChargeHud(document.body);
 
   // ---- Pause menu
@@ -764,6 +835,20 @@ async function main() {
     camera.position.set(pr.xMeters, pr.eyeYMeters, pr.zMeters);
     camera.rotation.order = 'YXZ';
     camera.rotation.set(pr.pitchRad, pr.yawRad, 0);
+
+    // ---- Sim projectile billboards: sync THREE meshes to sim.projectileRenders()
+    syncProjectileBillboards();
+
+    // ---- Drain sim explosion events → VFX + SFX (player damage already done in sim)
+    for (const ev of sim.drainEvents()) {
+      if (ev.kind === 'explosion') {
+        const ex = fpToMeters(ev.x);
+        const ey = fpToMeters(ev.y);
+        const ez = fpToMeters(ev.z);
+        sfx.play(SfxEvent.DYNAMITE_BOOM, { x: ex, y: ey, z: ez });
+        gibs.spawnExplosion({ x: ex, y: ey, z: ez }, EXPLOSION_STANDARD, performance.now() / 1000);
+      }
+    }
 
     scheduler.tick(realDt, fixedStep);
 

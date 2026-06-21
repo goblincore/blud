@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chargeFraction, throwVelocityMps, remainingFuse, fuseFrameIndex, throwVector, Dynamite, resetProjectiles } from './dynamite';
+import { chargeFraction, throwVelocityMps, remainingFuse, fuseFrameIndex, throwVector, Dynamite } from './dynamite';
 import type { FrameCtx } from './types';
 import { DYNAMITE_COOK } from '../gibs/tuning';
 
@@ -139,25 +139,17 @@ describe('throwVector (Blood pitch-biased lob port)', () => {
 //
 // See docs/dev-notes/2026-04-22-notblood-source-reference.md for the canonical
 // Blood state machine this mirrors.
+//
+// NOTE: Projectile body + detonation now live in src/sim/ (plan 3, Task 7).
+// FSM tests below check the weapon phase machine and hook invocation only.
+// Impact-detonate + displacement grace tests are in src/sim/projectile.test.ts.
 // ———————————————————————————————————————————————————————————————————————
 
 function makeCtx(now: number): FrameCtx {
-  const stubCollider = {} as any;
-  const stubBody = {
-    setLinvel: () => {},
-    setAngvel: () => {},
-    translation: () => ({ x: 0, y: 0, z: 0 }),
-    collider: (_idx: number) => stubCollider, // impact-detonate path queries this
-  };
   return {
-    world: {
-      createRigidBody: () => stubBody,
-      createCollider: () => {},
-      removeRigidBody: () => {},
-      contactPairsWith: (_c: any, _f: any) => {}, // no contacts in unit tests
-    } as any,
+    world: {} as any,
     player: {
-      pos: { x: 0, y: 0, z: 0 },
+      pos: { x: 0, y: 1.75, z: 0 },
       forward: { x: 0, y: 0, z: -1 },
       handPos: { x: 0, y: 1, z: 0 },
       takeDamage: () => {},
@@ -174,7 +166,6 @@ function makeCtx(now: number): FrameCtx {
 /** Construct a Dynamite and drive it past the equip animation so `idle` is reached.
  *  Returns the dynamite and the post-equip time (equipEnd) the caller can start from. */
 function equipped(): { d: Dynamite; equipEnd: number } {
-  resetProjectiles(makeCtx(0).world);
   const d = new Dynamite();
   d.onFrame(makeCtx(0), 0);        // lazy-init: enters 'equipping', phaseEnteredAt=0
   d.onFrame(makeCtx(0.45), 0.45);  // equippingMs=420ms elapsed → idle
@@ -183,14 +174,12 @@ function equipped(): { d: Dynamite; equipEnd: number } {
 
 describe('Dynamite FSM', () => {
   it('starts in EQUIPPING (before any onFrame)', () => {
-    resetProjectiles(makeCtx(0).world);
     const d = new Dynamite();
     expect(d.phase()).toBe('equipping');
     expect(d.isFuseLit()).toBe(false);
   });
 
   it('EQUIPPING auto-advances to IDLE after equippingMs', () => {
-    resetProjectiles(makeCtx(0).world);
     const d = new Dynamite();
     d.onFrame(makeCtx(0), 0);        // lazy-init
     d.onFrame(makeCtx(0.45), 0.45);  // past equippingMs=420ms
@@ -199,7 +188,6 @@ describe('Dynamite FSM', () => {
   });
 
   it('onPress during EQUIPPING is a no-op (player can\'t shoot during equip)', () => {
-    resetProjectiles(makeCtx(0).world);
     const d = new Dynamite();
     d.onFrame(makeCtx(0), 0);  // lazy-init, phase=equipping
     d.onPress(makeCtx(0.1));
@@ -258,92 +246,33 @@ describe('Dynamite FSM', () => {
     expect(d.phase()).toBe('idle');
   });
 
-  // ——— Impact-detonate (NotBlood primary fire) —————————————————————————
-  it('thrown projectile uses impact-safety fuse (not remainingFuse) — long enough to clear arena', async () => {
-    const { DYNAMITE_COOK } = await import('../gibs/tuning');
+  it('throwHook is called on release with speed and impact=true', () => {
     const { d, equipEnd } = equipped();
-    let spawnedFuse = -1;
-    const ctxWithSpy = (now: number): FrameCtx => {
-      const c = makeCtx(now);
-      // Hook spawnExplosion to capture when it fires; we need a unique world
-      // each call so resetProjectiles doesn't leak state.
-      return c;
+    let hookedSpeed = -1;
+    let hookedImpact = false;
+    d.throwHook = (speedMps, impact) => {
+      hookedSpeed = speedMps;
+      hookedImpact = impact;
     };
-    d.onPress(ctxWithSpy(equipEnd + 0.01));
-    // Fully cook the bundle (would have remainingFuse=0 in old code → instant
-    // detonate). Now should use impactSafetyFuseSec instead.
-    d.onRelease(ctxWithSpy(equipEnd + DYNAMITE_COOK.maxChargeSec + 0.01));
-    // The projectile is now in flight. Drive a frame at a time well under
-    // impactSafetyFuseSec; it should NOT detonate (no contact reported).
-    let exploded = false;
-    const trackingCtx: FrameCtx = (() => {
-      const c = makeCtx(equipEnd + 3.0);
-      c.gibs = { spawnExplosion: () => { exploded = true; }, registerDude: () => {}, unregisterDude: () => {} } as any;
-      return c;
-    })();
-    d.onFrame(trackingCtx, 0.5);
-    expect(exploded).toBe(false);
-    void spawnedFuse;
-  });
-
-  it('thrown projectile detonates immediately when contactPairsWith reports a contact', () => {
-    const { d, equipEnd } = equipped();
     d.onPress(makeCtx(equipEnd + 0.01));
-    d.onRelease(makeCtx(equipEnd + 0.5)); // half-cook throw
-    let exploded = false;
-    const ctx: FrameCtx = (() => {
-      const c = makeCtx(equipEnd + 1.5);
-      // Override translation to be 5 m past spawn so the safe-distance check
-      // passes, and contactPairsWith to report a contact.
-      const fakeBody = {
-        setLinvel: () => {}, setAngvel: () => {},
-        translation: () => ({ x: 5, y: 1, z: 0 }),
-        collider: () => ({}),
-      };
-      c.world = {
-        createRigidBody: () => fakeBody,
-        createCollider: () => {},
-        removeRigidBody: () => {},
-        contactPairsWith: (_c: any, fn: (other: any) => void) => fn({}),
-      } as any;
-      c.gibs = { spawnExplosion: () => { exploded = true; }, registerDude: () => {}, unregisterDude: () => {} } as any;
-      return c;
-    })();
-    // Drive one frame after spawn — grace + displacement satisfied → contact → detonate.
-    d.onFrame(ctx, 0.1);
-    expect(exploded).toBe(true);
+    d.onRelease(makeCtx(equipEnd + 0.5));
+    expect(hookedSpeed).toBeGreaterThan(0);
+    expect(hookedImpact).toBe(true);
+    expect(d.phase()).toBe('throwing');
   });
 
-  it('does NOT detonate while still inside the player safety radius (just-thrown)', () => {
-    // Build a context whose body's translation barely changes from spawnPos so
-    // the safe-distance gate fails. We use the same world+body for release and
-    // onFrame so the projectile actually picks up our near-stationary body.
-    const stubCollider = {} as any;
-    const stubBody = {
-      setLinvel: () => {}, setAngvel: () => {},
-      translation: () => ({ x: 0, y: 0.1, z: 0.1 }), // ~0.14 m from handPos {0,0,0}
-      collider: (_idx: number) => stubCollider,
-    };
-    const fakeWorld = {
-      createRigidBody: () => stubBody,
-      createCollider: () => {},
-      removeRigidBody: () => {},
-      contactPairsWith: (_c: any, fn: (other: any) => void) => fn({}), // contact would fire if checked
-    };
-    const ctxAt = (now: number, gibsSpy: { exploded: boolean }): FrameCtx => ({
-      world: fakeWorld as any,
-      player: { pos: { x: 0, y: 0, z: 0 }, forward: { x: 0, y: 0, z: -1 }, handPos: { x: 0, y: 0, z: 0 }, takeDamage: () => {} },
-      gibs: { spawnExplosion: () => { gibsSpy.exploded = true; }, registerDude: () => {}, unregisterDude: () => {} } as any,
-      now,
-    });
-    resetProjectiles(fakeWorld as any);
-    const d = new Dynamite();
-    const spy = { exploded: false };
-    d.onFrame(ctxAt(0, spy), 0);        // equip lazy-init
-    d.onFrame(ctxAt(0.45, spy), 0.45);  // → idle
-    d.onPress(ctxAt(0.46, spy));
-    d.onRelease(ctxAt(0.96, spy));      // half-cook throw
-    d.onFrame(ctxAt(1.05, spy), 0.09);  // grace expired but displacement < 0.7m
-    expect(spy.exploded).toBe(false);
+  it('throwHook receives charge-proportional speed', () => {
+    const { d: d1, equipEnd: e1 } = equipped();
+    const { d: d2, equipEnd: e2 } = equipped();
+    let speed1 = 0, speed2 = 0;
+    d1.throwHook = (s) => { speed1 = s; };
+    d2.throwHook = (s) => { speed2 = s; };
+    // Minimal charge
+    d1.onPress(makeCtx(e1 + 0.01));
+    d1.onRelease(makeCtx(e1 + 0.01)); // near 0 cook
+    // Full charge
+    d2.onPress(makeCtx(e2 + 0.01));
+    d2.onRelease(makeCtx(e2 + 0.01 + DYNAMITE_COOK.maxChargeSec + 0.1)); // full cook
+    expect(speed2).toBeGreaterThan(speed1);
   });
 });

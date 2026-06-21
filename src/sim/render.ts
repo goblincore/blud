@@ -18,7 +18,13 @@ function lerpAngle(a: number, b: number, t: number): number {
   return ((r % 2048) + 2048) % 2048;               // keep in [0, 2048)
 }
 
-export interface ProjectileRender { xMeters: number; yMeters: number; zMeters: number; }
+export interface ProjectileRender {
+  xMeters: number; yMeters: number; zMeters: number;
+  /** Remaining fuse in tics (from current state — not interpolated, cosmetic only). */
+  fuseTics: number;
+  /** Max fuse in tics at spawn (for fuse-frame cycle math). */
+  fuseMaxTics: number;
+}
 
 /** Interpolate projectile positions between the previous and current tic, in meters.
  *  Match by index — a projectile detonated this tic (in prev but not cur) is dropped.
@@ -35,6 +41,8 @@ export function renderProjectiles(prev: ProjectileState[], cur: ProjectileState[
       xMeters: fpToMeters(a.x + (b.x - a.x) * alpha),
       yMeters: fpToMeters(a.y + (b.y - a.y) * alpha),
       zMeters: fpToMeters(a.z + (b.z - a.z) * alpha),
+      fuseTics: b.fuseTics,
+      fuseMaxTics: b.fuseMaxTics,
     });
   }
   return out;
