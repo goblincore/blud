@@ -1,5 +1,5 @@
 // src/sim/player.ts
-import { metersPerSecToFp, mulfp, FP_PER_BU } from './fp';
+import { metersPerSecToFp, mulfp, FP_PER_BU, fpFromMeters } from './fp';
 import { bcos, bsin } from './trig';
 import { clipMoveXZ, type SimAABB } from './geometry';
 import { BTN_JUMP, BTN_SPRINT, type InputCommand } from './types';
@@ -22,7 +22,7 @@ const WALK = metersPerSecToFp(6);
 const RUN = metersPerSecToFp(9);
 const JUMP_VY = metersPerSecToFp(8.5);
 const GRAVITY_DV = metersPerSecToFp(25 / 120); // Δvy per tic (25 m/s² at 120 tic/s)
-const RADIUS = Math.round(0.3 * 256 * FP_PER_BU); // 0.3 m in fp
+const RADIUS = fpFromMeters(0.3); // 0.3 m player radius in fp
 const DIAG = Math.round(0.70710678 * FP_PER_BU);  // 1/√2 in 16.16
 
 /** Advance the player one tic. Pure: mutates `p`, reads `cmd` + `geo`. */

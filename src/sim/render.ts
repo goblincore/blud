@@ -12,8 +12,9 @@ export interface PlayerRender {
 
 /** Shortest-arc lerp of a Blood angle (handles 2048 wraparound). */
 function lerpAngle(a: number, b: number, t: number): number {
-  let d = ((b - a + 1024 + 2048) % 2048) - 1024; // [-1024, 1024)
-  return a + d * t;
+  const d = ((b - a + 1024 + 2048) % 2048) - 1024; // shortest arc in [-1024, 1024)
+  const r = a + d * t;
+  return ((r % 2048) + 2048) % 2048;               // keep in [0, 2048)
 }
 
 /** Interpolate the player between the previous and current tic for smooth

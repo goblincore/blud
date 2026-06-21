@@ -25,4 +25,10 @@ describe('renderPlayer — interpolated camera transform (render boundary)', () 
     const out = renderPlayer(cur, cur, 1);
     expect(out.yawRad).toBeCloseTo(Math.PI / 2, 4);
   });
+  it('wraps yaw across the 0/2048 boundary without overshoot at alpha=1', () => {
+    const prev = createPlayerState(); prev.yaw = 1900;
+    const cur = createPlayerState(); cur.yaw = 100;
+    const out = renderPlayer(prev, cur, 1);
+    expect(out.yawRad).toBeCloseTo((100 / 2048) * Math.PI * 2, 4);
+  });
 });

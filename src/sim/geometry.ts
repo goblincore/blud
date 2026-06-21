@@ -52,6 +52,11 @@ export function clipMoveXZ(
  * floor is NOT included here (handled as a y-clamp in the player step).
  *
  * Arena (meters): floorSize 40, wallThick 0.5, walls centered at ±20.
+ *
+ * SYNC WARNING: these wall + obstacle AABBs mirror the colliders in
+ * src/game/arena.ts (the `walls` and `obstacles` arrays). arena.ts is NOT
+ * imported (determinism firewall) — if you add/move arena geometry, update
+ * this function by hand or the sim collision will diverge from the visuals.
  */
 export function buildArenaGeometry(): SimAABB[] {
   const boxFromCenter = (cx: number, cz: number, sx: number, sz: number): SimAABB => ({
