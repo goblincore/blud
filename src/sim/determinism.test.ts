@@ -1,4 +1,11 @@
 // src/sim/determinism.test.ts
+//
+// Determinism harness. NOTE (plan 1 scope): stepSim does not yet draw from the
+// RNG during a tic — RNG-in-step lands with player/weapon logic in plans 2–3.
+// So this harness currently proves per-tic determinism of the tic counter +
+// integer integration + clone/hash, and the seeded velocities prove seed
+// divergence. When stepSim first consumes the RNG, EXTEND recordedInputs (or a
+// step path) so the harness also exercises the RNG-during-step path.
 import { describe, it, expect } from 'vitest';
 import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
