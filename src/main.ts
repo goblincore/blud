@@ -5,7 +5,8 @@ import { createScheduler } from './engine/loop';
 import { createInputState, attachInput } from './engine/input';
 import { initPhysics } from './physics/world';
 import { buildArena, installSkybox, registerArenaSurfaces, ZombieCluster, GameOverOverlay } from './game/arena';
-import { createPlayer } from './game/player';
+import { SimRunner } from './sim/runner';
+import { EMPTY_INPUT, BTN_JUMP, BTN_SPRINT, type InputCommand } from './sim/types';
 import { createDebugHud } from './ui/debug-hud';
 import { ChargeHud } from './ui/charge-hud';
 import { PauseMenu } from './ui/pause-menu';
@@ -169,12 +170,45 @@ async function main() {
   const input = createInputState();
   attachInput(canvas, input);
 
-  // ---- Player (M1 character controller)
-  const player = createPlayer({
-    world: physics.world,
-    camera,
-    spawn: new THREE.Vector3(0, 2, 0),
-  });
+  // ---- Deterministic sim player (120 Hz)
+  // Replaces the Rapier kinematic player capsule + character controller.
+  // The sim core is Three/Rapier-free; main.ts drives the camera from the
+  // interpolated PlayerRender at render time.
+  const sim = new SimRunner(0xb1d, 0, 0); // spawn at arena center (feet y=0)
+
+  // ---- Input sampler: converts InputState → per-tic InputCommand.
+  // Mouse delta is consumed exactly once per sim tic (inside sampleInput via
+  // consumeMouseDelta). The old player.update consumed it — this replaces that.
+  const RAD_TO_BANGLE = 2048 / (Math.PI * 2);
+  const MOUSE_SENS_BANGLE = 0.0022 * RAD_TO_BANGLE; // 0.0022 rad/count × 2048/(2π)
+  const PITCH_LIMIT_BANGLE = Math.round((Math.PI / 2 - 0.05) * RAD_TO_BANGLE);
+  let aimYaw = 0;   // accumulated absolute Blood angle
+  let aimPitch = 0;
+  function sampleInput(): InputCommand {
+    const { dx, dy } = input.consumeMouseDelta();
+    aimYaw = Math.round(((aimYaw - dx * MOUSE_SENS_BANGLE) % 2048 + 2048) % 2048);
+    aimPitch = Math.round(aimPitch - dy * MOUSE_SENS_BANGLE);
+    if (aimPitch > PITCH_LIMIT_BANGLE) aimPitch = PITCH_LIMIT_BANGLE;
+    if (aimPitch < -PITCH_LIMIT_BANGLE) aimPitch = -PITCH_LIMIT_BANGLE;
+    let buttons = 0;
+    if (input.isDown('Space')) buttons |= BTN_JUMP;
+    if (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) buttons |= BTN_SPRINT;
+    return {
+      moveForward: (input.isDown('KeyW') ? 1 : 0) - (input.isDown('KeyS') ? 1 : 0),
+      moveStrafe: (input.isDown('KeyD') ? 1 : 0) - (input.isDown('KeyA') ? 1 : 0),
+      aimYaw, aimPitch, buttons,
+    };
+  }
+
+  // ---- player adapter: thin shim over the sim player so legacy callers
+  // (enemy AI, weapon origin, lastPlayerPos, hud) keep getting a THREE.Vector3
+  // at the player's eye position — matching what the old position() returned.
+  const player = {
+    position(): THREE.Vector3 {
+      const r = sim.playerRender();
+      return new THREE.Vector3(r.xMeters, r.eyeYMeters, r.zMeters);
+    },
+  };
 
   // Camera must be in the scene graph before AudioListener is added to it
   // (required for positional audio), and before FPV weapon meshes are parented.
@@ -320,8 +354,8 @@ async function main() {
     groundFlames.clear(scene);
     pelletRegistry.length = 0;
     playerGib.hp = 100;
-    // Reset player position — re-create player body
-    player.update(0, input); // no-op to satisfy interface; player stays where they are
+    // Reset sim player back to spawn (arena center, feet y=0)
+    sim.reset(0, 0);
     cluster.spawn(4);
   });
 
@@ -627,7 +661,8 @@ async function main() {
 
   function fixedStep(dt: number) {
     physics.step(dt);
-    player.update(dt, input);
+    // Note: player movement is now driven by sim.advance() in the render callback
+    // at 120 Hz; the legacy 60 Hz fixedStep no longer calls player.update.
 
     // Weapon tick (fuse countdown, projectile physics)
     // Single onFrame call — weapons.current now ticks whichever weapon is held.
@@ -659,8 +694,10 @@ async function main() {
     }
 
     // ——— Pellet registry tick ——————————————————
-    // Get player rigid body for hit detection (player body handle = 0 from player.ts)
-    const playerBody = (player as any)._body as RAPIER.RigidBody | null;
+    // Player no longer has a Rapier body (sim player replaced it); pass null so
+    // the pellet still raycasts world geometry but cannot detect player hits.
+    // TODO(plan-3 or sooner): replace with AABB proximity check against sim.playerRender().
+    const playerBody = null as RAPIER.RigidBody | null;
     const pelletRaycastFn = (from: Vec3, dir: Vec3, maxDist: number) => {
       const dLen = Math.hypot(dir.x, dir.y, dir.z);
       if (dLen < 0.0001) return null;
@@ -718,6 +755,15 @@ async function main() {
   setRenderCallback((realDt) => {
     // Skip game simulation when paused (still renders frozen frame)
     if (pauseMenu.paused) return;
+
+    // ---- Sim player: advance at 120 Hz and set camera from interpolated state.
+    // sampleInput() consumes the mouse delta exactly once per sim tic.
+    // Must run before scheduler.tick so enemies read an up-to-date player.position().
+    sim.advance(realDt, sampleInput);
+    const pr = sim.playerRender();
+    camera.position.set(pr.xMeters, pr.eyeYMeters, pr.zMeters);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(pr.pitchRad, pr.yawRad, 0);
 
     scheduler.tick(realDt, fixedStep);
 
