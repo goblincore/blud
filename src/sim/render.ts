@@ -22,7 +22,10 @@ export interface ProjectileRender { xMeters: number; yMeters: number; zMeters: n
 
 /** Interpolate projectile positions between the previous and current tic, in meters.
  *  Match by index — a projectile detonated this tic (in prev but not cur) is dropped.
- *  The runner uses the same prev/cur snapshots it already keeps for the player. */
+ *  The runner uses the same prev/cur snapshots it already keeps for the player.
+ *  NOTE: index-matching assumes projectiles are append-only + removed-on-detonation;
+ *  if multiple projectiles detonate in the same tic the surviving indices shift and
+ *  one frame may interpolate slightly wrong — cosmetic only (render path). */
 export function renderProjectiles(prev: ProjectileState[], cur: ProjectileState[], alpha: number): ProjectileRender[] {
   const n = Math.min(prev.length, cur.length);
   const out: ProjectileRender[] = [];

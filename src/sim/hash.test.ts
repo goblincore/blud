@@ -62,4 +62,11 @@ describe('hashSimState', () => {
     const a = createSimState(5); const b = createSimState(5); b.player.hp = 50;
     expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
+
+  it('changes when a projectile elastic/radius differs', () => {
+    const base = { x: 1, y: 2, z: 3, vx: 0, vy: 0, vz: 0, radius: 5242, elastic: 24576, resting: false, fuseTics: 5, fuseMaxTics: 5, impactMode: true, spawnTic: 0, spawnX: 1, spawnY: 2, spawnZ: 3 };
+    const a = createSimState(5); a.projectiles.push({ ...base });
+    const b = createSimState(5); b.projectiles.push({ ...base, elastic: 30000 });
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
 });

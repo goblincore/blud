@@ -19,7 +19,14 @@ export function isAirBurstFp(_x: number, y: number, _z: number, _geo: SimAABB[])
 
 /** Deterministic explosion damage to the player (the only sim-resident target this
  *  slice). Linear falloff to the radius edge. `rng` reserved for any future
- *  variance roll (kept in the signature so the harness exercises the RNG path). */
+ *  variance roll (kept in the signature so the harness exercises the RNG path).
+ *
+ *  NOTE — cross-platform determinism: the falloff uses float meters
+ *  (Math.hypot/division) to compute the scalar before writing integer `hp`.
+ *  This is deterministic WITHIN a single JS engine (all current peers), but if a
+ *  native client or a different JS engine is ever added as a lockstep peer, move
+ *  the falloff to integer fp arithmetic to guarantee identical `hp` across
+ *  platforms. */
 export function applyExplosionToPlayer(
   p: PlayerState, ex: number, ey: number, ez: number, rng: SimRng,
 ): void {

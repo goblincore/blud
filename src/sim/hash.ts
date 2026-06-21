@@ -28,6 +28,7 @@ export function hashSimState(s: SimState): number {
 
   for (const pr of s.projectiles) {
     mix(pr.x); mix(pr.y); mix(pr.z); mix(pr.vx); mix(pr.vy); mix(pr.vz);
+    mix(pr.radius); mix(pr.elastic); mix(pr.fuseMaxTics);
     mix(pr.fuseTics); mix(pr.impactMode ? 1 : 0);
   }
 
