@@ -1,28 +1,26 @@
 // src/sim/determinism.test.ts
-//
-// Determinism harness. NOTE (plan 1 scope): stepSim does not yet draw from the
-// RNG during a tic — RNG-in-step lands with player/weapon logic in plans 2–3.
-// So this harness currently proves per-tic determinism of the tic counter +
-// integer integration + clone/hash, and the seeded velocities prove seed
-// divergence. When stepSim first consumes the RNG, EXTEND recordedInputs (or a
-// step path) so the harness also exercises the RNG-during-step path.
+// Harness proves player move/look/jump/collision determinism; RNG-in-step arrives with weapons (plan 3) — extend then.
 import { describe, it, expect } from 'vitest';
 import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
 import { hashSimState } from './hash';
 import { cloneSimState } from './snapshot';
 import { randomInt } from './rng';
-import type { InputCommand } from './types';
+import { BTN_JUMP, BTN_SPRINT, type InputCommand } from './types';
+import { buildArenaGeometry } from './geometry';
 
-/** A deterministic recorded input stream (varied movement/aim/buttons). */
+const GEO = buildArenaGeometry();
+
+/** A deterministic recorded input stream exercising the player every tic. */
 function recordedInputs(n: number): InputCommand[] {
   const out: InputCommand[] = [];
   for (let i = 0; i < n; i++) {
     out.push({
       moveForward: (i % 3) - 1,
-      moveStrafe: (i % 2) === 0 ? 1 : -1,
-      aimAngle: (i * 37) % 2048,
-      buttons: i % 5 === 0 ? 1 : 0,
+      moveStrafe: (i % 5 < 2) ? 1 : -1,
+      aimYaw: (i * 37) % 2048,
+      aimPitch: ((i * 13) % 400) - 200,
+      buttons: (i % 47 === 0 ? BTN_JUMP : 0) | (i % 3 === 0 ? BTN_SPRINT : 0),
     });
   }
   return out;
@@ -49,8 +47,8 @@ describe('determinism harness', () => {
     const b = seededState(2026);
     expect(hashSimState(a)).toBe(hashSimState(b)); // identical seeding
     for (let t = 0; t < inputs.length; t++) {
-      stepSim(a, inputs[t]!);
-      stepSim(b, inputs[t]!);
+      stepSim(a, inputs[t]!, GEO);
+      stepSim(b, inputs[t]!, GEO);
       expect(hashSimState(a)).toBe(hashSimState(b)); // identical EVERY tic
     }
   });
@@ -59,7 +57,7 @@ describe('determinism harness', () => {
     const inputs = recordedInputs(300);
     const run = (): number => {
       const s = seededState(2026);
-      for (const cmd of inputs) stepSim(s, cmd);
+      for (const cmd of inputs) stepSim(s, cmd, GEO);
       return hashSimState(s);
     };
     expect(run()).toBe(run());
@@ -68,11 +66,11 @@ describe('determinism harness', () => {
   it('mid-run snapshot + resume reproduces the same final hash', () => {
     const inputs = recordedInputs(200);
     const live = seededState(7);
-    for (let t = 0; t < 100; t++) stepSim(live, inputs[t]!);
+    for (let t = 0; t < 100; t++) stepSim(live, inputs[t]!, GEO);
     const snap = cloneSimState(live);              // save at tic 100
-    for (let t = 100; t < 200; t++) stepSim(live, inputs[t]!);
+    for (let t = 100; t < 200; t++) stepSim(live, inputs[t]!, GEO);
     const liveHash = hashSimState(live);
-    for (let t = 100; t < 200; t++) stepSim(snap, inputs[t]!); // resume from snapshot
+    for (let t = 100; t < 200; t++) stepSim(snap, inputs[t]!, GEO); // resume from snapshot
     expect(hashSimState(snap)).toBe(liveHash);
   });
 
@@ -80,7 +78,7 @@ describe('determinism harness', () => {
     const inputs = recordedInputs(50);
     const a = seededState(1);
     const b = seededState(2);
-    for (const cmd of inputs) { stepSim(a, cmd); stepSim(b, cmd); }
+    for (const cmd of inputs) { stepSim(a, cmd, GEO); stepSim(b, cmd, GEO); }
     expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
 });
