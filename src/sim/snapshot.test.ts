@@ -5,6 +5,9 @@ import { stepSim } from './step';
 import { cloneSimState } from './snapshot';
 import { hashSimState } from './hash';
 import { EMPTY_INPUT } from './types';
+import { buildArenaGeometry } from './geometry';
+
+const GEO = buildArenaGeometry();
 
 describe('cloneSimState', () => {
   it('produces an equal-but-independent copy', () => {
@@ -24,8 +27,8 @@ describe('cloneSimState', () => {
     s.bodies.push({ x: 0, y: 0, z: 0, vx: 7, vy: -3, vz: 2 });
     const c = cloneSimState(s);
     for (let i = 0; i < 50; i++) {
-      stepSim(s, EMPTY_INPUT);
-      stepSim(c, EMPTY_INPUT);
+      stepSim(s, EMPTY_INPUT, GEO);
+      stepSim(c, EMPTY_INPUT, GEO);
     }
     expect(hashSimState(c)).toBe(hashSimState(s));
   });

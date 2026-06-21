@@ -21,5 +21,9 @@ export function hashSimState(s: SimState): number {
     mix(b.vx); mix(b.vy); mix(b.vz);
   }
 
+  const p = s.player;
+  mix(p.x); mix(p.y); mix(p.z); mix(p.vy);
+  mix(p.yaw); mix(p.pitch); mix(p.grounded ? 1 : 0); mix(p.prevButtons);
+
   return h >>> 0;
 }

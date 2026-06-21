@@ -4,6 +4,9 @@ import { createSimState } from './state';
 import { stepSim } from './step';
 import { hashSimState } from './hash';
 import { EMPTY_INPUT } from './types';
+import { buildArenaGeometry } from './geometry';
+
+const GEO = buildArenaGeometry();
 
 describe('hashSimState', () => {
   it('is stable for identical states', () => {
@@ -15,7 +18,7 @@ describe('hashSimState', () => {
   it('changes when the tic advances', () => {
     const s = createSimState(5);
     const before = hashSimState(s);
-    stepSim(s, EMPTY_INPUT);
+    stepSim(s, EMPTY_INPUT, GEO);
     expect(hashSimState(s)).not.toBe(before);
   });
 
@@ -40,5 +43,12 @@ describe('hashSimState', () => {
     expect(Number.isInteger(h)).toBe(true);
     expect(h).toBeGreaterThanOrEqual(0);
     expect(h).toBeLessThanOrEqual(0xffffffff);
+  });
+
+  it('changes when the player position differs', () => {
+    const a = createSimState(5);
+    const b = createSimState(5);
+    b.player.x = 1234;
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
 });
