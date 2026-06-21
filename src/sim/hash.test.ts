@@ -51,4 +51,15 @@ describe('hashSimState', () => {
     b.player.x = 1234;
     expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
+
+  it('changes when a projectile differs', () => {
+    const a = createSimState(5); const b = createSimState(5);
+    b.projectiles.push({ x: 1, y: 2, z: 3, vx: 0, vy: 0, vz: 0, radius: 1, elastic: 24576, resting: false, fuseTics: 1, fuseMaxTics: 1, impactMode: true, spawnTic: 0, spawnX: 1, spawnY: 2, spawnZ: 3 });
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
+
+  it('changes when player hp differs', () => {
+    const a = createSimState(5); const b = createSimState(5); b.player.hp = 50;
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
 });

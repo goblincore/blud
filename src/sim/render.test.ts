@@ -1,9 +1,10 @@
 // src/sim/render.test.ts
 import { describe, it, expect } from 'vitest';
 import { createPlayerState } from './player';
-import { renderPlayer } from './render';
+import { renderPlayer, renderProjectiles } from './render';
 import { fpFromMeters } from './fp';
 import { BANGLE_QUARTER } from './trig';
+import { createSimState } from './state';
 
 describe('renderPlayer — interpolated camera transform (render boundary)', () => {
   it('lerps position between prev and cur by alpha, in meters', () => {
@@ -30,5 +31,16 @@ describe('renderPlayer — interpolated camera transform (render boundary)', () 
     const cur = createPlayerState(); cur.yaw = 100;
     const out = renderPlayer(prev, cur, 1);
     expect(out.yawRad).toBeCloseTo((100 / 2048) * Math.PI * 2, 4);
+  });
+});
+
+describe('renderProjectiles — interpolated billboard positions', () => {
+  it('renderProjectiles interpolates positions to meters', () => {
+    const prev = createSimState(1); const cur = createSimState(1);
+    const base = { vx:0,vy:0,vz:0,radius:1,elastic:24576,resting:false,fuseTics:1,fuseMaxTics:1,impactMode:true,spawnTic:0,spawnX:0,spawnY:0,spawnZ:0 };
+    prev.projectiles.push({ ...base, x: 0, y: fpFromMeters(0), z: 0, spawnX:0,spawnY:0,spawnZ:0 });
+    cur.projectiles.push({ ...base, x: fpFromMeters(2), y: 0, z: 0, spawnX:0,spawnY:0,spawnZ:0 });
+    const out = renderProjectiles(prev.projectiles, cur.projectiles, 0.5);
+    expect(out[0]!.xMeters).toBeCloseTo(1, 6);
   });
 });
