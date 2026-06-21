@@ -1,5 +1,5 @@
 // src/sim/determinism.test.ts
-// Harness proves player move/look/jump/collision determinism; RNG-in-step arrives with weapons (plan 3) — extend then.
+// Harness now covers player + projectiles (throw/bounce/fuse/detonation/explosion-vs-player). RNG-in-step exercised iff the explosion draws it.
 import { describe, it, expect } from 'vitest';
 import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
@@ -8,6 +8,7 @@ import { cloneSimState } from './snapshot';
 import { randomInt } from './rng';
 import { BTN_JUMP, BTN_SPRINT, type InputCommand } from './types';
 import { buildArenaGeometry } from './geometry';
+import { spawnProjectile, throwVelocity } from './projectile';
 
 const GEO = buildArenaGeometry();
 
@@ -37,6 +38,9 @@ function seededState(seed: number): SimState {
       vz: randomInt(s.rng, 7) - 3,
     });
   }
+  // Throw a dynamite projectile mid-air: exercises stepProjectiles, fuse countdown,
+  // floor bounce, detonation, and applyExplosionToPlayer through the recorded stream.
+  spawnProjectile(s.projectiles, 0, 3_000_000, 0, throwVelocity(s.player.yaw, 0, 2_500_000), 90, true, 0);
   return s;
 }
 
