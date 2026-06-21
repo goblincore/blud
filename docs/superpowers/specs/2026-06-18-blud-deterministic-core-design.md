@@ -36,16 +36,26 @@ Two layers, one-way data flow.
 
 - **Sim layer — MUST be bit-identical across peers.** Player movement/state,
   dude AI + movement, weapon/projectile logic, damage/death/gib *decisions*,
-  all timers, all RNG draws. Runs at a fixed **120 tic/s**.
-- **Cosmetic layer — per-client, free to diverge.** Rapier gib chunks, blood
-  particles, decals, screenshake, camera bob, animation-frame interpolation,
-  audio.
+  all timers, all RNG draws, and **persistent interactable objects** — the
+  kickable head (`kThingZombieHead`) and any future physics object a player can
+  collide with, kick, or otherwise change. Runs at a fixed **120 tic/s**.
+  (Source-faithful: the kickable head is a real Blood `kThing` with deterministic
+  `MoveThing` physics, not an FX.)
+- **Cosmetic layer — per-client, free to diverge.** The pure-decoration gib
+  *spray* (body-chunk scatter that settles into gore), blood particles, decals,
+  screenshake, camera bob, animation-frame interpolation, audio. Each is spawned
+  from a deterministic `SimEvent` (so every peer *does* see gore), but the exact
+  per-chunk scatter may differ harmlessly because no one interacts with it.
 - **Flow is one-way: `sim → events → cosmetic`.** The sim never reads cosmetic
-  state back. This is precisely what lets float/Rapier physics diverge between
-  clients without affecting gameplay.
+  state back. This is precisely what lets float/Rapier *decoration* physics
+  diverge between clients without affecting gameplay.
 
-If a thing can affect another player's outcome, it lives in the sim. If it's
-only seen/heard locally, it's cosmetic.
+**The test:** if a player can interact with it, or another player must see the
+*same* thing in the *same* place (e.g. the kickable head you punted across the
+room — your co-op partner has to see it land where you kicked it), it lives in
+the sim as a deterministic `kThing`. If it's only watched/heard and touching it
+changes nothing, it's cosmetic. Gib chunks split along this line: the
+**interactable head = sim**; the **decorative spray = cosmetic**.
 
 ## 2. Units & math
 
@@ -131,8 +141,18 @@ the level must carry a deterministic sim-geometry, distinct from its render mesh
 Deterministic, on `SimState`:
 
 - **Player** — movement + look + collision (deterministic wall-clip).
-- **Dynamite** — throw arc + fuse + explosion *decision* (already a pure-ish
-  pipeline; move its state into `SimState`). Gib chunks remain cosmetic.
+- **`kThing` mover** — a generic deterministic moving-thing integrator (port of
+  Blood `MoveThing`: fp velocity integrate, gravity, floor bounce w/ elastic,
+  wall-clip via the sim-geometry). Shared substrate for the thrown dynamite AND
+  the kickable head (and future physics objects).
+- **Dynamite** — throw arc + fuse + detonation as a deterministic `kThing`;
+  explosion *decision* in `SimState`, emitted as a `SimEvent`. The decorative
+  gib **spray** stays cosmetic (spawned from the event); explosion-vs-**player**
+  damage is deterministic (player is in the sim).
+- **Kickable head** — the `kThingZombieHead` is a **deterministic sim `kThing`**
+  (shared/interactable: co-op peers see the same head and the same kick outcome),
+  reusing the `kThing` mover, plus a player kick interaction. Only the decorative
+  spray around it is cosmetic.
 - **Shotgun cultist — full NotBlood AI** ported natively deterministic:
   `Idle → Chase → Dodge → Goto → Search → Fire → Recoil(→Dodge)` with **real
   deterministic LOS**. This is the cultist port originally requested, built once,
