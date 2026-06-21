@@ -5,9 +5,7 @@ import { TICS_PER_SEC } from './units';
 import { stepThing, type ThingState } from './thing';
 import type { SimAABB } from './geometry';
 import type { SimEvent } from './types';
-import type { PlayerState } from './player';
-import type { SimRng } from './rng';
-import { isAirBurstFp, applyExplosionToPlayer } from './explosion';
+import { isAirBurstFp } from './explosion';
 
 /** Throw tuning (ports DYNAMITE_COOK; tics instead of seconds). */
 export const THROW = {
@@ -55,10 +53,8 @@ const IMPACT_SAFE_DIST_SQ_FP = _safe * _safe;
  *  events. `tic` is the current SimState.tic. Mutates `projectiles`. */
 export function stepProjectiles(
   projectiles: ProjectileState[],
-  player: PlayerState,
   geo: SimAABB[],
   tic: number,
-  rng: SimRng,
   out: SimEvent[],
 ): void {
   for (let i = projectiles.length - 1; i >= 0; i--) {
@@ -74,7 +70,6 @@ export function stepProjectiles(
 
     if (detonate) {
       const air = isAirBurstFp(p.x, p.y, p.z, geo);
-      applyExplosionToPlayer(player, p.x, p.y, p.z, rng);
       out.push({ kind: 'explosion', x: p.x, y: p.y, z: p.z, air });
       projectiles.splice(i, 1);
     }

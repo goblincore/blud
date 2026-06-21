@@ -23,6 +23,6 @@ export function stepSim(state: SimState, input: InputCommand, geo: SimAABB[]): S
   }
 
   const events: SimEvent[] = [];
-  stepProjectiles(state.projectiles, state.player, geo, state.tic, state.rng, events);
+  stepProjectiles(state.projectiles, geo, state.tic, events);
   return events;
 }

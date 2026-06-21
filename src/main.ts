@@ -605,7 +605,7 @@ async function main() {
   }
   const projMeshes: ProjMeshEntry[] = [];
 
-  function syncProjectileBillboards(): void {
+  function syncProjectileBillboards(realDt: number): void {
     const renders = sim.projectileRenders();
     // Grow the mesh pool to match renders
     while (projMeshes.length < renders.length) {
@@ -634,7 +634,7 @@ async function main() {
       const entry = projMeshes[i]!;
       entry.mesh.position.set(r.xMeters, r.yMeters, r.zMeters);
       entry.mesh.lookAt(camera.position);
-      entry.spinPhase += entry.spinRate * (1 / 60); // approximate frame dt for spin
+      entry.spinPhase = (entry.spinPhase + entry.spinRate * realDt) % (Math.PI * 2);
       entry.mesh.rotateZ(entry.spinPhase);
       // Fuse-burn frame cycling (Blood SEQ 3432→3435)
       if (dynamiteBundleFrames.length > 1) {
@@ -837,9 +837,9 @@ async function main() {
     camera.rotation.set(pr.pitchRad, pr.yawRad, 0);
 
     // ---- Sim projectile billboards: sync THREE meshes to sim.projectileRenders()
-    syncProjectileBillboards();
+    syncProjectileBillboards(realDt);
 
-    // ---- Drain sim explosion events → VFX + SFX (player damage already done in sim)
+    // ---- Drain sim explosion events → VFX + SFX
     for (const ev of sim.drainEvents()) {
       if (ev.kind === 'explosion') {
         const ex = fpToMeters(ev.x);

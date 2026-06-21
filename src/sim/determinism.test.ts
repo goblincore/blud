@@ -1,5 +1,5 @@
 // src/sim/determinism.test.ts
-// Harness now covers player + projectiles (throw/bounce/fuse/detonation/explosion-vs-player). RNG-in-step exercised iff the explosion draws it.
+// Harness covers player + projectile physics + detonation/event determinism. Deterministic explosion-vs-player damage lands with the player-as-target unification.
 import { describe, it, expect } from 'vitest';
 import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
@@ -39,7 +39,7 @@ function seededState(seed: number): SimState {
     });
   }
   // Throw a dynamite projectile mid-air: exercises stepProjectiles, fuse countdown,
-  // floor bounce, detonation, and applyExplosionToPlayer through the recorded stream.
+  // floor bounce, detonation, and explosion event emission through the recorded stream.
   spawnProjectile(s.projectiles, 0, 3_000_000, 0, throwVelocity(s.player.yaw, 0, 2_500_000), 90, true, 0);
   return s;
 }
