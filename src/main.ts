@@ -152,6 +152,13 @@ const HAND_MUZZLE_LATERAL = 0.2; // screen-right of eye
 const HAND_MUZZLE_VERTICAL = -0.25; // below eye
 const HAND_MUZZLE_FORWARD = 0.5; // toward the gun muzzle (gun renders at ~0.6 m)
 
+// Dynamite throw origin — camera-space offset so the bundle leaves the player's
+// RIGHT HAND (lower-right of view) and arcs toward center, not from the eye/center.
+// (Migration regression: the sim throw hook had spawned at the raw eye.) Tunable.
+const DYN_THROW_LATERAL = 0.35;  // right of eye → right hand
+const DYN_THROW_VERTICAL = -0.5; // below eye → toward center-bottom
+const DYN_THROW_FORWARD = 0.4;   // slightly in front of the eye
+
 const FIXED_DT = 1 / 60;
 
 async function main() {
@@ -583,11 +590,25 @@ async function main() {
   // ——— Configure Dynamite throw hook (routes throw into the deterministic sim) ———
   const dynamite = weapons.getDynamite();
   dynamite.throwHook = (speedMps, impact) => {
-    // Eye position and aim angles come from the sim / input sampler (closure capture).
-    // The sim runner converts to fp internally.
-    const pr = sim.playerRender();
+    // Spawn at the player's RIGHT HAND, not the eye: a camera-space offset (the
+    // same basis the FPV muzzle uses) so the bundle leaves the lower-right of the
+    // view and arcs toward center. Aim direction still comes from aimYaw/aimPitch.
+    // (Determinism note: uses the live interpolated camera; fine for the legacy
+    // single-player throw — becomes a deterministic sim input when weapons migrate.)
+    camera.updateWorldMatrix(true, false);
+    const m = camera.matrixWorld.elements;
+    const basis: CameraBasis = {
+      right: { x: m[0], y: m[1], z: m[2] },
+      up: { x: m[4], y: m[5], z: m[6] },
+      forward: { x: -m[8], y: -m[9], z: -m[10] },
+    };
+    const eye = camera.position;
+    const hand = muzzleWorldPosition(
+      { x: eye.x, y: eye.y, z: eye.z }, basis,
+      DYN_THROW_LATERAL, DYN_THROW_VERTICAL, DYN_THROW_FORWARD,
+    );
     sim.spawnProjectile(
-      pr.xMeters, pr.eyeYMeters, pr.zMeters,
+      hand.x, hand.y, hand.z,
       aimYaw, aimPitch, speedMps,
       impact ? THROW.impactSafetyFuseTics : THROW.fuseMaxTics,
       impact,
