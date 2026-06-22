@@ -162,8 +162,11 @@ export const DYNAMITE_COOK = {
   maxChargeSec: 2.0,          // 240 tics @ 120 TPS (matches Blood's divscale16 / 240)
   minVelocityMps: 6.0,        // tuned so min-charge range ≈ 3 m (source-simulated; range ∝ v²)
   maxVelocityMps: 28.0,       // tuned so full-charge range ≈ 68 m (source-simulated; was 14 → ~17 m)
-  fuseMaxSec: 1.5,            // Blood weaponTimer-based fuse ≈ 50 tics ≈ 0.4s; Blud 1.5s for feel
-                              // (used by alt-fire / drop / overcook self-explode; NOT primary throw)
+  fuseMaxSec: 2.0,            // In-hand cook fuse (overcook self-explode) + alt-fire/drop fuse; NOT
+                              // primary throw. ALIGNED to maxChargeSec (2.0s) and the ~1.98s
+                              // dynamite-fuse-burn animation: was 1.5s, which blew in-hand 0.5s
+                              // before full charge / before the visible fuse finished → read as
+                              // "explodes sooner than expected" while charging.
   impactSafetyFuseSec: 5.0,   // Primary-fire impact-detonate: this is the in-flight fallback timeout
                               // for projectiles that never hit anything. Generous so a fully-cooked
                               // throw can clear the arena before fallback. Mirrors NotBlood's

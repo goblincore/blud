@@ -57,8 +57,9 @@ describe('dynamite tuning', () => {
   it('maxChargeSec is 2 (240 tics @ 120 TPS)', () => {
     expect(DYNAMITE_COOK.maxChargeSec).toBe(2.0);
   });
-  it('fuseMaxSec is 1.5 (shorter fuse for snappier feel, closer to Blood weaponTimer)', () => {
-    expect(DYNAMITE_COOK.fuseMaxSec).toBe(1.5);
+  it('fuseMaxSec (in-hand cook fuse) is aligned to maxChargeSec so it does not blow before full charge', () => {
+    expect(DYNAMITE_COOK.fuseMaxSec).toBe(2.0);
+    expect(DYNAMITE_COOK.fuseMaxSec).toBeGreaterThanOrEqual(DYNAMITE_COOK.maxChargeSec); // no overcook before full charge
   });
   it('throw velocity range is tuned to the source-simulated RANGE (min ~3 m, full ~68 m)', () => {
     // CORRECTED 2026-06-17: Blood's Cos() reads costable[] (2^30), NOT sintable
