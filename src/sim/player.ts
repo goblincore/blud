@@ -1,6 +1,6 @@
 // src/sim/player.ts
 import { metersPerSecToFp, mulfp, FP_PER_BU, fpFromMeters } from './fp';
-import { bcos, bsin } from './trig';
+import { yawRotate } from './trig';
 import { clipMoveXZ, type SimAABB } from './geometry';
 import { BTN_JUMP, BTN_SPRINT, type InputCommand } from './types';
 
@@ -38,10 +38,8 @@ export function stepPlayer(p: PlayerState, cmd: InputCommand, geo: SimAABB[]): v
   let lz = -cmd.moveForward;
   if (lx !== 0 && lz !== 0) { lx = lx * DIAG; lz = lz * DIAG; } // normalize diagonal (×1/√2, in 16.16)
   else { lx = lx * FP_PER_BU; lz = lz * FP_PER_BU; }            // unit in 16.16
-  // rotate (lx, lz) by yaw: world = R(yaw)·local
-  const cos = bcos(p.yaw), sin = bsin(p.yaw);
-  const wx = mulfp(lx, cos) + mulfp(lz, sin);
-  const wz = -mulfp(lx, sin) + mulfp(lz, cos);
+  // rotate (lx, lz) by yaw into world space (shared with throwVelocity — see trig.yawRotate)
+  const { x: wx, z: wz } = yawRotate(lx, lz, p.yaw);
   const speed = (cmd.buttons & BTN_SPRINT) ? RUN : WALK;
   const dx = mulfp(wx, speed);
   const dz = mulfp(wz, speed);

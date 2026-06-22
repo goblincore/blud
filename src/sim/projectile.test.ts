@@ -7,8 +7,31 @@ import { createSimState } from './state';
 import { stepSim } from './step';
 import { buildArenaGeometry } from './geometry';
 import { EMPTY_INPUT } from './types';
+import { createPlayerState, stepPlayer } from './player';
 
 const GEO = buildArenaGeometry();
+
+/** The player's forward MOVE direction (unit) at a yaw — the working reference:
+ *  W walks where you look, and the camera faces this way. The throw MUST match it. */
+function playerForwardDir(yaw: number): { x: number; z: number } {
+  const p = createPlayerState();
+  stepPlayer(p, { ...EMPTY_INPUT, moveForward: 1, aimYaw: yaw }, []); // no geo → free move
+  const len = Math.hypot(p.x, p.z) || 1;
+  return { x: p.x / len, z: p.z / len };
+}
+
+describe('throwVelocity direction matches the player forward (regression: mirrored-X bug)', () => {
+  it('throws where the player faces/moves, across the whole circle', () => {
+    const speed = metersPerSecToFp(20);
+    for (const yaw of [0, 256, 512, 900, 1024, 1500, 2000]) {
+      const f = playerForwardDir(yaw);
+      const v = throwVelocity(yaw, 0, speed);
+      const len = Math.hypot(v.vx, v.vz) || 1;
+      expect(v.vx / len).toBeCloseTo(f.x, 2); // same horizontal direction
+      expect(v.vz / len).toBeCloseTo(f.z, 2);
+    }
+  });
+});
 
 describe('throwVelocity — deterministic, aim-relative + upward lob', () => {
   const speed = metersPerSecToFp(20);

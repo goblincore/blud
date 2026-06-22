@@ -1,6 +1,6 @@
 // src/sim/projectile.ts
-import { mulfp, fpFromMeters } from './fp';
-import { bcos, bsin, BANGLE_FULL } from './trig';
+import { mulfp, fpFromMeters, FP_PER_BU } from './fp';
+import { bcos, bsin, BANGLE_FULL, yawRotate } from './trig';
 import { TICS_PER_SEC } from './units';
 import { stepThing, type ThingState } from './thing';
 import type { SimAABB } from './geometry';
@@ -31,8 +31,12 @@ export function throwVelocity(yaw: number, pitch: number, speed: number): ThrowV
   const horiz = bcos(effPitch);                  // 16.16 horizontal scale
   const vy = mulfp(speed, bsin(effPitch));       // vertical component
   const hs = mulfp(speed, horiz);
-  const vx = mulfp(hs, bsin(yaw));
-  const vz = mulfp(hs, -bcos(yaw));
+  // Horizontal direction = the SAME yaw→world forward the player moves/looks along
+  // (shared yawRotate — previously this re-derived it with a flipped X, which made
+  // throws mirror across the Z axis as you turned). local forward = (0, -1).
+  const fwd = yawRotate(0, -FP_PER_BU, yaw);
+  const vx = mulfp(hs, fwd.x);
+  const vz = mulfp(hs, fwd.z);
   return { vx, vy, vz };
 }
 

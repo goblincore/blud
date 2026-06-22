@@ -1,5 +1,5 @@
 // src/sim/trig.ts
-import { FP_PER_BU } from './fp';
+import { FP_PER_BU, mulfp } from './fp';
 
 /** Blood angle units: a full turn is 2048. */
 export const BANGLE_FULL = 2048;
@@ -27,3 +27,19 @@ function wrap(a: number): number {
 export function bcos(angle: number): number { return COS[wrap(angle)]!; }
 /** sin(angle) in 16.16 — sin(a) = cos(a - 90°) = cos(a - 512). */
 export function bsin(angle: number): number { return COS[wrap(angle - BANGLE_QUARTER)]!; }
+
+/**
+ * Rotate a local-space horizontal vector `(lx, lz)` (16.16) into world space by
+ * `yaw` (Blood angle). THE single source of "yaw → world direction" — both
+ * player movement (stepPlayer) and the dynamite throw (throwVelocity) MUST use
+ * this so they never disagree. Convention: local forward `(0, -1)` at yaw 0 maps
+ * to world `(-sin, -cos)` = the camera's facing.
+ */
+export function yawRotate(lx: number, lz: number, yaw: number): { x: number; z: number } {
+  const cos = bcos(yaw);
+  const sin = bsin(yaw);
+  return {
+    x: mulfp(lx, cos) + mulfp(lz, sin),
+    z: -mulfp(lx, sin) + mulfp(lz, cos),
+  };
+}
