@@ -615,6 +615,14 @@ async function main() {
     );
   };
 
+  // ——— Route head-pops into the deterministic sim (plan 3.5: shared kickable head) ———
+  // ChunkSystem.spawnHeadChunk funnels BOTH the 25% normal popHead and the
+  // explosion-launched head; this hook makes every head a sim object instead of a
+  // Rapier body. The blood spray (popHead's emitBurst) stays cosmetic.
+  chunks.spawnHeadHook = (origin, vel) => {
+    sim.spawnHead(origin.x, origin.y, origin.z, vel.x, vel.y, vel.z);
+  };
+
   // ——— Sim projectile billboard registry ————————————————————————
   // Three.js billboard meshes driven by sim.projectileRenders(). Created/removed to
   // match the sim projectile list. Spin is applied after lookAt (screen-space rotation).
@@ -667,6 +675,40 @@ async function main() {
           entry.lastFrameIdx = idx;
         }
       }
+    }
+  }
+
+  // ——— Sim kickable-head billboard registry ————————————————————————
+  // Three.js billboards driven by sim.headRenders(). Created/removed to match the
+  // sim head list; each faces the camera (lookAt). Tile 3405 = zombie head.
+  const ZOMBIE_HEAD_PICNUM = 3405;
+  const headMeshes: THREE.Mesh[] = [];
+
+  function syncHeadBillboards(): void {
+    const renders = sim.headRenders();
+    while (headMeshes.length < renders.length) {
+      const geom = new THREE.PlaneGeometry(0.45, 0.45);
+      const mat = new THREE.MeshBasicMaterial({
+        map: gibTextures!.get(ZOMBIE_HEAD_PICNUM),
+        transparent: true,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      headMeshes.push(mesh);
+    }
+    while (headMeshes.length > renders.length) {
+      const mesh = headMeshes.pop()!;
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+    for (let i = 0; i < renders.length; i++) {
+      const r = renders[i]!;
+      const mesh = headMeshes[i]!;
+      mesh.position.set(r.xMeters, r.yMeters, r.zMeters);
+      mesh.lookAt(camera.position);
     }
   }
 
@@ -859,6 +901,7 @@ async function main() {
 
     // ---- Sim projectile billboards: sync THREE meshes to sim.projectileRenders()
     syncProjectileBillboards(realDt);
+  syncHeadBillboards();
 
     // ---- Drain sim explosion events → VFX + SFX
     for (const ev of sim.drainEvents()) {

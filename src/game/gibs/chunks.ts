@@ -45,6 +45,13 @@ export class ChunkSystem {
   /** Picnum for the iconic bouncing zombie head (kickable — Blood signature). */
   private readonly zombieHeadPicnum = 3405;
 
+  /** When set, head spawns route to the deterministic sim instead of a cosmetic
+   *  Rapier body — the sim owns the kickable head (plan 3.5). The billboard is
+   *  driven from sim.headRenders() in main.ts. Both head sources (the 25% normal
+   *  popHead and the explosion-launched head) funnel through spawnHeadChunk, so
+   *  this single hook captures both. */
+  spawnHeadHook: ((origin: Vec3, vel: Vec3) => void) | null = null;
+
   /** Wire the SFX engine for gib splat sounds. */
   setSfx(sfx: Sfx): void { this.sfx = sfx; }
 
@@ -131,6 +138,7 @@ export class ChunkSystem {
   /** Spawn the iconic kickable zombie head at an explicit origin + velocity.
    *  Public: also used for the 25% normal-death head-pop (GibSystem.popHead). */
   spawnHeadChunk(origin: Vec3, vel: Vec3, now: number): void {
+    if (this.spawnHeadHook) { this.spawnHeadHook(origin, vel); return; }
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(origin.x, origin.y, origin.z)
       .setLinearDamping(0.4) // more drag so it settles into rolling, not sliding forever
