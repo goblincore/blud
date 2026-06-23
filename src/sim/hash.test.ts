@@ -6,6 +6,7 @@ import { hashSimState } from './hash';
 import { EMPTY_INPUT } from './types';
 import { buildArenaGeometry } from './geometry';
 import { spawnHead } from './head';
+import { spawnDude } from './dude';
 
 const GEO = buildArenaGeometry();
 
@@ -68,6 +69,13 @@ describe('hashSimState', () => {
     const a = createSimState(5);
     const b = createSimState(5);
     spawnHead(a.heads, 1000, 2000, 3000, 10, 20, 30, 0);
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
+
+  it('hash reflects dude state', () => {
+    const a = createSimState(5);
+    const b = createSimState(5);
+    spawnDude(a.dudes, 1000, 0, 0, 512);
     expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
 

@@ -10,6 +10,8 @@ import { BTN_JUMP, BTN_SPRINT, type InputCommand } from './types';
 import { buildArenaGeometry } from './geometry';
 import { spawnProjectile, throwVelocity } from './projectile';
 import { spawnHead } from './head';
+import { spawnDude } from './dude';
+import { fpFromMeters } from './fp';
 
 const GEO = buildArenaGeometry();
 
@@ -44,6 +46,12 @@ function seededState(seed: number): SimState {
   spawnProjectile(s.projectiles, 0, 3_000_000, 0, throwVelocity(s.player.yaw, 0, 2_500_000), 90, true, 0);
   // a head dropped mid-air so it falls/bounces across the recorded run
   spawnHead(s.heads, 100_000, 2_000_000, -80_000, 30_000, 120_000, -20_000, 0);
+  // a cultist near the player so the AI (targeting/chase/fire) runs through the
+  // recorded stream — covers dude state in replay/snapshot/divergence.
+  spawnDude(s.dudes, fpFromMeters(3), fpFromMeters(3), 0, 0);
+  // Park the player within sight+hearing radius so the cultist acquires + chases.
+  s.player.x = fpFromMeters(4);
+  s.player.z = fpFromMeters(4);
   return s;
 }
 

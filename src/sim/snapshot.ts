@@ -15,5 +15,6 @@ export function cloneSimState(s: SimState): SimState {
     player: { ...s.player },
     projectiles: s.projectiles.map((p) => ({ ...p })),
     heads: s.heads.map((h) => ({ ...h })),
+    dudes: s.dudes.map((d) => ({ ...d })),
   };
 }

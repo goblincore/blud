@@ -38,5 +38,12 @@ export function hashSimState(s: SimState): number {
     mix(hd.kickCooldownTics); mix(hd.spawnTic);
   }
 
+  for (const du of s.dudes) {
+    mix(du.x); mix(du.y); mix(du.z); mix(du.vx); mix(du.vz);
+    mix(du.ang); mix(du.goalAng); mix(du.health); mix(du.ai); mix(du.stateTics);
+    mix(du.hasTarget ? 1 : 0); mix(du.targetX); mix(du.targetZ);
+    mix(du.dodgeDir); mix(du.fired ? 1 : 0);
+  }
+
   return h >>> 0;
 }

@@ -7,6 +7,7 @@ import { hashSimState } from './hash';
 import { EMPTY_INPUT } from './types';
 import { buildArenaGeometry } from './geometry';
 import { spawnHead } from './head';
+import { spawnDude } from './dude';
 
 const GEO = buildArenaGeometry();
 
@@ -29,6 +30,14 @@ describe('cloneSimState', () => {
     const c = cloneSimState(s);
     c.heads[0]!.x = 999;
     expect(s.heads[0]!.x).toBe(1);
+  });
+
+  it('clones dudes independently', () => {
+    const s = createSimState(1);
+    spawnDude(s.dudes, 1000, 0, 0, 512);
+    const c = cloneSimState(s);
+    c.dudes[0]!.x = 999;
+    expect(s.dudes[0]!.x).toBe(1000);
   });
 
   it('snapshot fidelity: clone then step both → identical hash', () => {

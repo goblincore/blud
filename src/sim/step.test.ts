@@ -5,6 +5,7 @@ import { stepSim } from './step';
 import { EMPTY_INPUT } from './types';
 import { buildArenaGeometry } from './geometry';
 import { spawnHead } from './head';
+import { spawnDude } from './dude';
 import { fpFromMeters } from './fp';
 
 const GEO = buildArenaGeometry();
@@ -51,5 +52,19 @@ describe('stepSim', () => {
     stepSim(s, { ...EMPTY_INPUT, aimYaw: 1536 }, GEO);
     expect(s.heads.length).toBe(1);
     expect(s.heads[0]!.vx).toBeGreaterThan(0); // kicked toward +X this tic
+  });
+
+  it('steps dudes inside stepSim (idle cultist near the player starts thinking)', () => {
+    const s = createSimState(1);
+    // Place the cultist a few meters in front of the player so aiThinkTarget runs.
+    spawnDude(s.dudes, fpFromMeters(3), fpFromMeters(3), 0, 0);
+    // Park the player within sight+hearing radius of the cultist.
+    s.player.x = fpFromMeters(4);
+    s.player.z = fpFromMeters(4);
+    for (let i = 0; i < 50; i++) stepSim(s, EMPTY_INPUT, GEO);
+    expect(s.dudes.length).toBe(1);
+    // With the player in range and LOS clear, the cultist should have acquired a
+    // target (transitioned out of Idle) within a handful of alertChance rolls.
+    expect(s.dudes[0]!.hasTarget).toBe(true);
   });
 });
