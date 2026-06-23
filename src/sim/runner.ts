@@ -22,6 +22,10 @@ export class SimRunner {
   private geo = buildArenaGeometry();
   private accumulator = 0;
   private events: SimEvent[] = [];
+  /** Debug-only: when set, the player's hp is pinned at full after each advance.
+   *  Kept OUT of stepSim (the deterministic core) so the determinism harness/hash
+   *  are unaffected — this is a client-side playtest aid, not sim state. */
+  private invulnerable = false;
 
   constructor(seed: number, spawnXMeters: number, spawnZMeters: number) {
     this.state = createSimState(seed);
@@ -56,7 +60,12 @@ export class SimRunner {
     }
     // Spiral-of-death guard: if we fell more than 5 tics behind, drop the lag.
     if (steps >= 5) this.accumulator = 0;
+    if (this.invulnerable) this.state.player.hp = 100; // debug god mode (post-step; non-deterministic by design)
   }
+
+  /** Toggle/set debug invulnerability (god mode) — pins player hp after each advance. */
+  setInvulnerable(on: boolean): void { this.invulnerable = on; }
+  isInvulnerable(): boolean { return this.invulnerable; }
 
   /**
    * Spawn a dynamite projectile into the sim. Converts meters→fp at the boundary.

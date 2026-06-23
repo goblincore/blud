@@ -712,6 +712,14 @@ async function main() {
     }
   });
 
+  // ---- G key: toggle debug god mode (invulnerable) — playtest AI without dying
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.metaKey) {
+      sim.setInvulnerable(!sim.isInvulnerable());
+      console.log(`[blud] god mode ${sim.isInvulnerable() ? 'ON' : 'OFF'}`);
+    }
+  });
+
   // TODO M5: remove debug T-key once mixed waves land
   // ---- T key: spawn one shotgun cultist at a perimeter point
   window.addEventListener('keydown', (e) => {
@@ -933,7 +941,7 @@ async function main() {
 
     // HUD — health driven from the sim-authoritative player hp (Plan 4).
     const playerHp = sim.playerHp();
-    hud.update(realDt, player.position(), playerHp);
+    hud.update(realDt, player.position(), playerHp, sim.isInvulnerable());
 
     // Damage hit-flash: trigger a CA pulse when the sim player took damage this
     // frame (replaces the old PlayerGibAdapter path). Scales lightly with the
