@@ -5,8 +5,11 @@
 // the spawn entry point. Movers/targeting/thinkers/fire/state-machine stepping
 // are added by later tasks (Plan 4 tasks 3–6); Task 1 defines only the data.
 //
-// Determinism firewall: this module imports ONLY sibling sim modules (./fp).
-import { fpFromMeters, metersPerSecToFp } from './fp';
+// Determinism firewall: this module imports ONLY sibling sim modules
+// (./fp, ./trig, ./units) — never three, Rapier, or src/game.
+import { fpFromMeters, metersPerSecToFp, mulfp, approxDist } from './fp';
+import { bcos, bsin, yawRotate } from './trig';
+import { TICS_PER_SEC } from './units';
 
 /**
  * AI states — a 1:1 mirror of aicult.cpp's AISTATE table (Idle/Chase/Dodge/
@@ -92,4 +95,121 @@ export function spawnDude(dudes: DudeState[], x: number, z: number, _yUnused: nu
     health: CULTIST.health, ai: DudeAi.Idle, stateTics: 0,
     hasTarget: false, targetX: 0, targetZ: 0, dodgeDir: 0, fired: false,
   });
+}
+
+// ——— Movers (Plan 4, Task 3) ————————————————————————————————
+// Port of NotBlood ai.cpp:311-358 (aiMoveForward / aiMoveTurn / aiMoveDodge).
+// Angles are Blood units (full turn = 2048); velocity is fp/tic. The cultist is
+// ground-only, so these only touch horizontal (x,z) velocity + facing; gravity
+// is not applied (y is clamped to 0 in moveDude).
+//
+// Calibration note (like the head kick): Blood's frontSpeed/sideSpeed/angSpeed
+// are in Blood units at Blood's tic rate and do NOT map 1:1 to the sim. Here
+// CULTIST.walkSpeed/sideSpeed are sim cruise speeds (m/s → fp/tic) and the
+// forward/right velocity components are CLAMPED to them so velocity stays
+// bounded (Blood instead accumulates frontSpeed/tic and lets MoveDude damp it).
+// Friction is a constant per-tic clip (same idea as the grounded head) so a
+// coasting dude halts to exactly zero — determinism-friendly.
+
+/** Blood's forward-thrust gate: aiMoveForward only thrusts once |Δang| ≤ 341
+ *  (ai.cpp:316 `if (klabs(nAng) > 341) return;`). 341/2048 ≈ 60°. */
+const THRUST_ANG_GATE = 341;
+
+/** Per-tic horizontal speed bleed (Coulomb-style, like the grounded head).
+ *  ~0.33 m/s shed per tic → a 2.3 m/s coasting cultist halts in ~7 tics. */
+const DUDE_FRICTION_CLIP = metersPerSecToFp(40 / TICS_PER_SEC);
+
+/** Blood angle wrap to [0,2048). */
+function wrapAng(a: number): number {
+  return ((a % 2048) + 2048) % 2048;
+}
+
+/** Signed shortest turn from `from` to `to`, in [-1024, 1023] (Blood units).
+ *  Mirrors `((goalAng+1024-ang)&2047)-1024` from ai.cpp. */
+function shortestArc(from: number, to: number): number {
+  return ((to + 1024 - from) & 2047) - 1024;
+}
+
+/** Rotate `d.ang` toward `goalAng` by at most CULTIST.turnRate (shortest arc),
+ *  and return the PRE-turn signed delta (used by the movers' thrust gate, which
+ *  — like Blood — tests the angle before this tic's turn). */
+function turnTowardDelta(d: DudeState, goalAng: number): number {
+  const da = shortestArc(d.ang, goalAng);
+  const step = Math.max(-CULTIST.turnRate, Math.min(CULTIST.turnRate, da));
+  d.ang = wrapAng(d.ang + step);
+  return da;
+}
+
+/** Rotate `d.ang` toward `goalAng` by at most CULTIST.turnRate (shortest arc).
+ *  Port of ai.cpp:325-330 (aiMoveTurn) — pure turn, no thrust. */
+export function turnToward(d: DudeState, goalAng: number): void {
+  turnTowardDelta(d, goalAng);
+}
+
+/** Decompose a world-space horizontal velocity into the dude's facing frame.
+ *  `fwd` is speed along the facing (local forward = (0,-1) → world (-sin,-cos));
+ *  `right` is speed along the right (local (1,0) → world (cos,-sin)). */
+function decomposeVel(vx: number, vz: number, ang: number): { fwd: number; right: number } {
+  const cos = bcos(ang);
+  const sin = bsin(ang);
+  return {
+    right: mulfp(vx, cos) - mulfp(vz, sin),
+    fwd: -(mulfp(vx, sin) + mulfp(vz, cos)),
+  };
+}
+
+/** Recompose a facing-frame (fwd, right) pair into world-space velocity, using
+ *  the shared yawRotate (the single source of "yaw → world direction"). */
+function composeVel(fwd: number, right: number, ang: number): { vx: number; vz: number } {
+  const w = yawRotate(right, -fwd, ang);
+  return { vx: w.x, vz: w.z };
+}
+
+/** Per-tic horizontal friction: shed a constant speed clip, stopping dead once
+ *  below it (deterministic — reaches exactly zero, no asymptotic creep). */
+function applyDudeFriction(d: DudeState): void {
+  const speed = approxDist(d.vx, d.vz);
+  if (speed <= 0) return;
+  if (speed <= DUDE_FRICTION_CLIP) { d.vx = 0; d.vz = 0; return; }
+  const remain = speed - DUDE_FRICTION_CLIP;
+  d.vx = Math.floor((d.vx * remain) / speed);
+  d.vz = Math.floor((d.vz * remain) / speed);
+}
+
+/** Port of ai.cpp:316-324 (aiMoveForward): turn toward `goalAng`, then thrust
+ *  forward along the facing only when roughly facing the goal (|Δang| ≤ 341).
+ *  The forward velocity component is clamped to CULTIST.walkSpeed (accel→cruise). */
+export function aiMoveForward(d: DudeState): void {
+  const da = turnTowardDelta(d, d.goalAng);
+  if (Math.abs(da) > THRUST_ANG_GATE) return; // still turning — no forward thrust
+  const v = decomposeVel(d.vx, d.vz, d.ang);
+  const fwd = Math.min(v.fwd + CULTIST.walkSpeed, CULTIST.walkSpeed);
+  const w = composeVel(fwd, v.right, d.ang);
+  d.vx = w.vx;
+  d.vz = w.vz;
+}
+
+/** Port of ai.cpp:340-358 (aiMoveDodge): turn toward `goalAng`, then add
+ *  ±CULTIST.sideSpeed to the perpendicular (right) velocity component in the
+ *  facing frame (mirrors Blood's dmulscale30 decomp/recomp), clamped to sideSpeed. */
+export function aiMoveDodge(d: DudeState): void {
+  turnTowardDelta(d, d.goalAng);
+  if (d.dodgeDir === 0) return;
+  const v = decomposeVel(d.vx, d.vz, d.ang);
+  const dir = d.dodgeDir > 0 ? 1 : -1;
+  const right = Math.max(-CULTIST.sideSpeed, Math.min(v.right + dir * CULTIST.sideSpeed, CULTIST.sideSpeed));
+  const w = composeVel(v.fwd, right, d.ang);
+  d.vx = w.vx;
+  d.vz = w.vz;
+}
+
+/** Integrate one tic of cultist physics: advance position by velocity, clamp to
+ *  the floor (ground-only — no gravity), then apply horizontal friction. This is
+ *  the sim-side analog of Blood's MoveDude (move + damp) and is called every tic
+ *  regardless of AI state, so a dude whose AI stops thrusting coasts to a halt. */
+export function moveDude(d: DudeState): void {
+  d.x += d.vx;
+  d.z += d.vz;
+  d.y = 0; // ground-only: cultist feet always on the floor
+  applyDudeFriction(d);
 }
