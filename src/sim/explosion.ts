@@ -21,10 +21,10 @@ export function isAirBurstFp(_x: number, y: number, _z: number, _geo: SimAABB[])
  *  slice). Linear falloff to the radius edge. `rng` reserved for any future
  *  variance roll (kept in the signature so the harness exercises the RNG path).
  *
- *  NOT yet wired into stepSim — deterministic player damage lands with the
- *  player-as-target HP unification (sim-authoritative hp + legacy AOE
- *  player-exclusion); wiring it now would double-count with
- *  gibs.spawnExplosion's AOE loop.
+ *  Wired into stepSim: for every `explosion` SimEvent produced by stepProjectiles
+ *  this tic, stepSim calls this to apply falloff damage to the sim-authoritative
+ *  player. The legacy AOE loop (gibs.spawnExplosion) is player-excluded in
+ *  main.ts so the two don't double-count.
  *
  *  NOTE — cross-platform determinism: the falloff uses float meters
  *  (Math.hypot/division) to compute the scalar before writing integer `hp`.

@@ -56,3 +56,11 @@ export function stepPlayer(p: PlayerState, cmd: InputCommand, geo: SimAABB[]): v
 
   p.prevButtons = cmd.buttons;
 }
+
+/** Clamp player hp at 0 — the player-as-target damage sources (dynamite
+ *  explosion via applyExplosionToPlayer, cultist shotgun pellets via stepDudes)
+ *  subtract from `hp`; this keeps it from going negative so the hash and the
+ *  HUD always see a non-negative value. Called once at the end of stepSim. */
+export function clampPlayerHp(p: PlayerState): void {
+  if (p.hp < 0) p.hp = 0;
+}

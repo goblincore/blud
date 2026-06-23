@@ -3,9 +3,10 @@ import { describe, it, expect } from 'vitest';
 import { createSimState } from './state';
 import { stepSim } from './step';
 import { buildArenaGeometry } from './geometry';
-import { fpToMeters, metersPerSecToFp } from './fp';
+import { fpToMeters, metersPerSecToFp, fpFromMeters } from './fp';
 import { EMPTY_INPUT, BTN_JUMP, type InputCommand } from './types';
 import { BANGLE_QUARTER } from './trig';
+import { spawnProjectile } from './projectile';
 
 const geo = buildArenaGeometry();
 
@@ -65,5 +66,36 @@ describe('stepPlayer (via stepSim)', () => {
     for (let i = 0; i < 600; i++) stepSim(s, cmd({ moveForward: 1, aimYaw: 0 }), geo); // run at -Z wall
     // wall inner face ≈ -20 + wallThick/2; player radius 0.3 keeps it short of it.
     expect(fpToMeters(s.player.z)).toBeGreaterThan(-20);
+  });
+});
+
+describe('player.hp clamp', () => {
+  it('never goes negative: a lethal explosion clamps hp at 0', () => {
+    // Point-blank (1 m) damage = round(240 * (1 - 1/4.6875)) = 189 > 100 hp.
+    // Without a clamp hp would be -89; the clamp keeps it at exactly 0.
+    const s = createSimState(7);
+    s.player.x = fpFromMeters(0);
+    s.player.z = fpFromMeters(0);
+    spawnProjectile(
+      s.projectiles, fpFromMeters(1), 0, 0,
+      { vx: 0, vy: 0, vz: 0 }, 1, false, 0,
+    );
+    stepSim(s, EMPTY_INPUT, geo);
+    expect(s.player.hp).toBe(0);
+    expect(s.player.hp).not.toBeLessThan(0);
+  });
+
+  it('stays clamped at 0 across subsequent tics (no negative bleed-through)', () => {
+    const s = createSimState(7);
+    s.player.x = fpFromMeters(0);
+    s.player.z = fpFromMeters(0);
+    spawnProjectile(
+      s.projectiles, fpFromMeters(1), 0, 0,
+      { vx: 0, vy: 0, vz: 0 }, 1, false, 0,
+    );
+    stepSim(s, EMPTY_INPUT, geo);
+    expect(s.player.hp).toBe(0);
+    for (let i = 0; i < 30; i++) stepSim(s, EMPTY_INPUT, geo);
+    expect(s.player.hp).toBe(0);
   });
 });

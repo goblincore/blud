@@ -6,6 +6,7 @@ import { EMPTY_INPUT } from './types';
 import { buildArenaGeometry } from './geometry';
 import { spawnHead } from './head';
 import { spawnDude } from './dude';
+import { spawnProjectile } from './projectile';
 import { fpFromMeters } from './fp';
 
 const GEO = buildArenaGeometry();
@@ -66,5 +67,43 @@ describe('stepSim', () => {
     // With the player in range and LOS clear, the cultist should have acquired a
     // target (transitioned out of Idle) within a handful of alertChance rolls.
     expect(s.dudes[0]!.hasTarget).toBe(true);
+  });
+});
+
+describe('explosion-vs-player damage (wired through stepSim)', () => {
+  // A dynamite placed at (dx,dz) from the player with a 1-tic fuse + zero
+  // velocity detonates on the first stepSim, emitting an `explosion` event that
+  // applyExplosionToPlayer consumes. Radius ≈ 4.69 m; falloff = 1 - d/radius;
+  // damage = round(240 * falloff).
+  function detonateNextToPlayer(distM: number, seed: number): number {
+    const s = createSimState(seed);
+    s.player.x = fpFromMeters(0);
+    s.player.z = fpFromMeters(0);
+    // fuse = 1 → detonates on the first stepSim. impactMode false so fuse alone
+    // triggers it (no velocity needed to travel away from spawn).
+    spawnProjectile(
+      s.projectiles, fpFromMeters(distM), 0, 0,
+      { vx: 0, vy: 0, vz: 0 }, 1, false, 0,
+    );
+    stepSim(s, EMPTY_INPUT, GEO);
+    return s.player.hp;
+  }
+
+  it('a projectile detonating next to the player reduces player.hp (partial, not clamped)', () => {
+    // 4 m away: damage = round(240 * (1 - 4/4.6875)) = 35 → hp 100 → 65.
+    expect(detonateNextToPlayer(4, 7)).toBe(65);
+  });
+
+  it('closer detonations hurt more (falloff is monotonic with distance)', () => {
+    expect(detonateNextToPlayer(2, 7)).toBeLessThan(detonateNextToPlayer(4, 7));
+  });
+
+  it('a projectile detonating far away leaves player.hp unchanged', () => {
+    // 10 m is beyond the ~4.69 m radius → no damage.
+    expect(detonateNextToPlayer(10, 7)).toBe(100);
+  });
+
+  it('is deterministic: same seed → same hp', () => {
+    expect(detonateNextToPlayer(3, 42)).toBe(detonateNextToPlayer(3, 42));
   });
 });
