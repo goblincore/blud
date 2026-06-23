@@ -8,8 +8,12 @@
 // Determinism firewall: this module imports ONLY sibling sim modules
 // (./fp, ./trig, ./units) — never three, Rapier, or src/game.
 import { fpFromMeters, metersPerSecToFp, mulfp, approxDist } from './fp';
-import { bcos, bsin, yawRotate } from './trig';
+import { bcos, bsin, yawRotate, getangle } from './trig';
 import { TICS_PER_SEC } from './units';
+import { losClear, type SimAABB } from './geometry';
+import { chance, type SimRng } from './rng';
+import type { PlayerState } from './player';
+import type { SimEvent } from './types';
 
 /**
  * AI states — a 1:1 mirror of aicult.cpp's AISTATE table (Idle/Chase/Dodge/
@@ -58,6 +62,7 @@ export const CULTIST = {
   seeDist: fpFromMeters(18),                 // sight radius (SHOTGUN_CULTIST.aggroRadiusM)
   hearDist: fpFromMeters(9),                 // hear radius (acquire outside FOV when close)
   periphery: 512,                            // half-FOV in Blood-angle units (512 = 90°)
+  alertChance: 0x8000,                       // per-tic Idle alert probability (dude.cpp:1559)
   fireRange: fpFromMeters(12),               // SHOTGUN_CULTIST.fireRangeM (Blood 0x3200)
   fireAngle: 28,                             // |Δang| firing cone, Blood-angle units (aicult.cpp:572)
   throwMin: fpFromMeters(6), throwMax: fpFromMeters(11), // SThrow band (Blood 0x1400..0x2c00)
@@ -212,4 +217,187 @@ export function moveDude(d: DudeState): void {
   d.z += d.vz;
   d.y = 0; // ground-only: cultist feet always on the floor
   applyDudeFriction(d);
+}
+
+// ——— Targeting + chase brain + state-machine driver (Plan 4, Task 4) ————————
+// Port of NotBlood ai.cpp:1325-1362 (aiThinkTarget) and aicult.cpp:411-540
+// (thinkChase, the kDudeCultistShotgun branch). The only target is the sim
+// PlayerState. Every RNG draw comes from `rng` (SimRng) and is documented with
+// its source line. Angles are Blood units; distances are fp (16.16). The fire
+// ACTION is Task 5 (here we only set the SFire/SThrow transition CONDITIONS);
+// Dodge/Goto/Search mover bodies are Task 6 (here we only transition INTO them).
+//
+// Coordinate convention: the sim's horizontal plane is (x,z) with y vertical,
+// and a sprite facing yaw θ moves toward (-sin θ, -cos θ) in (x,z) (see
+// yawRotate / the mover tests). Blood's (x,y) horizontal → sim (x,z), so Blood's
+// `dy` maps to the sim's `dz`, and `getangle(dx,dz)` (trig.ts) returns the
+// sim-convention angle aiming facing θ at (dx,dz) — NOT Blood's raw atan2(y,x).
+
+/** Transition a dude into `newState`, resetting its state timer from the
+ *  DUDE_STATES table, and clearing one-shot guards on entry to SFire. Mirrors
+ *  Blood's aiNewState (which resets the AISTATE offset/timer). */
+function enterState(d: DudeState, newState: DudeAi): void {
+  d.ai = newState;
+  d.stateTics = DUDE_STATES[newState].tics;
+  if (newState === DudeAi.SFire) d.fired = false; // one-shot guard (Task 5 fires once)
+}
+
+/** Aim + mark the player as the current target, then enter Chase. Port of
+ *  aiSetTarget + aiActivateDude (→ cultistChase) from ai.cpp. */
+function acquireTarget(d: DudeState, player: PlayerState): void {
+  d.hasTarget = true;
+  d.targetX = player.x;
+  d.targetZ = player.z;
+  d.goalAng = getangle(player.x - d.x, player.z - d.z);
+  enterState(d, DudeAi.Chase);
+}
+
+/** Port of ai.cpp:1325-1362 (aiThinkTarget). Called every tic while Idle: with
+ *  probability `alertChance`, scan for the player; acquire if within sight
+ *  radius+LOS+periphery (sight) OR within hear radius+LOS (hear).
+ *
+ *  RNG draw (documented): `chance(rng, CULTIST.alertChance)` — ai.cpp:1329
+ *  `if (Chance(pDudeInfo->alertChance))`. No other draws in this function. */
+function aiThinkTarget(d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimRng): void {
+  // ai.cpp:1329 — alert gate (one RNG draw per Idle tic).
+  if (!chance(rng, CULTIST.alertChance)) return;
+  if (player.hp <= 0) return; // dead players can't be targeted (Blood: health==0 skip)
+
+  const dx = player.x - d.x;
+  const dz = player.z - d.z;
+  const nDist = approxDist(dx, dz);
+
+  // ai.cpp:1343 — too far to see OR hear → skip.
+  if (nDist > CULTIST.seeDist && nDist > CULTIST.hearDist) return;
+
+  // ai.cpp:1345 — geometric line-of-sight (cansee). The sim uses losClear
+  // (Task 2); eye/target heights are passed for API parity but arena AABBs are
+  // full-height columns, so losClear drops Y.
+  if (!losClear(d.x, CULTIST.eyeHeight, d.z, player.x, player.y + CULTIST.eyeHeight, player.z, geo)) return;
+
+  // ai.cpp:1347 — delta angle to the player (Blood: ((getangle(dx,dy)+1024-ang)&2047)-1024).
+  const nDeltaAngle = shortestArc(d.ang, getangle(dx, dz));
+
+  // ai.cpp:1348 — sight acquire: in sight radius AND within periphery FOV.
+  if (nDist < CULTIST.seeDist && Math.abs(nDeltaAngle) <= CULTIST.periphery) {
+    acquireTarget(d, player);
+    return;
+  }
+  // ai.cpp:1354 — hear acquire: close enough to hear (outside FOV is OK).
+  if (nDist < CULTIST.hearDist) {
+    acquireTarget(d, player);
+    return;
+  }
+}
+
+/** Port of aicult.cpp:411-540 (thinkChase, kDudeCultistShotgun branch). Called
+ *  every tic while Chase: face the player, refresh last-known, and either keep
+ *  chasing or transition to SFire/SThrow (conditions only — fire is Task 5) or,
+ *  if the target is lost (out of range / no LOS / outside periphery / dead),
+ *  record last-known and go to Goto (→ investigate) / Search.
+ *
+ *  RNG draw (documented): `chance(rng, CULTIST.alertChance)` on the SThrow
+ *  branch — aicult.cpp:566 `&& Chance(0x8000)`. SFire has no RNG draw. */
+function thinkChase(d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimRng): void {
+  // aicult.cpp:412 — no target → Goto (investigate last-known).
+  if (!d.hasTarget) { enterState(d, DudeAi.Goto); return; }
+
+  const dx = player.x - d.x;
+  const dz = player.z - d.z;
+  // aicult.cpp:421 — aiChooseDirection: face the movement angle toward the target.
+  d.goalAng = getangle(dx, dz);
+
+  // aicult.cpp:425 — target dead → Search (give up the chase).
+  if (player.hp <= 0) { enterState(d, DudeAi.Search); d.hasTarget = false; return; }
+
+  const nDist = approxDist(dx, dz);
+
+  // aicult.cpp:447 — only act when the target is within sight radius.
+  if (nDist <= CULTIST.seeDist) {
+    const nDeltaAngle = shortestArc(d.ang, getangle(dx, dz));
+    // aicult.cpp:452 — cansee (line-of-sight) gate.
+    if (losClear(d.x, CULTIST.eyeHeight, d.z, player.x, player.y + CULTIST.eyeHeight, player.z, geo)) {
+      // aicult.cpp:453 — in sight AND within periphery → keep the target fresh.
+      if (nDist < CULTIST.seeDist && Math.abs(nDeltaAngle) <= CULTIST.periphery) {
+        // aiSetTarget: refresh last-known position (used by Goto/Search later).
+        d.targetX = player.x;
+        d.targetZ = player.z;
+
+        // aicult.cpp:565 (SThrow condition, kDudeCultistShotgun): throw band +
+        //   Chance(0x8000). SIMPLIFIED for the single-player milestone: Blood
+        //   also gates on TargetNearExplosion, (target.flags&2), nDifficulty>=2,
+        //   IsPlayerSprite && !isRunning — none of which map to the sim. The RNG
+        //   draw is chance(CULTIST.alertChance) == Chance(0x8000); note the
+        //   short-circuit means it only fires inside the throw band.
+        if (nDist > CULTIST.throwMin && nDist < CULTIST.throwMax && chance(rng, CULTIST.alertChance)) {
+          enterState(d, DudeAi.SThrow);
+          return;
+        }
+        // aicult.cpp:572 (SFire condition): nDist < 0x3200 (fireRange) &&
+        //   |nDeltaAngle| < 28 (fireAngle). (Blood also HitScans first to confirm
+        //   a clear shot + Dodges if blocked by a same-type cultist; the clear-
+        //   shot is redundant with the cansee above, and same-type-Dodge is T6.)
+        if (nDist < CULTIST.fireRange && Math.abs(nDeltaAngle) < CULTIST.fireAngle) {
+          enterState(d, DudeAi.SFire);
+          return;
+        }
+        // else: target visible but not in a fire/throw window → keep chasing.
+        return;
+      }
+    }
+  }
+
+  // aicult.cpp:805 (fall-through) — target lost: go investigate last-known, then
+  //   drop the target. (Blood: aiNewState(&cultistGoto); pXSprite->target = -1.)
+  enterState(d, DudeAi.Goto);
+  d.hasTarget = false;
+}
+
+/**
+ * Advance all dudes one tic — the state-machine driver. Per dude (skipping the
+ * dead): run the thinker for the current AI state (sets goalAng, may transition
+ * states), run the mover for the (possibly new) state, integrate physics
+ * (always, so a coasting dude halts via friction), then decrement the state
+ * timer and transition to DUDE_STATES[ai].next on expiry.
+ *
+ * `tic` (absolute SimState.tic) and `out` (event sink) are part of the signature
+ * for Task 5 (cultistFire) / Task 7 (SimState wiring); unused in Task 4.
+ */
+export function stepDudes(
+  dudes: DudeState[],
+  player: PlayerState,
+  geo: SimAABB[],
+  rng: SimRng,
+  tic: number,
+  out: SimEvent[],
+): void {
+  void tic;
+  void out;
+  for (const d of dudes) {
+    if (d.health <= 0) continue; // dead dudes don't think or move
+
+    // 1. Thinker — sets goalAng, may transition the AI state.
+    switch (d.ai) {
+      case DudeAi.Idle: aiThinkTarget(d, player, geo, rng); break;
+      case DudeAi.Chase: thinkChase(d, player, geo, rng); break;
+      // SFire fire thinker: Task 5. Goto/Search/Dodge/SThrow/Recoil thinkers: Task 6.
+      default: break;
+    }
+
+    // 2. Mover — movement for the current (possibly just-transitioned) state.
+    switch (d.ai) {
+      case DudeAi.Chase: aiMoveForward(d); break;
+      // Dodge/Goto movers: Task 6. Idle/SFire/SThrow/Search/Recoil: stand still.
+      default: break;
+    }
+
+    // 3. Integrate physics (position += velocity; ground clamp; friction).
+    moveDude(d);
+
+    // 4. State timer — decrement and transition to `next` on expiry.
+    if (d.stateTics > 0) {
+      d.stateTics -= 1;
+      if (d.stateTics === 0) enterState(d, DUDE_STATES[d.ai].next);
+    }
+  }
 }

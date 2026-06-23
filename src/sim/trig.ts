@@ -43,3 +43,25 @@ export function yawRotate(lx: number, lz: number, yaw: number): { x: number; z: 
     z: -mulfp(lx, sin) + mulfp(lz, cos),
   };
 }
+
+/**
+ * Deterministic integer atan2 → Blood angle [0, 2048) pointing toward (dx,dz),
+ * in the SIM facing convention. A sprite facing yaw θ moves toward
+ * (-sin θ, -cos θ) in (x,z) (see `yawRotate` + the mover tests), so the angle
+ * that AIMS facing θ at a target at delta (dx,dz) satisfies
+ * (-sin θ, -cos θ) ∝ (dx,dz) → θ = atan2(-dx, -dz).
+ *
+ * This DIFFERS from Blood's raw `getangle(x,y)` (engine.cpp:12525, which is
+ * atan2-style with angle 0 = +x) because the sim's sprite facing is the
+ * camera-style forward = -z at yaw 0. Port note: Blood derives getangle from the
+ * `radarang` table + `scale`; here we derive from `Math.atan2` — deterministic
+ * IEEE-754 on integer fp inputs, the same determinism envelope as the `COS`
+ * table (built via `Math.round(Math.cos(...))`). Inputs are fp integers; the
+ * result is an integer angle in [0, 2048). Used by the cultist targeting /
+ * chase brain (dude.ts) to set goalAng and compute Δangle vs periphery.
+ */
+export function getangle(dx: number, dz: number): number {
+  if (dx === 0 && dz === 0) return 0;
+  const a = (Math.atan2(-dx, -dz) / (Math.PI * 2)) * BANGLE_FULL;
+  return wrap(Math.round(a));
+}

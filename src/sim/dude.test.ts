@@ -2,10 +2,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   spawnDude, DudeAi, CULTIST,
-  turnToward, aiMoveForward, aiMoveDodge, moveDude,
+  turnToward, aiMoveForward, aiMoveDodge, moveDude, stepDudes,
   type DudeState,
 } from './dude';
 import { fpFromMeters, metersPerSecToFp } from './fp';
+import { createRng } from './rng';
+import { createPlayerState } from './player';
+import { buildArenaGeometry } from './geometry';
 
 describe('dude spawn', () => {
   it('spawns a cultist idle, full health, facing its initial angle', () => {
@@ -121,5 +124,89 @@ describe('moveDude friction', () => {
     d.y = fpFromMeters(1);
     moveDude(d);
     expect(d.y).toBe(0);
+  });
+});
+
+// ——— Plan 4, Task 4: targeting + chase brain + state-machine driver ———————
+// All exercised through the public `stepDudes` driver (which dispatches the
+// Idle thinker `aiThinkTarget` / the Chase thinker `thinkChase` and runs the
+// state-machine timer). RNG comes from a seeded `SimRng` so every test is
+// deterministic.
+
+describe('stepDudes: Idle → Chase (aiThinkTarget acquire)', () => {
+  it('acquires the player when in range, LOS clear, and within periphery', () => {
+    const dudes: DudeState[] = [];
+    spawnDude(dudes, 0, 0, 0, 0);                 // origin, facing yaw 0 (forward = -z)
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-3);   // straight ahead, 3 m, in periphery
+    const geo = buildArenaGeometry();
+    const rng = createRng(42);
+    let acquired = false;
+    // aiThinkTarget gates on Chance(alertChance=0x8000) each Idle tic (ai.cpp:1329),
+    // so loop until the deterministic sequence rolls a pass.
+    for (let i = 0; i < 200; i++) {
+      stepDudes(dudes, player, geo, rng, 0, []);
+      if (dudes[0]!.ai === DudeAi.Chase) { acquired = true; break; }
+    }
+    expect(acquired).toBe(true);
+    expect(dudes[0]!.hasTarget).toBe(true);
+  });
+});
+
+describe('stepDudes: Chase refreshes last-known while the player is visible', () => {
+  it('stays in Chase and records the player position (out of fire/throw range)', () => {
+    const dudes: DudeState[] = [];
+    spawnDude(dudes, 0, 0, 0, 0);
+    const d = dudes[0]!;
+    d.ai = DudeAi.Chase; d.hasTarget = true;
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-15);  // 15 m ahead: <seeDist, >fireRange/throwMax
+    const geo = buildArenaGeometry();
+    stepDudes(dudes, player, geo, createRng(3), 0, []);
+    expect(d.ai).toBe(DudeAi.Chase);
+    expect(d.targetX).toBe(0);
+    expect(d.targetZ).toBe(fpFromMeters(-15));
+  });
+});
+
+describe('stepDudes: Chase moves toward + faces the player', () => {
+  it('turns to face the player and walks toward it', () => {
+    const dudes: DudeState[] = [];
+    spawnDude(dudes, 0, 0, 0, 0);
+    const d = dudes[0]!;
+    d.ai = DudeAi.Chase; d.hasTarget = true;
+    const player = createPlayerState();
+    // ~16 m, off-axis: within seeDist+periphery, outside fireRange(12m)/throwMax(11m).
+    player.x = fpFromMeters(3); player.z = fpFromMeters(-15);
+    const geo = buildArenaGeometry();
+    const rng = createRng(7);
+    for (let i = 0; i < 60; i++) stepDudes(dudes, player, geo, rng, 0, []);
+    // getangle(3,-15) ≈ 1984 in the sim facing convention → the dude snaps to face it.
+    expect(d.ang).toBe(1984);
+    // walked toward the player: +x and -z components of the facing vector.
+    expect(d.x).toBeGreaterThan(0);
+    expect(d.z).toBeLessThan(fpFromMeters(-0.3));
+  });
+});
+
+describe('stepDudes: Chase → Goto on LOS break (records last-known)', () => {
+  it('goes to Goto and keeps the last-known position when LOS is blocked', () => {
+    const dudes: DudeState[] = [];
+    spawnDude(dudes, 0, 0, 0, 0);
+    const d = dudes[0]!;
+    d.ai = DudeAi.Chase; d.hasTarget = true;
+    d.targetX = 0; d.targetZ = fpFromMeters(-2);   // last seen here
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-6);     // now behind a wall
+    // custom wall between dude (0,0) and player (0,-6): blocks the eye→target ray.
+    const geo = [{
+      minX: fpFromMeters(-0.5), maxX: fpFromMeters(0.5),
+      minZ: fpFromMeters(-4), maxZ: fpFromMeters(-2),
+    }];
+    stepDudes(dudes, player, geo, createRng(1), 0, []);
+    expect(d.ai).toBe(DudeAi.Goto);
+    expect(d.hasTarget).toBe(false);
+    expect(d.targetX).toBe(0);
+    expect(d.targetZ).toBe(fpFromMeters(-2));      // unchanged = last known
   });
 });
