@@ -2,10 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   spawnDude, DudeAi, CULTIST,
-  turnToward, aiMoveForward, aiMoveDodge, moveDude, stepDudes,
+  turnToward, aiMoveForward, aiMoveDodge, moveDude, stepDudes, recoilDude,
   type DudeState,
 } from './dude';
-import { fpFromMeters, metersPerSecToFp } from './fp';
+import { fpFromMeters, fpFromBU, metersPerSecToFp } from './fp';
 import { createRng } from './rng';
 import { createPlayerState } from './player';
 import { buildArenaGeometry } from './geometry';
@@ -298,5 +298,184 @@ describe('stepDudes: SFire blocked by a wall → no damage', () => {
     stepDudes(dudes, player, geo, createRng(99), 0, []);
     expect(player.hp).toBe(hpBefore);            // fully blocked
     expect(dudes[0]!.fired).toBe(true);          // did fire (just missed)
+  });
+});
+
+// ——— Plan 4, Task 6: tactical states (dodge/goto/search/throw/recoil) ————————
+// All exercised through the public `stepDudes` driver. State durations come from
+// DUDE_STATES (Dodge 90, Goto 600, Search 1800, SThrow 30, Recoil 0). The
+// dodgeDir is chosen from the seeded `SimRng` (one Chance(0x8000) draw per
+// aiChooseDirection, ai.cpp:307) so it is deterministic for a given seed.
+
+import { DUDE_STATES } from './dude';
+
+/** Make a dude already in a given AI state with the table's duration loaded. */
+function makeDudeIn(ai: DudeAi): DudeState {
+  const d = makeDude();
+  d.ai = ai;
+  d.stateTics = DUDE_STATES[ai].tics;
+  return d;
+}
+
+describe('stepDudes: SThrow windup → SFire', () => {
+  it('counts down the 30-tic windup then transitions to SFire', () => {
+    const dudes: DudeState[] = [makeDudeIn(DudeAi.SThrow)];
+    const player = createPlayerState();
+    const geo = buildArenaGeometry();
+    // SThrow has no thinker/mover: just a timed windup. Step the full duration.
+    for (let i = 0; i < DUDE_STATES[DudeAi.SThrow].tics; i++) {
+      stepDudes(dudes, player, geo, createRng(1), 0, []);
+    }
+    expect(dudes[0]!.ai).toBe(DudeAi.SFire);
+    expect(dudes[0]!.stateTics).toBe(DUDE_STATES[DudeAi.SFire].tics);
+  });
+});
+
+describe('stepDudes: Dodge lasts 90 tics then → Chase', () => {
+  it('strafes for the full 90-tic Dodge duration then returns to Chase', () => {
+    const d = makeDudeIn(DudeAi.Dodge);
+    d.ang = 0; d.goalAng = 0; d.dodgeDir = 1; // strafe +right (yaw 0 → +x)
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    const startX = d.x;
+    const rng = createRng(5);
+    for (let i = 0; i < DUDE_STATES[DudeAi.Dodge].tics; i++) {
+      stepDudes(dudes, player, buildArenaGeometry(), rng, 0, []);
+    }
+    expect(dudes[0]!.ai).toBe(DudeAi.Chase);
+    // dodged sideways (+x for dodgeDir=+1 at yaw 0) during the 90 tics
+    expect(dudes[0]!.x).toBeGreaterThan(startX);
+  });
+});
+
+describe('stepDudes: recoilDude → Recoil → Dodge (dodgeDir deterministic)', () => {
+  it('recoilDude enters Recoil, then the next step transitions to Dodge', () => {
+    const d = makeDudeIn(DudeAi.Chase);
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    const geo = buildArenaGeometry();
+    recoilDude(d);
+    expect(d.ai).toBe(DudeAi.Recoil);
+    expect(d.stateTics).toBe(DUDE_STATES[DudeAi.Recoil].tics); // 0 (transient)
+    // one step: the 0-tic transient Recoil transitions to Dodge, rolling dodgeDir
+    stepDudes(dudes, player, geo, createRng(42), 0, []);
+    expect(d.ai).toBe(DudeAi.Dodge);
+    expect(d.stateTics).toBe(DUDE_STATES[DudeAi.Dodge].tics); // 90
+  });
+
+  it('recoilDude is ignored for a dead dude (no reaction post-mortem)', () => {
+    const d = makeDudeIn(DudeAi.Chase);
+    d.health = 0;
+    recoilDude(d);
+    expect(d.ai).toBe(DudeAi.Chase); // unchanged
+  });
+
+  it('dodgeDir is deterministic from the seed (same seed → same sign)', () => {
+    const run = (seed: number): number => {
+      const d = makeDudeIn(DudeAi.Chase);
+      const dudes: DudeState[] = [d];
+      recoilDude(d);
+      stepDudes(dudes, createPlayerState(), buildArenaGeometry(), createRng(seed), 0, []);
+      return d.dodgeDir; // ±1, set on entering Dodge
+    };
+    expect(Math.abs(run(42))).toBe(1);            // never 0 in Dodge
+    expect(run(42)).toBe(run(42));                 // same seed → same dir
+    expect(run(7)).toBe(run(7));
+    // at least one seed pair disagrees (sanity that it's a real roll, not a
+    // constant) — try several seeds until we see both signs.
+    const signs = new Set<number>();
+    for (let s = 1; s <= 32; s++) signs.add(run(s) > 0 ? 1 : -1);
+    expect(signs.size).toBe(2);
+  });
+
+  it('a recoiling dude eventually returns to Chase via Dodge (Recoil→Dodge→Chase)', () => {
+    const d = makeDudeIn(DudeAi.Chase);
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    const geo = buildArenaGeometry();
+    recoilDude(d);
+    // 1 (Recoil→Dodge) + 90 (Dodge→Chase) steps
+    for (let i = 0; i < 1 + DUDE_STATES[DudeAi.Dodge].tics; i++) {
+      stepDudes(dudes, player, geo, createRng(42), 0, []);
+    }
+    expect(d.ai).toBe(DudeAi.Chase);
+  });
+});
+
+describe('stepDudes: Goto walks toward last-known then → Idle on expiry', () => {
+  it('moves toward targetX/targetZ during Goto', () => {
+    const d = makeDudeIn(DudeAi.Goto);
+    d.ang = 0;                       // facing -z (forward)
+    d.targetX = 0; d.targetZ = fpFromMeters(-50); // far last-known straight ahead
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    player.x = fpFromMeters(200); player.z = fpFromMeters(200); // far: not reacquired
+    const startZ = d.z;
+    const rng = createRng(2);
+    for (let i = 0; i < 30; i++) stepDudes(dudes, player, buildArenaGeometry(), rng, 0, []);
+    expect(d.ai).toBe(DudeAi.Goto);              // still going
+    expect(d.z).toBeLessThan(startZ);            // walked toward -z last-known
+  });
+
+  it('expires to Idle after the 600-tic Goto duration', () => {
+    const d = makeDudeIn(DudeAi.Goto);
+    d.ang = 0;
+    d.targetX = 0; d.targetZ = fpFromMeters(-50);
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    player.x = fpFromMeters(200); player.z = fpFromMeters(200);
+    const rng = createRng(2);
+    for (let i = 0; i < DUDE_STATES[DudeAi.Goto].tics; i++) {
+      stepDudes(dudes, player, buildArenaGeometry(), rng, 0, []);
+    }
+    expect(d.ai).toBe(DudeAi.Idle);
+  });
+
+  it('reacquires the player on LOS → Chase (drops the Goto walk)', () => {
+    const d = makeDudeIn(DudeAi.Goto);
+    d.ang = 0;
+    d.targetX = fpFromMeters(50); d.targetZ = fpFromMeters(-50); // irrelevant once seen
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    // player straight ahead, close, clear LOS: lookForTarget should acquire.
+    player.x = 0; player.z = fpFromMeters(-4);
+    const rng = createRng(11);
+    let acquired = false;
+    for (let i = 0; i < 200; i++) {
+      stepDudes(dudes, player, buildArenaGeometry(), rng, 0, []);
+      if (d.ai === DudeAi.Chase) { acquired = true; break; }
+    }
+    expect(acquired).toBe(true);
+    expect(d.hasTarget).toBe(true);
+  });
+});
+
+describe('stepDudes: Search → Idle after 1800 (sees target → Chase)', () => {
+  it('expires to Idle after the 1800-tic Search duration', () => {
+    const d = makeDudeIn(DudeAi.Search);
+    d.ang = 0; d.goalAng = 0;
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    player.x = fpFromMeters(200); player.z = fpFromMeters(200); // far: not seen
+    const rng = createRng(3);
+    for (let i = 0; i < DUDE_STATES[DudeAi.Search].tics; i++) {
+      stepDudes(dudes, player, buildArenaGeometry(), rng, 0, []);
+    }
+    expect(d.ai).toBe(DudeAi.Idle);
+  });
+
+  it('spots the player and returns to Chase', () => {
+    const d = makeDudeIn(DudeAi.Search);
+    d.ang = 0; d.goalAng = 0;
+    const dudes: DudeState[] = [d];
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-4); // straight ahead, clear LOS
+    const rng = createRng(11);
+    let acquired = false;
+    for (let i = 0; i < 200; i++) {
+      stepDudes(dudes, player, buildArenaGeometry(), rng, 0, []);
+      if (d.ai === DudeAi.Chase) { acquired = true; break; }
+    }
+    expect(acquired).toBe(true);
   });
 });
