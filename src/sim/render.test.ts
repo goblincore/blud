@@ -1,10 +1,11 @@
 // src/sim/render.test.ts
 import { describe, it, expect } from 'vitest';
 import { createPlayerState } from './player';
-import { renderPlayer, renderProjectiles } from './render';
+import { renderPlayer, renderProjectiles, renderHeads } from './render';
 import { fpFromMeters } from './fp';
 import { BANGLE_QUARTER } from './trig';
 import { createSimState } from './state';
+import type { HeadState } from './head';
 
 describe('renderPlayer — interpolated camera transform (render boundary)', () => {
   it('lerps position between prev and cur by alpha, in meters', () => {
@@ -31,6 +32,20 @@ describe('renderPlayer — interpolated camera transform (render boundary)', () 
     const cur = createPlayerState(); cur.yaw = 100;
     const out = renderPlayer(prev, cur, 1);
     expect(out.yawRad).toBeCloseTo((100 / 2048) * Math.PI * 2, 4);
+  });
+});
+
+describe('renderHeads — interpolated head positions', () => {
+  it('interpolates head positions to meters', () => {
+    const base: HeadState = {
+      x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0,
+      radius: 0, elastic: 0, resting: false, kickCooldownTics: 0, spawnTic: 0,
+    };
+    const prev: HeadState[] = [{ ...base }];
+    const cur: HeadState[] = [{ ...base, x: fpFromMeters(2) }];
+    const out = renderHeads(prev, cur, 0.5);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.xMeters).toBeCloseTo(1, 5); // halfway between 0 and 2 m
   });
 });
 
