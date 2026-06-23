@@ -45,5 +45,10 @@ export function hashSimState(s: SimState): number {
     mix(du.dodgeDir); mix(du.fired ? 1 : 0);
   }
 
+  for (const pl of s.pellets) {
+    mix(pl.x); mix(pl.y); mix(pl.z); mix(pl.vx); mix(pl.vy); mix(pl.vz);
+    mix(pl.damage); mix(pl.dieTic);
+  }
+
   return h >>> 0;
 }

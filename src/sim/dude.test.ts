@@ -2,12 +2,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   spawnDude, DudeAi, CULTIST,
-  turnToward, aiMoveForward, aiMoveDodge, moveDude, stepDudes, recoilDude,
-  type DudeState,
+  turnToward, aiMoveForward, aiMoveDodge, moveDude, stepDudes, stepPellets, recoilDude,
+  type DudeState, type PelletState,
 } from './dude';
 import { fpFromMeters, fpFromBU, metersPerSecToFp } from './fp';
 import { createRng } from './rng';
-import { createPlayerState } from './player';
+import { createPlayerState, type PlayerState } from './player';
 import { buildArenaGeometry } from './geometry';
 
 describe('dude spawn', () => {
@@ -238,19 +238,28 @@ function makeSFireDudeAtFireTic(): DudeState {
   return d;
 }
 
-describe('stepDudes: SFire shotgun hits a player straight ahead', () => {
+describe('stepDudes: SFire shotgun hits a player straight ahead (travelling pellets)', () => {
+  // Projectile mode: SFire spawns travelling pellets (no instant damage); the
+  // pellets deliver damage over the following tics via stepPellets.
+  const settle = (pellets: PelletState[], player: PlayerState, geo: ReturnType<typeof buildArenaGeometry>): void => {
+    for (let t = 1; t <= 300 && pellets.length > 0; t++) stepPellets(pellets, player, geo, t);
+  };
+
   it('reduces player.hp on a clear shot (≥1 pellet connects)', () => {
     const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
     const player = createPlayerState();
     player.x = 0; player.z = fpFromMeters(-5);    // 5 m dead ahead, on axis
     const geo = buildArenaGeometry();
     const out: import('./types').SimEvent[] = [];
+    const pellets: PelletState[] = [];
     const hpBefore = player.hp;
-    stepDudes(dudes, player, geo, createRng(99), 0, out);
-    expect(player.hp).toBeLessThan(hpBefore);     // damaged
+    stepDudes(dudes, player, geo, createRng(99), 0, out, pellets);
+    expect(player.hp).toBe(hpBefore);             // no INSTANT damage (projectiles, not hitscan)
+    expect(pellets.length).toBe(SHOTGUN.pellets); // pellets in flight
     expect(dudes[0]!.fired).toBe(true);           // fired this visit
-    // a cultistFire event was emitted for the cosmetic layer
-    expect(out.filter((e) => e.kind === 'cultistFire')).toHaveLength(1);
+    expect(out.filter((e) => e.kind === 'cultistFire')).toHaveLength(1); // muzzle/SFX cue
+    settle(pellets, player, geo);
+    expect(player.hp).toBeLessThan(hpBefore);     // pellets reached the player
   });
 
   it('is deterministic: same seed → identical player.hp', () => {
@@ -258,26 +267,29 @@ describe('stepDudes: SFire shotgun hits a player straight ahead', () => {
       const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
       const player = createPlayerState();
       player.x = 0; player.z = fpFromMeters(-5);
-      stepDudes(dudes, player, buildArenaGeometry(), createRng(seed), 0, []);
+      const geo = buildArenaGeometry();
+      const pellets: PelletState[] = [];
+      stepDudes(dudes, player, geo, createRng(seed), 0, [], pellets);
+      settle(pellets, player, geo);
       return player.hp;
     };
     expect(run(99)).toBe(run(99));
     expect(run(7)).toBe(run(7));
-    // different seeds may differ (spread) — just assert they're each self-stable
   });
 
-  it('fires exactly once per SFire visit (no double damage on later tics)', () => {
+  it('fires exactly once per SFire visit (no second blast on later tics)', () => {
     const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
     const d = dudes[0]!;
     const player = createPlayerState();
     player.x = 0; player.z = fpFromMeters(-5);
     const geo = buildArenaGeometry();
-    stepDudes(dudes, player, geo, createRng(99), 0, []);
+    const pellets: PelletState[] = [];
+    stepDudes(dudes, player, geo, createRng(99), 0, [], pellets);
     expect(d.fired).toBe(true);
-    const hpAfterFire = player.hp;
-    // a few more SFire tics: the one-shot guard prevents a second blast
-    for (let i = 0; i < 5; i++) stepDudes(dudes, player, geo, createRng(99), 0, []);
-    expect(player.hp).toBe(hpAfterFire);
+    const spawned = pellets.length;
+    // a few more SFire tics: the one-shot guard prevents a second blast → no new pellets
+    for (let i = 0; i < 5; i++) stepDudes(dudes, player, geo, createRng(99), 0, [], pellets);
+    expect(pellets.length).toBeLessThanOrEqual(spawned); // never grew (no re-fire); only shrinks as they travel
     expect(d.fired).toBe(true);
   });
 });
@@ -295,9 +307,11 @@ describe('stepDudes: SFire blocked by a wall → no damage', () => {
         minZ: fpFromMeters(-3), maxZ: fpFromMeters(-2) },
     ];
     const hpBefore = player.hp;
-    stepDudes(dudes, player, geo, createRng(99), 0, []);
-    expect(player.hp).toBe(hpBefore);            // fully blocked
-    expect(dudes[0]!.fired).toBe(true);          // did fire (just missed)
+    const pellets: PelletState[] = [];
+    stepDudes(dudes, player, geo, createRng(99), 0, [], pellets);
+    for (let t = 1; t <= 300 && pellets.length > 0; t++) stepPellets(pellets, player, geo, t);
+    expect(player.hp).toBe(hpBefore);            // fully blocked — pellets died on the wall
+    expect(dudes[0]!.fired).toBe(true);          // did fire (just blocked)
   });
 });
 
@@ -477,5 +491,48 @@ describe('stepDudes: Search → Idle after 1800 (sees target → Chase)', () => 
       if (d.ai === DudeAi.Chase) { acquired = true; break; }
     }
     expect(acquired).toBe(true);
+  });
+});
+
+describe('cultist projectile fire (NotBlood nHitscanProjectiles mode)', () => {
+  const GEO = buildArenaGeometry();
+
+  it('SFire spawns travelling pellets that damage the player over time, not instantly', () => {
+    const dudes: DudeState[] = [];
+    spawnDude(dudes, 0, 0, 0, 0); // dude at origin, ang 0 → forward = -Z
+    const d = dudes[0]!;
+    d.ai = DudeAi.SFire;
+    d.stateTics = DUDE_STATES[DudeAi.SFire].tics - SHOTGUN.sfireFireTic; // fire this tic
+    d.fired = false;
+
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-3); // 3 m ahead (-Z), clear LOS
+    const hp0 = player.hp;
+
+    const pellets: PelletState[] = [];
+    stepDudes(dudes, player, GEO, createRng(7), 100, [], pellets);
+
+    expect(pellets.length).toBe(SHOTGUN.pellets); // 8 travelling pellets spawned
+    expect(player.hp).toBe(hp0);                  // NOT instant hitscan — no damage yet this tic
+
+    for (let t = 101; t <= 300 && pellets.length > 0; t++) stepPellets(pellets, player, GEO, t);
+    expect(player.hp).toBeLessThan(hp0);          // pellets reached the player and dealt damage
+  });
+
+  it('is deterministic — same seed + setup → same player hp', () => {
+    function run(): number {
+      const dudes: DudeState[] = [];
+      spawnDude(dudes, 0, 0, 0, 0);
+      const d = dudes[0]!;
+      d.ai = DudeAi.SFire;
+      d.stateTics = DUDE_STATES[DudeAi.SFire].tics - SHOTGUN.sfireFireTic;
+      const player = createPlayerState();
+      player.x = 0; player.z = fpFromMeters(-3);
+      const pellets: PelletState[] = [];
+      stepDudes(dudes, player, GEO, createRng(42), 100, [], pellets);
+      for (let t = 101; t <= 300 && pellets.length > 0; t++) stepPellets(pellets, player, GEO, t);
+      return player.hp;
+    }
+    expect(run()).toBe(run());
   });
 });

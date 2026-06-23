@@ -5,8 +5,8 @@ import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
 import { cloneSimState } from './snapshot';
 import { buildArenaGeometry } from './geometry';
-import { renderPlayer, renderProjectiles, renderHeads, renderDudes,
-         type PlayerRender, type ProjectileRender, type HeadRender, type DudeRender } from './render';
+import { renderPlayer, renderProjectiles, renderHeads, renderDudes, renderPellets,
+         type PlayerRender, type ProjectileRender, type HeadRender, type DudeRender, type PelletRender } from './render';
 import { EMPTY_INPUT, type InputCommand, type SimEvent } from './types';
 import { fpFromMeters, metersPerSecToFp } from './fp';
 import { TICS_PER_SEC } from './units';
@@ -110,6 +110,12 @@ export class SimRunner {
     return renderHeads(this.prev.heads, this.state.heads, alpha);
   }
 
+  /** Interpolated travelling-pellet positions for cosmetic tracer rendering. */
+  pelletRenders(): PelletRender[] {
+    const alpha = this.accumulator / SIM_DT;
+    return renderPellets(this.prev.pellets, this.state.pellets, alpha);
+  }
+
   /** Spawn a shotgun cultist into the sim at (xM,zM) on the floor, facing
    *  `angBlood` (Blood-angle units). Converts meters→fp at the boundary.
    *  Called from main.ts (the cultist spawn hook) — never from sim internals.
@@ -128,6 +134,8 @@ export class SimRunner {
   clearDudes(): void {
     this.state.dudes.length = 0;
     this.prev.dudes.length = 0;
+    this.state.pellets.length = 0; // drop in-flight pellets too (clean wave reset)
+    this.prev.pellets.length = 0;
   }
 
   /** Interpolated cultist transforms for billboard rendering (alpha from the

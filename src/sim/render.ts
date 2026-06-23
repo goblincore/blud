@@ -4,7 +4,7 @@ import { bloodAngleToRadians } from './units';
 import type { PlayerState } from './player';
 import type { ProjectileState } from './projectile';
 import type { HeadState } from './head';
-import { type DudeAi, type DudeState } from './dude';
+import { type DudeAi, type DudeState, type PelletState } from './dude';
 
 const EYE_HEIGHT_M = 1.75; // eye above feet (matches the legacy player feel)
 
@@ -52,6 +52,26 @@ export function renderProjectiles(prev: ProjectileState[], cur: ProjectileState[
 
 export interface HeadRender {
   xMeters: number; yMeters: number; zMeters: number;
+}
+
+export interface PelletRender {
+  xMeters: number; yMeters: number; zMeters: number;
+}
+
+/** Interpolate travelling pellet positions between prev/cur tic, in meters.
+ *  Match by index (append-only + removed-on-hit/expire, same as heads). */
+export function renderPellets(prev: PelletState[], cur: PelletState[], alpha: number): PelletRender[] {
+  const n = Math.min(prev.length, cur.length);
+  const out: PelletRender[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = prev[i]!, b = cur[i]!;
+    out.push({
+      xMeters: fpToMeters(a.x + (b.x - a.x) * alpha),
+      yMeters: fpToMeters(a.y + (b.y - a.y) * alpha),
+      zMeters: fpToMeters(a.z + (b.z - a.z) * alpha),
+    });
+  }
+  return out;
 }
 
 /** Interpolate head positions between the previous and current tic, in meters.

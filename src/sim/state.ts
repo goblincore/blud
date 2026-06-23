@@ -4,7 +4,7 @@ import type { KinematicBody } from './types';
 import { createPlayerState, type PlayerState } from './player';
 import type { ProjectileState } from './projectile';
 import type { HeadState } from './head';
-import type { DudeState } from './dude';
+import type { DudeState, PelletState } from './dude';
 
 /** The entire deterministic simulation state. Plain serializable data only —
  *  no class instances, no Rapier handles, no closures — so it can be hashed and
@@ -18,8 +18,9 @@ export interface SimState {
   projectiles: ProjectileState[];
   heads: HeadState[];
   dudes: DudeState[];
+  pellets: PelletState[];
 }
 
 export function createSimState(seed: number): SimState {
-  return { tic: 0, rng: createRng(seed), bodies: [], player: createPlayerState(), projectiles: [], heads: [], dudes: [] };
+  return { tic: 0, rng: createRng(seed), bodies: [], player: createPlayerState(), projectiles: [], heads: [], dudes: [], pellets: [] };
 }

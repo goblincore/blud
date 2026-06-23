@@ -689,6 +689,38 @@ async function main() {
     }
   }
 
+  // ——— Sim shotgun-pellet tracer registry ————————————————————————
+  // Cosmetic billboards driven by sim.pelletRenders(). The pellets are real,
+  // deterministic sim entities (they travel + damage the player in-sim, NotBlood
+  // nHitscanProjectiles mode); these tiny glowing quads just make them visible so
+  // the player can see (and dodge) the shot. Created/removed to match the list.
+  const PELLET_TRACER_SIZE = 0.12;
+  const pelletMeshes: THREE.Mesh[] = [];
+
+  function syncPelletTracers(): void {
+    const renders = sim.pelletRenders();
+    while (pelletMeshes.length < renders.length) {
+      const geom = new THREE.PlaneGeometry(PELLET_TRACER_SIZE, PELLET_TRACER_SIZE);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.95, depthWrite: false });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      pelletMeshes.push(mesh);
+    }
+    while (pelletMeshes.length > renders.length) {
+      const mesh = pelletMeshes.pop()!;
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+    for (let i = 0; i < renders.length; i++) {
+      const r = renders[i]!;
+      const mesh = pelletMeshes[i]!;
+      mesh.position.set(r.xMeters, r.yMeters, r.zMeters);
+      mesh.lookAt(camera.position);
+    }
+  }
+
   const chargeHud = new ChargeHud(document.body);
 
   // ---- Pause menu
@@ -868,6 +900,7 @@ async function main() {
     // ---- Sim projectile billboards: sync THREE meshes to sim.projectileRenders()
     syncProjectileBillboards(realDt);
   syncHeadBillboards();
+  syncPelletTracers();
 
     // ---- Drain sim events → VFX + SFX
     for (const ev of sim.drainEvents()) {
@@ -878,8 +911,9 @@ async function main() {
         sfx.play(SfxEvent.DYNAMITE_BOOM, { x: ex, y: ey, z: ez });
         gibs.spawnExplosion({ x: ex, y: ey, z: ez }, EXPLOSION_STANDARD, performance.now() / 1000);
       } else if (ev.kind === 'cultistFire') {
-        // Cosmetic-only muzzle flash + SFX. The damage already happened in-sim
-        // (stepDudes hitscan → player.hp); this is just the visual/audio cue.
+        // Cosmetic-only muzzle flash + SFX. The blast spawns travelling sim
+        // pellets (rendered by syncPelletTracers; they damage player.hp in-sim);
+        // this is just the muzzle visual/audio cue at the moment of firing.
         const fx = fpToMeters(ev.x);
         const fy = fpToMeters(ev.y);
         const fz = fpToMeters(ev.z);

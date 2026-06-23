@@ -51,6 +51,16 @@ export interface DudeState {
   fired: boolean;                      // one-shot guard so an SFire visit fires exactly once
 }
 
+/** A travelling shotgun pellet (NotBlood kMissileShell). Straight-line fp motion;
+ *  swept-collides with the player AABB + geometry each tic; expires at `dieTic`.
+ *  Damage folds into the sim-authoritative `player.hp` on a player hit. */
+export interface PelletState {
+  x: number; y: number; z: number;     // fp position
+  vx: number; vy: number; vz: number;  // fp/tic velocity (straight line, no gravity)
+  damage: number;                      // hp subtracted on a player hit
+  dieTic: number;                      // tic at which the pellet expires (range cap)
+}
+
 // Cultist tuning as sim constants (mirror SHOTGUN_CULTIST + SHOTGUN_BLAST; the
 // BU/angle ones come from aicult.cpp/dudeInfo and may need feel-calibration like
 // the head kick — note any change in the commit).
@@ -80,7 +90,15 @@ export const SHOTGUN = {
   spreadAng: Math.round((14 / 360) * 2048),  // 14° cone half-angle in Blood-angle units
   maxRange: fpFromMeters(25),                // SHOTGUN_BLAST.pelletMaxRangeM
   sfireFireTic: 18,                          // tic into SFire (60-tic state) when the blast goes off
+  // NotBlood `nHitscanProjectiles` mode (actFireMissile kMissileShell): the cultist
+  // fires TRAVELLING pellets instead of vanilla hitscan (actFireVector kVectorShell)
+  // — visible, slightly dodgeable, less cheap-feeling. We use this mode. Speed is a
+  // sim feel-calibration (fast but reactable); tune in playtest.
+  pelletSpeed: metersPerSecToFp(35),         // fp/tic — travelling pellet velocity
 } as const;
+
+/** Pellet lifetime in tics = maxRange / speed (both fp; the quotient is tics). */
+const PELLET_LIFETIME_TICS = Math.ceil(SHOTGUN.maxRange / SHOTGUN.pelletSpeed);
 
 // State table — duration (tics; 0 = continuous), and the next state on expiry.
 // move/think are dispatched in stepDude by `ai`; this table carries durations + transitions.
@@ -557,6 +575,7 @@ function rayHitsPlayer(
  *  is emitted for the cosmetic layer. Port of aicult.cpp:159-207. */
 function fireShotgun(
   d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimRng, out: SimEvent[],
+  pellets: PelletState[], tic: number,
 ): void {
   const eyeX = d.x;
   const eyeY = CULTIST.eyeHeight; // dude feet at y=0; shoots from eye height
@@ -608,15 +627,15 @@ function fireShotgun(
     const fy = spreadFrac(r1, PELLET_SPREAD_Z) + bfy;
     const slope = baseSlope + Math.round(fy * SLOPE_FRACTION * FP_PER_BU);
 
-    // Pellet endpoint at SHOTGUN.maxRange horizontal distance along the direction.
-    const endX = eyeX + mulfp(hx, SHOTGUN.maxRange);
-    const endZ = eyeZ + mulfp(hz, SHOTGUN.maxRange);
-    const endY = eyeY + mulfp(slope, SHOTGUN.maxRange);
-
-    // aicult.cpp:193 — actFireVector(... kVectorShell): hitscan. Apply damage in-sim.
-    if (rayHitsPlayer(eyeX, eyeY, eyeZ, endX, endY, endZ, player, geo)) {
-      player.hp -= SHOTGUN.pelletDamage;
-    }
+    // NotBlood nHitscanProjectiles (actFireMissile kMissileShell): spawn a
+    // TRAVELLING pellet with velocity = unit direction × pelletSpeed (vertical =
+    // slope × horizontal speed). It sweep-collides with the player + geometry over
+    // the next tics (stepPellets) rather than dealing instant hitscan damage.
+    spawnPellet(
+      pellets, eyeX, eyeY, eyeZ,
+      mulfp(hx, SHOTGUN.pelletSpeed), mulfp(slope, SHOTGUN.pelletSpeed), mulfp(hz, SHOTGUN.pelletSpeed),
+      SHOTGUN.pelletDamage, tic + PELLET_LIFETIME_TICS,
+    );
   }
 
   // Signed Blood-angle pitch from the aim slope (atan2 of eye-delta over dist),
@@ -633,14 +652,47 @@ function fireShotgun(
  *  fires exactly once. */
 function thinkSFire(
   d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimRng, out: SimEvent[],
+  pellets: PelletState[], tic: number,
 ): void {
   if (d.fired) return;
   // stateTics counts DOWN from DUDE_STATES[SFire].tics (60); the blast goes off
   // once SHOTGUN.sfireFireTic (18) tics have elapsed, i.e. stateTics <= 60-18.
   const fireAt = DUDE_STATES[DudeAi.SFire].tics - SHOTGUN.sfireFireTic;
   if (d.stateTics > fireAt) return;
-  fireShotgun(d, player, geo, rng, out);
+  fireShotgun(d, player, geo, rng, out, pellets, tic);
   d.fired = true;
+}
+
+/** Spawn a travelling pellet into the sim. */
+export function spawnPellet(
+  pellets: PelletState[],
+  x: number, y: number, z: number,
+  vx: number, vy: number, vz: number,
+  damage: number, dieTic: number,
+): void {
+  pellets.push({ x, y, z, vx, vy, vz, damage, dieTic });
+}
+
+/** Advance all pellets one tic: straight-line motion + swept collision. A pellet
+ *  that sweeps through the player AABB (before any wall) does `player.hp -= damage`
+ *  and is removed; one that hits geometry, or outlives `dieTic` (range cap), is
+ *  removed. Reuses `rayHitsPlayer` (player-before-wall ordering) and `losClear`. */
+export function stepPellets(
+  pellets: PelletState[], player: PlayerState, geo: SimAABB[], tic: number,
+): void {
+  for (let i = pellets.length - 1; i >= 0; i--) {
+    const p = pellets[i]!;
+    const ox = p.x, oy = p.y, oz = p.z;
+    p.x += p.vx; p.y += p.vy; p.z += p.vz;
+    if (rayHitsPlayer(ox, oy, oz, p.x, p.y, p.z, player, geo)) {
+      player.hp -= p.damage;
+      pellets.splice(i, 1);
+    } else if (!losClear(ox, oy, oz, p.x, p.y, p.z, geo)) {
+      pellets.splice(i, 1); // hit a wall
+    } else if (tic >= p.dieTic) {
+      pellets.splice(i, 1); // range cap
+    }
+  }
 }
 
 /**
@@ -660,8 +712,8 @@ export function stepDudes(
   rng: SimRng,
   tic: number,
   out: SimEvent[],
+  pellets: PelletState[] = [], // SFire spawns travelling pellets into this; defaults to a throwaway for callers that don't render pellets
 ): void {
-  void tic;
   for (const d of dudes) {
     if (d.health <= 0) continue; // dead dudes don't think or move
 
@@ -671,7 +723,7 @@ export function stepDudes(
       case DudeAi.Chase: thinkChase(d, player, geo, rng); break;
       case DudeAi.Goto: thinkGoto(d, player, geo, rng); break;
       case DudeAi.Search: thinkSearch(d, player, geo, rng); break;
-      case DudeAi.SFire: thinkSFire(d, player, geo, rng, out); break;
+      case DudeAi.SFire: thinkSFire(d, player, geo, rng, out, pellets, tic); break;
       // Dodge/SThrow/Recoil have NO thinker (aicult.cpp state table: NULL).
       default: break;
     }

@@ -5,7 +5,7 @@ import { stepPlayer, clampPlayerHp } from './player';
 import type { SimAABB } from './geometry';
 import { stepProjectiles } from './projectile';
 import { stepHeads, kickHeads } from './head';
-import { stepDudes } from './dude';
+import { stepDudes, stepPellets } from './dude';
 import { applyExplosionToPlayer } from './explosion';
 
 /**
@@ -37,9 +37,11 @@ export function stepSim(state: SimState, input: InputCommand, geo: SimAABB[]): S
   }
   stepHeads(state.heads, geo, state.tic);
   kickHeads(state.player, state.heads);
-  stepDudes(state.dudes, state.player, geo, state.rng, state.tic, events);
-  // Both explosion damage (above) and cultist pellet damage (stepDudes) subtract
-  // from player.hp this tic; clamp once at the end so it never goes negative.
+  stepDudes(state.dudes, state.player, geo, state.rng, state.tic, events, state.pellets);
+  // Travelling shotgun pellets (spawned by SFire) sweep + apply player damage.
+  stepPellets(state.pellets, state.player, geo, state.tic);
+  // Both explosion damage (above) and cultist pellet damage subtract from
+  // player.hp this tic; clamp once at the end so it never goes negative.
   clampPlayerHp(state.player);
   return events;
 }
