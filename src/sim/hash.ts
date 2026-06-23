@@ -32,5 +32,11 @@ export function hashSimState(s: SimState): number {
     mix(pr.fuseTics); mix(pr.impactMode ? 1 : 0);
   }
 
+  for (const hd of s.heads) {
+    mix(hd.x); mix(hd.y); mix(hd.z); mix(hd.vx); mix(hd.vy); mix(hd.vz);
+    mix(hd.radius); mix(hd.elastic); mix(hd.resting ? 1 : 0);
+    mix(hd.kickCooldownTics); mix(hd.spawnTic);
+  }
+
   return h >>> 0;
 }

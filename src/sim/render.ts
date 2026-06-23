@@ -3,6 +3,7 @@ import { fpToMeters } from './fp';
 import { bloodAngleToRadians } from './units';
 import type { PlayerState } from './player';
 import type { ProjectileState } from './projectile';
+import type { HeadState } from './head';
 
 const EYE_HEIGHT_M = 1.75; // eye above feet (matches the legacy player feel)
 
@@ -43,6 +44,27 @@ export function renderProjectiles(prev: ProjectileState[], cur: ProjectileState[
       zMeters: fpToMeters(a.z + (b.z - a.z) * alpha),
       fuseTics: b.fuseTics,
       fuseMaxTics: b.fuseMaxTics,
+    });
+  }
+  return out;
+}
+
+export interface HeadRender {
+  xMeters: number; yMeters: number; zMeters: number;
+}
+
+/** Interpolate head positions between the previous and current tic, in meters.
+ *  Match by index (append-only + removed-on-despawn, same convention as projectiles).
+ *  Cosmetic only — the billboard always faces the camera, so no orientation is sent. */
+export function renderHeads(prev: HeadState[], cur: HeadState[], alpha: number): HeadRender[] {
+  const n = Math.min(prev.length, cur.length);
+  const out: HeadRender[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = prev[i]!, b = cur[i]!;
+    out.push({
+      xMeters: fpToMeters(a.x + (b.x - a.x) * alpha),
+      yMeters: fpToMeters(a.y + (b.y - a.y) * alpha),
+      zMeters: fpToMeters(a.z + (b.z - a.z) * alpha),
     });
   }
   return out;

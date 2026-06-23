@@ -5,11 +5,13 @@ import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
 import { cloneSimState } from './snapshot';
 import { buildArenaGeometry } from './geometry';
-import { renderPlayer, renderProjectiles, type PlayerRender, type ProjectileRender } from './render';
+import { renderPlayer, renderProjectiles, renderHeads,
+         type PlayerRender, type ProjectileRender, type HeadRender } from './render';
 import { EMPTY_INPUT, type InputCommand, type SimEvent } from './types';
 import { fpFromMeters, metersPerSecToFp } from './fp';
 import { TICS_PER_SEC } from './units';
 import { spawnProjectile as simSpawnProjectile, throwVelocity } from './projectile';
+import { spawnHead as simSpawnHead } from './head';
 
 const SIM_DT = 1 / TICS_PER_SEC; // ~8.33 ms
 
@@ -76,6 +78,26 @@ export class SimRunner {
   projectileRenders(): ProjectileRender[] {
     const alpha = this.accumulator / SIM_DT;
     return renderProjectiles(this.prev.projectiles, this.state.projectiles, alpha);
+  }
+
+  /** Spawn a kickable head into the sim. Converts meters→fp and m/s→fp/tic at the
+   *  boundary. Called from main.ts (via the head-pop hook) — never from sim internals. */
+  spawnHead(
+    xM: number, yM: number, zM: number,
+    vxMps: number, vyMps: number, vzMps: number,
+  ): void {
+    simSpawnHead(
+      this.state.heads,
+      fpFromMeters(xM), fpFromMeters(yM), fpFromMeters(zM),
+      metersPerSecToFp(vxMps), metersPerSecToFp(vyMps), metersPerSecToFp(vzMps),
+      this.state.tic,
+    );
+  }
+
+  /** Interpolated head transforms for billboard rendering (alpha from the accumulator). */
+  headRenders(): HeadRender[] {
+    const alpha = this.accumulator / SIM_DT;
+    return renderHeads(this.prev.heads, this.state.heads, alpha);
   }
 
   /** Drain and return all sim events accumulated since the last call. */
