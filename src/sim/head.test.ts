@@ -73,10 +73,10 @@ describe('head kick', () => {
     const player = createPlayerState();
     player.yaw = 1536; // forward = +X
     kickHeads(player, heads);
-    expect(heads[0]!.vy).toBeGreaterThan(metersPerSecToFp(4)); // clearly launches up (not a 12 cm twitch)
+    expect(heads[0]!.vy).toBeGreaterThan(metersPerSecToFp(7)); // a powerful boot, not a gentle pop
     let maxY = 0;
-    for (let t = 1; t <= 60; t++) { stepHeads(heads, GEO, t); maxY = Math.max(maxY, heads[0]!.y); }
-    expect(maxY).toBeGreaterThan(fpFromMeters(0.3));          // rises a real arc off the floor
+    for (let t = 1; t <= 120; t++) { stepHeads(heads, GEO, t); maxY = Math.max(maxY, heads[0]!.y); }
+    expect(maxY).toBeGreaterThan(fpFromMeters(1.0));           // sails well up into the air (NotBlood-style)
   });
 
   it('does not kick a head out of reach', () => {

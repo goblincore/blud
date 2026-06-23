@@ -65,8 +65,8 @@ export function stepHeads(heads: HeadState[], geo: SimAABB[], tic: number): void
 // Blood actKickObject: zvel = nSpeed * 0.5 upward (mulscale14(nSpeed, -0x2000)) —
 // the vertical pop is half the horizontal kick, which is what makes a punted head
 // sail up like a kicked soccer ball rather than skid along the floor.
-export const KICK_SPEED = metersPerSecToFp(9);     // horizontal punt speed (fp/tic)
-export const KICK_UP = metersPerSecToFp(5);        // vertical pop ≈ ½ horizontal (Blood ratio); ~0.5 m apex at g=25
+export const KICK_SPEED = metersPerSecToFp(15);    // horizontal punt speed (fp/tic) — a big NotBlood-style boot
+export const KICK_UP = metersPerSecToFp(9);        // vertical pop ≈ ½ horizontal (Blood ratio); ~1.6 m apex at g=25
 export const KICK_CONTACT_DIST = fpFromMeters(0.65); // player radius (0.3) + head (0.18) + slop
 const KICK_CONTACT_DIST_SQ = KICK_CONTACT_DIST * KICK_CONTACT_DIST;
 export const KICK_MAX_HEIGHT = fpFromMeters(0.7);  // only boot heads near the floor
