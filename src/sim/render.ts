@@ -4,6 +4,7 @@ import { bloodAngleToRadians } from './units';
 import type { PlayerState } from './player';
 import type { ProjectileState } from './projectile';
 import type { HeadState } from './head';
+import { type DudeAi, type DudeState } from './dude';
 
 const EYE_HEIGHT_M = 1.75; // eye above feet (matches the legacy player feel)
 
@@ -65,6 +66,38 @@ export function renderHeads(prev: HeadState[], cur: HeadState[], alpha: number):
       xMeters: fpToMeters(a.x + (b.x - a.x) * alpha),
       yMeters: fpToMeters(a.y + (b.y - a.y) * alpha),
       zMeters: fpToMeters(a.z + (b.z - a.z) * alpha),
+    });
+  }
+  return out;
+}
+
+export interface DudeRender {
+  xMeters: number; yMeters: number; zMeters: number;
+  /** Facing yaw in radians (interpolated across the 0/2048 wrap via lerpAngle). */
+  yawRad: number;
+  /** Current AI state (from `cur`) — drives the cosmetic anim-state mapping. */
+  ai: DudeAi;
+  /** Current health (from `cur`) — drives the health bar + death cue. */
+  health: number;
+}
+
+/** Interpolate cultist transforms between the previous and current tic, in
+ *  meters + radians, passing `ai`/`health` from `cur` for the cosmetic anim-state
+ *  + health bar. Match by index (append-only + skipped-when-dead, same convention
+ *  as heads/projectiles). Position interpolates linearly; the facing uses
+ *  `lerpAngle` so it takes the shortest arc across the 0/2048 boundary. */
+export function renderDudes(prev: DudeState[], cur: DudeState[], alpha: number): DudeRender[] {
+  const n = Math.min(prev.length, cur.length);
+  const out: DudeRender[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = prev[i]!, b = cur[i]!;
+    out.push({
+      xMeters: fpToMeters(a.x + (b.x - a.x) * alpha),
+      yMeters: fpToMeters(a.y + (b.y - a.y) * alpha),
+      zMeters: fpToMeters(a.z + (b.z - a.z) * alpha),
+      yawRad: bloodAngleToRadians(lerpAngle(a.ang, b.ang, alpha)),
+      ai: b.ai,
+      health: b.health,
     });
   }
   return out;

@@ -1,11 +1,12 @@
 // src/sim/render.test.ts
 import { describe, it, expect } from 'vitest';
 import { createPlayerState } from './player';
-import { renderPlayer, renderProjectiles, renderHeads } from './render';
+import { renderPlayer, renderProjectiles, renderHeads, renderDudes } from './render';
 import { fpFromMeters } from './fp';
 import { BANGLE_QUARTER } from './trig';
 import { createSimState } from './state';
 import type { HeadState } from './head';
+import { DudeAi, type DudeState } from './dude';
 
 describe('renderPlayer — interpolated camera transform (render boundary)', () => {
   it('lerps position between prev and cur by alpha, in meters', () => {
@@ -57,5 +58,31 @@ describe('renderProjectiles — interpolated billboard positions', () => {
     cur.projectiles.push({ ...base, x: fpFromMeters(2), y: 0, z: 0, spawnX:0,spawnY:0,spawnZ:0 });
     const out = renderProjectiles(prev.projectiles, cur.projectiles, 0.5);
     expect(out[0]!.xMeters).toBeCloseTo(1, 6);
+  });
+});
+
+const baseDude: DudeState = {
+  x: 0, y: 0, z: 0, vx: 0, vz: 0, ang: 0, goalAng: 0,
+  health: 40, ai: DudeAi.Idle, stateTics: 0,
+  hasTarget: false, targetX: 0, targetZ: 0, dodgeDir: 0, fired: false,
+};
+
+describe('renderDudes — interpolated cultist transforms', () => {
+  it('interpolates positions to meters and lerps the facing angle (shortest arc)', () => {
+    const prev: DudeState[] = [{ ...baseDude, ang: 0 }];
+    const cur: DudeState[] = [{ ...baseDude, x: fpFromMeters(2), z: fpFromMeters(4), ang: BANGLE_QUARTER }];
+    const out = renderDudes(prev, cur, 0.5);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.xMeters).toBeCloseTo(1, 5); // halfway 0→2 m
+    expect(out[0]!.zMeters).toBeCloseTo(2, 5); // halfway 0→4 m
+    expect(out[0]!.yawRad).toBeCloseTo(Math.PI / 4, 4); // halfway 0→90° = 45°
+  });
+
+  it('passes ai and health through from cur (cosmetic anim-state + health bar)', () => {
+    const prev: DudeState[] = [{ ...baseDude }];
+    const cur: DudeState[] = [{ ...baseDude, ai: DudeAi.SFire, health: 22 }];
+    const out = renderDudes(prev, cur, 1);
+    expect(out[0]!.ai).toBe(DudeAi.SFire);
+    expect(out[0]!.health).toBe(22);
   });
 });

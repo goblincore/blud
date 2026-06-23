@@ -5,13 +5,14 @@ import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
 import { cloneSimState } from './snapshot';
 import { buildArenaGeometry } from './geometry';
-import { renderPlayer, renderProjectiles, renderHeads,
-         type PlayerRender, type ProjectileRender, type HeadRender } from './render';
+import { renderPlayer, renderProjectiles, renderHeads, renderDudes,
+         type PlayerRender, type ProjectileRender, type HeadRender, type DudeRender } from './render';
 import { EMPTY_INPUT, type InputCommand, type SimEvent } from './types';
 import { fpFromMeters, metersPerSecToFp } from './fp';
 import { TICS_PER_SEC } from './units';
 import { spawnProjectile as simSpawnProjectile, throwVelocity } from './projectile';
 import { spawnHead as simSpawnHead } from './head';
+import { spawnDude as simSpawnDude, recoilDude as simRecoilDude } from './dude';
 
 const SIM_DT = 1 / TICS_PER_SEC; // ~8.33 ms
 
@@ -98,6 +99,46 @@ export class SimRunner {
   headRenders(): HeadRender[] {
     const alpha = this.accumulator / SIM_DT;
     return renderHeads(this.prev.heads, this.state.heads, alpha);
+  }
+
+  /** Spawn a shotgun cultist into the sim at (xM,zM) on the floor, facing
+   *  `angBlood` (Blood-angle units). Converts meters→fp at the boundary.
+   *  Called from main.ts (the cultist spawn hook) — never from sim internals.
+   *  Returns nothing; the cosmetic layer reads the new dude by index via
+   *  `dudeRenders()` (it's append-only, so the index is `dudes.length-1`). */
+  spawnDude(xM: number, zM: number, angBlood: number): void {
+    simSpawnDude(this.state.dudes, fpFromMeters(xM), fpFromMeters(zM), 0, angBlood);
+  }
+
+  /** Interpolated cultist transforms for billboard rendering (alpha from the
+   *  accumulator). Match-by-index — a cultist's cosmetic billboard keeps the
+   *  index it got at `spawnDude` time. */
+  dudeRenders(): DudeRender[] {
+    const alpha = this.accumulator / SIM_DT;
+    return renderDudes(this.prev.dudes, this.state.dudes, alpha);
+  }
+
+  /** Kill a cultist by index — sets its health to 0 so `stepDudes` skips it
+   *  (dead dudes don't think/move/fire) and the cosmetic layer plays death via
+   *  `DudeRender.health <= 0`. Health-0 (rather than splicing) keeps the index
+   *  mapping stable for surviving cultists (match-by-index rendering).
+   *  Called from main.ts when a player weapon kills the cosmetic cultist. */
+  killDude(index: number): void {
+    const d = this.state.dudes[index];
+    if (d) d.health = 0;
+  }
+
+  /** Force a cultist into the Recoil reaction (→ Dodge next step) — bridges a
+   *  non-lethal player-weapon hit on the cosmetic cultist to the sim AI so it
+   *  reacts. No-op on a dead/out-of-range dude (delegates to dude.recoilDude). */
+  recoilDude(index: number): void {
+    const d = this.state.dudes[index];
+    if (d) simRecoilDude(d);
+  }
+
+  /** The sim-authoritative player hit-point count, for the HUD health display. */
+  playerHp(): number {
+    return this.state.player.hp;
   }
 
   /** Drain and return all sim events accumulated since the last call. */
