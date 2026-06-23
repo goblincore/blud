@@ -5,6 +5,7 @@ import { stepSim } from './step';
 import { hashSimState } from './hash';
 import { EMPTY_INPUT } from './types';
 import { buildArenaGeometry } from './geometry';
+import { spawnHead } from './head';
 
 const GEO = buildArenaGeometry();
 
@@ -60,6 +61,13 @@ describe('hashSimState', () => {
 
   it('changes when player hp differs', () => {
     const a = createSimState(5); const b = createSimState(5); b.player.hp = 50;
+    expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
+
+  it('hash reflects head state', () => {
+    const a = createSimState(5);
+    const b = createSimState(5);
+    spawnHead(a.heads, 1000, 2000, 3000, 10, 20, 30, 0);
     expect(hashSimState(a)).not.toBe(hashSimState(b));
   });
 

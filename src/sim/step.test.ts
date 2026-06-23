@@ -4,6 +4,8 @@ import { createSimState } from './state';
 import { stepSim } from './step';
 import { EMPTY_INPUT } from './types';
 import { buildArenaGeometry } from './geometry';
+import { spawnHead } from './head';
+import { fpFromMeters } from './fp';
 
 const GEO = buildArenaGeometry();
 
@@ -39,5 +41,15 @@ describe('stepSim', () => {
     const events = stepSim(s, EMPTY_INPUT, GEO);
     expect(Array.isArray(events)).toBe(true);
     expect(events).toHaveLength(0);
+  });
+
+  it('steps and kicks heads inside stepSim', () => {
+    const s = createSimState(1);
+    spawnHead(s.heads, fpFromMeters(0.3), 0, 0, 0, 0, 0, s.tic);
+    // Facing comes from aimYaw (stepPlayer overwrites yaw from input every tic).
+    // 1536 -> forward +X (x = -sin(1536) = +1 in the yaw frame).
+    stepSim(s, { ...EMPTY_INPUT, aimYaw: 1536 }, GEO);
+    expect(s.heads.length).toBe(1);
+    expect(s.heads[0]!.vx).toBeGreaterThan(0); // kicked toward +X this tic
   });
 });

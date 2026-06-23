@@ -4,6 +4,7 @@ import type { InputCommand, SimEvent } from './types';
 import { stepPlayer } from './player';
 import type { SimAABB } from './geometry';
 import { stepProjectiles } from './projectile';
+import { stepHeads, kickHeads } from './head';
 
 /**
  * Advance the simulation by exactly one 120 Hz tic. PURE with respect to the
@@ -24,5 +25,7 @@ export function stepSim(state: SimState, input: InputCommand, geo: SimAABB[]): S
 
   const events: SimEvent[] = [];
   stepProjectiles(state.projectiles, geo, state.tic, events);
+  stepHeads(state.heads, geo, state.tic);
+  kickHeads(state.player, state.heads);
   return events;
 }

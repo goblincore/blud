@@ -9,6 +9,7 @@ import { randomInt } from './rng';
 import { BTN_JUMP, BTN_SPRINT, type InputCommand } from './types';
 import { buildArenaGeometry } from './geometry';
 import { spawnProjectile, throwVelocity } from './projectile';
+import { spawnHead } from './head';
 
 const GEO = buildArenaGeometry();
 
@@ -41,6 +42,8 @@ function seededState(seed: number): SimState {
   // Throw a dynamite projectile mid-air: exercises stepProjectiles, fuse countdown,
   // floor bounce, detonation, and explosion event emission through the recorded stream.
   spawnProjectile(s.projectiles, 0, 3_000_000, 0, throwVelocity(s.player.yaw, 0, 2_500_000), 90, true, 0);
+  // a head dropped mid-air so it falls/bounces across the recorded run
+  spawnHead(s.heads, 100_000, 2_000_000, -80_000, 30_000, 120_000, -20_000, 0);
   return s;
 }
 
