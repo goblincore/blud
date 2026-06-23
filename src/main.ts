@@ -267,6 +267,11 @@ async function main() {
     )),
   ]);
 
+  // Cultist shotgun-pellet tracer sprite — NotBlood kMissileShell (tile 9295,
+  // extracted from notblood.pk3/TILES099.ART). Null-safe: falls back to a flat
+  // glow if the placeholder asset is absent.
+  const pelletTex = await loadTexture('/assets/weapons/shotgun-shell-placeholder/9295-placeholder.png').catch(() => null);
+
   // Projectile billboard rendering for thrown dynamite bundles
   configureProjectileRendering(scene, dynamiteBundleFrames);
   setProjectileCamera(camera);
@@ -694,14 +699,20 @@ async function main() {
   // deterministic sim entities (they travel + damage the player in-sim, NotBlood
   // nHitscanProjectiles mode); these tiny glowing quads just make them visible so
   // the player can see (and dodge) the shot. Created/removed to match the list.
-  const PELLET_TRACER_SIZE = 0.12;
+  const PELLET_TRACER_SIZE = 0.16;
   const pelletMeshes: THREE.Mesh[] = [];
 
   function syncPelletTracers(): void {
     const renders = sim.pelletRenders();
     while (pelletMeshes.length < renders.length) {
       const geom = new THREE.PlaneGeometry(PELLET_TRACER_SIZE, PELLET_TRACER_SIZE);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.95, depthWrite: false });
+      const mat = new THREE.MeshBasicMaterial({
+        map: pelletTex ?? null,
+        color: pelletTex ? 0xffffff : 0xffcc66, // tint white when textured so the sprite colors show
+        transparent: true,
+        opacity: pelletTex ? 1 : 0.95,
+        depthWrite: false,
+      });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.frustumCulled = false;
       scene.add(mesh);

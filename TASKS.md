@@ -99,7 +99,7 @@ Key reference docs (open these before touching their area):
 - `F2.cultist.search` [x] Search-after-LOS state for cultist (scans area when player breaks LOS) — folded into plan 4 (Search state on `SimState.dudes`).
 - `F2.cultist.los` [x] Real LOS raycast for cultist — folded into plan 4 (deterministic segment-vs-AABB LOS against arena geometry).
 - `F2.cultist.sfx` [ ] Replace placeholder cultist SFX (reuses zombie aggro/death sounds).
-- `F2.cultist.pellet-visual` [ ] Cultist shotgun pellet tracer is a flat color quad placeholder (`syncPelletTracers` in `main.ts`). NotBlood renders `kMissileShell` as bullet tile 9295 (custom TILES099.ART, not extracted). Use the flare projectile sprite (repo has flare assets) for a glowing pellet, or extract/sub a bullet tile.
+- `F2.cultist.pellet-visual` [x] Cultist shotgun pellet tracer now uses NotBlood's `kMissileShell` bullet sprite (tile 9295, 15×16 glow) — extracted from `notblood.pk3/TILES099.ART` (BUILDART magic-prefixed format, not handled by `extract_blood_sprites.py`; extracted manually with the Blood palette) → `public/assets/weapons/shotgun-shell-placeholder/9295-placeholder.png` (gitignored placeholder; `syncPelletTracers` loads it null-safe, falls back to a flat glow). **Awaiting visual playtest.** Nice-to-have: add BUILDART support to the extraction script.
 
 ## Process / tooling
 
