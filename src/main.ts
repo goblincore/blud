@@ -13,9 +13,8 @@ import { PauseMenu } from './ui/pause-menu';
 import { WeaponRegistry, Dynamite, FlareGun } from './game/weapons';
 import { StuckFlare } from './game/weapons/stuck-flare';
 import { AxeZombie } from './game/enemy/axe-zombie';
-import { ShotgunCultist } from './game/enemy/shotgun-cultist';
-import { Pellet, pelletDirInCone } from './game/enemy/shotgun-pellet';
-import { SHOTGUN_BLAST, ZOMBIE_GIB_PROFILE, BLOOD_SPLAT, EXPLOSION_STANDARD } from './game/gibs/tuning';
+import { ShotgunCultist, type CultistSimAnim } from './game/enemy/shotgun-cultist';
+import { ZOMBIE_GIB_PROFILE, BLOOD_SPLAT, EXPLOSION_STANDARD } from './game/gibs/tuning';
 import { updateSmokeColumns } from './vfx/smoke-particles';
 import { WaveRunner } from './game/encounter/wave-runner';
 import { WARMUP_ROUND } from './game/encounter/encounters';
@@ -24,6 +23,7 @@ import { GroundFlameManager } from './game/gibs/ground-flame';
 import { configureProjectileRendering, setProjectileCamera, fuseFrameIndex } from './game/weapons/dynamite';
 import { THROW } from './sim/projectile';
 import { fpToMeters } from './sim/fp';
+import { DudeAi } from './sim/dude';
 import { configureProjectileRendering as configureFlareProjectileRendering, setProjectileCamera as setFlareProjectileCamera } from './game/weapons/flare';
 import { ParticlePool, bloodSplatPositions } from './game/gibs/particles';
 import { mulberry32 } from './game/rng';
@@ -45,45 +45,9 @@ import { Sfx } from './audio/sfx';
 import { SfxEvent } from './audio/events';
 import { Ambient } from './audio/ambient';
 import type { QavManifest, SeqManifest } from './animation/qav-schema';
-import type { GibbableDude } from './game/gibs';
 import type { ParticlePool as PPool } from './game/gibs/particles';
-import type { GibProfile } from './game/gibs/tuning';
 import type { Player as WeaponPlayer, FrameCtx } from './game/weapons/types';
 import type { Vec3 } from './game/gibs/particles';
-
-/** Adapter: M1 player → GibbableDude (so the player can be registered for AOE damage). */
-class PlayerGibAdapter implements GibbableDude {
-  readonly id = 'player';
-  readonly kind = 'player' as const;
-  hp = 100;
-  readonly gibProfile: GibProfile = {
-    fleshPicnums: [1454, 1268, 1269, 1456, 1267],
-    bonePicnums: [],
-    boneWeight: 0,
-    bodyPartCount: { min: 2, max: 4 },
-    chunkCount: { min: 8, max: 14 },
-    spawnsKickableHead: false, // player gibs shouldn't drop a zombie head
-  };
-
-  constructor(
-    private readonly getPos: () => THREE.Vector3,
-    private readonly getForward: () => THREE.Vector3,
-    private readonly bus?: PostFxBus,
-  ) {}
-
-  get pos(): Vec3 {
-    const p = this.getPos();
-    return { x: p.x, y: p.y, z: p.z };
-  }
-
-  takeDamage(amount: number, _impulse: Vec3): void {
-    this.hp -= amount;
-    // CA spike that decays back to baseline over 0.4s. Scales lightly with
-    // damage — 0.015 floor so a glancing hit still reads, cap near 0.025.
-    const intensity = 0.015 + 0.01 * Math.min(amount / 60, 1);
-    this.bus?.triggerDamagePulse(intensity, 0.4, performance.now() / 1000);
-  }
-}
 
 /** Adapter: M1 player → Weapon Player interface. */
 class WeaponPlayerAdapter implements WeaponPlayer {
@@ -139,6 +103,19 @@ class WeaponPlayerAdapter implements WeaponPlayer {
 
   takeDamage(_amount: number, _impulse: Vec3): void {
     // Player damage — overcook = gib via GibSystem directly
+  }
+}
+
+/** Map the sim's DudeAi state → a cosmetic cultist anim hint (Plan 4). The sim
+ *  owns the cultist's AI; this is the anim-state mapping fed into the cosmetic
+ *  ShotgunCultist via setSimDrive. Idle→idle, Chase/Goto/Search/Dodge/SThrow→
+ *  walk, SFire→fire, Recoil→recoil. */
+function dudeAiToAnim(ai: DudeAi): CultistSimAnim {
+  switch (ai) {
+    case DudeAi.SFire: return 'fire';
+    case DudeAi.Recoil: return 'recoil';
+    case DudeAi.Idle: return 'idle';
+    default: return 'walk'; // Chase / Goto / Search / Dodge / SThrow
   }
 }
 
@@ -310,19 +287,10 @@ async function main() {
   const explosions = new ExplosionVfx(scene);
   const shake     = new Screenshake();
 
-  // ---- Post-FX bus (constructed early so PlayerGibAdapter can fire damage pulses)
+  // ---- Post-FX bus (constructed early so the sim-hp damage pulse can fire)
   const postFxBus = new PostFxBus(DEFAULT_POST_FX.ca.baseline);
 
   // ---- Player adapters
-  const playerGib = new PlayerGibAdapter(
-    player.position,
-    () => {
-      const d = new THREE.Vector3();
-      camera.getWorldDirection(d);
-      return d;
-    },
-    postFxBus,
-  );
   const weaponPlayer = new WeaponPlayerAdapter(player.position, camera);
 
   // ---- Shared tile texture cache + getter (needed by ground flames, launched corpses, etc.)
@@ -347,7 +315,10 @@ async function main() {
     explosions, groundExplosionAtlas, airExplosionAtlas, shake,
     () => { gameOverOverlay.show(); },
   );
-  gibs.registerDude(playerGib);
+  // NOTE: the player is intentionally NOT registered here (Plan 4). Explosion-
+  // vs-player damage is now sim-authoritative (stepSim → applyExplosionToPlayer)
+  // and cultist pellets damage the sim player via stepDudes hitscan, so
+  // registering the player for the legacy AOE would double-count.
 
   // ---- Ground flames (persistent flame at burn-death position)
   const groundFlames = new GroundFlameManager();
@@ -361,9 +332,8 @@ async function main() {
     shake.reset();
     clearStuckFlares();
     groundFlames.clear(scene);
-    pelletRegistry.length = 0;
-    playerGib.hp = 100;
-    // Reset sim player back to spawn (arena center, feet y=0)
+    // Reset sim player back to spawn (arena center, feet y=0). sim.reset clears
+    // dudes + projectiles + restores player hp to 100.
     sim.reset(0, 0);
     cluster.spawn(4);
   });
@@ -463,25 +433,6 @@ async function main() {
   };
   let flareIdCounter = 0;
 
-  // ——— Pellet global registry —————————————————————
-  const pelletRegistry: Pellet[] = [];
-
-  // ——— Spawn pellets from cultist fire ——————————
-  function spawnPellets(origin: Vec3, dir: Vec3): void {
-    const now = performance.now() / 1000;
-    for (let i = 0; i < SHOTGUN_BLAST.pelletCount; i++) {
-      const pelletDir = pelletDirInCone(dir, i, SHOTGUN_BLAST.pelletCount, SHOTGUN_BLAST.spreadConeDeg);
-      const pellet = new Pellet(
-        origin,
-        pelletDir,
-        SHOTGUN_BLAST.pelletSpeedMps,
-        now,
-        SHOTGUN_BLAST.pelletDamage,
-      );
-      pelletRegistry.push(pellet);
-    }
-  }
-
   function frameCtx(): FrameCtx {
     return {
       world: physics.world,
@@ -491,6 +442,30 @@ async function main() {
       fpAnimator,
       sfx,
     };
+  }
+
+  // ——— Spawn a sim-driven shotgun cultist (Plan 4) ————————————————
+  // Mirrors the kickable-head pattern: spawn the cosmetic ShotgunCultist via the
+  // cluster, then spawn its deterministic sim dude and keep the index alongside
+  // it. The cosmetic billboard/anim + facing are driven from sim.dudeRenders()
+  // each fixed step (applyCultistSimDrive). Player→dude damage stays legacy
+  // (dynamite AOE / flare hit the cosmetic body); kills + non-lethal hits bridge
+  // back to the sim via onSimKill / onSimRecoil.
+  function spawnSimCultist(pos: { x: number; y: number; z: number }): ShotgunCultist | null {
+    const enemy = cluster.spawnOne('cultist-shotgun', pos);
+    if (!(enemy instanceof ShotgunCultist)) return null;
+    const cultist = enemy;
+    // Face the arena center (0,0) at spawn. Blood facing θ moves toward
+    // (-sinθ,-cosθ); to aim at (0,0) from (pos.x,pos.z) → sinθ∝pos.x, cosθ∝pos.z
+    // → θ = atan2(pos.x, pos.z). The sim wraps internally; normalize to [0,2048).
+    const angBlood = Math.round(
+      ((Math.atan2(pos.x, pos.z) + Math.PI * 2) % (Math.PI * 2)) * 2048 / (Math.PI * 2),
+    );
+    const idx = sim.spawnDude(pos.x, pos.z, angBlood);
+    cultist.simDudeIndex = idx;
+    cultist.onSimKill = () => sim.killDude(idx);
+    cultist.onSimRecoil = () => sim.recoilDude(idx);
+    return cultist;
   }
 
   // ——— Wave runner ————————————————————————————————
@@ -506,12 +481,10 @@ async function main() {
       return points[Math.floor(Math.random() * points.length)]!;
     },
     spawn: (kind, pos) => {
-      const enemy = cluster.spawnOne(kind, pos);
-      if (enemy instanceof ShotgunCultist) {
-        enemy.brain.hooks = {
-          ...enemy.brain.hooks,
-          onFire: (origin: Vec3, dir: Vec3) => spawnPellets(origin, dir),
-        };
+      if (kind === 'cultist-shotgun') {
+        spawnSimCultist(pos);
+      } else {
+        cluster.spawnOne(kind, pos);
       }
     },
   });
@@ -732,7 +705,9 @@ async function main() {
       decals.reset();
       clearStuckFlares();
       groundFlames.clear(scene);
-      pelletRegistry.length = 0;
+      // Clear sim dudes — cluster.reset() despawned the cosmetic cultists, so
+      // their sim dudes (alive or dead) must be dropped too for a clean wave.
+      sim.clearDudes();
       waveRunner.start(performance.now() / 1000);
     }
   });
@@ -748,13 +723,7 @@ async function main() {
         { x: 0, y: 1, z: -15 },
       ];
       const pos = points[Math.floor(Math.random() * points.length)]!;
-      const cultist = cluster.spawnOne('cultist-shotgun', pos);
-      if (cultist instanceof ShotgunCultist) {
-        cultist.brain.hooks = {
-          ...cultist.brain.hooks,
-          onFire: (origin: Vec3, dir: Vec3) => spawnPellets(origin, dir),
-        };
-      }
+      spawnSimCultist(pos);
       console.log('[blud] spawned cultist at', pos);
     }
   });
@@ -831,49 +800,31 @@ async function main() {
       }
     }
 
-    // ——— Pellet registry tick ——————————————————
-    // Player no longer has a Rapier body (sim player replaced it); pass null so
-    // the pellet still raycasts world geometry but cannot detect player hits.
-    // TODO(plan-3 or sooner): replace with AABB proximity check against sim.playerRender().
-    const playerBody = null as RAPIER.RigidBody | null;
-    const pelletRaycastFn = (from: Vec3, dir: Vec3, maxDist: number) => {
-      const dLen = Math.hypot(dir.x, dir.y, dir.z);
-      if (dLen < 0.0001) return null;
-      const rayDir = { x: dir.x / dLen, y: dir.y / dLen, z: dir.z / dLen };
-      const ray = new RAPIER.Ray(
-        { x: from.x, y: from.y, z: from.z },
-        rayDir,
-      );
-      const hit = physics.world.castRayAndGetNormal(ray, maxDist, true);
-      if (hit) {
-        const toi = hit.timeOfImpact;
-        return {
-          pos: { x: from.x + rayDir.x * toi, y: from.y + rayDir.y * toi, z: from.z + rayDir.z * toi },
-          body: hit.collider.parent(),
-        };
-      }
-      return null;
-    };
-    for (let i = pelletRegistry.length - 1; i >= 0; i--) {
-      const pellet = pelletRegistry[i]!;
-      const alive = pellet.update(now, pelletRaycastFn, (dmg, imp) => weaponPlayer.takeDamage(dmg, imp), playerBody);
-      if (!alive) pelletRegistry.splice(i, 1);
-    }
-
-    // ——— Cultist line-of-sight update —————————
+    // ——— Feed sim drive to cosmetic cultists (Plan 4) ————————————
+    // The sim owns the cultist's AI/move/fire; each fixed step we hand every
+    // sim-driven ShotgunCultist its interpolated transform + anim hint so its
+    // update() can drive the Rapier collision proxy + billboard. Dead sim
+    // dudes (health 0) yield no drive — the cosmetic death path takes over.
+    const dudeRenders = sim.dudeRenders();
     for (const z of cluster.getZombies()) {
-      if (z instanceof ShotgunCultist) {
-        // Approximate LOS: true if within fire range (real raycast is F2)
-        const dx = z.pos.x - ppos.x;
-        const dy = z.pos.y - ppos.y;
-        const dz = z.pos.z - ppos.z;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        z.setLineOfSight(dist <= 15); // generous — refines with raycast in F2
+      if (z instanceof ShotgunCultist && z.simDudeIndex >= 0) {
+        const r = dudeRenders[z.simDudeIndex];
+        if (r && r.health > 0) {
+          z.setSimDrive({
+            xMeters: r.xMeters, yMeters: r.yMeters, zMeters: r.zMeters,
+            yawRad: r.yawRad,
+            anim: dudeAiToAnim(r.ai),
+          });
+        } else {
+          z.clearSimDrive();
+        }
       }
     }
 
     // ——— Wave runner tick —————————————————————
-    const playerAlive = playerGib.hp > 0;
+    // Player liveness is sim-authoritative now (hp from cultist pellets +
+    // explosions; the player is excluded from the legacy AOE).
+    const playerAlive = sim.playerHp() > 0;
     waveRunner.update(dt, now, playerAlive, cluster.aliveCount());
   }
 
@@ -889,6 +840,9 @@ async function main() {
   // + footstep audio accumulator.
   let lastPlayerPos = player.position().clone();
   let playerDistAccum = 0;
+  // Sim-authoritative player hp on the previous render frame (drives the
+  // damage hit-flash pulse on a drop).
+  let lastPlayerHp = sim.playerHp();
 
   setRenderCallback((realDt) => {
     // Skip game simulation when paused (still renders frozen frame)
@@ -907,7 +861,7 @@ async function main() {
     syncProjectileBillboards(realDt);
   syncHeadBillboards();
 
-    // ---- Drain sim explosion events → VFX + SFX
+    // ---- Drain sim events → VFX + SFX
     for (const ev of sim.drainEvents()) {
       if (ev.kind === 'explosion') {
         const ex = fpToMeters(ev.x);
@@ -915,7 +869,22 @@ async function main() {
         const ez = fpToMeters(ev.z);
         sfx.play(SfxEvent.DYNAMITE_BOOM, { x: ex, y: ey, z: ez });
         gibs.spawnExplosion({ x: ex, y: ey, z: ez }, EXPLOSION_STANDARD, performance.now() / 1000);
+      } else if (ev.kind === 'cultistFire') {
+        // Cosmetic-only muzzle flash + SFX. The damage already happened in-sim
+        // (stepDudes hitscan → player.hp); this is just the visual/audio cue.
+        const fx = fpToMeters(ev.x);
+        const fy = fpToMeters(ev.y);
+        const fz = fpToMeters(ev.z);
+        sfx.play(SfxEvent.CULTIST_SHOT, { x: fx, y: fy, z: fz });
+        particles.emitBurst({ x: fx, y: fy, z: fz }, {
+          tile: 2424, count: 6, speedMin: 2.0, speedMax: 5.0,
+          gravity: 0, airdrag: 0.6, lifetimeSec: 0.12, size: 0.18,
+        });
       }
+      // 'dudeDeath' is not emitted in this milestone: player→dude kills are
+      // detected in the cosmetic layer (ShotgunCultist.takeDamage → GibSystem),
+      // and bridge to the sim via killDude. Left for future sim-authoritative
+      // player weapons.
     }
 
     scheduler.tick(realDt, fixedStep);
@@ -962,8 +931,25 @@ async function main() {
     camera.rotation.y += off.yaw;
     camera.rotation.z += off.roll;
 
-    // HUD
-    hud.update(realDt, player.position());
+    // HUD — health driven from the sim-authoritative player hp (Plan 4).
+    const playerHp = sim.playerHp();
+    hud.update(realDt, player.position(), playerHp);
+
+    // Damage hit-flash: trigger a CA pulse when the sim player took damage this
+    // frame (replaces the old PlayerGibAdapter path). Scales lightly with the
+    // delta; the sim is now the single source of player damage.
+    if (playerHp < lastPlayerHp) {
+      const dmg = lastPlayerHp - playerHp;
+      const intensity = 0.015 + 0.01 * Math.min(dmg / 60, 1);
+      postFxBus.triggerDamagePulse(intensity, 0.4, now);
+    }
+    lastPlayerHp = playerHp;
+
+    // Game-over: with the player excluded from the legacy AOE it can no longer be
+    // gibbed, so death comes from the sim hp hitting 0 (cultist pellets +
+    // explosions). Show the overlay (idempotent); R restarts via its handler.
+    if (playerHp <= 0) gameOverOverlay.show();
+
     const w = weapons.current;
     chargeHud.setCharge(w instanceof Dynamite ? w.chargeFractionAt(now) : 0);
   });

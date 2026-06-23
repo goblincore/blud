@@ -13,6 +13,7 @@ export enum SfxEvent {
   FLARE_SHOOT = 'flare_shoot',
   FLARE_IMPACT = 'flare_impact',
   FLARE_BURN_LOOP = 'flare_burn_loop',
+  CULTIST_SHOT = 'cultist_shot',
 }
 
 /**
@@ -36,4 +37,5 @@ export const SFX_BLOOD_MAP: Record<SfxEvent, string> = {
   [SfxEvent.FLARE_SHOOT]:      '',           // TODO: find a fire-shot whoosh SFX (FLARE1.wav placeholder)
   [SfxEvent.FLARE_IMPACT]:     '',           // TODO: find a flare-hit sfx (FLAREHIT.wav placeholder)
   [SfxEvent.FLARE_BURN_LOOP]:  '',           // TODO: looping crackle (FLAREBRN.wav placeholder)
+  [SfxEvent.CULTIST_SHOT]:     '',           // TODO: cultist shotgun blast SFX (F2.cultist.sfx)
 };

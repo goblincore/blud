@@ -104,10 +104,21 @@ export class SimRunner {
   /** Spawn a shotgun cultist into the sim at (xM,zM) on the floor, facing
    *  `angBlood` (Blood-angle units). Converts meters→fp at the boundary.
    *  Called from main.ts (the cultist spawn hook) — never from sim internals.
-   *  Returns nothing; the cosmetic layer reads the new dude by index via
-   *  `dudeRenders()` (it's append-only, so the index is `dudes.length-1`). */
-  spawnDude(xM: number, zM: number, angBlood: number): void {
+   *  Returns the new dude's index so the cosmetic layer can keep it alongside
+   *  its `ShotgunCultist` (dudes are append-only + skipped-when-dead, so the
+   *  index stays stable for match-by-index `dudeRenders()` rendering). */
+  spawnDude(xM: number, zM: number, angBlood: number): number {
+    const idx = this.state.dudes.length;
     simSpawnDude(this.state.dudes, fpFromMeters(xM), fpFromMeters(zM), 0, angBlood);
+    return idx;
+  }
+
+  /** Clear all sim dudes (e.g. on a wave/restart reset that despawns the
+   *  cosmetic cultists). Dead dudes are inert (skipped by stepDudes) but kept
+   *  index-stable; this drops them entirely so a fresh wave starts clean. */
+  clearDudes(): void {
+    this.state.dudes.length = 0;
+    this.prev.dudes.length = 0;
   }
 
   /** Interpolated cultist transforms for billboard rendering (alpha from the

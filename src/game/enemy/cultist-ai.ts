@@ -285,6 +285,37 @@ export class CultistBrain {
     }
   }
 
+  /** Cosmetic-only burn-state management for the sim-driven cultist (Plan 4).
+   *  Called each frame INSTEAD of the full `update()` — the deterministic sim
+   *  owns the cultist's AI / movement / fire / LOS now; this keeps ONLY the
+   *  Burning entry/exit that the sim doesn't model (stuck flares are a legacy
+   *  player→dude weapon, and burn death + the panic-run anim stay cosmetic).
+   *
+   *  Death (hp ≤ 0) is already handled synchronously by `applyDamage` (the DoT
+   *  path calls it each frame), so this only needs to flip Burning on/off. The
+   *  full FSM (Idle/Chase/Aim/Fire/Recoil + LOS + fire hook) is intentionally
+   *  NOT run — the sim's DudeAi state drives the cosmetic anim instead. */
+  updateBurnState(stuckFlareCount: number, isFlareIgnited: boolean): void {
+    if (this.state === CultistState.Dead) return;
+    // Enter Burning when a flare is stuck AND ignited (NotBlood actor.cpp:3000).
+    // Defer while airborne — landing (takeDamage) recovers through Recoil first.
+    if (
+      stuckFlareCount > 0 && isFlareIgnited &&
+      this.state !== CultistState.Burning && this.state !== CultistState.Launched
+    ) {
+      this.state = CultistState.Burning;
+      // Mirror NotBlood actor.cpp:3000-3070: pSprite->type swap to
+      // kDudeBurningCultist resets HP to dudeInfo[40].startHealth=25.
+      if (this.hp > BURN.cultistBurnResetHp) this.hp = BURN.cultistBurnResetHp;
+      this._hooks.onBurningStart?.();
+      return;
+    }
+    // Exit Burning when all flares expired (fire went out).
+    if (stuckFlareCount === 0 && this.state === CultistState.Burning) {
+      this.state = CultistState.Chase;
+    }
+  }
+
   desiredVelocity(self: Vec3, player: Vec3): Vec3 {
     if (this.state === CultistState.Dead) return { x: 0, y: 0, z: 0 };
 

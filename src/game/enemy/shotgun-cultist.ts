@@ -36,6 +36,29 @@ const STATE_ANIM_MAP: Record<CultistState, string> = {
   [CultistState.Launched]: 'cultist-shotgun-recoil',
 };
 
+/** Sim-driven cosmetic anim hint — derived from `DudeRender.ai` in main.ts and
+ *  fed in via `setSimDrive`. The sim owns the cultist's AI; this is the cosmetic
+ *  anim-state mapping (Idle→idle, Chase/Goto/Search/Dodge/SThrow→walk,
+ *  SFire→fire, Recoil→recoil). */
+export type CultistSimAnim = 'idle' | 'walk' | 'fire' | 'recoil';
+
+const SIM_ANIM_MAP: Record<CultistSimAnim, string> = {
+  idle: 'cultist-shotgun-idle',
+  walk: 'cultist-shotgun-chase',
+  fire: 'cultist-shotgun-fire',
+  recoil: 'cultist-shotgun-recoil',
+};
+
+/** One frame of sim drive for the cosmetic cultist (meters + radians). main.ts
+ *  reads `sim.dudeRenders()[idx]`, maps the ai → `CultistSimAnim`, and calls
+ *  `setSimDrive` each fixed step. `yMeters` is kept for API parity but unused —
+ *  the body's y stays at its spawn height (see the billboard anchor note). */
+export interface CultistSimDrive {
+  xMeters: number; yMeters: number; zMeters: number;
+  yawRad: number;
+  anim: CultistSimAnim;
+}
+
 
 export class ShotgunCultist implements GibbableDude {
   readonly id: string;
@@ -86,6 +109,20 @@ export class ShotgunCultist implements GibbableDude {
   /** Track whether the player is in line-of-sight for brain. */
   private _hasLos = false;
 
+  // ——— Sim drive (Plan 4) ————————————————————————————
+  // The deterministic sim owns the cultist's AI / movement / fire / aggro; this
+  // cosmetic object keeps the sim dude's index so main.ts can feed each frame's
+  // interpolated transform + anim hint in via `setSimDrive`. The Rapier body is
+  // now a passive collision proxy (for flare sticking) driven from the sim.
+  /** Index into `sim.dudeRenders()` for this cultist (-1 = not sim-driven). */
+  simDudeIndex = -1;
+  /** Latest sim drive (position + facing + anim hint); null when dead/unset. */
+  private simDrive: CultistSimDrive | null = null;
+  /** Bridge: called when this cosmetic cultist dies so the sim dude stops acting. */
+  onSimKill?: () => void;
+  /** Bridge: called on a non-lethal player-weapon hit so the sim AI reacts. */
+  onSimRecoil?: () => void;
+
   constructor(
     id: string,
     world: RAPIER.World,
@@ -119,6 +156,12 @@ export class ShotgunCultist implements GibbableDude {
 
   /** Wire the SFX engine. */
   setSfx(sfx: Sfx): void { this._sfx = sfx; }
+
+  /** Feed one frame of sim drive (position + facing + anim hint). Called by
+   *  main.ts each fixed step before `update`. Null/`clearSimDrive` lets the
+   *  cosmetic death/launch path take over (a dead sim dude has health 0). */
+  setSimDrive(d: CultistSimDrive): void { this.simDrive = d; }
+  clearSimDrive(): void { this.simDrive = null; }
 
   /** Wire the particle pool for smoke emission from stuck flares. */
   setParticlePool(pool: ParticlePool): void { this._particlePool = pool; }
@@ -202,19 +245,24 @@ export class ShotgunCultist implements GibbableDude {
     const anyIgnited = this.stuckFlares.some(f => f.isIgnited(now));
     this.brain.setIsFlareIgnited(anyIgnited);
 
-    this.brain.update(dt, this.pos, playerPos, this._hasLos);
+    // Sim owns the cultist's AI / movement / fire / LOS (Plan 4). Only the
+    // legacy cosmetic burn-state is managed here (flares are a player→dude
+    // weapon the sim doesn't model); the full FSM is intentionally NOT run.
+    this.brain.updateBurnState(this.stuckFlares.length, anyIgnited);
 
-    // Detect state change → trigger new animation
+    // Death / burn-state change. The sim owns the AI-state anim, so only the
+    // legacy cosmetic states (Dead / Burning) drive an anim here; the
+    // sim-driven anim (idle/walk/fire/recoil) is applied below from simDrive.
     if (this.brain.state !== prev) {
-      this.onStateEnter(this.brain.state, now, prev);
-      // Track death time for reap scheduling
-      // deathTime may already be stamped by takeDamage (explosion deaths) — the
-      // < 0 guard makes this the fallback for DoT/other deaths, not an overwrite.
       if (this.brain.state === CultistState.Dead && this.deathTime < 0) {
+        // deathTime may already be stamped by takeDamage (explosion deaths) —
+        // the < 0 guard makes this the fallback for DoT/burn deaths.
         this.deathTime = now;
-        if (prev === CultistState.Burning) {
-          this.onBurnDeath?.(this.pos, now);
-        }
+        this.onStateEnter(CultistState.Dead, now, prev);
+        if (prev === CultistState.Burning) this.onBurnDeath?.(this.pos, now);
+        this.onSimKill?.(); // bridge: sim dude stops acting (health → 0)
+      } else if (this.brain.state === CultistState.Burning) {
+        this.onStateEnter(CultistState.Burning, now, prev);
       }
     }
 
@@ -249,15 +297,29 @@ export class ShotgunCultist implements GibbableDude {
           this.anim.play('cultist-shotgun-recoil', now);
         }
       }
-    } else {
-      // Kinematic move driven by AI
-      const v = this.brain.desiredVelocity(this.pos, playerPos);
-      this.body.setNextKinematicTranslation({ x: t.x + v.x * dt, y: t.y, z: t.z + v.z * dt });
-      // Update facing direction from velocity (skip when dead)
-      if (this.brain.state !== CultistState.Dead && Math.hypot(v.x, v.z) > 0.01) {
-        this.setFacing({ x: v.x, z: v.z });
+    } else if (this.simDrive && this.brain.state !== CultistState.Dead) {
+      // SIM-DRIVEN position (Plan 4): the Rapier body is now a passive collision
+      // proxy (flare sticking) driven from the deterministic sim each frame.
+      // Only x/z are driven — y stays at spawn height (the billboard anchor
+      // expects the body center near y=1; the sim dude's feet are at y=0).
+      this.body.setNextKinematicTranslation({
+        x: this.simDrive.xMeters, y: t.y, z: this.simDrive.zMeters,
+      });
+      // Facing from the sim yaw. Blood facing θ moves toward (-sinθ,-cosθ) in
+      // (x,z) (see sim trig.yawRotate); the billboard's angle-variant picker
+      // wants that world direction.
+      this.facing = {
+        x: -Math.sin(this.simDrive.yawRad),
+        z: -Math.cos(this.simDrive.yawRad),
+      };
+      // Sim anim hint (burn anim was played above if Burning). play() is
+      // idempotent for the same name, so this only restarts on a real change.
+      if (this.brain.state !== CultistState.Burning) {
+        this.anim.play(SIM_ANIM_MAP[this.simDrive.anim], now);
       }
     }
+    // else: Dead (or no sim drive yet) — body rests at its last position; the
+    //   death anim was played by takeDamage / the burn-death path above.
 
     // Billboard render update
     const trans = this.body.translation();
@@ -296,6 +358,14 @@ export class ShotgunCultist implements GibbableDude {
     const died = wasAlive && this.brain.state === CultistState.Dead;
     if (died) this.deathTime = performance.now() / 1000;
 
+    // Bridge player→dude damage to the sim (Plan 4 boundary decision: player
+    // weapons stay legacy-driven). On death the sim dude is killed (stops
+    // acting); a non-lethal hit forces a Recoil→Dodge reaction so the AI reacts.
+    if (wasAlive) {
+      if (died) this.onSimKill?.();
+      else this.onSimRecoil?.();
+    }
+
     // Concussion launch — NotBlood ConcussSprite applies velocity to dudes
     // alive or dead, decoupled from damage outcome.
     const speed = Math.hypot(vel.x, vel.y, vel.z);
@@ -326,6 +396,10 @@ export class ShotgunCultist implements GibbableDude {
   /** Marks the cultist as gibbed — cluster reaps immediately. */
   onGibbed(): void {
     this.gibbed = true;
+    // Bridge: the GibSystem destroys the body directly (not via takeDamage), so
+    // kill the sim dude here too — otherwise it keeps acting after being gibbed.
+    if (this.deathTime < 0) this.deathTime = performance.now() / 1000;
+    this.onSimKill?.();
     this.anim.object.visible = false;
     // Body torn apart — the fire goes with it (kills the orphan flame that
     // otherwise keeps burning at the last body position for its full 6s).
