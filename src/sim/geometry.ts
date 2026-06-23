@@ -47,6 +47,75 @@ export function clipMoveXZ(
 }
 
 /**
+ * Deterministic segment-vs-AABB test in the XZ plane (slab method). Returns
+ * true iff the segment from (x0,z0) to (x1,z1) intersects `aabb`, boundary
+ * inclusive (a segment grazing the box edge counts as a hit — conservative
+ * for line-of-sight). All inputs are fp integers, so the per-axis `t` ratios are
+ * exact rationals; arithmetic is deterministic IEEE-754 within safe-int range.
+ *
+ * Arena AABBs are full-height columns, so a 2D XZ test suffices (the caller's
+ * Y coordinates are dropped by `losClear`).
+ */
+export function segmentHitsAABB(
+  x0: number, z0: number, x1: number, z1: number, aabb: SimAABB,
+): boolean {
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+
+  // — X slab —
+  let txmin: number;
+  let txmax: number;
+  if (dx === 0) {
+    // Segment parallel to Z: inside the X slab only if x0 lies within [minX,maxX].
+    if (x0 < aabb.minX || x0 > aabb.maxX) return false;
+    txmin = -Infinity;
+    txmax = Infinity;
+  } else {
+    const t1 = (aabb.minX - x0) / dx;
+    const t2 = (aabb.maxX - x0) / dx;
+    txmin = t1 < t2 ? t1 : t2;
+    txmax = t1 < t2 ? t2 : t1;
+  }
+
+  // — Z slab —
+  let tzmin: number;
+  let tzmax: number;
+  if (dz === 0) {
+    if (z0 < aabb.minZ || z0 > aabb.maxZ) return false;
+    tzmin = -Infinity;
+    tzmax = Infinity;
+  } else {
+    const t1 = (aabb.minZ - z0) / dz;
+    const t2 = (aabb.maxZ - z0) / dz;
+    tzmin = t1 < t2 ? t1 : t2;
+    tzmax = t1 < t2 ? t2 : t1;
+  }
+
+  // Intersect both slab intervals with the segment parameter range [0,1].
+  const tEnter = Math.max(txmin, tzmin, 0);
+  const tExit = Math.min(txmax, tzmax, 1);
+  return tEnter <= tExit;
+}
+
+/**
+ * True if the eye→target segment is unobstructed by any solid geometry AABB.
+ * `y0`/`y1` are accepted (eye/target heights) but unused — arena walls and
+ * obstacles are full-height columns, so an XZ footprint test is sufficient.
+ */
+export function losClear(
+  x0: number, y0: number, z0: number,
+  x1: number, y1: number, z1: number,
+  geo: SimAABB[],
+): boolean {
+  void y0;
+  void y1;
+  for (const a of geo) {
+    if (segmentHitsAABB(x0, z0, x1, z1, a)) return false;
+  }
+  return true;
+}
+
+/**
  * Build the arena sim-geometry (XZ AABBs in fp) mirroring the wall + obstacle
  * colliders in src/game/arena.ts. Keep these values in sync with that file; the
  * floor is NOT included here (handled as a y-clamp in the player step).
