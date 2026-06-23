@@ -682,12 +682,16 @@ async function main() {
   // Three.js billboards driven by sim.headRenders(). Created/removed to match the
   // sim head list; each faces the camera (lookAt). Tile 3405 = zombie head.
   const ZOMBIE_HEAD_PICNUM = 3405;
+  const HEAD_BILLBOARD_SIZE = 0.45;
+  // The sim head's y is its BOTTOM (floor = 0); the billboard is centred on its
+  // position, so lift it half its height or it renders half-sunk through the floor.
+  const HEAD_BILLBOARD_HALF = HEAD_BILLBOARD_SIZE / 2;
   const headMeshes: THREE.Mesh[] = [];
 
   function syncHeadBillboards(): void {
     const renders = sim.headRenders();
     while (headMeshes.length < renders.length) {
-      const geom = new THREE.PlaneGeometry(0.45, 0.45);
+      const geom = new THREE.PlaneGeometry(HEAD_BILLBOARD_SIZE, HEAD_BILLBOARD_SIZE);
       const mat = new THREE.MeshBasicMaterial({
         map: gibTextures!.get(ZOMBIE_HEAD_PICNUM),
         transparent: true,
@@ -707,7 +711,7 @@ async function main() {
     for (let i = 0; i < renders.length; i++) {
       const r = renders[i]!;
       const mesh = headMeshes[i]!;
-      mesh.position.set(r.xMeters, r.yMeters, r.zMeters);
+      mesh.position.set(r.xMeters, r.yMeters + HEAD_BILLBOARD_HALF, r.zMeters);
       mesh.lookAt(camera.position);
     }
   }

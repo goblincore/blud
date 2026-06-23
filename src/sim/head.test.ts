@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { spawnHead, stepHeads, kickHeads, HEAD_MAX_AGE_TICS,
          KICK_UP, KICK_COOLDOWN_TICS, KICK_MAX_HEIGHT, type HeadState } from './head';
 import { buildArenaGeometry } from './geometry';
-import { fpFromMeters } from './fp';
+import { fpFromMeters, metersPerSecToFp } from './fp';
 import { createPlayerState } from './player';
 
 const GEO = buildArenaGeometry();
@@ -44,6 +44,15 @@ describe('head physics', () => {
     for (let t = 1; t <= HEAD_MAX_AGE_TICS; t++) stepHeads(heads, GEO, t);
     expect(heads.length).toBe(0);
   });
+
+  it('floor friction brings a sliding head to rest (no infinite hockey-puck glide)', () => {
+    const heads: HeadState[] = [];
+    spawnHead(heads, 0, 0, 0, metersPerSecToFp(5), 0, 0, 0); // on the floor, sliding +X at 5 m/s
+    for (let t = 1; t <= 240; t++) stepHeads(heads, GEO, t);
+    expect(heads[0]!.vx).toBe(0);                       // friction stopped it (was: glides forever)
+    expect(heads[0]!.vz).toBe(0);
+    expect(heads[0]!.x).toBeLessThan(fpFromMeters(2));  // bounded skid, not a glide across the arena
+  });
 });
 
 describe('head kick', () => {
@@ -56,6 +65,18 @@ describe('head kick', () => {
     expect(heads[0]!.vx).toBeGreaterThan(0);          // booted toward +X
     expect(heads[0]!.vy).toBe(KICK_UP);               // pops up
     expect(heads[0]!.kickCooldownTics).toBe(KICK_COOLDOWN_TICS);
+  });
+
+  it('launches the head into the air on a kick (vertical pop, soccer-ball arc)', () => {
+    const heads: HeadState[] = [];
+    spawnHead(heads, fpFromMeters(0.3), 0, 0, 0, 0, 0, 0);
+    const player = createPlayerState();
+    player.yaw = 1536; // forward = +X
+    kickHeads(player, heads);
+    expect(heads[0]!.vy).toBeGreaterThan(metersPerSecToFp(4)); // clearly launches up (not a 12 cm twitch)
+    let maxY = 0;
+    for (let t = 1; t <= 60; t++) { stepHeads(heads, GEO, t); maxY = Math.max(maxY, heads[0]!.y); }
+    expect(maxY).toBeGreaterThan(fpFromMeters(0.3));          // rises a real arc off the floor
   });
 
   it('does not kick a head out of reach', () => {

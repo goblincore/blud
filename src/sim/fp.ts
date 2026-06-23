@@ -22,3 +22,12 @@ export function metersPerSecToFp(mps: number): number {
 export function mulfp(a: number, b: number): number {
   return Math.floor((a * b) / FP_PER_BU);
 }
+
+/** Blood's integer octagonal distance approximation (common_game.h `approxDist`):
+ *  the larger axis plus 3/8 of the smaller. Deterministic (no float sqrt) — used
+ *  for in-sim velocity magnitudes (e.g. floor friction). */
+export function approxDist(dx: number, dy: number): number {
+  dx = Math.abs(dx);
+  dy = Math.abs(dy);
+  return dx > dy ? dx + Math.floor((3 * dy) / 8) : dy + Math.floor((3 * dx) / 8);
+}
