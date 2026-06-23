@@ -7,11 +7,11 @@
 //
 // Determinism firewall: this module imports ONLY sibling sim modules
 // (./fp, ./trig, ./units) — never three, Rapier, or src/game.
-import { fpFromMeters, metersPerSecToFp, mulfp, approxDist } from './fp';
+import { fpFromMeters, metersPerSecToFp, mulfp, approxDist, FP_PER_BU } from './fp';
 import { bcos, bsin, yawRotate, getangle } from './trig';
 import { TICS_PER_SEC } from './units';
-import { losClear, type SimAABB } from './geometry';
-import { chance, type SimRng } from './rng';
+import { losClear, segmentEnterT, type SimAABB } from './geometry';
+import { chance, nextU32, type SimRng } from './rng';
 import type { PlayerState } from './player';
 import type { SimEvent } from './types';
 
@@ -71,7 +71,11 @@ export const CULTIST = {
 } as const;
 
 export const SHOTGUN = {
-  pellets: 7,                                // SHOTGUN_BLAST.pelletCount
+  // aicult.cpp:187 — `for (int i = 0; i < 8; i++)`: the cultist fires 8 vectors.
+  // (This is the CULTIST's hardcoded count; the PLAYER's SHOTGUN_BLAST.pelletCount
+  // is 7 — a different weapon. Plan's draft constant said 7 via that comment;
+  // corrected to 8 to stay faithful to ShotSeqCallback's loop.)
+  pellets: 8,
   pelletDamage: 12,                          // SHOTGUN_BLAST.pelletDamage
   spreadAng: Math.round((14 / 360) * 2048),  // 14° cone half-angle in Blood-angle units
   maxRange: fpFromMeters(25),                // SHOTGUN_BLAST.pelletMaxRangeM
@@ -353,6 +357,201 @@ function thinkChase(d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimR
   d.hasTarget = false;
 }
 
+// ——— Shotgun fire — deterministic hitscan + player-as-target damage (Plan 4, Task 5) —
+// Port of NotBlood aicult.cpp:159-207 (ShotSeqCallback). Blood fires the cultist's
+// blast as 8 `kVectorShell` HITSCANS via actFireVector; the sim has no Blood
+// sectors/hitscan engine, so each pellet is a deterministic segment raycast vs
+// the arena geometry AND the player AABB. Damage folds into the sim-authoritative
+// `player.hp`; a single `cultistFire` SimEvent is emitted for the cosmetic
+// tracer/muzzle/SFX (the damage already happened in-sim).
+//
+// RNG FAITHFULNESS: the NUMBER and ORDER of draws mirrors ShotSeqCallback exactly
+// — 3 `Random2` base-spread draws (aicult.cpp:168-170) then, per pellet,
+// `Random3(500)`/`Random3(1000)`/`Random3(1000)` (aicult.cpp:189-191, 2 draws each).
+// `Random2`/`Random3` are ported onto `SimRng` (Blood uses the engine's signed
+// `wrand()`; the sim uses unsigned `nextU32`), preserving each function's draw
+// count (1 / 2) and signed-spread shape. The SFX `Chance(0x8000)` roll at
+// aicult.cpp:202 is OMITTED in-sim (cosmetic-only; the cultistFire event selects
+// the SFX in the cosmetic layer) — documented so the draw count is auditable.
+//
+// CALIBRATION (like the head kick): Blood's spread magnitudes are in its own
+// z/vector units and do NOT map 1:1 to sim fp. The cone fractions below are the
+// sim-scale feel-calibration of that spread (start values; note tweaks in the
+// commit). What MUST stay stable for the determinism harness is the draw count.
+
+/** Player horizontal hit radius (fp) — the AABB half-extent around player.x/z. */
+const PLAYER_HIT_RADIUS = fpFromMeters(0.3);
+
+/** Blood difficulty-3 ShotSeqCallback spread arguments (gGameOptions.nDifficulty=3).
+ *  (5-3)*1000-500 = 1500 (xy); (5-3)*500 = 1000 (z); pellet args 1000/500. */
+const BASE_SPREAD_XY = 1500;
+const BASE_SPREAD_Z = 1000;
+const PELLET_SPREAD_XY = 1000;
+const PELLET_SPREAD_Z = 500;
+
+/** Sim-scale cone feel-calibration. The pellet's horizontal direction is the
+ *  facing unit plus up to `CONE_FRACTION` of a unit of spread (then renormalized
+ *  to unit) → a cone of half-angle atan(CONE_FRACTION) ≈ 5.7°. `SLOPE_FRACTION` is
+ *  the vertical analogue (fraction of a 45° slope). Start values; tune in playtest. */
+const CONE_FRACTION = 0.10;
+const SLOPE_FRACTION = 0.10;
+
+/** Port of common_game.h:843 `Random2(a1) = mulscale14(wrand(), a1) - a1`.
+ *  Blood's `wrand()` is a signed 16-bit value; we map one `nextU32` draw to the
+ *  same [-1,1) normalized factor `s` and apply `floor(2*s*a1 - a1)`, which has the
+ *  same [-3*a1, a1) range and -a1 mean as the original. ONE RNG draw. */
+function random2(rng: SimRng, a1: number): number {
+  const s = nextU32(rng) / 2147483648 - 1; // [-1, 1) — wrand()/32768 analogue
+  return Math.floor(2 * s * a1 - a1);
+}
+
+/** Port of common_game.h:848 `Random3(a1) = mulscale15(wrand()+wrand(), a1) - a1`.
+ *  Two `wrand()` draws (triangular); we use TWO `nextU32` draws, each mapped to
+ *  [-1,1), sum them to [-2,2), and apply `floor(sum*a1 - a1)` → same [-3*a1, a1)
+ *  range and triangular concentration as the original. TWO RNG draws. */
+function random3(rng: SimRng, a1: number): number {
+  const s1 = nextU32(rng) / 2147483648 - 1;
+  const s2 = nextU32(rng) / 2147483648 - 1;
+  return Math.floor((s1 + s2) * a1 - a1);
+}
+
+/** Map a Blood spread draw back to its SYMMETRIC [-1,1) underlying factor.
+ *  `random2(a)=floor(2*s*a - a)` and `random3(a)=floor(sum*a - a)` both encode a
+ *  symmetric factor (s∈[-1,1), sum∈[-2,2)); `draw + a` recovers ≈ that factor×a
+ *  (resp. ×2a), so `(draw + a)/(2*a)` ∈ [-1,1) is the symmetric spread factor.
+ *  We do NOT use Blood's raw [-3a,a) asymmetric value here — the asymmetry is an
+ *  artifact of Blood's `mulscale - a` formula, not a desired cone shape. Clamped
+ *  for safety. (The RNG DRAW COUNT is what's faithful; the magnitude mapping is a
+ *  sim feel-calibration — see CONE_FRACTION.) */
+function spreadFrac(draw: number, a1: number): number {
+  const f = (draw + a1) / (2 * a1);
+  return f < -1 ? -1 : f > 1 ? 1 : f;
+}
+
+/** Does the pellet segment (eye→endpoint) strike the player before any geometry?
+ *  The player is an XZ AABB of half-extent PLAYER_HIT_RADIUS around player.x/z,
+ *  with a vertical span of feet→eye (player.y .. player.y + CULTIST.eyeHeight).
+ *  Geometry AABBs are full-height columns, so occlusion is an XZ entry-parameter
+ *  ordering: if any AABB is entered strictly before the player box, the pellet
+ *  hits the wall first and is blocked. The pellet's height at the player's XZ
+ *  crossing must lie within the player's vertical span. */
+function rayHitsPlayer(
+  eyeX: number, eyeY: number, eyeZ: number,
+  endX: number, endY: number, endZ: number,
+  player: PlayerState, geo: SimAABB[],
+): boolean {
+  const box: SimAABB = {
+    minX: player.x - PLAYER_HIT_RADIUS, maxX: player.x + PLAYER_HIT_RADIUS,
+    minZ: player.z - PLAYER_HIT_RADIUS, maxZ: player.z + PLAYER_HIT_RADIUS,
+  };
+  const tPlayer = segmentEnterT(eyeX, eyeZ, endX, endZ, box);
+  if (tPlayer === Infinity) return false; // pellet misses the player's XZ footprint
+
+  // Geometry occlusion: a wall entered before the player blocks the pellet.
+  for (const a of geo) {
+    const tg = segmentEnterT(eyeX, eyeZ, endX, endZ, a);
+    if (tg < tPlayer) return false;
+  }
+
+  // Vertical gate: the pellet's height where it crosses the player's XZ box must
+  // be within feet→eye (so a pellet sailing over/under the player misses).
+  const yAt = eyeY + (endY - eyeY) * tPlayer;
+  return yAt >= player.y && yAt <= player.y + CULTIST.eyeHeight;
+}
+
+/** Fire the cultist shotgun once: 8 deterministic pellet raycasts from the
+ *  dude's eye toward the player (yaw from d.ang, slope from the eye-height delta
+ *  over distance — the sim analogue of gDudeSlope = divscale10(dz, dist)). Each
+ *  pellet reaching the player does SHOTGUN.pelletDamage; one cultistFire event
+ *  is emitted for the cosmetic layer. Port of aicult.cpp:159-207. */
+function fireShotgun(
+  d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimRng, out: SimEvent[],
+): void {
+  const eyeX = d.x;
+  const eyeY = CULTIST.eyeHeight; // dude feet at y=0; shoots from eye height
+  const eyeZ = d.z;
+
+  const dx = player.x - d.x;
+  const dz = player.z - d.z;
+  const dist = approxDist(dx, dz); // fp horizontal distance
+
+  // Slope (vertical rise per horizontal unit), 16.16 — sim analogue of Blood's
+  // gDudeSlope = divscale10(pTarget->z - pSprite->z, nDist) (aicult.cpp:478). Aim at
+  // the player's vertical CENTER (mid-body), not its eye: the hit AABB spans
+  // feet→eye (see rayHitsPlayer), so a center aim keeps vertical spread in-box.
+  // (CULTIST.eyeHeight is the sim's proxy for the player's body height — there is
+  // no separate player-height constant; noted as a feel-calibration value.)
+  const aimY = player.y + (CULTIST.eyeHeight >> 1);
+  const baseSlope = dist > 0 ? Math.floor(((aimY - eyeY) * FP_PER_BU) / dist) : 0;
+
+  // Base horizontal facing unit (16.16): yawRotate(0, -FP_PER_BU, ang) = (-sin,-cos).
+  const baseX = -bsin(d.ang);
+  const baseZ = -bcos(d.ang);
+
+  // aicult.cpp:166-170 — base direction (Cos/Sin>>16) + 3 Random2 base-spread draws.
+  const bjx = random2(rng, BASE_SPREAD_XY);
+  const bjy = random2(rng, BASE_SPREAD_XY);
+  const bjz = random2(rng, BASE_SPREAD_Z);
+  const bfx = spreadFrac(bjx, BASE_SPREAD_XY);
+  const bfz = spreadFrac(bjy, BASE_SPREAD_XY);
+  const bfy = spreadFrac(bjz, BASE_SPREAD_Z);
+
+  for (let i = 0; i < SHOTGUN.pellets; i++) {
+    // aicult.cpp:189-191 — per-pellet Random3 spread (r1=vertical, r2/r3=horizontal).
+    const r1 = random3(rng, PELLET_SPREAD_Z);
+    const r2 = random3(rng, PELLET_SPREAD_XY);
+    const r3 = random3(rng, PELLET_SPREAD_XY);
+
+    // Horizontal direction = facing unit + (base+pellet) spread, renormalized to unit.
+    const fx = spreadFrac(r3, PELLET_SPREAD_XY) + bfx;
+    const fz = spreadFrac(r2, PELLET_SPREAD_XY) + bfz;
+    let hx = baseX + Math.round(fx * CONE_FRACTION * FP_PER_BU);
+    let hz = baseZ + Math.round(fz * CONE_FRACTION * FP_PER_BU);
+    const hlen = approxDist(hx, hz);
+    if (hlen > 0) {
+      hx = Math.floor((hx * FP_PER_BU) / hlen);
+      hz = Math.floor((hz * FP_PER_BU) / hlen);
+    }
+
+    // Vertical slope = base slope + (base+pellet) vertical spread.
+    const fy = spreadFrac(r1, PELLET_SPREAD_Z) + bfy;
+    const slope = baseSlope + Math.round(fy * SLOPE_FRACTION * FP_PER_BU);
+
+    // Pellet endpoint at SHOTGUN.maxRange horizontal distance along the direction.
+    const endX = eyeX + mulfp(hx, SHOTGUN.maxRange);
+    const endZ = eyeZ + mulfp(hz, SHOTGUN.maxRange);
+    const endY = eyeY + mulfp(slope, SHOTGUN.maxRange);
+
+    // aicult.cpp:193 — actFireVector(... kVectorShell): hitscan. Apply damage in-sim.
+    if (rayHitsPlayer(eyeX, eyeY, eyeZ, endX, endY, endZ, player, geo)) {
+      player.hp -= SHOTGUN.pelletDamage;
+    }
+  }
+
+  // Signed Blood-angle pitch from the aim slope (atan2 of eye-delta over dist),
+  // for the cosmetic tracer/muzzle. ang is the dude's facing yaw.
+  const pitch = dist > 0
+    ? Math.round((Math.atan2(aimY - eyeY, dist) / (Math.PI * 2)) * 2048)
+    : 0;
+  out.push({ kind: 'cultistFire', x: eyeX, y: eyeY, z: eyeZ, ang: d.ang, pitch });
+}
+
+/** SFire thinker (Plan 4, Task 5): once the SFire state has elapsed
+ *  SHOTGUN.sfireFireTic tics and the dude hasn't fired this visit, fire once.
+ *  `d.fired` is reset to false on SFire ENTRY (enterState), so each SFire visit
+ *  fires exactly once. */
+function thinkSFire(
+  d: DudeState, player: PlayerState, geo: SimAABB[], rng: SimRng, out: SimEvent[],
+): void {
+  if (d.fired) return;
+  // stateTics counts DOWN from DUDE_STATES[SFire].tics (60); the blast goes off
+  // once SHOTGUN.sfireFireTic (18) tics have elapsed, i.e. stateTics <= 60-18.
+  const fireAt = DUDE_STATES[DudeAi.SFire].tics - SHOTGUN.sfireFireTic;
+  if (d.stateTics > fireAt) return;
+  fireShotgun(d, player, geo, rng, out);
+  d.fired = true;
+}
+
 /**
  * Advance all dudes one tic — the state-machine driver. Per dude (skipping the
  * dead): run the thinker for the current AI state (sets goalAng, may transition
@@ -372,7 +571,6 @@ export function stepDudes(
   out: SimEvent[],
 ): void {
   void tic;
-  void out;
   for (const d of dudes) {
     if (d.health <= 0) continue; // dead dudes don't think or move
 
@@ -380,7 +578,8 @@ export function stepDudes(
     switch (d.ai) {
       case DudeAi.Idle: aiThinkTarget(d, player, geo, rng); break;
       case DudeAi.Chase: thinkChase(d, player, geo, rng); break;
-      // SFire fire thinker: Task 5. Goto/Search/Dodge/SThrow/Recoil thinkers: Task 6.
+      case DudeAi.SFire: thinkSFire(d, player, geo, rng, out); break;
+      // Goto/Search/Dodge/SThrow/Recoil thinkers: Task 6.
       default: break;
     }
 

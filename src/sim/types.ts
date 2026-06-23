@@ -31,4 +31,10 @@ export const EMPTY_INPUT: InputCommand = {
  *  never reads them back. */
 export type SimEvent =
   | { kind: 'noop' }
-  | { kind: 'explosion'; x: number; y: number; z: number; air: boolean };
+  | { kind: 'explosion'; x: number; y: number; z: number; air: boolean }
+  // Plan 4, Task 5 — cultist shotgun fire (cosmetic cue: muzzle fp + aim).
+  // `ang` is the Blood yaw [0,2048); `pitch` is a signed Blood-angle pitch
+  // (atan2 of the eye-height delta over horizontal distance).
+  | { kind: 'cultistFire'; x: number; y: number; z: number; ang: number; pitch: number }
+  // Plan 4, Task 5 — cosmetic death/gibs cue for a slain dude (feet position).
+  | { kind: 'dudeDeath'; x: number; y: number; z: number };

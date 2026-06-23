@@ -210,3 +210,93 @@ describe('stepDudes: Chase → Goto on LOS break (records last-known)', () => {
     expect(d.targetZ).toBe(fpFromMeters(-2));      // unchanged = last known
   });
 });
+
+// ——— Plan 4, Task 5: shotgun fire — deterministic hitscan + player damage —————
+// All exercised through the public `stepDudes` driver, which dispatches the SFire
+// thinker `thinkSFire` → `fireShotgun`. A dude placed in SFire at the fire tic
+// (stateTics = DUDE_STATES[SFire].tics - SHOTGUN.sfireFireTic) fires on the next
+// step. RNG comes from a seeded `SimRng`, so the spread (and thus the damage) is
+// identical for identical seeds.
+
+import { SHOTGUN } from './dude';
+
+/** The SFire stateTics value at which the blast goes off (one step before firing).
+ *  Mirrors thinkSFire: fireAt = SFire.tics - sfireFireTic. */
+function sfireFireAt(): number {
+  // DUDE_STATES[SFire].tics (60) - SHOTGUN.sfireFireTic (18) = 42.
+  return 60 - SHOTGUN.sfireFireTic;
+}
+
+/** Spawn a dude already in SFire at the fire tic, facing yaw 0 (forward = -z). */
+function makeSFireDudeAtFireTic(): DudeState {
+  const dudes: DudeState[] = [];
+  spawnDude(dudes, 0, 0, 0, 0);
+  const d = dudes[0]!;
+  d.ai = DudeAi.SFire;
+  d.stateTics = sfireFireAt();
+  d.fired = false;
+  return d;
+}
+
+describe('stepDudes: SFire shotgun hits a player straight ahead', () => {
+  it('reduces player.hp on a clear shot (≥1 pellet connects)', () => {
+    const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-5);    // 5 m dead ahead, on axis
+    const geo = buildArenaGeometry();
+    const out: import('./types').SimEvent[] = [];
+    const hpBefore = player.hp;
+    stepDudes(dudes, player, geo, createRng(99), 0, out);
+    expect(player.hp).toBeLessThan(hpBefore);     // damaged
+    expect(dudes[0]!.fired).toBe(true);           // fired this visit
+    // a cultistFire event was emitted for the cosmetic layer
+    expect(out.filter((e) => e.kind === 'cultistFire')).toHaveLength(1);
+  });
+
+  it('is deterministic: same seed → identical player.hp', () => {
+    const run = (seed: number): number => {
+      const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
+      const player = createPlayerState();
+      player.x = 0; player.z = fpFromMeters(-5);
+      stepDudes(dudes, player, buildArenaGeometry(), createRng(seed), 0, []);
+      return player.hp;
+    };
+    expect(run(99)).toBe(run(99));
+    expect(run(7)).toBe(run(7));
+    // different seeds may differ (spread) — just assert they're each self-stable
+  });
+
+  it('fires exactly once per SFire visit (no double damage on later tics)', () => {
+    const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
+    const d = dudes[0]!;
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-5);
+    const geo = buildArenaGeometry();
+    stepDudes(dudes, player, geo, createRng(99), 0, []);
+    expect(d.fired).toBe(true);
+    const hpAfterFire = player.hp;
+    // a few more SFire tics: the one-shot guard prevents a second blast
+    for (let i = 0; i < 5; i++) stepDudes(dudes, player, geo, createRng(99), 0, []);
+    expect(player.hp).toBe(hpAfterFire);
+    expect(d.fired).toBe(true);
+  });
+});
+
+describe('stepDudes: SFire blocked by a wall → no damage', () => {
+  it('deals no damage when a wall stands between the cultist and player', () => {
+    const dudes: DudeState[] = [makeSFireDudeAtFireTic()];
+    const player = createPlayerState();
+    player.x = 0; player.z = fpFromMeters(-5);
+    // wide wall (2 m) on-axis between dude (0,0) and player (0,-5): blocks the
+    // whole cone, so no pellet reaches the player.
+    const geo: import('./geometry').SimAABB[] = [
+      ...buildArenaGeometry(),
+      { minX: fpFromMeters(-1), maxX: fpFromMeters(1),
+        minZ: fpFromMeters(-3), maxZ: fpFromMeters(-2) },
+    ];
+    const hpBefore = player.hp;
+    stepDudes(dudes, player, geo, createRng(99), 0, []);
+    expect(player.hp).toBe(hpBefore);            // fully blocked
+    expect(dudes[0]!.fired).toBe(true);          // did fire (just missed)
+  });
+});

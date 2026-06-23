@@ -98,6 +98,55 @@ export function segmentHitsAABB(
 }
 
 /**
+ * Parametric companion to {@link segmentHitsAABB}: returns the entry parameter
+ * `t` in [0,1] at which the segment (x0,z0)→(x1,z1) enters `aabb`, or `Infinity`
+ * if they do not intersect. `t=0` means the start point is already inside the
+ * box. Used by the cultist hitscan (dude.ts) to ORDER a pellet's player-hit vs
+ * its geometry-hit so a wall between the cultist and player blocks the shot.
+ *
+ * Same slab math as {@link segmentHitsAABB}; only the return value differs.
+ */
+export function segmentEnterT(
+  x0: number, z0: number, x1: number, z1: number, aabb: SimAABB,
+): number {
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+
+  // — X slab —
+  let txmin: number;
+  let txmax: number;
+  if (dx === 0) {
+    if (x0 < aabb.minX || x0 > aabb.maxX) return Infinity;
+    txmin = -Infinity;
+    txmax = Infinity;
+  } else {
+    const t1 = (aabb.minX - x0) / dx;
+    const t2 = (aabb.maxX - x0) / dx;
+    txmin = t1 < t2 ? t1 : t2;
+    txmax = t1 < t2 ? t2 : t1;
+  }
+
+  // — Z slab —
+  let tzmin: number;
+  let tzmax: number;
+  if (dz === 0) {
+    if (z0 < aabb.minZ || z0 > aabb.maxZ) return Infinity;
+    tzmin = -Infinity;
+    tzmax = Infinity;
+  } else {
+    const t1 = (aabb.minZ - z0) / dz;
+    const t2 = (aabb.maxZ - z0) / dz;
+    tzmin = t1 < t2 ? t1 : t2;
+    tzmax = t1 < t2 ? t2 : t1;
+  }
+
+  const tEnter = Math.max(txmin, tzmin, 0);
+  const tExit = Math.min(txmax, tzmax, 1);
+  if (tEnter > tExit) return Infinity;
+  return tEnter;
+}
+
+/**
  * True if the eye→target segment is unobstructed by any solid geometry AABB.
  * `y0`/`y1` are accepted (eye/target heights) but unused — arena walls and
  * obstacles are full-height columns, so an XZ footprint test is sufficient.
