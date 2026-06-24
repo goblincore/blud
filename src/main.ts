@@ -4,7 +4,8 @@ import { createRenderer } from './engine/renderer';
 import { createScheduler } from './engine/loop';
 import { createInputState, attachInput } from './engine/input';
 import { initPhysics } from './physics/world';
-import { buildArena, installSkybox, registerArenaSurfaces, ZombieCluster, GameOverOverlay } from './game/arena';
+import { installSkybox, ZombieCluster, GameOverOverlay } from './game/arena';
+import { bakeLevelCosmetic } from './game/level/bake-cosmetic';
 import { SimRunner } from './sim/runner';
 import { EMPTY_INPUT, BTN_JUMP, BTN_SPRINT, type InputCommand } from './sim/types';
 import { createDebugHud } from './ui/debug-hud';
@@ -143,14 +144,12 @@ async function main() {
   const { renderer, scene, camera, canvas, setRenderCallback, setDrawFn } = createRenderer(mount);
 
   // Skybox — dusky-red gradient, matches fog + clear color for a seamless
-  // horizon fade. Call before buildArena so fog color is set when arena
+  // horizon fade. Call before bakeLevelCosmetic so fog color is set when level
   // geometry is queried by distance.
   installSkybox(scene, renderer);
 
   // ---- Physics
   const physics = await initPhysics();
-  buildArena(scene, physics.world);
-  registerArenaSurfaces();
 
   // ---- Input
   const input = createInputState();
@@ -160,7 +159,8 @@ async function main() {
   // Replaces the Rapier kinematic player capsule + character controller.
   // The sim core is Three/Rapier-free; main.ts drives the camera from the
   // interpolated PlayerRender at render time.
-  const sim = new SimRunner(0xb1d, 0, 0); // spawn at arena center (feet y=0)
+  const sim = new SimRunner(0xb1d);
+  const level = bakeLevelCosmetic(sim.floorplan(), scene, physics.world);
 
   // ---- Input sampler: converts InputState → per-tic InputCommand.
   // Mouse delta is consumed exactly once per sim tic (inside sampleInput via
@@ -170,6 +170,8 @@ async function main() {
   const PITCH_LIMIT_BANGLE = Math.round((Math.PI / 2 - 0.05) * RAD_TO_BANGLE);
   let aimYaw = 0;   // accumulated absolute Blood angle
   let aimPitch = 0;
+  // Face the player toward the arena at spawn (the floorplan start angle).
+  aimYaw = sim.playerStartMeters().angBlood;
   function sampleInput(): InputCommand {
     const { dx, dy } = input.consumeMouseDelta();
     aimYaw = Math.round(((aimYaw - dx * MOUSE_SENS_BANGLE) % 2048 + 2048) % 2048);
@@ -337,9 +339,10 @@ async function main() {
     shake.reset();
     clearStuckFlares();
     groundFlames.clear(scene);
-    // Reset sim player back to spawn (arena center, feet y=0). sim.reset clears
-    // dudes + projectiles + restores player hp to 100.
-    sim.reset(0, 0);
+    // Reset sim player back to its floorplan start. sim.reset clears dudes +
+    // projectiles + restores player hp to 100. Same map (deterministic) — no
+    // cosmetic rebuild needed.
+    sim.reset();
     cluster.spawn(4);
   });
 
@@ -476,14 +479,10 @@ async function main() {
   // ——— Wave runner ————————————————————————————————
   const waveRunner = new WaveRunner(WARMUP_ROUND, {
     pickSpawnPos: () => {
-      // Pick one of 4 perimeter points around the arena
-      const points = [
-        { x: 15, y: 1, z: 0 },
-        { x: -15, y: 1, z: 0 },
-        { x: 0, y: 1, z: 15 },
-        { x: 0, y: 1, z: -15 },
-      ];
-      return points[Math.floor(Math.random() * points.length)]!;
+      const pts = sim.spawnPointsMeters();
+      if (pts.length === 0) return { x: 0, y: 1, z: 0 };
+      const p = pts[Math.floor(Math.random() * pts.length)]!;
+      return { x: p.x, y: 1, z: p.z };
     },
     spawn: (kind, pos) => {
       if (kind === 'cultist-shotgun') {
@@ -756,10 +755,19 @@ async function main() {
   });
 
   // ---- G key: toggle debug god mode (invulnerable) — playtest AI without dying
+  // ---- M key: reroll the generated map (dev aid — rebuilds cosmetic + reseeds facing)
   window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.metaKey) {
       sim.setInvulnerable(!sim.isInvulnerable());
       console.log(`[blud] god mode ${sim.isInvulnerable() ? 'ON' : 'OFF'}`);
+    }
+    if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey) {
+      const seed = Math.floor(Math.random() * 0x7fffffff) >>> 0;
+      sim.reroll(seed);
+      level.rebuild(sim.floorplan());
+      sim.clearDudes();
+      aimYaw = sim.playerStartMeters().angBlood;
+      console.info('[blud] rerolled map, seed', seed);
     }
   });
 
