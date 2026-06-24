@@ -12,6 +12,7 @@ import { spawnProjectile, throwVelocity } from './projectile';
 import { spawnHead } from './head';
 import { spawnDude } from './dude';
 import { fpFromMeters } from './fp';
+import { generateFloorplan, bakeSimGeometry, floorplanFingerprint } from './floorplan';
 
 const GEO = buildArenaGeometry();
 
@@ -95,5 +96,24 @@ describe('determinism harness', () => {
     const b = seededState(2);
     for (const cmd of inputs) { stepSim(a, cmd, GEO); stepSim(b, cmd, GEO); }
     expect(hashSimState(a)).not.toBe(hashSimState(b));
+  });
+});
+
+describe('determinism — generated map', () => {
+  it('same seed → identical map fingerprint', () => {
+    expect(floorplanFingerprint(generateFloorplan(2026)))
+      .toBe(floorplanFingerprint(generateFloorplan(2026)));
+  });
+
+  it('stepping is deterministic on a generated map (two states hash-match every tic)', () => {
+    const geo = bakeSimGeometry(generateFloorplan(2026));
+    const inputs = recordedInputs(200);
+    const a = seededState(2026);
+    const b = seededState(2026);
+    for (let t = 0; t < inputs.length; t++) {
+      stepSim(a, inputs[t]!, geo);
+      stepSim(b, inputs[t]!, geo);
+      expect(hashSimState(a)).toBe(hashSimState(b));
+    }
   });
 });
