@@ -1,8 +1,10 @@
-# Blud — Mixed-Height Cover (2.5D Vertical Collision) — Design
+# Blud — Arena Structure: Mixed-Height Cover + Spawn Arches — Design
 
 **Date:** 2026-06-24
 **Status:** design approved (direction + scope), pre-implementation
 **Builds on:** [2026-06-23-blud-procedural-levels-design.md](2026-06-23-blud-procedural-levels-design.md) (arena-first generator). Follows the arena-first feel pivot (`dd5b575`).
+
+> **Scope note:** this one "arena structure" iteration combines TWO playtest-driven features that share the generator + cosmetic baker: **(A) mixed-height cover** (stand/shoot over) and **(B) spawn arches** (enemies emerge from framed perimeter doorways instead of popping into the open). A separate, later iteration does the broader visual/theming pass (props, materials, lighting).
 
 ---
 
@@ -21,7 +23,8 @@ Two relevant facts found while scoping:
 1. Cover comes in **height tiers**: low (standable, see/shoot over) and tall (full walls), generated procedurally.
 2. The **player** can walk into low cover and be blocked, auto-step tiny ledges, **jump onto** low cover and **stand** on it, walk off and fall, and **see/shoot over** low cover.
 3. **Enemies** (cultists) are **floor-bound**: low cover blocks their *movement* (they path around — and this also fixes the walk-through-walls gap) but **not** their *sight/shots* (height-aware LOS lets them shoot over low cover).
-4. All of it stays **deterministic** (integer fp; same seed/inputs → same hash) and the determinism harness proves it.
+4. **Spawn arches:** the generator places a few **recessed perimeter niches** with **arched mouths**; enemies spawn *inside* a niche and walk out through the arch into the arena (telegraphed origin), instead of appearing at random open cells. The arches also give the perimeter visual structure.
+5. All of it stays **deterministic** (integer fp; same seed/inputs → same hash) and the determinism harness proves it.
 
 ### Non-goals (deferred)
 - Enemy verticality (cultists mounting cover / vertical AI navigation).
@@ -75,9 +78,22 @@ Cover blocks get a **height tier**:
 
 Implementation: keep the occupancy grid for placement (cover cells = solid, so spawns/start avoid them) and add a **parallel per-cell height code** (`0` = open, else a tier → fp top). The perimeter border ring is `tall`. Each scattered cover island is assigned a tier by a seeded roll (bias toward low so most cover is shoot-over-able). `bakeWallRectsMeters` merges runs of **equal height** and emits `{rect, top}`; `bakeSimGeometry` maps each to a `SimAABB` with `top`. The fingerprint folds in the height codes.
 
+## 4.5 Spawn arches — perimeter gates (`floorplan.ts`)
+
+Enemies should **emerge from framed doorways in the wall**, not appear at random open cells.
+
+- The perimeter thickens from a 1-cell ring into a **wall band** (≈2–3 cells, i.e. 4–6 m — reads as thick stone arena walls) so there is room to recess niches into it. The open arena interior stays **≥ 48 m**; the grid grows to host the band.
+- The generator carves **`N_ARCHES` (≈3–4) recessed niches** into the band on different edges. Each niche is a small **enclosed pocket** (≈3 wide × 2 deep cells) walled on its outer three sides, open to the arena through an **arch mouth** (≈2 cells wide) in the inner wall. Niche placement is seeded and spaced so two arches don't overlap.
+- **Enemy spawn points relocate into the niches** (replacing the random arena-cell spawns). A spawned enemy stands in the niche facing the arena; the existing chase AI walks it out through the arch toward the player — **no special "emerge" logic needed**. (Wave spawning in `main.ts` already reads `sim.spawnPointsMeters()`, so this is a generator-side change; the wiring is unchanged.)
+- The arch mouth is a real **gap in the wall geometry** (open cells), so enemies physically path through it and the player can shoot into/through it.
+- **Player start** stays an open arena-edge cell facing center (not a niche).
+
+This subsumes the "satellite alcoves" deferred from the procgen spec, repurposed as spawn theaters.
+
 ## 5. Cosmetic baker (`bake-cosmetic.ts`)
 
-Render each wall rect at its **real height** (`top` in meters, capped for the `WALL_TOP` sentinel → the existing 4 m wall height) instead of a flat `WALL_HEIGHT`. Rapier colliders match. Low cover reads as short crates/walls; tall cover as full walls. (Sim collision is authoritative; cosmetic just mirrors the per-rect height.)
+- **Heights:** render each wall rect at its **real height** (`top` in meters, capped for the `WALL_TOP` sentinel → the existing 4 m wall height) instead of a flat `WALL_HEIGHT`. Rapier colliders match. Low cover reads as short crates/walls; tall cover as full walls. (Sim collision is authoritative; cosmetic just mirrors the per-rect height.)
+- **Arch frames:** at each niche mouth, draw a simple **arch frame** — two side posts + a lintel/arched top spanning the mouth — so the opening reads as a doorway rather than a bare gap. The frame is cosmetic only (the collidable gap is the open cells); it sits in the wall band above/around the mouth. Frame placement comes from the niche/arch metadata the generator records on the `Floorplan` (mouth position + width + edge orientation). A dim recess material on the niche interior sells the "enemies come from in there" read.
 
 ## 6. Determinism
 
@@ -93,9 +109,9 @@ Render each wall rect at its **real height** (`top` in meters, capped for the `W
 | `src/sim/player.ts` | `stepPlayer`: step-aware clip + `supportFloorY` + land/step/fall replacing the `y ≤ 0` clamp; `STEP` constant. |
 | `src/sim/dude.ts` | `moveDude`: add step-aware `clipMoveXZ` (feet 0 / step 0) → enemies blocked by all cover (+ fixes walk-through-walls). LOS/pellet calls unchanged (already pass Y; now respected). |
 | `src/sim/thing.ts` | `clipMoveXZ` call passes `feetY = 0, stepUp = 0` (things bounce off all cover as today). |
-| `src/sim/floorplan.ts` | cover height tiers + parallel height grid; `MeterRect`/bake gain `top`; fingerprint folds heights. |
+| `src/sim/floorplan.ts` | cover height tiers + parallel height grid; `MeterRect`/bake gain `top`; thickened perimeter band + recessed spawn niches with arch mouths; `arches` metadata on `Floorplan`; spawns relocate into niches; fingerprint folds heights + arches. |
 | `src/sim/geometry.ts` (`buildArenaGeometry`) + tests | set `top = WALL_TOP` on existing AABBs (back-compat). |
-| `src/game/level/bake-cosmetic.ts` | render per-rect real height + matching colliders. |
+| `src/game/level/bake-cosmetic.ts` | render per-rect real height + matching colliders; arch-frame meshes at niche mouths; recess material. |
 | `src/sim/determinism.test.ts` | jump-onto-cover + path-around-cover determinism coverage. |
 
 ## 8. Verification
@@ -103,12 +119,15 @@ Render each wall rect at its **real height** (`top` in meters, capped for the `W
 - **Unit (geometry):** `clipMoveXZ` blocks when `top > feetY+stepUp`, passes otherwise; `supportFloorY` returns the right tier top / 0 off-cover; height-aware `losClear` blocks under a box top and clears over it; full-height (`WALL_TOP`) preserves today's results.
 - **Unit (player):** jump onto a 1.2 m box → lands and stays at `y = 1.2`; walk off → falls to 0; auto-step a 0.4 m lip; blocked by a 3 m wall.
 - **Unit (dude):** `moveDude` stops at a cover edge (no longer ghosts through); cultist `losClear` returns true over a 1.2 m box between two eye-height points, false through a tall wall.
+- **Unit (arches):** generator emits `N_ARCHES` niches; each niche is enclosed except a ≥2-cell arch mouth that connects (flood-fill) to the arena; all enemy spawn cells lie inside niches and are open; arena interior stays ≥48 m; same seed → identical arches.
 - **Determinism harness:** jump-onto-cover + path-around-cover runs hash-match across two states each tic + snapshot/resume; existing player/dude/dynamite fingerprints stay deterministic on height-tiered geometry.
 - **Integration:** firewall grep clean (`src/sim` engine-free), tsc, full vitest, vite build.
-- **Playtest (the gate):** stand behind low cover and trade shots over it; jump onto cover and fight from height; cultists path around cover instead of through it and still shoot over low cover; tall walls block sight + movement; reroll a dozen maps — mix of low/tall cover, all walkable.
+- **Playtest (the gate):** stand behind low cover and trade shots over it; jump onto cover and fight from height; cultists path around cover instead of through it and still shoot over low cover; tall walls block sight + movement; enemies **emerge from arched niches** and walk into the arena; reroll a dozen maps — mix of low/tall cover + 3–4 arches, all walkable.
 
 ## 9. Open items (resolve in planning, not blocking)
 
 - Exact `STEP` (≈0.5 m), low-tier height (≈1.2 m), and low-vs-tall mix ratio — tune in playtest.
 - `supportFloorY` edge case: standing half-on/half-off a box — start with "center-over-footprint (expanded by radius) → supported," refine if it feels grabby.
 - Whether to add the mid (~2.2 m) tier in v1 or defer until the low/tall mix is judged.
+- Arch count (≈3–4), mouth width (≈2 cells), niche depth (≈2 cells), perimeter band thickness (≈2–3 cells), and grid size to keep the open arena ≥48 m — tune in playtest.
+- Arch-frame mesh style (flat lintel vs stepped/arched top) — start simple, prettify in the later theming pass.
