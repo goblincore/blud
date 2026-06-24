@@ -133,17 +133,32 @@ export function installSkybox(scene: THREE.Scene, renderer: THREE.WebGLRenderer)
   c.height = 512;
   const ctx = c.getContext('2d')!;
 
-  // Vertical gradient: zenith (top) → horizon (middle) → nadir (bottom).
-  // Colors hand-picked for the Blud mood — deep purple/black at zenith,
-  // bruised red at horizon, a touch brighter just above for atmospheric lift.
+  // Overcast storm: dark slate-blue sky with a bruised tint, a paler band at the
+  // horizon where weak light breaks through, plus procedural cloud streaks. The
+  // open outdoor-ruins mood (vs the old enclosed dusky-red box).
   const g = ctx.createLinearGradient(0, 0, 0, c.height);
-  g.addColorStop(0.00, '#0a0510');   // zenith: near-black purple
-  g.addColorStop(0.35, '#2a1218');   // upper sky: bruised plum
-  g.addColorStop(0.50, '#4a1a1c');   // horizon: dusky red
-  g.addColorStop(0.62, '#2a1218');   // just below horizon: back to plum (ground haze)
-  g.addColorStop(1.00, '#0a0510');   // nadir (rarely seen under arena floor)
+  g.addColorStop(0.00, '#0b0d14');   // zenith: near-black slate
+  g.addColorStop(0.34, '#181a26');   // upper sky: dark storm
+  g.addColorStop(0.50, '#3a3744');   // horizon: pale stormy break (bruise-grey)
+  g.addColorStop(0.60, '#1c1822');   // ground haze
+  g.addColorStop(1.00, '#08060c');   // nadir (rarely seen under the floor)
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, c.width, c.height);
+
+  // Procedural overcast clouds — soft grey blobs banded across the upper sky.
+  // Pure cosmetic; placement randomness is fine (not sim state).
+  for (let i = 0; i < 48; i++) {
+    const x = Math.random() * c.width;
+    const y = 50 + Math.random() * 210;
+    const r = 40 + Math.random() * 130;
+    const a = 0.04 + Math.random() * 0.10;
+    const shade = 150 + Math.floor(Math.random() * 60);
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, `rgba(${shade},${shade},${shade + 12},${a})`);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -155,14 +170,59 @@ export function installSkybox(scene: THREE.Scene, renderer: THREE.WebGLRenderer)
   scene.background = tex;
 
   // Horizon color drives fog + renderer clear so the arena fades into the
-  // sky cleanly at distance. 0x4a1a1c matches the gradient's horizon stop.
-  const horizonColor = 0x4a1a1c;
+  // sky cleanly at distance. Matches the stormy-grey horizon stop above.
+  const horizonColor = 0x2a2833;
   if (scene.fog && scene.fog instanceof THREE.Fog) {
     scene.fog.color.set(horizonColor);
   }
   renderer.setClearColor(horizonColor);
 
   return { horizonColor };
+}
+
+/** Procedural bare-tree silhouette (canvas) for the ruins backdrop. */
+function makeDeadTreeTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 256;
+  const ctx = c.getContext('2d')!;
+  ctx.strokeStyle = '#08080c';
+  ctx.lineCap = 'round';
+  const baseX = 64;
+  ctx.lineWidth = 9;
+  ctx.beginPath(); ctx.moveTo(baseX, 256); ctx.lineTo(baseX, 120); ctx.stroke();
+  // recursive bare branches (forking, thinning)
+  const branch = (x: number, y: number, ang: number, len: number, w: number, depth: number): void => {
+    if (depth === 0 || len < 6) return;
+    const x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len;
+    ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke();
+    branch(x2, y2, ang - 0.4 - Math.random() * 0.3, len * 0.72, w * 0.7, depth - 1);
+    branch(x2, y2, ang + 0.4 + Math.random() * 0.3, len * 0.72, w * 0.7, depth - 1);
+  };
+  branch(baseX, 130, -Math.PI / 2, 52, 7, 5);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Sparse ring of bare dead trees beyond the arena walls, silhouetted against
+ *  the stormy sky — sells the open outdoor-ruins read. Pure cosmetic, no
+ *  colliders, added once. Trees are tall enough to rise above the perimeter. */
+export function addRuinsBackdrop(scene: THREE.Scene): void {
+  const mat = new THREE.SpriteMaterial({
+    map: makeDeadTreeTexture(), transparent: true, depthWrite: false, fog: true,
+  });
+  const group = new THREE.Group();
+  const COUNT = 28;
+  for (let i = 0; i < COUNT; i++) {
+    const ang = (i / COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.22;
+    const rad = 34 + Math.random() * 18;       // beyond the ~28 m perimeter
+    const h = 9 + Math.random() * 7;            // 9..16 m — clears the 4 m walls
+    const s = new THREE.Sprite(mat);
+    s.position.set(Math.cos(ang) * rad, h / 2 - 0.5, Math.sin(ang) * rad);
+    s.scale.set(h * 0.5, h, 1);
+    group.add(s);
+  }
+  scene.add(group);
 }
 
 // ——— Static surface AABBs —————————————————————————————————

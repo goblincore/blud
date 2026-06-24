@@ -4,7 +4,7 @@ import { createRenderer } from './engine/renderer';
 import { createScheduler } from './engine/loop';
 import { createInputState, attachInput } from './engine/input';
 import { initPhysics } from './physics/world';
-import { installSkybox, ZombieCluster, GameOverOverlay } from './game/arena';
+import { installSkybox, addRuinsBackdrop, ZombieCluster, GameOverOverlay } from './game/arena';
 import { bakeLevelCosmetic } from './game/level/bake-cosmetic';
 import { SimRunner } from './sim/runner';
 import { EMPTY_INPUT, BTN_JUMP, BTN_SPRINT, type InputCommand } from './sim/types';
@@ -143,10 +143,12 @@ async function main() {
   const mount = document.getElementById('app')!;
   const { renderer, scene, camera, canvas, setRenderCallback, setDrawFn } = createRenderer(mount);
 
-  // Skybox — dusky-red gradient, matches fog + clear color for a seamless
-  // horizon fade. Call before bakeLevelCosmetic so fog color is set when level
-  // geometry is queried by distance.
+  // Skybox — stormy overcast gradient + clouds, matches fog + clear color for a
+  // seamless horizon fade. Call before bakeLevelCosmetic so fog color is set
+  // when level geometry is queried by distance.
   installSkybox(scene, renderer);
+  // Dead-tree ring beyond the walls — open outdoor-ruins backdrop (cosmetic).
+  addRuinsBackdrop(scene);
 
   // ---- Physics
   const physics = await initPhysics();
