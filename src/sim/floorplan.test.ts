@@ -1,6 +1,11 @@
 // src/sim/floorplan.test.ts
 import { describe, it, expect } from 'vitest';
-import { CELL_M, GRID_W, GRID_H, cellToWorld, generateFloorplan, type Floorplan } from './floorplan';
+import {
+  CELL_M, GRID_W, GRID_H, cellToWorld, generateFloorplan,
+  bakeWallRectsMeters, bakeSimGeometry, type Floorplan,
+} from './floorplan';
+import { losClear } from './geometry';
+import { fpFromMeters } from './fp';
 
 function emptyFloorplan(): Floorplan {
   return {
@@ -117,5 +122,47 @@ describe('generateFloorplan — start + spawns', () => {
       expect(fp.open[s.cell.cz * fp.gridW + s.cell.cx]).toBe(1); // walkable
       expect(s.cell.cx === fp.start.cell.cx && s.cell.cz === fp.start.cell.cz).toBe(false);
     }
+  });
+});
+
+describe('bakeSimGeometry — walls', () => {
+  it('produces SimAABBs and a smaller, non-empty merged set', () => {
+    const fp = generateFloorplan(2026);
+    const geo = bakeSimGeometry(fp);
+    expect(geo.length).toBeGreaterThan(0);
+    // merge must beat the naive 1-box-per-wall-cell count
+    let wallCells = 0;
+    const open = (cx: number, cz: number) =>
+      cx >= 0 && cz >= 0 && cx < fp.gridW && cz < fp.gridH && fp.open[cz * fp.gridW + cx] === 1;
+    for (let cz = 0; cz < fp.gridH; cz++)
+      for (let cx = 0; cx < fp.gridW; cx++)
+        if (fp.open[cz * fp.gridW + cx] === 0 &&
+            (open(cx - 1, cz) || open(cx + 1, cz) || open(cx, cz - 1) || open(cx, cz + 1))) wallCells++;
+    expect(geo.length).toBeLessThan(wallCells);
+  });
+
+  it('every wall rect sits on a solid cell, never inside an open cell', () => {
+    const fp = generateFloorplan(2026);
+    for (const r of bakeWallRectsMeters(fp)) {
+      // sample the rect center, convert back to a cell, assert it is solid
+      const cx = Math.floor((r.minX + (fp.gridW * fp.cellMeters) / 2) / fp.cellMeters);
+      const cz = Math.floor((r.minZ + (fp.gridH * fp.cellMeters) / 2) / fp.cellMeters);
+      expect(fp.open[cz * fp.gridW + cx]).toBe(0);
+    }
+  });
+
+  it('walls block line-of-sight from a room out through the solid border', () => {
+    const fp = generateFloorplan(2026);
+    const geo = bakeSimGeometry(fp);
+    const s = fp.start.cell;
+    const y = fpFromMeters(1.2);
+    // from the start cell straight out past the grid edge → must cross a wall
+    const half = (fp.gridW * fp.cellMeters) / 2;
+    const sxWorld = -half + (s.cx + 0.5) * fp.cellMeters;
+    const szWorld = -half + (s.cz + 0.5) * fp.cellMeters;
+    expect(
+      losClear(fpFromMeters(sxWorld), y, fpFromMeters(szWorld),
+               fpFromMeters(sxWorld), y, fpFromMeters(-half - 10), geo),
+    ).toBe(false);
   });
 });

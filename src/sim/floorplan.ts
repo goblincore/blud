@@ -202,3 +202,50 @@ export function generateFloorplan(seed: number): Floorplan {
     arenaRoomId: 0,
   };
 }
+
+// ─── wall baking (grid → merged AABBs) ───────────────────────────────────────
+
+/** Axis-aligned rectangle in world meters (XZ footprint). */
+export interface MeterRect { minX: number; maxX: number; minZ: number; maxZ: number; }
+
+/** Bake the occupancy grid into merged wall rectangles (world meters). A solid
+ *  cell is a wall iff it borders an open cell (4-neighbourhood); consecutive
+ *  wall cells in a row are fused into one rect (greedy horizontal merge) to keep
+ *  the AABB count low (clip + LOS iterate this set every tic). */
+export function bakeWallRectsMeters(fp: Floorplan): MeterRect[] {
+  const { open, gridW, gridH, cellMeters } = fp;
+  const originX = -(gridW * cellMeters) / 2;
+  const originZ = -(gridH * cellMeters) / 2;
+  const isOpen = (cx: number, cz: number) =>
+    cx >= 0 && cz >= 0 && cx < gridW && cz < gridH && open[cz * gridW + cx] === 1;
+  const isWall = (cx: number, cz: number) =>
+    open[cz * gridW + cx] === 0 &&
+    (isOpen(cx - 1, cz) || isOpen(cx + 1, cz) || isOpen(cx, cz - 1) || isOpen(cx, cz + 1));
+
+  const rects: MeterRect[] = [];
+  for (let cz = 0; cz < gridH; cz++) {
+    let run = -1;
+    for (let cx = 0; cx <= gridW; cx++) {
+      const wall = cx < gridW && isWall(cx, cz);
+      if (wall && run < 0) run = cx;
+      else if (!wall && run >= 0) {
+        rects.push({
+          minX: originX + run * cellMeters,
+          maxX: originX + cx * cellMeters,
+          minZ: originZ + cz * cellMeters,
+          maxZ: originZ + (cz + 1) * cellMeters,
+        });
+        run = -1;
+      }
+    }
+  }
+  return rects;
+}
+
+/** Sim collision geometry (fp units) — the array fed to stepSim/clipMoveXZ/losClear. */
+export function bakeSimGeometry(fp: Floorplan): SimAABB[] {
+  return bakeWallRectsMeters(fp).map((r) => ({
+    minX: fpFromMeters(r.minX), maxX: fpFromMeters(r.maxX),
+    minZ: fpFromMeters(r.minZ), maxZ: fpFromMeters(r.maxZ),
+  }));
+}
