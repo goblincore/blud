@@ -57,12 +57,37 @@ describe('generateFloorplan — rooms', () => {
     }
   });
 
-  it('never overlaps two rooms (open-cell count == sum of room areas before corridors)', () => {
-    // Rooms are placed with a margin; corridors are carved in Task 3, so at this
-    // point the open-cell count equals the total room area exactly.
-    const fp = generateFloorplan(2026);
-    const totalArea = fp.rooms.reduce((n, r) => n + r.w * r.h, 0);
-    const openCount = fp.open.reduce((n, v) => n + v, 0);
-    expect(openCount).toBe(totalArea);
+});
+
+describe('generateFloorplan — connectivity', () => {
+  // Flood-fill the open grid from the player start; every room center must be reached.
+  function reachableFromStart(fp: ReturnType<typeof generateFloorplan>): Set<number> {
+    const seen = new Set<number>();
+    const stack = [fp.start.cell.cx * 1 + 0, fp.start.cell.cz]; // placeholder
+    const sx = fp.start.cell.cx, sz = fp.start.cell.cz;
+    const key = (cx: number, cz: number) => cz * fp.gridW + cx;
+    const open = (cx: number, cz: number) =>
+      cx >= 0 && cz >= 0 && cx < fp.gridW && cz < fp.gridH && fp.open[key(cx, cz)] === 1;
+    const work = [[sx, sz]];
+    seen.add(key(sx, sz));
+    while (work.length) {
+      const [cx, cz] = work.pop()!;
+      for (const [nx, nz] of [[cx - 1, cz], [cx + 1, cz], [cx, cz - 1], [cx, cz + 1]] as const) {
+        if (open(nx, nz) && !seen.has(key(nx, nz))) { seen.add(key(nx, nz)); work.push([nx, nz]); }
+      }
+    }
+    void stack;
+    return seen;
+  }
+
+  it('every room center is reachable from the player start', () => {
+    for (const seed of [1, 2, 7, 42, 2026, 99999, 123456]) {
+      const fp = generateFloorplan(seed);
+      const seen = reachableFromStart(fp);
+      for (const r of fp.rooms) {
+        const ccx = r.cx + (r.w >> 1), ccz = r.cz + (r.h >> 1);
+        expect(seen.has(ccz * fp.gridW + ccx)).toBe(true);
+      }
+    }
   });
 });

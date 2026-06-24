@@ -102,6 +102,50 @@ function placeRooms(rng: SimRng, open: Uint8Array): Room[] {
   return rooms;
 }
 
+// ─── corridor carving + connectivity ───────────────────────────────────────────
+
+const EXTRA_LOOPS = 2;
+
+function roomCenter(r: Room): Cell { return { cx: r.cx + (r.w >> 1), cz: r.cz + (r.h >> 1) }; }
+
+/** Carve an L-shaped, 1-cell-wide corridor between two room centers. */
+function carveCorridor(open: Uint8Array, gridW: number, a: Cell, b: Cell): void {
+  let x = a.cx, z = a.cz;
+  while (x !== b.cx) { open[cellIndex(gridW, x, z)] = 1; x += x < b.cx ? 1 : -1; }
+  while (z !== b.cz) { open[cellIndex(gridW, x, z)] = 1; z += z < b.cz ? 1 : -1; }
+  open[cellIndex(gridW, x, z)] = 1;
+}
+
+function connectRooms(rng: SimRng, open: Uint8Array, rooms: Room[]): void {
+  if (rooms.length < 2) return;
+  const centers = rooms.map(roomCenter);
+  const dist2 = (a: number, b: number): number => {
+    const dx = centers[a]!.cx - centers[b]!.cx, dz = centers[a]!.cz - centers[b]!.cz;
+    return dx * dx + dz * dz;
+  };
+  // Prim-like MST from room 0 (the arena) → spanning tree guarantees reachability.
+  const connected = new Set<number>([0]);
+  while (connected.size < rooms.length) {
+    let best = -1, from = -1, bestD = Infinity;
+    for (const c of connected) {
+      for (let r = 0; r < rooms.length; r++) {
+        if (connected.has(r)) continue;
+        const d = dist2(c, r);
+        if (d < bestD) { bestD = d; best = r; from = c; }
+      }
+    }
+    if (best < 0) break;
+    carveCorridor(open, GRID_W, centers[from]!, centers[best]!);
+    connected.add(best);
+  }
+  // A few extra loop edges for flanking (Blood maps are looped, not tree-like — spec §5.1).
+  for (let e = 0; e < EXTRA_LOOPS && rooms.length > 2; e++) {
+    const a = randomInt(rng, rooms.length);
+    const b = randomInt(rng, rooms.length);
+    if (a !== b) carveCorridor(open, GRID_W, centers[a]!, centers[b]!);
+  }
+}
+
 /** Synthesize a single-floor map from a seed. Pure: same seed → identical grid
  *  and room list. Room 0 is always the guaranteed large arena. The RNG stream
  *  is XOR-mixed away from the sim-step stream so map generation and simulation
@@ -110,11 +154,12 @@ export function generateFloorplan(seed: number): Floorplan {
   const rng = createRng((seed ^ 0x9e3779b9) >>> 0);
   const open = new Uint8Array(GRID_W * GRID_H);
   const rooms = placeRooms(rng, open);
-
+  connectRooms(rng, open, rooms);
+  const ac = roomCenter(rooms[0]!);
   return {
     seed, gridW: GRID_W, gridH: GRID_H, cellMeters: CELL_M,
     open, rooms, spawns: [],
-    start: { cell: { cx: rooms[0]!.cx, cz: rooms[0]!.cz }, angBlood: 0 },
+    start: { cell: { cx: ac.cx, cz: ac.cz }, angBlood: 0 },
     arenaRoomId: 0,
   };
 }
