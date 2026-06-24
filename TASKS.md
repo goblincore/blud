@@ -108,7 +108,7 @@ Key reference docs (open these before touching their area):
 - `P3`  [-]  CI / GitHub Actions — defer until meaningful test coverage exists
 - `P4`  [ ]  Dependency audit — `npm audit` flags 6 vulns (1 critical); likely transitive, safe for a web build
 - `P5`  [-]  Prune old `dispatch/blud-m1-task-*` branches
-- `P6`  [ ]  Theme-preview schema merge — write `scripts/build_theme_patterns.py` to join raw families + `labels.json` into the `{texture_families, map_archetypes}` shape that [theme-preview.ts](src/dev/theme-preview.ts) expects. R5.1 sidecar.
+- `P6`  [x]  Theme-preview schema merge — `scripts/build_theme_patterns.py` joins `patterns.raw.json` + `labels.json` → theme-shaped `patterns.json` (`{texture_families[weighted floors/walls/ceilings], map_archetypes, geometry}`); validates clean; 30 families/39 maps; doorFreq 0.0413 cross-checks R5's 4.1%. Feeds procgen levels §5.1 + deferred theming.
 - `P7`  [x]  BUNFUSE extraction + cooking visual — `dynamite-fuse-burn.json`, `7081c14`
 
 ---

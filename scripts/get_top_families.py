@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 def main():
-    patterns_path = Path("public/assets/map-research/patterns.json")
+    patterns_path = Path("public/assets/map-research/patterns.raw.json")
     if not patterns_path.exists():
         print(f"Error: {patterns_path} not found.")
         return

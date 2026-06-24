@@ -662,7 +662,9 @@ def main():
         "perMap": all_stats,
     }
 
-    out_path = out_dir / "patterns.json"
+    # Raw statistics dump. The theme-shaped patterns.json that theme-preview.ts
+    # loads is produced downstream by build_theme_patterns.py (raw + labels).
+    out_path = out_dir / "patterns.raw.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2, default=str)
     print(f"\nResults written to {out_path}")
