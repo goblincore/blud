@@ -68,11 +68,13 @@ describe('generateFloorplan — connectivity', () => {
     const key = (cx: number, cz: number) => cz * fp.gridW + cx;
     const open = (cx: number, cz: number) =>
       cx >= 0 && cz >= 0 && cx < fp.gridW && cz < fp.gridH && fp.open[key(cx, cz)] === 1;
-    const work = [[sx, sz]];
+    const work: Array<[number, number]> = [[sx, sz]];
     seen.add(key(sx, sz));
     while (work.length) {
       const [cx, cz] = work.pop()!;
-      for (const [nx, nz] of [[cx - 1, cz], [cx + 1, cz], [cx, cz - 1], [cx, cz + 1]] as const) {
+      for (const [nx, nz] of [
+        [cx - 1, cz], [cx + 1, cz], [cx, cz - 1], [cx, cz + 1],
+      ] as Array<[number, number]>) {
         if (open(nx, nz) && !seen.has(key(nx, nz))) { seen.add(key(nx, nz)); work.push([nx, nz]); }
       }
     }
@@ -88,6 +90,32 @@ describe('generateFloorplan — connectivity', () => {
         const ccx = r.cx + (r.w >> 1), ccz = r.cz + (r.h >> 1);
         expect(seen.has(ccz * fp.gridW + ccx)).toBe(true);
       }
+    }
+  });
+});
+
+describe('generateFloorplan — start + spawns', () => {
+  it('starts the player in a room far from the arena, facing toward it', () => {
+    const fp = generateFloorplan(2026);
+    // start cell is walkable
+    expect(fp.open[fp.start.cell.cz * fp.gridW + fp.start.cell.cx]).toBe(1);
+    // facing vector (-sinθ,-cosθ) should point roughly toward the arena center
+    const theta = (fp.start.angBlood / 2048) * Math.PI * 2;
+    const fx = -Math.sin(theta), fz = -Math.cos(theta);
+    const arena = fp.rooms[0]!;
+    const dx = (arena.cx + (arena.w >> 1)) - fp.start.cell.cx;
+    const dz = (arena.cz + (arena.h >> 1)) - fp.start.cell.cz;
+    expect(fx * dx + fz * dz).toBeGreaterThan(0); // dot product positive → faces arena
+  });
+
+  it('emits spawn points (weighted toward the arena), none on the start cell', () => {
+    const fp = generateFloorplan(2026);
+    expect(fp.spawns.length).toBeGreaterThan(0);
+    const arenaSpawns = fp.spawns.filter(s => s.roomId === fp.arenaRoomId).length;
+    expect(arenaSpawns).toBeGreaterThanOrEqual(3); // arena is the main fight space
+    for (const s of fp.spawns) {
+      expect(fp.open[s.cell.cz * fp.gridW + s.cell.cx]).toBe(1); // walkable
+      expect(s.cell.cx === fp.start.cell.cx && s.cell.cz === fp.start.cell.cz).toBe(false);
     }
   });
 });

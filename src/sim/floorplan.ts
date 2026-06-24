@@ -146,6 +146,44 @@ function connectRooms(rng: SimRng, open: Uint8Array, rooms: Room[]): void {
   }
 }
 
+// ─── player start + enemy spawns ──────────────────────────────────────────────
+
+const ARENA_SPAWNS = 5;
+const ROOM_SPAWNS_MAX = 3; // 0..2
+
+/** Blood facing angle (0..2047) that points from cell A toward cell B. */
+function bloodAngleToward(from: Cell, to: Cell): number {
+  const dx = to.cx - from.cx, dz = to.cz - from.cz;
+  const theta = Math.atan2(-dx, -dz); // facing (-sinθ,-cosθ) ∝ (dx,dz)
+  return Math.round((((theta % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) * 2048 / (Math.PI * 2)) % 2048;
+}
+
+function chooseStart(rooms: Room[]): { cell: Cell; angBlood: number; roomId: number } {
+  const ac = roomCenter(rooms[0]!);
+  let startRoom = 0, far = -1;
+  for (let r = 1; r < rooms.length; r++) {
+    const c = roomCenter(rooms[r]!);
+    const d = (c.cx - ac.cx) ** 2 + (c.cz - ac.cz) ** 2;
+    if (d > far) { far = d; startRoom = r; }
+  }
+  const sc = roomCenter(rooms[startRoom]!);
+  return { cell: sc, angBlood: bloodAngleToward(sc, ac), roomId: startRoom };
+}
+
+function placeSpawns(rng: SimRng, rooms: Room[], startRoomId: number): SpawnPoint[] {
+  const spawns: SpawnPoint[] = [];
+  for (const r of rooms) {
+    if (r.id === startRoomId) continue; // keep the player's start room clear
+    const n = r.kind === 'arena' ? ARENA_SPAWNS : randomInt(rng, ROOM_SPAWNS_MAX);
+    for (let i = 0; i < n; i++) {
+      const cx = r.cx + 1 + randomInt(rng, Math.max(1, r.w - 2));
+      const cz = r.cz + 1 + randomInt(rng, Math.max(1, r.h - 2));
+      spawns.push({ cell: { cx, cz }, roomId: r.id });
+    }
+  }
+  return spawns;
+}
+
 /** Synthesize a single-floor map from a seed. Pure: same seed → identical grid
  *  and room list. Room 0 is always the guaranteed large arena. The RNG stream
  *  is XOR-mixed away from the sim-step stream so map generation and simulation
@@ -155,11 +193,12 @@ export function generateFloorplan(seed: number): Floorplan {
   const open = new Uint8Array(GRID_W * GRID_H);
   const rooms = placeRooms(rng, open);
   connectRooms(rng, open, rooms);
-  const ac = roomCenter(rooms[0]!);
+  const start = chooseStart(rooms);
+  const spawns = placeSpawns(rng, rooms, start.roomId);
   return {
     seed, gridW: GRID_W, gridH: GRID_H, cellMeters: CELL_M,
-    open, rooms, spawns: [],
-    start: { cell: { cx: ac.cx, cz: ac.cz }, angBlood: 0 },
+    open, rooms, spawns,
+    start: { cell: start.cell, angBlood: start.angBlood },
     arenaRoomId: 0,
   };
 }
