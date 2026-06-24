@@ -4,7 +4,7 @@
 **Status:** design approved (direction + scope), pre-implementation
 **Builds on:** [2026-06-23-blud-procedural-levels-design.md](2026-06-23-blud-procedural-levels-design.md) (arena-first generator). Follows the arena-first feel pivot (`dd5b575`).
 
-> **Scope note:** this one "arena structure" iteration combines TWO playtest-driven features that share the generator + cosmetic baker: **(A) mixed-height cover** (stand/shoot over) and **(B) spawn arches** (enemies emerge from framed perimeter doorways instead of popping into the open). A separate, later iteration does the broader visual/theming pass (props, materials, lighting).
+> **⚠️ RE-SPLIT (2026-06-24):** this spec was reduced. Spawn arches, height-aware geometry/LOS, ruined walls, layout motifs, and enemy-wall-collision moved to the **structure** iteration → [2026-06-24-blud-arena-structure-design.md](2026-06-24-blud-arena-structure-design.md), which ships first. **This spec now covers ONLY the remaining delicate piece: the player *standing/jumping onto* cover** — `SimAABB.top` is assumed to already exist (added by the structure iteration); here we add `supportFloorY` + the player vertical step (land/step/fall on box tops) + cover tiers becoming *standable* + determinism coverage for jump-onto-cover. Sections below that describe arches / dude-collision / height-aware LOS are superseded by the structure spec; read this for §3.2–3.3 (supportFloorY + player vertical step) and the standable-cover determinism harness.
 
 ---
 
