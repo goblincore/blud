@@ -84,11 +84,26 @@ Geometry is derived from rooms+links by the bakers (walls = the cell boundaries 
 Uses the sim's existing seeded RNG (`src/sim/rng.ts`) so generation is deterministic and replay-safe.
 
 1. **Bounds.** Grid sized to a larger footprint than the old 40×40 (target ~64×64 m, perf-capped per §9). `cellMeters` chosen so walls land on clean fixed-point values.
-2. **Place the feature arena.** Reserve and place **one large room** (`kind: 'arena'`) first — the guaranteed marquee open combat space the user asked for. Size is a large fraction of the grid.
+2. **Place the feature arena.** Reserve and place **one large room** (`kind: 'arena'`) first — the guaranteed marquee open combat space the user asked for. Size is a large fraction of the grid. This is the **`arena-with-closets` / `multi-arena`** archetype, the 2nd/3rd most common in Blood's campaign (§5.1).
 3. **Place remaining rooms.** Attempt N rectangular rooms of varied size via seeded rejection sampling; reject overlaps (with a margin) against placed rooms. Mix of sizes.
 4. **Connect into a reachable graph.** Build a connection graph over rooms; take a spanning tree (guarantees every room reachable from `start`), then add a few extra edges for **flanking loops** (avoids pure-tree dead-feel). Each edge becomes a `Link` with a door cell punched through the shared/adjacent wall, joined by a short corridor where rooms aren't adjacent.
 5. **Pick start + spawns.** `start` = a cell in a room far from the arena (so the player advances *into* the big space). `spawns` = cells distributed across rooms, weighted toward the arena.
 6. **Validate.** Assert full connectivity (flood-fill from `start` reaches every room and spawn) and that the start cell is clear. On a failed seed, deterministically perturb and retry up to a bounded count; if still failing, fall back to a trivial valid layout (never ship an unwalkable map).
+
+### 5.1 Tuning source — R5/R5.1 Blood campaign analysis
+
+The generator's numeric knobs are grounded in the existing reverse-engineering of all 39 Blood campaign maps ([docs/dev-notes/2026-04-21-blood-map-research.md](../../dev-notes/2026-04-21-blood-map-research.md), R5 + R5.1 vision pass), the same way enemy HP is grounded in `tuning-sources.md`. These are **structural** patterns — theme-agnostic, so they apply directly even though Blud's art is not Blood's. Starting values (feel-tune later):
+
+| Knob | Value (from R5) | Rationale |
+|------|-----------------|-----------|
+| Layout archetype | `arena-with-closets` / `multi-arena` | 2nd/3rd most common; matches "one big arena + side rooms". (Most common is `hub-and-spokes` — a later template variant.) |
+| Connectivity style | **looped, not tree** — `hubRatio ≈ 0.45`, `deadEndRatio ≈ 0.02` | 44.6% of Blood sectors are 4–7-portal hubs; dead-ends are rare. Justifies the "spanning tree + extra loop edges" step. |
+| Arena connections | target ~5 (min 3, max 8) | Large arenas in Blood average ~5 portals. |
+| Room size | log-normal, median ~14×14 m (~800K BU²), right-skewed | Most rooms small-medium; a few large. Drives the varied-size sampling. |
+| Enemy density | ~0.33 dudes / M BU² → **~3–5 per medium room, 8–15 in the big arena**, 72% in large rooms | Spawn-count + spawn-placement weighting (spawns weighted toward the arena). |
+| Doors/lifts | ~1 in 12 sectors (ZMotion lotag 600) | **Deferred** — slice 1 uses open doorways, not animated doors. Recorded for the run-structure spec. |
+
+These map cleanly onto the `Floorplan` knobs; the implementation plan turns the relevant rows into named constants. Texture/theme data (the other half of R5/R5.1) feeds the deferred theming layer — see §8.
 
 ## 6. Baking
 
@@ -120,7 +135,7 @@ Wall/floor merging for meshes can be coarse in v1 (one box per merged AABB) — 
 ### Deferred (each its own later spec)
 - **Authored room templates** — the pluggable producer behind the same `Floorplan` seam (the seam exists now; the library comes later).
 - **Run structure** — hub → N rooms → boss, door/gate transitions between maps, difficulty curve, win/lose flow.
-- **Theming / props / lighting / set-pieces** — the Weird West aesthetic layer; per-region mood; prop sockets.
+- **Theming / props / lighting / set-pieces** — the Weird West aesthetic layer; per-region mood; prop sockets. R5/R5.1 already produced a reusable **theme-template schema** (weighted floor↔wall co-occurrence families → theme tags) and the `theme-preview.ts` dev route; that spec authors **Blud-native** texture families into that same shape (Blood picnums are reference only — extracted Blood art never ships, per the project guardrail). Open prerequisite: **P6** (`scripts/build_theme_patterns.py` to regen the merged `patterns.json` the preview expects).
 - **Verticality** — multi-floor, ramps, height variation (current geometry is full-height single-floor by construction).
 - **Remaining bestiary + boss** — Scrollkin, Posting Priest, Deputy Dogg, Gooner Horse, The Algorithm.
 
