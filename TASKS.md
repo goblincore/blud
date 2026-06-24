@@ -50,7 +50,7 @@ Key reference docs (open these before touching their area):
 - [x] M5-A: Shotgun cultist with pellet projectile + minimal AI
 - [x] M5-C: NotBlood-faithful flare burn behavior + projectile graphic + cultist anim gap fix
 - [x] M5-D: NotBlood fidelity pass — flare burn-death + dynamite + gib taxonomy (see [findings](docs/dev-notes/2026-04-26-notblood-fidelity-research.md))
-- `M6`  [!]  Chunks & generator (Blender chunks + run stitcher) — blocked on M5
+- `M6`  [~]  Procedural levels (PIVOTED from Blender chunks → fully procedural deterministic data) — slice 1 (generated arena) landed `3ade23c`: seeded room-and-corridor `Floorplan` → `bakeSimGeometry` (sim) + `bakeLevelCosmetic` (meshes+Rapier colliders), single source of truth; kills `buildArenaGeometry`/`arena.ts` hand-sync dup. Spec [2026-06-23-blud-procedural-levels-design.md](docs/superpowers/specs/2026-06-23-blud-procedural-levels-design.md). **Browser playtest pending** (dev :5174).
 - `M7`  [!]  The Algorithm boss fight — blocked on M6
 - `M8`  [!]  Polish (music, balance, HUD) — blocked on M7
 - `M9`  [!]  Ship to itch.io — blocked on M8
