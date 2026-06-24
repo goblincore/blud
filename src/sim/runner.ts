@@ -4,7 +4,8 @@
 import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
 import { cloneSimState } from './snapshot';
-import { buildArenaGeometry } from './geometry';
+import { generateFloorplan, bakeSimGeometry, cellToWorld, type Floorplan } from './floorplan';
+import type { SimAABB } from './geometry';
 import { renderPlayer, renderProjectiles, renderHeads, renderDudes, renderPellets,
          type PlayerRender, type ProjectileRender, type HeadRender, type DudeRender, type PelletRender } from './render';
 import { EMPTY_INPUT, type InputCommand, type SimEvent } from './types';
@@ -19,7 +20,8 @@ const SIM_DT = 1 / TICS_PER_SEC; // ~8.33 ms
 export class SimRunner {
   private state: SimState;
   private prev: SimState;
-  private geo = buildArenaGeometry();
+  private fp: Floorplan;
+  private geo: SimAABB[];
   private accumulator = 0;
   private events: SimEvent[] = [];
   /** Debug-only: when set, the player's hp is pinned at full after each advance.
@@ -27,21 +29,53 @@ export class SimRunner {
    *  are unaffected — this is a client-side playtest aid, not sim state. */
   private invulnerable = false;
 
-  constructor(seed: number, spawnXMeters: number, spawnZMeters: number) {
+  constructor(seed: number) {
+    this.fp = generateFloorplan(seed);
+    this.geo = bakeSimGeometry(this.fp);
     this.state = createSimState(seed);
-    this.state.player.x = fpFromMeters(spawnXMeters);
-    this.state.player.z = fpFromMeters(spawnZMeters);
+    this.applyStart();
     this.prev = cloneSimState(this.state);
   }
 
-  /** Reset the runner — teleports the player to a new spawn and clears state. */
-  reset(spawnXMeters: number, spawnZMeters: number): void {
-    this.state = createSimState(0xb1d);
-    this.state.player.x = fpFromMeters(spawnXMeters);
-    this.state.player.z = fpFromMeters(spawnZMeters);
+  /** Place the sim player at the floorplan's start cell. (Facing is driven by
+   *  main.ts's aimYaw accumulator — stepPlayer overwrites player.yaw from input
+   *  every tic — so main.ts seeds aimYaw from playerStartMeters().angBlood; we
+   *  set player.yaw here too so the very first pre-input render frame faces right.) */
+  private applyStart(): void {
+    const s = cellToWorld(this.fp, this.fp.start.cell.cx, this.fp.start.cell.cz);
+    this.state.player.x = fpFromMeters(s.x);
+    this.state.player.z = fpFromMeters(s.z);
+    this.state.player.yaw = this.fp.start.angBlood;
+  }
+
+  /** Reset to the current floorplan's start (e.g. on death/restart). */
+  reset(): void {
+    this.state = createSimState(this.fp.seed);
+    this.applyStart();
     this.prev = cloneSimState(this.state);
     this.accumulator = 0;
     this.events = [];
+  }
+
+  /** Regenerate the whole map from a new seed and reset to its start. */
+  reroll(seed: number): void {
+    this.fp = generateFloorplan(seed);
+    this.geo = bakeSimGeometry(this.fp);
+    this.reset();
+  }
+
+  /** The generated map (read-only) — the cosmetic baker derives meshes from it. */
+  floorplan(): Floorplan { return this.fp; }
+
+  /** Player start in world meters + Blood facing angle. */
+  playerStartMeters(): { x: number; z: number; angBlood: number } {
+    const s = cellToWorld(this.fp, this.fp.start.cell.cx, this.fp.start.cell.cz);
+    return { x: s.x, z: s.z, angBlood: this.fp.start.angBlood };
+  }
+
+  /** Enemy spawn points in world meters. */
+  spawnPointsMeters(): { x: number; z: number }[] {
+    return this.fp.spawns.map((sp) => cellToWorld(this.fp, sp.cell.cx, sp.cell.cz));
   }
 
   /**
