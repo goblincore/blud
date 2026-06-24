@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CELL_M, GRID_W, GRID_H, cellToWorld, generateFloorplan,
-  bakeWallRectsMeters, bakeSimGeometry, type Floorplan,
+  bakeWallRectsMeters, bakeSimGeometry, floorplanFingerprint, type Floorplan,
 } from './floorplan';
 import { losClear } from './geometry';
 import { fpFromMeters } from './fp';
@@ -150,6 +150,17 @@ describe('bakeSimGeometry — walls', () => {
       expect(fp.open[cz * fp.gridW + cx]).toBe(0);
     }
   });
+
+describe('floorplanFingerprint', () => {
+  it('is identical for the same seed', () => {
+    expect(floorplanFingerprint(generateFloorplan(2026)))
+      .toBe(floorplanFingerprint(generateFloorplan(2026)));
+  });
+  it('differs across seeds', () => {
+    expect(floorplanFingerprint(generateFloorplan(1)))
+      .not.toBe(floorplanFingerprint(generateFloorplan(2)));
+  });
+});
 
   it('walls block line-of-sight from a room out through the solid border', () => {
     const fp = generateFloorplan(2026);

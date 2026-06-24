@@ -249,3 +249,15 @@ export function bakeSimGeometry(fp: Floorplan): SimAABB[] {
     minZ: fpFromMeters(r.minZ), maxZ: fpFromMeters(r.maxZ),
   }));
 }
+
+// ─── fingerprint (determinism hook) ───────────────────────────────────────────
+
+/** FNV-1a hash over the occupancy grid + room rects — a stable map fingerprint
+ *  for the determinism harness (same seed → same number on every client). */
+export function floorplanFingerprint(fp: Floorplan): number {
+  let h = 2166136261 >>> 0;
+  const mix = (v: number) => { h ^= v & 0xff; h = Math.imul(h, 16777619) >>> 0; };
+  for (let i = 0; i < fp.open.length; i++) mix(fp.open[i]!);
+  for (const r of fp.rooms) { mix(r.cx); mix(r.cz); mix(r.w); mix(r.h); mix(r.kind === 'arena' ? 1 : 0); }
+  return h >>> 0;
+}
