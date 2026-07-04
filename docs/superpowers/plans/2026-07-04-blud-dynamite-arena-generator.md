@@ -483,7 +483,7 @@ git commit -m "feat(arenagen): mid-ring pocket clusters + mid-height assignment"
 - Create: `src/sim/arenagen/grade.ts`
 - Test: `src/sim/arenagen/grade.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/sim/arenagen/grade.test.ts
@@ -550,12 +550,12 @@ describe('gradePlan', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails** — confirmed `Failed to resolve import "./grade"`.
 
 Run: `npx vitest run src/sim/arenagen/grade.test.ts`
 Expected: FAIL — cannot resolve `./grade`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 // src/sim/arenagen/grade.ts
@@ -644,12 +644,12 @@ export function gradePlan(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes** — 4 tests passed; seed sweep landed 19/20 (floor 10); tsc clean; firewall clean. The 1/20 fail is a low/mid ratio edge (seed 16: mid=4, low<8) — the retry loop in Task 5 regenerates.
 
 Run: `npx vitest run src/sim/arenagen/grade.test.ts`
 Expected: PASS. If the "most seeds" assertion lands below 10/20, do NOT loosen the test — inspect which criterion fails (log the reports) and tune `SIGHTLINE_MIN` (0.45–0.60 band) or cluster count first.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** (06e2e37)
 
 ```bash
 git add src/sim/arenagen/grade.ts src/sim/arenagen/grade.test.ts
