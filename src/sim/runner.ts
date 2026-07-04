@@ -4,7 +4,8 @@
 import { createSimState, type SimState } from './state';
 import { stepSim } from './step';
 import { cloneSimState } from './snapshot';
-import { generateFloorplan, bakeSimGeometry, cellToWorld, type Floorplan } from './floorplan';
+import { bakeSimGeometry, cellToWorld, type Floorplan } from './floorplan';
+import { generateArena } from './arenagen';
 import type { SimAABB } from './geometry';
 import { renderPlayer, renderProjectiles, renderHeads, renderDudes, renderPellets,
          type PlayerRender, type ProjectileRender, type HeadRender, type DudeRender, type PelletRender } from './render';
@@ -30,7 +31,7 @@ export class SimRunner {
   private invulnerable = false;
 
   constructor(seed: number) {
-    this.fp = generateFloorplan(seed);
+    this.fp = generateArena(seed);
     this.geo = bakeSimGeometry(this.fp);
     this.state = createSimState(seed);
     this.applyStart();
@@ -59,7 +60,7 @@ export class SimRunner {
 
   /** Regenerate the whole map from a new seed and reset to its start. */
   reroll(seed: number): void {
-    this.fp = generateFloorplan(seed);
+    this.fp = generateArena(seed);
     this.geo = bakeSimGeometry(this.fp);
     this.reset();
   }
