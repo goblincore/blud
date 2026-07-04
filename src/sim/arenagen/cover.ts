@@ -73,3 +73,68 @@ export function placeCenterCover(rng: SimRng, open: Uint8Array): CoverPiece[] {
   }
   return placed;
 }
+
+/** Mid ring: 4–6 clusters of 2–3 pieces, each with a shared open pocket on the
+ *  outward side. Enemy pathing funnels into pockets → dynamite payoff; the
+ *  player reads pockets as throw targets while backpedaling to the lane. */
+export function placeMidClusters(
+  rng: SimRng, open: Uint8Array,
+): { pieces: CoverPiece[]; pockets: Pocket[] } {
+  const anchors = cellsInRing('mid');
+  const hx = (GRID_W - 1) / 2, hz = (GRID_H - 1) / 2;
+  const target = 4 + randomInt(rng, 3); // 4–6 clusters
+  const pieces: CoverPiece[] = [];
+  const pockets: Pocket[] = [];
+  const reserved = new Set<number>(); // pocket cells no later cluster may carve
+  let clusterId = 0;
+  for (let attempt = 0; clusterId < target && attempt < 160; attempt++) {
+    const a = anchors[randomInt(rng, anchors.length)]!;
+    // Outward = dominant axis away from grid center; perpendicular spreads the cluster.
+    const ox = a.cx - hx, oz = a.cz - hz;
+    const dir = Math.abs(ox) >= Math.abs(oz)
+      ? { dx: Math.sign(ox) || 1, dz: 0 }
+      : { dx: 0, dz: Math.sign(oz) || 1 };
+    const perp = { dx: dir.dz, dz: dir.dx };
+    const n = 2 + randomInt(rng, 2); // 2–3 pieces
+    const cells: Cell[] = [
+      { cx: a.cx, cz: a.cz },
+      { cx: a.cx + perp.dx, cz: a.cz + perp.dz },
+    ];
+    if (n === 3) cells.push({ cx: a.cx - perp.dx, cz: a.cz - perp.dz });
+    if (cells.some((c) => ringOf(c.cx, c.cz) !== 'mid')) continue;
+    if (cells.some((c) => reserved.has(c.cz * GRID_W + c.cx))) continue;
+    // Pocket candidates: the far (outward) side of the cluster.
+    const pocketCand: Cell[] = [
+      { cx: a.cx + dir.dx, cz: a.cz + dir.dz },
+      { cx: a.cx + dir.dx + perp.dx, cz: a.cz + dir.dz + perp.dz },
+      { cx: a.cx + dir.dx - perp.dx, cz: a.cz + dir.dz - perp.dz },
+      { cx: a.cx + 2 * dir.dx, cz: a.cz + 2 * dir.dz },
+    ].filter((c) => ringOf(c.cx, c.cz) === 'mid' && open[c.cz * GRID_W + c.cx] === 1);
+    if (pocketCand.length < 2) continue;
+    if (!clearAround(open, cells)) continue;
+    if (!tryCarve(open, cells)) continue;
+    for (const c of cells)
+      pieces.push({ cx: c.cx, cz: c.cz, w: 1, h: 1, height: 'low', clusterId });
+    const size = Math.min(pocketCand.length, 2 + randomInt(rng, 3)); // 2–4 cells
+    const pocketCells = pocketCand.slice(0, size);
+    for (const c of pocketCells) reserved.add(c.cz * GRID_W + c.cx);
+    pockets.push({ clusterId, cells: pocketCells });
+    clusterId++;
+  }
+  return { pieces, pockets };
+}
+
+/** Promote 2–4 mid-ring pieces to sightline breakers, never adjacent
+ *  (Chebyshev > 2 apart). Everything else stays lob-over low. */
+export function assignMidHeights(rng: SimRng, pieces: CoverPiece[]): void {
+  if (pieces.length === 0) return;
+  const target = 2 + randomInt(rng, 3); // 2–4
+  const chosen: CoverPiece[] = [];
+  for (let attempt = 0; chosen.length < target && attempt < 60; attempt++) {
+    const p = pieces[randomInt(rng, pieces.length)]!;
+    if (p.height === 'mid') continue;
+    if (chosen.some((q) => Math.abs(q.cx - p.cx) <= 2 && Math.abs(q.cz - p.cz) <= 2)) continue;
+    p.height = 'mid';
+    chosen.push(p);
+  }
+}
