@@ -172,7 +172,7 @@ git commit -m "feat(arenagen): ring zoning + ArenaPlan types"
 - Create: `src/sim/arenagen/cover.ts`
 - Test: `src/sim/arenagen/cover.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test** (commit b8a45a1)
 
 ```ts
 // src/sim/arenagen/cover.test.ts
@@ -228,12 +228,12 @@ describe('placeCenterCover', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails** — confirmed `Failed to resolve import "./cover"`
 
 Run: `npx vitest run src/sim/arenagen/cover.test.ts`
 Expected: FAIL — cannot resolve `./cover`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 // src/sim/arenagen/cover.ts
@@ -313,12 +313,12 @@ export function placeCenterCover(rng: SimRng, open: Uint8Array): CoverPiece[] {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes** — 3 tests passed; tsc clean; firewall clean
 
 Run: `npx vitest run src/sim/arenagen/cover.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** (b8a45a1)
 
 ```bash
 git add src/sim/arenagen/cover.ts src/sim/arenagen/cover.test.ts
