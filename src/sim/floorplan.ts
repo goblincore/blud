@@ -1,6 +1,12 @@
 // src/sim/floorplan.ts
 // Determinism firewall: plain data only — NO 'three', NO Rapier, NO src/game/**.
 // Imports limited to sibling sim modules.
+//
+// SUPERSEDED (2026-07-04): generateFloorplan is no longer called by runner.ts —
+// src/sim/arenagen/ (dynamite-first generator) replaced it. This module still
+// owns the shared Floorplan type + grid/bake utilities. Delete generateFloorplan,
+// chooseStart, scatterCover, placeSpawns + their tests once arenagen is proven
+// in-game (spec: 2026-07-04-blud-dynamite-arena-generator-design.md, §Migration).
 import { createRng, randomInt, type SimRng } from './rng';
 import { fpFromMeters } from './fp';
 import type { SimAABB } from './geometry';
