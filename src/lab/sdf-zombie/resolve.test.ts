@@ -71,3 +71,25 @@ describe('placePrims', () => {
     expect(() => placePrims(prims, resolved)).toThrow(/ghost/);
   });
 });
+
+describe('placePrims with offset and op', () => {
+  const skull = new Map([['skull', { head: [0, 1, 0] as const, tail: [0, 1.2, 0] as const }]]);
+
+  it('displaces both endpoints by the offset', () => {
+    const [p] = placePrims([{
+      bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,
+      limb: 'head', offset: [0.05, 0, -0.02],
+    }] as ExpandedPrim[], skull as never);
+    expect(p!.a).toEqual([0.05, 1.1, -0.02]);
+    expect(p!.b).toEqual([0.05, 1.1, -0.02]);
+  });
+
+  it('defaults op to add and passes sub through', () => {
+    const mk = (op?: 'add' | 'sub') => placePrims([{
+      bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,
+      limb: 'head', ...(op ? { op } : {}),
+    }] as ExpandedPrim[], skull as never)[0]!;
+    expect(mk().op).toBe('add');
+    expect(mk('sub').op).toBe('sub');
+  });
+});
