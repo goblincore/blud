@@ -19,6 +19,13 @@ precision highp float;
 
 #define MAX_PRIMS ${MAX_PRIMS}
 #define MAX_CLUSTERS ${MAX_CLUSTERS}
+#define MAX_WOUNDS 16
+uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius
+uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age
+uniform int  uWoundCount;
+uniform float uWoundBlendK;        // separate from the union k — makes the wet lip
+uniform vec3 uDeepColor;
+uniform vec3 uCharColor;
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -43,6 +50,45 @@ float smin(float a, float b, float k) {
   if (k <= 0.0) return min(a, b);
   float h = max(k - abs(a - b), 0.0) / k;
   return min(a, b) - h * h * k * 0.25;
+}
+
+// Smooth subtraction: smax(a, b, k) = -smin(-a, -b, k).
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+/** Carves every wound out of the field. Burns barely subtract; they char. */
+float applyWounds(float d, vec3 p) {
+  for (int i = 0; i < MAX_WOUNDS; i++) {
+    if (i >= uWoundCount) break;
+    vec4 w = uWound[i];
+    float type = uWoundMeta[i].x;
+    // A burn only opens up as it cooks; a pellet/blast subtracts immediately.
+    float depth = type > 1.5 ? w.w * 0.35 * clamp(uWoundMeta[i].y, 0.0, 1.0) : w.w;
+    d = smax(d, -(length(p - w.xyz) - depth), uWoundBlendK);
+  }
+  return d;
+}
+
+/** 0 at the surface far from wounds, 1 deep inside one. Drives the wet interior. */
+float woundMask(vec3 p) {
+  float m = 0.0;
+  for (int i = 0; i < MAX_WOUNDS; i++) {
+    if (i >= uWoundCount) break;
+    vec4 w = uWound[i];
+    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
+  }
+  return m;
+}
+
+/** 0 unburned, 1 fully charred. */
+float charMask(vec3 p) {
+  float m = 0.0;
+  for (int i = 0; i < MAX_WOUNDS; i++) {
+    if (i >= uWoundCount) break;
+    if (uWoundMeta[i].x < 1.5) continue;
+    vec4 w = uWound[i];
+    m = max(m, (1.0 - smoothstep(0.0, w.w * 2.2, length(p - w.xyz))) * clamp(uWoundMeta[i].y, 0.0, 1.0));
+  }
+  return m;
 }
 
 float sdPrim(vec3 p, int i) {
@@ -74,7 +120,7 @@ float mapBody(vec3 p) {
       d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
     }
   }
-  return d;
+  return applyWounds(d, p);
 }
 
 vec3 calcNormal(vec3 p) {
@@ -103,7 +149,11 @@ void main() {
   vec3 p = ro + rd * t;
   vec3 n = calcNormal(p);
   float diff = max(dot(n, normalize(uLightDir)), 0.0);
-  outColor = vec4(uBaseColor * (0.22 + 0.78 * diff), 1.0);
+  float wm = woundMask(p);
+  float cm = charMask(p);
+  vec3 albedo = mix(uBaseColor, uDeepColor, wm);
+  albedo = mix(albedo, uCharColor, cm);
+  outColor = vec4(albedo * (0.22 + 0.78 * diff), 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
   gl_FragDepth = (clip.z / clip.w) * 0.5 + 0.5;

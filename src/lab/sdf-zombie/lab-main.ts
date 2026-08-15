@@ -4,11 +4,21 @@ import { createRenderer } from '../../engine/renderer';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { createZombieView } from './zombie';
+import {
+  MAX_WOUNDS,
+  pushWound,
+  woundWorldPos,
+  worldHitToWound,
+  type Wound,
+  type WoundType,
+} from './damage';
+import { sdBody } from './validate';
+import type { Vec3 } from './types';
 
 const mount = document.getElementById('app');
 if (!mount) throw new Error('#app not found');
 
-const { scene, camera } = createRenderer(mount);
+const { renderer, scene, camera } = createRenderer(mount);
 
 // Ground plane — a polygonal surface the raymarched blobs must composite against.
 const floor = new THREE.Mesh(
@@ -35,3 +45,47 @@ if (errorsEl) errorsEl.textContent = body.errors.join('\n');
 
 const view = createZombieView(body);
 scene.add(view.object);
+
+let wounds: Wound[] = [];
+
+const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
+const RADIUS: Record<WoundType, number> = { pellet: 0.055, blast: 0.13, burn: 0.08 };
+
+/** Marches the CPU-side field along a ray to find where a shot lands. */
+function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
+  let t = 0;
+  for (let i = 0; i < 128 && t < 20; i++) {
+    const p: Vec3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
+    const d = sdBody(p, body);
+    if (d < 0.002) return p;
+    t += Math.max(d, 0.002);
+  }
+  return null;
+}
+
+function refreshWounds() {
+  view.setWounds(
+    wounds.map(w => woundWorldPos(body.prims, w)),
+    wounds.map(w => w.radius),
+    wounds.map(w => TYPE_ID[w.type]),
+    wounds.map(w => w.ageSec),
+  );
+}
+
+renderer.domElement.addEventListener('pointerdown', (ev: PointerEvent) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+    -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const o = ray.ray.origin, d = ray.ray.direction;
+
+  const hit = raycastBody([o.x, o.y, o.z], [d.x, d.y, d.z]);
+  if (!hit) return;
+
+  const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
+  wounds = pushWound(wounds, worldHitToWound(body.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+  refreshWounds();
+});
