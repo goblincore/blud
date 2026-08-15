@@ -70,3 +70,31 @@ function toLocalApprox(prim: Primitive, world: Vec3): Vec3 {
   const rel = sub(world, prim.a);
   return [dot(rel, u), dot(rel, v), dot(rel, w)];
 }
+
+/**
+ * Blows the whole body apart: every live cluster becomes a chunk and the body
+ * is left with nothing alive.
+ *
+ * Unlike `severLimb` this DOES release the torso — there is no body left to
+ * anchor, so the fold-order argument for protecting it no longer applies. It
+ * still never removes or reorders primitives; every cluster just goes dead,
+ * so the invariant holds by the same mechanism.
+ *
+ * Chunks are seeded from the CURRENT primitive set, so gibs reflect damage
+ * already dealt — an arm shot off earlier is simply not in the pile.
+ */
+export function gibAll(body: BuildResult): { body: BuildResult; chunks: ChunkGroup[] } {
+  const chunks: ChunkGroup[] = [];
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    chunks.push({
+      limb: c.limb,
+      prims: body.prims.slice(c.start, c.start + c.count),
+      origin: c.center,
+    });
+  }
+  return {
+    body: { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) },
+    chunks,
+  };
+}

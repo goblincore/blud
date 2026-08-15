@@ -7,6 +7,7 @@ import { FRAG, VERT } from './march.glsl';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
 import type { Primitive, Vec3 } from './types';
 import { len, sub } from './vec';
+import { MAX_WOUNDS } from './damage';
 
 export interface ZombieView {
   object: THREE.Object3D;
@@ -168,8 +169,18 @@ export function chunkExtent(prims: Primitive[], origin: Vec3): number {
  * centred in its own local space and its endpoints are re-packed in world
  * space every update(). Signature and ChunkView shape match the plan exactly.
  */
-export function createChunkView(chunk: Chunk, prims: Primitive[], template: THREE.ShaderMaterial): ChunkView {
+export function createChunkView(
+  chunk: Chunk,
+  prims: Primitive[],
+  template: THREE.ShaderMaterial,
+  /** World position where this limb was attached — becomes the torn end. */
+  tornAt?: Vec3,
+): ChunkView {
   const material = template.clone();
+  // Material.clone() shares uniform VALUE references, so a chunk writing its
+  // own wound array would scribble on the body's. Give it fresh buffers.
+  material.uniforms.uWound = { value: new Float32Array(MAX_WOUNDS * 4) };
+  material.uniforms.uWoundMeta = { value: new Float32Array(MAX_WOUNDS * 4) };
 
   // chunk.pos is the cluster centre at sever time, so this recentres the
   // severed limb's rest-space primitives around the chunk's own origin.
@@ -184,6 +195,9 @@ export function createChunkView(chunk: Chunk, prims: Primitive[], template: THRE
   // limb (~0.3-0.45), which the shader's cluster-bounds cull would erase. Use
   // the true extent instead (same recipe as clusters.ts).
   const extent = chunkExtent(prims, chunk.pos);
+  const tornLocal: Vec3 | null = tornAt ? sub(tornAt, chunk.pos) : null;
+  // Big enough to read as a torn stump rather than a pellet hole.
+  const tornRadius = extent * 0.55;
 
   const packed = packBody({
     prims: local,
@@ -202,7 +216,7 @@ export function createChunkView(chunk: Chunk, prims: Primitive[], template: THRE
   material.uniforms.uPrimCount = { value: packed.primCount };
   material.uniforms.uClusterCount = { value: 1 };
   material.uniforms.uMaxBlendK = { value: packed.maxBlendK };
-  material.uniforms.uWoundCount = { value: 0 };
+  material.uniforms.uWoundCount = { value: 0 }; // set by apply() when torn
   material.uniforms.uSteps = { value: 48 }; // chunks are small; fewer steps
 
   const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
@@ -228,6 +242,18 @@ export function createChunkView(chunk: Chunk, prims: Primitive[], template: THRE
       packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz, 0], o);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
+
+    if (tornLocal) {
+      // Same tumble-then-squash transform the primitives get, so the torn end
+      // stays welded to the stump as the limb spins and flattens.
+      const rx = tornLocal[0] * cos + tornLocal[2] * sin;
+      const rz = -tornLocal[0] * sin + tornLocal[2] * cos;
+      const w = material.uniforms.uWound!.value as Float32Array;
+      const m = material.uniforms.uWoundMeta!.value as Float32Array;
+      w.set([c.pos[0] + rx * sx, c.pos[1] + tornLocal[1] * sy, c.pos[2] + rz * sz, tornRadius], 0);
+      m.set([1, 0, 0, 0], 0); // type 1 = blast, so it reads as torn, not burned
+      material.uniforms.uWoundCount!.value = 1;
+    }
     return { sx, sy, sz };
   }
 

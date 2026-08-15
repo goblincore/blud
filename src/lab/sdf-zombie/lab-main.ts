@@ -13,7 +13,7 @@ import {
   type Wound, type WoundType,
 } from './damage';
 import { sdBody } from './validate';
-import { severLimb } from './sever';
+import { severLimb, gibAll } from './sever';
 import { bindRig, applyRig, impulseAt } from './rig-bind';
 import { stepRig } from './rig';
 import { makeChunk, stepChunk, type Chunk } from './gib-chunks';
@@ -212,29 +212,86 @@ const SEVER_KEYS: Record<string, LimbId> = {
 
 const chunks: { state: Chunk; view: ChunkView }[] = [];
 
-function spawnChunk(limb: LimbId, origin: Vec3, prims: typeof current.prims) {
+/** Chunks are disposed oldest-first past this, so a long session can't leak. */
+const MAX_CHUNKS = 24;
+
+/** The endpoint of `prims` nearest `toward` — i.e. where the limb tore away. */
+function attachPoint(prims: typeof current.prims, toward: Vec3): Vec3 {
+  let best: Vec3 = prims[0]!.a;
+  let bestD = Infinity;
+  for (const p of prims)
+    for (const e of [p.a, p.b]) {
+      const dx = e[0] - toward[0], dy = e[1] - toward[1], dz = e[2] - toward[2];
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) { bestD = d; best = e; }
+    }
+  return best;
+}
+
+function torsoCentre(): Vec3 {
+  return current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0];
+}
+
+function spawnChunk(
+  limb: LimbId, origin: Vec3, prims: typeof current.prims,
+  vel?: Vec3, tornAt?: Vec3,
+) {
   if (prims.length === 0) return;
-  const vel: Vec3 = [
+  const v: Vec3 = vel ?? [
     (Math.random() - 0.5) * 3.2,
     1.8 + Math.random() * 2.2,
     (Math.random() - 0.5) * 3.2,
   ];
   // Collision radius = the limb's real visual extent (the plan's hardcoded
   // 0.14 is smaller than any limb and would bury it half-way into the floor).
-  const state = makeChunk(limb, origin, vel, chunkExtent(prims, origin));
-  const view = createChunkView(state, prims, viewMaterialTemplate);
+  const state = makeChunk(limb, origin, v, chunkExtent(prims, origin));
+  const view = createChunkView(state, prims, viewMaterialTemplate, tornAt);
   scene.add(view.object);
   chunks.push({ state, view });
+
+  while (chunks.length > MAX_CHUNKS) {
+    const oldest = chunks.shift();
+    if (!oldest) break;
+    scene.remove(oldest.view.object);
+    oldest.view.dispose();
+  }
+}
+
+/** Blows the whole body apart — every live cluster becomes a chunk. */
+function gibEverything() {
+  const centre = torsoCentre();
+  const { body: next, chunks: groups } = gibAll(current);
+  for (const g of groups) {
+    // Radial launch from the body centre, so the pile spreads instead of
+    // every piece going the same way.
+    const dx = g.origin[0] - centre[0];
+    const dy = g.origin[1] - centre[1];
+    const dz = g.origin[2] - centre[2];
+    const l = Math.hypot(dx, dy, dz) || 1;
+    const speed = 2.4 + Math.random() * 2.0;
+    const vel: Vec3 = [
+      (dx / l) * speed + (Math.random() - 0.5) * 1.2,
+      2.2 + Math.random() * 2.4,
+      (dz / l) * speed + (Math.random() - 0.5) * 1.2,
+    ];
+    spawnChunk(g.limb, g.origin, g.prims, vel, attachPoint(g.prims, centre));
+  }
+  current = next;
+  wounds = [];
+  view.update(current);
+  refreshWounds();
+  rebind();
 }
 
 window.addEventListener('keydown', (ev) => {
+  if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
   const limb = SEVER_KEYS[ev.key];
   if (!limb) return;
   const { body: next, chunk, stumpWound } = severLimb(current, limb);
   if (chunk.prims.length === 0) return;
   current = next;
   if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
-  spawnChunk(limb, chunk.origin, chunk.prims);
+  spawnChunk(limb, chunk.origin, chunk.prims, undefined, attachPoint(chunk.prims, torsoCentre()));
   view.update(current);
   refreshWounds();
   rebind();
