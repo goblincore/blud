@@ -23,28 +23,44 @@ function limbFor(base: LimbBase, side: 'l' | 'r' | null): LimbId {
 export function expandMirror(def: BodyDef): ExpandedBody {
   const bones: BoneDef[] = [];
   const mirroredBoneNames = new Set<string>();
+  /** Which side each emitted bone came out on; null for bones that were not mirrored. */
+  const sideOf = new Map<BoneDef, 'l' | 'r' | null>();
 
   for (const b of def.bones) {
-    if (!b.mirror) { bones.push({ ...b }); continue; }
+    if (!b.mirror) {
+      const kept = { ...b };
+      bones.push(kept);
+      sideOf.set(kept, null);
+      continue;
+    }
     mirroredBoneNames.add(b.name);
     const side = b.side ?? 0;
-    bones.push({ ...b, name: `${b.name}.l`, side, mirror: false });
-    // NOTE: the right copy mirrors in x — both the side offset AND the direction.
-    // Negating only `side` (as originally planned) leaves a `dir` with a nonzero x
-    // component (e.g. the zombie's clavicle `dir: [1,0,0]`) pointing the same way
-    // on both sides, so both limbs land on the left of the body.
-    bones.push({
+    const l: BoneDef = { ...b, name: `${b.name}.l`, side, mirror: false };
+    // The right copy mirrors in x — both the side offset AND the direction.
+    // Negating only `side` leaves a `dir` with a nonzero x component (the
+    // zombie's clavicle is `dir: [1,0,0]`) pointing the same way on both sides,
+    // so both limbs land on the left of the body.
+    const r: BoneDef = {
       ...b, name: `${b.name}.r`, side: -side, mirror: false,
       dir: [-b.dir[0], b.dir[1], b.dir[2]],
-    });
+    };
+    bones.push(l, r);
+    sideOf.set(l, 'l');
+    sideOf.set(r, 'r');
   }
 
   // A mirrored bone's parent may itself be mirrored — retarget to the same side.
+  // The side comes from how this bone was expanded, not from its name: a bone
+  // that was never mirrored has no side, and guessing one would silently hang it
+  // off the left half of a bilateral pair.
   for (const b of bones) {
-    if (b.parent && mirroredBoneNames.has(b.parent)) {
-      const suffix = b.name.endsWith('.r') ? '.r' : '.l';
-      b.parent = `${b.parent}${suffix}`;
-    }
+    if (!b.parent || !mirroredBoneNames.has(b.parent)) continue;
+    const side = sideOf.get(b) ?? null;
+    if (side === null)
+      throw new Error(
+        `bone "${b.name}" has mirrored parent "${b.parent}" but is not itself mirrored — ambiguous side`,
+      );
+    b.parent = `${b.parent}.${side}`;
   }
 
   const prims: ExpandedPrim[] = [];

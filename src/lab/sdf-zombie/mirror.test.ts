@@ -47,6 +47,38 @@ describe('expandMirror', () => {
     expect(out.prims.find(p => p.bone === 'pelvis')!.limb).toBe('torso');
   });
 
+  it('retargets a mirrored bone to the matching side of its mirrored parent', () => {
+    const nested: BodyDef = {
+      name: 'nested',
+      root: [0, 1, 0],
+      bones: [
+        { name: 'thigh', parent: null, dir: [0, -1, 0], length: 0.4, side: 0.09, mirror: true },
+        { name: 'shin', parent: 'thigh', dir: [0, -1, 0], length: 0.4, mirror: true },
+      ],
+      prims: [],
+    };
+    const nestedOut = expandMirror(nested);
+    expect(nestedOut.bones.find(b => b.name === 'shin.l')!.parent).toBe('thigh.l');
+    expect(nestedOut.bones.find(b => b.name === 'shin.r')!.parent).toBe('thigh.r');
+  });
+
+  it('throws when a non-mirrored bone hangs off a mirrored parent', () => {
+    // There is no correct side for it — silently picking one would render the
+    // part off-centre with no error, which is exactly what must not happen.
+    const bad: BodyDef = {
+      name: 'tailed',
+      root: [0, 1, 0],
+      bones: [
+        { name: 'hip', parent: null, dir: [0, 1, 0], length: 0.2, side: 0.09, mirror: true },
+        { name: 'tail', parent: 'hip', dir: [0, 0, -1], length: 0.3 },
+      ],
+      prims: [],
+    };
+    expect(() => expandMirror(bad)).toThrow(
+      /bone "tail" has mirrored parent "hip" but is not itself mirrored/,
+    );
+  });
+
   it('throws when a mirrored prim names a bone that is not mirrored', () => {
     const bad: BodyDef = {
       ...def,
