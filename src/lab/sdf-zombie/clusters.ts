@@ -27,13 +27,20 @@ export function assignClusters(
     while (i < sorted.length && sorted[i]!.limb === limb) i++;
     const members = sorted.slice(start, i);
 
+    // Carves are holes, not surface. Including them in the bound inflates it
+    // and defeats the shader's cluster cull for no gain. `start`/`count` still
+    // span every member, carves included — the fold order requires that run to
+    // stay contiguous.
+    const solid = members.filter(p => p.op !== 'sub');
+    const fitTo = solid.length > 0 ? solid : members;
+
     // Centroid of the capsule endpoints, then the radius that covers them all.
     let sum: Vec3 = [0, 0, 0];
-    for (const p of members) sum = add(sum, add(p.a, p.b));
-    const center = vscale(sum, 1 / (members.length * 2));
+    for (const p of fitTo) sum = add(sum, add(p.a, p.b));
+    const center = vscale(sum, 1 / (fitTo.length * 2));
 
     let radius = 0;
-    for (const p of members) {
+    for (const p of fitTo) {
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
       for (const end of [p.a, p.b])
         radius = Math.max(radius, len(sub(end, center)) + p.radius * maxScale);

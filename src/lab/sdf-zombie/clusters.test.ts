@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/clusters.test.ts
 import { describe, it, expect } from 'vitest';
 import { assignClusters } from './clusters';
-import { CLUSTER_ORDER, type LimbId, type Primitive } from './types';
+import { CLUSTER_ORDER, type LimbId, type Primitive, type Vec3 } from './types';
 import { len, sub } from './vec';
 
 const prim = (limb: LimbId, a: [number, number, number], radius = 0.1): Omit<Primitive, 'cluster'> =>
@@ -53,4 +53,21 @@ describe('assignClusters', () => {
   it('starts every cluster alive', () => {
     expect(built.clusters.every(c => c.alive)).toBe(true);
   });
+});
+
+it('fits bounds to solid primitives only, ignoring carves', () => {
+  const solid = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3,
+    radius: 0.1, scale: [1, 1, 1] as Vec3, blendK: 0.01, limb: 'head' as const,
+  };
+  const withoutCarve = assignClusters([solid]);
+  // A carve far off to the side would balloon a naive bound.
+  const withCarve = assignClusters([
+    solid,
+    { ...solid, a: [5, 0, 0] as Vec3, b: [5, 0, 0] as Vec3, op: 'sub' as const },
+  ]);
+  expect(withCarve.clusters[0]!.radius).toBeCloseTo(withoutCarve.clusters[0]!.radius, 6);
+  expect(withCarve.clusters[0]!.center).toEqual(withoutCarve.clusters[0]!.center);
+  // The carve still belongs to the cluster's contiguous run — fold order intact.
+  expect(withCarve.clusters[0]!.count).toBe(2);
 });

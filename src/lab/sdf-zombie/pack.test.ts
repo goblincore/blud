@@ -4,6 +4,7 @@ import { packBody, PRIM_STRIDE, CLUSTER_STRIDE } from './pack';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
+import type { Vec3 } from './types';
 
 /** Packs into Float32Array, so expected values must be rounded to float32. */
 const f32 = (v: number) => Math.fround(v);
@@ -52,4 +53,21 @@ describe('packBody', () => {
   it('reports the largest blendK, which the shader needs as its cull margin', () => {
     expect(packed.maxBlendK).toBe(Math.max(...built.prims.map(p => p.blendK)));
   });
+});
+
+it('packs a carve as a negative blend constant', () => {
+  const prim = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'head' as const, cluster: 0,
+  };
+  const p = packBody({
+    prims: [prim, { ...prim, op: 'sub' as const }],
+    clusters: [{ id: 0, limb: 'head', start: 0, count: 2, center: [0, 0, 0], radius: 0.1, alive: true }],
+    bones: new Map(),
+  });
+  expect(p.primB[3]).toBeCloseTo(0.02, 6);   // additive
+  expect(p.primB[7]).toBeCloseTo(-0.02, 6);  // carve
+  // The cull margin is a distance, never signed.
+  expect(p.maxBlendK).toBeCloseTo(0.02, 6);
+  expect(p.carveCount).toBe(1);
 });

@@ -15,6 +15,8 @@ export interface PackedBody {
   clusterCount: number;
   /** Cull margin: a cluster can still pull the surface from up to this far away. */
   maxBlendK: number;
+  /** How many packed primitives are carves. Zero lets the shader skip the pass. */
+  carveCount: number;
 }
 
 export function packBody(body: BuiltBody): PackedBody {
@@ -23,11 +25,20 @@ export function packBody(body: BuiltBody): PackedBody {
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
+  let carveCount = 0;
   body.prims.forEach((p, i) => {
     const o = i * PRIM_STRIDE;
+    // A NEGATIVE packed blendK means "carve this primitive out". The shader
+    // reads the sign to split the additive fold from the carve pass — see
+    // mapBody and applyCarves in march.glsl.ts. Encoding it in the sign rather
+    // than adding a fourth per-primitive uniform array keeps per-step uniform
+    // traffic flat, and this renderer is fill-rate bound.
+    if (p.op === 'sub') carveCount++;
+    const k = p.op === 'sub' ? -p.blendK : p.blendK;
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
-    primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
+    primB.set([p.b[0], p.b[1], p.b[2], k], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], p.cluster], o);
+    // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
 
@@ -44,5 +55,6 @@ export function packBody(body: BuiltBody): PackedBody {
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,
+    carveCount,
   };
 }
