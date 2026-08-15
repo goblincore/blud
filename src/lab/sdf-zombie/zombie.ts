@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import type { BuildResult } from './build-body';
 import { packBody, type PackedBody } from './pack';
 import { FRAG, VERT } from './march.glsl';
+import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
+import type { Vec3 } from './types';
 import { len, sub } from './vec';
 
 export interface ZombieView {
@@ -10,6 +12,9 @@ export interface ZombieView {
   material: THREE.ShaderMaterial;
   /** Re-upload after the body changes (sever, override edit, rig step). */
   update(body: BuildResult): void;
+  /** Uploads wounds already transformed to world space by the caller. */
+  setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[]): void;
+  applyMaterial(m: FleshMaterial, light: LightPreset): void;
 }
 
 /** Proxy box big enough to contain every live cluster, with blend margin. */
@@ -56,6 +61,22 @@ export function createZombieView(body: BuildResult): ZombieView {
       uStepMul: { value: 0.6 },
       uBaseColor: { value: new THREE.Color(0xc46a72) },
       uLightDir: { value: new THREE.Vector3(0.5, 1.0, 0.4) },
+      uSpecIntensity: { value: 0.95 },
+      uSpecRoughness: { value: 0.12 },
+      uFresnelBoost: { value: 0.85 },
+      uTranslucency: { value: 0.45 },
+      uSurfaceNoiseAmp: { value: 0.06 },
+      uSilhouetteNoiseAmp: { value: 0.016 },
+      uWetness: { value: 1.0 },
+      uKeyIntensity: { value: 2.4 },
+      uFillIntensity: { value: 0.06 },
+      uKeyColor: { value: new THREE.Color(1.0, 0.96, 0.92) },
+      uWound: { value: new Float32Array(16 * 4) },
+      uWoundMeta: { value: new Float32Array(16 * 4) },
+      uWoundCount: { value: 0 },
+      uWoundBlendK: { value: 0.015 },
+      uDeepColor: { value: new THREE.Color(0x8c1420) },
+      uCharColor: { value: new THREE.Color(0x1a1214) },
     },
   });
 
@@ -63,6 +84,8 @@ export function createZombieView(body: BuildResult): ZombieView {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
   mesh.position.copy(center);
   mesh.frustumCulled = false; // the proxy is the bound; don't double-cull
+
+  // set after construction so the preset is the single source of truth
 
   return {
     object: mesh,
@@ -81,6 +104,33 @@ export function createZombieView(body: BuildResult): ZombieView {
       const fit = fitProxy(p, next);
       mesh.position.copy(fit.center);
       mesh.scale.setScalar(fit.size / size);
+    },
+    setWounds(worldPositions, radii, types, ages) {
+      const w = material.uniforms.uWound!.value as Float32Array;
+      const m = material.uniforms.uWoundMeta!.value as Float32Array;
+      const n = Math.min(worldPositions.length, 16);
+      for (let i = 0; i < n; i++) {
+        w.set([...worldPositions[i]!, radii[i]!], i * 4);
+        m.set([types[i]!, ages[i]!, 0, 0], i * 4);
+      }
+      material.uniforms.uWoundCount!.value = n;
+    },
+    applyMaterial(m, light) {
+      const u = material.uniforms;
+      (u.uBaseColor!.value as THREE.Color).setRGB(...m.baseColor);
+      (u.uDeepColor!.value as THREE.Color).setRGB(...m.deepColor);
+      (u.uCharColor!.value as THREE.Color).setRGB(...m.charColor);
+      u.uSpecIntensity!.value = m.specIntensity;
+      u.uSpecRoughness!.value = m.specRoughness;
+      u.uFresnelBoost!.value = m.fresnelBoost;
+      u.uTranslucency!.value = m.translucency;
+      u.uSurfaceNoiseAmp!.value = m.surfaceNoiseAmp;
+      u.uSilhouetteNoiseAmp!.value = m.silhouetteNoiseAmp;
+      u.uWetness!.value = m.wetness;
+      (u.uLightDir!.value as THREE.Vector3).set(...light.keyDir);
+      (u.uKeyColor!.value as THREE.Color).setRGB(...light.keyColor);
+      u.uKeyIntensity!.value = light.keyIntensity;
+      u.uFillIntensity!.value = light.fillIntensity;
     },
   };
 }

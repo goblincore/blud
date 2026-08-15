@@ -19,6 +19,13 @@ precision highp float;
 
 #define MAX_PRIMS ${MAX_PRIMS}
 #define MAX_CLUSTERS ${MAX_CLUSTERS}
+#define MAX_WOUNDS 16
+uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius
+uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age
+uniform int  uWoundCount;
+uniform float uWoundBlendK;        // separate from the union k — makes the wet lip
+uniform vec3 uDeepColor;
+uniform vec3 uCharColor;
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -35,13 +42,13 @@ uniform int uSteps;
 uniform float uStepMul;
 uniform vec3 uBaseColor;
 uniform vec3 uLightDir;
-
-// three's FRAGMENT prefix declares viewMatrix and cameraPosition but NOT
-// projectionMatrix (that one is vertex-only). The gl_FragDepth write below
-// needs it, so declare it here — three still binds it by name from the
-// program's active uniform list. Without this the program fails to link with
-// "'projectionMatrix' : undeclared identifier" and nothing renders, while
-// tsc/vite/vitest all stay green because none of them compile GLSL.
+uniform float uSpecIntensity, uSpecRoughness, uFresnelBoost, uTranslucency;
+uniform float uSurfaceNoiseAmp, uSilhouetteNoiseAmp, uWetness;
+uniform float uKeyIntensity, uFillIntensity;
+uniform vec3  uKeyColor;
+// three's ShaderMaterial FRAGMENT prefix declares viewMatrix/cameraPosition but
+// NOT projectionMatrix (vertex-only) — the gl_FragDepth write below needs it.
+// Declared here; three still binds it by name from the program's active uniforms.
 uniform mat4 projectionMatrix;
 
 // iq quadratic polynomial smooth-min: rigid + conservative (never overestimates).
@@ -51,6 +58,45 @@ float smin(float a, float b, float k) {
   if (k <= 0.0) return min(a, b);
   float h = max(k - abs(a - b), 0.0) / k;
   return min(a, b) - h * h * k * 0.25;
+}
+
+// Smooth subtraction: smax(a, b, k) = -smin(-a, -b, k).
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+/** Carves every wound out of the field. Burns barely subtract; they char. */
+float applyWounds(float d, vec3 p) {
+  for (int i = 0; i < MAX_WOUNDS; i++) {
+    if (i >= uWoundCount) break;
+    vec4 w = uWound[i];
+    float type = uWoundMeta[i].x;
+    // A burn only opens up as it cooks; a pellet/blast subtracts immediately.
+    float depth = type > 1.5 ? w.w * 0.35 * clamp(uWoundMeta[i].y, 0.0, 1.0) : w.w;
+    d = smax(d, -(length(p - w.xyz) - depth), uWoundBlendK);
+  }
+  return d;
+}
+
+/** 0 at the surface far from wounds, 1 deep inside one. Drives the wet interior. */
+float woundMask(vec3 p) {
+  float m = 0.0;
+  for (int i = 0; i < MAX_WOUNDS; i++) {
+    if (i >= uWoundCount) break;
+    vec4 w = uWound[i];
+    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
+  }
+  return m;
+}
+
+/** 0 unburned, 1 fully charred. */
+float charMask(vec3 p) {
+  float m = 0.0;
+  for (int i = 0; i < MAX_WOUNDS; i++) {
+    if (i >= uWoundCount) break;
+    if (uWoundMeta[i].x < 1.5) continue;
+    vec4 w = uWound[i];
+    m = max(m, (1.0 - smoothstep(0.0, w.w * 2.2, length(p - w.xyz))) * clamp(uWoundMeta[i].y, 0.0, 1.0));
+  }
+  return m;
 }
 
 float sdPrim(vec3 p, int i) {
@@ -63,6 +109,25 @@ float sdPrim(vec3 p, int i) {
   float minScale = min(S.x, min(S.y, S.z));
   return (length(q - (a + ab * t)) - A.w) * minScale;
 }
+
+float hash13(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float noise3(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n = mix(
+    mix(mix(hash13(i + vec3(0,0,0)), hash13(i + vec3(1,0,0)), f.x),
+        mix(hash13(i + vec3(0,1,0)), hash13(i + vec3(1,1,0)), f.x), f.y),
+    mix(mix(hash13(i + vec3(0,0,1)), hash13(i + vec3(1,0,1)), f.x),
+        mix(hash13(i + vec3(0,1,1)), hash13(i + vec3(1,1,1)), f.x), f.y), f.z);
+  return n * 2.0 - 1.0;
+}
+
+float fbm(vec3 p) { return noise3(p * 4.0) * 0.6 + noise3(p * 9.0) * 0.3; }
 
 float mapBody(vec3 p) {
   float d = 1e9;
@@ -86,7 +151,7 @@ float mapBody(vec3 p) {
       d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
     }
   }
-  return d;
+  return applyWounds(d, p) + fbm(p * 3.0) * uSilhouetteNoiseAmp;
 }
 
 vec3 calcNormal(vec3 p) {
@@ -115,29 +180,37 @@ void main() {
   vec3 p = ro + rd * t;
   vec3 n = calcNormal(p);
 
-  // INTERIM SHADING — superseded by Task 16's FleshMaterial presets. A flat
-  // diffuse term gives the eye nothing to read form against, so the body looks
-  // like a featureless mass even when the geometry is correct. Hard key +
-  // specular + fresnel rim is the minimum that makes a silhouette legible.
+  // Micro-detail perturbs the normal only — costs no march safety.
+  n = normalize(n + vec3(fbm(p * 22.0), fbm(p * 22.0 + 5.0), fbm(p * 22.0 + 11.0)) * uSurfaceNoiseAmp);
+
+  float wm = woundMask(p);
+  float cm = charMask(p);
+  vec3 albedo = mix(uBaseColor, uDeepColor, wm);
+  albedo = mix(albedo, uCharColor, cm);
+
   vec3 L = normalize(uLightDir);
   vec3 V = -rd;
   vec3 H = normalize(L + V);
-
   float diff = max(dot(n, L), 0.0);
-  // Wrapped diffuse — light bends round the form instead of terminating hard.
-  float wrap = max((dot(n, L) + 0.35) / 1.35, 0.0);
-  // Bounce from the floor, so undersides aren't dead black.
-  float bounce = max(-n.y, 0.0) * 0.18;
-  float spec = pow(max(dot(n, H), 0.0), 42.0) * 0.55;
-  // Fresnel rim: the single cheapest cue for reading a curved silhouette.
-  float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.55;
-  // Cheap AO from the field: sample a little along the normal — creases and
-  // the insides of joints stay darker, which is what separates limb from torso.
+
+  // Wounds are wetter than the surrounding skin; char is dead matte.
+  float wet = uWetness * mix(1.0, 1.6, wm) * (1.0 - cm);
+  float shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, uSpecRoughness));
+  float fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * uFresnelBoost;
+
+  // Fake backlit scatter: sample the field a little way toward the light.
+  float thin = clamp(mapBody(p + L * 0.06) * -8.0, 0.0, 1.0);
+  vec3 scatter = uDeepColor * thin * uTranslucency * (1.0 - cm);
+
+  // Cheap AO from the field: sample along the normal so creases and the
+  // insides of joints stay darker. Kept from the interim shading pass —
+  // without it a limb dissolves into the torso visually even when the
+  // geometry is correctly separated.
   float ao = clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1.0);
 
-  vec3 lit = uBaseColor * (0.10 + 0.55 * wrap + 0.75 * diff + bounce) * ao
-           + vec3(1.0, 0.93, 0.90) * spec
-           + vec3(0.85, 0.35, 0.38) * rim;
+  vec3 lit = albedo * (uFillIntensity + diff * uKeyIntensity) * uKeyColor * ao
+           + uKeyColor * (shine * uSpecIntensity + fres) * wet
+           + scatter;
   outColor = vec4(lit, 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
