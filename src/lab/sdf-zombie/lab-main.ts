@@ -23,6 +23,9 @@ import {
   addButton, addSection, addSelect, addSlider, clearOverride,
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS,
 } from './panel';
+import { createPostFxComposer } from '../../vfx/post-fx/composer';
+import { PostFxBus } from '../../vfx/post-fx/post-fx-bus';
+import { DEFAULT_POST_FX } from '../../vfx/post-fx/config';
 
 const mount = document.getElementById('app');
 if (!mount) throw new Error('#app not found');
@@ -45,6 +48,38 @@ const refCube = new THREE.Mesh(
 );
 refCube.position.set(0.6, 0.2, 0.3);
 scene.add(refCube);
+
+// ---------------------------------------------------------------------------
+// Post-FX. The lab ran WITHOUT this until 2026-08-15: createRenderer exposes
+// setDrawFn to swap in an EffectComposer and only src/main.ts ever called it,
+// so the lab drew straight to the screen with no Bayer dither, no BLOOD.PAL
+// snap, no scanlines. The lab spec promised the opposite and warned that a
+// raymarcher judged in a clean viewport would lie about how it looks in Blud.
+// It did — every look judgment recorded before this date was made through the
+// wrong chain.
+//
+// `postCfg` is re-read by the composer every frame, so live mutation works.
+// ---------------------------------------------------------------------------
+const postCfg = structuredClone(DEFAULT_POST_FX);
+const postBus = new PostFxBus(postCfg.ca.baseline);
+const composer = createPostFxComposer(renderer, scene, camera, postBus, postCfg);
+let postEnabled = true;
+
+function installDrawFn() {
+  handle.setDrawFn(
+    postEnabled
+      ? () => composer.render(0, performance.now() / 1000)
+      : () => renderer.render(scene, camera),
+  );
+}
+installDrawFn();
+
+// createRenderer's own resize handler knows nothing about the composer.
+function sizeComposer() {
+  composer.setSize(renderer.domElement.width, renderer.domElement.height);
+}
+sizeComposer();
+window.addEventListener('resize', sizeComposer);
 
 let override = loadOverride();
 const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, override);
@@ -395,6 +430,13 @@ addButton(actionBox, 'reset overrides', () => {
   override = {};
   rebuildBody();
 });
+// Without a bypass, debugging a surface bug means guessing whether an artifact
+// came from the flesh shader or from the palette snap on top of it.
+const postBtn = addButton(actionBox, 'post-fx: on', () => {
+  postEnabled = !postEnabled;
+  installDrawFn();
+  postBtn.textContent = `post-fx: ${postEnabled ? 'on' : 'off'}`;
+});
 
 reapply();
 
@@ -403,6 +445,9 @@ reapply();
 (window as unknown as { __sdfLab: unknown }).__sdfLab = {
   get wounds() { return wounds; },
   get current() { return current; },
+  /** Live post-fx config — mutate to isolate which pass causes an artifact. */
+  postCfg,
+  setPostEnabled(on: boolean) { postEnabled = on; installDrawFn(); },
   setCam(yaw: number, pitch: number, dist: number) {
     autoSpin = false;
     camYaw = yaw;
