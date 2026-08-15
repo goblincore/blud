@@ -56,28 +56,40 @@ Explicitly out of scope. Every one of these is a trap that would turn a side que
 Standalone Vite entry `sdf-lab.html` → `src/lab/sdf-zombie/`. The only shared code is `createRenderer` and the post-fx composer, consumed **read-only** and unmodified.
 
 ```
-                         ┌──────────── pure, vitest-covered, no GL ────────────┐
-                         │                                                     │
-  rig.ts ──────────▶ field.ts ◀────── damage.ts ◀───── sever.ts                │
-  (verlet chain,    (primitive list:                (limb-id → primitives,     │
-   walk cycle,       pos, radius, capB,              detach into chunk group)  │
-   stretch/lag)      limbId, clusterId)                    │                   │
-                         │                                 ▼                   │
-                         │                           gib-chunks.ts             │
-                         │                     (gravity, bounce, squash)       │
-                         └─────────────────────┬───────────────────────────────┘
-                                               │  packed uniform arrays
-                                               ▼
-                                        zombie.ts  ──▶  proxy boxes (Three)
-                                               │
-                                               ▼
-                                        march.glsl.ts
-                            (sphere trace · cluster cull · gl_FragDepth
-                             · material presets · lighting presets)
-                                               │
-                                               ▼
-                                          lab-main.ts
-                        (scene, floor, orbit cam, click-to-shoot, tuning panel)
+  ┌──────────────── pure, vitest-covered, no GL / no Three ────────────────────┐
+  │                                                                            │
+  │   body.ts            override layer (from panel)                           │
+  │   (BodyDef: bones + primitives,   │                                        │
+  │    relative, named, one side)     │                                        │
+  │        │                          │                                        │
+  │        └──────────┬───────────────┘                                        │
+  │                   ▼                                                        │
+  │            build-body.ts                                                   │
+  │      (expand mirror · resolve relative placement                           │
+  │       · merge overrides · validateBody ✓)                                  │
+  │                   │                                                        │
+  │                   ▼                                                        │
+  │   rig.ts ────▶ field.ts ◀──── damage.ts        sever.ts                    │
+  │  (verlet,     (built primitives,  (wound ring   (limbId → primitives,      │
+  │   walk,        clusters + bounds,  buffer,       detach to chunk group,    │
+  │   stretch)     uniform packing)    rest-space)   stamp stump wound)        │
+  │                   │                                    │                   │
+  │                   │                                    ▼                   │
+  │                   │                             gib-chunks.ts              │
+  │                   │                       (gravity, bounce, squash)        │
+  └───────────────────┼────────────────────────────────────────────────────────┘
+                      │  packed uniform arrays
+                      ▼
+               zombie.ts  ──▶  proxy boxes (Three)
+                      │
+                      ▼
+               march.glsl.ts
+   (sphere trace · cluster cull · gl_FragDepth
+    · material presets · lighting presets)
+                      │
+                      ▼
+                 lab-main.ts
+   (scene, floor, orbit cam, click-to-shoot, tuning panel ──▶ override layer)
 ```
 
 **The seam that matters:** everything above the packing line is plain data and pure functions with no Three.js or GL dependency, so the rig, the damage bookkeeping, the severing logic and the chunk physics are all unit-testable. Only `zombie.ts`, `march.glsl.ts` and `lab-main.ts` touch the engine. `src/lab/` falls inside the vitest collection scoped in `955b93b`, so lab tests run with the existing suite.
@@ -86,7 +98,9 @@ Standalone Vite entry `sdf-lab.html` → `src/lab/sdf-zombie/`. The only shared 
 
 | Module | Does | Depends on |
 |---|---|---|
-| `field.ts` | Owns the primitive list and packs it into uniform arrays. Defines clusters and their bounding spheres. | — |
+| `body.ts` | The declarative `BodyDef` — bones and primitives, relative and named, one side only. Plain data, serialisable. | — |
+| `build-body.ts` | Expands `mirror`, resolves relative placement to concrete primitives, merges the override layer, runs `validateBody`. | `body` |
+| `field.ts` | Owns the built primitive list and packs it into uniform arrays. Defines clusters and their bounding spheres. | `build-body` |
 | `rig.ts` | Verlet points + distance constraints driving primitive endpoints. Rest lengths, stiffness, damping. Procedural walk/lunge. | `field` types |
 | `damage.ts` | Wound ring buffer. Converts a world-space hit into a rest-space wound record. | `field` types |
 | `sever.ts` | Limb-id → primitive mapping; detaches a limb into a chunk group with inherited velocity; stamps the stump wound. | `field`, `damage` |
@@ -109,10 +123,43 @@ interface Primitive {
   b: Vec3;          // capsule endpoint B (== a for spheres)
   radius: number;
   scale: Vec3;      // ellipsoid axis scale
+  blendK: number;   // smooth-min factor against the body — how much this limb webs in
   limbId: LimbId;   // for severing
   clusterId: number;// for bounding-sphere culling
 }
 ```
+
+### Body authoring — borrowed structure from WAM
+
+[`elliottdehn/wam`](https://github.com/elliottdehn/wam) is a DSL that compiles declarative text into low-poly skinned glTF characters. Its organising principle — the author makes **discrete, named, relative, symmetric decisions** and the compiler derives everything else, with a lint pass and a render-inspect loop — transfers to SDF bodies *better* than it does to meshes, because the compiler's hardest jobs disappear: no vertex generation, no winding order, no normals, and above all **no skinning weights** (an SDF primitive is owned by exactly one bone).
+
+**We adopt the principles, not the compiler.** A text DSL with a parser and CLI is infrastructure that amortises across many creatures; for one experimental zombie it costs more than the zombie. The following cheap subset is adopted now because it is a small amount of code and materially improves iteration:
+
+| Adopted | Shape here |
+|---|---|
+| Declarative body as **data, not code** | `body.ts` exports a plain `BodyDef` object — bones and primitives — with zero runtime or engine imports. Serialisable. |
+| **Relative, named placement** | Bones by `parent` + direction + length (never absolute XYZ). Primitives placed at a normalised position along a bone chain — WAM's `ring 0.80 w=… d=…` becomes an ellipsoid with those axis scales at 0.80 along that chain. |
+| **Mirror expanded at build time** | Author one side; a build step generates the bilateral pair. Guarantees symmetry, halves the authoring. |
+| **A `checks` / lint pass** | `validateBody(def)` — see below. |
+| **Non-destructive override layer** | The tuning panel writes edits back to an override object merged over `BodyDef` and `FleshMaterial` on load, so slider work survives a reload. WAM's `.wamedit.json` pattern. |
+
+Deliberately **not** adopted: text DSL syntax, parser, CLI, offline render-to-PNG loop, glTF export, and the procedural texture baker. The texture baker in particular has no analogue — SDFs shade per-pixel from rest-space triplanar (§7), so WAM's entire texture subsystem is replaced by the ~10 floats of `FleshMaterial`.
+
+**One concept WAM has no equivalent for:** `blendK` per primitive. Smooth-min strength is an authorable, named, per-joint decision, and it is the parameter most responsible for whether the body reads as continuous flesh or as a pile of balloons. It belongs in `BodyDef` alongside the geometry.
+
+#### `validateBody` — the checks pass
+
+This is the highest-value borrowed idea, because every one of these failures is **silent** — it produces a plausible-looking wrong image rather than an error, and is easy to misdiagnose as a shader bug.
+
+| Check | Failure it catches |
+|---|---|
+| every primitive lies inside its cluster's bounding sphere | geometry dropout — the cull discards real surface |
+| silhouette noise amplitude vs. march step multiplier | Lipschitz violation → march artifacts |
+| field has no disconnected components at rest | a limb floating unattached because its `blendK` is too small |
+| primitive count ≤ shader ceiling; wound count ≤ ring capacity | silent truncation of the uniform array |
+| every primitive's `limbId` maps to a severable group | a limb that cannot be shot off |
+
+Runs in the vitest suite against the shipped body, and again in the lab on hot reload so panel edits cannot push the body into an invalid state unnoticed.
 
 ### Fluid skin
 
@@ -231,7 +278,9 @@ Because chunks are seeded from the *current* primitive set, **gibs reflect damag
 
 - **Orbit camera** with mouse; no FPS controller (this is a look test, not a feel test of movement).
 - **Click to shoot** — screen ray → SDF hit point → wound record. Modifier keys select pellet / blast / burn.
-- **Tuning panel** exposing: material preset + every `FleshMaterial` field, lighting preset + key position, rig stiffness/damping, wound radius per type, march step count, silhouette noise amplitude, and a reset button.
+- **Tuning panel** exposing: material preset + every `FleshMaterial` field, lighting preset + key position, rig stiffness/damping, per-primitive `blendK`, wound radius per type, march step count, silhouette noise amplitude, and a reset button.
+- **Panel edits persist** to the override layer (§4) — dump to `localStorage` continuously plus a copy-to-clipboard button emitting a JSON blob that can be pasted into `body.ts` to promote a tweak into the committed definition. Without this, every reload throws away the tuning work, which is the actual output of the experiment.
+- `validateBody` re-runs on every override change; failures surface in the panel rather than silently rendering wrong.
 - Keys for **re-spawn**, **force gib**, and **sever a named limb** so specific cases can be inspected without shooting for them.
 
 ---
@@ -246,9 +295,10 @@ Pure modules get vitest coverage; the shader is judged by eye — which is the e
 | `damage.ts` | world hit → correct rest-space wound; ring buffer evicts oldest at capacity; round-trip through a moved/stretched primitive lands back on the same surface point |
 | `sever.ts` | limb primitives leave the body set; chunk group inherits them exactly once; stump wound stamped at the joint; severing twice is a no-op |
 | `gib-chunks.ts` | gravity integrates; floor bounce loses energy and settles; squash relaxes to unit scale; chunks come to rest |
-| `field.ts` | packing round-trips; cluster bounds actually contain their primitives (the cull is only correct if this holds) |
+| `field.ts` | packing round-trips |
+| `build-body.ts` | mirror produces an exact bilateral pair; relative placement resolves to expected world positions; override layer merges without dropping unlisted fields; **`validateBody` fires on each failure case in §4** |
 
-The cluster-bounds test is the one that matters for correctness — a bounding sphere that does not contain its primitives produces silent geometry dropout that is easy to misread as a shader bug.
+The `validateBody` cases are the ones that matter for correctness. Every failure they catch is *silent* — it renders a plausible but wrong image rather than erroring, and reads like a shader bug when it is actually a body-definition bug. Each check gets a test that constructs a deliberately broken `BodyDef` and asserts the check fires.
 
 ---
 
@@ -265,5 +315,9 @@ The cluster-bounds test is the one that matters for correctness — a bounding s
 ---
 
 ## 12. If it works
+
+**A creature DSL becomes worth building.** The WAM-derived structure in §4 is deliberately shaped to receive one: `BodyDef` is plain serialisable data with relative, named, mirrored placement, so a text front-end that emits `BodyDef` slots in behind an unchanged `build-body` → `field` → shader path. That is the point at which a parser amortises — a bestiary of SDF creatures, not one zombie. Not before.
+
+
 
 Out of scope here, listed only so the experiment is not accidentally designed to preclude it: porting onto a real enemy would require the flesh to stay **entirely cosmetic** — the sim keeps its Build-unit hit volumes and integer tic loop, wound positions arrive from deterministic sim hit events, and the jiggle/stretch stays per-client and unsynchronised. The architecture in §3 already separates pure state from rendering along roughly that line, which is deliberate. That port is a separate spec.
