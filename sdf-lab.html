@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — SDF zombie lab</title>
+<style>
+  body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #panel {
+    position: fixed; top: 8px; right: 8px; z-index: 10;
+    background: rgba(0,0,0,0.78); padding: 10px; border: 1px solid #444;
+    width: 260px; max-height: 92vh; overflow-y: auto; line-height: 1.4;
+  }
+  #panel h2 { margin: 8px 0 4px; font-size: 12px; color: #d88; }
+  #panel label { display: block; font-size: 11px; margin: 3px 0; }
+  #panel input[type=range] { width: 100%; }
+  #errors { color: #ff6464; font-size: 11px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="panel"><div id="errors"></div></div>
+  <script type="module" src="/src/lab/sdf-zombie/lab-main.ts"></script>
+</body>
+</html>
