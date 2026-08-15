@@ -14,6 +14,8 @@ import {
 } from './damage';
 import { sdBody } from './validate';
 import { severLimb } from './sever';
+import { bindRig, applyRig, impulseAt } from './rig-bind';
+import { stepRig } from './rig';
 import { makeChunk, stepChunk, type Chunk } from './gib-chunks';
 import { chunkExtent, createChunkView, type ChunkView } from './zombie';
 import type { LimbId, Vec3 } from './types';
@@ -60,6 +62,10 @@ const viewMaterialTemplate = view.material;
 
 /** The live body — replaced on sever and on any override edit. */
 let current = body;
+
+let bound = bindRig(current);
+// Rebind whenever the body itself changes (sever, override edit).
+function rebind() { bound = bindRig(current); }
 
 // ---------------------------------------------------------------------------
 // Wounds
@@ -141,6 +147,27 @@ handle.setRenderCallback((dt) => {
     c.view.update(c.state);
   }
 
+  // Drive the flesh: settle the rig toward its rest pose, push the result back
+  // into the primitives, and re-upload. This is what makes the body deform —
+  // and what makes rest-space wounds observable, since they ride the flesh.
+  bound = {
+    ...bound,
+    rig: stepRig(bound.rig, Math.min(dt, 1 / 30), {
+      gravity: [0, -2.2, 0],
+      damping: 0.06,
+      iterations: 4,
+      restStiffness: 0.18,
+    }),
+  };
+  const posed = applyRig(current, bound);
+  view.update(posed);
+  view.setWounds(
+    wounds.map(w => woundWorldPos(posed.prims, w)),
+    wounds.map(w => w.radius),
+    wounds.map(w => TYPE_ID[w.type]),
+    wounds.map(w => w.ageSec),
+  );
+
   if (autoSpin) camYaw += dt * 0.35;
   const cp = Math.cos(camPitch);
   camera.position.set(
@@ -170,6 +197,10 @@ canvas.addEventListener('pointerdown', (ev: PointerEvent) => {
 
   const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
   wounds = pushWound(wounds, worldHitToWound(current.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+  // A hit shoves the nearest joint along the shot direction — the rest-pose
+  // pull springs it back, so the limb visibly recoils and lags.
+  const push = type === 'blast' ? 0.10 : 0.04;
+  bound = impulseAt(bound, hit, [d.x * push, d.y * push, d.z * push]);
   refreshWounds();
 });
 
@@ -206,6 +237,7 @@ window.addEventListener('keydown', (ev) => {
   spawnChunk(limb, chunk.origin, chunk.prims);
   view.update(current);
   refreshWounds();
+  rebind();
 });
 
 // ---------------------------------------------------------------------------
@@ -223,6 +255,7 @@ function rebuildBody() {
   if (errorsEl) errorsEl.textContent = current.errors.join('\n');
   view.update(current);
   refreshWounds();
+  rebind();
 }
 
 const presetBox = addSection(panelEl, 'presets');
