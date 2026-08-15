@@ -282,9 +282,11 @@ import { VERT, FRAG_SPIKE } from './march.glsl';
 
 const spikeMat = new THREE.ShaderMaterial({
   glslVersion: THREE.GLSL3,
-  // Three gates depth write behind this flag even though GLSL ES 3.00
-  // exposes gl_FragDepth natively. Omitting it fails silently on some drivers.
-  extensions: { fragDepth: true },
+  // `gl_FragDepth` is CORE in GLSL ES 3.00, so GLSL3 alone is sufficient.
+  // Do NOT add `extensions: { fragDepth: true }` — that was a WebGL1-era flag.
+  // In three r170 the ShaderMaterial `extensions` type accepts only
+  // clipCullDistance/multiDraw, and WebGLPrograms reads only those two, so the
+  // flag is a tsc error AND a runtime no-op.
   side: THREE.BackSide,
   uniforms: {
     uSphereCenter: { value: new THREE.Vector3(0, 0.9, 0) },
@@ -1751,7 +1753,7 @@ export function createZombieView(body: BuildResult): ZombieView {
 
   const material = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
-    extensions: { fragDepth: true },
+    // No `extensions` entry — see the note in Task 2. GLSL3 is sufficient.
     side: THREE.BackSide,
     vertexShader: VERT,
     fragmentShader: FRAG,

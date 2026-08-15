@@ -219,14 +219,13 @@ The shader **writes `gl_FragDepth`**, so blobs depth-sort correctly against the 
 
 ```ts
 new THREE.ShaderMaterial({
-  glslVersion: THREE.GLSL3,        // WebGL2
-  extensions: { fragDepth: true }, // three gates the capability behind this flag
+  glslVersion: THREE.GLSL3,  // WebGL2 — this alone is sufficient
   side: THREE.BackSide,
   // …
 })
 ```
 
-Three gates depth write behind `extensions.fragDepth` even though GLSL ES 3.00 exposes `gl_FragDepth` natively. Omitting it fails silently on some drivers rather than erroring.
+**`glslVersion: THREE.GLSL3` is all that is required**, because `gl_FragDepth` is *core* in GLSL ES 3.00. Do **not** add `extensions: { fragDepth: true }` — that is a WebGL1-era mechanism. Verified against the installed three r170: `ShaderMaterialParameters['extensions']` accepts only `clipCullDistance` and `multiDraw`, and `WebGLPrograms` reads only those two, so the flag is simultaneously a TypeScript error and a runtime no-op. (Widely-cited three.js guidance still says otherwise; it predates the removal.)
 
 **Each gib chunk gets its own small proxy box**, sized to that chunk's bounds. Chunks are small on screen so the fill cost is trivial, overlapping boxes resolve through the normal depth test, and this avoids one wasteful box spanning a spread-out gib cloud.
 
