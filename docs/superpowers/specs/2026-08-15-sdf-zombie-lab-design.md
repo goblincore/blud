@@ -115,6 +115,20 @@ Standalone Vite entry `sdf-lab.html` → `src/lab/sdf-zombie/`. The only shared 
 
 A character is **~15–25 primitives** — ellipsoid torso, sphere head, capsule limbs, plus gut/jaw/shoulder blobs — combined with **smooth-min** rather than union. Smooth blending is the entire point: continuous flesh between limbs is a property of the operator, not something authored.
 
+### Which smooth-min, and the ordering trap
+
+Use the **quadratic polynomial** `smin` ([iq's catalogue](https://iquilezles.org/articles/smin/)). It is *rigid* (shapes preserved outside the blend zone — Exponential is not, and would let every primitive subtly distort the whole body) and *conservative* (never overestimates distance, which is non-negotiable for sphere tracing — overestimation punches holes in the surface). It is also iq's own default.
+
+**The trap:** quadratic is **not associative**, so `smin(a, smin(b,c)) ≠ smin(smin(a,b), c)`. On a static model this never matters. Here it does, because **this design removes primitives at runtime when a limb is severed** — with a non-associative fold, changing the set can change the surface *elsewhere*, so shooting an arm off could subtly reshape the torso. Array packing order becomes visually significant. That failure reads as a shader bug and is miserable to diagnose.
+
+Only Exponential and Circular Geometric are order-independent, and both cost something real (non-rigid and non-conservative respectively). So instead:
+
+> **Fold in a fixed cluster order** (head, torso, arms, legs), never raw array order, and **sever by removing a whole cluster's primitives as a group.** Removing a limb then never reorders the survivors, the fold sequence over the remainder is unchanged, and the torso is bit-identical.
+
+Non-associativity is neutralised by construction rather than paid for with a worse blend. This constrains `sever.ts` (§5) and the packing in `field.ts` — it is a requirement, not an optimisation.
+
+**Smooth subtraction** is `smax(a, b, k) = -smin(-a, -b, k)`, so a crater is `smax(d, -sphere, k)`. iq's article does not cover the subtractive case, and its blend behaviour is exactly what produces the "wet lip" around a wound — so `k` for subtraction gets its own panel slider rather than reusing the union constant.
+
 Primitives are uploaded as **uniform arrays**, not generated into shader source. One generic shader serves every body; the count is a uniform. Fixed ceilings of 32 primitives and 16 wounds are compile-time constants in the shader string.
 
 ```ts
@@ -191,15 +205,28 @@ Wounds are a **ring buffer of 16**. Overflow drops the oldest. No persistence la
 
 Each primitive carries a `limbId`. Severing moves that limb's primitives into a new chunk group with velocity inherited from the rig, and stamps a large wound record at the joint. The remaining primitives re-blend through `smin`, so the stump closes over with no explicit cap geometry. The stamped wound is what makes it read as torn meat rather than a smooth clay nub.
 
+**A limb must be an entire fold cluster, removed as a group** — see the ordering trap in §4. Severing a *subset* of a cluster, or leaving holes in the packed array, reorders the remaining fold and silently reshapes the rest of the body. `validateBody` asserts that every `limbId` maps cleanly onto a cluster boundary.
+
 ---
 
 ## 6. Rendering
 
 ### Proxy-box marching
 
-The body is drawn as a **proxy box** — a cube mesh sized to the rig bounds, `side: BackSide`, `depthWrite: true` — and the fragment shader sphere-traces from the ray's entry point. Cost scales with the enemy's screen area rather than the screen.
+The body is drawn as a **proxy box** — a cube mesh sized to the rig bounds, `side: BackSide` so the fragment survives when the camera is inside the box — and the fragment shader sphere-traces from the ray's entry point. Cost scales with the enemy's screen area rather than the screen.
 
-The shader **writes `gl_FragDepth`**, so blobs depth-sort correctly against the floor plane and against each other. This is non-negotiable; without it nothing composites.
+The shader **writes `gl_FragDepth`**, so blobs depth-sort correctly against the floor plane and against each other. This is non-negotiable; without it nothing composites. Concretely on three r170:
+
+```ts
+new THREE.ShaderMaterial({
+  glslVersion: THREE.GLSL3,        // WebGL2
+  extensions: { fragDepth: true }, // three gates the capability behind this flag
+  side: THREE.BackSide,
+  // …
+})
+```
+
+Three gates depth write behind `extensions.fragDepth` even though GLSL ES 3.00 exposes `gl_FragDepth` natively. Omitting it fails silently on some drivers rather than erroring.
 
 **Each gib chunk gets its own small proxy box**, sized to that chunk's bounds. Chunks are small on screen so the fill cost is trivial, overlapping boxes resolve through the normal depth test, and this avoids one wasteful box spanning a spread-out gib cloud.
 
@@ -300,17 +327,36 @@ Pure modules get vitest coverage; the shader is judged by eye — which is the e
 
 The `validateBody` cases are the ones that matter for correctness. Every failure they catch is *silent* — it renders a plausible but wrong image rather than erroring, and reads like a shader bug when it is actually a body-definition bug. Each check gets a test that constructs a deliberately broken `BodyDef` and asserts the check fires.
 
+Two SDF-specific wins worth stating, because they were **limits** in the mesh version of this idea (see the WAM evaluation in the Obsidian vault, `Claude Notes/Research/2026-08-05-wam-language-evaluation.md`): WAM's `gap()` cannot distinguish "attached" from "floating" (nearest *vertices* miss the crossing) and its `clip()` cannot measure a small sphere sitting mid-facet. Both are mesh **sampling** artifacts. With an analytic field, fusion is proven exactly by evaluating along the segment between two primitive centres (all-negative ⇒ fused), and containment is just `sdfBody(p)`. The SDF checks are exact where the mesh ones were approximate.
+
+### The limit of checks
+
+> **A model can pass every check and be the wrong animal.**
+
+Carried over verbatim from the WAM evaluation, where a goblin passed 22 checks while reading unmistakably as a *pig*. Checks measure correctness; they say nothing about legibility. This spec's success criterion (§1) is deliberately a list of things you must be able to **see**, not assertions that can pass — because the deliverable is an opinion about how the flesh looks, and no test can produce one.
+
+Its corollary, **encode art direction as arithmetic**, is the deferred half: if this succeeds and a bestiary follows, "reads as a shambling corpse" becomes asserts (arms hang below the hip line, head pitched forward of the spine, deliberate limb-length asymmetry) that later creatures inherit. Not built now — one creature cannot validate a house style.
+
 ---
 
 ## 11. Risks
 
 | Risk | Mitigation |
 |---|---|
-| Fill cost tanks framerate | Cluster culling first, then step LOD, then half-res RT held in reserve |
+| Fill cost tanks framerate | Cluster culling first, then step LOD, then half-res RT held in reserve. Beyond that, see the Dreams escape hatch below. |
+| Severing reshapes the rest of the body | Fixed cluster fold order + sever whole clusters (§4, §5), asserted by `validateBody` |
 | Distance displacement causes march artifacts | Step multiplier 0.6; expose it in the panel so it can be tuned against the noise amplitude |
 | Texture swims despite rest-space sampling | Nearest-primitive selection popping at blend boundaries — blend the nearest 2–3 by weight if visible |
 | 16 wounds too few to read as "shot to pieces" | Accept and record as a finding; do not pre-build a baked damage texture |
 | Look is good but nothing ports to the game | Accepted. The deliverable is the opinion. |
+
+### The Dreams escape hatch
+
+Media Molecule's *Dreams* is the largest shipped SDF character system, and it is worth knowing that **it does not raymarch SDF characters**. It evaluates operationally-transformed CSG trees into SDF volume textures, then generates dense multi-resolution point clouds and meshes via compute-shader marching cubes. Alex Evans' SIGGRAPH 2015 talk on it is titled *"Learning from Failure: a Survey of Promising, Unconventional and Mostly Abandoned Renderers."*
+
+That divergence is explainable rather than disqualifying — Dreams handled arbitrary user-authored CSG at unbounded complexity across whole scenes on PS4-era hardware, against this spec's ~20 analytic primitives on one character behind a proxy box at 960×540, with a closed-form field that needs no volume-texture storage or incremental update. Roughly three orders of magnitude apart.
+
+But it is the documented fallback: **if fill cost proves unmanageable after all three levers in §6, stop marching and sample the field into points or a mesh.** Recorded here so that outcome reads as a known branch rather than a dead end.
 
 ---
 
