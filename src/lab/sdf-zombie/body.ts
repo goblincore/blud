@@ -1,5 +1,6 @@
 // src/lab/sdf-zombie/body.ts
 import type { BodyDef } from './types';
+import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 
 /**
  * The lab zombie — authored as discrete, named, relative, symmetric decisions.
@@ -8,7 +9,7 @@ import type { BodyDef } from './types';
  * Proportions are deliberately wrong in a B-movie way: long arms hanging past
  * the hip line, head pitched forward of the spine, heavy gut.
  */
-export const ZOMBIE: BodyDef = {
+const ZOMBIE_BASE: BodyDef = {
   name: 'zombie',
   root: [0, 0.92, 0], // pelvis height in metres
 
@@ -48,3 +49,17 @@ export const ZOMBIE: BodyDef = {
     { bone: 'shin',  at: 1.00, radius: 0.070, scale: [0.85, 0.6, 1.5], blendK: 0.0125, limb: 'leg', mirror: true },
   ],
 };
+
+/**
+ * The zombie with a face attached.
+ *
+ * Face primitives are generated rather than authored inline so the tuning
+ * panel can drive them live; bake a tuned FaceParams back into DEFAULT_FACE
+ * in face.ts once it lands.
+ */
+export function makeZombie(face: FaceParams = DEFAULT_FACE): BodyDef {
+  return { ...ZOMBIE_BASE, prims: [...ZOMBIE_BASE.prims, ...facePrims(face)] };
+}
+
+/** The default-faced zombie. Kept as a const for the existing test importers. */
+export const ZOMBIE: BodyDef = makeZombie();

@@ -119,15 +119,44 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       `multiplier ${opts.stepMultiplier} — lower the noise or the multiplier`);
 
   // Connectivity: every cluster must fuse into at least one other cluster.
-  // Sample along the segment between cluster centres; fused ⇒ the field stays
+  // Sample along the segment between cluster CORES; fused ⇒ the field stays
   // inside (negative) the whole way.
+  //
+  // Probe from a core rather than from `center`. A cluster centre is a BOUNDING
+  // construct — the centroid of every endpoint — and nothing guarantees it lies
+  // inside the flesh. A head carrying a dozen face primitives on the front of
+  // the skull drags that centroid clean out of the cranium, at which point every
+  // segment starts outside the surface and the whole body reports as
+  // disconnected. The core below is inside its primitive by construction.
   if (body.clusters.length > 1)
     for (const c of body.clusters) {
-      const fused = body.clusters.some(o => o.id !== c.id && segmentInside(c.center, o.center, body));
+      const from = clusterCore(body, c);
+      if (from === null) continue; // nothing solid to probe from
+      const fused = body.clusters.some(o => {
+        if (o.id === c.id) return false;
+        const to = clusterCore(body, o);
+        return to !== null && segmentInside(from, to, body);
+      });
       if (!fused) errs.push(`cluster "${c.limb}" is disconnected — not fused to any other cluster`);
     }
 
   return errs;
+}
+
+/**
+ * A point guaranteed to be inside a cluster's flesh: the midpoint of its
+ * fattest solid primitive, which sits `radius * minScale` deep inside that
+ * primitive's own surface and therefore inside the union.
+ */
+function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
+  let best: Primitive | null = null;
+  let bestDepth = -Infinity;
+  for (const p of body.prims.slice(c.start, c.start + c.count)) {
+    if (p.op === 'sub') continue;
+    const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    if (depth > bestDepth) { bestDepth = depth; best = p; }
+  }
+  return best === null ? null : lerp(best.a, best.b, 0.5);
 }
 
 function segmentInside(from: Vec3, to: Vec3, body: Body): boolean {

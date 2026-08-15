@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { createRenderer } from '../../engine/renderer';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
-import { ZOMBIE } from './body';
+import { makeZombie } from './body';
+import { DEFAULT_FACE, type FaceParams } from './face';
 import { createZombieView } from './zombie';
 import {
   FLESH_PRESETS, LIGHT_PRESETS,
@@ -21,7 +22,7 @@ import { chunkExtent, createChunkView, type ChunkView } from './zombie';
 import type { LimbId, Vec3 } from './types';
 import {
   addButton, addSection, addSelect, addSlider, clearOverride,
-  loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS,
+  loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
 } from './panel';
 import { createPostFxComposer } from '../../vfx/post-fx/composer';
 import { PostFxBus } from '../../vfx/post-fx/post-fx-bus';
@@ -88,7 +89,8 @@ sizeComposer();
 window.addEventListener('resize', sizeComposer);
 
 let override = loadOverride();
-const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, override);
+let face: FaceParams = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
+const body = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
 const errorsEl = document.getElementById('errors');
 if (errorsEl) errorsEl.textContent = body.errors.join('\n');
 
@@ -364,8 +366,9 @@ function reapply() {
 }
 
 function rebuildBody() {
+  override = { ...override, faceParams: face };
   saveOverride(override);
-  current = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, override);
+  current = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
   if (errorsEl) errorsEl.textContent = current.errors.join('\n');
   view.update(current);
   refreshWounds();
@@ -404,6 +407,37 @@ addSlider(bodyBox, {
     rebuildBody();
   },
 });
+
+// Face. Sliders regenerate the face primitives and rebuild the body, so a
+// param change alters which primitives exist rather than just their values.
+const faceBox = addSection(panelEl, 'face');
+for (const s of FACE_SLIDERS)
+  addSlider(faceBox, {
+    label: s.key, min: s.min, max: s.max, step: 0.001,
+    get: () => face[s.key],
+    set: (v) => { (face[s.key] as number) = v; rebuildBody(); },
+  });
+
+/** Locked three-quarter close-up on the skull, so face work needs no orbiting. */
+function focusHead() {
+  const skull = current.bones.get('skull');
+  autoSpin = false;
+  camTarget.set(0, skull ? (skull.head[1] + skull.tail[1]) / 2 : 1.55, 0);
+  camYaw = 0.62;
+  camPitch = 0.06;
+  camDist = 0.52;
+}
+
+function focusBody() {
+  autoSpin = false;
+  camTarget.set(0, 1.05, 0);
+  camYaw = 0.35;
+  camPitch = 0.12;
+  camDist = 2.4;
+}
+
+addButton(faceBox, 'focus head', focusHead);
+addButton(faceBox, 'focus body', focusBody);
 
 // Crater shape. Kept out of FleshMaterial because these describe damage
 // geometry, not the surface — they change the field, not the shading.
@@ -453,6 +487,8 @@ reapply();
   get current() { return current; },
   /** Live post-fx config — mutate to isolate which pass causes an artifact. */
   postCfg,
+  focusHead,
+  focusBody,
   setPostEnabled(on: boolean) { postEnabled = on; installDrawFn(); },
   setCam(yaw: number, pitch: number, dist: number) {
     autoSpin = false;

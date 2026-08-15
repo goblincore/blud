@@ -1,8 +1,10 @@
 // src/lab/sdf-zombie/build-body.test.ts
 import { describe, it, expect } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
-import { ZOMBIE } from './body';
+import { ZOMBIE, makeZombie } from './body';
+import { DEFAULT_FACE } from './face';
 import { CLUSTER_ORDER } from './types';
+import { MAX_PRIMS } from './validate';
 
 describe('buildBody with the shipped zombie', () => {
   const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -17,7 +19,7 @@ describe('buildBody with the shipped zombie', () => {
 
   it('stays within the shader ceilings', () => {
     expect(built.prims.length).toBeGreaterThanOrEqual(15);
-    expect(built.prims.length).toBeLessThanOrEqual(32);
+    expect(built.prims.length).toBeLessThanOrEqual(MAX_PRIMS);
   });
 
   it('is bilaterally symmetric in x', () => {
@@ -37,5 +39,29 @@ describe('buildBody with the shipped zombie', () => {
   it('reports errors instead of throwing when an override breaks a check', () => {
     const o = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, { primBlendK: { 0: 0 } });
     expect(Array.isArray(o.errors)).toBe(true);
+  });
+});
+
+describe('makeZombie', () => {
+  const built = buildBody(makeZombie(DEFAULT_FACE), DEFAULT_BUILD_OPTS);
+
+  it('builds a valid body with the face attached', () => {
+    expect(built.errors).toEqual([]);
+  });
+
+  it('puts every face carve inside the head cluster', () => {
+    const head = built.clusters.find(c => c.limb === 'head')!;
+    const carves = built.prims
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.op === 'sub');
+    expect(carves.length).toBeGreaterThan(0);
+    for (const { i } of carves) {
+      expect(i).toBeGreaterThanOrEqual(head.start);
+      expect(i).toBeLessThan(head.start + head.count);
+    }
+  });
+
+  it('stays inside the shader primitive cap', () => {
+    expect(built.prims.length).toBeLessThanOrEqual(MAX_PRIMS);
   });
 });
