@@ -4,7 +4,7 @@ import { createRenderer } from '../../engine/renderer';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { createZombieView } from './zombie';
-import { FLESH_PRESETS, LIGHT_PRESETS } from './material';
+import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type FleshPresetName, type LightPresetName } from './material';
 import {
   MAX_WOUNDS,
   pushWound,
@@ -42,7 +42,7 @@ scene.add(refCube);
 camera.position.set(0, 1.4, 3.2);
 camera.lookAt(0, 0.9, 0);
 
-const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, loadOverride());
 const errorsEl = document.getElementById('errors');
 if (errorsEl) errorsEl.textContent = body.errors.join('\n');
 
@@ -108,3 +108,67 @@ window.addEventListener('keydown', (ev) => {
   view.update(current);
   refreshWounds();
 });
+
+import {
+  addButton, addSection, addSelect, addSlider, clearOverride,
+  loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS,
+} from './panel';
+
+const panelEl = document.getElementById('panel')!;
+let override = loadOverride();
+let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
+let light: LightPresetName = 'practical-hard-key';
+
+function reapply() {
+  view.applyMaterial(flesh, LIGHT_PRESETS[light]);
+}
+
+const presetBox = addSection(panelEl, 'presets');
+addSelect(presetBox, 'flesh', Object.keys(FLESH_PRESETS), 'henenlotter-latex', (v) => {
+  flesh = { ...FLESH_PRESETS[v as FleshPresetName] };
+  reapply();
+  rebuildMaterialSliders();
+});
+addSelect(presetBox, 'light', Object.keys(LIGHT_PRESETS), light, (v) => {
+  light = v as LightPresetName;
+  reapply();
+});
+
+const matBox = addSection(panelEl, 'material');
+function rebuildMaterialSliders() {
+  matBox.textContent = '';
+  for (const s of MATERIAL_SLIDERS)
+    addSlider(matBox, {
+      label: s.key, min: s.min, max: s.max, step: 0.005,
+      get: () => flesh[s.key] as number,
+      set: (v) => { (flesh[s.key] as number) = v; reapply(); },
+    });
+}
+rebuildMaterialSliders();
+
+const bodyBox = addSection(panelEl, 'body');
+addSlider(bodyBox, {
+  label: 'global blendK', min: 0.005, max: 0.2, step: 0.001,
+  get: () => current.prims[0]?.blendK ?? 0.06,
+  set: (v) => {
+    override = { ...override, primBlendK: Object.fromEntries(current.prims.map((_, i) => [i, v])) };
+    rebuildBody();
+  },
+});
+
+const actionBox = addSection(panelEl, 'actions');
+addButton(actionBox, 'respawn', () => { wounds = []; override = loadOverride(); rebuildBody(); });
+addButton(actionBox, 'copy override JSON', () => {
+  void navigator.clipboard.writeText(serializeOverride(override));
+});
+addButton(actionBox, 'reset overrides', () => { clearOverride(); override = {}; rebuildBody(); });
+
+function rebuildBody() {
+  saveOverride(override);
+  current = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, override);
+  if (errorsEl) errorsEl.textContent = current.errors.join('\n');
+  view.update(current);
+  refreshWounds();
+}
+
+reapply();
