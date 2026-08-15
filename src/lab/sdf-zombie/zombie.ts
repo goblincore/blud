@@ -57,6 +57,7 @@ export function createZombieView(body: BuildResult): ZombieView {
       uClusterBounds: { value: packed.clusterBounds },
       uClusterRange: { value: packed.clusterRange },
       uPrimCount: { value: packed.primCount },
+      uCarveCount: { value: packed.carveCount },
       uClusterCount: { value: packed.clusterCount },
       uMaxBlendK: { value: packed.maxBlendK },
       uSteps: { value: 96 },
@@ -104,6 +105,7 @@ export function createZombieView(body: BuildResult): ZombieView {
       (u.uClusterBounds!.value as Float32Array).set(p.clusterBounds);
       (u.uClusterRange!.value as Float32Array).set(p.clusterRange);
       u.uPrimCount!.value = p.primCount;
+      u.uCarveCount!.value = p.carveCount;
       u.uClusterCount!.value = p.clusterCount;
       u.uMaxBlendK!.value = p.maxBlendK;
       const fit = fitProxy(p, next);
@@ -214,6 +216,9 @@ export function createChunkView(
   material.uniforms.uClusterBounds = { value: packed.clusterBounds };
   material.uniforms.uClusterRange = { value: packed.clusterRange };
   material.uniforms.uPrimCount = { value: packed.primCount };
+  // A severed head keeps its face: the cluster slice carries its carves, and
+  // apply() below rewrites only xyz per endpoint, leaving the packed sign in .w.
+  material.uniforms.uCarveCount = { value: packed.carveCount };
   material.uniforms.uClusterCount = { value: 1 };
   material.uniforms.uMaxBlendK = { value: packed.maxBlendK };
   material.uniforms.uWoundCount = { value: 0 }; // set by apply() when torn

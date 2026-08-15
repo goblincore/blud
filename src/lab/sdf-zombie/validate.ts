@@ -47,13 +47,38 @@ export function smin(a: number, b: number, k: number): number {
   return Math.min(a, b) - h * h * kk * 0.25;
 }
 
-/** Field value over all live clusters, in fixed fold order. */
+/** Smooth subtraction. Must match the shader's smax exactly. */
+export function smax(a: number, b: number, k: number): number {
+  return -smin(-a, -b, k);
+}
+
+/**
+ * Field value over all live clusters, in fixed fold order.
+ *
+ * Two passes, and the order is load-bearing. Every ADDITIVE primitive folds
+ * first, then every carve is subtracted from the assembled result. Carving
+ * per-cluster instead would restructure a non-associative smooth-min fold and
+ * change the surface everywhere, forcing a retune of every authored blendK.
+ *
+ * Mirrors mapBody + applyCarves in march.glsl.ts, and must stay in step: this
+ * field also backs click-to-shoot raycasting, so drift means shots land where
+ * the body isn't — or inside an eye socket.
+ */
 export function sdBody(p: Vec3, body: Body): number {
   let d = 1e9;
   for (const c of body.clusters) {
     if (!c.alive) continue;
-    for (const prim of body.prims.slice(c.start, c.start + c.count))
+    for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op === 'sub') continue;
       d = smin(d, sdPrimitive(p, prim), prim.blendK);
+    }
+  }
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op !== 'sub') continue;
+      d = smax(d, -sdPrimitive(p, prim), prim.blendK);
+    }
   }
   return d;
 }

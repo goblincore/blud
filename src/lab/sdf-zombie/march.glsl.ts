@@ -44,6 +44,7 @@ uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w = cluster id
 uniform vec4 uClusterBounds[MAX_CLUSTERS]; // xyz = centre, w = radius
 uniform vec4 uClusterRange[MAX_CLUSTERS];  // x = start, y = count, z = alive
 uniform int  uPrimCount;
+uniform int  uCarveCount;   // 0 lets the whole carve pass be skipped
 uniform int  uClusterCount;
 uniform float uMaxBlendK;
 uniform int uSteps;
@@ -149,6 +150,38 @@ float noise3(vec3 p) {
 
 float fbm(vec3 p) { return noise3(p * 4.0) * 0.6 + noise3(p * 9.0) * 0.3; }
 
+/**
+ * Carves every subtractive primitive out of the assembled field.
+ *
+ * Runs AFTER the complete additive fold, in fixed cluster order — the same
+ * structure applyWounds uses. Carving per-cluster instead would restructure a
+ * non-associative smooth-min fold, changing the surface everywhere and forcing
+ * a retune of every authored blendK.
+ *
+ * Consequence worth knowing before authoring: a carve is NOT scoped to its
+ * cluster. That is geometrically safe today because the face carves sit inside
+ * the skull and nothing else is within their radius. A future carve placed near
+ * a cluster boundary would silently bite its neighbour.
+ */
+float applyCarves(float d, vec3 p) {
+  if (uCarveCount == 0) return d;   // free on bodies with no carves
+  for (int c = 0; c < MAX_CLUSTERS; c++) {
+    if (c >= uClusterCount) break;
+    vec4 range = uClusterRange[c];
+    if (range.z < 0.5) continue;              // severed — its carves leave with it
+    int start = int(range.x), count = int(range.y);
+    for (int i = 0; i < MAX_PRIMS; i++) {
+      if (i >= count) break;
+      int idx = start + i;
+      if (idx >= uPrimCount) break;
+      float k = uPrimB[idx].w;
+      if (k >= 0.0) continue;                 // additive — already folded
+      d = smax(d, -sdPrim(p, idx), -k);       // -k restores the magnitude
+    }
+  }
+  return d;
+}
+
 float mapBody(vec3 p) {
   float d = 1e9;
   for (int c = 0; c < MAX_CLUSTERS; c++) {
@@ -168,10 +201,14 @@ float mapBody(vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
+      float k = uPrimB[idx].w;
+      if (k < 0.0) continue;                   // carve — handled by applyCarves
+      d = smin(d, sdPrim(p, idx), k);
     }
   }
-  return applyWounds(d, p) + fbm(p * 3.0) * uSilhouetteNoiseAmp;
+  // Carves first: they are part of the body's own definition. Wounds are
+  // damage stamped on top of the finished body.
+  return applyWounds(applyCarves(d, p), p) + fbm(p * 3.0) * uSilhouetteNoiseAmp;
 }
 
 vec3 calcNormal(vec3 p) {
