@@ -1,6 +1,9 @@
 // src/lab/sdf-zombie/lab-main.ts
 import * as THREE from 'three';
 import { createRenderer } from '../../engine/renderer';
+import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import { ZOMBIE } from './body';
+import { createZombieView } from './zombie';
 
 const mount = document.getElementById('app');
 if (!mount) throw new Error('#app not found');
@@ -25,3 +28,10 @@ scene.add(refCube);
 
 camera.position.set(0, 1.4, 3.2);
 camera.lookAt(0, 0.9, 0);
+
+const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+const errorsEl = document.getElementById('errors');
+if (errorsEl) errorsEl.textContent = body.errors.join('\n');
+
+const view = createZombieView(body);
+scene.add(view.object);
