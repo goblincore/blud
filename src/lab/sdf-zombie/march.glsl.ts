@@ -35,6 +35,21 @@ uniform float uRimWidth;           // how broad the lip is
 uniform vec3 uDeepColor;
 uniform vec3 uCharColor;
 
+// --- Face texture, projected flat onto the front of the head ---------------
+// Features (eyes, mouth, brow shading) are texture rather than geometry: at
+// this scale smin's blend zone is wider than the features themselves, so a
+// carved socket smears into a band. A texture also costs ONE sample at the hit
+// point instead of prims x steps x pixels.
+//
+// Projection is planar in head space, faded by how squarely the surface faces
+// front, so it wraps the face without smearing round the sides of the skull.
+uniform sampler2D uFaceTex;
+uniform float uFaceEnabled;   // 0 on limbs that are not the head
+uniform float uFaceStrength;
+uniform float uFaceForward;   // +1 or -1: which way the zombie looks
+uniform vec4  uFaceProj;      // xy = scale of head-space xy -> uv, zw = uv centre
+uniform vec4  uFaceAtlas;     // xy = uv scale, zw = uv offset — crops the head out of the sheet
+
 in vec3 vWorldPos;
 out vec4 outColor;
 
@@ -243,6 +258,25 @@ void main() {
   float wm = woundMask(p);
   float cm = charMask(p);
   vec3 albedo = mix(uBaseColor, uDeepColor, wm);
+
+  // Face texture, before wounds and char so damage still paints over it.
+  if (uFaceEnabled > 0.5) {
+    // Head-space position, normalised by the head cluster's own bounding
+    // sphere — which applyRig recomputes every frame, so the projection rides
+    // the head as it jiggles without needing a full rest-space transform.
+    vec3 hs = (p - uClusterBounds[0].xyz) / max(uClusterBounds[0].w, 1e-4);
+    vec2 uv = vec2(hs.x * uFaceForward, hs.y) * uFaceProj.xy + uFaceProj.zw;
+    // Fade by how squarely this surface faces the front, so the projection
+    // does not smear a second face down the sides and back of the skull.
+    float facing = smoothstep(0.15, 0.65, dot(n, vec3(0.0, 0.0, uFaceForward)));
+    if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+      vec4 t = texture(uFaceTex, uv * uFaceAtlas.xy + uFaceAtlas.zw);
+      // The sheet is stored sRGB-encoded; this shader works in linear.
+      vec3 lin = pow(max(t.rgb, 0.0), vec3(2.2));
+      albedo = mix(albedo, lin, facing * t.a * uFaceStrength);
+    }
+  }
+
   albedo = mix(albedo, uCharColor, cm);
 
   vec3 L = normalize(uLightDir);

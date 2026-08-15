@@ -11,16 +11,17 @@ describe('facePrims', () => {
     }
   });
 
-  it('emits both carves and additions', () => {
-    const prims = facePrims(DEFAULT_FACE);
-    expect(prims.some(p => p.op === 'sub')).toBe(true);
-    expect(prims.some(p => p.op !== 'sub')).toBe(true);
+  it('is purely additive — features are the texture\'s job, not geometry\'s', () => {
+    // Carved sockets/mouth/temples were tried and removed: smin's blend zone
+    // (k*4) is wider than the features themselves, so they smear into a band.
+    // Carving infrastructure still exists for wounds and the skeleton field.
+    expect(facePrims(DEFAULT_FACE).every(p => p.op !== 'sub')).toBe(true);
   });
 
-  it('makes bilateral features by offset, never by bone mirroring', () => {
-    // `skull` is not a mirrored bone, so mirror:true would throw in expandMirror.
+  it('never mirrors by bone — `skull` is not a mirrored bone', () => {
+    // mirror:true would throw in expandMirror; bilateral features must use
+    // mirrorOffset instead.
     for (const p of facePrims(DEFAULT_FACE)) expect(p.mirror).toBeFalsy();
-    expect(facePrims(DEFAULT_FACE).some(p => p.mirrorOffset)).toBe(true);
   });
 
   it('leaves room for the body inside the shader cap', () => {
@@ -37,9 +38,7 @@ describe('facePrims', () => {
     expect(tipZ(0.10)).toBeGreaterThan(tipZ(0.04));
   });
 
-  it('deepens the eye sockets as socketDepth grows', () => {
-    const socket = (d: number) =>
-      facePrims({ ...DEFAULT_FACE, socketDepth: d }).find(p => p.tag === 'eye-socket')!;
-    expect(socket(0.05).radius).toBeGreaterThan(socket(0.02).radius);
+  it('keeps the primitive count low — detail moved to texture', () => {
+    expect(facePrims(DEFAULT_FACE).length).toBeLessThanOrEqual(4);
   });
 });

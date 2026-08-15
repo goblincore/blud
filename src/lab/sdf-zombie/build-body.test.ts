@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE, makeZombie } from './body';
-import { DEFAULT_FACE } from './face';
+import { DEFAULT_FACE, facePrims } from './face';
 import { CLUSTER_ORDER } from './types';
 import { MAX_PRIMS } from './validate';
 
@@ -49,16 +49,20 @@ describe('makeZombie', () => {
     expect(built.errors).toEqual([]);
   });
 
-  it('puts every face carve inside the head cluster', () => {
+  it('adds the face to the head cluster and nowhere else', () => {
     const head = built.clusters.find(c => c.limb === 'head')!;
-    const carves = built.prims
-      .map((p, i) => ({ p, i }))
-      .filter(({ p }) => p.op === 'sub');
-    expect(carves.length).toBeGreaterThan(0);
-    for (const { i } of carves) {
-      expect(i).toBeGreaterThanOrEqual(head.start);
-      expect(i).toBeLessThan(head.start + head.count);
-    }
+    const faceCount = facePrims(DEFAULT_FACE).length;
+    // The face grows the head cluster and leaves the other five untouched.
+    expect(head.count).toBe(3 + faceCount);
+    for (const p of built.prims.slice(head.start, head.start + head.count))
+      expect(p.limb).toBe('head');
+  });
+
+  it('carries no carves — face detail is the texture\'s job', () => {
+    // Carved sockets/mouth/temples were built, judged, and removed: smin's
+    // blend zone is wider than the features, and a primitive costs
+    // prims x steps x pixels while a texture costs one sample at the hit point.
+    expect(built.prims.every(p => p.op !== 'sub')).toBe(true);
   });
 
   it('stays inside the shader primitive cap', () => {

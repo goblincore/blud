@@ -103,6 +103,39 @@ scene.add(view.object);
 // Chunks clone this at sever time so they shade like the body did when cut.
 const viewMaterialTemplate = view.material;
 
+// ---------------------------------------------------------------------------
+// Face texture. DEV PLACEHOLDER ONLY — this is extracted Blood art and must
+// never ship; shipping needs original art at the same ~34x32 size.
+//
+// It is used here because it is already quantized to BLOOD.PAL, so unlike
+// anything procedural it cannot fail the palette-snap test, and because it
+// proves the technique today rather than after an art pass.
+//
+// Tile 1200 is the front-facing standing axe zombie, 77x116. The head occupies
+// roughly x 22-56, y 2-34 from the top-left; the atlas rect below crops it out
+// in UV space (v is flipped — GL samples from the bottom).
+// ---------------------------------------------------------------------------
+const FACE_TILE = '/assets/blood-tiles/1200.png';
+const faceTex = new THREE.TextureLoader().load(FACE_TILE, () => {
+  view.material.uniforms.uFaceEnabled!.value = 1;
+});
+faceTex.magFilter = THREE.NearestFilter;   // chunky texels, not a blurry smear
+faceTex.minFilter = THREE.NearestFilter;
+faceTex.generateMipmaps = false;
+// three defaults flipY to TRUE, which puts the PNG's TOP row at v=0. The atlas
+// rect below is written in standard GL orientation (v=0 at the bottom), so
+// without this the crop lands on the sprite's legs instead of its head.
+faceTex.flipY = false;
+view.material.uniforms.uFaceTex!.value = faceTex;
+(view.material.uniforms.uFaceAtlas!.value as THREE.Vector4).set(
+  34 / 77, 32 / 116,          // uv scale  (head width/height as a fraction)
+  22 / 77, 1 - 34 / 116,      // uv offset (left edge; bottom edge of the head band)
+);
+// Map the crop across the whole cranium. hs is normalised by the head cluster
+// radius, which includes the nose, so the skull itself only spans about +/-0.6
+// of that — hence a scale near 0.8 rather than 0.5.
+(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.80, 0.80, 0.5, 0.5);
+
 /** The live body — replaced on sever and on any override edit. */
 let current = body;
 
@@ -436,6 +469,32 @@ function focusBody() {
   camDist = 2.4;
 }
 
+// Face-texture alignment. The projection is planar in head space, so these
+// four numbers are how the sprite gets registered onto the skull.
+const faceUniform = (name: string) => view.material.uniforms[name] as { value: number };
+const faceProj = () => view.material.uniforms.uFaceProj!.value as THREE.Vector4;
+addSlider(faceBox, {
+  label: 'texStrength', min: 0, max: 1, step: 0.01,
+  get: () => faceUniform('uFaceStrength').value,
+  set: (v) => { faceUniform('uFaceStrength').value = v; },
+});
+addSlider(faceBox, {
+  label: 'texScaleX', min: 0.4, max: 2.5, step: 0.01,
+  get: () => faceProj().x, set: (v) => { faceProj().x = v; },
+});
+addSlider(faceBox, {
+  label: 'texScaleY', min: 0.4, max: 2.5, step: 0.01,
+  get: () => faceProj().y, set: (v) => { faceProj().y = v; },
+});
+addSlider(faceBox, {
+  label: 'texCentreY', min: 0.2, max: 0.9, step: 0.01,
+  get: () => faceProj().w, set: (v) => { faceProj().w = v; },
+});
+addButton(faceBox, 'flip facing', () => {
+  const u = faceUniform('uFaceForward');
+  u.value = -u.value;
+});
+
 addButton(faceBox, 'focus head', focusHead);
 addButton(faceBox, 'focus body', focusBody);
 
@@ -485,6 +544,8 @@ reapply();
 (window as unknown as { __sdfLab: unknown }).__sdfLab = {
   get wounds() { return wounds; },
   get current() { return current; },
+  /** The body's ShaderMaterial — lets uniforms be tuned live from the console. */
+  get material() { return view.material; },
   /** Live post-fx config — mutate to isolate which pass causes an artifact. */
   postCfg,
   focusHead,

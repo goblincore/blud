@@ -83,6 +83,12 @@ export function createZombieView(body: BuildResult): ZombieView {
       uRimWidth: { value: 0.42 },
       uDeepColor: { value: new THREE.Color(0x8c1420) },
       uCharColor: { value: new THREE.Color(0x1a1214) },
+      uFaceTex: { value: null as THREE.Texture | null },
+      uFaceEnabled: { value: 0 },
+      uFaceStrength: { value: 0.85 },
+      uFaceForward: { value: 1 },
+      uFaceProj: { value: new THREE.Vector4(1.15, 1.15, 0.5, 0.52) },
+      uFaceAtlas: { value: new THREE.Vector4(1, 1, 0, 0) },
     },
   });
 
@@ -228,6 +234,9 @@ export function createChunkView(
   material.uniforms.uMaxBlendK = { value: packed.maxBlendK };
   material.uniforms.uWoundCount = { value: 0 }; // set by apply() when torn
   material.uniforms.uSteps = { value: 48 }; // chunks are small; fewer steps
+  // Only a severed HEAD carries the face. Without this the clone would project
+  // a face onto a flying arm, since every chunk's own cluster 0 is itself.
+  material.uniforms.uFaceEnabled = { value: chunk.limb === 'head' ? 1 : 0 };
 
   const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
