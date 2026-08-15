@@ -97,7 +97,10 @@ function refreshWounds() {
 }
 
 // ---------------------------------------------------------------------------
-// Orbit camera. RIGHT-drag rotates so left-click stays free for shooting.
+// Orbit camera. EITHER button drags to orbit; a left press that does not travel
+// far enough to count as a drag fires a shot instead (see the pointerup handler
+// under "Shooting"). Binding orbit to right-drag alone left the lab effectively
+// undriveable on a trackpad, where right-drag is a two-finger contortion.
 // ---------------------------------------------------------------------------
 let camYaw = 0.35;
 let camPitch = 0.12;
@@ -106,6 +109,9 @@ const camTarget = new THREE.Vector3(0, 1.05, 0);
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
+/** Cursor travel since pointerdown, in px. Under the threshold, it was a click. */
+let dragTravel = 0;
+const DRAG_SLOP = 5;
 // Slow auto-spin until the first interaction, so the silhouette reads without
 // the viewer having to discover the controls.
 let autoSpin = true;
@@ -114,21 +120,23 @@ const canvas = renderer.domElement;
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('pointerdown', (e) => {
   autoSpin = false;
-  if (e.button !== 2) return;
+  if (e.button !== 0 && e.button !== 2) return;
   dragging = true;
+  dragTravel = 0;
   lastX = e.clientX;
   lastY = e.clientY;
   canvas.setPointerCapture(e.pointerId);
 });
-canvas.addEventListener('pointerup', (e) => {
-  if (!dragging) return;
-  dragging = false;
-  canvas.releasePointerCapture(e.pointerId);
-});
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
-  camYaw -= (e.clientX - lastX) * 0.008;
-  camPitch = Math.max(-0.5, Math.min(1.3, camPitch + (e.clientY - lastY) * 0.006));
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  dragTravel += Math.hypot(dx, dy);
+  // Below the slop threshold the press is still a candidate shot, so don't
+  // swing the camera out from under the shooter's aim.
+  if (dragTravel < DRAG_SLOP) return;
+  camYaw -= dx * 0.008;
+  camPitch = Math.max(-0.5, Math.min(1.3, camPitch + dy * 0.006));
   lastX = e.clientX;
   lastY = e.clientY;
 });
@@ -180,9 +188,17 @@ handle.setRenderCallback((dt) => {
 
 // ---------------------------------------------------------------------------
 // Shooting — left button only. Shift = blast, Alt = burn.
+//
+// Fires on pointerUP rather than down, because the same button also orbits:
+// a press that travelled further than DRAG_SLOP was a camera drag and must not
+// also put a hole in the zombie.
 // ---------------------------------------------------------------------------
-canvas.addEventListener('pointerdown', (ev: PointerEvent) => {
-  if (ev.button !== 0) return;
+canvas.addEventListener('pointerup', (ev: PointerEvent) => {
+  if (dragging) {
+    dragging = false;
+    canvas.releasePointerCapture(ev.pointerId);
+  }
+  if (ev.button !== 0 || dragTravel >= DRAG_SLOP) return;
   const rect = canvas.getBoundingClientRect();
   const ndc = new THREE.Vector2(
     ((ev.clientX - rect.left) / rect.width) * 2 - 1,

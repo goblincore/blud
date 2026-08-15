@@ -15,11 +15,23 @@
   #panel label { display: block; font-size: 11px; margin: 3px 0; }
   #panel input[type=range] { width: 100%; }
   #errors { color: #ff6464; font-size: 11px; white-space: pre-wrap; }
+  #controls {
+    position: fixed; bottom: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #bbb;
+  }
+  #controls b { color: #d88; font-weight: normal; }
 </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="panel"><div id="errors"></div></div>
+  <div id="controls">
+    <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom &nbsp;·&nbsp; <b>click</b> shoot
+    &nbsp;(<b>shift</b> blast, <b>alt</b> burn)<br />
+    <b>1</b> head &nbsp;<b>3</b>/<b>4</b> arm L/R &nbsp;<b>5</b>/<b>6</b> leg L/R sever
+    &nbsp;·&nbsp; <b>G</b> gib everything
+  </div>
   <script type="module" src="/src/lab/sdf-zombie/lab-main.ts"></script>
 </body>
 </html>
