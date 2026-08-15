@@ -243,3 +243,16 @@ addButton(actionBox, 'reset overrides', () => {
 });
 
 reapply();
+
+// Dev handle for inspecting lab state from the console, and for driving the
+// camera during automated visual checks. Lab-only; nothing in the game reads it.
+(window as unknown as { __sdfLab: unknown }).__sdfLab = {
+  get wounds() { return wounds; },
+  get current() { return current; },
+  setCam(yaw: number, pitch: number, dist: number) {
+    autoSpin = false;
+    camYaw = yaw;
+    camPitch = pitch;
+    camDist = dist;
+  },
+};
