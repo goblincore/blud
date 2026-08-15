@@ -14,6 +14,8 @@ import {
 } from './damage';
 import { sdBody } from './validate';
 import { severLimb } from './sever';
+import { makeChunk, stepChunk, type Chunk } from './gib-chunks';
+import { chunkExtent, createChunkView, type ChunkView } from './zombie';
 import type { LimbId, Vec3 } from './types';
 import {
   addButton, addSection, addSelect, addSlider, clearOverride,
@@ -53,6 +55,8 @@ let light: LightPresetName = 'practical-hard-key';
 const view = createZombieView(body);
 view.applyMaterial(flesh, LIGHT_PRESETS[light]);
 scene.add(view.object);
+// Chunks clone this at sever time so they shade like the body did when cut.
+const viewMaterialTemplate = view.material;
 
 /** The live body — replaced on sever and on any override edit. */
 let current = body;
@@ -129,6 +133,14 @@ canvas.addEventListener(
 );
 
 handle.setRenderCallback((dt) => {
+  // Gib physics: step every chunk, then re-pack its world-space uniforms.
+  // NOTE: this lives in the SAME callback as the camera — setRenderCallback
+  // replaces rather than appends, so a second call would silently kill one.
+  for (const c of chunks) {
+    c.state = stepChunk(c.state, dt);
+    c.view.update(c.state);
+  }
+
   if (autoSpin) camYaw += dt * 0.35;
   const cp = Math.cos(camPitch);
   camera.position.set(
@@ -167,12 +179,31 @@ const SEVER_KEYS: Record<string, LimbId> = {
   '1': 'head', '3': 'armL', '4': 'armR', '5': 'legL', '6': 'legR',
 };
 
+const chunks: { state: Chunk; view: ChunkView }[] = [];
+
+function spawnChunk(limb: LimbId, origin: Vec3, prims: typeof current.prims) {
+  if (prims.length === 0) return;
+  const vel: Vec3 = [
+    (Math.random() - 0.5) * 3.2,
+    1.8 + Math.random() * 2.2,
+    (Math.random() - 0.5) * 3.2,
+  ];
+  // Collision radius = the limb's real visual extent (the plan's hardcoded
+  // 0.14 is smaller than any limb and would bury it half-way into the floor).
+  const state = makeChunk(limb, origin, vel, chunkExtent(prims, origin));
+  const view = createChunkView(state, prims, viewMaterialTemplate);
+  scene.add(view.object);
+  chunks.push({ state, view });
+}
+
 window.addEventListener('keydown', (ev) => {
   const limb = SEVER_KEYS[ev.key];
   if (!limb) return;
-  const { body: next, stumpWound } = severLimb(current, limb);
+  const { body: next, chunk, stumpWound } = severLimb(current, limb);
+  if (chunk.prims.length === 0) return;
   current = next;
   if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+  spawnChunk(limb, chunk.origin, chunk.prims);
   view.update(current);
   refreshWounds();
 });

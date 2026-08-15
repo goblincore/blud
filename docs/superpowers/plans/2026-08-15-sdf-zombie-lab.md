@@ -3837,3 +3837,308 @@ Two spec items are deliberately **partial**, and flagged rather than silently dr
 **Type consistency:** `Primitive`, `BuiltBody`, `ClusterInfo`, `Wound`, `Chunk`, `FleshMaterial` are defined once and used with the same field names throughout. `MAX_PRIMS`/`MAX_CLUSTERS` are defined in `validate.ts` and re-declared in `march.glsl.ts` — Task 7's test asserts the TS ceiling, and Task 9's test asserts the packed arrays match it. `stepRig`'s signature changed to an options object in Task 11 and has no other callers until Task 19, which passes `StepOpts`.
 
 **The CPU/GPU mirror contract:** `validate.ts`'s `sdPrimitive` and `smin` must stay numerically identical to `sdPrim` and `smin` in `march.glsl.ts` — the CPU copy backs both `validateBody` and the click-to-shoot raycast in Task 13, so a drift means shots land where the body isn't. `goober-test` handled this by keeping `sdf.js` explicitly "mirrors the GLSL in blendshell.js exactly" under unit test, and the same discipline applies here. If either copy is edited, edit both in the same commit.
+
+---
+
+## Task 21: Wire the rig into the body — the missing deformation link
+
+`rig.ts` shipped in Task 11 with 7 passing tests and is imported by **nothing but its own test file**. No task connects it to the primitives, so the body is rigid. Task 19's "procedural sway" translates `view.object.position`, which moves the whole proxy box rigidly — the primitives never move relative to each other.
+
+Two of the spec's five success criteria are structurally blocked by this:
+
+- *"Flesh stretches and lags"* — nothing deforms the body.
+- *"Craters stay positioned on moving flesh"* — the entire point of the rest-space wound system in `damage.ts`. The flesh never moves, so it is proven only in unit tests.
+
+**Binding model:** each primitive endpoint is bound to exactly one rig point — an SDF primitive is owned by one bone, which is what makes this simpler than mesh skinning. At bind time, record `(rigPointIndex, offset)` per endpoint; each frame, `endpoint = rigPoint.pos + offset`.
+
+**Files:**
+- Create: `src/lab/sdf-zombie/rig-bind.ts`
+- Test: `src/lab/sdf-zombie/rig-bind.test.ts`
+- Modify: `src/lab/sdf-zombie/lab-main.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// src/lab/sdf-zombie/rig-bind.test.ts
+import { describe, it, expect } from 'vitest';
+import { bindRig, applyRig } from './rig-bind';
+import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import { ZOMBIE } from './body';
+import { stepRig } from './rig';
+import { len, sub } from './vec';
+
+describe('bindRig', () => {
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(body);
+
+  it('creates one rig point per distinct bone joint', () => {
+    expect(bound.rig.points.length).toBeGreaterThan(4);
+    expect(bound.rig.points.length).toBeLessThanOrEqual(body.bones.size * 2);
+  });
+
+  it('binds every primitive endpoint to some rig point', () => {
+    expect(bound.binding).toHaveLength(body.prims.length);
+    for (const b of bound.binding) {
+      expect(b.a.point).toBeGreaterThanOrEqual(0);
+      expect(b.a.point).toBeLessThan(bound.rig.points.length);
+      expect(b.b.point).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('pins the pelvis so the body does not fall through the floor', () => {
+    expect(bound.rig.points.some(p => p.pinned)).toBe(true);
+  });
+
+  it('constrains adjacent joints at their rest separation', () => {
+    for (const c of bound.rig.constraints) expect(c.rest).toBeGreaterThan(0);
+  });
+});
+
+describe('applyRig', () => {
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(body);
+
+  it('is the identity at rest — an unmoved rig reproduces the original body', () => {
+    const out = applyRig(body, bound);
+    for (let i = 0; i < body.prims.length; i++) {
+      expect(len(sub(out.prims[i].a, body.prims[i].a))).toBeCloseTo(0, 9);
+      expect(len(sub(out.prims[i].b, body.prims[i].b))).toBeCloseTo(0, 9);
+    }
+  });
+
+  it('moves primitives when their bound rig point moves', () => {
+    const moved = { ...bound, rig: { ...bound.rig,
+      points: bound.rig.points.map((p, i) => i === bound.rig.points.length - 1
+        ? { ...p, pos: [p.pos[0] + 0.5, p.pos[1], p.pos[2]] as const } : p) } };
+    const out = applyRig(body, moved);
+    const anyMoved = out.prims.some((p, i) => len(sub(p.a, body.prims[i].a)) > 0.4);
+    expect(anyMoved).toBe(true);
+  });
+
+  it('RECOMPUTES cluster bounds — stale bounds silently drop moving flesh', () => {
+    const moved = { ...bound, rig: { ...bound.rig,
+      points: bound.rig.points.map(p => p.pinned ? p
+        : ({ ...p, pos: [p.pos[0] + 0.3, p.pos[1], p.pos[2]] as const })) } };
+    const out = applyRig(body, moved);
+    for (const c of out.clusters)
+      for (const prim of out.prims.slice(c.start, c.start + c.count)) {
+        const maxScale = Math.max(...prim.scale);
+        for (const end of [prim.a, prim.b])
+          expect(len(sub(end, c.center)) + prim.radius * maxScale)
+            .toBeLessThanOrEqual(c.radius + 1e-6);
+      }
+  });
+
+  it('preserves fold order — cluster start/count/limb are untouched', () => {
+    const out = applyRig(body, bound);
+    expect(out.clusters.map(c => `${c.limb}:${c.start}:${c.count}`))
+      .toEqual(body.clusters.map(c => `${c.limb}:${c.start}:${c.count}`));
+  });
+
+  it('survives a settled rig without NaN', () => {
+    let rig = bound.rig;
+    for (let i = 0; i < 120; i++)
+      rig = stepRig(rig, 1 / 60, { gravity: [0, -9.8, 0], damping: 0.04, iterations: 4, restStiffness: 0.2 });
+    const out = applyRig(body, { ...bound, rig });
+    for (const p of out.prims) for (const v of [...p.a, ...p.b]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx vitest run src/lab/sdf-zombie/rig-bind.test.ts`
+Expected: FAIL — `Failed to resolve import "./rig-bind"`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `src/lab/sdf-zombie/rig-bind.ts`:
+
+```ts
+// src/lab/sdf-zombie/rig-bind.ts
+import type { BuildResult } from './build-body';
+import type { ClusterInfo, Primitive, Vec3 } from './types';
+import { makeRig, type RigState } from './rig';
+import { add, len, scale as vscale, sub } from './vec';
+
+/** Which rig point an endpoint follows, and its fixed offset from that point. */
+interface EndpointBind { point: number; offset: Vec3 }
+interface PrimBind { a: EndpointBind; b: EndpointBind }
+
+export interface BoundRig {
+  rig: RigState;
+  binding: PrimBind[];
+}
+
+const KEY_EPS = 1e-4;
+
+/**
+ * Builds a rig from the body's resolved bone joints and binds every primitive
+ * endpoint to its nearest joint.
+ *
+ * One endpoint follows exactly one point — an SDF primitive is owned by a
+ * single bone, so there are no skinning weights to solve and no blend seams.
+ */
+export function bindRig(body: BuildResult): BoundRig {
+  // Deduplicate joints: a bone's tail and its child's head are the same point.
+  const positions: Vec3[] = [];
+  const indexOf = (p: Vec3): number => {
+    for (let i = 0; i < positions.length; i++)
+      if (len(sub(positions[i], p)) < KEY_EPS) return i;
+    positions.push(p);
+    return positions.length - 1;
+  };
+
+  const constraints: { a: number; b: number; rest: number; stiffness: number }[] = [];
+  for (const bone of body.bones.values()) {
+    const h = indexOf(bone.head);
+    const t = indexOf(bone.tail);
+    if (h !== t) constraints.push({ a: h, b: t, rest: len(sub(bone.tail, bone.head)), stiffness: 1 });
+  }
+
+  // Pin the lowest joint — without an anchor the whole rig falls under gravity.
+  let lowest = 0;
+  positions.forEach((p, i) => { if (p[1] < positions[lowest][1]) lowest = i; });
+
+  const rig = makeRig(
+    positions.map((pos, i) => ({ pos, pinned: i === lowest })),
+    constraints,
+  );
+
+  const bindEnd = (p: Vec3): EndpointBind => {
+    let best = 0;
+    let bestD = Infinity;
+    positions.forEach((q, i) => { const d = len(sub(p, q)); if (d < bestD) { bestD = d; best = i; } });
+    return { point: best, offset: sub(p, positions[best]) };
+  };
+
+  return { rig, binding: body.prims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })) };
+}
+
+/**
+ * Re-derives primitive endpoints from the current rig pose and RECOMPUTES the
+ * cluster bounding spheres.
+ *
+ * Recomputing bounds is not optional: the shader culls on them, so a stale
+ * bound silently discards flesh that has moved outside it — the exact failure
+ * `validateBody`'s bounding-sphere check exists to catch. Cluster start/count
+ * and ordering are left untouched, preserving the fold order.
+ */
+export function applyRig(body: BuildResult, bound: BoundRig): BuildResult {
+  const pos = bound.rig.points;
+  const prims: Primitive[] = body.prims.map((p, i) => ({
+    ...p,
+    a: add(pos[bound.binding[i].a.point].pos, bound.binding[i].a.offset),
+    b: add(pos[bound.binding[i].b.point].pos, bound.binding[i].b.offset),
+  }));
+
+  const clusters: ClusterInfo[] = body.clusters.map(c => {
+    const members = prims.slice(c.start, c.start + c.count);
+    let sum: Vec3 = [0, 0, 0];
+    for (const m of members) sum = add(sum, add(m.a, m.b));
+    const center = vscale(sum, 1 / (members.length * 2));
+    let radius = 0;
+    for (const m of members) {
+      const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
+      for (const end of [m.a, m.b])
+        radius = Math.max(radius, len(sub(end, center)) + m.radius * maxScale);
+    }
+    return { ...c, center, radius };
+  });
+
+  return { ...body, prims, clusters };
+}
+
+/** Shoves the rig point nearest a world position — used to make hits push flesh. */
+export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
+  let best = 0;
+  let bestD = Infinity;
+  bound.rig.points.forEach((p, i) => {
+    const d = len(sub(world, p.pos));
+    if (d < bestD && !p.pinned) { bestD = d; best = i; }
+  });
+  return {
+    ...bound,
+    rig: {
+      ...bound.rig,
+      points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, delta) } : p),
+    },
+  };
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npx vitest run src/lab/sdf-zombie/rig-bind.test.ts`
+Expected: PASS, 10 tests. The bounds-recompute test is the one that matters — without it the cull silently eats moving flesh.
+
+- [ ] **Step 5: Drive the rig from the render loop**
+
+In `src/lab/sdf-zombie/lab-main.ts`, add the imports:
+
+```ts
+import { bindRig, applyRig, impulseAt } from './rig-bind';
+import { stepRig } from './rig';
+```
+
+After `let current = body;` add:
+
+```ts
+let bound = bindRig(current);
+// Rebind whenever the body itself changes (sever, override edit).
+function rebind() { bound = bindRig(current); }
+```
+
+Call `rebind()` at the end of both `rebuildBody()` and the sever `keydown` handler.
+
+Then inside the existing `handle.setRenderCallback((dt) => { ... })`, before the camera block:
+
+```ts
+  // Drive the flesh: settle the rig toward its rest pose, push the result back
+  // into the primitives, and re-upload. This is what makes the body deform —
+  // and what makes rest-space wounds observable, since they ride the flesh.
+  bound = {
+    ...bound,
+    rig: stepRig(bound.rig, Math.min(dt, 1 / 30), {
+      gravity: [0, -2.2, 0],
+      damping: 0.06,
+      iterations: 4,
+      restStiffness: 0.18,
+    }),
+  };
+  const posed = applyRig(current, bound);
+  view.update(posed);
+  view.setWounds(
+    wounds.map(w => woundWorldPos(posed.prims, w)),
+    wounds.map(w => w.radius),
+    wounds.map(w => TYPE_ID[w.type]),
+    wounds.map(w => w.ageSec),
+  );
+```
+
+- [ ] **Step 6: Make hits shove the flesh**
+
+In the shooting handler, after `wounds = pushWound(...)`, add:
+
+```ts
+  // A hit shoves the nearest joint along the shot direction — the rest-pose
+  // pull springs it back, so the limb visibly recoils and lags.
+  const push = type === 'blast' ? 0.10 : 0.04;
+  bound = impulseAt(bound, hit, [d.x * push, d.y * push, d.z * push]);
+```
+
+- [ ] **Step 7: Verify**
+
+Run `npm run build` and `npm test` (expect all green), then **load the page** — this task is not verifiable any other way:
+
+1. The body visibly settles and sways rather than standing rigid.
+2. Shooting it makes the hit limb **recoil and spring back**.
+3. A crater placed on a limb **stays on that limb** as it moves, rather than sliding across the surface. This is the rest-space wound system finally being demonstrated rather than merely unit-tested.
+4. No creases appear as the body moves — if they do, cluster bounds are not being recomputed.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/lab/sdf-zombie/rig-bind.ts src/lab/sdf-zombie/rig-bind.test.ts src/lab/sdf-zombie/lab-main.ts
+git commit -m "feat(sdf-lab): bind the verlet rig to primitives so the flesh deforms"
+```

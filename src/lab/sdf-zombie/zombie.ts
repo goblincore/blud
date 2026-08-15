@@ -1,10 +1,11 @@
 // src/lab/sdf-zombie/zombie.ts
 import * as THREE from 'three';
 import type { BuildResult } from './build-body';
-import { packBody, type PackedBody } from './pack';
+import { packBody, PRIM_STRIDE, type PackedBody } from './pack';
+import type { Chunk } from './gib-chunks';
 import { FRAG, VERT } from './march.glsl';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
-import type { Vec3 } from './types';
+import type { Primitive, Vec3 } from './types';
 import { len, sub } from './vec';
 
 export interface ZombieView {
@@ -131,6 +132,118 @@ export function createZombieView(body: BuildResult): ZombieView {
       (u.uKeyColor!.value as THREE.Color).setRGB(...light.keyColor);
       u.uKeyIntensity!.value = light.keyIntensity;
       u.uFillIntensity!.value = light.fillIntensity;
+    },
+  };
+}
+
+export interface ChunkView {
+  object: THREE.Object3D;
+  update(chunk: Chunk): void;
+  dispose(): void;
+}
+
+/** Furthest reach of a set of primitives from `origin` (same recipe as clusters.ts). */
+export function chunkExtent(prims: Primitive[], origin: Vec3): number {
+  let r = 0;
+  for (const p of prims) {
+    const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    r = Math.max(r, len(sub(p.a, origin)) + p.radius * ms, len(sub(p.b, origin)) + p.radius * ms);
+  }
+  return r;
+}
+
+/**
+ * A detached blob, raymarched in its own small proxy box. Reuses the body
+ * material's shader by packing the chunk's primitives as a one-cluster body.
+ *
+ * NOTE (task-18 deviation from the plan snippet, geometry-corrected): the
+ * fragment shader marches in WORLD space — `ro = cameraPosition` and the
+ * packed prims ARE the field. The mesh transform only moves the proxy box
+ * (`tMax`), so setting mesh.position/rotation/scale alone (as the plan wrote)
+ * would fly the box off while the limb geometry stayed frozen in body space,
+ * and squash/tumble would never affect the blob. Instead the chunk is packed
+ * centred in its own local space and its endpoints are re-packed in world
+ * space every update(). Signature and ChunkView shape match the plan exactly.
+ */
+export function createChunkView(chunk: Chunk, prims: Primitive[], template: THREE.ShaderMaterial): ChunkView {
+  const material = template.clone();
+
+  // chunk.pos is the cluster centre at sever time, so this recentres the
+  // severed limb's rest-space primitives around the chunk's own origin.
+  const local = prims.map(p => ({
+    ...p,
+    cluster: 0,
+    a: sub(p.a, chunk.pos),
+    b: sub(p.b, chunk.pos),
+  }));
+
+  // The plan packed bounds/box from chunk.radius (0.14) — smaller than a real
+  // limb (~0.3-0.45), which the shader's cluster-bounds cull would erase. Use
+  // the true extent instead (same recipe as clusters.ts).
+  const extent = chunkExtent(prims, chunk.pos);
+
+  const packed = packBody({
+    prims: local,
+    clusters: [{
+      id: 0, limb: chunk.limb, start: 0, count: local.length,
+      center: [0, 0, 0], radius: extent, alive: true,
+    }],
+    bones: new Map(),
+  });
+
+  material.uniforms.uPrimA = { value: packed.primA };
+  material.uniforms.uPrimB = { value: packed.primB };
+  material.uniforms.uPrimScale = { value: packed.primScale };
+  material.uniforms.uClusterBounds = { value: packed.clusterBounds };
+  material.uniforms.uClusterRange = { value: packed.clusterRange };
+  material.uniforms.uPrimCount = { value: packed.primCount };
+  material.uniforms.uClusterCount = { value: 1 };
+  material.uniforms.uMaxBlendK = { value: packed.maxBlendK };
+  material.uniforms.uWoundCount = { value: 0 };
+  material.uniforms.uSteps = { value: 48 }; // chunks are small; fewer steps
+
+  const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
+  mesh.frustumCulled = false;
+
+  /** Writes the local prims into the world-space uniform arrays for state `c`. */
+  function apply(c: Chunk): { sx: number; sy: number; sz: number } {
+    const s = Math.min(1, Math.max(0, c.squash));
+    // Non-uniform squash on impact — flatten in y, bulge in x/z.
+    const sx = 1 + s * 0.35, sy = 1 - s * 0.5, sz = 1 + s * 0.35;
+    const cos = Math.cos(c.angle), sin = Math.sin(c.angle);
+    local.forEach((p, i) => {
+      const o = i * PRIM_STRIDE;
+      const ends: readonly [Vec3, Float32Array][] = [[p.a, packed.primA], [p.b, packed.primB]];
+      for (const [pt, arr] of ends) {
+        // Tumble around y, then squash in WORLD axes so the blob always
+        // flattens against the floor, however far it has rolled.
+        const rx = pt[0] * cos + pt[2] * sin;
+        const rz = -pt[0] * sin + pt[2] * cos;
+        arr.set([c.pos[0] + rx * sx, c.pos[1] + pt[1] * sy, c.pos[2] + rz * sz], o);
+      }
+      packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz, 0], o);
+    });
+    packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
+    return { sx, sy, sz };
+  }
+
+  const first = apply(chunk);
+  mesh.position.set(chunk.pos[0], chunk.pos[1], chunk.pos[2]);
+  mesh.rotation.y = chunk.angle;
+  mesh.scale.set(first.sx, first.sy, first.sz);
+
+  return {
+    object: mesh,
+    update(c: Chunk) {
+      const { sx, sy, sz } = apply(c);
+      mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
+      mesh.rotation.y = c.angle;
+      mesh.scale.set(sx, sy, sz);
+    },
+    dispose() {
+      mesh.geometry.dispose();
+      material.dispose();
     },
   };
 }
