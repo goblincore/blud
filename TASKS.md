@@ -55,6 +55,21 @@ Key reference docs (open these before touching their area):
 - `M8`  [!]  Polish (music, balance, HUD) — blocked on M7
 - `M9`  [!]  Ship to itch.io — blocked on M8
 
+## Side quests (off the critical path)
+
+- `X1` [x]  **SDF zombie lab** — raymarched SDF-volume character in a standalone
+  sandbox, firewalled from `src/sim` and `src/game`. Smooth-min flesh with
+  seamless joints, verlet jiggle, wounds as field subtraction with everted
+  T-1000 rims, self-closing stumps, and raymarched gibs that reflect damage
+  already dealt. **Verdict: worth building on** — see findings.
+  Run: `npm run dev` → `/sdf-lab.html`
+  - [spec](docs/superpowers/specs/2026-08-15-sdf-zombie-lab-design.md) ·
+    [plan](docs/superpowers/plans/2026-08-15-sdf-zombie-lab.md) ·
+    [findings](docs/dev-notes/2026-08-15-sdf-zombie-lab-findings.md)
+  - Open follow-ups: align gibbing with Blud's own physics/gib logic + flesh
+    trails; face and character design (carve primitives); skeleton as a second
+    SDF field; rest-space triplanar (specced but never implemented).
+
 ## Asset pipeline
 
 - `A1-A6`, `A9`, `A10`, `A11`  [x]  RFF/PAL/ART decoding, sprite extraction (axe-zombie, gibs, dynamite), animation system port, arena reskin — see git log + dev-notes
