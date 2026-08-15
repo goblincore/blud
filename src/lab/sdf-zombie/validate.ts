@@ -2,9 +2,20 @@
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import { add, len, lerp, scale as vscale, sub } from './vec';
 
-/** Must match MAX_PRIMS in the fragment shader. */
-export const MAX_PRIMS = 32;
-/** Must match MAX_CLUSTERS in the fragment shader. */
+/**
+ * Shader array ceilings. THE canonical declaration — `march.glsl.ts` imports
+ * these and bakes them into the GLSL, so the CPU field and the GPU field
+ * cannot drift apart. They were separately declared in both files until
+ * 2026-08-15; if they disagree the shader reads past the uniform array.
+ *
+ * 48 fits the 21-primitive body plus a ~13-primitive face with headroom. The
+ * cost is uniform space: the fragment shader lands around 300 vec4 against a
+ * GLES 3.0 guaranteed minimum of 224. The development machine (Apple M3)
+ * reports MAX_FRAGMENT_UNIFORM_VECTORS = 1024, so this is a portability note
+ * rather than a blocker. The escape hatch, if a low-end GLES 3.0 target ever
+ * matters, is a float data texture read with texelFetch.
+ */
+export const MAX_PRIMS = 48;
 export const MAX_CLUSTERS = 6;
 
 export interface ValidateOpts {

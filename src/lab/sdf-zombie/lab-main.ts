@@ -63,7 +63,13 @@ scene.add(refCube);
 const postCfg = structuredClone(DEFAULT_POST_FX);
 const postBus = new PostFxBus(postCfg.ca.baseline);
 const composer = createPostFxComposer(renderer, scene, camera, postBus, postCfg);
-let postEnabled = true;
+// Defaults OFF. The chain is correct, but every flesh preset in material.ts
+// was hand-tuned to compensate for the missing gamma encode described above,
+// so through the correct pipeline they read far too bright. Until the presets
+// are retuned, judging surface work with this on would compare new geometry
+// against a knowingly-wrong material. Toggle it in the panel to check the
+// palette look.
+let postEnabled = false;
 
 function installDrawFn() {
   handle.setDrawFn(
@@ -432,7 +438,7 @@ addButton(actionBox, 'reset overrides', () => {
 });
 // Without a bypass, debugging a surface bug means guessing whether an artifact
 // came from the flesh shader or from the palette snap on top of it.
-const postBtn = addButton(actionBox, 'post-fx: on', () => {
+const postBtn = addButton(actionBox, `post-fx: ${postEnabled ? 'on' : 'off'}`, () => {
   postEnabled = !postEnabled;
   installDrawFn();
   postBtn.textContent = `post-fx: ${postEnabled ? 'on' : 'off'}`;

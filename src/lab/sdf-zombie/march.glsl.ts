@@ -2,6 +2,8 @@
 // Shader source as strings. Kept engine-free so it can be diffed and tested
 // as text; Three only consumes it in zombie.ts.
 
+import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
+
 export const VERT = /* glsl */ `
 out vec3 vWorldPos;
 void main() {
@@ -11,8 +13,11 @@ void main() {
 }
 `;
 
-export const MAX_PRIMS = 32;
-export const MAX_CLUSTERS = 6;
+// Re-exported for existing importers. `validate.ts` is the single source of
+// truth: a second declaration here is exactly how the CPU field (which backs
+// click-to-shoot) and the GPU field drift apart. No import cycle — validate.ts
+// does not import this module.
+export { MAX_CLUSTERS, MAX_PRIMS };
 
 export const FRAG = /* glsl */ `
 precision highp float;

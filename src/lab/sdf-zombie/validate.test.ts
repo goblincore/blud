@@ -1,8 +1,20 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, MAX_PRIMS } from './validate';
+import { validateBody, MAX_PRIMS, MAX_CLUSTERS } from './validate';
 import { assignClusters } from './clusters';
+import { FRAG } from './march.glsl';
 import type { LimbId, Primitive } from './types';
+
+describe('shader caps', () => {
+  it('bakes the same ceilings into the GLSL that the CPU side enforces', () => {
+    expect(FRAG).toContain(`#define MAX_PRIMS ${MAX_PRIMS}`);
+    expect(FRAG).toContain(`#define MAX_CLUSTERS ${MAX_CLUSTERS}`);
+  });
+
+  it('has room for the 21-primitive body plus a face', () => {
+    expect(MAX_PRIMS).toBeGreaterThanOrEqual(40);
+  });
+});
 
 const prim = (limb: LimbId, a: [number, number, number], radius = 0.1, blendK = 0.06):
   Omit<Primitive, 'cluster'> => ({ a, b: a, radius, scale: [1, 1, 1], blendK, limb });
