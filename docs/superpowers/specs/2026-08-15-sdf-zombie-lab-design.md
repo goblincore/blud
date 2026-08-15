@@ -350,6 +350,16 @@ Its corollary, **encode art direction as arithmetic**, is the deferred half: if 
 | 16 wounds too few to read as "shot to pieces" | Accept and record as a finding; do not pre-build a baked damage texture |
 | Look is good but nothing ports to the game | Accepted. The deliverable is the opinion. |
 
+### Prior art on disk: `~/Projects/goober-test`
+
+A July 2026 experiment built SDF creatures from the same ingredients — round-cone primitives, iq polynomial smooth-min, per-shape blend caps — and reported **good animation, janky skin, and joints/seams that were not smooth**. That is this spec's exact failure mode, so the cause matters.
+
+**It did not raymarch.** `src/blendshell.js` renders a fixed-topology triangle shell of stacked canonical capsules and relaxes each vertex onto the isosurface in the *vertex shader*. Its own comments record the results: verts branch-jump and "smear stretched triangles across the body"; verts tunnel through neighbours ("ear verts spiking out of the chin"); parked verts tear holes that expose the hull behind; and at `radial=12, heightSegs=6` the fillet crown at a joint is covered by a single thin strip of triangles. **Joints are where the fillet is largest and the coverage thinnest** — so that is where it tore. The blend math was never at fault.
+
+Raymarching removes that entire class: no shell, no topology, no coverage strip. The cost moves to fill rate, which §6 already plans for. Two secondary contributors are also avoided here — a 2 cm normal epsilon (`0.0015` in §6) and a deliberately faceted `smoothMix` for a Dreamcast look, which reads badly on flesh.
+
+Transferable, and folded into the plan: its `Rope` verlet blends toward a **rest pose** each step, which is what stops a chain going floppy under gravity; and its `sdf.js` deliberately mirrors the GLSL under unit test, the same CPU/GPU discipline `validate.ts` uses here. Its `animation.js` Walker (phase-grouped stepping feet, two-bone IK knees) is the part that worked, and is the first place to look if a real walk cycle is ever wanted.
+
 ### The Dreams escape hatch
 
 Media Molecule's *Dreams* is the largest shipped SDF character system, and it is worth knowing that **it does not raymarch SDF characters**. It evaluates operationally-transformed CSG trees into SDF volume textures, then generates dense multi-resolution point clouds and meshes via compute-shader marching cubes. Alex Evans' SIGGRAPH 2015 talk on it is titled *"Learning from Failure: a Survey of Promising, Unconventional and Mostly Abandoned Renderers."*
