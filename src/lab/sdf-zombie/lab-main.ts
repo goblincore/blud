@@ -13,6 +13,8 @@ import {
   type WoundType,
 } from './damage';
 import { sdBody } from './validate';
+import { severLimb } from './sever';
+import { CLUSTER_ORDER, type LimbId } from './types';
 import type { Vec3 } from './types';
 
 const mount = document.getElementById('app');
@@ -56,7 +58,7 @@ function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
   let t = 0;
   for (let i = 0; i < 128 && t < 20; i++) {
     const p: Vec3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
-    const d = sdBody(p, body);
+    const d = sdBody(p, current);
     if (d < 0.002) return p;
     t += Math.max(d, 0.002);
   }
@@ -65,7 +67,7 @@ function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
 
 function refreshWounds() {
   view.setWounds(
-    wounds.map(w => woundWorldPos(body.prims, w)),
+    wounds.map(w => woundWorldPos(current.prims, w)),
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
@@ -86,6 +88,21 @@ renderer.domElement.addEventListener('pointerdown', (ev: PointerEvent) => {
   if (!hit) return;
 
   const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-  wounds = pushWound(wounds, worldHitToWound(body.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+  refreshWounds();
+});
+
+// Sever keys: clear a cluster's alive flag; the field and proxy re-fit on the
+// next view.update(). 2 is deliberately absent — torso must never sever.
+let current = body;
+const SEVER_KEYS: Record<string, LimbId> = { '1': 'head', '3': 'armL', '4': 'armR', '5': 'legL', '6': 'legR' };
+
+window.addEventListener('keydown', (ev) => {
+  const limb = SEVER_KEYS[ev.key];
+  if (!limb) return;
+  const { body: next, stumpWound } = severLimb(current, limb);
+  current = next;
+  if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+  view.update(current);
   refreshWounds();
 });
