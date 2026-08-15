@@ -36,6 +36,14 @@ uniform float uStepMul;
 uniform vec3 uBaseColor;
 uniform vec3 uLightDir;
 
+// three's FRAGMENT prefix declares viewMatrix and cameraPosition but NOT
+// projectionMatrix (that one is vertex-only). The gl_FragDepth write below
+// needs it, so declare it here — three still binds it by name from the
+// program's active uniform list. Without this the program fails to link with
+// "'projectionMatrix' : undeclared identifier" and nothing renders, while
+// tsc/vite/vitest all stay green because none of them compile GLSL.
+uniform mat4 projectionMatrix;
+
 // iq quadratic polynomial smooth-min: rigid + conservative (never overestimates).
 // NOT associative — the fold order below is fixed by cluster and must stay that way.
 float smin(float a, float b, float k) {
@@ -63,9 +71,13 @@ float mapBody(vec3 p) {
     vec4 range = uClusterRange[c];
     if (range.z < 0.5) continue;               // severed
     vec4 bounds = uClusterBounds[c];
-    // Cull, with a blend margin: a cluster still pulls the surface from
-    // uMaxBlendK away, so culling on "> d" alone would clip the blend fillet.
-    if (length(p - bounds.xyz) - bounds.w > d + uMaxBlendK) continue;
+    // Cull, with a blend margin: a cluster still pulls the surface from its
+    // blend width away, so culling on "> d" alone clips the blend fillet.
+    // NOTE the 4.0: smin() scales k by 4 internally, so the ACTUAL influence
+    // radius is 4x the authored blendK. Using the unscaled value here culls
+    // clusters that are still bending the surface, which shows up as hard
+    // creases exactly along cluster boundaries.
+    if (length(p - bounds.xyz) - bounds.w > d + uMaxBlendK * 4.0) continue;
     int start = int(range.x), count = int(range.y);
     for (int i = 0; i < MAX_PRIMS; i++) {
       if (i >= count) break;
