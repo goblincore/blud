@@ -48,6 +48,33 @@ The smooth-min used here (quadratic polynomial) is **not associative**. Because 
 
 Violating either can silently reshape the torso when you shoot an arm off. It presents as a shader bug.
 
+## Second critical constraint — `smin` scales `k` by 4
+
+`smin(a, b, k)` begins with `k *= 4.0` (iq's normalisation). **Every consumer of an
+authored `blendK` must account for that ×4**, and two separate bugs came from
+forgetting it:
+
+- **Authoring.** `blendK: 0.08` means a **32 cm** blend radius, not 8 cm. On limbs
+  with a 6 cm radius that fuses the entire body into a featureless blob. Authored
+  values belong in the **0.012–0.02** range for a human-scale body.
+- **Culling.** The cluster cull margin must be `uMaxBlendK * 4.0`. Using the
+  unscaled value discards clusters that are still bending the surface, which
+  renders as hard creases exactly along cluster boundaries.
+
+Note the first of these **passes every check** — a fully-fused blob is trivially
+"connected", so `validateBody` is satisfied. It is only visible by looking, and it
+is the concrete instance of this plan's own warning that a model can pass every
+check and still be the wrong animal.
+
+## Third: nothing in the toolchain compiles GLSL
+
+`tsc`, `vite build` and `vitest` all stay green with a fragment shader that does
+not link. The Task 2 spike shipped with `projectionMatrix` undeclared — three's
+**fragment** prefix provides `viewMatrix` and `cameraPosition` but not
+`projectionMatrix` — so the program never linked and nothing rendered, through
+eight subsequent green tasks. **A human must load the page after any shader
+change.** Task verification commands cannot substitute for this.
+
 ---
 
 ## File structure
@@ -572,8 +599,8 @@ const def: BodyDef = {
     { name: 'thigh', parent: 'pelvis', dir: [0, -1, 0], length: 0.4, side: 0.09, mirror: true },
   ],
   prims: [
-    { bone: 'pelvis', at: 0.5, radius: 0.18, scale: [1, 1, 0.8], blendK: 0.08, limb: 'torso' },
-    { bone: 'thigh', at: 0.1, capTo: 0.9, radius: 0.09, scale: [1, 1, 1], blendK: 0.06, limb: 'leg', mirror: true },
+    { bone: 'pelvis', at: 0.5, radius: 0.18, scale: [1, 1, 0.8], blendK: 0.02, limb: 'torso' },
+    { bone: 'thigh', at: 0.1, capTo: 0.9, radius: 0.09, scale: [1, 1, 1], blendK: 0.015, limb: 'leg', mirror: true },
   ],
 };
 
@@ -611,7 +638,7 @@ describe('expandMirror', () => {
   it('throws when a mirrored prim names a bone that is not mirrored', () => {
     const bad: BodyDef = {
       ...def,
-      prims: [{ bone: 'pelvis', at: 0.5, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'arm', mirror: true }],
+      prims: [{ bone: 'pelvis', at: 0.5, radius: 0.1, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true }],
     };
     expect(() => expandMirror(bad)).toThrow(/pelvis/);
   });
@@ -773,7 +800,7 @@ describe('placePrims', () => {
 
   it('places a sphere prim at the normalised position along its bone', () => {
     const prims: ExpandedPrim[] = [
-      { bone: 'pelvis', at: 0.5, radius: 0.2, scale: [1, 1, 1], blendK: 0.05, limb: 'torso' },
+      { bone: 'pelvis', at: 0.5, radius: 0.2, scale: [1, 1, 1], blendK: 0.0125, limb: 'torso' },
     ];
     const [p] = placePrims(prims, resolved);
     expect(p.a).toEqual([0, 1.15, 0]);
@@ -782,7 +809,7 @@ describe('placePrims', () => {
 
   it('spans a capsule prim between at and capTo on the same bone', () => {
     const prims: ExpandedPrim[] = [
-      { bone: 'thigh.l', at: 0.0, capTo: 1.0, radius: 0.09, scale: [1, 1, 1], blendK: 0.05, limb: 'legL' },
+      { bone: 'thigh.l', at: 0.0, capTo: 1.0, radius: 0.09, scale: [1, 1, 1], blendK: 0.0125, limb: 'legL' },
     ];
     const [p] = placePrims(prims, resolved);
     expect(p.a).toEqual([0.1, 1.3, 0]);
@@ -791,7 +818,7 @@ describe('placePrims', () => {
 
   it('throws when a prim names a bone that does not exist', () => {
     const prims: ExpandedPrim[] = [
-      { bone: 'ghost', at: 0.5, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'torso' },
+      { bone: 'ghost', at: 0.5, radius: 0.1, scale: [1, 1, 1], blendK: 0.0125, limb: 'torso' },
     ];
     expect(() => placePrims(prims, resolved)).toThrow(/ghost/);
   });
@@ -907,7 +934,7 @@ import { CLUSTER_ORDER, type LimbId, type Primitive } from './types';
 import { len, sub } from './vec';
 
 const prim = (limb: LimbId, a: [number, number, number], radius = 0.1): Omit<Primitive, 'cluster'> =>
-  ({ a, b: a, radius, scale: [1, 1, 1], blendK: 0.05, limb });
+  ({ a, b: a, radius, scale: [1, 1, 1], blendK: 0.0125, limb });
 
 describe('assignClusters', () => {
   // Deliberately out of fold order on input.
@@ -1351,26 +1378,26 @@ export const ZOMBIE: BodyDef = {
 
   prims: [
     // Head — skull plus a heavy jaw that juts forward.
-    { bone: 'skull', at: 0.45, radius: 0.115, scale: [1, 1.08, 1.05], blendK: 0.05, limb: 'head' },
-    { bone: 'skull', at: 0.15, radius: 0.075, scale: [0.9, 0.7, 1.25], blendK: 0.05, limb: 'head' },
-    { bone: 'neck',  at: 0.2, capTo: 1.0, radius: 0.055, scale: [1, 1, 1], blendK: 0.06, limb: 'head' },
+    { bone: 'skull', at: 0.45, radius: 0.115, scale: [1, 1.08, 1.05], blendK: 0.0125, limb: 'head' },
+    { bone: 'skull', at: 0.15, radius: 0.075, scale: [0.9, 0.7, 1.25], blendK: 0.0125, limb: 'head' },
+    { bone: 'neck',  at: 0.2, capTo: 1.0, radius: 0.055, scale: [1, 1, 1], blendK: 0.015, limb: 'head' },
 
     // Torso — ribcage tapering into a sagging gut.
-    { bone: 'spine',  at: 0.85, radius: 0.155, scale: [1.25, 1, 0.78], blendK: 0.08, limb: 'torso' },
-    { bone: 'spine',  at: 0.50, radius: 0.150, scale: [1.15, 1, 0.80], blendK: 0.08, limb: 'torso' },
-    { bone: 'spine',  at: 0.15, radius: 0.142, scale: [1.02, 1, 0.95], blendK: 0.08, limb: 'torso' },
-    { bone: 'pelvis', at: 0.40, radius: 0.145, scale: [1.10, 0.9, 0.92], blendK: 0.08, limb: 'torso' },
+    { bone: 'spine',  at: 0.85, radius: 0.155, scale: [1.25, 1, 0.78], blendK: 0.02, limb: 'torso' },
+    { bone: 'spine',  at: 0.50, radius: 0.150, scale: [1.15, 1, 0.80], blendK: 0.02, limb: 'torso' },
+    { bone: 'spine',  at: 0.15, radius: 0.142, scale: [1.02, 1, 0.95], blendK: 0.02, limb: 'torso' },
+    { bone: 'pelvis', at: 0.40, radius: 0.145, scale: [1.10, 0.9, 0.92], blendK: 0.02, limb: 'torso' },
 
     // Arms — shoulder blob, then upper and forearm capsules, then a fist.
-    { bone: 'clavicle', at: 0.85, radius: 0.085, scale: [1, 1, 1], blendK: 0.07, limb: 'arm', mirror: true },
-    { bone: 'upperArm', at: 0.05, capTo: 0.95, radius: 0.062, scale: [1, 1, 1], blendK: 0.06, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.052, scale: [1, 1, 1], blendK: 0.06, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 1.00, radius: 0.062, scale: [1, 1, 1], blendK: 0.05, limb: 'arm', mirror: true },
+    { bone: 'clavicle', at: 0.85, radius: 0.085, scale: [1, 1, 1], blendK: 0.0175, limb: 'arm', mirror: true },
+    { bone: 'upperArm', at: 0.05, capTo: 0.95, radius: 0.062, scale: [1, 1, 1], blendK: 0.015, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.052, scale: [1, 1, 1], blendK: 0.015, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 1.00, radius: 0.062, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
 
     // Legs — thigh, shin, foot.
-    { bone: 'thigh', at: 0.05, capTo: 0.95, radius: 0.082, scale: [1, 1, 1], blendK: 0.07, limb: 'leg', mirror: true },
-    { bone: 'shin',  at: 0.05, capTo: 0.92, radius: 0.062, scale: [1, 1, 1], blendK: 0.06, limb: 'leg', mirror: true },
-    { bone: 'shin',  at: 1.00, radius: 0.070, scale: [0.85, 0.6, 1.5], blendK: 0.05, limb: 'leg', mirror: true },
+    { bone: 'thigh', at: 0.05, capTo: 0.95, radius: 0.082, scale: [1, 1, 1], blendK: 0.0175, limb: 'leg', mirror: true },
+    { bone: 'shin',  at: 0.05, capTo: 0.92, radius: 0.062, scale: [1, 1, 1], blendK: 0.015, limb: 'leg', mirror: true },
+    { bone: 'shin',  at: 1.00, radius: 0.070, scale: [0.85, 0.6, 1.5], blendK: 0.0125, limb: 'leg', mirror: true },
   ],
 };
 ```
@@ -1646,6 +1673,14 @@ uniform float uStepMul;
 uniform vec3 uBaseColor;
 uniform vec3 uLightDir;
 
+// REQUIRED. three's FRAGMENT prefix declares viewMatrix and cameraPosition but
+// NOT projectionMatrix (that one is vertex-only). The gl_FragDepth write needs
+// it. Without this the program fails to link with
+//   ERROR: 'projectionMatrix' : undeclared identifier
+// and nothing renders at all — while tsc, vite and vitest all stay green,
+// because none of them compile GLSL. three still binds it by name.
+uniform mat4 projectionMatrix;
+
 // iq quadratic polynomial smooth-min: rigid + conservative (never overestimates).
 // NOT associative — the fold order below is fixed by cluster and must stay that way.
 float smin(float a, float b, float k) {
@@ -1675,7 +1710,11 @@ float mapBody(vec3 p) {
     vec4 bounds = uClusterBounds[c];
     // Cull, with a blend margin: a cluster still pulls the surface from
     // uMaxBlendK away, so culling on `> d` alone would clip the blend fillet.
-    if (length(p - bounds.xyz) - bounds.w > d + uMaxBlendK) continue;
+    // NOTE the 4.0 — smin() scales k by 4 internally, so a cluster's real
+    // influence radius is 4x the authored blendK. Using the unscaled value
+    // culls clusters that are still bending the surface, which shows up as
+    // hard creases exactly along cluster boundaries.
+    if (length(p - bounds.xyz) - bounds.w > d + uMaxBlendK * 4.0) continue;
     int start = int(range.x), count = int(range.y);
     for (int i = 0; i < MAX_PRIMS; i++) {
       if (i >= count) break;
@@ -2086,7 +2125,7 @@ import type { Primitive } from './types';
 import { add, len, sub } from './vec';
 
 const capsule = (a: [number, number, number], b: [number, number, number]): Primitive =>
-  ({ a, b, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'armL', cluster: 2 });
+  ({ a, b, radius: 0.1, scale: [1, 1, 1], blendK: 0.0125, limb: 'armL', cluster: 2 });
 
 describe('worldHitToWound / woundWorldPos', () => {
   const prims = [capsule([0, 1, 0], [0, 1.4, 0]), capsule([1, 1, 0], [1, 1.4, 0])];
