@@ -29,7 +29,14 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     mirroredBoneNames.add(b.name);
     const side = b.side ?? 0;
     bones.push({ ...b, name: `${b.name}.l`, side, mirror: false });
-    bones.push({ ...b, name: `${b.name}.r`, side: -side, mirror: false });
+    // NOTE: the right copy mirrors in x — both the side offset AND the direction.
+    // Negating only `side` (as originally planned) leaves a `dir` with a nonzero x
+    // component (e.g. the zombie's clavicle `dir: [1,0,0]`) pointing the same way
+    // on both sides, so both limbs land on the left of the body.
+    bones.push({
+      ...b, name: `${b.name}.r`, side: -side, mirror: false,
+      dir: [-b.dir[0], b.dir[1], b.dir[2]],
+    });
   }
 
   // A mirrored bone's parent may itself be mirrored — retarget to the same side.
