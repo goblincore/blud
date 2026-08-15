@@ -98,9 +98,14 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       errs.push(`cluster "${c.limb}" is not contiguous — fold order is corrupt`);
   }
 
-  // Bounding spheres must contain their primitives, or the cull drops real surface.
+  // Bounding spheres must contain their SOLID primitives, or the cull drops
+  // real surface. Carves are skipped for the same reason clusters.ts excludes
+  // them from the fit: they carry no surface to lose. The connectivity check
+  // below deliberately does NOT skip them — it runs on the carved field, so a
+  // socket deep enough to detach the head from the neck is reported.
   for (const c of body.clusters)
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op === 'sub') continue;
       const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
       for (const end of [prim.a, prim.b])
         if (len(sub(end, c.center)) + prim.radius * maxScale > c.radius + 1e-6)

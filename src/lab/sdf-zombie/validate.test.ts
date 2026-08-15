@@ -109,3 +109,20 @@ describe('shader/CPU field mirror', () => {
     expect(FRAG).toContain('uCarveCount');
   });
 });
+
+describe('validateBody with carves', () => {
+  it('does not report a carve as escaping its bounding sphere', () => {
+    const solid: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.2,
+      scale: [1, 1, 1], blendK: 0.01, limb: 'head', cluster: 0,
+    };
+    const errs = validateBody({
+      prims: [solid, { ...solid, a: [0.2, 0, 0], b: [0.2, 0, 0], radius: 0.08, op: 'sub' }],
+      clusters: [{
+        id: 0, limb: 'head', start: 0, count: 2,
+        center: [0, 0, 0], radius: 0.2, alive: true,
+      }],
+    }, { silhouetteNoiseAmp: 0.012, stepMultiplier: 0.6 });
+    expect(errs.filter(e => /bounding sphere/.test(e))).toEqual([]);
+  });
+});

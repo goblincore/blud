@@ -64,3 +64,13 @@ describe('pushWound', () => {
     expect(out[0]!.radius).toBe(1 / 1000); // index 0 evicted
   });
 });
+
+it('never binds a wound to a carve', () => {
+  const solid: Primitive = {
+    a: [0, 0, 0], b: [0, 0, 0], radius: 0.2,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'head', cluster: 0,
+  };
+  // The carve is nearer the hit, so a naive nearest-primitive search picks it.
+  const carve: Primitive = { ...solid, a: [0.5, 0, 0], b: [0.5, 0, 0], op: 'sub' };
+  expect(worldHitToWound([solid, carve], [0.49, 0, 0], 0.05, 'pellet').primIdx).toBe(0);
+});

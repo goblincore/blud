@@ -34,12 +34,16 @@ export function worldHitToWound(
   radius: number,
   type: WoundType,
 ): Wound {
-  let primIdx = 0;
+  let primIdx = -1;
   let best = Infinity;
   prims.forEach((p, i) => {
+    // A carve is a hole. A crater riding the inside of an eye socket is
+    // meaningless, and it would be carried by a primitive with no surface.
+    if (p.op === 'sub') return;
     const d = Math.min(len(sub(hit, p.a)), len(sub(hit, p.b)));
     if (d < best) { best = d; primIdx = i; }
   });
+  if (primIdx < 0) primIdx = 0; // a body with no solid primitives cannot be hit
 
   const prim = prims[primIdx]!;
   const { u, v, w } = frame(prim);

@@ -40,7 +40,9 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
   // so the wound rides flesh that still exists.
   const live = body.prims
     .map((p, i) => ({ p, i }))
-    .filter(({ p }) => p.limb !== limb && clusters.find(c => c.limb === p.limb)?.alive);
+    .filter(({ p }) => p.op !== 'sub'   // a stump must anchor to flesh, not a hole
+      && p.limb !== limb
+      && clusters.find(c => c.limb === p.limb)?.alive);
 
   let primIdx = -1, best = Infinity;
   for (const { p, i } of live) {
