@@ -42,6 +42,14 @@ uniform int uSteps;
 uniform float uStepMul;
 uniform vec3 uBaseColor;
 uniform vec3 uLightDir;
+uniform float uSpecIntensity, uSpecRoughness, uFresnelBoost, uTranslucency;
+uniform float uSurfaceNoiseAmp, uSilhouetteNoiseAmp, uWetness;
+uniform float uKeyIntensity, uFillIntensity;
+uniform vec3  uKeyColor;
+// three's ShaderMaterial FRAGMENT prefix declares viewMatrix/cameraPosition but
+// NOT projectionMatrix (vertex-only) — the gl_FragDepth write below needs it.
+// Declared here; three still binds it by name from the program's active uniforms.
+uniform mat4 projectionMatrix;
 
 // iq quadratic polynomial smooth-min: rigid + conservative (never overestimates).
 // NOT associative — the fold order below is fixed by cluster and must stay that way.
@@ -102,6 +110,25 @@ float sdPrim(vec3 p, int i) {
   return (length(q - (a + ab * t)) - A.w) * minScale;
 }
 
+float hash13(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float noise3(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n = mix(
+    mix(mix(hash13(i + vec3(0,0,0)), hash13(i + vec3(1,0,0)), f.x),
+        mix(hash13(i + vec3(0,1,0)), hash13(i + vec3(1,1,0)), f.x), f.y),
+    mix(mix(hash13(i + vec3(0,0,1)), hash13(i + vec3(1,0,1)), f.x),
+        mix(hash13(i + vec3(0,1,1)), hash13(i + vec3(1,1,1)), f.x), f.y), f.z);
+  return n * 2.0 - 1.0;
+}
+
+float fbm(vec3 p) { return noise3(p * 4.0) * 0.6 + noise3(p * 9.0) * 0.3; }
+
 float mapBody(vec3 p) {
   float d = 1e9;
   for (int c = 0; c < MAX_CLUSTERS; c++) {
@@ -120,7 +147,7 @@ float mapBody(vec3 p) {
       d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
     }
   }
-  return applyWounds(d, p);
+  return applyWounds(d, p) + fbm(p * 3.0) * uSilhouetteNoiseAmp;
 }
 
 vec3 calcNormal(vec3 p) {
@@ -148,12 +175,33 @@ void main() {
 
   vec3 p = ro + rd * t;
   vec3 n = calcNormal(p);
-  float diff = max(dot(n, normalize(uLightDir)), 0.0);
+
+  // Micro-detail perturbs the normal only — costs no march safety.
+  n = normalize(n + vec3(fbm(p * 22.0), fbm(p * 22.0 + 5.0), fbm(p * 22.0 + 11.0)) * uSurfaceNoiseAmp);
+
   float wm = woundMask(p);
   float cm = charMask(p);
   vec3 albedo = mix(uBaseColor, uDeepColor, wm);
   albedo = mix(albedo, uCharColor, cm);
-  outColor = vec4(albedo * (0.22 + 0.78 * diff), 1.0);
+
+  vec3 L = normalize(uLightDir);
+  vec3 V = -rd;
+  vec3 H = normalize(L + V);
+  float diff = max(dot(n, L), 0.0);
+
+  // Wounds are wetter than the surrounding skin; char is dead matte.
+  float wet = uWetness * mix(1.0, 1.6, wm) * (1.0 - cm);
+  float shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, uSpecRoughness));
+  float fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * uFresnelBoost;
+
+  // Fake backlit scatter: sample the field a little way toward the light.
+  float thin = clamp(mapBody(p + L * 0.06) * -8.0, 0.0, 1.0);
+  vec3 scatter = uDeepColor * thin * uTranslucency * (1.0 - cm);
+
+  vec3 lit = albedo * (uFillIntensity + diff * uKeyIntensity) * uKeyColor
+           + uKeyColor * (shine * uSpecIntensity + fres) * wet
+           + scatter;
+  outColor = vec4(lit, 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
   gl_FragDepth = (clip.z / clip.w) * 0.5 + 0.5;

@@ -4,6 +4,7 @@ import { createRenderer } from '../../engine/renderer';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { createZombieView } from './zombie';
+import { FLESH_PRESETS, LIGHT_PRESETS } from './material';
 import {
   MAX_WOUNDS,
   pushWound,
@@ -46,6 +47,7 @@ const errorsEl = document.getElementById('errors');
 if (errorsEl) errorsEl.textContent = body.errors.join('\n');
 
 const view = createZombieView(body);
+view.applyMaterial(FLESH_PRESETS['henenlotter-latex'], LIGHT_PRESETS['practical-hard-key']);
 scene.add(view.object);
 
 let wounds: Wound[] = [];
