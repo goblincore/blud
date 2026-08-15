@@ -114,8 +114,31 @@ void main() {
 
   vec3 p = ro + rd * t;
   vec3 n = calcNormal(p);
-  float diff = max(dot(n, normalize(uLightDir)), 0.0);
-  outColor = vec4(uBaseColor * (0.22 + 0.78 * diff), 1.0);
+
+  // INTERIM SHADING — superseded by Task 16's FleshMaterial presets. A flat
+  // diffuse term gives the eye nothing to read form against, so the body looks
+  // like a featureless mass even when the geometry is correct. Hard key +
+  // specular + fresnel rim is the minimum that makes a silhouette legible.
+  vec3 L = normalize(uLightDir);
+  vec3 V = -rd;
+  vec3 H = normalize(L + V);
+
+  float diff = max(dot(n, L), 0.0);
+  // Wrapped diffuse — light bends round the form instead of terminating hard.
+  float wrap = max((dot(n, L) + 0.35) / 1.35, 0.0);
+  // Bounce from the floor, so undersides aren't dead black.
+  float bounce = max(-n.y, 0.0) * 0.18;
+  float spec = pow(max(dot(n, H), 0.0), 42.0) * 0.55;
+  // Fresnel rim: the single cheapest cue for reading a curved silhouette.
+  float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.55;
+  // Cheap AO from the field: sample a little along the normal — creases and
+  // the insides of joints stay darker, which is what separates limb from torso.
+  float ao = clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1.0);
+
+  vec3 lit = uBaseColor * (0.10 + 0.55 * wrap + 0.75 * diff + bounce) * ao
+           + vec3(1.0, 0.93, 0.90) * spec
+           + vec3(0.85, 0.35, 0.38) * rim;
+  outColor = vec4(lit, 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
   gl_FragDepth = (clip.z / clip.w) * 0.5 + 0.5;
