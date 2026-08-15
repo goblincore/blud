@@ -258,6 +258,23 @@ addSlider(bodyBox, {
   },
 });
 
+// Crater shape. Kept out of FleshMaterial because these describe damage
+// geometry, not the surface — they change the field, not the shading.
+const dmgBox = addSection(panelEl, 'damage');
+const rimUniform = (name: string) =>
+  view.material.uniforms[name] as { value: number };
+for (const [key, label, min, max] of [
+  ['uWoundBlendK', 'wound blendK', 0.002, 0.06],
+  ['uRimSplay', 'rim splay', 0, 1.5],
+  ['uRimOffset', 'rim offset', 0.8, 2.0],
+  ['uRimWidth', 'rim width', 0.15, 1.2],
+] as const)
+  addSlider(dmgBox, {
+    label, min, max, step: 0.005,
+    get: () => rimUniform(key).value,
+    set: (v) => { rimUniform(key).value = v; },
+  });
+
 const actionBox = addSection(panelEl, 'actions');
 addButton(actionBox, 'respawn', () => {
   wounds = [];

@@ -24,6 +24,9 @@ uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius
 uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age
 uniform int  uWoundCount;
 uniform float uWoundBlendK;        // separate from the union k — makes the wet lip
+uniform float uRimSplay;           // height of the everted lip, as a fraction of depth
+uniform float uRimOffset;          // where the lip sits, as a multiple of crater radius
+uniform float uRimWidth;           // how broad the lip is
 uniform vec3 uDeepColor;
 uniform vec3 uCharColor;
 
@@ -71,7 +74,19 @@ float applyWounds(float d, vec3 p) {
     float type = uWoundMeta[i].x;
     // A burn only opens up as it cooks; a pellet/blast subtracts immediately.
     float depth = type > 1.5 ? w.w * 0.35 * clamp(uWoundMeta[i].y, 0.0, 1.0) : w.w;
-    d = smax(d, -(length(p - w.xyz) - depth), uWoundBlendK);
+    float r = length(p - w.xyz);
+
+    d = smax(d, -(r - depth), uWoundBlendK);
+
+    // Everted rim. A plain smooth subtraction leaves a clean dish; real flesh
+    // (and the T-1000 taking a shotgun round) PEELS — the displaced material
+    // splays outward into a raised lip around the mouth.
+    //
+    // Modelled as a Gaussian ring just outside the crater. Subtracting from d
+    // means "more material here", so this adds a bulge rather than a dent.
+    // Burns evert far less: they char and contract instead of tearing open.
+    float x = (r - depth * uRimOffset) / max(depth * uRimWidth, 1e-4);
+    d -= exp(-x * x) * depth * uRimSplay * (type > 1.5 ? 0.25 : 1.0);
   }
   return d;
 }
