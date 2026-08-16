@@ -300,6 +300,13 @@ export const FLICKER = /* wgsl */ `fn flicker(t: f32, amt: f32) -> f32 {
 // / viewportHeight. Stepping by (d - r) rather than d is the standard cone
 // march step — it is what keeps the cone outside the surface.
 //
+// LEVELS CHAIN, AND FINER IS WHAT HELPS. A coarser level above the first would
+// only cheapen the pre-pass, which is already a fraction of the pixels; it
+// would not improve the distance handed to the full march. A FINER level does,
+// because coneK shrinks with tile size and a narrower cone travels further
+// before it touches. So the chain runs wide to narrow — 8x8, then 2x2 — each
+// starting from the last.
+//
 // Returns the distance, or tMax when the cone never came near anything. tMax
 // is the right answer for a miss rather than zero: a cone that missed means
 // every ray in the tile misses too, so there is nothing for them to skip past.
@@ -311,11 +318,16 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
-  coneK: f32
+  coneK: f32,
+  startT: f32
 ) -> f32 {
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
-  var t = 0.0;
+  // Chained levels: this cone begins where the coarser one stopped. Safe
+  // because a NARROWER cone can only travel further than a wider one before
+  // touching — which is the whole reason a second, finer level is worth
+  // running at all.
+  var t = clamp(startT, 0.0, tMax);
   for (var i = 0; i < 64; i = i + 1) {
     let d = mapBody(camPos + rd * t, data, counts, marchCfg.z, woundCfg, woundCfg2);
     let r = t * coneK;

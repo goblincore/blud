@@ -225,14 +225,26 @@ crowded scenes with minimal empty space", and a shoulder-to-shoulder crowd of
 overlapping bodies is precisely that. 22% in the worst case is consistent, and
 a sparse encounter should do better.
 
-**The useful next level is FINER, not coarser** — which is the opposite of the
-intuition, so it is worth writing down. Adding a coarser level above our 8x8
-would only make the pre-pass itself cheaper, and the pre-pass is already a
-sixty-fourth of the pixels. It would not improve the start distance the fine
-pass receives at all. A FINER level would: cone radius grows with tile size,
-and a narrower cone travels further before it touches anything, so an 8x8 ->
-2x2 -> per-pixel chain hands the fine march a strictly larger proven-empty
-distance than 8x8 alone. That is the version of his recursion worth having.
+**A finer second level was built, MEASURED, and turned off again.** The
+reasoning that led to it was half right, and the half that was wrong is the
+interesting part. A narrower cone does travel further before touching, so a
+finer level genuinely hands the full march a longer proven-empty distance —
+that part held. What it ignored was the COST of the level: pre-pass cost grows
+as 1/tile², so halving the tile quadruples it. The 8x8 level is a
+sixty-fourth of the pixels and nearly free. A 2x2 level is a QUARTER of them,
+which is most of a full march.
+
+Measured at 10 bodies, repeats within 3%: the 2x2 second level made the frame
+**~30% slower** (112 ms to 146 ms) than the single level alone. Off by
+default, kept tunable via `setConeFineTile()` — tile 4 was never cleanly
+measured, because the sweep that would have settled it drifted 60% on its own
+control and was thrown out.
+
+**Why it does not pay, and this is the general lesson:** ARBM's recursion is
+ADAPTIVE — it subdivides only the patches that need it. A uniform finer level
+pays full cost across the whole screen to help the few tiles that had further
+to travel. Porting a recursive CPU algorithm as a fixed pyramid loses the one
+property that made it work.
 
 **Interpolated shading is the one idea we have no analogue for.** He terminates
 early where all four corners of a patch are inside an object with aligned

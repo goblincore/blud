@@ -32,10 +32,8 @@ import {
 
 export interface ZombieGpuView {
   object: THREE.Object3D;
-  /** The coarse cone-march twin, rendered into the pre-pass target. */
+  /** The coarse cone-march twin, rendered into the pre-pass targets. */
   coneObject: THREE.Object3D;
-  /** Cone footprint radius per unit distance — set from tile size and fov. */
-  setConeK(k: number): void;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
   /** Re-upload after the body changes (sever, override edit, rig step). */
@@ -243,12 +241,27 @@ const coneFetch = wgslFn(CONE_FETCH_WGSL);
  * MarchUniforms is derived rather than declared.
  */
 export function createConeUniforms() {
-  return { enabled: uniform(0) };
+  return {
+    /** Whether the FULL march starts from the pre-pass at all. */
+    enabled: uniform(0),
+    /** Footprint radius per unit distance for the level being rendered. */
+    k: uniform(0.02),
+    /** Whether the cone pass itself chains from the coarser level's result. */
+    chain: uniform(0),
+  };
 }
 export type ConeUniforms = ReturnType<typeof createConeUniforms>;
 
 export interface ConeSource {
+  /** Finest level, read by the full-resolution march. */
   texture: THREE.Texture;
+  /**
+   * Coarsest level, read by the cone pass itself when chaining.
+   *
+   * Fixed rather than swapped per pass: pass A simply runs with `chain` at 0
+   * and ignores it, so no texture binding has to change between the two.
+   */
+  coarseTexture: THREE.Texture;
   uniforms: ConeUniforms;
 }
 
@@ -422,7 +435,6 @@ export function createZombieGpuView(
   // same value normalised as DEPTH — so where proxy boxes overlap the hardware
   // depth test resolves to the NEAREST start, which is the one value that is
   // safe for every body in that tile.
-  const coneK = uniform(0.02);
   const coneT = coneMarch({
     worldPos: positionWorld,
     camPos: cameraPosition,
@@ -431,7 +443,14 @@ export function createZombieGpuView(
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
-    coneK,
+    coneK: opts.cone ? opts.cone.uniforms.k : float(0.02),
+    startT: opts.cone
+      ? coneFetch({
+          coneTex: texture(opts.cone.coarseTexture),
+          screenUV: screenUV,
+          enabled: opts.cone.uniforms.chain,
+        })
+      : float(0),
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -483,7 +502,6 @@ export function createZombieGpuView(
   return {
     object: mesh,
     coneObject: coneMesh,
-    setConeK(k: number) { coneK.value = k; },
     uniforms: u,
     update(next) {
       const p = upload(next);

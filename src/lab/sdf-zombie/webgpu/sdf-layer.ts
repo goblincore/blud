@@ -62,6 +62,30 @@ export const CONE_LAYER = 2;
 export const CONE_TILE = 8;
 
 /**
+ * Tile size of an optional SECOND, finer cone level. **0 — off by default.**
+ *
+ * The reasoning for adding one was half right and it is worth keeping the
+ * whole argument. A narrower cone DOES travel further before it touches, so a
+ * finer level hands the full march a strictly larger proven-empty distance
+ * than 8x8 alone. What that reasoning ignored is the COST of the level:
+ * pre-pass cost grows as 1/tile^2, so halving the tile quadruples it. The 8x8
+ * level is a sixty-fourth of the pixels and nearly free; a 2x2 level is a
+ * QUARTER of them, which is most of a full march.
+ *
+ * Measured at 10 bodies, repeats within 3%: a 2x2 second level made the frame
+ * ~30% SLOWER (112 ms to 146 ms) than the single level alone, while the single
+ * 8x8 level was worth -22%. So the second level is off, and this stays tunable
+ * via setConeFineTile() because 4 was never cleanly measured — the sweep that
+ * would have settled it drifted 60% on its own control and was thrown out.
+ *
+ * The deeper reason this does not pay: the ARBM recursion it was modelled on
+ * is ADAPTIVE, subdividing only the patches that need it. A uniform finer
+ * level pays full cost across the entire screen to help the few tiles that
+ * had further to travel.
+ */
+export const CONE_TILE_FINE = 0;
+
+/**
  * Samples the SDF layer at the current pixel. rgb is colour, a is depth.
  *
  * `textureLoad` with explicit integer coordinates, not `textureSample`: the
@@ -106,6 +130,11 @@ export interface SdfLayer {
   readonly cone: ConeSource;
   /** Turns the cone pre-pass on or off, for measurement. */
   setConeEnabled(on: boolean): void;
+  /** Lens and layer height, from which both levels' cone widths are derived. */
+  setConeGeometry(fovDeg: number, targetHeight: number): void;
+  /** Second-level tile size in pixels, or 0 for a single level. */
+  setConeFineTile(px: number): void;
+  readonly coneFineTile: number;
   readonly coneEnabled: boolean;
   readonly scale: number;
   readonly flipY: boolean;
@@ -148,15 +177,28 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // from the console if a future three version changes its mind.
   const uFlipY = uniform(1);
 
-  // Coarse pre-pass target. One texel per CONE_TILE of the SDF pass, holding
-  // the distance every ray in that tile can safely skip.
-  const coneTarget = new THREE.RenderTarget(1, 1, {
+  // Two chained pre-pass levels: wide then narrow. Each holds the distance
+  // every ray in its tile can safely skip.
+  const coneOpts = {
     depthBuffer: true,
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
-  });
+  } as const;
+  const coneCoarse = new THREE.RenderTarget(1, 1, coneOpts);
+  const coneFine = new THREE.RenderTarget(1, 1, coneOpts);
   const coneUniforms = createConeUniforms();
+  let coneFov = 75;
+  let coneHeight = 540;
+  /**
+   * Tile size of the second level, or 0 to run a single level.
+   *
+   * Tunable because the trade is sharp and not obvious: a narrower cone hands
+   * the full march a longer proven-empty distance, but pre-pass cost grows as
+   * 1/tile^2, so halving the tile quadruples what the level costs. Measured at
+   * 10 bodies: tile 2 made the frame ~30% SLOWER than no second level at all.
+   */
+  let coneFineTile: number = CONE_TILE_FINE;
 
   const sampled = composite({
     layerTex: texture(target.texture),
@@ -181,13 +223,23 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   quadCam.position.z = 1;
 
+  /** Cone footprint radius per unit distance for a tile of `px` pixels. */
+  function coneKFor(px: number): number {
+    return (px * Math.tan((coneFov * Math.PI) / 360)) / Math.max(1, coneHeight);
+  }
+
   function resize() {
     const w = Math.max(1, Math.round(fullW * scale));
     const h = Math.max(1, Math.round(fullH * scale));
     target.setSize(w, h);
-    coneTarget.setSize(
+    coneCoarse.setSize(
       Math.max(1, Math.ceil(w / CONE_TILE)),
       Math.max(1, Math.ceil(h / CONE_TILE)),
+    );
+    const ft = coneFineTile > 0 ? coneFineTile : CONE_TILE;
+    coneFine.setSize(
+      Math.max(1, Math.ceil(w / ft)),
+      Math.max(1, Math.ceil(h / ft)),
     );
   }
 
@@ -201,12 +253,27 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       renderer.setRenderTarget(null);
       void renderer.render(scene, camera);
 
-      // Pass 1b — the coarse cone pre-pass, one texel per tile. Cheap: a
-      // sixty-fourth of the pixels at CONE_TILE = 8, and no shading at all.
+      // Pass 1b — the cone pre-pass, wide level then narrow, each starting
+      // where the last stopped. No shading in either; the wide level is a
+      // sixty-fourth of the pixels and the narrow one a quarter.
+      //
+      // The same meshes render twice. Only the uniforms change: `chain` is 0
+      // for the wide level so it ignores the (unwritten) coarse texture, and 1
+      // for the narrow one. No binding has to be swapped between passes.
       if (coneUniforms.enabled.value > 0.5) {
         camera.layers.set(CONE_LAYER);
-        renderer.setRenderTarget(coneTarget);
+
+        coneUniforms.k.value = coneKFor(CONE_TILE);
+        coneUniforms.chain.value = 0;
+        renderer.setRenderTarget(coneCoarse);
         void renderer.render(scene, camera);
+
+        if (coneFineTile > 0) {
+          coneUniforms.k.value = coneKFor(coneFineTile);
+          coneUniforms.chain.value = 1;
+          renderer.setRenderTarget(coneFine);
+          void renderer.render(scene, camera);
+        }
       }
 
       // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
@@ -235,7 +302,20 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       resize();
     },
     setFlipY(on) { uFlipY.value = on ? 1 : 0; },
-    cone: { texture: coneTarget.texture, uniforms: coneUniforms },
+    // The full march reads the finest level that was actually rendered. With
+    // the second level off, that is the coarse one — hence the swap here
+    // rather than a branch in the shader.
+    cone: {
+      get texture() { return coneFineTile > 0 ? coneFine.texture : coneCoarse.texture; },
+      coarseTexture: coneCoarse.texture,
+      uniforms: coneUniforms,
+    },
+    setConeGeometry(fovDeg, targetHeight) {
+      coneFov = fovDeg;
+      coneHeight = targetHeight;
+    },
+    setConeFineTile(px) { coneFineTile = Math.max(0, Math.round(px)); resize(); },
+    get coneFineTile() { return coneFineTile; },
     setConeEnabled(on) { coneUniforms.enabled.value = on ? 1 : 0; },
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },
     get scale() { return scale; },
@@ -243,7 +323,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
-      coneTarget.dispose();
+      coneCoarse.dispose();
+      coneFine.dispose();
       quad.geometry.dispose();
       quadMat.dispose();
     },
