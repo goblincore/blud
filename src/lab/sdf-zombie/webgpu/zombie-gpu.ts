@@ -89,6 +89,15 @@ export function createZombieGpuView(body: BuildResult): ZombieGpuView {
 
   const packed = upload(body);
 
+  /**
+   * Swizzle accessors on a wgslFn result.
+   *
+   * three 0.185 types wgslFn's return as a plain Node, which has no `.xyz` or
+   * `.w` on it even though the node system supplies them at runtime. Casting
+   * through a named shape keeps the two uses below honest about what they
+   * expect, rather than scattering `as any` at each call site.
+   */
+  type Swizzled = { xyz: unknown; w: unknown };
   const marched = marchBody({
     worldPos: positionWorld,
     camPos: cameraPosition,
@@ -102,16 +111,16 @@ export function createZombieGpuView(body: BuildResult): ZombieGpuView {
     lightCfg: uLightCfg,
     surfCfg: uSurfCfg,
     surfCfg2: uSurfCfg2,
-  });
+  }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
   material.side = THREE.BackSide;
-  material.colorNode = vec4(marched.xyz, 1.0);
+  material.colorNode = vec4(marched.xyz as never, 1.0);
 
   // Depth from the marched hit, so the body composites with real geometry.
   // WebGPU clip z is already [0,1] — no `* 0.5 + 0.5` remap, unlike the GLSL.
   const rayDir = normalize(sub(positionWorld, cameraPosition));
-  const hitPos = add(cameraPosition, mul(rayDir, marched.w));
+  const hitPos = add(cameraPosition, mul(rayDir, marched.w as never));
   const clip = mul(cameraProjectionMatrix, mul(cameraViewMatrix, vec4(hitPos, 1.0)));
   material.depthNode = clip.z.div(clip.w);
   material.depthWrite = true;
