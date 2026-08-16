@@ -47,6 +47,7 @@ import { sdBody } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
 import { createBloodSim, burst, emitTrails, stepBlood } from '../blood-sim';
 import { createBloodView } from './blood-view-gpu';
+import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt } from '../rig-bind';
 import { stepRig } from '../rig';
@@ -187,7 +188,12 @@ async function main() {
   }
   sizeSdfLayer();
   window.addEventListener('resize', sizeSdfLayer);
-  handle.setDrawFn(() => sdfLayer.render(scene, camera));
+  // The frame's draw: goo density first, then the whole sdf flow in the
+  // middle, then the goo surface composited on top (with fake depth, so it
+  // interleaves with flesh and floor). gooLayer is declared further down —
+  // safe in a closure because everything between here and the end of main()
+  // is synchronous, so no frame can fire before it initialises.
+  handle.setDrawFn(() => gooLayer.render(camera, () => sdfLayer.render(scene, camera)));
 
   // The occluder hull. Its own layer, rendered before the march, so every ray
   // can stop at the distance something solid already covers — the early-Z that
@@ -221,6 +227,28 @@ async function main() {
   scene.add(view.object);
   scene.add(view.coneObject);
   const u = view.uniforms;
+
+  // The metaball blood layer (gobs-and-goo task 5). It shares the march's
+  // light uniform NODES — not copies — so any panel re-tune of lightDir /
+  // keyColor / intensities moves the goo and the flesh together. Created
+  // here rather than beside sdfLayer because it needs those nodes, which
+  // only exist once the body view does.
+  const gooLayer = createGooLayer(handle.renderer, {
+    lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+  });
+  {
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+  }
+  // Density follows the SDF layer's resolution at a fixed fraction; this
+  // listener is registered AFTER sizeSdfLayer's own, so it reads the
+  // already-updated targetSize. A separate listener rather than a line in
+  // sizeSdfLayer because that runs once before gooLayer exists (temporal
+  // dead zone — see the panel note on frames firing mid-bootstrap).
+  window.addEventListener('resize', () => {
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+  });
 
   /**
    * Crowd fill. Declared here, ahead of everything that touches it, because a
@@ -986,6 +1014,9 @@ async function main() {
       bdt, Math.random);
     stepBlood(bloodSim, bdt, Math.random);
     bloodView.sync(bloodSim, camera);
+    // The goo density quads pose from the same sim state, in the callback
+    // (before the drawFn) — same contract as bloodView.sync.
+    gooLayer.sync(bloodSim, camera);
 
     // Drive the flesh: settle the rig toward its rest pose, push the result
     // back into the primitives, and re-upload. This is what makes the body
@@ -1255,6 +1286,21 @@ async function main() {
     shellBtn.textContent = `shell silhouette: ${on ? 'on' : 'off'}`;
   }
 
+  // Metaball blood (gobs-and-goo task 5). The two knobs that shape the
+  // surface: where the density field becomes goo, and how wide the soft
+  // band between bare and full-blood is (as a multiple of the threshold).
+  const gooBox = addSection(panelEl, 'goo');
+  addSlider(gooBox, {
+    label: 'goo threshold', min: 0.1, max: 0.95, step: 0.01,
+    get: () => gooLayer.threshold,
+    set: (v) => { gooLayer.setThreshold(v); },
+  });
+  addSlider(gooBox, {
+    label: 'goo edge', min: 1.05, max: 3, step: 0.05,
+    get: () => gooLayer.edge,
+    set: (v) => { gooLayer.setEdge(v); },
+  });
+
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
@@ -1294,6 +1340,16 @@ async function main() {
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
     sdfLayer,
+    /**
+     * The metaball blood layer — threshold/edge setters for console tuning,
+     * mirroring the panel's goo section (which reaches only the same two).
+     */
+    gooLayer: {
+      setThreshold: (v: number) => gooLayer.setThreshold(v),
+      setEdge: (v: number) => gooLayer.setEdge(v),
+      get threshold() { return gooLayer.threshold; },
+      get edge() { return gooLayer.edge; },
+    },
     /**
      * Stamps n blast wounds on the front of the torso by raycasting
      * straight-on — a deterministic heavy-damage state for automated visual

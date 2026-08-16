@@ -3,8 +3,14 @@
 // Instanced billboard renderer for blood-sim: gooey specular droplets +
 // flat floor splats. WebGPU twin; ../blood-view.ts mirrors it with plain
 // three imports. Keep the two in the same shape.
+//
+// MIST ONLY since gobs-and-goo task 5: droplets at/over the goo cutoff and
+// all scraps render through goo-layer's screen-space metaball pass instead —
+// this view keeps the fine burst beads too small to fuse into a surface,
+// and the floor splats, which already read well.
 import * as THREE from 'three/webgpu';
 import type { BloodSim } from '../blood-sim';
+import { GOO_TUNING } from './goo-layer';
 
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
@@ -91,7 +97,13 @@ export function createBloodView(): BloodView {
     camInv.copy(camera.quaternion).invert();
     for (let i = 0; i < MAX_DROPLETS; i++) {
       const d = sim.droplets[i];
-      if (!d) { m.makeScale(0, 0, 0); drops.setMatrixAt(i, m); continue; }
+      // The goo layer owns everything that feeds the metaball density
+      // field; only sub-cutoff mist beads pose here. Scraps never do.
+      if (!d || d.kind === 'scrap' || d.size >= GOO_TUNING.mistMaxSize) {
+        m.makeScale(0, 0, 0);
+        drops.setMatrixAt(i, m);
+        continue;
+      }
       p.set(d.pos[0], d.pos[1], d.pos[2]);
       // Billboard, then roll in screen space so the stretch follows velocity.
       vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
