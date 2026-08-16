@@ -105,20 +105,9 @@ export const MATERIAL_SLIDERS: { key: keyof FleshMaterial; min: number; max: num
 
 /** Face sliders, mirroring MATERIAL_SLIDERS. Ranges are authoring judgement. */
 export const FACE_SLIDERS: { key: keyof FaceParams; min: number; max: number }[] = [
-  { key: 'noseLength', min: 0.01, max: 0.11 },
-  { key: 'noseWidth', min: 0.4, max: 2.0 },
-  { key: 'noseDroop', min: 0, max: 0.07 },
-  { key: 'noseHook', min: -0.02, max: 0.05 },
-  { key: 'browHeavy', min: 0, max: 0.07 },
-  { key: 'browRise', min: -0.01, max: 0.06 },
-  { key: 'eyeSize', min: 0.008, max: 0.035 },
-  { key: 'eyeSpacing', min: 0.02, max: 0.065 },
-  { key: 'eyeBulge', min: -0.01, max: 0.03 },
-  { key: 'lidDroop', min: -0.005, max: 0.035 },
-  { key: 'socketDepth', min: 0.01, max: 0.05 },
-  { key: 'mouthWidth', min: 0.015, max: 0.075 },
-  { key: 'mouthOpen', min: 0.003, max: 0.035 },
-  { key: 'chinJut', min: -0.01, max: 0.055 },
-  { key: 'jawWidth', min: 0.04, max: 0.11 },
-  { key: 'jawDrop', min: 0.03, max: 0.11 },
+  { key: 'headRadius', min: 0.07, max: 0.20 },
+  { key: 'headWidth', min: 0.6, max: 1.6 },
+  { key: 'headHeight', min: 0.6, max: 2.0 },
+  { key: 'headDepth', min: 0.6, max: 1.8 },
+  { key: 'headBlend', min: 0, max: 0.02 },
 ];

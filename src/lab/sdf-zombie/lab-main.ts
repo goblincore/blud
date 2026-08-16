@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/lab-main.ts
 import * as THREE from 'three';
 import { createRenderer } from '../../engine/renderer';
-import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
 import { makeZombie } from './body';
 import { DEFAULT_FACE, type FaceParams } from './face';
 import { createZombieView } from './zombie';
@@ -157,10 +157,33 @@ let faceTexName: FaceTexName = 'smiley';
 loadFaceTexture(faceTexName);
 view.material.uniforms.uFaceEnabled!.value = 1;
 // Map the crop across the head and no further. uv = hs * scale + centre, so
-// uv lands in [0,1] over hs +/- 0.5/scale — at scale 1.0 that is exactly the
-// head cluster's own radius. At the old 0.80 it reached 25% beyond, which put
-// the projection down on the neck and chest.
-(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(1.0, 1.0, 0.5, 0.5);
+// uv lands in [0,1] over hs +/- 0.5/scale. hs is normalised by the skull's own
+// radius, so the head spans hs +/- 1.0 — which needs scale 0.5, not 1.0. At 1.0
+// the texture covered only the middle half of the face.
+(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.5, 0.5, 0.5, 0.5);
+
+/**
+ * The skull's own sphere: the fattest additive primitive in the head cluster.
+ *
+ * NOT the head cluster's bounding sphere — that also encloses the neck capsule,
+ * so it is far larger than the head and normalising the face projection by it
+ * spilled the texture down over the neck and shoulders.
+ */
+function headSphere(b: BuildResult): { centre: Vec3; radius: number } | null {
+  const head = b.clusters.find(c => c.limb === 'head');
+  if (!head) return null;
+  let best: Vec3 | null = null;
+  let bestR = -Infinity;
+  for (const p of b.prims.slice(head.start, head.start + head.count)) {
+    if (p.op === 'sub') continue;
+    const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    if (r > bestR) {
+      bestR = r;
+      best = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+    }
+  }
+  return best === null ? null : { centre: best, radius: bestR };
+}
 
 /** The live body — replaced on sever and on any override edit. */
 let current = body;
@@ -271,6 +294,10 @@ handle.setRenderCallback((dt) => {
   };
   const posed = applyRig(current, bound);
   view.update(posed);
+  // Re-derive the skull's sphere from the POSED primitives so the face
+  // projection tracks the head through the jiggle.
+  const skull = headSphere(posed);
+  if (skull) view.setHeadSphere(skull.centre, skull.radius);
   view.setWounds(
     wounds.map(w => woundWorldPos(posed.prims, w)),
     wounds.map(w => w.radius),

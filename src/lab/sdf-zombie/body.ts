@@ -26,15 +26,8 @@ const ZOMBIE_BASE: BodyDef = {
   ],
 
   prims: [
-    // Head — skull plus a heavy jaw that juts forward.
-    //
-    // blendK is deliberately TIGHTER here than anywhere else on the body.
-    // smin scales k by 4, so the old 0.0125 fused jaw into cranium across a
-    // 5 cm blend and the head read as a featureless egg — no chin, no jaw
-    // line, nothing for a face to sit on. 0.005 gives a 2 cm blend, which
-    // keeps the joint smooth while letting the jaw stay a separate form.
-    { bone: 'skull', at: 0.45, radius: 0.115, scale: [1, 1.08, 1.05], blendK: 0.005, limb: 'head' },
-    { bone: 'skull', at: 0.15, radius: 0.075, scale: [0.9, 0.7, 1.25], blendK: 0.005, limb: 'head' },
+    // Head — just the neck here. The skull itself is a single parameterised
+    // ellipsoid emitted by face.ts, so it can be tuned live in the panel.
     { bone: 'neck',  at: 0.05, capTo: 1.0, radius: 0.045, scale: [1, 1, 1], blendK: 0.007, limb: 'head' },
 
     // Torso — ribcage tapering into a sagging gut.

@@ -9,7 +9,6 @@ export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
   primB: Float32Array;         // xyz = endpoint B, w = blendK
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
-  primTint: Float32Array;      // xyz = albedo override, w = strength (0 = untinted)
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = unused
   primCount: number;
@@ -24,7 +23,6 @@ export function packBody(body: BuiltBody): PackedBody {
   const primA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primTint = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
   let carveCount = 0;
@@ -44,8 +42,6 @@ export function packBody(body: BuiltBody): PackedBody {
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
     primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], isCarve ? 1 : 0], o);
-    const t = p.tint;
-    primTint.set(t ? [t[0], t[1], t[2], p.tintStrength ?? 1] : [0, 0, 0, 0], o);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
@@ -59,7 +55,7 @@ export function packBody(body: BuiltBody): PackedBody {
   });
 
   return {
-    primA, primB, primScale, primTint, clusterBounds, clusterRange,
+    primA, primB, primScale, clusterBounds, clusterRange,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,

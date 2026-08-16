@@ -33,7 +33,7 @@ describe('override persistence', () => {
 });
 
 it('round-trips faceParams through storage', () => {
-  saveOverride({ faceParams: { noseLength: 0.099 } });
-  expect(loadOverride().faceParams?.noseLength).toBeCloseTo(0.099, 6);
+  saveOverride({ faceParams: { headHeight: 1.44 } });
+  expect(loadOverride().faceParams?.headHeight).toBeCloseTo(1.44, 6);
   clearOverride();
 });

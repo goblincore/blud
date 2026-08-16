@@ -49,27 +49,20 @@ describe('makeZombie', () => {
     expect(built.errors).toEqual([]);
   });
 
-  it('adds the face to the head cluster and nowhere else', () => {
+  it('adds the head to the head cluster and nowhere else', () => {
     const head = built.clusters.find(c => c.limb === 'head')!;
-    // mirrorOffset entries expand into a +x/-x pair, so count the expansion.
+    // body.ts contributes only the neck; face.ts emits the skull itself.
     const faceCount = facePrims(DEFAULT_FACE)
       .reduce((n, p) => n + (p.mirrorOffset ? 2 : 1), 0);
-    // The face grows the head cluster and leaves the other five untouched.
-    expect(head.count).toBe(3 + faceCount);
+    expect(head.count).toBe(1 + faceCount);
     for (const p of built.prims.slice(head.start, head.start + head.count))
       expect(p.limb).toBe('head');
   });
 
-  it('keeps every carve inside the head cluster', () => {
-    const head = built.clusters.find(c => c.limb === 'head')!;
-    const carves = built.prims
-      .map((p, i) => ({ p, i }))
-      .filter(({ p }) => p.op === 'sub');
-    expect(carves.length).toBeGreaterThan(0);
-    for (const { i } of carves) {
-      expect(i).toBeGreaterThanOrEqual(head.start);
-      expect(i).toBeLessThan(head.start + head.count);
-    }
+  it('carries no carves — the face is texture, so nothing is cut out', () => {
+    // The carve machinery is still exercised by wounds and by sever.ts; it is
+    // simply unused by the body's own definition.
+    expect(built.prims.every(p => p.op !== 'sub')).toBe(true);
   });
 
   it('stays inside the shader primitive cap', () => {

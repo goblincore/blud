@@ -49,6 +49,11 @@ uniform float uFaceStrength;
 uniform float uFaceForward;   // +1 or -1: which way the zombie looks
 uniform vec4  uFaceProj;      // xy = scale of head-space xy -> uv, zw = uv centre
 uniform vec4  uFaceAtlas;     // xy = uv scale, zw = uv offset — crops the head out of the sheet
+// The SKULL's own sphere (xyz = centre, w = radius), not the head cluster's.
+// The head cluster also contains the neck capsule, so its bounding sphere is
+// far bigger than the head — normalising by it let the projection spill down
+// over the neck and shoulders.
+uniform vec4  uHeadSphere;
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -263,10 +268,10 @@ void main() {
 
   // Face texture, before wounds and char so damage still paints over it.
   if (uFaceEnabled > 0.5) {
-    // Head-space position, normalised by the head cluster's own bounding
-    // sphere — which applyRig recomputes every frame, so the projection rides
-    // the head as it jiggles without needing a full rest-space transform.
-    vec3 hs = (p - uClusterBounds[0].xyz) / max(uClusterBounds[0].w, 1e-4);
+    // Head-space position, normalised by the skull's own sphere — which is
+    // re-uploaded every frame from the posed primitives, so the projection
+    // rides the head as it jiggles without a full rest-space transform.
+    vec3 hs = (p - uHeadSphere.xyz) / max(uHeadSphere.w, 1e-4);
     vec2 uv = vec2(hs.x * uFaceForward, hs.y) * uFaceProj.xy + uFaceProj.zw;
     // Fade by how squarely this surface faces the front, so the projection
     // does not smear a second face down the sides and back of the skull.
@@ -277,7 +282,7 @@ void main() {
     // Confine it to the HEAD. A uv box alone is not enough: the chest also
     // faces front, so without this the projection paints the torso wherever
     // the box happens to reach past the jaw.
-    facing *= 1.0 - smoothstep(0.75, 1.05, length(hs));
+    facing *= 1.0 - smoothstep(0.88, 1.02, length(hs));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       vec4 t = texture(uFaceTex, uv * uFaceAtlas.xy + uFaceAtlas.zw);
       // Sampled AS-IS, deliberately not linearised. The sheet is sRGB-encoded,
