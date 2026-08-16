@@ -9,6 +9,8 @@ export interface ChunkGroup {
   prims: Primitive[];
   /** World-space centre at the moment of detachment. */
   origin: Vec3;
+  /** World points where this piece tore away (joints/attachment) — torn-end wounds. */
+  tornAt: Vec3[];
 }
 
 export interface SeverResult {
@@ -30,7 +32,7 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
 
   const cluster = body.clusters.find(c => c.limb === limb);
   if (!cluster || !cluster.alive)
-    return { body, chunk: { limb, prims: [], origin: [0, 0, 0] }, stumpWound: null };
+    return { body, chunk: { limb, prims: [], origin: [0, 0, 0], tornAt: [] }, stumpWound: null };
 
   const prims = body.prims.slice(cluster.start, cluster.start + cluster.count);
   const clusters = body.clusters.map(c => (c.limb === limb ? { ...c, alive: false } : c));
@@ -60,7 +62,7 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
     ageSec: 0,
   };
 
-  return { body: next, chunk: { limb, prims, origin: cluster.center }, stumpWound };
+  return { body: next, chunk: { limb, prims, origin: cluster.center, tornAt: [] }, stumpWound };
 }
 
 /** Local-frame offset from a primitive's head, matching damage.ts's convention. */
@@ -93,7 +95,68 @@ export function gibAll(body: BuildResult): { body: BuildResult; chunks: ChunkGro
       limb: c.limb,
       prims: body.prims.slice(c.start, c.start + c.count),
       origin: c.center,
+      tornAt: [],
     });
+  }
+  return {
+    body: { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) },
+    chunks,
+  };
+}
+
+/** Two endpoints closer than this are the same joint (limb chains touch). */
+const JOINT_EPS = 0.06;
+
+/**
+ * Blows the body apart into PER-PRIMITIVE pieces — "lots of small chunks".
+ *
+ * Non-head clusters emit one piece per additive prim; the head stays whole
+ * because its face carves and skull sphere don't survive splitting (and the
+ * intact bouncing head is a Blood signature). Same alive-flag mechanism as
+ * gibAll: nothing is removed or reordered, so the fold-order invariant holds.
+ *
+ * Each piece's tornAt lists the world points where it tore away: every
+ * endpoint it shared with a neighbouring prim of the same cluster (the joint
+ * chain), or — for the piece nearest the torso — its attachment end.
+ */
+export function gibAllPieces(
+  body: BuildResult, torsoCentre: Vec3,
+): { body: BuildResult; chunks: ChunkGroup[] } {
+  const chunks: ChunkGroup[] = [];
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    const prims = body.prims.slice(c.start, c.start + c.count);
+    if (c.limb === 'head') {
+      // Whole head; torn at its closest endpoint to the torso (the neck).
+      let neck: Vec3 = prims[0]!.a;
+      let best = Infinity;
+      for (const p of prims) {
+        if (p.op === 'sub') continue;
+        for (const e of [p.a, p.b]) {
+          const d = len(sub(e, torsoCentre));
+          if (d < best) { best = d; neck = e; }
+        }
+      }
+      chunks.push({ limb: c.limb, prims, origin: c.center, tornAt: [neck] });
+      continue;
+    }
+    const adds = prims.filter(p => p.op !== 'sub');
+    for (const p of adds) {
+      const tornAt: Vec3[] = [];
+      for (const e of [p.a, p.b]) {
+        const isJoint = adds.some(q => q !== p &&
+          (len(sub(q.a, e)) < JOINT_EPS || len(sub(q.b, e)) < JOINT_EPS));
+        if (isJoint) tornAt.push(e);
+      }
+      if (tornAt.length === 0) {
+        // A single-prim cluster (or an isolated prim): torn where it met the body.
+        tornAt.push(len(sub(p.a, torsoCentre)) < len(sub(p.b, torsoCentre)) ? p.a : p.b);
+      }
+      const origin: Vec3 = [
+        (p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2,
+      ];
+      chunks.push({ limb: c.limb, prims: [p], origin, tornAt: tornAt.slice(0, 2) });
+    }
   }
   return {
     body: { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) },

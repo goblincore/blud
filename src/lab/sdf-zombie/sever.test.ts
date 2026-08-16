@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/sever.test.ts
 import { describe, it, expect } from 'vitest';
-import { severLimb } from './sever';
+import { gibAllPieces, severLimb } from './sever';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { packBody } from './pack';
@@ -56,5 +56,55 @@ describe('severLimb', () => {
 
   it('refuses to sever the torso', () => {
     expect(() => severLimb(body, 'torso')).toThrow(/torso/i);
+  });
+});
+
+describe('gibAllPieces', () => {
+  const body2 = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const torso = body2.clusters.find(c => c.limb === 'torso')!;
+
+  it('splits every non-head cluster into one piece per add-prim', () => {
+    const { chunks } = gibAllPieces(body2, torso.center);
+    for (const cl of body2.clusters) {
+      const pieces = chunks.filter(g => g.limb === cl.limb);
+      const addPrims = body2.prims
+        .slice(cl.start, cl.start + cl.count)
+        .filter(p => p.op !== 'sub');
+      if (cl.limb === 'head') {
+        expect(pieces).toHaveLength(1); // head stays whole (face carves)
+      } else {
+        expect(pieces).toHaveLength(addPrims.length);
+        for (const piece of pieces) expect(piece.prims).toHaveLength(1);
+      }
+    }
+  });
+
+  it('pieces exactly partition each split cluster (no prim lost or doubled)', () => {
+    const { chunks } = gibAllPieces(body2, torso.center);
+    const armPrims = body2.prims.filter(p => p.limb === 'armL' && p.op !== 'sub');
+    const pieces = chunks.filter(g => g.limb === 'armL').flatMap(g => g.prims);
+    expect(pieces).toHaveLength(armPrims.length);
+    for (const p of armPrims) expect(pieces).toContain(p);
+  });
+
+  it('marks every cluster dead, like gibAll', () => {
+    const { body: after } = gibAllPieces(body2, torso.center);
+    expect(after.clusters.every(c => !c.alive)).toBe(true);
+  });
+
+  it('gives every piece at least one torn point, at joints or the attach end', () => {
+    const { chunks } = gibAllPieces(body2, torso.center);
+    for (const g of chunks) {
+      expect(g.tornAt.length).toBeGreaterThanOrEqual(1);
+      expect(g.tornAt.length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('piece origins sit at their prim midpoints', () => {
+    const { chunks } = gibAllPieces(body2, torso.center);
+    const piece = chunks.find(g => g.limb === 'legR')!;
+    const p = piece.prims[0]!;
+    expect(piece.origin[0]).toBeCloseTo((p.a[0] + p.b[0]) / 2, 6);
+    expect(piece.origin[1]).toBeCloseTo((p.a[1] + p.b[1]) / 2, 6);
   });
 });
