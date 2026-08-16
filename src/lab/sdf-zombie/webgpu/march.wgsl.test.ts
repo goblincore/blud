@@ -18,14 +18,21 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, DATA_ROWS,
+  SCENE_HELPERS, MARCH_SCENE, SCENE_DATA_ROWS, SCENE_MAX_BODIES,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
+  ROW_BODY_SPHERE, ROW_BODY_RANGE,
 } from './march.wgsl';
+import { MAX_BODIES } from '../merge-bodies';
 import { MAX_WOUNDS } from '../damage';
 import { sdBody, MAX_PRIMS } from '../validate';
 import type { Primitive } from '../types';
 
-const ALL = [...HELPERS, MARCH_BODY];
+// Every WGSL source in the file, both paths. The merged-scene sources MUST be
+// in here: the reserved-word and parse-contract checks are the only thing
+// standing between a one-word slip and a blank page whose only symptom is a
+// CreateShaderModule error buried under a dozen cascading ones.
+const ALL = [...HELPERS, MARCH_BODY, ...SCENE_HELPERS, MARCH_SCENE];
 
 /** `fn name(` — the same shape three's ^-anchored declarationRegexp needs. */
 function declaredName(src: string): string | null {
@@ -62,6 +69,67 @@ describe('wgslFn parse contract', () => {
   it('declares no helper twice', () => {
     const names = HELPERS.map(declaredName);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('orders SCENE_HELPERS so each only calls the ones before it', () => {
+    const names = SCENE_HELPERS.map(declaredName);
+    const seen = new Set<string>();
+    SCENE_HELPERS.forEach((src, i) => {
+      const self = names[i]!;
+      const body = src.slice(src.indexOf('{'));
+      for (const other of names) {
+        if (other === null || other === self || seen.has(other)) continue;
+        expect(
+          new RegExp(`\\b${other}\\s*\\(`).test(body),
+          `${self} calls ${other}, which is declared after it`,
+        ).toBe(false);
+      }
+      seen.add(self);
+    });
+  });
+
+  it('declares no scene helper twice', () => {
+    const names = SCENE_HELPERS.map(declaredName);
+    expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe('merged scene layout', () => {
+  it('keeps the merged rows clear of the per-body ones', () => {
+    // The merged rows are APPENDED so that march.glsl.ts's mirror of the
+    // per-body layout, and validate.ts's CPU mirror, stay untouched.
+    const perBody = [
+      ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
+      ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
+    ];
+    expect(Math.max(...perBody)).toBe(DATA_ROWS - 1);
+    expect(ROW_BODY_SPHERE).toBe(DATA_ROWS);
+    expect(new Set([...perBody, ROW_BODY_SPHERE, ROW_BODY_RANGE]).size).toBe(SCENE_DATA_ROWS);
+    expect(Math.max(ROW_BODY_SPHERE, ROW_BODY_RANGE)).toBe(SCENE_DATA_ROWS - 1);
+  });
+
+  it('agrees with merge-bodies.ts on the body cap', () => {
+    // The shader's body loop is a compile-time constant, so a mismatch would
+    // silently stop drawing whichever bodies fell past the shader's limit.
+    expect(SCENE_MAX_BODIES).toBe(MAX_BODIES);
+    expect(MARCH_SCENE.length).toBeGreaterThan(0);
+    const mapScene = SCENE_HELPERS.find(h => declaredName(h) === 'mapScene')!;
+    expect(mapScene).toContain(`b < ${MAX_BODIES}`);
+  });
+
+  it('combines bodies with a hard min, never a smooth one', () => {
+    // smin across bodies would fuse the whole crowd into one sheet of flesh at
+    // close range. Bodies union; only clusters WITHIN a body blend.
+    const mapScene = SCENE_HELPERS.find(h => declaredName(h) === 'mapScene')!;
+    expect(mapScene).toContain('d = min(d, db)');
+    expect(/d\s*=\s*smin\(d,/.test(mapScene)).toBe(false);
+  });
+
+  it('marches a conservative field, passing zero noise like the per-body path', () => {
+    // Normal warping: the noise belongs on the normal, not in the marched
+    // field, or the Lipschitz bound breaks and over-relaxation is unsafe.
+    expect(MARCH_SCENE).toContain('mapScene(camPos + rd * t, data, counts, sceneCfg, 0.0)');
+    expect(MARCH_SCENE).toContain('calcNormalScene(p, data, counts, sceneCfg, marchCfg.z)');
   });
 });
 

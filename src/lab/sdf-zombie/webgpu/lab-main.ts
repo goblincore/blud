@@ -28,6 +28,7 @@ import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER } from './sdf-layer';
 import { createZombieGpuView, createChunkGpuView, type ChunkGpuView } from './zombie-gpu';
+import { createSceneGpuView, type SceneGpuView } from './scene-gpu';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
@@ -815,6 +816,49 @@ async function main() {
     return s[Math.floor(s.length * 0.5)]!;
   }
 
+  // ---------------------------------------------------------------------------
+  // Merged march (spike). One draw for every body instead of one draw per body.
+  // ---------------------------------------------------------------------------
+  //
+  // Kept as a SWITCH rather than a replacement so the two architectures can be
+  // measured against each other in one session, on one machine, minutes apart —
+  // which after this session's measurement work is the only kind of comparison
+  // worth quoting.
+  //
+  // FAIR-COMPARISON WARNING. The merged path has no face, no wounds, no char,
+  // no AO and no cone pre-pass. Switch those off on the per-body side before
+  // comparing, or the number is the feature gap and not the architecture.
+  // `__sdfLab.mergedCompare()` sets both sides up correctly.
+  let mergedView: SceneGpuView | null = null;
+
+  /** Every crowd body's current field, as fed to the merged fold. */
+  function crowdBodies() {
+    return crowd
+      .map(v => bodySource.get(v.object)?.detailed)
+      .filter((b): b is NonNullable<typeof b> => b !== undefined);
+  }
+
+  function setMerged(on: boolean) {
+    if (on === (mergedView !== null)) return;
+    if (on) {
+      const posed = applyRig(current, bound);
+      mergedView = createSceneGpuView([posed, ...crowdBodies()]);
+      mergedView.applyMaterial(flesh, LIGHT_PRESETS[light]);
+      mergedView.object.layers.set(SDF_LAYER);
+      scene.add(mergedView.object);
+    } else {
+      scene.remove(mergedView!.object);
+      mergedView!.dispose();
+      mergedView = null;
+    }
+    // The per-body meshes and their cone twins have to stop drawing, or both
+    // architectures render at once and the measurement is of neither.
+    for (const v of [view, ...crowd]) {
+      v.object.visible = !on;
+      v.coneObject.visible = !on;
+    }
+  }
+
   // Dynamic resolution. Off by default so every benchmark on this branch stays
   // reproducible — a controller that moves the pixel count mid-run would make
   // the numbers meaningless, which is the exact failure this session spent its
@@ -894,6 +938,9 @@ async function main() {
     };
     const posed = applyRig(current, bound);
     view.update(posed);
+    // The merged path re-folds every body each frame. That is the same CPU
+    // work the per-body path already does per body, just gathered in one place.
+    if (mergedView) mergedView.update([posed, ...crowdBodies()]);
     view.setTime(performance.now() / 1000);
     // Re-derive the skull's sphere from the POSED primitives so the face
     // projection tracks the head through the jiggle.
@@ -1233,6 +1280,33 @@ async function main() {
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
     /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
+    /** Merged march: one draw for the whole crowd. Spike — see scene-gpu.ts. */
+    setMerged,
+    get merged() {
+      return mergedView === null ? null : { bodies: mergedView.bodyCount };
+    },
+    /**
+     * Sets BOTH paths to the same reduced feature set, so an A/B measures the
+     * architecture rather than the feature gap. The merged spike has no face,
+     * wounds, char, AO or cone pre-pass, so the per-body side must give those
+     * up for the duration of the comparison.
+     */
+    mergedCompare(on: boolean) {
+      lodEnabled = false;
+      lodOverride.face = false;
+      lodOverride.ao = false;
+      faceEnabled = false;
+      wounds = [];
+      refreshWounds();
+      sdfLayer.setConeEnabled(false);
+      for (const x of [view, ...crowd]) {
+        x.uniforms.woundCfg.value.x = 0;
+        x.uniforms.faceCfg.value.x = 0;
+        x.uniforms.lodCfg.value.x = 0;
+      }
+      setMerged(on);
+      return { merged: on, cone: sdfLayer.coneEnabled, bodies: crowd.length + 1 };
+    },
     /** Dynamic resolution: drives the SDF scale to hold the frame budget. */
     setAdaptive(on: boolean) {
       adaptiveEnabled = on;
