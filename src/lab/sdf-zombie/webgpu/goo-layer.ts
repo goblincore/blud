@@ -99,7 +99,7 @@ export const GOO_TUNING = {
    * quads stripe near edge-on in the low-res buffer), elongated 1.4-2.6x
    * along its stamp yaw so pools merge into smears, not perfect circles.
    */
-  splatGooScale: 0.35,
+  splatGooScale: 0.25,
   /** Density above which a pixel is goo. A lone blob peaks near 1.0. */
   threshold: 0.4,
   /** Soft-edge band start, as a multiple of the threshold. */
