@@ -95,35 +95,25 @@ Key reference docs (open these before touching their area):
     projection mode built but never compared side-by-side; perf HUD + N-body
     spawner deferred, still the only route to an honest cost number.
 
-- `X1.2` [~] **SDF lab on WebGPU** — lab only; the game stays on WebGL.
+- `X1.2` [x] **SDF lab on WebGPU** — parity reached; this is the path to build on.
   [spec](docs/superpowers/specs/2026-08-15-sdf-lab-webgpu-design.md) ·
-  run: `npm run dev` → `/sdf-lab-webgpu.html`
-  - **Phase 0 PASSED and Phase 1 mostly done — the zombie renders on WebGPU.**
-    Field ported to WGSL near line-for-line so it stays diffable against
-    `march.glsl.ts` and `validate.ts`'s CPU mirror. Every pure module
-    (build-body, clusters, pack, validate, face) is shared UNCHANGED, so the
-    field maths cannot drift between the two paths.
-  - **Primitive data is now a float DATA TEXTURE, not uniform arrays.** That was
-    the point: uniforms capped the body near 48 prims against a 224-vec4 floor;
-    this device reports a 4 GB storage limit. `MAX_PRIMS` stops being an
-    authoring constraint.
-  - three bumped 0.170 → **0.185** (game included — it is WIP, so the
-    blast-radius argument for staying didn't apply). Needed for the WGSL
-    `inverse()` polyfill (rest-space coords) and `StorageTextureNode.store()`
-    (compute writing to textures — the whole reason for migrating).
-  - **Traps, all of which present as one unhelpful error or a blank page:**
-    three's `wgslFn` regex is `^`-anchored so each source must BEGIN with `fn`
-    (a leading comment breaks it) and helpers go through the `includes`
-    argument, not concatenation; import EVERYTHING from `three/webgpu` or you
-    get two copies of three and the node system stops seeing lights; no
-    top-level await; WebGPU clip z is already [0,1] so the GLSL's trailing
-    `* 0.5 + 0.5` must NOT be carried over.
-  - **Not yet ported:** wounds/rims, severing, gib chunks, the face texture
-    (projection + relief + glowing eyes), the tuning panel.
-  - **Still no measurement.** Two rendering paths now, no numbers for either.
-    `timestamp-query` IS available on this device, so a real GPU-time readout is
-    finally straightforward — do that before any optimisation pass, and before
-    concluding WebGPU buys speed rather than just headroom.
+  [findings](docs/dev-notes/2026-08-16-sdf-lab-webgpu-parity.md) ·
+  run: `/sdf-lab-webgpu.html` (bench twin `/sdf-lab-webgpu-bench.html`)
+  - Wounds, severing, gibs, face and panel all ported; primitive AND wound data
+    ride one float texture, so `MAX_PRIMS` is no longer an authoring ceiling.
+  - **WebGPU applies the sRGB output encode WebGL's raw `ShaderMaterial` skipped**
+    (measured: 0.5 albedo → 188 vs 128). WebGPU is correct; the flesh presets are
+    what look wrong — see `X1.3`.
+  - **LOD baseline: 15 bodies = 36.8 ms / 44.7 p95** (M3, 960x540, 96 steps).
+    Target ~16 ms. `[` / `]` spawn crowd bodies.
+
+- `X1.3` [ ] **Retune the flesh presets against the corrected sRGB pipeline** —
+  one job that unblocks three: the WebGPU lab's look, leaving post-fx on, and
+  bloom for the eye glow. Presets in `src/lab/sdf-zombie/material.ts`.
+
+- `X1.4` [ ] **LOD pass** — 15 bodies from 36.8 ms to ~16 ms. Levers: fewer march
+  steps by distance, a cheaper far-field (drop face/wounds/AO), proxy-box
+  tightening, and compute-side culling. Measure with timestamp queries first.
 
 ## Asset pipeline
 

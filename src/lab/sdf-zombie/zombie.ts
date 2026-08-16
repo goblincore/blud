@@ -6,7 +6,8 @@ import type { Chunk } from './gib-chunks';
 import { FRAG, VERT } from './march.glsl';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
 import type { Primitive, Vec3 } from './types';
-import { len, sub } from './vec';
+import { sub } from './vec';
+import { chunkExtent } from './extent';
 import { MAX_WOUNDS } from './damage';
 
 export interface ZombieView {
@@ -176,20 +177,10 @@ export interface ChunkView {
   dispose(): void;
 }
 
-/**
- * Furthest reach of a set of primitives from `origin` (same recipe as
- * clusters.ts). Carves are excluded — they are holes, and counting them would
- * inflate both the collision radius and the proxy box.
- */
-export function chunkExtent(prims: Primitive[], origin: Vec3): number {
-  let r = 0;
-  for (const p of prims) {
-    if (p.op === 'sub') continue;
-    const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    r = Math.max(r, len(sub(p.a, origin)) + p.radius * ms, len(sub(p.b, origin)) + p.radius * ms);
-  }
-  return r;
-}
+// Moved to extent.ts so the WebGPU path can share it without importing this
+// module — which imports `three` and would pull a second copy of the library
+// into the WebGPU bundle. Re-exported for the existing importers.
+export { chunkExtent } from './extent';
 
 /**
  * A detached blob, raymarched in its own small proxy box. Reuses the body

@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Blud — SDF lab (WebGPU spike)</title>
+<title>Blud — SDF zombie lab (WebGPU)</title>
 <style>
   body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
   #app { width: 100vw; height: 100vh; }
-  #status {
-    position: fixed; top: 8px; left: 8px; z-index: 10;
-    background: rgba(0,0,0,0.72); padding: 8px 10px; border: 1px solid #444;
-    font-size: 11px; line-height: 1.6; color: #9c9;
+  #panel {
+    position: fixed; top: 8px; right: 8px; z-index: 10;
+    background: rgba(0,0,0,0.78); padding: 10px; border: 1px solid #444;
+    width: 260px; max-height: 92vh; overflow-y: auto; line-height: 1.4;
   }
+  #panel h2 { margin: 8px 0 4px; font-size: 12px; color: #d88; }
+  #panel label { display: block; font-size: 11px; margin: 3px 0; }
+  #panel input[type=range] { width: 100%; }
+  #errors { color: #ff6464; font-size: 11px; white-space: pre-wrap; }
   #controls {
     position: fixed; bottom: 8px; left: 8px; z-index: 10;
     background: rgba(0,0,0,0.68); padding: 8px 10px; border: 1px solid #444;
@@ -21,12 +25,14 @@
 </head>
 <body>
   <div id="app"></div>
-  <div id="status"></div>
+  <div id="panel"><div id="errors"></div></div>
   <div id="controls">
-    <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom<br />
-    Phase 0 spike: one raymarched sphere, depth-composited against a floor and
-    an intersecting cube.
+    <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom &nbsp;·&nbsp; <b>click</b> shoot
+    &nbsp;(<b>shift</b> blast, <b>alt</b> burn)<br />
+    <b>1</b> head &nbsp;<b>3</b>/<b>4</b> arm L/R &nbsp;<b>5</b>/<b>6</b> leg L/R sever
+    &nbsp;·&nbsp; <b>G</b> gib everything<br />
+    <b>[</b> / <b>]</b> remove/add a crowd body
   </div>
-  <script type="module" src="/src/lab/sdf-zombie/webgpu/spike-main.ts"></script>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/lab-main.ts"></script>
 </body>
 </html>

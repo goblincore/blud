@@ -19,6 +19,7 @@ export default defineConfig({
         sdfLab: resolve(__dirname, 'sdf-lab.html'),
         sdfLabWebgpu: resolve(__dirname, 'sdf-lab-webgpu.html'),
         sdfLabWebglBench: resolve(__dirname, 'sdf-lab-webgl-bench.html'),
+        sdfLabWebgpuBench: resolve(__dirname, 'sdf-lab-webgpu-bench.html'),
       },
     },
   },
