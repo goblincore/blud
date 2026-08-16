@@ -176,10 +176,12 @@ Key reference docs (open these before touching their area):
   [dev-note](docs/dev-notes/2026-08-16-shell-glitch/)). Bench re-gate still pending.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
-- `X1.22` [ ] **Rig motion pass (Spec B)** — procedural shamble (wander), FABRIK IK
-  (foot-plant, head look-at, wound clutch), hit-stagger, collapse + damage meter.
-  [spec](docs/superpowers/specs/2026-08-16-sdf-lab-rig-motion-design.md); plan after
-  X1.21 + X1.19.2; before skeleton X1.20. Candidate kimi/deepseek testbed.
+- `X1.22` [x] **Rig motion pass (Spec B)** — 4-task dispatch chain merged (deepseek
+  built gait/wander/ik, glm stagger/collapse+wiring): hero shambles, staggers,
+  clutches, collapses; 1086 tests. Verified walking + crumple in browser.
+- `X1.22.1` [ ] Collapse 2s frame stalls — 'falling' phase alternates 10ms/2000ms rAF
+  deltas (timestamped passes + JS + device errors all ruled out; evidence in dualmem).
+  Dispatched. Playtest collapse via K only after this lands.
 - `X1.23` [ ] **FPV + dynamite (Spec C)** — pointer-lock walk mode, SDF flesh hands
   (keyframed prim poses vs QAV reference, verlet jiggle, splash-scarred), dynamite on
   the game's DYNAMITE_COOK constants, explosion into the full gore stack.
