@@ -179,10 +179,9 @@ Key reference docs (open these before touching their area):
   (keyframed prim poses vs QAV reference, verlet jiggle, splash-scarred), dynamite on
   the game's DYNAMITE_COOK constants, explosion into the full gore stack.
   [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md); after X1.22, before X1.20.
-- `X1.24` [ ] **Grapeshot shotgun (Spec D)** — homemade pipe-gun (Abe-gun read) modeled
-  by a dispatched agent via the Blender MCP bridge (committed bpy script = source of
-  truth); Blood sawed-off fire model on the game's pellet constants. After X1.23; the
-  model script can run in parallel earlier. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-grapeshot-design.md)
+- `X1.24` [~] **Grapeshot shotgun (Spec D)** — MODEL DONE: `scripts/model_grapeshot_gun.py`
+  → `public/assets/lab/grapeshot-gun.glb` (2 960 tris, 122 KB, deterministic; [notes](docs/dev-notes/2026-08-16-grapeshot-model/notes.md)).
+  Remaining: Blood sawed-off fire model on the game's pellet constants, after X1.23. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-grapeshot-design.md)
 - `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
   chunk material + screen-space metaball blood. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gobs-and-goo-design.md); plan after the fix-pass lands. WebGPU only.
 - `X1.11` [-] ~~Port normal warping to `march.glsl.ts`~~ — dead: the WebGL lab is
