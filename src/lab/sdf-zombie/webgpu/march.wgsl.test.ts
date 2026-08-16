@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, DATA_ROWS,
-  SCENE_HELPERS, MARCH_SCENE, SCENE_DATA_ROWS, SCENE_MAX_BODIES,
+  SCENE_HELPERS, MARCH_SCENE, SCENE_ENTRIES, SCENE_DATA_ROWS, SCENE_MAX_BODIES,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
   ROW_BODY_SPHERE, ROW_BODY_RANGE,
@@ -32,7 +32,7 @@ import type { Primitive } from '../types';
 // in here: the reserved-word and parse-contract checks are the only thing
 // standing between a one-word slip and a blank page whose only symptom is a
 // CreateShaderModule error buried under a dozen cascading ones.
-const ALL = [...HELPERS, MARCH_BODY, ...SCENE_HELPERS, MARCH_SCENE];
+const ALL = [...HELPERS, MARCH_BODY, ...SCENE_HELPERS, ...SCENE_ENTRIES];
 
 /** `fn name(` — the same shape three's ^-anchored declarationRegexp needs. */
 function declaredName(src: string): string | null {

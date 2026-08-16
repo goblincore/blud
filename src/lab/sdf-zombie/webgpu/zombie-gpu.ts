@@ -231,7 +231,9 @@ const CONE_FETCH_WGSL = /* wgsl */ `fn coneFetch(
   let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
   return textureLoad(coneTex, c, 0).x;
 }`;
-const coneFetch = wgslFn(CONE_FETCH_WGSL);
+/** Shared with the merged path, which needs the identical NEAREST tile fetch. */
+export const coneFetchNode = wgslFn(CONE_FETCH_WGSL);
+const coneFetch = coneFetchNode;
 
 /**
  * The cone pre-pass's output, as the march material needs it.
@@ -348,7 +350,7 @@ function createMarchMaterial(
  * camera's far plane would waste precision; smaller would clamp distant starts
  * together and lose the ordering.
  */
-const CONE_DEPTH_RANGE = 32;
+export const CONE_DEPTH_RANGE = 32;
 
 /** Allocates the RGBA32F data texture every march reads its field from. */
 function createDataTexture() {

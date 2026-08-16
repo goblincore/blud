@@ -842,12 +842,15 @@ async function main() {
     if (on === (mergedView !== null)) return;
     if (on) {
       const posed = applyRig(current, bound);
-      mergedView = createSceneGpuView([posed, ...crowdBodies()]);
+      mergedView = createSceneGpuView([posed, ...crowdBodies()], sdfLayer.cone);
       mergedView.applyMaterial(flesh, LIGHT_PRESETS[light]);
       mergedView.object.layers.set(SDF_LAYER);
+      mergedView.coneObject.layers.set(CONE_LAYER);
       scene.add(mergedView.object);
+      scene.add(mergedView.coneObject);
     } else {
       scene.remove(mergedView!.object);
+      scene.remove(mergedView!.coneObject);
       mergedView!.dispose();
       mergedView = null;
     }
@@ -1298,7 +1301,11 @@ async function main() {
       faceEnabled = false;
       wounds = [];
       refreshWounds();
-      sdfLayer.setConeEnabled(false);
+      // Cone state is NOT forced here any more. The first spike ran with it off
+      // on both sides for fairness and the merged path lost 3.3x — and the
+      // diagnosis was that its union proxy box is mostly empty space, which is
+      // precisely what the cone accelerates. Leaving the caller in charge means
+      // the same comparison can be run with the cone on for both.
       for (const x of [view, ...crowd]) {
         x.uniforms.woundCfg.value.x = 0;
         x.uniforms.faceCfg.value.x = 0;

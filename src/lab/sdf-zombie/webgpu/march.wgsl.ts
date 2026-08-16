@@ -713,6 +713,39 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   return vec4<f32>(lit, t);
 }`;
 
+// The merged field's cone pre-pass. Same algorithm as coneMarch, over mapScene.
+//
+// This matters far more to the merged path than to the per-body one. Each body
+// used to carry a TIGHT proxy box that bounded the march in screen space and
+// depth; the merged path has one union box over the whole crowd, so most of its
+// pixels are empty space and every miss pays the full step budget. The cone
+// pre-pass is exactly the accelerator for that — it hands each tile a distance
+// already proven empty, which is the cost the union box reintroduced.
+export const CONE_MARCH_SCENE = /* wgsl */ `fn coneMarchScene(
+  worldPos: vec3<f32>,
+  camPos: vec3<f32>,
+  data: texture_2d<f32>,
+  counts: vec4<f32>,
+  sceneCfg: vec4<f32>,
+  marchCfg: vec3<f32>,
+  coneK: f32,
+  startT: f32
+) -> f32 {
+  let rd = normalize(worldPos - camPos);
+  let tMax = length(worldPos - camPos);
+  var t = clamp(startT, 0.0, tMax);
+  for (var i = 0; i < 64; i = i + 1) {
+    // Zero noise, like the full march: the pre-pass must see the SAME field,
+    // or the distance it certifies as empty is not one the march can trust.
+    let d = mapScene(camPos + rd * t, data, counts, sceneCfg, 0.0);
+    let r = t * coneK;
+    if (d < r + 0.0012) { return t; }
+    t = t + max(d - r, 0.0005) * marchCfg.y;
+    if (t > tMax) { return tMax; }
+  }
+  return t;
+}`;
+
 // The merged march. One draw for the whole crowd.
 //
 // SPIKE SCOPE, stated plainly so the measurement is not over-read: no face, no
@@ -816,3 +849,6 @@ export const SCENE_HELPERS = [
   SMIN, SMAX, SD_PRIM, HASH13, NOISE3, FBM,
   APPLY_CARVES_RANGE, MAP_SCENE, CALC_NORMAL_SCENE,
 ];
+
+/** Every merged-path WGSL entry point, for the lint to cover. */
+export const SCENE_ENTRIES = [MARCH_SCENE, CONE_MARCH_SCENE];

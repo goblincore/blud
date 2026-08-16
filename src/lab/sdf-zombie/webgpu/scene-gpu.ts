@@ -22,13 +22,14 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, float,
-  cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add,
+  cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add, screenUV,
 } from 'three/tsl';
 import {
-  MARCH_SCENE, SCENE_HELPERS, SCENE_DATA_ROWS, SCENE_MAX_BODIES,
+  MARCH_SCENE, CONE_MARCH_SCENE, SCENE_HELPERS, SCENE_DATA_ROWS, SCENE_MAX_BODIES,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_BODY_SPHERE, ROW_BODY_RANGE,
 } from './march.wgsl';
+import { type ConeSource, CONE_DEPTH_RANGE, coneFetchNode } from './zombie-gpu';
 import { mergeBodies, type MergedScene } from '../merge-bodies';
 import { MAX_PRIMS } from '../validate';
 import type { BuiltBody } from '../types';
@@ -38,12 +39,11 @@ import type { FleshMaterial, LightPreset } from '../material';
 const SCENE_TEX_WIDTH = MAX_PRIMS * SCENE_MAX_BODIES;
 
 /** Same include-chaining the per-body path uses — see buildMarchFn there. */
-const marchScene = (() => {
-  const nodes = SCENE_HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
-  );
-  return wgslFn(MARCH_SCENE, nodes);
-})();
+const sceneHelperNodes = SCENE_HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
+  (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
+);
+const marchScene = wgslFn(MARCH_SCENE, sceneHelperNodes);
+const coneMarchScene = wgslFn(CONE_MARCH_SCENE, sceneHelperNodes);
 
 export function createSceneUniforms() {
   return {
@@ -68,6 +68,8 @@ export type SceneUniforms = ReturnType<typeof createSceneUniforms>;
 
 export interface SceneGpuView {
   object: THREE.Mesh;
+  /** The cone pre-pass twin, on CONE_LAYER. Shares the proxy geometry. */
+  coneObject: THREE.Mesh;
   uniforms: SceneUniforms;
   /** Re-packs and re-uploads every body. Call whenever any body moved. */
   update(bodies: BuiltBody[]): void;
@@ -77,7 +79,7 @@ export interface SceneGpuView {
   dispose(): void;
 }
 
-export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
+export function createSceneGpuView(bodies: BuiltBody[], cone?: ConeSource): SceneGpuView {
   // Nearest, no mips: these are DATA. Any interpolation would blend one
   // primitive's endpoint into its neighbour's.
   const texels = new Float32Array(SCENE_TEX_WIDTH * SCENE_DATA_ROWS * 4);
@@ -107,8 +109,17 @@ export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
     lightCfg: u.lightCfg,
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
-    // No cone pre-pass in the spike, so every ray starts at the camera.
-    startT: float(0),
+    // The cone's proven-empty start distance. This matters MORE here than on
+    // the per-body path: a union proxy box is mostly empty space, and without
+    // a start distance every miss marches the full step budget before
+    // discarding. That cost is what made the first spike lose 3.3x.
+    startT: cone
+      ? coneFetchNode({
+          coneTex: texture(cone.texture),
+          screenUV: screenUV,
+          enabled: cone.uniforms.enabled,
+        })
+      : float(0),
   }) as unknown as { xyz: unknown; w: unknown };
 
   const material = new MeshBasicNodeMaterial();
@@ -130,10 +141,36 @@ export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
   // through colorNode never reaches the target.
   material.outputNode = vec4(marched.xyz as never, depth);
 
+  // The cone pre-pass twin: same field, same proxy box, no shading. Its output
+  // is the start distance, written as colour AND normalised as depth, so where
+  // proxy boxes overlap the hardware depth test resolves to the nearest start.
+  const coneT = coneMarchScene({
+    worldPos: positionWorld,
+    camPos: cameraPosition,
+    data: texture(dataTex),
+    counts: u.counts,
+    sceneCfg: u.sceneCfg,
+    marchCfg: u.marchCfg,
+    coneK: cone ? cone.uniforms.k : float(0.02),
+    // Chaining from a coarser level is a per-body-path feature; the merged
+    // path runs one level.
+    startT: float(0),
+  }) as unknown as { div: (n: number) => unknown };
+
+  const coneMaterial = new MeshBasicNodeMaterial();
+  coneMaterial.side = THREE.BackSide;
+  coneMaterial.colorNode = vec4(coneT as never, 0, 0, 1);
+  coneMaterial.depthNode = coneT.div(CONE_DEPTH_RANGE) as never;
+  coneMaterial.depthWrite = true;
+  coneMaterial.depthTest = true;
+
   // One box over every body. Geometry is rebuilt on update because the union
   // moves and grows as bodies do — cheap next to what it saves.
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
   mesh.frustumCulled = false; // the proxy IS the bound
+  // Shares the geometry, so the two can never disagree about the bound.
+  const coneMesh = new THREE.Mesh(mesh.geometry, coneMaterial);
+  coneMesh.frustumCulled = false;
 
   function writeRow(row: number, at: number, v: readonly number[]) {
     const o = (row * SCENE_TEX_WIDTH + at) * 4;
@@ -174,9 +211,11 @@ export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
   function fitProxy() {
     if (merged.bodies.length === 0) {
       mesh.visible = false;
+      coneMesh.visible = false;
       return;
     }
     mesh.visible = true;
+    coneMesh.visible = true;
     const min = [Infinity, Infinity, Infinity];
     const max = [-Infinity, -Infinity, -Infinity];
     for (const b of merged.bodies) {
@@ -192,6 +231,9 @@ export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
     mesh.position.set(
       (min[0]! + max[0]!) / 2, (min[1]! + max[1]!) / 2, (min[2]! + max[2]!) / 2,
     );
+    // Shared geometry, so it must be re-pointed rather than left on the old one.
+    coneMesh.geometry = mesh.geometry;
+    coneMesh.position.copy(mesh.position);
   }
 
   function applyMaterial(m: FleshMaterial, light: LightPreset) {
@@ -209,6 +251,7 @@ export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
 
   return {
     object: mesh,
+    coneObject: coneMesh,
     uniforms: u,
     update,
     applyMaterial,
@@ -216,6 +259,7 @@ export function createSceneGpuView(bodies: BuiltBody[]): SceneGpuView {
     dispose() {
       mesh.geometry.dispose();
       material.dispose();
+      coneMaterial.dispose();
       dataTex.dispose();
     },
   };
