@@ -11,11 +11,23 @@
 //   trick: density is a scalar field on screen, and thresholding it fuses
 //   neighbours into ropey strands and sheets while sparse drops stay beads.
 //
+//   BLUR — the canonical grapes→sheets fix from screen-space fluid
+//   rendering (reference: jeantimex/fluid's screen-space pipeline): every
+//   splat resolves as its own density peak, so thresholding the RAW field
+//   beads trails into pearls no matter how the size/overlap/threshold are
+//   tuned. A separable 9-tap Gaussian (horizontal into one target, vertical
+//   into the other, sigma = GOO_TUNING.blurPx density-target pixels) widens
+//   each peak until neighbours fuse into ropes and sheets. ALL channels are
+//   filtered with the same weights, so the g/b depth ratio recovers a depth
+//   smoothed exactly as far as the density itself — downstream unchanged.
+//   blurPx = 0 bypasses both passes entirely.
+//
 //   SURFACE — a fullscreen quad re-thresholds the density field per pixel,
 //   derives a normal from the density gradient (central differences, 4
 //   taps), shades deep-red blood with the march's own light rig, and writes
 //   a fake depth reconstructed from the per-pixel average view depth so the
-//   goo interleaves with flesh and floor in the canvas depth buffer.
+//   goo interleaves with flesh and floor in the canvas depth buffer. When
+//   the blur ran, this reads the blurred buffer instead of the raw density.
 //
 // WHY HALF-FLOAT, not the FloatType the SDF targets use: the density pass
 // BLENDS (additive), and WebGPU core only guarantees blending on 16-bit
@@ -80,6 +92,12 @@ export const GOO_TUNING = {
   edge: 1.6,
   /** Density-gradient to normal strength (see GOO_SURFACE_WGSL). */
   bump: 2.5,
+  /**
+   * Gaussian blur sigma, in density-target pixels, applied separably (H
+   * then V) between the density pass and the surface pass — see the BLUR
+   * note in the file header. 0 bypasses both blur passes entirely.
+   */
+  blurPx: 2.5,
 } as const;
 
 /**
@@ -163,6 +181,38 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   return vec4<f32>(lit, depthBuf);
 }`;
 
+/**
+ * One axis of the separable blur (the pass runs twice: dir = (1,0) then
+ * (0,1)). Integer-coordinate textureLoad with edge clamping, the same fetch
+ * shape the surface pass and coneFetch use — and NO flipY: target-to-target
+ * fullscreen sampling is orientation-preserving on this backend (the cone
+ * pre-pass proves it), the inversion only appears at the canvas boundary.
+ *
+ * The 9 weights are derived from sigma at runtime (the slider owns sigma)
+ * and normalised, so the kernel preserves the field's total density and the
+ * surface threshold stays calibrated at any setting. rgb all take the same
+ * weights — g/b stays density*depth over density.
+ */
+export const GOO_BLUR_WGSL = /* wgsl */ `fn gooBlur(
+  srcTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  dir: vec2<f32>,
+  sigma: f32
+) -> vec4<f32> {
+  let dims = vec2<f32>(textureDimensions(srcTex, 0));
+  let maxP = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let base = vec2<i32>(floor(texCoord * dims));
+  var sum = vec4<f32>(0.0);
+  var wsum = 0.0;
+  for (var i = -4; i <= 4; i = i + 1) {
+    let w = exp(-f32(i * i) / (2.0 * sigma * sigma));
+    let c = clamp(base + vec2<i32>(dir * f32(i)), vec2<i32>(0, 0), maxP);
+    sum = sum + textureLoad(srcTex, c, 0) * w;
+    wsum = wsum + w;
+  }
+  return sum / wsum;
+}`;
+
 /** Uniform nodes the goo shares with the march, so one re-tune moves both. */
 export interface GooLightRig {
   lightDir: ReturnType<typeof uniform>;
@@ -175,9 +225,10 @@ type Swizzled = { xyz: unknown; w: unknown };
 
 export interface GooLayer {
   /**
-   * The frame: density pass, then the caller's middle (the whole
-   * sdf/cone/occluder/composite flow — see how lab-main installs this over
-   * sdfLayer.render), then the surface pass composited onto the canvas.
+   * The frame: density pass, then the separable blur (unless blurPx is 0),
+   * then the caller's middle (the whole sdf/cone/occluder/composite flow —
+   * see how lab-main installs this over sdfLayer.render), then the surface
+   * pass composited onto the canvas.
    */
   render(camera: THREE.PerspectiveCamera, between: () => void): void;
   /** Re-pose the density quads from sim state; call once per frame, before render. */
@@ -188,8 +239,11 @@ export interface GooLayer {
   setFlipY(on: boolean): void;
   setThreshold(v: number): void;
   setEdge(v: number): void;
+  /** Gaussian sigma in density-target pixels; 0 bypasses the blur passes. */
+  setBlurPx(v: number): void;
   readonly threshold: number;
   readonly edge: number;
+  readonly blurPx: number;
   readonly targetSize: { width: number; height: number };
   dispose(): void;
 }
@@ -210,12 +264,27 @@ export function createGooLayer(
     magFilter: THREE.NearestFilter,
   });
 
+  // The blur ping-pong pair: horizontal reads the density target and writes
+  // blurA, vertical reads blurA and writes blurB, the surface reads blurB.
+  // Never sampled with blending and never read while written, so they take
+  // the density target's own options verbatim (half-float, nearest, no
+  // depth) and live at its exact size — one blur texel is one density texel.
+  const blurOpts = {
+    depthBuffer: false,
+    type: THREE.HalfFloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  } as const;
+  const blurA = new THREE.RenderTarget(1, 1, blurOpts);
+  const blurB = new THREE.RenderTarget(1, 1, blurOpts);
+
   // Same backend property sdf-layer pinned: render targets come back
   // y-inverted relative to the canvas, flipped on with a uniform so a future
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
   const uThresh = uniform(GOO_TUNING.threshold);
   const uEdge = uniform(GOO_TUNING.edge);
+  const uBlurPx = uniform(GOO_TUNING.blurPx);
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
   const uCamCfg = uniform(new THREE.Vector4(1, 1, 0.1, 200));
@@ -253,34 +322,87 @@ export function createGooLayer(
   // Colour through colorNode (three applies the output sRGB encode), fake
   // depth through depthNode, so the hardware interleaves the goo with the
   // flesh and floor already in the canvas depth buffer.
+  //
+  // TWO instantiations of the same fn, identical except which texture
+  // densTex binds: the blurred buffer when the blur ran, the raw density
+  // target when it was bypassed. They share every uniform NODE, so slider
+  // state cannot drift between them; render() picks per frame by swapping
+  // the quad's material, because a texture binding is baked into the node
+  // graph at construction.
   // ---------------------------------------------------------------
   const surface = wgslFn(GOO_SURFACE_WGSL);
-  const surfaced = surface({
-    densTex: texture(target.texture),
-    texCoord: uv(),
-    flipY: uFlipY,
-    lightDir: rig.lightDir,
-    keyColor: rig.keyColor,
-    lightCfg: rig.lightCfg,
-    camWorld: uCamWorld,
-    camCfg: uCamCfg,
-    gooCfg: vec2(uThresh, uEdge),
-  }) as unknown as Swizzled;
+  function makeSurfaceMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const surfaced = surface({
+      densTex: texture(densTexture),
+      texCoord: uv(),
+      flipY: uFlipY,
+      lightDir: rig.lightDir,
+      keyColor: rig.keyColor,
+      lightCfg: rig.lightCfg,
+      camWorld: uCamWorld,
+      camCfg: uCamCfg,
+      gooCfg: vec2(uThresh, uEdge),
+    }) as unknown as Swizzled;
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(surfaced.xyz as never, 1.0);
+    m.depthNode = surfaced.w as never;
+    m.depthWrite = true;
+    m.depthTest = true;
+    return m;
+  }
+  const surfRawMat = makeSurfaceMat(target.texture);
+  const surfBlurMat = makeSurfaceMat(blurB.texture);
 
-  const quadMat = new MeshBasicNodeMaterial();
-  quadMat.colorNode = vec4(surfaced.xyz as never, 1.0);
-  quadMat.depthNode = surfaced.w as never;
-  quadMat.depthWrite = true;
-  quadMat.depthTest = true;
-
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), quadMat);
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), surfRawMat);
   quad.frustumCulled = false;
   const quadScene = new THREE.Scene();
   quadScene.add(quad);
   // z = 1 so the plane at z = 0 sits inside the [0,1] depth range rather
   // than exactly on the near plane, which is degenerate. (sdf-layer's trap.)
+  // Shared by the blur quads below — an ortho camera is scene-independent.
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   quadCam.position.z = 1;
+
+  // ---------------------------------------------------------------
+  // Blur passes: one fullscreen quad PER DIRECTION (swapping materials on a
+  // shared quad every frame would dirty three's render lists for nothing),
+  // horizontal density→blurA then vertical blurA→blurB. Opaque full-viewport
+  // writes: no blending, nothing depends on the clear colour. Alpha is dead
+  // — nothing downstream reads .a — so plain colorNode is safe here despite
+  // the alpha-never-reaches-the-target trap (which forces it to 1 anyway).
+  // ---------------------------------------------------------------
+  const blur = wgslFn(GOO_BLUR_WGSL);
+  function makeBlurMat(
+    srcTexture: THREE.Texture, dirX: number, dirY: number,
+  ): MeshBasicNodeMaterial {
+    const blurred = blur({
+      srcTex: texture(srcTexture),
+      texCoord: uv(),
+      dir: vec2(dirX, dirY),
+      sigma: uBlurPx,
+    }) as unknown as Swizzled;
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(blurred.xyz as never, 1.0);
+    m.depthWrite = false;
+    m.depthTest = false;
+    m.fog = false;
+    return m;
+  }
+  const blurHMat = makeBlurMat(target.texture, 1, 0);
+  const blurVMat = makeBlurMat(blurA.texture, 0, 1);
+
+  /** A fullscreen quad scene for a blur direction (or the composite). */
+  function fullscreenScene(mat: MeshBasicNodeMaterial): {
+    scene: THREE.Scene; quad: THREE.Mesh;
+  } {
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+    q.frustumCulled = false;
+    const s = new THREE.Scene();
+    s.add(q);
+    return { scene: s, quad: q };
+  }
+  const blurH = fullscreenScene(blurHMat);
+  const blurV = fullscreenScene(blurVMat);
 
   /** Explicit first clear after every (re)allocation — see file header. */
   let targetsNeedInit = true;
@@ -318,8 +440,16 @@ export function createGooLayer(
 
       if (targetsNeedInit) {
         targetsNeedInit = false;
-        renderer.setRenderTarget(target);
-        void renderer.render(emptyScene, camera);
+        // All three targets — the blur pair needs the same explicit first
+        // clear as the density target itself: setSize reallocates the
+        // backing texture, and a lazily-initialised texture inside the same
+        // encoder as the pass that samples it gets the whole submit rejected.
+        // The clear colour is irrelevant (see sdf-layer's note); what matters
+        // is that each texture exists before anything samples it.
+        for (const t of [target, blurA, blurB]) {
+          renderer.setRenderTarget(t);
+          void renderer.render(emptyScene, camera);
+        }
       }
 
       // Pass A — density. Cleared BLACK: the renderer's clear colour is the
@@ -334,13 +464,29 @@ export function createGooLayer(
       renderer.setClearColor(prevClear);
       camera.layers.mask = restore;
 
+      // Pass A2 — the separable blur, horizontal then vertical, each a
+      // fullscreen quad at the density target's own resolution. Bypassed
+      // ENTIRELY at blurPx = 0: not even a degenerate copy pass runs, and
+      // the surface reads the raw density target below.
+      const blurred = uBlurPx.value > 0;
+      if (blurred) {
+        renderer.setRenderTarget(blurA);
+        void renderer.render(blurH.scene, quadCam);
+        renderer.setRenderTarget(blurB);
+        void renderer.render(blurV.scene, quadCam);
+      }
+
       // The middle of the frame belongs to whoever composed us — the whole
       // polygon/sdf/cone/occluder/composite flow. Density already sits in
       // its target, so the surface pass can run after it for free.
       between();
 
       // Pass B — composite the goo surface onto the canvas. autoClear off,
-      // or this wipes the frame it is composited onto.
+      // or this wipes the frame it is composited onto. The material picks
+      // blurred-vs-raw density; reassigned only on crossings of the
+      // blurPx = 0 line so the steady frame mutates nothing.
+      const wantMat = blurred ? surfBlurMat : surfRawMat;
+      if (quad.material !== wantMat) quad.material = wantMat;
       renderer.setRenderTarget(null);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;
@@ -379,10 +525,11 @@ export function createGooLayer(
     },
 
     setSize(sdfWidth, sdfHeight) {
-      target.setSize(
-        Math.max(1, Math.round(sdfWidth * GOO_TUNING.densityScale)),
-        Math.max(1, Math.round(sdfHeight * GOO_TUNING.densityScale)),
-      );
+      const w = Math.max(1, Math.round(sdfWidth * GOO_TUNING.densityScale));
+      const h = Math.max(1, Math.round(sdfHeight * GOO_TUNING.densityScale));
+      target.setSize(w, h);
+      blurA.setSize(w, h);
+      blurB.setSize(w, h);
       // setSize reallocates the backing texture — the lazy-init conflict
       // would return on the next frame without a fresh explicit clear.
       targetsNeedInit = true;
@@ -390,15 +537,24 @@ export function createGooLayer(
     setFlipY(on) { uFlipY.value = on ? 1 : 0; },
     setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(0.95, v)); },
     setEdge(v) { uEdge.value = Math.max(1.01, Math.min(4, v)); },
+    setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(5, v)); },
     get threshold() { return uThresh.value; },
     get edge() { return uEdge.value; },
+    get blurPx() { return uBlurPx.value; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
+      blurA.dispose();
+      blurB.dispose();
       quads.geometry.dispose();
       densMat.dispose();
       quad.geometry.dispose();
-      quadMat.dispose();
+      surfRawMat.dispose();
+      surfBlurMat.dispose();
+      blurH.quad.geometry.dispose();
+      blurV.quad.geometry.dispose();
+      blurHMat.dispose();
+      blurVMat.dispose();
     },
   };
 }

@@ -1292,9 +1292,11 @@ async function main() {
     shellBtn.textContent = `shell silhouette: ${on ? 'on' : 'off'}`;
   }
 
-  // Metaball blood (gobs-and-goo task 5). The two knobs that shape the
-  // surface: where the density field becomes goo, and how wide the soft
-  // band between bare and full-blood is (as a multiple of the threshold).
+  // Metaball blood (gobs-and-goo task 5 + the X1.21.1 blur). The three
+  // knobs that shape the surface: where the density field becomes goo, how
+  // wide the soft band between bare and full-blood is (as a multiple of the
+  // threshold), and how far the separable Gaussian blurs the density field
+  // before the surface extracts it (0 = bypass — beaded pearls return).
   const gooBox = addSection(panelEl, 'goo');
   addSlider(gooBox, {
     label: 'goo threshold', min: 0.1, max: 0.95, step: 0.01,
@@ -1305,6 +1307,11 @@ async function main() {
     label: 'goo edge', min: 1.05, max: 3, step: 0.05,
     get: () => gooLayer.edge,
     set: (v) => { gooLayer.setEdge(v); },
+  });
+  addSlider(gooBox, {
+    label: 'goo blur px', min: 0, max: 5, step: 0.5,
+    get: () => gooLayer.blurPx,
+    set: (v) => { gooLayer.setBlurPx(v); },
   });
 
   const actionBox = addSection(panelEl, 'actions');
@@ -1347,14 +1354,17 @@ async function main() {
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
     sdfLayer,
     /**
-     * The metaball blood layer — threshold/edge setters for console tuning,
-     * mirroring the panel's goo section (which reaches only the same two).
+     * The metaball blood layer — threshold/edge/blur setters for console
+     * tuning, mirroring the panel's goo section (which reaches only the
+     * same three).
      */
     gooLayer: {
       setThreshold: (v: number) => gooLayer.setThreshold(v),
       setEdge: (v: number) => gooLayer.setEdge(v),
+      setBlurPx: (v: number) => gooLayer.setBlurPx(v),
       get threshold() { return gooLayer.threshold; },
       get edge() { return gooLayer.edge; },
+      get blurPx() { return gooLayer.blurPx; },
     },
     /**
      * Stamps n blast wounds on the front of the torso by raycasting
