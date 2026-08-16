@@ -67,8 +67,39 @@ Key reference docs (open these before touching their area):
     [plan](docs/superpowers/plans/2026-08-15-sdf-zombie-lab.md) ·
     [findings](docs/dev-notes/2026-08-15-sdf-zombie-lab-findings.md)
   - Open follow-ups: align gibbing with Blud's own physics/gib logic + flesh
-    trails; face and character design (carve primitives); skeleton as a second
-    SDF field; rest-space triplanar (specced but never implemented).
+    trails; skeleton as a second SDF field; rest-space triplanar (specced but
+    never implemented).
+- `X1.1` [~] **Face + PSX surface** — carving, face, post-fx.
+  [spec](docs/superpowers/specs/2026-08-15-sdf-zombie-face-psx-design.md) ·
+  [plan](docs/superpowers/plans/2026-08-15-sdf-zombie-face-psx.md)
+  - **Done:** lab now renders through the real post-fx chain (it never had —
+    every look judgment before this was made in the wrong viewport, and the
+    flesh presets turn out to be tuned against a *missing gamma encode*, so
+    post-fx defaults OFF until they're retuned); subtractive primitives
+    end-to-end; `MAX_PRIMS` 32→48, single-sourced; `validateBody` connectivity
+    probe fixed (it used the cluster *bounding* centre, which a face drags
+    outside the flesh).
+  - **Face is NOT solved.** Carved sockets/mouth failed — `smin` scales k by 4,
+    so its blend zone is wider than the features themselves. Pivoted to a
+    projected Blood-sprite texture (dev placeholder); the projection works but
+    isn't registered onto the skull yet.
+  - **Next experiment:** carve with `blendK: 0`. `smin` short-circuits to hard
+    `min`, giving crisp edges with no smear — and hard min/max *are*
+    associative, so fold order stops mattering for face features. Blocked on a
+    bug first: `pack.ts` encodes carves as a negative `blendK`, and `-0` is
+    indistinguishable from `0`, so a zero-blend carve silently folds in as
+    *additive*. Move the flag into `uPrimScale.w` (`cluster + 64`).
+  - Deferred: perf HUD + N-body spawner (task 2 of the plan); Phase 2
+    (rest-space coords, the three detail stacks).
+- `X1.2` [ ] **SDF lab on WebGPU** — lab only; the game stays on WebGL.
+  [spec](docs/superpowers/specs/2026-08-15-sdf-lab-webgpu-design.md)
+  - three 0.170 **already ships WebGPU** (`three/webgpu` is in its export map),
+    so this needs no dependency bump and can't affect the game.
+  - `feature/webgpu-levels` is a **reference, not a base** — 54 commits behind
+    main, no `src/lab/`, and carrying the abandoned M6 dungeon work.
+  - Buys storage buffers (kills the uniform ceiling) and compute (polygonize,
+    cull, timestamp-query). Does **not** promise a speedup, and loses
+    `EXT_conservative_depth`, which has no WGSL equivalent.
 
 ## Asset pipeline
 
