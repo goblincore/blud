@@ -70,6 +70,34 @@ uniform vec3  uHeadAxes;
  * replacing it.
  */
 uniform float uFaceMean;
+/**
+ * Bump strength. The face sheet doubles as a HEIGHT MAP: it is already a
+ * multiplier centred on mid-grey, so (luma - mean) is a signed height for
+ * free — dark recessed, light raised.
+ *
+ * This perturbs the shading NORMAL only, at the hit point. It deliberately
+ * does not displace the field: doing that would mean sampling the texture
+ * inside mapBody, ~100 fetches per pixel instead of four, and it would break
+ * the Lipschitz bound the sphere tracer relies on — the same hazard
+ * validateBody's silhouetteNoiseAmp check exists to catch. Relief without
+ * silhouette; the nose primitive handles silhouette.
+ */
+uniform float uFaceRelief;
+/**
+ * 0 = planar, 1 = spherical (lat-long).
+ *
+ * Planar derives uv from x/y alone, so as the surface turns away it repeats
+ * the same uv column and streaks down the side of the skull; the facing fade
+ * hides that rather than fixing it. Spherical maps longitude and latitude of
+ * the head-space direction instead, so the face wraps the front hemisphere at
+ * even density and simply does not stretch.
+ *
+ * NOT triplanar, which is the usual answer for surface detail but the wrong
+ * one here: blending three axis projections would mirror the face onto the
+ * SIDES of the head. Triplanar suits unregistered detail; a face is a
+ * registered layout.
+ */
+uniform float uFaceProjMode;
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -288,7 +316,18 @@ void main() {
     // re-uploaded every frame from the posed primitives, so the projection
     // rides the head as it jiggles without a full rest-space transform.
     vec3 hs = (p - uHeadCentre) / max(uHeadAxes, vec3(1e-4));
-    vec2 uv = vec2(hs.x * uFaceForward, hs.y) * uFaceProj.xy + uFaceProj.zw;
+    vec2 raw;
+    if (uFaceProjMode > 0.5) {
+      vec3 dir = normalize(hs);
+      // Longitude measured from the front, latitude from the equator. Both
+      // normalised to -1..1 so uFaceProj means the same thing in either mode.
+      raw = vec2(
+        atan(dir.x * uFaceForward, dir.z * uFaceForward) / 3.14159265,
+        asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
+    } else {
+      raw = vec2(hs.x * uFaceForward, hs.y);
+    }
+    vec2 uv = raw * uFaceProj.xy + uFaceProj.zw;
     // Fade by how squarely this surface faces the front, so the projection
     // does not smear a second face down the sides and back of the skull.
     // A planar projection derives uv from x/y alone, so as the surface turns
@@ -313,6 +352,23 @@ void main() {
       // Used as a MULTIPLIER, not a replacement — see uFaceMean.
       vec3 detail = t.rgb / max(uFaceMean, 1e-3);
       albedo = mix(albedo, albedo * detail, facing * t.a * uFaceStrength);
+
+      // Relief. Central differences on luminance give the height gradient; the
+      // projection is planar along z, so its tangent basis is just x and y and
+      // the bump drops straight into world space with no TBN to build.
+      if (uFaceRelief > 0.0) {
+        vec2 e = uFaceAtlas.xy * 0.012;
+        vec2 base = uv * uFaceAtlas.xy + uFaceAtlas.zw;
+        vec3 W = vec3(0.2126, 0.7152, 0.0722);
+        float hL = dot(texture(uFaceTex, base - vec2(e.x, 0.0)).rgb, W);
+        float hR = dot(texture(uFaceTex, base + vec2(e.x, 0.0)).rgb, W);
+        float hD = dot(texture(uFaceTex, base - vec2(0.0, e.y)).rgb, W);
+        float hU = dot(texture(uFaceTex, base + vec2(0.0, e.y)).rgb, W);
+        // Negated: the gradient points UPHILL, and a normal tilts away from
+        // rising ground. Without this the sockets would bulge instead of sink.
+        vec3 bump = vec3(-(hR - hL) * uFaceForward, -(hU - hD), 0.0);
+        n = normalize(n + bump * uFaceRelief * facing * t.a);
+      }
     }
   }
 

@@ -570,6 +570,11 @@ const texBtn = addButton(faceBox, 'face tex: on', () => {
 const faceUniform = (name: string) => view.material.uniforms[name] as { value: number };
 const faceProj = () => view.material.uniforms.uFaceProj!.value as THREE.Vector4;
 addSlider(faceBox, {
+  label: 'texRelief', min: 0, max: 5, step: 0.05,
+  get: () => faceUniform('uFaceRelief').value,
+  set: (v) => { faceUniform('uFaceRelief').value = v; },
+});
+addSlider(faceBox, {
   label: 'texStrength', min: 0, max: 1, step: 0.01,
   get: () => faceUniform('uFaceStrength').value,
   set: (v) => { faceUniform('uFaceStrength').value = v; },
@@ -585,6 +590,16 @@ addSlider(faceBox, {
 addSlider(faceBox, {
   label: 'texCentreY', min: 0.2, max: 0.9, step: 0.01,
   get: () => faceProj().w, set: (v) => { faceProj().w = v; },
+});
+// Spherical spreads longitude evenly round the skull, so it needs a wider
+// scale than planar to put the face in the same place — swap the scales with
+// the mode rather than making you retune by hand.
+const projBtn = addButton(faceBox, 'proj: planar', () => {
+  const m = faceUniform('uFaceProjMode');
+  m.value = m.value > 0.5 ? 0 : 1;
+  const spherical = m.value > 0.5;
+  faceProj().set(spherical ? 1.35 : 0.45, spherical ? 1.05 : 0.58, 0.5, spherical ? 0.5 : 0.56);
+  projBtn.textContent = `proj: ${spherical ? 'spherical' : 'planar'}`;
 });
 addButton(faceBox, 'flip facing', () => {
   const u = faceUniform('uFaceForward');

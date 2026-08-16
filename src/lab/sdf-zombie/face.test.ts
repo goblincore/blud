@@ -4,20 +4,31 @@ import { DEFAULT_FACE, facePrims } from './face';
 import { MAX_PRIMS } from './validate';
 
 describe('facePrims', () => {
-  it('emits a cranium, a jaw and a nose, all on the skull bone', () => {
+  it('emits cranium, jaw, brow and nose, all on the skull bone', () => {
     const prims = facePrims(DEFAULT_FACE);
-    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw', 'nose']);
+    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw', 'brow', 'nose']);
     for (const p of prims) {
       expect(p.bone).toBe('skull');
       expect(p.limb).toBe('head');
     }
   });
 
-  it('drops the nose entirely at noseLength 0', () => {
-    // The nose exists for the PROFILE only, so it has to be removable without
+  it('drops the nose and brow entirely at zero', () => {
+    // Both exist for the PROFILE only, so each has to be removable without
     // leaving a bead sitting on the face.
-    const prims = facePrims({ ...DEFAULT_FACE, noseLength: 0 });
-    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw']);
+    expect(facePrims({ ...DEFAULT_FACE, noseLength: 0 }).map(p => p.tag))
+      .toEqual(['head', 'jaw', 'brow']);
+    expect(facePrims({ ...DEFAULT_FACE, browHeavy: 0 }).map(p => p.tag))
+      .toEqual(['head', 'jaw', 'nose']);
+    expect(facePrims({ ...DEFAULT_FACE, noseLength: 0, browHeavy: 0 }).map(p => p.tag))
+      .toEqual(['head', 'jaw']);
+  });
+
+  it('raises the brow with browRise and juts it with browHeavy', () => {
+    const brow = (f: Partial<typeof DEFAULT_FACE>) =>
+      facePrims({ ...DEFAULT_FACE, ...f }).find(p => p.tag === 'brow')!;
+    expect(brow({ browRise: 0.06 }).offset![1]!).toBeGreaterThan(brow({ browRise: 0.01 }).offset![1]!);
+    expect(brow({ browHeavy: 0.03 }).offset![2]!).toBeGreaterThan(brow({ browHeavy: 0.005 }).offset![2]!);
   });
 
   it('projects the nose further forward as noseLength grows', () => {

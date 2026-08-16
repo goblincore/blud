@@ -80,6 +80,14 @@ export interface FaceParams {
   /** How far below the head centre the nose sits. */
   noseDrop: number;
   /**
+   * The brow ridge. Like the jaw, it is the CREASE beneath it that reads
+   * rather than the mass itself, so it barely protrudes — which also means it
+   * does not fight the face projection the way a big nose would.
+   */
+  browHeavy: number;
+  /** Height of the brow above the head centre. */
+  browRise: number;
+  /**
    * Smooth-min strength against the neck. Kept small: smin scales k by 4, so
    * the old 0.0125 fused head into neck across 5 cm and the silhouette lost
    * its jaw entirely.
@@ -103,6 +111,8 @@ export const DEFAULT_FACE: FaceParams = {
   noseLength: 0.016,
   noseWidth: 0.62,
   noseDrop: 0.012,
+  browHeavy: 0.010,
+  browRise: 0.030,
   headBlend: 0.006,
 };
 
@@ -131,6 +141,19 @@ export function facePrims(f: FaceParams): FacePrim[] {
       blendK: f.headBlend,
       offset: [0, -f.jawDrop, f.jawJut * FACE_FORWARD],
     },
+    // Brow ridge. Wide and shallow — a ledge over the eyes, not a second
+    // forehead. Second silhouette break on the skull after the nose.
+    ...(f.browHeavy > 0.0005 ? [{
+      ...HEAD, tag: 'brow',
+      radius: f.headRadius * 0.30,
+      scale: [1.55, 0.42, 0.80] as Vec3,
+      blendK: f.headBlend * 1.3,
+      offset: [
+        0,
+        f.browRise,
+        (f.headRadius * f.headDepth * 0.72 + f.browHeavy) * FACE_FORWARD,
+      ] as Vec3,
+    }] : []),
     // The nose. Blended softly, because it is a large smooth form that should
     // melt into the face rather than sit on it as a separate bead.
     ...(f.noseLength > 0.0005 ? [{

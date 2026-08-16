@@ -94,6 +94,8 @@ export function createZombieView(body: BuildResult): ZombieView {
       uHeadCentre: { value: new THREE.Vector3(0, 1.6, 0) },
       uHeadAxes: { value: new THREE.Vector3(0.12, 0.13, 0.12) },
       uFaceMean: { value: 0.5 },
+      uFaceRelief: { value: 1.4 },
+      uFaceProjMode: { value: 0 },
     },
   });
 
