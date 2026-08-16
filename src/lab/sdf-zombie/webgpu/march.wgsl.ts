@@ -564,6 +564,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;
+  var clamped = false;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     // 0.0, not marchCfg.z. This one argument IS normal warping on the march
@@ -584,7 +585,24 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     }
     prevRadius = radius;
     t = t + stepLen;
-    if (t > tMax) { break; }
+    if (t > tMax) {
+      // Do NOT break outright on the relaxed path. An over-relaxed step can
+      // cross the surface AND tMax together, and the overshoot test cannot
+      // fire until the NEXT sample — so breaking here discards a hit the
+      // retraction would have recovered. Harmless while tMax was the proxy
+      // box's far side; the occluder pre-pass made tMax a bound that can sit
+      // millimetres behind the surface, and this break shredded every body
+      // whose hull gap was tight (the interpenetrating-crowd holes).
+      //
+      // Instead, take the pending sample AT tMax: if the step did cross the
+      // surface, the overshoot test fires there and the retraction replays
+      // the interval at omega 1. One extra visit at most — the clamped flag —
+      // so a genuinely empty ray still terminates. The plain path is exempt:
+      // at omega <= 1.0 steps are conservative and nothing can be skipped.
+      if (omega <= 1.0 || clamped) { break; }
+      t = tMax;
+      clamped = true;
+    }
   }
   if (!hit) { discard; }
 

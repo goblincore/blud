@@ -193,11 +193,23 @@ async function main() {
 
   // The occluder hull. Its own layer, rendered before the march, so every ray
   // can stop at the distance something solid already covers — the early-Z that
-  // frag_depth and discard rule out. Off by default: it is the measurement
-  // under test, and a lever that is on by default cannot be A/B'd honestly.
+  // frag_depth and discard rule out.
+  //
+  // ON BY DEFAULT, and the cone stays off, because the full on/off matrix was
+  // measured (10 bodies, 960x540, cooled, interleaved, all runs valid):
+  //
+  //                 cone only   cone+occ   occ only   neither
+  //   stacked        18.32       17.93      16.29      21.30
+  //   spread         11.24       10.92      10.86        —
+  //
+  // Occluder-only wins BOTH scenes. The two accelerators cut the same ray
+  // interval — cone from the front, occluder from the back — and once the
+  // occluder exists, the cone's two extra render passes cost more than its
+  // start distances save. The cone toggle stays for measurement, not for use.
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
+  sdfLayer.setOccluderEnabled(true);
 
   let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
@@ -458,6 +470,15 @@ async function main() {
     );
   }
   function refreshWounds() { uploadWounds(current.prims); }
+
+  /**
+   * The hero's wounds as world-space removal spheres, from the SAME posed
+   * primitives the wound upload uses — so the hull's exclusion zone tracks
+   * the jiggle exactly as the rendered craters do.
+   */
+  function woundSpheres(prims: BuildResult['prims']) {
+    return wounds.map(w => ({ centre: woundWorldPos(prims, w), radius: w.radius }));
+  }
 
   // -------------------------------------------------------------------------
   // Crowd fill, for the LOD work that comes next. Extra bodies are STATIC —
@@ -953,7 +974,7 @@ async function main() {
     // The merged path re-folds every body each frame. That is the same CPU
     // work the per-body path already does per body, just gathered in one place.
     if (mergedView) mergedView.update([posed, ...crowdBodies()]);
-    if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()]);
+    if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     view.setTime(performance.now() / 1000);
     // Re-derive the skull's sphere from the POSED primitives so the face
     // projection tracks the head through the jiggle.
@@ -1352,7 +1373,10 @@ async function main() {
       // Populate immediately rather than waiting a frame: a benchmark started
       // in the same tick would otherwise measure an EMPTY hull and read as a
       // free win.
-      if (on) occluderHull.update([applyRig(current, bound), ...crowdBodies()]);
+      if (on) {
+        const posed = applyRig(current, bound);
+        occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
+      }
     },
     get occluder() {
       return { enabled: sdfLayer.occluderEnabled, instances: occluderHull.instanceCount };

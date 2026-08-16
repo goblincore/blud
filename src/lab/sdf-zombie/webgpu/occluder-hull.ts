@@ -53,6 +53,24 @@ export interface HullInstance {
   radius: number;
 }
 
+/** A wound's removal sphere, in world space — what applyWounds subtracts. */
+export interface WoundSphere {
+  centre: Vec3;
+  radius: number;
+}
+
+/**
+ * Extra clearance around a wound before a hull sphere is considered safe.
+ *
+ * Covers the two ways a wound reaches past its nominal radius: the smax blend
+ * softens the cavity wall outward, and the everted rim displaces material
+ * around the mouth. Verified the hard way — a blast crater rendered with a
+ * BLACK centre while the occluder was on and a wet interior with it off,
+ * because the carve had exposed the hull sphere inside the cavity and every
+ * ray into the crater clamped at it.
+ */
+const WOUND_CLEARANCE = 0.05;
+
 /**
  * One sphere at each end of every additive primitive.
  *
@@ -63,9 +81,26 @@ export interface HullInstance {
  * Radius is `r * min(scale)`, the largest sphere guaranteed to fit inside an
  * ellipsoid capsule whose axes are scaled unevenly — using the raw radius
  * would poke outside on any axis scaled below 1.
+ *
+ * `wounds` are the current removal spheres: any hull sphere that intersects
+ * one is DROPPED, not shrunk. Wounds subtract, and subtraction is the one
+ * thing that can put a hull sphere outside the body — the inside-ness
+ * argument (smin only adds) covers every other case. Dropping costs a little
+ * culling in a small region around each wound; keeping it costs a hole in
+ * the render.
  */
-export function buildHullInstances(bodies: BuiltBody[], shrink = HULL_SHRINK): HullInstance[] {
+export function buildHullInstances(
+  bodies: BuiltBody[], shrink = HULL_SHRINK, wounds: WoundSphere[] = [],
+): HullInstance[] {
   const out: HullInstance[] = [];
+  const clearOfWounds = (c: Vec3, r: number): boolean => {
+    for (const w of wounds) {
+      const dx = c[0] - w.centre[0], dy = c[1] - w.centre[1], dz = c[2] - w.centre[2];
+      const reach = w.radius + r + WOUND_CLEARANCE;
+      if (dx * dx + dy * dy + dz * dz < reach * reach) return false;
+    }
+    return true;
+  };
   for (const body of bodies) {
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
@@ -77,10 +112,12 @@ export function buildHullInstances(bodies: BuiltBody[], shrink = HULL_SHRINK): H
       if (!live.has(p.cluster)) continue;
       const r = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]) * shrink;
       if (r < MIN_HULL_RADIUS) continue;
-      out.push({ centre: p.a, radius: r });
+      if (clearOfWounds(p.a, r)) out.push({ centre: p.a, radius: r });
       // A zero-length capsule is a sphere; one instance is enough.
       const dx = p.b[0] - p.a[0], dy = p.b[1] - p.a[1], dz = p.b[2] - p.a[2];
-      if (dx * dx + dy * dy + dz * dz > 1e-8) out.push({ centre: p.b, radius: r });
+      if (dx * dx + dy * dy + dz * dz > 1e-8 && clearOfWounds(p.b, r)) {
+        out.push({ centre: p.b, radius: r });
+      }
     }
   }
   return out;
@@ -88,7 +125,7 @@ export function buildHullInstances(bodies: BuiltBody[], shrink = HULL_SHRINK): H
 
 export interface OccluderHull {
   object: THREE.Mesh;
-  update(bodies: BuiltBody[]): void;
+  update(bodies: BuiltBody[], wounds?: WoundSphere[]): void;
   readonly instanceCount: number;
   dispose(): void;
 }
@@ -118,8 +155,8 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   const m = new THREE.Matrix4();
   let count = 0;
 
-  function update(bodies: BuiltBody[]) {
-    const inst = buildHullInstances(bodies);
+  function update(bodies: BuiltBody[], wounds: WoundSphere[] = []) {
+    const inst = buildHullInstances(bodies, HULL_SHRINK, wounds);
     count = Math.min(inst.length, maxInstances);
     for (let i = 0; i < count; i++) {
       const s = inst[i]!;
