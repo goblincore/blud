@@ -4,13 +4,26 @@ import { DEFAULT_FACE, facePrims } from './face';
 import { MAX_PRIMS } from './validate';
 
 describe('facePrims', () => {
-  it('emits a cranium and a jaw, both on the skull bone', () => {
+  it('emits a cranium, a jaw and a nose, all on the skull bone', () => {
     const prims = facePrims(DEFAULT_FACE);
-    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw']);
+    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw', 'nose']);
     for (const p of prims) {
       expect(p.bone).toBe('skull');
       expect(p.limb).toBe('head');
     }
+  });
+
+  it('drops the nose entirely at noseLength 0', () => {
+    // The nose exists for the PROFILE only, so it has to be removable without
+    // leaving a bead sitting on the face.
+    const prims = facePrims({ ...DEFAULT_FACE, noseLength: 0 });
+    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw']);
+  });
+
+  it('projects the nose further forward as noseLength grows', () => {
+    const z = (len: number) =>
+      facePrims({ ...DEFAULT_FACE, noseLength: len }).find(p => p.tag === 'nose')!.offset![2]!;
+    expect(z(0.04)).toBeGreaterThan(z(0.01));
   });
 
   it('makes the jaw narrower than the cranium, so the skull tapers', () => {

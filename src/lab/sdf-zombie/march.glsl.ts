@@ -291,10 +291,13 @@ void main() {
     vec2 uv = vec2(hs.x * uFaceForward, hs.y) * uFaceProj.xy + uFaceProj.zw;
     // Fade by how squarely this surface faces the front, so the projection
     // does not smear a second face down the sides and back of the skull.
-    // Widened from (0.15, 0.65): with hard-edged sockets the normals swing
-    // sharply, and a narrow window left the eye region — the part that most
-    // needs the texture — almost entirely unpainted.
-    float facing = smoothstep(-0.10, 0.35, dot(n, vec3(0.0, 0.0, uFaceForward)));
+    // A planar projection derives uv from x/y alone, so as the surface turns
+    // away it repeats the same uv column and STREAKS down the side of the
+    // skull. Fading out well before the surface is edge-on hides it. The
+    // window was briefly widened to (-0.10, 0.35) back when hard-edged sockets
+    // swung the normals sharply; with a smooth head that is no longer needed
+    // and it was the direct cause of the streaking.
+    float facing = smoothstep(0.28, 0.66, dot(n, vec3(0.0, 0.0, uFaceForward)));
     // Confine it to the HEAD. Generous, because the surface now sits at
     // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
     // against wrapping onto the neck, and the uv bounds below do most of the

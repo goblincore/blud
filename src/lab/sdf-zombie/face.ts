@@ -65,6 +65,21 @@ export interface FaceParams {
   /** Forward offset of the jaw — a small positive value juts the chin. */
   jawJut: number;
   /**
+   * How far the nose projects beyond the face, in metres.
+   *
+   * Purely for the PROFILE: head-on it adds almost nothing the painted nose
+   * does not already give, but in profile the skull is otherwise a smooth
+   * curve with no break in it. Keep it SMALL. A planar face projection derives
+   * uv from x/y alone, so a modest nose picks up the painted nose region
+   * behind it, while a large one juts past the projection plane and reads as
+   * an untextured lump — which is exactly how the earlier geometric nose
+   * failed. 0 removes it entirely.
+   */
+  noseLength: number;
+  noseWidth: number;
+  /** How far below the head centre the nose sits. */
+  noseDrop: number;
+  /**
    * Smooth-min strength against the neck. Kept small: smin scales k by 4, so
    * the old 0.0125 fused head into neck across 5 cm and the silhouette lost
    * its jaw entirely.
@@ -85,6 +100,9 @@ export const DEFAULT_FACE: FaceParams = {
   jawHeight: 0.86,
   jawDrop: 0.076,
   jawJut: 0.03,
+  noseLength: 0.016,
+  noseWidth: 0.62,
+  noseDrop: 0.012,
   headBlend: 0.006,
 };
 
@@ -113,5 +131,18 @@ export function facePrims(f: FaceParams): FacePrim[] {
       blendK: f.headBlend,
       offset: [0, -f.jawDrop, f.jawJut * FACE_FORWARD],
     },
+    // The nose. Blended softly, because it is a large smooth form that should
+    // melt into the face rather than sit on it as a separate bead.
+    ...(f.noseLength > 0.0005 ? [{
+      ...HEAD, tag: 'nose',
+      radius: f.headRadius * 0.19,
+      scale: [f.noseWidth, 0.85, 1.45] as Vec3,
+      blendK: f.headBlend * 1.2,
+      offset: [
+        0,
+        -f.noseDrop,
+        (f.headRadius * f.headDepth * 0.80 + f.noseLength) * FACE_FORWARD,
+      ] as Vec3,
+    }] : []),
   ];
 }
