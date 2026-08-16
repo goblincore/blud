@@ -7,7 +7,9 @@
 // on the tuning that the mist/goo split depends on.
 
 import { describe, it, expect } from 'vitest';
-import { GOO_TUNING, GOO_SURFACE_WGSL } from './goo-layer';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
+import { GOO_TUNING, GOO_SURFACE_WGSL, GOO_BLUR_WGSL } from './goo-layer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -34,17 +36,21 @@ const RESERVED_WORDS = [
   'virtual', 'volatile', 'where', 'while', 'write', 'writeonly', 'yield',
 ];
 
+/** Declared names (let/var plus params/fields) in a WGSL string. */
+function declaredNames(wgsl: string): string[] {
+  return [
+    ...wgsl.matchAll(/\b(?:let|var)\s+([a-z_][a-z_0-9]*)/gi),
+    ...wgsl.matchAll(/[(,]\s*([a-z_][a-z_0-9]*)\s*:/gi),
+  ].map(m => m[1]!);
+}
+
 describe('goo surface WGSL', () => {
   it('starts with fn, since three anchors its parse to ^', () => {
     expect(/^fn\s+gooSurface\s*\(/.test(GOO_SURFACE_WGSL)).toBe(true);
   });
 
   it('declares nothing reserved', () => {
-    const declared = [
-      ...GOO_SURFACE_WGSL.matchAll(/\b(?:let|var)\s+([a-z_][a-z_0-9]*)/gi),
-      ...GOO_SURFACE_WGSL.matchAll(/[(,]\s*([a-z_][a-z_0-9]*)\s*:/gi),
-    ].map(m => m[1]!);
-    const clashes = declared.filter(d => RESERVED_WORDS.includes(d));
+    const clashes = declaredNames(GOO_SURFACE_WGSL).filter(d => RESERVED_WORDS.includes(d));
     expect(clashes).toEqual([]);
   });
 
@@ -57,6 +63,61 @@ describe('goo surface WGSL', () => {
     expect(GOO_SURFACE_WGSL).toContain('vec3<f32>(0.35, 0.02, 0.05)');
     // The WebGPU [0,1] depth mapping three's perspective matrix produces.
     expect(GOO_SURFACE_WGSL).toContain('far * (viewDepth - near)');
+  });
+});
+
+describe('goo blur WGSL (X1.21.1: grapes→sheets)', () => {
+  it('starts with fn, since three anchors its parse to ^', () => {
+    expect(/^fn\s+gooBlur\s*\(/.test(GOO_BLUR_WGSL)).toBe(true);
+  });
+
+  it('declares nothing reserved', () => {
+    const clashes = declaredNames(GOO_BLUR_WGSL).filter(d => RESERVED_WORDS.includes(d));
+    expect(clashes).toEqual([]);
+  });
+
+  it('is a 9-tap kernel whose weights derive from sigma and normalise', () => {
+    // -4..4 inclusive is the 9 taps; runtime weights (not a baked table)
+    // keep the slider live, and the wsum division preserves total density
+    // so the surface threshold stays calibrated at any blurPx.
+    expect(GOO_BLUR_WGSL).toContain('for (var i = -4; i <= 4;');
+    expect(GOO_BLUR_WGSL).toMatch(/exp\(-f32\(i \* i\)\s*\/\s*\(2\.0 \* sigma \* sigma\)\)/);
+    expect(GOO_BLUR_WGSL).toContain('wsum');
+  });
+
+  it('blurs every channel with the same weights (g/b depth ratio survives)', () => {
+    // r=density, g=density*depth, b=density must all take the SAME kernel,
+    // else the downstream g/b ratio stops being a smoothed depth estimate.
+    expect(GOO_BLUR_WGSL).toMatch(/var sum = vec4<f32>\(0\.0\)/);
+    expect(GOO_BLUR_WGSL).toMatch(/sum \+ textureLoad\(srcTex, c, 0\) \* w/);
+    expect(GOO_BLUR_WGSL).toMatch(/return sum \/ wsum/);
+  });
+});
+
+describe('goo blur wiring (source tripwires)', () => {
+  // render() needs a live WebGPURenderer, so the bypass path is pinned as
+  // text guards on the module source — the same discipline the WGSL tests
+  // apply to strings that cannot execute in CI. Cwd-relative (vitest runs
+  // from the repo root; import.meta.url is not a file URL under happy-dom).
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('bypasses both blur passes entirely at blurPx = 0', () => {
+    // One hoisted gate, three consequences: the two blur renders and the
+    // surface's choice of blurred-vs-raw texture. No degenerate copy pass.
+    expect(src).toContain('const blurred = uBlurPx.value > 0');
+    expect(src).toContain('if (blurred) {');
+    expect(src).toContain('blurred ? surfBlurMat : surfRawMat');
+    expect(src).toContain('void renderer.render(blurH.scene, quadCam)');
+    expect(src).toContain('void renderer.render(blurV.scene, quadCam)');
+  });
+
+  it('the surface reads the blurred buffer, and the pair rides the density size', () => {
+    expect(src).toContain('makeSurfaceMat(blurB.texture)');
+    expect(src).toContain('makeBlurMat(blurA.texture, 0, 1)');
+    // Same explicit-first-clear treatment as the density target (the
+    // lazy-init trap) and the same resize in setSize.
+    expect(src).toContain('for (const t of [target, blurA, blurB])');
+    expect(src).toContain('blurB.setSize(w, h)');
   });
 });
 
@@ -80,5 +141,15 @@ describe('goo tuning pins', () => {
     // The sim caps droplets at 600; scraps ride the same array, so 700
     // bounds any droplet population the sim can hold.
     expect(GOO_TUNING.maxParticles).toBeGreaterThanOrEqual(600);
+  });
+
+  it('blurPx defaults inside its slider range and 0 is a legal bypass', () => {
+    // Panel slider is 0–5 step 0.5; the default must sit strictly inside so
+    // the shipped look is the blurred one (the whole point of X1.21.1),
+    // while 0 remains the documented bypass value.
+    expect(GOO_TUNING.blurPx).toBeGreaterThan(0);
+    expect(GOO_TUNING.blurPx).toBeLessThanOrEqual(5);
+    expect(GOO_TUNING.blurPx).toBe(2.5);
+    expect(Number.isInteger(GOO_TUNING.blurPx * 2)).toBe(true);
   });
 });
