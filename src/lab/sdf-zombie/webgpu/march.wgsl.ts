@@ -282,6 +282,50 @@ export const FLICKER = /* wgsl */ `fn flicker(t: f32, amt: f32) -> f32 {
   return mix(1.0, 0.45 + f * 0.75, amt);
 }`;
 
+// CONE MARCH — the coarse pre-pass.
+//
+// Runs at a fraction of the resolution and answers one question per tile: how
+// far can EVERY ray in this tile travel before any of them could possibly hit
+// something? The full-resolution march then starts there instead of at the
+// camera, skipping the empty space in front of the body.
+//
+// The cone is what makes it safe. A ray marched at tile centre would report a
+// distance valid only for that one ray; a neighbouring ray in the same tile
+// might have geometry nearer and would tunnel straight through it. So this
+// marches a CONE whose radius grows with distance to cover the tile's whole
+// screen footprint, and stops as soon as the field comes within that radius.
+// The result is conservative for every ray the tile covers.
+//
+// `coneK` is the footprint radius per unit distance: tilePixels * tan(fovY/2)
+// / viewportHeight. Stepping by (d - r) rather than d is the standard cone
+// march step — it is what keeps the cone outside the surface.
+//
+// Returns the distance, or tMax when the cone never came near anything. tMax
+// is the right answer for a miss rather than zero: a cone that missed means
+// every ray in the tile misses too, so there is nothing for them to skip past.
+export const CONE_MARCH = /* wgsl */ `fn coneMarch(
+  worldPos: vec3<f32>,
+  camPos: vec3<f32>,
+  data: texture_2d<f32>,
+  counts: vec4<f32>,
+  marchCfg: vec3<f32>,
+  woundCfg: vec4<f32>,
+  woundCfg2: vec4<f32>,
+  coneK: f32
+) -> f32 {
+  let rd = normalize(worldPos - camPos);
+  let tMax = length(worldPos - camPos);
+  var t = 0.0;
+  for (var i = 0; i < 64; i = i + 1) {
+    let d = mapBody(camPos + rd * t, data, counts, marchCfg.z, woundCfg, woundCfg2);
+    let r = t * coneK;
+    if (d < r + 0.0012) { return t; }
+    t = t + max(d - r, 0.0005) * marchCfg.y;
+    if (t > tMax) { return tMax; }
+  }
+  return t;
+}`;
+
 // Entry point. Returns rgb plus the hit distance in w, so the depth node can
 // reconstruct the hit point without marching a second time.
 //
@@ -330,7 +374,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   headCentre: vec3<f32>,
   headAxes: vec3<f32>,
   faceGlowColor: vec3<f32>,
-  lodCfg: vec4<f32>
+  lodCfg: vec4<f32>,
+  startT: f32
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
@@ -360,7 +405,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // At or below 1.0 the relaxed path is off and marchCfg.y is back in charge.
   let relax = marchCfg.z <= 0.0 && woundCfg2.y > 1.0;
   var omega = select(marchCfg.y, woundCfg2.y, relax);
-  var t = 0.0;
+  // Start where the cone pre-pass proved the tile is still empty, rather than
+  // at the camera. Clamped to tMax so a stale or over-eager coarse value can
+  // never push the ray straight out the back of the proxy box.
+  var t = clamp(startT, 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;

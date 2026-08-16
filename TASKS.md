@@ -124,10 +124,11 @@ Key reference docs (open these before touching their area):
 - `X1.5` [x] **SDF layer at its own resolution** — flesh renders to its own
   target and composites over full-res geometry. **~2x**; default scale 0.7
   (0.5 read as too coarse). Slider in the panel.
-- `X1.6` [x] **Raymarch micro-optimisation** — relaxed sphere tracing (the old
-  `stepMul` 0.6 was UNDER-relaxation) and partial evaluation of the field
-  (`specialise.ts`, **−20%**, loops unrolled + carve decisions baked).
-  Remaining unused: cone marching, which subsumes "march from the box entry".
+- `X1.6` [x] **Raymarch optimisation** — relaxed sphere tracing (the old
+  `stepMul` 0.6 was UNDER-relaxation), partial evaluation of the field
+  (`specialise.ts`, **−20%**), and a cone-march pre-pass at 1/8 tiles giving
+  every ray a proven-empty start distance (**−22%**, and the tightest
+  measurement of the lot). Levers now stack to roughly **3x** overall.
 - `X1.7` [ ] **Compute polygonisation** — the big one, and the reason the
   WebGPU migration happened. Jiggle and flesh SURVIVE (applyRig moves primitive
   endpoints, so it deforms the field's definition, not the rendering).

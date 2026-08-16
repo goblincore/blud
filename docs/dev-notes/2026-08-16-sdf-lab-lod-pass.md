@@ -180,14 +180,28 @@ little better than the headline.
 regenerated. Deliberately NOT regenerated on a sever: the alive flag is still
 read at runtime, so a limb coming off costs no pipeline compile.
 
-**3. Cone marching / multi-resolution.** Bálint & Valasek's second
-contribution, and what ARBM builds on. A cheap low-resolution pre-pass marches
+**3. Cone marching / multi-resolution — DONE, worth ~22%.** Bálint & Valasek's
+second contribution, and what ARBM builds on. A cheap low-resolution pre-pass marches
 with a cone radius equal to the pixel footprint and records a conservative
 starting `t` per tile; the full pass starts from there instead of from the
 camera. This subsumes the "start at the proxy box entry" idea — it starts at
 the last provably-empty distance, which is much further along — and it
 composes directly with the half-resolution layer already built, since that
 pass is a natural place to hang the pre-pass off.
+
+MEASURED at 10 bodies, full resolution: GPU 222 ms without against 173 ms
+with, **−22%**, and it is the tightest measurement of the whole exercise —
+repeats within a condition differ by 2% (219.9/224.1 against 171.9/173.8).
+
+The CONE is the entire safety argument. A ray marched at tile centre gives a
+distance valid for that one ray; a neighbour in the same tile might have
+geometry nearer and would tunnel straight through it. Marching a cone whose
+radius grows to cover the tile's footprint, and stopping when the field comes
+within that radius, gives a distance conservative for every ray in the tile.
+Where proxy boxes overlap, the pre-pass writes its distance as depth too, so
+the hardware depth test resolves to the NEAREST start — the one value safe for
+all of them. `CONE_TILE` is 8 and worth sweeping: bigger tiles make the
+pre-pass cheaper but the cone wider, and a wider cone stops earlier.
 
 ## The remaining gap
 

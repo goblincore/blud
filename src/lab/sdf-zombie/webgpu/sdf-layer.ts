@@ -34,6 +34,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
+import { createConeUniforms, type ConeSource } from './zombie-gpu';
 
 /**
  * The layer SDF bodies live on. Everything raymarched goes here; the polygonal
@@ -41,6 +42,24 @@ import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
  * mask apart rather than an object list to keep in sync.
  */
 export const SDF_LAYER = 1;
+
+/**
+ * The layer the coarse cone-march twins live on.
+ *
+ * A separate layer rather than a material swap: swapping materials on every
+ * mesh each frame would dirty three's render lists, and the twin needs its own
+ * depth buffer anyway.
+ */
+export const CONE_LAYER = 2;
+
+/**
+ * Tile size of the cone pre-pass, in full-resolution pixels.
+ *
+ * 8 is the figure the technique is usually quoted with. Bigger tiles make the
+ * pre-pass cheaper but the cone wider, and a wider cone stops earlier — so the
+ * start distance it proves is less useful. Cheap to change and worth sweeping.
+ */
+export const CONE_TILE = 8;
 
 /**
  * Samples the SDF layer at the current pixel. rgb is colour, a is depth.
@@ -83,6 +102,11 @@ export interface SdfLayer {
   setScale(scale: number): void;
   /** Whether the render target comes back inverted relative to the canvas. */
   setFlipY(on: boolean): void;
+  /** The pre-pass output, to hand to every view that should start from it. */
+  readonly cone: ConeSource;
+  /** Turns the cone pre-pass on or off, for measurement. */
+  setConeEnabled(on: boolean): void;
+  readonly coneEnabled: boolean;
   readonly scale: number;
   readonly flipY: boolean;
   /** Actual SDF target size, for the panel to display. */
@@ -124,6 +148,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // from the console if a future three version changes its mind.
   const uFlipY = uniform(1);
 
+  // Coarse pre-pass target. One texel per CONE_TILE of the SDF pass, holding
+  // the distance every ray in that tile can safely skip.
+  const coneTarget = new THREE.RenderTarget(1, 1, {
+    depthBuffer: true,
+    type: THREE.FloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+  const coneUniforms = createConeUniforms();
+
   const sampled = composite({
     layerTex: texture(target.texture),
     texCoord: uv(),
@@ -148,9 +182,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   quadCam.position.z = 1;
 
   function resize() {
-    target.setSize(
-      Math.max(1, Math.round(fullW * scale)),
-      Math.max(1, Math.round(fullH * scale)),
+    const w = Math.max(1, Math.round(fullW * scale));
+    const h = Math.max(1, Math.round(fullH * scale));
+    target.setSize(w, h);
+    coneTarget.setSize(
+      Math.max(1, Math.ceil(w / CONE_TILE)),
+      Math.max(1, Math.ceil(h / CONE_TILE)),
     );
   }
 
@@ -164,9 +201,18 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       renderer.setRenderTarget(null);
       void renderer.render(scene, camera);
 
-      // Pass 2 — the raymarched bodies alone, into the scaled target. The
-      // clear leaves alpha at 1.0, which is the "nothing here" sentinel the
-      // composite discards on.
+      // Pass 1b — the coarse cone pre-pass, one texel per tile. Cheap: a
+      // sixty-fourth of the pixels at CONE_TILE = 8, and no shading at all.
+      if (coneUniforms.enabled.value > 0.5) {
+        camera.layers.set(CONE_LAYER);
+        renderer.setRenderTarget(coneTarget);
+        void renderer.render(scene, camera);
+      }
+
+      // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
+      // starting from the distance the pre-pass proved empty. The clear leaves
+      // alpha at 1.0, which is the "nothing here" sentinel the composite
+      // discards on.
       camera.layers.set(SDF_LAYER);
       renderer.setRenderTarget(target);
       void renderer.render(scene, camera);
@@ -189,11 +235,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       resize();
     },
     setFlipY(on) { uFlipY.value = on ? 1 : 0; },
+    cone: { texture: coneTarget.texture, uniforms: coneUniforms },
+    setConeEnabled(on) { coneUniforms.enabled.value = on ? 1 : 0; },
+    get coneEnabled() { return coneUniforms.enabled.value > 0.5; },
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
+      coneTarget.dispose();
       quad.geometry.dispose();
       quadMat.dispose();
     },

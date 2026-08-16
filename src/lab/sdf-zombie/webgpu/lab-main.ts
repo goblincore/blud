@@ -26,7 +26,7 @@
 // system cannot see the lights and every standard material renders black.
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
-import { createSdfLayer, SDF_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, CONE_TILE } from './sdf-layer';
 import { createZombieGpuView, createChunkGpuView, type ChunkGpuView } from './zombie-gpu';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
@@ -160,6 +160,17 @@ async function main() {
   resEl.style.fontSize = '11px';
   statusBox.appendChild(resEl);
 
+  /**
+   * Every view whose cone footprint depends on the layer's resolution.
+   *
+   * Declared ahead of sizeSdfLayer, which runs before any view exists — a
+   * `[view, ...crowd]` there would hit the temporal dead zone on the very
+   * first call. Views register themselves as they are created.
+   */
+  const coneTargets: { setConeK(k: number): void }[] = [];
+  /** Latest cone footprint constant, so a view created later can adopt it. */
+  let lastConeK = 0.02;
+
   // The raymarched bodies render into their own target at their own scale and
   // composite back over the polygonal scene. Cost is close to linear in
   // pixels, so this is the biggest lever available without compute.
@@ -169,6 +180,11 @@ async function main() {
     sdfLayer.setSize(s.x, s.y);
     const t = sdfLayer.targetSize;
     resEl.textContent = `sdf ${t.width}x${t.height} (${sdfLayer.scale.toFixed(2)}x)`;
+    // Cone footprint radius per unit distance: a tile spans CONE_TILE pixels
+    // of the SDF pass, and the frame spans 2*tan(fov/2) of world per unit
+    // distance over its full height.
+    lastConeK = (CONE_TILE * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, t.height);
+    for (const v of coneTargets) v.setConeK(lastConeK);
   }
   sizeSdfLayer();
   window.addEventListener('resize', sizeSdfLayer);
@@ -177,12 +193,16 @@ async function main() {
   let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
-  const view = createZombieGpuView(body);
+  const view = createZombieGpuView(body, { cone: sdfLayer.cone });
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
   // camera layer mask apart rather than an object list to keep in sync.
   view.object.layers.set(SDF_LAYER);
+  view.coneObject.layers.set(CONE_LAYER);
+  view.setConeK(lastConeK);
+  coneTargets.push(view);
   scene.add(view.object);
+  scene.add(view.coneObject);
   const u = view.uniforms;
 
   /**
@@ -464,6 +484,9 @@ async function main() {
       const v = crowd.pop();
       if (!v) break;
       scene.remove(v.object);
+      scene.remove(v.coneObject);
+      const ci = coneTargets.indexOf(v);
+      if (ci >= 0) coneTargets.splice(ci, 1);
       v.dispose();
     }
     while (crowd.length < n) {
@@ -478,7 +501,8 @@ async function main() {
       const crowdBody = buildBody(makeZombie(crowdFace), DEFAULT_BUILD_OPTS, override);
       const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
-      const v = createZombieGpuView(placed, { specialise: specialiseShaders });
+      const v = createZombieGpuView(placed,
+        { specialise: specialiseShaders, cone: sdfLayer.cone });
       trackBody(v, placed);
       v.applyMaterial(flesh, LIGHT_PRESETS[light]);
       if (faceSheet) {
@@ -492,7 +516,11 @@ async function main() {
         if (skull) v.setHeadShape(skull.centre, skull.axes);
       }
       v.object.layers.set(SDF_LAYER);
+      v.coneObject.layers.set(CONE_LAYER);
+      v.setConeK(lastConeK);
+      coneTargets.push(v);
       scene.add(v.object);
+      scene.add(v.coneObject);
       crowd.push(v);
     }
     countEl.textContent = `bodies: ${crowd.length + 1}`;
@@ -1019,6 +1047,8 @@ async function main() {
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
     get sdfScale() { return sdfLayer.scale; },
     setSdfFlipY(on: boolean) { sdfLayer.setFlipY(on); },
+    setConeEnabled(on: boolean) { sdfLayer.setConeEnabled(on); },
+    get coneEnabled() { return sdfLayer.coneEnabled; },
     get sdfFlipY() { return sdfLayer.flipY; },
     setSimplifyOverride(v: boolean | null) { simplifyOverride = v; },
     /** Re-spawns the crowd at a new spacing. 1 = shoulder to shoulder. */

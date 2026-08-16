@@ -11,8 +11,8 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  wgslFn, positionWorld, cameraPosition, vec4, uniform, texture,
-  cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add,
+  wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, float,
+  cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add, screenUV,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE } from '../pack';
@@ -25,13 +25,17 @@ import { sub as vsub } from '../vec';
 import { chunkExtent } from '../extent';
 import { specialiseMapBody } from './specialise';
 import {
-  HELPERS, MARCH_BODY, DATA_ROWS,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
   ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
 
 export interface ZombieGpuView {
   object: THREE.Object3D;
+  /** The coarse cone-march twin, rendered into the pre-pass target. */
+  coneObject: THREE.Object3D;
+  /** Cone footprint radius per unit distance — set from tile size and fov. */
+  setConeK(k: number): void;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
   /** Re-upload after the body changes (sever, override edit, rig step). */
@@ -81,6 +85,14 @@ function buildMarchFn(mapBodySrc?: string) {
 }
 
 const marchBody = buildMarchFn();
+
+/** The coarse cone-march entry, sharing the same dependency-ordered helpers. */
+const coneMarch = (() => {
+  const nodes = HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
+    (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
+  );
+  return wgslFn(CONE_MARCH, nodes);
+})();
 
 /**
  * Stand-in face sheet, so the texture binding exists before the real art
@@ -204,8 +216,45 @@ type Swizzled = { xyz: unknown; w: unknown };
  * three hashes them to ONE pipeline and only the bind groups differ — which is
  * what makes a two-dozen-chunk gib explosion affordable on this path.
  */
+/**
+ * Reads the coarse pass's start distance for this pixel.
+ *
+ * Deliberately a NEAREST fetch of the tile the pixel falls in: interpolating
+ * two tiles would produce a distance neither of them proved safe, which is how
+ * a ray ends up starting past geometry and the body develops holes.
+ */
+const CONE_FETCH_WGSL = /* wgsl */ `fn coneFetch(
+  coneTex: texture_2d<f32>,
+  screenUV: vec2<f32>,
+  enabled: f32
+) -> f32 {
+  if (enabled < 0.5) { return 0.0; }
+  let dims = vec2<f32>(textureDimensions(coneTex, 0));
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  return textureLoad(coneTex, c, 0).x;
+}`;
+const coneFetch = wgslFn(CONE_FETCH_WGSL);
+
+/**
+ * The cone pre-pass's output, as the march material needs it.
+ *
+ * Built by a factory so the node types stay exact — `wgslFn` takes Nodes, and
+ * a hand-written `{ value: number }` does not satisfy it. Same reason
+ * MarchUniforms is derived rather than declared.
+ */
+export function createConeUniforms() {
+  return { enabled: uniform(0) };
+}
+export type ConeUniforms = ReturnType<typeof createConeUniforms>;
+
+export interface ConeSource {
+  texture: THREE.Texture;
+  uniforms: ConeUniforms;
+}
+
 function createMarchMaterial(
   dataTex: THREE.Texture, u: MarchUniforms, march = marchBody,
+  cone?: ConeSource,
 ) {
   const marched = march({
     worldPos: positionWorld,
@@ -233,6 +282,13 @@ function createMarchMaterial(
     headAxes: u.headAxes,
     faceGlowColor: u.faceGlowColor,
     lodCfg: u.lodCfg,
+    startT: cone
+      ? coneFetch({
+          coneTex: texture(cone.texture),
+          screenUV: screenUV,
+          enabled: cone.uniforms.enabled,
+        })
+      : float(0),
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -270,6 +326,16 @@ function createMarchMaterial(
   material.outputNode = vec4(marched.xyz as never, depth);
   return material;
 }
+
+/**
+ * Depth range the cone pass normalises its distance by.
+ *
+ * Only has to exceed any distance the lab's camera sits at — it exists so the
+ * depth test can pick the nearest start, not to be metric. Larger than the
+ * camera's far plane would waste precision; smaller would clamp distant starts
+ * together and lose the ordering.
+ */
+const CONE_DEPTH_RANGE = 32;
 
 /** Allocates the RGBA32F data texture every march reads its field from. */
 function createDataTexture() {
@@ -317,6 +383,8 @@ function writeWounds(
 }
 
 export interface GpuViewOpts {
+  /** Coarse cone pre-pass to start the march from. Omit to march from the camera. */
+  cone?: ConeSource;
   /**
    * Generate a shader specialised to THIS body's structure — loops unrolled,
    * carve decisions and blend constants baked. See specialise.ts. Costs one
@@ -345,7 +413,33 @@ export function createZombieGpuView(
 
   const packed = upload(body);
   const material = createMarchMaterial(
-    dataTex, u, opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody);
+    dataTex, u,
+    opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
+    opts.cone);
+
+  // The coarse twin: same field, same proxy box, no shading, its own mesh on
+  // its own layer. Writes the conservative start distance into .x, and the
+  // same value normalised as DEPTH — so where proxy boxes overlap the hardware
+  // depth test resolves to the NEAREST start, which is the one value that is
+  // safe for every body in that tile.
+  const coneK = uniform(0.02);
+  const coneT = coneMarch({
+    worldPos: positionWorld,
+    camPos: cameraPosition,
+    data: texture(dataTex),
+    counts: u.counts,
+    marchCfg: u.marchCfg,
+    woundCfg: u.woundCfg,
+    woundCfg2: u.woundCfg2,
+    coneK,
+  }) as unknown as { div: (d: unknown) => unknown };
+
+  const coneMaterial = new MeshBasicNodeMaterial();
+  coneMaterial.side = THREE.BackSide;
+  coneMaterial.outputNode = vec4(coneT as never, 0, 0, 1);
+  coneMaterial.depthNode = coneT.div(CONE_DEPTH_RANGE) as never;
+  coneMaterial.depthWrite = true;
+  coneMaterial.depthTest = true;
 
   /**
    * Proxy box covering every live cluster, plus blend margin.
@@ -380,8 +474,16 @@ export function createZombieGpuView(
   mesh.position.copy(first.centre);
   mesh.frustumCulled = false; // the proxy IS the bound; don't double-cull
 
+  // Shares the geometry — same proxy box, different material — and follows the
+  // main mesh's transform so severing keeps the two in step.
+  const coneMesh = new THREE.Mesh(mesh.geometry, coneMaterial);
+  coneMesh.frustumCulled = false;
+  coneMesh.position.copy(mesh.position);
+
   return {
     object: mesh,
+    coneObject: coneMesh,
+    setConeK(k: number) { coneK.value = k; },
     uniforms: u,
     update(next) {
       const p = upload(next);
@@ -391,6 +493,8 @@ export function createZombieGpuView(
       // narrowing it, and a uniform scale would either clip or over-cover.
       mesh.scale.set(
         f.size.x / first.size.x, f.size.y / first.size.y, f.size.z / first.size.z);
+      coneMesh.position.copy(mesh.position);
+      coneMesh.scale.copy(mesh.scale);
     },
     setWounds(worldPositions, radii, types, ages) {
       u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages);
@@ -420,6 +524,7 @@ export function createZombieGpuView(
     dispose() {
       mesh.geometry.dispose();
       material.dispose();
+      coneMaterial.dispose();
       dataTex.dispose();
     },
   };
