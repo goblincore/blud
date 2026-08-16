@@ -172,6 +172,10 @@ Key reference docs (open these before touching their area):
 - `X1.21.1` [ ] Goo fluidity — bilateral blur on the density buffer before surface
   extraction (the canonical grapes→sheets fix; screen-space fluid reference:
   github.com/jeantimex/fluid). Scale/overlap/threshold already retuned inline.
+- `X1.21.2` [ ] Shell-silhouette visual glitches — with the toggle ON, hard-edged pale
+  wedges/patches cut across shoulders and arms (playtest screenshot 2026-08-16). Suspect
+  the displaced surface vs occluder/cone conservativeness (displacement extends past the
+  smooth field the pre-passes assume). Systematic pass; A/B occluder off first.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
 - `X1.22` [ ] **Rig motion pass (Spec B)** — procedural shamble (wander), FABRIK IK
