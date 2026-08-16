@@ -1008,6 +1008,8 @@ async function main() {
     setStepsOverride(v: number | null) { stepsOverride = v; },
     /** Sphere-trace step multiplier on every body. Default 0.6. */
     setStepMul(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.y = v; },
+    /** Over-relaxation factor; <= 1 disables the relaxed tracer. */
+    setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
     /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
     get sdfScale() { return sdfLayer.scale; },

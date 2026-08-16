@@ -336,13 +336,50 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let tMax = length(worldPos - camPos);
   let steps = i32(marchCfg.x);
 
+  // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).
+  //
+  // Plain sphere tracing steps by exactly the unbounding radius. This shader
+  // used to step by 0.6 of it — UNDER-relaxation, costing ~1.67x the
+  // iterations of the textbook algorithm — because the silhouette fbm added to
+  // mapBody breaks the Lipschitz bound, so the "distance" can overestimate and
+  // a full step can tunnel through the surface. validateBody's
+  // silhouetteNoiseAmp-vs-stepMultiplier check exists for exactly that.
+  //
+  // So the relaxation is CONDITIONAL on the field being trustworthy. With the
+  // noise off — which is what LOD does to every distant body — the field is an
+  // exact CSG of ellipsoid capsules under a conservative smooth-min, and the
+  // tracer can safely overstep and backtrack when it overshoots. With the noise
+  // on, marchCfg.y stays in charge and nothing changes.
+  //
+  // The overshoot test is the whole safety argument: if the new unbounding
+  // sphere does not reach back far enough to touch the previous one, the step
+  // jumped over a gap the spheres never covered, so it is retracted and the
+  // step falls back to the conservative radius.
+  // woundCfg2.y carries the relaxation factor so it stays tunable — the win is
+  // theory until it is measured, and it cannot be measured against a constant.
+  // At or below 1.0 the relaxed path is off and marchCfg.y is back in charge.
+  let relax = marchCfg.z <= 0.0 && woundCfg2.y > 1.0;
+  var omega = select(marchCfg.y, woundCfg2.y, relax);
   var t = 0.0;
   var hit = false;
+  var prevRadius = 0.0;
+  var stepLen = 0.0;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     let d = mapBody(camPos + rd * t, data, counts, marchCfg.z, woundCfg, woundCfg2);
-    if (d < 0.0012) { hit = true; break; }
-    t = t + d * marchCfg.y;
+    let radius = abs(d);
+    let overshot = omega > 1.0 && (radius + prevRadius) < stepLen;
+    if (overshot) {
+      // Undo the part of the last step that was not covered by the spheres,
+      // and drop to plain sphere tracing for the rest of this ray.
+      stepLen = stepLen - omega * stepLen;
+      omega = 1.0;
+    } else {
+      if (d < 0.0012) { hit = true; break; }
+      stepLen = d * omega;
+    }
+    prevRadius = radius;
+    t = t + stepLen;
     if (t > tMax) { break; }
   }
   if (!hit) { discard; }

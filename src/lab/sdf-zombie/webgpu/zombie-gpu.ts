@@ -105,8 +105,14 @@ function defaultUniforms(faceTex: THREE.Texture) {
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0.016)),
     /** x count, y blendK, z rimSplay, w rimOffset */
     woundCfg: uniform(new THREE.Vector4(0, 0.015, 0.55, 1.15)),
-    /** x rimWidth */
-    woundCfg2: uniform(new THREE.Vector4(0.42, 0, 0, 0)),
+    /**
+     * x rimWidth, y relaxation factor for sphere tracing.
+     *
+     * 1.6 is the usual over-relaxation constant. It only takes effect where
+     * the silhouette noise is off and the field is therefore trustworthy —
+     * see the long note in MARCH_BODY. Set at or below 1.0 to disable.
+     */
+    woundCfg2: uniform(new THREE.Vector4(0.42, 1.6, 0, 0)),
     baseColor: uniform(new THREE.Color(0xc46a72)),
     deepColor: uniform(new THREE.Color(0x8c1420)),
     charColor: uniform(new THREE.Color(0x1a1214)),

@@ -137,6 +137,51 @@ most of the crowd is at a distance.
 
 ---
 
+## Raymarching techniques not yet used
+
+Three from the literature, prompted by
+[batchmarching](https://github.com/maximecb/batchmarching/) and
+[the partial-evaluation post](https://pointersgonewild.com/2016/05/08/optimizing-ray-marching-through-partial-evaluation/).
+ARBM itself is a CPU algorithm and does not port, but its references do.
+
+**1. Relaxed sphere tracing — DONE.** ([Keinert et al. 2014;
+Bálint & Valasek 2018](https://people.inf.elte.hu/csabix/publications/articles/eurographics-2018-shortpaper.pdf).)
+Plain sphere tracing advances by the full unbounding radius; over-relaxation
+advances further and backtracks when the new sphere fails to reach the
+previous one. This shader was doing the *opposite* — `stepMul` 0.6, i.e.
+**under**-relaxation costing ~1.67x the textbook iteration count — because the
+silhouette fbm breaks the Lipschitz bound and a full step can tunnel through
+the surface. So the relaxation is conditional on the noise being off, which is
+already true of every distant body under LOD. Tunable via `woundCfg2.y`.
+
+**2. Partial evaluation — the best untried idea.** The blog's own proposal is
+to specialise the shader per frustum quadrant as the camera moves, and the
+author is openly unsure that recompiling on every camera move is viable. It is
+not, for us. But the *idea* applies in a form that suits this code far better:
+specialise on the body's **structure** rather than on the camera.
+
+The inner loop currently does three `textureLoad`s per primitive per step,
+under dynamic loop bounds, with a branch to skip carves. All of that is
+interpreter overhead over data that barely changes: which primitives exist,
+which are carves, and the cluster ranges change only on a sever or a rebuild.
+Generating WGSL with that loop **unrolled and the carve decisions baked in**
+removes the branches, the bounds checks and the indirection, leaving only the
+endpoint fetches — and those could become uniforms. Regenerate the shader on
+structural change, which is rare; the per-frame rig jiggle changes endpoint
+VALUES, not structure, so it does not trigger a rebuild.
+
+Worth trying before polygonisation, because it is much smaller and the two are
+not exclusive.
+
+**3. Cone marching / multi-resolution.** Bálint & Valasek's second
+contribution, and what ARBM builds on. A cheap low-resolution pre-pass marches
+with a cone radius equal to the pixel footprint and records a conservative
+starting `t` per tile; the full pass starts from there instead of from the
+camera. This subsumes the "start at the proxy box entry" idea — it starts at
+the last provably-empty distance, which is much further along — and it
+composes directly with the half-resolution layer already built, since that
+pass is a natural place to hang the pre-pass off.
+
 ## The remaining gap
 
 Quality LOD tops out at −24%. Reaching 16 ms needs **fewer fragment
