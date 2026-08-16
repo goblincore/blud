@@ -169,6 +169,9 @@ Key reference docs (open these before touching their area):
 - `X1.19.2` [ ] Chain-cut union test — overlapping wounds that jointly carve a joint
   through (or fat joints like the hand knob) don't sever; test the cross-section
   against the UNION of carve spheres. Small, `connectivity.ts`, after X1.21 lands.
+- `X1.21.1` [ ] Goo fluidity — bilateral blur on the density buffer before surface
+  extraction (the canonical grapes→sheets fix; screen-space fluid reference:
+  github.com/jeantimex/fluid). Scale/overlap/threshold already retuned inline.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
 - `X1.22` [ ] **Rig motion pass (Spec B)** — procedural shamble (wander), FABRIK IK
