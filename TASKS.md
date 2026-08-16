@@ -166,9 +166,9 @@ Key reference docs (open these before touching their area):
 - `X1.19.1` [x] Gore fix-pass — per-type wound profiles ("calibres"), tighter rim
   locality (no armpit welding), mid-limb severing (per-prim dead flag; floating-piece
   fix + hanging-arm chain anatomy), game-hot launch, trail-sized droplets.
-- `X1.19.2` [ ] Chain-cut union test — overlapping wounds that jointly carve a joint
-  through (or fat joints like the hand knob) don't sever; test the cross-section
-  against the UNION of carve spheres. Small, `connectivity.ts`, after X1.21 lands.
+- `X1.19.2` [x] Chain-cut union test — cross-sections now test disc samples against
+  the UNION of carve spheres (overlapping wounds + fat joints sever); dispatched
+  glm-5.3, merged with 6 regression tests.
 - `X1.21.1` [x] Goo fluidity — separable 9-tap Gaussian on the density buffer before surface
   extraction (blurPx 2.5 default, `goo blur px` slider, 0 = bypass); frozen-pile A/B verified beads→ropes, +~0.15 ms.
 - `X1.21.2` [ ] Shell-silhouette visual glitches — with the toggle ON, hard-edged pale
