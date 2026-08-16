@@ -179,9 +179,10 @@ Key reference docs (open these before touching their area):
 - `X1.22` [x] **Rig motion pass (Spec B)** — 4-task dispatch chain merged (deepseek
   built gait/wander/ik, glm stagger/collapse+wiring): hero shambles, staggers,
   clutches, collapses; 1086 tests. Verified walking + crumple in browser.
-- `X1.22.1` [ ] Collapse 2s frame stalls — 'falling' phase alternates 10ms/2000ms rAF
-  deltas (timestamped passes + JS + device errors all ruled out; evidence in dualmem).
-  Dispatched. Playtest collapse via K only after this lands.
+- `X1.22.1` [x] Collapse "stall" — the 2s frames were the browser-pane background
+  throttle (measurement artifact); the REAL bug was the per-frame dt clamp turning
+  throttle into slow-motion sim. Fixed: sub-stepped rig integration (`planSubSteps`)
+  + opaque canvas present; collapse 2.5s @ 60fps. [dev-note](docs/dev-notes/2026-08-16-collapse-stall/notes.md)
 - `X1.23` [ ] **FPV + dynamite (Spec C)** — pointer-lock walk mode, SDF flesh hands
   (keyframed prim poses vs QAV reference, verlet jiggle, splash-scarred), dynamite on
   the game's DYNAMITE_COOK constants, explosion into the full gore stack.
