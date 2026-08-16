@@ -129,11 +129,15 @@ Key reference docs (open these before touching their area):
   (`specialise.ts`, **−20%**), and a cone-march pre-pass at 1/8 tiles giving
   every ray a proven-empty start distance (**−22%**, and the tightest
   measurement of the lot). Levers now stack to roughly **3x** overall.
-- `X1.7` [ ] **Compute polygonisation** — the big one, and the reason the
-  WebGPU migration happened. Jiggle and flesh SURVIVE (applyRig moves primitive
-  endpoints, so it deforms the field's definition, not the rendering).
-  [spec](docs/superpowers/specs/2026-08-16-sdf-polygonisation-design.md).
-  Phase 0 is a go/no-go spike: extract one posed body, rasterise, measure.
+- `X1.7` [ ] **Compute polygonisation — NEXT SESSION.** The big one, and the
+  reason the WebGPU migration happened. Jiggle and flesh SURVIVE (applyRig
+  moves primitive endpoints, so it deforms the field's definition, not the
+  rendering). ~1.2M field evals for a close raymarched body vs ~50k to extract,
+  and independent of screen coverage.
+  [spec](docs/superpowers/specs/2026-08-16-sdf-polygonisation-design.md) ·
+  [phase 0 plan](docs/superpowers/plans/2026-08-16-sdf-polygonisation-phase0.md)
+  - **Cool the machine and re-baseline first** — this session's absolutes
+    ranged 2x on identical configs (222 ms hot, 112 ms cooled).
 
 ## Asset pipeline
 
