@@ -47,6 +47,7 @@ import { sdBody } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
 import { createBloodSim, burst, emitTrails, stepBlood } from '../blood-sim';
 import { createBloodView } from './blood-view-gpu';
+import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt } from '../rig-bind';
 import { stepRig } from '../rig';
@@ -187,7 +188,12 @@ async function main() {
   }
   sizeSdfLayer();
   window.addEventListener('resize', sizeSdfLayer);
-  handle.setDrawFn(() => sdfLayer.render(scene, camera));
+  // The frame's draw: goo density first, then the whole sdf flow in the
+  // middle, then the goo surface composited on top (with fake depth, so it
+  // interleaves with flesh and floor). gooLayer is declared further down —
+  // safe in a closure because everything between here and the end of main()
+  // is synchronous, so no frame can fire before it initialises.
+  handle.setDrawFn(() => gooLayer.render(camera, () => sdfLayer.render(scene, camera)));
 
   // The occluder hull. Its own layer, rendered before the march, so every ray
   // can stop at the distance something solid already covers — the early-Z that
@@ -221,6 +227,28 @@ async function main() {
   scene.add(view.object);
   scene.add(view.coneObject);
   const u = view.uniforms;
+
+  // The metaball blood layer (gobs-and-goo task 5). It shares the march's
+  // light uniform NODES — not copies — so any panel re-tune of lightDir /
+  // keyColor / intensities moves the goo and the flesh together. Created
+  // here rather than beside sdfLayer because it needs those nodes, which
+  // only exist once the body view does.
+  const gooLayer = createGooLayer(handle.renderer, {
+    lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+  });
+  {
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+  }
+  // Density follows the SDF layer's resolution at a fixed fraction; this
+  // listener is registered AFTER sizeSdfLayer's own, so it reads the
+  // already-updated targetSize. A separate listener rather than a line in
+  // sizeSdfLayer because that runs once before gooLayer exists (temporal
+  // dead zone — see the panel note on frames firing mid-bootstrap).
+  window.addEventListener('resize', () => {
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+  });
 
   /**
    * Crowd fill. Declared here, ahead of everything that touches it, because a
@@ -518,6 +546,17 @@ async function main() {
    * Applied at spawn, so changing it re-spawns the crowd.
    */
   let specialiseShaders = false;
+
+  /**
+   * Shell-displacement silhouette noise (gobs-and-goo task 4): inside a thin
+   * shell of the smooth surface, the march steps the fbm-displaced REAL field
+   * conservatively instead of warping only the normal. The amplitude matches
+   * marchCfg.z's silhouette value (0.016), so the displaced skin and the
+   * warped normals — same fbm, same scale — never disagree.
+   */
+  const SHELL_AMP = 0.016;
+  /** One source of truth for the default: defaultUniforms' woundCfg2.z. */
+  let shellSilhouette = u.woundCfg2.value.z > 0;
 
   function setCrowdCount(n: number) {
     while (crowd.length > n) {
@@ -975,6 +1014,9 @@ async function main() {
       bdt, Math.random);
     stepBlood(bloodSim, bdt, Math.random);
     bloodView.sync(bloodSim, camera);
+    // The goo density quads pose from the same sim state, in the callback
+    // (before the drawFn) — same contract as bloodView.sync.
+    gooLayer.sync(bloodSim, camera);
 
     // Drive the flesh: settle the rig toward its rest pose, push the result
     // back into the primitives, and re-upload. This is what makes the body
@@ -1226,6 +1268,39 @@ async function main() {
       `simplify: ${simplifyOverride === null ? 'auto' : simplifyOverride ? 'ON' : 'OFF'}`;
   });
 
+  const shellBtn = addButton(
+    lodBox, `shell silhouette: ${shellSilhouette ? 'on' : 'off'}`,
+    () => setShellDisplace(!shellSilhouette));
+  /**
+   * Wires shell displacement (woundCfg2.z) through the hero AND the crowd:
+   * crowd views own their uniform set, and the bench gate is a 10-body
+   * measurement, so a hero-only toggle is no measurement — same shape as
+   * setSilhouetteNoise. Chunk views copy woundCfg2 from the hero template at
+   * spawn, so chunks cut after this inherit the setting for free;
+   * pre-existing chunks keep their spawn-time value (ChunkGpuView exposes no
+   * uniforms), which is fine — they are airborne for seconds at most.
+   */
+  function setShellDisplace(on: boolean) {
+    shellSilhouette = on;
+    for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.z = on ? SHELL_AMP : 0;
+    shellBtn.textContent = `shell silhouette: ${on ? 'on' : 'off'}`;
+  }
+
+  // Metaball blood (gobs-and-goo task 5). The two knobs that shape the
+  // surface: where the density field becomes goo, and how wide the soft
+  // band between bare and full-blood is (as a multiple of the threshold).
+  const gooBox = addSection(panelEl, 'goo');
+  addSlider(gooBox, {
+    label: 'goo threshold', min: 0.1, max: 0.95, step: 0.01,
+    get: () => gooLayer.threshold,
+    set: (v) => { gooLayer.setThreshold(v); },
+  });
+  addSlider(gooBox, {
+    label: 'goo edge', min: 1.05, max: 3, step: 0.05,
+    get: () => gooLayer.edge,
+    set: (v) => { gooLayer.setEdge(v); },
+  });
+
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
@@ -1265,6 +1340,16 @@ async function main() {
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
     sdfLayer,
+    /**
+     * The metaball blood layer — threshold/edge setters for console tuning,
+     * mirroring the panel's goo section (which reaches only the same two).
+     */
+    gooLayer: {
+      setThreshold: (v: number) => gooLayer.setThreshold(v),
+      setEdge: (v: number) => gooLayer.setEdge(v),
+      get threshold() { return gooLayer.threshold; },
+      get edge() { return gooLayer.edge; },
+    },
     /**
      * Stamps n blast wounds on the front of the torso by raycasting
      * straight-on — a deterministic heavy-damage state for automated visual
@@ -1333,6 +1418,9 @@ async function main() {
     /** Same run the B key starts; result also lands on `window.__benchResult`. */
     runBench,
     setLodEnabled(on: boolean) { lodEnabled = on; },
+    /** Shell-displacement silhouettes on every live body view. */
+    setShellDisplace,
+    get shellDisplace() { return shellSilhouette; },
     /** null = let LOD decide; true/false force the lever on every body. */
     setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },
     setStepsOverride(v: number | null) { stepsOverride = v; },

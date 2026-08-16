@@ -183,8 +183,11 @@ Key reference docs (open these before touching their area):
   by a dispatched agent via the Blender MCP bridge (committed bpy script = source of
   truth); Blood sawed-off fire model on the game's pellet constants. After X1.23; the
   model script can run in parallel earlier. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-grapeshot-design.md)
-- `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
-  chunk material + screen-space metaball blood. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gobs-and-goo-design.md); plan after the fix-pass lands. WebGPU only.
+- `X1.21` [~] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
+  chunk material + screen-space metaball blood + bench-gated shell silhouettes.
+  [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gobs-and-goo-design.md) ·
+  [plan](docs/superpowers/plans/2026-08-16-sdf-lab-gobs-and-goo.md) — tasks 1–4 landed
+  (gobs, scraps, gore mask, shell toggle — default OFF, 12.36 ms > 12 ms gate); tasks 5–6 (metaball blood + wiring) next. WebGPU only.
 - `X1.11` [-] ~~Port normal warping to `march.glsl.ts`~~ — dead: the WebGL lab is
   **FROZEN** at gore fix-pass parity (owner decision 2026-08-16). All lab work is
   WebGPU-only from here; the GLSL twin stays as reference until deleted at merge.

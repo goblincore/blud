@@ -153,7 +153,8 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
 // Carves every wound out of the field. Burns barely subtract; they char.
 //
 // woundCfg  = (count, blendK, rimSplay, rimOffset)
-// woundCfg2 = (rimWidth, spare, spare, spare)
+// woundCfg2 = (rimWidth, relax, shellAmp, spare) — y and z are consumed by
+//             MARCH_BODY, not here; see the woundCfg2 note at the entry point.
 export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> f32 {
   var d = dIn;
   let n = i32(woundCfg.x);
@@ -369,7 +370,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   counts     x primCount, y clusterCount, z carveCount, w maxBlendK
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
-//   woundCfg2  x rimWidth
+//   woundCfg2  x rimWidth, y relaxation factor, z shellAmp (silhouette shell)
 //   lightCfg   x keyIntensity, y fillIntensity
 //   surfCfg    x specIntensity, y specRoughness, z fresnelBoost, w translucency
 //   surfCfg2   x wetness, y surfaceNoiseAmp
@@ -379,12 +380,14 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   faceCfg3   x glowFlicker, y timeSeconds
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
-//   lodCfg     x aoEnabled
+//   lodCfg     x aoEnabled, w goreStrength (0 body, 1 chunk views)
 //
 // LOD NOTE: most quality levers are guarded by their own amplitude reaching
 // zero (silhouette noise, surface noise, translucency, face, wounds), so the
-// LOD system drives them through uniforms that already existed. Only AO needs
-// lodCfg, because "no ambient occlusion" has no amplitude to turn down.
+// LOD system drives them through uniforms that already existed. AO needs
+// lodCfg.x because "no ambient occlusion" has no amplitude to turn down;
+// the gore mask took the spare lodCfg.w for the same reason — "no gore"
+// has no colour amplitude to fade to.
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -455,6 +458,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // ellipsoid capsules under a conservative smooth-min for EVERY body, not
   // just the distant ones LOD had already stripped, so over-relaxation is
   // always safe and marchCfg.y no longer has to be held under 1.
+  //
+  // SHELL DISPLACEMENT (gobs-and-goo task 4) is the owner-approved middle
+  // path that brings the bumpy outline BACK: the relaxed march runs the
+  // smooth field until it is inside a thin shell of the surface, and only
+  // there does the fbm displace the stepped distance — see the loop body.
   let relax = woundCfg2.y > 1.0;
   var omega = select(marchCfg.y, woundCfg2.y, relax);
   // Start where the cone pre-pass proved the tile is still empty, rather than
@@ -467,21 +475,36 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var clamped = false;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
-    // 0.0, not marchCfg.z. This one argument IS normal warping on the march
-    // side: the silhouette fbm was the single most expensive thing in the
-    // shader precisely because it ran here, ~100 times per pixel. It now runs
-    // four times per HIT pixel, inside calcNormal.
-    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
+    // 0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm
+    // still reaches the normal only via calcNormal — but inside a thin shell
+    // of the surface the same fbm is added to the REAL stepped distance just
+    // below, which is where the silhouette gets its bumps back without
+    // paying fbm at every step of the empty approach.
+    var d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
+    // Shell displacement: inside a thin shell of the smooth surface, the
+    // silhouette noise displaces the REAL field — bumpy outlines are back —
+    // and stepping goes conservative because the noise breaks the Lipschitz
+    // bound. Outside the shell the relaxed march is untouched.
+    let shellAmp = woundCfg2.z;
+    var conservative = false;
+    if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
+      d = d + fbm((camPos + rd * t) * 3.0) * shellAmp;
+      conservative = true;
+    }
     let radius = abs(d);
-    let overshot = omega > 1.0 && (radius + prevRadius) < stepLen;
+    let overshot = !conservative && omega > 1.0 && (radius + prevRadius) < stepLen;
     if (overshot) {
       // Undo the part of the last step that was not covered by the spheres,
-      // and drop to plain sphere tracing for the rest of this ray.
+      // and drop to plain sphere tracing for the rest of this ray. Skipped on
+      // a displaced sample — the retraction rewinds by the omega excess,
+      // which is only the real excess when stepLen was d times omega, and a
+      // shell step was already under-relaxed at 0.6 so there is nothing to
+      // take back.
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
       if (d < 0.0012) { hit = true; break; }
-      stepLen = d * omega;
+      stepLen = d * select(omega, 0.6, conservative);
     }
     prevRadius = radius;
     t = t + stepLen;
@@ -519,6 +542,22 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let wm = woundMask(p, data, woundCfg);
   let cm = charMask(p, data, woundCfg);
   var albedo = mix(baseColor, deepColor, wm);
+
+  // Gore mask (gobs-and-goo spec §2): chunks are torn meat, not clean latex.
+  // fbm mottling + proximity to the torn wounds; blends toward wet deep red
+  // and darker clot, and rides the wet boost so bloody regions glisten.
+  // Sits BEFORE the face/char pass so a torn-off head still gets its face
+  // and char painted over the gore, and before the wet line, which maxes wm
+  // against gore. goreStrength is 0 on the body view, so standing bodies skip
+  // the whole block — including its fbm — and shade exactly as before.
+  let goreStrength = lodCfg.w;
+  var gore = 0.0;
+  if (goreStrength > 0.0) {
+    let mottle = clamp(fbm(p * 6.0) * 0.5 + 0.5, 0.0, 1.0);
+    gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
+    let clot = deepColor * 0.55;
+    albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);
+  }
 
   // Emissive mask from the face sheet; added into the lit colour further down.
   var faceGlow = 0.0;
@@ -598,8 +637,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
 
-  // Wounds are wetter than the surrounding skin; char is dead matte.
-  let wet = surfCfg2.x * mix(1.0, 1.6, wm) * (1.0 - cm);
+  // Wounds are wetter than the surrounding skin; char is dead matte. Gore
+  // rides the same boost: bloody chunk regions glisten like open wounds.
+  let wet = surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm);
   let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound

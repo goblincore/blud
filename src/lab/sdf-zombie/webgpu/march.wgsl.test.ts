@@ -136,8 +136,10 @@ describe('ported features reach the entry point', () => {
   it('does not carry the GLSL depth remap', () => {
     // WebGPU clip z is already [0,1] where OpenGL's is [-1,1]. The GLSL wrote
     // (clip.z / clip.w) * 0.5 + 0.5; carrying that over composites everything
-    // at the wrong depth.
-    expect(MARCH_BODY).not.toContain('0.5 + 0.5');
+    // at the wrong depth. Guard the clip.w DIVISION specifically, not the bare
+    // `0.5 + 0.5` substring: the gore mask legitimately remaps fbm's [-1,1]
+    // onto [0,1] with `* 0.5 + 0.5`, and so may any future mask.
+    expect(MARCH_BODY).not.toMatch(/clip\.w/);
   });
 
   it('fades fresnel out inside wounds instead of wet-boosting it (X1.17)', () => {
@@ -162,12 +164,42 @@ describe('ported features reach the entry point', () => {
     expect(applyWounds).toMatch(/smoothstep\(amp \* 0\.35, amp \* 0\.7, dIn\)/);
   });
 
+  it('shades chunks through the gore mask (gobs-and-goo §2)', () => {
+    // lodCfg.w is goreStrength: 0 on the body, 1 on chunk views. The body's
+    // clean-latex read must stay reachable, and the gore block's own fbm is
+    // what makes a chunk read as mottled torn meat rather than a red ball.
+    expect(MARCH_BODY).toContain('goreStrength');
+    expect(MARCH_BODY).toContain('fbm(p * 6.0)');
+  });
+
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
     // primScale.w: 0 add, 1 carve, 2 dead (severed mid-limb). The additive
     // fold already skips anything above 0.5; a dead prim must ALSO stop
     // carving, or a severed hand keeps biting the field it left behind.
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
     expect(applyCarves).toContain('S.w > 1.5');
+  });
+
+  it('shell-displaces the real field only inside a thin shell (gobs-and-goo task 4)', () => {
+    // The middle path between fbm at every step (too expensive) and
+    // normal-warping only (loses the outline): the march runs the SMOOTH
+    // field relaxed until |d| enters the shell, then the silhouette fbm
+    // displaces the stepped distance itself. Same 3.0 scale as mapBody's
+    // noise term, so calcNormal's warped normals match the displaced skin.
+    expect(MARCH_BODY).toContain('var d = mapBody(');
+    expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
+    expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
+    expect(MARCH_BODY)
+      .toMatch(/d = d \+ fbm\(\(camPos \+ rd \* t\) \* 3\.0\) \* shellAmp;/);
+  });
+
+  it('steps the shell conservatively and never retracts a displaced sample', () => {
+    // The fbm breaks the Lipschitz bound, so inside the shell a relaxed step
+    // could tunnel — 0.6 under-relaxation pays for the noise instead. And the
+    // overshoot retraction assumes the un-displaced field (it rewinds by the
+    // omega excess), so it must be suppressed whenever d carries the shell.
+    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
+    expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
   });
 });
 

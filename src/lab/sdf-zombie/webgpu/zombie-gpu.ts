@@ -131,9 +131,9 @@ function defaultUniforms(faceTex: THREE.Texture) {
     /** x count, y blendK, z rimSplay, w rimOffset */
     woundCfg: uniform(new THREE.Vector4(0, 0.015, 0.55, 1.15)),
     /**
-     * x rimWidth, y relaxation factor for sphere tracing.
+     * x rimWidth, y relaxation factor, z shellAmp (silhouette shell noise).
      *
-     * 1.4, from a measured sweep (10 bodies, occluder on, cooled, with an
+     * y: 1.4, from a measured sweep (10 bodies, occluder on, cooled, with an
      * interleaved control): 1.0 → 14.89 ms, 1.4 → 9.31, 1.6 → 9.81, 1.8 →
      * 10.17. Higher factors save steps but pay for them in overshoot
      * retractions — each one costs extra samples and drops the ray to plain
@@ -141,6 +141,16 @@ function defaultUniforms(faceTex: THREE.Texture) {
      * before it could be measured honestly. Purely a perf knob: the overshoot
      * test makes any factor exact on a conservative field. At or below 1.0
      * the relaxed path is off.
+     *
+     * z: shell-displacement silhouette amplitude (gobs-and-goo task 4). 0 is
+     * off — normals still carry the fbm via calcNormal. 0.016, matching
+     * marchCfg.z's silhouette value, turns the REAL field bumpy inside a thin
+     * shell of the surface. Bench-gated OFF (task 4, 10 bodies, occluder on,
+     * 0.70 scale, second of two runs quoted, all hiddenSteps 0): shell off
+     * 12.03 ms, shell on 12.36 ms — over the 12 ms gate. A reverse-order
+     * control (on first) gave on 10.79 / off 12.72, so the real shell cost is
+     * inside the ±2 ms thermal noise; the gate is simply conservative. Drive
+     * it live from the panel or __sdfLab.setShellDisplace.
      */
     woundCfg2: uniform(new THREE.Vector4(0.42, 1.4, 0, 0)),
     baseColor: uniform(new THREE.Color(0xc46a72)),
@@ -186,11 +196,12 @@ function defaultUniforms(faceTex: THREE.Texture) {
     /** The face sheet itself. Swapped by the panel; see setFaceTexture(). */
     faceTex: texture(faceTex),
     /**
-     * x = aoEnabled.
+     * x = aoEnabled, w = goreStrength (0 body, 1 chunk views).
      *
-     * The only LOD lever that needs its own uniform: every other one is
+     * The two levers that need their own uniform: every other one is
      * switched off by driving its existing amplitude to zero, and the shader
-     * branches on that. "No ambient occlusion" has no amplitude.
+     * branches on that. "No ambient occlusion" and "no gore mask" have no
+     * amplitude to turn down.
      */
     lodCfg: uniform(new THREE.Vector4(1, 0, 0, 0)),
   };
@@ -622,9 +633,10 @@ export interface ChunkGpuView {
  * translateBody() exists for, and it has bitten this project twice.
  *
  * `template` is the body's live uniform set at the moment of the cut, so the
- * chunk shades exactly like the flesh it came from. Its VALUES are copied, not
- * the nodes: sharing the nodes would let a chunk's wound count scribble over
- * the body's.
+ * chunk shades like the flesh it came from — one deliberate exception: the
+ * gore mask below (lodCfg.w = 1) repaints it as torn meat. Its VALUES are
+ * copied, not the nodes: sharing the nodes would let a chunk's wound count
+ * scribble over the body's.
  */
 export function createChunkGpuView(
   chunk: Chunk,
@@ -693,6 +705,10 @@ export function createChunkGpuView(
   u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
   // Chunks are small; fewer steps.
   u.marchCfg.value.x = 48;
+  // Gore mask (gobs-and-goo §2): a chunk is torn meat, not clean latex. The
+  // body view keeps w=0, so the shader skips the block entirely there. The
+  // head keeps gore too — it just tore off; its face still paints over it.
+  u.lodCfg.value.w = 1;
   // Only a severed HEAD carries the face. Without this a flying arm would get
   // one projected onto it, since every chunk's own cluster 0 is itself.
   u.faceCfg.value.x = chunk.limb === 'head' ? 1 : 0;
