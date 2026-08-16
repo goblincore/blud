@@ -21,14 +21,18 @@ last session arrived at by measurement — and one thing that was missed:
   without the discrete popping; and **normal warping**, which we have no
   analogue for.
 - **[Lipschitz Pruning](https://wbrbr.org/publications/LipschitzPruning/)**
-  (Barbier et al.) — local pruned trees, code published. Their headline 629x is
-  on a 6023-node scene; ours is 23 primitives, so expect single digits.
+  (Barbier et al.) — **read in full; do NOT build this.** It targets huge
+  static trees (thousands of nodes) where we have 23; we already measured that
+  cutting 23 primitives to 6 buys only −11%, so tree size is not our
+  bottleneck; and its pruned trees are built per grid cell over a dense
+  partition, while our rig moves every endpoint every frame. The authors list
+  partial update as future work.
 
-**Why this can change the plan:** proxy and continuous-LOD nodes attack the
-crowd problem from INSIDE raymarching. Polygonisation abandons the paradigm.
-If the paper's approach gets close on a tree like ours, Phase 0 may not be
-worth running at all — and that is a cheaper thing to find out by reading than
-by building a marching-cubes compute pass.
+**Why this can still change the plan:** proxy and continuous-LOD nodes attack
+the crowd problem from INSIDE raymarching, where polygonisation abandons the
+paradigm. Worth reading before building a marching-cubes compute pass — though
+on the evidence of `simplify.ts` (−11%), expect them to be worth less here
+than in the paper's scenes.
 
 **Do normal warping first regardless.** It is small, it is wanted by this spec
 anyway (§5 — silhouette noise aliases at 2 cm voxels), and it unlocks a chain:

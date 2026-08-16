@@ -277,14 +277,34 @@ what was built here:
 | Normal warping | nothing yet — and this is the important one |
 
 **[Lipschitz Pruning](https://wbrbr.org/publications/LipschitzPruning/)**
-(Barbier et al.) computes local pruned trees equivalent to the full tree within
-a region of space, collapsing binary operators to one operand or whole subtrees
-to constants. Compatible with smooth CSG operators, so it applies to a
-smooth-min fold like ours. Reported speedups "up to two orders of magnitude",
-629x on a scene of 6023 nodes — **and that scaling is the catch for us.** Our
-tree is 23 primitives under 6 clusters, and the per-cluster bounding-sphere
-cull in `mapBody` is already a flat version of the same idea. Expect single
-digits here, not 629x. Code is published.
+(Barbier et al.) — **read in full, and it is very probably NOT for us.** An
+earlier draft of this note said "read before committing to polygonisation";
+that was written from the abstract and over-sold it. Three reasons, in order
+of how badly each bites:
+
+1. **Our tree is far too small.** The paper positions itself against methods
+   "limited to a few dozens to hundreds of nodes" and renders scenes of
+   *thousands*. We have 23 primitives under 6 clusters. We are already inside
+   the regime it treats as the easy case.
+2. **We measured our own insensitivity to tree size.** Cutting 23 primitives
+   to 6 via `simplify.ts` bought −11%. A technique whose entire payoff is
+   reducing active primitives per evaluation cannot do much better than that
+   ceiling here. Our cost is fragment invocations and steps-to-hit, not tree
+   complexity.
+3. **Our field animates every frame.** Pruned trees are built per grid cell
+   over a dense spatial partition, with a large GPU allocation up front. The
+   rig moves every primitive endpoint every frame, so the whole structure
+   would need rebuilding per frame per body — and the authors list *partial
+   update* of the pruning structure as future work, not a solved problem.
+
+The mechanism is elegant and worth knowing: two traversals per region, the
+first marking each node inactive / skipped / active, the second rewiring
+parents to drop pruned subtrees, with complementary flags tracking sign
+inversions. The Lipschitz bound is what lets a single evaluation at a region
+centre bound the operands across the whole region — the same property our
+noise breaks. They also note interval arithmetic is more general but costlier,
+with similar pruning power in practice, and that scenes with many primitives
+close together (their fluid) prune *worst* — which is our crowd, too.
 
 ### The insight that connects the whole session
 
@@ -306,11 +326,17 @@ over-relaxation becomes safe on every body rather than distant ones, and
 step count — and the polygonisation spec already wanted the same change for its
 own reasons (§5, silhouette noise aliases at 2 cm voxels).
 
-**This should be read before committing to polygonisation.** Proxy and
-continuous-LOD nodes attack the same crowd problem from inside the raymarching
-paradigm, with published results; polygonisation abandons the paradigm. The
-comparison deserves to be made on evidence rather than on the assumption that
-meshing is the only way out.
+**Revised conclusion after reading the pruning paper in full:** the two papers
+are not equally relevant, and only one of them should shape the next session.
+Lipschitz Pruning targets a problem we do not have (huge static trees).
+Hubert-Brierre's normal warping targets one we demonstrably do (the noise term
+is our most expensive, and it is what breaks the Lipschitz bound). Do normal
+warping; do not build a pruning hierarchy.
+
+Proxy and continuous-LOD nodes remain worth reading before polygonisation,
+since they attack the crowd problem from inside the raymarching paradigm — but
+on the evidence of our own `simplify.ts` measurement (−11%), expect them to
+be worth less here than they are in the paper's scenes.
 
 ## The remaining gap
 
