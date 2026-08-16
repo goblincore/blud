@@ -111,8 +111,8 @@ export const DEFAULT_FACE: FaceParams = {
   noseLength: 0.016,
   noseWidth: 0.62,
   noseDrop: 0.012,
-  browHeavy: 0.010,
-  browRise: 0.030,
+  browHeavy: 0.008,
+  browRise: 0.045,
   headBlend: 0.006,
 };
 
