@@ -175,6 +175,10 @@ Key reference docs (open these before touching their area):
   (foot-plant, head look-at, wound clutch), hit-stagger, collapse + damage meter.
   [spec](docs/superpowers/specs/2026-08-16-sdf-lab-rig-motion-design.md); plan after
   X1.21 + X1.19.2; before skeleton X1.20. Candidate kimi/deepseek testbed.
+- `X1.23` [ ] **FPV + dynamite (Spec C)** — pointer-lock walk mode, SDF flesh hands
+  (keyframed prim poses vs QAV reference, verlet jiggle, splash-scarred), dynamite on
+  the game's DYNAMITE_COOK constants, explosion into the full gore stack.
+  [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md); after X1.22, before X1.20.
 - `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
   chunk material + screen-space metaball blood. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gobs-and-goo-design.md); plan after the fix-pass lands. WebGPU only.
 - `X1.11` [-] ~~Port normal warping to `march.glsl.ts`~~ — dead: the WebGL lab is
