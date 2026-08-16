@@ -186,11 +186,10 @@ Key reference docs (open these before touching their area):
   (keyframed prim poses vs QAV reference, verlet jiggle, splash-scarred), dynamite on
   the game's DYNAMITE_COOK constants, explosion into the full gore stack.
   [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md); after X1.22, before X1.20.
-- `X1.24` [~] **Grapeshot shotgun (Spec D)** — MODEL DONE (kimi/k3 via Blender MCP):
-  `scripts/model_grapeshot_gun.py` → `public/assets/lab/grapeshot-gun.glb` (2 960 tris,
-  122 KB, deterministic; [notes](docs/dev-notes/2026-08-16-grapeshot-model/notes.md)).
-  Art-pass notes: darken/matte materials, more tape wraps, rougher plank. Remaining:
-  Blood sawed-off fire model after X1.23. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-grapeshot-design.md)
+- `X1.24` [~] **Grapeshot shotgun (Spec D)** — MODEL DONE, glm-5.3's chosen (owner pick):
+  `grapeshot-gun-glm.glb` (1 372 tris, 68 KB; [notes](docs/dev-notes/2026-08-16-grapeshot-model-glm/notes.md));
+  kimi/k3's `grapeshot-gun.glb` kept as bake-off reference. Remaining: Blood sawed-off
+  fire model after X1.23. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-grapeshot-design.md)
 - `X1.21` [x] **Gobs & goo (Spec A)** — amorphous gobs + scraps (`gobs.ts`), gore-mask
   chunk shading, screen-space metaball blood (`goo-layer.ts`), shell silhouettes
   bench-gated (default OFF: 12.36 ms @ 10 bodies > 12 ms gate; toggle in lod panel).
