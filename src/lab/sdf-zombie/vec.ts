@@ -37,3 +37,39 @@ export function basisFromAxis(axis: Vec3): { u: Vec3; v: Vec3; w: Vec3 } {
   const v = cross(w, u);
   return { u, v, w };
 }
+
+/** Unit quaternion as [x, y, z, w]. */
+export type Quat = [number, number, number, number];
+
+export const qIdentity = (): Quat => [0, 0, 0, 1];
+
+export function qFromAxisAngle(axis: Vec3, angle: number): Quat {
+  const a = normalize(axis);
+  const h = angle / 2;
+  const s = Math.sin(h);
+  return [a[0] * s, a[1] * s, a[2] * s, Math.cos(h)];
+}
+
+/** Hamilton product — qMul(a, b) rotates by b FIRST, then a. */
+export function qMul(a: Quat, b: Quat): Quat {
+  const [ax, ay, az, aw] = a;
+  const [bx, by, bz, bw] = b;
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ];
+}
+
+export function qNormalize(q: Quat): Quat {
+  const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+}
+
+/** Rotate v by unit quaternion q: v + 2w(u×v) + 2(u×(u×v)). */
+export function qRotate(q: Quat, v: Vec3): Vec3 {
+  const u: Vec3 = [q[0], q[1], q[2]];
+  const t = scale(cross(u, v), 2);
+  return add(v, add(scale(t, q[3]), cross(u, t)));
+}
