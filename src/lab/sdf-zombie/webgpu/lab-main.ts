@@ -45,7 +45,8 @@ import {
 } from '../damage';
 import { sdBody } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
-import { createBloodSim, burst, emitTrails, stepBlood } from '../blood-sim';
+import { makeGobs } from '../gobs';
+import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../blood-sim';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
@@ -774,8 +775,13 @@ async function main() {
   /** Blows the whole body apart — every live cluster becomes a chunk. */
   function gibEverything() {
     const centre = torsoCentre();
-    const { body: next, chunks: groups } = gibAllPieces(current, centre);
-    for (const g of groups) {
+    // gibAllPieces does the alive-flag bookkeeping; the PIECES come from
+    // makeGobs instead — amorphous hunks + scraps, not anatomy prims
+    // (gobs-and-goo spec §1). Severs still detach real anatomy.
+    const { body: next } = gibAllPieces(current, centre);
+    const { gobs, scraps } = makeGobs(current, centre, Math.random);
+    addScraps(bloodSim, scraps, centre, Math.random);
+    for (const g of gobs) {
       // Radial launch from the body centre, so the pile spreads instead of
       // every piece going the same way.
       const dx = g.origin[0] - centre[0];
