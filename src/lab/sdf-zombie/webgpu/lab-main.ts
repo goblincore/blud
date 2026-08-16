@@ -453,6 +453,11 @@ async function main() {
    * in any perf claim; quoting only one of them would be picking a winner.
    */
   let crowdSpread = 1;
+  /**
+   * Whether crowd bodies get a shader specialised to their structure.
+   * Applied at spawn, so changing it re-spawns the crowd.
+   */
+  let specialiseShaders = false;
 
   function setCrowdCount(n: number) {
     while (crowd.length > n) {
@@ -473,7 +478,7 @@ async function main() {
       const crowdBody = buildBody(makeZombie(crowdFace), DEFAULT_BUILD_OPTS, override);
       const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
-      const v = createZombieGpuView(placed);
+      const v = createZombieGpuView(placed, { specialise: specialiseShaders });
       trackBody(v, placed);
       v.applyMaterial(flesh, LIGHT_PRESETS[light]);
       if (faceSheet) {
@@ -1017,6 +1022,14 @@ async function main() {
     get sdfFlipY() { return sdfLayer.flipY; },
     setSimplifyOverride(v: boolean | null) { simplifyOverride = v; },
     /** Re-spawns the crowd at a new spacing. 1 = shoulder to shoulder. */
+    /** Re-spawns the crowd with or without per-body specialised shaders. */
+    setSpecialise(on: boolean) {
+      const n = crowd.length;
+      setCrowdCount(0);
+      specialiseShaders = on;
+      setCrowdCount(n);
+    },
+    get specialise() { return specialiseShaders; },
     setCrowdSpread(v: number) {
       const n = crowd.length;
       setCrowdCount(0);

@@ -121,12 +121,18 @@ Key reference docs (open these before touching their area):
     is −24%, so the 2.3x target is unreachable this way.
   - **Cost is fill-bound**: 18.6 ms + 0.237 ms/1k px, and linear in body count
     even when bodies occlude, because frag_depth + discard defeat early-Z.
-- `X1.5` [ ] **Half-res crowd pass** — the cheapest remaining shot at ~16 ms and
-  it needs no compute: render distant bodies to a smaller target and composite
-  by depth. Cost is linear in pixels, so this is close to 4x on what it covers.
-- `X1.6` [ ] **Compute polygonisation** — marching cubes / surface nets, which
-  buys back the early-Z the raymarcher gives up. The reason the migration
-  happened; still unwritten.
+- `X1.5` [x] **SDF layer at its own resolution** — flesh renders to its own
+  target and composites over full-res geometry. **~2x**; default scale 0.7
+  (0.5 read as too coarse). Slider in the panel.
+- `X1.6` [x] **Raymarch micro-optimisation** — relaxed sphere tracing (the old
+  `stepMul` 0.6 was UNDER-relaxation) and partial evaluation of the field
+  (`specialise.ts`, **−20%**, loops unrolled + carve decisions baked).
+  Remaining unused: cone marching, which subsumes "march from the box entry".
+- `X1.7` [ ] **Compute polygonisation** — the big one, and the reason the
+  WebGPU migration happened. Jiggle and flesh SURVIVE (applyRig moves primitive
+  endpoints, so it deforms the field's definition, not the rendering).
+  [spec](docs/superpowers/specs/2026-08-16-sdf-polygonisation-design.md).
+  Phase 0 is a go/no-go spike: extract one posed body, rasterise, measure.
 
 ## Asset pipeline
 

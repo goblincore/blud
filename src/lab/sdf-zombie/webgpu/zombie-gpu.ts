@@ -23,6 +23,7 @@ import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { sub as vsub } from '../vec';
 import { chunkExtent } from '../extent';
+import { specialiseMapBody } from './specialise';
 import {
   HELPERS, MARCH_BODY, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
@@ -65,10 +66,21 @@ export interface ZombieGpuView {
  * Each helper is itself a node, built by folding so that every one carries the
  * helpers declared before it.
  */
-const helperNodes = HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
-  (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
-);
-const marchBody = wgslFn(MARCH_BODY, helperNodes);
+function buildMarchFn(mapBodySrc?: string) {
+  // Swap one entry in the dependency-ordered helper list. mapBody sits at a
+  // fixed place in that order — after the things it calls, before calcNormal
+  // which calls it — so the specialised version has to go in the SAME slot or
+  // WGSL's declaration-before-use rule breaks.
+  const sources = mapBodySrc
+    ? HELPERS.map(h => (/^fn\s+mapBody\s*\(/.test(h) ? mapBodySrc : h))
+    : HELPERS;
+  const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
+    (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
+  );
+  return wgslFn(MARCH_BODY, nodes);
+}
+
+const marchBody = buildMarchFn();
 
 /**
  * Stand-in face sheet, so the texture binding exists before the real art
@@ -192,8 +204,10 @@ type Swizzled = { xyz: unknown; w: unknown };
  * three hashes them to ONE pipeline and only the bind groups differ — which is
  * what makes a two-dozen-chunk gib explosion affordable on this path.
  */
-function createMarchMaterial(dataTex: THREE.Texture, u: MarchUniforms) {
-  const marched = marchBody({
+function createMarchMaterial(
+  dataTex: THREE.Texture, u: MarchUniforms, march = marchBody,
+) {
+  const marched = march({
     worldPos: positionWorld,
     camPos: cameraPosition,
     data: texture(dataTex),
@@ -302,7 +316,18 @@ function writeWounds(
   return n;
 }
 
-export function createZombieGpuView(body: BuildResult): ZombieGpuView {
+export interface GpuViewOpts {
+  /**
+   * Generate a shader specialised to THIS body's structure — loops unrolled,
+   * carve decisions and blend constants baked. See specialise.ts. Costs one
+   * pipeline compile per distinct structure, so it is opt-in until measured.
+   */
+  specialise?: boolean;
+}
+
+export function createZombieGpuView(
+  body: BuildResult, opts: GpuViewOpts = {},
+): ZombieGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(blankFaceTexture());
 
@@ -319,7 +344,8 @@ export function createZombieGpuView(body: BuildResult): ZombieGpuView {
   }
 
   const packed = upload(body);
-  const material = createMarchMaterial(dataTex, u);
+  const material = createMarchMaterial(
+    dataTex, u, opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody);
 
   /**
    * Proxy box covering every live cluster, plus blend margin.

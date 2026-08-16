@@ -154,7 +154,7 @@ silhouette fbm breaks the Lipschitz bound and a full step can tunnel through
 the surface. So the relaxation is conditional on the noise being off, which is
 already true of every distant body under LOD. Tunable via `woundCfg2.y`.
 
-**2. Partial evaluation — the best untried idea.** The blog's own proposal is
+**2. Partial evaluation — DONE, worth ~20%.** The blog's own proposal is
 to specialise the shader per frustum quadrant as the camera moves, and the
 author is openly unsure that recompiling on every camera move is viable. It is
 not, for us. But the *idea* applies in a form that suits this code far better:
@@ -170,8 +170,15 @@ endpoint fetches — and those could become uniforms. Regenerate the shader on
 structural change, which is rare; the per-frame rig jiggle changes endpoint
 VALUES, not structure, so it does not trigger a rebuild.
 
-Worth trying before polygonisation, because it is much smaller and the two are
-not exclusive.
+MEASURED at 10 bodies, full resolution, alternating repeats: GPU 232 ms
+generic against 185 ms specialised, **−20%**, with both specialised readings
+below both generic ones. Wall clock agrees at −11%. Only nine of the ten
+bodies were specialised — the hero stays generic — so the per-body saving is a
+little better than the headline.
+
+`specialise.ts` generates it; `structureKey()` says when it must be
+regenerated. Deliberately NOT regenerated on a sever: the alive flag is still
+read at runtime, so a limb coming off costs no pipeline compile.
 
 **3. Cone marching / multi-resolution.** Bálint & Valasek's second
 contribution, and what ARBM builds on. A cheap low-resolution pre-pass marches
