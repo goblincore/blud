@@ -159,6 +159,11 @@ async function main() {
   const resEl = document.createElement('div');
   resEl.style.fontSize = '11px';
   statusBox.appendChild(resEl);
+  // Result line for the keypress-driven benchmark — see runBench.
+  const benchEl = document.createElement('div');
+  benchEl.style.fontSize = '11px';
+  benchEl.style.color = '#fc9';
+  statusBox.appendChild(benchEl);
 
   // The raymarched bodies render into their own target at their own scale and
   // composite back over the polygonal scene. Cost is close to linear in
@@ -662,7 +667,112 @@ async function main() {
     rebind();
   }
 
+  // ---------------------------------------------------------------------------
+  // Benchmark. Press B.
+  // ---------------------------------------------------------------------------
+  //
+  // Everything about the shape of this is a reaction to how badly the previous
+  // measurement setup lied. Three separate faults, all of which produced
+  // confident numbers:
+  //
+  //   1. `renderer.setAnimationLoop` is requestAnimationFrame, which stops dead
+  //      when the page is not composited. Automated runs drive the lab from a
+  //      browser pane that hides between tool calls, so a fifteen-second sample
+  //      window collected under twenty frames.
+  //   2. The animation loop's timestamp resolve is fire-and-forget, and with
+  //      the cone pre-pass on, ONE frame is three `renderer.render` calls. Which
+  //      pass a reading described depended on when the resolve happened to land,
+  //      so the same configuration could read like the full march or like the
+  //      composite blit alone.
+  //   3. A hidden document has no swapchain texture, so the passes do nothing
+  //      and resolve to ~0.065 ms. That reads as a 70x speedup.
+  //
+  // So: hand-driven frames at a fixed timestep, one awaited resolve each, and a
+  // hard count of any frame stepped while hidden. A keypress starts it because
+  // a keypress is the one trigger that leaves the pane visible.
+  let benchRunning = false;
+
+  async function benchGpu({ chunks = 12, chunkFrames = 20, warmup = 40, dt = 1 / 60 } = {}) {
+    handle.setLoopRunning(false);
+    try {
+      let hiddenSteps = 0;
+      const step = () => {
+        if (document.hidden) hiddenSteps++;
+        handle.step(dt);
+      };
+      for (let i = 0; i < warmup; i++) step();
+      await handle.resolveGpu();
+
+      // Wall-clock per frame with the submission queue kept full, NOT the
+      // per-pass timestamp.
+      //
+      // The timestamp route was tried first and swung 13 / 36 / 21 ms across
+      // three back-to-back runs of an identical configuration. The cause is
+      // the await: resolving after every frame drains the queue, so the GPU
+      // goes idle between frames and clocks down, and how far it drops depends
+      // on whatever else is compositing at the time. Measuring while
+      // deliberately starving the GPU cannot produce a stable number.
+      //
+      // Submitting a chunk before awaiting keeps the queue full for all but
+      // the last frame of each chunk. The resolve at the chunk boundary is
+      // what makes the timing honest rather than a measurement of how fast
+      // frames can be QUEUED: it does not return until the GPU has finished
+      // the work, so the elapsed time covers execution rather than submission.
+      const perFrame: number[] = [];
+      for (let c = 0; c < chunks; c++) {
+        const t0 = performance.now();
+        for (let i = 0; i < chunkFrames; i++) step();
+        await handle.resolveGpu();
+        perFrame.push((performance.now() - t0) / chunkFrames);
+      }
+
+      const s = perFrame.sort((a, b) => a - b);
+      const at = (q: number) => +s[Math.min(s.length - 1, Math.floor(s.length * q))]!.toFixed(2);
+      return {
+        bodies: crowd.length + 1,
+        n: s.length * chunkFrames,
+        median: at(0.5),
+        p05: at(0.0),
+        p95: at(0.95),
+        sdfScale: sdfLayer.scale,
+        cone: sdfLayer.coneEnabled,
+        lod: lodEnabled,
+        hiddenSteps,
+      };
+    } finally {
+      handle.setLoopRunning(true);
+    }
+  }
+
+  /**
+   * Runs the benchmark and leaves the result BOTH on screen and on
+   * `window.__benchResult`, so it can be read back later from a console call
+   * that would itself have hidden the page.
+   */
+  async function runBench(label = ''): Promise<void> {
+    if (benchRunning) return;
+    benchRunning = true;
+    benchEl.textContent = 'bench: running…';
+    try {
+      const r = await benchGpu();
+      const stamped = r === null ? null : { ...r, label };
+      (window as unknown as { __benchResult: unknown }).__benchResult = stamped;
+      if (r === null) {
+        benchEl.textContent = 'bench: no timestamps';
+      } else if (r.hiddenSteps > 0) {
+        // Loud, because this is the failure that looks like success.
+        benchEl.textContent = `bench: INVALID — ${r.hiddenSteps} hidden frames`;
+      } else {
+        benchEl.textContent =
+          `bench ${r.median} ms (p05 ${r.p05} / p95 ${r.p95}) · ${r.bodies}b · n=${r.n}`;
+      }
+    } finally {
+      benchRunning = false;
+    }
+  }
+
   window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'b' || ev.key === 'B') { void runBench(); return; }
     if (ev.key === ']') { setCrowdCount(crowd.length + 1); return; }
     if (ev.key === '[') { setCrowdCount(Math.max(0, crowd.length - 1)); return; }
     if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
@@ -1020,6 +1130,36 @@ async function main() {
     },
     /** Drops both sample windows, so a reading cannot include the old setting. */
     resetStats() { frames.length = 0; gpuTimes.length = 0; },
+    /**
+     * The measurement to quote. Takes the frame clock away from
+     * requestAnimationFrame and drives `frameCount` frames by hand, awaiting
+     * the timestamp resolve after each one.
+     *
+     * Two reasons this exists rather than reading `stats()`:
+     *
+     * 1. **rAF stops when the page is not composited.** Automated runs live in
+     *    a browser pane that hides between tool calls, so a rAF sample window
+     *    collects single-digit frames over fifteen seconds — `stats()` returns
+     *    null and the on-screen median is whatever the last burst happened to
+     *    hit. Every absolute measured that way is noise.
+     * 2. **Awaiting each resolve serialises the frames.** In the animation loop
+     *    the resolve is fire-and-forget and frames overlap, so a reading may
+     *    belong to a frame two behind the current settings. Here each pass is
+     *    measured in isolation, which is what makes A/B comparisons stable.
+     *
+     * The timestep is FIXED rather than measured, so the rig integrates
+     * identically on every run and the pose sequence is reproducible.
+     *
+     * MUST BE RUN ON A VISIBLE PAGE — press B rather than calling this from a
+     * console that hides the pane. A hidden document has no swapchain texture
+     * to draw into, so every pass resolves to ~0.065 ms of nothing and the
+     * median looks like a spectacular win. `hiddenSteps` records how many
+     * frames were stepped while hidden precisely so that failure cannot be
+     * quoted as a result; a run with any is discarded by the caller.
+     */
+    benchGpu,
+    /** Same run the B key starts; result also lands on `window.__benchResult`. */
+    runBench,
     setLodEnabled(on: boolean) { lodEnabled = on; },
     /** null = let LOD decide; true/false force the lever on every body. */
     setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },

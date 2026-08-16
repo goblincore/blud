@@ -43,6 +43,31 @@ export interface LabRendererHandle {
    * so it cannot tell "twice as fast" from "still 60fps".
    */
   gpuMs(): number | null;
+  /**
+   * Drives exactly one frame by hand — the same callback and draw the
+   * animation loop runs, with the timestep supplied rather than measured.
+   *
+   * This exists because `setAnimationLoop` is requestAnimationFrame, and rAF
+   * is throttled to a stop whenever the page is not being composited. Every
+   * automated measurement runs in a browser pane that hides between tool
+   * calls, so a rAF-driven sample window collects a handful of frames over
+   * fifteen seconds and the median means nothing. Stepping by hand takes the
+   * compositor out of the loop entirely.
+   */
+  step(dtSec: number): void;
+  /**
+   * Awaits the GPU timestamp resolve and returns the pass time in ms, or null
+   * when timestamp queries are unavailable. Pairs with `step` — the async
+   * fire-and-forget resolve inside the animation loop cannot be awaited, so a
+   * hand-driven loop needs its own.
+   */
+  resolveGpu(): Promise<number | null>;
+  /**
+   * Stops or restarts the animation loop. A benchmark must own the frame
+   * clock outright: leaving rAF running alongside hand-driven steps means the
+   * two interleave and the timestamps belong to whichever submitted last.
+   */
+  setLoopRunning(on: boolean): void;
 }
 
 /** Matches src/engine/renderer.ts, so the lab looks the same on both paths. */
@@ -115,7 +140,7 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
   let resolving = false;
   let lastGpuMs: number | null = null;
 
-  renderer.setAnimationLoop(() => {
+  const loop = () => {
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
     lastTime = now;
@@ -129,7 +154,8 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
         .catch(() => { lastGpuMs = null; })
         .finally(() => { resolving = false; });
     }
-  });
+  };
+  renderer.setAnimationLoop(loop);
 
   // `backend.isWebGPUBackend` is how three distinguishes them. Surfacing this
   // matters: WebGPURenderer transparently falls back to a WebGL2 backend, and
@@ -147,5 +173,21 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
     setDrawFn(fn) { drawFn = fn; },
     backend: backendName,
     gpuMs: () => lastGpuMs,
+    step(dtSec) { cb(dtSec); drawFn(); },
+    async resolveGpu() {
+      try {
+        await renderer.resolveTimestampsAsync();
+        lastGpuMs = renderer.info.render.timestamp;
+      } catch {
+        lastGpuMs = null;
+      }
+      return lastGpuMs;
+    },
+    setLoopRunning(on) {
+      renderer.setAnimationLoop(on ? loop : null);
+      // Otherwise the first frame back sees the whole benchmark as its dt and
+      // the rig integrates a several-second step in one go.
+      if (on) lastTime = performance.now();
+    },
   };
 }
