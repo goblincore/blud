@@ -112,6 +112,7 @@ Key reference docs (open these before touching their area):
   bloom for the eye glow. Presets in `src/lab/sdf-zombie/material.ts`.
 
 - `X1.4` [~] **LOD pass** — built, measured, and it does NOT reach the target.
+  **Every number in this row predates `X1.8` and needs re-measuring — see `X1.10`.**
   [findings](docs/dev-notes/2026-08-16-sdf-lab-lod-pass.md)
   - Shipped: GPU timestamp queries (wall clock was vsync-pinned and hiding
     everything), screen-height-driven `lod.ts`, coarse `simplify.ts` stand-in,
@@ -129,15 +130,28 @@ Key reference docs (open these before touching their area):
   (`specialise.ts`, **−20%**), and a cone-march pre-pass at 1/8 tiles giving
   every ray a proven-empty start distance (**−22%**, and the tightest
   measurement of the lot). Levers now stack to roughly **3x** overall.
-- `X1.7` [ ] **Compute polygonisation — NEXT SESSION.** The big one, and the
-  reason the WebGPU migration happened. Jiggle and flesh SURVIVE (applyRig
-  moves primitive endpoints, so it deforms the field's definition, not the
-  rendering). ~1.2M field evals for a close raymarched body vs ~50k to extract,
-  and independent of screen coverage.
+- `X1.7` [-] **Compute polygonisation — PREMISE MOVED, re-derive before building.**
+  Scoped against a raymarcher that could not reach 16 ms; `X1.9` puts 10 bodies
+  at 13.5 ms. Re-read the spec's cost argument before writing a compute pass.
   [spec](docs/superpowers/specs/2026-08-16-sdf-polygonisation-design.md) ·
   [phase 0 plan](docs/superpowers/plans/2026-08-16-sdf-polygonisation-phase0.md)
-  - **Cool the machine and re-baseline first** — this session's absolutes
-    ranged 2x on identical configs (222 ms hot, 112 ms cooled).
+- `X1.8` [x] **A benchmark that does not lie** — the old readout had three
+  faults (rAF stops on a hidden page; the fire-and-forget resolve sampled a
+  random one of the 3 passes per frame; hidden pages resolve to ~0.065 ms of
+  nothing). Press **B**. Every absolute before this is unsourced.
+  [findings](docs/dev-notes/2026-08-16-sdf-lab-lod-pass.md)
+- `X1.9` [x] **Normal warping** (Hubert-Brierre et al.) — silhouette fbm out of
+  the marched field, onto the normal via `calcNormal`; field is conservative
+  again so over-relaxation applies to every body. **22.40 → 13.48 ms at 10
+  bodies (1.66x)**, shading visually unchanged.
+- `X1.10` [ ] **Re-measure LOD and sweep the relaxation factor** — `X1.4`'s
+  numbers all predate `X1.8`, and `silhouetteNoise` (its top lever at −8%) is
+  now nearly free in the march. Relax 1.6 was never swept; 1.8/2.0 untested.
+- `X1.11` [ ] **Port normal warping to `march.glsl.ts`** — the WebGL lab still
+  has the noise in its field, so `validate.ts`'s Lipschitz guard must stay
+  until it does. The two labs are one technique apart.
+- `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
+  and the surrounding articles/code. Deferred, not urgent.
 
 ## Asset pipeline
 

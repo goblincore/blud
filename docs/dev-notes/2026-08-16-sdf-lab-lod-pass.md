@@ -357,3 +357,123 @@ invocations**, not cheaper ones. In rough order of effort:
 `EXT_conservative_depth` would have helped and has no WGSL equivalent, so the
 occlusion problem cannot be solved in the fragment path. That is a real cost of
 the migration and it is now measured rather than predicted.
+
+---
+
+# Update, same day, second session
+
+Two things happened here. The second is the result; the first is the reason
+nothing above it should be trusted.
+
+## The measurement was broken, and that is most of this note's history
+
+Everything above was measured through `renderer.info.render.timestamp`,
+sampled from the animation loop. That readout had **three independent faults**,
+each of which produced a confident number.
+
+1. **`setAnimationLoop` is requestAnimationFrame, and rAF stops when the page
+   is not composited.** Every automated run drives the lab from a browser pane
+   that is hidden between tool calls. A fifteen-second sample window collected
+   under twenty frames; `stats()` returned null while the on-screen median
+   showed whatever the last burst happened to hit.
+2. **With the cone pre-pass on, one frame is THREE `renderer.render` calls,
+   and the loop's resolve is fire-and-forget.** three sums timestamp durations
+   per frame id, so *which pass a reading described* depended on when the
+   resolve landed. The same configuration could read like the full march or
+   like the composite blit alone. This is very probably the real source of the
+   "absolutes ranged 2x on identical configurations" recorded above and blamed
+   on thermals.
+3. **A hidden document has no swapchain texture.** The passes do nothing and
+   resolve to ~0.065 ms — which reads as a 70x speedup.
+
+The bench now owns the frame clock: animation loop stopped, frames stepped by
+hand at a fixed timestep, and any frame stepped while `document.hidden` is
+counted and reported as **INVALID** rather than averaged in. Press **B**; a
+keypress is the one trigger that leaves the pane visible.
+
+**Per-pass timestamps had to be abandoned too.** Awaiting a resolve after every
+frame swung 13.6 / 36.2 / 21.2 ms across three back-to-back runs of an
+identical config, because draining the queue every frame leaves the GPU idle
+between frames and it clocks down. The metric is now wall-clock per frame over
+a chunk of 20 frames submitted back-to-back, with one resolve at the chunk
+boundary — the resolve is what makes it measure execution rather than
+submission — medianed over 12 chunks. **That repeats to ~1%.**
+
+### Fresh baseline
+
+960x540, cone on, SDF scale 1.0, LOD off, `stepMul` 0.6:
+
+| bodies | ms/frame |
+| --- | --- |
+| 1 | 3.07 / 3.08 |
+| 10 | 22.44 / 22.68 / 22.40 |
+
+Nowhere near the numbers this note reasons about above (10 bodies read 112 ms
+"cooled" and 222 ms "hot"). **Treat every absolute recorded before this section
+as unsourced, and every ratio as suspect unless both sides came from the same
+pass.**
+
+### Thermals are real, and this bench provokes them
+
+The saturated queue means no vsync idle, so back-to-back runs heat the GPU
+fast. One uninterrupted sequence drifted its own control from 22 ms to 61 ms.
+Every comparison below cools to one body at 0.3x scale for ~30 s between runs
+**and re-measures the control inside the same sequence.** A ratio quoted
+without an interleaved control is not a result.
+
+## Normal warping: the prediction was right
+
+Implemented per Hubert-Brierre et al. — see the prior-art section above, which
+called this the missing piece and the Lipschitz bound the reason.
+
+The silhouette fbm is out of the marched field. `mapBody` still applies it, but
+the march and the cone pre-pass pass `0.0` and only `calcNormal` passes a real
+amplitude, so it runs four times per **hit** pixel instead of ~100 times per
+pixel. Leaving it expressed as a field displacement that only `calcNormal`
+differentiates is what keeps it exact: `calcNormal` returns
+`normalize(grad(d + h))`, which is precisely the normal the displaced surface
+had. Shading is unchanged; only the silhouette and the hit position give up
+the detail.
+
+Then the part that pays: the field is conservative again, so the relaxed-tracing
+gate drops its `marchCfg.z <= 0.0` condition and over-relaxation applies to
+**every** body rather than only the distant ones LOD had already stripped.
+
+| config (10 bodies) | ms/frame | vs control |
+| --- | --- | --- |
+| HEAD — noise in field, relax gated off | 22.40 | control |
+| warped, relax off | 20.18 | −10% |
+| **warped, relax 1.6** | **13.48** | **−40% (1.66x)** |
+
+1.66x is almost exactly the 1.67x that under-relaxation at `stepMul` 0.6 was
+theorised to be costing.
+
+**A mid-session reading said relaxation was a loss** (18.5 with, 17.1 without).
+It was taken while throttling; that sequence's control had drifted to 61 ms by
+the end. Cold, against a re-measured control, it is the largest single win on
+the branch. This is the concrete case for the interleaved-control rule.
+
+Visual checks, in the places a broken bound shows first: close-up flesh, deep
+everted blast craters, severed stumps, and a 10-body crowd. No holes, speckle
+or banding. A same-camera A/B against the old shader shows slightly cleaner
+edges and otherwise identical mottling.
+
+## Where that leaves the target
+
+10 bodies now sits at ~13.5 ms — **inside 16 ms**, without LOD, at full SDF
+scale. The gap the section above describes as needing compute is smaller than
+it was measured to be, and part of it was never real.
+
+Still open, and now worth re-deriving rather than inheriting:
+
+- **Every LOD number above needs re-measuring.** `silhouetteNoise` was the top
+  lever at −8%; it is now nearly free in the march, so the lever mostly buys
+  nothing while still costing the mottling on distant bodies.
+- **`validate.ts` still enforces the noise-vs-`stepMultiplier` Lipschitz
+  guard**, correctly, because `march.glsl.ts` still has the noise in its field.
+  The WebGL lab is now one technique behind the WGSL path.
+- **Relaxation factor was never swept.** 1.6 was picked before it could be
+  measured honestly; 1.8 and 2.0 are untested.
+- **Polygonisation Phase 0's premise has moved.** It was scoped against a
+  raymarcher that could not reach 16 ms. Re-read its cost argument against
+  13.5 ms before building a marching-cubes compute pass.
