@@ -87,6 +87,19 @@ describe('specialiseMapBody', () => {
     // and this pins it, because the alternative is recompiling mid-gib.
     expect(specialiseMapBody(oneArmed)).toBe(src);
   });
+
+  it('drops prims severed MID-LIMB (dead flag) from both passes', () => {
+    // Unlike the cluster alive flag, dead is per-primitive and must be baked
+    // out: the generic shader reads it from primScale.w, but here the fold
+    // calls are literals. A dead prim left in the source keeps rendering.
+    const armIdx = body.prims.findIndex(p => p.limb === 'armL');
+    const midSevered: BuildResult = {
+      ...body,
+      prims: body.prims.map((p, i) => (i === armIdx ? { ...p, dead: true } : p)),
+    };
+    const deadSrc = specialiseMapBody(midSevered);
+    expect(foldOrder(deadSrc, 'smin')).toEqual(foldOrder(src, 'smin').filter(i => i !== armIdx));
+  });
 });
 
 describe('structureKey', () => {
@@ -120,5 +133,14 @@ describe('structureKey', () => {
       clusters: body.clusters.map(c => (c.limb === 'head' ? { ...c, alive: false } : c)),
     };
     expect(structureKey(dead)).toBe(structureKey(body));
+  });
+
+  it('changes when a primitive goes dead, since dead prims are baked out', () => {
+    const armIdx = body.prims.findIndex(p => p.limb === 'armL');
+    const midSevered: BuildResult = {
+      ...body,
+      prims: body.prims.map((p, i) => (i === armIdx ? { ...p, dead: true } : p)),
+    };
+    expect(structureKey(midSevered)).not.toBe(structureKey(body));
   });
 });

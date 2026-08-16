@@ -110,6 +110,41 @@ describe('shader/CPU field mirror', () => {
   });
 });
 
+describe('dead prims (mid-limb severing)', () => {
+  // primScale.w semantics: 0 add, 1 carve, 2 dead. The CPU mirror must skip
+  // dead prims in BOTH passes exactly as the shaders do, or click-to-shoot
+  // rays hit flesh that is no longer there.
+  const ball: Primitive = {
+    a: [0, 0, 0], b: [0, 0, 0], radius: 0.2,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'head', cluster: 0,
+  };
+  const near: Primitive = {
+    ...ball, a: [0, 0.45, 0], b: [0, 0.45, 0], radius: 0.08, limb: 'armL',
+  };
+  const carve: Primitive = {
+    ...ball, a: [0.15, 0, 0], b: [0.15, 0, 0], radius: 0.08, op: 'sub',
+  };
+  const clusters = (count: number) =>
+    [{ id: 0, limb: 'head' as LimbId, start: 0, count, center: [0, 0, 0] as Vec3, radius: 0.2, alive: true }];
+
+  it('drops a dead additive prim from the fold', () => {
+    const live = { prims: [ball, near], clusters: clusters(2) };
+    const dead = { prims: [ball, { ...near, dead: true }], clusters: clusters(2) };
+    const p: Vec3 = [0, 0.45, 0]; // centre of `near`
+    expect(sdBody(p, live)).toBeLessThan(0);
+    expect(sdBody(p, dead)).toBeGreaterThan(0);
+  });
+
+  it('drops a dead carve from the carve pass', () => {
+    const live = { prims: [ball, carve], clusters: clusters(2) };
+    const dead = { prims: [ball, { ...carve, dead: true }], clusters: clusters(2) };
+    const alone = { prims: [ball], clusters: clusters(1) };
+    const p: Vec3 = [0.17, 0, 0]; // inside the ball, under the carve
+    expect(sdBody(p, live)).toBeGreaterThan(0);
+    expect(sdBody(p, dead)).toBeCloseTo(sdBody(p, alone), 6);
+  });
+});
+
 describe('validateBody with carves', () => {
   it('does not report a carve as escaping its bounding sphere', () => {
     const solid: Primitive = {

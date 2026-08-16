@@ -1,10 +1,12 @@
 // src/lab/sdf-zombie/sever.test.ts
 import { describe, it, expect } from 'vitest';
-import { gibAllPieces, severLimb } from './sever';
+import { gibAll, gibAllPieces, severDistal, severLimb } from './sever';
+import { cutChains, type ChainCut } from './connectivity';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { packBody } from './pack';
 import { sdBody } from './validate';
+import { worldHitToWound, woundWorldPos } from './damage';
 
 describe('severLimb', () => {
   const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -106,5 +108,106 @@ describe('gibAllPieces', () => {
     const p = piece.prims[0]!;
     expect(piece.origin[0]).toBeCloseTo((p.a[0] + p.b[0]) / 2, 6);
     expect(piece.origin[1]).toBeCloseTo((p.a[1] + p.b[1]) / 2, 6);
+  });
+});
+
+// --- severDistal: mid-limb severing ---------------------------------------
+
+describe('severDistal', () => {
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const torso = body.clusters.find(c => c.limb === 'torso')!;
+
+  // legL's chain: thigh (topmost midpoint), foot (degenerate ball), shin (the
+  // rest); knee = the closest endpoint pair across thigh/shin.
+  const leg = body.clusters.find(c => c.limb === 'legL')!;
+  const legPrims = body.prims.slice(leg.start, leg.start + leg.count)
+    .filter(p => p.op !== 'sub');
+  const midY = (p: (typeof legPrims)[number]) => (p.a[1] + p.b[1]) / 2;
+  const thigh = legPrims.reduce((m, p) => (midY(p) > midY(m) ? p : m));
+  const foot = legPrims.find(p =>
+    Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]) < 1e-6)!;
+  const shin = legPrims.find(p => p !== thigh && p !== foot)!;
+  let knee = thigh.b;
+  {
+    let best = Infinity;
+    for (const e of [thigh.a, thigh.b]) for (const f of [shin.a, shin.b]) {
+      const d = Math.hypot(e[0] - f[0], e[1] - f[1], e[2] - f[2]);
+      if (d < best) {
+        best = d;
+        knee = [(e[0] + f[0]) / 2, (e[1] + f[1]) / 2, (e[2] + f[2]) / 2];
+      }
+    }
+  }
+  const dist3 = (a: readonly number[], b: readonly number[]) =>
+    Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+
+  const cut: ChainCut = cutChains(body, [worldHitToWound(body.prims, knee, 0.16, 'blast')])[0]!;
+
+  it('keeps the cluster alive — only the proximal prims remain in it', () => {
+    const { body: after } = severDistal(body, cut);
+    expect(after.clusters.find(c => c.limb === 'legL')!.alive).toBe(true);
+    expect(after.clusters.filter(c => c.limb !== 'legL').every(c => c.alive)).toBe(true);
+  });
+
+  it('marks exactly the distal prims dead — nothing removed or reordered', () => {
+    const { body: after } = severDistal(body, cut);
+    expect(after.prims).toHaveLength(body.prims.length);
+    expect(after.prims.map(p => p.limb)).toEqual(body.prims.map(p => p.limb));
+    expect(after.prims[body.prims.indexOf(shin)]!.dead).toBe(true);
+    expect(after.prims[body.prims.indexOf(foot)]!.dead).toBe(true);
+    expect(after.prims[body.prims.indexOf(thigh)]!.dead).toBeUndefined();
+  });
+
+  it('chunks exactly the distal prims as live copies, torn at the joint', () => {
+    const { chunk } = severDistal(body, cut);
+    expect(chunk.limb).toBe('legL');
+    expect(chunk.prims).toHaveLength(2);
+    expect(chunk.prims.every(p => !p.dead)).toBe(true);
+    expect(chunk.tornAt).toHaveLength(1);
+    expect(dist3(chunk.tornAt[0]!, knee)).toBeLessThan(0.03);
+  });
+
+  it('stamps a blast stump wound at the joint, sized by the joint girth', () => {
+    const { stumpWound } = severDistal(body, cut);
+    expect(stumpWound).not.toBeNull();
+    expect(stumpWound!.type).toBe('blast');
+    expect(dist3(woundWorldPos(body.prims, stumpWound!), knee)).toBeLessThan(0.03);
+    expect(stumpWound!.radius).toBeGreaterThan(0.05);
+    expect(stumpWound!.radius).toBeLessThan(0.15);
+  });
+
+  it('packBody writes w=2 for the dead prims only', () => {
+    const packed = packBody(severDistal(body, cut).body);
+    expect(packed.primScale[body.prims.indexOf(shin) * 4 + 3]).toBe(2);
+    expect(packed.primScale[body.prims.indexOf(foot) * 4 + 3]).toBe(2);
+    expect(packed.primScale[body.prims.indexOf(thigh) * 4 + 3]).toBe(0);
+  });
+
+  it('the CPU field no longer registers the dead prims', () => {
+    const after = severDistal(body, cut).body;
+    const p = foot.a; // the foot ball's centre
+    expect(sdBody(p, body)).toBeLessThan(0);
+    expect(sdBody(p, after)).toBeGreaterThan(0);
+  });
+
+  it('gibAllPieces does not resurrect the dead distal prims', () => {
+    const after = severDistal(body, cut).body;
+    const { chunks } = gibAllPieces(after, torso.center);
+    const legPieces = chunks.filter(g => g.limb === 'legL');
+    expect(legPieces).toHaveLength(1); // the thigh only
+    expect(legPieces[0]!.prims).toHaveLength(1);
+  });
+
+  it('gibAll skips the dead prims too', () => {
+    const after = severDistal(body, cut).body;
+    const { chunks } = gibAll(after);
+    const legGroup = chunks.find(g => g.limb === 'legL')!;
+    expect(legGroup.prims).toHaveLength(1);
+  });
+
+  it('a later severLimb of the same limb must not resurrect the hand', () => {
+    const after = severDistal(body, cut).body;
+    const { chunk } = severLimb(after, 'legL');
+    expect(chunk.prims).toHaveLength(1);
   });
 });

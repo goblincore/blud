@@ -14,10 +14,10 @@ import {
   type Wound, type WoundType,
 } from './damage';
 import { sdBody } from './validate';
-import { severLimb, gibAll, gibAllPieces } from './sever';
+import { severLimb, severDistal, gibAll, gibAllPieces } from './sever';
 import { createBloodSim, burst, emitTrails, stepBlood } from './blood-sim';
 import { createBloodView } from './blood-view';
-import { cutLimbs } from './connectivity';
+import { cutChains, cutLimbs } from './connectivity';
 import { bindRig, applyRig, impulseAt } from './rig-bind';
 import { stepRig } from './rig';
 import { makeChunk, stepChunk, type Chunk } from './gib-chunks';
@@ -397,13 +397,29 @@ canvas.addEventListener('pointerup', (ev: PointerEvent) => {
 
   // Wound-driven detachment: a carve that disconnects a limb severs it for
   // real — same path as the keyboard sever.
-  for (const limb of cutLimbs(current, wounds, torsoCentre())) {
+  const fullCuts = cutLimbs(current, wounds, torsoCentre());
+  for (const limb of fullCuts) {
     const { body: next, chunk, stumpWound } = severLimb(current, limb);
     if (chunk.prims.length === 0) continue;
     current = next;
     if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
     spawnChunk(limb, chunk.origin, chunk.prims, undefined,
       [attachPoint(chunk.prims, torsoCentre())]);
+    view.update(current);
+    refreshWounds();
+    rebind();
+  }
+
+  // Mid-limb cuts: a carve that severs a CHAIN joint (knee, elbow…) drops
+  // everything distal to it as its own chunk — before this the distal piece
+  // stayed in the field and floated. Full-limb cuts above take precedence.
+  for (const cut of cutChains(current, wounds)) {
+    if (fullCuts.includes(cut.limb)) continue;
+    const { body: next, chunk, stumpWound } = severDistal(current, cut);
+    if (chunk.prims.length === 0) continue;
+    current = next;
+    if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+    spawnChunk(cut.limb, chunk.origin, chunk.prims, undefined, chunk.tornAt);
     view.update(current);
     refreshWounds();
     rebind();

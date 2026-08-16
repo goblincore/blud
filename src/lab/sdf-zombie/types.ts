@@ -76,6 +76,13 @@ export interface Primitive {
    * test fixtures that build Primitive literals keep compiling.
    */
   op?: 'add' | 'sub';
+  /**
+   * Severed mid-limb but never removed — the smooth-min fold order is sacred,
+   * so a distal prim goes DEAD instead: packBody writes primScale.w = 2 and
+   * every field (shader add fold, carve pass, CPU mirror) skips it. Absent
+   * means alive.
+   */
+  dead?: boolean;
 }
 
 export interface ClusterInfo {

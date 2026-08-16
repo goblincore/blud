@@ -140,7 +140,9 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       let idx = start + i;
       if (idx >= primCount) { break; }
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
-      if (S.w < 0.5) { continue; }
+      // S.w: 0 add, 1 carve, 2 dead (severed mid-limb). Dead prims stop
+      // carving too — a severed hand must not keep biting the field it left.
+      if (S.w < 0.5 || S.w > 1.5) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
       d = smax(d, -sdPrim(p, idx, data), k);
     }
@@ -236,6 +238,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       let idx = start + i;
       if (idx >= primCount) { break; }
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
+      // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
       if (S.w > 0.5) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
       d = smin(d, sdPrim(p, idx, data), k);

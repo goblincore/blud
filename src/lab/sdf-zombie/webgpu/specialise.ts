@@ -16,7 +16,9 @@
 // All four are decided by the body's structure, which changes only when the
 // body is REBUILT — a panel edit. It does not change when the rig jiggles
 // (that moves endpoint VALUES, still read from the texture) and it does not
-// change on a sever, because the alive flag is still read at runtime below.
+// change on a whole-limb sever, because the alive flag is still read at
+// runtime below. A per-prim dead flag (mid-limb sever) DOES regenerate — the
+// fold calls are literals here, so the prim must be baked out.
 // So the loops unroll, the bounds vanish, the carve branch is decided at
 // generation time, and the blend constants become literals.
 //
@@ -57,7 +59,7 @@ export function specialiseMapBody(body: BuildResult): string {
     const additive = [];
     for (let i = c.start; i < c.start + c.count; i++) {
       const p = body.prims[i];
-      if (p && p.op !== 'sub') additive.push(i);
+      if (p && p.op !== 'sub' && !p.dead) additive.push(i);
     }
     if (additive.length === 0) return;
 
@@ -87,7 +89,7 @@ export function specialiseMapBody(body: BuildResult): string {
     const carves = [];
     for (let i = c.start; i < c.start + c.count; i++) {
       const p = body.prims[i];
-      if (p && p.op === 'sub') carves.push(i);
+      if (p && p.op === 'sub' && !p.dead) carves.push(i);
     }
     if (carves.length === 0) return;
 
@@ -115,9 +117,13 @@ export function specialiseMapBody(body: BuildResult): string {
  *
  * Used to avoid regenerating — and therefore recompiling a pipeline — when
  * nothing structural moved. Deliberately excludes endpoint positions: those
- * change every frame with the rig and are still read from the texture.
+ * change every frame with the rig and are still read from the texture. The
+ * cluster alive flag is excluded too (read at runtime); the per-prim DEAD
+ * flag is NOT — dead prims are baked out of the fold, so a mid-limb sever
+ * regenerates, one compile per sever.
  */
 export function structureKey(body: BuildResult): string {
   return body.clusters.map(c => `${c.start}:${c.count}`).join(',') + '|' +
-    body.prims.map(p => `${p.op === 'sub' ? 's' : 'a'}${p.blendK}`).join(',');
+    body.prims.map(p =>
+      `${p.dead ? (p.op === 'sub' ? 'S' : 'D') : p.op === 'sub' ? 's' : 'a'}${p.blendK}`).join(',');
 }

@@ -161,6 +161,14 @@ describe('ported features reach the entry point', () => {
     // old reach exceeded the armpit gap and the rim still welded arm to torso.
     expect(applyWounds).toMatch(/smoothstep\(amp \* 0\.35, amp \* 0\.7, dIn\)/);
   });
+
+  it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
+    // primScale.w: 0 add, 1 carve, 2 dead (severed mid-limb). The additive
+    // fold already skips anything above 0.5; a dead prim must ALSO stop
+    // carving, or a severed hand keeps biting the field it left behind.
+    const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
+    expect(applyCarves).toContain('S.w > 1.5');
+  });
 });
 
 describe('data texture layout', () => {

@@ -62,21 +62,22 @@ export function smax(a: number, b: number, k: number): number {
  *
  * Mirrors mapBody + applyCarves in march.glsl.ts, and must stay in step: this
  * field also backs click-to-shoot raycasting, so drift means shots land where
- * the body isn't — or inside an eye socket.
+ * the body isn't — or inside an eye socket. primScale.w semantics are shared
+ * with the shaders: 0 add, 1 carve, 2 dead — dead prims skip BOTH passes.
  */
 export function sdBody(p: Vec3, body: Body): number {
   let d = 1e9;
   for (const c of body.clusters) {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub') continue;
+      if (prim.op === 'sub' || prim.dead) continue;
       d = smin(d, sdPrimitive(p, prim), prim.blendK);
     }
   }
   for (const c of body.clusters) {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op !== 'sub') continue;
+      if (prim.op !== 'sub' || prim.dead) continue;
       d = smax(d, -sdPrimitive(p, prim), prim.blendK);
     }
   }
@@ -100,12 +101,13 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
 
   // Bounding spheres must contain their SOLID primitives, or the cull drops
   // real surface. Carves are skipped for the same reason clusters.ts excludes
-  // them from the fit: they carry no surface to lose. The connectivity check
-  // below deliberately does NOT skip them — it runs on the carved field, so a
-  // socket deep enough to detach the head from the neck is reported.
+  // them from the fit: they carry no surface to lose. Dead prims likewise —
+  // they are not in the field. The connectivity check below deliberately does
+  // NOT skip carves — it runs on the carved field, so a socket deep enough to
+  // detach the head from the neck is reported.
   for (const c of body.clusters)
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub') continue;
+      if (prim.op === 'sub' || prim.dead) continue;
       const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
       for (const end of [prim.a, prim.b])
         if (len(sub(end, c.center)) + prim.radius * maxScale > c.radius + 1e-6)
@@ -152,7 +154,7 @@ function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let best: Primitive | null = null;
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
-    if (p.op === 'sub') continue;
+    if (p.op === 'sub' || p.dead) continue;
     const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
     if (depth > bestDepth) { bestDepth = depth; best = p; }
   }

@@ -138,7 +138,7 @@ out vec4 outColor;
 
 uniform vec4 uPrimA[MAX_PRIMS];          // xyz = A, w = radius
 uniform vec4 uPrimB[MAX_PRIMS];          // xyz = B, w = blendK
-uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w = 1 when this is a carve
+uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w: 0 add, 1 carve, 2 dead
 uniform vec4 uClusterBounds[MAX_CLUSTERS]; // xyz = centre, w = radius
 uniform vec4 uClusterRange[MAX_CLUSTERS];  // x = start, y = count, z = alive
 uniform int  uPrimCount;
@@ -281,7 +281,7 @@ float applyCarves(float d, vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      if (uPrimScale[idx].w < 0.5) continue;  // additive — already folded
+      if (uPrimScale[idx].w < 0.5 || uPrimScale[idx].w > 1.5) continue;  // additive or dead (mid-limb sever)
       // blendK 0 makes smax short-circuit to a hard max: a crisp-edged carve
       // with no smear, which is the only way features smaller than the blend
       // zone survive. Hard min/max are also ASSOCIATIVE, so zero-blend carves
@@ -311,7 +311,7 @@ float mapBody(vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      if (uPrimScale[idx].w > 0.5) continue;   // carve — handled by applyCarves
+      if (uPrimScale[idx].w > 0.5) continue;   // carve or dead — applyCarves' job / gone
       d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
     }
   }
