@@ -118,4 +118,7 @@ export const FACE_SLIDERS: { key: keyof FaceParams; min: number; max: number }[]
   { key: 'socketDepth', min: 0.01, max: 0.05 },
   { key: 'mouthWidth', min: 0.015, max: 0.075 },
   { key: 'mouthOpen', min: 0.003, max: 0.035 },
+  { key: 'chinJut', min: -0.01, max: 0.055 },
+  { key: 'jawWidth', min: 0.04, max: 0.11 },
+  { key: 'jawDrop', min: 0.03, max: 0.11 },
 ];

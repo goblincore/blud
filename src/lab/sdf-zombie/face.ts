@@ -78,6 +78,12 @@ export interface FaceParams {
   socketDepth: number;
   mouthWidth: number;
   mouthOpen: number;
+  /** How far the chin juts forward under the mouth. */
+  chinJut: number;
+  /** Half the width of the mandible corners. */
+  jawWidth: number;
+  /** How far the jaw corners sit below the cranium centre. */
+  jawDrop: number;
 }
 
 /**
@@ -101,6 +107,9 @@ export const DEFAULT_FACE: FaceParams = {
   socketDepth: 0.026,
   mouthWidth: 0.038,
   mouthOpen: 0.012,
+  chinJut: 0.020,
+  jawWidth: 0.072,
+  jawDrop: 0.070,
 };
 
 /**
@@ -169,6 +178,23 @@ export function facePrims(f: FaceParams): FacePrim[] {
         f.browRise - 0.012 + f.eyeSize * 0.75 - f.lidDroop,
         noseBaseZ - 0.008 + f.eyeBulge,
       ),
+    },
+
+    // --- Jaw: the line the whole face hangs off ------------------------------
+    // Without these the head is an egg and every feature floats on it. Blended
+    // softly (not HARD_EDGE) because a jaw is a large form that should flow
+    // into the skull — it is the crease BETWEEN jaw and cheek that reads, and
+    // that crease only exists once the head's own blendK is tight enough,
+    // which is why body.ts drops the cranium to 0.005.
+    {
+      ...HEAD, tag: 'jaw-corner', radius: 0.030, blendK: 0.006,
+      scale: [0.85, 0.95, 1.05], mirrorOffset: true,
+      offset: off(f.jawWidth, -f.jawDrop, noseBaseZ - 0.070),
+    },
+    {
+      ...HEAD, tag: 'chin', radius: 0.026, blendK: 0.006,
+      scale: [1.15, 0.85, 0.95],
+      offset: off(0, -f.jawDrop - 0.016, noseBaseZ - 0.028 + f.chinJut),
     },
 
     // --- Mouth: a hard slit, so it stays a line instead of a cavern ---------

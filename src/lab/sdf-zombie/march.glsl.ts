@@ -270,12 +270,19 @@ void main() {
     vec2 uv = vec2(hs.x * uFaceForward, hs.y) * uFaceProj.xy + uFaceProj.zw;
     // Fade by how squarely this surface faces the front, so the projection
     // does not smear a second face down the sides and back of the skull.
-    float facing = smoothstep(0.15, 0.65, dot(n, vec3(0.0, 0.0, uFaceForward)));
+    // Widened from (0.15, 0.65): with hard-edged sockets the normals swing
+    // sharply, and a narrow window left the eye region — the part that most
+    // needs the texture — almost entirely unpainted.
+    float facing = smoothstep(-0.10, 0.35, dot(n, vec3(0.0, 0.0, uFaceForward)));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       vec4 t = texture(uFaceTex, uv * uFaceAtlas.xy + uFaceAtlas.zw);
-      // The sheet is stored sRGB-encoded; this shader works in linear.
-      vec3 lin = pow(max(t.rgb, 0.0), vec3(2.2));
-      albedo = mix(albedo, lin, facing * t.a * uFaceStrength);
+      // Sampled AS-IS, deliberately not linearised. The sheet is sRGB-encoded,
+      // but so are the hand-tuned flesh colours this blends against — they were
+      // authored to compensate for the missing output encode (see lab-main's
+      // post-fx note). Linearising only the texture darkens it to ~0.15 while
+      // everything around it stays bright, which is why the face barely showed.
+      // Revisit together with the preset retune, not before.
+      albedo = mix(albedo, t.rgb, facing * t.a * uFaceStrength);
     }
   }
 
