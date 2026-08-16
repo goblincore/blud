@@ -126,12 +126,18 @@ type FaceTexName = 'smiley' | 'blood-zombie';
  * image, and top-left because that is how images are indexed everywhere except
  * OpenGL. The conversion happens once, below.
  */
-const FACE_TEXTURES: Record<FaceTexName, { url: string; rect: [number, number, number, number, number, number] }> = {
-  smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64] },
+const FACE_TEXTURES: Record<FaceTexName, { url: string; rect: [number, number, number, number, number, number]; mean: number }> = {
+  smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.66 },
   'blood-zombie': {
     url: '/assets/blood-tiles/1200.png',
-    // The head of the standing axe zombie, off a 77x116 sheet.
-    rect: [22, 2, 34, 32, 77, 116],
+    // Just the FACE of the standing axe zombie, off a 77x116 sheet. The head
+    // is only ~16px across on this sprite — the eyes are the pale pixels at
+    // y 2-4 — so an earlier 34x32 rect was dragging in the whole torso and
+    // painting the sprite's own silhouette across the middle of the face.
+    rect: [32, 0, 18, 16, 77, 116],
+    // Measured off the crop: 84/255. Divides out the sprite's baked
+    // lighting so it modulates the flesh rather than blacking it out.
+    mean: 0.33,
   },
 };
 
@@ -151,16 +157,18 @@ function loadFaceTexture(name: FaceTexName) {
   (u.uFaceTex!.value as THREE.Texture | null)?.dispose();
   u.uFaceTex!.value = tex;
   (u.uFaceAtlas!.value as THREE.Vector4).set(w / sheetW, h / sheetH, x / sheetW, y / sheetH);
+  u.uFaceMean!.value = def.mean;
 }
 
-let faceTexName: FaceTexName = 'smiley';
+let faceTexName: FaceTexName = 'blood-zombie';
 loadFaceTexture(faceTexName);
 view.material.uniforms.uFaceEnabled!.value = 1;
 // Map the crop across the head and no further. uv = hs * scale + centre, so
 // uv lands in [0,1] over hs +/- 0.5/scale. hs is normalised by the skull's own
-// radius, so the head spans hs +/- 1.0 — which needs scale 0.5, not 1.0. At 1.0
-// the texture covered only the middle half of the face.
-(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.5, 0.5, 0.5, 0.5);
+// radius, so the head spans hs +/- 1.0 and scale 0.5 would cover it edge to
+// edge. 0.75 deliberately covers only the middle two-thirds: a face occupies
+// the front of a head, not the whole sphere, and it read better smaller.
+(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.75, 0.75, 0.5, 0.5);
 
 /**
  * The skull's own sphere: the fattest additive primitive in the head cluster.

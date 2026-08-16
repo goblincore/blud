@@ -54,6 +54,15 @@ uniform vec4  uFaceAtlas;     // xy = uv scale, zw = uv offset — crops the hea
 // far bigger than the head — normalising by it let the projection spill down
 // over the neck and shoulders.
 uniform vec4  uHeadSphere;
+/**
+ * Mean luminance of the face crop. The sheet already carries BAKED LIGHTING,
+ * so pasting it in as albedo and then lighting it again double-shades — the
+ * Blood face averages 84/255, which turned the whole head near-black. Dividing
+ * by the mean keeps the PATTERN (dark eye sockets, pale highlights) while
+ * throwing away its overall level, so it modulates our flesh instead of
+ * replacing it.
+ */
+uniform float uFaceMean;
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -285,13 +294,14 @@ void main() {
     facing *= 1.0 - smoothstep(0.88, 1.02, length(hs));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       vec4 t = texture(uFaceTex, uv * uFaceAtlas.xy + uFaceAtlas.zw);
-      // Sampled AS-IS, deliberately not linearised. The sheet is sRGB-encoded,
-      // but so are the hand-tuned flesh colours this blends against — they were
-      // authored to compensate for the missing output encode (see lab-main's
-      // post-fx note). Linearising only the texture darkens it to ~0.15 while
-      // everything around it stays bright, which is why the face barely showed.
-      // Revisit together with the preset retune, not before.
-      albedo = mix(albedo, t.rgb, facing * t.a * uFaceStrength);
+      // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
+      // hand-tuned flesh colours it blends against, which were authored to
+      // compensate for the missing output encode (see lab-main's post-fx note).
+      // Revisit both together at the preset retune, not before.
+      //
+      // Used as a MULTIPLIER, not a replacement — see uFaceMean.
+      vec3 detail = t.rgb / max(uFaceMean, 1e-3);
+      albedo = mix(albedo, albedo * detail, facing * t.a * uFaceStrength);
     }
   }
 

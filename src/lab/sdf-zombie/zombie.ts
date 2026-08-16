@@ -92,6 +92,7 @@ export function createZombieView(body: BuildResult): ZombieView {
       uFaceProj: { value: new THREE.Vector4(1.15, 1.15, 0.5, 0.52) },
       uFaceAtlas: { value: new THREE.Vector4(1, 1, 0, 0) },
       uHeadSphere: { value: new THREE.Vector4(0, 1.6, 0, 0.13) },
+      uFaceMean: { value: 0.5 },
     },
   });
 
