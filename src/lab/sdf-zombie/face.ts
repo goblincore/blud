@@ -74,19 +74,17 @@ export interface FaceParams {
 
 /** A clean oval, a little taller than wide. */
 export const DEFAULT_FACE: FaceParams = {
-  // The CRANIUM stays close to spherical. Stretching an ellipsoid along y does
-  // not flatten its crown, it SHARPENS it — the radius of curvature at the
-  // pole goes as a^2/b — so a tall headHeight produced a conehead. All the
-  // taper comes from the jaw below instead, which is what actually gives the
-  // Blud zombie's gaunt egg without a pointed dome.
+  // Tuned by hand in the panel, then baked. Keep headHeight near 1: raising it
+  // SHARPENS the crown rather than doming it, so the height and the gaunt
+  // taper both come from the jaw below.
   headRadius: 0.118,
-  headWidth: 1.0,
-  headHeight: 1.10,
-  headDepth: 1.05,
-  jawWidth: 0.80,
+  headWidth: 0.85,
+  headHeight: 1.06,
+  headDepth: 0.894,
+  jawWidth: 0.748,
   jawHeight: 0.86,
   jawDrop: 0.076,
-  jawJut: 0.012,
+  jawJut: 0.03,
   headBlend: 0.006,
 };
 

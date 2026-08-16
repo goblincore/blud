@@ -175,12 +175,13 @@ function loadFaceTexture(name: FaceTexName) {
 let faceTexName: FaceTexName = 'zombie-flat';
 loadFaceTexture(faceTexName);
 view.material.uniforms.uFaceEnabled!.value = 1;
-// Map the crop across the head and no further. uv = hs * scale + centre, so
-// uv lands in [0,1] over hs +/- 0.5/scale. hs is normalised by the skull's own
-// radius, so the head spans hs +/- 1.0 and scale 0.5 would cover it edge to
-// edge. 0.75 deliberately covers only the middle two-thirds: a face occupies
-// the front of a head, not the whole sphere, and it read better smaller.
-(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.75, 0.75, 0.5, 0.5);
+// Face projection, tuned by hand in the panel and baked.
+//
+// uv = hs * scale + centre, and hs is normalised PER AXIS by the skull's own
+// semi-axes, so the head surface sits at |hs| ~= 1 in every direction and these
+// numbers no longer shift when the head is reproportioned.
+(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.45, 0.58, 0.5, 0.56);
+view.material.uniforms.uFaceStrength!.value = 1.0;
 
 /**
  * The skull's centre and its three SEMI-AXES: the fattest additive primitive in
