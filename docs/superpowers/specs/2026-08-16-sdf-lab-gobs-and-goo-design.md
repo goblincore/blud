@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Status:** approved (brainstormed with project owner)
-**Scope:** SDF zombie lab only (`src/lab/sdf-zombie/`), both renderer paths. No game-side changes.
+**Scope:** SDF zombie lab only (`src/lab/sdf-zombie/`), **WebGPU path only** — the WebGL lab is frozen as of the 2026-08-16 gore fix-pass (owner decision; WebGPU is the build path per X1.2). No game-side changes.
 **Depends on:** the gore fix-pass landing first
 (`docs/superpowers/plans/2026-08-16-sdf-lab-gore-fix-pass.md`). Implementation
 chain bases off its final branch. The skeleton reveal (X1.20) follows THIS
@@ -66,8 +66,7 @@ Large gobs drop the clean latex read:
 - Implemented in the shared march shading for chunk fields only (a per-body
   uniform flag/strength so the standing body is unaffected until the future
   body-damage system adopts the same mask).
-- Both shader paths in the same commit (march.wgsl.ts + march.glsl.ts), with
-  the text-lint tripwires extended.
+- march.wgsl.ts only (WebGL frozen); text-lint tripwires extended.
 
 ## 3. Screen-space metaball blood
 
@@ -86,8 +85,8 @@ micro-beads survive only for fine mist):
   reference look); sparse drops remain beads. Threshold, blur radius and
   shading constants are panel-tunable.
 - Splat decals on the floor stay as today (they already read well).
-- WebGPU path first-class; WebGL lab gets the same passes via its own render
-  targets (no shared three imports).
+- WebGPU only. The WebGL lab is frozen at fix-pass parity and gets none of
+  this; its billboard blood view stays as-is.
 
 ## 4. Physics
 
@@ -103,7 +102,7 @@ launch velocities apply to gobs as-is.
 - Blood-sim: scrap band (size/drag) distinct from droplets; deterministic.
 - Shaders: text tripwires for the gore-mask uniform and the metaball surface
   pass wiring.
-- Visual (both labs): full gib reads as a few ragged hunks + gooey scraps in
+- Visual (WebGPU lab): full gib reads as a few ragged hunks + gooey scraps in
   a viscous connected spray; strands visible where spray is dense; gobs land
   bloody-side glistening; standing body unchanged.
 

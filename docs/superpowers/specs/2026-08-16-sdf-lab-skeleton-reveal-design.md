@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Status:** approved (brainstormed with project owner; decisions recorded below)
-**Scope:** SDF zombie lab only (`src/lab/sdf-zombie/`), both renderer paths. No game-side changes.
+**Scope:** SDF zombie lab only (`src/lab/sdf-zombie/`), **WebGPU path only** (WebGL lab frozen 2026-08-16). No game-side changes.
 **Depends on:** the gore-feel pass landing first (`2026-08-16-sdf-lab-gore-feel-design.md`) —
 this feature rides its per-prim chunks, 3D chunk stepper (`chunkPoint`), and
 connectivity sphere-math. Its implementation chain must base off the gore
@@ -45,8 +45,7 @@ resolved rig:
   jaw wedge), ribcage (3–5 torus segments around the torso spine), spine
   (stacked short lathes), pelvis (flattened lathe).
 - Output is renderer-agnostic geometry data (positions/normals/indices +
-  per-vertex gore weight). Each renderer path wraps it in its own
-  `THREE.BufferGeometry` (the two-copies-of-three rule again).
+  per-vertex gore weight); the WebGPU view wraps it in a BufferGeometry.
 - Every bone also gets a **pre-broken variant**: the same lathe terminated
   mid-shaft with a jagged crown (randomized vertex ring), generated at the
   same time.
@@ -103,7 +102,7 @@ next to the march.
 - Chunk carry: severed/gibbed pieces reference the right bone segment; stub
   follows shattered state.
 - Visual: gray-placeholder compositing check first (resolution-seam risk),
-  then full pass in both labs: torso blast shows ribs; stump shows protruding
+  then full pass in the WebGPU lab: torso blast shows ribs; stump shows protruding
   bone; heavy fire shatters and ejects shards; gib pile has bone inside meat.
 
 ## Out of scope
