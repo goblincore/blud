@@ -52,6 +52,14 @@ import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt } from '../rig-bind';
 import { stepRig } from '../rig';
+import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
+import {
+  applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
+  STANDING_RIG, stepMotion,
+  type MotionJoints, type MotionSignals,
+} from '../motion';
+import { makeRng, type WanderBounds } from '../wander';
+import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
@@ -169,6 +177,9 @@ async function main() {
   benchEl.style.fontSize = '11px';
   benchEl.style.color = '#fc9';
   statusBox.appendChild(benchEl);
+  // Motion status line (filled by the motion panel section further down;
+  // declared here so the frame callback can always reach it).
+  let motionReadEl: HTMLDivElement | null = null;
 
   // The raymarched bodies render into their own target at their own scale and
   // composite back over the polygonal scene. Cost is close to linear in
@@ -477,7 +488,91 @@ async function main() {
   /** The live body — replaced on sever and on any override edit. */
   let current = body;
   let bound = bindRig(current);
-  function rebind() { bound = bindRig(current); }
+  /** The hero's latest POSED body (world space) — what's on screen, and what
+   *  shots raycast against. Authored rest-space raycasting stopped being
+   *  valid the moment the body could wander or fall. */
+  let lastPosed = current;
+
+  // Motion (X1.22): the orchestrator drives the hero's rest-pose targets;
+  // the crowd stays static — it is a perf fixture, body zero is the actor.
+  const WANDER_BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
+  const MOTION_SEED = 1337; // fixed: reproducible shambling for A/B checks
+  const motionRng = makeRng(MOTION_SEED);
+  let motionJoints: MotionJoints | null = makeMotionJoints(current, bound.rig.restPose);
+  let motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
+  let motionEnabled = true;
+  let wanderOn = true;
+  let forcedCollapse = false;
+  let lastRootShift: Vec3 = [0, 0, 0];
+  // bindRig pins the lowest joint as a static anchor; walking releases it —
+  // the rest pull + plants carry the body instead (and collapse wants the
+  // pin gone anyway, so it lives in one place).
+  function unpinnedRigPoints() {
+    return bound.rig.points.map(p => ({ ...p, pinned: false }));
+  }
+  if (motionJoints) {
+    bound = { ...bound, rig: { ...bound.rig, points: unpinnedRigPoints() } };
+  }
+  // Per-frame signal accumulators: events (shots/severs) land between frames,
+  // the motion step consumes and clears them inside the frame callback.
+  let pendingShot: MotionSignals['shot'] = null;
+  const pendingWounds: Wound[] = [];
+  const pendingSevered: LimbId[] = [];
+
+  /**
+   * Re-binds the prims after a body edit. While motion is on, the rig POINTS
+   * are carried across (bones are unchanged by severing — only alive flags
+   * move — so the points map 1:1); without this, every shot that severed a
+   * limb would teleport the walking body back to the origin.
+   */
+  function rebind() {
+    const keep = motionEnabled && motionJoints ? bound.rig.points : null;
+    bound = bindRig(current);
+    if (keep && keep.length === bound.rig.points.length) {
+      bound = {
+        ...bound,
+        rig: { ...bound.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+      };
+    }
+  }
+
+  /** Hard motion reset: fresh bind at the origin, fresh clocks. Body edits
+   *  (rebuild/respawn/gib) spawn a new shambler rather than springing an old
+   *  pose across the arena. */
+  function resetMotion() {
+    bound = bindRig(current);
+    motionJoints = makeMotionJoints(current, bound.rig.restPose);
+    if (motionJoints) {
+      bound = { ...bound, rig: { ...bound.rig, points: unpinnedRigPoints() } };
+    }
+    motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
+    lastRootShift = [0, 0, 0];
+    pendingShot = null;
+    pendingWounds.length = 0;
+    pendingSevered.length = 0;
+    forcedCollapse = false;
+  }
+
+  /** Full-limb severance map from cluster alive flags (mid-limb distal cuts
+   *  leave the cluster alive and do NOT count — hop/collapse see full legs). */
+  function missingLimbs(): MissingLimbs {
+    const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
+    return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
+  }
+
+  /** Present-but-hurt limbs for the gait limp skew — a limb carrying at
+   *  least one live wound on a still-alive cluster. */
+  function woundedLimbs() {
+    const alive = (l: LimbId) => current.clusters.find(c => c.limb === l)?.alive ?? false;
+    const w = { armL: false, armR: false, legL: false, legR: false };
+    for (const wound of wounds) {
+      const prim = current.prims[wound.primIdx];
+      if (!prim || !alive(prim.limb)) continue;
+      if (prim.limb === 'armL' || prim.limb === 'armR'
+        || prim.limb === 'legL' || prim.limb === 'legR') w[prim.limb] = true;
+    }
+    return w;
+  }
 
   let wounds: Wound[] = [];
   const chunks: { id: number; state: Chunk; view: ChunkGpuView }[] = [];
@@ -489,11 +584,11 @@ async function main() {
   let nextChunkId = 1;
 
   /** Marches the CPU-side field along a ray to find where a shot lands. */
-  function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
+  function raycastBody(origin: Vec3, dir: Vec3, field: BuildResult = current): Vec3 | null {
     let t = 0;
     for (let i = 0; i < 128 && t < 20; i++) {
       const p: Vec3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
-      const d = sdBody(p, current);
+      const d = sdBody(p, field);
       if (d < 0.002) return p;
       t += Math.max(d, 0.002);
     }
@@ -664,11 +759,25 @@ async function main() {
     ray.setFromCamera(ndc, camera);
     const o = ray.ray.origin, d = ray.ray.direction;
 
-    const hit = raycastBody([o.x, o.y, o.z], [d.x, d.y, d.z]);
+    // Raycast the POSED body (world space): wander/collapse broke the
+    // rest-space assumption, and wounds are prim-LOCAL, so a hit mapped
+    // through the posed prims rides the authored body cleanly (applyRig
+    // keeps prim indices 1:1).
+    const hit = raycastBody([o.x, o.y, o.z], [d.x, d.y, d.z], lastPosed);
     if (!hit) return;
 
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-    wounds = pushWound(wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES[type].radius, type), MAX_WOUNDS);
+    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type);
+    wounds = pushWound(wounds, wound, MAX_WOUNDS);
+    pendingWounds.push(wound);
+    // The shot feeds stagger (profile + direction) and, for torso blasts,
+    // the wound clutch — both consumed by the next motion step.
+    pendingShot = {
+      type,
+      dirWorld: [d.x, d.y, d.z],
+      woundWorld: hit,
+      torso: lastPosed.prims[wound.primIdx]?.limb === 'torso',
+    };
     // A hit shoves the nearest joint along the shot direction — the rest-pose
     // pull springs it back, so the limb visibly recoils and lags.
     const push = type === 'blast' ? 0.10 : 0.04;
@@ -682,7 +791,11 @@ async function main() {
       const { body: next, chunk, stumpWound } = severLimb(current, limb);
       if (chunk.prims.length === 0) continue;
       current = next;
-      if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+      if (stumpWound) {
+        wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+        pendingWounds.push(stumpWound);
+      }
+      pendingSevered.push(limb);
       spawnChunk(limb, chunk.origin, chunk.prims, undefined,
         [attachPoint(chunk.prims, torsoCentre())]);
       view.update(current);
@@ -698,7 +811,11 @@ async function main() {
       const { body: next, chunk, stumpWound } = severDistal(current, cut);
       if (chunk.prims.length === 0) continue;
       current = next;
-      if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+      if (stumpWound) {
+        wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+        pendingWounds.push(stumpWound);
+      }
+      pendingSevered.push(cut.limb);
       spawnChunk(cut.limb, chunk.origin, chunk.prims, undefined, chunk.tornAt);
       view.update(current);
       refreshWounds();
@@ -740,8 +857,8 @@ async function main() {
     return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
   }
 
-  function torsoCentre(): Vec3 {
-    return current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0];
+  function torsoCentre(b: BuildResult = current): Vec3 {
+    return b.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0];
   }
 
   function spawnChunk(
@@ -749,6 +866,12 @@ async function main() {
     vel?: Vec3, tornAt?: Vec3[],
   ) {
     if (prims.length === 0) return;
+    // The sever results are authored rest-space; chunks live in world space.
+    // With the hero wandering (or lying somewhere), spawn the piece where the
+    // body actually is — chunk.pos is the recentring origin for the piece's
+    // prims AND its physics seed, so both must shift together.
+    origin = add(origin, lastRootShift);
+    if (tornAt) tornAt = tornAt.map(t => add(t, lastRootShift));
     const v: Vec3 = vel ?? [
       (Math.random() - 0.5) * 4.5,
       2.5 + Math.random() * 2.5,
@@ -802,7 +925,7 @@ async function main() {
     wounds = [];
     view.update(current);
     refreshWounds();
-    rebind();
+    resetMotion(); // a gibbed body is done shambling — fresh state for whatever spawns next
   }
 
   // ---------------------------------------------------------------------------
@@ -922,12 +1045,17 @@ async function main() {
     if (ev.key === ']') { setCrowdCount(crowd.length + 1); return; }
     if (ev.key === '[') { setCrowdCount(Math.max(0, crowd.length - 1)); return; }
     if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
+    if (ev.key === 'k' || ev.key === 'K') { forcedCollapse = true; return; }
     const limb = SEVER_KEYS[ev.key];
     if (!limb) return;
     const { body: next, chunk, stumpWound } = severLimb(current, limb);
     if (chunk.prims.length === 0) return;
     current = next;
-    if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+    if (stumpWound) {
+      wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+      pendingWounds.push(stumpWound);
+    }
+    pendingSevered.push(limb);
     spawnChunk(limb, chunk.origin, chunk.prims, undefined,
       [attachPoint(chunk.prims, torsoCentre())]);
     view.update(current);
@@ -1024,19 +1152,88 @@ async function main() {
     // (before the drawFn) — same contract as bloodView.sync.
     gooLayer.sync(bloodSim, camera);
 
-    // Drive the flesh: settle the rig toward its rest pose, push the result
-    // back into the primitives, and re-upload. This is what makes the body
-    // deform — and what makes rest-space wounds observable, since they ride it.
-    bound = {
-      ...bound,
-      rig: stepRig(bound.rig, Math.min(dt, 1 / 30), {
-        gravity: [0, -2.2, 0],
-        damping: 0.06,
-        iterations: 4,
-        restStiffness: 0.18,
-      }),
-    };
+    // Drive the flesh. With motion on, the orchestrator composes wander +
+    // gait + stagger into per-point rest targets, IK locks the stance feet /
+    // aims the head / presses the wound, then stepRig integrates toward them
+    // exactly as before — the rig stays the single motion authority. A
+    // collapse ramps the rest pull off, swaps in full gravity, adds the
+    // one-sided rope limits and chunk-stepper floor contact, and the corpse
+    // keeps rendering through the same posed-prims path (still shootable,
+    // severable, gibbable — it is just horizontal now).
+    const rdt = Math.min(dt, 1 / 30);
+    if (motionEnabled && motionJoints) {
+      const step = stepMotion(
+        motionState, motionJoints, { enabled: true, wander: wanderOn },
+        {
+          dt: rdt,
+          shot: pendingShot,
+          wounded: woundedLimbs(),
+          severed: pendingSevered,
+          missing: missingLimbs(),
+          headAlive: current.clusters.find(c => c.limb === 'head')?.alive ?? false,
+          forcedCollapse,
+          freshWounds: pendingWounds,
+        },
+        bound.rig.points, WANDER_BOUNDS, motionRng,
+      );
+      motionState = step.state;
+      const f = step.frame;
+      pendingShot = null;
+      pendingWounds.length = 0;
+      pendingSevered.length = 0;
+      forcedCollapse = false;
+      lastRootShift = f.rootShift;
+
+      let points = stepRig(
+        { ...bound.rig, restPose: f.restPose }, rdt,
+        {
+          gravity: f.gravity,
+          damping: 0.06,
+          iterations: 4,
+          restStiffness: STANDING_RIG.restStiffness * f.restPull,
+        },
+      ).points;
+      if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+      if (f.collapsed) {
+        points = applyFloorContact(points, motionJoints.groundY - MOTION_TUNING.floorPad);
+      }
+      bound = {
+        ...bound,
+        rig: { points, constraints: bound.rig.constraints, restPose: f.restPose },
+      };
+
+      if (motionReadEl) {
+        motionReadEl.textContent =
+          `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
+          (f.staggerKind ? ` · ${f.staggerKind}` : '') +
+          (f.clutchArm ? ` · clutch ${f.clutchArm}` : '');
+      }
+      // Keep the shambler framed: the orbit target drifts after the body
+      // (fast enough to follow a walk, slow enough to leave the orbit feel).
+      if (!f.collapsed) {
+        const k = Math.min(1, dt * 2.2);
+        camTarget.x += (f.rootShift[0] - camTarget.x) * k;
+        camTarget.z += (f.rootShift[2] - camTarget.z) * k;
+      }
+    } else {
+      // Statue mode — the pre-motion behaviour, verbatim. Pending signals
+      // still drain so a re-enable can't fire a stale shot.
+      pendingShot = null;
+      pendingWounds.length = 0;
+      pendingSevered.length = 0;
+      forcedCollapse = false;
+      bound = {
+        ...bound,
+        rig: stepRig(bound.rig, rdt, {
+          gravity: [0, -2.2, 0],
+          damping: 0.06,
+          iterations: 4,
+          restStiffness: 0.18,
+        }),
+      };
+    }
     const posed = applyRig(current, bound);
+    lastPosed = posed;
     view.update(posed);
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     view.setTime(performance.now() / 1000);
@@ -1078,6 +1275,7 @@ async function main() {
     view.update(current);
     refreshWounds();
     rebind();
+    resetMotion(); // a rebuilt body is a new shambler, not a pose transfer
   }
 
   const presetBox = addSection(panelEl, 'presets');
@@ -1201,16 +1399,19 @@ async function main() {
 
   /** Locked three-quarter close-up on the skull, so face work needs no orbiting. */
   function focusHead() {
-    const skull = current.bones.get('skull');
+    // POSED centre: with wander the authored skull position is behind the
+    // camera, not in front of it.
+    const c = lastPosed.clusters.find(cl => cl.limb === 'head')?.center;
     autoSpin = false;
-    camTarget.set(0, skull ? (skull.head[1] + skull.tail[1]) / 2 : 1.55, 0);
+    camTarget.set(c?.[0] ?? 0, c?.[1] ?? 1.55, c?.[2] ?? 0);
     camYaw = 0.62;
     camPitch = 0.06;
     camDist = 0.52;
   }
   function focusBody() {
+    const c = torsoCentre(lastPosed);
     autoSpin = false;
-    camTarget.set(0, 1.05, 0);
+    camTarget.set(c[0], 1.05, c[2]);
     camYaw = 0.35;
     camPitch = 0.12;
     camDist = 2.4;
@@ -1328,6 +1529,48 @@ async function main() {
     set: (v) => { gooLayer.setBlurPx(v); },
   });
 
+  // Motion (X1.22): master + wander toggles, the forced-collapse hook for
+  // the K key's panel twin, and the live damage-meter readout.
+  const motionBox = addSection(panelEl, 'motion');
+  const motionBtn = addButton(motionBox, `motion: ${motionEnabled ? 'on' : 'off'}`, () => {
+    setMotionEnabled(!motionEnabled);
+  });
+  const wanderBtn = addButton(motionBox, `wander: ${wanderOn ? 'on' : 'off'}`, () => {
+    setWander(!wanderOn);
+  });
+  addButton(motionBox, 'force collapse', () => { forcedCollapse = true; });
+  motionReadEl = document.createElement('div');
+  motionReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
+  motionBox.appendChild(motionReadEl);
+
+  /** Motion master. Off = the pre-X1.22 statue loop, verbatim. On = a fresh
+   *  shambler from the origin. */
+  function setMotionEnabled(on: boolean) {
+    motionEnabled = on;
+    if (on) {
+      resetMotion();
+    } else if (motionJoints) {
+      // Statue at wherever the body ended up, in its authored pose — not
+      // frozen mid-stride, and not snapped back to the origin either.
+      bound = {
+        ...bound,
+        rig: {
+          ...bound.rig,
+          restPose: motionJoints.base.map(
+            v => [v[0] + lastRootShift[0], v[1], v[2] + lastRootShift[2]] as Vec3),
+        },
+      };
+      camTarget.x = lastRootShift[0];
+      camTarget.z = lastRootShift[2];
+    }
+    motionBtn.textContent = `motion: ${on ? 'on' : 'off'}`;
+  }
+  /** Wander toggle — locomotion only; hit reactions stay live either way. */
+  function setWander(on: boolean) {
+    wanderOn = on;
+    wanderBtn.textContent = `wander: ${on ? 'on' : 'off'}`;
+  }
+
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
@@ -1386,14 +1629,16 @@ async function main() {
      * checks, with no pointer events or camera dependence involved.
      */
     stampWounds(n: number) {
-      const c = torsoCentre();
+      const c = torsoCentre(lastPosed);
       for (let i = 0; i < n; i++) {
         const ox = ((i % 3) - 1) * 0.06;
         const oy = Math.floor(i / 3) * 0.07 - 0.05;
-        const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1]);
+        const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1], lastPosed);
         if (!hit) continue;
-        wounds = pushWound(
-          wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES.blast.radius, 'blast'), MAX_WOUNDS);
+        const w = worldHitToWound(
+          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast');
+        wounds = pushWound(wounds, w, MAX_WOUNDS);
+        pendingWounds.push(w); // stamped blasts feed the damage meter too
       }
       refreshWounds();
     },
@@ -1448,6 +1693,30 @@ async function main() {
     /** Same run the B key starts; result also lands on `window.__benchResult`. */
     runBench,
     setLodEnabled(on: boolean) { lodEnabled = on; },
+    /** X1.22 rig motion — the whole pipeline's state peek. */
+    get motion() {
+      return {
+        enabled: motionEnabled,
+        wander: wanderOn,
+        phase: motionState.collapse.phase,
+        meter: motionState.collapse.meter,
+        hop: motionState.collapse.phase === 'standing'
+          && (missingLimbs().legL !== missingLimbs().legR),
+        stagger: motionState.stagger.kind,
+        clutch: motionState.clutch.arm,
+        heading: motionState.wander.heading,
+        pos: motionState.wander.pos as unknown as number[],
+        speed: motionState.wander.speed,
+        blend: motionState.blend,
+        rootShift: lastRootShift as unknown as number[],
+      };
+    },
+    /** Locomotion toggle — gait/stagger/IK stay live regardless. */
+    setWander,
+    /** Motion master toggle — off is the pre-X1.22 statue. */
+    setMotionEnabled,
+    /** The K key's console twin: forces the collapse next frame. */
+    forceCollapse() { forcedCollapse = true; },
     /** Shell-displacement silhouettes on every live body view. */
     setShellDisplace,
     setLegacyGamma,
