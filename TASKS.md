@@ -171,10 +171,9 @@ Key reference docs (open these before touching their area):
   glm-5.3, merged with 6 regression tests.
 - `X1.21.1` [x] Goo fluidity — separable 9-tap Gaussian on the density buffer before surface
   extraction (blurPx 2.5 default, `goo blur px` slider, 0 = bypass); frozen-pile A/B verified beads→ropes, +~0.15 ms.
-- `X1.21.2` [ ] Shell-silhouette visual glitches — with the toggle ON, hard-edged pale
-  wedges/patches cut across shoulders and arms (playtest screenshot 2026-08-16). Suspect
-  the displaced surface vs occluder/cone conservativeness (displacement extends past the
-  smooth field the pre-passes assume). Systematic pass; A/B occluder off first.
+- `X1.21.2` [x] Shell-silhouette glitches — BOTH pre-passes under-bounded the displaced
+  field; occluder+cone bounds relaxed by shellAmp (dropout 320→26 px @ 4x amp, 12 tests;
+  [dev-note](docs/dev-notes/2026-08-16-shell-glitch/)). Bench re-gate still pending.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
 - `X1.22` [ ] **Rig motion pass (Spec B)** — procedural shamble (wander), FABRIK IK
