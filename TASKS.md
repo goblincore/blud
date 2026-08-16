@@ -150,6 +150,22 @@ Key reference docs (open these before touching their area):
 - `X1.11` [ ] **Port normal warping to `march.glsl.ts`** — the WebGL lab still
   has the noise in its field, so `validate.ts`'s Lipschitz guard must stay
   until it does. The two labs are one technique apart.
+- `X1.13` [x] **Adaptive SDF resolution** — pure tested controller drives the
+  layer scale from measured frame time. Signal is asymmetric: DOWN is computed
+  (`scale * sqrt(budget/measured)`), UP must probe + back off, because wall
+  clock is vsync-pinned. **27.2 ms/37 fps → 16.7 ms/60 fps** inside the crowd.
+- `X1.14` [x] **Merged single-pass march — DEAD END, autopsy recorded.** One
+  draw for the whole crowd; built, renders correctly, and loses. 1 body 2.04 →
+  3.75 ms (1.84x), 10 spread 9.88 → 33.83 ms (3.4x), cone pre-pass worth 0.4%.
+  The one-body case is decisive: no overdraw to save and no empty space to
+  accelerate, so the cost is `mapScene` itself — an extra loop level, two more
+  fetches per step and a second live accumulator, which costs occupancy on a
+  fragment-bound shader. Kept behind `setMerged()` (off) until `X1.15` lands.
+- `X1.15` [ ] **Occluder depth pre-pass — NEXT.** The right shape after all: it
+  ADDS a bound instead of removing ten. Depth-only pass of a conservative inner
+  hull (raw capsules are strictly inside the smoothed surface, since `smin`
+  only adds material), then the march early-outs on one depth fetch. Watch the
+  wound case — carving can cut through the hull and make it non-conservative.
 - `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
   and the surrounding articles/code. Deferred, not urgent.
 
