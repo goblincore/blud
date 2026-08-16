@@ -1644,6 +1644,14 @@ async function main() {
     },
     setCrowdCount,
     gibEverything,
+    /** The respawn button's console twin — a fresh body AND a fresh shambler.
+     *  resetMotion alone re-binds the rig of whatever body is current, which
+     *  for a gibbed corpse is a body-shaped nothing. */
+    respawn() {
+      wounds = [];
+      override = loadOverride();
+      rebuildBody();
+    },
     focusHead,
     focusBody,
     /**
