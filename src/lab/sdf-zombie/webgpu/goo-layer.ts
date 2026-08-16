@@ -84,8 +84,10 @@ export const GOO_TUNING = {
    * (BLOOD_TRAIL.size 0.22 was tuned for game-camera sprites); used raw as
    * physical blob radii they built quarter-metre goo towers (playtest
    * 2026-08-16). Same reasoning as the billboard view's DROPLET_VIEW_SCALE.
+   * 0.4 read as thick hose-water ropes once the blur landed; 0.3 thins the
+   * strands back toward spray (blur keeps neighbours fusing at this size).
    */
-  sizeScale: 0.4,
+  sizeScale: 0.3,
   /** Density above which a pixel is goo. A lone blob peaks near 1.0. */
   threshold: 0.4,
   /** Soft-edge band start, as a multiple of the threshold. */
