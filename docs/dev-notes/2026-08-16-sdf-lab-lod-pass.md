@@ -257,6 +257,61 @@ approach undersamples everything evenly — and on a game that already renders
 the intended look than smart flat-shaded patches would be. Worth knowing about;
 not obviously worth adopting here.
 
+## Prior art we should have read first
+
+[research.tektite.studio/topic/ray-marching](https://research.tektite.studio/topic/ray-marching/)
+catalogues the field, and two 2025 Computer Graphics Forum papers turn out to
+describe — with proofs and published numbers — most of what this session
+arrived at by measurement.
+
+**[Accelerating Signed Distance Functions](https://onlinelibrary.wiley.com/doi/10.1111/cgf.70258)**
+(Hubert-Brierre et al.) embeds *optimization nodes* directly in the
+construction tree, avoiding external structures like octrees, while preserving
+the Lipschitz/conservative property. Its pieces map almost one-to-one onto
+what was built here:
+
+| Their node | Ours |
+| --- | --- |
+| Proxy nodes | `simplify.ts`, one capsule per limb (−11%) |
+| Continuous level-of-detail nodes | `lod.ts` — but DISCRETE, hence the hysteresis and the visible swap |
+| Normal warping | nothing yet — and this is the important one |
+
+**[Lipschitz Pruning](https://wbrbr.org/publications/LipschitzPruning/)**
+(Barbier et al.) computes local pruned trees equivalent to the full tree within
+a region of space, collapsing binary operators to one operand or whole subtrees
+to constants. Compatible with smooth CSG operators, so it applies to a
+smooth-min fold like ours. Reported speedups "up to two orders of magnitude",
+629x on a scene of 6023 nodes — **and that scaling is the catch for us.** Our
+tree is 23 primitives under 6 clusters, and the per-cluster bounding-sphere
+cull in `mapBody` is already a flat version of the same idea. Expect single
+digits here, not 629x. Code is published.
+
+### The insight that connects the whole session
+
+**Normal warping is the missing piece, and the reason is the Lipschitz bound.**
+
+Silhouette noise is the most expensive term in this shader — it runs inside
+`mapBody`, so ~100 times per pixel — and worse, it BREAKS the Lipschitz
+property. That single fact caused three separate compromises here: `stepMul`
+sat at 0.6 (under-relaxation, ~1.67x the textbook iteration count),
+over-relaxation had to be gated to bodies where LOD had already switched the
+noise off, and `validateBody` needs a check tying noise amplitude to step
+multiplier.
+
+Hubert-Brierre's normal warping adds surface detail as a NORMAL perturbation at
+negligible cost, leaving the field itself conservative. Adopt it and the noise
+leaves the field entirely, which means: the term costing ~8% disappears,
+over-relaxation becomes safe on every body rather than distant ones, and
+`stepMul` can go from 0.6 to 1.0 or beyond. Those compound — plausibly 2x on
+step count — and the polygonisation spec already wanted the same change for its
+own reasons (§5, silhouette noise aliases at 2 cm voxels).
+
+**This should be read before committing to polygonisation.** Proxy and
+continuous-LOD nodes attack the same crowd problem from inside the raymarching
+paradigm, with published results; polygonisation abandons the paradigm. The
+comparison deserves to be made on evidence rather than on the assumption that
+meshing is the only way out.
+
 ## The remaining gap
 
 Quality LOD tops out at −24%. Reaching 16 ms needs **fewer fragment

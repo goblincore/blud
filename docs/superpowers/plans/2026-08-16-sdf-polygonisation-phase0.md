@@ -10,6 +10,32 @@ until it does.
 
 ---
 
+## Read this first — it may change the plan
+
+Two 2025 CGF papers describe, with proofs and published numbers, most of what
+last session arrived at by measurement — and one thing that was missed:
+
+- **[Accelerating Signed Distance Functions](https://onlinelibrary.wiley.com/doi/10.1111/cgf.70258)**
+  (Hubert-Brierre et al.) — optimization nodes inside the construction tree.
+  Proxy nodes ≈ our `simplify.ts`; continuous LOD nodes ≈ our `lod.ts` but
+  without the discrete popping; and **normal warping**, which we have no
+  analogue for.
+- **[Lipschitz Pruning](https://wbrbr.org/publications/LipschitzPruning/)**
+  (Barbier et al.) — local pruned trees, code published. Their headline 629x is
+  on a 6023-node scene; ours is 23 primitives, so expect single digits.
+
+**Why this can change the plan:** proxy and continuous-LOD nodes attack the
+crowd problem from INSIDE raymarching. Polygonisation abandons the paradigm.
+If the paper's approach gets close on a tree like ours, Phase 0 may not be
+worth running at all — and that is a cheaper thing to find out by reading than
+by building a marching-cubes compute pass.
+
+**Do normal warping first regardless.** It is small, it is wanted by this spec
+anyway (§5 — silhouette noise aliases at 2 cm voxels), and it unlocks a chain:
+noise leaves the field, the field becomes Lipschitz again, over-relaxation
+becomes safe on every body instead of only distant ones, and `stepMul` moves
+from 0.6 to 1.0+. Plausibly 2x on step count before any extraction is written.
+
 ## Before writing any code
 
 1. **Cool the machine and re-baseline.** This is not optional bookkeeping: the
