@@ -40,14 +40,17 @@ export function placePrims(
   return prims.map(p => {
     const bone = bones.get(p.bone);
     if (!bone) throw new Error(`prim references unknown bone "${p.bone}"`);
-    const a = lerp(bone.head, bone.tail, p.at);
-    const b = p.capTo === undefined ? a : lerp(bone.head, bone.tail, p.capTo);
+    const o = p.offset ?? ([0, 0, 0] as const);
+    const shift = (v: Vec3): Vec3 => [v[0] + o[0], v[1] + o[1], v[2] + o[2]];
+    const a = shift(lerp(bone.head, bone.tail, p.at));
+    const b = p.capTo === undefined ? a : shift(lerp(bone.head, bone.tail, p.capTo));
     return {
       a, b,
       radius: p.radius,
       scale: p.scale,
       blendK: p.blendK,
       limb: p.limb as LimbId,
+      op: p.op ?? 'add',
     };
   });
 }

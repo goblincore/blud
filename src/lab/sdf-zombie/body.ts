@@ -1,5 +1,6 @@
 // src/lab/sdf-zombie/body.ts
 import type { BodyDef } from './types';
+import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 
 /**
  * The lab zombie — authored as discrete, named, relative, symmetric decisions.
@@ -8,15 +9,24 @@ import type { BodyDef } from './types';
  * Proportions are deliberately wrong in a B-movie way: long arms hanging past
  * the hip line, head pitched forward of the spine, heavy gut.
  */
-export const ZOMBIE: BodyDef = {
+const ZOMBIE_BASE: BodyDef = {
   name: 'zombie',
   root: [0, 0.92, 0], // pelvis height in metres
 
   bones: [
     { name: 'pelvis',   parent: null,     dir: [0, 1, 0],       length: 0.14 },
-    { name: 'spine',    parent: 'pelvis', dir: [0, 1, -0.12],   length: 0.34 },
-    { name: 'neck',     parent: 'spine',  dir: [0, 1, -0.35],   length: 0.16 },
-    { name: 'skull',    parent: 'neck',   dir: [0, 1, -0.18],   length: 0.16 },
+    // The upper body hunches FORWARD, i.e. +z.
+    //
+    // These three used to lean -z while the forearms angle +z
+    // (`foreArm dir: [0.05, -1, 0.1]`) and the feet drift +z. The body faced
+    // one way and the head tipped the other, so in profile the occiput jutted
+    // out where the face should be and the head read as being on backwards —
+    // while the face texture, projected onto +z, landed on the side you never
+    // look at. The comment below always claimed "head pitched forward of the
+    // spine"; the numbers just did the opposite.
+    { name: 'spine',    parent: 'pelvis', dir: [0, 1, 0.12],    length: 0.34 },
+    { name: 'neck',     parent: 'spine',  dir: [0, 1, 0.35],    length: 0.16 },
+    { name: 'skull',    parent: 'neck',   dir: [0, 1, 0.18],    length: 0.16 },
     { name: 'clavicle', parent: 'spine',  dir: [1, 0, 0],       length: 0.20, side: 0,    mirror: true },
     { name: 'upperArm', parent: 'clavicle', dir: [0.30, -1, 0], length: 0.30, side: 0,    mirror: true },
     { name: 'foreArm',  parent: 'upperArm', dir: [0.05, -1, 0.1], length: 0.30, side: 0,  mirror: true },
@@ -25,9 +35,8 @@ export const ZOMBIE: BodyDef = {
   ],
 
   prims: [
-    // Head — skull plus a heavy jaw that juts forward.
-    { bone: 'skull', at: 0.45, radius: 0.115, scale: [1, 1.08, 1.05], blendK: 0.0125, limb: 'head' },
-    { bone: 'skull', at: 0.15, radius: 0.075, scale: [0.9, 0.7, 1.25], blendK: 0.0125, limb: 'head' },
+    // Head — just the neck here. The skull itself is a single parameterised
+    // ellipsoid emitted by face.ts, so it can be tuned live in the panel.
     { bone: 'neck',  at: 0.05, capTo: 1.0, radius: 0.045, scale: [1, 1, 1], blendK: 0.007, limb: 'head' },
 
     // Torso — ribcage tapering into a sagging gut.
@@ -48,3 +57,17 @@ export const ZOMBIE: BodyDef = {
     { bone: 'shin',  at: 1.00, radius: 0.070, scale: [0.85, 0.6, 1.5], blendK: 0.0125, limb: 'leg', mirror: true },
   ],
 };
+
+/**
+ * The zombie with a face attached.
+ *
+ * Face primitives are generated rather than authored inline so the tuning
+ * panel can drive them live; bake a tuned FaceParams back into DEFAULT_FACE
+ * in face.ts once it lands.
+ */
+export function makeZombie(face: FaceParams = DEFAULT_FACE): BodyDef {
+  return { ...ZOMBIE_BASE, prims: [...ZOMBIE_BASE.prims, ...facePrims(face)] };
+}
+
+/** The default-faced zombie. Kept as a const for the existing test importers. */
+export const ZOMBIE: BodyDef = makeZombie();

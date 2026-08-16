@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/panel.ts
 import type { BodyOverride } from './build-body';
 import type { FleshMaterial } from './material';
+import type { FaceParams } from './face';
 
 export const STORAGE_KEY = 'blud.sdf-lab.override.v1';
 
@@ -100,4 +101,22 @@ export const MATERIAL_SLIDERS: { key: keyof FleshMaterial; min: number; max: num
   { key: 'surfaceNoiseAmp', min: 0, max: 0.6 },
   { key: 'silhouetteNoiseAmp', min: 0, max: 0.2 },
   { key: 'wetness', min: 0, max: 2 },
+];
+
+/** Face sliders, mirroring MATERIAL_SLIDERS. Ranges are authoring judgement. */
+export const FACE_SLIDERS: { key: keyof FaceParams; min: number; max: number }[] = [
+  { key: 'headRadius', min: 0.07, max: 0.20 },
+  { key: 'headWidth', min: 0.6, max: 1.6 },
+  { key: 'headHeight', min: 0.6, max: 2.0 },
+  { key: 'headDepth', min: 0.6, max: 1.8 },
+  { key: 'jawWidth', min: 0.4, max: 1.3 },
+  { key: 'jawHeight', min: 0.4, max: 1.4 },
+  { key: 'jawDrop', min: 0, max: 0.16 },
+  { key: 'jawJut', min: -0.03, max: 0.06 },
+  { key: 'noseLength', min: 0, max: 0.05 },
+  { key: 'noseWidth', min: 0.3, max: 1.2 },
+  { key: 'noseDrop', min: -0.02, max: 0.06 },
+  { key: 'browHeavy', min: 0, max: 0.035 },
+  { key: 'browRise', min: 0, max: 0.07 },
+  { key: 'headBlend', min: 0, max: 0.02 },
 ];

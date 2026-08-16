@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Blud — SDF zombie lab</title>
+<title>Blud — SDF zombie lab (WebGPU)</title>
 <style>
   body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
   #app { width: 100vw; height: 100vh; }
@@ -30,8 +30,10 @@
     <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom &nbsp;·&nbsp; <b>click</b> shoot
     &nbsp;(<b>shift</b> blast, <b>alt</b> burn)<br />
     <b>1</b> head &nbsp;<b>3</b>/<b>4</b> arm L/R &nbsp;<b>5</b>/<b>6</b> leg L/R sever
-    &nbsp;·&nbsp; <b>G</b> gib everything
+    &nbsp;·&nbsp; <b>G</b> gib everything<br />
+    <b>[</b> / <b>]</b> remove/add a crowd body
+    &nbsp;·&nbsp; <b>B</b> benchmark (needs a visible window)
   </div>
-  <script type="module" src="/src/lab/sdf-zombie/lab-main.ts"></script>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/lab-main.ts"></script>
 </body>
 </html>

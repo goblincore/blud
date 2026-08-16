@@ -1,8 +1,20 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, MAX_PRIMS } from './validate';
+import { validateBody, sdBody, MAX_PRIMS, MAX_CLUSTERS } from './validate';
 import { assignClusters } from './clusters';
-import type { LimbId, Primitive } from './types';
+import { FRAG } from './march.glsl';
+import type { LimbId, Primitive, Vec3 } from './types';
+
+describe('shader caps', () => {
+  it('bakes the same ceilings into the GLSL that the CPU side enforces', () => {
+    expect(FRAG).toContain(`#define MAX_PRIMS ${MAX_PRIMS}`);
+    expect(FRAG).toContain(`#define MAX_CLUSTERS ${MAX_CLUSTERS}`);
+  });
+
+  it('has room for the 21-primitive body plus a face', () => {
+    expect(MAX_PRIMS).toBeGreaterThanOrEqual(40);
+  });
+});
 
 const prim = (limb: LimbId, a: [number, number, number], radius = 0.1, blendK = 0.06):
   Omit<Primitive, 'cluster'> => ({ a, b: a, radius, scale: [1, 1, 1], blendK, limb });
@@ -59,5 +71,58 @@ describe('validateBody', () => {
     body.prims[l.start] = tmp;
     const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
     expect(errs.join(' ')).toMatch(/contiguous|fold order/i);
+  });
+});
+
+describe('carving', () => {
+  const ball: Primitive = {
+    a: [0, 0, 0], b: [0, 0, 0], radius: 0.2,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'head', cluster: 0,
+  };
+  const carve: Primitive = { ...ball, a: [0.2, 0, 0], b: [0.2, 0, 0], radius: 0.08, op: 'sub' };
+  const clusters = (count: number, alive = true) =>
+    [{ id: 0, limb: 'head' as LimbId, start: 0, count, center: [0, 0, 0] as Vec3, radius: 0.2, alive }];
+
+  const solidBody = { prims: [ball], clusters: clusters(1) };
+  const carvedBody = { prims: [ball, carve], clusters: clusters(2) };
+
+  it('pushes the surface inward where a carve overlaps it', () => {
+    const p: Vec3 = [0.17, 0, 0]; // just inside the sphere, under the carve
+    expect(sdBody(p, solidBody)).toBeLessThan(0);
+    expect(sdBody(p, carvedBody)).toBeGreaterThan(0);
+  });
+
+  it('leaves the field untouched far from any carve', () => {
+    const far: Vec3 = [-0.19, 0, 0];
+    expect(sdBody(far, carvedBody)).toBeCloseTo(sdBody(far, solidBody), 6);
+  });
+
+  it('drops a cluster carves and all when it is severed', () => {
+    const dead = { prims: [ball, carve], clusters: clusters(2, false) };
+    expect(sdBody([0, 0, 0], dead)).toBeGreaterThan(1e8);
+  });
+});
+
+describe('shader/CPU field mirror', () => {
+  it('carves in the shader too, behind a count guard', () => {
+    expect(FRAG).toContain('applyCarves');
+    expect(FRAG).toContain('uCarveCount');
+  });
+});
+
+describe('validateBody with carves', () => {
+  it('does not report a carve as escaping its bounding sphere', () => {
+    const solid: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.2,
+      scale: [1, 1, 1], blendK: 0.01, limb: 'head', cluster: 0,
+    };
+    const errs = validateBody({
+      prims: [solid, { ...solid, a: [0.2, 0, 0], b: [0.2, 0, 0], radius: 0.08, op: 'sub' }],
+      clusters: [{
+        id: 0, limb: 'head', start: 0, count: 2,
+        center: [0, 0, 0], radius: 0.2, alive: true,
+      }],
+    }, { silhouetteNoiseAmp: 0.012, stepMultiplier: 0.6 });
+    expect(errs.filter(e => /bounding sphere/.test(e))).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import { expandMirror } from './mirror';
 import { placePrims, resolveBones } from './resolve';
 import { assignClusters } from './clusters';
 import { validateBody, type ValidateOpts } from './validate';
+import type { FaceParams } from './face';
 
 export interface BuildOpts extends ValidateOpts {}
 
@@ -19,6 +20,12 @@ export const DEFAULT_BUILD_OPTS: BuildOpts = {
 export interface BodyOverride {
   primRadius?: Record<number, number>;
   primBlendK?: Record<number, number>;
+  /**
+   * Live face tuning. Merged over DEFAULT_FACE by the caller and passed to
+   * `makeZombie`, not applied by buildBody — face params change which
+   * primitives exist, so they must act before the body is built.
+   */
+  faceParams?: Partial<FaceParams>;
 }
 
 export interface BuildResult extends BuiltBody {

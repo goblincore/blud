@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/lab-main.ts
 import * as THREE from 'three';
 import { createRenderer } from '../../engine/renderer';
-import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
-import { ZOMBIE } from './body';
+import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
+import { makeZombie } from './body';
+import { DEFAULT_FACE, type FaceParams } from './face';
 import { createZombieView } from './zombie';
 import {
   FLESH_PRESETS, LIGHT_PRESETS,
@@ -21,8 +22,11 @@ import { chunkExtent, createChunkView, type ChunkView } from './zombie';
 import type { LimbId, Vec3 } from './types';
 import {
   addButton, addSection, addSelect, addSlider, clearOverride,
-  loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS,
+  loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
 } from './panel';
+import { createPostFxComposer } from '../../vfx/post-fx/composer';
+import { PostFxBus } from '../../vfx/post-fx/post-fx-bus';
+import { DEFAULT_POST_FX } from '../../vfx/post-fx/config';
 
 const mount = document.getElementById('app');
 if (!mount) throw new Error('#app not found');
@@ -46,8 +50,47 @@ const refCube = new THREE.Mesh(
 refCube.position.set(0.6, 0.2, 0.3);
 scene.add(refCube);
 
+// ---------------------------------------------------------------------------
+// Post-FX. The lab ran WITHOUT this until 2026-08-15: createRenderer exposes
+// setDrawFn to swap in an EffectComposer and only src/main.ts ever called it,
+// so the lab drew straight to the screen with no Bayer dither, no BLOOD.PAL
+// snap, no scanlines. The lab spec promised the opposite and warned that a
+// raymarcher judged in a clean viewport would lie about how it looks in Blud.
+// It did — every look judgment recorded before this date was made through the
+// wrong chain.
+//
+// `postCfg` is re-read by the composer every frame, so live mutation works.
+// ---------------------------------------------------------------------------
+const postCfg = structuredClone(DEFAULT_POST_FX);
+const postBus = new PostFxBus(postCfg.ca.baseline);
+const composer = createPostFxComposer(renderer, scene, camera, postBus, postCfg);
+// Defaults OFF. The chain is correct, but every flesh preset in material.ts
+// was hand-tuned to compensate for the missing gamma encode described above,
+// so through the correct pipeline they read far too bright. Until the presets
+// are retuned, judging surface work with this on would compare new geometry
+// against a knowingly-wrong material. Toggle it in the panel to check the
+// palette look.
+let postEnabled = false;
+
+function installDrawFn() {
+  handle.setDrawFn(
+    postEnabled
+      ? () => composer.render(0, performance.now() / 1000)
+      : () => renderer.render(scene, camera),
+  );
+}
+installDrawFn();
+
+// createRenderer's own resize handler knows nothing about the composer.
+function sizeComposer() {
+  composer.setSize(renderer.domElement.width, renderer.domElement.height);
+}
+sizeComposer();
+window.addEventListener('resize', sizeComposer);
+
 let override = loadOverride();
-const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, override);
+let face: FaceParams = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
+const body = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
 const errorsEl = document.getElementById('errors');
 if (errorsEl) errorsEl.textContent = body.errors.join('\n');
 
@@ -59,6 +102,117 @@ view.applyMaterial(flesh, LIGHT_PRESETS[light]);
 scene.add(view.object);
 // Chunks clone this at sever time so they shade like the body did when cut.
 const viewMaterialTemplate = view.material;
+
+// ---------------------------------------------------------------------------
+// Face texture, projected flat onto the front of the head.
+//
+// Two sources, switchable in the panel:
+//
+// - `smiley` is a DIAGNOSTIC. Flat yellow, a red border marking the edge of
+//   the projected rect, and a blue mark in the top-left corner. It has no
+//   baked lighting, no transparent background and no crop ambiguity, so if it
+//   lands wrong you can see exactly HOW — mirrored, rotated, offset, or
+//   smeared round the skull. Debugging projection with the Blood sprite means
+//   fighting four confounds at once.
+// - `blood-zombie` is the real candidate: tile 1200, the front-facing standing
+//   axe zombie (77x116), cropped to its head. DEV PLACEHOLDER — extracted
+//   Blood art, never ships. Used because it is already quantized to BLOOD.PAL.
+// ---------------------------------------------------------------------------
+type FaceTexName = 'zombie-flat' | 'smiley' | 'blood-zombie';
+
+/**
+ * url, plus the crop rect in TOP-LEFT pixel coordinates: [x, y, w, h, sheetW,
+ * sheetH]. Pixels rather than uv because that is how you read them off an
+ * image, and top-left because that is how images are indexed everywhere except
+ * OpenGL. The conversion happens once, below.
+ */
+const FACE_TEXTURES: Record<FaceTexName, { url: string; rect: [number, number, number, number, number, number]; mean: number }> = {
+  // ORIGINAL art, so unlike the extracted sprite this one can actually ship.
+  //
+  // Drawn as a LUMINANCE MASK on neutral mid-grey rather than as a picture:
+  // because the texture is applied as a multiplier, mid-grey divided by the
+  // mean comes out at 1.0 and leaves the flesh untouched, so only the features
+  // act — sockets and mouth darken, eyes and teeth brighten. Flat fills and no
+  // baked shading, which is the property that made the smiley legible and the
+  // Blood sprite muddy.
+    // mean is MEASURED off the file, not guessed — it sets the level the
+  // multiplier divides out, so a stale value shifts the whole head's
+  // brightness. Re-measure after editing the art.
+  'zombie-flat': { url: '/assets/lab/zombie-face.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.406 },
+  smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.66 },
+  'blood-zombie': {
+    url: '/assets/blood-tiles/1200.png',
+    // Just the FACE of the standing axe zombie, off a 77x116 sheet. The head
+    // is only ~16px across on this sprite — the eyes are the pale pixels at
+    // y 2-4 — so an earlier 34x32 rect was dragging in the whole torso and
+    // painting the sprite's own silhouette across the middle of the face.
+    rect: [32, 0, 18, 16, 77, 116],
+    // Measured off the crop: 84/255. Divides out the sprite's baked
+    // lighting so it modulates the flesh rather than blacking it out.
+    mean: 0.33,
+  },
+};
+
+function loadFaceTexture(name: FaceTexName) {
+  const def = FACE_TEXTURES[name];
+  const tex = new THREE.TextureLoader().load(def.url);
+  tex.magFilter = THREE.NearestFilter;   // chunky texels, not a blurry smear
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  // Keep three's default flipY (true), so v=0 is the PNG's TOP row and the
+  // pixel rects above convert with no arithmetic. Setting flipY=false to make
+  // the zombie crop work was what left the smiley diagnostic upside down —
+  // its blue top-left marker came out bottom-left.
+  tex.flipY = true;
+  const [x, y, w, h, sheetW, sheetH] = def.rect;
+  const u = view.material.uniforms;
+  (u.uFaceTex!.value as THREE.Texture | null)?.dispose();
+  u.uFaceTex!.value = tex;
+  (u.uFaceAtlas!.value as THREE.Vector4).set(w / sheetW, h / sheetH, x / sheetW, y / sheetH);
+  u.uFaceMean!.value = def.mean;
+}
+
+let faceTexName: FaceTexName = 'zombie-flat';
+loadFaceTexture(faceTexName);
+view.material.uniforms.uFaceEnabled!.value = 1;
+// Face projection, tuned by hand in the panel and baked.
+//
+// uv = hs * scale + centre, and hs is normalised PER AXIS by the skull's own
+// semi-axes, so the head surface sits at |hs| ~= 1 in every direction and these
+// numbers no longer shift when the head is reproportioned.
+(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.45, 0.58, 0.5, 0.56);
+view.material.uniforms.uFaceStrength!.value = 1.0;
+
+/**
+ * The skull's centre and its three SEMI-AXES: the fattest additive primitive in
+ * the head cluster, measured per axis.
+ *
+ * Not the head cluster's bounding sphere — that also encloses the neck capsule,
+ * so it is far larger than the head and normalising the face projection by it
+ * spilled the texture over the neck and shoulders.
+ *
+ * And per-axis rather than one radius, because the head is an ellipsoid: with a
+ * single radius the surface sits at |hs| = maxScale/thisAxis, so whichever axis
+ * was largest landed on the head mask's cutoff and vanished. Raising headDepth
+ * past headHeight made the whole face disappear.
+ */
+function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
+  const head = b.clusters.find(c => c.limb === 'head');
+  if (!head) return null;
+  let best: Vec3 | null = null;
+  let bestAxes: Vec3 | null = null;
+  let bestR = -Infinity;
+  for (const p of b.prims.slice(head.start, head.start + head.count)) {
+    if (p.op === 'sub') continue;
+    const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    if (r > bestR) {
+      bestR = r;
+      best = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      bestAxes = [p.radius * p.scale[0], p.radius * p.scale[1], p.radius * p.scale[2]];
+    }
+  }
+  return best === null || bestAxes === null ? null : { centre: best, axes: bestAxes };
+}
 
 /** The live body — replaced on sever and on any override edit. */
 let current = body;
@@ -97,7 +251,10 @@ function refreshWounds() {
 }
 
 // ---------------------------------------------------------------------------
-// Orbit camera. RIGHT-drag rotates so left-click stays free for shooting.
+// Orbit camera. EITHER button drags to orbit; a left press that does not travel
+// far enough to count as a drag fires a shot instead (see the pointerup handler
+// under "Shooting"). Binding orbit to right-drag alone left the lab effectively
+// undriveable on a trackpad, where right-drag is a two-finger contortion.
 // ---------------------------------------------------------------------------
 let camYaw = 0.35;
 let camPitch = 0.12;
@@ -106,6 +263,9 @@ const camTarget = new THREE.Vector3(0, 1.05, 0);
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
+/** Cursor travel since pointerdown, in px. Under the threshold, it was a click. */
+let dragTravel = 0;
+const DRAG_SLOP = 5;
 // Slow auto-spin until the first interaction, so the silhouette reads without
 // the viewer having to discover the controls.
 let autoSpin = true;
@@ -114,21 +274,23 @@ const canvas = renderer.domElement;
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('pointerdown', (e) => {
   autoSpin = false;
-  if (e.button !== 2) return;
+  if (e.button !== 0 && e.button !== 2) return;
   dragging = true;
+  dragTravel = 0;
   lastX = e.clientX;
   lastY = e.clientY;
   canvas.setPointerCapture(e.pointerId);
 });
-canvas.addEventListener('pointerup', (e) => {
-  if (!dragging) return;
-  dragging = false;
-  canvas.releasePointerCapture(e.pointerId);
-});
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
-  camYaw -= (e.clientX - lastX) * 0.008;
-  camPitch = Math.max(-0.5, Math.min(1.3, camPitch + (e.clientY - lastY) * 0.006));
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  dragTravel += Math.hypot(dx, dy);
+  // Below the slop threshold the press is still a candidate shot, so don't
+  // swing the camera out from under the shooter's aim.
+  if (dragTravel < DRAG_SLOP) return;
+  camYaw -= dx * 0.008;
+  camPitch = Math.max(-0.5, Math.min(1.3, camPitch + dy * 0.006));
   lastX = e.clientX;
   lastY = e.clientY;
 });
@@ -161,6 +323,11 @@ handle.setRenderCallback((dt) => {
   };
   const posed = applyRig(current, bound);
   view.update(posed);
+  // Re-derive the skull's sphere from the POSED primitives so the face
+  // projection tracks the head through the jiggle.
+  view.setTime(performance.now() / 1000);
+  const skull = headShape(posed);
+  if (skull) view.setHeadShape(skull.centre, skull.axes);
   view.setWounds(
     wounds.map(w => woundWorldPos(posed.prims, w)),
     wounds.map(w => w.radius),
@@ -180,9 +347,17 @@ handle.setRenderCallback((dt) => {
 
 // ---------------------------------------------------------------------------
 // Shooting — left button only. Shift = blast, Alt = burn.
+//
+// Fires on pointerUP rather than down, because the same button also orbits:
+// a press that travelled further than DRAG_SLOP was a camera drag and must not
+// also put a hole in the zombie.
 // ---------------------------------------------------------------------------
-canvas.addEventListener('pointerdown', (ev: PointerEvent) => {
-  if (ev.button !== 0) return;
+canvas.addEventListener('pointerup', (ev: PointerEvent) => {
+  if (dragging) {
+    dragging = false;
+    canvas.releasePointerCapture(ev.pointerId);
+  }
+  if (ev.button !== 0 || dragTravel >= DRAG_SLOP) return;
   const rect = canvas.getBoundingClientRect();
   const ndc = new THREE.Vector2(
     ((ev.clientX - rect.left) / rect.width) * 2 - 1,
@@ -307,8 +482,9 @@ function reapply() {
 }
 
 function rebuildBody() {
+  override = { ...override, faceParams: face };
   saveOverride(override);
-  current = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS, override);
+  current = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
   if (errorsEl) errorsEl.textContent = current.errors.join('\n');
   view.update(current);
   refreshWounds();
@@ -348,6 +524,104 @@ addSlider(bodyBox, {
   },
 });
 
+// Face. Sliders regenerate the face primitives and rebuild the body, so a
+// param change alters which primitives exist rather than just their values.
+const faceBox = addSection(panelEl, 'face');
+for (const s of FACE_SLIDERS)
+  addSlider(faceBox, {
+    label: s.key, min: s.min, max: s.max, step: 0.001,
+    get: () => face[s.key],
+    set: (v) => { (face[s.key] as number) = v; rebuildBody(); },
+  });
+
+/** Locked three-quarter close-up on the skull, so face work needs no orbiting. */
+function focusHead() {
+  const skull = current.bones.get('skull');
+  autoSpin = false;
+  camTarget.set(0, skull ? (skull.head[1] + skull.tail[1]) / 2 : 1.55, 0);
+  camYaw = 0.62;
+  camPitch = 0.06;
+  camDist = 0.52;
+}
+
+function focusBody() {
+  autoSpin = false;
+  camTarget.set(0, 1.05, 0);
+  camYaw = 0.35;
+  camPitch = 0.12;
+  camDist = 2.4;
+}
+
+// Face texture. `smiley` first — a diagnostic that makes misregistration
+// obvious. The on/off toggle lives here rather than only on __sdfLab: it was
+// switched off from the console once and left that way, which made texStrength
+// look like it had no effect at all.
+addSelect(faceBox, 'texture', Object.keys(FACE_TEXTURES), faceTexName, (v) => {
+  faceTexName = v as FaceTexName;
+  loadFaceTexture(faceTexName);
+});
+const texBtn = addButton(faceBox, 'face tex: on', () => {
+  const u = view.material.uniforms.uFaceEnabled!;
+  u.value = u.value > 0.5 ? 0 : 1;
+  texBtn.textContent = `face tex: ${u.value > 0.5 ? 'on' : 'off'}`;
+});
+
+// Alignment. The projection is planar in head space, so these four numbers are
+// how the texture gets registered onto the skull.
+const faceUniform = (name: string) => view.material.uniforms[name] as { value: number };
+const faceProj = () => view.material.uniforms.uFaceProj!.value as THREE.Vector4;
+addSlider(faceBox, {
+  label: 'eyeGlow', min: 0, max: 6, step: 0.05,
+  get: () => faceUniform('uFaceGlowStrength').value,
+  set: (v) => { faceUniform('uFaceGlowStrength').value = v; },
+});
+addSlider(faceBox, {
+  // Which pixels count as eyes. Lower catches more of the sheet, so teeth and
+  // highlights start glowing too.
+  label: 'eyeGlowCut', min: 0.3, max: 1, step: 0.01,
+  get: () => faceUniform('uFaceGlowThreshold').value,
+  set: (v) => { faceUniform('uFaceGlowThreshold').value = v; },
+});
+addSlider(faceBox, {
+  label: 'texRelief', min: 0, max: 5, step: 0.05,
+  get: () => faceUniform('uFaceRelief').value,
+  set: (v) => { faceUniform('uFaceRelief').value = v; },
+});
+addSlider(faceBox, {
+  label: 'texStrength', min: 0, max: 1, step: 0.01,
+  get: () => faceUniform('uFaceStrength').value,
+  set: (v) => { faceUniform('uFaceStrength').value = v; },
+});
+addSlider(faceBox, {
+  label: 'texScaleX', min: 0.4, max: 2.5, step: 0.01,
+  get: () => faceProj().x, set: (v) => { faceProj().x = v; },
+});
+addSlider(faceBox, {
+  label: 'texScaleY', min: 0.4, max: 2.5, step: 0.01,
+  get: () => faceProj().y, set: (v) => { faceProj().y = v; },
+});
+addSlider(faceBox, {
+  label: 'texCentreY', min: 0.2, max: 0.9, step: 0.01,
+  get: () => faceProj().w, set: (v) => { faceProj().w = v; },
+});
+// Spherical spreads longitude evenly round the skull, so it needs a wider
+// scale than planar to put the face in the same place — swap the scales with
+// the mode rather than making you retune by hand.
+const projBtn = addButton(faceBox, 'proj: planar', () => {
+  const m = faceUniform('uFaceProjMode');
+  m.value = m.value > 0.5 ? 0 : 1;
+  const spherical = m.value > 0.5;
+  faceProj().set(spherical ? 1.35 : 0.45, spherical ? 1.05 : 0.58, 0.5, spherical ? 0.5 : 0.56);
+  projBtn.textContent = `proj: ${spherical ? 'spherical' : 'planar'}`;
+});
+addButton(faceBox, 'flip facing', () => {
+  const u = faceUniform('uFaceForward');
+  u.value = -u.value;
+});
+
+addButton(faceBox, 'focus head', focusHead);
+addButton(faceBox, 'focus body', focusBody);
+
 // Crater shape. Kept out of FleshMaterial because these describe damage
 // geometry, not the surface — they change the field, not the shading.
 const dmgBox = addSection(panelEl, 'damage');
@@ -379,6 +653,13 @@ addButton(actionBox, 'reset overrides', () => {
   override = {};
   rebuildBody();
 });
+// Without a bypass, debugging a surface bug means guessing whether an artifact
+// came from the flesh shader or from the palette snap on top of it.
+const postBtn = addButton(actionBox, `post-fx: ${postEnabled ? 'on' : 'off'}`, () => {
+  postEnabled = !postEnabled;
+  installDrawFn();
+  postBtn.textContent = `post-fx: ${postEnabled ? 'on' : 'off'}`;
+});
 
 reapply();
 
@@ -387,6 +668,13 @@ reapply();
 (window as unknown as { __sdfLab: unknown }).__sdfLab = {
   get wounds() { return wounds; },
   get current() { return current; },
+  /** The body's ShaderMaterial — lets uniforms be tuned live from the console. */
+  get material() { return view.material; },
+  /** Live post-fx config — mutate to isolate which pass causes an artifact. */
+  postCfg,
+  focusHead,
+  focusBody,
+  setPostEnabled(on: boolean) { postEnabled = on; installDrawFn(); },
   setCam(yaw: number, pitch: number, dist: number) {
     autoSpin = false;
     camYaw = yaw;

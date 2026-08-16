@@ -34,6 +34,24 @@ export interface PrimDef {
   blendK: number;
   limb: LimbBase;
   mirror?: boolean;
+  /**
+   * 'sub' carves this primitive out of the assembled field instead of adding
+   * to it. Carves apply AFTER the complete additive fold — see applyCarves in
+   * march.glsl.ts for why not per-cluster.
+   */
+  op?: 'add' | 'sub';
+  /**
+   * Displacement from the bone-relative placement, in world axes. The body is
+   * authored in a rest pose with no rotations, so world and bone axes coincide
+   * at authoring time.
+   */
+  offset?: Vec3;
+  /**
+   * Emits two copies with `offset.x` negated. For bilateral features on a bone
+   * that is NOT itself mirrored — eye sockets on the skull. Distinct from
+   * `mirror`, which requires a mirrored bone and throws without one.
+   */
+  mirrorOffset?: boolean;
 }
 
 export interface BodyDef {
@@ -53,6 +71,11 @@ export interface Primitive {
   blendK: number;
   limb: LimbId;
   cluster: number;
+  /**
+   * Absent means 'add'. Optional rather than required so the many existing
+   * test fixtures that build Primitive literals keep compiling.
+   */
+  op?: 'add' | 'sub';
 }
 
 export interface ClusterInfo {

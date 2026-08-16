@@ -2,7 +2,7 @@
 import type { BodyDef, BoneDef, LimbBase, LimbId, PrimDef } from './types';
 
 /** A prim after mirror expansion: bone name is concrete, limb is a concrete cluster. */
-export interface ExpandedPrim extends Omit<PrimDef, 'limb' | 'mirror'> {
+export interface ExpandedPrim extends Omit<PrimDef, 'limb' | 'mirror' | 'mirrorOffset'> {
   limb: LimbId;
 }
 
@@ -65,7 +65,22 @@ export function expandMirror(def: BodyDef): ExpandedBody {
 
   const prims: ExpandedPrim[] = [];
   for (const p of def.prims) {
-    const { mirror, limb, ...rest } = p;
+    const { mirror, mirrorOffset, limb, ...rest } = p;
+
+    if (mirror && mirrorOffset)
+      throw new Error(`prim on bone "${p.bone}" sets both mirror and mirrorOffset`);
+
+    // Bilateral by OFFSET: one bone, two prims either side of its axis. This is
+    // how a face gets two eye sockets — `skull` is not a mirrored bone, so
+    // `mirror: true` would throw on it.
+    if (mirrorOffset) {
+      const o = rest.offset ?? ([0, 0, 0] as const);
+      const side = limbFor(limb, null);
+      prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side });
+      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], limb: side });
+      continue;
+    }
+
     if (!mirror) { prims.push({ ...rest, limb: limbFor(limb, null) }); continue; }
     if (!mirroredBoneNames.has(p.bone))
       throw new Error(`mirrored prim references non-mirrored bone "${p.bone}"`);

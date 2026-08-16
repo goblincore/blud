@@ -31,3 +31,9 @@ describe('override persistence', () => {
     expect(text).toContain('\n'); // pretty-printed for pasting into body.ts
   });
 });
+
+it('round-trips faceParams through storage', () => {
+  saveOverride({ faceParams: { headHeight: 1.44 } });
+  expect(loadOverride().faceParams?.headHeight).toBeCloseTo(1.44, 6);
+  clearOverride();
+});

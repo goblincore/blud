@@ -6,7 +6,8 @@ import type { Chunk } from './gib-chunks';
 import { FRAG, VERT } from './march.glsl';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
 import type { Primitive, Vec3 } from './types';
-import { len, sub } from './vec';
+import { sub } from './vec';
+import { chunkExtent } from './extent';
 import { MAX_WOUNDS } from './damage';
 
 export interface ZombieView {
@@ -16,6 +17,10 @@ export interface ZombieView {
   update(body: BuildResult): void;
   /** Uploads wounds already transformed to world space by the caller. */
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[]): void;
+  /** The skull's centre and semi-axes, which the face projection normalises by. */
+  setHeadShape(centre: Vec3, axes: Vec3): void;
+  /** Drives the eye-glow flicker. Seconds. */
+  setTime(seconds: number): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
 }
 
@@ -57,6 +62,7 @@ export function createZombieView(body: BuildResult): ZombieView {
       uClusterBounds: { value: packed.clusterBounds },
       uClusterRange: { value: packed.clusterRange },
       uPrimCount: { value: packed.primCount },
+      uCarveCount: { value: packed.carveCount },
       uClusterCount: { value: packed.clusterCount },
       uMaxBlendK: { value: packed.maxBlendK },
       uSteps: { value: 96 },
@@ -82,6 +88,28 @@ export function createZombieView(body: BuildResult): ZombieView {
       uRimWidth: { value: 0.42 },
       uDeepColor: { value: new THREE.Color(0x8c1420) },
       uCharColor: { value: new THREE.Color(0x1a1214) },
+      uFaceTex: { value: null as THREE.Texture | null },
+      uFaceEnabled: { value: 0 },
+      uFaceStrength: { value: 0.85 },
+      uFaceForward: { value: 1 },
+      uFaceProj: { value: new THREE.Vector4(1.15, 1.15, 0.5, 0.52) },
+      uFaceAtlas: { value: new THREE.Vector4(1, 1, 0, 0) },
+      uHeadCentre: { value: new THREE.Vector3(0, 1.6, 0) },
+      uHeadAxes: { value: new THREE.Vector3(0.12, 0.13, 0.12) },
+      uFaceMean: { value: 0.5 },
+      uFaceRelief: { value: 1.4 },
+      uFaceProjMode: { value: 0 },
+      // 0.88 rather than 0.72 — see the measurement note in
+      // webgpu/zombie-gpu.ts. At 0.72 the mask covers most of the upper face,
+      // which only passed unnoticed while the glow was additive.
+      uFaceGlowThreshold: { value: 0.88 },
+      uFaceGlowStrength: { value: 1.6 },
+      // Bright red, and deliberately over 1.0 on the red channel: an emissive
+      // that only reaches 1.0 cannot read as a LIGHT, and a value above it is
+      // also what a bloom pass would key on if one is added later.
+      uFaceGlowColor: { value: new THREE.Color(1.9, 0.18, 0.10) },
+      uFaceGlowFlicker: { value: 0.45 },
+      uTime: { value: 0 },
     },
   });
 
@@ -104,6 +132,7 @@ export function createZombieView(body: BuildResult): ZombieView {
       (u.uClusterBounds!.value as Float32Array).set(p.clusterBounds);
       (u.uClusterRange!.value as Float32Array).set(p.clusterRange);
       u.uPrimCount!.value = p.primCount;
+      u.uCarveCount!.value = p.carveCount;
       u.uClusterCount!.value = p.clusterCount;
       u.uMaxBlendK!.value = p.maxBlendK;
       const fit = fitProxy(p, next);
@@ -119,6 +148,11 @@ export function createZombieView(body: BuildResult): ZombieView {
         m.set([types[i]!, ages[i]!, 0, 0], i * 4);
       }
       material.uniforms.uWoundCount!.value = n;
+    },
+    setTime(t) { material.uniforms.uTime!.value = t; },
+    setHeadShape(centre, axes) {
+      (material.uniforms.uHeadCentre!.value as THREE.Vector3).set(...centre);
+      (material.uniforms.uHeadAxes!.value as THREE.Vector3).set(...axes);
     },
     applyMaterial(m, light) {
       const u = material.uniforms;
@@ -146,15 +180,10 @@ export interface ChunkView {
   dispose(): void;
 }
 
-/** Furthest reach of a set of primitives from `origin` (same recipe as clusters.ts). */
-export function chunkExtent(prims: Primitive[], origin: Vec3): number {
-  let r = 0;
-  for (const p of prims) {
-    const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    r = Math.max(r, len(sub(p.a, origin)) + p.radius * ms, len(sub(p.b, origin)) + p.radius * ms);
-  }
-  return r;
-}
+// Moved to extent.ts so the WebGPU path can share it without importing this
+// module — which imports `three` and would pull a second copy of the library
+// into the WebGPU bundle. Re-exported for the existing importers.
+export { chunkExtent } from './extent';
 
 /**
  * A detached blob, raymarched in its own small proxy box. Reuses the body
@@ -214,10 +243,22 @@ export function createChunkView(
   material.uniforms.uClusterBounds = { value: packed.clusterBounds };
   material.uniforms.uClusterRange = { value: packed.clusterRange };
   material.uniforms.uPrimCount = { value: packed.primCount };
+  // A severed head keeps its face: the cluster slice carries its carves, and
+  // apply() below rewrites only xyz per endpoint, leaving the packed sign in .w.
+  material.uniforms.uCarveCount = { value: packed.carveCount };
   material.uniforms.uClusterCount = { value: 1 };
   material.uniforms.uMaxBlendK = { value: packed.maxBlendK };
   material.uniforms.uWoundCount = { value: 0 }; // set by apply() when torn
   material.uniforms.uSteps = { value: 48 }; // chunks are small; fewer steps
+  // Only a severed HEAD carries the face. Without this the clone would project
+  // a face onto a flying arm, since every chunk's own cluster 0 is itself.
+  material.uniforms.uFaceEnabled = { value: chunk.limb === 'head' ? 1 : 0 };
+  // A severed head keeps its face: give the clone its own head sphere, centred
+  // on the chunk, since the template's points at the body's original skull.
+  material.uniforms.uHeadCentre = {
+    value: new THREE.Vector3(chunk.pos[0], chunk.pos[1], chunk.pos[2]),
+  };
+  material.uniforms.uHeadAxes = { value: new THREE.Vector3(extent, extent, extent) };
 
   const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
@@ -239,7 +280,9 @@ export function createChunkView(
         const rz = -pt[0] * sin + pt[2] * cos;
         arr.set([c.pos[0] + rx * sx, c.pos[1] + pt[1] * sy, c.pos[2] + rz * sz], o);
       }
-      packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz, 0], o);
+      // Preserve the carve flag in .w — a severed head keeps its face.
+      packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
+        p.op === 'sub' ? 1 : 0], o);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
 

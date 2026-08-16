@@ -67,8 +67,132 @@ Key reference docs (open these before touching their area):
     [plan](docs/superpowers/plans/2026-08-15-sdf-zombie-lab.md) ·
     [findings](docs/dev-notes/2026-08-15-sdf-zombie-lab-findings.md)
   - Open follow-ups: align gibbing with Blud's own physics/gib logic + flesh
-    trails; face and character design (carve primitives); skeleton as a second
-    SDF field; rest-space triplanar (specced but never implemented).
+    trails; skeleton as a second SDF field; rest-space triplanar (specced but
+    never implemented).
+- `X1.1` [x] **Face + PSX surface** — carving, face, post-fx.
+  [spec](docs/superpowers/specs/2026-08-15-sdf-zombie-face-psx-design.md) ·
+  [plan](docs/superpowers/plans/2026-08-15-sdf-zombie-face-psx.md)
+  - **Geometry carries SILHOUETTE, texture carries FEATURES.** Four primitives
+    (cranium, jaw, brow, small nose) plus a flat greyscale face texture
+    projected on the front. That texture does three jobs at once: albedo
+    multiplier, height map driving relief, and emissive mask for red flickering
+    eyes. Original art, so it can ship.
+  - **Read `face.ts`'s header before touching the face.** It records four
+    complete rebuilds and why each failed — smooth carves smear (smin's k*4
+    blend is wider than an eye socket); hard carves (`blendK: 0`) fix that and
+    are associative, so they're the right tool for wounds/stumps/skeleton but
+    not a face; crisp geometry still doesn't read because all prims share one
+    albedo, and faces are mostly colour not shape; and a protruding nose breaks
+    a planar projection outright.
+  - Also fixed: post-fx was never wired, which exposed that the flesh presets
+    are tuned against a **missing sRGB encode** (post-fx defaults OFF until they
+    are retuned — one job, not two); `validateBody`'s connectivity probe used a
+    *bounding* centre a face drags outside the flesh; **the head was on
+    backwards**; and the face projection normalised by a sphere radius on an
+    ellipsoid head, so whichever axis was largest vanished.
+  - Open: bloom for the eye glow (emissive already exceeds 1.0 to key it, but
+    bloom needs the composer → gated on the preset retune); spherical
+    projection mode built but never compared side-by-side; perf HUD + N-body
+    spawner deferred, still the only route to an honest cost number.
+
+- `X1.2` [x] **SDF lab on WebGPU** — parity reached; this is the path to build on.
+  [spec](docs/superpowers/specs/2026-08-15-sdf-lab-webgpu-design.md) ·
+  [findings](docs/dev-notes/2026-08-16-sdf-lab-webgpu-parity.md) ·
+  run: `/sdf-lab-webgpu.html` (bench twin `/sdf-lab-webgpu-bench.html`)
+  - Wounds, severing, gibs, face and panel all ported; primitive AND wound data
+    ride one float texture, so `MAX_PRIMS` is no longer an authoring ceiling.
+  - **WebGPU applies the sRGB output encode WebGL's raw `ShaderMaterial` skipped**
+    (measured: 0.5 albedo → 188 vs 128). WebGPU is correct; the flesh presets are
+    what look wrong — see `X1.3`.
+  - **LOD baseline: 15 bodies = 36.8 ms / 44.7 p95** (M3, 960x540, 96 steps).
+    Target ~16 ms. `[` / `]` spawn crowd bodies.
+
+- `X1.3` [ ] **Retune the flesh presets against the corrected sRGB pipeline** —
+  one job that unblocks three: the WebGPU lab's look, leaving post-fx on, and
+  bloom for the eye glow. Presets in `src/lab/sdf-zombie/material.ts`.
+
+- `X1.4` [~] **LOD pass** — built, measured, and it does NOT reach the target.
+  **Every number in this row predates `X1.8` and needs re-measuring — see `X1.10`.**
+  [findings](docs/dev-notes/2026-08-16-sdf-lab-lod-pass.md)
+  - Shipped: GPU timestamp queries (wall clock was vsync-pinned and hiding
+    everything), screen-height-driven `lod.ts`, coarse `simplify.ts` stand-in,
+    shader guards, tight AABB proxy, change-detected uniform writes.
+  - **Worth ~10% on a distributed crowd, nothing on a close pack** (correctly —
+    every body deserves full quality there). Ceiling of ALL quality reduction
+    is −24%, so the 2.3x target is unreachable this way.
+  - **Cost is fill-bound**: 18.6 ms + 0.237 ms/1k px, and linear in body count
+    even when bodies occlude, because frag_depth + discard defeat early-Z.
+- `X1.5` [x] **SDF layer at its own resolution** — flesh renders to its own
+  target and composites over full-res geometry. **~2x**; default scale 0.7
+  (0.5 read as too coarse). Slider in the panel.
+- `X1.6` [x] **Raymarch optimisation** — relaxed sphere tracing (the old
+  `stepMul` 0.6 was UNDER-relaxation), partial evaluation of the field
+  (`specialise.ts`, **−20%**), and a cone-march pre-pass at 1/8 tiles giving
+  every ray a proven-empty start distance (**−22%**, and the tightest
+  measurement of the lot). Levers now stack to roughly **3x** overall.
+- `X1.7` [-] **Compute polygonisation — PREMISE MOVED, re-derive before building.**
+  Scoped against a raymarcher that could not reach 16 ms; `X1.9` puts 10 bodies
+  at 13.5 ms. Re-read the spec's cost argument before writing a compute pass.
+  [spec](docs/superpowers/specs/2026-08-16-sdf-polygonisation-design.md) ·
+  [phase 0 plan](docs/superpowers/plans/2026-08-16-sdf-polygonisation-phase0.md)
+- `X1.8` [x] **A benchmark that does not lie** — the old readout had three
+  faults (rAF stops on a hidden page; the fire-and-forget resolve sampled a
+  random one of the 3 passes per frame; hidden pages resolve to ~0.065 ms of
+  nothing). Press **B**. Every absolute before this is unsourced.
+  [findings](docs/dev-notes/2026-08-16-sdf-lab-lod-pass.md)
+- `X1.9` [x] **Normal warping** (Hubert-Brierre et al.) — silhouette fbm out of
+  the marched field, onto the normal via `calcNormal`; field is conservative
+  again so over-relaxation applies to every body. **22.40 → 13.48 ms at 10
+  bodies (1.66x)**, shading visually unchanged.
+- `X1.10` [x] **Re-measure + relax sweep — QUALITY LOD IS DEAD.** On the honest
+  bench (10 bodies spread, occluder on, cooled, interleaved control 9.81/9.74):
+  LOD on = 9.79 vs off 9.81 — **0.2%, within noise**, at LOD's own benchmark
+  scene. Relax sweep: 1.0 → 14.89 / **1.4 → 9.31** / 1.6 → 9.81 / 1.8 → 10.17;
+  optimum is **1.4** (default flipped, ~5% free). LOD now defaults OFF;
+  machinery kept for measurement. 2.0 unswept — curve already rising past 1.6.
+  Sustained-thermal soak still open (punted; not ready to run).
+- `X1.16` [ ] **Gib chunk shape — limbs must stay limb-like.** Playtest: gibbed
+  limbs read as rounded blobs ("boob shapes"), not cylinders/arms/legs.
+  Interrogate the torn-end / stump-closure treatment in `gib-chunks.ts` +
+  `createChunkGpuView` (the torn-end cap + blend may be swallowing the
+  capsule silhouette); chunks should keep their source primitives' elongation.
+- `X1.17` [ ] **Wound rendering bug: camera-dependent shimmer + blown-white
+  interiors** on heavily-wounded bodies (screenshots 2026-08-16). Shifts as
+  the camera rotates ⇒ view-dependent shading terms (fresnel/spec/scatter) on
+  degenerate hits inside deep multi-wound cavities are the lead suspects —
+  possibly interacting with the tracer's clamped tMax sample landing INSIDE
+  the surface. Needs its own systematic pass; do not guess-fix.
+- `X1.18` [ ] **Wound fluid: gushing/gooey particle gore** (feature, planned
+  with user). Wounds should emit fluid — ties into the game's ChunkSystem
+  blood-trail/splat pipeline (`F2.cascade-gibs`) and the lab's verlet rig;
+  candidate approach: emitter per wound seeded from `woundWorldPos`, particles
+  as tiny raymarched blobs or the game's existing droplet sprites.
+- `X1.11` [ ] **Port normal warping to `march.glsl.ts`** — the WebGL lab still
+  has the noise in its field, so `validate.ts`'s Lipschitz guard must stay
+  until it does. The two labs are one technique apart.
+- `X1.13` [x] **Adaptive SDF resolution** — pure tested controller drives the
+  layer scale from measured frame time. Signal is asymmetric: DOWN is computed
+  (`scale * sqrt(budget/measured)`), UP must probe + back off, because wall
+  clock is vsync-pinned. **27.2 ms/37 fps → 16.7 ms/60 fps** inside the crowd.
+- `X1.14` [x] **Merged single-pass march — DEAD END, autopsy recorded.** One
+  draw for the whole crowd; built, renders correctly, and loses. 1 body 2.04 →
+  3.75 ms (1.84x), 10 spread 9.88 → 33.83 ms (3.4x), cone pre-pass worth 0.4%.
+  The one-body case is decisive: no overdraw to save and no empty space to
+  accelerate, so the cost is `mapScene` itself — an extra loop level, two more
+  fetches per step and a second live accumulator, which costs occupancy on a
+  fragment-bound shader. Kept behind `setMerged()` (off) until `X1.15` lands.
+- `X1.15` [x] **Occluder inner-hull pre-pass — LANDED, and it SUPERSEDES the
+  cone.** Matrix (10 bodies, cooled, interleaved): stacked 21.30 bare / 18.32
+  cone / **16.29 occluder-only**; spread 11.24 cone / **10.86 occluder-only**.
+  Occluder now defaults ON, cone OFF (toggle kept for measurement). Two bugs
+  root-caused en route: the relaxed tracer broke on `t > tMax` before its
+  overshoot retraction could fire (fixed with a clamped final sample;
+  `march-tracer.test.ts` keeps the pre-fix loop asserting the miss), and
+  wounds exposed hull spheres inside craters (fixed by wound exclusion in
+  `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
+  march to the clamp through interpenetrating fields; fold into `X1.10`.
+- `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
+  and the surrounding articles/code. Deferred, not urgent.
 
 ## Asset pipeline
 

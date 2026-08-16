@@ -2,9 +2,20 @@
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import { add, len, lerp, scale as vscale, sub } from './vec';
 
-/** Must match MAX_PRIMS in the fragment shader. */
-export const MAX_PRIMS = 32;
-/** Must match MAX_CLUSTERS in the fragment shader. */
+/**
+ * Shader array ceilings. THE canonical declaration — `march.glsl.ts` imports
+ * these and bakes them into the GLSL, so the CPU field and the GPU field
+ * cannot drift apart. They were separately declared in both files until
+ * 2026-08-15; if they disagree the shader reads past the uniform array.
+ *
+ * 48 fits the 21-primitive body plus a ~13-primitive face with headroom. The
+ * cost is uniform space: the fragment shader lands around 300 vec4 against a
+ * GLES 3.0 guaranteed minimum of 224. The development machine (Apple M3)
+ * reports MAX_FRAGMENT_UNIFORM_VECTORS = 1024, so this is a portability note
+ * rather than a blocker. The escape hatch, if a low-end GLES 3.0 target ever
+ * matters, is a float data texture read with texelFetch.
+ */
+export const MAX_PRIMS = 48;
 export const MAX_CLUSTERS = 6;
 
 export interface ValidateOpts {
@@ -36,13 +47,38 @@ export function smin(a: number, b: number, k: number): number {
   return Math.min(a, b) - h * h * kk * 0.25;
 }
 
-/** Field value over all live clusters, in fixed fold order. */
+/** Smooth subtraction. Must match the shader's smax exactly. */
+export function smax(a: number, b: number, k: number): number {
+  return -smin(-a, -b, k);
+}
+
+/**
+ * Field value over all live clusters, in fixed fold order.
+ *
+ * Two passes, and the order is load-bearing. Every ADDITIVE primitive folds
+ * first, then every carve is subtracted from the assembled result. Carving
+ * per-cluster instead would restructure a non-associative smooth-min fold and
+ * change the surface everywhere, forcing a retune of every authored blendK.
+ *
+ * Mirrors mapBody + applyCarves in march.glsl.ts, and must stay in step: this
+ * field also backs click-to-shoot raycasting, so drift means shots land where
+ * the body isn't — or inside an eye socket.
+ */
 export function sdBody(p: Vec3, body: Body): number {
   let d = 1e9;
   for (const c of body.clusters) {
     if (!c.alive) continue;
-    for (const prim of body.prims.slice(c.start, c.start + c.count))
+    for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op === 'sub') continue;
       d = smin(d, sdPrimitive(p, prim), prim.blendK);
+    }
+  }
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op !== 'sub') continue;
+      d = smax(d, -sdPrimitive(p, prim), prim.blendK);
+    }
   }
   return d;
 }
@@ -62,9 +98,14 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       errs.push(`cluster "${c.limb}" is not contiguous — fold order is corrupt`);
   }
 
-  // Bounding spheres must contain their primitives, or the cull drops real surface.
+  // Bounding spheres must contain their SOLID primitives, or the cull drops
+  // real surface. Carves are skipped for the same reason clusters.ts excludes
+  // them from the fit: they carry no surface to lose. The connectivity check
+  // below deliberately does NOT skip them — it runs on the carved field, so a
+  // socket deep enough to detach the head from the neck is reported.
   for (const c of body.clusters)
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op === 'sub') continue;
       const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
       for (const end of [prim.a, prim.b])
         if (len(sub(end, c.center)) + prim.radius * maxScale > c.radius + 1e-6)
@@ -78,15 +119,44 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       `multiplier ${opts.stepMultiplier} — lower the noise or the multiplier`);
 
   // Connectivity: every cluster must fuse into at least one other cluster.
-  // Sample along the segment between cluster centres; fused ⇒ the field stays
+  // Sample along the segment between cluster CORES; fused ⇒ the field stays
   // inside (negative) the whole way.
+  //
+  // Probe from a core rather than from `center`. A cluster centre is a BOUNDING
+  // construct — the centroid of every endpoint — and nothing guarantees it lies
+  // inside the flesh. A head carrying a dozen face primitives on the front of
+  // the skull drags that centroid clean out of the cranium, at which point every
+  // segment starts outside the surface and the whole body reports as
+  // disconnected. The core below is inside its primitive by construction.
   if (body.clusters.length > 1)
     for (const c of body.clusters) {
-      const fused = body.clusters.some(o => o.id !== c.id && segmentInside(c.center, o.center, body));
+      const from = clusterCore(body, c);
+      if (from === null) continue; // nothing solid to probe from
+      const fused = body.clusters.some(o => {
+        if (o.id === c.id) return false;
+        const to = clusterCore(body, o);
+        return to !== null && segmentInside(from, to, body);
+      });
       if (!fused) errs.push(`cluster "${c.limb}" is disconnected — not fused to any other cluster`);
     }
 
   return errs;
+}
+
+/**
+ * A point guaranteed to be inside a cluster's flesh: the midpoint of its
+ * fattest solid primitive, which sits `radius * minScale` deep inside that
+ * primitive's own surface and therefore inside the union.
+ */
+function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
+  let best: Primitive | null = null;
+  let bestDepth = -Infinity;
+  for (const p of body.prims.slice(c.start, c.start + c.count)) {
+    if (p.op === 'sub') continue;
+    const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    if (depth > bestDepth) { bestDepth = depth; best = p; }
+  }
+  return best === null ? null : lerp(best.a, best.b, 0.5);
 }
 
 function segmentInside(from: Vec3, to: Vec3, body: Body): boolean {
