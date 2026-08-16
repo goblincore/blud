@@ -172,6 +172,7 @@ float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
 /** Carves every wound out of the field. Burns barely subtract; they char. */
 float applyWounds(float d, vec3 p) {
+  float dIn = d;  // pre-wound field; the rim locality gate below reads it
   for (int i = 0; i < MAX_WOUNDS; i++) {
     if (i >= uWoundCount) break;
     vec4 w = uWound[i];
@@ -190,7 +191,12 @@ float applyWounds(float d, vec3 p) {
     // means "more material here", so this adds a bulge rather than a dent.
     // Burns evert far less: they char and contract instead of tearing open.
     float x = (r - depth * uRimOffset) / max(depth * uRimWidth, 1e-4);
-    d -= exp(-x * x) * depth * uRimSplay * (type > 1.5 ? 0.25 : 1.0);
+    float amp = depth * uRimSplay * (type > 1.5 ? 0.25 : 1.0);
+    // Surface locality: a bulge of amplitude amp can only displace flesh that
+    // was already within ~amp of the pre-wound surface. Ungated, the shell
+    // adds material in EMPTY space and welds separate limbs together.
+    float rimLocal = 1.0 - smoothstep(amp * 0.5, amp * 1.2, dIn);
+    d -= exp(-x * x) * amp * rimLocal;
   }
   return d;
 }
