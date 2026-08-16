@@ -710,9 +710,9 @@ async function main() {
   ) {
     if (prims.length === 0) return;
     const v: Vec3 = vel ?? [
-      (Math.random() - 0.5) * 3.2,
-      1.8 + Math.random() * 2.2,
-      (Math.random() - 0.5) * 3.2,
+      (Math.random() - 0.5) * 4.5,
+      2.5 + Math.random() * 2.5,
+      (Math.random() - 0.5) * 4.5,
     ];
     // Collision radius = the limb's real visual extent; chunk.radius's 0.14 is
     // smaller than any limb and would bury it half-way into the floor.
@@ -743,10 +743,12 @@ async function main() {
       const dy = g.origin[1] - centre[1];
       const dz = g.origin[2] - centre[2];
       const l = Math.hypot(dx, dy, dz) || 1;
-      const speed = 2.4 + Math.random() * 2.0;
+      // Game-hot burst, matched to the game ChunkSystem's hand-tuned spawn
+      // (chunks.ts spawnOne): pieces go flying out far, not a soft slump.
+      const speed = 5.0 + Math.random() * 4.0;
       const vel: Vec3 = [
         (dx / l) * speed + (Math.random() - 0.5) * 1.2,
-        2.2 + Math.random() * 2.4,
+        (0.8 + Math.random() * 0.8) * speed * 0.8,
         (dz / l) * speed + (Math.random() - 0.5) * 1.2,
       ];
       spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt);
