@@ -33,16 +33,7 @@ export interface LabRendererHandle {
   setDrawFn(fn: () => void): void;
   /** 'webgpu' or 'webgl' — WebGPURenderer silently falls back, so ASK. */
   readonly backend: string;
-  /**
-   * GPU time for the last resolved render pass, in ms, or null when timestamp
-   * queries are unavailable (the WebGL fallback backend has none).
-   *
-   * This is the number LOD work should be judged against. Wall-clock frame
-   * time bundles the GPU pass with the rig step, the re-pack and the upload,
-   * and it pins to the vsync interval whenever there is any headroom at all —
-   * so it cannot tell "twice as fast" from "still 60fps".
-   */
-  gpuMs(): number | null;
+
   /**
    * Drives exactly one frame by hand — the same callback and draw the
    * animation loop runs, with the timestep supplied rather than measured.
@@ -56,12 +47,15 @@ export interface LabRendererHandle {
    */
   step(dtSec: number): void;
   /**
-   * Awaits the GPU timestamp resolve and returns the pass time in ms, or null
-   * when timestamp queries are unavailable. Pairs with `step` — the async
-   * fire-and-forget resolve inside the animation loop cannot be awaited, so a
-   * hand-driven loop needs its own.
+   * Awaits the GPU timestamp resolve. The VALUE is discarded on purpose: with
+   * several render calls per frame and a fire-and-forget resolve in the loop,
+   * three's per-frame attribution is unreliable — it once reported 73 ms of
+   * "GPU" against a 33 ms frame interval, which is impossible. What the await
+   * DOES reliably provide is a completion fence: it does not return until the
+   * submitted work has executed, which is what benchGpu's wall-clock chunks
+   * are timed against. Trust the fence, never the number.
    */
-  resolveGpu(): Promise<number | null>;
+  resolveGpu(): Promise<void>;
   /**
    * Stops or restarts the animation loop. A benchmark must own the frame
    * clock outright: leaving rAF running alongside hand-driven steps means the
@@ -138,7 +132,6 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
   // resolve has to keep up with the frames. One in-flight resolve at a time is
   // enough: it is async, and a reading every few frames is plenty for tuning.
   let resolving = false;
-  let lastGpuMs: number | null = null;
 
   const loop = () => {
     const now = performance.now();
@@ -147,11 +140,14 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
     cb(dt);
     drawFn();
 
+    // Drain the timestamp query pool. It has a fixed capacity and warns loudly
+    // once it fills, so the resolve has to keep up with the frames even though
+    // nothing reads its value any more (the per-frame number was unreliable
+    // with multiple passes per frame — see resolveGpu's note).
     if (!resolving) {
       resolving = true;
       renderer.resolveTimestampsAsync()
-        .then(() => { lastGpuMs = renderer.info.render.timestamp; })
-        .catch(() => { lastGpuMs = null; })
+        .catch(() => {})
         .finally(() => { resolving = false; });
     }
   };
@@ -172,16 +168,13 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
     setRenderCallback(fn) { cb = fn; },
     setDrawFn(fn) { drawFn = fn; },
     backend: backendName,
-    gpuMs: () => lastGpuMs,
     step(dtSec) { cb(dtSec); drawFn(); },
     async resolveGpu() {
       try {
         await renderer.resolveTimestampsAsync();
-        lastGpuMs = renderer.info.render.timestamp;
       } catch {
-        lastGpuMs = null;
+        // The fence failing means no timestamp feature; nothing to do.
       }
-      return lastGpuMs;
     },
     setLoopRunning(on) {
       renderer.setAnimationLoop(on ? loop : null);

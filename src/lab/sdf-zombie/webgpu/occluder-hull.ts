@@ -9,10 +9,11 @@
 // has no equivalent of EXT_conservative_depth's depth_greater qualifier, so
 // early-Z cannot be won back and the rejection has to be done by hand.
 //
-// The merged single-pass march was tried first and lost (see the autopsy in
-// scene-gpu.ts). The lesson from it is the reason this is expected to work:
-// every body's TIGHT proxy box is worth more than the overdraw it costs, so
-// the fix has to ADD a bound rather than replace ten of them with one.
+// The merged single-pass march was tried first and lost — deleted since; the
+// autopsy lives in commits 482f9e1/b28d168 and TASKS.md row X1.14. The lesson
+// from it is the reason this approach works: every body's TIGHT proxy box is
+// worth more than the overdraw it costs, so the fix has to ADD a bound rather
+// than replace ten of them with one.
 //
 // WHY IT IS SAFE, which is the only thing that really matters here. smin never
 // subtracts — `smin(a,b,k) <= min(a,b)` — so the solid region contains the

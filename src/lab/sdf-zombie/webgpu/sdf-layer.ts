@@ -225,6 +225,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   });
   const occluderUniforms = { enabled: uniform(0) };
   const clearColorScratch = new THREE.Color();
+
+  /**
+   * Pre-pass targets need an explicit first clear whenever they are
+   * (re)allocated. The march materials bind the cone and occluder textures
+   * UNCONDITIONALLY — the enable uniforms gate the fetch, not the binding —
+   * so when a pre-pass is disabled its target is sampled without ever having
+   * been rendered to. three then lazily initialises the texture inside the
+   * SAME command encoder as the pass that samples it, and WebGPU rejects the
+   * whole submit:
+   *   "usage (TextureBinding|RenderAttachment) includes writable usage and
+   *    another usage in the same synchronization scope"
+   * — one dropped frame per lazy init, at boot and after every resize. An
+   * explicit clear in its own pass, flagged on allocation, ends that.
+   */
+  let targetsNeedInit = true;
+  const emptyScene = new THREE.Scene();
   let coneFov = 75;
   let coneHeight = 540;
   /**
@@ -270,6 +286,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     const h = Math.max(1, Math.round(fullH * scale));
     target.setSize(w, h);
     occluder.setSize(w, h);
+    // setSize reallocates the backing textures, so they are uninitialised
+    // again and the lazy-init conflict would return on the next frame.
+    targetsNeedInit = true;
     coneCoarse.setSize(
       Math.max(1, Math.ceil(w / CONE_TILE)),
       Math.max(1, Math.ceil(h / CONE_TILE)),
@@ -284,6 +303,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   return {
     render(scene, camera) {
       const restore = camera.layers.mask;
+
+      if (targetsNeedInit) {
+        targetsNeedInit = false;
+        // The clear colour is irrelevant: a disabled pre-pass is never
+        // FETCHED (the enable uniforms gate occFetch/coneFetch), and an
+        // enabled one clears for real at the top of its own pass.
+        for (const t of [coneCoarse, coneFine, occluder]) {
+          renderer.setRenderTarget(t);
+          void renderer.render(emptyScene, camera);
+        }
+      }
 
       // Pass 1 — the polygonal scene, at full resolution, straight to the
       // canvas. This leaves the depth the composite will test against.
