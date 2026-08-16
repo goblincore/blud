@@ -135,7 +135,10 @@ const FACE_TEXTURES: Record<FaceTexName, { url: string; rect: [number, number, n
   // act — sockets and mouth darken, eyes and teeth brighten. Flat fills and no
   // baked shading, which is the property that made the smiley legible and the
   // Blood sprite muddy.
-  'zombie-flat': { url: '/assets/lab/zombie-face.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.451 },
+    // mean is MEASURED off the file, not guessed — it sets the level the
+  // multiplier divides out, so a stale value shifts the whole head's
+  // brightness. Re-measure after editing the art.
+  'zombie-flat': { url: '/assets/lab/zombie-face.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.382 },
   smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.66 },
   'blood-zombie': {
     url: '/assets/blood-tiles/1200.png',

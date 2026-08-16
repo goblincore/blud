@@ -109,5 +109,9 @@ export const FACE_SLIDERS: { key: keyof FaceParams; min: number; max: number }[]
   { key: 'headWidth', min: 0.6, max: 1.6 },
   { key: 'headHeight', min: 0.6, max: 2.0 },
   { key: 'headDepth', min: 0.6, max: 1.8 },
+  { key: 'jawWidth', min: 0.4, max: 1.3 },
+  { key: 'jawHeight', min: 0.4, max: 1.4 },
+  { key: 'jawDrop', min: 0, max: 0.16 },
+  { key: 'jawJut', min: -0.03, max: 0.06 },
   { key: 'headBlend', min: 0, max: 0.02 },
 ];

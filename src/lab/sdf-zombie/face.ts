@@ -42,12 +42,24 @@ export const FACE_FORWARD = 1;
 const HEAD_AT = 0.45;
 
 export interface FaceParams {
-  /** Overall size of the head, in metres. */
+  /** Overall size of the cranium, in metres. */
   headRadius: number;
   /** Ellipsoid scales. Raising headHeight gives the taller dome. */
   headWidth: number;
   headHeight: number;
   headDepth: number;
+  /**
+   * The jaw: a second, narrower mass below the cranium. One ellipsoid cannot
+   * taper, and the Blud zombie's skull is an egg — widest at the cranium,
+   * narrowing to a gaunt chin. Two primitives are the cheapest way to get that
+   * silhouette, and silhouette is the one thing the face texture cannot supply.
+   */
+  jawWidth: number;
+  jawHeight: number;
+  /** How far the jaw hangs below the cranium centre, in metres. */
+  jawDrop: number;
+  /** Forward offset of the jaw — a small positive value juts the chin. */
+  jawJut: number;
   /**
    * Smooth-min strength against the neck. Kept small: smin scales k by 4, so
    * the old 0.0125 fused head into neck across 5 cm and the silhouette lost
@@ -58,10 +70,16 @@ export interface FaceParams {
 
 /** A clean oval, a little taller than wide. */
 export const DEFAULT_FACE: FaceParams = {
-  headRadius: 0.125,
-  headWidth: 1.0,
-  headHeight: 1.22,
-  headDepth: 1.05,
+  // Tall and narrow, after the Blud zombie: a bald egg of a skull rather than
+  // a sphere.
+  headRadius: 0.112,
+  headWidth: 0.94,
+  headHeight: 1.34,
+  headDepth: 1.04,
+  jawWidth: 0.72,
+  jawHeight: 0.80,
+  jawDrop: 0.082,
+  jawJut: 0.010,
   headBlend: 0.006,
 };
 
@@ -71,11 +89,24 @@ export interface FacePrim extends PrimDef {
 }
 
 export function facePrims(f: FaceParams): FacePrim[] {
-  const scale: Vec3 = [f.headWidth, f.headHeight, f.headDepth];
+  const HEAD = { bone: 'skull', limb: 'head', at: HEAD_AT } as const;
   return [
     {
-      bone: 'skull', limb: 'head', at: HEAD_AT, tag: 'head',
-      radius: f.headRadius, scale, blendK: f.headBlend,
+      ...HEAD, tag: 'head',
+      radius: f.headRadius,
+      scale: [f.headWidth, f.headHeight, f.headDepth],
+      blendK: f.headBlend,
+    },
+    {
+      ...HEAD, tag: 'jaw',
+      // Narrower and lower, so the pair reads as a tapered skull rather than a
+      // ball. Blended at the same k as the cranium: the crease between them is
+      // the jaw line, and it only survives while k stays small — smin scales k
+      // by 4, so anything much above 0.006 fuses the two back into an egg.
+      radius: f.headRadius * 0.78,
+      scale: [f.jawWidth, f.jawHeight, f.headDepth * 0.96],
+      blendK: f.headBlend,
+      offset: [0, -f.jawDrop, f.jawJut * FACE_FORWARD],
     },
   ];
 }

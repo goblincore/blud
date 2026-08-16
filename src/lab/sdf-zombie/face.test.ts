@@ -4,12 +4,22 @@ import { DEFAULT_FACE, facePrims } from './face';
 import { MAX_PRIMS } from './validate';
 
 describe('facePrims', () => {
-  it('emits a single head primitive on the skull bone', () => {
+  it('emits a cranium and a jaw, both on the skull bone', () => {
     const prims = facePrims(DEFAULT_FACE);
-    expect(prims).toHaveLength(1);
-    expect(prims[0]!.bone).toBe('skull');
-    expect(prims[0]!.limb).toBe('head');
-    expect(prims[0]!.tag).toBe('head');
+    expect(prims.map(p => p.tag)).toEqual(['head', 'jaw']);
+    for (const p of prims) {
+      expect(p.bone).toBe('skull');
+      expect(p.limb).toBe('head');
+    }
+  });
+
+  it('makes the jaw narrower than the cranium, so the skull tapers', () => {
+    const [head, jaw] = facePrims(DEFAULT_FACE);
+    // A single ellipsoid cannot taper; the pair is what gives the gaunt egg
+    // silhouette, and silhouette is the one thing the texture cannot supply.
+    expect(jaw!.radius).toBeLessThan(head!.radius);
+    expect(jaw!.scale[0]).toBeLessThan(head!.scale[0]);
+    expect(jaw!.offset![1]).toBeLessThan(0);
   });
 
   it('is purely additive — the face is texture, not geometry', () => {
@@ -32,6 +42,12 @@ describe('facePrims', () => {
   it('grows the head with headRadius', () => {
     expect(facePrims({ ...DEFAULT_FACE, headRadius: 0.18 })[0]!.radius)
       .toBeGreaterThan(facePrims({ ...DEFAULT_FACE, headRadius: 0.09 })[0]!.radius);
+  });
+
+  it('drops the jaw further with jawDrop', () => {
+    const at = (d: number) =>
+      facePrims({ ...DEFAULT_FACE, jawDrop: d }).find(p => p.tag === 'jaw')!.offset![1]!;
+    expect(at(0.14)).toBeLessThan(at(0.04));
   });
 
   it('leaves the body plenty of room inside the shader cap', () => {
