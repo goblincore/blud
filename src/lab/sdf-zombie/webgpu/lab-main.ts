@@ -55,7 +55,7 @@ import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
-  STANDING_RIG, stepMotion,
+  planSubSteps, STANDING_RIG, stepMotion,
   type MotionJoints, type MotionSignals,
 } from '../motion';
 import { makeRng, type WanderBounds } from '../wander';
@@ -1162,58 +1162,72 @@ async function main() {
     // severable, gibbable — it is just horizontal now).
     const rdt = Math.min(dt, 1 / 30);
     if (motionEnabled && motionJoints) {
-      const step = stepMotion(
-        motionState, motionJoints, { enabled: true, wander: wanderOn },
-        {
-          dt: rdt,
-          shot: pendingShot,
-          wounded: woundedLimbs(),
-          severed: pendingSevered,
-          missing: missingLimbs(),
-          headAlive: current.clusters.find(c => c.limb === 'head')?.alive ?? false,
-          forcedCollapse,
-          freshWounds: pendingWounds,
-        },
-        bound.rig.points, WANDER_BOUNDS, motionRng,
-      );
-      motionState = step.state;
-      const f = step.frame;
-      pendingShot = null;
-      pendingWounds.length = 0;
-      pendingSevered.length = 0;
-      forcedCollapse = false;
-      lastRootShift = f.rootShift;
+      // Sub-stepped integration (X1.22.1): consume the frame's real elapsed
+      // time in ≤1/30-sized steps instead of the old flat 33 ms clamp, so a
+      // stalled or hidden frame cannot stretch the fall into a death spiral.
+      // See planSubSteps for the catch-up bound.
+      let f: ReturnType<typeof stepMotion>['frame'] | null = null;
+      let first = true;
+      for (const sdt of planSubSteps(dt)) {
+        const step = stepMotion(
+          motionState, motionJoints, { enabled: true, wander: wanderOn },
+          {
+            dt: sdt,
+            shot: pendingShot,
+            wounded: woundedLimbs(),
+            severed: pendingSevered,
+            missing: missingLimbs(),
+            headAlive: current.clusters.find(c => c.limb === 'head')?.alive ?? false,
+            forcedCollapse,
+            freshWounds: pendingWounds,
+          },
+          bound.rig.points, WANDER_BOUNDS, motionRng,
+        );
+        motionState = step.state;
+        f = step.frame;
+        // Signals drain after the FIRST sub-step: they describe events that
+        // landed before this frame, not per-sub-step re-triggers.
+        if (first) {
+          first = false;
+          pendingShot = null;
+          pendingWounds.length = 0;
+          pendingSevered.length = 0;
+          forcedCollapse = false;
+        }
+        lastRootShift = f.rootShift;
 
-      let points = stepRig(
-        { ...bound.rig, restPose: f.restPose }, rdt,
-        {
-          gravity: f.gravity,
-          damping: 0.06,
-          iterations: 4,
-          restStiffness: STANDING_RIG.restStiffness * f.restPull,
-        },
-      ).points;
-      if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
-      if (f.collapsed) {
-        points = applyFloorContact(points, motionJoints.groundY - MOTION_TUNING.floorPad);
+        let points = stepRig(
+          { ...bound.rig, restPose: f.restPose }, sdt,
+          {
+            gravity: f.gravity,
+            damping: 0.06,
+            iterations: 4,
+            restStiffness: STANDING_RIG.restStiffness * f.restPull,
+          },
+        ).points;
+        if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+        if (f.collapsed) {
+          points = applyFloorContact(points, motionJoints.groundY - MOTION_TUNING.floorPad);
+        }
+        bound = {
+          ...bound,
+          rig: { points, constraints: bound.rig.constraints, restPose: f.restPose },
+        };
       }
-      bound = {
-        ...bound,
-        rig: { points, constraints: bound.rig.constraints, restPose: f.restPose },
-      };
-
-      if (motionReadEl) {
-        motionReadEl.textContent =
-          `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
-          (f.staggerKind ? ` · ${f.staggerKind}` : '') +
-          (f.clutchArm ? ` · clutch ${f.clutchArm}` : '');
-      }
-      // Keep the shambler framed: the orbit target drifts after the body
-      // (fast enough to follow a walk, slow enough to leave the orbit feel).
-      if (!f.collapsed) {
-        const k = Math.min(1, dt * 2.2);
-        camTarget.x += (f.rootShift[0] - camTarget.x) * k;
-        camTarget.z += (f.rootShift[2] - camTarget.z) * k;
+      if (f) {
+        if (motionReadEl) {
+          motionReadEl.textContent =
+            `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
+            (f.staggerKind ? ` · ${f.staggerKind}` : '') +
+            (f.clutchArm ? ` · clutch ${f.clutchArm}` : '');
+        }
+        // Keep the shambler framed: the orbit target drifts after the body
+        // (fast enough to follow a walk, slow enough to leave the orbit feel).
+        if (!f.collapsed) {
+          const k = Math.min(1, dt * 2.2);
+          camTarget.x += (f.rootShift[0] - camTarget.x) * k;
+          camTarget.z += (f.rootShift[2] - camTarget.z) * k;
+        }
       }
     } else {
       // Statue mode — the pre-motion behaviour, verbatim. Pending signals

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
-  STANDING_RIG, stepMotion,
+  planSubSteps, STANDING_RIG, stepMotion, SUBSTEP_TUNING,
   type MotionConfig, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
 import { buildBody } from './build-body';
@@ -364,6 +364,48 @@ describe('stepMotion — collapse', () => {
       { ...NO_SIGNALS(), freshWounds: [blastWound()] }, stubPoints(j), BOUNDS, makeRng(3));
     expect(more.frame.meter).toBeGreaterThan(settled.frame.meter);
     expect(more.frame.phase).toBe('settled');
+  });
+});
+
+describe('planSubSteps (collapse-stall fix, X1.22.1)', () => {
+  it('a normal 60 fps frame is exactly one step of exactly dt', () => {
+    // The steady-state path must be bit-identical to the pre-fix single
+    // step — the fix may not change tuned feel at full frame rate.
+    expect(planSubSteps(1 / 60)).toEqual([1 / 60]);
+    expect(planSubSteps(0.001)).toEqual([0.001]);
+  });
+
+  it('a frame at or under the old clamp ceiling stays a single step', () => {
+    expect(planSubSteps(1 / 30)).toEqual([1 / 30]);
+    // A hair over the ceiling splits into two equal steps, never one
+    // over-ceiling step.
+    const split = planSubSteps(1 / 30 * 1.5);
+    expect(split.length).toBe(2);
+    for (const s of split) expect(s).toBeLessThanOrEqual(SUBSTEP_TUNING.maxStep + 1e-12);
+    expect(split.reduce((a, b) => a + b, 0)).toBeCloseTo(1 / 30 * 1.5, 12);
+  });
+
+  it('consumes real elapsed time instead of discarding it (no death spiral)', () => {
+    // The old clamp advanced a 2 s frame by 33 ms — the fall crawled at
+    // ~1.6% of wall clock. Sub-steps must consume the whole frame...
+    const stalled = planSubSteps(0.25);
+    expect(stalled.reduce((a, b) => a + b, 0)).toBeCloseTo(0.25, 12);
+    for (const s of stalled) expect(s).toBeLessThanOrEqual(SUBSTEP_TUNING.maxStep + 1e-12);
+  });
+
+  it('bounds catch-up at maxCatchup so a long-hidden gap cannot burst', () => {
+    const caught = planSubSteps(600); // 10 min hidden tab
+    const total = caught.reduce((a, b) => a + b, 0);
+    expect(total).toBeCloseTo(SUBSTEP_TUNING.maxCatchup, 12);
+    for (const s of caught) expect(s).toBeLessThanOrEqual(SUBSTEP_TUNING.maxStep + 1e-12);
+    // ...and the bound keeps the sub-step count (and thus the catch-up CPU)
+    // small: 0.5 s at ≤1/30 per step is ≤15 steps.
+    expect(caught.length).toBeLessThanOrEqual(16);
+  });
+
+  it('degenerate inputs produce no steps', () => {
+    expect(planSubSteps(0)).toEqual([]);
+    expect(planSubSteps(-5)).toEqual([]);
   });
 });
 

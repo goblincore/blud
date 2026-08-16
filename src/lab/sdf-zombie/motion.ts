@@ -97,6 +97,48 @@ export const STANDING_RIG = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Sub-stepped integration (the collapse-stall fix, X1.22.1)
+// ---------------------------------------------------------------------------
+
+/** Sub-step planning knobs for the wiring's per-frame rig integration. */
+export const SUBSTEP_TUNING = {
+  /** Largest single step the rig is ever integrated with — the old
+   *  `Math.min(dt, 1/30)` clamp's per-step ceiling, kept as the step size so
+   *  a catch-up frame's dynamics stay identical to a genuine 30 fps frame
+   *  (the cadence the collapse feel was approved at). */
+  maxStep: 1 / 30,
+  /** Most sim time one rendered frame may consume. Without a cap a frame
+   *  returning from a long stall/hidden gap would integrate seconds of fall
+   * in one callback; with it, catch-up is spread over a few frames while
+   * still completing a 2.5 s fall in ~5 stalled frames instead of ~75. */
+  maxCatchup: 0.5,
+} as const;
+
+/**
+ * Splits a frame's elapsed time into rig sub-steps: at most `maxStep` each,
+ * at most `maxCatchup` total, never more steps than the time needs.
+ *
+ * This is what breaks the collapse death spiral. The old flat
+ * `Math.min(dt, 1/30)` clamp advanced the fall by 33 ms NO MATTER how late
+ * the frame was, so any stall — a hidden tab, compositor back-pressure, a
+ * debugger pause — stretched a 2.5 s fall into minutes of wall clock while
+ * the stall persisted (the longer the fall takes, the longer the stall is
+ * exposed). Sub-stepping consumes the real elapsed time instead: normal
+ * frames get exactly one step of exactly `dt` (identical to before), and a
+ * late frame catches up in 33 ms-sized chunks, bounded by `maxCatchup`.
+ * Pure; the lab wiring is its only caller.
+ */
+export function planSubSteps(
+  dt: number, tuning: { maxStep: number; maxCatchup: number } = SUBSTEP_TUNING,
+): number[] {
+  const total = Math.max(0, Math.min(dt, tuning.maxCatchup));
+  if (total === 0) return [];
+  const n = Math.max(1, Math.ceil(total / tuning.maxStep));
+  const step = total / n;
+  return Array.from({ length: n }, () => step);
+}
+
+// ---------------------------------------------------------------------------
 // The wiring contract: joint names ↔ rig point indices ↔ chain lengths.
 // ---------------------------------------------------------------------------
 
