@@ -161,11 +161,16 @@ Key reference docs (open these before touching their area):
   accelerate, so the cost is `mapScene` itself — an extra loop level, two more
   fetches per step and a second live accumulator, which costs occupancy on a
   fragment-bound shader. Kept behind `setMerged()` (off) until `X1.15` lands.
-- `X1.15` [ ] **Occluder depth pre-pass — NEXT.** The right shape after all: it
-  ADDS a bound instead of removing ten. Depth-only pass of a conservative inner
-  hull (raw capsules are strictly inside the smoothed surface, since `smin`
-  only adds material), then the march early-outs on one depth fetch. Watch the
-  wound case — carving can cut through the hull and make it non-conservative.
+- `X1.15` [x] **Occluder inner-hull pre-pass — LANDED, and it SUPERSEDES the
+  cone.** Matrix (10 bodies, cooled, interleaved): stacked 21.30 bare / 18.32
+  cone / **16.29 occluder-only**; spread 11.24 cone / **10.86 occluder-only**.
+  Occluder now defaults ON, cone OFF (toggle kept for measurement). Two bugs
+  root-caused en route: the relaxed tracer broke on `t > tMax` before its
+  overshoot retraction could fire (fixed with a clamped final sample;
+  `march-tracer.test.ts` keeps the pre-fix loop asserting the miss), and
+  wounds exposed hull spheres inside craters (fixed by wound exclusion in
+  `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
+  march to the clamp through interpenetrating fields; fold into `X1.10`.
 - `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
   and the surrounding articles/code. Deferred, not urgent.
 
