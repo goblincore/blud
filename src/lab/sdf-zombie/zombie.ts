@@ -16,8 +16,8 @@ export interface ZombieView {
   update(body: BuildResult): void;
   /** Uploads wounds already transformed to world space by the caller. */
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[]): void;
-  /** The skull's sphere, which the face projection is normalised against. */
-  setHeadSphere(centre: Vec3, radius: number): void;
+  /** The skull's centre and semi-axes, which the face projection normalises by. */
+  setHeadShape(centre: Vec3, axes: Vec3): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
 }
 
@@ -91,7 +91,8 @@ export function createZombieView(body: BuildResult): ZombieView {
       uFaceForward: { value: 1 },
       uFaceProj: { value: new THREE.Vector4(1.15, 1.15, 0.5, 0.52) },
       uFaceAtlas: { value: new THREE.Vector4(1, 1, 0, 0) },
-      uHeadSphere: { value: new THREE.Vector4(0, 1.6, 0, 0.13) },
+      uHeadCentre: { value: new THREE.Vector3(0, 1.6, 0) },
+      uHeadAxes: { value: new THREE.Vector3(0.12, 0.13, 0.12) },
       uFaceMean: { value: 0.5 },
     },
   });
@@ -132,9 +133,9 @@ export function createZombieView(body: BuildResult): ZombieView {
       }
       material.uniforms.uWoundCount!.value = n;
     },
-    setHeadSphere(centre, radius) {
-      (material.uniforms.uHeadSphere!.value as THREE.Vector4)
-        .set(centre[0], centre[1], centre[2], radius);
+    setHeadShape(centre, axes) {
+      (material.uniforms.uHeadCentre!.value as THREE.Vector3).set(...centre);
+      (material.uniforms.uHeadAxes!.value as THREE.Vector3).set(...axes);
     },
     applyMaterial(m, light) {
       const u = material.uniforms;
@@ -247,9 +248,10 @@ export function createChunkView(
   material.uniforms.uFaceEnabled = { value: chunk.limb === 'head' ? 1 : 0 };
   // A severed head keeps its face: give the clone its own head sphere, centred
   // on the chunk, since the template's points at the body's original skull.
-  material.uniforms.uHeadSphere = {
-    value: new THREE.Vector4(chunk.pos[0], chunk.pos[1], chunk.pos[2], extent),
+  material.uniforms.uHeadCentre = {
+    value: new THREE.Vector3(chunk.pos[0], chunk.pos[1], chunk.pos[2]),
   };
+  material.uniforms.uHeadAxes = { value: new THREE.Vector3(extent, extent, extent) };
 
   const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);

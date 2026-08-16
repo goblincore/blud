@@ -183,16 +183,23 @@ view.material.uniforms.uFaceEnabled!.value = 1;
 (view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.75, 0.75, 0.5, 0.5);
 
 /**
- * The skull's own sphere: the fattest additive primitive in the head cluster.
+ * The skull's centre and its three SEMI-AXES: the fattest additive primitive in
+ * the head cluster, measured per axis.
  *
- * NOT the head cluster's bounding sphere — that also encloses the neck capsule,
+ * Not the head cluster's bounding sphere — that also encloses the neck capsule,
  * so it is far larger than the head and normalising the face projection by it
- * spilled the texture down over the neck and shoulders.
+ * spilled the texture over the neck and shoulders.
+ *
+ * And per-axis rather than one radius, because the head is an ellipsoid: with a
+ * single radius the surface sits at |hs| = maxScale/thisAxis, so whichever axis
+ * was largest landed on the head mask's cutoff and vanished. Raising headDepth
+ * past headHeight made the whole face disappear.
  */
-function headSphere(b: BuildResult): { centre: Vec3; radius: number } | null {
+function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
   const head = b.clusters.find(c => c.limb === 'head');
   if (!head) return null;
   let best: Vec3 | null = null;
+  let bestAxes: Vec3 | null = null;
   let bestR = -Infinity;
   for (const p of b.prims.slice(head.start, head.start + head.count)) {
     if (p.op === 'sub') continue;
@@ -200,9 +207,10 @@ function headSphere(b: BuildResult): { centre: Vec3; radius: number } | null {
     if (r > bestR) {
       bestR = r;
       best = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      bestAxes = [p.radius * p.scale[0], p.radius * p.scale[1], p.radius * p.scale[2]];
     }
   }
-  return best === null ? null : { centre: best, radius: bestR };
+  return best === null || bestAxes === null ? null : { centre: best, axes: bestAxes };
 }
 
 /** The live body — replaced on sever and on any override edit. */
@@ -316,8 +324,8 @@ handle.setRenderCallback((dt) => {
   view.update(posed);
   // Re-derive the skull's sphere from the POSED primitives so the face
   // projection tracks the head through the jiggle.
-  const skull = headSphere(posed);
-  if (skull) view.setHeadSphere(skull.centre, skull.radius);
+  const skull = headShape(posed);
+  if (skull) view.setHeadShape(skull.centre, skull.axes);
   view.setWounds(
     wounds.map(w => woundWorldPos(posed.prims, w)),
     wounds.map(w => w.radius),

@@ -49,11 +49,18 @@ uniform float uFaceStrength;
 uniform float uFaceForward;   // +1 or -1: which way the zombie looks
 uniform vec4  uFaceProj;      // xy = scale of head-space xy -> uv, zw = uv centre
 uniform vec4  uFaceAtlas;     // xy = uv scale, zw = uv offset — crops the head out of the sheet
-// The SKULL's own sphere (xyz = centre, w = radius), not the head cluster's.
-// The head cluster also contains the neck capsule, so its bounding sphere is
-// far bigger than the head — normalising by it let the projection spill down
-// over the neck and shoulders.
-uniform vec4  uHeadSphere;
+// The SKULL's own centre, and its three SEMI-AXES.
+//
+// Not the head cluster's bounds: that also encloses the neck capsule, so
+// normalising by it spilled the projection over the neck and shoulders.
+//
+// And not a single radius either. The head is an ELLIPSOID, so with one scalar
+// radius the surface sits at |hs| = maxScale/thisAxis — meaning whichever axis
+// happened to be largest landed at |hs| = 1 and got eaten by the head mask.
+// Raising headDepth past headHeight made the entire face vanish. Dividing per
+// axis puts the whole surface at |hs| ~= 1 regardless of proportions.
+uniform vec3  uHeadCentre;
+uniform vec3  uHeadAxes;
 /**
  * Mean luminance of the face crop. The sheet already carries BAKED LIGHTING,
  * so pasting it in as albedo and then lighting it again double-shades — the
@@ -280,7 +287,7 @@ void main() {
     // Head-space position, normalised by the skull's own sphere — which is
     // re-uploaded every frame from the posed primitives, so the projection
     // rides the head as it jiggles without a full rest-space transform.
-    vec3 hs = (p - uHeadSphere.xyz) / max(uHeadSphere.w, 1e-4);
+    vec3 hs = (p - uHeadCentre) / max(uHeadAxes, vec3(1e-4));
     vec2 uv = vec2(hs.x * uFaceForward, hs.y) * uFaceProj.xy + uFaceProj.zw;
     // Fade by how squarely this surface faces the front, so the projection
     // does not smear a second face down the sides and back of the skull.
@@ -288,10 +295,11 @@ void main() {
     // sharply, and a narrow window left the eye region — the part that most
     // needs the texture — almost entirely unpainted.
     float facing = smoothstep(-0.10, 0.35, dot(n, vec3(0.0, 0.0, uFaceForward)));
-    // Confine it to the HEAD. A uv box alone is not enough: the chest also
-    // faces front, so without this the projection paints the torso wherever
-    // the box happens to reach past the jaw.
-    facing *= 1.0 - smoothstep(0.88, 1.02, length(hs));
+    // Confine it to the HEAD. Generous, because the surface now sits at
+    // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
+    // against wrapping onto the neck, and the uv bounds below do most of the
+    // vertical confining already.
+    facing *= 1.0 - smoothstep(1.30, 1.70, length(hs));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       vec4 t = texture(uFaceTex, uv * uFaceAtlas.xy + uFaceAtlas.zw);
       // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
