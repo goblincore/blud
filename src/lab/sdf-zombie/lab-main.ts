@@ -118,7 +118,7 @@ const viewMaterialTemplate = view.material;
 //   axe zombie (77x116), cropped to its head. DEV PLACEHOLDER — extracted
 //   Blood art, never ships. Used because it is already quantized to BLOOD.PAL.
 // ---------------------------------------------------------------------------
-type FaceTexName = 'smiley' | 'blood-zombie';
+type FaceTexName = 'zombie-flat' | 'smiley' | 'blood-zombie';
 
 /**
  * url, plus the crop rect in TOP-LEFT pixel coordinates: [x, y, w, h, sheetW,
@@ -127,6 +127,15 @@ type FaceTexName = 'smiley' | 'blood-zombie';
  * OpenGL. The conversion happens once, below.
  */
 const FACE_TEXTURES: Record<FaceTexName, { url: string; rect: [number, number, number, number, number, number]; mean: number }> = {
+  // ORIGINAL art, so unlike the extracted sprite this one can actually ship.
+  //
+  // Drawn as a LUMINANCE MASK on neutral mid-grey rather than as a picture:
+  // because the texture is applied as a multiplier, mid-grey divided by the
+  // mean comes out at 1.0 and leaves the flesh untouched, so only the features
+  // act — sockets and mouth darken, eyes and teeth brighten. Flat fills and no
+  // baked shading, which is the property that made the smiley legible and the
+  // Blood sprite muddy.
+  'zombie-flat': { url: '/assets/lab/zombie-face.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.451 },
   smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.66 },
   'blood-zombie': {
     url: '/assets/blood-tiles/1200.png',
@@ -160,7 +169,7 @@ function loadFaceTexture(name: FaceTexName) {
   u.uFaceMean!.value = def.mean;
 }
 
-let faceTexName: FaceTexName = 'blood-zombie';
+let faceTexName: FaceTexName = 'zombie-flat';
 loadFaceTexture(faceTexName);
 view.material.uniforms.uFaceEnabled!.value = 1;
 // Map the crop across the head and no further. uv = hs * scale + centre, so

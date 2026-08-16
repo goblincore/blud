@@ -15,9 +15,18 @@ const ZOMBIE_BASE: BodyDef = {
 
   bones: [
     { name: 'pelvis',   parent: null,     dir: [0, 1, 0],       length: 0.14 },
-    { name: 'spine',    parent: 'pelvis', dir: [0, 1, -0.12],   length: 0.34 },
-    { name: 'neck',     parent: 'spine',  dir: [0, 1, -0.35],   length: 0.16 },
-    { name: 'skull',    parent: 'neck',   dir: [0, 1, -0.18],   length: 0.16 },
+    // The upper body hunches FORWARD, i.e. +z.
+    //
+    // These three used to lean -z while the forearms angle +z
+    // (`foreArm dir: [0.05, -1, 0.1]`) and the feet drift +z. The body faced
+    // one way and the head tipped the other, so in profile the occiput jutted
+    // out where the face should be and the head read as being on backwards —
+    // while the face texture, projected onto +z, landed on the side you never
+    // look at. The comment below always claimed "head pitched forward of the
+    // spine"; the numbers just did the opposite.
+    { name: 'spine',    parent: 'pelvis', dir: [0, 1, 0.12],    length: 0.34 },
+    { name: 'neck',     parent: 'spine',  dir: [0, 1, 0.35],    length: 0.16 },
+    { name: 'skull',    parent: 'neck',   dir: [0, 1, 0.18],    length: 0.16 },
     { name: 'clavicle', parent: 'spine',  dir: [1, 0, 0],       length: 0.20, side: 0,    mirror: true },
     { name: 'upperArm', parent: 'clavicle', dir: [0.30, -1, 0], length: 0.30, side: 0,    mirror: true },
     { name: 'foreArm',  parent: 'upperArm', dir: [0.05, -1, 0.1], length: 0.30, side: 0,  mirror: true },
