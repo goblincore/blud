@@ -203,6 +203,48 @@ the hardware depth test resolves to the NEAREST start — the one value safe for
 all of them. `CONE_TILE` is 8 and worth sweeping: bigger tiles make the
 pre-pass cheaper but the cone wider, and a wider cone stops earlier.
 
+## ARBM, and what it says about our cone pass
+
+[The recursive-algorithm post](https://pointersgonewild.com/2026-03-06-a-recursive-algorithm-to-render-signed-distance-fields/)
+is the writeup behind the batchmarching repo. It starts from a single ray for
+the whole viewport, advances every ray in a patch together by a distance
+computed conservatively from a centre ray, and subdivides only when uniform
+advancement stops being safe. He reports 3-4x fewer rays per pixel and a
+tripled frame rate, and notes himself that it parallels GPU cone marching.
+
+**Our cone pass is the single-level version of his recursion.** Three things
+follow, and the third is actionable.
+
+**His 3-4x will not transfer.** It is a CPU number, and on a CPU every ray
+skipped is work saved. A GPU already marches coherent rays in lockstep across
+SIMD lanes, so the saving only materialises where a whole tile agrees — which
+is exactly the part a tile pre-pass already captures. Measured here: 22%.
+
+**His own caveat matches our measurement.** He expects less benefit "for
+crowded scenes with minimal empty space", and a shoulder-to-shoulder crowd of
+overlapping bodies is precisely that. 22% in the worst case is consistent, and
+a sparse encounter should do better.
+
+**The useful next level is FINER, not coarser** — which is the opposite of the
+intuition, so it is worth writing down. Adding a coarser level above our 8x8
+would only make the pre-pass itself cheaper, and the pre-pass is already a
+sixty-fourth of the pixels. It would not improve the start distance the fine
+pass receives at all. A FINER level would: cone radius grows with tile size,
+and a narrower cone travels further before it touches anything, so an 8x8 ->
+2x2 -> per-pixel chain hands the fine march a strictly larger proven-empty
+distance than 8x8 alone. That is the version of his recursion worth having.
+
+**Interpolated shading is the one idea we have no analogue for.** He terminates
+early where all four corners of a patch are inside an object with aligned
+normals, and interpolates across patches up to 10x10 — under one sample per
+pixel. Our half-resolution layer is the crude cousin: uniform undersampling
+rather than adaptive. His is better quality per unit cost in principle, but it
+undersamples flat regions and keeps detail at silhouettes, whereas the layer
+approach undersamples everything evenly — and on a game that already renders
+960x540 through `image-rendering: pixelated`, even undersampling is closer to
+the intended look than smart flat-shaded patches would be. Worth knowing about;
+not obviously worth adopting here.
+
 ## The remaining gap
 
 Quality LOD tops out at −24%. Reaching 16 ms needs **fewer fragment
