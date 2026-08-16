@@ -24,7 +24,8 @@
 // Two copies of three means the node system cannot see the lights.
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
-import { createZombieGpuView, translateBody } from './zombie-gpu';
+import { createZombieGpuView } from './zombie-gpu';
+import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
 import { DEFAULT_FACE, type FaceParams } from '../face';
