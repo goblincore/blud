@@ -116,6 +116,61 @@ export const DEFAULT_FACE: FaceParams = {
   headBlend: 0.006,
 };
 
+/**
+ * Named head shapes, so a crowd is not fifteen copies of one skull.
+ *
+ * Silhouette is the only thing the face TEXTURE cannot vary — every zombie
+ * shares one sheet — so it is the only place variety can come from. These are
+ * hand-tuned in the panel and baked, same as DEFAULT_FACE.
+ *
+ * Keep the list small and each entry distinct at a distance. Two heads that
+ * differ only in the third decimal cost a body rebuild and read as identical.
+ */
+export const FACE_PRESETS: Record<string, FaceParams> = {
+  /** The original: tall gaunt cranium tapering to a narrow chin. */
+  gaunt: DEFAULT_FACE,
+  /**
+   * Rounder skull, heavier brow, and a nose that drops rather than projects —
+   * which reads as hooked in profile. `noseLength` is near zero on purpose:
+   * length pushes the nose THROUGH the planar face projection and leaves it
+   * untextured (see the header), so the hook comes from noseDrop and a
+   * narrower noseWidth instead.
+   */
+  hooked: {
+    headRadius: 0.122,
+    headWidth: 0.969,
+    headHeight: 1.081,
+    headDepth: 1.06,
+    jawWidth: 0.748,
+    jawHeight: 0.913,
+    jawDrop: 0.043,
+    jawJut: 0.04,
+    noseLength: 0.003,
+    noseWidth: 0.3,
+    noseDrop: 0.042,
+    browHeavy: 0.011,
+    browRise: 0.044,
+    headBlend: 0.004,
+  },
+};
+
+export type FacePresetName = keyof typeof FACE_PRESETS;
+
+export const FACE_PRESET_NAMES = Object.keys(FACE_PRESETS) as FacePresetName[];
+
+/**
+ * Picks a head shape from a 0..1 roll.
+ *
+ * Takes the roll rather than calling Math.random itself, so a caller that
+ * needs a crowd to look the same twice — a replay, a seeded level, a
+ * screenshot comparison — can hand it a seeded generator instead.
+ */
+export function pickFace(roll: number): FaceParams {
+  const n = FACE_PRESET_NAMES.length;
+  const i = Math.min(n - 1, Math.max(0, Math.floor(roll * n)));
+  return FACE_PRESETS[FACE_PRESET_NAMES[i]!]!;
+}
+
 /** A head primitive, tagged so tests and the panel can find it by name. */
 export interface FacePrim extends PrimDef {
   tag: string;

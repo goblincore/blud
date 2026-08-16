@@ -26,11 +26,14 @@
 // system cannot see the lights and every standard material renders black.
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
+import { createSdfLayer, SDF_LAYER } from './sdf-layer';
 import { createZombieGpuView, createChunkGpuView, type ChunkGpuView } from './zombie-gpu';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
-import { DEFAULT_FACE, type FaceParams } from '../face';
+import {
+  DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
+} from '../face';
 import {
   FLESH_PRESETS, LIGHT_PRESETS,
   type FleshMaterial, type FleshPresetName, type LightPresetName,
@@ -153,12 +156,32 @@ async function main() {
   gpuEl.style.fontSize = '11px';
   gpuEl.style.color = '#9cf';
   statusBox.appendChild(gpuEl);
+  const resEl = document.createElement('div');
+  resEl.style.fontSize = '11px';
+  statusBox.appendChild(resEl);
+
+  // The raymarched bodies render into their own target at their own scale and
+  // composite back over the polygonal scene. Cost is close to linear in
+  // pixels, so this is the biggest lever available without compute.
+  const sdfLayer = createSdfLayer(handle.renderer);
+  function sizeSdfLayer() {
+    const s = handle.renderer.getDrawingBufferSize(new THREE.Vector2());
+    sdfLayer.setSize(s.x, s.y);
+    const t = sdfLayer.targetSize;
+    resEl.textContent = `sdf ${t.width}x${t.height} (${sdfLayer.scale.toFixed(2)}x)`;
+  }
+  sizeSdfLayer();
+  window.addEventListener('resize', sizeSdfLayer);
+  handle.setDrawFn(() => sdfLayer.render(scene, camera));
 
   let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
   const view = createZombieGpuView(body);
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
+  // Everything raymarched lives on SDF_LAYER, so the two render passes are a
+  // camera layer mask apart rather than an object list to keep in sync.
+  view.object.layers.set(SDF_LAYER);
   scene.add(view.object);
   const u = view.uniforms;
 
@@ -442,7 +465,13 @@ async function main() {
       const i = crowd.length + 1; // body zero is the interactive one
       const col = i % 5;
       const row = Math.floor(i / 5);
-      const placed = translateBody(current,
+      // Each crowd body gets its OWN head, built from a random preset, so a
+      // crowd is not fifteen copies of one skull. Silhouette is the only thing
+      // that can vary — every zombie shares one face sheet — so it is the only
+      // place variety can come from. Built once at spawn, not per frame.
+      const crowdFace = pickFace(Math.random());
+      const crowdBody = buildBody(makeZombie(crowdFace), DEFAULT_BUILD_OPTS, override);
+      const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
       const v = createZombieGpuView(placed);
       trackBody(v, placed);
@@ -457,6 +486,7 @@ async function main() {
         const skull = headShape(placed);
         if (skull) v.setHeadShape(skull.centre, skull.axes);
       }
+      v.object.layers.set(SDF_LAYER);
       scene.add(v.object);
       crowd.push(v);
     }
@@ -576,6 +606,7 @@ async function main() {
     // smaller than any limb and would bury it half-way into the floor.
     const state = makeChunk(limb, origin, v, chunkExtent(prims, origin));
     const chunkView = createChunkGpuView(state, prims, u, tornAt);
+    chunkView.object.layers.set(SDF_LAYER);
     scene.add(chunkView.object);
     chunks.push({ state, view: chunkView });
 
@@ -774,13 +805,28 @@ async function main() {
   // Face. Sliders regenerate the face primitives and rebuild the body, so a
   // param change alters which primitives exist rather than just their values.
   const faceBox = addSection(panelEl, 'face');
-  for (const s of FACE_SLIDERS)
-    addSlider(faceBox, {
-      label: s.key, min: s.min, max: s.max, step: 0.001,
-      get: () => face[s.key],
-      set: (v) => { (face[s.key] as number) = v; rebuildBody(); },
-    });
+  // The shape sliders live in their own box so switching preset can rebuild
+  // them in place — otherwise they keep showing the previous head's numbers.
+  const faceSliderBox = document.createElement('div');
+  faceBox.appendChild(faceSliderBox);
+  function rebuildFaceSliders() {
+    faceSliderBox.textContent = '';
+    for (const s of FACE_SLIDERS)
+      addSlider(faceSliderBox, {
+        label: s.key, min: s.min, max: s.max, step: 0.001,
+        get: () => face[s.key],
+        set: (v) => { (face[s.key] as number) = v; rebuildBody(); },
+      });
+  }
+  rebuildFaceSliders();
 
+  // Head SHAPE, as distinct from the face sheet below. The sheet is shared by
+  // every zombie; the skull is the only thing that can differ between them.
+  addSelect(faceBox, 'head shape', Object.keys(FACE_PRESETS), 'gaunt', (v) => {
+    Object.assign(face, FACE_PRESETS[v]!);
+    rebuildBody();
+    rebuildFaceSliders();
+  });
   addSelect(faceBox, 'texture', Object.keys(FACE_TEXTURES), faceTexName, (v) => {
     faceTexName = v as FaceTexName;
     loadFaceTexture(faceTexName);
@@ -869,6 +915,13 @@ async function main() {
   // same full-quality baseline — a lever measured while another is already off
   // reports the wrong number, and these are close enough in cost to matter.
   const lodBox = addSection(panelEl, 'lod');
+  addSlider(lodBox, {
+    // The single biggest lever measured: cost is close to linear in pixels, so
+    // 0.5 here is ~4x on the raymarch. Level geometry stays full resolution.
+    label: 'sdf resolution', min: 0.25, max: 1, step: 0.05,
+    get: () => sdfLayer.scale,
+    set: (v) => { sdfLayer.setScale(v); sizeSdfLayer(); },
+  });
   const lodBtn = addButton(lodBox, 'lod: on', () => {
     lodEnabled = !lodEnabled;
     lodBtn.textContent = `lod: ${lodEnabled ? 'on' : 'off'}`;
@@ -955,6 +1008,11 @@ async function main() {
     setStepsOverride(v: number | null) { stepsOverride = v; },
     /** Sphere-trace step multiplier on every body. Default 0.6. */
     setStepMul(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.y = v; },
+    /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
+    setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
+    get sdfScale() { return sdfLayer.scale; },
+    setSdfFlipY(on: boolean) { sdfLayer.setFlipY(on); },
+    get sdfFlipY() { return sdfLayer.flipY; },
     setSimplifyOverride(v: boolean | null) { simplifyOverride = v; },
     /** Re-spawns the crowd at a new spacing. 1 = shoulder to shoulder. */
     setCrowdSpread(v: number) {

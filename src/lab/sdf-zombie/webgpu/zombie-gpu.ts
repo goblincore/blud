@@ -217,15 +217,37 @@ function createMarchMaterial(dataTex: THREE.Texture, u: MarchUniforms) {
 
   const material = new MeshBasicNodeMaterial();
   material.side = THREE.BackSide;
-  material.colorNode = vec4(marched.xyz as never, 1.0);
 
   // Depth from the marched hit, so the body composites with real geometry.
   // WebGPU clip z is already [0,1] — no `* 0.5 + 0.5` remap, unlike the GLSL.
   const rayDir = normalize(sub(positionWorld, cameraPosition));
   const hitPos = add(cameraPosition, mul(rayDir, marched.w as never));
   const clip = mul(cameraProjectionMatrix, mul(cameraViewMatrix, vec4(hitPos, 1.0)));
-  material.depthNode = clip.z.div(clip.w);
+  const depth = clip.z.div(clip.w);
+
+  material.colorNode = vec4(marched.xyz as never, 1.0);
+  material.depthNode = depth;
   material.depthWrite = true;
+
+  // Depth goes out in ALPHA as well as to depthNode, via `outputNode`.
+  //
+  // It has to be outputNode and not colorNode: three builds `DiffuseColor =
+  // vec4(colorNode.xyz, 1.0)` and then forces `DiffuseColor.w = 1.0` again for
+  // an opaque material, so an alpha written through colorNode never reaches
+  // the target. That cost a pass where the composite discarded every pixel and
+  // no body appeared at all. outputNode replaces the final RGBA outright.
+  //
+  // The alpha copy is what lets the half-resolution SDF layer composite: its
+  // pass renders into a float target, and the composite reads depth straight
+  // back out of the colour it already samples. Attaching a DepthTexture and
+  // sampling it as `texture_depth_2d` was the first attempt and read as "near"
+  // everywhere, so the quad passed the depth test across the whole screen and
+  // painted out the floor. Depth in a float alpha channel has no such
+  // ambiguity, and FloatType keeps it exact rather than quantised to 8 bits.
+  //
+  // Harmless when the material draws straight to the canvas: it is opaque, so
+  // the framebuffer alpha is never read.
+  material.outputNode = vec4(marched.xyz as never, depth);
   return material;
 }
 
