@@ -173,12 +173,15 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // Modelled as a Gaussian ring just outside the crater. Subtracting from d
     // means "more material here", so this adds a bulge rather than a dent.
     // Burns evert far less: they char and contract instead of tearing open.
-    let x = (r - depth * woundCfg.w) / max(depth * woundCfg2.x, 1e-4);
-    let amp = depth * woundCfg.z * select(1.0, 0.25, isBurn);
+    let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
+    let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
     // Surface locality: a bulge of amplitude amp can only displace flesh that
     // was already within ~amp of the pre-wound surface. Ungated, the shell
     // adds material in EMPTY space and welds separate limbs together.
-    let rimLocal = 1.0 - smoothstep(amp * 0.5, amp * 1.2, dIn);
+    // Tighter reach than the first cut: 0.35/0.7 (was 0.5/1.2). At blast
+    // amplitude the old reach exceeded the armpit gap and the rim still
+    // bridged arm to torso from the shoulder side.
+    let rimLocal = 1.0 - smoothstep(amp * 0.35, amp * 0.7, dIn);
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return d;

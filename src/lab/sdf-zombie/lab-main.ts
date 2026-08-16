@@ -10,7 +10,7 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from './material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
   type Wound, type WoundType,
 } from './damage';
 import { sdBody } from './validate';
@@ -230,7 +230,6 @@ function rebind() { bound = bindRig(current); }
 let wounds: Wound[] = [];
 
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
-const RADIUS: Record<WoundType, number> = { pellet: 0.055, blast: 0.13, burn: 0.08 };
 
 /** Marches the CPU-side field along a ray to find where a shot lands. */
 function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
@@ -250,6 +249,8 @@ function refreshWounds() {
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
+    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+    wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
   );
 }
 
@@ -347,6 +348,8 @@ handle.setRenderCallback((dt) => {
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
+    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+    wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
   );
 
   if (autoSpin) camYaw += dt * 0.35;
@@ -385,7 +388,7 @@ canvas.addEventListener('pointerup', (ev: PointerEvent) => {
   if (!hit) return;
 
   const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES[type].radius, type), MAX_WOUNDS);
   // A hit shoves the nearest joint along the shot direction — the rest-pose
   // pull springs it back, so the limb visibly recoils and lags.
   const push = type === 'blast' ? 0.10 : 0.04;

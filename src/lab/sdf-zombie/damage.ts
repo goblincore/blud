@@ -7,6 +7,24 @@ export const MAX_WOUNDS = 16;
 
 export type WoundType = 'pellet' | 'blast' | 'burn';
 
+/** Per-type wound character — the "weapon calibre" knobs. rimSplayScale and
+ *  rimOffsetScale multiply the global woundCfg rim settings PER WOUND, packed
+ *  into the spare ROW_WOUND_META channels (z, w). */
+export interface WoundProfile {
+  radius: number;
+  rimSplayScale: number;
+  rimOffsetScale: number;
+}
+export const WOUND_PROFILES: Record<WoundType, WoundProfile> = {
+  // Pellet: small clean punch, modest lip.
+  pellet: { radius: 0.055, rimSplayScale: 0.8, rimOffsetScale: 1.0 },
+  // Blast: big crater but a TAMED lip — the default splay welded the arm to
+  // the torso at the shoulder (playtest 2026-08-16 screenshot 1).
+  blast: { radius: 0.13, rimSplayScale: 0.45, rimOffsetScale: 0.85 },
+  // Burn: chars and contracts; barely everts (shader already scales by 0.25).
+  burn: { radius: 0.08, rimSplayScale: 1.0, rimOffsetScale: 1.0 },
+};
+
 export interface Wound {
   /** Index into the built primitive array — the primitive this wound rides. */
   primIdx: number;

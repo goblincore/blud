@@ -15,8 +15,11 @@ export interface ZombieView {
   material: THREE.ShaderMaterial;
   /** Re-upload after the body changes (sever, override edit, rig step). */
   update(body: BuildResult): void;
-  /** Uploads wounds already transformed to world space by the caller. */
-  setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[]): void;
+  /** Uploads wounds already transformed to world space by the caller.
+   *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES);
+   *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s. */
+  setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
+    splayScales?: number[], offsetScales?: number[]): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** Drives the eye-glow flicker. Seconds. */
@@ -139,13 +142,15 @@ export function createZombieView(body: BuildResult): ZombieView {
       mesh.position.copy(fit.center);
       mesh.scale.setScalar(fit.size / size);
     },
-    setWounds(worldPositions, radii, types, ages) {
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales) {
       const w = material.uniforms.uWound!.value as Float32Array;
       const m = material.uniforms.uWoundMeta!.value as Float32Array;
       const n = Math.min(worldPositions.length, 16);
       for (let i = 0; i < n; i++) {
         w.set([...worldPositions[i]!, radii[i]!], i * 4);
-        m.set([types[i]!, ages[i]!, 0, 0], i * 4);
+        // meta = (type, age, rimSplayScale, rimOffsetScale); scales default
+        // to 1 so omitted callers keep the global woundCfg rim settings.
+        m.set([types[i]!, ages[i]!, splayScales?.[i] ?? 1, offsetScales?.[i] ?? 1], i * 4);
       }
       material.uniforms.uWoundCount!.value = n;
     },
@@ -289,7 +294,7 @@ export function createChunkView(
       const m = material.uniforms.uWoundMeta!.value as Float32Array;
       ats.forEach((at, i) => {
         w.set([at[0], at[1], at[2], tornRadii[i] ?? 0], i * 4);
-        m.set([1, 0, 0, 0], i * 4); // type 1 = blast, so it reads as torn, not burned
+        m.set([1, 0, 1, 1], i * 4); // type 1 = blast, so it reads as torn, not burned; scales 1 = global rim settings
       });
       material.uniforms.uWoundCount!.value = tornLocals.length;
     } else {

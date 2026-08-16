@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/damage.test.ts
 import { describe, it, expect } from 'vitest';
-import { worldHitToWound, woundWorldPos, pushWound, MAX_WOUNDS } from './damage';
+import { worldHitToWound, woundWorldPos, pushWound, MAX_WOUNDS, WOUND_PROFILES } from './damage';
 import type { Primitive } from './types';
 import { add, len, sub } from './vec';
 
@@ -46,6 +46,33 @@ describe('worldHitToWound / woundWorldPos', () => {
     expect(w.type).toBe('burn');
     expect(w.radius).toBe(0.09);
     expect(w.ageSec).toBe(0);
+  });
+});
+
+describe('WOUND_PROFILES — per-type "weapon calibre" knobs', () => {
+  it('covers all three wound types', () => {
+    expect(Object.keys(WOUND_PROFILES).sort()).toEqual(['blast', 'burn', 'pellet']);
+  });
+
+  it('radii match the previous local RADIUS tables exactly', () => {
+    // The lab-mains used to carry `const RADIUS = { pellet: 0.055, blast: 0.13,
+    // burn: 0.08 }`. Drifting these silently retunes every wound pipeline term.
+    expect(WOUND_PROFILES.pellet.radius).toBe(0.055);
+    expect(WOUND_PROFILES.blast.radius).toBe(0.13);
+    expect(WOUND_PROFILES.burn.radius).toBe(0.08);
+  });
+
+  it('tames the blast lip — the default splay welded the arm to the torso', () => {
+    // Playtest 2026-08-16: at splay 1 the blast rim bridged the armpit gap.
+    expect(WOUND_PROFILES.blast.rimSplayScale).toBeLessThan(1);
+    expect(WOUND_PROFILES.blast.rimOffsetScale).toBeLessThanOrEqual(1);
+  });
+
+  it('scales are positive so the rim never inverts', () => {
+    for (const p of Object.values(WOUND_PROFILES)) {
+      expect(p.rimSplayScale).toBeGreaterThan(0);
+      expect(p.rimOffsetScale).toBeGreaterThan(0);
+    }
   });
 });
 

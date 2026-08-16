@@ -40,7 +40,7 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
@@ -97,7 +97,6 @@ const FACE_TEXTURES: Record<
 };
 
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
-const RADIUS: Record<WoundType, number> = { pellet: 0.055, blast: 0.13, burn: 0.08 };
 
 /** Chunks are disposed oldest-first past this, so a long session can't leak.
  *  A per-prim gib is ~15 pieces, so 40 lets two full gibs coexist. */
@@ -478,6 +477,8 @@ async function main() {
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
+      wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+      wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
     );
   }
   function refreshWounds() { uploadWounds(current.prims); }
@@ -627,7 +628,7 @@ async function main() {
     if (!hit) return;
 
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-    wounds = pushWound(wounds, worldHitToWound(current.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+    wounds = pushWound(wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES[type].radius, type), MAX_WOUNDS);
     // A hit shoves the nearest joint along the shot direction — the rest-pose
     // pull springs it back, so the limb visibly recoils and lags.
     const push = type === 'blast' ? 0.10 : 0.04;
@@ -1259,7 +1260,7 @@ async function main() {
         const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1]);
         if (!hit) continue;
         wounds = pushWound(
-          wounds, worldHitToWound(current.prims, hit, RADIUS.blast, 'blast'), MAX_WOUNDS);
+          wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES.blast.radius, 'blast'), MAX_WOUNDS);
       }
       refreshWounds();
     },

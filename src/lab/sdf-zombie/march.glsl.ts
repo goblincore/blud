@@ -26,7 +26,7 @@ precision highp float;
 #define MAX_CLUSTERS ${MAX_CLUSTERS}
 #define MAX_WOUNDS 16
 uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius
-uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age
+uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age, z = rimSplayScale, w = rimOffsetScale (per-wound "calibre")
 uniform int  uWoundCount;
 uniform float uWoundBlendK;        // separate from the union k — makes the wet lip
 uniform float uRimSplay;           // height of the everted lip, as a fraction of depth
@@ -190,12 +190,15 @@ float applyWounds(float d, vec3 p) {
     // Modelled as a Gaussian ring just outside the crater. Subtracting from d
     // means "more material here", so this adds a bulge rather than a dent.
     // Burns evert far less: they char and contract instead of tearing open.
-    float x = (r - depth * uRimOffset) / max(depth * uRimWidth, 1e-4);
-    float amp = depth * uRimSplay * (type > 1.5 ? 0.25 : 1.0);
+    float x = (r - depth * uRimOffset * uWoundMeta[i].w) / max(depth * uRimWidth, 1e-4);
+    float amp = depth * uRimSplay * uWoundMeta[i].z * (type > 1.5 ? 0.25 : 1.0);
     // Surface locality: a bulge of amplitude amp can only displace flesh that
     // was already within ~amp of the pre-wound surface. Ungated, the shell
     // adds material in EMPTY space and welds separate limbs together.
-    float rimLocal = 1.0 - smoothstep(amp * 0.5, amp * 1.2, dIn);
+    // Tighter reach than the first cut: 0.35/0.7 (was 0.5/1.2). At blast
+    // amplitude the old reach exceeded the armpit gap and the rim still
+    // bridged arm to torso from the shoulder side.
+    float rimLocal = 1.0 - smoothstep(amp * 0.35, amp * 0.7, dIn);
     d -= exp(-x * x) * amp * rimLocal;
   }
   return d;

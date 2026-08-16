@@ -152,6 +152,14 @@ describe('ported features reach the entry point', () => {
     const applyWounds = HELPERS.find(h => declaredName(h) === 'applyWounds')!;
     expect(applyWounds).toContain('rimLocal');
     expect(applyWounds).toMatch(/smoothstep\([^)]*dIn\)/);
+    // Per-wound rim scales ride the spare ROW_WOUND_META channels: z multiplies
+    // the splay (amplitude), w the offset (ring radius) — the "weapon calibre"
+    // knobs that let a blast wear a tamer lip than a pellet.
+    expect(applyWounds).toContain('wMeta.z');
+    expect(applyWounds).toContain('wMeta.w');
+    // Tighter locality than the first cut (0.5/1.2): at blast amplitude the
+    // old reach exceeded the armpit gap and the rim still welded arm to torso.
+    expect(applyWounds).toMatch(/smoothstep\(amp \* 0\.35, amp \* 0\.7, dIn\)/);
   });
 });
 
