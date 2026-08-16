@@ -144,9 +144,29 @@ Key reference docs (open these before touching their area):
   the marched field, onto the normal via `calcNormal`; field is conservative
   again so over-relaxation applies to every body. **22.40 → 13.48 ms at 10
   bodies (1.66x)**, shading visually unchanged.
-- `X1.10` [ ] **Re-measure LOD and sweep the relaxation factor** — `X1.4`'s
-  numbers all predate `X1.8`, and `silhouetteNoise` (its top lever at −8%) is
-  now nearly free in the march. Relax 1.6 was never swept; 1.8/2.0 untested.
+- `X1.10` [x] **Re-measure + relax sweep — QUALITY LOD IS DEAD.** On the honest
+  bench (10 bodies spread, occluder on, cooled, interleaved control 9.81/9.74):
+  LOD on = 9.79 vs off 9.81 — **0.2%, within noise**, at LOD's own benchmark
+  scene. Relax sweep: 1.0 → 14.89 / **1.4 → 9.31** / 1.6 → 9.81 / 1.8 → 10.17;
+  optimum is **1.4** (default flipped, ~5% free). LOD now defaults OFF;
+  machinery kept for measurement. 2.0 unswept — curve already rising past 1.6.
+  Sustained-thermal soak still open (punted; not ready to run).
+- `X1.16` [ ] **Gib chunk shape — limbs must stay limb-like.** Playtest: gibbed
+  limbs read as rounded blobs ("boob shapes"), not cylinders/arms/legs.
+  Interrogate the torn-end / stump-closure treatment in `gib-chunks.ts` +
+  `createChunkGpuView` (the torn-end cap + blend may be swallowing the
+  capsule silhouette); chunks should keep their source primitives' elongation.
+- `X1.17` [ ] **Wound rendering bug: camera-dependent shimmer + blown-white
+  interiors** on heavily-wounded bodies (screenshots 2026-08-16). Shifts as
+  the camera rotates ⇒ view-dependent shading terms (fresnel/spec/scatter) on
+  degenerate hits inside deep multi-wound cavities are the lead suspects —
+  possibly interacting with the tracer's clamped tMax sample landing INSIDE
+  the surface. Needs its own systematic pass; do not guess-fix.
+- `X1.18` [ ] **Wound fluid: gushing/gooey particle gore** (feature, planned
+  with user). Wounds should emit fluid — ties into the game's ChunkSystem
+  blood-trail/splat pipeline (`F2.cascade-gibs`) and the lab's verlet rig;
+  candidate approach: emitter per wound seeded from `woundWorldPos`, particles
+  as tiny raymarched blobs or the game's existing droplet sprites.
 - `X1.11` [ ] **Port normal warping to `march.glsl.ts`** — the WebGL lab still
   has the noise in its field, so `validate.ts`'s Lipschitz guard must stay
   until it does. The two labs are one technique apart.

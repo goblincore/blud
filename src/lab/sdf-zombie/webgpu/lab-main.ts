@@ -250,7 +250,13 @@ async function main() {
     wounds: true,
   };
 
-  let lodEnabled = true;
+  // OFF by default since the X1.10 re-measure: at LOD's own benchmark scene
+  // (10 bodies spread, occluder on) the whole quality-lever system is worth
+  // 0.2% — within noise. Normal warping made its top lever (silhouette noise
+  // in the march) free, and the occluder absorbed the rest. The machinery
+  // stays for measurement, but paying its popping/hysteresis complexity by
+  // default bought nothing the last time it was measured.
+  let lodEnabled = false;
   /**
    * Per-lever overrides, for measuring one thing at a time. `null` means "let
    * LOD decide"; true/false force it on every body regardless of distance.
@@ -1127,7 +1133,7 @@ async function main() {
     get: () => adaptiveBudgetMs,
     set: (v) => { adaptiveBudgetMs = v; },
   });
-  const lodBtn = addButton(lodBox, 'lod: on', () => {
+  const lodBtn = addButton(lodBox, 'lod: off', () => {
     lodEnabled = !lodEnabled;
     lodBtn.textContent = `lod: ${lodEnabled ? 'on' : 'off'}`;
   });

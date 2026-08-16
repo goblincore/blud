@@ -130,11 +130,16 @@ function defaultUniforms(faceTex: THREE.Texture) {
     /**
      * x rimWidth, y relaxation factor for sphere tracing.
      *
-     * 1.6 is the usual over-relaxation constant. It only takes effect where
-     * the silhouette noise is off and the field is therefore trustworthy —
-     * see the long note in MARCH_BODY. Set at or below 1.0 to disable.
+     * 1.4, from a measured sweep (10 bodies, occluder on, cooled, with an
+     * interleaved control): 1.0 → 14.89 ms, 1.4 → 9.31, 1.6 → 9.81, 1.8 →
+     * 10.17. Higher factors save steps but pay for them in overshoot
+     * retractions — each one costs extra samples and drops the ray to plain
+     * tracing — and the curve bottoms at 1.4. The textbook 1.6 was adopted
+     * before it could be measured honestly. Purely a perf knob: the overshoot
+     * test makes any factor exact on a conservative field. At or below 1.0
+     * the relaxed path is off.
      */
-    woundCfg2: uniform(new THREE.Vector4(0.42, 1.6, 0, 0)),
+    woundCfg2: uniform(new THREE.Vector4(0.42, 1.4, 0, 0)),
     baseColor: uniform(new THREE.Color(0xc46a72)),
     deepColor: uniform(new THREE.Color(0x8c1420)),
     charColor: uniform(new THREE.Color(0x1a1214)),
