@@ -44,7 +44,11 @@ const HEAD_AT = 0.45;
 export interface FaceParams {
   /** Overall size of the cranium, in metres. */
   headRadius: number;
-  /** Ellipsoid scales. Raising headHeight gives the taller dome. */
+  /**
+   * Ellipsoid scales. Keep headHeight near 1: raising it SHARPENS the crown
+   * rather than doming it, because an ellipsoid's pole curvature goes as
+   * a^2/b. Height belongs in jawDrop, not here.
+   */
   headWidth: number;
   headHeight: number;
   headDepth: number;
@@ -70,16 +74,19 @@ export interface FaceParams {
 
 /** A clean oval, a little taller than wide. */
 export const DEFAULT_FACE: FaceParams = {
-  // Tall and narrow, after the Blud zombie: a bald egg of a skull rather than
-  // a sphere.
-  headRadius: 0.112,
-  headWidth: 0.94,
-  headHeight: 1.34,
-  headDepth: 1.04,
-  jawWidth: 0.72,
-  jawHeight: 0.80,
-  jawDrop: 0.082,
-  jawJut: 0.010,
+  // The CRANIUM stays close to spherical. Stretching an ellipsoid along y does
+  // not flatten its crown, it SHARPENS it — the radius of curvature at the
+  // pole goes as a^2/b — so a tall headHeight produced a conehead. All the
+  // taper comes from the jaw below instead, which is what actually gives the
+  // Blud zombie's gaunt egg without a pointed dome.
+  headRadius: 0.118,
+  headWidth: 1.0,
+  headHeight: 1.10,
+  headDepth: 1.05,
+  jawWidth: 0.80,
+  jawHeight: 0.86,
+  jawDrop: 0.076,
+  jawJut: 0.012,
   headBlend: 0.006,
 };
 
