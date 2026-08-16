@@ -166,6 +166,9 @@ Key reference docs (open these before touching their area):
 - `X1.19.1` [x] Gore fix-pass — per-type wound profiles ("calibres"), tighter rim
   locality (no armpit welding), mid-limb severing (per-prim dead flag; floating-piece
   fix + hanging-arm chain anatomy), game-hot launch, trail-sized droplets.
+- `X1.19.2` [ ] Chain-cut union test — overlapping wounds that jointly carve a joint
+  through (or fat joints like the hand knob) don't sever; test the cross-section
+  against the UNION of carve spheres. Small, `connectivity.ts`, after X1.21 lands.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
 - `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
