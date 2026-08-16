@@ -95,15 +95,35 @@ Key reference docs (open these before touching their area):
     projection mode built but never compared side-by-side; perf HUD + N-body
     spawner deferred, still the only route to an honest cost number.
 
-- `X1.2` [ ] **SDF lab on WebGPU** — lab only; the game stays on WebGL.
-  [spec](docs/superpowers/specs/2026-08-15-sdf-lab-webgpu-design.md)
-  - three 0.170 **already ships WebGPU** (`three/webgpu` is in its export map),
-    so this needs no dependency bump and can't affect the game.
-  - `feature/webgpu-levels` is a **reference, not a base** — 54 commits behind
-    main, no `src/lab/`, and carrying the abandoned M6 dungeon work.
-  - Buys storage buffers (kills the uniform ceiling) and compute (polygonize,
-    cull, timestamp-query). Does **not** promise a speedup, and loses
-    `EXT_conservative_depth`, which has no WGSL equivalent.
+- `X1.2` [~] **SDF lab on WebGPU** — lab only; the game stays on WebGL.
+  [spec](docs/superpowers/specs/2026-08-15-sdf-lab-webgpu-design.md) ·
+  run: `npm run dev` → `/sdf-lab-webgpu.html`
+  - **Phase 0 PASSED and Phase 1 mostly done — the zombie renders on WebGPU.**
+    Field ported to WGSL near line-for-line so it stays diffable against
+    `march.glsl.ts` and `validate.ts`'s CPU mirror. Every pure module
+    (build-body, clusters, pack, validate, face) is shared UNCHANGED, so the
+    field maths cannot drift between the two paths.
+  - **Primitive data is now a float DATA TEXTURE, not uniform arrays.** That was
+    the point: uniforms capped the body near 48 prims against a 224-vec4 floor;
+    this device reports a 4 GB storage limit. `MAX_PRIMS` stops being an
+    authoring constraint.
+  - three bumped 0.170 → **0.185** (game included — it is WIP, so the
+    blast-radius argument for staying didn't apply). Needed for the WGSL
+    `inverse()` polyfill (rest-space coords) and `StorageTextureNode.store()`
+    (compute writing to textures — the whole reason for migrating).
+  - **Traps, all of which present as one unhelpful error or a blank page:**
+    three's `wgslFn` regex is `^`-anchored so each source must BEGIN with `fn`
+    (a leading comment breaks it) and helpers go through the `includes`
+    argument, not concatenation; import EVERYTHING from `three/webgpu` or you
+    get two copies of three and the node system stops seeing lights; no
+    top-level await; WebGPU clip z is already [0,1] so the GLSL's trailing
+    `* 0.5 + 0.5` must NOT be carried over.
+  - **Not yet ported:** wounds/rims, severing, gib chunks, the face texture
+    (projection + relief + glowing eyes), the tuning panel.
+  - **Still no measurement.** Two rendering paths now, no numbers for either.
+    `timestamp-query` IS available on this device, so a real GPU-time readout is
+    finally straightforward — do that before any optimisation pass, and before
+    concluding WebGPU buys speed rather than just headroom.
 
 ## Asset pipeline
 
