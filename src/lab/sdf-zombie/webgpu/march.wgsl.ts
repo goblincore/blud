@@ -233,7 +233,14 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     }
   }
   let carved = applyCarves(d, p, data, counts);
-  return applyWounds(carved, p, data, woundCfg, woundCfg2) + fbm(p * 3.0) * noiseAmp;
+  let dmg = applyWounds(carved, p, data, woundCfg, woundCfg2);
+  // The silhouette noise is the single most expensive thing in the whole
+  // shader, because mapBody runs ~100 times per pixel and fbm is two 3D value
+  // noise lookups — sixteen hash13 calls — every one of those times. Branching
+  // it out is the top LOD lever; without the guard, setting the amplitude to
+  // zero still pays for it in full.
+  if (noiseAmp <= 0.0) { return dmg; }
+  return dmg + fbm(p * 3.0) * noiseAmp;
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
@@ -292,6 +299,12 @@ export const FLICKER = /* wgsl */ `fn flicker(t: f32, amt: f32) -> f32 {
 //   faceCfg3   x glowFlicker, y timeSeconds
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
+//   lodCfg     x aoEnabled
+//
+// LOD NOTE: most quality levers are guarded by their own amplitude reaching
+// zero (silhouette noise, surface noise, translucency, face, wounds), so the
+// LOD system drives them through uniforms that already existed. Only AO needs
+// lodCfg, because "no ambient occlusion" has no amplitude to turn down.
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -316,7 +329,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   faceAtlas: vec4<f32>,
   headCentre: vec3<f32>,
   headAxes: vec3<f32>,
-  faceGlowColor: vec3<f32>
+  faceGlowColor: vec3<f32>,
+  lodCfg: vec4<f32>
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
@@ -335,9 +349,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   let p = camPos + rd * t;
   var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2);
-  // Micro-detail perturbs the normal only — costs no march safety.
-  n = normalize(n + vec3<f32>(
-    fbm(p * 22.0), fbm(p * 22.0 + 5.0), fbm(p * 22.0 + 11.0)) * surfCfg2.y);
+  // Micro-detail perturbs the normal only — costs no march safety. Three more
+  // fbm calls though, so it is guarded: once per hit pixel rather than per
+  // step, but still six noise lookups a body does not always need.
+  if (surfCfg2.y > 0.0) {
+    n = normalize(n + vec3<f32>(
+      fbm(p * 22.0), fbm(p * 22.0 + 5.0), fbm(p * 22.0 + 11.0)) * surfCfg2.y);
+  }
 
   let wm = woundMask(p, data, woundCfg);
   let cm = charMask(p, data, woundCfg);
@@ -427,13 +445,23 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z;
 
   // Fake backlit scatter: sample the field a little way toward the light.
-  let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2) * -8.0, 0.0, 1.0);
-  let scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
+  // A whole extra mapBody, so it is skipped outright at zero translucency
+  // rather than multiplied away afterwards.
+  var scatter = vec3<f32>(0.0, 0.0, 0.0);
+  if (surfCfg.w > 0.0) {
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2) * -8.0, 0.0, 1.0);
+    scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
+  }
 
   // Cheap AO from the field, so creases and the insides of joints stay dark.
   // Without it a limb dissolves into the torso visually even when the geometry
-  // is correctly separated.
-  let ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2) / 0.06, 0.35, 1.0);
+  // is correctly separated — so this is a LOD lever, not a free win: it is the
+  // one guarded by an explicit flag rather than by its own amplitude, because
+  // there is no "AO strength" to turn down.
+  var ao = 1.0;
+  if (lodCfg.x > 0.5) {
+    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2) / 0.06, 0.35, 1.0);
+  }
 
   let lit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
           + keyColor * (shine * surfCfg.x + fres) * wet

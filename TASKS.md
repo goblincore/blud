@@ -111,9 +111,22 @@ Key reference docs (open these before touching their area):
   one job that unblocks three: the WebGPU lab's look, leaving post-fx on, and
   bloom for the eye glow. Presets in `src/lab/sdf-zombie/material.ts`.
 
-- `X1.4` [ ] **LOD pass** — 15 bodies from 36.8 ms to ~16 ms. Levers: fewer march
-  steps by distance, a cheaper far-field (drop face/wounds/AO), proxy-box
-  tightening, and compute-side culling. Measure with timestamp queries first.
+- `X1.4` [~] **LOD pass** — built, measured, and it does NOT reach the target.
+  [findings](docs/dev-notes/2026-08-16-sdf-lab-lod-pass.md)
+  - Shipped: GPU timestamp queries (wall clock was vsync-pinned and hiding
+    everything), screen-height-driven `lod.ts`, coarse `simplify.ts` stand-in,
+    shader guards, tight AABB proxy, change-detected uniform writes.
+  - **Worth ~10% on a distributed crowd, nothing on a close pack** (correctly —
+    every body deserves full quality there). Ceiling of ALL quality reduction
+    is −24%, so the 2.3x target is unreachable this way.
+  - **Cost is fill-bound**: 18.6 ms + 0.237 ms/1k px, and linear in body count
+    even when bodies occlude, because frag_depth + discard defeat early-Z.
+- `X1.5` [ ] **Half-res crowd pass** — the cheapest remaining shot at ~16 ms and
+  it needs no compute: render distant bodies to a smaller target and composite
+  by depth. Cost is linear in pixels, so this is close to 4x on what it covers.
+- `X1.6` [ ] **Compute polygonisation** — marching cubes / surface nets, which
+  buys back the early-Z the raymarcher gives up. The reason the migration
+  happened; still unwritten.
 
 ## Asset pipeline
 

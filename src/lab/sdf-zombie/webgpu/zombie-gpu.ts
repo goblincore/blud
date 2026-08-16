@@ -134,6 +134,14 @@ function defaultUniforms(faceTex: THREE.Texture) {
     faceGlowColor: uniform(new THREE.Color(1.9, 0.18, 0.10)),
     /** The face sheet itself. Swapped by the panel; see setFaceTexture(). */
     faceTex: texture(faceTex),
+    /**
+     * x = aoEnabled.
+     *
+     * The only LOD lever that needs its own uniform: every other one is
+     * switched off by driving its existing amplitude to zero, and the shader
+     * branches on that. "No ambient occlusion" has no amplitude.
+     */
+    lodCfg: uniform(new THREE.Vector4(1, 0, 0, 0)),
   };
 }
 
@@ -189,6 +197,7 @@ function createMarchMaterial(dataTex: THREE.Texture, u: MarchUniforms) {
     headCentre: u.headCentre,
     headAxes: u.headAxes,
     faceGlowColor: u.faceGlowColor,
+    lodCfg: u.lodCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -269,7 +278,15 @@ export function createZombieGpuView(body: BuildResult): ZombieGpuView {
   const packed = upload(body);
   const material = createMarchMaterial(dataTex, u);
 
-  /** Proxy box covering every live cluster, plus blend margin. */
+  /**
+   * Proxy box covering every live cluster, plus blend margin.
+   *
+   * A true AABB, not a cube. A standing body is roughly 0.6 x 1.8 x 0.35, so
+   * the cube this used to build — 1.8 on every side — covered about three
+   * times the screen area of the body itself, and every one of those extra
+   * pixels entered the march. Sphere tracing exits them quickly, but "quickly"
+   * still means several full mapBody evaluations each.
+   */
   function fit(body_: BuildResult, maxBlendK: number) {
     const min = [Infinity, Infinity, Infinity];
     const max = [-Infinity, -Infinity, -Infinity];
@@ -283,13 +300,13 @@ export function createZombieGpuView(body: BuildResult): ZombieGpuView {
     const pad = maxBlendK * 4 + 0.05;
     return {
       centre: new THREE.Vector3(...min.map((v, i) => (v + max[i]!) / 2)),
-      size: Math.max(...max.map((v, i) => v - min[i]!)) + pad * 2,
+      size: new THREE.Vector3(...max.map((v, i) => v - min[i]! + pad * 2)),
     };
   }
 
   const first = fit(body, packed.maxBlendK);
   const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(first.size, first.size, first.size), material,
+    new THREE.BoxGeometry(first.size.x, first.size.y, first.size.z), material,
   );
   mesh.position.copy(first.centre);
   mesh.frustumCulled = false; // the proxy IS the bound; don't double-cull
@@ -301,7 +318,10 @@ export function createZombieGpuView(body: BuildResult): ZombieGpuView {
       const p = upload(next);
       const f = fit(next, p.maxBlendK);
       mesh.position.copy(f.centre);
-      mesh.scale.setScalar(f.size / first.size);
+      // Per-axis, since the box is an AABB: severing a leg shortens it without
+      // narrowing it, and a uniform scale would either clip or over-cover.
+      mesh.scale.set(
+        f.size.x / first.size.x, f.size.y / first.size.y, f.size.z / first.size.z);
     },
     setWounds(worldPositions, radii, types, ages) {
       u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages);
@@ -383,6 +403,7 @@ export function createChunkGpuView(
   u.faceCfg.value.copy(template.faceCfg.value);
   u.faceCfg2.value.copy(template.faceCfg2.value);
   u.faceCfg3.value.copy(template.faceCfg3.value);
+  u.lodCfg.value.copy(template.lodCfg.value);
   u.faceProj.value.copy(template.faceProj.value);
   u.faceAtlas.value.copy(template.faceAtlas.value);
   u.faceGlowColor.value.copy(template.faceGlowColor.value);

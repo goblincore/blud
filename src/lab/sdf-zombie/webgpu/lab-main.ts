@@ -45,6 +45,11 @@ import { bindRig, applyRig, impulseAt } from '../rig-bind';
 import { stepRig } from '../rig';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
+import { simplifyBody } from '../simplify';
+import {
+  LOD_LEVELS, LOD_LEVERS, pickLodSticky, screenHeightPx,
+  type LodLevel, type LodLever,
+} from '../lod';
 import type { LimbId, Vec3 } from '../types';
 import {
   addButton, addSection, addSelect, addSlider, clearOverride,
@@ -144,6 +149,10 @@ async function main() {
   const fpsEl = document.createElement('div');
   fpsEl.style.fontSize = '11px';
   statusBox.appendChild(fpsEl);
+  const gpuEl = document.createElement('div');
+  gpuEl.style.fontSize = '11px';
+  gpuEl.style.color = '#9cf';
+  statusBox.appendChild(gpuEl);
 
   let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
@@ -159,6 +168,145 @@ async function main() {
    * setCrowdCount further down.
    */
   const crowd: ReturnType<typeof createZombieGpuView>[] = [];
+
+  // -------------------------------------------------------------------------
+  // LOD
+  //
+  // Every lever except AO is expressed by driving a uniform that already
+  // existed to zero, which the shader branches on. That keeps the LOD system
+  // from becoming a second source of truth about what the shader does.
+  //
+  // `full` is the reference: the quality the lab had before LOD existed. It is
+  // what `lod: off` restores, and what each per-lever override is measured
+  // against, so a measurement never compares against a moving baseline.
+  // -------------------------------------------------------------------------
+  const FULL_QUALITY: LodLevel = {
+    name: 'full',
+    minScreenPx: 0,
+    steps: 96,
+    simplify: false,
+    silhouetteNoise: true,
+    surfaceNoise: true,
+    scatter: true,
+    ao: true,
+    face: true,
+    wounds: true,
+  };
+
+  let lodEnabled = true;
+  /**
+   * Per-lever overrides, for measuring one thing at a time. `null` means "let
+   * LOD decide"; true/false force it on every body regardless of distance.
+   */
+  const lodOverride: Partial<Record<LodLever, boolean | null>> = {};
+  /** Forces the march step count on every body. null = let LOD decide. */
+  let stepsOverride: number | null = null;
+  /**
+   * Forces the coarse-body swap. Separate from `lodOverride` because every
+   * entry there is a quality flag where true means "better", and `simplify` is
+   * the one lever where true means "cheaper" — folding it in would break the
+   * monotonicity the LOD table is checked against.
+   */
+  let simplifyOverride: boolean | null = null;
+  /** Last level chosen per body, so pickLodSticky has something to stick to. */
+  const lastLevel = new WeakMap<object, number>();
+  /** Last set of uniform values applied, so unchanged frames write nothing. */
+  const lastSig = new WeakMap<object, string>();
+
+  /** The world-space centre of a body's proxy, which is what distance means here. */
+  const bodyCentre = new THREE.Vector3();
+  const drawSize = new THREE.Vector2();
+
+  /** World height of a view's proxy box, which is the body's own height. */
+  function boxHeight(o: THREE.Object3D): number {
+    const geo = (o as THREE.Mesh).geometry as THREE.BoxGeometry | undefined;
+    const h = geo?.parameters?.height ?? 1.8;
+    return h * o.scale.y;
+  }
+
+  /** The panel's face-texture switch. LOD may turn the face off, never on. */
+  let faceEnabled = true;
+
+  /**
+   * What each view currently has UPLOADED — detailed or coarse — plus the
+   * source bodies to swap between.
+   *
+   * Swapping is a re-pack and a texture upload, so it must happen on the frame
+   * the level CHANGES and not on every frame at that level. Keyed by object
+   * rather than held on the view so LOD stays a lab concern.
+   */
+  const bodySource = new WeakMap<
+    object, { detailed: BuildResult; coarse: BuildResult; usingCoarse: boolean }
+  >();
+
+  /** Registers a view's bodies, and builds its coarse stand-in once. */
+  function trackBody(v: ReturnType<typeof createZombieGpuView>, b: BuildResult) {
+    bodySource.set(v.object, {
+      detailed: b, coarse: simplifyBody(b), usingCoarse: false,
+    });
+  }
+
+  function applyLod(v: ReturnType<typeof createZombieGpuView>) {
+    const vu = v.uniforms;
+    let level: LodLevel;
+    if (lodEnabled) {
+      v.object.getWorldPosition(bodyCentre);
+      const dist = bodyCentre.distanceTo(camera.position);
+      // The proxy box's height IS the body's world height, and it shrinks when
+      // limbs come off — so a torso-only body correctly counts as smaller.
+      // Viewport height in DEVICE pixels, not CSS: the lab renders at 540 and
+      // stretches, so CSS height would over-report detail by ~2x.
+      const worldH = boxHeight(v.object);
+      const px = screenHeightPx(worldH, dist, camera.fov, handle.renderer.getDrawingBufferSize(drawSize).y);
+      const idx = pickLodSticky(px, lastLevel.get(v.object) ?? -1);
+      lastLevel.set(v.object, idx);
+      level = LOD_LEVELS[idx]!;
+    } else {
+      level = FULL_QUALITY;
+    }
+
+    const on = (k: LodLever) => {
+      const o = lodOverride[k];
+      return o === undefined || o === null ? (level[k] as boolean) : o;
+    };
+
+    // Wound suppression has to run every frame regardless: uploadWounds writes
+    // the live count earlier in the same frame, so a cached skip would let a
+    // suppressed level's wounds reappear.
+    if (!on('wounds')) vu.woundCfg.value.x = 0;
+
+    // Everything else is applied ONLY when the decision changes. Writing these
+    // uniforms every frame for every body measurably COST time — the close-
+    // packed 15-body case came out ~6% slower with LOD on than off, despite
+    // LOD choosing full quality for every body, because each write dirties a
+    // uniform buffer that then has to be re-uploaded.
+    const sig = `${level.name}|${stepsOverride}|${simplifyOverride}|${faceEnabled}|` +
+      LOD_LEVERS.map(k => (on(k) ? 1 : 0)).join('') +
+      `|${flesh.silhouetteNoiseAmp},${flesh.surfaceNoiseAmp},${flesh.translucency}`;
+    if (lastSig.get(v.object) === sig) return;
+    lastSig.set(v.object, sig);
+
+    vu.marchCfg.value.x = stepsOverride ?? level.steps;
+    // Zero amplitude is what the shader branches on — see the LOD note on
+    // MARCH_BODY. These read their "on" value back from the live material so
+    // the panel sliders keep working while LOD is running.
+    vu.marchCfg.value.z = on('silhouetteNoise') ? flesh.silhouetteNoiseAmp : 0;
+    vu.surfCfg2.value.y = on('surfaceNoise') ? flesh.surfaceNoiseAmp : 0;
+    vu.surfCfg.value.w = on('scatter') ? flesh.translucency : 0;
+    vu.lodCfg.value.x = on('ao') ? 1 : 0;
+    vu.faceCfg.value.x = on('face') && faceEnabled ? 1 : 0;
+    // Body swap, only on the frame the decision CHANGES: it re-packs and
+    // re-uploads the data texture, which is far too much to do every frame at
+    // a steady level. The hero is exempt — it is rig-driven and re-uploaded
+    // every frame anyway, and it is the body being looked at.
+    const src = bodySource.get(v.object);
+    const wantCoarse = v !== view
+      && (simplifyOverride === null ? level.simplify : simplifyOverride);
+    if (src && wantCoarse !== src.usingCoarse) {
+      src.usingCoarse = wantCoarse;
+      v.update(wantCoarse ? src.coarse : src.detailed);
+    }
+  }
 
   // -------------------------------------------------------------------------
   // Face texture
@@ -271,6 +419,18 @@ async function main() {
   // the packed primitives ARE the field, so object.position would move only the
   // proxy box and clip the body into slices.
   // -------------------------------------------------------------------------
+  /**
+   * How far apart crowd bodies stand, as a multiplier on the base grid.
+   *
+   * 1 is the shoulder-to-shoulder pack the renderer bench used: every body
+   * large on screen and heavily overlapped, which is the LOD worst case
+   * because nothing is small enough to demote. Larger values stretch the grid
+   * back into something closer to a real encounter, where most of the crowd is
+   * at a distance — which is the case LOD is actually for. Both numbers belong
+   * in any perf claim; quoting only one of them would be picking a winner.
+   */
+  let crowdSpread = 1;
+
   function setCrowdCount(n: number) {
     while (crowd.length > n) {
       const v = crowd.pop();
@@ -282,8 +442,10 @@ async function main() {
       const i = crowd.length + 1; // body zero is the interactive one
       const col = i % 5;
       const row = Math.floor(i / 5);
-      const placed = translateBody(current, [(col - 2) * 0.62, 0, -row * 0.85]);
+      const placed = translateBody(current,
+        [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
       const v = createZombieGpuView(placed);
+      trackBody(v, placed);
       v.applyMaterial(flesh, LIGHT_PRESETS[light]);
       if (faceSheet) {
         v.setFaceTexture(faceSheet.tex, faceSheet.atlas, faceSheet.mean);
@@ -472,7 +634,16 @@ async function main() {
   // per-frame has to live in this one function.
   // -------------------------------------------------------------------------
   const frames: number[] = [];
+  // GPU times are sampled from a resolve that lands every few frames, so this
+  // window covers a longer stretch of wall clock than `frames` does.
+  const gpuTimes: number[] = [];
   let lastStamp = performance.now();
+
+  /** Median of a sample window. The stat to quote — one hitch cannot swing it. */
+  function median(xs: number[]): number {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor(s.length * 0.5)]!;
+  }
 
   handle.setRenderCallback((dt) => {
     const now = performance.now();
@@ -484,7 +655,19 @@ async function main() {
       const med = s[Math.floor(s.length * 0.5)]!;
       const p95 = s[Math.floor(s.length * 0.95)]!;
       fpsEl.textContent =
-        `${med.toFixed(1)} / ${p95.toFixed(1)} ms  (${(1000 / med).toFixed(0)} fps)`;
+        `cpu+gpu ${med.toFixed(1)} / ${p95.toFixed(1)} ms  (${(1000 / med).toFixed(0)} fps)`;
+    }
+
+    // The number LOD is judged on. Wall clock pins to the vsync interval the
+    // moment there is any headroom, so it cannot tell a 2x win from "still
+    // 60fps"; GPU pass time keeps counting down past the knee.
+    const g = handle.gpuMs();
+    if (g !== null && g > 0) {
+      gpuTimes.push(g);
+      if (gpuTimes.length > 90) gpuTimes.shift();
+      gpuEl.textContent = `gpu ${median(gpuTimes).toFixed(2)} ms`;
+    } else if (gpuTimes.length === 0) {
+      gpuEl.textContent = 'gpu: no timestamp query';
     }
 
     // Gib physics: step every chunk, then re-pack its world-space field.
@@ -522,6 +705,12 @@ async function main() {
       camTarget.z + Math.cos(camYaw) * cp * camDist,
     );
     camera.lookAt(camTarget);
+
+    // LOD last: the camera has just moved, and every lever it drives is a
+    // uniform the steps above may have written. Running it earlier would pick
+    // levels against the previous frame's camera and then get overwritten.
+    applyLod(view);
+    for (const v of crowd) applyLod(v);
   });
 
   // -------------------------------------------------------------------------
@@ -575,12 +764,11 @@ async function main() {
     },
   });
   addSlider(bodyBox, {
-    label: 'march steps', min: 24, max: 192, step: 1,
-    get: () => u.marchCfg.value.x,
-    set: (v) => {
-      u.marchCfg.value.x = v;
-      for (const c of crowd) c.uniforms.marchCfg.value.x = v;
-    },
+    // Forces the count on every body, LOD included — otherwise applyLod would
+    // overwrite the slider on the very next frame.
+    label: 'march steps (0 = lod)', min: 0, max: 192, step: 1,
+    get: () => stepsOverride ?? 0,
+    set: (v) => { stepsOverride = v > 0 ? v : null; },
   });
 
   // Face. Sliders regenerate the face primitives and rebuild the body, so a
@@ -598,8 +786,10 @@ async function main() {
     loadFaceTexture(faceTexName);
   });
   const texBtn = addButton(faceBox, 'face tex: on', () => {
-    u.faceCfg.value.x = u.faceCfg.value.x > 0.5 ? 0 : 1;
-    texBtn.textContent = `face tex: ${u.faceCfg.value.x > 0.5 ? 'on' : 'off'}`;
+    // Goes through faceEnabled rather than the uniform, because applyLod
+    // rewrites faceCfg.x every frame and would undo a direct poke.
+    faceEnabled = !faceEnabled;
+    texBtn.textContent = `face tex: ${faceEnabled ? 'on' : 'off'}`;
   });
 
   // Alignment. The projection is planar in head space, so these four numbers
@@ -675,6 +865,31 @@ async function main() {
   ] as [() => number, (v: number) => void, string, number, number][])
     addSlider(dmgBox, { label, min, max, step: 0.005, get, set });
 
+  // LOD. The overrides exist so each lever can be measured ALONE against the
+  // same full-quality baseline — a lever measured while another is already off
+  // reports the wrong number, and these are close enough in cost to matter.
+  const lodBox = addSection(panelEl, 'lod');
+  const lodBtn = addButton(lodBox, 'lod: on', () => {
+    lodEnabled = !lodEnabled;
+    lodBtn.textContent = `lod: ${lodEnabled ? 'on' : 'off'}`;
+  });
+  for (const k of LOD_LEVERS) {
+    const btn = addButton(lodBox, `${k}: auto`, () => {
+      // auto -> forced off -> forced on -> auto
+      const cur = lodOverride[k];
+      lodOverride[k] = cur === undefined || cur === null ? false : cur === false ? true : null;
+      const label = lodOverride[k] === null || lodOverride[k] === undefined
+        ? 'auto' : lodOverride[k] ? 'ON' : 'OFF';
+      btn.textContent = `${k}: ${label}`;
+    });
+  }
+
+  const simpBtn = addButton(lodBox, 'simplify: auto', () => {
+    simplifyOverride = simplifyOverride === null ? true : simplifyOverride ? false : null;
+    simpBtn.textContent =
+      `simplify: ${simplifyOverride === null ? 'auto' : simplifyOverride ? 'ON' : 'OFF'}`;
+  });
+
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
@@ -716,14 +931,39 @@ async function main() {
     gibEverything,
     focusHead,
     focusBody,
-    /** Median/p95 frame time in ms over the last ~120 frames. */
+    /**
+     * Median/p95 wall-clock frame time and median GPU pass time, in ms.
+     *
+     * Quote `gpu` for anything perf-related: wall clock pins to vsync as soon
+     * as there is headroom, so below ~16 ms it stops measuring the renderer.
+     */
     stats() {
       const s = [...frames].sort((a, b) => a - b);
       return s.length < 20 ? null : {
         median: +s[Math.floor(s.length * 0.5)]!.toFixed(2),
         p95: +s[Math.floor(s.length * 0.95)]!.toFixed(2),
+        gpu: gpuTimes.length ? +median(gpuTimes).toFixed(2) : null,
+        gpuSamples: gpuTimes.length,
         bodies: crowd.length + 1,
       };
+    },
+    /** Drops both sample windows, so a reading cannot include the old setting. */
+    resetStats() { frames.length = 0; gpuTimes.length = 0; },
+    setLodEnabled(on: boolean) { lodEnabled = on; },
+    /** null = let LOD decide; true/false force the lever on every body. */
+    setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },
+    setStepsOverride(v: number | null) { stepsOverride = v; },
+    setSimplifyOverride(v: boolean | null) { simplifyOverride = v; },
+    /** Re-spawns the crowd at a new spacing. 1 = shoulder to shoulder. */
+    setCrowdSpread(v: number) {
+      const n = crowd.length;
+      setCrowdCount(0);
+      crowdSpread = v;
+      setCrowdCount(n);
+    },
+    clearOverrides() { for (const k of Object.keys(lodOverride)) delete lodOverride[k as LodLever]; },
+    get lodLevels() {
+      return [view, ...crowd].map(v => lastLevel.get(v.object) ?? -1);
     },
     setCam(yaw: number, pitch: number, dist: number) {
       autoSpin = false;

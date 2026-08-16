@@ -33,6 +33,16 @@ export interface LabRendererHandle {
   setDrawFn(fn: () => void): void;
   /** 'webgpu' or 'webgl' — WebGPURenderer silently falls back, so ASK. */
   readonly backend: string;
+  /**
+   * GPU time for the last resolved render pass, in ms, or null when timestamp
+   * queries are unavailable (the WebGL fallback backend has none).
+   *
+   * This is the number LOD work should be judged against. Wall-clock frame
+   * time bundles the GPU pass with the rig step, the re-pack and the upload,
+   * and it pins to the vsync interval whenever there is any headroom at all —
+   * so it cannot tell "twice as fast" from "still 60fps".
+   */
+  gpuMs(): number | null;
 }
 
 /** Matches src/engine/renderer.ts, so the lab looks the same on both paths. */
@@ -40,7 +50,12 @@ const MAX_RENDER_W = 960;
 const MAX_RENDER_H = 540;
 
 export async function createLabRenderer(mount: HTMLElement): Promise<LabRendererHandle> {
-  const renderer = new WebGPURenderer({ antialias: false });
+  // trackTimestamp turns on the WebGPU timestamp-query pool. It is the whole
+  // reason the perf work can be honest: wall-clock frame time pins to vsync
+  // whenever there is headroom, so it cannot distinguish "twice as fast" from
+  // "still 60fps". Costs nothing when the feature is absent — the backend
+  // ANDs it with hasFeature('timestamp-query') during init.
+  const renderer = new WebGPURenderer({ antialias: false, trackTimestamp: true });
   renderer.setPixelRatio(1); // explicit: we drive internal size ourselves
   // WebGPURenderer's signature takes a Color, where WebGLRenderer accepts a
   // hex number — first of the small API differences between the two paths.
@@ -93,12 +108,27 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
   let lastTime = performance.now();
   let cb: (dtSec: number) => void = () => {};
   let drawFn: () => void = () => { void renderer.render(scene, camera); };
+
+  // The query pool has a fixed capacity and warns loudly once it fills, so the
+  // resolve has to keep up with the frames. One in-flight resolve at a time is
+  // enough: it is async, and a reading every few frames is plenty for tuning.
+  let resolving = false;
+  let lastGpuMs: number | null = null;
+
   renderer.setAnimationLoop(() => {
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
     lastTime = now;
     cb(dt);
     drawFn();
+
+    if (!resolving) {
+      resolving = true;
+      renderer.resolveTimestampsAsync()
+        .then(() => { lastGpuMs = renderer.info.render.timestamp; })
+        .catch(() => { lastGpuMs = null; })
+        .finally(() => { resolving = false; });
+    }
   });
 
   // `backend.isWebGPUBackend` is how three distinguishes them. Surfacing this
@@ -116,5 +146,6 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
     setRenderCallback(fn) { cb = fn; },
     setDrawFn(fn) { drawFn = fn; },
     backend: backendName,
+    gpuMs: () => lastGpuMs,
   };
 }
