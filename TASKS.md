@@ -107,11 +107,11 @@ Key reference docs (open these before touching their area):
   - **LOD baseline: 15 bodies = 36.8 ms / 44.7 p95** (M3, 960x540, 96 steps).
     Target ~16 ms. `[` / `]` spawn crowd bodies.
 
-- `X1.3` [ ] **Retune the flesh presets against the corrected sRGB pipeline** —
-  one job that unblocks three: the WebGPU lab's look, leaving post-fx on, and
-  bloom for the eye glow. Presets in `src/lab/sdf-zombie/material.ts`.
-  **Scheduled after gobs-and-goo (X1.21)** — owner session with the sliders; the
-  henenlotter-latex look gets its numbers re-derived for the encoded pipeline.
+- `X1.3` [~] **Flesh look on WebGPU** — legacy-gamma toggle landed (`12a4e40`,
+  lodCfg.y default ON): shader-side sRGB decode cancels the output encode, so
+  presets read exactly as tuned. Remaining (owner call): keep the toggle as the
+  look, or retune `material.ts` presets through the honest chain (needed before
+  post-fx/bloom rebuild, which wants a defined color chain).
 
 - `X1.4` [~] **LOD pass** — built, measured, and it does NOT reach the target.
   **Every number in this row predates `X1.8` and needs re-measuring — see `X1.10`.**
