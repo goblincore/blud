@@ -17,6 +17,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         themePreview: resolve(__dirname, 'theme-preview.html'),
         sdfLab: resolve(__dirname, 'sdf-lab.html'),
+        sdfLabWebgpu: resolve(__dirname, 'sdf-lab-webgpu.html'),
       },
     },
   },

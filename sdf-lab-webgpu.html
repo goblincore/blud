@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — SDF lab (WebGPU spike)</title>
+<style>
+  body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #status {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.72); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #9c9;
+  }
+  #controls {
+    position: fixed; bottom: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #bbb;
+  }
+  #controls b { color: #d88; font-weight: normal; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="status"></div>
+  <div id="controls">
+    <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom<br />
+    Phase 0 spike: one raymarched sphere, depth-composited against a floor and
+    an intersecting cube.
+  </div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/spike-main.ts"></script>
+</body>
+</html>
