@@ -9,16 +9,16 @@ import type { Vec3 } from './types';
 const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
 const torso = body.clusters.find(c => c.limb === 'torso')!;
 
-/** The armL attachment endpoint: nearest armL endpoint to the torso centre. */
+/** The armL attachment endpoint: the AUTHORED root prim's endpoint (the
+ *  shoulder). Clusters are built root-first; nearest-to-torso-centre was the
+ *  elbow on a hanging arm — the bug the hanging-arm regressions pin. */
 function armRoot(): Vec3 {
   const arm = body.clusters.find(c => c.limb === 'armL')!;
-  const prims = body.prims.slice(arm.start, arm.start + arm.count);
-  let best: Vec3 = prims[0]!.a; let bd = Infinity;
-  for (const p of prims) for (const e of [p.a, p.b]) {
-    const d = Math.hypot(e[0] - torso.center[0], e[1] - torso.center[1], e[2] - torso.center[2]);
-    if (d < bd) { bd = d; best = e; }
+  for (let i = arm.start; i < arm.start + arm.count; i++) {
+    const p = body.prims[i]!;
+    if (p.op !== 'sub') return p.a;
   }
-  return best;
+  throw new Error('armL has no add prims');
 }
 
 function woundAt(at: Vec3, radius: number, type: 'blast' | 'burn' = 'blast'): Wound {
@@ -123,5 +123,66 @@ describe('cutChains', () => {
       clusters: body.clusters.map(c => c.limb === 'legL' ? { ...c, alive: false } : c),
     };
     expect(cutChains(dead, [woundAt(knee, 0.16)])).toHaveLength(0);
+  });
+});
+
+// --- Regression: hanging-arm anatomy (dispatch task-5 findings, 2026-08-16) --
+// Distance-to-torso-centre is a broken proxy for "attachment end": on a
+// hanging arm the ELBOW is nearer the torso centre than the shoulder, which
+// (a) anchored cutLimbs' neck at the elbow and (b) sent chainOrder's walk the
+// wrong way so it covered only 2 of the arm's prims and mid-arm joints were
+// never tested. Chains follow AUTHORED order now (clusters are built
+// root→tip from the bone tree).
+import { chainOrder, JOINT_EPS } from './connectivity';
+
+describe('hanging-arm anatomy regressions', () => {
+  const arm = body.clusters.find(c => c.limb === 'armL')!;
+  const armAdds: number[] = [];
+  for (let i = arm.start; i < arm.start + arm.count; i++) {
+    if (body.prims[i]!.op !== 'sub') armAdds.push(i);
+  }
+
+  it('chainOrder covers EVERY add prim of the arm, in authored root→tip order', () => {
+    const order = chainOrder(body, arm, torso.center);
+    expect(order).toEqual(armAdds);
+  });
+
+  it('consecutive chain prims actually share a joint', () => {
+    const order = chainOrder(body, arm, torso.center);
+    for (let j = 0; j + 1 < order.length; j++) {
+      const p = body.prims[order[j]!]!;
+      const q = body.prims[order[j + 1]!]!;
+      let best = Infinity;
+      for (const e of [p.a, p.b]) for (const f of [q.a, q.b]) {
+        best = Math.min(best, Math.hypot(e[0] - f[0], e[1] - f[1], e[2] - f[2]));
+      }
+      expect(best).toBeLessThan(JOINT_EPS);
+    }
+  });
+
+  it('a wrist blast severs the hand (the floating-forearm repro)', () => {
+    const handIdx = armAdds[armAdds.length - 1]!;
+    const wrist = body.prims[handIdx]!.a;
+    const wounds = [woundAt([wrist[0], wrist[1] + 0.01, wrist[2]], 0.13)];
+    const cuts = cutChains(body, wounds);
+    const armCut = cuts.find(c => c.limb === 'armL');
+    expect(armCut).toBeDefined();
+    expect(armCut!.fromPrim).toBe(handIdx);
+  });
+
+  it('an elbow blast severs forearm+hand, not the whole arm', () => {
+    const forearmIdx = armAdds[2]!;
+    const elbow = body.prims[forearmIdx]!.a;
+    const wounds = [woundAt(elbow, 0.13)];
+    const cuts = cutChains(body, wounds);
+    expect(cuts.find(c => c.limb === 'armL')?.fromPrim).toBe(forearmIdx);
+    // And the attachment neck (shoulder) must NOT read as cut by an elbow hit.
+    expect(cutLimbs(body, wounds, torso.center)).not.toContain('armL');
+  });
+
+  it('cutLimbs anchors the neck at the SHOULDER (authored root), not the elbow', () => {
+    const shoulder = body.prims[armAdds[0]!]!.a;
+    const wounds = [woundAt(shoulder, 0.16)];
+    expect(cutLimbs(body, wounds, torso.center)).toContain('armL');
   });
 });

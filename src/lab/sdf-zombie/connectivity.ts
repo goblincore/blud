@@ -53,13 +53,18 @@ export function jointPoint(p: Primitive, q: Primitive): Vec3 {
 }
 
 /**
- * A cluster's live add-prims ordered root→tip, as body.prims indices.
- * The root is the prim with an endpoint nearest the torso centre; the walk
- * then hops shared endpoints (JOINT_EPS), the same joint logic gibAllPieces
- * uses for torn points. Dead prims are not part of the chain.
+ * A cluster's live add-prims root→tip, as body.prims indices — which is just
+ * AUTHORED order: clusters are built root-first from the bone tree (shoulder
+ * ball → upper arm → forearm → hand). The previous version re-derived the
+ * chain geometrically from distance-to-torso-centre, and that proxy is wrong
+ * for hanging arms — the elbow sits NEARER the torso centre than the
+ * shoulder, so the walk went the wrong way, covered 2 of 4 prims, and
+ * mid-arm joints were never tested (the 2026-08-16 floating-forearm bug).
+ * The optional torsoCentre parameter is retained for signature compatibility
+ * and ignored.
  */
 export function chainOrder(
-  body: BuildResult, cluster: ClusterInfo, torsoCentre: Vec3,
+  body: BuildResult, cluster: ClusterInfo, _torsoCentre?: Vec3,
 ): number[] {
   const idxs: number[] = [];
   for (let i = cluster.start; i < cluster.start + cluster.count; i++) {
@@ -67,42 +72,7 @@ export function chainOrder(
     if (p.op === 'sub' || p.dead) continue;
     idxs.push(i);
   }
-  if (idxs.length === 0) return [];
-
-  // Root: the prim owning the endpoint nearest the torso.
-  let root = idxs[0]!; let best = Infinity;
-  for (const i of idxs) {
-    const p = body.prims[i]!;
-    for (const e of [p.a, p.b]) {
-      const d = len(sub(e, torsoCentre));
-      if (d < best) { best = d; root = i; }
-    }
-  }
-
-  const order: number[] = [root];
-  const rest = new Set(idxs.filter(i => i !== root));
-  // Walk out along the chain from the root's TIP-side endpoint.
-  const rootPrim = body.prims[root]!;
-  let end: Vec3 = len(sub(rootPrim.a, torsoCentre)) >= len(sub(rootPrim.b, torsoCentre))
-    ? rootPrim.a
-    : rootPrim.b;
-  while (rest.size > 0) {
-    let next = -1; let matched: Vec3 | null = null; let bd = JOINT_EPS;
-    for (const i of rest) {
-      const p = body.prims[i]!;
-      for (const e of [p.a, p.b]) {
-        const d = len(sub(e, end));
-        if (d < bd) { bd = d; next = i; matched = e; }
-      }
-    }
-    if (next < 0 || matched === null) break; // chain exhausted
-    order.push(next);
-    rest.delete(next);
-    const p = body.prims[next]!;
-    // Continue from the prim's FAR endpoint (the one that did not match).
-    end = len(sub(p.a, matched)) > len(sub(p.b, matched)) ? p.a : p.b;
-  }
-  return order;
+  return idxs;
 }
 
 /**
@@ -123,15 +93,21 @@ export function cutLimbs(
     if (!c.alive || c.limb === 'torso') continue;
     const prims = body.prims.slice(c.start, c.start + c.count);
 
-    let root: Vec3 | null = null; let bd = Infinity;
-    for (const p of prims) {
-      if (p.op === 'sub' || p.dead) continue;
-      for (const e of [p.a, p.b]) {
-        const d = len(sub(e, torsoCentre));
-        if (d < bd) { bd = d; root = e; }
-      }
+    // The attachment root is the FIRST authored prim's proximal endpoint —
+    // the end that is NOT the joint with the next prim in the chain. Distance
+    // to the torso centre anchored arms at the ELBOW (nearer the centre than
+    // the shoulder on a hanging arm) and full-limb severs fired mid-limb.
+    const order = chainOrder(body, c);
+    if (order.length === 0) continue;
+    const first = body.prims[order[0]!]!;
+    let root: Vec3;
+    if (order.length === 1) {
+      root = len(sub(first.a, torsoCentre)) <= len(sub(first.b, torsoCentre))
+        ? first.a : first.b;
+    } else {
+      const joint = jointPoint(first, body.prims[order[1]!]!);
+      root = len(sub(first.a, joint)) >= len(sub(first.b, joint)) ? first.a : first.b;
     }
-    if (!root) continue;
 
     const girth = endpointGirth(prims, root);
     const dir = normalize(sub(torsoCentre, root));

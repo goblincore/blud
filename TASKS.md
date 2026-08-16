@@ -163,6 +163,9 @@ Key reference docs (open these before touching their area):
 - `X1.19` [x] Gore-feel pass — per-prim gib pieces, 3D quat tumble + topple, gooey
   blood trails/splats on the game's tuning constants, wound-driven amputation
   (connectivity), rim locality. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gore-feel-design.md); playtest knobs: sever eagerness, droplet size.
+- `X1.19.1` [x] Gore fix-pass — per-type wound profiles ("calibres"), tighter rim
+  locality (no armpit welding), mid-limb severing (per-prim dead flag; floating-piece
+  fix + hanging-arm chain anatomy), game-hot launch, trail-sized droplets.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
 - `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
