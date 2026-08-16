@@ -21,3 +21,29 @@ export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   }
   return r;
 }
+
+/**
+ * Radius for a chunk's torn-end wound: the limb's cross-section girth at the
+ * tear, scaled up just enough to read as the whole cross-section ripped open.
+ *
+ * It must NOT derive from the chunk's extent. Extent is dominated by limb
+ * LENGTH, and every geometric term of the wound pipeline — the carve sphere
+ * and the everted rim's amplitude, ring radius and width — scales with the
+ * wound radius. At `extent * 0.55` the carve ate half the limb and the rim
+ * inflated the rest, so every chunk rendered as a rounded blob (X1.16).
+ */
+export function tornEndRadius(prims: Primitive[], tornAt: Vec3): number {
+  let bestD = Infinity;
+  let girth = 0.05;
+  for (const p of prims) {
+    if (p.op === 'sub') continue;
+    // Effective girth of an ellipsoid capsule is its radius on the thinnest
+    // axis — the same min-scale sdPrim uses to keep its bound conservative.
+    const g = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    for (const e of [p.a, p.b]) {
+      const d = len(sub(e, tornAt));
+      if (d < bestD) { bestD = d; girth = g; }
+    }
+  }
+  return girth * 1.35;
+}

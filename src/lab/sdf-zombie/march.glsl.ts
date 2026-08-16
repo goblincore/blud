@@ -427,7 +427,10 @@ void main() {
   // Wounds are wetter than the surrounding skin; char is dead matte.
   float wet = uWetness * mix(1.0, 1.6, wm) * (1.0 - cm);
   float shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, uSpecRoughness));
-  float fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * uFresnelBoost;
+  // Fresnel fades out INSIDE wounds rather than riding the wet boost — see the
+  // note on the same lines in webgpu/march.wgsl.ts (X1.17). The wet glisten a
+  // wound should have is the tight specular term, which keeps the boost.
+  float fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * uFresnelBoost * (1.0 - wm);
 
   // Fake backlit scatter: sample the field a little way toward the light.
   float thin = clamp(mapBody(p + L * 0.06) * -8.0, 0.0, 1.0);

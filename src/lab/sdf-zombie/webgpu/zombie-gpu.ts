@@ -22,7 +22,7 @@ import type { Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { sub as vsub } from '../vec';
-import { chunkExtent } from '../extent';
+import { chunkExtent, tornEndRadius } from '../extent';
 import { specialiseMapBody } from './specialise';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
@@ -662,8 +662,9 @@ export function createChunkGpuView(
   // erase anything reaching past it.
   const extent = chunkExtent(prims, chunk.pos);
   const tornLocal: Vec3 | null = tornAt ? vsub(tornAt, chunk.pos) : null;
-  // Big enough to read as a torn stump rather than a pellet hole.
-  const tornRadius = extent * 0.55;
+  // Girth at the tear, NOT extent: extent is length-dominated, and a wound
+  // radius that scales with length swallows the capsule silhouette (X1.16).
+  const tornRadius = tornLocal ? tornEndRadius(local, tornLocal) : 0;
 
   const packed = packBody({
     prims: local,

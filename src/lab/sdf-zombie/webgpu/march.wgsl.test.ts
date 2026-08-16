@@ -139,6 +139,14 @@ describe('ported features reach the entry point', () => {
     // at the wrong depth.
     expect(MARCH_BODY).not.toContain('0.5 + 0.5');
   });
+
+  it('fades fresnel out inside wounds instead of wet-boosting it (X1.17)', () => {
+    // Fresnel is environment rim-light; inside a cavity the "environment" is
+    // the wound itself. Left at full strength it hits its ceiling on the
+    // grazing-heavy rim geometry, gets the 1.6x wound-wetness boost on top,
+    // and clips whole patches to white that sweep with the camera.
+    expect(MARCH_BODY).toMatch(/let fres = [^;]*\* \(1\.0 - wm\);/);
+  });
 });
 
 describe('data texture layout', () => {

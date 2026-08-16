@@ -7,7 +7,7 @@ import { FRAG, VERT } from './march.glsl';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
 import type { Primitive, Vec3 } from './types';
 import { sub } from './vec';
-import { chunkExtent } from './extent';
+import { chunkExtent, tornEndRadius } from './extent';
 import { MAX_WOUNDS } from './damage';
 
 export interface ZombieView {
@@ -225,8 +225,9 @@ export function createChunkView(
   // the true extent instead (same recipe as clusters.ts).
   const extent = chunkExtent(prims, chunk.pos);
   const tornLocal: Vec3 | null = tornAt ? sub(tornAt, chunk.pos) : null;
-  // Big enough to read as a torn stump rather than a pellet hole.
-  const tornRadius = extent * 0.55;
+  // Girth at the tear, NOT extent: extent is length-dominated, and a wound
+  // radius that scales with length swallows the capsule silhouette (X1.16).
+  const tornRadius = tornLocal ? tornEndRadius(local, tornLocal) : 0;
 
   const packed = packBody({
     prims: local,

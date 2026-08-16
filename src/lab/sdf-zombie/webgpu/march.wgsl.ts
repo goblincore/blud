@@ -590,7 +590,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // Wounds are wetter than the surrounding skin; char is dead matte.
   let wet = surfCfg2.x * mix(1.0, 1.6, wm) * (1.0 - cm);
   let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
-  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z;
+  // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
+  // environment rim-light, and inside a cavity the "environment" is the wound
+  // itself. At full strength it maxes out on the grazing-heavy rim geometry,
+  // the 1.6x wound wetness lands on top, and whole patches clip to white and
+  // sweep across the cavity as the camera moves (X1.17). The wet glisten a
+  // wound SHOULD have is the tight specular term, which keeps the boost.
+  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - wm);
 
   // Fake backlit scatter: sample the field a little way toward the light.
   // A whole extra mapBody, so it is skipped outright at zero translucency

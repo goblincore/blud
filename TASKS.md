@@ -151,17 +151,10 @@ Key reference docs (open these before touching their area):
   optimum is **1.4** (default flipped, ~5% free). LOD now defaults OFF;
   machinery kept for measurement. 2.0 unswept — curve already rising past 1.6.
   Sustained-thermal soak still open (punted; not ready to run).
-- `X1.16` [ ] **Gib chunk shape — limbs must stay limb-like.** Playtest: gibbed
-  limbs read as rounded blobs ("boob shapes"), not cylinders/arms/legs.
-  Interrogate the torn-end / stump-closure treatment in `gib-chunks.ts` +
-  `createChunkGpuView` (the torn-end cap + blend may be swallowing the
-  capsule silhouette); chunks should keep their source primitives' elongation.
-- `X1.17` [ ] **Wound rendering bug: camera-dependent shimmer + blown-white
-  interiors** on heavily-wounded bodies (screenshots 2026-08-16). Shifts as
-  the camera rotates ⇒ view-dependent shading terms (fresnel/spec/scatter) on
-  degenerate hits inside deep multi-wound cavities are the lead suspects —
-  possibly interacting with the tracer's clamped tMax sample landing INSIDE
-  the surface. Needs its own systematic pass; do not guess-fix.
+- `X1.16` [x] Gib blob shapes fixed — torn-end wound radius now derives from limb
+  girth (`tornEndRadius`, `extent.ts`), not extent×0.55; both renderer paths + tests.
+- `X1.17` [x] Wound white-out + shimmer fixed — fresnel now fades with the wound
+  mask instead of riding the 1.6× wet boost (both shaders); occluder ruled out by A/B.
 - `X1.18` [ ] **Wound fluid: gushing/gooey particle gore** (feature, planned
   with user). Wounds should emit fluid — ties into the game's ChunkSystem
   blood-trail/splat pipeline (`F2.cascade-gibs`) and the lab's verlet rig;

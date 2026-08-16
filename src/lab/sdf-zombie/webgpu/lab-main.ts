@@ -899,8 +899,10 @@ async function main() {
     tickAdaptive(now);
 
     // Gib physics: step every chunk, then re-pack its world-space field.
+    // dt clamped like the rig's: a hidden tab pausing rAF must not integrate
+    // the whole gap in one ballistic step and teleport every chunk.
     for (const c of chunks) {
-      c.state = stepChunk(c.state, dt);
+      c.state = stepChunk(c.state, Math.min(dt, 1 / 30));
       c.view.update(c.state);
     }
 
@@ -1191,6 +1193,25 @@ async function main() {
     get bodyCount() { return crowd.length + 1; },
     /** The march uniforms — lets any of them be tuned live from the console. */
     uniforms: u,
+    /** The SDF layer — occluder/cone toggles for A/B experiments. */
+    sdfLayer,
+    /**
+     * Stamps n blast wounds on the front of the torso by raycasting
+     * straight-on — a deterministic heavy-damage state for automated visual
+     * checks, with no pointer events or camera dependence involved.
+     */
+    stampWounds(n: number) {
+      const c = torsoCentre();
+      for (let i = 0; i < n; i++) {
+        const ox = ((i % 3) - 1) * 0.06;
+        const oy = Math.floor(i / 3) * 0.07 - 0.05;
+        const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1]);
+        if (!hit) continue;
+        wounds = pushWound(
+          wounds, worldHitToWound(current.prims, hit, RADIUS.blast, 'blast'), MAX_WOUNDS);
+      }
+      refreshWounds();
+    },
     setCrowdCount,
     gibEverything,
     focusHead,
