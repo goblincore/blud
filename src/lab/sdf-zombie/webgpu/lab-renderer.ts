@@ -74,7 +74,20 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
   // whenever there is headroom, so it cannot distinguish "twice as fast" from
   // "still 60fps". Costs nothing when the feature is absent — the backend
   // ANDs it with hasFeature('timestamp-query') during init.
-  const renderer = new WebGPURenderer({ antialias: false, trackTimestamp: true });
+  // alpha: false — the canvas context is configured alphaMode 'opaque'
+  // instead of three's default 'premultiplied'. The scene is fully opaque
+  // (the clear colour fills the frame; nothing reads canvas alpha), so this
+  // changes nothing visually — but it changes which compositing path Chrome
+  // takes for the canvas on macOS. A premultiplied WebGPU canvas cannot be
+  // promoted to a direct overlay, and the readback path it lands on instead
+  // has a known frame-pacing pathology there: severely degraded pacing for
+  // per-frame-updated WebGPU canvases on high-refresh displays (chromium
+  // issue 502668704 — the collapse-stall investigation, X1.22.1; see
+  // docs/dev-notes/2026-08-16-collapse-stall/notes.md). 'opaque' keeps the
+  // present on the overlay-capable path and stops tripping it.
+  const renderer = new WebGPURenderer({
+    antialias: false, trackTimestamp: true, alpha: false,
+  });
   renderer.setPixelRatio(1); // explicit: we drive internal size ourselves
   // WebGPURenderer's signature takes a Color, where WebGLRenderer accepts a
   // hex number — first of the small API differences between the two paths.
