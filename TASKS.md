@@ -156,10 +156,13 @@ Key reference docs (open these before touching their area):
 - `X1.17` [x] Wound white-out + shimmer fixed — fresnel now fades with the wound
   mask instead of riding the 1.6× wet boost (both shaders); occluder ruled out by A/B.
 - `X1.18` [ ] **Wound fluid: gushing/gooey particle gore** (feature, planned
-  with user). Wounds should emit fluid — ties into the game's ChunkSystem
-  blood-trail/splat pipeline (`F2.cascade-gibs`) and the lab's verlet rig;
-  candidate approach: emitter per wound seeded from `woundWorldPos`, particles
-  as tiny raymarched blobs or the game's existing droplet sprites.
+  with user). Wounds should emit fluid — `blood-sim.ts` (X1.19) was built to
+  host wound-anchored emitters; seed from `woundWorldPos`.
+- `X1.19` [x] Gore-feel pass — per-prim gib pieces, 3D quat tumble + topple, gooey
+  blood trails/splats on the game's tuning constants, wound-driven amputation
+  (connectivity), rim locality. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gore-feel-design.md); playtest knobs: sever eagerness, droplet size.
+- `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
+  shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.19 playtest.
 - `X1.11` [ ] **Port normal warping to `march.glsl.ts`** — the WebGL lab still
   has the noise in its field, so `validate.ts`'s Lipschitz guard must stay
   until it does. The two labs are one technique apart.
