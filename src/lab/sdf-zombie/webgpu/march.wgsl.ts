@@ -234,11 +234,20 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   }
   let carved = applyCarves(d, p, data, counts);
   let dmg = applyWounds(carved, p, data, woundCfg, woundCfg2);
-  // The silhouette noise is the single most expensive thing in the whole
-  // shader, because mapBody runs ~100 times per pixel and fbm is two 3D value
-  // noise lookups — sixteen hash13 calls — every one of those times. Branching
-  // it out is the top LOD lever; without the guard, setting the amplitude to
-  // zero still pays for it in full.
+  // Silhouette detail. The MARCH passes 0.0 here and only calcNormal passes a
+  // real amplitude, so this term no longer displaces the surface — it survives
+  // solely to give calcNormal's tetrahedron differences something to
+  // differentiate, which warps the shading normal. See MARCH_BODY.
+  //
+  // Keeping it expressed as a field displacement rather than as a hand-written
+  // gradient is deliberate: calcNormal returns normalize(grad(d + h)), which is
+  // EXACTLY the normal the displaced surface had before. So the shading is
+  // unchanged to the precision of the differencing, and only the silhouette
+  // and the hit position lose the detail — which is the whole trade.
+  //
+  // The guard stays and now matters more than ever, since the march relies on
+  // this call costing nothing: fbm is two 3D value-noise lookups, sixteen
+  // hash13 calls, and without the branch a zero amplitude still pays in full.
   if (noiseAmp <= 0.0) { return dmg; }
   return dmg + fbm(p * 3.0) * noiseAmp;
 }`;
@@ -329,7 +338,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   // running at all.
   var t = clamp(startT, 0.0, tMax);
   for (var i = 0; i < 64; i = i + 1) {
-    let d = mapBody(camPos + rd * t, data, counts, marchCfg.z, woundCfg, woundCfg2);
+    // 0.0 for the noise: it lives on the normal now, not in the field. The
+    // pre-pass must see the same field the march does, or the distance it
+    // certifies as empty is not a distance the march can trust.
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
     let r = t * coneK;
     if (d < r + 0.0012) { return t; }
     t = t + max(d - r, 0.0005) * marchCfg.y;
@@ -398,15 +410,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // Plain sphere tracing steps by exactly the unbounding radius. This shader
   // used to step by 0.6 of it — UNDER-relaxation, costing ~1.67x the
   // iterations of the textbook algorithm — because the silhouette fbm added to
-  // mapBody breaks the Lipschitz bound, so the "distance" can overestimate and
-  // a full step can tunnel through the surface. validateBody's
-  // silhouetteNoiseAmp-vs-stepMultiplier check exists for exactly that.
-  //
-  // So the relaxation is CONDITIONAL on the field being trustworthy. With the
-  // noise off — which is what LOD does to every distant body — the field is an
-  // exact CSG of ellipsoid capsules under a conservative smooth-min, and the
-  // tracer can safely overstep and backtrack when it overshoots. With the noise
-  // on, marchCfg.y stays in charge and nothing changes.
+  // mapBody broke the Lipschitz bound, so the "distance" could overestimate
+  // and a full step could tunnel through the surface.
   //
   // The overshoot test is the whole safety argument: if the new unbounding
   // sphere does not reach back far enough to touch the previous one, the step
@@ -415,7 +420,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // woundCfg2.y carries the relaxation factor so it stays tunable — the win is
   // theory until it is measured, and it cannot be measured against a constant.
   // At or below 1.0 the relaxed path is off and marchCfg.y is back in charge.
-  let relax = marchCfg.z <= 0.0 && woundCfg2.y > 1.0;
+  // NORMAL WARPING (Hubert-Brierre et al. 2025) is why this is no longer
+  // conditional on the noise amplitude. The silhouette fbm has been taken OUT
+  // of the marched field — see the mapBody call below, which passes 0.0 — and
+  // survives only in calcNormal, where it perturbs the shading normal at the
+  // hit point. The field the tracer sees is therefore an exact CSG of
+  // ellipsoid capsules under a conservative smooth-min for EVERY body, not
+  // just the distant ones LOD had already stripped, so over-relaxation is
+  // always safe and marchCfg.y no longer has to be held under 1.
+  let relax = woundCfg2.y > 1.0;
   var omega = select(marchCfg.y, woundCfg2.y, relax);
   // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
@@ -426,7 +439,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var stepLen = 0.0;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
-    let d = mapBody(camPos + rd * t, data, counts, marchCfg.z, woundCfg, woundCfg2);
+    // 0.0, not marchCfg.z. This one argument IS normal warping on the march
+    // side: the silhouette fbm was the single most expensive thing in the
+    // shader precisely because it ran here, ~100 times per pixel. It now runs
+    // four times per HIT pixel, inside calcNormal.
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
     let radius = abs(d);
     let overshot = omega > 1.0 && (radius + prevRadius) < stepLen;
     if (overshot) {
