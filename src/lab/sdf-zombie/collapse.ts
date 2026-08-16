@@ -147,7 +147,8 @@ export interface CollapseStep {
   phase: CollapsePhase;
   /** True when exactly one leg is missing — hop-limp gait, NOT collapse.
    *  Meaningful while standing; the gait already derives hop from its own
-   *  missing skew, so this is the explicit contract for the wiring. */
+   *  missing skew, so this is the explicit contract for the wiring. While
+   *  collapsed (any phase) hop is false — a horizontal corpse has no gait. */
   hop: boolean;
   /** Rest-pose pull multiplier (0..1): multiply stepRig's restStiffness by
    *  this. 1 while standing; ramps to 0 over fallReleaseTime; 0 after. */
@@ -197,7 +198,7 @@ export function stepCollapse(state: CollapseState, sig: CollapseSignal, dt: numb
   return {
     state: { phase, meter, fallAge },
     phase,
-    hop: sig.missing.legL !== sig.missing.legR,
+    hop: phase === 'standing' && (sig.missing.legL !== sig.missing.legR),
     restPull,
     ropes: collapsed ? sig.ropes.map(r => ({ a: r.a, b: r.b, max: r.max })) : [],
     settled: phase === 'settled',
@@ -207,12 +208,13 @@ export function stepCollapse(state: CollapseState, sig: CollapseSignal, dt: numb
 /**
  * One pass of one-sided max-distance relaxation over the rig points: for
  * each rope, when dist(a, b) > max the endpoints are pulled together to
- * exactly max — half the correction to each free endpoint (full correction
- * to the free one when the other is pinned), mirroring stepRig's constraint
- * split and pin handling. Never pushes apart; a bent limb (dist ≤ max) is
- * untouched. The input is not mutated. Single pass by design — task 4 runs
- * it once AFTER stepRig each frame; repeated passes would fight stepRig's
- * equality constraints.
+ * max the endpoints are pulled together, splitting the correction
+ * half/half between FREE endpoints — the exact split stepRig's constraint
+ * pass uses, pins included (a rope against a pinned end half-corrects per
+ * pass, just like stepRig's equality constraints). Never pushes apart; a
+ * bent limb (dist ≤ max) is untouched. The input is not mutated. Single
+ * pass by design — task 4 runs it once AFTER stepRig each frame; repeated
+ * passes would fight stepRig's equality constraints.
  */
 export function relaxRopeConstraints(
   points: readonly RigPoint[],
