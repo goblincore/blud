@@ -44,7 +44,10 @@ import {
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
-import { severLimb, gibAll } from '../sever';
+import { severLimb, gibAll, gibAllPieces } from '../sever';
+import { createBloodSim, burst, emitTrails, stepBlood } from '../blood-sim';
+import { createBloodView } from './blood-view-gpu';
+import { cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt } from '../rig-bind';
 import { stepRig } from '../rig';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
@@ -96,8 +99,9 @@ const FACE_TEXTURES: Record<
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 const RADIUS: Record<WoundType, number> = { pellet: 0.055, blast: 0.13, burn: 0.08 };
 
-/** Chunks are disposed oldest-first past this, so a long session can't leak. */
-const MAX_CHUNKS = 24;
+/** Chunks are disposed oldest-first past this, so a long session can't leak.
+ *  A per-prim gib is ~15 pieces, so 40 lets two full gibs coexist. */
+const MAX_CHUNKS = 40;
 
 // Everything lives inside an async bootstrap rather than using top-level await.
 // WebGPURenderer needs `await renderer.init()`, and the project's build target
@@ -448,7 +452,13 @@ async function main() {
   function rebind() { bound = bindRig(current); }
 
   let wounds: Wound[] = [];
-  const chunks: { state: Chunk; view: ChunkGpuView }[] = [];
+  const chunks: { id: number; state: Chunk; view: ChunkGpuView }[] = [];
+  // Blood: the deterministic droplet/splat sim, plus its instanced renderer.
+  const bloodSim = createBloodSim();
+  const bloodView = createBloodView();
+  for (const o of bloodView.objects) scene.add(o);
+  /** Trail-source ids for emitTrails — every flying chunk is an emitter. */
+  let nextChunkId = 1;
 
   /** Marches the CPU-side field along a ray to find where a shot lands. */
   function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
@@ -623,6 +633,20 @@ async function main() {
     const push = type === 'blast' ? 0.10 : 0.04;
     bound = impulseAt(bound, hit, [d.x * push, d.y * push, d.z * push]);
     refreshWounds();
+
+    // Wound-driven detachment: a carve that disconnects a limb severs it for
+    // real — same path as the keyboard sever.
+    for (const limb of cutLimbs(current, wounds, torsoCentre())) {
+      const { body: next, chunk, stumpWound } = severLimb(current, limb);
+      if (chunk.prims.length === 0) continue;
+      current = next;
+      if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+      spawnChunk(limb, chunk.origin, chunk.prims, undefined,
+        [attachPoint(chunk.prims, torsoCentre())]);
+      view.update(current);
+      refreshWounds();
+      rebind();
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -646,13 +670,26 @@ async function main() {
     return best;
   }
 
+  /** The piece's long axis from its prims — the topple aligns this flat. */
+  function primsLongAxis(prims: typeof current.prims, origin: Vec3): Vec3 {
+    // Longest chord among endpoints, in chunk-local space.
+    let best: Vec3 = [0, 1, 0]; let bestLen = 0;
+    for (const p of prims) {
+      if (p.op === 'sub') continue;
+      const d: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
+      const l = Math.hypot(...d);
+      if (l > bestLen) { bestLen = l; best = d; }
+    }
+    return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
+  }
+
   function torsoCentre(): Vec3 {
     return current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0];
   }
 
   function spawnChunk(
     limb: LimbId, origin: Vec3, prims: typeof current.prims,
-    vel?: Vec3, tornAt?: Vec3,
+    vel?: Vec3, tornAt?: Vec3[],
   ) {
     if (prims.length === 0) return;
     const v: Vec3 = vel ?? [
@@ -662,11 +699,13 @@ async function main() {
     ];
     // Collision radius = the limb's real visual extent; chunk.radius's 0.14 is
     // smaller than any limb and would bury it half-way into the floor.
-    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin));
+    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin), primsLongAxis(prims, origin));
     const chunkView = createChunkGpuView(state, prims, u, tornAt);
     chunkView.object.layers.set(SDF_LAYER);
     scene.add(chunkView.object);
-    chunks.push({ state, view: chunkView });
+    chunks.push({ id: nextChunkId++, state, view: chunkView });
+    // Goo at the tear: a droplet burst where the piece ripped away.
+    burst(bloodSim, origin, Math.random);
 
     while (chunks.length > MAX_CHUNKS) {
       const oldest = chunks.shift();
@@ -679,7 +718,7 @@ async function main() {
   /** Blows the whole body apart — every live cluster becomes a chunk. */
   function gibEverything() {
     const centre = torsoCentre();
-    const { body: next, chunks: groups } = gibAll(current);
+    const { body: next, chunks: groups } = gibAllPieces(current, centre);
     for (const g of groups) {
       // Radial launch from the body centre, so the pile spreads instead of
       // every piece going the same way.
@@ -693,7 +732,7 @@ async function main() {
         2.2 + Math.random() * 2.4,
         (dz / l) * speed + (Math.random() - 0.5) * 1.2,
       ];
-      spawnChunk(g.limb, g.origin, g.prims, vel, attachPoint(g.prims, centre));
+      spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt);
     }
     current = next;
     wounds = [];
@@ -825,7 +864,8 @@ async function main() {
     if (chunk.prims.length === 0) return;
     current = next;
     if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
-    spawnChunk(limb, chunk.origin, chunk.prims, undefined, attachPoint(chunk.prims, torsoCentre()));
+    spawnChunk(limb, chunk.origin, chunk.prims, undefined,
+      [attachPoint(chunk.prims, torsoCentre())]);
     view.update(current);
     refreshWounds();
     rebind();
@@ -905,6 +945,17 @@ async function main() {
       c.state = stepChunk(c.state, Math.min(dt, 1 / 30));
       c.view.update(c.state);
     }
+
+    // Blood: every flying chunk trails droplets, the sim settles them into
+    // splats, and the instanced view re-poses from sim state. Same dt clamp —
+    // a hidden tab must not integrate the whole gap in one ballistic step.
+    const bdt = Math.min(dt, 1 / 30);
+    emitTrails(
+      bloodSim,
+      chunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+      bdt, Math.random);
+    stepBlood(bloodSim, bdt, Math.random);
+    bloodView.sync(bloodSim, camera);
 
     // Drive the flesh: settle the rig toward its rest pose, push the result
     // back into the primitives, and re-upload. This is what makes the body

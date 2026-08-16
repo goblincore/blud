@@ -147,6 +147,12 @@ describe('ported features reach the entry point', () => {
     // and clips whole patches to white that sweep with the camera.
     expect(MARCH_BODY).toMatch(/let fres = [^;]*\* \(1\.0 - wm\);/);
   });
+
+  it('gates the everted rim on surface locality (no limb welding)', () => {
+    const applyWounds = HELPERS.find(h => declaredName(h) === 'applyWounds')!;
+    expect(applyWounds).toContain('rimLocal');
+    expect(applyWounds).toMatch(/smoothstep\([^)]*dIn\)/);
+  });
 });
 
 describe('data texture layout', () => {

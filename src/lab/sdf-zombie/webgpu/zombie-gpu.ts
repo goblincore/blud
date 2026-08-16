@@ -18,7 +18,7 @@ import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE } from '../pack';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
-import type { Chunk } from '../gib-chunks';
+import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { sub as vsub } from '../vec';
@@ -621,8 +621,8 @@ export function createChunkGpuView(
   chunk: Chunk,
   prims: Primitive[],
   template: MarchUniforms,
-  /** World position where this limb was attached — becomes the torn end. */
-  tornAt?: Vec3,
+  /** World positions where this limb was attached — become torn ends. */
+  tornAt?: Vec3[],
 ): ChunkGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
@@ -661,10 +661,10 @@ export function createChunkGpuView(
   // where chunk.radius is 0.14, and the shader's cluster-bounds cull would
   // erase anything reaching past it.
   const extent = chunkExtent(prims, chunk.pos);
-  const tornLocal: Vec3 | null = tornAt ? vsub(tornAt, chunk.pos) : null;
+  const tornLocals: Vec3[] = (tornAt ?? []).map(t => vsub(t, chunk.pos));
   // Girth at the tear, NOT extent: extent is length-dominated, and a wound
   // radius that scales with length swallows the capsule silhouette (X1.16).
-  const tornRadius = tornLocal ? tornEndRadius(local, tornLocal) : 0;
+  const tornRadii = tornLocals.map(t => tornEndRadius(local, t));
 
   const packed = packBody({
     prims: local,
@@ -699,21 +699,15 @@ export function createChunkGpuView(
 
   /** Writes the local prims into the world-space data rows for state `c`. */
   function apply(c: Chunk): { sx: number; sy: number; sz: number } {
-    const s = Math.min(1, Math.max(0, c.squash));
-    // Non-uniform squash on impact — flatten in y, bulge in x/z.
-    const sx = 1 + s * 0.35, sy = 1 - s * 0.5, sz = 1 + s * 0.35;
-    const cos = Math.cos(c.angle), sin = Math.sin(c.angle);
+    const { sx, sy, sz } = squashFactors(c);
     local.forEach((p, i) => {
       const o = i * PRIM_STRIDE;
-      const ends: readonly [Vec3, Float32Array][] = [[p.a, packed.primA], [p.b, packed.primB]];
-      for (const [pt, arr] of ends) {
-        // Tumble around y, then squash in WORLD axes so the blob always
-        // flattens against the floor, however far it has rolled.
-        const rx = pt[0] * cos + pt[2] * sin;
-        const rz = -pt[0] * sin + pt[2] * cos;
-        arr.set([c.pos[0] + rx * sx, c.pos[1] + pt[1] * sy, c.pos[2] + rz * sz], o);
-      }
-      // Preserve the carve flag in .w — a severed head keeps its face.
+      packed.primA.set(chunkPoint(c, p.a, sx, sy, sz), o);
+      packed.primB.set(chunkPoint(c, p.b, sx, sy, sz), o);
+      // Squash multiplies the world-axis ellipsoid scale. Approximation: the
+      // authored per-axis scale does not rotate with the chunk (the yaw-only
+      // version had the same limitation) — limb prims are near-uniform so this
+      // never shows.
       packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
         p.op === 'sub' ? 1 : 0], o);
     });
@@ -724,21 +718,16 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
 
-    if (tornLocal) {
-      // Same tumble-then-squash transform the primitives get, so the torn end
-      // stays welded to the stump as the limb spins and flattens.
-      const rx = tornLocal[0] * cos + tornLocal[2] * sin;
-      const rz = -tornLocal[0] * sin + tornLocal[2] * cos;
-      const at: Vec3 = [
-        c.pos[0] + rx * sx, c.pos[1] + tornLocal[1] * sy, c.pos[2] + rz * sz,
-      ];
-      // type 1 = blast, so it reads as torn, not burned.
-      u.woundCfg.value.x = writeWounds(texels, [at], [tornRadius], [1], [0]);
+    if (tornLocals.length > 0) {
+      // Torn ends ride the same rotate-then-squash transform as the prims, so
+      // they stay welded to the stumps as the piece tumbles.
+      const ats = tornLocals.map(t => chunkPoint(c, t, sx, sy, sz));
+      u.woundCfg.value.x = writeWounds(
+        texels, ats, tornRadii, ats.map(() => 1), ats.map(() => 0));
     } else {
       u.woundCfg.value.x = 0;
     }
 
-    // A severed head's face projection has to ride the tumbling skull.
     if (u.faceCfg.value.x > 0.5) u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
 
     dataTex.needsUpdate = true;
@@ -747,7 +736,10 @@ export function createChunkGpuView(
 
   const firstApply = apply(chunk);
   mesh.position.set(chunk.pos[0], chunk.pos[1], chunk.pos[2]);
-  mesh.rotation.y = chunk.angle;
+  // No mesh rotation: the proxy box stays axis-aligned — its size
+  // (extent * 2 * 1.4 + ...) already covers every orientation of the rotated
+  // field, and rotating the box while squash acts in world axes would
+  // under-cover.
   mesh.scale.set(firstApply.sx, firstApply.sy, firstApply.sz);
 
   return {
@@ -755,7 +747,6 @@ export function createChunkGpuView(
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
-      mesh.rotation.y = c.angle;
       mesh.scale.set(sx, sy, sz);
     },
     dispose() {

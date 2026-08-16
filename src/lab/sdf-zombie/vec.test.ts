@@ -1,6 +1,9 @@
 // src/lab/sdf-zombie/vec.test.ts
 import { describe, it, expect } from 'vitest';
 import { add, sub, scale, dot, cross, len, normalize, lerp, basisFromAxis } from './vec';
+import {
+  qIdentity, qFromAxisAngle, qMul, qNormalize, qRotate, type Quat,
+} from './vec';
 
 describe('vec helpers', () => {
   it('does elementwise arithmetic', () => {
@@ -35,5 +38,41 @@ describe('vec helpers', () => {
       expect(dot(u, w)).toBeCloseTo(0, 6);
       expect(dot(v, w)).toBeCloseTo(0, 6);
     }
+  });
+});
+
+describe('quaternions', () => {
+  it('identity rotates nothing', () => {
+    expect(qRotate(qIdentity(), [1, 2, 3])).toEqual([1, 2, 3]);
+  });
+
+  it('rotates 90 degrees about y', () => {
+    const q = qFromAxisAngle([0, 1, 0], Math.PI / 2);
+    const v = qRotate(q, [1, 0, 0]);
+    expect(v[0]).toBeCloseTo(0, 6);
+    expect(v[1]).toBeCloseTo(0, 6);
+    expect(v[2]).toBeCloseTo(-1, 6);
+  });
+
+  it('composes: qMul(a, b) applies b then a', () => {
+    const a = qFromAxisAngle([0, 1, 0], Math.PI / 2);
+    const b = qFromAxisAngle([1, 0, 0], Math.PI / 2);
+    const v = qRotate(qMul(a, b), [0, 1, 0]);
+    const expected = qRotate(a, qRotate(b, [0, 1, 0]));
+    expect(v[0]).toBeCloseTo(expected[0], 6);
+    expect(v[1]).toBeCloseTo(expected[1], 6);
+    expect(v[2]).toBeCloseTo(expected[2], 6);
+  });
+
+  it('normalize returns a unit quaternion', () => {
+    const q = qNormalize([1, 2, 3, 4]);
+    const n = Math.hypot(q[0], q[1], q[2], q[3]);
+    expect(n).toBeCloseTo(1, 6);
+  });
+
+  it('rotation preserves length', () => {
+    const q = qFromAxisAngle([0.3, 0.8, -0.5], 1.234);
+    const v = qRotate(q, [2, -1, 0.5]);
+    expect(Math.hypot(...v)).toBeCloseTo(Math.hypot(2, -1, 0.5), 6);
   });
 });
