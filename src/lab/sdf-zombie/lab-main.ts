@@ -325,6 +325,7 @@ handle.setRenderCallback((dt) => {
   view.update(posed);
   // Re-derive the skull's sphere from the POSED primitives so the face
   // projection tracks the head through the jiggle.
+  view.setTime(performance.now() / 1000);
   const skull = headShape(posed);
   if (skull) view.setHeadShape(skull.centre, skull.axes);
   view.setWounds(

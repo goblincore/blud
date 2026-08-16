@@ -18,6 +18,8 @@ export interface ZombieView {
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[]): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
+  /** Drives the eye-glow flicker. Seconds. */
+  setTime(seconds: number): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
 }
 
@@ -98,7 +100,12 @@ export function createZombieView(body: BuildResult): ZombieView {
       uFaceProjMode: { value: 0 },
       uFaceGlowThreshold: { value: 0.72 },
       uFaceGlowStrength: { value: 1.6 },
-      uFaceGlowColor: { value: new THREE.Color(0.95, 1.0, 0.72) },
+      // Bright red, and deliberately over 1.0 on the red channel: an emissive
+      // that only reaches 1.0 cannot read as a LIGHT, and a value above it is
+      // also what a bloom pass would key on if one is added later.
+      uFaceGlowColor: { value: new THREE.Color(1.9, 0.18, 0.10) },
+      uFaceGlowFlicker: { value: 0.45 },
+      uTime: { value: 0 },
     },
   });
 
@@ -138,6 +145,7 @@ export function createZombieView(body: BuildResult): ZombieView {
       }
       material.uniforms.uWoundCount!.value = n;
     },
+    setTime(t) { material.uniforms.uTime!.value = t; },
     setHeadShape(centre, axes) {
       (material.uniforms.uHeadCentre!.value as THREE.Vector3).set(...centre);
       (material.uniforms.uHeadAxes!.value as THREE.Vector3).set(...axes);

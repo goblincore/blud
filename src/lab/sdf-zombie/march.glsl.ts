@@ -114,6 +114,24 @@ uniform float uFaceProjMode;
 uniform float uFaceGlowThreshold;
 uniform float uFaceGlowStrength;
 uniform vec3  uFaceGlowColor;
+/** 0 = steady, 1 = fully guttering. Irregular on purpose — see flicker(). */
+uniform float uFaceGlowFlicker;
+uniform float uTime;
+
+/**
+ * Irregular flicker. Three incommensurate sines rather than one, because a
+ * single sine reads as a machine pulsing and the eye picks the period out
+ * immediately; overlapping periods never quite repeat.
+ */
+float flicker(float t) {
+  float a = sin(t * 11.3) * 0.5 + 0.5;
+  float b = sin(t * 23.7 + 1.3) * 0.5 + 0.5;
+  float c = sin(t * 3.1 + 0.7) * 0.5 + 0.5;
+  float f = a * 0.35 + b * 0.25 + c * 0.40;
+  // Biased upward so it mostly burns and only occasionally dips, rather than
+  // spending half its time dark.
+  return mix(1.0, 0.45 + f * 0.75, uFaceGlowFlicker);
+}
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -426,7 +444,7 @@ void main() {
            + scatter
            // Emissive: added AFTER lighting, so the eyes hold their own light
            // instead of going dark whenever the head turns from the key.
-           + uFaceGlowColor * faceGlow * uFaceGlowStrength * (1.0 - cm);
+           + uFaceGlowColor * faceGlow * uFaceGlowStrength * flicker(uTime) * (1.0 - cm);
   outColor = vec4(lit, 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
