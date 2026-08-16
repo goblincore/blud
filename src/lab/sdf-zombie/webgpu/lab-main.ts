@@ -26,9 +26,10 @@
 // system cannot see the lights and every standard material renders black.
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
 import { createZombieGpuView, createChunkGpuView, type ChunkGpuView } from './zombie-gpu';
 import { createSceneGpuView, type SceneGpuView } from './scene-gpu';
+import { createOccluderHull } from './occluder-hull';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
@@ -190,10 +191,18 @@ async function main() {
   window.addEventListener('resize', sizeSdfLayer);
   handle.setDrawFn(() => sdfLayer.render(scene, camera));
 
+  // The occluder hull. Its own layer, rendered before the march, so every ray
+  // can stop at the distance something solid already covers — the early-Z that
+  // frag_depth and discard rule out. Off by default: it is the measurement
+  // under test, and a lever that is on by default cannot be A/B'd honestly.
+  const occluderHull = createOccluderHull();
+  occluderHull.object.layers.set(OCCLUDER_LAYER);
+  scene.add(occluderHull.object);
+
   let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
-  const view = createZombieGpuView(body, { cone: sdfLayer.cone });
+  const view = createZombieGpuView(body, { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
   // camera layer mask apart rather than an object list to keep in sync.
@@ -498,7 +507,7 @@ async function main() {
       const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
       const v = createZombieGpuView(placed,
-        { specialise: specialiseShaders, cone: sdfLayer.cone });
+        { specialise: specialiseShaders, cone: sdfLayer.cone, occluder: sdfLayer.occluder });
       trackBody(v, placed);
       v.applyMaterial(flesh, LIGHT_PRESETS[light]);
       if (faceSheet) {
@@ -944,6 +953,7 @@ async function main() {
     // The merged path re-folds every body each frame. That is the same CPU
     // work the per-body path already does per body, just gathered in one place.
     if (mergedView) mergedView.update([posed, ...crowdBodies()]);
+    if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()]);
     view.setTime(performance.now() / 1000);
     // Re-derive the skull's sphere from the POSED primitives so the face
     // projection tracks the head through the jiggle.
@@ -1333,6 +1343,20 @@ async function main() {
     get sdfScale() { return sdfLayer.scale; },
     setSdfFlipY(on: boolean) { sdfLayer.setFlipY(on); },
     setConeEnabled(on: boolean) { sdfLayer.setConeEnabled(on); },
+    /**
+     * Occluder inner-hull pre-pass. Lets every ray stop where something solid
+     * already covers it — see occluder-hull.ts for why that is safe.
+     */
+    setOccluder(on: boolean) {
+      sdfLayer.setOccluderEnabled(on);
+      // Populate immediately rather than waiting a frame: a benchmark started
+      // in the same tick would otherwise measure an EMPTY hull and read as a
+      // free win.
+      if (on) occluderHull.update([applyRig(current, bound), ...crowdBodies()]);
+    },
+    get occluder() {
+      return { enabled: sdfLayer.occluderEnabled, instances: occluderHull.instanceCount };
+    },
     setConeFineTile(px: number) { sdfLayer.setConeFineTile(px); },
     get coneFineTile() { return sdfLayer.coneFineTile; },
     get coneEnabled() { return sdfLayer.coneEnabled; },

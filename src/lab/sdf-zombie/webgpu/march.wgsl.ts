@@ -511,10 +511,25 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   headAxes: vec3<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
-  startT: f32
+  startT: f32,
+  occT: f32
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
-  let tMax = length(worldPos - camPos);
+  // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a
+  // conservative INNER hull of the scene — geometry guaranteed to lie inside
+  // the real surface, rasterised depth-only before this pass.
+  //
+  // Clamping tMax by it is the entire consumption path, and it is safe in the
+  // one direction that matters: the hull is INSIDE the body, so any true
+  // surface along this ray is NEARER than the hull that covers it. Cutting the
+  // ray at the hull can therefore never remove a hit that would have been
+  // visible — it only stops the march from grinding through the full step
+  // budget in space that something solid already covers.
+  //
+  // This is what early-Z would have done for free. It cannot, because this
+  // shader writes frag_depth and discards, and WGSL has no equivalent of
+  // EXT_conservative_depth's depth_greater qualifier to win it back.
+  let tMax = min(length(worldPos - camPos), occT);
   let steps = i32(marchCfg.x);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).

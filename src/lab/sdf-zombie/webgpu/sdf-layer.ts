@@ -34,7 +34,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
-import { createConeUniforms, type ConeSource } from './zombie-gpu';
+import { createConeUniforms, type ConeSource, type OccluderSource } from './zombie-gpu';
 
 /**
  * The layer SDF bodies live on. Everything raymarched goes here; the polygonal
@@ -51,6 +51,23 @@ export const SDF_LAYER = 1;
  * depth buffer anyway.
  */
 export const CONE_LAYER = 2;
+
+/**
+ * The layer the conservative INNER-HULL occluders live on.
+ *
+ * The march writes frag_depth and discards, which between them defeat early-Z,
+ * so a body fully hidden behind another still pays in full — measured at 6.2x
+ * for ten bodies sharing one body's silhouette. WGSL has no equivalent of
+ * EXT_conservative_depth's depth_greater qualifier to win early-Z back, so the
+ * rejection has to be done by hand: rasterise cheap geometry that is
+ * GUARANTEED to lie inside the real surface, and let every ray stop at the
+ * distance that hull covers.
+ *
+ * Inside-ness is what makes it safe, and it comes free from the field's own
+ * algebra: smin only ever ADDS material, so the raw primitives are strictly
+ * inside the blended surface they build.
+ */
+export const OCCLUDER_LAYER = 3;
 
 /**
  * Tile size of the cone pre-pass, in full-resolution pixels.
@@ -128,6 +145,10 @@ export interface SdfLayer {
   setFlipY(on: boolean): void;
   /** The pre-pass output, to hand to every view that should start from it. */
   readonly cone: ConeSource;
+  /** The inner-hull pre-pass the march clamps its tMax by. See OCCLUDER_LAYER. */
+  readonly occluder: OccluderSource;
+  setOccluderEnabled(on: boolean): void;
+  readonly occluderEnabled: boolean;
   /** Turns the cone pre-pass on or off, for measurement. */
   setConeEnabled(on: boolean): void;
   /** Lens and layer height, from which both levels' cone widths are derived. */
@@ -188,6 +209,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const coneCoarse = new THREE.RenderTarget(1, 1, coneOpts);
   const coneFine = new THREE.RenderTarget(1, 1, coneOpts);
   const coneUniforms = createConeUniforms();
+
+  // The occluder target holds a DISTANCE per pixel, not a depth: the march
+  // compares it against its own ray parameter t, and converting a depth back
+  // into a distance in the shader would need the projection undone per pixel.
+  //
+  // Full SDF-layer resolution, because it is consumed per marched pixel. It is
+  // cheap regardless — the hull is a few hundred low-poly spheres with no
+  // shading.
+  const occluder = new THREE.RenderTarget(1, 1, {
+    depthBuffer: true,   // nearest hull surface must win where hulls overlap
+    type: THREE.FloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+  const occluderUniforms = { enabled: uniform(0) };
+  const clearColorScratch = new THREE.Color();
   let coneFov = 75;
   let coneHeight = 540;
   /**
@@ -232,6 +269,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     const w = Math.max(1, Math.round(fullW * scale));
     const h = Math.max(1, Math.round(fullH * scale));
     target.setSize(w, h);
+    occluder.setSize(w, h);
     coneCoarse.setSize(
       Math.max(1, Math.ceil(w / CONE_TILE)),
       Math.max(1, Math.ceil(h / CONE_TILE)),
@@ -276,6 +314,26 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         }
       }
 
+      // Pass 1c — the occluder hulls. Depth-only in spirit: the fragment
+      // shader writes one number, the distance from the camera. Cleared to
+      // zero, which occFetch reads as "nothing here" rather than as a
+      // zero-length ray.
+      if (occluderUniforms.enabled.value > 0.5) {
+        camera.layers.set(OCCLUDER_LAYER);
+        renderer.setRenderTarget(occluder);
+        // BLACK, explicitly, and restored afterwards. The renderer's clear
+        // colour is the scene background (0x1a1116), so without this the
+        // target clears to red 0.102 — and occFetch reads that as "a hull
+        // surface 10 cm from the camera", which clamps tMax on almost every
+        // ray and shreds the whole crowd. It renders as bodies dissolving into
+        // disconnected blobs, which looks like a broken hull rather than a
+        // clear colour.
+        const prevClear = renderer.getClearColor(clearColorScratch).getHex();
+        renderer.setClearColor(0x000000);
+        void renderer.render(scene, camera);
+        renderer.setClearColor(prevClear);
+      }
+
       // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
       // starting from the distance the pre-pass proved empty. The clear leaves
       // alpha at 1.0, which is the "nothing here" sentinel the composite
@@ -317,6 +375,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     setConeFineTile(px) { coneFineTile = Math.max(0, Math.round(px)); resize(); },
     get coneFineTile() { return coneFineTile; },
     setConeEnabled(on) { coneUniforms.enabled.value = on ? 1 : 0; },
+    occluder: { texture: occluder.texture, uniforms: occluderUniforms },
+    setOccluderEnabled(on) { occluderUniforms.enabled.value = on ? 1 : 0; },
+    get occluderEnabled() { return occluderUniforms.enabled.value > 0.5; },
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },

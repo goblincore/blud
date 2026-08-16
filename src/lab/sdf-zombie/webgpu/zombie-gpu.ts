@@ -236,6 +236,34 @@ export const coneFetchNode = wgslFn(CONE_FETCH_WGSL);
 const coneFetch = coneFetchNode;
 
 /**
+ * Reads the occluder pre-pass's distance for this pixel.
+ *
+ * ZERO IS THE "NOTHING HERE" SENTINEL, and it has to be: the target is cleared
+ * to zero, and clamping a ray's tMax to zero would erase the whole layer. A
+ * real occluder distance of exactly zero would mean the camera is exactly on
+ * the hull surface, which the near plane already excludes.
+ */
+const OCC_FETCH_WGSL = /* wgsl */ `fn occFetch(
+  occTex: texture_2d<f32>,
+  screenUV: vec2<f32>,
+  enabled: f32
+) -> f32 {
+  if (enabled < 0.5) { return 1e9; }
+  let dims = vec2<f32>(textureDimensions(occTex, 0));
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  let v = textureLoad(occTex, c, 0).x;
+  if (v <= 0.0) { return 1e9; }
+  return v;
+}`;
+export const occFetchNode = wgslFn(OCC_FETCH_WGSL);
+
+/** The occluder pre-pass's output, as the march material needs it. */
+export interface OccluderSource {
+  texture: THREE.Texture;
+  uniforms: { enabled: ReturnType<typeof uniform> };
+}
+
+/**
  * The cone pre-pass's output, as the march material needs it.
  *
  * Built by a factory so the node types stay exact — `wgslFn` takes Nodes, and
@@ -269,7 +297,7 @@ export interface ConeSource {
 
 function createMarchMaterial(
   dataTex: THREE.Texture, u: MarchUniforms, march = marchBody,
-  cone?: ConeSource,
+  cone?: ConeSource, occluder?: OccluderSource,
 ) {
   const marched = march({
     worldPos: positionWorld,
@@ -304,6 +332,13 @@ function createMarchMaterial(
           enabled: cone.uniforms.enabled,
         })
       : float(0),
+    occT: occluder
+      ? occFetchNode({
+          occTex: texture(occluder.texture),
+          screenUV: screenUV,
+          enabled: occluder.uniforms.enabled,
+        })
+      : float(1e9),
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -401,6 +436,12 @@ export interface GpuViewOpts {
   /** Coarse cone pre-pass to start the march from. Omit to march from the camera. */
   cone?: ConeSource;
   /**
+   * Conservative inner hull of the scene, rasterised depth-only before the
+   * march. Lets a ray stop early where something solid already covers it —
+   * the early-Z that frag_depth + discard rule out.
+   */
+  occluder?: OccluderSource;
+  /**
    * Generate a shader specialised to THIS body's structure — loops unrolled,
    * carve decisions and blend constants baked. See specialise.ts. Costs one
    * pipeline compile per distinct structure, so it is opt-in until measured.
@@ -430,7 +471,7 @@ export function createZombieGpuView(
   const material = createMarchMaterial(
     dataTex, u,
     opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
-    opts.cone);
+    opts.cone, opts.occluder);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
