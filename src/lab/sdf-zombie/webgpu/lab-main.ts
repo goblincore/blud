@@ -50,6 +50,9 @@ import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
 import {
+  initialAdaptiveState, scaleForRung, stepAdaptive,
+} from '../adaptive-scale';
+import {
   LOD_LEVELS, LOD_LEVERS, pickLodSticky, screenHeightPx,
   type LodLevel, type LodLever,
 } from '../lod';
@@ -694,6 +697,11 @@ async function main() {
 
   async function benchGpu({ chunks = 12, chunkFrames = 20, warmup = 40, dt = 1 / 60 } = {}) {
     handle.setLoopRunning(false);
+    // Dynamic resolution would move the pixel count mid-run, and pixel count
+    // IS the thing being measured. Suspended for the duration rather than
+    // merely discouraged.
+    const hadAdaptive = adaptiveEnabled;
+    adaptiveEnabled = false;
     try {
       let hiddenSteps = 0;
       const step = () => {
@@ -738,8 +746,11 @@ async function main() {
         cone: sdfLayer.coneEnabled,
         lod: lodEnabled,
         hiddenSteps,
+        adaptive: hadAdaptive ? 'suspended' : 'off',
       };
     } finally {
+      adaptiveEnabled = hadAdaptive;
+      adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
       handle.setLoopRunning(true);
     }
   }
@@ -804,6 +815,38 @@ async function main() {
     return s[Math.floor(s.length * 0.5)]!;
   }
 
+  // Dynamic resolution. Off by default so every benchmark on this branch stays
+  // reproducible — a controller that moves the pixel count mid-run would make
+  // the numbers meaningless, which is the exact failure this session spent its
+  // first half undoing.
+  let adaptiveEnabled = false;
+  let adaptiveBudgetMs = 1000 / 60;
+  let adaptiveState = initialAdaptiveState(performance.now());
+  /**
+   * Shorter than the 120-frame display window on purpose. The controller has
+   * to notice a camera move into a crowd within a few frames, where the
+   * readout wants a stable number to print.
+   */
+  const ADAPTIVE_WINDOW = 30;
+
+  function tickAdaptive(nowMs: number): void {
+    if (!adaptiveEnabled || frames.length < ADAPTIVE_WINDOW) return;
+    const next = stepAdaptive(adaptiveState, {
+      nowMs,
+      medianFrameMs: median(frames.slice(-ADAPTIVE_WINDOW)),
+      budgetMs: adaptiveBudgetMs,
+    });
+    if (next.rung !== adaptiveState.rung) {
+      sdfLayer.setScale(scaleForRung(next.rung));
+      sizeSdfLayer();
+      // The window still holds frames rendered at the OLD scale, and feeding
+      // those to the controller again would have it react twice to one event —
+      // straight into the oscillation this ladder exists to avoid.
+      frames.length = 0;
+    }
+    adaptiveState = next;
+  }
+
   handle.setRenderCallback((dt) => {
     const now = performance.now();
     frames.push(now - lastStamp);
@@ -816,6 +859,8 @@ async function main() {
       fpsEl.textContent =
         `cpu+gpu ${med.toFixed(1)} / ${p95.toFixed(1)} ms  (${(1000 / med).toFixed(0)} fps)`;
     }
+
+    tickAdaptive(now);
 
     // The number LOD is judged on. Wall clock pins to the vsync interval the
     // moment there is any headroom, so it cannot tell a 2x win from "still
@@ -1050,6 +1095,19 @@ async function main() {
     get: () => sdfLayer.scale,
     set: (v) => { sdfLayer.setScale(v); sizeSdfLayer(); },
   });
+  // Dynamic resolution. Drives the slider above from the measured frame time
+  // rather than by hand — the answer to "why does zooming IN get slower when
+  // there is LESS on screen", which is that cost is per covered pixel.
+  const adaptBtn = addButton(lodBox, 'adaptive res: off', () => {
+    adaptiveEnabled = !adaptiveEnabled;
+    adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+    adaptBtn.textContent = `adaptive res: ${adaptiveEnabled ? 'on' : 'off'}`;
+  });
+  addSlider(lodBox, {
+    label: 'adaptive budget ms', min: 8, max: 40, step: 0.1,
+    get: () => adaptiveBudgetMs,
+    set: (v) => { adaptiveBudgetMs = v; },
+  });
   const lodBtn = addButton(lodBox, 'lod: on', () => {
     lodEnabled = !lodEnabled;
     lodBtn.textContent = `lod: ${lodEnabled ? 'on' : 'off'}`;
@@ -1175,6 +1233,22 @@ async function main() {
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
     /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
+    /** Dynamic resolution: drives the SDF scale to hold the frame budget. */
+    setAdaptive(on: boolean) {
+      adaptiveEnabled = on;
+      adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+      adaptBtn.textContent = `adaptive res: ${on ? 'on' : 'off'}`;
+    },
+    setAdaptiveBudget(ms: number) { adaptiveBudgetMs = ms; },
+    get adaptive() {
+      return {
+        enabled: adaptiveEnabled,
+        budgetMs: adaptiveBudgetMs,
+        rung: adaptiveState.rung,
+        scale: scaleForRung(adaptiveState.rung),
+        probeIntervalMs: adaptiveState.probeIntervalMs,
+      };
+    },
     get sdfScale() { return sdfLayer.scale; },
     setSdfFlipY(on: boolean) { sdfLayer.setFlipY(on); },
     setConeEnabled(on: boolean) { sdfLayer.setConeEnabled(on); },
