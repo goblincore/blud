@@ -110,6 +110,8 @@ Key reference docs (open these before touching their area):
 - `X1.3` [ ] **Retune the flesh presets against the corrected sRGB pipeline** —
   one job that unblocks three: the WebGPU lab's look, leaving post-fx on, and
   bloom for the eye glow. Presets in `src/lab/sdf-zombie/material.ts`.
+  **Scheduled after gobs-and-goo (X1.21)** — owner session with the sliders; the
+  henenlotter-latex look gets its numbers re-derived for the encoded pipeline.
 
 - `X1.4` [~] **LOD pass** — built, measured, and it does NOT reach the target.
   **Every number in this row predates `X1.8` and needs re-measuring — see `X1.10`.**
@@ -162,10 +164,12 @@ Key reference docs (open these before touching their area):
   blood trails/splats on the game's tuning constants, wound-driven amputation
   (connectivity), rim locality. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gore-feel-design.md); playtest knobs: sever eagerness, droplet size.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
-  shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.19 playtest.
-- `X1.11` [ ] **Port normal warping to `march.glsl.ts`** — the WebGL lab still
-  has the noise in its field, so `validate.ts`'s Lipschitz guard must stay
-  until it does. The two labs are one technique apart.
+  shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
+- `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
+  chunk material + screen-space metaball blood. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gobs-and-goo-design.md); plan after the fix-pass lands. WebGPU only.
+- `X1.11` [-] ~~Port normal warping to `march.glsl.ts`~~ — dead: the WebGL lab is
+  **FROZEN** at gore fix-pass parity (owner decision 2026-08-16). All lab work is
+  WebGPU-only from here; the GLSL twin stays as reference until deleted at merge.
 - `X1.13` [x] **Adaptive SDF resolution** — pure tested controller drives the
   layer scale from measured frame time. Signal is asymmetric: DOWN is computed
   (`scale * sqrt(budget/measured)`), UP must probe + back off, because wall
