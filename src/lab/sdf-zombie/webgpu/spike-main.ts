@@ -24,7 +24,7 @@
 // Two copies of three means the node system cannot see the lights.
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
-import { createZombieGpuView } from './zombie-gpu';
+import { createZombieGpuView, translateBody } from './zombie-gpu';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
 import { DEFAULT_FACE, type FaceParams } from '../face';
@@ -78,10 +78,43 @@ const body = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS);
 say(`body: ${body.prims.length} prims, ${body.clusters.length} clusters`);
 if (body.errors.length) say(body.errors.join(' | '), true);
 
-const view = createZombieGpuView(body);
-view.applyMaterial(FLESH_PRESETS['henenlotter-latex'], LIGHT_PRESETS['practical-hard-key']);
-scene.add(view.object);
-say('body material built');
+// --- N bodies, for the measurement that matters -----------------------------
+// Cost here is bodies x pixels x steps, so the crowd question is answered by
+// spawning until the frame falls off 60fps. No timer API needed: a vsync-locked
+// frame time tells you nothing, but the COUNT at which it breaks tells you a lot.
+//
+// Spread in a shallow arc facing the camera so they overlap on screen. Overlap
+// is the real hazard rather than count — the shader writes depth and discards,
+// which defeats early-Z, so an occluded body still marches every pixel.
+const views: ReturnType<typeof createZombieGpuView>[] = [];
+
+function setBodyCount(n: number) {
+  while (views.length > n) {
+    const v = views.pop();
+    if (v) scene.remove(v.object);
+  }
+  while (views.length < n) {
+    const i = views.length;
+    const col = i % 5;
+    const row = Math.floor(i / 5);
+    // Translate the FIELD, not the mesh — see translateBody(). Moving
+    // object.position would shift only the proxy box and clip the body.
+    const v = createZombieGpuView(
+      translateBody(body, [(col - 2) * 0.62, 0, -row * 0.85]));
+    v.applyMaterial(FLESH_PRESETS['henenlotter-latex'], LIGHT_PRESETS['practical-hard-key']);
+    scene.add(v.object);
+    views.push(v);
+  }
+  countEl.textContent = `bodies: ${views.length}`;
+}
+
+const countEl = document.createElement('div');
+statusEl?.appendChild(countEl);
+const fpsEl = document.createElement('div');
+statusEl?.appendChild(fpsEl);
+
+setBodyCount(Number(new URLSearchParams(location.search).get('n') ?? 1));
+say('press [ and ] to remove/add a body');
 
 // --- Orbit, matching the WebGL lab's controls -------------------------------
 let camYaw = 0.35;
@@ -111,7 +144,25 @@ canvas.addEventListener('wheel', (e) => {
   camDist = Math.max(0.9, Math.min(8, camDist + Math.sign(e.deltaY) * 0.2));
 }, { passive: true });
 
+// Rolling median frame time. Median rather than mean so one hitch does not
+// swamp the reading, and p95 alongside it because a stable median with a bad
+// p95 is a stutter, not a smooth frame.
+const frames: number[] = [];
+let lastStamp = performance.now();
+
 handle.setRenderCallback(() => {
+  const now = performance.now();
+  frames.push(now - lastStamp);
+  lastStamp = now;
+  if (frames.length > 120) frames.shift();
+  if (frames.length > 20) {
+    const s2 = [...frames].sort((a, b) => a - b);
+    const med = s2[Math.floor(s2.length * 0.5)]!;
+    const p95 = s2[Math.floor(s2.length * 0.95)]!;
+    fpsEl.textContent =
+      `${med.toFixed(1)} / ${p95.toFixed(1)} ms  (${(1000 / med).toFixed(0)} fps)`;
+  }
+
   const cp = Math.cos(camPitch);
   camera.position.set(
     camTarget.x + Math.sin(camYaw) * cp * camDist,
@@ -123,8 +174,24 @@ handle.setRenderCallback(() => {
 
 say('running');
 
+window.addEventListener('keydown', (e) => {
+  if (e.key === ']') setBodyCount(views.length + 1);
+  if (e.key === '[') setBodyCount(Math.max(0, views.length - 1));
+});
+
 (window as unknown as { __sdfSpike: unknown }).__sdfSpike = {
   backend: handle.backend,
+  setBodyCount,
+  get bodyCount() { return views.length; },
+  /** Median/p95 frame time in ms over the last ~120 frames. */
+  stats() {
+    const s2 = [...frames].sort((a, b) => a - b);
+    return s2.length < 20 ? null : {
+      median: +s2[Math.floor(s2.length * 0.5)]!.toFixed(2),
+      p95: +s2[Math.floor(s2.length * 0.95)]!.toFixed(2),
+      bodies: views.length,
+    };
+  },
   setCam(yaw: number, pitch: number, dist: number) {
     camYaw = yaw; camPitch = pitch; camDist = dist;
   },

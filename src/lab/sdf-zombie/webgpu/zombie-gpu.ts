@@ -23,6 +23,26 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
 } from './march.wgsl';
 
+/**
+ * Returns a copy of `body` with every primitive endpoint and cluster centre
+ * shifted by `offset`.
+ *
+ * This is how you MOVE a raymarched body. The shader marches in WORLD space and
+ * the packed primitives ARE the field, so setting mesh.position only moves the
+ * proxy BOX — the flesh stays at the origin and the displaced box then clips it.
+ * The WebGL path's createChunkView carries the same warning; it is an easy and
+ * very confusing mistake, presenting as a body with slices missing.
+ */
+export function translateBody(body: BuildResult, offset: [number, number, number]): BuildResult {
+  const sh = (v: readonly [number, number, number]): [number, number, number] =>
+    [v[0] + offset[0], v[1] + offset[1], v[2] + offset[2]];
+  return {
+    ...body,
+    prims: body.prims.map(p => ({ ...p, a: sh(p.a), b: sh(p.b) })),
+    clusters: body.clusters.map(c => ({ ...c, center: sh(c.center) })),
+  };
+}
+
 export interface ZombieGpuView {
   object: THREE.Object3D;
   update(body: BuildResult): void;
