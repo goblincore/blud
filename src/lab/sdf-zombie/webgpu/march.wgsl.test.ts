@@ -136,8 +136,10 @@ describe('ported features reach the entry point', () => {
   it('does not carry the GLSL depth remap', () => {
     // WebGPU clip z is already [0,1] where OpenGL's is [-1,1]. The GLSL wrote
     // (clip.z / clip.w) * 0.5 + 0.5; carrying that over composites everything
-    // at the wrong depth.
-    expect(MARCH_BODY).not.toContain('0.5 + 0.5');
+    // at the wrong depth. Guard the clip.w DIVISION specifically, not the bare
+    // `0.5 + 0.5` substring: the gore mask legitimately remaps fbm's [-1,1]
+    // onto [0,1] with `* 0.5 + 0.5`, and so may any future mask.
+    expect(MARCH_BODY).not.toMatch(/clip\.w/);
   });
 
   it('fades fresnel out inside wounds instead of wet-boosting it (X1.17)', () => {
@@ -160,6 +162,14 @@ describe('ported features reach the entry point', () => {
     // Tighter locality than the first cut (0.5/1.2): at blast amplitude the
     // old reach exceeded the armpit gap and the rim still welded arm to torso.
     expect(applyWounds).toMatch(/smoothstep\(amp \* 0\.35, amp \* 0\.7, dIn\)/);
+  });
+
+  it('shades chunks through the gore mask (gobs-and-goo §2)', () => {
+    // lodCfg.w is goreStrength: 0 on the body, 1 on chunk views. The body's
+    // clean-latex read must stay reachable, and the gore block's own fbm is
+    // what makes a chunk read as mottled torn meat rather than a red ball.
+    expect(MARCH_BODY).toContain('goreStrength');
+    expect(MARCH_BODY).toContain('fbm(p * 6.0)');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {

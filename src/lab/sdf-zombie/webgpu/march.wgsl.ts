@@ -379,12 +379,14 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   faceCfg3   x glowFlicker, y timeSeconds
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
-//   lodCfg     x aoEnabled
+//   lodCfg     x aoEnabled, w goreStrength (0 body, 1 chunk views)
 //
 // LOD NOTE: most quality levers are guarded by their own amplitude reaching
 // zero (silhouette noise, surface noise, translucency, face, wounds), so the
-// LOD system drives them through uniforms that already existed. Only AO needs
-// lodCfg, because "no ambient occlusion" has no amplitude to turn down.
+// LOD system drives them through uniforms that already existed. AO needs
+// lodCfg.x because "no ambient occlusion" has no amplitude to turn down;
+// the gore mask took the spare lodCfg.w for the same reason — "no gore"
+// has no colour amplitude to fade to.
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -520,6 +522,22 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let cm = charMask(p, data, woundCfg);
   var albedo = mix(baseColor, deepColor, wm);
 
+  // Gore mask (gobs-and-goo spec §2): chunks are torn meat, not clean latex.
+  // fbm mottling + proximity to the torn wounds; blends toward wet deep red
+  // and darker clot, and rides the wet boost so bloody regions glisten.
+  // Sits BEFORE the face/char pass so a torn-off head still gets its face
+  // and char painted over the gore, and before the wet line, which maxes wm
+  // against gore. goreStrength is 0 on the body view, so standing bodies skip
+  // the whole block — including its fbm — and shade exactly as before.
+  let goreStrength = lodCfg.w;
+  var gore = 0.0;
+  if (goreStrength > 0.0) {
+    let mottle = clamp(fbm(p * 6.0) * 0.5 + 0.5, 0.0, 1.0);
+    gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
+    let clot = deepColor * 0.55;
+    albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);
+  }
+
   // Emissive mask from the face sheet; added into the lit colour further down.
   var faceGlow = 0.0;
 
@@ -598,8 +616,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
 
-  // Wounds are wetter than the surrounding skin; char is dead matte.
-  let wet = surfCfg2.x * mix(1.0, 1.6, wm) * (1.0 - cm);
+  // Wounds are wetter than the surrounding skin; char is dead matte. Gore
+  // rides the same boost: bloody chunk regions glisten like open wounds.
+  let wet = surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm);
   let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound
