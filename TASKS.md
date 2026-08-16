@@ -72,27 +72,28 @@ Key reference docs (open these before touching their area):
 - `X1.1` [x] **Face + PSX surface** — carving, face, post-fx.
   [spec](docs/superpowers/specs/2026-08-15-sdf-zombie-face-psx-design.md) ·
   [plan](docs/superpowers/plans/2026-08-15-sdf-zombie-face-psx.md)
-  - **The face is geometry for SILHOUETTE, texture for FEATURES.** Head is two
-    primitives (rounded cranium + narrower jaw, the crease between them being
-    the jaw line); an original flat greyscale face texture is projected onto
-    the front. Both live-tunable, tuned values baked into `DEFAULT_FACE`.
-  - **Carved geometry failed, four times, for reasons now recorded in
-    `face.ts`** — read that header before trying it again. Short version:
-    smooth carves smear (smin's k*4 blend zone is wider than an eye socket);
-    hard carves (`blendK: 0`) fix that and hold a crisp edge at any size, but
-    every primitive shares one albedo so a geometric eyeball still reads as
-    flesh; and a protruding nose breaks a planar face projection outright.
-  - Also fixed along the way: the post-fx chain was never wired (every earlier
-    look judgment was made in the wrong viewport, and the flesh presets turn
-    out to be tuned against a *missing gamma encode*, so post-fx defaults OFF);
-    `validateBody`'s connectivity probe used a *bounding* centre that a face
-    drags outside the flesh; and **the head was on backwards** — spine, neck
-    and skull leaned -z while the arms and feet point +z.
-  - Open: the projection is planar, so the face stretches toward the sides of
-    the skull (triplanar or curved would fix it); flesh presets still need a
-    retune against the corrected colour pipeline; perf HUD + N-body spawner
-    (task 2 of the plan) deferred; Phase 2 (rest-space coords, three detail
-    stacks) not started.
+  - **Geometry carries SILHOUETTE, texture carries FEATURES.** Four primitives
+    (cranium, jaw, brow, small nose) plus a flat greyscale face texture
+    projected on the front. That texture does three jobs at once: albedo
+    multiplier, height map driving relief, and emissive mask for red flickering
+    eyes. Original art, so it can ship.
+  - **Read `face.ts`'s header before touching the face.** It records four
+    complete rebuilds and why each failed — smooth carves smear (smin's k*4
+    blend is wider than an eye socket); hard carves (`blendK: 0`) fix that and
+    are associative, so they're the right tool for wounds/stumps/skeleton but
+    not a face; crisp geometry still doesn't read because all prims share one
+    albedo, and faces are mostly colour not shape; and a protruding nose breaks
+    a planar projection outright.
+  - Also fixed: post-fx was never wired, which exposed that the flesh presets
+    are tuned against a **missing sRGB encode** (post-fx defaults OFF until they
+    are retuned — one job, not two); `validateBody`'s connectivity probe used a
+    *bounding* centre a face drags outside the flesh; **the head was on
+    backwards**; and the face projection normalised by a sphere radius on an
+    ellipsoid head, so whichever axis was largest vanished.
+  - Open: bloom for the eye glow (emissive already exceeds 1.0 to key it, but
+    bloom needs the composer → gated on the preset retune); spherical
+    projection mode built but never compared side-by-side; perf HUD + N-body
+    spawner deferred, still the only route to an honest cost number.
 
 - `X1.2` [ ] **SDF lab on WebGPU** — lab only; the game stays on WebGL.
   [spec](docs/superpowers/specs/2026-08-15-sdf-lab-webgpu-design.md)
