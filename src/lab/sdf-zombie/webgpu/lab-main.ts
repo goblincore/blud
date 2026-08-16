@@ -1289,6 +1289,7 @@ async function main() {
   function setLegacyGamma(on: boolean) {
     legacyGamma = on;
     for (const x of [view, ...crowd]) x.uniforms.lodCfg.value.y = on ? 1 : 0;
+    gooLayer.setLegacyGamma(on);
     gammaBtn.textContent = `legacy gamma: ${on ? 'on' : 'off'}`;
   }
   /**

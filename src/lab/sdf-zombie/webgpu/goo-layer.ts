@@ -47,7 +47,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  wgslFn, texture, uv, vec2, vec4, uniform, float, max, dot, positionView,
+  wgslFn, texture, uv, vec2, vec3, vec4, uniform, float, max, dot, positionView,
 } from 'three/tsl';
 import type { BloodSim } from '../blood-sim';
 
@@ -84,11 +84,12 @@ export const GOO_TUNING = {
    * (BLOOD_TRAIL.size 0.22 was tuned for game-camera sprites); used raw as
    * physical blob radii they built quarter-metre goo towers (playtest
    * 2026-08-16). Same reasoning as the billboard view's DROPLET_VIEW_SCALE.
-   * 0.4 read as thick hose-water ropes once the blur landed; 0.3 still read
-   * ~2x too big against the body (owner playtest); 0.15 puts a trail droplet
-   * around wrist thickness. Blur keeps neighbours fusing at this size.
+   * 0.4 read as thick hose-water ropes once the blur landed; 0.15 broke the
+   * air trails into disconnected beads. 0.22 is the owner's mix point: thin
+   * CONNECTED liquid strands in the air, with the billboard sprites layered
+   * on top carrying the density (owner playtest 2026-08-16).
    */
-  sizeScale: 0.15,
+  sizeScale: 0.22,
   /**
    * Floor-pool radius multiplier on a sim splat's decal size. Splats are the
    * PERSISTENT blood record (they never age out — blood-sim keeps a 256 ring
@@ -98,7 +99,7 @@ export const GOO_TUNING = {
    * quads stripe near edge-on in the low-res buffer), elongated 1.4-2.6x
    * along its stamp yaw so pools merge into smears, not perfect circles.
    */
-  splatGooScale: 0.6,
+  splatGooScale: 0.35,
   /** Density above which a pixel is goo. A lone blob peaks near 1.0. */
   threshold: 0.4,
   /** Soft-edge band start, as a multiple of the threshold. */
@@ -134,7 +135,7 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   lightCfg: vec2<f32>,
   camWorld: mat4x4<f32>,
   camCfg: vec4<f32>,
-  gooCfg: vec2<f32>
+  gooCfg: vec3<f32>
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -191,6 +192,18 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let base = vec3<f32>(0.35, 0.02, 0.05);
   var lit = base * (lightCfg.y + diff * lightCfg.x) * keyColor * mix(0.55, 1.0, softEdge);
   lit = lit + keyColor * (glint * 1.2 + rim) * softEdge;
+
+  // Legacy display look (gooCfg.z) — the SAME decode marchBody applies (see
+  // march.wgsl.ts): without it the flesh renders through the legacy chain
+  // while the blood renders through the honest one, and the pools read
+  // washed gray-pink next to the saturated flesh.
+  if (gooCfg.z > 0.5) {
+    let c = max(lit, vec3<f32>(0.0));
+    let lo = c / 12.92;
+    let hi = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    lit = select(hi, lo, c <= vec3<f32>(0.04045));
+  }
+
   return vec4<f32>(lit, depthBuf);
 }`;
 
@@ -254,6 +267,8 @@ export interface GooLayer {
   setEdge(v: number): void;
   /** Gaussian sigma in density-target pixels; 0 bypasses the blur passes. */
   setBlurPx(v: number): void;
+  /** Mirror of the march's legacy-gamma flag — keep both on one switch. */
+  setLegacyGamma(on: boolean): void;
   readonly threshold: number;
   readonly edge: number;
   readonly blurPx: number;
@@ -296,6 +311,9 @@ export function createGooLayer(
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
   const uThresh = uniform(GOO_TUNING.threshold);
+  // Matches the march's lodCfg.y default (legacy gamma ON) — lab-main's
+  // setLegacyGamma drives both together.
+  const uLegacy = uniform(1);
   const uEdge = uniform(GOO_TUNING.edge);
   const uBlurPx = uniform(GOO_TUNING.blurPx);
   const uCamWorld = uniform(new THREE.Matrix4());
@@ -354,7 +372,7 @@ export function createGooLayer(
       lightCfg: rig.lightCfg,
       camWorld: uCamWorld,
       camCfg: uCamCfg,
-      gooCfg: vec2(uThresh, uEdge),
+      gooCfg: vec3(uThresh, uEdge, uLegacy),
     }) as unknown as Swizzled;
     const m = new MeshBasicNodeMaterial();
     m.colorNode = vec4(surfaced.xyz as never, 1.0);
@@ -571,6 +589,7 @@ export function createGooLayer(
     setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(0.95, v)); },
     setEdge(v) { uEdge.value = Math.max(1.01, Math.min(4, v)); },
     setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(5, v)); },
+    setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },
     get threshold() { return uThresh.value; },
     get edge() { return uEdge.value; },
     get blurPx() { return uBlurPx.value; },
