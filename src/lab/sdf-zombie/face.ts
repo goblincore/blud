@@ -4,7 +4,7 @@
 // Every feature rides the `skull` bone and lands in the `head` cluster, so the
 // fixed fold order is untouched and a severed head takes its face with it.
 //
-// WHY THIS IS ONLY A NOSE AND A BROW. Four passes of carved eye sockets, mouths and
+// WHY CARVING WORKS NOW, HAVING FAILED BEFORE. Four passes of carved eye sockets, mouths and
 // temples produced a snouted creature, never a readable face, and there is a
 // structural reason rather than a tuning one: smin scales k by 4, so even a
 // 0.0035 blend constant smears over ~1.4 cm. Eye sockets are inherently
@@ -66,6 +66,18 @@ export interface FaceParams {
   browHeavy: number;
   /** Height of the brow ridge above the cranium centre. */
   browRise: number;
+  /** Radius of the eyeball. */
+  eyeSize: number;
+  /** Half the distance between the two eyes. */
+  eyeSpacing: number;
+  /** How far the eyeball stands proud of the socket floor. */
+  eyeBulge: number;
+  /** How far the upper lid comes down over the eye. 0 = wide open. */
+  lidDroop: number;
+  /** Depth of the recess the eye sits in. */
+  socketDepth: number;
+  mouthWidth: number;
+  mouthOpen: number;
 }
 
 /**
@@ -82,7 +94,21 @@ export const DEFAULT_FACE: FaceParams = {
   noseHook: 0.012,
   browHeavy: 0.030,
   browRise: 0.022,
+  eyeSize: 0.019,
+  eyeSpacing: 0.040,
+  eyeBulge: 0.008,
+  lidDroop: 0.010,
+  socketDepth: 0.026,
+  mouthWidth: 0.038,
+  mouthOpen: 0.012,
 };
+
+/**
+ * Zero blend. smin/smax short-circuit to hard min/max, so a feature holds a
+ * crisp edge no matter how small it is — which is the whole reason the earlier
+ * smooth-blended face failed.
+ */
+const HARD_EDGE = 0;
 
 /** A face primitive, tagged so tests and the panel can find one by name. */
 export interface FacePrim extends PrimDef {
@@ -116,6 +142,41 @@ export function facePrims(f: FaceParams): FacePrim[] {
       ...HEAD, tag: 'nose-tip', radius: 0.021, blendK: 0.008,
       scale: [f.noseWidth, 1.0, 1.1],
       offset: off(0, browY - 0.030 - f.noseDroop, noseBaseZ + f.noseLength),
+    },
+
+    // --- Eyes: a recess, a bulging ball, and a lid over it -------------------
+    // All hard-edged. The socket is carved first (carves always run after the
+    // whole additive fold), so the eyeball added here is NOT eaten by it —
+    // which is exactly why the eye has to stand proud of the socket floor.
+    {
+      ...HEAD, tag: 'eye-socket', radius: f.socketDepth, blendK: HARD_EDGE,
+      scale: [1.25, 1.0, 0.7], op: 'sub', mirrorOffset: true,
+      offset: off(f.eyeSpacing, f.browRise - 0.012, HEAD_RZ + 0.004),
+    },
+    {
+      ...HEAD, tag: 'eyeball', radius: f.eyeSize, blendK: HARD_EDGE,
+      scale: [1, 1, 1], mirrorOffset: true,
+      offset: off(f.eyeSpacing, f.browRise - 0.012, noseBaseZ - 0.006 + f.eyeBulge),
+    },
+    {
+      ...HEAD, tag: 'eyelid', radius: f.eyeSize * 1.12, blendK: HARD_EDGE,
+      // Flattened in y and pushed down over the top of the ball, so what is
+      // left showing is a slit rather than a full sphere. A wide-open eye on a
+      // corpse reads as surprise; a half-lidded one reads as dead.
+      scale: [1.05, 0.62, 1.0], mirrorOffset: true,
+      offset: off(
+        f.eyeSpacing,
+        f.browRise - 0.012 + f.eyeSize * 0.75 - f.lidDroop,
+        noseBaseZ - 0.008 + f.eyeBulge,
+      ),
+    },
+
+    // --- Mouth: a hard slit, so it stays a line instead of a cavern ---------
+    {
+      ...HEAD, tag: 'mouth', radius: f.mouthOpen, blendK: HARD_EDGE,
+      scale: [f.mouthWidth / Math.max(f.mouthOpen, 1e-4), 1.0, 0.55],
+      op: 'sub',
+      offset: off(0, -0.082, noseBaseZ - 0.004),
     },
   ];
 }

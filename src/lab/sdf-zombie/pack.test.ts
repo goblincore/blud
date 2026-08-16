@@ -65,8 +65,11 @@ it('packs a carve as a negative blend constant', () => {
     clusters: [{ id: 0, limb: 'head', start: 0, count: 2, center: [0, 0, 0], radius: 0.1, alive: true }],
     bones: new Map(),
   });
-  expect(p.primB[3]).toBeCloseTo(0.02, 6);   // additive
-  expect(p.primB[7]).toBeCloseTo(-0.02, 6);  // carve
+  // blendK keeps its magnitude on BOTH; the carve flag rides primScale.w.
+  expect(p.primB[3]).toBeCloseTo(0.02, 6);
+  expect(p.primB[7]).toBeCloseTo(0.02, 6);
+  expect(p.primScale[3]).toBe(0);   // additive
+  expect(p.primScale[7]).toBe(1);   // carve
   // The cull margin is a distance, never signed.
   expect(p.maxBlendK).toBeCloseTo(0.02, 6);
   expect(p.carveCount).toBe(1);

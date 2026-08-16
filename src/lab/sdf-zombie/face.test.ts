@@ -11,11 +11,31 @@ describe('facePrims', () => {
     }
   });
 
-  it('is purely additive — features are the texture\'s job, not geometry\'s', () => {
-    // Carved sockets/mouth/temples were tried and removed: smin's blend zone
-    // (k*4) is wider than the features themselves, so they smear into a band.
-    // Carving infrastructure still exists for wounds and the skeleton field.
-    expect(facePrims(DEFAULT_FACE).every(p => p.op !== 'sub')).toBe(true);
+  it('carves the socket and mouth, and adds the eyeball and lid', () => {
+    const byTag = new Map(facePrims(DEFAULT_FACE).map(p => [p.tag, p]));
+    expect(byTag.get('eye-socket')!.op).toBe('sub');
+    expect(byTag.get('mouth')!.op).toBe('sub');
+    // An empty socket reads as a hole; a ball under a lid reads as an eye.
+    expect(byTag.get('eyeball')!.op).not.toBe('sub');
+    expect(byTag.get('eyelid')!.op).not.toBe('sub');
+  });
+
+  it('gives every face FEATURE a hard edge, and the big forms a soft one', () => {
+    // blendK 0 makes smin short-circuit to a hard min. Without it the blend
+    // zone (k*4) is wider than the feature and it smears into a band — which
+    // is exactly how the first four attempts failed.
+    const byTag = new Map(facePrims(DEFAULT_FACE).map(p => [p.tag, p]));
+    for (const tag of ['eye-socket', 'eyeball', 'eyelid', 'mouth'])
+      expect(byTag.get(tag)!.blendK).toBe(0);
+    // The nose and brow are large forms that SHOULD melt into the skull.
+    for (const tag of ['brow', 'nose-bridge', 'nose-tip'])
+      expect(byTag.get(tag)!.blendK).toBeGreaterThan(0);
+  });
+
+  it('drops the lid further over the eye as lidDroop grows', () => {
+    const lidY = (droop: number) =>
+      facePrims({ ...DEFAULT_FACE, lidDroop: droop }).find(p => p.tag === 'eyelid')!.offset![1]!;
+    expect(lidY(0.03)).toBeLessThan(lidY(0.0));
   });
 
   it('never mirrors by bone — `skull` is not a mirrored bone', () => {
@@ -38,7 +58,9 @@ describe('facePrims', () => {
     expect(tipZ(0.10)).toBeGreaterThan(tipZ(0.04));
   });
 
-  it('keeps the primitive count low — detail moved to texture', () => {
-    expect(facePrims(DEFAULT_FACE).length).toBeLessThanOrEqual(4);
+  it('keeps the expanded primitive count within budget', () => {
+    const expanded = facePrims(DEFAULT_FACE)
+      .reduce((n, p) => n + (p.mirrorOffset ? 2 : 1), 0);
+    expect(21 + expanded).toBeLessThanOrEqual(MAX_PRIMS);
   });
 });

@@ -8,7 +8,7 @@ export const CLUSTER_STRIDE = 4; // vec4
 export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
   primB: Float32Array;         // xyz = endpoint B, w = blendK
-  primScale: Float32Array;     // xyz = ellipsoid scale, w = cluster id
+  primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = unused
   primCount: number;
@@ -28,16 +28,20 @@ export function packBody(body: BuiltBody): PackedBody {
   let carveCount = 0;
   body.prims.forEach((p, i) => {
     const o = i * PRIM_STRIDE;
-    // A NEGATIVE packed blendK means "carve this primitive out". The shader
-    // reads the sign to split the additive fold from the carve pass — see
-    // mapBody and applyCarves in march.glsl.ts. Encoding it in the sign rather
-    // than adding a fourth per-primitive uniform array keeps per-step uniform
-    // traffic flat, and this renderer is fill-rate bound.
-    if (p.op === 'sub') carveCount++;
-    const k = p.op === 'sub' ? -p.blendK : p.blendK;
+    // The carve flag rides primScale.w, which held a cluster id the shader
+    // never actually read.
+    //
+    // It used to ride the SIGN of blendK, which was free but silently broken:
+    // -0 is indistinguishable from 0 once stored in a Float32Array, so a carve
+    // authored with blendK 0 folded in as ADDITIVE. That matters because
+    // blendK 0 is the useful case — smin short-circuits to a hard min, giving
+    // crisp-edged features instead of the smear that made carved eye sockets
+    // fail. Never encode a flag in a sign whose zero is meaningful.
+    const isCarve = p.op === 'sub';
+    if (isCarve) carveCount++;
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
-    primB.set([p.b[0], p.b[1], p.b[2], k], o);
-    primScale.set([p.scale[0], p.scale[1], p.scale[2], p.cluster], o);
+    primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
+    primScale.set([p.scale[0], p.scale[1], p.scale[2], isCarve ? 1 : 0], o);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });

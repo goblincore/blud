@@ -111,4 +111,11 @@ export const FACE_SLIDERS: { key: keyof FaceParams; min: number; max: number }[]
   { key: 'noseHook', min: -0.02, max: 0.05 },
   { key: 'browHeavy', min: 0, max: 0.07 },
   { key: 'browRise', min: -0.01, max: 0.06 },
+  { key: 'eyeSize', min: 0.008, max: 0.035 },
+  { key: 'eyeSpacing', min: 0.02, max: 0.065 },
+  { key: 'eyeBulge', min: -0.01, max: 0.03 },
+  { key: 'lidDroop', min: -0.005, max: 0.035 },
+  { key: 'socketDepth', min: 0.01, max: 0.05 },
+  { key: 'mouthWidth', min: 0.015, max: 0.075 },
+  { key: 'mouthOpen', min: 0.003, max: 0.035 },
 ];

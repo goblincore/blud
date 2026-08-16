@@ -258,7 +258,9 @@ export function createChunkView(
         const rz = -pt[0] * sin + pt[2] * cos;
         arr.set([c.pos[0] + rx * sx, c.pos[1] + pt[1] * sy, c.pos[2] + rz * sz], o);
       }
-      packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz, 0], o);
+      // Preserve the carve flag in .w — a severed head keeps its face.
+      packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
+        p.op === 'sub' ? 1 : 0], o);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
 

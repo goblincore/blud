@@ -55,7 +55,7 @@ out vec4 outColor;
 
 uniform vec4 uPrimA[MAX_PRIMS];          // xyz = A, w = radius
 uniform vec4 uPrimB[MAX_PRIMS];          // xyz = B, w = blendK
-uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w = cluster id
+uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w = 1 when this is a carve
 uniform vec4 uClusterBounds[MAX_CLUSTERS]; // xyz = centre, w = radius
 uniform vec4 uClusterRange[MAX_CLUSTERS];  // x = start, y = count, z = alive
 uniform int  uPrimCount;
@@ -189,9 +189,12 @@ float applyCarves(float d, vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      float k = uPrimB[idx].w;
-      if (k >= 0.0) continue;                 // additive — already folded
-      d = smax(d, -sdPrim(p, idx), -k);       // -k restores the magnitude
+      if (uPrimScale[idx].w < 0.5) continue;  // additive — already folded
+      // blendK 0 makes smax short-circuit to a hard max: a crisp-edged carve
+      // with no smear, which is the only way features smaller than the blend
+      // zone survive. Hard min/max are also ASSOCIATIVE, so zero-blend carves
+      // are exempt from the fold-order constraint that shapes everything else.
+      d = smax(d, -sdPrim(p, idx), uPrimB[idx].w);
     }
   }
   return d;
@@ -216,9 +219,8 @@ float mapBody(vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      float k = uPrimB[idx].w;
-      if (k < 0.0) continue;                   // carve — handled by applyCarves
-      d = smin(d, sdPrim(p, idx), k);
+      if (uPrimScale[idx].w > 0.5) continue;   // carve — handled by applyCarves
+      d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
     }
   }
   // Carves first: they are part of the body's own definition. Wounds are
