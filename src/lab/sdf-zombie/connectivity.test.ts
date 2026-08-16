@@ -133,7 +133,10 @@ describe('cutChains', () => {
 // wrong way so it covered only 2 of the arm's prims and mid-arm joints were
 // never tested. Chains follow AUTHORED order now (clusters are built
 // root→tip from the bone tree).
-import { chainOrder, JOINT_EPS } from './connectivity';
+import {
+  chainOrder, DISC_RING_SAMPLES, endpointGirth, JOINT_EPS, jointPoint,
+} from './connectivity';
+import { add, basisFromAxis, scale, sub } from './vec';
 
 describe('hanging-arm anatomy regressions', () => {
   const arm = body.clusters.find(c => c.limb === 'armL')!;
@@ -184,5 +187,94 @@ describe('hanging-arm anatomy regressions', () => {
     const shoulder = body.prims[armAdds[0]!]!.a;
     const wounds = [woundAt(shoulder, 0.16)];
     expect(cutLimbs(body, wounds, torso.center)).toContain('armL');
+  });
+});
+
+// --- Union coverage: wounds that JOINTLY saw through a cross-section -----
+// Pre-union, a section was cut only when ONE carve sphere engulfed it, so
+// (a) two overlapping wounds flanking a joint never severed it and (b) fat
+// joints — girth beyond any legal wound radius — could never be cut at all
+// (owner playtests 2026-08-16). The disc (centre + DISC_RING_SAMPLES ring at
+// girth radius ⟂ the chain axis) now cuts when the UNION of carve spheres
+// covers every sample. Fixtures derive their wound positions from the SAME
+// basis the implementation uses (u/v ⟂ the proximal→distal axis), so the
+// flanking hits sit in the disc plane by construction.
+describe('union-of-wounds severing', () => {
+  // The knee again: legL's fattest joint, near-vertical chain, so the disc
+  // plane is (almost exactly) the world x-z plane.
+  const leg = body.clusters.find(c => c.limb === 'legL')!;
+  const order = chainOrder(body, leg, torso.center);
+  const thigh = body.prims[order[0]!]!;
+  const shin = body.prims[order[1]!]!;
+  const knee = jointPoint(thigh, shin);
+  const girth = endpointGirth(
+    body.prims.slice(leg.start, leg.start + leg.count), knee);
+  const mid = (p: typeof thigh): Vec3 => [
+    (p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2,
+  ];
+  const { u, v } = basisFromAxis(sub(mid(shin), mid(thigh)));
+  const D = Math.PI / 180;
+  /** A wound centre on the knee's disc plane: `r` out from the joint at `deg`. */
+  const flank = (deg: number, r: number): Vec3 =>
+    add(knee, add(scale(u, Math.cos(deg * D) * r), scale(v, Math.sin(deg * D) * r)));
+
+  it('two overlapping blasts flanking the knee sever it; EITHER alone does not', () => {
+    // Opposite sides of the joint, 0.07 out in-plane: each blast alone leaves
+    // the far rim of the disc outside its sphere; together the rims overlap.
+    const wA = woundAt(flank(90, 0.07), 0.13);
+    const wB = woundAt(flank(270, 0.07), 0.13);
+    expect(cutChains(body, [wA])).toHaveLength(0);
+    expect(cutChains(body, [wB])).toHaveLength(0);
+    const cuts = cutChains(body, [wA, wB]);
+    expect(cuts).toHaveLength(1);
+    expect(cuts[0]!.limb).toBe('legL');
+    expect(cuts[0]!.fromPrim).toBe(body.prims.indexOf(shin));
+  });
+
+  it('a FAT joint cuts under a covering pair of wounds it could never engulf', () => {
+    // girth 0.082 vs wounds of 0.079: no single sphere can swallow the disc
+    // even centred dead-on. Placed BETWEEN ring samples (half the ring's
+    // angular spacing), each wound covers the disc centre plus the four ring
+    // samples clustered toward it — and the two halves partition the ring.
+    const r = 0.079;
+    expect(r).toBeLessThan(girth);
+    const halfGap = 180 / DISC_RING_SAMPLES;
+    const wA = woundAt(flank(45 + halfGap, 0.03), r);
+    const wB = woundAt(flank(225 + halfGap, 0.03), r);
+    expect(cutChains(body, [wA])).toHaveLength(0);
+    expect(cutChains(body, [wB])).toHaveLength(0);
+    expect(cutChains(body, [wA, wB])).toHaveLength(1);
+    expect(cutChains(body, [wA, wB])[0]!.fromPrim).toBe(body.prims.indexOf(shin));
+  });
+
+  it('a single small wound still cuts nothing (no union false positives)', () => {
+    // A pellet-sized blast centred dead on the knee leaves the whole ring out.
+    expect(cutChains(body, [woundAt(knee, 0.055)])).toHaveLength(0);
+  });
+
+  it('burn wounds never sever, even as a fully covering pair', () => {
+    const bA = woundAt(flank(90, 0.07), 0.13, 'burn');
+    const bB = woundAt(flank(270, 0.07), 0.13, 'burn');
+    expect(cutChains(body, [bA, bB])).toHaveLength(0);
+    expect(cutLimbs(body, [bA, bB], torso.center)).toHaveLength(0);
+  });
+
+  it('the single-sphere fast path still fires: an off-centre engulfing blast cuts', () => {
+    // 0.03 off the joint, radius 0.16: dist + girth < radius — the engulf
+    // case the pre-union code handled, unchanged.
+    const cuts = cutChains(body, [woundAt(flank(0, 0.03), 0.16)]);
+    expect(cuts).toHaveLength(1);
+    expect(cuts[0]!.fromPrim).toBe(body.prims.indexOf(shin));
+  });
+
+  it('cutLimbs: a flanking pair detaches the arm at the neck; either alone does not', () => {
+    const arm = body.clusters.find(c => c.limb === 'armL')!;
+    const root = body.prims[chainOrder(body, arm, torso.center)[0]!]!.a;
+    const { v: nv } = basisFromAxis(sub(torso.center, root));
+    const wA = woundAt(add(root, scale(nv, 0.07)), 0.115);
+    const wB = woundAt(add(root, scale(nv, -0.07)), 0.115);
+    expect(cutLimbs(body, [wA], torso.center)).not.toContain('armL');
+    expect(cutLimbs(body, [wB], torso.center)).not.toContain('armL');
+    expect(cutLimbs(body, [wA, wB], torso.center)).toContain('armL');
   });
 });
