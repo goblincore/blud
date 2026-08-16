@@ -89,15 +89,37 @@ const WOUND_CLEARANCE = 0.05;
  * argument (smin only adds) covers every other case. Dropping costs a little
  * culling in a small region around each wound; keeping it costs a hole in
  * the render.
+ *
+ * `shellAmp` (X1.21.2) sizes the hull against the SHELL-DISPLACED field, not
+ * just the smooth one. Direction matters and is INWARD, which is not the
+ * BVH instinct: this hull is consumed as a bound on how far a ray may march
+ * (the march clamps tMax by the hull distance), so a sphere that grows is a
+ * bound that TIGHTENS and culls more — the exact opposite of conservative
+ * here. The displacement the hull must survive is the DENT side: the fbm can
+ * pull the real surface up to ~0.9 amp below the smooth one, so a sphere
+ * keeping only its usual (1 - shrink) clearance can find the dented surface
+ * passing BEHIND it on thin limbs, and every ray through it discards — dark
+ * dropout, A/B-confirmed with the occluder toggled off. Pulling the radius
+ * in by the amp (and growing the wound clearance by it) keeps every emitted
+ * sphere inside the displaced field; spheres too small to afford the margin
+ * are dropped rather than half-included.
+ *
+ * The production consumer does not pass an amp: the march compensates on
+ * its own side instead, extending its tMax by woundCfg2.z (see
+ * march.wgsl.ts), which covers every dent through the uniform already on
+ * every body. This parameter is the contract made explicit — and the
+ * cheaper hull for any caller that prefers paying in geometry to paying in
+ * march steps.
  */
 export function buildHullInstances(
   bodies: BuiltBody[], shrink = HULL_SHRINK, wounds: WoundSphere[] = [],
+  shellAmp = 0,
 ): HullInstance[] {
   const out: HullInstance[] = [];
   const clearOfWounds = (c: Vec3, r: number): boolean => {
     for (const w of wounds) {
       const dx = c[0] - w.centre[0], dy = c[1] - w.centre[1], dz = c[2] - w.centre[2];
-      const reach = w.radius + r + WOUND_CLEARANCE;
+      const reach = w.radius + r + WOUND_CLEARANCE + shellAmp;
       if (dx * dx + dy * dy + dz * dz < reach * reach) return false;
     }
     return true;
@@ -114,7 +136,11 @@ export function buildHullInstances(
       // see-through holes wherever the phantom overlaps the body on screen.
       if (p.op === 'sub' || p.dead) continue;
       if (!live.has(p.cluster)) continue;
-      const r = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]) * shrink;
+      // Minus the amp, not plus: the dent side is the one that can reach
+      // past the hull (see the buildHullInstances doc). A sphere that cannot
+      // afford the margin is dropped — a half-margin sphere is the dropout
+      // bug in miniature.
+      const r = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]) * shrink - shellAmp;
       if (r < MIN_HULL_RADIUS) continue;
       if (clearOfWounds(p.a, r)) out.push({ centre: p.a, radius: r });
       // A zero-length capsule is a sphere; one instance is enough.

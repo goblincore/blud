@@ -356,7 +356,17 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // certifies as empty is not a distance the march can trust.
     let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
     let r = t * coneK;
-    if (d < r + 0.0012) { return t; }
+    // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
+    // certifies is measured against the SMOOTH field, but the shell displaces
+    // the real surface OUTWARD by up to ~0.9 amp wherever the fbm dips. A
+    // bump standing proud of the smooth surface can sit CLOSER to the camera
+    // than the distance this pass proved empty, so a march started there
+    // skips its crest whole — hard-edged pale tile-shaped patches across
+    // shoulders and arms, because the miss is per tile. Stopping one amp
+    // early hands that band back to the full march, which walks it
+    // conservative and hits the bumps properly. Zero when the shell is off,
+    // so the undisplaced behaviour is bit-identical.
+    if (d < r + 0.0012 + woundCfg2.z) { return t; }
     t = t + max(d - r, 0.0005) * marchCfg.y;
     if (t > tMax) { return tMax; }
   }
@@ -429,10 +439,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // visible — it only stops the march from grinding through the full step
   // budget in space that something solid already covers.
   //
-  // This is what early-Z would have done for free. It cannot, because this
-  // shader writes frag_depth and discards, and WGSL has no equivalent of
-  // EXT_conservative_depth's depth_greater qualifier to win it back.
-  let tMax = min(length(worldPos - camPos), occT);
+  // + woundCfg2.z (shell displacement, X1.21.2) buys back the one exception
+  // that direction had. The shell can also dent the surface INWARD, and a
+  // dent retreats up to ~0.9 amp below the smooth field the hull was sized
+  // against; the hull clearance is only (1 - shrink) of the prim radius, so on
+  // thin limbs a dent can pass BEHIND the hull sphere along the ray — and a
+  // march whose tMax stops at the hull discards the pixel outright. On screen
+  // that is dark dropout where the displaced skin should be; A/B with the
+  // occluder off and the shell on makes it vanish. Extending the bound by one
+  // amp reaches every dent the fbm can cut, while bumps stand PROUD of the
+  // hull and were never at risk. Zero when the shell is off, so the
+  // undisplaced bound is bit-identical.
+  let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
   let steps = i32(marchCfg.x);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).

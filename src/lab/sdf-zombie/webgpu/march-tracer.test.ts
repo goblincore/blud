@@ -106,6 +106,15 @@ function trace(field: FieldAlongRay, tMax: number, omega0 = 1.6, startT = 0): Tr
 /** Sphere of radius 1 centred at t=5 along the ray: surface at t=4. */
 const sphereAt5: FieldAlongRay = (t) => Math.abs(t - 5) - 1;
 
+/**
+ * The X1.21.2 shell-displacement shape: the same body, DENTED — the fbm has
+ * pulled the surface ~0.9 amp below its smooth position. 0.016 is the lab's
+ * production amplitude and 0.9 the worst |fbm| (0.6 + 0.3 octaves of a
+ * [-1, 1] noise), so the dent sits 0.0144 below the smooth skin.
+ */
+const SHELL_AMP = 0.016;
+const dentedAt5: FieldAlongRay = (t) => Math.abs(t - (5 + 0.9 * SHELL_AMP)) - 1;
+
 describe('the pre-fix loop, kept as the record of the bug', () => {
   it('misses a surface that one relaxed step jumps clean over', () => {
     // From t=0 the field reads 4, so the first relaxed step is 4 * 1.6 = 6.4:
@@ -185,5 +194,49 @@ describe('the WGSL carries the same guard', () => {
 
   it('clamps t to tMax rather than breaking on the relaxed path', () => {
     expect(MARCH_BODY).toContain('t = tMax;');
+  });
+});
+
+describe('the occluder bound under shell displacement (X1.21.2)', () => {
+  // The hull clears the SMOOTH surface by only (1 - shrink) of the prim
+  // radius. A thin limb with 0.008 of clearance loses that argument entirely
+  // once a 0.0144 dent passes behind its hull sphere: the raw occT bound cuts
+  // the ray in front of the surface the march needed to find, and the pixel
+  // discards — the dark-dropout half of the shell glitches.
+  const occT = 4 + 0.008;              // hull entry: 0.008 inside the smooth skin
+  const dentT = 4 + 0.9 * SHELL_AMP;   // 4.0144 — past the hull
+
+  it('misses the dent when tMax stops at the raw hull distance', () => {
+    // The pre-fix bound. This miss, at scale, was the dark dropout the A/B
+    // isolated (occluder off, shell on: the patches vanish).
+    const r = trace(dentedAt5, occT);
+    expect(r.hit).toBe(false);
+  });
+
+  it('finds the dent with the bound extended by the shell amp', () => {
+    // The fix: min(box, occT + woundCfg2.z). One amp covers the worst dent
+    // (0.9 amp) with margin to spare.
+    const r = trace(dentedAt5, occT + SHELL_AMP);
+    expect(r.hit).toBe(true);
+    expect(r.t).toBeCloseTo(dentT, 3);
+  });
+
+  it('still misses a surface a full amp past the hull that no fbm can cut', () => {
+    // The relaxation is one amp wide, not a licence to reach anything: a
+    // surface 0.03 behind the hull entry is beyond even a worst-case dent and
+    // must stay an honest miss (something else covers this ray).
+    const deep: FieldAlongRay = (t) => Math.abs(t - 5.03) - 1;
+    expect(trace(deep, occT + SHELL_AMP).hit).toBe(false);
+  });
+
+  it('never moves a BUMP out of reach — bumps were always nearer than the hull', () => {
+    // The outward half of the displacement needs no help: a proud surface at
+    // 4 - 0.0144 is in front of the hull entry, so both bounds find it and
+    // the relaxation changes nothing about where.
+    const proud: FieldAlongRay = (t) => Math.abs(t - (5 - 0.9 * SHELL_AMP)) - 1;
+    const tight = trace(proud, occT);
+    const loose = trace(proud, occT + SHELL_AMP);
+    expect(tight.hit && loose.hit).toBe(true);
+    expect(Math.abs(tight.t - loose.t)).toBeLessThan(HIT_EPS * 4);
   });
 });

@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  HELPERS, MARCH_BODY, DATA_ROWS,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
@@ -29,7 +29,7 @@ import type { Primitive } from '../types';
 // reserved-word and parse-contract checks are the only thing standing between
 // a one-word slip and a blank page whose only symptom is a CreateShaderModule
 // error buried under a dozen cascading ones.
-const ALL = [...HELPERS, MARCH_BODY];
+const ALL = [...HELPERS, MARCH_BODY, CONE_MARCH];
 
 /** `fn name(` — the same shape three's ^-anchored declarationRegexp needs. */
 function declaredName(src: string): string | null {
@@ -200,6 +200,27 @@ describe('ported features reach the entry point', () => {
     // omega excess), so it must be suppressed whenever d carries the shell.
     expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
     expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
+  });
+
+  it('extends the occluder bound by the shell amp (X1.21.2 dark dropout)', () => {
+    // The hull is sized against the SMOOTH field, but a shell DENT retreats
+    // up to ~0.9 amp below it — past the hull's (1 - shrink) clearance on
+    // thin limbs — and a march clamped at the raw occT discards those pixels
+    // outright: dark dropout patches, A/B-confirmed with the occluder off.
+    // The bound must carry the amp so the dent stays reachable. Bumps are
+    // nearer than the hull and never needed it. At amp 0 the bound is
+    // bit-identical to the undisplaced one, so the guard pins the EXPRESSION
+    // rather than a value.
+    expect(MARCH_BODY).toContain('let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);');
+  });
+
+  it('stops the cone one shell amp early (X1.21.2 pale tile wedges)', () => {
+    // The cone certifies emptiness against the SMOOTH field; a displaced
+    // BUMP stands up to ~0.9 amp proud of it and can sit inside the distance
+    // the tile proved empty. A march started there skips the crest and shades
+    // at the wrong depth — the hard-edged pale patches, per 8x8 tile. The
+    // stop threshold must carry the amp; at amp 0 it is the old bound again.
+    expect(CONE_MARCH).toContain('if (d < r + 0.0012 + woundCfg2.z) { return t; }');
   });
 });
 
