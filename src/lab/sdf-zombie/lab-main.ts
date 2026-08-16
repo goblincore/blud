@@ -570,6 +570,18 @@ const texBtn = addButton(faceBox, 'face tex: on', () => {
 const faceUniform = (name: string) => view.material.uniforms[name] as { value: number };
 const faceProj = () => view.material.uniforms.uFaceProj!.value as THREE.Vector4;
 addSlider(faceBox, {
+  label: 'eyeGlow', min: 0, max: 6, step: 0.05,
+  get: () => faceUniform('uFaceGlowStrength').value,
+  set: (v) => { faceUniform('uFaceGlowStrength').value = v; },
+});
+addSlider(faceBox, {
+  // Which pixels count as eyes. Lower catches more of the sheet, so teeth and
+  // highlights start glowing too.
+  label: 'eyeGlowCut', min: 0.3, max: 1, step: 0.01,
+  get: () => faceUniform('uFaceGlowThreshold').value,
+  set: (v) => { faceUniform('uFaceGlowThreshold').value = v; },
+});
+addSlider(faceBox, {
   label: 'texRelief', min: 0, max: 5, step: 0.05,
   get: () => faceUniform('uFaceRelief').value,
   set: (v) => { faceUniform('uFaceRelief').value = v; },

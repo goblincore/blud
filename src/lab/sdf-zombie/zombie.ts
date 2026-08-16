@@ -96,6 +96,9 @@ export function createZombieView(body: BuildResult): ZombieView {
       uFaceMean: { value: 0.5 },
       uFaceRelief: { value: 1.4 },
       uFaceProjMode: { value: 0 },
+      uFaceGlowThreshold: { value: 0.72 },
+      uFaceGlowStrength: { value: 1.6 },
+      uFaceGlowColor: { value: new THREE.Color(0.95, 1.0, 0.72) },
     },
   });
 

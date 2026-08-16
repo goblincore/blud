@@ -98,6 +98,22 @@ uniform float uFaceRelief;
  * registered layout.
  */
 uniform float uFaceProjMode;
+/**
+ * Emissive eyes, keyed off the brightest pixels of the face sheet.
+ *
+ * Three problems, one cause: the sheet is applied as a MULTIPLIER, so a white
+ * pixel can only brighten pink flesh and never actually be white; the relief
+ * gradient reads bright as RAISED, so the eyes bulged instead of sitting in
+ * their sockets; and an eye should not be lit by the key light at all.
+ *
+ * Since the eyes are already the brightest thing in the greyscale, that
+ * brightness keys a glow: added AFTER lighting so it is genuinely emissive,
+ * with relief suppressed wherever it applies. No extra art — paint the eyes
+ * brighter or dimmer to control it.
+ */
+uniform float uFaceGlowThreshold;
+uniform float uFaceGlowStrength;
+uniform vec3  uFaceGlowColor;
 
 in vec3 vWorldPos;
 out vec4 outColor;
@@ -310,6 +326,9 @@ void main() {
   float cm = charMask(p);
   vec3 albedo = mix(uBaseColor, uDeepColor, wm);
 
+  // Emissive mask from the face sheet; added into the lit colour further down.
+  float faceGlow = 0.0;
+
   // Face texture, before wounds and char so damage still paints over it.
   if (uFaceEnabled > 0.5) {
     // Head-space position, normalised by the skull's own sphere — which is
@@ -350,8 +369,14 @@ void main() {
       // Revisit both together at the preset retune, not before.
       //
       // Used as a MULTIPLIER, not a replacement — see uFaceMean.
+      vec3 W = vec3(0.2126, 0.7152, 0.0722);
+      faceGlow = smoothstep(uFaceGlowThreshold, 1.0, dot(t.rgb, W)) * facing * t.a;
+
       vec3 detail = t.rgb / max(uFaceMean, 1e-3);
-      albedo = mix(albedo, albedo * detail, facing * t.a * uFaceStrength);
+      // Skip the multiply where it glows: an eye is not tinted flesh, and the
+      // emissive term below supplies its colour outright.
+      albedo = mix(albedo, albedo * detail,
+                   facing * t.a * uFaceStrength * (1.0 - faceGlow));
 
       // Relief. Central differences on luminance give the height gradient; the
       // projection is planar along z, so its tangent basis is just x and y and
@@ -359,7 +384,6 @@ void main() {
       if (uFaceRelief > 0.0) {
         vec2 e = uFaceAtlas.xy * 0.012;
         vec2 base = uv * uFaceAtlas.xy + uFaceAtlas.zw;
-        vec3 W = vec3(0.2126, 0.7152, 0.0722);
         float hL = dot(texture(uFaceTex, base - vec2(e.x, 0.0)).rgb, W);
         float hR = dot(texture(uFaceTex, base + vec2(e.x, 0.0)).rgb, W);
         float hD = dot(texture(uFaceTex, base - vec2(0.0, e.y)).rgb, W);
@@ -367,7 +391,10 @@ void main() {
         // Negated: the gradient points UPHILL, and a normal tilts away from
         // rising ground. Without this the sockets would bulge instead of sink.
         vec3 bump = vec3(-(hR - hL) * uFaceForward, -(hU - hD), 0.0);
-        n = normalize(n + bump * uFaceRelief * facing * t.a);
+        // Suppressed where it glows: bright means RAISED to a height map, so
+        // without this the eyes bulge out of their sockets instead of sitting
+        // in them.
+        n = normalize(n + bump * uFaceRelief * facing * t.a * (1.0 - faceGlow));
       }
     }
   }
@@ -396,7 +423,10 @@ void main() {
 
   vec3 lit = albedo * (uFillIntensity + diff * uKeyIntensity) * uKeyColor * ao
            + uKeyColor * (shine * uSpecIntensity + fres) * wet
-           + scatter;
+           + scatter
+           // Emissive: added AFTER lighting, so the eyes hold their own light
+           // instead of going dark whenever the head turns from the key.
+           + uFaceGlowColor * faceGlow * uFaceGlowStrength * (1.0 - cm);
   outColor = vec4(lit, 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
