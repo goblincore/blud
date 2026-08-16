@@ -1,10 +1,15 @@
 // src/lab/sdf-zombie/connectivity.ts
 //
 // Wound-driven limb detachment: "visually cut => actually cut". After each
-// wound lands, every live non-torso limb checks whether a blast/pellet wound's
-// carve sphere fully engulfs a cross-section. Pure sphere math against the
-// wound list — no field evaluation, deterministic, conservative (a nick can
-// never fire).
+// wound lands, every live non-torso limb checks whether the blast/pellet
+// carve spheres — taken as a UNION — fully carve through a cross-section.
+// The section is a disc: its centre plus a ring of points at the local
+// girth radius, in the plane perpendicular to the chain direction. It is
+// cut iff EVERY disc sample lies inside at least one carve sphere, so two
+// overlapping wounds that jointly saw through a joint sever it even though
+// neither alone engulfs it (playtest 2026-08-16). Pure sphere math against
+// the wound list — no field evaluation, deterministic, conservative (a nick
+// can never fire).
 //
 // Two cut kinds:
 //  - cutLimbs:  the ATTACHMENT neck (limb root to torso). A full-limb sever.
@@ -14,7 +19,7 @@
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, LimbId, Primitive, Vec3 } from './types';
 import { woundWorldPos, type Wound } from './damage';
-import { add, len, normalize, scale, sub } from './vec';
+import { add, basisFromAxis, len, normalize, scale, sub } from './vec';
 
 /** Samples along the attachment neck. */
 const NECK_SAMPLES = 4;
@@ -23,6 +28,50 @@ const NECK_LEN = 0.1;
 
 /** Two endpoints closer than this are the same joint (limb chains touch). */
 export const JOINT_EPS = 0.06;
+
+/** Ring sample count around a cross-section disc in the union-coverage test. */
+export const DISC_RING_SAMPLES = 8;
+
+/** A carve sphere in world space — blast/pellet wounds only (burns never cut). */
+interface CarveSphere {
+  centre: Vec3;
+  radius: number;
+}
+
+/** All cutting wounds of a wound list, resolved to world space, once per call. */
+function carveSpheres(prims: Primitive[], wounds: Wound[]): CarveSphere[] {
+  const out: CarveSphere[] = [];
+  for (const w of wounds) {
+    if (w.type === 'burn') continue;
+    out.push({ centre: woundWorldPos(prims, w), radius: w.radius });
+  }
+  return out;
+}
+
+/**
+ * Is the cross-section disc at `centre` fully carved by the UNION of spheres?
+ * The disc is the centre point plus a DISC_RING_SAMPLES ring at `girth`
+ * radius in the plane perpendicular to `axis` (the local chain direction).
+ * Cut iff EVERY sample is inside at least ONE sphere, so wounds that jointly
+ * cover the section sever it. Fast path: a single sphere engulfing the whole
+ * disc (dist + girth < radius, the pre-union test) implies union coverage —
+ * every sample sits within `girth` of `centre` — and short-circuits the ring.
+ */
+function sectionCut(
+  centre: Vec3, girth: number, axis: Vec3, spheres: CarveSphere[],
+): boolean {
+  for (const s of spheres) {
+    if (len(sub(centre, s.centre)) + girth < s.radius) return true;
+  }
+  const { u, v } = basisFromAxis(axis);
+  const samples: Vec3[] = [centre];
+  for (let k = 0; k < DISC_RING_SAMPLES; k++) {
+    const t = (k / DISC_RING_SAMPLES) * Math.PI * 2;
+    samples.push(add(centre, add(
+      scale(u, Math.cos(t) * girth), scale(v, Math.sin(t) * girth))));
+  }
+  return samples.every(p => spheres.some(s => len(sub(p, s.centre)) < s.radius));
+}
 
 /** Girth at a point: radius of the nearest live add-prim endpoint to it. */
 export function endpointGirth(prims: Primitive[], at: Vec3): number {
@@ -76,17 +125,18 @@ export function chainOrder(
 }
 
 /**
- * Limbs whose attachment neck is fully carved through by the wounds.
+ * Limbs whose attachment neck is carved through by the UNION of wounds.
  * The neck runs from the limb's closest endpoint to the torso centre,
- * NECK_LEN toward the torso. A sample is cut when a single blast/pellet
- * wound sphere covers the whole local cross-section:
- * dist(sample, wound) + girth < wound.radius (the shader's carve depth).
+ * NECK_LEN toward the torso. Each neck sample is a disc centred on the
+ * sample, ringed at the root girth, in the plane perpendicular to the
+ * root→torso direction; the limb detaches when any sample's disc is fully
+ * covered (see sectionCut).
  */
 export function cutLimbs(
   body: BuildResult, wounds: Wound[], torsoCentre: Vec3,
 ): LimbId[] {
-  const carves = wounds.filter(w => w.type !== 'burn');
-  if (carves.length === 0) return [];
+  const spheres = carveSpheres(body.prims, wounds);
+  if (spheres.length === 0) return [];
   const out: LimbId[] = [];
 
   for (const c of body.clusters) {
@@ -115,10 +165,7 @@ export function cutLimbs(
     let cut = false;
     for (let k = 0; k < NECK_SAMPLES && !cut; k++) {
       const sample = add(root, scale(dir, (k / (NECK_SAMPLES - 1)) * NECK_LEN));
-      for (const w of carves) {
-        const centre = woundWorldPos(body.prims, w);
-        if (len(sub(sample, centre)) + girth < w.radius) { cut = true; break; }
-      }
+      if (sectionCut(sample, girth, dir, spheres)) cut = true;
     }
     if (cut) out.push(c.limb);
   }
@@ -132,19 +179,20 @@ export interface ChainCut {
 }
 
 /**
- * Joints along each live limb chain whose cross-section a wound engulfs.
- * Returns the outermost cut per limb (everything distal to it detaches).
+ * Joints along each live limb chain whose cross-section the UNION of wounds
+ * carves through. Returns the outermost cut per limb (everything distal to
+ * it detaches).
  *
- * Same engulfing test as cutLimbs — dist(joint, wound) + girth < radius,
- * blast/pellet only — applied at each JOINT between consecutive chain prims
- * instead of at the attachment neck. The most proximal engulfed joint wins.
- * The torso never chain-cuts (it anchors the fold) and neither does the head:
- * the head stays whole (face carves + the intact bouncing head are Blood
- * signatures, gore-feel spec §1).
+ * Same disc test as cutLimbs — blast/pellet only — applied at each JOINT
+ * between consecutive chain prims, with the disc plane perpendicular to
+ * the proximal→distal axis of the two chained prims. The most proximal cut
+ * joint wins. The torso never chain-cuts (it anchors the fold) and neither
+ * does the head: the head stays whole (face carves + the intact bouncing
+ * head are Blood signatures, gore-feel spec §1).
  */
 export function cutChains(body: BuildResult, wounds: Wound[]): ChainCut[] {
-  const carves = wounds.filter(w => w.type !== 'burn');
-  if (carves.length === 0) return [];
+  const spheres = carveSpheres(body.prims, wounds);
+  if (spheres.length === 0) return [];
   const torso = body.clusters.find(c => c.limb === 'torso');
   if (!torso) return [];
   const out: ChainCut[] = [];
@@ -155,18 +203,22 @@ export function cutChains(body: BuildResult, wounds: Wound[]): ChainCut[] {
     if (order.length < 2) continue;
     const prims = body.prims.slice(c.start, c.start + c.count);
 
-    // First (most proximal) engulfed joint wins: everything past it detaches.
+    // First (most proximal) cut joint wins: everything past it detaches.
     for (let j = 0; j + 1 < order.length; j++) {
       const prox = body.prims[order[j]!]!;
       const distal = body.prims[order[j + 1]!]!;
       const joint = jointPoint(prox, distal);
       const girth = endpointGirth(prims, joint);
-      let cut = false;
-      for (const w of carves) {
-        const centre = woundWorldPos(body.prims, w);
-        if (len(sub(joint, centre)) + girth < w.radius) { cut = true; break; }
+      // Chain direction: proximal prim midpoint → distal prim midpoint (the
+      // hand/foot are degenerate balls, so their own a→b axis would vanish).
+      const mid = (p: Primitive): Vec3 => [
+        (p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2,
+      ];
+      const axis = normalize(sub(mid(distal), mid(prox)));
+      if (sectionCut(joint, girth, axis, spheres)) {
+        out.push({ limb: c.limb, fromPrim: order[j + 1]! });
+        break;
       }
-      if (cut) { out.push({ limb: c.limb, fromPrim: order[j + 1]! }); break; }
     }
   }
   return out;
