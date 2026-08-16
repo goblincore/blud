@@ -26,7 +26,7 @@ precision highp float;
 #define MAX_CLUSTERS ${MAX_CLUSTERS}
 #define MAX_WOUNDS 16
 uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius
-uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age
+uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age, z = rimSplayScale, w = rimOffsetScale (per-wound "calibre")
 uniform int  uWoundCount;
 uniform float uWoundBlendK;        // separate from the union k — makes the wet lip
 uniform float uRimSplay;           // height of the everted lip, as a fraction of depth
@@ -138,7 +138,7 @@ out vec4 outColor;
 
 uniform vec4 uPrimA[MAX_PRIMS];          // xyz = A, w = radius
 uniform vec4 uPrimB[MAX_PRIMS];          // xyz = B, w = blendK
-uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w = 1 when this is a carve
+uniform vec4 uPrimScale[MAX_PRIMS];      // xyz = scale, w: 0 add, 1 carve, 2 dead
 uniform vec4 uClusterBounds[MAX_CLUSTERS]; // xyz = centre, w = radius
 uniform vec4 uClusterRange[MAX_CLUSTERS];  // x = start, y = count, z = alive
 uniform int  uPrimCount;
@@ -190,12 +190,15 @@ float applyWounds(float d, vec3 p) {
     // Modelled as a Gaussian ring just outside the crater. Subtracting from d
     // means "more material here", so this adds a bulge rather than a dent.
     // Burns evert far less: they char and contract instead of tearing open.
-    float x = (r - depth * uRimOffset) / max(depth * uRimWidth, 1e-4);
-    float amp = depth * uRimSplay * (type > 1.5 ? 0.25 : 1.0);
+    float x = (r - depth * uRimOffset * uWoundMeta[i].w) / max(depth * uRimWidth, 1e-4);
+    float amp = depth * uRimSplay * uWoundMeta[i].z * (type > 1.5 ? 0.25 : 1.0);
     // Surface locality: a bulge of amplitude amp can only displace flesh that
     // was already within ~amp of the pre-wound surface. Ungated, the shell
     // adds material in EMPTY space and welds separate limbs together.
-    float rimLocal = 1.0 - smoothstep(amp * 0.5, amp * 1.2, dIn);
+    // Tighter reach than the first cut: 0.35/0.7 (was 0.5/1.2). At blast
+    // amplitude the old reach exceeded the armpit gap and the rim still
+    // bridged arm to torso from the shoulder side.
+    float rimLocal = 1.0 - smoothstep(amp * 0.35, amp * 0.7, dIn);
     d -= exp(-x * x) * amp * rimLocal;
   }
   return d;
@@ -278,7 +281,7 @@ float applyCarves(float d, vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      if (uPrimScale[idx].w < 0.5) continue;  // additive — already folded
+      if (uPrimScale[idx].w < 0.5 || uPrimScale[idx].w > 1.5) continue;  // additive or dead (mid-limb sever)
       // blendK 0 makes smax short-circuit to a hard max: a crisp-edged carve
       // with no smear, which is the only way features smaller than the blend
       // zone survive. Hard min/max are also ASSOCIATIVE, so zero-blend carves
@@ -308,7 +311,7 @@ float mapBody(vec3 p) {
       if (i >= count) break;
       int idx = start + i;
       if (idx >= uPrimCount) break;
-      if (uPrimScale[idx].w > 0.5) continue;   // carve — handled by applyCarves
+      if (uPrimScale[idx].w > 0.5) continue;   // carve or dead — applyCarves' job / gone
       d = smin(d, sdPrim(p, idx), uPrimB[idx].w);
     }
   }

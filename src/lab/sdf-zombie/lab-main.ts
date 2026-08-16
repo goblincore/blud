@@ -10,14 +10,14 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from './material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
   type Wound, type WoundType,
 } from './damage';
 import { sdBody } from './validate';
-import { severLimb, gibAll, gibAllPieces } from './sever';
+import { severLimb, severDistal, gibAll, gibAllPieces } from './sever';
 import { createBloodSim, burst, emitTrails, stepBlood } from './blood-sim';
 import { createBloodView } from './blood-view';
-import { cutLimbs } from './connectivity';
+import { cutChains, cutLimbs } from './connectivity';
 import { bindRig, applyRig, impulseAt } from './rig-bind';
 import { stepRig } from './rig';
 import { makeChunk, stepChunk, type Chunk } from './gib-chunks';
@@ -230,7 +230,6 @@ function rebind() { bound = bindRig(current); }
 let wounds: Wound[] = [];
 
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
-const RADIUS: Record<WoundType, number> = { pellet: 0.055, blast: 0.13, burn: 0.08 };
 
 /** Marches the CPU-side field along a ray to find where a shot lands. */
 function raycastBody(origin: Vec3, dir: Vec3): Vec3 | null {
@@ -250,6 +249,8 @@ function refreshWounds() {
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
+    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+    wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
   );
 }
 
@@ -347,6 +348,8 @@ handle.setRenderCallback((dt) => {
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
+    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+    wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
   );
 
   if (autoSpin) camYaw += dt * 0.35;
@@ -385,7 +388,7 @@ canvas.addEventListener('pointerup', (ev: PointerEvent) => {
   if (!hit) return;
 
   const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, RADIUS[type], type), MAX_WOUNDS);
+  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES[type].radius, type), MAX_WOUNDS);
   // A hit shoves the nearest joint along the shot direction — the rest-pose
   // pull springs it back, so the limb visibly recoils and lags.
   const push = type === 'blast' ? 0.10 : 0.04;
@@ -394,13 +397,29 @@ canvas.addEventListener('pointerup', (ev: PointerEvent) => {
 
   // Wound-driven detachment: a carve that disconnects a limb severs it for
   // real — same path as the keyboard sever.
-  for (const limb of cutLimbs(current, wounds, torsoCentre())) {
+  const fullCuts = cutLimbs(current, wounds, torsoCentre());
+  for (const limb of fullCuts) {
     const { body: next, chunk, stumpWound } = severLimb(current, limb);
     if (chunk.prims.length === 0) continue;
     current = next;
     if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
     spawnChunk(limb, chunk.origin, chunk.prims, undefined,
       [attachPoint(chunk.prims, torsoCentre())]);
+    view.update(current);
+    refreshWounds();
+    rebind();
+  }
+
+  // Mid-limb cuts: a carve that severs a CHAIN joint (knee, elbow…) drops
+  // everything distal to it as its own chunk — before this the distal piece
+  // stayed in the field and floated. Full-limb cuts above take precedence.
+  for (const cut of cutChains(current, wounds)) {
+    if (fullCuts.includes(cut.limb)) continue;
+    const { body: next, chunk, stumpWound } = severDistal(current, cut);
+    if (chunk.prims.length === 0) continue;
+    current = next;
+    if (stumpWound) wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+    spawnChunk(cut.limb, chunk.origin, chunk.prims, undefined, chunk.tornAt);
     view.update(current);
     refreshWounds();
     rebind();
@@ -461,9 +480,9 @@ function spawnChunk(
 ) {
   if (prims.length === 0) return;
   const v: Vec3 = vel ?? [
-    (Math.random() - 0.5) * 3.2,
-    1.8 + Math.random() * 2.2,
-    (Math.random() - 0.5) * 3.2,
+    (Math.random() - 0.5) * 4.5,
+    2.5 + Math.random() * 2.5,
+    (Math.random() - 0.5) * 4.5,
   ];
   // Collision radius = the limb's real visual extent (the plan's hardcoded
   // 0.14 is smaller than any limb and would bury it half-way into the floor).
@@ -493,10 +512,12 @@ function gibEverything() {
     const dy = g.origin[1] - centre[1];
     const dz = g.origin[2] - centre[2];
     const l = Math.hypot(dx, dy, dz) || 1;
-    const speed = 2.4 + Math.random() * 2.0;
+    // Game-hot burst, matched to the game ChunkSystem's hand-tuned spawn
+    // (chunks.ts spawnOne): pieces go flying out far, not a soft slump.
+    const speed = 5.0 + Math.random() * 4.0;
     const vel: Vec3 = [
       (dx / l) * speed + (Math.random() - 0.5) * 1.2,
-      2.2 + Math.random() * 2.4,
+      (0.8 + Math.random() * 0.8) * speed * 0.8,
       (dz / l) * speed + (Math.random() - 0.5) * 1.2,
     ];
     spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt);

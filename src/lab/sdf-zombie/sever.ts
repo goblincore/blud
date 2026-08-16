@@ -2,6 +2,7 @@
 import type { BuildResult } from './build-body';
 import type { LimbId, Primitive, Vec3 } from './types';
 import type { Wound } from './damage';
+import { chainOrder, endpointGirth, JOINT_EPS, jointPoint, type ChainCut } from './connectivity';
 import { basisFromAxis, dot, len, lerp, sub } from './vec';
 
 export interface ChunkGroup {
@@ -34,7 +35,8 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
   if (!cluster || !cluster.alive)
     return { body, chunk: { limb, prims: [], origin: [0, 0, 0], tornAt: [] }, stumpWound: null };
 
-  const prims = body.prims.slice(cluster.start, cluster.start + cluster.count);
+  const prims = body.prims.slice(cluster.start, cluster.start + cluster.count)
+    .filter(p => !p.dead); // mid-limb-severed prims already left as chunks
   const clusters = body.clusters.map(c => (c.limb === limb ? { ...c, alive: false } : c));
   const next: BuildResult = { ...body, clusters };
 
@@ -43,6 +45,7 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
   const live = body.prims
     .map((p, i) => ({ p, i }))
     .filter(({ p }) => p.op !== 'sub'   // a stump must anchor to flesh, not a hole
+      && !p.dead
       && p.limb !== limb
       && clusters.find(c => c.limb === p.limb)?.alive);
 
@@ -91,21 +94,17 @@ export function gibAll(body: BuildResult): { body: BuildResult; chunks: ChunkGro
   const chunks: ChunkGroup[] = [];
   for (const c of body.clusters) {
     if (!c.alive) continue;
-    chunks.push({
-      limb: c.limb,
-      prims: body.prims.slice(c.start, c.start + c.count),
-      origin: c.center,
-      tornAt: [],
-    });
+    // Dead prims left the body as mid-limb chunks already — never resurrect
+    // them (a full gib after a severed hand must not spawn a second hand).
+    const prims = body.prims.slice(c.start, c.start + c.count).filter(p => !p.dead);
+    if (prims.length === 0) continue;
+    chunks.push({ limb: c.limb, prims, origin: c.center, tornAt: [] });
   }
   return {
     body: { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) },
     chunks,
   };
 }
-
-/** Two endpoints closer than this are the same joint (limb chains touch). */
-const JOINT_EPS = 0.06;
 
 /**
  * Blows the body apart into PER-PRIMITIVE pieces — "lots of small chunks".
@@ -117,7 +116,9 @@ const JOINT_EPS = 0.06;
  *
  * Each piece's tornAt lists the world points where it tore away: every
  * endpoint it shared with a neighbouring prim of the same cluster (the joint
- * chain), or — for the piece nearest the torso — its attachment end.
+ * chain), or — for the piece nearest the torso — its attachment end. DEAD
+ * prims do not get pieces, but they still count as joint partners: the thigh
+ * next to a severed shin is torn at the knee as well as the hip.
  */
 export function gibAllPieces(
   body: BuildResult, torsoCentre: Vec3,
@@ -125,7 +126,8 @@ export function gibAllPieces(
   const chunks: ChunkGroup[] = [];
   for (const c of body.clusters) {
     if (!c.alive) continue;
-    const prims = body.prims.slice(c.start, c.start + c.count);
+    const prims = body.prims.slice(c.start, c.start + c.count).filter(p => !p.dead);
+    if (prims.length === 0) continue;
     if (c.limb === 'head') {
       // Whole head; torn at its closest endpoint to the torso (the neck).
       let neck: Vec3 = prims[0]!.a;
@@ -140,8 +142,10 @@ export function gibAllPieces(
       chunks.push({ limb: c.limb, prims, origin: c.center, tornAt: [neck] });
       continue;
     }
+    // Joint partners include dead prims — see the doc comment.
     const adds = prims.filter(p => p.op !== 'sub');
     for (const p of adds) {
+      if (p.dead) continue;
       const tornAt: Vec3[] = [];
       for (const e of [p.a, p.b]) {
         const isJoint = adds.some(q => q !== p &&
@@ -161,5 +165,64 @@ export function gibAllPieces(
   return {
     body: { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) },
     chunks,
+  };
+}
+
+/**
+ * Severs a limb FROM a mid-chain prim outward: distal prims go dead (never
+ * removed — fold order is sacred), the cluster stays alive with its proximal
+ * prims, and the detached prims come back as a chunk group.
+ *
+ * The distal set is recomputed from the CURRENT body's chain rather than
+ * trusted from the cut, so a stale cut can never resurrect or double-take.
+ */
+export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
+  const empty: SeverResult = {
+    body,
+    chunk: { limb: cut.limb, prims: [], origin: [0, 0, 0], tornAt: [] },
+    stumpWound: null,
+  };
+  const cluster = body.clusters.find(c => c.limb === cut.limb);
+  const torso = body.clusters.find(c => c.limb === 'torso');
+  if (!cluster || !cluster.alive || !torso) return empty;
+
+  const order = chainOrder(body, cluster, torso.center);
+  const pos = order.indexOf(cut.fromPrim);
+  // pos 0 would be the attachment end — that is cutLimbs' job, not ours.
+  if (pos < 1) return empty;
+
+  const proxIdx = order[pos - 1]!;
+  const distalIdxs = order.slice(pos);
+  const prox = body.prims[proxIdx]!;
+  const joint = jointPoint(prox, body.prims[distalIdxs[0]!]!);
+
+  const distalSet = new Set(distalIdxs);
+  const prims = body.prims.map((p, i) => (distalSet.has(i) ? { ...p, dead: true } : p));
+
+  // Live copies for the chunk: on the body they are dead, but the chunk is
+  // its own standalone piece and must still render (packBody writes w=2 for
+  // dead prims — a dead-flagged copy would march as nothing).
+  const chunkPrims = distalIdxs.map(i => ({ ...body.prims[i]!, dead: false }));
+  let ox = 0, oy = 0, oz = 0;
+  for (const p of chunkPrims) {
+    ox += (p.a[0] + p.b[0]) / 2;
+    oy += (p.a[1] + p.b[1]) / 2;
+    oz += (p.a[2] + p.b[2]) / 2;
+  }
+  const n = chunkPrims.length || 1;
+  const origin: Vec3 = [ox / n, oy / n, oz / n];
+
+  const stumpWound: Wound = {
+    primIdx: proxIdx,
+    local: toLocalApprox(prox, joint),
+    radius: endpointGirth(body.prims.slice(cluster.start, cluster.start + cluster.count), joint) * 1.2,
+    type: 'blast',
+    ageSec: 0,
+  };
+
+  return {
+    body: { ...body, prims },
+    chunk: { limb: cut.limb, prims: chunkPrims, origin, tornAt: [joint] },
+    stumpWound,
   };
 }

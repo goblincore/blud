@@ -9,6 +9,11 @@ import type { BloodSim } from '../blood-sim';
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
 
+/** Lab-camera compensation: BLOOD_TRAIL.size was tuned for game camera
+ *  distances — the lab camera sits much closer, so unscaled droplets read as
+ *  big dropping orbs instead of small trailing beads. */
+const DROPLET_VIEW_SCALE = 0.45;
+
 /** Radial red droplet with an off-centre white glint and darker rim — the
  *  specular "gooey latex" read, baked into a texture so both renderer paths
  *  look identical with zero custom shader. */
@@ -91,10 +96,11 @@ export function createBloodView(): BloodView {
       // Billboard, then roll in screen space so the stretch follows velocity.
       vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
       const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
-      const stretch = 1 + Math.min(speed * 0.18, 1.4);
+      // Stretch cap 0.8: trails streak, orbs balloon (was capped at 1.4).
+      const stretch = 1 + Math.min(speed * 0.18, 0.8);
       roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
       q.copy(camera.quaternion).multiply(roll);
-      s.set(d.size * stretch, d.size, 1);
+      s.set(d.size * stretch * DROPLET_VIEW_SCALE, d.size * DROPLET_VIEW_SCALE, 1);
       m.compose(p, q, s);
       drops.setMatrixAt(i, m);
     }

@@ -51,7 +51,9 @@ export function burst(sim: BloodSim, origin: Vec3, rng: () => number): void {
       vel: [Math.cos(theta) * speed, up * speed * 0.6, Math.sin(theta) * speed],
       age: 0,
       life: GIB_BURST.lifetimeSec,
-      size: 0.05 + rng() * 0.05,
+      // Small beads, not orbs: the lab camera sits close and burst drops
+      // read half-size vs the game's distances (playtest 2026-08-16).
+      size: 0.03 + rng() * 0.03,
     });
   }
 }

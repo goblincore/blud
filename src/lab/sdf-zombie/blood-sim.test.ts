@@ -20,6 +20,18 @@ describe('blood-sim', () => {
     }
   });
 
+  it('burst droplets are trail-sized beads, not orbs (0.03..0.06 m)', () => {
+    const sim = createBloodSim();
+    burst(sim, [0, 1, 0], seeded(3));
+    expect(sim.droplets.length).toBeGreaterThan(0);
+    for (const d of sim.droplets) {
+      // Lab plays closer than the game camera: burst drops read as small
+      // beads, half the old 0.05..0.10 orb band.
+      expect(d.size).toBeGreaterThanOrEqual(0.03);
+      expect(d.size).toBeLessThanOrEqual(0.06);
+    }
+  });
+
   it('trails emit at BLOOD_TRAIL.emitHz per source with 1/256 vel inheritance', () => {
     const sim = createBloodSim();
     const src = [{ id: 1, pos: [0, 2, 0] as [number, number, number], vel: [256, 0, 0] as [number, number, number] }];

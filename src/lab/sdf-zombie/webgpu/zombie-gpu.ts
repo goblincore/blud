@@ -38,8 +38,11 @@ export interface ZombieGpuView {
   uniforms: MarchUniforms;
   /** Re-upload after the body changes (sever, override edit, rig step). */
   update(body: BuildResult): void;
-  /** Uploads wounds already transformed to world space by the caller. */
-  setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[]): void;
+  /** Uploads wounds already transformed to world space by the caller.
+   *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES);
+   *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s. */
+  setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
+    splayScales?: number[], offsetScales?: number[]): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** Drives the eye-glow flicker. Seconds. */
@@ -417,10 +420,14 @@ function createDataTexture() {
 /**
  * Writes the wound rows. Shared by the body and by a chunk's torn end, which
  * is itself just a single blast wound parked where the limb came away.
+ * meta texel = (type, age, rimSplayScale, rimOffsetScale); the scale slots
+ * default to 1 so callers that pass nothing (chunk torn ends) keep the global
+ * woundCfg rim settings unchanged.
  */
 function writeWounds(
   texels: Float32Array,
   worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
+  splayScales?: number[], offsetScales?: number[],
 ): number {
   const n = Math.min(worldPositions.length, MAX_WOUNDS);
   const wBase = ROW_WOUND * MAX_PRIMS * 4;
@@ -433,6 +440,8 @@ function writeWounds(
     texels[wBase + i * 4 + 3] = radii[i]!;
     texels[mBase + i * 4] = types[i]!;
     texels[mBase + i * 4 + 1] = ages[i]!;
+    texels[mBase + i * 4 + 2] = splayScales?.[i] ?? 1;
+    texels[mBase + i * 4 + 3] = offsetScales?.[i] ?? 1;
   }
   return n;
 }
@@ -562,8 +571,8 @@ export function createZombieGpuView(
       coneMesh.position.copy(mesh.position);
       coneMesh.scale.copy(mesh.scale);
     },
-    setWounds(worldPositions, radii, types, ages) {
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages);
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales) {
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales);
       dataTex.needsUpdate = true;
     },
     setHeadShape(centre, axes) {
