@@ -99,7 +99,10 @@ export function createZombieView(body: BuildResult): ZombieView {
       uFaceMean: { value: 0.5 },
       uFaceRelief: { value: 1.4 },
       uFaceProjMode: { value: 0 },
-      uFaceGlowThreshold: { value: 0.72 },
+      // 0.88 rather than 0.72 — see the measurement note in
+      // webgpu/zombie-gpu.ts. At 0.72 the mask covers most of the upper face,
+      // which only passed unnoticed while the glow was additive.
+      uFaceGlowThreshold: { value: 0.88 },
       uFaceGlowStrength: { value: 1.6 },
       // Bright red, and deliberately over 1.0 on the red channel: an emissive
       // that only reaches 1.0 cannot read as a LIGHT, and a value above it is

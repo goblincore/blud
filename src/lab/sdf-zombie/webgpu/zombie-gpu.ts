@@ -121,7 +121,14 @@ function defaultUniforms(faceTex: THREE.Texture) {
     /** x enabled, y strength, z forward (+1/-1), w relief */
     faceCfg: uniform(new THREE.Vector4(0, 0.85, 1, 1.4)),
     /** x projMode (0 planar, 1 spherical), y mean, z glowThreshold, w glowStrength */
-    faceCfg2: uniform(new THREE.Vector4(0, 0.5, 0.72, 1.6)),
+    // 0.88, not the 0.72 this used to be. Measured off the sheet: at 0.72 the
+    // mask covers 314 texels spanning y 0-35 — most of the upper face — while
+    // at 0.9 it is 30 texels in a tight band at y 20-25, which is the eyes and
+    // nothing else. The loose value only ever worked because the glow was a
+    // faint ADDITIVE tint that spilled unnoticeably; now that the eye replaces
+    // the flesh under it, a loose threshold paints a solid red patch across
+    // the brow. Re-measure this if the art changes.
+    faceCfg2: uniform(new THREE.Vector4(0, 0.5, 0.88, 1.6)),
     /** x glowFlicker, y timeSeconds */
     faceCfg3: uniform(new THREE.Vector4(0.45, 0, 0, 0)),
     faceProj: uniform(new THREE.Vector4(1.15, 1.15, 0.5, 0.52)),
@@ -131,7 +138,15 @@ function defaultUniforms(faceTex: THREE.Texture) {
     // Bright red, and deliberately over 1.0 on the red channel: an emissive
     // that only reaches 1.0 cannot read as a LIGHT, and a value above it is
     // also what a bloom pass would key on if one is added later.
-    faceGlowColor: uniform(new THREE.Color(1.9, 0.18, 0.10)),
+    //
+    // Green and blue are much lower than the WebGL path's 0.18/0.10, and that
+    // divergence is deliberate. These are LINEAR values that go through the
+    // output sRGB encode on this path, which lifts the low channels far more
+    // than the clamped red one — 0.18 linear encodes to 0.46, so the "red" eye
+    // came out salmon. At 1.6 strength these land near RGB(255, 42, 28).
+    // The WebGL path has no output encode (see the parity note), so its
+    // numbers stay as authored; both converge at the preset retune, X1.3.
+    faceGlowColor: uniform(new THREE.Color(1.9, 0.012, 0.005)),
     /** The face sheet itself. Swapped by the panel; see setFaceTexture(). */
     faceTex: texture(faceTex),
     /**

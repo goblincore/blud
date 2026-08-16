@@ -439,13 +439,17 @@ void main() {
   // geometry is correctly separated.
   float ao = clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1.0);
 
-  vec3 lit = albedo * (uFillIntensity + diff * uKeyIntensity) * uKeyColor * ao
-           + uKeyColor * (shine * uSpecIntensity + fres) * wet
-           + scatter
-           // Emissive: added AFTER lighting, so the eyes hold their own light
-           // instead of going dark whenever the head turns from the key.
-           + uFaceGlowColor * faceGlow * uFaceGlowStrength * flicker(uTime) * (1.0 - cm);
-  outColor = vec4(lit, 1.0);
+  vec3 fleshLit = albedo * (uFillIntensity + diff * uKeyIntensity) * uKeyColor * ao
+                + uKeyColor * (shine * uSpecIntensity + fres) * wet
+                + scatter;
+
+  // The eye REPLACES the flesh rather than adding to it — see the long note on
+  // the same lines in webgpu/march.wgsl.ts. Adding a red emissive on top of
+  // lit flesh cannot make a red eye: it makes brighter pink. This also finally
+  // implements what this file's own header has always claimed, that an eye
+  // should not be lit by the key light at all.
+  vec3 glow = uFaceGlowColor * faceGlow * uFaceGlowStrength * flicker(uTime) * (1.0 - cm);
+  outColor = vec4(fleshLit * (1.0 - faceGlow) + glow, 1.0);
 
   vec4 clip = projectionMatrix * viewMatrix * vec4(p, 1.0);
   gl_FragDepth = (clip.z / clip.w) * 0.5 + 0.5;

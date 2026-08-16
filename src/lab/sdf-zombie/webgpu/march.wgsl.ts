@@ -463,12 +463,26 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2) / 0.06, 0.35, 1.0);
   }
 
-  let lit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
-          + keyColor * (shine * surfCfg.x + fres) * wet
-          + scatter
-          // Emissive: added AFTER lighting, so the eyes hold their own light
-          // instead of going dark whenever the head turns from the key.
-          + faceGlowColor * faceGlow * faceCfg2.w * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
+  let fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
+               + keyColor * (shine * surfCfg.x + fres) * wet
+               + scatter;
+
+  // The eye REPLACES the flesh rather than adding to it.
+  //
+  // This used to be a pure addition, and it could not produce a red eye. Lit
+  // flesh is already bright — roughly (1.16, 0.60, 0.62) with the key on it —
+  // so adding a red emissive on top gives something like (4.2, 0.62, 0.63).
+  // The output sRGB encode then clamps red at 1.0 while lifting the low
+  // channels hard (0.62 encodes to 0.81), and the eye lands at RGB(255, 206,
+  // 208): a pale cream, with the red only visible where it spilled onto the
+  // darker skin around the socket. Exactly the reported symptom.
+  //
+  // Fading the flesh out under the glow also matches what the GLSL header
+  // always claimed — "an eye should not be lit by the key light at all" — a
+  // statement the code never actually implemented.
+  let glow = faceGlowColor * faceGlow * faceCfg2.w
+           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
+  let lit = fleshLit * (1.0 - faceGlow) + glow;
 
   return vec4<f32>(lit, t);
 }`;

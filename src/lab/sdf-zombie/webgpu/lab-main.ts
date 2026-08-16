@@ -953,6 +953,8 @@ async function main() {
     /** null = let LOD decide; true/false force the lever on every body. */
     setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },
     setStepsOverride(v: number | null) { stepsOverride = v; },
+    /** Sphere-trace step multiplier on every body. Default 0.6. */
+    setStepMul(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.y = v; },
     setSimplifyOverride(v: boolean | null) { simplifyOverride = v; },
     /** Re-spawns the crowd at a new spacing. 1 = shoulder to shoulder. */
     setCrowdSpread(v: number) {
