@@ -108,8 +108,11 @@ export function buildHullInstances(
 
     for (const p of body.prims) {
       // Carves are the subtractive half of the body's own definition. A hull
-      // sphere built from one would sit in a hole.
-      if (p.op === 'sub') continue;
+      // sphere built from one would sit in a hole. Dead prims (mid-limb
+      // severing) are flesh that no longer exists: a hull sphere at the old
+      // joint clamps tMax in EMPTY space and every ray through it discards —
+      // see-through holes wherever the phantom overlaps the body on screen.
+      if (p.op === 'sub' || p.dead) continue;
       if (!live.has(p.cluster)) continue;
       const r = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]) * shrink;
       if (r < MIN_HULL_RADIUS) continue;

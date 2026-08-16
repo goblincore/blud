@@ -87,3 +87,24 @@ describe('buildHullInstances', () => {
     expect(base.length - after.length).toBeLessThan(base.length / 3);
   });
 });
+
+describe('dead prims (mid-limb severing)', () => {
+  it('emits no hull spheres for dead prims — a phantom hull punches discard holes', () => {
+    // Regression: after severDistal marks a forearm dead, the flesh field
+    // skips it but the hull still built spheres at the old joint positions.
+    // Those clamp tMax in empty space and every ray through them discards —
+    // see-through holes wherever the phantom overlaps the body on screen
+    // (playtest 2026-08-16, black discs at blasted wrist/elbow locations).
+    const body = {
+      clusters: [{ id: 0, limb: 'armL' as const, start: 0, count: 2, center: [0, 0, 0] as const, radius: 1, alive: true }],
+      prims: [
+        { a: [0, 0, 0], b: [0, 1, 0], radius: 0.2, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0 },
+        { a: [0, 1, 0], b: [0, 2, 0], radius: 0.2, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0, dead: true },
+      ],
+    } as never;
+    const instances = buildHullInstances([body]);
+    // Only the live prim's two endpoints; nothing at y=2, nothing extra at y=1.
+    expect(instances).toHaveLength(2);
+    for (const i of instances) expect(i.centre[1]).toBeLessThanOrEqual(1);
+  });
+});
