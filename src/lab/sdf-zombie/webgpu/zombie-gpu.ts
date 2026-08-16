@@ -203,7 +203,8 @@ function defaultUniforms(faceTex: THREE.Texture) {
      * branches on that. "No ambient occlusion" and "no gore mask" have no
      * amplitude to turn down.
      */
-    lodCfg: uniform(new THREE.Vector4(1, 0, 0, 0)),
+    // y = legacyGamma, default ON: presets read as tuned (see march.wgsl.ts).
+    lodCfg: uniform(new THREE.Vector4(1, 1, 0, 0)),
   };
 }
 

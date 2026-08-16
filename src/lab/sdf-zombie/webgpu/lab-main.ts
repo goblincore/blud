@@ -1277,6 +1277,20 @@ async function main() {
   const shellBtn = addButton(
     lodBox, `shell silhouette: ${shellSilhouette ? 'on' : 'off'}`,
     () => setShellDisplace(!shellSilhouette));
+
+  // Legacy gamma (lodCfg.y): flesh presets were tuned against the WebGL lab's
+  // missing output encode; ON cancels this path's sRGB encode so they read as
+  // tuned. OFF shows the honest chain — the X1.3 retune target. Same
+  // hero+crowd fan-out as setShellDisplace; chunks copy lodCfg at spawn.
+  let legacyGamma = true;
+  const gammaBtn = addButton(
+    lodBox, 'legacy gamma: on',
+    () => setLegacyGamma(!legacyGamma));
+  function setLegacyGamma(on: boolean) {
+    legacyGamma = on;
+    for (const x of [view, ...crowd]) x.uniforms.lodCfg.value.y = on ? 1 : 0;
+    gammaBtn.textContent = `legacy gamma: ${on ? 'on' : 'off'}`;
+  }
   /**
    * Wires shell displacement (woundCfg2.z) through the hero AND the crowd:
    * crowd views own their uniform set, and the bench gate is a 10-body
@@ -1436,6 +1450,7 @@ async function main() {
     setLodEnabled(on: boolean) { lodEnabled = on; },
     /** Shell-displacement silhouettes on every live body view. */
     setShellDisplace,
+    setLegacyGamma,
     get shellDisplace() { return shellSilhouette; },
     /** null = let LOD decide; true/false force the lever on every body. */
     setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },

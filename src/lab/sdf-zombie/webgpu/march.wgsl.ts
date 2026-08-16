@@ -380,7 +380,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   faceCfg3   x glowFlicker, y timeSeconds
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
-//   lodCfg     x aoEnabled, w goreStrength (0 body, 1 chunk views)
+//   lodCfg     x aoEnabled, y legacyGamma, w goreStrength (0 body, 1 chunk views)
 //
 // LOD NOTE: most quality levers are guarded by their own amplitude reaching
 // zero (silhouette noise, surface noise, translucency, face, wounds), so the
@@ -687,7 +687,21 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // statement the code never actually implemented.
   let glow = faceGlowColor * faceGlow * faceCfg2.w
            * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
-  let lit = fleshLit * (1.0 - faceGlow) + glow;
+  var lit = fleshLit * (1.0 - faceGlow) + glow;
+
+  // Legacy display look (lodCfg.y). Every flesh preset was hand-tuned in the
+  // WebGL lab, which displayed the lit LINEAR value raw — no output sRGB
+  // encode. This path encodes correctly, which lifts the low channels and
+  // washes those presets out. Applying the sRGB EOTF (decode) here cancels
+  // three's output encode exactly, so the marched flesh displays the same
+  // linear values the presets were tuned against. Kill switch for the X1.3
+  // retune: turn this off, retune presets through the honest chain, delete.
+  if (lodCfg.y > 0.5) {
+    let c = max(lit, vec3<f32>(0.0));
+    let lo = c / 12.92;
+    let hi = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    lit = select(hi, lo, c <= vec3<f32>(0.04045));
+  }
 
   return vec4<f32>(lit, t);
 }`;
