@@ -179,6 +179,28 @@ describe('ported features reach the entry point', () => {
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
     expect(applyCarves).toContain('S.w > 1.5');
   });
+
+  it('shell-displaces the real field only inside a thin shell (gobs-and-goo task 4)', () => {
+    // The middle path between fbm at every step (too expensive) and
+    // normal-warping only (loses the outline): the march runs the SMOOTH
+    // field relaxed until |d| enters the shell, then the silhouette fbm
+    // displaces the stepped distance itself. Same 3.0 scale as mapBody's
+    // noise term, so calcNormal's warped normals match the displaced skin.
+    expect(MARCH_BODY).toContain('var d = mapBody(');
+    expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
+    expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
+    expect(MARCH_BODY)
+      .toMatch(/d = d \+ fbm\(\(camPos \+ rd \* t\) \* 3\.0\) \* shellAmp;/);
+  });
+
+  it('steps the shell conservatively and never retracts a displaced sample', () => {
+    // The fbm breaks the Lipschitz bound, so inside the shell a relaxed step
+    // could tunnel — 0.6 under-relaxation pays for the noise instead. And the
+    // overshoot retraction assumes the un-displaced field (it rewinds by the
+    // omega excess), so it must be suppressed whenever d carries the shell.
+    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
+    expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
+  });
 });
 
 describe('data texture layout', () => {

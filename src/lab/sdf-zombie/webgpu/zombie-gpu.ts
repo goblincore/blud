@@ -131,9 +131,9 @@ function defaultUniforms(faceTex: THREE.Texture) {
     /** x count, y blendK, z rimSplay, w rimOffset */
     woundCfg: uniform(new THREE.Vector4(0, 0.015, 0.55, 1.15)),
     /**
-     * x rimWidth, y relaxation factor for sphere tracing.
+     * x rimWidth, y relaxation factor, z shellAmp (silhouette shell noise).
      *
-     * 1.4, from a measured sweep (10 bodies, occluder on, cooled, with an
+     * y: 1.4, from a measured sweep (10 bodies, occluder on, cooled, with an
      * interleaved control): 1.0 → 14.89 ms, 1.4 → 9.31, 1.6 → 9.81, 1.8 →
      * 10.17. Higher factors save steps but pay for them in overshoot
      * retractions — each one costs extra samples and drops the ray to plain
@@ -141,6 +141,16 @@ function defaultUniforms(faceTex: THREE.Texture) {
      * before it could be measured honestly. Purely a perf knob: the overshoot
      * test makes any factor exact on a conservative field. At or below 1.0
      * the relaxed path is off.
+     *
+     * z: shell-displacement silhouette amplitude (gobs-and-goo task 4). 0 is
+     * off — normals still carry the fbm via calcNormal. 0.016, matching
+     * marchCfg.z's silhouette value, turns the REAL field bumpy inside a thin
+     * shell of the surface. Bench-gated OFF (task 4, 10 bodies, occluder on,
+     * 0.70 scale, second of two runs quoted, all hiddenSteps 0): shell off
+     * 12.03 ms, shell on 12.36 ms — over the 12 ms gate. A reverse-order
+     * control (on first) gave on 10.79 / off 12.72, so the real shell cost is
+     * inside the ±2 ms thermal noise; the gate is simply conservative. Drive
+     * it live from the panel or __sdfLab.setShellDisplace.
      */
     woundCfg2: uniform(new THREE.Vector4(0.42, 1.4, 0, 0)),
     baseColor: uniform(new THREE.Color(0xc46a72)),

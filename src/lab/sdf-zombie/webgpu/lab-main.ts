@@ -519,6 +519,17 @@ async function main() {
    */
   let specialiseShaders = false;
 
+  /**
+   * Shell-displacement silhouette noise (gobs-and-goo task 4): inside a thin
+   * shell of the smooth surface, the march steps the fbm-displaced REAL field
+   * conservatively instead of warping only the normal. The amplitude matches
+   * marchCfg.z's silhouette value (0.016), so the displaced skin and the
+   * warped normals — same fbm, same scale — never disagree.
+   */
+  const SHELL_AMP = 0.016;
+  /** One source of truth for the default: defaultUniforms' woundCfg2.z. */
+  let shellSilhouette = u.woundCfg2.value.z > 0;
+
   function setCrowdCount(n: number) {
     while (crowd.length > n) {
       const v = crowd.pop();
@@ -1226,6 +1237,24 @@ async function main() {
       `simplify: ${simplifyOverride === null ? 'auto' : simplifyOverride ? 'ON' : 'OFF'}`;
   });
 
+  const shellBtn = addButton(
+    lodBox, `shell silhouette: ${shellSilhouette ? 'on' : 'off'}`,
+    () => setShellDisplace(!shellSilhouette));
+  /**
+   * Wires shell displacement (woundCfg2.z) through the hero AND the crowd:
+   * crowd views own their uniform set, and the bench gate is a 10-body
+   * measurement, so a hero-only toggle is no measurement — same shape as
+   * setSilhouetteNoise. Chunk views copy woundCfg2 from the hero template at
+   * spawn, so chunks cut after this inherit the setting for free;
+   * pre-existing chunks keep their spawn-time value (ChunkGpuView exposes no
+   * uniforms), which is fine — they are airborne for seconds at most.
+   */
+  function setShellDisplace(on: boolean) {
+    shellSilhouette = on;
+    for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.z = on ? SHELL_AMP : 0;
+    shellBtn.textContent = `shell silhouette: ${on ? 'on' : 'off'}`;
+  }
+
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
@@ -1333,6 +1362,9 @@ async function main() {
     /** Same run the B key starts; result also lands on `window.__benchResult`. */
     runBench,
     setLodEnabled(on: boolean) { lodEnabled = on; },
+    /** Shell-displacement silhouettes on every live body view. */
+    setShellDisplace,
+    get shellDisplace() { return shellSilhouette; },
     /** null = let LOD decide; true/false force the lever on every body. */
     setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },
     setStepsOverride(v: number | null) { stepsOverride = v; },
