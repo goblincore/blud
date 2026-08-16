@@ -171,6 +171,10 @@ Key reference docs (open these before touching their area):
   against the UNION of carve spheres. Small, `connectivity.ts`, after X1.21 lands.
 - `X1.20` [ ] **Skeleton reveal** — procedural mesh bones under the flesh, two-state
   shatter, bloody ivory. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-skeleton-reveal-design.md); plan after X1.21 (bones ride the large gobs).
+- `X1.22` [ ] **Rig motion pass (Spec B)** — procedural shamble (wander), FABRIK IK
+  (foot-plant, head look-at, wound clutch), hit-stagger, collapse + damage meter.
+  [spec](docs/superpowers/specs/2026-08-16-sdf-lab-rig-motion-design.md); plan after
+  X1.21 + X1.19.2; before skeleton X1.20. Candidate kimi/deepseek testbed.
 - `X1.21` [ ] **Gobs & goo (Spec A)** — amorphous generated flesh gobs + gore-mask
   chunk material + screen-space metaball blood. [spec](docs/superpowers/specs/2026-08-16-sdf-lab-gobs-and-goo-design.md); plan after the fix-pass lands. WebGPU only.
 - `X1.11` [-] ~~Port normal warping to `march.glsl.ts`~~ — dead: the WebGL lab is
