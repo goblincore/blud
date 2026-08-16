@@ -646,6 +646,19 @@ async function main() {
     return best;
   }
 
+  /** The piece's long axis from its prims — the topple aligns this flat. */
+  function primsLongAxis(prims: typeof current.prims, origin: Vec3): Vec3 {
+    // Longest chord among endpoints, in chunk-local space.
+    let best: Vec3 = [0, 1, 0]; let bestLen = 0;
+    for (const p of prims) {
+      if (p.op === 'sub') continue;
+      const d: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
+      const l = Math.hypot(...d);
+      if (l > bestLen) { bestLen = l; best = d; }
+    }
+    return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
+  }
+
   function torsoCentre(): Vec3 {
     return current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0];
   }
@@ -662,8 +675,8 @@ async function main() {
     ];
     // Collision radius = the limb's real visual extent; chunk.radius's 0.14 is
     // smaller than any limb and would bury it half-way into the floor.
-    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin));
-    const chunkView = createChunkGpuView(state, prims, u, tornAt);
+    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin), primsLongAxis(prims, origin));
+    const chunkView = createChunkGpuView(state, prims, u, tornAt ? [tornAt] : undefined);
     chunkView.object.layers.set(SDF_LAYER);
     scene.add(chunkView.object);
     chunks.push({ state, view: chunkView });
