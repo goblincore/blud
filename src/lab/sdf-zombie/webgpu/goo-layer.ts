@@ -65,9 +65,17 @@ export const GOO_TUNING = {
    * units — about half the 20 Hz trail spacing of a fast chunk, which is
    * the minimum for neighbours to fuse into a strand.
    */
-  quadScale: 2.2,
+  quadScale: 3.2,
+  /**
+   * World-size multiplier applied to every particle before it splats into the
+   * density field. The sim sizes are the game's BILLBOARD sprite sizes
+   * (BLOOD_TRAIL.size 0.22 was tuned for game-camera sprites); used raw as
+   * physical blob radii they built quarter-metre goo towers (playtest
+   * 2026-08-16). Same reasoning as the billboard view's DROPLET_VIEW_SCALE.
+   */
+  sizeScale: 0.4,
   /** Density above which a pixel is goo. A lone blob peaks near 1.0. */
-  threshold: 0.55,
+  threshold: 0.4,
   /** Soft-edge band start, as a multiple of the threshold. */
   edge: 1.6,
   /** Density-gradient to normal strength (see GOO_SURFACE_WGSL). */
@@ -355,7 +363,8 @@ export function createGooLayer(
         const stretch = 1 + Math.min(speed * 0.18, 0.8);
         roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
         q.copy(camera.quaternion).multiply(roll);
-        s.set(d.size * stretch * GOO_TUNING.quadScale, d.size * GOO_TUNING.quadScale, 1);
+        const gs = d.size * GOO_TUNING.sizeScale;
+        s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
         m.compose(p, q, s);
         quads.setMatrixAt(n++, m);
       }
