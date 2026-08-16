@@ -58,8 +58,8 @@ import type { BloodSim } from '../blood-sim';
  * family itself.
  */
 export const GOO_TUNING = {
-  /** InstancedMesh cap for the density pass (droplets + scraps). */
-  maxParticles: 700,
+  /** InstancedMesh cap for the density pass (droplets + scraps + splats). */
+  maxParticles: 1000,
   /**
    * Droplets with sim size UNDER this stay billboard mist (blood-view-gpu);
    * at/over it they feed the density field. 0.05 sits inside the burst band
@@ -89,6 +89,16 @@ export const GOO_TUNING = {
    * around wrist thickness. Blur keeps neighbours fusing at this size.
    */
   sizeScale: 0.15,
+  /**
+   * Floor-pool radius multiplier on a sim splat's decal size. Splats are the
+   * PERSISTENT blood record (they never age out — blood-sim keeps a 256 ring
+   * buffer), so feeding them into the density field is what makes pools stay
+   * after their droplets die (owner note 2026-08-16: pools vanished with the
+   * droplets). Each splat is a billboarded blob at its floor point (flat
+   * quads stripe near edge-on in the low-res buffer), elongated 1.4-2.6x
+   * along its stamp yaw so pools merge into smears, not perfect circles.
+   */
+  splatGooScale: 0.6,
   /** Density above which a pixel is goo. A lone blob peaks near 1.0. */
   threshold: 0.4,
   /** Soft-edge band start, as a multiple of the threshold. */
@@ -514,6 +524,26 @@ export function createGooLayer(
         q.copy(camera.quaternion).multiply(roll);
         const gs = d.size * GOO_TUNING.sizeScale;
         s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
+        m.compose(p, q, s);
+        quads.setMatrixAt(n++, m);
+      }
+      // Floor pools: every splat becomes an elongated density blob at its
+      // floor point (see the splatGooScale note). BILLBOARDED, not laid
+      // flat: a flat quad viewed near edge-on covers only a few rows of the
+      // low-res density buffer and stripes. The blob is rolled in screen
+      // space by the stamp yaw so pools still smear directionally. Droplets
+      // take the budget first — they are the flying action — but the splat
+      // ring is capped at 256 so both fit.
+      for (let i = 0; i < sim.splats.length && n < GOO_TUNING.maxParticles; i++) {
+        const sp = sim.splats[i]!;
+        p.set(sp.pos[0], 0.02, sp.pos[2]);
+        roll.setFromAxisAngle(zAxis, sp.yaw);
+        q.copy((camera as THREE.PerspectiveCamera).quaternion).multiply(roll);
+        // Deterministic per-splat eccentricity hashed from the stamp yaw.
+        const h = Math.sin(sp.yaw * 78.233) * 43758.5453;
+        const ecc = 1.4 + (h - Math.floor(h)) * 1.2;
+        const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
+        s.set(gr * ecc, gr, 1);
         m.compose(p, q, s);
         quads.setMatrixAt(n++, m);
       }

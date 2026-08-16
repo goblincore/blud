@@ -97,9 +97,12 @@ export function createBloodView(): BloodView {
     camInv.copy(camera.quaternion).invert();
     for (let i = 0; i < MAX_DROPLETS; i++) {
       const d = sim.droplets[i];
-      // The goo layer owns everything that feeds the metaball density
-      // field; only sub-cutoff mist beads pose here. Scraps never do.
-      if (!d || d.kind === 'scrap' || d.size >= GOO_TUNING.mistMaxSize) {
+      // Every droplet poses here, INCLUDING the ones feeding the metaball
+      // density field: the sprites layer over the goo surface — sprites
+      // carry the game-style density, the goo carries the wet surface
+      // (owner mix, 2026-08-16). Scraps stay goo-only (they are flesh, not
+      // spray).
+      if (!d || d.kind === 'scrap') {
         m.makeScale(0, 0, 0);
         drops.setMatrixAt(i, m);
         continue;
