@@ -52,6 +52,13 @@ export interface PrimDef {
    * `mirror`, which requires a mirrored bone and throws without one.
    */
   mirrorOffset?: boolean;
+  /**
+   * Albedo override for this primitive, linear RGB. Blended by proximity at
+   * the hit point, NOT folded into the field — tint never affects geometry.
+   */
+  tint?: Vec3;
+  /** How strongly `tint` claims the surface, 0..1. Ignored without `tint`. */
+  tintStrength?: number;
 }
 
 export interface BodyDef {
@@ -76,6 +83,8 @@ export interface Primitive {
    * test fixtures that build Primitive literals keep compiling.
    */
   op?: 'add' | 'sub';
+  tint?: Vec3;
+  tintStrength?: number;
 }
 
 export interface ClusterInfo {

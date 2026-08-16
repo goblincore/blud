@@ -274,6 +274,10 @@ void main() {
     // sharply, and a narrow window left the eye region — the part that most
     // needs the texture — almost entirely unpainted.
     float facing = smoothstep(-0.10, 0.35, dot(n, vec3(0.0, 0.0, uFaceForward)));
+    // Confine it to the HEAD. A uv box alone is not enough: the chest also
+    // faces front, so without this the projection paints the torso wherever
+    // the box happens to reach past the jaw.
+    facing *= 1.0 - smoothstep(0.75, 1.05, length(hs));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       vec4 t = texture(uFaceTex, uv * uFaceAtlas.xy + uFaceAtlas.zw);
       // Sampled AS-IS, deliberately not linearised. The sheet is sRGB-encoded,

@@ -51,6 +51,7 @@ export function placePrims(
       blendK: p.blendK,
       limb: p.limb as LimbId,
       op: p.op ?? 'add',
+      ...(p.tint ? { tint: p.tint, tintStrength: p.tintStrength ?? 1 } : {}),
     };
   });
 }

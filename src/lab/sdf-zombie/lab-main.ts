@@ -104,37 +104,63 @@ scene.add(view.object);
 const viewMaterialTemplate = view.material;
 
 // ---------------------------------------------------------------------------
-// Face texture. DEV PLACEHOLDER ONLY — this is extracted Blood art and must
-// never ship; shipping needs original art at the same ~34x32 size.
+// Face texture, projected flat onto the front of the head.
 //
-// It is used here because it is already quantized to BLOOD.PAL, so unlike
-// anything procedural it cannot fail the palette-snap test, and because it
-// proves the technique today rather than after an art pass.
+// Two sources, switchable in the panel:
 //
-// Tile 1200 is the front-facing standing axe zombie, 77x116. The head occupies
-// roughly x 22-56, y 2-34 from the top-left; the atlas rect below crops it out
-// in UV space (v is flipped — GL samples from the bottom).
+// - `smiley` is a DIAGNOSTIC. Flat yellow, a red border marking the edge of
+//   the projected rect, and a blue mark in the top-left corner. It has no
+//   baked lighting, no transparent background and no crop ambiguity, so if it
+//   lands wrong you can see exactly HOW — mirrored, rotated, offset, or
+//   smeared round the skull. Debugging projection with the Blood sprite means
+//   fighting four confounds at once.
+// - `blood-zombie` is the real candidate: tile 1200, the front-facing standing
+//   axe zombie (77x116), cropped to its head. DEV PLACEHOLDER — extracted
+//   Blood art, never ships. Used because it is already quantized to BLOOD.PAL.
 // ---------------------------------------------------------------------------
-const FACE_TILE = '/assets/blood-tiles/1200.png';
-const faceTex = new THREE.TextureLoader().load(FACE_TILE, () => {
-  view.material.uniforms.uFaceEnabled!.value = 1;
-});
-faceTex.magFilter = THREE.NearestFilter;   // chunky texels, not a blurry smear
-faceTex.minFilter = THREE.NearestFilter;
-faceTex.generateMipmaps = false;
-// three defaults flipY to TRUE, which puts the PNG's TOP row at v=0. The atlas
-// rect below is written in standard GL orientation (v=0 at the bottom), so
-// without this the crop lands on the sprite's legs instead of its head.
-faceTex.flipY = false;
-view.material.uniforms.uFaceTex!.value = faceTex;
-(view.material.uniforms.uFaceAtlas!.value as THREE.Vector4).set(
-  34 / 77, 32 / 116,          // uv scale  (head width/height as a fraction)
-  22 / 77, 1 - 34 / 116,      // uv offset (left edge; bottom edge of the head band)
-);
-// Map the crop across the whole cranium. hs is normalised by the head cluster
-// radius, which includes the nose, so the skull itself only spans about +/-0.6
-// of that — hence a scale near 0.8 rather than 0.5.
-(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(0.80, 0.80, 0.5, 0.5);
+type FaceTexName = 'smiley' | 'blood-zombie';
+
+/**
+ * url, plus the crop rect in TOP-LEFT pixel coordinates: [x, y, w, h, sheetW,
+ * sheetH]. Pixels rather than uv because that is how you read them off an
+ * image, and top-left because that is how images are indexed everywhere except
+ * OpenGL. The conversion happens once, below.
+ */
+const FACE_TEXTURES: Record<FaceTexName, { url: string; rect: [number, number, number, number, number, number] }> = {
+  smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64] },
+  'blood-zombie': {
+    url: '/assets/blood-tiles/1200.png',
+    // The head of the standing axe zombie, off a 77x116 sheet.
+    rect: [22, 2, 34, 32, 77, 116],
+  },
+};
+
+function loadFaceTexture(name: FaceTexName) {
+  const def = FACE_TEXTURES[name];
+  const tex = new THREE.TextureLoader().load(def.url);
+  tex.magFilter = THREE.NearestFilter;   // chunky texels, not a blurry smear
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  // Keep three's default flipY (true), so v=0 is the PNG's TOP row and the
+  // pixel rects above convert with no arithmetic. Setting flipY=false to make
+  // the zombie crop work was what left the smiley diagnostic upside down —
+  // its blue top-left marker came out bottom-left.
+  tex.flipY = true;
+  const [x, y, w, h, sheetW, sheetH] = def.rect;
+  const u = view.material.uniforms;
+  (u.uFaceTex!.value as THREE.Texture | null)?.dispose();
+  u.uFaceTex!.value = tex;
+  (u.uFaceAtlas!.value as THREE.Vector4).set(w / sheetW, h / sheetH, x / sheetW, y / sheetH);
+}
+
+let faceTexName: FaceTexName = 'smiley';
+loadFaceTexture(faceTexName);
+view.material.uniforms.uFaceEnabled!.value = 1;
+// Map the crop across the head and no further. uv = hs * scale + centre, so
+// uv lands in [0,1] over hs +/- 0.5/scale — at scale 1.0 that is exactly the
+// head cluster's own radius. At the old 0.80 it reached 25% beyond, which put
+// the projection down on the neck and chest.
+(view.material.uniforms.uFaceProj!.value as THREE.Vector4).set(1.0, 1.0, 0.5, 0.5);
 
 /** The live body — replaced on sever and on any override edit. */
 let current = body;
@@ -469,8 +495,22 @@ function focusBody() {
   camDist = 2.4;
 }
 
-// Face-texture alignment. The projection is planar in head space, so these
-// four numbers are how the sprite gets registered onto the skull.
+// Face texture. `smiley` first — a diagnostic that makes misregistration
+// obvious. The on/off toggle lives here rather than only on __sdfLab: it was
+// switched off from the console once and left that way, which made texStrength
+// look like it had no effect at all.
+addSelect(faceBox, 'texture', Object.keys(FACE_TEXTURES), faceTexName, (v) => {
+  faceTexName = v as FaceTexName;
+  loadFaceTexture(faceTexName);
+});
+const texBtn = addButton(faceBox, 'face tex: on', () => {
+  const u = view.material.uniforms.uFaceEnabled!;
+  u.value = u.value > 0.5 ? 0 : 1;
+  texBtn.textContent = `face tex: ${u.value > 0.5 ? 'on' : 'off'}`;
+});
+
+// Alignment. The projection is planar in head space, so these four numbers are
+// how the texture gets registered onto the skull.
 const faceUniform = (name: string) => view.material.uniforms[name] as { value: number };
 const faceProj = () => view.material.uniforms.uFaceProj!.value as THREE.Vector4;
 addSlider(faceBox, {
