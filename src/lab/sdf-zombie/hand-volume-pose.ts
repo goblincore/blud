@@ -37,6 +37,7 @@ import * as THREE from 'three/webgpu';
 import { HAND_PRIM_GROUPS } from './hands';
 import type { Primitive, Vec3 } from './types';
 import type { HandSheetProjection } from './fpv-mode';
+import type { DynamitePropContract } from './webgpu/hand-volume-clip';
 
 /** The spec's warp ceiling. fpv-view re-clamps defensively; this is the
  *  authority the unit tests pin. */
@@ -156,4 +157,72 @@ export function bakedHandPose(
     quaternion: [q.x, q.y, q.z, q.w],
     warpLocal: [wx, wy, wz],
   };
+}
+
+// ——— X1.27 task D2: the held GLB's exact root transform —————————————————
+//
+// The clip-mode prop is seated from the MANIFEST's authored anchors, never
+// from the primitive hand path's prop seats or its procedural prop mesh
+// constants: those describe a different bundle, and the spec forbids a
+// proxy of a different size. One source of truth composes the transform:
+//
+//   q_root = q_hand · q_model     (anatomical→world after model→anatomical)
+//   grip_world = centre + q_hand · gripLocal
+//   root = grip_world − (q_root · ŷ_model) · modelGripOffsetM
+//
+// The last line inverts the GLB's own GripAnchor placement (the anchor sits
+// at model +Y·modelGripOffsetM from the origin/FlightPivot), so seating the
+// ROOT at `root` puts the authored grip point on the authored grip seat
+// exactly — the same contract the six poses were baked under.
+//
+// QUATERNION ORDER NOTE — the hand pose arrives xyzw (BakedHandPose's
+// convention, above), the manifest's modelRotationLocal arrives (w, x, y,
+// z), and the OUTPUT BakedPropPose.quaternion is (w, x, y, z) to match
+// dynamite-prop.ts's DynamitePose end to end. This function is the one
+// place the two conventions meet.
+
+/** The held GLB's world transform for one animated baked-hand frame. */
+export interface BakedPropPose {
+  /** The GLB root / FlightPivot in world space, metres. */
+  position: Vec3;
+  /** (w, x, y, z) — model-local → world for the GLB root. */
+  quaternion: [number, number, number, number];
+}
+
+// Dedicated scratch (bakedHandPose's are owned by its basis repair).
+const dqHand = new THREE.Quaternion();
+const dqModel = new THREE.Quaternion();
+const dqRoot = new THREE.Quaternion();
+const dvGrip = new THREE.Vector3();
+const dvAxis = new THREE.Vector3();
+
+/**
+ * Derives the exact held-prop transform from one animated baked hand pose
+ * and the clip manifest's prop contract. The hand quaternion is the volume's
+ * full local-to-world rotation (including any wrist swing a caller composed
+ * onto it); `warpLocal` is deliberately IGNORED — the warp is a field-domain
+ * sampling warp inside the volume (march.wgsl.ts), not object motion, and
+ * the prop rides the rigid frame. Pure — no input is mutated.
+ */
+export function bakedDynamitePose(
+  hand: BakedHandPose,
+  prop: DynamitePropContract,
+): BakedPropPose {
+  // hand: xyzw; modelRotationLocal: (w, x, y, z).
+  dqHand.set(hand.quaternion[0], hand.quaternion[1], hand.quaternion[2], hand.quaternion[3]);
+  const mr = prop.modelRotationLocal;
+  dqModel.set(mr[1], mr[2], mr[3], mr[0]);
+  dqRoot.copy(dqHand).multiply(dqModel).normalize();
+
+  // Bundle long axis in world: model +Y under the composed rotation.
+  dvAxis.set(0, 1, 0).applyQuaternion(dqRoot);
+  // Authored grip seat: anatomical local → world, riding the hand centre.
+  dvGrip.set(prop.gripLocal[0], prop.gripLocal[1], prop.gripLocal[2]).applyQuaternion(dqHand);
+  // Root sits at −axis·offset from the grip (the GripAnchor inversion).
+  const position: Vec3 = [
+    hand.centre[0] + dvGrip.x - dvAxis.x * prop.modelGripOffsetM,
+    hand.centre[1] + dvGrip.y - dvAxis.y * prop.modelGripOffsetM,
+    hand.centre[2] + dvGrip.z - dvAxis.z * prop.modelGripOffsetM,
+  ];
+  return { position, quaternion: [dqRoot.w, dqRoot.x, dqRoot.y, dqRoot.z] };
 }

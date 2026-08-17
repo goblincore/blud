@@ -3,9 +3,16 @@
 // X1.26 task C1 — the baked-hand pose derivation: rigid wrist/forearm
 // translation, distal warp residual in the anatomical basis, the 12 mm
 // clamp, the volume-safe determinant repair, and input purity.
+//
+// X1.27 task D2 — bakedDynamitePose: the EXACT held GLB root transform from
+// the animated hand volume + the manifest's prop contract (the same values
+// the poses were authored against, read from the real checked-in clip).
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { bakedHandPose, HAND_WARP_CLAMP_M } from './hand-volume-pose';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
+import { bakedHandPose, bakedDynamitePose, HAND_WARP_CLAMP_M, type BakedHandPose } from './hand-volume-pose';
+import { validateHandClipManifest, type DynamitePropContract } from './webgpu/hand-volume-clip';
 import { HAND_PRIM_GROUPS } from './hands';
 import type { HandSheetProjection } from './fpv-mode';
 import type { Primitive, Vec3 } from './types';
@@ -163,5 +170,166 @@ describe('bakedHandPose', () => {
     expect(JSON.parse(JSON.stringify(unjiggled))).toEqual(snap.unjiggled);
     expect(JSON.parse(JSON.stringify(jiggled))).toEqual(snap.jiggled);
     expect(JSON.parse(JSON.stringify(projection))).toEqual(snap.projection);
+  });
+});
+
+// ——— X1.27 task D2: bakedDynamitePose ————————————————————————————————————
+
+/** The REAL prop contract the six poses were authored against, read from the
+ *  checked-in v2 clip manifest (validated, so the values below are the
+ *  authored ones, not a hand-written stand-in). */
+const REAL_PROP: DynamitePropContract = validateHandClipManifest(
+  JSON.parse(readFileSync('public/assets/lab/hand-sdf-dynamite-grip-r.json', 'utf8')),
+).prop;
+
+/** A hand volume at the anatomical origin, unrotated, unwarped. Its
+ *  quaternion is xyzw (BakedHandPose's convention). */
+const IDENTITY_HAND: BakedHandPose = {
+  centre: [0, 0, 0],
+  quaternion: [0, 0, 0, 1],
+  warpLocal: [0, 0, 0],
+};
+
+/** (w, x, y, z) pose quaternion → THREE.Quaternion. */
+function propQuat(q: readonly [number, number, number, number]): THREE.Quaternion {
+  return new THREE.Quaternion(q[1], q[2], q[3], q[0]);
+}
+
+/** The bundle's world long axis under a prop pose (model +Y rotated). */
+function axisOf(pose: { quaternion: [number, number, number, number] }): THREE.Vector3 {
+  return new THREE.Vector3(0, 1, 0).applyQuaternion(propQuat(pose.quaternion));
+}
+
+/** The world grip point reconstructed from a prop pose: the GLB root plus
+ *  the GripAnchor's model-local offset (0, modelGripOffsetM, 0) rotated by
+ *  the root quaternion — the same relation the pose was built to invert. */
+function gripOf(
+  pose: { position: Vec3; quaternion: [number, number, number, number] },
+  prop: DynamitePropContract,
+): THREE.Vector3 {
+  return new THREE.Vector3(0, prop.modelGripOffsetM, 0)
+    .applyQuaternion(propQuat(pose.quaternion))
+    .add(new THREE.Vector3(pose.position[0], pose.position[1], pose.position[2]));
+}
+
+describe('bakedDynamitePose', () => {
+  it('identity hand seats the authored grip point exactly at prop.gripLocal', () => {
+    const pose = bakedDynamitePose(IDENTITY_HAND, REAL_PROP);
+    const grip = gripOf(pose, REAL_PROP);
+    expect(grip.x).toBeCloseTo(REAL_PROP.gripLocal[0], 12);
+    expect(grip.y).toBeCloseTo(REAL_PROP.gripLocal[1], 12);
+    expect(grip.z).toBeCloseTo(REAL_PROP.gripLocal[2], 12);
+    // and the bundle's world axis is the hand-unrotated axisLocal (the
+    // manifest values carry f32 bake noise ~1e-8, so 6 digits, not 9)
+    const axis = axisOf(pose);
+    expect(axis.x).toBeCloseTo(REAL_PROP.axisLocal[0], 6);
+    expect(axis.y).toBeCloseTo(REAL_PROP.axisLocal[1], 6);
+    expect(axis.z).toBeCloseTo(REAL_PROP.axisLocal[2], 6);
+    // the pose quaternion is unit length
+    expect(propQuat(pose.quaternion).length()).toBeCloseTo(1, 12);
+  });
+
+  it('a 90° hand quaternion rotates BOTH the root position and the bundle axis', () => {
+    // 90° about world +Z, xyzw
+    const S = Math.SQRT1_2;
+    const hand: BakedHandPose = {
+      centre: IDENTITY_HAND.centre,
+      quaternion: [0, 0, S, S],
+      warpLocal: [0, 0, 0],
+    };
+    const base = bakedDynamitePose(IDENTITY_HAND, REAL_PROP);
+    const rotated = bakedDynamitePose(hand, REAL_PROP);
+    const rz = new THREE.Quaternion(0, 0, S, S);
+    const wantPos = new THREE.Vector3(base.position[0], base.position[1], base.position[2])
+      .applyQuaternion(rz);
+    expect(rotated.position[0]).toBeCloseTo(wantPos.x, 12);
+    expect(rotated.position[1]).toBeCloseTo(wantPos.y, 12);
+    expect(rotated.position[2]).toBeCloseTo(wantPos.z, 12);
+    const wantAxis = axisOf(base).applyQuaternion(rz);
+    const gotAxis = axisOf(rotated);
+    expect(gotAxis.x).toBeCloseTo(wantAxis.x, 9);
+    expect(gotAxis.y).toBeCloseTo(wantAxis.y, 9);
+    expect(gotAxis.z).toBeCloseTo(wantAxis.z, 9);
+  });
+
+  it('modelGripOffsetM moves the GLB root opposite model +Y from the world grip', () => {
+    const pose = bakedDynamitePose(IDENTITY_HAND, REAL_PROP);
+    // world grip under the identity hand = centre + I·gripLocal = gripLocal
+    const axis = axisOf(pose);
+    expect(pose.position[0]).toBeCloseTo(REAL_PROP.gripLocal[0] - axis.x * REAL_PROP.modelGripOffsetM, 12);
+    expect(pose.position[1]).toBeCloseTo(REAL_PROP.gripLocal[1] - axis.y * REAL_PROP.modelGripOffsetM, 12);
+    expect(pose.position[2]).toBeCloseTo(REAL_PROP.gripLocal[2] - axis.z * REAL_PROP.modelGripOffsetM, 12);
+    // flipping the offset's sign moves the root to the OTHER side of the
+    // grip along the same axis — and the grip invariant survives it.
+    const flipped: DynamitePropContract = { ...REAL_PROP, modelGripOffsetM: -REAL_PROP.modelGripOffsetM };
+    const pose2 = bakedDynamitePose(IDENTITY_HAND, flipped);
+    const d = new THREE.Vector3(
+      pose2.position[0] - pose.position[0],
+      pose2.position[1] - pose.position[1],
+      pose2.position[2] - pose.position[2],
+    );
+    expect(d.length()).toBeCloseTo(Math.abs(2 * REAL_PROP.modelGripOffsetM), 12);
+    expect(d.angleTo(axis)).toBeCloseTo(Math.PI, 9); // the OTHER side, along the bundle axis
+    const grip2 = gripOf(pose2, flipped);
+    expect(grip2.x).toBeCloseTo(flipped.gripLocal[0], 12);
+    expect(grip2.y).toBeCloseTo(flipped.gripLocal[1], 12);
+    expect(grip2.z).toBeCloseTo(flipped.gripLocal[2], 12);
+  });
+
+  it('modelRotationLocal determines roll: position and axis unchanged, quaternion differs', () => {
+    // Roll the model 30° about its OWN +Y (the long axis) by appending the
+    // rotation after the authored model quaternion — preserves the +Y
+    // mapping, changes everything else.
+    const qm = propQuat(REAL_PROP.modelRotationLocal);
+    const roll = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0), Math.PI / 6);
+    const rolled = qm.clone().multiply(roll);
+    const variant: DynamitePropContract = {
+      ...REAL_PROP,
+      modelRotationLocal: [rolled.w, rolled.x, rolled.y, rolled.z],
+    };
+    const base = bakedDynamitePose(IDENTITY_HAND, REAL_PROP);
+    const rolledPose = bakedDynamitePose(IDENTITY_HAND, variant);
+    expect(rolledPose.position[0]).toBeCloseTo(base.position[0], 12);
+    expect(rolledPose.position[1]).toBeCloseTo(base.position[1], 12);
+    expect(rolledPose.position[2]).toBeCloseTo(base.position[2], 12);
+    const axis = axisOf(rolledPose);
+    expect(axis.x).toBeCloseTo(REAL_PROP.axisLocal[0], 6);
+    expect(axis.y).toBeCloseTo(REAL_PROP.axisLocal[1], 6);
+    expect(axis.z).toBeCloseTo(REAL_PROP.axisLocal[2], 6);
+    const qb = propQuat(base.quaternion);
+    const qr = propQuat(rolledPose.quaternion);
+    expect(qr.length()).toBeCloseTo(1, 12);
+    expect(qb.angleTo(qr)).toBeGreaterThan(0.01); // the roll is visible
+  });
+
+  it('the distal warp does not move the prop (rigid frame only)', () => {
+    const warped: BakedHandPose = { ...IDENTITY_HAND, warpLocal: [0.012, 0, 0] };
+    const a = bakedDynamitePose(IDENTITY_HAND, REAL_PROP);
+    const b = bakedDynamitePose(warped, REAL_PROP);
+    expect(b.position).toEqual(a.position);
+    expect(b.quaternion).toEqual(a.quaternion);
+  });
+
+  it('does not mutate its inputs', () => {
+    const hand: BakedHandPose = {
+      centre: [0.01, 0.02, 0.03],
+      quaternion: [0, 0, Math.SQRT1_2, Math.SQRT1_2],
+      warpLocal: [0.001, 0.002, 0.003],
+    };
+    const prop = { ...REAL_PROP };
+    const snap = {
+      hand: JSON.parse(JSON.stringify(hand)),
+      prop: JSON.parse(JSON.stringify(prop)),
+    };
+    bakedDynamitePose(hand, prop);
+    expect(JSON.parse(JSON.stringify(hand))).toEqual(snap.hand);
+    expect(JSON.parse(JSON.stringify(prop))).toEqual(snap.prop);
+  });
+
+  it('source guard: derives only from the volume frame and contract, not the primitive prop seats', () => {
+    const src = readFileSync('src/lab/sdf-zombie/hand-volume-pose.ts', 'utf8');
+    expect(src).not.toContain('handPropPoses');
+    expect(src).not.toContain('PROP_MESH');
   });
 });
