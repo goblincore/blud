@@ -4,6 +4,7 @@ import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
 import { makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
+import { rotateYaw } from './gait';
 import {
   add, len, normalize, qFromTo, qRotate, scale as vscale, sub,
 } from './vec';
@@ -139,10 +140,15 @@ export function bindRig(body: BuildResult): BoundRig {
  * bound silently discards flesh that has moved outside it — the exact failure
  * `validateBody`'s bounding-sphere check exists to catch. Cluster start/count
  * and ordering are left untouched, preserving the fold order.
+ *
+ * `bodyYaw` is the motion pipeline's applied body rotation (motion.ts
+ * state.bodyYaw, 0 in the statue loop): the rigid head's clamp cone is
+ * anchored to the ROTATED rest gaze, so turning the body does not clamp the
+ * head back to the authored facing.
  */
-export function applyRig(body: BuildResult, bound: BoundRig): BuildResult {
+export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
-  const rigid = bound.head ? headTransform(bound.head, pos) : null;
+  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw) : null;
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
     if (face && rigid) {
@@ -181,14 +187,16 @@ export function applyRig(body: BuildResult, bound: BoundRig): BuildResult {
  * identity quaternion and the tip prediction lands on the tip point, so the
  * drift vector is zero — bit-identical to the pre-rigid posed body.
  */
-function headTransform(h: HeadRigid, pos: readonly RigPoint[]): {
+function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
 } {
   const pivot = pos[h.pivot]!.pos;
   const tip = pos[h.tip]!.pos;
   const dir = normalize(sub(tip, pivot));
-  const clamped = clampDir(dir, h.restDir, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
+  const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
+  const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
   const q = qFromTo(h.restDir, clamped);
 
   // Translation: the neck pivot plus a bounded share of the drift the rigid

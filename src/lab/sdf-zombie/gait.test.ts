@@ -22,12 +22,12 @@ const DT = 1 / 60;
 
 /** Runs stepGait for `seconds` and returns every pose (for assertions that
  *  need signed asymmetries across a cycle, not exact floats). */
-function poses(seed: number, skew: GaitSkew, seconds: number, dt = DT): GaitPose[] {
+function poses(seed: number, skew: GaitSkew, seconds: number, dt = DT, style: 'swing' | 'reach' = 'swing'): GaitPose[] {
   let st = makeGaitState(seed);
   const out: GaitPose[] = [];
   const n = Math.round(seconds / dt);
   for (let i = 0; i < n; i++) {
-    const step = stepGait(st, skew, dt);
+    const step = stepGait(st, skew, dt, style);
     st = step.state;
     out.push(step.pose);
   }
@@ -218,7 +218,8 @@ describe('GAIT_TUNING', () => {
     expect(GAIT_TUNING.strideFreq).toBeLessThan(2);
     expect(GAIT_TUNING.stanceDuty).toBeGreaterThan(0.4);
     expect(GAIT_TUNING.stanceDuty).toBeLessThan(0.8);
-    for (const v of Object.values(GAIT_TUNING)) expect(v).toBeGreaterThan(0);
+    for (const v of Object.values(GAIT_TUNING))
+      if (typeof v === 'number') expect(v).toBeGreaterThan(0);
   });
 });
 

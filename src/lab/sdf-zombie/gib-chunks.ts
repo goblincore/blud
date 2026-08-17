@@ -3,31 +3,65 @@
 // Hand-rolled deterministic chunk physics. Deliberately NOT Rapier: the game's
 // cosmetic ChunkSystem uses Rapier, but the lab wants a stepper whose every
 // constant is a knob and whose output is pure state-in/state-out. The game's
-// playtested Rapier values are the tuning TARGETS here (restitution 0.55,
-// tumble +/-9 rad/s per axis), not a dependency.
+// playtested Rapier values are the tuning TARGETS here (restitution 0.55),
+// not a dependency.
+//
+// Motion-polish pass (severed-limb helicopter fix): limbs and gobs tumble
+// differently. A severed arm launched with the game's ±9 rad/s angvel reads
+// as a spinning helicopter seed; limbs now spawn with a slower tumble and
+// ALL chunks bleed angular velocity in the air, so the tumble decays instead
+// of spinning at full rate until the floor kills it. Gobs keep the chaotic
+// spawn. Launch speeds and gravity are untouched — the arcs are game-hot and
+// authoritative; only the spin was tuned.
 import type { LimbId, Vec3 } from './types';
 import {
   add, cross, dot, len, normalize, scale,
   qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat,
 } from './vec';
 
-const GRAVITY = -9.8;
-/** Game ChunkSystem capsule restitution (chunks skip off floors). */
-const RESTITUTION = 0.55;
-/** Horizontal + angular velocity multiplier while in floor contact. */
-const FLOOR_FRICTION = 0.72;
-const AIR_DRAG = 0.006;
-/** Squash decays back to zero at this rate per second. */
-const SQUASH_RELAX = 5.5;
-/** Spawn tumble amplitude: (rng-0.5)*2*TUMBLE = +/-9 rad/s, the game's angvel. */
-const TUMBLE = 9;
-/** Below this speed a grounded chunk starts easing flat. */
-const TOPPLE_SPEED = 0.6;
-/** Radians/sec the long axis eases toward horizontal (~90deg in 0.4s). */
-const TOPPLE_RATE = 4.0;
+/** All chunk-stepper constants in one place. */
+export const CHUNK_TUNING = {
+  gravity: -9.8,
+  /** Game ChunkSystem capsule restitution (chunks skip off floors). */
+  restitution: 0.55,
+  /** Horizontal + angular velocity multiplier while in floor contact. */
+  floorFriction: 0.72,
+  airDrag: 0.006,
+  /** Squash decays back to zero at this rate per second. */
+  squashRelax: 5.5,
+  /** LIMB spawn tumble amplitude (rad/s): (rng-0.5)*2*limbTumble. Lower than
+   *  the gobs' — a tumbling forearm reads heavy, not helicopter. */
+  limbTumble: 4.2,
+  /** GOB spawn tumble amplitude (rad/s) — the game's setAngvel((rand-0.5)*18)
+   *  = ±9, kept chaotic for the amorphous hunks. */
+  gobTumble: 9,
+  /** Airborne angular-velocity decay (1/s) — the tumble bleeds off in flight
+   *  instead of spinning at spawn rate until the floor stops it. */
+  angularAirDamp: 1.9,
+  /** Extra grounded spin kill per contact frame, multiplied with
+   *  floorFriction for angVel only — a sliding chunk stops rolling fast. */
+  angularFloorDamp: 0.55,
+  /** Below this speed a grounded chunk starts easing flat. */
+  toppleSpeed: 0.6,
+  /** Radians/sec the long axis eases toward horizontal (~90deg in 0.4s). */
+  toppleRate: 4.0,
+} as const;
+
+/** What the chunk IS — limbs tumble heavy, gobs chaotic (CHUNK_TUNING). */
+export type ChunkKind = 'limb' | 'gob';
+
+const GRAVITY = CHUNK_TUNING.gravity;
+const RESTITUTION = CHUNK_TUNING.restitution;
+const FLOOR_FRICTION = CHUNK_TUNING.floorFriction;
+const AIR_DRAG = CHUNK_TUNING.airDrag;
+const SQUASH_RELAX = CHUNK_TUNING.squashRelax;
+const TOPPLE_SPEED = CHUNK_TUNING.toppleSpeed;
+const TOPPLE_RATE = CHUNK_TUNING.toppleRate;
 
 export interface Chunk {
   limb: LimbId;
+  /** limb | gob — picks the spawn tumble amplitude (CHUNK_TUNING). */
+  kind: ChunkKind;
   pos: Vec3;
   vel: Vec3;
   radius: number;
@@ -44,16 +78,18 @@ export interface Chunk {
 export function makeChunk(
   limb: LimbId, pos: Vec3, vel: Vec3, radius: number,
   longAxis: Vec3, rng: () => number = Math.random,
+  kind: ChunkKind = 'limb',
 ): Chunk {
-  // Tumble proportional-ish to being launched at all; flat amplitude matches
-  // the game ChunkSystem's setAngvel((rand-0.5)*18) = +/-9 rad/s.
+  // Tumble proportional-ish to being launched at all. Limbs tumble slower
+  // than the game's ±9 rad/s (helicopter fix); gobs keep the chaotic spawn.
+  const tumble = kind === 'gob' ? CHUNK_TUNING.gobTumble : CHUNK_TUNING.limbTumble;
   const angVel: Vec3 = [
-    (rng() - 0.5) * 2 * TUMBLE,
-    (rng() - 0.5) * 2 * TUMBLE,
-    (rng() - 0.5) * 2 * TUMBLE,
+    (rng() - 0.5) * 2 * tumble,
+    (rng() - 0.5) * 2 * tumble,
+    (rng() - 0.5) * 2 * tumble,
   ];
   return {
-    limb, pos, vel, radius, squash: 0,
+    limb, kind, pos, vel, radius, squash: 0,
     quat: qIdentity(), angVel, longAxis: normalize(longAxis),
   };
 }
@@ -77,6 +113,9 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
     quat = qNormalize(qMul(qFromAxisAngle(scale(angVel, 1 / w), w * dt), quat));
   }
 
+  // Airborne angular damping: the tumble DECAYS in flight (helicopter fix).
+  angVel = scale(angVel, Math.max(0, 1 - CHUNK_TUNING.angularAirDamp * dt));
+
   let grounded = false;
   if (y < c.radius) {
     y = c.radius;
@@ -88,7 +127,7 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
       if (Math.abs(vy) < 0.35) vy = 0;
     }
     vx *= FLOOR_FRICTION; vz *= FLOOR_FRICTION;
-    angVel = scale(angVel, FLOOR_FRICTION);
+    angVel = scale(angVel, FLOOR_FRICTION * CHUNK_TUNING.angularFloorDamp);
     if (len(angVel) < 0.05) angVel = [0, 0, 0];
   }
 

@@ -50,11 +50,14 @@ export type StaggerKind = 'flinch' | 'lurch' | 'shudder';
 
 /** All reaction amplitudes, timings and decay curves in one place. */
 export const STAGGER_TUNING = {
-  // Flinch (pellet) — a one-beat shoulder/torso twitch.
+  // Flinch (pellet) — a one-beat shoulder/torso twitch. Amplitude raised
+  // 0.04 → 0.085 in the motion-polish pass: 4 cm was sub-perceptual at the
+  //  god-cam's working distance on a ~1.9 m body (the owner's "shots show no
+  //  visible reaction").
   /** Peak shoulder twitch (m). */
-  flinchAmp: 0.04,
+  flinchAmp: 0.085,
   /** One-beat duration (s). */
-  flinchBeat: 0.24,
+  flinchBeat: 0.3,
   /** Root share of the twitch (fraction). */
   flinchRootScale: 0.35,
   /** Chest share of the shoulder twitch (fraction). */
@@ -64,8 +67,10 @@ export const STAGGER_TUNING = {
   // knock. The envelope is a normalised attack-decay: peak = lurchAmp at
   // ~lurchRise, then decays with time constant lurchDecay. 5τ = 1.0 s, which
   // is the reaction's total duration — the "recovers over ~1 s" of spec §4.
-  /** Peak root displacement along the shot (m). */
-  lurchAmp: 0.17,
+  /** Peak root displacement along the shot (m). Raised 0.17 → 0.26 in the
+   *  motion-polish pass — the rest-pull damps the targets hard, so the
+   *  visible lurch lands well under the target value. */
+  lurchAmp: 0.26,
   /** Attack time constant (s). */
   lurchRise: 0.05,
   /** Decay time constant (s) — 5τ is the lurch's duration. */

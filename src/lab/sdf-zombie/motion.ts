@@ -14,8 +14,13 @@
 // ONE FRAME, STANDING (spec §1-§4 of the rig-motion design):
 //
 //   wander ─┬─► root translation (ground-plane shift of every target)
-//           └─► heading — gait/stagger offsets are BODY-LOCAL and get
-//                          rotated into world space by rotateYaw(·, heading)
+//           └─► heading — the body's APPLIED yaw (state.bodyYaw) follows it
+//                          at a damped, gain-scaled rate; the WHOLE authored
+//                          pose is rotated about the root's vertical axis by
+//                          bodyYaw, and gait/stagger offsets (BODY-LOCAL) are
+//                          rotated by the same bodyYaw — so the pose, the
+//                          offsets, the aim cone and the stagger's
+//                          world→local shot frame all agree mid-turn
 //   stagger ─► reaction offsets ADD onto the gait offsets (sibling contract,
 //              see stagger.ts's header); the shot direction arrives in WORLD
 //              space and is rotated to body-local here
@@ -56,9 +61,9 @@ import type { LimbId, Vec3 } from './types';
 import { add, len, normalize, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName } from './gait';
-import { jointNamesForBody, rotateYaw, stepGait } from './gait';
+import { GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
 import type { WanderBounds, WanderState } from './wander';
-import { headingDir, stepWander, WANDER_TUNING, type Rng } from './wander';
+import { headingDir, stepWander, WANDER_TUNING, wrapPi, type Rng } from './wander';
 import type { ArmSide, ClutchArm, ClutchState, PlantState, AimState } from './ik';
 import {
   IK_TUNING, makeAim, makeClutch, makePlant, solveChain, solvePlantedLeg,
@@ -78,6 +83,35 @@ export const MOTION_TUNING = {
   blendRate: 2.5,
   /** The stride reaches full amplitude at this fraction of cruise speed. */
   fullStrideAt: 1,
+  /** Body-yaw follow rate (rad/s) — the whole body turns to face the wander
+   *  heading at this heavy-damped rate, so turns never snap. */
+  headingFollowRate: 1.7,
+  /** Heading-follow gain 0..1 — scales the follow rate. 0 = the
+   *  "strafe-walker" bestiary variant: the body NEVER turns, facing its
+   *  authored direction while moving any direction. A tunable, not a code
+   *  path — do not build the variant, just leave the knob. */
+  headingFollow: 1,
+  /** Lean into the turn: metres of lateral upper-body offset per rad/s of
+   *  applied yaw rate. */
+  turnLean: 0.05,
+  /** Lean clamp (m) — a hard turn leans this much and no more. */
+  turnLeanMax: 0.06,
+  /** Reach-style arms stay this raised at idle (gait blend floor) — a
+   *  standing zombie keeps its mummy arms up instead of dropping them. */
+  reachMinPresence: 0.85,
+  /** Localized hit recoil: the rig point nearest the hit is shoved along the
+   *  shot direction with this peak offset (m) per profile, attack-decaying
+   *  back over ~5×decay seconds. Composes with the whole-body stagger and
+   *  the instant impulseAt jolt in the wiring. */
+  recoil: {
+    pellet: 0.07,
+    blast: 0.2,
+    burn: 0.045,
+    /** Attack time constant (s). */
+    rise: 0.03,
+    /** Decay time constant (s) — 5τ ≈ 0.45 s total. */
+    decay: 0.09,
+  },
   /** Gravity while collapsed (m/s²) — full weight, matching the chunk
    *  stepper's GRAVITY. Standing keeps the lab's soft -2.2. */
   collapseGravity: -9.8,
@@ -205,6 +239,20 @@ export function makeMotionJoints(
 // State, config, signals.
 // ---------------------------------------------------------------------------
 
+/** Localized hit recoil — the pose deviation at the rig point nearest a
+ *  hit. World-space direction (the body may be turning; the shove follows
+ *  the shot ray regardless), attack-decay envelope over ~5×decay seconds. */
+export interface RecoilState {
+  /** The joint taking the shove, or null when calm. */
+  joint: GaitJointName | null;
+  /** Unit shot direction, WORLD space. */
+  dirWorld: Vec3;
+  /** Peak offset (m) — profile-scaled at the hit. */
+  amp: number;
+  /** Seconds since the hit. */
+  age: number;
+}
+
 /** The whole per-body motion state — every sub-state the modules own, plus
  *  the two wiring-owned blends. Plain data; reconstruct or hand-edit in tests. */
 export interface MotionState {
@@ -216,6 +264,13 @@ export interface MotionState {
   plantR: PlantState;
   aim: AimState;
   clutch: ClutchState;
+  recoil: RecoilState;
+  /** The body's APPLIED yaw (rad) — follows wander.heading at the damped
+   *  headingFollowRate × headingFollow gain. Every body-local thing (rest
+   *  pose rotation, gait/stagger offsets, the aim cone, the stagger's
+   *  world→local shot rotation) uses THIS, never wander.heading directly,
+   *  so the whole frame agrees during the damped turn. */
+  bodyYaw: number;
   /** Gait amplitude 0..1 — follows wander speed / the wander toggle. */
   blend: number;
   /** Last frame's root shift (kept so a fall can freeze it). */
@@ -235,6 +290,8 @@ export function makeMotionState(seed: number, start: Vec3): MotionState {
     plantR: makePlant(),
     aim: makeAim([0, 0, 1]),
     clutch: makeClutch(),
+    recoil: { joint: null, dirWorld: [0, 0, 0], amp: 0, age: 0 },
+    bodyYaw: 0,
     blend: 0,
     lastShift: [0, 0, 0],
     fallShift: null,
@@ -246,6 +303,11 @@ export function makeMotionState(seed: number, start: Vec3): MotionState {
 export interface MotionConfig {
   enabled: boolean;
   wander: boolean;
+  /** Arm animation style — defaults to GAIT_TUNING.armStyle ('reach'). */
+  armStyle?: ArmStyle;
+  /** Heading-follow gain override 0..1 — defaults to MOTION_TUNING
+   *  .headingFollow. 0 reproduces the strafe-walker (body never turns). */
+  headingFollow?: number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -274,6 +336,9 @@ export interface MotionFrame {
   /** Whole-body ground-plane translation baked into every rest target. */
   rootShift: Vec3;
   heading: number;
+  /** The applied body yaw — the wiring feeds this to applyRig so the rigid
+   *  head clamp cone turns WITH the body. */
+  bodyYaw: number;
   /** Rest targets per rig point, world space. rig.restPose ← this. */
   restPose: Vec3[];
   /** Multiply stepRig's restStiffness by this (the collapse ramp). */
@@ -302,6 +367,29 @@ const SOLVE = {
 } as const;
 
 const Z: Vec3 = [0, 0, 0];
+
+/** Joints the reach-style blend floor applies to (the arms). */
+const ARM_JOINTS: ReadonlySet<GaitJointName> = new Set([
+  'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
+]);
+
+/** How much of the turn lean each joint takes — the upper body rolls into
+ *  the turn, the legs stay planted under it. */
+const LEAN_SHARE: Partial<Record<GaitJointName, number>> = {
+  pelvis: 0.3, hips: 0.45, chest: 0.8, neck: 0.9, head: 1,
+  shoulderL: 0.85, shoulderR: 0.85, elbowL: 0.6, elbowR: 0.6,
+  handL: 0.5, handR: 0.5,
+};
+
+/** Normalised attack-decay envelope (peak exactly 1) — the recoil's shape,
+ *  same curve family as stagger.ts's lurch. */
+function recoilEnv(age: number, rise: number, decay: number): number {
+  if (age <= 0) return 0;
+  const peakAge = rise * Math.log(1 + decay / rise);
+  const peak = (1 - Math.exp(-peakAge / rise)) * Math.exp(-peakAge / decay);
+  const e = (1 - Math.exp(-age / rise)) * Math.exp(-age / decay);
+  return peak > 0 ? e / peak : 0;
+}
 
 function clamp(n: number, lo: number, hi: number): number {
   return n < lo ? lo : n > hi ? hi : n;
@@ -341,9 +429,11 @@ export function stepMotion(
   const collapsed = collapse.phase !== 'standing';
 
   // --- stagger: the shot's reaction (dir rotated world → body-local) ------
+  // bodyYaw (not wander.heading) is the body's actual facing — during the
+  // damped turn the two disagree, and the reaction must follow the BODY.
   const stagger = stepStagger(state.stagger, {
     hit: sig.shot && !collapsed
-      ? { type: sig.shot.type, dir: rotateYaw(sig.shot.dirWorld, -state.wander.heading) }
+      ? { type: sig.shot.type, dir: rotateYaw(sig.shot.dirWorld, -state.bodyYaw) }
       : null,
   }, dt);
 
@@ -353,6 +443,24 @@ export function stepMotion(
   // --- locomotion (standing only) -----------------------------------------
   let wander = state.wander;
   if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds);
+
+  // --- body yaw: the damped rigid turn -------------------------------------
+  // The whole body (rest pose, gait/stagger offsets, aim cone, plants via
+  // their world capture) rotates about the root's vertical axis toward the
+  // wander heading — rate-limited, never snapping. Gain 0 pins the authored
+  // facing forever: the strafe-walker. Collapsed freezes the yaw with the
+  // rest of the pose.
+  let bodyYaw = state.bodyYaw;
+  let lean = 0;
+  if (!collapsed) {
+    const gain = cfg.headingFollow ?? MOTION_TUNING.headingFollow;
+    const maxTurn = MOTION_TUNING.headingFollowRate * Math.max(gain, 0) * dt;
+    const dYaw = wrapPi(wander.heading - bodyYaw);
+    const applied = Math.abs(dYaw) <= maxTurn ? dYaw : Math.sign(dYaw) * maxTurn;
+    bodyYaw = wrapPi(bodyYaw + applied);
+    const yawRate = dt > 1e-9 ? applied / dt : 0;
+    lean = clamp(yawRate * MOTION_TUNING.turnLean, -MOTION_TUNING.turnLeanMax, MOTION_TUNING.turnLeanMax);
+  }
 
   // Gait amplitude follows actual speed — idle beats and the wander toggle
   // fade the stride out instead of stepping in place like a treadmill.
@@ -370,21 +478,43 @@ export function stepMotion(
     missing: sig.missing,
     wounded: sig.wounded,
   };
+  const armStyle = cfg.armStyle ?? GAIT_TUNING.armStyle;
   const gait = stepGait(
     { time: state.gait.time + stagger.phaseKnock, seed: state.gait.seed },
-    skew, dt,
+    skew, dt, armStyle,
   );
 
   // --- assemble the standing rest targets ----------------------------------
+  // The whole authored pose is rotated by bodyYaw about the root's vertical
+  // axis (the pelvis line), THEN translated by the root shift; the body-local
+  // gait/stagger offsets rotate by the same yaw, so every part of the frame
+  // agrees on where "forward" is. Plants need no rotation handling: they are
+  // captured in WORLD space from where the foot actually is, so a planted
+  // foot pivots in place while the body turns around it (no skate).
   const shift: Vec3 = frozen ?? [
     wander.pos[0] - joints.pelvis[0], 0, wander.pos[2] - joints.pelvis[2],
   ];
+  const pivot = joints.pelvis;
+  // Reach-style arms keep a presence floor so a standing zombie's mummy arms
+  // stay up; every other offset fades with locomotion as before.
+  const armPresence = armStyle === 'reach'
+    ? Math.max(blend, MOTION_TUNING.reachMinPresence)
+    : blend;
   const targets: Vec3[] = joints.base.map((base, i) => {
     const name = joints.names[i]!;
     const gaitOff = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
     const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
-    const local = add(scale(gaitOff, blend), stagOff);
-    return add(add(base, shift), rotateYaw(local, wander.heading));
+    const s = ARM_JOINTS.has(name) ? armPresence : blend;
+    const local = add(scale(gaitOff, s), stagOff);
+    const leanShare = LEAN_SHARE[name] ?? 0;
+    const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
+    const spun = rotateYaw([base[0] - pivot[0], base[1], base[2] - pivot[2]], bodyYaw);
+    const off = rotateYaw(leaned, bodyYaw);
+    return [
+      pivot[0] + shift[0] + spun[0] + off[0],
+      spun[1] + off[1],
+      pivot[2] + shift[2] + spun[2] + off[2],
+    ];
   });
 
   // --- IK override 1: foot plants ------------------------------------------
@@ -441,7 +571,10 @@ export function stepMotion(
   // POSED head to the same IK_TUNING cone regardless.
   let aim = state.aim;
   if (!collapsed && sig.headAlive) {
-    const restDir = normalize(sub(joints.base[idx.head!]!, joints.base[idx.neck!]!));
+    // The rest gaze direction turns WITH the body — during a damped turn the
+    // clamp cone must be anchored to the applied yaw, not the authored +z.
+    const restDir = rotateYaw(
+      normalize(sub(joints.base[idx.head!]!, joints.base[idx.neck!]!)), bodyYaw);
     const t = wander.target ?? add(wander.pos, scale(headingDir(wander.heading), 2));
     const look: Vec3 = [t[0], joints.base[idx.head!]![1] + shift[1], t[2]];
     const stepped = stepAim(aim, targets[idx.neck!]!, restDir, look, [joints.neck[1]], {
@@ -493,9 +626,45 @@ export function stepMotion(
     clutch = makeClutch(); // a corpse has no flourishes
   }
 
+  // --- localized hit recoil -------------------------------------------------
+  // The rig point NEAREST the hit takes a world-space shove along the shot
+  // ray, attack-decaying over ~0.45 s; the verlet constraints drag the
+  // connected chain (shoulder/torso) after it. Applied LAST of the target
+  // overrides so the plants/aim/clutch can't stomp it, and composed on top
+  // of the whole-body stagger. A fresh hit re-targets the recoil.
+  let recoil = state.recoil;
+  if (sig.shot && !collapsed) {
+    const at = sig.shot.woundWorld;
+    let best: GaitJointName | null = null;
+    let bestD = Infinity;
+    joints.names.forEach((name, i) => {
+      const p = havePoints ? points[i]!.pos : targets[i]!;
+      const d = len(sub(p, at));
+      if (d < bestD) { bestD = d; best = name; }
+    });
+    recoil = {
+      joint: best,
+      dirWorld: normalize(sig.shot.dirWorld),
+      amp: MOTION_TUNING.recoil[sig.shot.type],
+      age: 0,
+    };
+  }
+  if (recoil.joint !== null) {
+    const R = MOTION_TUNING.recoil;
+    const dur = R.decay * 5;
+    if (collapsed || recoil.age >= dur) {
+      recoil = { joint: null, dirWorld: Z, amp: 0, age: 0 };
+    } else {
+      const env = recoilEnv(recoil.age, R.rise, R.decay);
+      const i = idx[recoil.joint]!;
+      targets[i] = add(targets[i]!, scale(recoil.dirWorld, recoil.amp * env));
+      recoil = { ...recoil, age: recoil.age + dt };
+    }
+  }
+
   const nextState: MotionState = {
     wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
-    plantL, plantR, aim, clutch, blend,
+    plantL, plantR, aim, clutch, recoil, bodyYaw, blend,
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };
@@ -505,6 +674,7 @@ export function stepMotion(
     frame: {
       rootShift: shift,
       heading: wander.heading,
+      bodyYaw,
       restPose: targets,
       restPull: collapse.restPull,
       gravity: collapsed
