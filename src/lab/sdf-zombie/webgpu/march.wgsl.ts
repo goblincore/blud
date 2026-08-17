@@ -35,11 +35,14 @@
 //   row 5  wound        xyz = world position, w = radius
 //   row 6  woundMeta    x = type (0 pellet, 1 blast, 2 burn), y = age
 //   row 7  primQuat     xyzw = per-prim orientation (identity = 0,0,0,1)
+//   row 8  restA        xyz = REST endpoint A, w = radius (0 = unwritten)
+//   row 9  restB        xyz = REST endpoint B, w = blendK
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
 // owner decision and keeps world-axis ellipsoid squash — its lab renders a
 // posed head with the old detached-visor artefact. Do not port this back.
+// Rows 8-9 (task 6, rest-space noise) diverge the same way, same reason.
 //
 // Wounds ride the SAME texture rather than a uniform array, which the GLSL
 // path had to use. MAX_WOUNDS (16) is comfortably under MAX_PRIMS (48), so
@@ -58,7 +61,7 @@
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 8;
+export const DATA_ROWS = 10;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -67,6 +70,8 @@ export const ROW_CLUSTER_RANGE = 4;
 export const ROW_WOUND = 5;
 export const ROW_WOUND_META = 6;
 export const ROW_PRIM_QUAT = 7;
+export const ROW_REST_A = 8;
+export const ROW_REST_B = 9;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -188,6 +193,83 @@ export const NOISE_LOCAL = /* wgsl */ `fn noiseLocal(p: vec3<f32>, ns: vec3<f32>
   return vec3<f32>(dp.x * ch - dp.z * sh, dp.y, dp.x * sh + dp.z * ch);
 }`;
 
+// Quaternion triple for the REST-FRAME noise anchor (motion-polish task 6).
+// qRot mirrors qRotate in vec.ts (v + 2w(u x v) + 2(u x (u x v))); qMulQ is
+// the Hamilton product with vec.qMul's convention — qMulQ(a, b) applies b
+// FIRST. qFromToV is the shortest-arc quat taking unit vector u onto v in the
+// cheap half-angle form (cross, 1+d) — the same ROTATION as vec.qFromTo's
+// acos form, cheaper; the CPU mirror (validate.restSpacePoint) uses this form
+// too so the two stay in step.
+export const Q_ROT = /* wgsl */ `fn qRot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
+  let t = 2.0 * cross(q.xyz, v);
+  return v + t * q.w + cross(q.xyz, t);
+}`;
+
+export const Q_MUL = /* wgsl */ `fn qMulQ(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+}`;
+
+export const Q_FROM_TO = /* wgsl */ `fn qFromToV(u: vec3<f32>, v: vec3<f32>) -> vec4<f32> {
+  let d = clamp(dot(u, v), -1.0, 1.0);
+  if (d >= 0.999999) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
+  if (d <= -0.999999) {
+    // Anti-parallel: any perpendicular axis gives the half turn.
+    var seed = vec3<f32>(1.0, 0.0, 0.0);
+    if (abs(u.x) >= 0.9) { seed = vec3<f32>(0.0, 1.0, 0.0); }
+    return vec4<f32>(normalize(cross(u, seed)), 0.0);
+  }
+  return normalize(vec4<f32>(cross(u, v), 1.0 + d));
+}`;
+
+// REST-SPACE NOISE ANCHOR (motion-polish task 6). Maps a world point into the
+// DOMINANT primitive's rest frame — translation between capsule midpoints,
+// rotation = shortest arc from the posed axis to the rest axis. Where the
+// prim carries an orient quat (rig-posed skull prims, ROW_PRIM_QUAT) its
+// CONJUGATE is composed UNDER the axis swing: the conjugate is the exact
+// local frame (applyRig rotates those prims' endpoints by that same quat, so
+// the residual swing is the identity) and the swing keeps the mapping honest
+// for every other prim.
+//
+// ROLL about the capsule axis is unresolved by design — a shortest-arc swing
+// picks any roll — and that is fine: the fbm is statistical, so a consistent
+// but arbitrary roll reads as the same flesh. Seams where the DOMINANT prim
+// flips between neighbours are the accepted cost (owner sign-off); they were
+// checked in the browser and are not visually loud.
+//
+// Fallbacks: best < 0 (no live prim — gibbed corpse) or restA.w <= 0 (rest
+// rows never written — the FPV hands view packs its own field) return the
+// caller's fallback, which is the old noiseLocal anchor. Degenerate capsules
+// (a == b point prims, e.g. the nose ball) skip the swing and map by
+// translation plus the orient frame alone.
+export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2d<f32>, best: i32, fallback: vec3<f32>) -> vec3<f32> {
+  if (best < 0) { return fallback; }
+  let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A}), 0);
+  if (ra.w <= 0.0) { return fallback; }
+  let rb = textureLoad(data, vec2<i32>(best, ${ROW_REST_B}), 0);
+  let pa = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_A}), 0).xyz;
+  let pb = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_B}), 0).xyz;
+  let midP = (pa + pb) * 0.5;
+  let midR = (ra.xyz + rb.xyz) * 0.5;
+  // The exact local frame first: the conjugate of the packed orient. A zero
+  // or identity quat leaves q identity (qRot by it is the identity anyway).
+  var q = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  let O = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_QUAT}), 0);
+  if (abs(1.0 - O.w) > 1e-6) { q = vec4<f32>(-O.xyz, O.w); }
+  let axisP = pb - pa;
+  let axisR = rb.xyz - ra.xyz;
+  let lenP = length(axisP);
+  let lenR = length(axisR);
+  if (lenP > 1e-6 && lenR > 1e-6) {
+    // Swing AFTER the orient frame: qMulQ(swing, q) applies q first.
+    q = qMulQ(qFromToV(qRot(q, axisP / lenP), axisR / lenR), q);
+  }
+  return midR + qRot(q, p - midP);
+}`;
+
 // Carves every subtractive primitive out of the assembled field, AFTER the
 // complete additive fold and in fixed cluster order — the structure the GLSL
 // version uses for wounds. Carving per-cluster would restructure a
@@ -295,8 +377,19 @@ export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<
 //
 // Carves come first: they are part of the body's own definition. Wounds are
 // damage stamped on top of the finished body.
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> f32 {
+//
+// RETURN PACKING (motion-polish task 6): x is the field value, exactly as
+// before; y is the DOMINANT prim's index as an f32 — the additive prim whose
+// OWN distance was smallest at p (argmin over the fold, tracked with a
+// compare against the sd the fold already computed — no extra sdPrim calls,
+// no extra textureLoads) — or -1 when no live additive prim was evaluated.
+// The march reuses y to anchor the shell displacement and the hit-pixel
+// noise without re-running the fold; the noise term below uses it to sample
+// the fbm in the dominant prim's REST frame so the texture rides every limb.
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec4<f32> {
   var d = 1e9;
+  var best = 1e9;
+  var bestIdx = -1;
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
   for (var c = 0; c < 8; c = c + 1) {
@@ -317,7 +410,12 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
       if (S.w > 0.5) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
-      if (ori) { d = smin(d, sdPrimO(p, idx, data), k); } else { d = smin(d, sdPrim(p, idx, data), k); }
+      // One sd evaluation feeds BOTH the smin fold and the argmin tracker —
+      // a second call would double the texture fetches this loop lives on.
+      var sd = sdPrim(p, idx, data);
+      if (ori) { sd = sdPrimO(p, idx, data); }
+      if (sd < best) { best = sd; bestIdx = idx; }
+      d = smin(d, sd, k);
     }
   }
   let carved = applyCarves(d, p, data, counts);
@@ -336,12 +434,14 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // The guard stays and now matters more than ever, since the march relies on
   // this call costing nothing: fbm is two 3D value-noise lookups, sixteen
   // hash13 calls, and without the branch a zero amplitude still pays in full.
-  if (noiseAmp <= 0.0) { return dmg; }
-  // NOISE ANCHOR (motion-polish): the field is packed in WORLD space but the
-  // noise must ride the FLESH — sampled at p minus the body's root shift
-  // (faceCfg3.zw), so a walking body does not slide through a stationary
-  // noise field. Callers with noiseAmp 0 may pass any shift; the term is dead.
-  return dmg + fbm(noiseLocal(p, noiseShift) * 3.0) * noiseAmp;
+  if (noiseAmp <= 0.0) { return vec4<f32>(dmg, f32(bestIdx), 0.0, 0.0); }
+  // NOISE ANCHOR (motion-polish task 6): the fbm samples the DOMINANT prim's
+  // REST frame — the texture is baked into the model, so gait bob, arm raises
+  // and jiggle carry their skin instead of sliding through the world-frame
+  // field. restPoint falls back to the old root-shift anchor (noiseLocal)
+  // when there is no live prim or the rest rows were never written.
+  let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));
+  return vec4<f32>(dmg + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), 0.0, 0.0);
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
@@ -350,10 +450,10 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift) +
-    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift) +
-    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift) +
-    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift));
+    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x +
+    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x +
+    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x +
+    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -435,7 +535,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // certifies as empty is not a distance the march can trust. The noise
     // shift is irrelevant at amplitude 0 (mapBody short-circuits the fbm), so
     // the zero vector keeps this pass independent of the motion plumbing.
-    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0));
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0)).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -538,11 +638,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // undisplaced bound is bit-identical.
   let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
   let steps = i32(marchCfg.x);
-  // NOISE ANCHOR (motion-polish): every fbm below samples at p - noiseShift
-  // so surface noise, silhouette noise, shell displacement and gore mottle
-  // ride the flesh instead of staying pinned to world space while the body
-  // walks. Packed into faceCfg3.zw — the only spare vec2 in the uniform set
-  // (see zombie-gpu.ts). Zero = the pre-motion behaviour, bit-identical.
+  // NOISE ANCHOR (motion-polish task 6): every fbm below samples the
+  // DOMINANT prim's REST frame via restPoint — the noise is baked into the
+  // model. noiseShift (faceCfg3.zw + lodCfg.z, the task-3 root-shift anchor)
+  // survives ONLY as restPoint's fallback for bodies without rest rows and
+  // for the no-live-prim case. Zero = the pre-motion behaviour there.
   let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).
@@ -583,6 +683,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var prevRadius = 0.0;
   var stepLen = 0.0;
   var clamped = false;
+  // Dominant prim at the last field sample (mapBody.y) — the hit pixel's
+  // noise anchor reuses it instead of re-running the fold (task 6).
+  var hitBest = -1;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     // 0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm
@@ -590,15 +693,19 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    var d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift);
+    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift);
+    var d = dres.x;
+    hitBest = i32(dres.y);
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz
-    // bound. Outside the shell the relaxed march is untouched.
+    // bound. Outside the shell the relaxed march is untouched. The fbm
+    // samples the dominant prim's REST frame (task 6), glued to the flesh;
+    // restPoint's loads are paid only inside the shell band.
     let shellAmp = woundCfg2.z;
     var conservative = false;
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm(noiseLocal(camPos + rd * t, noiseShift) * 3.0) * shellAmp;
+      d = d + fbm(restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift)) * 3.0) * shellAmp;
       conservative = true;
     }
     let radius = abs(d);
@@ -641,12 +748,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   let p = camPos + rd * t;
   var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift);
+  // The hit pixel's REST-space noise anchor (task 6): every fbm below —
+  // micro-detail, gore mottle — samples the dominant prim's rest frame, so
+  // the surface texture rides the limb through gait and jiggle. Computed
+  // once here; the fallback keeps the old root-shift anchor for bodies with
+  // no rest rows (the FPV hands view).
+  let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
   // Micro-detail perturbs the normal only — costs no march safety. Three more
   // fbm calls though, so it is guarded: once per hit pixel rather than per
   // step, but still six noise lookups a body does not always need.
   if (surfCfg2.y > 0.0) {
     n = normalize(n + vec3<f32>(
-      fbm(noiseLocal(p, noiseShift) * 22.0), fbm(noiseLocal(p, noiseShift) * 22.0 + 5.0), fbm(noiseLocal(p, noiseShift) * 22.0 + 11.0)) * surfCfg2.y);
+      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * surfCfg2.y);
   }
 
   let wm = woundMask(p, data, woundCfg);
@@ -663,7 +776,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let goreStrength = lodCfg.w;
   var gore = 0.0;
   if (goreStrength > 0.0) {
-    let mottle = clamp(fbm(noiseLocal(p, noiseShift) * 6.0) * 0.5 + 0.5, 0.0, 1.0);
+    let mottle = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);
     gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
     let clot = deepColor * 0.55;
     albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);
@@ -782,7 +895,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift) * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -793,7 +906,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift) / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift).x / 0.06, 0.35, 1.0);
   }
 
   let fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
@@ -841,6 +954,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
  */
 export const HELPERS = [
   SMIN, SMAX, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
+  Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,
 ];

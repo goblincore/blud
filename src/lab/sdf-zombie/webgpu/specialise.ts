@@ -62,9 +62,17 @@ export function specialiseMapBody(body: BuildResult): string {
   const lines: string[] = [];
   lines.push(
     'fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, ' +
-    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> f32 {',
+    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec4<f32> {',
   );
   lines.push('  var d = 1e9;');
+  // Argmin tracking (motion-polish task 6), same contract as the generic
+  // version: y of the return carries the dominant prim for the rest-space
+  // noise anchor. The REST endpoints are read from the texture at runtime
+  // (rows 8/9), exactly like the posed endpoints — nothing structural is
+  // baked, so no new guard is needed beyond the orient one above.
+  lines.push('  var best = 1e9;');
+  lines.push('  var bestIdx = -1;');
+  lines.push('  var sd = 0.0;');
 
   // --- additive fold, cluster by cluster ------------------------------------
   body.clusters.forEach((c, ci) => {
@@ -88,7 +96,11 @@ export function specialiseMapBody(body: BuildResult): string {
       `    if (range.z >= 0.5 && length(p - bounds.xyz) - bounds.w <= d + ${f(margin)}) {`,
     );
     for (const i of additive) {
-      lines.push(`      d = smin(d, sdPrim(p, ${i}, data), ${f(body.prims[i]!.blendK)});`);
+      // One sd evaluation feeds BOTH the smin fold and the argmin tracker —
+      // the generic version's exact structure, with the index as a literal.
+      lines.push(`      sd = sdPrim(p, ${i}, data);`);
+      lines.push(`      if (sd < best) { best = sd; bestIdx = ${i}; }`);
+      lines.push(`      d = smin(d, sd, ${f(body.prims[i]!.blendK)});`);
     }
     lines.push(`    }`);
     lines.push(`  }`);
@@ -118,9 +130,11 @@ export function specialiseMapBody(body: BuildResult): string {
   lines.push('  d = applyWounds(d, p, data, woundCfg, woundCfg2);');
   // Same guard as the generic version: the silhouette fbm is the single most
   // expensive term in the shader and must stay branched out at zero amplitude.
-  lines.push('  if (noiseAmp <= 0.0) { return d; }');
-  // Same noise anchor as the generic version — the fbm rides the flesh.
-  lines.push('  return d + fbm((p - noiseShift) * 3.0) * noiseAmp;');
+  lines.push('  if (noiseAmp <= 0.0) { return vec4<f32>(d, f32(bestIdx), 0.0, 0.0); }');
+  // Same rest-space noise anchor as the generic version — the fbm samples
+  // the dominant prim's REST frame, with noiseLocal as the fallback.
+  lines.push('  let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
+  lines.push('  return vec4<f32>(d + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), 0.0, 0.0);');
   lines.push('}');
   return lines.join('\n');
 }

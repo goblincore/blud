@@ -26,7 +26,8 @@ import { chunkExtent, tornEndRadius } from '../extent';
 import { specialiseMapBody } from './specialise';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
-  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
+  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
+  ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
   ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
 
@@ -36,8 +37,13 @@ export interface ZombieGpuView {
   coneObject: THREE.Object3D;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
-  /** Re-upload after the body changes (sever, override edit, rig step). */
-  update(body: BuildResult): void;
+  /**
+   * Re-upload after the body changes (sever, override edit, rig step).
+   * `rest` is the same body in its authored rest pose (motion-polish task 6 —
+   * the rest-space noise anchor); omitted, the posed prims double as rest,
+   * which is right for never-rigged bodies.
+   */
+  update(body: BuildResult, rest?: BuildResult): void;
   /** Uploads wounds already transformed to world space by the caller.
    *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES);
    *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s. */
@@ -506,12 +512,14 @@ export function createZombieGpuView(
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(blankFaceTexture());
 
-  function upload(next: BuildResult) {
-    const p = packBody(next);
+  function upload(next: BuildResult, rest?: BuildResult) {
+    const p = packBody(next, rest);
     writeRow(ROW_PRIM_A, p.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, p.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, p.primScale, MAX_PRIMS);
     writeRow(ROW_PRIM_QUAT, p.primQuat, MAX_PRIMS);
+    writeRow(ROW_REST_A, p.restA, MAX_PRIMS);
+    writeRow(ROW_REST_B, p.restB, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
     dataTex.needsUpdate = true;
@@ -598,8 +606,8 @@ export function createZombieGpuView(
     object: mesh,
     coneObject: coneMesh,
     uniforms: u,
-    update(next) {
-      const p = upload(next);
+    update(next, rest) {
+      const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
       mesh.position.copy(f.centre);
       // Per-axis, since the box is an AABB: severing a leg shortens it without
@@ -737,6 +745,12 @@ export function createChunkGpuView(
   writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
   writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
   writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
+  // The rest rows are the chunk-LOCAL prims, written ONCE here: apply()
+  // rewrites only the posed endpoint rows per frame as the chunk tumbles, so
+  // the noise anchor maps every frame back into the chunk's own rest space —
+  // the torn flesh keeps its texture through the tumble (task 6).
+  writeRow(ROW_REST_A, packed.restA, MAX_PRIMS);
+  writeRow(ROW_REST_B, packed.restB, MAX_PRIMS);
   writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
   // The quat row is written ONCE, here: a chunk's tumble rotates its packed
   // ENDPOINTS (apply() below) but leaves each prim's orient frozen at its
