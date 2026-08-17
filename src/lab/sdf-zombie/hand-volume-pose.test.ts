@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
-import { bakedHandPose, bakedDynamitePose, HAND_WARP_CLAMP_M, type BakedHandPose } from './hand-volume-pose';
+import { bakedHandPose, bakedDynamitePose, applyGripMotion, HAND_WARP_CLAMP_M, type BakedHandPose } from './hand-volume-pose';
+import { gripCameraQuaternion, type GripMotionFrame } from './hand-grip-clip';
 import { validateHandClipManifest, type DynamitePropContract } from './webgpu/hand-volume-clip';
 import { HAND_PRIM_GROUPS } from './hands';
 import type { HandSheetProjection } from './fpv-mode';
@@ -170,6 +171,98 @@ describe('bakedHandPose', () => {
     expect(JSON.parse(JSON.stringify(unjiggled))).toEqual(snap.unjiggled);
     expect(JSON.parse(JSON.stringify(jiggled))).toEqual(snap.jiggled);
     expect(JSON.parse(JSON.stringify(projection))).toEqual(snap.projection);
+  });
+});
+
+// ——— X1.27 task E2: applyGripMotion ————————————————————————————————————
+
+describe('applyGripMotion', () => {
+  /** A posed baked hand in the world with a nonzero warp residue. */
+  const BASE: BakedHandPose = {
+    centre: [0.31, 1.18, -0.47],
+    // 90° about world +X, xyzw
+    quaternion: [Math.SQRT1_2, 0, 0, Math.SQRT1_2],
+    warpLocal: [0.004, -0.002, 0.001],
+  };
+  /** The release-marker wrist frame (camera-local offset + euler key). */
+  const FRAME: GripMotionFrame = {
+    grip01: 0.62,
+    wristOffsetCamera: [0.020, 0.085, 0.095],
+    wristQuaternionCamera: (() => {
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.25, 0.05, 0.16, 'XYZ'));
+      return [q.x, q.y, q.z, q.w] as [number, number, number, number];
+    })(),
+    releaseNow: false,
+    propHeld: true,
+  };
+  const IDENT: [number, number, number, number] = [0, 0, 0, 1];
+
+  /** THREE chain of the composition contract, from xyzw tuples. */
+  function composed(
+    camera: readonly [number, number, number, number],
+    wrist: readonly [number, number, number, number],
+    base: readonly [number, number, number, number],
+  ): THREE.Quaternion {
+    const qc = new THREE.Quaternion(camera[0], camera[1], camera[2], camera[3]);
+    const qw = new THREE.Quaternion(wrist[0], wrist[1], wrist[2], wrist[3]);
+    const qb = new THREE.Quaternion(base[0], base[1], base[2], base[3]);
+    return qc.clone().multiply(qw).multiply(qc.clone().invert()).multiply(qb).normalize();
+  }
+
+  it('an identity camera copies the frame offset verbatim and applies the wrist rotation directly', () => {
+    const out = applyGripMotion(BASE, FRAME, IDENT);
+    for (let i = 0; i < 3; i++) {
+      expect(out.centre[i]).toBeCloseTo(BASE.centre[i]! + FRAME.wristOffsetCamera[i]!, 12);
+    }
+    const want = composed(IDENT, FRAME.wristQuaternionCamera, BASE.quaternion);
+    expect(out.quaternion[0]).toBeCloseTo(want.x, 9);
+    expect(out.quaternion[1]).toBeCloseTo(want.y, 9);
+    expect(out.quaternion[2]).toBeCloseTo(want.z, 9);
+    expect(out.quaternion[3]).toBeCloseTo(want.w, 9);
+  });
+
+  it('a 90° camera yaw rotates the offset (and the lab’s gripCameraQuaternion(90°,0) agrees)', () => {
+    const cam = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+    const CAMERA: [number, number, number, number] = [cam.x, cam.y, cam.z, cam.w];
+    const out = applyGripMotion(BASE, FRAME, CAMERA);
+    // R_y(90°): (x, y, z) → (z, y, −x)
+    expect(out.centre[0]).toBeCloseTo(BASE.centre[0] + 0.095, 9);
+    expect(out.centre[1]).toBeCloseTo(BASE.centre[1] + 0.085, 9);
+    expect(out.centre[2]).toBeCloseTo(BASE.centre[2] - 0.020, 9);
+    const want = composed(CAMERA, FRAME.wristQuaternionCamera, BASE.quaternion);
+    expect(out.quaternion[0]).toBeCloseTo(want.x, 9);
+    expect(out.quaternion[1]).toBeCloseTo(want.y, 9);
+    expect(out.quaternion[2]).toBeCloseTo(want.z, 9);
+    expect(out.quaternion[3]).toBeCloseTo(want.w, 9);
+    // the same numbers through the real lab path
+    const viaLab = applyGripMotion(BASE, FRAME, gripCameraQuaternion(Math.PI / 2, 0));
+    expect(viaLab.centre[0]).toBeCloseTo(out.centre[0], 9);
+    expect(viaLab.centre[1]).toBeCloseTo(out.centre[1], 9);
+    expect(viaLab.centre[2]).toBeCloseTo(out.centre[2], 9);
+  });
+
+  it('the warp stays in anatomical local coordinates, unchanged by the camera-space motion', () => {
+    const out = applyGripMotion(BASE, FRAME, IDENT);
+    expect(out.warpLocal).toEqual(BASE.warpLocal);
+    const rotated = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 2.1);
+    const out2 = applyGripMotion(BASE, FRAME, [rotated.x, rotated.y, rotated.z, rotated.w]);
+    expect(out2.warpLocal).toEqual(BASE.warpLocal); // NOT rotated into camera space
+  });
+
+  it('normalizes the output quaternion', () => {
+    const q = new THREE.Quaternion(...applyGripMotion(BASE, FRAME, IDENT).quaternion);
+    expect(q.length()).toBeCloseTo(1, 12);
+  });
+
+  it('does not mutate its inputs', () => {
+    const base = { ...BASE, centre: [...BASE.centre] as Vec3, quaternion: [...BASE.quaternion] as [number, number, number, number], warpLocal: [...BASE.warpLocal] as Vec3 };
+    const frame: GripMotionFrame = { ...FRAME, wristOffsetCamera: [...FRAME.wristOffsetCamera] as Vec3, wristQuaternionCamera: [...FRAME.wristQuaternionCamera] as [number, number, number, number] };
+    const camera = [...IDENT] as [number, number, number, number];
+    const snap = { base: JSON.parse(JSON.stringify(base)), frame: JSON.parse(JSON.stringify(frame)), camera: [...camera] };
+    applyGripMotion(base, frame, camera);
+    expect(JSON.parse(JSON.stringify(base))).toEqual(snap.base);
+    expect(JSON.parse(JSON.stringify(frame))).toEqual(snap.frame);
+    expect([...camera]).toEqual(snap.camera);
   });
 });
 

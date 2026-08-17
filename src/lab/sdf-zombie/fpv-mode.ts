@@ -288,7 +288,7 @@ export function handPoseTargets(
 // mouse right increases yaw; camera-local (x,y,z) → world is
 // right·x + up·y + forward·z around the eye.
 
-function camBasis(yaw: number, pitch: number): { f: Vec3; r: Vec3; u: Vec3 } {
+export function camBasis(yaw: number, pitch: number): { f: Vec3; r: Vec3; u: Vec3 } {
   const cp = Math.cos(pitch);
   const f: Vec3 = [Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp];
   const r: Vec3 = [Math.cos(yaw), 0, Math.sin(yaw)];
@@ -535,6 +535,17 @@ export function kickAngles(kick: FpvKick | null, now: number): { pitch: number; 
 
 export type FpvModeName = 'god' | 'fpv';
 
+/** When a release signal spawns the flight: 'immediate' (default — the
+ *  existing primitive/baked paths, spawn on the input frame at throwOrigin)
+ *  or 'deferred' (clip mode — the signal parks a PendingThrow and the lab
+ *  releases it at the grip clip's authored marker via releasePendingThrow). */
+export type ThrowReleaseMode = 'immediate' | 'deferred';
+
+/** A throw parked by a deferred-mode release signal: the aim direction and
+ *  speed captured at the input frame, owned by the lab until the clip's
+ *  release marker consumes it. */
+export interface PendingThrow { direction: Vec3; speedMps: number }
+
 export interface FpvModeState {
   mode: FpvModeName;
   /** The controller state persists across exits, so re-entering FPV resumes
@@ -557,6 +568,9 @@ export interface FpvModeState {
   lastHandPhase: HandPhase;
   /** Active camera kick, if any. */
   kick: FpvKick | null;
+  /** A deferred throw waiting for the grip clip's release marker. Null in
+   *  immediate mode and after releasePendingThrow consumes it. */
+  pendingThrow: PendingThrow | null;
 }
 
 /** Fresh state in god mode at the authored spawn ([0,0,4] facing -Z, so the
@@ -572,6 +586,7 @@ export function makeFpvMode(start: FpvModeName = 'god'): FpvModeState {
     handEntryFrom: null,
     lastHandPhase: 'idle',
     kick: null,
+    pendingThrow: null,
   };
 }
 
@@ -635,6 +650,7 @@ export function stepFpvMode(
   world: FpvWorld,
   port: FpvGorePort,
   bounds?: FpvBounds,
+  releaseMode: ThrowReleaseMode = 'immediate',
 ): { state: FpvModeState; frame: FpvModeFrame } {
   const dtc = Math.max(0, Math.min(dt, 0.25));
   let mode = state.mode;
@@ -645,6 +661,7 @@ export function stepFpvMode(
   let handEntry = state.handEntry;
   let handEntryFrom = state.handEntryFrom;
   let kick = state.kick;
+  let pendingThrow = state.pendingThrow;
 
   /** Resolve one detonation end-to-end: bundle → port calls → camera kick. */
   const detonate = (at: Vec3): void => {
@@ -676,14 +693,27 @@ export function stepFpvMode(
   }
 
   // A bundle spawned this frame integrates from the NEXT frame — the spawn
-  // velocity is the exact release velocity, not one drag-step decayed.
+  // velocity is the exact release velocity, not one drag-step decayed. In
+  // DEFERRED mode the signal instead parks a pending throw (idempotently —
+  // an un-consumed pending is never replaced or duplicated) and the lab's
+  // releasePendingThrow performs the spawn at the grip marker. Overcook is
+  // NEVER deferred: it detonates in hand on its own frame.
   let spawnedThisFrame = false;
   if (signal?.kind === 'throw') {
     // The signal carries the release speed (mapped through the game's band);
     // the direction is the CURRENT aim + the game's lob.
     const d = throwDirection(fpv.yaw, fpv.pitch);
-    flight = makeFlight(throwOrigin(fpv), [d[0] * signal.speedMps, d[1] * signal.speedMps, d[2] * signal.speedMps]);
-    spawnedThisFrame = true;
+    if (releaseMode === 'deferred') {
+      if (pendingThrow === null) {
+        pendingThrow = {
+          direction: [d[0], d[1], d[2]],
+          speedMps: signal.speedMps,
+        };
+      }
+    } else {
+      flight = makeFlight(throwOrigin(fpv), [d[0] * signal.speedMps, d[1] * signal.speedMps, d[2] * signal.speedMps]);
+      spawnedThisFrame = true;
+    }
   } else if (signal?.kind === 'overcook') {
     // Detonates in hand — the explosion sits at the bundle's held position.
     detonate(throwOrigin(fpv));
@@ -716,7 +746,7 @@ export function stepFpvMode(
   return {
     state: {
       mode, fpv, flight, jiggle, bobClock,
-      handEntry, handEntryFrom, lastHandPhase: ref.phase, kick,
+      handEntry, handEntryFrom, lastHandPhase: ref.phase, kick, pendingThrow,
     },
     frame: {
       mode,
@@ -732,6 +762,45 @@ export function stepFpvMode(
   };
 }
 
+/** The hand-velocity contribution ceiling for a deferred release — the
+ *  spec's inherited-motion budget on top of the stored aim impulse. */
+export const PENDING_THROW_HAND_VEL_CAP_MPS = 2.5;
+
+/**
+ * Performs a parked deferred throw at the grip clip's release marker.
+ * `position` is the CURRENT rendered held-prop root (the ownership handoff
+ * must not move it); `handVelocity` is the marker-frame hand-anchor
+ * velocity, whose MAGNITUDE is capped at PENDING_THROW_HAND_VEL_CAP_MPS
+ * and added vectorially to the stored aim-direction impulse. Spawns the
+ * existing makeFlight once (no second integrator; fuse/impact/detonation
+ * untouched — the new flight integrates on the next stepFpvMode) and clears
+ * the pending. With no pending throw this is the identity. Pure — no input
+ * is mutated.
+ */
+export function releasePendingThrow(
+  state: FpvModeState,
+  position: Vec3,
+  handVelocity: Vec3,
+): FpvModeState {
+  const p = state.pendingThrow;
+  if (!p) return state;
+  let vx = p.direction[0] * p.speedMps;
+  let vy = p.direction[1] * p.speedMps;
+  let vz = p.direction[2] * p.speedMps;
+  const hv = Math.hypot(handVelocity[0], handVelocity[1], handVelocity[2]);
+  if (hv > 1e-9) {
+    const s = Math.min(hv, PENDING_THROW_HAND_VEL_CAP_MPS) / hv;
+    vx += handVelocity[0] * s;
+    vy += handVelocity[1] * s;
+    vz += handVelocity[2] * s;
+  }
+  return {
+    ...state,
+    flight: makeFlight(position, [vx, vy, vz]),
+    pendingThrow: null,
+  };
+}
+
 /**
  * Automation throw (`__sdfLab.throwDynamite(charge)`): releases a bundle at
  * `chargeFrac` from the persistent FPV aim WITHOUT the pointer/hold loop —
@@ -744,18 +813,24 @@ export function forceThrow(
   state: FpvModeState,
   chargeFrac: number,
   now: number,
+  releaseMode: ThrowReleaseMode = 'immediate',
 ): FpvModeState {
   const c = Math.max(0, Math.min(1, chargeFrac));
   const speed = throwSpeedMps(c);
   const d = throwDirection(state.fpv.yaw, state.fpv.pitch);
-  const flight = makeFlight(
+  // Same split as a release signal: immediate spawns now, deferred parks.
+  const flight = releaseMode === 'deferred' ? state.flight : makeFlight(
     throwOrigin(state.fpv),
     [d[0] * speed, d[1] * speed, d[2] * speed],
   );
+  const pendingThrow = releaseMode === 'deferred' && state.pendingThrow === null
+    ? { direction: [d[0], d[1], d[2]] as Vec3, speedMps: speed }
+    : state.pendingThrow;
   const prev = handPhaseFromCook(state.fpv.cook, now);
   return {
     ...state,
     flight,
+    pendingThrow,
     fpv: { ...state.fpv, cook: { phase: 'cooldown', phaseAt: now, cookStart: now } },
     handEntry: poseAt(prev.phase, prev.phaseT, state.bobClock),
     handEntryFrom: prev.phase,

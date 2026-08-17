@@ -11,11 +11,11 @@ import {
   handFieldFrame, handPoseTargets, handPrimsToWorld, handPropPoses,
   handSheetProjections, kickAngles, makeFpvMode, makeHandFieldUi,
   requestHandField, settleHandVolume, splitHandWounds,
-  makeHandJiggle, posedHandPrims, stepFpvMode, stepHandJiggle,
+  makeHandJiggle, posedHandPrims, releasePendingThrow, stepFpvMode, stepHandJiggle,
   type FpvGorePort, type FpvKick, type FpvModeState, type FpvWorld,
   type HandFieldUi,
 } from './fpv-mode';
-import { EMPTY_FPV_INPUT, throwOrigin, throwSpeedMps, type FpvInput } from './fpv';
+import { EMPTY_FPV_INPUT, chargeFraction, throwDirection, throwOrigin, throwSpeedMps, type FpvInput } from './fpv';
 import { makeFlight } from './dynamite-flight';
 import {
   HAND_PRIMS, HAND_PRIM_COUNTS, HAND_PRIM_GROUPS, HAND_PROPS, buildHandPrims,
@@ -277,6 +277,150 @@ describe('overcook (in-hand detonation)', () => {
     expect(s.kick!.mag).toBeGreaterThan(2);
     // No flight was ever spawned.
     expect(s.flight).toBeNull();
+  });
+});
+
+// ——— X1.27 task E3: deferred throw release (clip mode) ——————————————————
+
+/** Reads `pendingThrow` off a state that may predate the field (the
+ *  pre-refactor pin test). */
+function pendingOf(s: FpvModeState): unknown {
+  return (s as { pendingThrow?: unknown }).pendingThrow ?? null;
+}
+
+describe('immediate release mode (default, pinned pre-refactor)', () => {
+  it('the release frame spawns the flight at the current throwOrigin, with no pending', () => {
+    const { port } = recordingPort();
+    const world = stubWorld(zombie);
+    let s = enterFpvMode(makeFpvMode(), { pos: [0, 0, 0], yaw: 0, pitch: 0 });
+    let t = 0;
+    s = stepFpvMode(s, PRESS, DT, t, world, port).state; t += DT;
+    for (let i = 0; i < 6; i++) { s = stepFpvMode(s, EMPTY_FPV_INPUT, DT, t, world, port).state; t += DT; }
+    s = stepFpvMode(s, RELEASE, DT, t, world, port).state;
+    expect(s.flight).not.toBeNull();
+    // spawned EXACTLY at the aim's throw origin (same-frame spawns do not integrate)
+    expect(s.flight!.pos).toEqual(throwOrigin(s.fpv));
+    expect(pendingOf(s)).toBeNull();
+    // the impulse is the aim direction × the mapped charge speed
+    const held = 7 * DT;
+    const speed = throwSpeedMps(chargeFraction(held));
+    const d = throwDirection(s.fpv.yaw, s.fpv.pitch);
+    expect(s.flight!.vel[0]).toBeCloseTo(d[0] * speed, 6);
+    expect(s.flight!.vel[1]).toBeCloseTo(d[1] * speed, 6);
+    expect(s.flight!.vel[2]).toBeCloseTo(d[2] * speed, 6);
+  });
+});
+
+describe('deferred release mode (clip)', () => {
+  /** Cooks briefly and releases in DEFERRED mode: pending set, no flight. */
+  function deferredPending() {
+    const { port } = recordingPort();
+    const world = stubWorld(ballBody([0, 1, -30]));
+    let s = enterFpvMode(makeFpvMode(), { pos: [0, 0, 0], yaw: 0, pitch: 0 });
+    let t = 0;
+    s = stepFpvMode(s, PRESS, DT, t, world, port).state; t += DT;
+    for (let i = 0; i < 6; i++) { s = stepFpvMode(s, EMPTY_FPV_INPUT, DT, t, world, port).state; t += DT; }
+    s = stepFpvMode(s, RELEASE, DT, t, world, port, undefined, 'deferred').state;
+    return { s, t: t + DT, world, port, held: 7 * DT };
+  }
+
+  it('the throw signal sets pendingThrow and spawns no flight', () => {
+    const { s, held } = deferredPending();
+    expect(s.flight).toBeNull();
+    expect(s.pendingThrow).not.toBeNull();
+    const d = throwDirection(s.fpv.yaw, s.fpv.pitch);
+    expect(s.pendingThrow!.direction[0]).toBeCloseTo(d[0], 12);
+    expect(s.pendingThrow!.direction[1]).toBeCloseTo(d[1], 12);
+    expect(s.pendingThrow!.direction[2]).toBeCloseTo(d[2], 12);
+    expect(s.pendingThrow!.speedMps).toBeCloseTo(throwSpeedMps(chargeFraction(held)), 9);
+  });
+
+  it('subsequent frames do not duplicate the pending throw', () => {
+    const { s, world, port, t } = deferredPending();
+    const first = s.pendingThrow;
+    expect(first).not.toBeNull();
+    let cur = s;
+    let tt = t;
+    for (let i = 0; i < 10; i++) {
+      cur = stepFpvMode(cur, EMPTY_FPV_INPUT, DT, tt, world, port).state;
+      tt += DT;
+      expect(cur.flight).toBeNull();
+      expect(cur.pendingThrow).toEqual(first);
+    }
+  });
+
+  it('releasePendingThrow spawns at the exact position, clears pending, and caps the hand velocity at 2.5 m/s', () => {
+    const { s } = deferredPending();
+    const d = throwDirection(s.fpv.yaw, s.fpv.pitch);
+    const speed = s.pendingThrow!.speedMps;
+    const pos: Vec3 = [1.25, 1.5, -0.75];
+
+    // zero hand velocity: exactly the stored aim impulse
+    const r0 = releasePendingThrow(s, pos, [0, 0, 0]);
+    expect(r0.flight!.pos).toEqual(pos); // EXACT — the handoff position
+    expect(r0.pendingThrow).toBeNull();
+    expect(r0.flight!.vel[0]).toBeCloseTo(d[0] * speed, 9);
+    expect(r0.flight!.vel[1]).toBeCloseTo(d[1] * speed, 9);
+    expect(r0.flight!.vel[2]).toBeCloseTo(d[2] * speed, 9);
+    expect(r0.flight!.spawn).toEqual(pos);
+    expect(r0.flight!.age).toBe(0);
+
+    // a fast hand contributes at most 2.5 m/s along its own direction
+    const big = releasePendingThrow(s, pos, [0, 10, 0]);
+    expect(big.flight!.vel[1]).toBeCloseTo(d[1] * speed + 2.5, 9);
+    expect(big.flight!.vel[0]).toBeCloseTo(d[0] * speed, 9);
+    expect(big.flight!.vel[2]).toBeCloseTo(d[2] * speed, 9);
+
+    // a slow hand contributes its full velocity
+    const small = releasePendingThrow(s, pos, [0, 1, 0]);
+    expect(small.flight!.vel[1]).toBeCloseTo(d[1] * speed + 1, 9);
+  });
+
+  it('a second release call is identity', () => {
+    const { s } = deferredPending();
+    const r1 = releasePendingThrow(s, [0.2, 1.0, -0.3], [0.5, 0, 0]);
+    const r2 = releasePendingThrow(r1, [9, 9, 9], [8, 0, 0]);
+    expect(r2).toEqual(r1);
+  });
+
+  it('the new flight does not integrate until the next stepFpvMode', () => {
+    const { s, world, port, t } = deferredPending();
+    const released = releasePendingThrow(s, [0.2, 1.0, -0.3], [0, 0, 0]);
+    expect(released.flight!.pos).toEqual([0.2, 1.0, -0.3]);
+    const stepped = stepFpvMode(released, EMPTY_FPV_INPUT, DT, t, world, port).state;
+    expect(stepped.flight).not.toBeNull();
+    const moved = stepped.flight!.pos[0] !== 0.2 || stepped.flight!.pos[1] !== 1.0 || stepped.flight!.pos[2] !== -0.3;
+    expect(moved).toBe(true);
+  });
+
+  it('overcook still detonates immediately in deferred mode', () => {
+    const { port, calls } = recordingPort();
+    const world = stubWorld(ballBody([0, 1, -30]));
+    let s = enterFpvMode(makeFpvMode(), { pos: [0, 0, 0], yaw: 0, pitch: 0 });
+    let t = 0;
+    s = stepFpvMode(s, PRESS, DT, t, world, port).state; t += DT;
+    let frames = 0;
+    while (calls.spawnBurst.length === 0 && frames < 200) {
+      s = stepFpvMode(s, EMPTY_FPV_INPUT, DT, t, world, port, undefined, 'deferred').state;
+      t += DT;
+      frames++;
+    }
+    expect(calls.spawnBurst.length).toBeGreaterThan(0); // the overcook frame
+    expect(s.flight).toBeNull();
+    expect(s.pendingThrow).toBeNull();
+  });
+
+  it('forceThrow deferred parks a pending throw; default stays immediate', () => {
+    const base = enterFpvMode(makeFpvMode(), { pos: [0, 0, 0], yaw: 0, pitch: 0 });
+    const deferred = forceThrow(base, 1, 5, 'deferred');
+    expect(deferred.flight).toBeNull();
+    expect(deferred.pendingThrow).not.toBeNull();
+    const d = throwDirection(base.fpv.yaw, base.fpv.pitch);
+    expect(deferred.pendingThrow!.direction[1]).toBeCloseTo(d[1], 12);
+    expect(deferred.pendingThrow!.speedMps).toBeCloseTo(throwSpeedMps(1), 9);
+    const immediate = forceThrow(base, 1, 5);
+    expect(immediate.flight).not.toBeNull();
+    expect(immediate.pendingThrow).toBeNull();
   });
 });
 

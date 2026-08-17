@@ -37,6 +37,7 @@ import * as THREE from 'three/webgpu';
 import { HAND_PRIM_GROUPS } from './hands';
 import type { Primitive, Vec3 } from './types';
 import type { HandSheetProjection } from './fpv-mode';
+import type { GripMotionFrame } from './hand-grip-clip';
 import type { DynamitePropContract } from './webgpu/hand-volume-clip';
 
 /** The spec's warp ceiling. fpv-view re-clamps defensively; this is the
@@ -156,6 +157,63 @@ export function bakedHandPose(
     centre,
     quaternion: [q.x, q.y, q.z, q.w],
     warpLocal: [wx, wy, wz],
+  };
+}
+
+// ——— X1.27 task E2: composing the grip wrist motion onto the volume ————
+//
+// The grip controller's wrist channel is authored CAMERA-LOCAL (the
+// underhand arc reads the same from any aim). This helper rotates it into
+// world through the CURRENT frame's hand-placement camera quaternion
+// (gripCameraQuaternion — see its header for the x-column mirror repair)
+// and composes it onto the baked pose:
+//
+//   centre'    = centre + R(camera) · wristOffsetCamera
+//   quaternion' = normalize(camera · wristCamera · camera⁻¹ · base)
+//
+// The conjugation (not a plain multiply) is what makes the wrist rotation
+// camera-RELATIVE: the same wristQuaternionCamera tips the hand "up and
+// forward" wherever the player aims. This moves the ENTIRE volume and
+// therefore the prop derived from it (bakedDynamitePose reads centre +
+// quaternion); the underhand arc must NEVER go into warpLocal — that is
+// march.wgsl's domain warp, reserved for the secondary distal lag, and it
+// stays in ANATOMICAL local coordinates untouched by the camera here.
+// All quaternions are xyzw (BakedHandPose's convention). Pure — no input
+// is mutated.
+
+// Dedicated scratch (bakedHandPose's are owned by its basis repair).
+const agCam = new THREE.Quaternion();
+const agCamInv = new THREE.Quaternion();
+const agWrist = new THREE.Quaternion();
+const agBase = new THREE.Quaternion();
+const agOut = new THREE.Quaternion();
+const agOff = new THREE.Vector3();
+
+/** Composes one grip-motion frame (camera-local wrist placement) onto a
+ *  baked hand pose through `cameraQuaternion` (xyzw). The warp is copied
+ *  unchanged. Pure — no input is mutated. */
+export function applyGripMotion(
+  base: BakedHandPose,
+  frame: GripMotionFrame,
+  cameraQuaternion: [number, number, number, number],
+): BakedHandPose {
+  // Defensive normalization so a drifted caller cannot scale the volume.
+  agCam.set(cameraQuaternion[0], cameraQuaternion[1], cameraQuaternion[2], cameraQuaternion[3]).normalize();
+  agWrist.set(
+    frame.wristQuaternionCamera[0], frame.wristQuaternionCamera[1],
+    frame.wristQuaternionCamera[2], frame.wristQuaternionCamera[3],
+  ).normalize();
+  agBase.set(base.quaternion[0], base.quaternion[1], base.quaternion[2], base.quaternion[3]);
+
+  agOff.set(frame.wristOffsetCamera[0], frame.wristOffsetCamera[1], frame.wristOffsetCamera[2])
+    .applyQuaternion(agCam);
+  agCamInv.copy(agCam).invert();
+  agOut.copy(agCam).multiply(agWrist).multiply(agCamInv).multiply(agBase).normalize();
+
+  return {
+    centre: [base.centre[0] + agOff.x, base.centre[1] + agOff.y, base.centre[2] + agOff.z],
+    quaternion: [agOut.x, agOut.y, agOut.z, agOut.w],
+    warpLocal: [base.warpLocal[0], base.warpLocal[1], base.warpLocal[2]],
   };
 }
 
