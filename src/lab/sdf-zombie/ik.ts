@@ -44,6 +44,13 @@ export const IK_TUNING = {
   headTurnRate: 2.4,
   /** Wound clutch: how long an arm presses a fresh wound (s). */
   clutchBeat: 0.9,
+  /** Pole bias deadband (m): a mid joint this close to the root→end axis on
+   *  the WRONG side is left alone — a near-straight chain reads neutral, not
+   *  "bent", and the AUTHORED rest knee sits ~1 cm behind the hip→ankle
+   *  line (the feet drift +z), so without the deadband the bias would
+   *  fight the authored pose and break bit-exact idle frames. The cow-knee
+   *  the bias exists to kill was 0.21 m — an order of magnitude out. */
+  poleDeadband: 0.02,
 } as const;
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -118,6 +125,41 @@ export function solveChain(points: Vec3[], lengths: readonly number[], target: V
 }
 
 // ---------------------------------------------------------------------------
+// Pole bias — which SIDE of a chain's root→end axis the middle joint bows to.
+// ---------------------------------------------------------------------------
+
+/**
+ * Pole bias for a 2-bone chain: FABRIK preserves the fold side of its start
+ * guess, so from a near-straight start the knee/elbow folds to whichever side
+ * numerical drift picks — and stays there (owner playtest: a knee solved
+ * 0.21 m BEHIND the hip→ankle axis, the "cow standing up" walk).
+ *
+ * If `mid` lies MATERIALLY on the wrong side of the root→end axis —
+ * dot(mid − axis, pole) < −IK_TUNING.poleDeadband — it is REFLECTED across
+ * the axis to the pole side. Reflection across the line preserves mid's
+ * distance to both root and end exactly (both sit on the axis), so the
+ * solved segment lengths and the end effector are untouched; only the fold
+ * side flips. A mid already on the pole side, exactly on the axis, or
+ * within the deadband of it (a near-straight chain reads neutral — and the
+ * authored rest pose stays bit-identical) is returned untouched. Pure and
+ * deterministic.
+ *
+ * Conventions (body-local, matching gait.ts's axes): knees bow FORWARD — the
+ * wiring passes the body's world forward (headingDir(bodyYaw)); elbows bow
+ * DOWN — the wiring passes world down ([0,-1,0], yaw-invariant).
+ */
+export function poleReflect(root: Vec3, mid: Vec3, end: Vec3, pole: Vec3): Vec3 {
+  const axis = sub(end, root);
+  const aa = dot(axis, axis);
+  if (aa < 1e-12) return mid; // degenerate axis — nothing to reflect across
+  const t = dot(sub(mid, root), axis) / aa;
+  const onAxis = add(root, scale(axis, t));
+  const off = sub(mid, onAxis);
+  if (dot(off, pole) >= -IK_TUNING.poleDeadband) return mid;
+  return sub(onAxis, off); // 2*onAxis - mid: the mirror image across the line
+}
+
+// ---------------------------------------------------------------------------
 // Foot plant.
 // ---------------------------------------------------------------------------
 
@@ -176,10 +218,14 @@ export function solvePlantedLeg(
   plant: PlantState,
   lengths: readonly [number, number],
   opts: SolveOpts,
+  pole?: Vec3,
 ): { knee: Vec3; foot: Vec3 } {
   if (plant.phase !== 'stance') return { knee, foot };
   const chain = solveChain([hip, knee, plant.plantPoint], lengths, plant.plantPoint, opts);
-  return { knee: chain[1]!, foot: plant.plantPoint };
+  // Pole bias: the solved knee must bow FORWARD (pole = the body's world
+  // forward), never backward — reflection preserves both segment lengths.
+  const solvedKnee = pole ? poleReflect(hip, chain[1]!, plant.plantPoint, pole) : chain[1]!;
+  return { knee: solvedKnee, foot: plant.plantPoint };
 }
 
 // ---------------------------------------------------------------------------

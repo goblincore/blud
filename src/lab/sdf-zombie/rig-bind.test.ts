@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/rig-bind.test.ts
 import { describe, it, expect } from 'vitest';
-import { bindRig, applyRig, HEAD_RIGID_TUNING } from './rig-bind';
+import { bindRig, applyRig, headQuatOf, HEAD_RIGID_TUNING } from './rig-bind';
 import { IK_TUNING } from './ik';
+import { headingDir } from './wander';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
@@ -136,6 +137,33 @@ describe('applyRig — rigid head cluster (motion-polish)', () => {
       const rest = len(sub(centre(body.prims, i), centre(body.prims, j)));
       const posed = len(sub(centre(out.prims, i), centre(out.prims, j)));
       expect(Math.abs(posed - rest)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('BODY YAW: the face turns WITH the body — the nose leads along the applied yaw in every quadrant (motion-polish task 5)', () => {
+    // Regression: a bare qFromTo(restDir, clamped) shortest-arc carries the
+    // head's pitch but ZERO azimuth — the pivot→tip axis is near-vertical in
+    // every walking direction, so a 180° body turn was invisible to the
+    // rigid pass and the face kept pointing the authored way (the owner's
+    // "head turned around" screenshot). The yaw must be composed explicitly.
+    let noseIdx = -1;
+    let noseZ = -Infinity;
+    body.prims.forEach((p, i) => {
+      if (p.limb !== 'head' || len(sub(p.a, p.b)) > 1e-9) return;
+      const z = (p.a[2] + p.b[2]) / 2;
+      if (z > noseZ) { noseZ = z; noseIdx = i; }
+    });
+    const pivot = bound.rig.points[bound.head!.pivot]!.pos;
+    const restLead = dot(sub(body.prims[noseIdx]!.a, pivot), [0, 0, 1]);
+    expect(restLead).toBeGreaterThan(0.05); // the nose really does lead at rest
+    for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 2.4]) {
+      const posed = applyRig(body, bound, yaw); // rig at REST, only the yaw changes
+      const fwd = headingDir(yaw);
+      const lead = dot(sub(posed.prims[noseIdx]!.a, pivot), fwd);
+      expect(lead).toBeGreaterThan(0.6 * restLead);
+      // The painted-face rotation (headQuatOf) rides the SAME turn.
+      const q = headQuatOf(bound, yaw)!;
+      expect(dot(qRotate(q, [0, 0, 1]), fwd)).toBeGreaterThan(0.9);
     }
   });
 

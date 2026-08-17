@@ -66,8 +66,16 @@ export const GAIT_TUNING = {
   footLift: 0.16,
   /** Foot push-back while planted (m) — the shamble drag. */
   footPush: 0.10,
-  /** Knee bend during swing (m) — the foot has to clear. */
+  /** Knee forward bow during swing (m) — the knee's offset OFF the
+   *  hip→ankle line, always toward +z (forward): knees never bend backward
+   *  (the "cow standing up" look, owner playtest). */
   kneeBend: 0.09,
+  /** Fraction of the foot's forward swing the knee tracks. At full reach
+   *  the leg is near-straight, so the knee must ride most of the way to the
+   *  foot for the bow (kneeBend) to land on the FORWARD side of the
+   *  hip→ankle line — a fixed offset sits BEHIND the line once the foot is
+   *  out front (motion-polish task 5). */
+  kneeTrack: 0.5,
   /** Knee lift during swing (m). */
   kneeLift: 0.02,
   /** Lateral hip sway amplitude (m). */
@@ -354,9 +362,13 @@ export function stepGait(
     const swing = Math.sin(Math.PI * u);
     if (!onGround) {
       const lift = T.footLift * sideScale * (1 - damage * T.damageLiftScale);
+      const reach = T.strideLen * sideScale * swing;
       return {
-        foot: [0, lift * swing, T.strideLen * sideScale * swing],
-        knee: [0, T.kneeLift * swing, -T.kneeBend * sideScale * swing],
+        foot: [0, lift * swing, reach],
+        // The knee tracks half the foot's reach PLUS a forward bow, so it
+        // stays on the +z (forward) side of the hip→ankle line through the
+        // whole swing — a human hinge, never a backward cow knee.
+        knee: [0, T.kneeLift * swing, T.kneeTrack * reach + T.kneeBend * sideScale * swing],
         stance: false,
       };
     }

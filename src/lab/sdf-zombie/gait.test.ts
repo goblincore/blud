@@ -111,6 +111,26 @@ describe('stepGait — determinism', () => {
 });
 
 describe('stepGait — skews', () => {
+  it('swing knee always bows FORWARD of the hip→foot line (never the backward "cow" knee)', () => {
+    // Motion-polish task 5: the swing knee offset used to sit BEHIND the hip
+    // while the foot reached forward — a backward hinge at full reach. The
+    // knee now tracks half the foot's reach plus a forward bow (kneeTrack /
+    // kneeBend), so it stays on the +z side of the line for the whole swing.
+    for (const seed of [1, 21, 42]) {
+      for (const p of poses(seed, NONE, 4)) {
+        for (const [knee, foot] of [
+          [p.offsets.kneeL, p.offsets.footL],
+          [p.offsets.kneeR, p.offsets.footR],
+        ] as const) {
+          if (foot[2] <= 0.01) continue; // stance / swing edge — no reach
+          // Knee z = kneeTrack·reach + bow ⇒ strictly ahead of half the
+          // foot's forward offset (half = the on-line position at mid-leg).
+          expect(knee[2]).toBeGreaterThan(0.5 * foot[2]);
+        }
+      }
+    }
+  });
+
   it('missing arm: that shoulder droops, its hand is dead, the survivor swings harder', () => {
     const seed = 21;
     const base = poses(seed, NONE, 4);

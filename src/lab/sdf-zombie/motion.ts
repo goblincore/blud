@@ -66,7 +66,7 @@ import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, WANDER_TUNING, wrapPi, type Rng } from './wander';
 import type { ArmSide, ClutchArm, ClutchState, PlantState, AimState } from './ik';
 import {
-  IK_TUNING, makeAim, makeClutch, makePlant, solveChain, solvePlantedLeg,
+  IK_TUNING, makeAim, makeClutch, makePlant, poleReflect, solveChain, solvePlantedLeg,
   stepAim, stepClutch, stepPlant,
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
@@ -592,11 +592,15 @@ export function stepMotion(
     footPos: footWorld(footIdx),
     groundY: joints.groundY,
   }, dt);
+  // Pole bias for the leg solves: knees bow FORWARD, along the applied body
+  // yaw (not wander.heading — the knee must agree with the turned body
+  // mid-turn, same contract as every other body-local thing this frame).
+  const legPole = headingDir(bodyYaw);
   const plantLeg = (st: PlantState, hip: GaitJointName, knee: GaitJointName, foot: GaitJointName, lens: readonly [number, number]) => {
     if (st.phase !== 'stance') return;
     const solved = solvePlantedLeg(
       targets[idx[hip]!]!, targets[idx[knee]!]!, targets[idx[foot]!]!,
-      st, lens, SOLVE,
+      st, lens, SOLVE, legPole,
     );
     targets[idx[knee]!] = solved.knee;
     targets[idx[foot]!] = solved.foot;
@@ -688,7 +692,10 @@ export function stepMotion(
       const chain = solveChain(
         [targets[iShoulder]!, targets[iElbow]!, targets[iHand]!], lens, clutch.target, SOLVE,
       );
-      targets[iElbow] = chain[1]!;
+      // Elbow pole: elbows bow DOWN (the opposite rule to knees) — an
+      // inverted elbow reads as a broken arm. Reflection preserves both
+      // segment lengths and the hand on the wound.
+      targets[iElbow] = poleReflect(targets[iShoulder]!, chain[1]!, chain[2]!, [0, -1, 0]);
       targets[iHand] = chain[2]!;
     }
   } else {
