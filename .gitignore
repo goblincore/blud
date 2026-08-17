@@ -5,6 +5,7 @@ dist/
 *.log
 .superpowers/
 .vite/
+.worktrees/
 
 # dev tooling
 scripts/.venv/
