@@ -188,6 +188,11 @@ Key reference docs (open these before touching their area):
   detonate gibs a body point-blank through the existing stack; 1201 tests. Burst
   billboards use the procedural-flipbook fallback (SEQ atlases are gitignored).
   [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md)
+- `X1.22.2` [x] **Motion/look polish arc** (owner playtest rounds, 6 dispatch tasks +
+  Opus hands): rigid head + face projection/ellipsoids riding rotation, socketed
+  reach arms, gaze follows travel (tunable), wounds ride the turn, facing-chain
+  quadrant fix + forward-knee pole rule, rest-space noise (texture glued to limbs,
+  rows 8-9), measured FPV hands from CC-BY mesh (ATTRIBUTIONS.md). 1319 tests.
 - `X1.25` [x] **PSX-AA post pass** — FXAA at internal res + temporal smear + optional
   sharp-bilinear upscale, `post` panel sliders, all-off = pixel parity. The first
   run's 'color shift' was a Y-flip (kimi-oai, 2 runs). Owner slider session open.
