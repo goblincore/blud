@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
   validateHandVolumeManifest, loadHandVolume, createFallbackHandVolumeTexture,
-  HOST_IS_LITTLE_ENDIAN, type HandVolumeManifest,
+  createR16fTexture, sha256Hex, HOST_IS_LITTLE_ENDIAN, type HandVolumeManifest,
 } from './hand-volume';
 import * as THREE from 'three/webgpu';
 
@@ -235,5 +235,47 @@ describe('HandVolumeManifest type stays literal', () => {
     const m: HandVolumeManifest = validateHandVolumeManifest(checkedIn);
     expect(m.encoding === 'r16f-le').toBe(true);
     expect(m.order === 'x-fastest-y-z').toBe(true);
+  });
+});
+
+describe('shared byte helpers (X1.27 task C1)', () => {
+  it('sha256Hex digests an ArrayBuffer to lowercase hex (node cross-check)', async () => {
+    const bytes = new Uint8Array([0, 1, 2, 255, 254, 0xde, 0xad, 0xbe, 0xef]);
+    expect(await sha256Hex(bytes.buffer))
+      .toBe(createHash('sha256').update(bytes).digest('hex'));
+  });
+
+  it('createR16fTexture builds the shared nearest/clamp half-float volume', () => {
+    const bits = new Uint16Array([0x3c00, 0xbc00, 0x3c00, 0x3c00,
+                                  0x3c00, 0x3c00, 0x3c00, 0x3c00]);
+    const tex = createR16fTexture(bits, [2, 2, 2]);
+    expect(tex).toBeInstanceOf(THREE.Data3DTexture);
+    expect(tex.image.width).toBe(2);
+    expect(tex.image.height).toBe(2);
+    expect(tex.image.depth).toBe(2);
+    expect(tex.format).toBe(THREE.RedFormat);
+    expect(tex.type).toBe(THREE.HalfFloatType);
+    expect(tex.magFilter).toBe(THREE.NearestFilter);
+    expect(tex.minFilter).toBe(THREE.NearestFilter);
+    expect(tex.wrapS).toBe(THREE.ClampToEdgeWrapping);
+    expect(tex.wrapT).toBe(THREE.ClampToEdgeWrapping);
+    expect(tex.wrapR).toBe(THREE.ClampToEdgeWrapping);
+    expect(tex.generateMipmaps).toBe(false);
+    expect(tex.unpackAlignment).toBe(1);
+    // The bits ride UNTOUCHED and the array is used by reference.
+    expect(tex.image.data).toBe(bits);
+    // Atlas dimensions work the same way (the clip loader passes [nx,ny,nz*6]).
+    const atlas = createR16fTexture(bits, [2, 2, 4]);
+    expect(atlas.image.depth).toBe(4);
+    tex.dispose();
+    atlas.dispose();
+  });
+
+  it('loadHandVolume uses the shared helpers (one implementation)', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/hand-volume.ts', 'utf8');
+    expect(src).toContain('await sha256Hex(buffer)');
+    expect(src).toContain('createR16fTexture(new Uint16Array(buffer), [nx, ny, nz])');
+    // the old private twin is gone
+    expect(src).not.toContain('function handVolumeTexture(');
   });
 });

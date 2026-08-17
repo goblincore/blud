@@ -63,4 +63,54 @@ git diff scripts/bake_hand_sdf.py              # empty (Task A already exported 
 
 ## Task C — strict v2 loading + adjacent-slab WGSL sampling
 
-(recorded below after implementation)
+- **C1 loader** (`hand-volume-clip.ts`, + tests): `validateHandClipManifest`
+  mirrors the baker's rejections one-for-one (labels/order/keys/atlas/byte/
+  prop-hash/unit-quaternion with the model+Y→axisLocal integrity check/path
+  safety); `gripFrameSample` pins the plan samples — `sample(0)={0,0,0}`,
+  `sample(0.3)={1,2,0.5}`, `sample(1)={5,5,0}` — and never invents a frame 6
+  or mixes non-adjacent frames. `loadHandClip` resolves the atlas relative to
+  the manifest URL, validates JSON before allocation and bytes/hash before
+  the texture, binds at ATLAS dims `[131,178,612]`. `hand-volume.ts` now
+  exports the shared `sha256Hex` + `createR16fTexture`; `loadHandVolume`
+  routes through them (v1 tests unchanged, 27/27).
+- **C2 WGSL** (`march.wgsl.ts`, `specialise.ts`): `sampleHandVolumeFrame`
+  does slab-local trilinear with exactly eight `textureLoad`s, `zBase =
+  frame * depth`, `i1 = min(i0+1, dimsI-1)` so z ends at `zBase + depth - 1`,
+  frames clamped to `atlasDims.z / depth - 1`. `sampleHandVolume` computes
+  world→local/warp/uv/outside ONCE, samples frame0 and frame1, and returns
+  `mix(d0, d1, clamp(volumeClip.z,0,1)) + outside`. `depth = max(1,
+  i32(volumeClip.w))` — no 0-depth sentinel exists. `volumeClip` threads
+  beside `volumeWarp` through mapBody/calcNormal/coneMarch/marchBody and the
+  specialised mapBody (11 call sites).
+- **C3 bindings** (`zombie-gpu.ts`, `fpv-view.ts`):
+  `defaultUniforms().volumeClip = Vector4(0,0,0,1)` (fallback), forwarded in
+  both march call sites. `HandsGpuView.setField('prims'|'volume', v1 | v2)`;
+  static v1 binds `[0,0,0,nz]` (bit-identical X1.26 sample), v2 binds
+  `frameDepth`; `setVolumeFrame` clamps indices to `[0,frameCount-1]`, alpha
+  to `[0,1]`, forces static v1 back to `[0,0,0,nz]`, and no-ops in prims
+  mode.
+- **Live WebGPU smoke (mandatory, Step 4):** Vite on **port 5277** (fresh,
+  lsof-verified; served bundle confirmed to contain `sampleHandVolumeFrame`/
+  `volumeClip` before trusting it), **Chrome 151 headed via CDP :9223**
+  (`scripts/verify-clip-smoke.mjs`, evidence `task-c-smoke.png`):
+  `backend webgpu-ok`, FPV + `setHandField('baked')` → `handField 'baked'`,
+  `handVolume 'ready'`, **0** console events matching
+  GPUValidationError/shader/compile/error, canvas luma σ **44.5** (rendered,
+  not blank). **PASS.**
+- **Timing evidence (benchGpu, not wall clock):** FPV + static baked hand,
+  1 body, SDF scale 0.7, 240 samples: **median 2.76 ms / p05 2.56 / p95
+  10.44, hiddenSteps 0** — inside the X1.26 gate band (baked 2.52 ms there;
+  the sampler now reads 8 texels per frame even at alpha 0, which is the
+  cost the adjacent-slab design accepts). Formal static-vs-clip comparison
+  is Task F's gate.
+
+### Task C verification
+
+```
+npx vitest run <6 focused webgpu suites>   # 185/185 (46 clip + 30 volume + 70 wgsl + 18 specialise + 8 zombie + 13 fpv)
+npm test                                   # 1447/1447
+npx tsc --noEmit                           # clean
+npm run build                              # ok (~4.8s)
+live smoke on :5277 / Chrome 151           # PASS, no GPU errors
+benchGpu (fpv+baked, n=240)                # median 2.76 ms, hiddenSteps 0
+```

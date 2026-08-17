@@ -43,6 +43,7 @@ import {
   marchBody, writeWounds, type MarchUniforms,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture, type HandVolume } from './hand-volume';
+import type { HandClipVolume } from './hand-volume-clip';
 import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
 } from './march.wgsl';
@@ -104,12 +105,20 @@ export interface HandsGpuView {
    *  HAND_SHEET_TUNING for why. */
   setSheetTuning(strength: number, relief: number): void;
   /** A/B switch (X1.26): `prims` is the complete existing interaction path
-   *  and restores its march settings; `volume` requires the loaded HandVolume
-   *  and zeroes the primitive fold. */
-  setField(field: 'prims' | 'volume', volume?: HandVolume): void;
+   *  and restores its march settings; `volume` requires a loaded static v1
+   *  HandVolume OR a v2 clip HandClipVolume (X1.27) and zeroes the primitive
+   *  fold. Both manifest kinds share boundsMin/boundsMax/voxelSize/
+   *  dimensions, so one binding path serves either; only the clip binds a
+   *  real frame depth into volumeClip.w (a static v1 binds its nz). */
+  setField(field: 'prims' | 'volume', volume?: HandVolume | HandClipVolume): void;
   /** Rigid volume placement + clamped distal warp; also refits the proxy box
    *  from the transformed manifest AABB. */
   setVolumePose(pose: HandVolumePoseIn): void;
+  /** Drives the clip's adjacent-frame sample: volumeClip = [frame0, frame1,
+   *  alpha, frameDepth]. Indices clamp to [0, frameCount-1] and alpha to
+   *  [0,1]; a bound STATIC v1 volume is forced to [0,0,0,nz] (its only
+   *  frame is the whole texture); with no volume bound this is a no-op. */
+  setVolumeFrame(frame0: number, frame1: number, alpha: number): void;
   /** Neutral-clay look toggle for the baked visual gate; saves and restores
    *  exactly the flesh settings it touches. */
   setClay(on: boolean): void;
@@ -228,8 +237,11 @@ export function createHandsGpuView(
   const volumeNode = texture3D(fallbackVolume);
 
   // Volume-mode state. primMarch snapshots the TEMPLATE values so switching
-  // back is exact, whatever the panel did in between.
-  let volume: HandVolume | null = null;
+  // back is exact, whatever the panel did in between. `volume` is the union
+  // of the two manifest kinds: v1 static (version 1) or v2 clip (version 2);
+  // everything they share is read through the shared fields, and the clip
+  // extras (frameDepth/frameCount) drive volumeClip.w and setVolumeFrame.
+  let volume: HandVolume | HandClipVolume | null = null;
   let clay = false;
   let claySaved: { r: number; g: number; b: number; spec: number; rough: number } | null = null;
   const primMarch = {
@@ -396,7 +408,7 @@ export function createHandsGpuView(
     setField(field, vol) {
       if (field === 'volume') {
         if (!vol) {
-          throw new Error('setField(volume): a loaded HandVolume is required — load first (task C2 gates this)');
+          throw new Error('setField(volume): a loaded HandVolume or HandClipVolume is required — load first (task C2 gates this)');
         }
         volume = vol;
         volumeNode.value = vol.texture;
@@ -404,6 +416,13 @@ export function createHandsGpuView(
         u.volumeMin.value.set(mn[0], mn[1], mn[2]);
         u.volumeInvExtent.value.set(
           1 / (mx[0]! - mn[0]!), 1 / (mx[1]! - mn[1]!), 1 / (mx[2]! - mn[2]!));
+        // Static v1 binds [0,0,0,nz] — frame 0 of the whole texture, alpha
+        // 0, the bit-identical X1.26 sample. A v2 clip binds its real frame
+        // depth and starts parked on frame 0 (the open hand).
+        const depth = vol.manifest.version === 2
+          ? vol.manifest.frameDepth
+          : vol.manifest.dimensions[2]!;
+        u.volumeClip.value.set(0, 0, 0, depth);
         // Conservative stepping for a non-exact trilinear field (spec).
         u.marchCfg.value.x = Math.max(VOLUME_MARCH.steps, primMarch.marchCfg.x);
         u.marchCfg.value.y = VOLUME_MARCH.stepMul;
@@ -415,10 +434,27 @@ export function createHandsGpuView(
         volume = null;
         u.volumePose0.value.w = 0;
         volumeNode.value = fallbackVolume;
+        u.volumeClip.value.set(0, 0, 0, 1); // fallback frame semantics
         u.marchCfg.value.copy(primMarch.marchCfg);
         u.woundCfg2.value.copy(primMarch.woundCfg2);
         // The prim path refits the proxy on the next update().
       }
+    },
+    setVolumeFrame(frame0, frame1, alpha) {
+      // No volume bound: the volume branch is disabled entirely and the
+      // uniform keeps its fallback [0,0,0,1] — nothing to drive.
+      if (!volume) return;
+      // Static v1 has ONE frame: the whole texture. Forcing the full-depth
+      // slab keeps the sample bit-identical whatever a caller passes.
+      if (volume.manifest.version === 1) {
+        u.volumeClip.value.set(0, 0, 0, volume.manifest.dimensions[2]!);
+        return;
+      }
+      const count = volume.manifest.frameCount;
+      const f0 = Math.min(Math.max(Math.round(frame0), 0), count - 1);
+      const f1 = Math.min(Math.max(Math.round(frame1), 0), count - 1);
+      const a = Math.min(Math.max(Number.isFinite(alpha) ? alpha : 0, 0), 1);
+      u.volumeClip.value.set(f0, f1, a, volume.manifest.frameDepth);
     },
     setVolumePose(p) {
       poseCentre.set(p.centre[0], p.centre[1], p.centre[2]);

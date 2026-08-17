@@ -187,15 +187,19 @@ export function validateHandVolumeManifest(input: unknown): HandVolumeManifest {
 }
 
 /**
- * The one texture construction for hand volumes: raw half bits, nearest
- * filtering (the shader does its own trilinear from eight textureLoads — a
- * sampler would buy nothing but a half-voxel shift; see march.wgsl.ts),
- * clamp-to-edge in all three axes, no mips.
+ * The one texture construction for hand volumes (X1.26, shared with the
+ * X1.27 clip loader): raw half bits, nearest filtering (the shader does its
+ * own trilinear from eight textureLoads — a sampler would buy nothing but a
+ * half-voxel shift; see march.wgsl.ts), clamp-to-edge in all three axes, no
+ * mips. `dimensions` may be a single frame OR a depth-packed atlas (the
+ * clip passes [nx, ny, nz*frameCount]) — the shader derives its slab-local
+ * indices from textureDimensions and volumeClip.w, never from a second
+ * uniform.
  */
-function handVolumeTexture(
-  bits: Uint16Array, nx: number, ny: number, nz: number,
+export function createR16fTexture(
+  bits: Uint16Array, dimensions: readonly [number, number, number],
 ): THREE.Data3DTexture {
-  const texture = new THREE.Data3DTexture(bits, nx, ny, nz);
+  const texture = new THREE.Data3DTexture(bits, dimensions[0], dimensions[1], dimensions[2]);
   texture.format = THREE.RedFormat;
   texture.type = THREE.HalfFloatType;
   texture.minFilter = THREE.NearestFilter;
@@ -209,6 +213,15 @@ function handVolumeTexture(
   return texture;
 }
 
+/** SHA-256 of an ArrayBuffer as lowercase hex (the loaders' integrity
+ *  check). Exported (X1.27 task C1) so the clip loader and the Task-D GLB
+ *  wrapper verify through ONE implementation. */
+export async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
+  return Array.from(new Uint8Array(
+    await crypto.subtle.digest('SHA-256', buffer),
+  )).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Half-float bits of +1.0 — the fallback's single "empty space" sample. */
 const HALF_POSITIVE_ONE = 0x3c00;
 
@@ -220,7 +233,7 @@ const HALF_POSITIVE_ONE = 0x3c00;
  * all, and its owner (the lab renderer) disposes it exactly once.
  */
 export function createFallbackHandVolumeTexture(): THREE.Data3DTexture {
-  return handVolumeTexture(new Uint16Array([HALF_POSITIVE_ONE]), 1, 1, 1);
+  return createR16fTexture(new Uint16Array([HALF_POSITIVE_ONE]), [1, 1, 1]);
 }
 
 /**
@@ -259,16 +272,14 @@ export async function loadHandVolume(url: string): Promise<HandVolume> {
   // platform exposes WebCrypto (every target does; the guard is for exotic
   // embedders where loading should still work rather than hard-fail).
   if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const digest = Array.from(new Uint8Array(
-      await crypto.subtle.digest('SHA-256', buffer),
-    )).map(b => b.toString(16).padStart(2, '0')).join('');
+    const digest = await sha256Hex(buffer);
     if (digest !== manifest.sha256.binary) {
       fail(`binary sha-256 mismatch: manifest says ${manifest.sha256.binary}, payload is ${digest}`);
     }
   }
 
   const [nx, ny, nz] = manifest.dimensions;
-  const texture = handVolumeTexture(new Uint16Array(buffer), nx, ny, nz);
+  const texture = createR16fTexture(new Uint16Array(buffer), [nx, ny, nz]);
   let disposed = false;
   return {
     manifest,

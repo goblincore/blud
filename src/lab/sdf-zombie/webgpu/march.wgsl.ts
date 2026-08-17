@@ -391,7 +391,37 @@ export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<
 //      would sample at texel centres (uv * dims - 0.5) and shift the whole
 //     field half a voxel; nearest filtering keeps every load exact and the
 //     nested mix is the only interpolation.
-export const SAMPLE_VOLUME = /* wgsl */ `fn sampleHandVolume(pWorld: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> f32 {
+export const SAMPLE_VOLUME = /* wgsl */ `fn sampleHandVolumeFrame(q: vec3<f32>, frameIndex: i32, volumeTex: texture_3d<f32>, volumeClip: vec4<f32>) -> f32 {
+  // X1.27: slab-local trilinear over ONE frame of the depth-packed atlas.
+  // volumeClip.w is the frame depth (never 0 — max(1, ...) guarantees a live
+  // slab and no 0-depth sentinel exists anywhere in WGSL); the z indices are
+  // frame-local and offset by frame * frameDepth, with the z clamp ending at
+  // zOffset + frameDepth - 1 so a slab can never bleed into its neighbour.
+  let atlasDims = vec3<i32>(textureDimensions(volumeTex, 0));
+  let depth = max(1, i32(volumeClip.w));
+  let dimsI = vec3<i32>(atlasDims.x, atlasDims.y, depth);
+  let frame = clamp(frameIndex, 0, atlasDims.z / depth - 1);
+  let zBase = frame * depth;
+  let i0 = vec3<i32>(floor(q));
+  let i1 = min(i0 + vec3<i32>(1, 1, 1), dimsI - vec3<i32>(1, 1, 1));
+  let a0 = vec3<i32>(i0.x, i0.y, i0.z + zBase);
+  let a1 = vec3<i32>(i1.x, i1.y, i1.z + zBase);
+  let fr = q - floor(q);
+  let s000 = textureLoad(volumeTex, a0, 0).r;
+  let s100 = textureLoad(volumeTex, vec3<i32>(a1.x, a0.y, a0.z), 0).r;
+  let s010 = textureLoad(volumeTex, vec3<i32>(a0.x, a1.y, a0.z), 0).r;
+  let s110 = textureLoad(volumeTex, vec3<i32>(a1.x, a1.y, a0.z), 0).r;
+  let s001 = textureLoad(volumeTex, vec3<i32>(a0.x, a0.y, a1.z), 0).r;
+  let s101 = textureLoad(volumeTex, vec3<i32>(a1.x, a0.y, a1.z), 0).r;
+  let s011 = textureLoad(volumeTex, vec3<i32>(a0.x, a1.y, a1.z), 0).r;
+  let s111 = textureLoad(volumeTex, a1, 0).r;
+  return mix(
+    mix(mix(s000, s100, fr.x), mix(s010, s110, fr.x), fr.y),
+    mix(mix(s001, s101, fr.x), mix(s011, s111, fr.x), fr.y),
+    fr.z);
+}
+
+fn sampleHandVolume(pWorld: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> f32 {
   let pl = pWorld - volumePose0.xyz;
   let cq = vec4<f32>(-volumePose1.xyz, volumePose1.w);
   let tq = 2.0 * cross(cq.xyz, pl);
@@ -404,30 +434,23 @@ export const SAMPLE_VOLUME = /* wgsl */ `fn sampleHandVolume(pWorld: vec3<f32>, 
   let diffMin = volumeMin - local;
   let diffMax = local - (volumeMin + extent);
   let outside = length(max(max(diffMin, diffMax), vec3<f32>(0.0, 0.0, 0.0)));
-  let dims = textureDimensions(volumeTex, 0);
-  // dims is vec3<u32>: WGSL has no u32−i32 overload, so the i1 clamp
-  // narrows through an explicit vec3<i32> conversion (a u32−i32 mix here
-  // failed pipeline compilation and froze the whole canvas — found by
-  // task C's live gate, invisible to the string-level tests).
-  let dimsI = vec3<i32>(dims);
-  let dimsF = vec3<f32>(dims);
+  // World-to-local, warp, uv and the outside-box distance are computed ONCE
+  // here; only the frame pair is sampled twice and mixed (X1.27). Static v1
+  // views bind volumeClip = [0, 0, 0, nz]: frame0 == frame1 == slab 0 and
+  // alpha 0, so the mix degenerates to exactly the v1 sample. The fallback
+  // binds [0, 0, 0, 1]: a 1-deep slab of one texel.
+  //
+  // textureDimensions is vec3<u32>: WGSL has no u32-minus-i32 overload, so
+  // the clamps narrow through explicit i32/f32 conversions (a mixed-type
+  // arithmetic here once failed pipeline compilation and froze the whole
+  // canvas — invisible to the string-level tests).
+  let atlasDims = vec3<i32>(textureDimensions(volumeTex, 0));
+  let depth = max(1, i32(volumeClip.w));
+  let dimsF = vec3<f32>(f32(atlasDims.x), f32(atlasDims.y), f32(depth));
   let q = clamp(uv * (dimsF - vec3<f32>(1.0, 1.0, 1.0)), vec3<f32>(0.0, 0.0, 0.0), dimsF - vec3<f32>(1.0, 1.0, 1.0));
-  let i0 = vec3<i32>(floor(q));
-  let i1 = min(i0 + vec3<i32>(1, 1, 1), dimsI - vec3<i32>(1, 1, 1));
-  let fr = q - floor(q);
-  let s000 = textureLoad(volumeTex, i0, 0).r;
-  let s100 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i0.z), 0).r;
-  let s010 = textureLoad(volumeTex, vec3<i32>(i0.x, i1.y, i0.z), 0).r;
-  let s110 = textureLoad(volumeTex, vec3<i32>(i1.x, i1.y, i0.z), 0).r;
-  let s001 = textureLoad(volumeTex, vec3<i32>(i0.x, i0.y, i1.z), 0).r;
-  let s101 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i1.z), 0).r;
-  let s011 = textureLoad(volumeTex, vec3<i32>(i0.x, i1.y, i1.z), 0).r;
-  let s111 = textureLoad(volumeTex, vec3<i32>(i1.x, i1.y, i1.z), 0).r;
-  let tri = mix(
-    mix(mix(s000, s100, fr.x), mix(s010, s110, fr.x), fr.y),
-    mix(mix(s001, s101, fr.x), mix(s011, s111, fr.x), fr.y),
-    fr.z);
-  return tri + outside;
+  let d0 = sampleHandVolumeFrame(q, i32(volumeClip.x), volumeTex, volumeClip);
+  let d1 = sampleHandVolumeFrame(q, i32(volumeClip.y), volumeTex, volumeClip);
+  return mix(d0, d1, clamp(volumeClip.z, 0.0, 1.0)) + outside;
 }`;
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
@@ -445,7 +468,7 @@ export const SAMPLE_VOLUME = /* wgsl */ `fn sampleHandVolume(pWorld: vec3<f32>, 
 // The march reuses y to anchor the shell displacement and the hit-pixel
 // noise without re-running the fold; the noise term below uses it to sample
 // the fbm in the dominant prim's REST frame so the texture rides every limb.
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> vec4<f32> {
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
   var best = 1e9;
   var bestIdx = -1;
@@ -457,7 +480,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // one would point restPoint at an unwritten prim row; -1 is its documented
   // no-live-prim path, so the noise falls back to the world-frame anchor.
   if (volumePose0.w > 0.5) {
-    d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);
+    d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
   } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
@@ -517,13 +540,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> vec3<f32> {
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x +
-    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x +
-    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x);
+    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
+    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
+    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
+    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -591,6 +614,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
+  volumeClip: vec4<f32>,
   counts: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
@@ -613,7 +637,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // the zero vector keeps this pass independent of the motion plumbing.
     // The volume block rides along for the same reason (X1.26): a cone that
     // ignored an enabled volume would certify empty space inside the hand.
-    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x;
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -644,6 +668,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   volumeInvExtent 1/(boundsMax - boundsMin), per axis
 //   volumeWarp  xyz = distal warp offset in local metres (CPU clamps it to
 //               12 mm); zero vector = no warp. w is spare.
+//   volumeClip  x/y = adjacent frame indices, z = mix alpha, w = frame
+//               depth. Static v1 binds [0,0,0,nz] (slab 0, alpha 0 = the
+//               exact v1 sample); the shared fallback binds [0,0,0,1]; a
+//               v2 clip binds frameDepth and drives x/y/z per frame.
 //   counts     x primCount, y clusterCount, z carveCount, w maxBlendK
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
@@ -680,6 +708,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
+  volumeClip: vec4<f32>,
   counts: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
@@ -791,7 +820,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);
+    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
     var d = dres.x;
     hitBest = i32(dres.y);
     // Shell displacement: inside a thin shell of the smooth surface, the
@@ -845,7 +874,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   if (!hit) { discard; }
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);
+  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -993,7 +1022,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -1004,7 +1033,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x / 0.06, 0.35, 1.0);
   }
 
   let fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao

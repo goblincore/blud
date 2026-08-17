@@ -238,6 +238,14 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     volumeMin: uniform(new THREE.Vector3(0, 0, 0)),
     volumeInvExtent: uniform(new THREE.Vector3(0, 0, 0)),
     volumeWarp: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /**  volumeClip (X1.27 task C3) — x/y = adjacent frame indices, z = mix
+     *   alpha, w = frame depth. The default [0,0,0,1] is the FALLBACK
+     *   semantics: a 1-deep slab, frame 0, alpha 0 — every non-clip view
+     *   (bodies, chunks, primitive hands) stays exactly where it was. A
+     *   static v1 view binds [0,0,0,nz] (slab 0 of the v1 texture, the
+     *   bit-identical X1.26 sample); a v2 clip view binds frameDepth and
+     *   drives x/y/z per frame. No 0-depth sentinel exists in WGSL. */
+    volumeClip: uniform(new THREE.Vector4(0, 0, 0, 1)),
     /**
      * x = aoEnabled, w = goreStrength (0 body, 1 chunk views).
      *
@@ -386,6 +394,7 @@ export function createMarchMaterial(
     volumeMin: u.volumeMin,
     volumeInvExtent: u.volumeInvExtent,
     volumeWarp: u.volumeWarp,
+    volumeClip: u.volumeClip,
     counts: u.counts,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
@@ -594,6 +603,7 @@ export function createZombieGpuView(
     volumeMin: u.volumeMin,
     volumeInvExtent: u.volumeInvExtent,
     volumeWarp: u.volumeWarp,
+    volumeClip: u.volumeClip,
     counts: u.counts,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,

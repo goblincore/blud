@@ -4,6 +4,8 @@
 // itself is guarded by tripwires in march.wgsl.test.ts; these pin the CPU side:
 // WHICH channel carries it, what its default is, and who overwrites it.
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
 import {
   createZombieGpuView, createChunkGpuView, defaultUniforms, blankFaceTexture,
 } from './zombie-gpu';
@@ -102,5 +104,23 @@ describe('baked hand volume binding (X1.26 task B3)', () => {
     expect(sharedDisposed).toBe(false); // caller still owns it
     shared.dispose();
     expect(sharedDisposed).toBe(true);
+  });
+});
+
+describe('clip frame uniform (X1.27 task C3)', () => {
+  it('defaultUniforms carries volumeClip with FALLBACK frame semantics [0,0,0,1]', () => {
+    const u = defaultUniforms(blankFaceTexture());
+    expect(u.volumeClip.value).toEqual(new THREE.Vector4(0, 0, 0, 1));
+    // w=1 means the 1-cubed fallback slab; x=y=0, z=0 sample texel 0 of it.
+  });
+
+  it('forwards volumeClip beside volumeWarp in BOTH march call sites', () => {
+    // Tripwire, not behaviour: the TSL call is named-arg matched against the
+    // WGSL signature, so a missing entry is a silent uniform mismatch.
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
+    const marchCalls = src.match(/volumeWarp: u\.volumeWarp,/g) ?? [];
+    expect(marchCalls.length).toBe(2); // createMarchMaterial + cone twin
+    expect(src.match(/volumeWarp: u\.volumeWarp,\s*\n\s*volumeClip: u\.volumeClip,/g)?.length)
+      .toBe(2);
   });
 });

@@ -49,8 +49,11 @@ describe('specialiseMapBody', () => {
     expect(src).toContain('volumeMin: vec3<f32>');
     expect(src).toContain('volumeInvExtent: vec3<f32>');
     expect(src).toContain('volumeWarp: vec4<f32>');
+    // X1.27 task C2: the clip uniform rides the specialised mapBody too —
+    // the specialised field must see the same slab sampling as the generic.
+    expect(src).toContain('volumeClip: vec4<f32>');
     expect(src).toContain('if (volumePose0.w > 0.5) {');
-    expect(src).toContain('d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);');
+    expect(src).toContain('d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);');
     // The primitive fold must live in the else arm, after the branch.
     expect(src.indexOf('} else {')).toBeGreaterThan(src.indexOf('if (volumePose0.w > 0.5) {'));
     expect(src.indexOf('d = applyWounds')).toBeGreaterThan(src.indexOf('} else {'));

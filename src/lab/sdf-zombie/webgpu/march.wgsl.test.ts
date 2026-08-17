@@ -210,7 +210,7 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -228,7 +228,7 @@ describe('ported features reach the entry point', () => {
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x');
+      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x');
   });
 
   it('steps the shell conservatively and never retracts a displaced sample', () => {
@@ -264,7 +264,10 @@ describe('ported features reach the entry point', () => {
 
 describe('baked hand volume branch (X1.26 task B2)', () => {
   it('exports SAMPLE_VOLUME starting with fn, per the wgslFn parse contract', () => {
-    expect(declaredName(SAMPLE_VOLUME)).toBe('sampleHandVolume');
+    // X1.27: the template now declares TWO helpers — the slab-local frame
+    // sampler first (wgslFn parses the leading fn), then the mixing sampler.
+    expect(declaredName(SAMPLE_VOLUME)).toBe('sampleHandVolumeFrame');
+    expect(SAMPLE_VOLUME).toContain('fn sampleHandVolume(');
   });
 
   it('reads exactly eight 3D corner texels for the trilinear reconstruction', () => {
@@ -282,14 +285,15 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     expect(SAMPLE_VOLUME)
       .toContain('q = clamp(uv * (dimsF - vec3<f32>(1.0, 1.0, 1.0)), vec3<f32>(0.0, 0.0, 0.0), dimsF - vec3<f32>(1.0, 1.0, 1.0));');
     expect(SAMPLE_VOLUME).not.toContain('- 0.5)');
-    // Nested mix: 4 edges, 2 faces, 1 slab = exactly seven.
-    expect((SAMPLE_VOLUME.match(/mix\(/g) ?? []).length).toBe(7);
+    // Nested mix: 4 edges, 2 faces, 1 slab = exactly seven per frame helper,
+    // plus the ONE frame mix in sampleHandVolume.
+    expect((SAMPLE_VOLUME.match(/mix\(/g) ?? []).length).toBe(8);
     // Degenerate top corner: floor == dims-1 clamps i1 back onto i0.
     expect(SAMPLE_VOLUME).toContain('min(i0 + vec3<i32>(1, 1, 1), dimsI - vec3<i32>(1, 1, 1))');
     // textureDimensions is vec3<u32> — WGSL has no u32−i32 overload, and a
     // mixed subtraction fails pipeline compilation at runtime (the canvas
-    // freeze task C diagnosed live).
-    expect(SAMPLE_VOLUME).toContain('let dimsI = vec3<i32>(dims);');
+    // freeze task C diagnosed live). Every narrowing is explicit.
+    expect(SAMPLE_VOLUME).toContain('vec3<i32>(textureDimensions(volumeTex, 0))');
   });
 
   it('transforms world to local with the conjugate of the local-to-world quat', () => {
@@ -310,7 +314,8 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     expect(SAMPLE_VOLUME).toContain('let diffMax = local - (volumeMin + extent);');
     expect(SAMPLE_VOLUME).toContain(
       'let outside = length(max(max(diffMin, diffMax), vec3<f32>(0.0, 0.0, 0.0)));');
-    expect(SAMPLE_VOLUME).toContain('return tri + outside;');
+    expect(SAMPLE_VOLUME)
+      .toContain('return mix(d0, d1, clamp(volumeClip.z, 0.0, 1.0)) + outside;');
   });
 
   it('sits in HELPERS before MAP_BODY, which calls it', () => {
@@ -336,12 +341,12 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     expect(elseArm).toContain('for (var c = 0; c < 8; c = c + 1)');
   });
 
-  it('threads the texture and five volume uniforms through EVERY mapBody call', () => {
+  it('threads the texture and six volume uniforms through EVERY mapBody call', () => {
     // Argument forwarding is load-bearing: a call site that forgets one
     // volume argument does not fail to compile — WGSL has no named args —
     // the generated node call simply mismatches. Every call, every source.
     const needed = ['volumeTex', 'volumePose0', 'volumePose1', 'volumeMin',
-      'volumeInvExtent', 'volumeWarp'];
+      'volumeInvExtent', 'volumeWarp', 'volumeClip'];
     for (const src of [...HELPERS, MARCH_BODY, CONE_MARCH]) {
       let at = src.indexOf('mapBody(');
       while (at >= 0) {
@@ -561,5 +566,71 @@ describe('per-prim orientation (motion-polish task 3)', () => {
         expect(sdPrimitive(p, prim)).toBeCloseTo(sdPrimWgsl(p, 0, tex), 4);
       }
     }
+  });
+});
+
+describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
+  const frameFn = SAMPLE_VOLUME.slice(0, SAMPLE_VOLUME.indexOf('fn sampleHandVolume('));
+
+  it('declares the slab-local frame helper with exactly eight textureLoads', () => {
+    expect(declaredName(SAMPLE_VOLUME)).toBe('sampleHandVolumeFrame');
+    const loads = frameFn.match(/textureLoad\(volumeTex/g) ?? [];
+    expect(loads.length).toBe(8);
+    // The frame helper is self-contained: no other texture traffic in it.
+    expect(frameFn.match(/textureLoad\(/g)?.length).toBe(8);
+    expect(frameFn.match(/textureDimensions/g)?.length).toBe(1);
+  });
+
+  it('offsets slab Z by frame * frameDepth and clamps Z to end at zOffset + frameDepth - 1', () => {
+    expect(frameFn).toContain('let depth = max(1, i32(volumeClip.w));');
+    expect(frameFn).toContain('let zBase = frame * depth;');
+    expect(frameFn).toContain(
+      'let i1 = min(i0 + vec3<i32>(1, 1, 1), dimsI - vec3<i32>(1, 1, 1));');
+    expect(frameFn).toContain('let a0 = vec3<i32>(i0.x, i0.y, i0.z + zBase);');
+    expect(frameFn).toContain('let a1 = vec3<i32>(i1.x, i1.y, i1.z + zBase);');
+    // dimsI is the SLAB extent (atlas x/y, frameDepth z) — never the atlas
+    // depth — so the clamp can never reach into the neighbouring slab.
+    expect(frameFn).toContain('let dimsI = vec3<i32>(atlasDims.x, atlasDims.y, depth);');
+    // Frames clamp to the atlas's frame count, so a stray index degrades to
+    // the last slab rather than sampling off the texture.
+    expect(frameFn).toContain('let frame = clamp(frameIndex, 0, atlasDims.z / depth - 1);');
+  });
+
+  it('forbids a 0-depth sentinel: depth is at least 1 in BOTH samplers', () => {
+    expect(frameFn).toContain('max(1, i32(volumeClip.w))');
+    expect(SAMPLE_VOLUME).toContain(
+      'let depth = max(1, i32(volumeClip.w));');
+    // And no division by volumeClip.w on any CODE line (comments excluded —
+    // the depth guard divides by the derived depth, never the raw uniform).
+    const codeLines = SAMPLE_VOLUME.split('\n').filter(l => !l.trim().startsWith('//'));
+    expect(codeLines.join('\n')).not.toMatch(/\/\s*volumeClip\.w/);
+  });
+
+  it('samples frame0 and frame1 independently and mixes once, after the shared work', () => {
+    const mixSampler = SAMPLE_VOLUME.slice(SAMPLE_VOLUME.indexOf('fn sampleHandVolume('));
+    expect(mixSampler).toContain(
+      'let d0 = sampleHandVolumeFrame(q, i32(volumeClip.x), volumeTex, volumeClip);');
+    expect(mixSampler).toContain(
+      'let d1 = sampleHandVolumeFrame(q, i32(volumeClip.y), volumeTex, volumeClip);');
+    // Exactly two frame calls, exactly one distance mix.
+    expect(mixSampler.match(/sampleHandVolumeFrame\(/g)?.length).toBe(2);
+    expect(mixSampler.match(/mix\(d0, d1/g)?.length).toBe(1);
+    expect(mixSampler).toContain('clamp(volumeClip.z, 0.0, 1.0)');
+    // World-to-local, warp, uv and the outside-box distance are computed ONCE
+    // (in the mixing sampler, before either frame is sampled).
+    expect(mixSampler.indexOf('let outside')).toBeLessThan(
+      mixSampler.indexOf('sampleHandVolumeFrame(q'));
+    expect((mixSampler.match(/volumeWarp\.xyz/g) ?? []).length).toBe(1);
+  });
+
+  it('forwards volumeClip beside volumeWarp through every sampler call site', () => {
+    expect(MAP_BODY).toContain(
+      'sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
+    expect(MARCH_BODY).toContain('volumeClip: vec4<f32>');
+    expect(CONE_MARCH).toContain('volumeClip: vec4<f32>');
+    const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
+    expect(calcNormal).toContain('volumeClip: vec4<f32>');
+    // Every calcNormal mapBody tap (4 of them) carries it.
+    expect((calcNormal.match(/volumeWarp, volumeClip\)/g) ?? []).length).toBe(4);
   });
 });

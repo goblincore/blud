@@ -17,6 +17,7 @@ import {
   createFallbackHandVolumeTexture, validateHandVolumeManifest,
   type HandVolume,
 } from './hand-volume';
+import { validateHandClipManifest, type HandClipVolume } from './hand-volume-clip';
 import type { Primitive, Vec3 } from '../types';
 import type { Wound } from '../damage';
 
@@ -229,5 +230,110 @@ describe('HandsGpuView disposal ownership (X1.26 task B4)', () => {
     view2.dispose();
     expect(fallbackDisposed).toBe(true);
     vol.dispose();
+  });
+});
+
+describe('clip volume frames (X1.27 task C3)', () => {
+  function makeClipVolume(): HandClipVolume {
+    const min: Vec3 = [-0.05, -0.05, -0.02];
+    const max: Vec3 = [0.05, 0.08, 0.02];
+    const manifest = validateHandClipManifest({
+      version: 2,
+      kind: 'hand-sdf-clip',
+      binary: 'clip.r16f',
+      encoding: 'r16f-le',
+      order: 'x-fastest-y-z',
+      axes: { x: 'thumbward', y: 'distal', z: 'dorsal' },
+      dimensions: [2, 2, 4],
+      atlasDimensions: [2, 2, 24],
+      frameDepth: 4,
+      frameCount: 6,
+      frames: [
+        { label: 'open', key: 0 }, { label: 'approach', key: 0.2 },
+        { label: 'first-contact', key: 0.4 }, { label: 'wrap', key: 0.6 },
+        { label: 'thumb-lock', key: 0.8 }, { label: 'firm-grip', key: 1 },
+      ],
+      timing: { closeSec: 0.22, releaseSec: 0.12, swingSec: 0.24, releaseAtSec: 0.15 },
+      boundsMin: min,
+      boundsMax: max,
+      voxelSize: [
+        (max[0]! - min[0]!) / 1, (max[1]! - min[1]!) / 1, (max[2]! - min[2]!) / 3,
+      ],
+      isoValue: 0,
+      byteLength: 2 * 2 * 2 * 4 * 6,
+      sha256: { binary: 'a'.repeat(64), source: 'b'.repeat(64) },
+      attribution: 'CC-BY-4.0 DavidFischer derived clip',
+      prop: {
+        url: 'dynamite-bundle-grip.glb',
+        sha256: 'c'.repeat(64),
+        gripLocal: [0, 0.04, 0],
+        axisLocal: [0, 1, 0],
+        modelGripOffsetM: -0.015,
+        modelRotationLocal: [1, 0, 0, 0],
+        contactRadiusM: 0.037,
+        contactBelowM: 0.115,
+        contactAboveM: 0.135,
+        fuseTipNode: 'FuseTip',
+        flightPivotNode: 'FlightPivot',
+      },
+    });
+    return {
+      manifest,
+      texture: createFallbackHandVolumeTexture(), // stand-in for the atlas
+      maxVoxelPitch: Math.max(...manifest.voxelSize),
+      dispose() { /* caller-owned fixture */ },
+    };
+  }
+
+  it('setField(volume) accepts a v2 clip and binds its real frame depth', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    const clip = makeClipVolume();
+    view.setField('volume', clip);
+    expect(view.uniforms.volumePose0.value.w).toBe(1);
+    expect(view.volumeTexture).toBe(clip.texture);
+    expect(view.uniforms.volumeMin.value.toArray()).toEqual(clip.manifest.boundsMin);
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([0, 0, 0, 4]);
+    // same conservative march settings as the static volume
+    expect(view.uniforms.marchCfg.value.x).toBeGreaterThanOrEqual(128);
+    view.dispose();
+  });
+
+  it('setVolumeFrame clamps indices to [0, frameCount-1] and alpha to [0,1]', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    view.setField('volume', makeClipVolume());
+    view.setVolumeFrame(9, -3, 0.5);
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([5, 0, 0.5, 4]);
+    view.setVolumeFrame(2, 3, 7);
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([2, 3, 1, 4]);
+    view.setVolumeFrame(1, 2, -1);
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([1, 2, 0, 4]);
+    view.setVolumeFrame(1.6, 2.4, 0.25); // rounds, does not truncate
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([2, 2, 0.25, 4]);
+    view.dispose();
+  });
+
+  it('a bound STATIC v1 volume is forced to [0,0,0,nz], whatever is passed', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    view.setField('volume', makeVolume({ min: [-0.05, -0.05, -0.02], max: [0.05, 0.08, 0.05] }));
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([0, 0, 0, 2]);
+    view.setVolumeFrame(3, 4, 0.9);
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([0, 0, 0, 2]);
+    view.dispose();
+  });
+
+  it('setVolumeFrame is a no-op in primitive mode (fallback frame semantics stay)', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    view.setVolumeFrame(2, 3, 0.5);
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([0, 0, 0, 1]);
+    view.dispose();
+  });
+
+  it('switching back to prims restores the fallback frame uniform', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    view.setField('volume', makeClipVolume());
+    view.setVolumeFrame(0, 1, 0.5);
+    view.setField('prims');
+    expect(view.uniforms.volumeClip.value.toArray()).toEqual([0, 0, 0, 1]);
+    view.dispose();
   });
 });
