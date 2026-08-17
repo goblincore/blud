@@ -160,10 +160,8 @@ export function createHandsGpuView(
   u.faceCfg.value.set(0, HAND_SHEET_TUNING.detailStrength, 1, HAND_SHEET_TUNING.relief);
   u.faceCfg2.value.set(0, 0.5, HAND_SHEET_TUNING.glowThreshold, 0);
   // hs in -1..1 over the hand's half-extents -> uv 0..1 across the sheet. The
-  // u scale is NEGATIVE to undo the mirrored x column setProjection has to use
-  // (see there): the two negations cancel, so the sheet's +u still lands on the
-  // hand's thumb side.
-  u.faceProj.value.set(-0.5, 0.5, 0.5, 0.5);
+  // u SIGN is decided per hand in setProjection — see there.
+  u.faceProj.value.set(0.5, 0.5, 0.5, 0.5);
   u.faceAtlas.value.set(1, 1, 0, 0);
 
   const material = createMarchMaterial(dataTex, u, marchBody);
@@ -240,17 +238,28 @@ export function createHandsGpuView(
     setProjection(p) {
       u.headCentre.value.set(p.centre[0], p.centre[1], p.centre[2]);
       u.headAxes.value.set(p.halfExtent[0], p.halfExtent[1], p.halfExtent[2]);
-      // headQuat's columns ARE the hand frame: the shader un-rotates by its
-      // conjugate, so head-space x lands across the hand and y along it.
+      // headQuat's columns ARE the hand frame (thumb-ward, knuckle-ward, back),
+      // because the shader un-rotates by its conjugate — so head-space x lands
+      // across the hand toward the thumb and y along it, which is exactly the
+      // frame the sheet was baked in.
       //
-      // The x column is NEGATED because the camera basis is left-handed (see
-      // handSheetProjections): without this the basis matrix is a reflection
-      // and setFromRotationMatrix returns a meaningless quaternion, which
-      // smears the sheet across the hand at a random angle. faceProj.x carries
-      // the matching −1 so uv comes out unmirrored.
-      bx.set(-p.basis.x[0], -p.basis.x[1], -p.basis.x[2]);
+      // HANDEDNESS, resolved here rather than authored. Two independent flips
+      // stack up: (thumb, knuckles, back) is a LEFT-handed triple for a right
+      // hand and right-handed for a left one, and the camera→world map is
+      // itself orientation-reversing (camera +z is forward). Whatever the net
+      // parity, a left-handed basis fed to makeBasis is a REFLECTION, and
+      // setFromRotationMatrix extracts a meaningless quaternion from it — the
+      // sheet then smears across the hand at a random angle. So: measure the
+      // determinant, negate the x column when it is negative to get a real
+      // rotation, and put the matching −1 in faceProj.x so uv comes back
+      // unmirrored. Deriving it per frame means no per-hand flag can go stale
+      // when a re-bake or a re-solve changes the parity.
+      bx.set(p.basis.x[0], p.basis.x[1], p.basis.x[2]);
       by.set(p.basis.y[0], p.basis.y[1], p.basis.y[2]);
       bz.set(p.basis.z[0], p.basis.z[1], p.basis.z[2]);
+      const flip = bx.clone().cross(by).dot(bz) < 0;
+      if (flip) bx.negate();
+      u.faceProj.value.x = flip ? -0.5 : 0.5;
       basisM.makeBasis(bx, by, bz);
       projQ.setFromRotationMatrix(basisM);
       u.headQuat.value.set(projQ.x, projQ.y, projQ.z, projQ.w);

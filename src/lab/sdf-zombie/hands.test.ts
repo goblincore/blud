@@ -10,15 +10,18 @@ import {
   HAND_POSES,
   HAND_PRIMS,
   HAND_PRIM_COUNTS,
+  HAND_SEATING,
   HAND_PRIM_GROUPS,
   HAND_PRIM_NAMES,
   HAND_PROPS,
   HAND_SHEETS,
+  HAND_THUMB_SIGN,
   HAND_SIDE_OF_ROLE,
   PROP_MESH,
   PROP_SEATS,
   STICK_IN_HAND,
   axisDistance,
+  primPropContact,
   bobOffset,
   handPhaseFromCook,
   handSheetPose,
@@ -33,6 +36,9 @@ import {
 } from './hands';
 import { makeFpv, stepCook, FPV_TUNING } from './fpv';
 import { DYNAMITE_COOK } from '../../game/gibs/tuning';
+// @ts-expect-error — node:fs is available in vitest
+import { readFileSync } from 'node:fs';
+import { MEASURED_HANDS } from './hand-measured';
 import { sdPrimitive, smin } from './validate';
 import type { Primitive, Vec3 } from './types';
 
@@ -89,11 +95,48 @@ function handField(prims: readonly Primitive[]): (p: Vec3) => number {
 // ——— Prim sets ———————————————————————————————————————————————————————————————
 
 describe('hand prim sets', () => {
-  it('are seven prims each — silhouette only, detail is the sheet’s job', () => {
+  it('are lean — eight prims each, silhouette only, detail is the sheet’s job', () => {
     for (const role of roles) {
       expect(primsOf(role).length).toBe(HAND_PRIM_COUNTS[role]);
-      expect(HAND_PRIM_COUNTS[role]).toBe(7);
+      expect(HAND_PRIM_COUNTS[role]).toBeGreaterThanOrEqual(7);
+      expect(HAND_PRIM_COUNTS[role]).toBeLessThanOrEqual(9);
       expect(new Set(HAND_PRIM_NAMES[role]).size).toBe(HAND_PRIM_COUNTS[role]);
+      // Prim names ARE the measured segment names, in prim order: the prim set
+      // is a projection of hand-measured.ts, not a parallel authored table.
+      expect([...HAND_PRIM_NAMES[role]]).toEqual([...HAND_SEATING[role].order]);
+    }
+  });
+
+  it('keeps the girth multiplier modest — overshooting is how claws happen', () => {
+    for (const role of roles) {
+      expect(HAND_SEATING[role].girth).toBeGreaterThanOrEqual(1);
+      expect(HAND_SEATING[role].girth).toBeLessThanOrEqual(1.35);
+    }
+  });
+
+  it('takes every endpoint and radius from the measured mesh', () => {
+    // Only the forearm's LENGTH is ours (it has to leave the frame); its
+    // direction, and every other segment outright, comes from the measurements.
+    for (const role of roles) {
+      const prims = primsOf(role);
+      for (let i = 0; i < prims.length; i++) {
+        const name = HAND_SEATING[role].order[i]!;
+        const seg = MEASURED_HANDS[HAND_SEATING[role].measured].segments[name]!;
+        // Radii are the measured ones times one uniform girth multiplier —
+        // claymation chunk, applied without moving anything.
+        expect(prims[i]!.radius).toBeCloseTo(seg.radius * HAND_SEATING[role].girth, 9);
+        const measuredLen = Math.hypot(
+          seg.b[0] - seg.a[0], seg.b[1] - seg.a[1], seg.b[2] - seg.a[2]);
+        const primLen = dist(prims[i]!.a as Vec3, prims[i]!.b as Vec3);
+        if (name === 'forearm') {
+          expect(primLen).toBeCloseTo(HAND_SEATING[role].forearmLenM, 6);
+        } else {
+          // Seating is a rigid motion, so lengths are preserved exactly —
+          // except where the tangency clamp pushed a buried endpoint out.
+          const clamped = HAND_SEATING[role].contact.includes(name);
+          expect(primLen, name).toBeCloseTo(measuredLen, clamped ? 1 : 9);
+        }
+      }
     }
   });
 
@@ -127,14 +170,18 @@ describe('hand prim sets', () => {
     for (const role of roles) {
       for (const p of primsOf(role)) {
         expect(mid(p, 1)).toBeLessThan(0);        // bottom half of the frame
-        expect(mid(p, 2)).toBeGreaterThan(0.2);   // inside the camera-anchored box
+        // In front of the camera's 0.1 near plane, with margin. The forearms are
+        // 0.62 m long now, so the nearest of them legitimately reaches in.
+        expect(mid(p, 2)).toBeGreaterThan(0.12);
         expect(mid(p, 2)).toBeLessThan(0.9);
       }
-      // The forearm stub exits below the hand mass.
+      // The forearm runs downward away from the hand mass. (How far it has to
+      // reach is the frame-edge test below — an absolute y threshold is the
+      // wrong measure once the arm also recedes in z.)
       const g = HAND_PRIM_GROUPS[role];
       const stub = primsOf(role)[g.forearm[0]!]!;
       const mass = primsOf(role)[g.mass[0]!]!;
-      expect(Math.min(stub.a[1], stub.b[1])).toBeLessThan(mid(mass, 1) - 0.15);
+      expect(Math.min(stub.a[1], stub.b[1])).toBeLessThan(mid(mass, 1));
     }
     expect(mid(primsOf('lead')[HAND_PRIM_GROUPS.lead.mass[0]!]!, 0)).toBeGreaterThan(0);
     expect(mid(primsOf('support')[HAND_PRIM_GROUPS.support.mass[0]!]!, 0)).toBeLessThan(0);
@@ -160,72 +207,55 @@ describe('hand prim sets', () => {
 // a construction guarantee. These are the assertions that keep it one.
 
 describe('the grips actually grip', () => {
-  it('sinks every grip prim’s surface INTO its prop (contact, not adjacency)', () => {
-    const cases: [HandRole, keyof typeof PROP_SEATS][] = [['lead', 'stick'], ['support', 'cig']];
-    for (const [role, key] of cases) {
-      const seat = PROP_SEATS[key];
-      for (const i of HAND_GRIP_PRIMS[role]) {
-        const p = primsOf(role)[i]!;
-        for (const end of [p.a, p.b] as Vec3[]) {
-          // The prim's SURFACE lies inside the prop's outer radius: they touch.
-          const surface = axisDistance(seat, end) - p.radius;
-          expect(surface, `${role}[${i}] surface`).toBeLessThan(seat.radius);
-        }
+  it('puts every contact digit’s surface INSIDE its prop (contact, not adjacency)', () => {
+    for (const role of roles) {
+      const cfg = HAND_SEATING[role];
+      for (const name of cfg.contact) {
+        const p = primsOf(role)[cfg.order.indexOf(name)]!;
+        const c = primPropContact(cfg.seat, p);
+        // Measured at the closest approach, which for a wrapped capsule is
+        // mid-span, not at an endpoint.
+        expect(c.sinkM, `${role}.${name} sink`).toBeGreaterThan(0);
+        // …and the tangency clamp caps how deep it may go, so a digit can never
+        // disappear inside the prop the way the raw measured thumb did.
+        expect(c.sinkM, `${role}.${name} sink`).toBeLessThanOrEqual(cfg.maxSinkM + 1e-9);
+        // Contact happens where the prop actually exists.
+        expect(c.axialM, `${role}.${name} axial`)
+          .toBeGreaterThan(-PROP_MESH[role === 'lead' ? 'stick' : 'cig'].below - 1e-9);
       }
     }
   });
 
-  it('wraps each digit tangent to its prop, sunk a few authored mm', () => {
-    // The wrapped digits (as opposed to the fist, which the bundle passes
-    // clean through) sit at radius = propR + primR − sink by construction, so
-    // their penetration IS the authored sink. A regression that re-authored a
-    // digit in raw camera coordinates would land outside this band.
-    const wrapped: [HandRole, keyof typeof PROP_SEATS, string[]][] = [
-      ['lead', 'stick', ['knuckles', 'fingerTips', 'thumbBase', 'thumbTip']],
-      ['support', 'cig', ['index', 'middle']],
-    ];
-    for (const [role, key, names] of wrapped) {
-      const seat = PROP_SEATS[key];
-      for (const name of names) {
-        const p = primsOf(role)[IX[role][name]!]!;
-        for (const end of [p.a, p.b] as Vec3[]) {
-          const sink = seat.radius - (axisDistance(seat, end) - p.radius);
-          expect(sink, `${role}.${name} sink`).toBeGreaterThan(0);
-          expect(sink, `${role}.${name} sink`).toBeLessThan(p.radius);
-        }
-      }
-    }
+  it('passes the bundle THROUGH the fist — measured overlap, not adjacency', () => {
+    // Deliberately NOT a contact prim: the bundle is swallowed by the fist mass
+    // rather than resting against it, and that overlap IS the occlusion.
+    const fist = primsOf('lead')[HAND_SEATING.lead.order.indexOf('fist')]!;
+    const c = primPropContact(PROP_SEATS.stick, fist);
+    expect(c.sinkM).toBeGreaterThan(0.010);
   });
 
-  it('passes the bundle THROUGH the fist — the axis is inside the fist mass', () => {
-    const fist = primsOf('lead')[IX.lead.fist!]!;
-    // The bundle's axis runs inside the fist prim's own radius.
-    expect(axisDistance(PROP_SEATS.stick, midV(fist)))
-      .toBeLessThan(fist.radius * Math.min(...fist.scale));
-  });
-
-  it('OCCLUDES the bundle: a ray from the eye to the grip hits flesh first', () => {
-    // The owner's actual complaint was that the bundle floated adjacent to the
-    // hand. March the hands' real SDF along the eye→grip ray and require the
-    // flesh surface to be crossed BEFORE the bundle's own surface.
+  it('OCCLUDES the bundle: its camera-facing shell is buried in flesh', () => {
+    // The owner's original complaint was a bundle floating ALONGSIDE the hand.
+    // Walk up the bundle's own surface on the side the eye sees and ask the
+    // hands' REAL SDF (validate.ts is the CPU mirror of march.wgsl's sdPrim +
+    // smin) how much of it is inside flesh. A single ray would thread the gap
+    // between thumb and fingers — which a real fist has — so measure coverage.
     const seat = PROP_SEATS.stick;
     const field = handField(primsOf('lead'));
-    const target = seat.grip as Vec3;
-    const range = Math.hypot(...target);
-    const dir: Vec3 = [target[0] / range, target[1] / range, target[2] / range];
-    let fleshAt = Infinity;
-    for (let t = 0.05; t < range; t += 0.0015) {
-      if (field([dir[0] * t, dir[1] * t, dir[2] * t]) <= 0) { fleshAt = t; break; }
+    let buried = 0, n = 0;
+    for (let t = -PROP_MESH.stick.below; t <= 0.05; t += 0.003) {
+      // The point on the bundle's shell facing the eye at this height (θ = 0).
+      if (field(wrapPoint(seat, 0, t, seat.radius)) < 0) buried++;
+      n++;
     }
-    const bundleAt = range - seat.radius; // the bundle's near surface
-    expect(fleshAt).toBeLessThan(bundleAt);
-    // And the flesh in front is a real slab, not a graze.
-    expect(bundleAt - fleshAt).toBeGreaterThan(0.004);
+    expect(n).toBeGreaterThan(20);
+    expect(buried / n, 'fraction of the visible shell inside flesh')
+      .toBeGreaterThan(0.3);
   });
 
   it('locks the lead thumb tip across the FRONT of the bundle', () => {
     const f = propFrame(PROP_SEATS.stick);
-    const tip = primsOf('lead')[IX.lead.thumbTip!]!;
+    const tip = primsOf('lead')[HAND_SEATING.lead.order.indexOf('thumbTip')]!;
     // e1 is the prop's camera-facing perpendicular: a positive component means
     // the thumb is on the side the eye is looking from.
     const rel = sub3(midV(tip), PROP_SEATS.stick.grip as Vec3);
@@ -234,21 +264,18 @@ describe('the grips actually grip', () => {
 
   it('pinches the cigarette from OPPOSITE sides, index and middle', () => {
     const f = propFrame(PROP_SEATS.cig);
-    const idx = primsOf('support')[IX.support.index!]!;
-    const mdl = primsOf('support')[IX.support.middle!]!;
+    const idx = primsOf('support')[HAND_SEATING.support.order.indexOf('index')]!;
+    const mdl = primsOf('support')[HAND_SEATING.support.order.indexOf('middle')]!;
     const side = (p: Primitive): number =>
       dot3(sub3(midV(p), PROP_SEATS.cig.grip as Vec3), f.e2);
     // Opposite signs across the cigarette — an actual pinch.
     expect(side(idx) * side(mdl)).toBeLessThan(0);
-    // Both seat into the paper by roughly the authored 2 mm: the digit's
-    // SURFACE (centre distance minus its radius) sits inside the cigarette's
-    // radius by that much.
+    // Both seat into the paper: measured at the closest approach, a fraction of
+    // a millimetre to a couple of millimetres, which is what a pinch is.
     for (const p of [idx, mdl]) {
-      for (const e of [p.a, p.b] as Vec3[]) {
-        const penetration = PROP_SEATS.cig.radius - (axisDistance(PROP_SEATS.cig, e) - p.radius);
-        expect(penetration).toBeGreaterThan(0.001);
-        expect(penetration).toBeLessThan(0.004);
-      }
+      const c = primPropContact(PROP_SEATS.cig, p);
+      expect(c.sinkM).toBeGreaterThan(0);
+      expect(c.sinkM).toBeLessThanOrEqual(HAND_SEATING.support.maxSinkM + 1e-9);
     }
   });
 
@@ -283,6 +310,45 @@ describe('the grips actually grip', () => {
 // ——— The detail sheet's projection frame ————————————————————————————————————
 
 describe('hand-detail sheet framing', () => {
+  it('projects through the BAKE’s own ortho half-scale — no drift', () => {
+    // HAND_SHEETS carries a copy of the bake's halfScaleM because hands.ts is a
+    // pure module and cannot fetch a runtime asset. A re-bake changes those
+    // numbers and NOTHING else would notice: the sheet would still render, just
+    // scaled wrong, with every crease slightly off the knuckle it came from.
+    // So read the manifest and compare.
+    const manifest = JSON.parse(readFileSync(
+      'public/assets/lab/hand-detail.json', 'utf8',
+    )) as { sheets: Record<string, { halfScaleM: number; mean: number }> };
+    for (const role of roles) {
+      const frame = HAND_SHEETS[role];
+      const entry = manifest.sheets[frame.sheet];
+      expect(entry, `manifest is missing sheet "${frame.sheet}"`).toBeTruthy();
+      expect(frame.halfExtent[0]).toBeCloseTo(entry!.halfScaleM, 9);
+      // Square bake camera: one ortho_scale drives both image axes, so the
+      // across and along extents must stay equal or the creases stretch.
+      expect(frame.halfExtent[1]).toBeCloseTo(entry!.halfScaleM, 9);
+      // Depth is free — nothing is projected along the back-of-hand axis.
+      expect(frame.halfExtent[2]).toBeGreaterThan(0);
+    }
+  });
+
+  it('points the sheet’s across-axis at the THUMB on both hands', () => {
+    // The bake authored both sheets thumb-toward-image-right, so the projection's
+    // x column has to be thumb-ward per hand — and `w = u × b` lands on the pinky
+    // side of a right hand and the thumb side of a left one, so the sign cannot be
+    // shared. HAND_THUMB_SIGN reads it off the measured thumb rather than
+    // reasoning about handedness.
+    for (const role of roles) {
+      const prims = primsOf(role);
+      const pose = handSheetPose(prims, role);
+      const tip = prims[HAND_SEATING[role].order.indexOf('thumbTip')]!;
+      const toThumb = sub3(midV(tip), pose.centre);
+      expect(dot3(toThumb, pose.basis.x), `${role} across-axis`).toBeGreaterThan(0);
+    }
+    // …and the two signs genuinely differ, which is the whole point.
+    expect(HAND_THUMB_SIGN.lead).not.toBe(HAND_THUMB_SIGN.support);
+  });
+
   it('gives each hand an orthonormal right-handed frame and its own sheet', () => {
     const sheets = new Set<string>();
     for (const role of roles) {
@@ -404,7 +470,7 @@ describe('pose keyframes (data integrity)', () => {
     const idle = HAND_POSES.lead.idle[i]!.pos!;
     expect(cook[1]).toBeLessThan(idle[1]);
     expect(cook[0]).toBeGreaterThan(idle[0]);
-    expect(HAND_POSES.lead.cook[IX.lead.knuckles!]!.scale![1]).toBeGreaterThan(1);
+    expect(HAND_POSES.lead.cook[IX.lead.knuckleRidge!]!.scale![1]).toBeGreaterThan(1);
   });
 
   it('extends the lead hand on the throw and drops the support hand clear', () => {
@@ -413,7 +479,7 @@ describe('pose keyframes (data integrity)', () => {
     expect(lead[2]).toBeGreaterThan(0);   // …and forward
     expect(HAND_POSES.support.throw[IX.support.palm!]!.pos![1]).toBeLessThan(0);
     // Fingers open on release.
-    expect(HAND_POSES.lead.throw[IX.lead.knuckles!]!.scale![0]).toBeLessThan(1);
+    expect(HAND_POSES.lead.throw[IX.lead.knuckleRidge!]!.scale![0]).toBeLessThan(1);
     // The arm follows the hand out rather than staying behind.
     const arm = HAND_POSES.lead.throw[IX.lead.forearm!]!.pos!;
     expect(arm[1]).toBeGreaterThan(lead[1] * 0.6);

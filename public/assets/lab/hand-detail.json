@@ -2,11 +2,14 @@
   "sheets": {
     "grip": {
       "file": "hand-detail-grip.png",
-      "mean": 0.779
+      "mean": 0.631,
+      "halfScaleM": 0.08629
     },
     "pinch": {
       "file": "hand-detail-pinch.png",
-      "mean": 0.697
+      "mean": 0.593,
+      "halfScaleM": 0.12909
     }
-  }
+  },
+  "attribution": "This work is based on \"First Person hands rigged\" (https://sketchfab.com/3d-models/first-person-hands-rigged-547a45535f0c4fe787948f7a7a6a88db) by DavidFischer (https://sketchfab.com/davidfischer) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
 }

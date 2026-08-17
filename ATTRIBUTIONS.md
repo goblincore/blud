@@ -1,0 +1,60 @@
+# Third-party attributions
+
+Credits that must travel with Blud wherever it is shared, including in the
+shipped game's credits screen. One section per third-party work.
+
+Everything else in this repo is original work. **Extracted Blood (1997) assets
+are dev placeholders only** — they are gitignored, never committed and never
+shipped (see `CLAUDE.md`), so they carry no attribution here.
+
+---
+
+## First Person hands rigged — DavidFischer (CC-BY-4.0)
+
+**Required credit (verbatim, as the model's `license.txt` specifies):**
+
+> This work is based on "First Person hands rigged"
+> (https://sketchfab.com/3d-models/first-person-hands-rigged-547a45535f0c4fe787948f7a7a6a88db)
+> by DavidFischer (https://sketchfab.com/davidfischer) licensed under CC-BY-4.0
+> (http://creativecommons.org/licenses/by/4.0/)
+
+- **Licence:** [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/) —
+  attribution required, derivatives allowed, commercial use allowed.
+- **Author:** DavidFischer — https://sketchfab.com/davidfischer
+- **Source:** https://sketchfab.com/3d-models/first-person-hands-rigged-547a45535f0c4fe787948f7a7a6a88db
+
+### What in this repo derives from it
+
+The model is posed in headless Blender by `scripts/pose_measure_hands.py` and
+used as ground truth for the SDF lab's first-person hands, in two ways:
+
+1. **`public/assets/lab/hand-detail-{grip,pinch}.png`** — greyscale height
+   sheets rendered from the posed mesh, projected onto the marched hand flesh
+   for relief. These ARE a derivative work, and they are the reason this
+   attribution exists.
+2. **`src/lab/sdf-zombie/hand-measured.ts`** — capsule measurements (axis
+   endpoints and cross-section radii) taken off the posed mesh, from which the
+   SDF prim silhouettes are built. Measurements are facts about dimensions
+   rather than copyrightable expression, so this file would carry no obligation
+   on its own; it is listed for honesty about provenance, not because the
+   licence compels it.
+
+### What does NOT derive from it
+
+- **The model itself is never redistributed.** No mesh, `.bin`, `.gltf`,
+  `.glb`, `.usdz` or texture from the pack is committed to this repo, and
+  `scripts/pose_measure_hands.py` reads it from a path outside the repo.
+- The hand prim *language*, poses, gestures, props, jiggle and shading are
+  original.
+- `src/lab/sdf-zombie/webgpu/hands-sheet.ts` ships a **procedural fallback**
+  pair of sheets, drawn from authored stroke data with no third-party input.
+  Deleting the two PNGs above activates it and removes this obligation
+  entirely, at the cost of cruder relief.
+
+### Not used
+
+A second pack (`free-fps-hands`, including `source/hand.blend` and its
+textures) was available locally but contains **no licence file anywhere**,
+including inside its archive. Its terms are therefore unknown, it is treated as
+all-rights-reserved, and **nothing in this repo derives from it** — it was never
+imported, opened or measured.

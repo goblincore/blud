@@ -463,19 +463,28 @@ describe('handSheetProjections', () => {
       const d = (p: Vec3, q: Vec3): number => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
       expect(d(b.x, b.y)).toBeCloseTo(0, 9);
       expect(d(b.y, b.z)).toBeCloseTo(0, 9);
-      // LEFT-handed on purpose: x × y = −z. The camera frame this rides is
-      // left-handed (camera +z is forward), so an honest hand frame comes out
-      // that way, and fpv-view's setProjection negates the x column to get a
-      // real rotation matrix out of it. Asserted so nobody "fixes" one half of
-      // that pair without the other.
+      for (const v of proj[side].halfExtent) expect(v).toBeGreaterThan(0);
+    }
+    // HANDEDNESS DIFFERS BETWEEN THE HANDS, and that is inherent rather than a
+    // bug. The sheet basis is (thumb-ward, knuckle-ward, back-of-hand), which is
+    // a LEFT-handed triple for a right hand and right-handed for a left one — the
+    // bake measured the same thing as determinants −1 (grip) and +1 (pinch) — and
+    // the camera→world map flips both again. So exactly one side arrives here as a
+    // reflection, which is why fpv-view's setProjection measures the determinant
+    // and negates a column rather than trusting a per-hand flag. Asserted as an
+    // inequality so nobody "fixes" one side into agreeing with the other.
+    const detOf = (b: { x: Vec3; y: Vec3; z: Vec3 }): number => {
       const cx: Vec3 = [
         b.x[1] * b.y[2] - b.x[2] * b.y[1],
         b.x[2] * b.y[0] - b.x[0] * b.y[2],
         b.x[0] * b.y[1] - b.x[1] * b.y[0],
       ];
-      for (let k = 0; k < 3; k++) expect(cx[k]).toBeCloseTo(-b.z[k]!, 9);
-      for (const v of proj[side].halfExtent) expect(v).toBeGreaterThan(0);
-    }
+      return cx[0] * b.z[0] + cx[1] * b.z[1] + cx[2] * b.z[2];
+    };
+    const dl = detOf(proj.left.basis), dr = detOf(proj.right.basis);
+    expect(Math.abs(dl)).toBeCloseTo(1, 9);   // orthonormal, so ±1
+    expect(Math.abs(dr)).toBeCloseTo(1, 9);
+    expect(Math.sign(dl)).not.toBe(Math.sign(dr));
     // The two centres are metres apart — one projection could never serve both,
     // which is why each hand gets its own view.
     const dx = proj.left.centre.map((v, i) => v - proj.right.centre[i]!);
