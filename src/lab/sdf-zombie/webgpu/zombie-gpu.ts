@@ -85,7 +85,9 @@ function buildMarchFn(mapBodySrc?: string) {
   return wgslFn(MARCH_BODY, nodes);
 }
 
-const marchBody = buildMarchFn();
+/** The default march entry (plus its dependency-ordered helpers), shared by
+ *  the body views and the hands view. */
+export const marchBody = buildMarchFn();
 
 /** The coarse cone-march entry, sharing the same dependency-ordered helpers. */
 const coneMarch = (() => {
@@ -100,9 +102,9 @@ const coneMarch = (() => {
  * loads. A 1x1 opaque white texel is the identity for everything the face does
  * — the multiplier divides by its own mean, and the relief differences are all
  * zero — so a body whose face never loads simply renders untextured rather
- * than black or pink.
+ * than black or pink. Exported for the hands view (which has no face at all).
  */
-function blankFaceTexture(): THREE.DataTexture {
+export function blankFaceTexture(): THREE.DataTexture {
   const tex = new THREE.DataTexture(
     new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat,
   );
@@ -122,7 +124,9 @@ function blankFaceTexture(): THREE.DataTexture {
  * make an already-long signature unreadable. Slot meanings are documented on
  * MARCH_BODY in march.wgsl.ts and repeated in the comments below.
  */
-function defaultUniforms(faceTex: THREE.Texture) {
+/** The default uniform block — exported so the hands view can start from the
+ *  same look defaults before copying the hero's live template. */
+export function defaultUniforms(faceTex: THREE.Texture) {
   return {
     /** x primCount, y clusterCount, z carveCount, w maxBlendK */
     counts: uniform(new THREE.Vector4(0, 0, 0, 0)),
@@ -315,7 +319,9 @@ export interface ConeSource {
   uniforms: ConeUniforms;
 }
 
-function createMarchMaterial(
+/** Builds the march material (depth-writing proxy-box shader). Exported for
+ *  the hands view — one material builder, one look. */
+export function createMarchMaterial(
   dataTex: THREE.Texture, u: MarchUniforms, march = marchBody,
   cone?: ConeSource, occluder?: OccluderSource,
 ) {
@@ -407,8 +413,10 @@ function createMarchMaterial(
  */
 export const CONE_DEPTH_RANGE = 32;
 
-/** Allocates the RGBA32F data texture every march reads its field from. */
-function createDataTexture() {
+/** Allocates the RGBA32F data texture every march reads its field from.
+ *  Exported for the FPV hands view, which marches its own small field the
+ *  same way (X1.23 task 4) — one copy of the packing machinery. */
+export function createDataTexture() {
   // Nearest filtering and no mips: these are DATA, and any interpolation
   // between texels would silently blend one primitive's endpoint into its
   // neighbour's.
@@ -435,8 +443,9 @@ function createDataTexture() {
  * meta texel = (type, age, rimSplayScale, rimOffsetScale); the scale slots
  * default to 1 so callers that pass nothing (chunk torn ends) keep the global
  * woundCfg rim settings unchanged.
+ * Exported for the hands view, which owns its own (splash-wound) ring.
  */
-function writeWounds(
+export function writeWounds(
   texels: Float32Array,
   worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
   splayScales?: number[], offsetScales?: number[],

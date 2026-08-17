@@ -63,6 +63,14 @@ import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
+import { buildHandPrims } from '../hands';
+import {
+  EMPTY_FPV_INPUT, enterFpvMode, exitFpvMode, forceThrow, handPrimsToWorld,
+  makeFpvMode, posedHandPrims, stepFpvMode,
+  type FpvGorePort, type FpvModeState,
+} from '../fpv-mode';
+import { cookCharge } from '../fpv';
+import { createBurstLayer, createHandsGpuView, createStickProp } from './fpv-view';
 import {
   initialAdaptiveState, scaleForRung, stepAdaptive,
 } from '../adaptive-scale';
@@ -180,6 +188,8 @@ async function main() {
   // Motion status line (filled by the motion panel section further down;
   // declared here so the frame callback can always reach it).
   let motionReadEl: HTMLDivElement | null = null;
+  // FPV readout line — same declaration-before-callback pattern.
+  let fpvReadEl: HTMLDivElement | null = null;
 
   // The raymarched bodies render into their own target at their own scale and
   // composite back over the polygonal scene. Cost is close to linear in
@@ -716,6 +726,11 @@ async function main() {
   const canvas = handle.canvas;
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('pointerdown', (e) => {
+    if (fpvMode.mode === 'fpv') {
+      // FPV owns the left button: press = cook. No orbiting in first person.
+      if (e.button === 0) fpvPress = true;
+      return;
+    }
     autoSpin = false;
     if (e.button !== 0 && e.button !== 2) return;
     dragging = true;
@@ -745,6 +760,11 @@ async function main() {
   // because the same button also orbits: a press that travelled further than
   // DRAG_SLOP was a camera drag and must not also put a hole in the zombie.
   canvas.addEventListener('pointerup', (ev: PointerEvent) => {
+    if (fpvMode.mode === 'fpv') {
+      // Release = throw. The god-cam click-shoot pipeline stays god-only.
+      if (ev.button === 0) fpvRelease = true;
+      return;
+    }
     if (dragging) {
       dragging = false;
       canvas.releasePointerCapture(ev.pointerId);
@@ -928,7 +948,193 @@ async function main() {
     resetMotion(); // a gibbed body is done shambling — fresh state for whatever spawns next
   }
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // FPV mode (X1.23): Tab toggles the god-cam ↔ first-person walk; the
+  // orchestration lives in ../fpv-mode.ts (pure, unit-tested) and this block
+  // owns everything browser-shaped — pointer lock, the input latch, the
+  // hands/stick/burst views, the charge-bar HUD, and the gore port that
+  // routes each detonation into the EXISTING stack above (pushWound,
+  // impulseAt, severLimb/severDistal, gibEverything, chunk velocities, the
+  // motion shot signal). Nothing below re-implements gore; it calls it.
+  // -------------------------------------------------------------------------
+  let fpvMode: FpvModeState = makeFpvMode('god');
+  /** The lab floor is 20×20 — the walk bounds are the floor, not the game's
+   *  full BALLISTIC arena the bundle still flies (and bounces) inside. */
+  const FPV_FLOOR_BOUNDS = { minX: -9.5, maxX: 9.5, minZ: -9.5, maxZ: 9.5 };
+  const HAND_REST = buildHandPrims();
+  /** The hands' own wound ring — splash stamps from the resolver. */
+  let handWounds: Wound[] = [];
+  /** Last frame's world-space hand prims — the splash trace target. */
+  let lastHandWorld: ReturnType<typeof handPrimsToWorld> = [];
+  const handsView = createHandsGpuView(u);
+  handsView.object.layers.set(SDF_LAYER);
+  handsView.setVisible(false);
+  scene.add(handsView.object);
+  const stick = createStickProp();
+  scene.add(stick.object);
+  const burstLayer = createBurstLayer(scene);
+  /** Hands A/B toggle — the spec's perf gate is measured both ways. */
+  let handsEnabled = true;
+
+  /** The lazy scene reads the resolver evaluates at detonation time. */
+  const fpvWorld = {
+    heroPosed: () => lastPosed,
+    chunks: () => chunks.map(c => ({ id: c.id, pos: c.state.pos })),
+    handPrimsWorld: () => lastHandWorld,
+  };
+
+  /** One detonation → the existing gore stack, in the click-shoot order. */
+  const gorePort: FpvGorePort = {
+    stampWounds(ws) {
+      for (const w of ws) wounds = pushWound(wounds, w, MAX_WOUNDS);
+      refreshWounds();
+    },
+    // DIRECT meter credit (fpv-mode's contract): freshWounds would weight by
+    // PROFILE radius and collapse the zombie from an edge-of-radius graze.
+    creditMeter(credit) {
+      motionState = {
+        ...motionState,
+        collapse: {
+          ...motionState.collapse,
+          meter: Math.min(1, motionState.collapse.meter + credit),
+        },
+      };
+    },
+    impulseRig(at, vel) {
+      // One frame's displacement from the concussion velocity — the Verlet
+      // prev-pos turns it into the launch velocity, and the rest-pose pull
+      // (or the collapse ramp) decides how much of it sticks.
+      const k = 1 / 30;
+      bound = impulseAt(bound, at, [vel[0] * k, vel[1] * k, vel[2] * k]);
+    },
+    severFullLimbs(limbs) {
+      for (const limb of limbs) {
+        const { body: next, chunk, stumpWound } = severLimb(current, limb);
+        if (chunk.prims.length === 0) continue;
+        current = next;
+        if (stumpWound) {
+          wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+          pendingWounds.push(stumpWound); // stump meter fuel, as click-shoot
+        }
+        pendingSevered.push(limb);
+        spawnChunk(limb, chunk.origin, chunk.prims, undefined,
+          [attachPoint(chunk.prims, torsoCentre())]);
+        view.update(current);
+        refreshWounds();
+        rebind();
+      }
+    },
+    applyChainCuts(cuts) {
+      for (const cut of cuts) {
+        const { body: next, chunk, stumpWound } = severDistal(current, cut);
+        if (chunk.prims.length === 0) continue;
+        current = next;
+        if (stumpWound) {
+          wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+          pendingWounds.push(stumpWound);
+        }
+        pendingSevered.push(cut.limb);
+        spawnChunk(cut.limb, chunk.origin, chunk.prims, undefined, chunk.tornAt);
+        view.update(current);
+        refreshWounds();
+        rebind();
+      }
+    },
+    gibBody() { gibEverything(); },
+    impulseChunks(list) {
+      for (const ci of list) {
+        const c = chunks.find(x => x.id === ci.chunkId);
+        if (!c) continue;
+        c.state = { ...c.state, vel: add(c.state.vel, ci.vel) };
+      }
+    },
+    spawnBurst(v) { burstLayer.spawn(v); },
+    stampHandWounds(ws) {
+      for (const w of ws) handWounds = pushWound(handWounds, w, MAX_WOUNDS);
+    },
+    pushShot(shot) { pendingShot = shot; },
+  };
+
+  // — Input latch: accumulated between frames, consumed once per frame. —
+  let fpvMouseDx = 0;
+  let fpvMouseDy = 0;
+  const fpvKeys = { forward: false, back: false, left: false, right: false };
+  let fpvPress = false;
+  let fpvRelease = false;
+
+  /** Charge-bar HUD — a minimal DOM overlay (spec §1: no crosshair needed,
+   *  the hands ARE the sight). */
+  const chargeWrap = document.createElement('div');
+  chargeWrap.style.cssText =
+    'position:fixed;left:50%;bottom:11%;transform:translateX(-50%);width:220px;' +
+    'height:10px;border:1px solid #f4c98a;background:rgba(0,0,0,0.55);' +
+    'display:none;pointer-events:none;z-index:5;';
+  const chargeFill = document.createElement('div');
+  chargeFill.style.cssText = 'height:100%;width:0%;background:#e8a33d;';
+  chargeWrap.appendChild(chargeFill);
+  mount.appendChild(chargeWrap);
+
+  function enterFpv() {
+    fpvMode = enterFpvMode(fpvMode);
+    fpvMouseDx = 0; fpvMouseDy = 0; fpvPress = false; fpvRelease = false;
+    handsView.setVisible(handsEnabled);
+    fpvBtn.textContent = 'fpv: exit';
+    try {
+      const p = canvas.requestPointerLock() as unknown;
+      if (p && typeof (p as Promise<void>).catch === 'function') {
+        (p as Promise<void>).catch(() => { /* lock denied — camera still works */ });
+      }
+    } catch { /* older signature — nothing to await */ }
+  }
+  function exitFpv() {
+    fpvMode = exitFpvMode(fpvMode);
+    handsView.setVisible(false);
+    chargeWrap.style.display = 'none';
+    fpvBtn.textContent = 'fpv: enter';
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+  }
+
+  // Losing the lock (Esc, tab switch) exits to the god-cam — the FPV camera
+  // without the mouse is a trap, and the god tooling must stay reachable.
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement !== canvas && fpvMode.mode === 'fpv') exitFpv();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === canvas && fpvMode.mode === 'fpv') {
+      fpvMouseDx += e.movementX;
+      fpvMouseDy += e.movementY;
+    }
+  });
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Tab') {
+      ev.preventDefault();
+      if (fpvMode.mode === 'fpv') exitFpv(); else enterFpv();
+      return;
+    }
+    if (fpvMode.mode !== 'fpv') return;
+    if (ev.code === 'KeyW') fpvKeys.forward = true;
+    else if (ev.code === 'KeyS') fpvKeys.back = true;
+    else if (ev.code === 'KeyA') fpvKeys.left = true;
+    else if (ev.code === 'KeyD') fpvKeys.right = true;
+  });
+  window.addEventListener('keyup', (ev) => {
+    if (ev.code === 'KeyW') fpvKeys.forward = false;
+    else if (ev.code === 'KeyS') fpvKeys.back = false;
+    else if (ev.code === 'KeyA') fpvKeys.left = false;
+    else if (ev.code === 'KeyD') fpvKeys.right = false;
+  });
+
+  // — Charge-bar + readout helpers (frame-side) —
+  function updateChargeHud(mode: string, charge: number) {
+    const show = mode === 'fpv' && charge > 0.001;
+    chargeWrap.style.display = show ? 'block' : 'none';
+    if (show) {
+      chargeFill.style.width = `${Math.round(charge * 100)}%`;
+      // Near the fuse limit the bar goes hot — the overcook warning.
+      chargeFill.style.background = charge > 0.85 ? '#e04c2c' : '#e8a33d';
+    }
+  }
+
   // Benchmark. Press B.
   // ---------------------------------------------------------------------------
   //
@@ -1130,6 +1336,48 @@ async function main() {
 
     tickAdaptive(now);
 
+    // — FPV step (X1.23): controller + flight + detonation + hands, FIRST so
+    //    a detonation's wounds/severs/impulses flow through the motion, rig
+    //    and pose code below exactly like any other hit this frame. The
+    //    gore port routes the bundle into the existing stack; nothing here
+    //    re-implements it. —
+    const fpvInput = fpvMode.mode === 'fpv'
+      ? {
+          dx: fpvMouseDx, dy: fpvMouseDy,
+          forward: fpvKeys.forward, back: fpvKeys.back,
+          left: fpvKeys.left, right: fpvKeys.right,
+          press: fpvPress, release: fpvRelease,
+        }
+      : EMPTY_FPV_INPUT;
+    fpvMouseDx = 0; fpvMouseDy = 0; fpvPress = false; fpvRelease = false;
+    const fpvNow = now / 1000;
+    const fpvStep = stepFpvMode(
+      fpvMode, fpvInput, dt, fpvNow, fpvWorld, gorePort, FPV_FLOOR_BOUNDS);
+    fpvMode = fpvStep.state;
+    const ff = fpvStep.frame;
+
+    // Hands: the pure pose + jiggle landed in fpvMode; march the world-space
+    // prims (also the splash target for the next detonation).
+    let posedLocalHands: ReturnType<typeof posedHandPrims> | null = null;
+    if (ff.mode === 'fpv') {
+      posedLocalHands = posedHandPrims(HAND_REST, ff.handPose, fpvMode.jiggle);
+      lastHandWorld = handPrimsToWorld(posedLocalHands, ff.eye, ff.yaw, ff.pitch);
+      if (handsEnabled) {
+        handsView.update(lastHandWorld, handWounds);
+        handsView.setVisible(true);
+      } else {
+        handsView.setVisible(false);
+      }
+    } else {
+      handsView.setVisible(false);
+    }
+    updateChargeHud(ff.mode, ff.charge);
+    if (fpvReadEl) {
+      fpvReadEl.textContent = ff.mode === 'fpv'
+        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length}`
+        : `god · ${ff.flight ? 'bundle away' : 'idle'} · bursts ${burstLayer.usingAtlas ? 'seq' : 'proc'}`;
+    }
+
     // Gib physics: step every chunk, then re-pack its world-space field.
     // dt clamped like the rig's: a hidden tab pausing rAF must not integrate
     // the whole gap in one ballistic step and teleport every chunk.
@@ -1257,14 +1505,53 @@ async function main() {
     if (skull) view.setHeadShape(skull.centre, skull.axes);
     uploadWounds(posed.prims);
 
-    if (autoSpin) camYaw += dt * 0.35;
-    const cp = Math.cos(camPitch);
-    camera.position.set(
-      camTarget.x + Math.sin(camYaw) * cp * camDist,
-      camTarget.y + Math.sin(camPitch) * camDist,
-      camTarget.z + Math.cos(camYaw) * cp * camDist,
-    );
-    camera.lookAt(camTarget);
+    if (ff.mode === 'fpv') {
+      // First-person camera: eye from the controller, aim from yaw/pitch,
+      // plus the detonation kick as a roll/pitch deflection.
+      camera.position.set(ff.eye[0], ff.eye[1], ff.eye[2]);
+      const p = ff.pitch + ff.kick.pitch;
+      const cp = Math.cos(p);
+      camera.lookAt(
+        ff.eye[0] + Math.sin(ff.yaw) * cp,
+        ff.eye[1] + Math.sin(p),
+        ff.eye[2] - Math.cos(ff.yaw) * cp,
+      );
+      camera.rotateZ(ff.kick.roll);
+    } else {
+      if (autoSpin) camYaw += dt * 0.35;
+      const cp = Math.cos(camPitch);
+      camera.position.set(
+        camTarget.x + Math.sin(camYaw) * cp * camDist,
+        camTarget.y + Math.sin(camPitch) * camDist,
+        camTarget.z + Math.cos(camYaw) * cp * camDist,
+      );
+      camera.lookAt(camTarget);
+    }
+
+    // Stick prop: ballistic once thrown (visible in god mode too — a
+    // spectator watches the arc), held in the lead hand between throws.
+    if (ff.flight) {
+      stick.pose({ mode: 'flight', pos: ff.flight.pos, spin: ff.flight.spin, fuseBurning: true });
+      stick.flicker(fpvNow, false);
+    } else if (ff.mode === 'fpv' && handsEnabled && posedLocalHands
+      && (ff.handPhase.phase === 'idle'
+        || ff.handPhase.phase === 'light' || ff.handPhase.phase === 'cook')) {
+      const m = posedLocalHands.right[3]!; // lead mitten grips the bundle
+      stick.pose({
+        mode: 'hand',
+        localPos: [
+          (m.a[0] + m.b[0]) / 2,
+          (m.a[1] + m.b[1]) / 2 + 0.05,
+          (m.a[2] + m.b[2]) / 2,
+        ],
+        camQuat: camera.quaternion,
+        cooking: ff.handPhase.phase === 'cook',
+      });
+      stick.flicker(fpvNow, ff.handPhase.phase === 'cook');
+    } else {
+      stick.pose({ mode: 'gone' });
+    }
+    burstLayer.update(dt, camera);
 
     // LOD last: the camera has just moved, and every lever it drives is a
     // uniform the steps above may have written. Running it earlier would pick
@@ -1558,6 +1845,24 @@ async function main() {
   motionReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
   motionBox.appendChild(motionReadEl);
 
+  // FPV (X1.23): enter/exit (Tab is the keyboard twin), the hands A/B
+  // toggle the spec's perf gate needs, and a live readout.
+  const fpvBox = addSection(panelEl, 'fpv');
+  const fpvBtn = addButton(fpvBox, 'fpv: enter', () => {
+    if (fpvMode.mode === 'fpv') exitFpv(); else enterFpv();
+  });
+  const handsBtn = addButton(fpvBox, `hands: ${handsEnabled ? 'on' : 'off'}`, () => {
+    setFpvHands(!handsEnabled);
+  });
+  function setFpvHands(on: boolean) {
+    handsEnabled = on;
+    if (fpvMode.mode === 'fpv') handsView.setVisible(on);
+    handsBtn.textContent = `hands: ${on ? 'on' : 'off'}`;
+  }
+  fpvReadEl = document.createElement('div');
+  fpvReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
+  fpvBox.appendChild(fpvReadEl);
+
   /** Motion master. Off = the pre-X1.22 statue loop, verbatim. On = a fresh
    *  shambler from the origin. */
   function setMotionEnabled(on: boolean) {
@@ -1738,6 +2043,46 @@ async function main() {
     setWander,
     /** Motion master toggle — off is the pre-X1.22 statue. */
     setMotionEnabled,
+    // — X1.23 FPV + dynamite ——————————————————————
+    /** The panel button's console twin: god-cam ↔ first-person. */
+    enterFpv,
+    exitFpv,
+    /** Automation throw: releases a bundle at `charge` (0..1) from the
+     *  stored FPV aim without the hold loop. Works in god mode too. */
+    throwDynamite(charge = 1) {
+      fpvMode = forceThrow(
+        fpvMode, Math.max(0, Math.min(1, charge)), performance.now() / 1000);
+    },
+    /** Hard-sets the FPV aim/position (metres, radians) — deterministic
+     *  throws for automated checks; the pointer-lock mouse can drift between
+     *  scripted steps and this pins the launch state. */
+    setFpvAim(opts: { yaw?: number; pitch?: number; pos?: number[] } = {}) {
+      fpvMode = {
+        ...fpvMode,
+        fpv: {
+          ...fpvMode.fpv,
+          yaw: opts.yaw ?? fpvMode.fpv.yaw,
+          pitch: opts.pitch ?? fpvMode.fpv.pitch,
+          pos: opts.pos ? [opts.pos[0] ?? 0, 0, opts.pos[2] ?? 0] : fpvMode.fpv.pos,
+        },
+      };
+    },
+    /** Hands A/B — the spec's perf gate is benchGpu with hands on vs off. */
+    setFpvHands,
+    get fpv() {
+      return {
+        mode: fpvMode.mode,
+        pos: fpvMode.fpv.pos as unknown as number[],
+        yaw: fpvMode.fpv.yaw,
+        pitch: fpvMode.fpv.pitch,
+        cookPhase: fpvMode.fpv.cook.phase,
+        charge: cookCharge(fpvMode.fpv, performance.now() / 1000),
+        flightPos: (fpvMode.flight?.pos ?? null) as number[] | null,
+        handWounds: handWounds.length,
+        handsEnabled,
+        burstsUseAtlas: burstLayer.usingAtlas,
+      };
+    },
     /** The K key's console twin: forces the collapse next frame. */
     forceCollapse() { forcedCollapse = true; },
     /** Shell-displacement silhouettes on every live body view. */
