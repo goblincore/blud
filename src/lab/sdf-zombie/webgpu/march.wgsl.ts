@@ -177,6 +177,17 @@ export const FBM = /* wgsl */ `fn fbm(p: vec3<f32>) -> f32 {
   return noise3(p * 4.0) * 0.6 + noise3(p * 9.0) * 0.3;
 }`;
 
+// Body-local noise frame (motion-polish): translate by the root shift, then
+// UNDO the body's applied yaw (packed into ns.y — the y shift is structurally
+// zero, see setRootShift) so the noise field wraps the character and turns
+// with it instead of the body rotating under a world-fixed texture.
+export const NOISE_LOCAL = /* wgsl */ `fn noiseLocal(p: vec3<f32>, ns: vec3<f32>) -> vec3<f32> {
+  let dp = vec3<f32>(p.x - ns.x, p.y, p.z - ns.z);
+  let ch = cos(ns.y);
+  let sh = sin(ns.y);
+  return vec3<f32>(dp.x * ch - dp.z * sh, dp.y, dp.x * sh + dp.z * ch);
+}`;
+
 // Carves every subtractive primitive out of the assembled field, AFTER the
 // complete additive fold and in fixed cluster order — the structure the GLSL
 // version uses for wounds. Carving per-cluster would restructure a
@@ -330,7 +341,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // noise must ride the FLESH — sampled at p minus the body's root shift
   // (faceCfg3.zw), so a walking body does not slide through a stationary
   // noise field. Callers with noiseAmp 0 may pass any shift; the term is dead.
-  return dmg + fbm((p - noiseShift) * 3.0) * noiseAmp;
+  return dmg + fbm(noiseLocal(p, noiseShift) * 3.0) * noiseAmp;
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
@@ -532,7 +543,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // ride the flesh instead of staying pinned to world space while the body
   // walks. Packed into faceCfg3.zw — the only spare vec2 in the uniform set
   // (see zombie-gpu.ts). Zero = the pre-motion behaviour, bit-identical.
-  let noiseShift = vec3<f32>(faceCfg3.z, 0.0, faceCfg3.w);
+  let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).
   //
@@ -587,7 +598,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     let shellAmp = woundCfg2.z;
     var conservative = false;
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm((camPos + rd * t - noiseShift) * 3.0) * shellAmp;
+      d = d + fbm(noiseLocal(camPos + rd * t, noiseShift) * 3.0) * shellAmp;
       conservative = true;
     }
     let radius = abs(d);
@@ -635,7 +646,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // step, but still six noise lookups a body does not always need.
   if (surfCfg2.y > 0.0) {
     n = normalize(n + vec3<f32>(
-      fbm((p - noiseShift) * 22.0), fbm((p - noiseShift) * 22.0 + 5.0), fbm((p - noiseShift) * 22.0 + 11.0)) * surfCfg2.y);
+      fbm(noiseLocal(p, noiseShift) * 22.0), fbm(noiseLocal(p, noiseShift) * 22.0 + 5.0), fbm(noiseLocal(p, noiseShift) * 22.0 + 11.0)) * surfCfg2.y);
   }
 
   let wm = woundMask(p, data, woundCfg);
@@ -652,7 +663,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let goreStrength = lodCfg.w;
   var gore = 0.0;
   if (goreStrength > 0.0) {
-    let mottle = clamp(fbm((p - noiseShift) * 6.0) * 0.5 + 0.5, 0.0, 1.0);
+    let mottle = clamp(fbm(noiseLocal(p, noiseShift) * 6.0) * 0.5 + 0.5, 0.0, 1.0);
     gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
     let clot = deepColor * 0.55;
     albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);
@@ -822,7 +833,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
  * order given.
  */
 export const HELPERS = [
-  SMIN, SMAX, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM,
+  SMIN, SMAX, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,
 ];

@@ -57,7 +57,7 @@ export interface ZombieGpuView {
    * structurally zero (wander translates on the floor), which is why the
    * packed channel is a vec2. Statue bodies leave the default (0, 0).
    */
-  setRootShift(x: number, z: number): void;
+  setRootShift(x: number, z: number, bodyYaw?: number): void;
   /**
    * Swaps the face sheet, its crop rect (as uv scale/offset) and its mean.
    *
@@ -619,7 +619,11 @@ export function createZombieGpuView(
     },
     setHeadRotation(q) { u.headQuat.value.set(q[0], q[1], q[2], q[3]); },
     setTime(seconds) { u.faceCfg3.value.y = seconds; },
-    setRootShift(x, z) { u.faceCfg3.value.z = x; u.faceCfg3.value.w = z; },
+    setRootShift(x, z, bodyYaw = 0) {
+      u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
+      // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
+      u.lodCfg.value.z = bodyYaw;
+    },
     setFaceTexture(tex, atlas, mean) {
       u.faceTex.value = tex;
       u.faceAtlas.value.copy(atlas);

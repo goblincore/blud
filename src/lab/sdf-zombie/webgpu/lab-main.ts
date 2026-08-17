@@ -64,16 +64,18 @@ import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
-import { LIGHTER_LIT, STICK_IN_HAND, buildHandPrims } from '../hands';
+import { CIG_EMBER_HOT, STICK_IN_HAND, buildHandPrims } from '../hands';
 import {
   EMPTY_FPV_INPUT, enterFpvMode, exitFpvMode, forceThrow, handPrimsToWorld,
-  handPropPoses, makeFpvMode, posedHandPrims, stepFpvMode,
+  handPropPoses, handSheetProjections, makeFpvMode, posedHandPrims,
+  splitHandWounds, stepFpvMode,
   type FpvGorePort, type FpvModeState,
 } from '../fpv-mode';
 import { cookCharge } from '../fpv';
 import {
-  createBurstLayer, createHandsGpuView, createLighterProp, createStickProp,
+  createBurstLayer, createCigaretteProp, createHandsGpuView, createStickProp,
 } from './fpv-view';
+import { loadBakedHandSheets, proceduralHandSheets } from './hands-sheet';
 import {
   initialAdaptiveState, scaleForRung, stepAdaptive,
 } from '../adaptive-scale';
@@ -976,14 +978,36 @@ async function main() {
   let handWounds: Wound[] = [];
   /** Last frame's world-space hand prims — the splash trace target. */
   let lastHandWorld: ReturnType<typeof handPrimsToWorld> = [];
-  const handsView = createHandsGpuView(u);
-  handsView.object.layers.set(SDF_LAYER);
-  handsView.setVisible(false);
-  scene.add(handsView.object);
+  // ONE VIEW PER HAND: the march's texture projection is a single set of
+  // uniforms, so each hand needs its own view to carry its own detail sheet
+  // pinned to its own posed prims (see fpv-view's header).
+  const handViews = {
+    left: createHandsGpuView(u, 'armL'),
+    right: createHandsGpuView(u, 'armR'),
+  } as const;
+  for (const v of [handViews.left, handViews.right]) {
+    v.object.layers.set(SDF_LAYER);
+    v.setVisible(false);
+    scene.add(v.object);
+  }
+  /** Hand-detail sheets: the procedural pair immediately so the hands are
+   *  never sheet-less, upgraded in place if the Blender bake is present. */
+  let handSheets = proceduralHandSheets();
+  handViews.left.setSheet(handSheets.pinch);
+  handViews.right.setSheet(handSheets.grip);
+  /** True once the baked sheets loaded — surfaced in the FPV readout. */
+  let handSheetsBaked = false;
+  void loadBakedHandSheets().then(baked => {
+    if (!baked) return;
+    handSheets = baked;
+    handSheetsBaked = true;
+    handViews.left.setSheet(baked.pinch);
+    handViews.right.setSheet(baked.grip);
+  });
   const stick = createStickProp();
   scene.add(stick.object);
-  const lighter = createLighterProp();
-  scene.add(lighter.object);
+  const cig = createCigaretteProp();
+  scene.add(cig.object);
   const burstLayer = createBurstLayer(scene);
   /** Hands A/B toggle — the spec's perf gate is measured both ways. */
   let handsEnabled = true;
@@ -1089,7 +1113,8 @@ async function main() {
   function enterFpv() {
     fpvMode = enterFpvMode(fpvMode);
     fpvMouseDx = 0; fpvMouseDy = 0; fpvPress = false; fpvRelease = false;
-    handsView.setVisible(handsEnabled);
+    handViews.left.setVisible(handsEnabled);
+    handViews.right.setVisible(handsEnabled);
     fpvBtn.textContent = 'fpv: exit';
     try {
       const p = canvas.requestPointerLock() as unknown;
@@ -1100,7 +1125,8 @@ async function main() {
   }
   function exitFpv() {
     fpvMode = exitFpvMode(fpvMode);
-    handsView.setVisible(false);
+    handViews.left.setVisible(false);
+    handViews.right.setVisible(false);
     chargeWrap.style.display = 'none';
     fpvBtn.textContent = 'fpv: enter';
     if (document.pointerLockElement === canvas) document.exitPointerLock();
@@ -1375,18 +1401,29 @@ async function main() {
       posedLocalHands = posedHandPrims(HAND_REST, ff.handPose, fpvMode.jiggle);
       lastHandWorld = handPrimsToWorld(posedLocalHands, ff.eye, ff.yaw, ff.pitch);
       if (handsEnabled) {
-        handsView.update(lastHandWorld, handWounds);
-        handsView.setVisible(true);
+        // lastHandWorld is [...left, ...right] — the order the splash wounds
+        // bind to; each view gets its own slice with its wounds rebased.
+        const nL = posedLocalHands.left.length;
+        const w = splitHandWounds(handWounds, nL);
+        const proj = handSheetProjections(posedLocalHands, ff.eye, ff.yaw, ff.pitch);
+        handViews.left.update(lastHandWorld.slice(0, nL), w.left);
+        handViews.left.setProjection(proj.left);
+        handViews.right.update(lastHandWorld.slice(nL), w.right);
+        handViews.right.setProjection(proj.right);
+        handViews.left.setVisible(true);
+        handViews.right.setVisible(true);
       } else {
-        handsView.setVisible(false);
+        handViews.left.setVisible(false);
+        handViews.right.setVisible(false);
       }
     } else {
-      handsView.setVisible(false);
+      handViews.left.setVisible(false);
+      handViews.right.setVisible(false);
     }
     updateChargeHud(ff.mode, ff.charge);
     if (fpvReadEl) {
       fpvReadEl.textContent = ff.mode === 'fpv'
-        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length}`
+        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length} · sheet ${handSheetsBaked ? 'baked' : 'proc'}`
         : `god · ${ff.flight ? 'bundle away' : 'idle'} · bursts ${burstLayer.usingAtlas ? 'seq' : 'proc'}`;
     }
 
@@ -1459,7 +1496,7 @@ async function main() {
         lastBodyYaw = f.bodyYaw;
         // Noise anchor (motion-polish): the march's fbm rides the body's root
         // translation so the skin texture does not swim while walking.
-        view.setRootShift(f.rootShift[0], f.rootShift[2]);
+        view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
 
         let points = stepRig(
           { ...bound.rig, restPose: f.restPose }, sdt,
@@ -1575,20 +1612,19 @@ async function main() {
     } else {
       stick.pose({ mode: 'gone' });
     }
-    // Lighter: carried in every FPV phase (the frames never put it away); the
-    // flame only burns while lighting and through the fuse burn.
+    // Cigarette: carried in every FPV phase and always lit; the ember flares
+    // as it meets the fuse and through the burn.
     if (propSeats) {
-      const lit = LIGHTER_LIT.includes(ff.handPhase.phase);
-      lighter.pose({
+      cig.pose({
         mode: 'hand',
-        pos: propSeats.lighter.pos,
-        axis: propSeats.lighter.axis,
+        pos: propSeats.cig.pos,
+        axis: propSeats.cig.axis,
         camQuat: camera.quaternion,
-        lit,
+        hot: CIG_EMBER_HOT.includes(ff.handPhase.phase),
       });
-      lighter.flicker(fpvNow);
+      cig.flicker(fpvNow);
     } else {
-      lighter.pose({ mode: 'gone' });
+      cig.pose({ mode: 'gone' });
     }
     burstLayer.update(dt, camera);
 
@@ -1898,7 +1934,10 @@ async function main() {
   });
   function setFpvHands(on: boolean) {
     handsEnabled = on;
-    if (fpvMode.mode === 'fpv') handsView.setVisible(on);
+    if (fpvMode.mode === 'fpv') {
+      handViews.left.setVisible(on);
+      handViews.right.setVisible(on);
+    }
     handsBtn.textContent = `hands: ${on ? 'on' : 'off'}`;
   }
   fpvReadEl = document.createElement('div');

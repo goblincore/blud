@@ -173,7 +173,7 @@ describe('ported features reach the entry point', () => {
     // Anchored to the noise shift (motion-polish) so the mottle rides the
     // chunk's own translation, not the world.
     expect(MARCH_BODY).toContain('goreStrength');
-    expect(MARCH_BODY).toContain('fbm((p - noiseShift) * 6.0)');
+    expect(MARCH_BODY).toContain('fbm(noiseLocal(p, noiseShift) * 6.0)');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
@@ -194,7 +194,7 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
     expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
     expect(MARCH_BODY)
-      .toMatch(/d = d \+ fbm\(\(camPos \+ rd \* t - noiseShift\) \* 3\.0\) \* shellAmp;/);
+      .toMatch(/d = d \+ fbm\(noiseLocal\(camPos \+ rd \* t, noiseShift\) \* 3\.0\) \* shellAmp;/);
   });
 
   it('anchors every noise site to the root shift, so texture rides the flesh (motion-polish)', () => {
@@ -204,12 +204,12 @@ describe('ported features reach the entry point', () => {
     // into faceCfg3.zw (the only spare vec2 — see zombie-gpu.ts) with y
     // structurally zero: root translation is ground-plane only. mapBody and
     // calcNormal thread it so the normal-warping warps with the same anchor.
-    expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, 0.0, faceCfg3.w);');
+    expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
     expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift)');
-    expect(MARCH_BODY).toContain('fbm((p - noiseShift) * 22.0)');
+    expect(MARCH_BODY).toContain('fbm(noiseLocal(p, noiseShift) * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
     const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
-    expect(mapBody).toContain('fbm((p - noiseShift) * 3.0) * noiseAmp');
+    expect(mapBody).toContain('fbm(noiseLocal(p, noiseShift) * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
     // independent of the motion plumbing — zero shift, dead noise term.
     const coneMarch = CONE_MARCH;
