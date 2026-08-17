@@ -193,11 +193,13 @@ Key reference docs (open these before touching their area):
   reach arms, gaze follows travel (tunable), wounds ride the turn, facing-chain
   quadrant fix + forward-knee pole rule, rest-space noise (texture glued to limbs,
   rows 8-9), measured FPV hands from CC-BY mesh (ATTRIBUTIONS.md). 1319 tests.
-- `X1.26` [ ] **Baked 3D-SDF hand prototype — NEXT SESSION OPENER** — one hand, one
-  simple pose, true SDF baked from the CC-BY mesh into a 3D texture, marched in the
-  hands view (wounds/material/jiggle survive). Gate: "reads as a proper hand".
-  [plan seed](docs/superpowers/plans/2026-08-17-sdf-hand-bake-prototype.md); SDF-prim
-  hand rounds PAUSED; third-person pivot stays the fallback if this fails.
+- `X1.26` [~] **Baked 3D-SDF hand prototype — DISPATCH APPROVED (A → B → C)** — research
+  spike chose fast-winding-number signing of the posed open triangle soup (global
+  hole-fill/voxel repair bridges the finger gaps into a mitten). One relaxed right
+  hand, anisotropic R16F 3D texture, shared hands marcher + optional jiggle domain
+  warp. Single gate: "reads as a proper hand". [design](docs/superpowers/specs/2026-08-17-sdf-hand-bake-design.md) ·
+  [dispatch-ready plan](docs/superpowers/plans/2026-08-17-sdf-hand-bake-prototype.md).
+  SDF-prim hand rounds PAUSED; third-person pivot stays the fallback if this fails.
 - `X1.25` [x] **PSX-AA post pass** — FXAA at internal res + temporal smear + optional
   sharp-bilinear upscale, `post` panel sliders, all-off = pixel parity. The first
   run's 'color shift' was a Y-flip (kimi-oai, 2 runs). Owner slider session open.
