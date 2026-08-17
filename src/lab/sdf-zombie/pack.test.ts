@@ -17,6 +17,7 @@ describe('packBody', () => {
     expect(packed.primA).toHaveLength(MAX_PRIMS * PRIM_STRIDE);
     expect(packed.primB).toHaveLength(MAX_PRIMS * PRIM_STRIDE);
     expect(packed.primScale).toHaveLength(MAX_PRIMS * PRIM_STRIDE);
+    expect(packed.primQuat).toHaveLength(MAX_PRIMS * PRIM_STRIDE);
     expect(packed.clusterBounds).toHaveLength(MAX_CLUSTERS * CLUSTER_STRIDE);
     expect(packed.clusterRange).toHaveLength(MAX_CLUSTERS * CLUSTER_STRIDE);
   });
@@ -48,6 +49,21 @@ describe('packBody', () => {
     expect(p2.clusterRange[2 * CLUSTER_STRIDE + 2]).toBe(0);
     // Primitive payload is byte-identical — severing never re-packs.
     expect(Array.from(p2.primA)).toEqual(Array.from(packed.primA));
+  });
+
+  it('packs an absent orient as the identity quat, and a set one verbatim', () => {
+    // The shader branches on |1 - w|, so the identity default must be exact.
+    const q: [number, number, number, number] = [0, 0.7071068, 0, 0.7071068];
+    const p = packBody({
+      prims: [
+        { ...built.prims[0]! },
+        { ...built.prims[0]!, orient: q },
+      ],
+      clusters: [{ id: 0, limb: 'head', start: 0, count: 2, center: [0, 0, 0], radius: 1, alive: true }],
+      bones: new Map(),
+    });
+    expect(Array.from(p.primQuat.slice(0, 4))).toEqual([0, 0, 0, 1]);
+    expect(Array.from(p.primQuat.slice(4, 8))).toEqual(q.map(f32));
   });
 
   it('reports the largest blendK, which the shader needs as its cull margin', () => {

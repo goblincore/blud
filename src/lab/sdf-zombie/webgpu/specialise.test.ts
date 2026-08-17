@@ -100,6 +100,32 @@ describe('specialiseMapBody', () => {
     const deadSrc = specialiseMapBody(midSevered);
     expect(foldOrder(deadSrc, 'smin')).toEqual(foldOrder(src, 'smin').filter(i => i !== armIdx));
   });
+
+  it('REFUSES a non-identity prim orient — a rig-posed body must use the generic march', () => {
+    // sdPrim reads the quat row from the texture at runtime, so orient is
+    // never baked as a literal — but a prim whose quat CHANGES per frame
+    // (skull prims under applyRig) has no business in a structure-baked
+    // shader at all. Assert the assumption rather than silently specialising
+    // a body whose baked structure went stale. Crowd/chunks are always
+    // identity, so this never fires for the bodies specialise serves.
+    const posed: BuildResult = {
+      ...body,
+      prims: body.prims.map((p, i) => i === 0
+        ? { ...p, orient: [0, Math.SQRT1_2, 0, Math.SQRT1_2] as [number, number, number, number] }
+        : p),
+    };
+    expect(() => specialiseMapBody(posed)).toThrow(/orient/);
+  });
+
+  it('accepts identity or absent orient — the crowd/chunk case', () => {
+    const ident: BuildResult = {
+      ...body,
+      prims: body.prims.map((p, i) => i === 0
+        ? { ...p, orient: [0, 0, 0, 1] as [number, number, number, number] }
+        : p),
+    };
+    expect(specialiseMapBody(ident)).toBe(src);
+  });
 });
 
 describe('structureKey', () => {

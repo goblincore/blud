@@ -146,7 +146,11 @@ export function applyRig(body: BuildResult, bound: BoundRig): BuildResult {
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
     if (face && rigid) {
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b) };
+      // orient carries the head's rigid rotation into the field maths so the
+      // anisotropic face ellipsoids (brow/nose/jaw) squash along the TURNED
+      // skull axes, not the world's — the detached-visor fix. Same q
+      // headTransform derived; reused, not recomputed.
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
     }
     const bind = bound.binding[i]!;
     const pa = pos[bind.a.point]!;
@@ -184,6 +188,8 @@ export function applyRig(body: BuildResult, bound: BoundRig): BuildResult {
 function headTransform(h: HeadRigid, pos: readonly RigPoint[]): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
+  /** The clamped rigid rotation — applyRig also stamps it as prim.orient. */
+  q: Quat;
 } {
   const pivot = pos[h.pivot]!.pos;
   const tip = pos[h.tip]!.pos;
@@ -203,7 +209,7 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[]): {
 
   const prims = new Map<number, { a: Vec3; b: Vec3 }>();
   h.prims.forEach((rest, i) => prims.set(i, { a: qRotate(q, rest.a), b: qRotate(q, rest.b) }));
-  return { origin, prims };
+  return { origin, prims, q };
 }
 
 /**

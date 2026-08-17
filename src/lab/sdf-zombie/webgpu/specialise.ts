@@ -44,6 +44,18 @@ function f(n: number): string {
  * means the entry point does not need a second variant.
  */
 export function specialiseMapBody(body: BuildResult): string {
+  // Per-prim ORIENTATION GUARD (motion-polish task 3): sdPrim reads the quat
+  // row from the texture at runtime, so orient is never baked as a literal —
+  // but a prim whose quat CHANGES at runtime (rig-posed skull prims) must not
+  // be specialised at all: hero bodies are rig-driven and re-uploaded every
+  // frame, which is exactly why they are never specialised. Crowd and chunk
+  // bodies always have identity/absent orient. ASSERT that assumption rather
+  // than silently specialising a body whose field would drift from its pose.
+  for (const p of body.prims) {
+    if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6)
+      throw new Error(
+        'specialiseMapBody: non-identity prim orient — rig-posed bodies must use the generic march');
+  }
   const maxBlendK = body.prims.reduce((m, p) => Math.max(m, p.blendK), 0);
   const margin = maxBlendK * 4;
 

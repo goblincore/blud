@@ -34,6 +34,12 @@
 //   row 4  clusterRange x = start, y = count, z = alive
 //   row 5  wound        xyz = world position, w = radius
 //   row 6  woundMeta    x = type (0 pellet, 1 blast, 2 burn), y = age
+//   row 7  primQuat     xyzw = per-prim orientation (identity = 0,0,0,1)
+//
+// DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
+// orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
+// owner decision and keeps world-axis ellipsoid squash — its lab renders a
+// posed head with the old detached-visor artefact. Do not port this back.
 //
 // Wounds ride the SAME texture rather than a uniform array, which the GLSL
 // path had to use. MAX_WOUNDS (16) is comfortably under MAX_PRIMS (48), so
@@ -52,7 +58,7 @@
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 7;
+export const DATA_ROWS = 8;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -60,6 +66,7 @@ export const ROW_CLUSTER_BOUNDS = 3;
 export const ROW_CLUSTER_RANGE = 4;
 export const ROW_WOUND = 5;
 export const ROW_WOUND_META = 6;
+export const ROW_PRIM_QUAT = 7;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -85,17 +92,42 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
+  var qq = p;
+  var a = A.xyz;
+  var b = B.xyz;
+  // Per-prim orientation (motion-polish task 3): rotate the sample AND the
+  // endpoints into the prim's local frame — the CONJUGATE rotation about the
+  // prim midpoint — BEFORE the scale-divide, so an anisotropic ellipsoid (the
+  // brow is [1.55, 0.42, 0.80]) turns with the head instead of staying
+  // world-aligned as a detached visor. Identity quats — everything except
+  // rig-posed skull prims — pay one compare and a texture fetch.
+  let O = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0);
+  if (abs(1.0 - O.w) > 1e-6) {
+    let mid = (A.xyz + B.xyz) * 0.5;
+    // Conjugate of O: vector part negated, w unchanged. Rodrigues-in-quat
+    // form: v' = v + 2*w*(u x v) + 2*(u x (u x v)), matching qRotate in vec.ts.
+    let u = -O.xyz;
+    let vq = qq - mid;
+    let tq = 2.0 * cross(u, vq);
+    qq = mid + vq + tq * O.w + cross(u, tq);
+    let va = a - mid;
+    let ta = 2.0 * cross(u, va);
+    a = mid + va + ta * O.w + cross(u, ta);
+    let vb = b - mid;
+    let tb = 2.0 * cross(u, vb);
+    b = mid + vb + tb * O.w + cross(u, tb);
+  }
   let inv = 1.0 / S.xyz;
-  let q = p * inv;
-  let a = A.xyz * inv;
-  let b = B.xyz * inv;
+  qq = qq * inv;
+  a = a * inv;
+  b = b * inv;
   let ab = b - a;
-  let ap = q - a;
+  let ap = qq - a;
   let ab2 = dot(ab, ab);
   // select() is (falseValue, trueValue, condition) — reversed from a ternary.
   let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
   let minScale = min(S.x, min(S.y, S.z));
-  return (length(q - (a + ab * t)) - A.w) * minScale;
+  return (length(qq - (a + ab * t)) - A.w) * minScale;
 }`;
 
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {

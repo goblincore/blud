@@ -7,9 +7,12 @@ import { ZOMBIE } from './body';
 import { packBody } from './pack';
 import { sdBody } from './validate';
 import { worldHitToWound, woundWorldPos } from './damage';
+import { applyRig, bindRig } from './rig-bind';
+import type { Vec3 } from './types';
 
 describe('severLimb', () => {
   const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(body);
 
   it('marks only the target cluster dead', () => {
     const { body: after } = severLimb(body, 'armL');
@@ -58,6 +61,26 @@ describe('severLimb', () => {
 
   it('refuses to sever the torso', () => {
     expect(() => severLimb(body, 'torso')).toThrow(/torso/i);
+  });
+
+  it('a severed head keeps its face orientation — the frozen orient rides the chunk', () => {
+    // Pose the head first so the skull prims carry a real orient, then cut.
+    // The chunk must keep that quat: the GPU chunk view writes the quat row
+    // ONCE at spawn (frozen at sever time), and a copy that dropped the field
+    // would render the flying head's brow world-aligned — the visor bug,
+    // mid-air.
+    const posed = applyRig(body, {
+      ...bound,
+      rig: { ...bound.rig, points: bound.rig.points.map((p, i) =>
+        i === bound.head!.tip ? { ...p, pos: [p.pos[0] + 0.5, p.pos[1], p.pos[2]] as Vec3 } : p) },
+    });
+    const oriented = posed.prims.filter(p => p.limb === 'head' && p.orient);
+    expect(oriented.length).toBeGreaterThanOrEqual(4);
+    const { chunk } = severLimb(posed, 'head');
+    for (const p of oriented) {
+      expect(chunk.prims).toContain(p); // reference-carried, orient and all
+      expect(Math.abs(1 - p.orient![3])).toBeGreaterThan(0.05);
+    }
   });
 });
 

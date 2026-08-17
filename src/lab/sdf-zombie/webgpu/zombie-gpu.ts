@@ -26,7 +26,7 @@ import { chunkExtent, tornEndRadius } from '../extent';
 import { specialiseMapBody } from './specialise';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
-  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
+  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
   ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
 
@@ -502,6 +502,7 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_A, p.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, p.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, p.primScale, MAX_PRIMS);
+    writeRow(ROW_PRIM_QUAT, p.primQuat, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
     dataTex.needsUpdate = true;
@@ -722,7 +723,13 @@ export function createChunkGpuView(
   writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
   writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
   writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
+  writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
   writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
+  // The quat row is written ONCE, here: a chunk's tumble rotates its packed
+  // ENDPOINTS (apply() below) but leaves each prim's orient frozen at its
+  // sever-time value — so a severed head's face ellipsoids keep the pose the
+  // head had when it came off. sever.ts's prim copies preserve the field via
+  // spread; a copy without it would silently drop the face's orientation.
   // A severed head keeps its face: the cluster slice carries its carves, and
   // apply() below rewrites only xyz per endpoint, leaving the packed sign in .w.
   u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);

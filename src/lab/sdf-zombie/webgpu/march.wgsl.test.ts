@@ -17,13 +17,15 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
-  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM,
+  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
-import { sdBody, MAX_PRIMS } from '../validate';
-import type { Primitive } from '../types';
+import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
+import { packBody } from '../pack';
+import { add, cross, scale as vscale, sub, qFromAxisAngle, qNormalize } from '../vec';
+import type { Primitive, Vec3 } from '../types';
 
 // Every WGSL source in the file. Anything new MUST be added here: the
 // reserved-word and parse-contract checks are the only thing standing between
@@ -249,7 +251,7 @@ describe('ported features reach the entry point', () => {
 describe('data texture layout', () => {
   it('gives every row a distinct index inside DATA_ROWS', () => {
     const rows = [
-      ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE,
+      ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
     ];
     expect(new Set(rows).size).toBe(rows.length);
@@ -316,5 +318,95 @@ describe('CPU field mirror is pinned', () => {
       ...body,
       clusters: body.clusters.map(c => ({ ...c, center: [...c.center] as [number, number, number] })),
     })).toBeCloseTo(want, 3);
+  });
+});
+
+describe('per-prim orientation (motion-polish task 3)', () => {
+  it('SD_PRIM reads the quat row and guards identity prims with a cheap branch', () => {
+    // String pins: the parity test below proves the CPU mirror, these prove
+    // the WGSL actually contains the branch being mirrored.
+    expect(SD_PRIM).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
+    expect(SD_PRIM).toContain('abs(1.0 - O.w) > 1e-6');
+    expect(DATA_ROWS).toBe(8);
+  });
+
+  /**
+   * Line-for-line TS transcription of the WGSL sdPrim, reading from a Float32
+   * array laid out exactly like the data texture (row-major, MAX_PRIMS wide).
+   * Kept in sync BY HAND, like the march-tracer transcriptions — the string
+   * pins above prove the branch exists; this proves its semantics match
+   * validate.sdPrimitive, which backs click-to-shoot.
+   */
+  function sdPrimWgsl(p: Vec3, i: number, tex: Float32Array): number {
+    const load = (row: number): number[] => {
+      const o = (row * MAX_PRIMS + i) * 4;
+      return [tex[o]!, tex[o + 1]!, tex[o + 2]!, tex[o + 3]!];
+    };
+    const A = load(ROW_PRIM_A), B = load(ROW_PRIM_B), S = load(ROW_PRIM_SCALE);
+    let qq: Vec3 = [p[0], p[1], p[2]];
+    let a: Vec3 = [A[0]!, A[1]!, A[2]!];
+    let b: Vec3 = [B[0]!, B[1]!, B[2]!];
+    const O = load(ROW_PRIM_QUAT);
+    if (Math.abs(1 - O[3]!) > 1e-6) {
+      const mid = vscale(add(a, b), 0.5);
+      const u: Vec3 = [-O[0]!, -O[1]!, -O[2]!];
+      const w = O[3]!;
+      const rot = (x: Vec3): Vec3 => {
+        const v = sub(x, mid);
+        const t = vscale(cross(u, v), 2);
+        return add(mid, add(v, add(vscale(t, w), cross(u, t))));
+      };
+      qq = rot(qq); a = rot(a); b = rot(b);
+    }
+    const inv: Vec3 = [1 / S[0]!, 1 / S[1]!, 1 / S[2]!];
+    qq = [qq[0] * inv[0], qq[1] * inv[1], qq[2] * inv[2]];
+    a = [a[0] * inv[0], a[1] * inv[1], a[2] * inv[2]];
+    b = [b[0] * inv[0], b[1] * inv[1], b[2] * inv[2]];
+    const ab = sub(b, a), ap = sub(qq, a);
+    const ab2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    const t = ab2 === 0 ? 0
+      : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / ab2));
+    const minScale = Math.min(S[0]!, S[1]!, S[2]!);
+    return (Math.hypot(qq[0] - (a[0] + ab[0] * t), qq[1] - (a[1] + ab[1] * t), qq[2] - (a[2] + ab[2] * t))
+      - A[3]!) * minScale;
+  }
+
+  it('PARITY: CPU sdPrimitive matches the WGSL math on random oriented prims', () => {
+    // Deterministic RNG — a parity test that flakes is worse than none.
+    let seed = 0x5eed;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let trial = 0; trial < 40; trial++) {
+      const centre: Vec3 = [rnd() * 2 - 1, 1 + rnd(), rnd() * 2 - 1];
+      const span = rnd() * 0.15; // 0 = sphere (the face case), else capsule
+      const axis = qFromAxisAngle([rnd() - 0.5, rnd() - 0.5, rnd() - 0.5] as Vec3, rnd() * 2.4);
+      const prim: Primitive = {
+        a: [centre[0], centre[1] - span, centre[2]],
+        b: [centre[0], centre[1] + span, centre[2]],
+        radius: 0.03 + rnd() * 0.1,
+        scale: [0.4 + rnd() * 1.4, 0.4 + rnd() * 1.4, 0.4 + rnd() * 1.4],
+        blendK: 0.02, limb: 'head', cluster: 0,
+        // Half the trials identity (absent), half a real rotation.
+        orient: trial % 2 === 0 ? undefined : qNormalize(axis),
+      };
+      const packed = packBody({
+        prims: [prim],
+        clusters: [{ id: 0, limb: 'head', start: 0, count: 1, center: [0, 0, 0], radius: 10, alive: true }],
+        bones: new Map(),
+      });
+      const tex = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+      tex.set(packed.primA, ROW_PRIM_A * MAX_PRIMS * 4);
+      tex.set(packed.primB, ROW_PRIM_B * MAX_PRIMS * 4);
+      tex.set(packed.primScale, ROW_PRIM_SCALE * MAX_PRIMS * 4);
+      tex.set(packed.primQuat, ROW_PRIM_QUAT * MAX_PRIMS * 4);
+      for (let s = 0; s < 25; s++) {
+        const p: Vec3 = [
+          centre[0] + (rnd() - 0.5) * 0.8,
+          centre[1] + (rnd() - 0.5) * 0.8,
+          centre[2] + (rnd() - 0.5) * 0.8,
+        ];
+        // f32 packing rounds the inputs, so tolerance is f32-scale, not f64.
+        expect(sdPrimitive(p, prim)).toBeCloseTo(sdPrimWgsl(p, 0, tex), 4);
+      }
+    }
   });
 });

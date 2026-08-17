@@ -14,6 +14,7 @@ export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
   primB: Float32Array;         // xyz = endpoint B, w = blendK
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
+  primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = unused
   primCount: number;
@@ -28,6 +29,7 @@ export function packBody(body: BuiltBody): PackedBody {
   const primA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primQuat = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
   let carveCount = 0;
@@ -51,6 +53,10 @@ export function packBody(body: BuiltBody): PackedBody {
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
     primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], w], o);
+    // Identity default: sdPrim branches on |1 - w| so an unoriented prim
+    // costs one compare. Only rig-posed skull prims ever carry a real quat.
+    const q = p.orient;
+    primQuat.set(q ? [q[0], q[1], q[2], q[3]] : [0, 0, 0, 1], o);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
@@ -64,7 +70,7 @@ export function packBody(body: BuiltBody): PackedBody {
   });
 
   return {
-    primA, primB, primScale, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, clusterBounds, clusterRange,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,

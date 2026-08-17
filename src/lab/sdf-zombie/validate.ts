@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
-import { add, len, lerp, scale as vscale, sub } from './vec';
+import { add, cross, len, lerp, scale as vscale, sub } from './vec';
 
 /**
  * Shader array ceilings. THE canonical declaration — `march.glsl.ts` imports
@@ -27,10 +27,31 @@ interface Body { prims: Primitive[]; clusters: ClusterInfo[] }
 
 /** Distance from p to one primitive, matching the shader's ellipsoid capsule. */
 export function sdPrimitive(p: Vec3, prim: Primitive): number {
+  let qv: Vec3 = p;
+  let av = prim.a;
+  let bv = prim.b;
+  // Per-prim orientation, the exact CPU mirror of SD_PRIM in march.wgsl.ts:
+  // conjugate rotation about the prim midpoint BEFORE the scale-divide, so a
+  // rig-posed face ellipsoid's squash turns with the head. Identity (absent)
+  // prims skip the branch — click-to-shoot pays one compare for them.
+  const o = prim.orient;
+  if (o && Math.abs(1 - o[3]) > 1e-6) {
+    const mid = vscale(add(prim.a, prim.b), 0.5);
+    const u: Vec3 = [-o[0], -o[1], -o[2]]; // conjugate: negate the vector part
+    const w = o[3];
+    const rot = (x: Vec3): Vec3 => {
+      const v = sub(x, mid);
+      const t = vscale(cross(u, v), 2);
+      return add(mid, add(v, add(vscale(t, w), cross(u, t))));
+    };
+    qv = rot(qv);
+    av = rot(av);
+    bv = rot(bv);
+  }
   const inv: Vec3 = [1 / prim.scale[0], 1 / prim.scale[1], 1 / prim.scale[2]];
-  const q: Vec3 = [p[0] * inv[0], p[1] * inv[1], p[2] * inv[2]];
-  const a: Vec3 = [prim.a[0] * inv[0], prim.a[1] * inv[1], prim.a[2] * inv[2]];
-  const b: Vec3 = [prim.b[0] * inv[0], prim.b[1] * inv[1], prim.b[2] * inv[2]];
+  const q: Vec3 = [qv[0] * inv[0], qv[1] * inv[1], qv[2] * inv[2]];
+  const a: Vec3 = [av[0] * inv[0], av[1] * inv[1], av[2] * inv[2]];
+  const b: Vec3 = [bv[0] * inv[0], bv[1] * inv[1], bv[2] * inv[2]];
   const ab = sub(b, a), ap = sub(q, a);
   const abLen2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
   const t = abLen2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / abLen2));
