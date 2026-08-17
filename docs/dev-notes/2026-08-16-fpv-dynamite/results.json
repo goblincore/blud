@@ -1,0 +1,139 @@
+{
+  "results": {
+    "steps": [
+      {
+        "name": "boot",
+        "ok": true,
+        "backend": "webgpu",
+        "hasFpv": true,
+        "fpv": {
+          "mode": "god",
+          "pos": [
+            0,
+            0,
+            4
+          ],
+          "yaw": 0,
+          "pitch": -0.03,
+          "cookPhase": "idle",
+          "charge": 0,
+          "flightPos": null,
+          "handWounds": 0,
+          "handsEnabled": true,
+          "burstsUseAtlas": false
+        },
+        "wounds": 0,
+        "motion": {
+          "phase": "standing",
+          "meter": 0
+        }
+      },
+      {
+        "name": "enter-fpv",
+        "mode": "fpv",
+        "pos": [
+          0,
+          0,
+          0
+        ],
+        "yaw": 0,
+        "pitch": -0.03,
+        "cookPhase": "idle",
+        "charge": 0,
+        "flightPos": null,
+        "handWounds": 0,
+        "handsEnabled": true,
+        "burstsUseAtlas": false
+      },
+      {
+        "name": "cooking",
+        "cookPhase": "cooking",
+        "charge": 0.498
+      },
+      {
+        "name": "in-flight",
+        "flightPos": [
+          0.35,
+          1.29,
+          -2.37
+        ]
+      },
+      {
+        "name": "standoff-blast",
+        "wounds": 16,
+        "meter": 0.407,
+        "phase": "standing",
+        "stagger": "lurch",
+        "chunks": 0,
+        "handWounds": 0
+      },
+      {
+        "name": "walked-forward",
+        "pos": [
+          0,
+          0,
+          -2.1
+        ]
+      },
+      {
+        "name": "point-blank-gib",
+        "chunks": 6,
+        "wounds": 0,
+        "phase": "falling",
+        "bodies": 1
+      },
+      {
+        "name": "overcook",
+        "pre": 0,
+        "post": {
+          "cookPhase": "idle",
+          "handWounds": 2,
+          "chunks": 12,
+          "phase": "falling"
+        }
+      },
+      {
+        "name": "bench-hands-off",
+        "bodies": 1,
+        "n": 240,
+        "median": 1,
+        "p05": 0.96,
+        "p95": 1.32,
+        "sdfScale": 0.7,
+        "cone": false,
+        "lod": false,
+        "hiddenSteps": 0,
+        "adaptive": "off",
+        "label": "god-hands-off"
+      },
+      {
+        "name": "bench-hands-on",
+        "bodies": 1,
+        "n": 240,
+        "median": 1.18,
+        "p05": 1.02,
+        "p95": 3.1,
+        "sdfScale": 0.7,
+        "cone": false,
+        "lod": false,
+        "hiddenSteps": 0,
+        "adaptive": "off",
+        "label": "fpv-hands-on"
+      },
+      {
+        "name": "god-cam-regression",
+        "mode": "god",
+        "wounds": 1,
+        "stats": {
+          "median": 16.7,
+          "p95": 17.5,
+          "bodies": 1
+        }
+      }
+    ]
+  },
+  "consoleLog": [
+    "debug: [vite] connecting...",
+    "debug: [vite] connected."
+  ]
+}
