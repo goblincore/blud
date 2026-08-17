@@ -66,3 +66,42 @@ textures) was available locally but contains **no licence file anywhere**,
 including inside its archive. Its terms are therefore unknown, it is treated as
 all-rights-reserved, and **nothing in this repo derives from it** — it was never
 imported, opened or measured.
+
+---
+
+## Dynamite bundle — DJMaesen / bumstrum (CC-BY-4.0)
+
+**Required credit (verbatim, as the model's embedded asset metadata specifies):**
+
+> This work is based on "Dynamite bundle"
+> (https://sketchfab.com/3d-models/dynamite-bundle-6d333be39e454b458d48ad86f8a78df4)
+> by DJMaesen (https://sketchfab.com/bumstrum) licensed under CC-BY-4.0
+> (http://creativecommons.org/licenses/by/4.0/)
+
+- **Licence:** [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/) —
+  attribution required, derivatives allowed, commercial use allowed.
+- **Author:** DJMaesen (https://sketchfab.com/bumstrum)
+- **Source:** https://sketchfab.com/3d-models/dynamite-bundle-6d333be39e454b458d48ad86f8a78df4
+
+### What in this repo derives from it
+
+1. **`public/assets/lab/dynamite-bundle-grip.glb`** — one derived,
+   self-contained runtime prop produced by `scripts/author_dynamite_grip.py`
+   (X1.27). Permitted modifications applied to the downloaded original:
+   - wrapper-node transforms collapsed, geometry joined;
+   - rescaled deterministically (long axis 0.32 m, larger transverse axis
+     0.074 m) and re-seated on its mesh-bounds centre;
+   - named anchor nodes added (`FlightPivot`, `GripAnchor`, `FuseTip`);
+   - embedded textures resized to at most 512×512.
+   The authored PBR material is preserved.
+2. **`public/assets/lab/dynamite-bundle-grip.json`** — the machine-readable
+   prop contract (hashes, dimensions, contact hull, anchors, this credit)
+   consumed by the pose authoring stage and the runtime clip loader.
+3. **`docs/dev-notes/2026-08-17-sdf-dynamite-grip/`** — preview renders of the
+   derived prop and of hand poses solved against it.
+
+### What does NOT derive from it
+
+- **The downloaded original is not redistributed.** It stays at a path outside
+  the repository and is only read by the authoring script; only the derived
+  GLB above (with modified scale, transforms and texture sizes) is committed.

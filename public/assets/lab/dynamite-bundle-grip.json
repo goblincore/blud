@@ -1,0 +1,18 @@
+{
+  "glb": "dynamite-bundle-grip.glb",
+  "sha256": "4b900499c36d5ee3c13ca6b0f02ef9e1acb403b48952aeecf10306626b4ad836",
+  "sourceSha256": "50dba10275395a82b460ef1a1aa5e9d14d10ce386d5bdfea76dec88c227029f1",
+  "dimensionsM": [
+    0.0726035088300705,
+    0.3199999928474426,
+    0.07400000095367432
+  ],
+  "modelUp": "+Y",
+  "modelGripOffsetM": -0.015,
+  "contactRadiusM": 0.037,
+  "contactBelowM": 0.115,
+  "contactAboveM": 0.135,
+  "fuseTipNode": "FuseTip",
+  "flightPivotNode": "FlightPivot",
+  "attribution": "This work is based on \"Dynamite bundle\" (https://sketchfab.com/3d-models/dynamite-bundle-6d333be39e454b458d48ad86f8a78df4) by DJMaesen (https://sketchfab.com/bumstrum) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+}

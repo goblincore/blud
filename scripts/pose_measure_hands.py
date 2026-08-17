@@ -818,8 +818,8 @@ def wrap_chain(hand, bones, base_rots, fsign, origin, axis, radius):
     return rots
 
 
-def build_grip(hand):
-    """Returns (rotations, prop_origin, prop_axis, prop_radius)."""
+def build_grip(hand, prop_radius=GRIP_PROP_R):
+    """Return rotations and the measured cylindrical seat for this radius."""
     fsign = flex_sign(hand)
     hand.splay_dir = splay_sign(hand, "index", "middle")
 
@@ -840,7 +840,7 @@ def build_grip(hand):
         if (p - centre).length > 0.030:
             continue
         palmar = min(palmar, (p - centre).dot(hand.B))
-    origin = centre + hand.B * (palmar - GRIP_PROP_R)
+    origin = centre + hand.B * (palmar - prop_radius)
 
     rots = {}
     for f in FINGERS:
@@ -854,10 +854,10 @@ def build_grip(hand):
           + " ".join(f"{f}={math.degrees(fans[f]):+.0f}" for f in FINGERS) + " deg")
     for f in FINGERS:
         rots = wrap_chain(hand, hand.digit_bones(f), rots, fsign,
-                          origin, axis, GRIP_PROP_R)
+                          origin, axis, prop_radius)
     world = hand.globals(rots)
     for f in FINGERS:
-        gaps = [segment_line_distance(a, b, origin, axis) - r - GRIP_PROP_R
+        gaps = [segment_line_distance(a, b, origin, axis) - r - prop_radius
                 for a, b, r in hand.bone_segments(world, hand.digit_bones(f))]
         print(f"[hands] grip: {f:6s} phalanx gaps to bundle surface = "
               + " ".join(f"{g * 1000:+6.1f}" for g in gaps) + " mm")
@@ -882,7 +882,7 @@ def build_grip(hand):
     # running up the bundle, closing the top of the fist, which is what a hand
     # does with something this fat.
     reach = (hand.tip_rest[tip] - thumb0).length
-    shell = GRIP_PROP_R + hand.radius[tip] + GRIP_THUMB_CLEAR
+    shell = prop_radius + hand.radius[tip] + GRIP_THUMB_CLEAR
     rel = thumb0 - origin
 
     def aim_for(phi):
@@ -910,7 +910,7 @@ def build_grip(hand):
 
     def gaps(trial):
         w2 = hand.globals(trial)
-        bundle = min(segment_line_distance(sa, sb, origin, axis) - sr - GRIP_PROP_R
+        bundle = min(segment_line_distance(sa, sb, origin, axis) - sr - prop_radius
                      for sa, sb, sr in hand.bone_segments(w2, hand.thumb[1:]))
         a, b, rr = hand.bone_segments(w2, [tip])[0]
         finger = min(segment_segment_distance(a, b, c, d) - rr - r2
@@ -946,7 +946,7 @@ def build_grip(hand):
           f"bundle gap={bundle * 1000:+.2f} mm finger gap={finger * 1000:+.2f} mm")
 
     # +Z out of the fist = the thumb side, which is "up" gripping a vertical bar.
-    return rots, origin, axis, GRIP_PROP_R
+    return rots, origin, axis, prop_radius
 
 
 # ===========================================================================

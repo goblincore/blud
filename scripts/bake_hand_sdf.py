@@ -467,31 +467,19 @@ RELAXED_POSE: dict[str, tuple[float, tuple[float, float, float]]] = {
 }
 
 
-def blender_stage(npz_path: Path) -> None:
-    """Runs INSIDE Blender (`--python bake_hand_sdf.py -- --blender-export X`).
-    Only Blender's bundled modules + pose_measure_hands helpers; never libigl."""
+# ---- stable authoring stages, shared by the clip baker (X1.27) ------------
+# Each helper is the exact code path the static v1 bake runs; factoring them
+# out (instead of copying) is what guarantees the six grip poses and the
+# checked-in X1.26 volume are built by ONE implementation. They need
+# Blender's mathutils/bmesh and are only ever called from inside Blender.
+
+def relaxed_rotations(hand) -> dict:
+    """The X1.26 relaxed open pose (deterministic; thumb stays at rest)."""
     import math
 
-    import bmesh
-    import numpy as np
-    from mathutils import Vector
-
     sys.path.insert(0, str(SCRIPTS_DIR))
-    from pose_measure_hands import (  # verified pose/skin helpers
-        FINGERS, Gltf, Hand, add_rot, flex_sign, splay_sign, SRC, ATTRIBUTION,
-    )
+    from pose_measure_hands import FINGERS, add_rot, flex_sign, splay_sign
 
-    def sha256_file(path: Path) -> str:
-        import hashlib
-        h = hashlib.sha256()
-        with open(path, "rb") as fh:
-            for block in iter(lambda: fh.read(1 << 20), b""):
-                h.update(block)
-        return h.hexdigest()
-
-    # ---- pose (deterministic; thumb stays at rest) -------------------------
-    gltf = Gltf(SRC)
-    hand = Hand(gltf, "R")
     fsign = flex_sign(hand)
     rots: dict = {}
     for f in FINGERS:
@@ -500,12 +488,16 @@ def blender_stage(npz_path: Path) -> None:
         add_rot(hand, rots, hand.ph[f][0], hand.B, math.radians(splay_deg) * away)
         for bone, deg in zip(hand.ph[f], (mcp, pip, dip)):
             add_rot(hand, rots, bone, hand.A, math.radians(deg) * fsign)
-    world = hand.globals(rots)
+    return rots
 
-    # ---- whole-component right-hand extraction -----------------------------
-    # Connected face components of the concatenated soup; a component is kept
-    # when it is not a nail mesh AND its AGGREGATE right-hand skin weight beats
-    # its left-hand weight. No per-vertex threshold anywhere (that tears seams).
+
+def extract_right_hand_components(gltf) -> dict:
+    """Whole-component right-hand extraction (no per-vertex thresholds).
+
+    Connected face components of the concatenated soup; a component is kept
+    when it is not a nail mesh AND its AGGREGATE right-hand skin weight beats
+    its left-hand weight.
+    """
     pos, wts, faces, nail = gltf.skinned_geometry()
 
     parent = list(range(len(pos)))
@@ -553,28 +545,46 @@ def blender_stage(npz_path: Path) -> None:
                        for r in kept_roots))
     if not kept_roots:
         raise SystemExit("no right-hand component found")
+    return {"pos": pos, "wts": wts, "nail": nail,
+            "kept_verts": kept_verts, "kept_faces": kept_faces,
+            "components": {"total": len(comps), "kept": len(kept_roots),
+                           "keptVerts": len(kept_verts),
+                           "keptFaces": len(kept_faces)}}
 
-    # ---- inverse-bind LBS over EVERY retained vertex ------------------------
-    # Same verified formula as Hand.skin(): chain-restricted weights, everything
-    # else (arm/other-side bindings) rides the identity `free` share.
+
+def inverse_bind_skin(hand, world, extract: dict) -> list[tuple[float, float, float]]:
+    """Inverse-bind LBS over EVERY retained vertex of the extraction.
+
+    Same verified formula as Hand.skin(): chain-restricted weights, everything
+    else (arm/other-side bindings) rides the identity `free` share.
+    """
+    from mathutils import Vector
+
     chain = set(hand.chain)
     posed: list[tuple[float, float, float]] = []
-    for i in kept_verts:
-        w = {k: v for k, v in wts[i].items() if k in chain}
+    for i in extract["kept_verts"]:
+        w = {k: v for k, v in extract["wts"][i].items() if k in chain}
         free = 1.0 - sum(w.values())
-        p = Vector(pos[i]) * hand.scale
+        p = Vector(extract["pos"][i]) * hand.scale
         acc = p * free if free > 1e-6 else Vector((0.0, 0.0, 0.0))
         for name, weight in w.items():
             acc += (world[name] @ p) * weight
         posed.append((acc.x, acc.y, acc.z))
+    return posed
 
-    # ---- anatomical frame: +X thumbward, +Y distal, +Z dorsal ----------------
-    # Construction per spec: flip X toward the thumb, then Z := cross(X, Y) so
-    # the volume frame is right-handed BY CONSTRUCTION (orthonormal asserted
-    # below). The nail-measured back normal hand.B is recorded as a diagnostic:
-    # on a true right hand cross(thumbward, distal) points PALMAR, so
-    # dorsal_sign tells the preview (and the dev note) which local ±Z is the
-    # back of the hand for THIS mesh instead of assuming anatomy.
+
+def anatomical_frame(hand, world):
+    """Right-handed anatomical frame from the posed skeleton.
+
+    +X thumbward, +Y distal, +Z dorsal (Z := cross(X, Y)). Returns
+    (x_axis, y_axis, z_axis, origin, dorsal_sign) where dorsal_sign says which
+    local ±Z is the back of the hand for THIS mesh.
+    """
+    from mathutils import Vector
+
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    from pose_measure_hands import FINGERS
+
     origin = hand.posed_pivot(world, hand.wrist)
     x_axis = Vector(hand.A)                       # pinky MCP -> index MCP
     if (hand.posed_tip(world, hand.thumb[2]) - origin).dot(x_axis) < 0.0:
@@ -591,19 +601,23 @@ def blender_stage(npz_path: Path) -> None:
     assert (x_axis.cross(y_axis) - z_axis).length < eps, "frame not right-handed"
     dorsal_dot_b = z_axis.dot(hand.B)
     dorsal_sign = 1.0 if dorsal_dot_b >= 0.0 else -1.0
-    print(f"[blender] frame: dorsal_sign={dorsal_sign:+.0f} "
-          f"(cross(X,Y).B={dorsal_dot_b:+.3f}; "
-          f"{'+Z is the nail/back side' if dorsal_sign > 0 else '+Z is the palm side for this mesh'})")
+    return x_axis, y_axis, z_axis, origin, dorsal_sign
 
-    local = [((Vector(p) - origin).dot(x_axis),
-              (Vector(p) - origin).dot(y_axis),
-              (Vector(p) - origin).dot(z_axis)) for p in posed]
 
-    # ---- wrist cut: bisect, cap ONLY the new cut edges, no other repair ------
+def wrist_cut_cap(local_verts, kept_faces, mesh_name: str = "HandRelaxedR") -> dict:
+    """35 mm wrist cut: bisect, weld ONLY the cut ring, cap ONLY cut edges.
+
+    Returns numpy arrays + boundary diagnostics. Hard-fails whenever the cap
+    fills nothing (the X1.26 wrist-cap trap: an open cut ring silently leaves
+    an uncapped wrist).
+    """
+    import bmesh
     import bpy
+    import numpy as np
+    from mathutils import Vector
 
-    me = bpy.data.meshes.new("HandRelaxedR")
-    me.from_pydata([Vector(v) for v in local], [], [tuple(f) for f in kept_faces])
+    me = bpy.data.meshes.new(mesh_name)
+    me.from_pydata([Vector(v) for v in local_verts], [], [tuple(f) for f in kept_faces])
     me.validate()
     bm = bmesh.new()
     bm.from_mesh(me)
@@ -664,6 +678,69 @@ def blender_stage(npz_path: Path) -> None:
                          dtype=np.int64)
     bm.free()
     bpy.data.meshes.remove(me)
+    return {"vertices": verts_out, "faces": faces_out,
+            "boundaryEdges": {"source": before_boundary,
+                              "afterCut": after_cut_boundary,
+                              "afterCap": after_cap_boundary,
+                              "cutRing": len(cut_edges),
+                              "weldedPairs": welded_pairs,
+                              "capFaces": cap_faces}}
+
+
+def blender_stage(npz_path: Path) -> None:
+    """Runs INSIDE Blender (`--python bake_hand_sdf.py -- --blender-export X`).
+    Only Blender's bundled modules + pose_measure_hands helpers; never libigl.
+    Every stage runs through the shared helpers above so the X1.27 clip author
+    and this static v1 bake cannot drift apart."""
+    import numpy as np
+    from mathutils import Vector
+
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    from pose_measure_hands import (  # verified pose/skin helpers
+        FINGERS, Gltf, Hand, SRC, ATTRIBUTION,
+    )
+
+    def sha256_file(path: Path) -> str:
+        import hashlib
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for block in iter(lambda: fh.read(1 << 20), b""):
+                h.update(block)
+        return h.hexdigest()
+
+    # ---- pose (deterministic; thumb stays at rest) -------------------------
+    gltf = Gltf(SRC)
+    hand = Hand(gltf, "R")
+    rots = relaxed_rotations(hand)
+    world = hand.globals(rots)
+
+    # ---- whole-component right-hand extraction -----------------------------
+    extract = extract_right_hand_components(gltf)
+    kept_faces = extract["kept_faces"]
+
+    # ---- inverse-bind LBS over EVERY retained vertex ------------------------
+    posed = inverse_bind_skin(hand, world, extract)
+
+    # ---- anatomical frame: +X thumbward, +Y distal, +Z dorsal ----------------
+    # Construction per spec: flip X toward the thumb, then Z := cross(X, Y) so
+    # the volume frame is right-handed BY CONSTRUCTION. The nail-measured back
+    # normal hand.B is recorded as a diagnostic: on a true right hand
+    # cross(thumbward, distal) points PALMAR, so dorsal_sign tells the preview
+    # (and the dev note) which local ±Z is the back of the hand for THIS mesh
+    # instead of assuming anatomy.
+    x_axis, y_axis, z_axis, origin, dorsal_sign = anatomical_frame(hand, world)
+    dorsal_dot_b = z_axis.dot(hand.B)
+    print(f"[blender] frame: dorsal_sign={dorsal_sign:+.0f} "
+          f"(cross(X,Y).B={dorsal_dot_b:+.3f}; "
+          f"{'+Z is the nail/back side' if dorsal_sign > 0 else '+Z is the palm side for this mesh'})")
+
+    local = [((Vector(p) - origin).dot(x_axis),
+              (Vector(p) - origin).dot(y_axis),
+              (Vector(p) - origin).dot(z_axis)) for p in posed]
+
+    # ---- wrist cut: bisect, cap ONLY the new cut edges, no other repair ------
+    cut = wrist_cut_cap(local, kept_faces, "HandRelaxedR")
+    verts_out, faces_out = cut["vertices"], cut["faces"]
 
     # ---- neutral 768x768 preview of the exact soup (post cut+cap) ------------
     render_preview_png(verts_out, faces_out, PREVIEW_PATH, dorsal_sign=dorsal_sign)
@@ -673,14 +750,8 @@ def blender_stage(npz_path: Path) -> None:
         "pose": {f: {"splayDeg": RELAXED_POSE[f][0],
                      "flexDeg": list(RELAXED_POSE[f][1])} for f in FINGERS},
         "thumb": "rest",
-        "components": {"total": len(comps),
-                        "kept": len(kept_roots),
-                        "keptVerts": len(kept_verts),
-                        "keptFaces": len(kept_faces)},
-        "boundaryEdges": {"source": before_boundary, "afterCut": after_cut_boundary,
-                           "afterCap": after_cap_boundary,
-                           "cutRing": len(cut_edges), "weldedPairs": welded_pairs,
-                           "capFaces": cap_faces},
+        "components": extract["components"],
+        "boundaryEdges": cut["boundaryEdges"],
         "wristCutM": WRIST_CUT_M,
         "frame": {"x": tuple(x_axis), "y": tuple(y_axis), "z": tuple(z_axis),
                    "origin": tuple(origin), "dorsalDotB": dorsal_dot_b},
