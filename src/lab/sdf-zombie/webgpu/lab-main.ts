@@ -64,14 +64,16 @@ import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
-import { buildHandPrims } from '../hands';
+import { LIGHTER_LIT, STICK_IN_HAND, buildHandPrims } from '../hands';
 import {
   EMPTY_FPV_INPUT, enterFpvMode, exitFpvMode, forceThrow, handPrimsToWorld,
-  makeFpvMode, posedHandPrims, stepFpvMode,
+  handPropPoses, makeFpvMode, posedHandPrims, stepFpvMode,
   type FpvGorePort, type FpvModeState,
 } from '../fpv-mode';
 import { cookCharge } from '../fpv';
-import { createBurstLayer, createHandsGpuView, createStickProp } from './fpv-view';
+import {
+  createBurstLayer, createHandsGpuView, createLighterProp, createStickProp,
+} from './fpv-view';
 import {
   initialAdaptiveState, scaleForRung, stepAdaptive,
 } from '../adaptive-scale';
@@ -980,6 +982,8 @@ async function main() {
   scene.add(handsView.object);
   const stick = createStickProp();
   scene.add(stick.object);
+  const lighter = createLighterProp();
+  scene.add(lighter.object);
   const burstLayer = createBurstLayer(scene);
   /** Hands A/B toggle — the spec's perf gate is measured both ways. */
   let handsEnabled = true;
@@ -1546,28 +1550,45 @@ async function main() {
       camera.lookAt(camTarget);
     }
 
-    // Stick prop: ballistic once thrown (visible in god mode too — a
-    // spectator watches the arc), held in the lead hand between throws.
+    // Held props: the bundle in the lead fist, the lighter in the support
+    // fist. Both seats come from handPropPoses, which reads the POSED prims —
+    // so they ride the pose, the idle bob and the jiggle, and (the bug this
+    // replaced) they land in WORLD space instead of camera-local coordinates
+    // used as world, which parked the bundle at the arena origin.
+    const propSeats = ff.mode === 'fpv' && handsEnabled && posedLocalHands
+      ? handPropPoses(posedLocalHands, ff.eye, ff.yaw, ff.pitch)
+      : null;
+    // Stick: ballistic once thrown (visible in god mode too — a spectator
+    // watches the arc), held in the lead hand between throws.
     if (ff.flight) {
       stick.pose({ mode: 'flight', pos: ff.flight.pos, spin: ff.flight.spin, fuseBurning: true });
       stick.flicker(fpvNow, false);
-    } else if (ff.mode === 'fpv' && handsEnabled && posedLocalHands
-      && (ff.handPhase.phase === 'idle'
-        || ff.handPhase.phase === 'light' || ff.handPhase.phase === 'cook')) {
-      const m = posedLocalHands.right[3]!; // lead mitten grips the bundle
+    } else if (propSeats && STICK_IN_HAND.includes(ff.handPhase.phase)) {
       stick.pose({
         mode: 'hand',
-        localPos: [
-          (m.a[0] + m.b[0]) / 2,
-          (m.a[1] + m.b[1]) / 2 + 0.05,
-          (m.a[2] + m.b[2]) / 2,
-        ],
+        pos: propSeats.stick.pos,
+        axis: propSeats.stick.axis,
         camQuat: camera.quaternion,
         cooking: ff.handPhase.phase === 'cook',
       });
       stick.flicker(fpvNow, ff.handPhase.phase === 'cook');
     } else {
       stick.pose({ mode: 'gone' });
+    }
+    // Lighter: carried in every FPV phase (the frames never put it away); the
+    // flame only burns while lighting and through the fuse burn.
+    if (propSeats) {
+      const lit = LIGHTER_LIT.includes(ff.handPhase.phase);
+      lighter.pose({
+        mode: 'hand',
+        pos: propSeats.lighter.pos,
+        axis: propSeats.lighter.axis,
+        camQuat: camera.quaternion,
+        lit,
+      });
+      lighter.flicker(fpvNow);
+    } else {
+      lighter.pose({ mode: 'gone' });
     }
     burstLayer.update(dt, camera);
 

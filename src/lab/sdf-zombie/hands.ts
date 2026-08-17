@@ -5,15 +5,41 @@
 //
 // The hands are SDF FLESH: the same capsule `Primitive` language the zombie
 // body is authored in (body.ts), posed in CAMERA-LOCAL space — x right, y up,
-// +z toward the scene, camera/eye at the origin, units metres. They are sized
-// for a bottom-of-frame first-person framing: mittens in the lower corners
-// converging on the held dynamite, forearm stubs running off the bottom of
-// the frame. Claymation-chunky — 5 prims per hand (spec: 4–6): forearm stub,
-// wrist, palm, fused-finger mitten, thumb.
+// +z toward the scene, camera/eye at the origin, units metres.
 //
-// No rendering here. The wiring task marches these as a small camera-anchored
+// ——— What the shapes are modelled on ————————————————————————————————————————
+// The game's own first-person dynamite frames (the QAV tile set behind
+// public/assets/animations/weapons/dynamite-*.json — tiles 3192 lead hand,
+// 3211/3212/3214 lighter hand, 3225 open hand, 3194 bundle) are the authoring
+// reference. REFERENCE ONLY: nothing here copies pixels, and no extracted
+// asset is imported, shipped, or committed. What those frames show, and what
+// this prim set therefore models:
+//
+//   * A closed FIST, not a mitten. The silhouette that says "hand" is (a) a
+//     row of three knuckle-topped finger tubes with visible grooves between
+//     them, curling over the grip and down the far side; (b) a fat opposable
+//     THUMB laid up and across the grip in three segments, breaking the
+//     outline on the inner-near side; (c) a broad flat back-of-hand slab with
+//     a heel pad at its base; (d) a clear WRIST taper into (e) a thick
+//     forearm running off the bottom of the frame — in the frames the forearm
+//     is roughly half the whole silhouette.
+//   * The bundle is gripped from below, emerging from the TOP of the fist
+//     between the index knuckle and the thumb, tilted in toward screen
+//     centre. The lighter rides the same spot on the other fist.
+//   * Idle sits high and relaxed; the fuse-burn frames hold the lead hand
+//     LOWER and further OUT than idle (a cocked, wound-up hold); the throw
+//     whips the hand up-forward until it leaves the frame entirely, fingers
+//     opening as it goes (tile 3225 is the open hand on the way back).
+//
+// Everything is authored in a HAND-LOCAL frame (u along the wrist→knuckle
+// axis, w across from pinky to thumb, b out of the back of the hand) so the
+// numbers read as anatomy instead of camera coordinates; buildHandPrims maps
+// that frame into camera space once, at load.
+//
+// No rendering here. The wiring marches these as a small camera-anchored
 // field: take HAND_PRIMS, add the per-prim transform poseAt returns, fold,
-// and run the existing Verlet jiggle (rig.ts) with HAND_JIGGLE.
+// and run the existing Verlet jiggle (rig.ts) with HAND_JIGGLE. Held props
+// (bundle, lighter) ride the pose via HAND_PROPS + propAnchor — see below.
 //
 // Timing comes from fpv.ts's cook state machine — never a second clock:
 // handPhaseFromCook maps CookPhase ('idle'|'cooking'|'cooldown') onto the
@@ -52,33 +78,135 @@ import { DYNAMITE_COOK } from '../../game/gibs/tuning';
 
 // ——— Prim set ——————————————————————————————————————————————————————————————
 
-/** Prim order is part of the interface: poses and jiggle data index it. */
-export const HAND_PRIM_NAMES = ['forearm', 'wrist', 'palm', 'mitten', 'thumb'] as const;
+/** Prim order is part of the interface: poses, jiggle and prop anchors index
+ *  it. Eleven prims per hand — the frames' five readable masses (forearm,
+ *  wrist, palm+heel, finger row, thumb) split just far enough that the finger
+ *  grooves and the thumb's opposition survive at bottom-of-frame scale. */
+export const HAND_PRIM_NAMES = [
+  'forearm', 'wrist', 'heel', 'palm', 'fingerRoot',
+  'finger0', 'finger1', 'finger2',
+  'thumbBase', 'thumbMid', 'thumbTip',
+] as const;
+export type HandPrimName = (typeof HAND_PRIM_NAMES)[number];
 export const HAND_PRIM_COUNT = HAND_PRIM_NAMES.length;
 
-/**
- * The RIGHT hand (lead — it holds and throws; FPV_TUNING.handOffsetM.lateral
- * is +, so the bundle leaves lower-right). The left hand is its x-mirror, so
- * tuning edits ONE table. Camera-local metres, rest pose == the idle pose.
- */
-const HAND_PRIMS_R: readonly Primitive[] = [
-  // 0 forearm stub — runs off the bottom-right of the frame.
-  { a: [0.36, -0.43, 0.41], b: [0.53, -0.63, 0.30], radius: 0.050, scale: [1, 1, 1], blendK: 0.008, limb: 'armR', cluster: 1 },
-  // 1 wrist — flows from the stub toward the palm.
-  { a: [0.38, -0.47, 0.40], b: [0.30, -0.41, 0.44], radius: 0.045, scale: [1, 0.92, 1], blendK: 0.008, limb: 'armR', cluster: 1 },
-  // 2 palm — broad and flat, cupping the stick.
-  { a: [0.31, -0.38, 0.45], b: [0.21, -0.31, 0.50], radius: 0.052, scale: [1.12, 0.85, 1.0], blendK: 0.007, limb: 'armR', cluster: 1 },
-  // 3 mitten — the fused-finger mass that grips the dynamite, pointing
-  // up-inward toward screen centre where the stick stands.
-  { a: [0.26, -0.34, 0.48], b: [0.15, -0.25, 0.53], radius: 0.047, scale: [1, 1, 1], blendK: 0.006, limb: 'armR', cluster: 1 },
-  // 4 thumb — wraps the inner side of the stick.
-  { a: [0.20, -0.36, 0.44], b: [0.12, -0.28, 0.47], radius: 0.026, scale: [1, 1, 1], blendK: 0.006, limb: 'armR', cluster: 1 },
-];
+/** Index groups the poses act on (a gesture moves masses, not prims). */
+export const HAND_PRIM_GROUPS = {
+  /** The frame-exiting stub — pinned in the jiggle, lags the hand in a pose. */
+  forearm: [0],
+  wrist: [1],
+  /** Heel + back-of-hand slab + the fused proximal finger mass. */
+  mass: [2, 3, 4],
+  /** The three curled finger tubes (index → ring/pinky). */
+  fingers: [5, 6, 7],
+  /** Thenar ball + the two opposable segments. */
+  thumb: [8, 9, 10],
+} as const satisfies Record<string, readonly number[]>;
 
-/** x-mirror into the left hand: negate x of both capsule ends, swap cluster. */
-function mirrorPrimX(p: Primitive): Primitive {
-  return { ...p, a: [-p.a[0], p.a[1], p.a[2]], b: [-p.b[0], p.b[1], p.b[2]], limb: 'armL', cluster: 0 };
+// ——— The hand-local frame ————————————————————————————————————————————————
+
+/** An orthonormal hand frame in camera-local axes. */
+export interface HandAxes {
+  /** Wrist → knuckles (the hand's long axis): up and in toward screen centre. */
+  u: Vec3;
+  /** Pinky → thumb, across the hand: in, down and toward the camera. */
+  w: Vec3;
+  /** Out of the BACK of the hand — the face we see, so it points at the eye. */
+  b: Vec3;
 }
+
+const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+function norm(v: Vec3): Vec3 {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+
+/**
+ * Seat of the RIGHT (lead) hand, authored against the frames: the grip centre
+ * sits in the lower-right of the view about 0.4 m out, the hand tips up and
+ * in toward screen centre, and its back faces the eye (we see knuckles and
+ * the thumb side, exactly as tile 3192 does).
+ */
+export const HAND_SEAT = {
+  /** Camera-local grip centre — where the bundle passes through the fist. */
+  grip: [0.215, -0.205, 0.405] as Vec3,
+  /** Wrist → knuckle direction (normalised on use). */
+  up: [-0.32, 0.90, 0.29] as Vec3,
+  /** Back-of-hand hint (orthogonalised against `up`): toward the eye, tipped
+   *  out and up so the knuckle row catches the key light. */
+  back: [0.35, 0.28, -0.90] as Vec3,
+} as const;
+
+/** Gram-Schmidt the authored hints into an orthonormal frame. */
+function seatAxes(up: Vec3, back: Vec3): HandAxes {
+  const u = norm(up);
+  const d = dot(back, u);
+  const b = norm([back[0] - d * u[0], back[1] - d * u[1], back[2] - d * u[2]]);
+  return { u, w: norm(cross(u, b)), b };
+}
+
+const mirrorAxis = (v: Vec3): Vec3 => [-v[0], v[1], v[2]];
+
+/** Per-side hand frames. The left hand is the right hand's x-mirror, so its
+ *  axes are the mirrored axes — hand-local pose offsets then read the same
+ *  on both sides ("curl the fingers", not "move −x"). */
+export const HAND_AXES: Record<'left' | 'right', HandAxes> = (() => {
+  const r = seatAxes(HAND_SEAT.up, HAND_SEAT.back);
+  return {
+    right: r,
+    left: { u: mirrorAxis(r.u), w: mirrorAxis(r.w), b: mirrorAxis(r.b) },
+  };
+})();
+
+/** One authored capsule, in hand-local metres: [alongU, alongW, alongB]. */
+interface ShapePrim {
+  name: HandPrimName;
+  a: Vec3;
+  b: Vec3;
+  radius: number;
+  scale?: Vec3;
+  blendK: number;
+}
+
+/**
+ * The lead hand's masses, authored in the hand frame (see the module header
+ * for what each one is doing in the reference frames). Offsets are multiplied
+ * by HANDS_TUNING.shape.spread and radii by .girth so the whole hand can be
+ * resized without re-authoring anatomy.
+ *
+ * blendK is the readability lever: the palm masses fuse (0.004–0.005 → a 1.6–2
+ * cm smin skirt) while the fingers and thumb tips stay nearly hard
+ * (0.0015–0.003) so the grooves between digits survive. The old mitten fused
+ * everything at 0.006–0.008 and read as one lump.
+ */
+const LEAD_SHAPE: readonly ShapePrim[] = [
+  // Runs off the bottom of the frame — about half the silhouette, as in 3192.
+  { name: 'forearm', a: [-0.150, 0.006, -0.012], b: [-0.400, 0.028, -0.055], radius: 0.047, blendK: 0.005 },
+  // The taper. Without it the fist and forearm read as one club.
+  { name: 'wrist', a: [-0.142, 0.002, -0.006], b: [-0.098, 0.000, 0.000], radius: 0.034, scale: [1, 1, 0.9], blendK: 0.005 },
+  // Hypothenar pad at the base of the palm, pinky side.
+  { name: 'heel', a: [-0.082, 0.010, -0.002], b: [-0.076, -0.042, -0.006], radius: 0.032, blendK: 0.004 },
+  // Broad flat back-of-hand slab, spanning the hand's width.
+  { name: 'palm', a: [-0.030, 0.030, 0.004], b: [-0.040, -0.050, 0.000], radius: 0.040, scale: [1, 1, 0.86], blendK: 0.004 },
+  // The fused proximal mass the three finger tubes rise from.
+  { name: 'fingerRoot', a: [0.040, 0.046, 0.006], b: [0.026, -0.056, 0.000], radius: 0.031, scale: [1, 1, 0.94], blendK: 0.004 },
+  // Curled fingers: knuckle proud of the back, over the top, down the far
+  // side. Index is thumb-most (+w) and thickest; the last tube carries
+  // ring+pinky together.
+  { name: 'finger0', a: [0.064, 0.046, 0.022], b: [0.012, 0.042, -0.042], radius: 0.023, blendK: 0.0015 },
+  { name: 'finger1', a: [0.060, 0.008, 0.021], b: [0.008, 0.006, -0.044], radius: 0.022, blendK: 0.0015 },
+  { name: 'finger2', a: [0.050, -0.030, 0.017], b: [0.000, -0.030, -0.044], radius: 0.021, blendK: 0.0015 },
+  // Thumb: thenar ball, then two segments laid up and across the grip so the
+  // pad ends against the index knuckle — the frames' pinch on the bundle.
+  { name: 'thumbBase', a: [-0.070, 0.028, 0.010], b: [-0.018, 0.060, 0.018], radius: 0.030, blendK: 0.003 },
+  { name: 'thumbMid', a: [-0.012, 0.062, 0.019], b: [0.030, 0.062, 0.016], radius: 0.023, blendK: 0.002 },
+  { name: 'thumbTip', a: [0.034, 0.060, 0.015], b: [0.064, 0.042, 0.010], radius: 0.019, blendK: 0.0015 },
+];
 
 // ——— Tuning ——————————————————————————————————————————————————————————————————
 
@@ -88,6 +216,10 @@ export const HANDS_TUNING = {
    *  HAND_PRIMS below is baked at these defaults — call buildHandPrims() after
    *  changing them. */
   anchor: { pos: [0, 0, 0] as Vec3, uniform: 1 },
+  /** Hand size: `spread` scales the authored hand-local offsets (how big the
+   *  hand is), `girth` scales the radii (how chunky the clay is). Tuned so
+   *  the fist reads at bottom-of-frame scale without eating the view. */
+  shape: { spread: 1.14, girth: 1.10 },
   /** Idle sway: figure-eight bob, x at 1 cycle / period, y at 2 (weapon sway). */
   bob: { periodSec: 0.9, lateralAmpM: 0.014, verticalAmpM: 0.011, forwardAmpM: 0.006 },
   /** Authored splits of fpv's windows: light+cook ≤ fuseMaxSec,
@@ -111,6 +243,40 @@ export const HAND_PHASE_SEC = {
   recover: FPV_TUNING.throwRecoverSec - HANDS_TUNING.phaseSec.throw,
 } as const;
 
+/** Hand-local (u,w,b) offset → camera-local metres, at the shape scale. */
+function localToCam(axes: HandAxes, o: Vec3, spread: number = HANDS_TUNING.shape.spread): Vec3 {
+  return [
+    (axes.u[0] * o[0] + axes.w[0] * o[1] + axes.b[0] * o[2]) * spread,
+    (axes.u[1] * o[0] + axes.w[1] * o[1] + axes.b[1] * o[2]) * spread,
+    (axes.u[2] * o[0] + axes.w[2] * o[1] + axes.b[2] * o[2]) * spread,
+  ];
+}
+
+/** x-mirror into the left hand: negate x of both capsule ends, swap cluster. */
+function mirrorPrimX(p: Primitive): Primitive {
+  return { ...p, a: [-p.a[0], p.a[1], p.a[2]], b: [-p.b[0], p.b[1], p.b[2]], limb: 'armL', cluster: 0 };
+}
+
+/** The RIGHT (lead) hand: LEAD_SHAPE mapped out of the hand frame into camera
+ *  space around HAND_SEAT.grip. Rest pose == the idle pose. */
+function buildLeadHand(): Primitive[] {
+  const axes = HAND_AXES.right;
+  const g = HAND_SEAT.grip;
+  const place = (o: Vec3): Vec3 => {
+    const c = localToCam(axes, o);
+    return [g[0] + c[0], g[1] + c[1], g[2] + c[2]];
+  };
+  return LEAD_SHAPE.map(s => ({
+    a: place(s.a),
+    b: place(s.b),
+    radius: s.radius * HANDS_TUNING.shape.girth,
+    scale: s.scale ?? [1, 1, 1],
+    blendK: s.blendK,
+    limb: 'armR' as const,
+    cluster: 1,
+  }));
+}
+
 /** Both hands' rest prims (anchor defaults). left = x-mirror of right. */
 export function buildHandPrims(): { left: Primitive[]; right: Primitive[] } {
   const { pos, uniform } = HANDS_TUNING.anchor;
@@ -120,9 +286,10 @@ export function buildHandPrims(): { left: Primitive[]; right: Primitive[] } {
     b: [p.b[0] * uniform + pos[0], p.b[1] * uniform + pos[1], p.b[2] * uniform + pos[2]],
     radius: p.radius * uniform,
   });
+  const lead = buildLeadHand();
   return {
-    right: HAND_PRIMS_R.map(seat),
-    left: HAND_PRIMS_R.map(p => seat(mirrorPrimX(p))),
+    right: lead.map(seat),
+    left: lead.map(p => seat(mirrorPrimX(p))),
   };
 }
 
@@ -144,83 +311,244 @@ export interface PrimPose {
 /** One hand's keyframe — sparse array indexed by HAND_PRIM_NAMES order. */
 export type HandKeyframe = readonly (PrimPose | undefined)[];
 
+/** Which pose table each side plays. */
+export const HAND_ROLE_OF_SIDE = { left: 'support', right: 'lead' } as const;
+export type HandRole = 'lead' | 'support';
+/** The side each role is played by (the inverse of HAND_ROLE_OF_SIDE). */
+export const HAND_SIDE_OF_ROLE: Record<HandRole, 'left' | 'right'> = {
+  lead: 'right', support: 'left',
+};
+
 /**
- * Role-keyed pose tables (camera space, NOT mirrored — the hands act
- * differently): `lead` = the right hand (holds + throws the stick, exits
- * lower-right per FPV_TUNING.handOffsetM), `support` = the left hand (raises
- * the lighter to the fuse, drops away on throw). Silhouettes follow the
- * game's 2D dynamite frames as described in the spec: idle low and relaxed,
- * light brings the fuse up to the flame, cook tenses around the stick,
- * throw extends the lead hand, recover settles home (target == idle).
+ * A pose authored as ANATOMY rather than as eleven offset vectors: where the
+ * arm carries the hand (camera-local `shift`), and what the hand itself does
+ * (hand-local flex / curl / press, plus grip swell). expandGesture turns one
+ * of these into the dense keyframe the tween consumes, so re-posing is a
+ * four-number edit and both roles stay describable in the same words.
+ */
+export interface HandGesture {
+  /** Whole-hand travel in CAMERA-local metres — the arm's contribution. */
+  shift?: Vec3;
+  /** Fraction of `shift` the forearm stub follows (it lags; 0..1). */
+  drag?: number;
+  /** Wrist flex — hand-local (u,w,b) offset on everything past the wrist. */
+  flex?: Vec3;
+  /** Finger curl — hand-local offset on the three finger tubes. */
+  curl?: Vec3;
+  /** Thumb press — hand-local offset on the three thumb segments. */
+  press?: Vec3;
+  /** Uniform ellipsoid swell on fingers + thumb (tension / release). */
+  swell?: number;
+  /** Uniform ellipsoid swell on the palm masses. */
+  palmSwell?: number;
+}
+
+/**
+ * Role-keyed gestures (camera space is NOT mirrored — the hands act
+ * differently), authored straight off the game's frames:
+ *
+ *   idle    both hands low and relaxed; the bundle stands in the LEAD fist.
+ *   light   lead lifts the fuse toward the flame; the SUPPORT thumb flicks
+ *           the lighter's wheel (tile 3211 vs 3212 is a thumb move, not an
+ *           arm move) and the hand rises higher than the lead's.
+ *   cook    the fuse-burn frames hold the lead hand LOWER and further OUT
+ *           than idle — a cocked, white-knuckle hold. The support hand
+ *           stations at the fuse. Grip swells; the verlet jiggle shakes it.
+ *   throw   lead whips up-forward-inward past the aim point with the fingers
+ *           flying open (tile 3225) — travel is capped by `drag` and by the
+ *           forearm's cut end, which must never rise into view. Support
+ *           drops down and outward, clear of the throw.
+ *   recover target IS idle — the motion is the blend home.
+ */
+export const HAND_GESTURES: Record<HandRole, Record<HandPhase, HandGesture>> = {
+  lead: {
+    idle: {},
+    light: {
+      shift: [-0.045, 0.032, 0.006], drag: 0.5,
+      flex: [0.004, 0.006, 0.000], curl: [0.002, 0.000, 0.002],
+      press: [0.006, 0.004, 0.002], swell: 1.03,
+    },
+    cook: {
+      shift: [0.012, -0.034, -0.014], drag: 0.6,
+      flex: [-0.004, 0.000, 0.006], curl: [0.006, 0.004, 0.004],
+      press: [0.008, 0.006, 0.003], swell: 1.10, palmSwell: 1.05,
+    },
+    throw: {
+      shift: [-0.020, 0.240, 0.130], drag: 0.90,
+      flex: [0.010, 0.000, -0.006], curl: [-0.010, 0.006, -0.020],
+      press: [-0.008, 0.010, -0.006], swell: 0.94,
+    },
+    recover: {},
+  },
+  support: {
+    idle: {},
+    light: {
+      shift: [0.150, 0.048, 0.030], drag: 0.55,
+      flex: [0.006, 0.004, 0.000], curl: [0.003, 0.000, 0.002],
+      press: [0.020, 0.010, 0.006], swell: 1.02,
+    },
+    cook: {
+      shift: [0.115, 0.010, 0.020], drag: 0.5,
+      flex: [0.002, 0.002, 0.002], curl: [0.004, 0.002, 0.003],
+      press: [0.010, 0.006, 0.004], swell: 1.06, palmSwell: 1.02,
+    },
+    throw: {
+      shift: [-0.055, -0.055, -0.025], drag: 0.6,
+      curl: [-0.004, 0.000, -0.004], press: [-0.004, 0.002, -0.003],
+      swell: 0.97,
+    },
+    recover: {},
+  },
+};
+
+const ZERO: Vec3 = [0, 0, 0];
+const addV = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const scaleV = (a: Vec3, s: number): Vec3 => [a[0] * s, a[1] * s, a[2] * s];
+const uniform = (s: number): Vec3 => [s, s, s];
+
+/** Expand one gesture into a dense per-prim keyframe for `role`. */
+export function expandGesture(role: HandRole, g: HandGesture): HandKeyframe {
+  const axes = HAND_AXES[HAND_SIDE_OF_ROLE[role]];
+  const shift = g.shift ?? ZERO;
+  const drag = g.drag ?? 1;
+  const flex = g.flex ? localToCam(axes, g.flex) : ZERO;
+  const curl = g.curl ? localToCam(axes, g.curl) : ZERO;
+  const press = g.press ? localToCam(axes, g.press) : ZERO;
+  const grip = uniform(g.swell ?? 1);
+  const palm = uniform(g.palmSwell ?? 1);
+
+  const G = HAND_PRIM_GROUPS;
+  const out: PrimPose[] = [];
+  for (let i = 0; i < HAND_PRIM_COUNT; i++) {
+    // The forearm lags the hand; everything past the wrist also flexes.
+    let pos = (G.forearm as readonly number[]).includes(i)
+      ? scaleV(shift, drag)
+      : shift;
+    if (!(G.forearm as readonly number[]).includes(i)
+      && !(G.wrist as readonly number[]).includes(i)) pos = addV(pos, flex);
+    if ((G.fingers as readonly number[]).includes(i)) pos = addV(pos, curl);
+    if ((G.thumb as readonly number[]).includes(i)) pos = addV(pos, press);
+    const scale = (G.fingers as readonly number[]).includes(i)
+      || (G.thumb as readonly number[]).includes(i)
+      ? grip
+      : (G.mass as readonly number[]).includes(i) ? palm : uniform(1);
+    out.push({ pos, scale });
+  }
+  return out;
+}
+
+/**
+ * The expanded pose tables the tween samples — same shape as before (sparse
+ * per-prim arrays keyed by role then phase), now GENERATED from HAND_GESTURES
+ * so the anatomy stays the single source of truth.
  */
 export const HAND_POSES: {
   lead: Record<HandPhase, HandKeyframe>;
   support: Record<HandPhase, HandKeyframe>;
 } = {
   lead: {
-    // idle: rest pose, zero offsets.
-    idle: [],
-    // light: raise the stick tip toward the flame, first squeeze.
-    light: [
-      { pos: [0, 0.02, 0] },                                     // forearm
-      { pos: [0, 0.03, 0] },                                     // wrist
-      { pos: [-0.02, 0.05, 0.01], scale: [1.04, 1, 1.04] },      // palm
-      { pos: [-0.03, 0.07, 0.02], scale: [1.05, 1.05, 1.05] },   // mitten
-      { pos: [-0.04, 0.08, 0.02] },                              // thumb
-    ],
-    // cook: hands tense around the stick — pull in/up/back, knuckle-whiten.
-    cook: [
-      { pos: [-0.01, 0.01, -0.005] },                                  // forearm
-      { pos: [-0.015, 0.02, -0.01] },                                  // wrist
-      { pos: [-0.03, 0.035, -0.015], scale: [1.08, 1.02, 1.08] },      // palm
-      { pos: [-0.045, 0.05, -0.02], scale: [1.1, 1.12, 1.1] },         // mitten
-      { pos: [-0.06, 0.06, -0.01], scale: [1.12, 1.12, 1.12] },        // thumb
-    ],
-    // throw: lead hand extends up-out-forward, fingers thinning out.
-    throw: [
-      { pos: [0.02, 0.05, 0.03] },                                // forearm
-      { pos: [0.03, 0.07, 0.05] },                                // wrist
-      { pos: [0.05, 0.1, 0.08] },                                 // palm
-      { pos: [0.06, 0.12, 0.1], scale: [0.96, 0.96, 0.96] },      // mitten
-      { pos: [0.03, 0.09, 0.06] },                                // thumb
-    ],
-    // recover: target IS the idle pose (zero offsets); the motion is the
-    // blend home from throw, with the bob fading back in.
-    recover: [],
+    idle: expandGesture('lead', HAND_GESTURES.lead.idle),
+    light: expandGesture('lead', HAND_GESTURES.lead.light),
+    cook: expandGesture('lead', HAND_GESTURES.lead.cook),
+    throw: expandGesture('lead', HAND_GESTURES.lead.throw),
+    recover: expandGesture('lead', HAND_GESTURES.lead.recover),
   },
   support: {
-    idle: [],
-    // light: the lighter hand rises higher — it brings the flame TO the fuse.
-    light: [
-      { pos: [0, 0.03, 0] },                                     // forearm
-      { pos: [0, 0.04, 0] },                                     // wrist
-      { pos: [0.01, 0.06, 0.02] },                               // palm
-      { pos: [0.02, 0.09, 0.03], scale: [1.06, 1.06, 1.06] },    // mitten
-      { pos: [0.03, 0.09, 0.02] },                               // thumb
-    ],
-    // cook: mirror-tense, converging inward (+x for the left hand).
-    cook: [
-      { pos: [0.01, 0.01, -0.005] },                                  // forearm
-      { pos: [0.015, 0.02, -0.01] },                                  // wrist
-      { pos: [0.035, 0.035, -0.015], scale: [1.08, 1.02, 1.08] },      // palm
-      { pos: [0.05, 0.05, -0.02], scale: [1.1, 1.12, 1.1] },           // mitten
-      { pos: [0.065, 0.06, -0.01], scale: [1.12, 1.12, 1.12] },        // thumb
-    ],
-    // throw: support hand drops back and outward, out of the throw's way.
-    throw: [
-      { pos: [-0.01, -0.02, -0.01] },                            // forearm
-      { pos: [-0.02, -0.03, -0.02] },                            // wrist
-      { pos: [-0.04, -0.05, -0.03] },                            // palm
-      { pos: [-0.06, -0.07, -0.04], scale: [0.97, 0.97, 0.97] }, // mitten
-      { pos: [-0.03, -0.05, -0.02] },                            // thumb
-    ],
-    recover: [],
+    idle: expandGesture('support', HAND_GESTURES.support.idle),
+    light: expandGesture('support', HAND_GESTURES.support.light),
+    cook: expandGesture('support', HAND_GESTURES.support.cook),
+    throw: expandGesture('support', HAND_GESTURES.support.throw),
+    recover: expandGesture('support', HAND_GESTURES.support.recover),
   },
 };
 
-/** Which pose table each side plays. */
-export const HAND_ROLE_OF_SIDE = { left: 'support', right: 'lead' } as const;
-export type HandRole = keyof typeof HAND_POSES; // 'lead' | 'support'
+// ——— Held props ———————————————————————————————————————————————————————————
+
+/**
+ * Where a held prop rides on a posed hand. The anchor is the mean midpoint of
+ * `prims` (so it follows the pose AND the verlet jiggle for free), plus a
+ * hand-local offset; `axis` is the prop's up-direction in hand-local terms.
+ * Both come back in CAMERA-local space from propAnchor.
+ */
+export interface PropAnchorSpec {
+  role: HandRole;
+  /** Prim indices whose capsule midpoints average to the anchor origin. */
+  prims: readonly number[];
+  /** Offset from that origin, hand-local (u,w,b) metres. */
+  offset: Vec3;
+  /** The prop's up-axis, hand-local — normalised by propAnchor. */
+  axis: Vec3;
+}
+
+/**
+ * The two props the frames put in the hands.
+ *
+ * `stick` — the dynamite bundle, gripped in the LEAD fist: it passes through
+ * the grip channel between the finger roots and the thumb, standing up and
+ * tilted in toward screen centre (the frames tilt it noticeably further in
+ * than the hand's own axis, hence the −w lean on `axis`). The offset lifts
+ * the bundle's CENTRE clear of the fist so roughly its lower third is
+ * swallowed by the grip.
+ *
+ * `lighter` — the zippo in the SUPPORT fist, standing on top of the index
+ * knuckle with the thumb against it, exactly as tiles 3211/3214 hold it.
+ * `flameOffset` (below) puts the flame just above its lid.
+ */
+export const HAND_PROPS = {
+  stick: {
+    role: 'lead',
+    prims: [3, 4, 9],                  // palm, fingerRoot, thumbMid
+    offset: [0.0527, 0.0206, -0.0205],
+    axis: [0.964, 0.250, -0.087],
+  },
+  lighter: {
+    role: 'support',
+    prims: [4, 5, 10],                 // fingerRoot, index finger, thumbTip
+    offset: [0.0580, 0.0000, 0.0202],
+    axis: [0.900, 0.420, 0.100],
+  },
+} as const satisfies Record<string, PropAnchorSpec>;
+
+/** Extra tuning the view needs for the props (metres along the prop axis). */
+export const HAND_PROP_TUNING = {
+  /** Lighter body half-height — the flame sits this far above its origin. */
+  flameOffsetM: 0.038,
+} as const;
+
+/** A prop's camera-local seat this frame. */
+export interface PropAnchor {
+  /** Camera-local position of the prop's origin. */
+  pos: Vec3;
+  /** Camera-local unit up-axis of the prop. */
+  axis: Vec3;
+}
+
+/**
+ * Seat a prop on one hand's POSED prims (camera-local, jiggle included — pass
+ * what posedHandPrims returned for that side). Pure: no state, no clock.
+ */
+export function propAnchor(
+  posedSide: readonly Primitive[],
+  spec: PropAnchorSpec,
+): PropAnchor {
+  const axes = HAND_AXES[HAND_SIDE_OF_ROLE[spec.role]];
+  let cx = 0, cy = 0, cz = 0, n = 0;
+  for (const i of spec.prims) {
+    const p = posedSide[i];
+    if (!p) continue;
+    cx += (p.a[0] + p.b[0]) / 2;
+    cy += (p.a[1] + p.b[1]) / 2;
+    cz += (p.a[2] + p.b[2]) / 2;
+    n++;
+  }
+  const k = n > 0 ? 1 / n : 0;
+  const off = localToCam(axes, spec.offset);
+  return {
+    pos: [cx * k + off[0], cy * k + off[1], cz * k + off[2]],
+    // The axis is a direction, so it takes the frame but NOT the spread scale.
+    axis: norm(localToCam(axes, spec.axis, 1)),
+  };
+}
 
 // ——— Tween ———————————————————————————————————————————————————————————————————
 
@@ -375,6 +703,12 @@ export function handPhaseFromCook(cook: CookState, now: number): HandPhaseRef {
   }
 }
 
+/** Phases where the bundle is still IN the lead hand (the view parks the
+ *  prop at throw — from then on the flight owns it). */
+export const STICK_IN_HAND: readonly HandPhase[] = ['idle', 'light', 'cook'];
+/** Phases where the lighter's flame is burning (light and the fuse burn). */
+export const LIGHTER_LIT: readonly HandPhase[] = ['light', 'cook'];
+
 // ——— Verlet jiggle spec (data for the wiring; rig.ts runs it) ————————————
 
 /** Per-prim jiggle behaviour, ordered like HAND_PRIM_NAMES. */
@@ -392,8 +726,9 @@ export interface PrimJiggle {
  * (its capsule midpoint), distance constraints between adjacent prims at
  * linkStiffness, per-prim rest-pull/damping from perPrim, gravity in
  * CAMERA-LOCAL space (softened — hands are near the eye, flesh sags more
- * than it falls). Distal flesh (mitten, thumb) is loose so the cook-hold
- * wobbles; the forearm stub is pinned as the frame anchor.
+ * than it falls). Stiffness falls off outward along the authored order, so
+ * the distal flesh (finger tubes, thumb tip) carries the cook-hold wobble
+ * while the forearm stub is pinned as the frame anchor.
  */
 export const HAND_JIGGLE = {
   gravity: [0, -1.6, 0] as Vec3,
@@ -402,10 +737,16 @@ export const HAND_JIGGLE = {
   restStiffness: 0.18,
   linkStiffness: 0.55,
   perPrim: [
-    { stiffness: 1.0, damping: 0.4, pinned: true },   // forearm — frame anchor
-    { stiffness: 0.85, damping: 0.35, pinned: false }, // wrist
-    { stiffness: 0.65, damping: 0.3, pinned: false },  // palm
-    { stiffness: 0.45, damping: 0.22, pinned: false }, // mitten — the wobble
-    { stiffness: 0.4, damping: 0.2, pinned: false },   // thumb
+    { stiffness: 1.0, damping: 0.4, pinned: true },     // forearm — frame anchor
+    { stiffness: 0.85, damping: 0.35, pinned: false },  // wrist
+    { stiffness: 0.7, damping: 0.32, pinned: false },   // heel
+    { stiffness: 0.65, damping: 0.3, pinned: false },   // palm
+    { stiffness: 0.6, damping: 0.28, pinned: false },   // fingerRoot
+    { stiffness: 0.45, damping: 0.22, pinned: false },  // finger0
+    { stiffness: 0.44, damping: 0.22, pinned: false },  // finger1
+    { stiffness: 0.42, damping: 0.21, pinned: false },  // finger2
+    { stiffness: 0.5, damping: 0.26, pinned: false },   // thumbBase
+    { stiffness: 0.42, damping: 0.21, pinned: false },  // thumbMid
+    { stiffness: 0.4, damping: 0.2, pinned: false },    // thumbTip
   ] as readonly PrimJiggle[],
 } as const;

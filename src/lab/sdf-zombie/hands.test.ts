@@ -2,14 +2,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   HANDS_TUNING,
+  HAND_AXES,
   HAND_JIGGLE,
   HAND_PHASE_SEC,
   HAND_POSES,
-  HAND_PRIM_COUNT,
   HAND_PRIMS,
+  HAND_PRIM_COUNT,
+  HAND_PRIM_GROUPS,
+  HAND_PRIM_NAMES,
+  HAND_PROPS,
+  LIGHTER_LIT,
+  STICK_IN_HAND,
   bobOffset,
   handPhaseFromCook,
   poseAt,
+  propAnchor,
   smooth01,
   type HandPhase,
   type HandPoseSample,
@@ -44,12 +51,30 @@ const finiteSample = (s: HandPoseSample): boolean =>
 
 // ——— Prim set ———————————————————————————————————————————————————————————————
 
+/** Named indices — the prim ORDER is interface, so bind names once here. */
+const IX = Object.fromEntries(HAND_PRIM_NAMES.map((n, i) => [n, i])) as
+  Record<(typeof HAND_PRIM_NAMES)[number], number>;
+const mid = (p: { a: readonly number[]; b: readonly number[] }, k: number): number =>
+  (p.a[k]! + p.b[k]!) / 2;
+const midV = (p: { a: readonly number[]; b: readonly number[] }): [number, number, number] =>
+  [mid(p, 0), mid(p, 1), mid(p, 2)];
+const dist = (a: readonly number[], b: readonly number[]): number =>
+  Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+
 describe('hand prim set', () => {
-  it('has 4–6 prims per hand (claymation-chunky), same count both sides', () => {
+  it('has 8–12 prims per hand (claymation-chunky), same count both sides', () => {
     expect(HAND_PRIMS.left.length).toBe(HAND_PRIM_COUNT);
     expect(HAND_PRIMS.right.length).toBe(HAND_PRIM_COUNT);
-    expect(HAND_PRIM_COUNT).toBeGreaterThanOrEqual(4);
-    expect(HAND_PRIM_COUNT).toBeLessThanOrEqual(6);
+    // The perf ceiling the spec's bench gate cares about: these march every
+    // frame, twice (two clusters).
+    expect(HAND_PRIM_COUNT).toBeGreaterThanOrEqual(8);
+    expect(HAND_PRIM_COUNT).toBeLessThanOrEqual(12);
+    expect(new Set(HAND_PRIM_NAMES).size).toBe(HAND_PRIM_COUNT);
+  });
+
+  it('the pose groups partition the prim list exactly once', () => {
+    const seen = Object.values(HAND_PRIM_GROUPS).flatMap(g => [...g]).sort((a, b) => a - b);
+    expect(seen).toEqual([...Array(HAND_PRIM_COUNT).keys()]);
   });
 
   it('left is the exact x-mirror of right (one authored side per the task)', () => {
@@ -70,25 +95,89 @@ describe('hand prim set', () => {
   it('is framed bottom-of-view: below centre, in front of the camera, stubs exiting low', () => {
     for (const side of ['left', 'right'] as const) {
       for (const p of HAND_PRIMS[side]) {
-        const cy = (p.a[1] + p.b[1]) / 2;
-        const cz = (p.a[2] + p.b[2]) / 2;
-        expect(cy).toBeLessThan(0);            // bottom half of the frame
-        expect(cz).toBeGreaterThan(0.2);       // inside the camera-anchored box
-        expect(cz).toBeLessThan(0.9);
+        expect(mid(p, 1)).toBeLessThan(0);          // bottom half of the frame
+        expect(mid(p, 2)).toBeGreaterThan(0.2);     // inside the camera-anchored box
+        expect(mid(p, 2)).toBeLessThan(0.9);
       }
-      const stub = HAND_PRIMS[side][0]!;
-      const mitten = HAND_PRIMS[side][3]!;
+      const stub = HAND_PRIMS[side][IX.forearm]!;
+      const fingers = HAND_PRIMS[side][IX.fingerRoot]!;
       // Forearm stub exits below the grip mass.
-      expect(Math.min(stub.a[1], stub.b[1])).toBeLessThan(
-        (mitten.a[1] + mitten.b[1]) / 2 - 0.15,
-      );
-      // Mitten converges toward screen centre past the wrist (grip faces in).
-      expect(Math.abs((mitten.a[0] + mitten.b[0]) / 2))
-        .toBeLessThan(Math.abs((HAND_PRIMS[side][1]!.a[0] + HAND_PRIMS[side][1]!.b[0]) / 2));
+      expect(Math.min(stub.a[1], stub.b[1])).toBeLessThan(mid(fingers, 1) - 0.15);
+      // The fingers converge toward screen centre past the wrist (grip faces in).
+      expect(Math.abs(mid(fingers, 0)))
+        .toBeLessThan(Math.abs(mid(HAND_PRIMS[side][IX.wrist]!, 0)));
     }
     // Lead (right) hand sits on the right of the view, support on the left.
-    expect((HAND_PRIMS.right[3]!.a[0] + HAND_PRIMS.right[3]!.b[0]) / 2).toBeGreaterThan(0);
-    expect((HAND_PRIMS.left[3]!.a[0] + HAND_PRIMS.left[3]!.b[0]) / 2).toBeLessThan(0);
+    expect(mid(HAND_PRIMS.right[IX.fingerRoot]!, 0)).toBeGreaterThan(0);
+    expect(mid(HAND_PRIMS.left[IX.fingerRoot]!, 0)).toBeLessThan(0);
+  });
+
+  // The point of the redesign: at bottom-of-frame scale the silhouette has to
+  // say "hand", not "mitten". These are the structural facts that carry that
+  // read in the game's own dynamite frames.
+  describe('reads as a hand, not a mitten', () => {
+    const R = HAND_PRIMS.right;
+
+    it('has three separated finger tubes — the grooves survive the smin fold', () => {
+      const f = HAND_PRIM_GROUPS.fingers.map(i => R[i]!);
+      expect(f.length).toBe(3);
+      for (let i = 0; i + 1 < f.length; i++) {
+        const gap = dist(midV(f[i]!), midV(f[i + 1]!));
+        const a = f[i]!, b = f[i + 1]!;
+        // Centres further apart than the two radii: the tubes touch and
+        // groove instead of merging into one bar…
+        expect(gap).toBeGreaterThan((a.radius + b.radius) * 0.8);
+        // …and the smin skirt (k is scaled ×4 in the shader) stays under the
+        // gap, so the groove is not smoothed away.
+        expect(Math.max(a.blendK, b.blendK) * 4).toBeLessThan(gap);
+      }
+    });
+
+    it('fuses the palm masses but keeps the digits crisp', () => {
+      const softest = Math.min(...HAND_PRIM_GROUPS.mass.map(i => R[i]!.blendK));
+      const hardest = Math.max(
+        ...[...HAND_PRIM_GROUPS.fingers, ...HAND_PRIM_GROUPS.thumb].map(i => R[i]!.blendK),
+      );
+      expect(hardest).toBeLessThan(softest);
+    });
+
+    it('has an opposable thumb: off the finger row, on the far side of the palm', () => {
+      const { w } = HAND_AXES.right;
+      const palm = midV(R[IX.palm]!);
+      const along = (p: readonly number[]): number =>
+        (p[0]! - palm[0]!) * w[0] + (p[1]! - palm[1]!) * w[1] + (p[2]! - palm[2]!) * w[2];
+      // Every thumb segment sits thumb-side (+w) of the palm, and the digit
+      // as a whole is displaced well past the finger row — the opposition
+      // that turns a paw into a hand.
+      for (const i of HAND_PRIM_GROUPS.thumb) expect(along(midV(R[i]!))).toBeGreaterThan(0.01);
+      const meanAlong = (g: readonly number[]): number =>
+        g.reduce((s, i) => s + along(midV(R[i]!)), 0) / g.length;
+      expect(meanAlong(HAND_PRIM_GROUPS.thumb))
+        .toBeGreaterThan(meanAlong(HAND_PRIM_GROUPS.fingers) + 0.03);
+      // It also rides proud of the fingers toward the eye (+b), so it breaks
+      // the silhouette instead of hiding behind the fist.
+      const { b } = HAND_AXES.right;
+      const out = (p: readonly number[]): number =>
+        (p[0]! - palm[0]!) * b[0] + (p[1]! - palm[1]!) * b[1] + (p[2]! - palm[2]!) * b[2];
+      const meanOut = (g: readonly number[]): number =>
+        g.reduce((s, i) => s + out(midV(R[i]!)), 0) / g.length;
+      expect(meanOut(HAND_PRIM_GROUPS.thumb)).toBeGreaterThan(meanOut(HAND_PRIM_GROUPS.fingers));
+      // The tip reaches ACROSS the grip — further along the hand than its base.
+      const { u } = HAND_AXES.right;
+      const up = (p: readonly number[]): number => p[0]! * u[0] + p[1]! * u[1] + p[2]! * u[2];
+      expect(up(midV(R[IX.thumbTip]!))).toBeGreaterThan(up(midV(R[IX.thumbBase]!)));
+    });
+
+    it('tapers at the wrist between a thick forearm and a broad palm', () => {
+      expect(R[IX.wrist]!.radius).toBeLessThan(R[IX.forearm]!.radius);
+      expect(R[IX.wrist]!.radius).toBeLessThan(R[IX.palm]!.radius);
+    });
+
+    it('gives the forearm roughly half the silhouette, as the frames do', () => {
+      const arm = dist(R[IX.forearm]!.a, R[IX.forearm]!.b);
+      const hand = dist(midV(R[IX.heel]!), midV(R[IX.finger1]!));
+      expect(arm).toBeGreaterThan(hand);
+    });
   });
 });
 
@@ -121,18 +210,116 @@ describe('pose keyframes (data integrity)', () => {
   });
 
   it('poses actually act: light lifts, cook squeezes, throw extends the lead hand', () => {
-    const leadMitten = HAND_POSES.lead.light[3]!;
-    expect(leadMitten.pos![1]).toBeGreaterThan(0);            // raises the stick
-    expect(HAND_POSES.support.light[3]!.pos![1]).toBeGreaterThan(
-      leadMitten.pos![1],                                     // lighter hand rises higher
+    const leadGrip = HAND_POSES.lead.light[IX.fingerRoot]!;
+    expect(leadGrip.pos![1]).toBeGreaterThan(0);              // raises the stick
+    expect(HAND_POSES.support.light[IX.fingerRoot]!.pos![1]).toBeGreaterThan(
+      leadGrip.pos![1],                                      // lighter hand rises higher
     );
-    const cookScale = HAND_POSES.lead.cook[3]!.scale!;
-    expect(cookScale[1]).toBeGreaterThan(1);                  // mitten swells (tense grip)
-    const throwLead = HAND_POSES.lead.throw[3]!.pos!;
-    const throwSupport = HAND_POSES.support.throw[3]!.pos!;
-    expect(throwLead[1]).toBeGreaterThan(0);                  // lead extends up…
-    expect(throwLead[2]).toBeGreaterThan(0);                  // …and forward
-    expect(throwSupport[1]).toBeLessThan(0);                  // support drops away
+    const cookScale = HAND_POSES.lead.cook[IX.finger1]!.scale!;
+    expect(cookScale[1]).toBeGreaterThan(1);                 // fingers swell (tense grip)
+    const throwLead = HAND_POSES.lead.throw[IX.fingerRoot]!.pos!;
+    const throwSupport = HAND_POSES.support.throw[IX.fingerRoot]!.pos!;
+    expect(throwLead[1]).toBeGreaterThan(0);                 // lead extends up…
+    expect(throwLead[2]).toBeGreaterThan(0);                 // …and forward
+    expect(throwSupport[1]).toBeLessThan(0);                 // support drops away
+  });
+
+  it('cook is the cocked hold the fuse-burn frames show: lower and further out', () => {
+    const cook = HAND_POSES.lead.cook[IX.palm]!.pos!;
+    const idle = HAND_POSES.lead.idle[IX.palm]!.pos!;
+    expect(cook[1]).toBeLessThan(idle[1]);                   // drops below idle
+    expect(cook[0]).toBeGreaterThan(idle[0]);                // and further outward
+    // The support hand comes IN to the fuse while the lead hand cocks away.
+    expect(HAND_POSES.support.cook[IX.palm]!.pos![0]).toBeGreaterThan(0.05);
+  });
+
+  it('the throw takes the whole arm with it (no forearm left hanging in frame)', () => {
+    const hand = HAND_POSES.lead.throw[IX.palm]!.pos!;
+    const arm = HAND_POSES.lead.throw[IX.forearm]!.pos!;
+    expect(arm[1]).toBeGreaterThan(hand[1] * 0.6);           // the stub follows, lagging
+    expect(arm[1]).toBeLessThan(hand[1]);                    // …but it does lag
+    // Fingers open on release (tile 3225) — the grip swell inverts.
+    expect(HAND_POSES.lead.throw[IX.finger1]!.scale![0]).toBeLessThan(1);
+  });
+
+  it('never lifts the forearm’s cut end into frame (the severed-arm read)', () => {
+    // The stub is a capsule that runs OFF the bottom of the view; if a pose
+    // lifts its far cap above the frame edge the player sees an amputation.
+    // lab-renderer.ts's camera is a 75° vertical FOV.
+    const halfTan = Math.tan((75 * Math.PI) / 180 / 2);
+    for (const role of ['lead', 'support'] as const) {
+      const side = role === 'lead' ? 'right' : 'left';
+      for (const ph of phases) {
+        const p = HAND_PRIMS[side][IX.forearm]!;
+        const o = HAND_POSES[role][ph][IX.forearm]?.pos ?? [0, 0, 0];
+        const y = p.b[1] + o[1] + p.radius;
+        const z = p.b[2] + o[2];
+        expect(y / (z * halfTan), `${role} ${ph}`).toBeLessThan(-1);
+      }
+    }
+  });
+
+  it('recover targets the idle pose exactly (the motion is the blend home)', () => {
+    for (const role of ['lead', 'support'] as const) {
+      for (let i = 0; i < HAND_PRIM_COUNT; i++) {
+        expect(HAND_POSES[role].recover[i]).toEqual(HAND_POSES[role].idle[i]);
+      }
+    }
+  });
+});
+
+// ——— Held props ————————————————————————————————————————————————————————————
+
+describe('held prop anchors (bundle + lighter)', () => {
+  const posedFor = (phase: HandPhase, side: 'left' | 'right', role: 'lead' | 'support') =>
+    HAND_PRIMS[side].map((p, i) => {
+      const tr = HAND_POSES[role][phase][i] ?? {};
+      const o = tr.pos ?? [0, 0, 0];
+      return { ...p, a: [p.a[0] + o[0], p.a[1] + o[1], p.a[2] + o[2]] as const,
+        b: [p.b[0] + o[0], p.b[1] + o[1], p.b[2] + o[2]] as const };
+    });
+  const stickAt = (ph: HandPhase) => propAnchor(posedFor(ph, 'right', 'lead'), HAND_PROPS.stick);
+  const lighterAt = (ph: HandPhase) =>
+    propAnchor(posedFor(ph, 'left', 'support'), HAND_PROPS.lighter);
+
+  it('each prop rides its own hand and sits clear of the knuckles', () => {
+    expect(HAND_PROPS.stick.role).toBe('lead');
+    expect(HAND_PROPS.lighter.role).toBe('support');
+    const s = stickAt('idle');
+    // Above the finger tubes (the frames show the bundle leaving the top of
+    // the fist), and on the lead hand's side of the view.
+    expect(s.pos[1]).toBeGreaterThan(mid(HAND_PRIMS.right[IX.finger1]!, 1));
+    expect(s.pos[0]).toBeGreaterThan(0);
+    const l = lighterAt('idle');
+    expect(l.pos[1]).toBeGreaterThan(mid(HAND_PRIMS.left[IX.finger1]!, 1));
+    expect(l.pos[0]).toBeLessThan(0);
+  });
+
+  it('anchors are unit-axis and tilt in toward screen centre, mirrored per side', () => {
+    for (const a of [stickAt('idle'), lighterAt('idle')]) {
+      expect(Math.hypot(...a.axis)).toBeCloseTo(1, 9);
+      expect(a.axis[1]).toBeGreaterThan(0.5);   // both props stand up
+    }
+    expect(stickAt('idle').axis[0]).toBeLessThan(0);   // lead prop leans left…
+    expect(lighterAt('idle').axis[0]).toBeGreaterThan(0); // …support leans right
+  });
+
+  it('anchors follow the pose — the light beat brings flame and fuse together', () => {
+    const gap = (ph: HandPhase) => dist(stickAt(ph).pos, lighterAt(ph).pos);
+    expect(gap('light')).toBeLessThan(gap('idle') * 0.5);
+    // …and the fuse burn lets them drift apart again, as the frames do.
+    expect(gap('cook')).toBeGreaterThan(gap('light'));
+  });
+
+  it('names the phases the view shows each prop in', () => {
+    expect([...STICK_IN_HAND]).toEqual(['idle', 'light', 'cook']); // released at throw
+    expect([...LIGHTER_LIT]).toEqual(['light', 'cook']);           // lit through the burn
+  });
+
+  it('is robust to a short prim list (never NaNs the mesh transform)', () => {
+    const a = propAnchor([], HAND_PROPS.stick);
+    expect(a.pos.every(Number.isFinite)).toBe(true);
+    expect(Math.hypot(...a.axis)).toBeCloseTo(1, 9);
   });
 });
 

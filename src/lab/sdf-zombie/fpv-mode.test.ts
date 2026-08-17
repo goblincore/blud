@@ -8,13 +8,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyExplosionEffect, enterFpvMode, exitFpvMode, forceThrow,
-  handPoseTargets, handPrimsToWorld, kickAngles, makeFpvMode,
+  handPoseTargets, handPrimsToWorld, handPropPoses, kickAngles, makeFpvMode,
   makeHandJiggle, posedHandPrims, stepFpvMode, stepHandJiggle,
   type FpvGorePort, type FpvKick, type FpvModeState, type FpvWorld,
 } from './fpv-mode';
 import { EMPTY_FPV_INPUT, throwOrigin, throwSpeedMps, type FpvInput } from './fpv';
 import { makeFlight } from './dynamite-flight';
-import { buildHandPrims, poseAt } from './hands';
+import {
+  HAND_PRIMS, HAND_PRIM_COUNT, HAND_PRIM_GROUPS, HAND_PROPS, buildHandPrims,
+  poseAt, propAnchor,
+} from './hands';
 import { resolveExplosion, type ExplosionEffect } from './explosion-aoe';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
 import { ZOMBIE } from './body';
@@ -362,13 +365,17 @@ describe('hand jiggle + posing', () => {
     const tr = pose.right[3]!;
     expect(out.a[0] - rest.a[0]).toBeCloseTo(tr.pos[0] + 0.01, 2);
     expect(out.b[1] - rest.b[1]).toBeCloseTo(tr.pos[1], 1.5);
-    // Scale multiplies (light swells the mitten 1.05).
-    expect(out.scale[0]).toBeCloseTo(rest.scale[0] * 1.05, 6);
+    // Scale multiplies: the light gesture swells the DIGITS (the grip
+    // tightens on the bundle), so read the swell off a finger tube.
+    const finger = HAND_PRIM_GROUPS.fingers[1]!;
+    expect(posed.right[finger]!.scale[0]).toBeCloseTo(
+      prims.right[finger]!.scale[0] * pose.right[finger]!.scale[0], 6);
+    expect(pose.right[finger]!.scale[0]).toBeGreaterThan(1);
     // An unstepped point (fresh rest midpoint) shows NO pose — the fold is
     // point-driven by design; the jiggle carries the pose.
     const fresh = posedHandPrims(prims, pose, makeHandJiggle());
     expect(fresh.right[3]!.a[0] - rest.a[0]).toBeCloseTo(0, 6);
-    expect(targets.right.length).toBe(5);
+    expect(targets.right.length).toBe(HAND_PRIM_COUNT);
   });
 });
 
@@ -392,6 +399,51 @@ describe('handPrimsToWorld', () => {
     }, [0, 0, 0], Math.PI / 2, 0);
     expect(w[0]!.a[0]).toBeCloseTo(1, 9);
     expect(w[0]!.a[2]).toBeCloseTo(0, 9);
+  });
+});
+
+// ——— Held props ————————————————————————————————————————————————————————
+
+describe('handPropPoses', () => {
+  const posed = buildHandPrims();
+
+  it('seats each prop on its own hand, in WORLD space at the camera basis', () => {
+    const eye: Vec3 = [3, 1.75, -2];
+    const seats = handPropPoses(posed, eye, 0, 0);
+    // yaw/pitch 0: right=+X, up=+Y, forward=−Z, so world = eye + (x, y, −z).
+    const stick = propAnchor(posed.right, HAND_PROPS.stick);
+    expect(seats.stick.pos[0]).toBeCloseTo(eye[0] + stick.pos[0], 9);
+    expect(seats.stick.pos[1]).toBeCloseTo(eye[1] + stick.pos[1], 9);
+    expect(seats.stick.pos[2]).toBeCloseTo(eye[2] - stick.pos[2], 9);
+    const lighter = propAnchor(posed.left, HAND_PROPS.lighter);
+    expect(seats.lighter.pos[0]).toBeCloseTo(eye[0] + lighter.pos[0], 9);
+    // The bundle rides the right of the view, the lighter the left.
+    expect(seats.stick.pos[0]).toBeGreaterThan(seats.lighter.pos[0]);
+  });
+
+  it('keeps the axis CAMERA-local — turning does not re-tilt the prop', () => {
+    const a = handPropPoses(posed, [0, 1.75, 0], 0, 0);
+    const b = handPropPoses(posed, [0, 1.75, 0], 1.1, -0.3);
+    expect(b.stick.axis).toEqual(a.stick.axis);
+    expect(b.lighter.axis).toEqual(a.lighter.axis);
+    // …while the world seat DOES follow the turn.
+    expect(b.stick.pos).not.toEqual(a.stick.pos);
+  });
+
+  it('follows the hand: a posed/jiggled hand carries its prop with it', () => {
+    const pose = poseAt('cook', 10, 0);
+    let j = makeHandJiggle();
+    const targets = handPoseTargets(HAND_PRIMS, pose);
+    for (let i = 0; i < 120; i++) j = stepHandJiggle(j, targets, DT);
+    const moved = posedHandPrims(HAND_PRIMS, pose, j);
+    const rest = handPropPoses(HAND_PRIMS, [0, 0, 0], 0, 0);
+    const cooked = handPropPoses(moved, [0, 0, 0], 0, 0);
+    const d = Math.hypot(
+      cooked.stick.pos[0] - rest.stick.pos[0],
+      cooked.stick.pos[1] - rest.stick.pos[1],
+      cooked.stick.pos[2] - rest.stick.pos[2],
+    );
+    expect(d).toBeGreaterThan(0.01); // the cocked hold takes the bundle with it
   });
 });
 

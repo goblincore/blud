@@ -45,8 +45,9 @@ import {
 } from './fpv';
 import { makeFlight, stepFlight, type FlightState } from './dynamite-flight';
 import {
-  HAND_JIGGLE, buildHandPrims, handPhaseFromCook, poseAt,
-  type HandPhase, type HandPhaseRef, type HandPoseSample,
+  HAND_JIGGLE, HAND_PROPS, HAND_SIDE_OF_ROLE, buildHandPrims, handPhaseFromCook,
+  poseAt, propAnchor,
+  type HandPhase, type HandPhaseRef, type HandPoseSample, type PropAnchor,
 } from './hands';
 import {
   resolveExplosion, type BurstVisual, type ChunkImpulse, type LiveChunkRef,
@@ -312,6 +313,43 @@ export function handPrimsToWorld(
     ...posed.left.map(p => ({ ...p, a: tx(p.a), b: tx(p.b) })),
     ...posed.right.map(p => ({ ...p, a: tx(p.a), b: tx(p.b) })),
   ];
+}
+
+// ——— Held props ———————————————————————————————————————————————————————————
+
+/** A held prop's seat this frame: WORLD position, CAMERA-local up-axis. The
+ *  split is deliberate — the view already has the camera quaternion, so
+ *  keeping the axis camera-local lets it orient the mesh with one multiply
+ *  and never re-derives the basis. */
+export interface HeldPropPose {
+  pos: Vec3;
+  axis: Vec3;
+}
+
+/**
+ * Seat the bundle and the lighter on the POSED hands. `posed` is what
+ * posedHandPrims returned this frame (camera-local, jiggle folded in), so a
+ * prop inherits the pose, the idle bob and the wobble without any of them
+ * being re-implemented here — which is the whole reason the anchors are
+ * defined against prim midpoints in hands.ts rather than as fixed offsets.
+ */
+export function handPropPoses(
+  posed: { left: Primitive[]; right: Primitive[] },
+  eye: Vec3,
+  yaw: number,
+  pitch: number,
+): { stick: HeldPropPose; lighter: HeldPropPose } {
+  const { f, r, u } = camBasis(yaw, pitch);
+  const toWorld = (p: Vec3): Vec3 => [
+    eye[0] + r[0] * p[0] + u[0] * p[1] + f[0] * p[2],
+    eye[1] + r[1] * p[0] + u[1] * p[1] + f[1] * p[2],
+    eye[2] + r[2] * p[0] + u[2] * p[1] + f[2] * p[2],
+  ];
+  const seat = (a: PropAnchor): HeldPropPose => ({ pos: toWorld(a.pos), axis: a.axis });
+  return {
+    stick: seat(propAnchor(posed[HAND_SIDE_OF_ROLE[HAND_PROPS.stick.role]], HAND_PROPS.stick)),
+    lighter: seat(propAnchor(posed[HAND_SIDE_OF_ROLE[HAND_PROPS.lighter.role]], HAND_PROPS.lighter)),
+  };
 }
 
 // ——— Camera kick ——————————————————————————————————————————————————————————

@@ -36,7 +36,12 @@ import { MAX_PRIMS } from '../validate';
 import { WOUND_PROFILES, type Wound } from '../damage';
 import { woundWorldPos } from '../damage';
 import type { Primitive, Vec3 } from '../types';
+import { HAND_PROP_TUNING } from '../hands';
 import type { BurstVisual } from '../explosion-aoe';
+
+/** The flame sits this far up the lighter's own axis (hands.ts owns the
+ *  number so the pose data and the mesh can never disagree). */
+const FLAME_LOCAL_Y = HAND_PROP_TUNING.flameOffsetM;
 
 /** Wound-type → shader ring id, mirroring lab-main's TYPE_ID (the shader's
  *  row-6 encoding; single source lives in damage.ts's WoundType order). */
@@ -173,7 +178,11 @@ export function createHandsGpuView(template: MarchUniforms): HandsGpuView {
 // ——— 2. The stick prop ————————————————————————————————————————————————————
 
 export type StickPose =
-  | { mode: 'hand'; localPos: Vec3; camQuat: THREE.Quaternion; cooking: boolean }
+  /** Held: `pos` is WORLD (the hand anchor, already transformed by the
+   *  wiring), `axis` is the bundle's up-direction in CAMERA-local space —
+   *  hands.ts's propAnchor produces exactly this pair, so the bundle tilts
+   *  with the fist instead of standing to attention. */
+  | { mode: 'hand'; pos: Vec3; axis: Vec3; camQuat: THREE.Quaternion; cooking: boolean }
   | { mode: 'flight'; pos: Vec3; spin: number; fuseBurning: boolean }
   | { mode: 'gone' };
 
@@ -183,6 +192,22 @@ export interface StickProp {
   /** Spark flicker + cooking pulse; `nowSec` is any clock. */
   flicker(nowSec: number, cooking: boolean): void;
   dispose(): void;
+}
+
+/**
+ * Orients a prop whose model-space up is +Y so that up lands along `axis`
+ * expressed in CAMERA-local space, then rotates the whole thing into world by
+ * `camQuat`. Shared by both held props.
+ */
+const UP_Y = new THREE.Vector3(0, 1, 0);
+const axisVec = new THREE.Vector3();
+const alignQ = new THREE.Quaternion();
+function orientHeld(obj: THREE.Object3D, axis: Vec3, camQuat: THREE.Quaternion): void {
+  axisVec.set(axis[0], axis[1], axis[2]);
+  if (axisVec.lengthSq() < 1e-12) axisVec.copy(UP_Y);
+  else axisVec.normalize();
+  alignQ.setFromUnitVectors(UP_Y, axisVec);
+  obj.quaternion.copy(camQuat).multiply(alignQ);
 }
 
 /**
@@ -223,8 +248,6 @@ export function createStickProp(): StickProp {
   spark.position.y = 0.11;
   group.add(spark);
 
-  const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.12, 0, -0.1));
-  const q = new THREE.Quaternion();
   const spinQ = new THREE.Quaternion();
 
   return {
@@ -233,10 +256,10 @@ export function createStickProp(): StickProp {
       if (p.mode === 'gone') { group.visible = false; return; }
       group.visible = true;
       if (p.mode === 'hand') {
-        // Held standing in the lead hand, tilted toward screen centre.
-        q.copy(p.camQuat).multiply(tilt);
-        group.quaternion.copy(q);
-        group.position.set(p.localPos[0], p.localPos[1], p.localPos[2]);
+        // Held in the lead fist: the anchor rides the posed prims, so the
+        // bundle inherits the pose, the idle bob AND the verlet jiggle.
+        orientHeld(group, p.axis, p.camQuat);
+        group.position.set(p.pos[0], p.pos[1], p.pos[2]);
         group.scale.setScalar(1);
       } else {
         // Ballistic: tumbling end over end about the horizontal axis the
@@ -258,6 +281,70 @@ export function createStickProp(): StickProp {
       stickGeo.dispose(); bandGeo.dispose(); fuse.geometry.dispose();
       spark.geometry.dispose(); paperMat.dispose(); bandMat.dispose();
       sparkMat.dispose(); (fuse.material as THREE.Material).dispose();
+    },
+  };
+}
+
+// ——— 2b. The lighter prop —————————————————————————————————————————————————
+
+export type LighterPose =
+  | { mode: 'hand'; pos: Vec3; axis: Vec3; camQuat: THREE.Quaternion; lit: boolean }
+  | { mode: 'gone' };
+
+export interface LighterProp {
+  object: THREE.Object3D;
+  pose(p: LighterPose): void;
+  /** Flame flicker; `nowSec` is any clock. Ignored while unlit. */
+  flicker(nowSec: number): void;
+  dispose(): void;
+}
+
+/**
+ * The zippo in the support fist (tiles 3211/3212/3214): a small dark box with
+ * a flipped-back lid, and a flame-coloured sprite above it while lighting.
+ * Never flesh — a mesh prop, like the bundle. Model-space up is +Y so
+ * orientHeld can stand it on the fist.
+ */
+export function createLighterProp(): LighterProp {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x37393d, roughness: 0.45, metalness: 0.6 });
+  const bodyGeo = new THREE.BoxGeometry(0.030, 0.044, 0.016);
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(body);
+  // The lid, hinged back off the top edge — the read that says "lighter".
+  const lidGeo = new THREE.BoxGeometry(0.030, 0.020, 0.014);
+  const lid = new THREE.Mesh(lidGeo, bodyMat);
+  lid.position.set(0, 0.026, -0.014);
+  lid.rotation.x = -0.9;
+  group.add(lid);
+  // Flame: a stretched emissive blob above the wick.
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb340, transparent: true, opacity: 0.9 });
+  const flameGeo = new THREE.SphereGeometry(0.011, 7, 7);
+  const flame = new THREE.Mesh(flameGeo, flameMat);
+  flame.position.y = FLAME_LOCAL_Y;
+  flame.scale.set(0.75, 1.8, 0.75);
+  group.add(flame);
+
+  let lit = false;
+  return {
+    object: group,
+    pose(p) {
+      if (p.mode === 'gone') { group.visible = false; return; }
+      group.visible = true;
+      lit = p.lit;
+      flame.visible = p.lit;
+      orientHeld(group, p.axis, p.camQuat);
+      group.position.set(p.pos[0], p.pos[1], p.pos[2]);
+    },
+    flicker(nowSec) {
+      if (!lit) return;
+      const f = 0.85 + 0.25 * Math.sin(nowSec * 27) + 0.12 * Math.sin(nowSec * 61);
+      flame.scale.set(0.75 * f, 1.8 * f, 0.75 * f);
+      flameMat.color.setHex(f > 1 ? 0xffd07a : 0xff9a2e);
+    },
+    dispose() {
+      bodyGeo.dispose(); lidGeo.dispose(); flameGeo.dispose();
+      bodyMat.dispose(); flameMat.dispose();
     },
   };
 }
