@@ -1,7 +1,8 @@
 # Textured Humanoid SDF Forearm-Sever Spike Design
 
 **Date:** 2026-08-17
-**Status:** Approved design, pending implementation plan
+**Status:** Approved design; implementation planned in
+`docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md`
 
 ## Purpose
 
