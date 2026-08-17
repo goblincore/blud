@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
@@ -322,20 +322,34 @@ describe('CPU field mirror is pinned', () => {
 });
 
 describe('per-prim orientation (motion-polish task 3)', () => {
-  it('SD_PRIM reads the quat row and guards identity prims with a cheap branch', () => {
+  it('sdPrimO reads the quat row and guards identity prims with a cheap branch', () => {
     // String pins: the parity test below proves the CPU mirror, these prove
     // the WGSL actually contains the branch being mirrored.
-    expect(SD_PRIM).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
-    expect(SD_PRIM).toContain('abs(1.0 - O.w) > 1e-6');
+    expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
+    expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
     expect(DATA_ROWS).toBe(8);
   });
 
+  it('sdPrim stays the plain world-axis capsule, diffable against the frozen GLSL', () => {
+    expect(SD_PRIM).not.toContain('QUAT');
+    expect(SD_PRIM).not.toContain('cross(');
+  });
+
+  it('mapBody hoists the orient branch to the cluster flag (clusterRange.w)', () => {
+    // Paying the quat textureLoad per prim measured +10-18% frame time; the
+    // hoist makes everything but a turned head cluster take the plain path.
+    expect(MAP_BODY).toContain('range.w > 0.5');
+    expect(MAP_BODY).toContain('sdPrimO(p, idx, data)');
+    expect(MAP_BODY).toContain('sdPrim(p, idx, data)');
+  });
+
   /**
-   * Line-for-line TS transcription of the WGSL sdPrim, reading from a Float32
-   * array laid out exactly like the data texture (row-major, MAX_PRIMS wide).
-   * Kept in sync BY HAND, like the march-tracer transcriptions — the string
-   * pins above prove the branch exists; this proves its semantics match
-   * validate.sdPrimitive, which backs click-to-shoot.
+   * Line-for-line TS transcription of the WGSL sdPrimO, reading from a
+   * Float32Array laid out exactly like the data texture (row-major,
+   * MAX_PRIMS wide). Kept in sync BY HAND, like the march-tracer
+   * transcriptions — the string pins above prove the branch exists; this
+   * proves its semantics match validate.sdPrimitive, which backs
+   * click-to-shoot.
    */
   function sdPrimWgsl(p: Vec3, i: number, tex: Float32Array): number {
     const load = (row: number): number[] => {

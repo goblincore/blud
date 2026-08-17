@@ -31,7 +31,7 @@
 //   row 1  primB        xyz = endpoint B, w = blendK
 //   row 2  primScale    xyz = ellipsoid scale, w = 1 when this is a carve
 //   row 3  clusterBnds  xyz = centre, w = radius
-//   row 4  clusterRange x = start, y = count, z = alive
+//   row 4  clusterRange x = start, y = count, z = alive, w = oriented-cluster
 //   row 5  wound        xyz = world position, w = radius
 //   row 6  woundMeta    x = type (0 pellet, 1 blast, 2 burn), y = age
 //   row 7  primQuat     xyzw = per-prim orientation (identity = 0,0,0,1)
@@ -86,21 +86,46 @@ export const SMAX = /* wgsl */ `fn smax(a: f32, b: f32, k: f32) -> f32 {
   return -smin(-a, -b, k);
 }`;
 
-// Ellipsoid capsule. Mirrors sdPrimitive() in validate.ts exactly; edit both in
-// the same commit or click-to-shoot drifts from what is drawn.
+// Ellipsoid capsule, world-axis squash. Mirrors the identity-orient path of
+// sdPrimitive() in validate.ts exactly; edit both in the same commit or
+// click-to-shoot drifts from what is drawn.
 export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>) -> f32 {
+  let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
+  let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
+  let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
+  let inv = 1.0 / S.xyz;
+  let q = p * inv;
+  let a = A.xyz * inv;
+  let b = B.xyz * inv;
+  let ab = b - a;
+  let ap = q - a;
+  let ab2 = dot(ab, ab);
+  // select() is (falseValue, trueValue, condition) — reversed from a ternary.
+  let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
+  let minScale = min(S.x, min(S.y, S.z));
+  return (length(q - (a + ab * t)) - A.w) * minScale;
+}`;
+
+// The oriented twin (motion-polish task 3): same ellipsoid capsule, but the
+// sample AND the endpoints are first rotated into the prim's local frame —
+// the CONJUGATE of the prim's packed quat about the prim midpoint — so an
+// anisotropic ellipsoid (the brow is [1.55, 0.42, 0.80]) turns with the head
+// instead of staying world-aligned as a detached visor. With an identity quat
+// this runs the identical op sequence as sdPrim (bit-identical), which is
+// what lets validate.ts's per-prim branch mirror BOTH call sites: mapBody
+// hoists the choice to the cluster flag (clusterRange.w), because paying this
+// fourth textureLoad for EVERY prim measured +10-18% frame time (1 body:
+// 2.41 -> 2.84 ms median; 10 bodies cone+occluder: 14.24 -> 15.75 ms,
+// 2026-08-17, benchGpu 240 frames, hiddenSteps 0). Only a turned head cluster
+// sets the flag; a rest head's quat is the exact identity, so statues and
+// every limb pay nothing.
+export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
   var qq = p;
   var a = A.xyz;
   var b = B.xyz;
-  // Per-prim orientation (motion-polish task 3): rotate the sample AND the
-  // endpoints into the prim's local frame — the CONJUGATE rotation about the
-  // prim midpoint — BEFORE the scale-divide, so an anisotropic ellipsoid (the
-  // brow is [1.55, 0.42, 0.80]) turns with the head instead of staying
-  // world-aligned as a detached visor. Identity quats — everything except
-  // rig-posed skull prims — pay one compare and a texture fetch.
   let O = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0);
   if (abs(1.0 - O.w) > 1e-6) {
     let mid = (A.xyz + B.xyz) * 0.5;
@@ -167,6 +192,11 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
     if (range.z < 0.5) { continue; }
     let start = i32(range.x);
     let count = i32(range.y);
+    // w: oriented-cluster flag (motion-polish task 3). Hoisting the quat
+    // branch to cluster granularity is the measured win — see sdPrimO. The
+    // two calls agree bit-for-bit on identity quats, so the CPU mirror
+    // (validate.sdBody) branches per prim and stays exact for both.
+    let ori = range.w > 0.5;
     for (var i = 0; i < 64; i = i + 1) {
       if (i >= count) { break; }
       let idx = start + i;
@@ -176,7 +206,7 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       // carving too — a severed hand must not keep biting the field it left.
       if (S.w < 0.5 || S.w > 1.5) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
-      d = smax(d, -sdPrim(p, idx, data), k);
+      if (ori) { d = smax(d, -sdPrimO(p, idx, data), k); } else { d = smax(d, -sdPrim(p, idx, data), k); }
     }
   }
   return d;
@@ -266,6 +296,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     if (length(p - bounds.xyz) - bounds.w > d + counts.w * 4.0) { continue; }
     let start = i32(range.x);
     let count = i32(range.y);
+    // w: oriented-cluster flag — same hoist as applyCarves, see sdPrimO.
+    let ori = range.w > 0.5;
     for (var i = 0; i < 64; i = i + 1) {
       if (i >= count) { break; }
       let idx = start + i;
@@ -274,7 +306,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
       if (S.w > 0.5) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
-      d = smin(d, sdPrim(p, idx, data), k);
+      if (ori) { d = smin(d, sdPrimO(p, idx, data), k); } else { d = smin(d, sdPrim(p, idx, data), k); }
     }
   }
   let carved = applyCarves(d, p, data, counts);
@@ -790,7 +822,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
  * order given.
  */
 export const HELPERS = [
-  SMIN, SMAX, SD_PRIM, HASH13, NOISE3, FBM,
+  SMIN, SMAX, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,
 ];

@@ -16,7 +16,7 @@ export interface PackedBody {
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
   primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
   clusterBounds: Float32Array; // xyz = centre, w = radius
-  clusterRange: Float32Array;  // x = start, y = count, z = alive, w = unused
+  clusterRange: Float32Array;  // x = start, y = count, z = alive, w = 1 when the cluster carries oriented prims
   primCount: number;
   clusterCount: number;
   /** Cull margin: a cluster can still pull the surface from up to this far away. */
@@ -66,7 +66,15 @@ export function packBody(body: BuiltBody): PackedBody {
   body.clusters.forEach((c, i) => {
     const o = i * CLUSTER_STRIDE;
     clusterBounds.set([c.center[0], c.center[1], c.center[2], c.radius], o);
-    clusterRange.set([c.start, c.count, c.alive ? 1 : 0, 0], o);
+    // w: oriented-cluster flag. The shader hoists the per-prim quat branch to
+    // cluster granularity with it (a second textureLoad per sdPrim call cost
+    // a measured ~10-18% frame time — see the sdPrimO note in march.wgsl.ts),
+    // so a cluster whose prims are ALL identity takes the plain world-axis
+    // path, which is every cluster except a turned head. Bit-identical either
+    // way: sdPrimO with an identity quat runs the identical op sequence.
+    const oriented = body.prims.slice(c.start, c.start + c.count)
+      .some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+    clusterRange.set([c.start, c.count, c.alive ? 1 : 0, oriented ? 1 : 0], o);
   });
 
   return {

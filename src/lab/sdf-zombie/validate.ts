@@ -30,10 +30,12 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   let qv: Vec3 = p;
   let av = prim.a;
   let bv = prim.b;
-  // Per-prim orientation, the exact CPU mirror of SD_PRIM in march.wgsl.ts:
+  // Per-prim orientation, the exact CPU mirror of sdPrimO in march.wgsl.ts:
   // conjugate rotation about the prim midpoint BEFORE the scale-divide, so a
-  // rig-posed face ellipsoid's squash turns with the head. Identity (absent)
-  // prims skip the branch — click-to-shoot pays one compare for them.
+  // rig-posed face ellipsoid's squash turns with the head. The WGSL hoists
+  // the choice between sdPrim and sdPrimO to a cluster flag purely as a
+  // texture-fetch optimisation — sdPrimO on an identity quat runs sdPrim's
+  // exact op sequence, so this per-prim branch is bit-identical to both.
   const o = prim.orient;
   if (o && Math.abs(1 - o[3]) > 1e-6) {
     const mid = vscale(add(prim.a, prim.b), 0.5);

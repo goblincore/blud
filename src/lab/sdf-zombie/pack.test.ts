@@ -66,6 +66,28 @@ describe('packBody', () => {
     expect(Array.from(p.primQuat.slice(4, 8))).toEqual(q.map(f32));
   });
 
+  it('sets the clusterRange.w orient flag only for clusters carrying a real quat', () => {
+    // The shader hoists the per-prim quat branch to this flag; a stale or
+    // missing flag either pays a textureLoad per prim everywhere or renders
+    // a turned head's face world-aligned again.
+    const q: [number, number, number, number] = [0, 0.7071068, 0, 0.7071068];
+    const mk = (orient?: [number, number, number, number]) => ({
+      ...built.prims[0]!, ...(orient ? { orient } : {}),
+    });
+    const p = packBody({
+      prims: [mk(), mk(q), mk([0, 0, 0, 1])],
+      clusters: [
+        { id: 0, limb: 'head', start: 0, count: 1, center: [0, 0, 0], radius: 1, alive: true },
+        { id: 1, limb: 'torso', start: 1, count: 1, center: [0, 0, 0], radius: 1, alive: true },
+        { id: 2, limb: 'armL', start: 2, count: 1, center: [0, 0, 0], radius: 1, alive: true },
+      ],
+      bones: new Map(),
+    });
+    expect(p.clusterRange[0 * CLUSTER_STRIDE + 3]).toBe(0); // absent orient
+    expect(p.clusterRange[1 * CLUSTER_STRIDE + 3]).toBe(1); // real quat
+    expect(p.clusterRange[2 * CLUSTER_STRIDE + 3]).toBe(0); // exact identity
+  });
+
   it('reports the largest blendK, which the shader needs as its cull margin', () => {
     expect(packed.maxBlendK).toBe(Math.max(...built.prims.map(p => p.blendK)));
   });
