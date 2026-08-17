@@ -505,6 +505,9 @@ async function main() {
   let wanderOn = true;
   let armStyle: ArmStyle = GAIT_TUNING.armStyle;
   let headingFollow: number = MOTION_TUNING.headingFollow;
+  /** Gaze-follow gain — 1 looks where the body walks, 0 pins the gaze to the
+   *  wander target (the creepy variant the owner wants kept reachable). */
+  let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
   let lastRootShift: Vec3 = [0, 0, 0];
   /** The body's applied yaw — feeds applyRig's rigid-head clamp cone. */
@@ -1183,7 +1186,7 @@ async function main() {
       for (const sdt of planSubSteps(dt)) {
         const step = stepMotion(
           motionState, motionJoints,
-          { enabled: true, wander: wanderOn, armStyle, headingFollow },
+          { enabled: true, wander: wanderOn, armStyle, headingFollow, gazeFollow },
           {
             dt: sdt,
             shot: pendingShot,
@@ -1619,6 +1622,15 @@ async function main() {
   function setHeadingFollow(v: number) {
     headingFollow = Math.max(0, Math.min(1, v));
   }
+  /** Gaze-follow gain 0..1 — 0 pins the gaze to the wander target. */
+  function setGazeFollow(v: number) {
+    gazeFollow = Math.max(0, Math.min(1, v));
+  }
+  addSlider(motionBox, {
+    label: 'gaze follow', min: 0, max: 1, step: 0.05,
+    get: () => gazeFollow,
+    set: setGazeFollow,
+  });
 
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
@@ -1765,6 +1777,7 @@ async function main() {
         bodyYaw: motionState.bodyYaw,
         armStyle,
         headingFollow,
+        gazeFollow,
         recoil: motionState.recoil.joint,
         pos: motionState.wander.pos as unknown as number[],
         speed: motionState.wander.speed,
@@ -1778,6 +1791,8 @@ async function main() {
     setArmStyle,
     /** Heading-follow gain — 0 keeps the body facing one way (strafe-walker). */
     setHeadingFollow,
+    /** Gaze-follow gain — 0 pins the gaze to the wander target (creepy variant). */
+    setGazeFollow,
     /** Motion master toggle — off is the pre-X1.22 statue. */
     setMotionEnabled,
     /** The K key's console twin: forces the collapse next frame. */
