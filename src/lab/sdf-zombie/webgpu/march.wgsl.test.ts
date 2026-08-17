@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
+  SAMPLE_VOLUME,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
@@ -209,7 +210,7 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -222,10 +223,12 @@ describe('ported features reach the entry point', () => {
     expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
-    // independent of the motion plumbing — zero shift, dead noise term.
+    // independent of the motion plumbing — zero shift, dead noise term. The
+    // volume block still rides along: the cone must see the same field the
+    // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0)).x');
+      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x');
   });
 
   it('steps the shell conservatively and never retracts a displaced sample', () => {
@@ -256,6 +259,126 @@ describe('ported features reach the entry point', () => {
     // at the wrong depth — the hard-edged pale patches, per 8x8 tile. The
     // stop threshold must carry the amp; at amp 0 it is the old bound again.
     expect(CONE_MARCH).toContain('if (d < r + 0.0012 + woundCfg2.z) { return t; }');
+  });
+});
+
+describe('baked hand volume branch (X1.26 task B2)', () => {
+  it('exports SAMPLE_VOLUME starting with fn, per the wgslFn parse contract', () => {
+    expect(declaredName(SAMPLE_VOLUME)).toBe('sampleHandVolume');
+  });
+
+  it('reads exactly eight 3D corner texels for the trilinear reconstruction', () => {
+    const loads = SAMPLE_VOLUME.match(/textureLoad\(volumeTex/g) ?? [];
+    expect(loads.length).toBe(8);
+    // And nothing else in the helper touches the texture.
+    expect(SAMPLE_VOLUME.match(/textureLoad\(/g)?.length).toBe(8);
+  });
+
+  it('reconstructs on the baker\'s ENDPOINT-INCLUSIVE lattice, not the sampler convention', () => {
+    // The baker sampled ON the bounds: first/last texels sit exactly at
+    // boundsMin/boundsMax, so texel coords are uv * (dims - 1). The
+    // normalized-sampler convention uv*dims - 0.5 assumes samples at texel
+    // CENTRES and would shift the whole field half a voxel.
+    expect(SAMPLE_VOLUME)
+      .toContain('q = clamp(uv * (dimsF - vec3<f32>(1.0, 1.0, 1.0)), vec3<f32>(0.0, 0.0, 0.0), dimsF - vec3<f32>(1.0, 1.0, 1.0));');
+    expect(SAMPLE_VOLUME).not.toContain('- 0.5)');
+    // Nested mix: 4 edges, 2 faces, 1 slab = exactly seven.
+    expect((SAMPLE_VOLUME.match(/mix\(/g) ?? []).length).toBe(7);
+    // Degenerate top corner: floor == dims-1 clamps i1 back onto i0.
+    expect(SAMPLE_VOLUME).toContain('min(i0 + vec3<i32>(1, 1, 1), dims - vec3<i32>(1, 1, 1))');
+  });
+
+  it('transforms world to local with the conjugate of the local-to-world quat', () => {
+    expect(SAMPLE_VOLUME).toContain('vec4<f32>(-volumePose1.xyz, volumePose1.w)');
+  });
+
+  it('applies the distal warp progressively with smoothstep(0.15, 0.9, uv.y)', () => {
+    // Wrist pinned (0 at the carpals), fingers fully lagged past 0.9. The
+    // 12 mm CLAMP is CPU-side (task C1); the shader just ramps.
+    expect(SAMPLE_VOLUME).toContain('smoothstep(0.15, 0.9, uv0.y)');
+    expect(SAMPLE_VOLUME).toContain('local0 - volumeWarp.xyz * distal');
+  });
+
+  it('adds metric distance to the AABB outside the volume — no slab extrusion', () => {
+    // Clamp-to-edge alone would repeat the boundary slab out to infinity;
+    // every outside sample must grow by its true distance to the box.
+    expect(SAMPLE_VOLUME).toContain('let diffMin = volumeMin - local;');
+    expect(SAMPLE_VOLUME).toContain('let diffMax = local - (volumeMin + extent);');
+    expect(SAMPLE_VOLUME).toContain(
+      'let outside = length(max(max(diffMin, diffMax), vec3<f32>(0.0, 0.0, 0.0)));');
+    expect(SAMPLE_VOLUME).toContain('return tri + outside;');
+  });
+
+  it('sits in HELPERS before MAP_BODY, which calls it', () => {
+    // WGSL declaration-before-use; HELPERS is dependency-ordered.
+    expect(HELPERS).toContain(SAMPLE_VOLUME);
+    expect(HELPERS.indexOf(SAMPLE_VOLUME)).toBeLessThan(HELPERS.indexOf(MAP_BODY));
+    expect(MAP_BODY).toContain('sampleHandVolume(p, volumeTex');
+  });
+
+  it('MAP_BODY: the volume branch supplies d, skips the primitive loop, and keeps the dominant index -1', () => {
+    const branch = MAP_BODY.indexOf('if (volumePose0.w > 0.5) {');
+    expect(branch).toBeGreaterThanOrEqual(0);
+    // The branch must precede carves/wounds — the bake is the body, damage
+    // still stamps on top of it either way.
+    expect(branch).toBeLessThan(MAP_BODY.indexOf('applyCarves'));
+    expect(branch).toBeLessThan(MAP_BODY.indexOf('applyWounds'));
+    // No faked primitive index: the volume branch never assigns bestIdx, so
+    // the rest-space anchor falls to its noiseLocal fallback.
+    const vol = MAP_BODY.slice(branch, MAP_BODY.indexOf('} else {', branch));
+    expect(vol).not.toMatch(/bestIdx\s*=/);
+    // ...and the primitive fold lives only in the else arm.
+    const elseArm = MAP_BODY.slice(MAP_BODY.indexOf('} else {', branch));
+    expect(elseArm).toContain('for (var c = 0; c < 8; c = c + 1)');
+  });
+
+  it('threads the texture and five volume uniforms through EVERY mapBody call', () => {
+    // Argument forwarding is load-bearing: a call site that forgets one
+    // volume argument does not fail to compile — WGSL has no named args —
+    // the generated node call simply mismatches. Every call, every source.
+    const needed = ['volumeTex', 'volumePose0', 'volumePose1', 'volumeMin',
+      'volumeInvExtent', 'volumeWarp'];
+    for (const src of [...HELPERS, MARCH_BODY, CONE_MARCH]) {
+      let at = src.indexOf('mapBody(');
+      while (at >= 0) {
+        const isDecl = at >= 2 && src.slice(at - 3, at).includes('fn');
+        if (!isDecl) {
+          const call = src.slice(at, at + 460);
+          for (const n of needed) {
+            expect(call, `${declaredName(src) ?? 'entry'} mapBody call missing ${n}`)
+              .toContain(n);
+          }
+        }
+        at = src.indexOf('mapBody(', at + 1);
+      }
+    }
+  });
+
+  it('calcNormal declares and forwards the volume params', () => {
+    const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
+    expect(calcNormal).toContain('volumeTex: texture_3d<f32>');
+    expect(calcNormal).toContain('volumePose0: vec4<f32>');
+    expect((calcNormal.match(/mapBody\(/g) ?? []).length).toBe(4);
+  });
+
+  it('MARCH_BODY and CONE_MARCH declare the volume params', () => {
+    for (const src of [MARCH_BODY, CONE_MARCH]) {
+      expect(src).toContain('volumeTex: texture_3d<f32>');
+      expect(src).toContain('volumePose0: vec4<f32>');
+      expect(src).toContain('volumePose1: vec4<f32>');
+      expect(src).toContain('volumeMin: vec3<f32>');
+      expect(src).toContain('volumeInvExtent: vec3<f32>');
+      expect(src).toContain('volumeWarp: vec4<f32>');
+    }
+  });
+
+  it('hit epsilon rides the spare woundCfg2.w; primitive default stays bit-identical', () => {
+    // Volume mode needs a hit epsilon of at least half the largest voxel
+    // pitch (trilinear of an SDF is not exact); the primitive path keeps its
+    // 1.2 mm literal because max(0.0012, 0) is 0.0012.
+    expect(MARCH_BODY).toContain('let hitEps = max(0.0012, woundCfg2.w);');
+    expect(MARCH_BODY).toContain('if (d < hitEps) { hit = true; break; }');
+    expect(MARCH_BODY).not.toContain('if (d < 0.0012)');
   });
 });
 

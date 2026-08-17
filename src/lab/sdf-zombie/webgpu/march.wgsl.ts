@@ -371,6 +371,60 @@ export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<
   return m;
 }`;
 
+// BAKED HAND VOLUME (X1.26): world-space distance from one anisotropic R16F
+// 3D texture, baked offline from a posed CC-BY hand mesh (see
+// hand-volume.ts for the loader/manifest contract and scripts/bake_hand_sdf.py
+// for the bake). Everything here is metric and conservative:
+//
+//   - world -> local is translate by the volume centre (volumePose0.xyz) then
+//     rotate by the CONJUGATE of the local-to-world quaternion (volumePose1) —
+//     the same Rodrigues-in-quat form as sdPrimO/qRot above;
+//   - the distal warp (Verlet residue as domain warp) subtracts a CPU-clamped
+//     (<= 12 mm) local-space offset, ramped by smoothstep(0.15, 0.9, uv.y) so
+//     the wrist stays pinned and only the digits lag;
+//   - OUTSIDE the AABB the sample is the clamped boundary value PLUS the true
+//     metric distance to the box: clamp-to-edge alone would repeat the
+//     boundary slab out to infinity and extrude a phantom hand;
+//   - the eight textureLoads are explicit because the baker's lattice is
+//     ENDPOINT-INCLUSIVE (texel 0 sits exactly on boundsMin, texel n-1 on
+//     boundsMax), so texel coords are uv * (dims - 1). A normalized sampler
+//      would sample at texel centres (uv * dims - 0.5) and shift the whole
+//     field half a voxel; nearest filtering keeps every load exact and the
+//     nested mix is the only interpolation.
+export const SAMPLE_VOLUME = /* wgsl */ `fn sampleHandVolume(pWorld: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> f32 {
+  let pl = pWorld - volumePose0.xyz;
+  let cq = vec4<f32>(-volumePose1.xyz, volumePose1.w);
+  let tq = 2.0 * cross(cq.xyz, pl);
+  let local0 = pl + tq * cq.w + cross(cq.xyz, tq);
+  let extent = vec3<f32>(1.0, 1.0, 1.0) / volumeInvExtent;
+  let uv0 = (local0 - volumeMin) * volumeInvExtent;
+  let distal = smoothstep(0.15, 0.9, uv0.y);
+  let local = local0 - volumeWarp.xyz * distal;
+  let uv = (local - volumeMin) * volumeInvExtent;
+  let diffMin = volumeMin - local;
+  let diffMax = local - (volumeMin + extent);
+  let outside = length(max(max(diffMin, diffMax), vec3<f32>(0.0, 0.0, 0.0)));
+  let dims = textureDimensions(volumeTex, 0);
+  let dimsF = vec3<f32>(dims);
+  let q = clamp(uv * (dimsF - vec3<f32>(1.0, 1.0, 1.0)), vec3<f32>(0.0, 0.0, 0.0), dimsF - vec3<f32>(1.0, 1.0, 1.0));
+  let i0 = vec3<i32>(floor(q));
+  let i1 = min(i0 + vec3<i32>(1, 1, 1), dims - vec3<i32>(1, 1, 1));
+  let fr = q - floor(q);
+  let s000 = textureLoad(volumeTex, i0, 0).r;
+  let s100 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i0.z), 0).r;
+  let s010 = textureLoad(volumeTex, vec3<i32>(i0.x, i1.y, i0.z), 0).r;
+  let s110 = textureLoad(volumeTex, vec3<i32>(i1.x, i1.y, i0.z), 0).r;
+  let s001 = textureLoad(volumeTex, vec3<i32>(i0.x, i0.y, i1.z), 0).r;
+  let s101 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i1.z), 0).r;
+  let s011 = textureLoad(volumeTex, vec3<i32>(i0.x, i1.y, i1.z), 0).r;
+  let s111 = textureLoad(volumeTex, vec3<i32>(i1.x, i1.y, i1.z), 0).r;
+  let tri = mix(
+    mix(mix(s000, s100, fr.x), mix(s010, s110, fr.x), fr.y),
+    mix(mix(s001, s101, fr.x), mix(s011, s111, fr.x), fr.y),
+    fr.z);
+  return tri + outside;
+}`;
+
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
 // still bends the surface from 4x the authored blendK away. Using the unscaled
 // value clips the fillet and shows up as hard creases along cluster edges.
@@ -386,10 +440,20 @@ export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<
 // The march reuses y to anchor the shell displacement and the hit-pixel
 // noise without re-running the fold; the noise term below uses it to sample
 // the fbm in the dominant prim's REST frame so the texture rides every limb.
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec4<f32> {
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
   var best = 1e9;
   var bestIdx = -1;
+  // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
+  // baked texture IS the body — d comes from sampleHandVolume and the whole
+  // primitive/cluster fold is skipped (counts are zeroed by the hands view,
+  // but the branch, not the counts, is what keeps it dead). bestIdx stays -1
+  // — the dominant-prim index has no meaning against a volume, and faking
+  // one would point restPoint at an unwritten prim row; -1 is its documented
+  // no-live-prim path, so the noise falls back to the world-frame anchor.
+  if (volumePose0.w > 0.5) {
+    d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);
+  } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
   for (var c = 0; c < 8; c = c + 1) {
@@ -417,6 +481,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       if (sd < best) { best = sd; bestIdx = idx; }
       d = smin(d, sd, k);
     }
+  }
   }
   let carved = applyCarves(d, p, data, counts);
   let dmg = applyWounds(carved, p, data, woundCfg, woundCfg2);
@@ -447,13 +512,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec3<f32> {
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x +
-    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x +
-    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift).x);
+    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x +
+    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x +
+    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x +
+    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -515,6 +580,12 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
   data: texture_2d<f32>,
+  volumeTex: texture_3d<f32>,
+  volumePose0: vec4<f32>,
+  volumePose1: vec4<f32>,
+  volumeMin: vec3<f32>,
+  volumeInvExtent: vec3<f32>,
+  volumeWarp: vec4<f32>,
   counts: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
@@ -535,7 +606,9 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // certifies as empty is not a distance the march can trust. The noise
     // shift is irrelevant at amplitude 0 (mapBody short-circuits the fbm), so
     // the zero vector keeps this pass independent of the motion plumbing.
-    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0)).x;
+    // The volume block rides along for the same reason (X1.26): a cone that
+    // ignored an enabled volume would certify empty space inside the hand.
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -558,6 +631,14 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 // reconstruct the hit point without marching a second time.
 //
 // Parameter groups, all vec4-packed to keep the argument list survivable:
+//   volumeTex  the baked hand volume (X1.26); every non-volume view binds
+//              the shared 1-cubed fallback and leaves the enable flag 0
+//   volumePose0 xyz = volume world centre, w = volume enable (0 = primitive)
+//   volumePose1 xyzw = volume local-to-world quaternion
+//   volumeMin   metric min corner of the volume AABB (local space)
+//   volumeInvExtent 1/(boundsMax - boundsMin), per axis
+//   volumeWarp  xyz = distal warp offset in local metres (CPU clamps it to
+//               12 mm); zero vector = no warp. w is spare.
 //   counts     x primCount, y clusterCount, z carveCount, w maxBlendK
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
@@ -587,7 +668,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
   data: texture_2d<f32>,
+  volumeTex: texture_3d<f32>,
   faceTex: texture_2d<f32>,
+  volumePose0: vec4<f32>,
+  volumePose1: vec4<f32>,
+  volumeMin: vec3<f32>,
+  volumeInvExtent: vec3<f32>,
+  volumeWarp: vec4<f32>,
   counts: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
@@ -638,6 +725,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // undisplaced bound is bit-identical.
   let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
   let steps = i32(marchCfg.x);
+  // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
+  // reconstruction of a baked SDF is not exact to the surface, so volume
+  // mode raises the threshold through the SPARE woundCfg2.w channel to at
+  // least half the largest voxel pitch (set by the hands view). max() keeps
+  // the primitive path bit-identical at the default 0.
+  let hitEps = max(0.0012, woundCfg2.w);
   // NOISE ANCHOR (motion-polish task 6): every fbm below samples the
   // DOMINANT prim's REST frame via restPoint — the noise is baked into the
   // model. noiseShift (faceCfg3.zw + lodCfg.z, the task-3 root-shift anchor)
@@ -693,7 +786,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift);
+    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);
     var d = dres.x;
     hitBest = i32(dres.y);
     // Shell displacement: inside a thin shell of the smooth surface, the
@@ -720,7 +813,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
-      if (d < 0.0012) { hit = true; break; }
+      if (d < hitEps) { hit = true; break; }
       stepLen = d * select(omega, 0.6, conservative);
     }
     prevRadius = radius;
@@ -747,7 +840,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   if (!hit) { discard; }
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift);
+  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -895,7 +988,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift).x * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -906,7 +999,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift).x / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp).x / 0.06, 0.35, 1.0);
   }
 
   let fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
@@ -955,7 +1048,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 export const HELPERS = [
   SMIN, SMAX, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
-  APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK,
+  APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,
 ];
 

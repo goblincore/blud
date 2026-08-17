@@ -37,10 +37,12 @@
 // Everything renderer-independent lives in fpv-mode.ts; this file only
 // draws what that module already decided.
 import * as THREE from 'three/webgpu';
+import { texture3D } from 'three/tsl';
 import {
   blankFaceTexture, createDataTexture, createMarchMaterial, defaultUniforms,
   marchBody, writeWounds, type MarchUniforms,
 } from './zombie-gpu';
+import { createFallbackHandVolumeTexture, type HandVolume } from './hand-volume';
 import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
 } from './march.wgsl';
@@ -67,11 +69,31 @@ export interface HandSheetProjectionIn {
   halfExtent: Vec3;
 }
 
+/** Volume pose for the baked hand (X1.26): rigid placement plus the distal
+ *  warp residue, all in the volume's own anatomical frame. */
+export interface HandVolumePoseIn {
+  /** Volume world centre (the shader's volumePose0.xyz). */
+  centre: Vec3;
+  /** local-to-world rotation, xyzw quaternion (the shader's volumePose1). */
+  quaternion: [number, number, number, number];
+  /** Distal warp offset in LOCAL metres; clamped here to 12 mm. */
+  warpLocal: Vec3;
+  /** False parks the warp at zero (the static first gate). */
+  warpEnabled: boolean;
+}
+
 export interface HandsGpuView {
   object: THREE.Object3D;
+  /** Live uniforms — same exposure as the body/chunk views, for tests and
+   *  the panel. */
+  uniforms: MarchUniforms;
+  /** The 3D texture currently bound to the volume slot: the view's own
+   *  1-cubed fallback in primitive mode, the loaded volume in baked mode. */
+  readonly volumeTexture: THREE.Texture;
   /** Re-packs THIS hand's world-space prims + its wound ring for the frame.
    *  Wounds must already be rebased onto `prims` (fpv-mode's
-   *  splitHandWounds does that). */
+   *  splitHandWounds does that). In volume mode the wound rows are still
+   *  uploaded but the primitive counts stay zero. */
   update(prims: Primitive[], wounds: readonly Wound[]): void;
   /** Binds the detail sheet. Until called, the view shades as bare flesh. */
   setSheet(sheet: HandSheet | null): void;
@@ -81,9 +103,43 @@ export interface HandsGpuView {
    *  handRelief sliders). Albedo strength should stay at ~0 — see
    *  HAND_SHEET_TUNING for why. */
   setSheetTuning(strength: number, relief: number): void;
+  /** A/B switch (X1.26): `prims` is the complete existing interaction path
+   *  and restores its march settings; `volume` requires the loaded HandVolume
+   *  and zeroes the primitive fold. */
+  setField(field: 'prims' | 'volume', volume?: HandVolume): void;
+  /** Rigid volume placement + clamped distal warp; also refits the proxy box
+   *  from the transformed manifest AABB. */
+  setVolumePose(pose: HandVolumePoseIn): void;
+  /** Neutral-clay look toggle for the baked visual gate; saves and restores
+   *  exactly the flesh settings it touches. */
+  setClay(on: boolean): void;
   setVisible(on: boolean): void;
   dispose(): void;
 }
+
+/** Conservative march settings for the baked field (spec: discrete trilinear
+ *  interpolation of an SDF is not exact, so no over-relaxation, a 0.75 step
+ *  multiplier, at least 128 steps, and a hit epsilon of at least half the
+ *  largest voxel pitch — set from the volume's maxVoxelPitch at setField). */
+const VOLUME_MARCH = {
+  steps: 128,
+  stepMul: 0.75,
+  relaxation: 1.0,
+} as const;
+
+/** Proxy padding in volume mode, metres: wounds still carve/rim in baked
+ *  mode, so their reach needs margin; the warp margin covers the 12 mm
+ *  clamped residue; maxVoxelPitch covers the boundary samples. */
+const VOLUME_WOUND_MARGIN_M = 0.05;
+const VOLUME_WARP_MARGIN_M = 0.012;
+
+/** Neutral clay for the shape gate: raw display channels (the legacy-gamma
+ *  path shows linear values raw — the same convention as every preset in
+ *  material.ts, so no sRGB conversion here). */
+const CLAY = {
+  r: 0x9a / 255, g: 0x81 / 255, b: 0x77 / 255,
+  specular: 0.15, roughness: 0.7,
+} as const;
 
 /**
  * How much of the hand sheet reaches the shading, split exactly the way the
@@ -164,7 +220,49 @@ export function createHandsGpuView(
   u.faceProj.value.set(0.5, 0.5, 0.5, 0.5);
   u.faceAtlas.value.set(1, 1, 0, 0);
 
-  const material = createMarchMaterial(dataTex, u, marchBody);
+  // VOLUME SLOT (X1.26): a texture3D NODE rather than a raw texture, so the
+  // volume-capable mode (setField) can rebind its .value between this
+  // fallback and a loaded volume without recompiling a pipeline. The view
+  // owns and disposes the fallback; a loaded volume stays caller-owned.
+  const fallbackVolume = createFallbackHandVolumeTexture();
+  const volumeNode = texture3D(fallbackVolume);
+
+  // Volume-mode state. primMarch snapshots the TEMPLATE values so switching
+  // back is exact, whatever the panel did in between.
+  let volume: HandVolume | null = null;
+  let clay = false;
+  let claySaved: { r: number; g: number; b: number; spec: number; rough: number } | null = null;
+  const primMarch = {
+    marchCfg: u.marchCfg.value.clone(),
+    woundCfg2: u.woundCfg2.value.clone(),
+  };
+  const poseCentre = new THREE.Vector3();
+  const poseQuat = new THREE.Quaternion();
+  const corner = new THREE.Vector3();
+
+  /** Sizes the proxy box from the TRANSFORMED manifest AABB — never from prim
+   *  bounds, which describe a different (seven-capsule) hand. */
+  function fitVolumeProxy() {
+    if (!volume) return;
+    const { boundsMin: mn, boundsMax: mx } = volume.manifest;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let c = 0; c < 8; c++) {
+      corner.set(
+        (c & 1) ? mx[0]! : mn[0]!,
+        (c & 2) ? mx[1]! : mn[1]!,
+        (c & 4) ? mx[2]! : mn[2]!);
+      corner.applyQuaternion(poseQuat).add(poseCentre);
+      minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
+      minY = Math.min(minY, corner.y); maxY = Math.max(maxY, corner.y);
+      minZ = Math.min(minZ, corner.z); maxZ = Math.max(maxZ, corner.z);
+    }
+    const pad = volume.maxVoxelPitch + VOLUME_WOUND_MARGIN_M + VOLUME_WARP_MARGIN_M;
+    mesh.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+    mesh.scale.set(maxX - minX + pad * 2, maxY - minY + pad * 2, maxZ - minZ + pad * 2);
+  }
+
+  const material = createMarchMaterial(dataTex, volumeNode, u, marchBody);
   // Unit box; the true axis-aligned cover is applied per frame via scale.
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
   mesh.frustumCulled = false; // camera-anchored: culling flakes on near moves
@@ -225,6 +323,8 @@ export function createHandsGpuView(
   const projQ = new THREE.Quaternion();
   return {
     object: mesh,
+    uniforms: u,
+    get volumeTexture() { return volumeNode.value as THREE.Texture; },
     setSheet(sheet) {
       if (!sheet) { u.faceCfg.value.x = 0; return; }
       u.faceTex.value = sheet.tex;
@@ -265,6 +365,23 @@ export function createHandsGpuView(
       u.headQuat.value.set(projQ.x, projQ.y, projQ.z, projQ.w);
     },
     update(prims, wounds) {
+      // Volume mode (X1.26): the wound ring still uploads (wounds are stamped
+      // on the baked field after either branch), but the primitive fold is
+      // dead — counts zeroed and no prim packing, so stale rows cannot ghost.
+      if (volume) {
+        u.woundCfg.value.x = writeWounds(
+          texels,
+          wounds.map(w => woundWorldPos(prims, w)),
+          wounds.map(w => w.radius),
+          wounds.map(w => TYPE_ID[w.type]),
+          wounds.map(w => w.ageSec),
+          wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+          wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+        );
+        u.counts.value.set(0, 0, 0, 0);
+        dataTex.needsUpdate = true;
+        return;
+      }
       apply(prims);
       u.woundCfg.value.x = writeWounds(
         texels,
@@ -276,11 +393,71 @@ export function createHandsGpuView(
         wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
       );
     },
+    setField(field, vol) {
+      if (field === 'volume') {
+        if (!vol) {
+          throw new Error('setField(volume): a loaded HandVolume is required — load first (task C2 gates this)');
+        }
+        volume = vol;
+        volumeNode.value = vol.texture;
+        const mn = vol.manifest.boundsMin, mx = vol.manifest.boundsMax;
+        u.volumeMin.value.set(mn[0], mn[1], mn[2]);
+        u.volumeInvExtent.value.set(
+          1 / (mx[0]! - mn[0]!), 1 / (mx[1]! - mn[1]!), 1 / (mx[2]! - mn[2]!));
+        // Conservative stepping for a non-exact trilinear field (spec).
+        u.marchCfg.value.x = Math.max(VOLUME_MARCH.steps, primMarch.marchCfg.x);
+        u.marchCfg.value.y = VOLUME_MARCH.stepMul;
+        u.woundCfg2.value.y = VOLUME_MARCH.relaxation;
+        u.woundCfg2.value.w = vol.maxVoxelPitch / 2; // hit eps >= half the largest pitch
+        u.volumePose0.value.w = 1;
+        fitVolumeProxy();
+      } else {
+        volume = null;
+        u.volumePose0.value.w = 0;
+        volumeNode.value = fallbackVolume;
+        u.marchCfg.value.copy(primMarch.marchCfg);
+        u.woundCfg2.value.copy(primMarch.woundCfg2);
+        // The prim path refits the proxy on the next update().
+      }
+    },
+    setVolumePose(p) {
+      poseCentre.set(p.centre[0], p.centre[1], p.centre[2]);
+      poseQuat.set(p.quaternion[0], p.quaternion[1], p.quaternion[2], p.quaternion[3]);
+      u.volumePose0.value.set(p.centre[0], p.centre[1], p.centre[2], u.volumePose0.value.w);
+      u.volumePose1.value.set(p.quaternion[0], p.quaternion[1], p.quaternion[2], p.quaternion[3]);
+      // Warp: clamped to 12 mm (the spec's ceiling) and parked at zero when
+      // disabled — the static/unwarped render is the first visual gate.
+      const wl = Math.hypot(p.warpLocal[0], p.warpLocal[1], p.warpLocal[2]);
+      const s = p.warpEnabled && wl > 1e-9 ? Math.min(1, VOLUME_WARP_MARGIN_M / wl) : 0;
+      u.volumeWarp.value.set(p.warpLocal[0] * s, p.warpLocal[1] * s, p.warpLocal[2] * s, 0);
+      fitVolumeProxy();
+    },
+    setClay(on) {
+      if (on === clay) return;
+      if (on) {
+        claySaved = {
+          r: u.baseColor.value.r, g: u.baseColor.value.g, b: u.baseColor.value.b,
+          spec: u.surfCfg.value.x, rough: u.surfCfg.value.y,
+        };
+        u.baseColor.value.setRGB(CLAY.r, CLAY.g, CLAY.b);
+        u.surfCfg.value.x = CLAY.specular;
+        u.surfCfg.value.y = CLAY.roughness;
+        clay = true;
+      } else {
+        const s = claySaved!;
+        u.baseColor.value.setRGB(s.r, s.g, s.b);
+        u.surfCfg.value.x = s.spec;
+        u.surfCfg.value.y = s.rough;
+        claySaved = null;
+        clay = false;
+      }
+    },
     setVisible(on) { mesh.visible = on; },
     dispose() {
       mesh.geometry.dispose();
       material.dispose();
       dataTex.dispose();
+      fallbackVolume.dispose(); // a loaded volume stays caller-owned
     },
   };
 }

@@ -4,10 +4,14 @@
 // itself is guarded by tripwires in march.wgsl.test.ts; these pin the CPU side:
 // WHICH channel carries it, what its default is, and who overwrites it.
 import { describe, it, expect } from 'vitest';
-import { createZombieGpuView, createChunkGpuView } from './zombie-gpu';
+import {
+  createZombieGpuView, createChunkGpuView, defaultUniforms, blankFaceTexture,
+} from './zombie-gpu';
+import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
+import * as THREE from 'three/webgpu';
 
 const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
 
@@ -47,5 +51,56 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     expect(view.uniforms.faceCfg3.value.w).toBeCloseTo(2.5, 6);
     view.dispose();
     template.dispose();
+  });
+});
+
+describe('baked hand volume binding (X1.26 task B3)', () => {
+  it('defaultUniforms carries the five volume uniforms, all primitive-mode', () => {
+    const u = defaultUniforms(blankFaceTexture());
+    expect(u.volumePose0.value.w).toBe(0); // enable flag OFF
+    expect(u.volumePose1.value.equals(new THREE.Vector4(0, 0, 0, 1))).toBe(true);
+    expect(u.volumeMin.value.lengthSq()).toBe(0);
+    expect(u.volumeInvExtent.value.lengthSq()).toBe(0);
+    expect(u.volumeWarp.value.lengthSq()).toBe(0);
+  });
+
+  it('body and chunk views default to primitive mode and bind the fallback volume', () => {
+    // The call-site guarantee: every march material carries a 3D texture
+    // binding. volumeTexture is part of each view interface, so a factory
+    // that omitted it would not compile.
+    const template = createZombieGpuView(body, {});
+    expect(template.uniforms.volumePose0.value.w).toBe(0);
+    expect(template.volumeTexture).toBeInstanceOf(THREE.Data3DTexture);
+    expect(template.volumeTexture.type).toBe(THREE.HalfFloatType);
+
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    expect(view.uniforms.volumePose0.value.w).toBe(0);
+    expect(view.volumeTexture).toBeInstanceOf(THREE.Data3DTexture);
+    view.dispose();
+    template.dispose();
+  });
+
+  it('a self-created fallback is disposed WITH the view; a shared one is not', () => {
+    // Ownership: the lab renderer may share ONE fallback across every
+    // non-volume view and dispose it once itself — a view disposing a shared
+    // texture would pull the binding out from under its neighbours (the same
+    // hazard setFaceTexture documents for face sheets).
+    const ownView = createZombieGpuView(body, {});
+    let ownDisposed = false;
+    ownView.volumeTexture.addEventListener('dispose', () => { ownDisposed = true; });
+    ownView.dispose();
+    expect(ownDisposed).toBe(true);
+
+    const shared = createFallbackHandVolumeTexture();
+    let sharedDisposed = false;
+    shared.addEventListener('dispose', () => { sharedDisposed = true; });
+    const sharedView = createZombieGpuView(body, { volumeTex: shared });
+    expect(sharedView.volumeTexture).toBe(shared);
+    sharedView.dispose();
+    expect(sharedDisposed).toBe(false); // caller still owns it
+    shared.dispose();
+    expect(sharedDisposed).toBe(true);
   });
 });

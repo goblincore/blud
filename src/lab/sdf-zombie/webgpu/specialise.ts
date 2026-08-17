@@ -62,7 +62,9 @@ export function specialiseMapBody(body: BuildResult): string {
   const lines: string[] = [];
   lines.push(
     'fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, ' +
-    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec4<f32> {',
+    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, ' +
+    'volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, ' +
+    'volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>) -> vec4<f32> {',
   );
   lines.push('  var d = 1e9;');
   // Argmin tracking (motion-polish task 6), same contract as the generic
@@ -73,6 +75,13 @@ export function specialiseMapBody(body: BuildResult): string {
   lines.push('  var best = 1e9;');
   lines.push('  var bestIdx = -1;');
   lines.push('  var sd = 0.0;');
+  // Volume branch (X1.26), same as the generic version: specialised bodies
+  // (crowd/chunks) never enable it, but the emitted shader must still branch
+  // on the flag rather than silently marching prims a caller meant to replace
+  // with the baked volume.
+  lines.push('  if (volumePose0.w > 0.5) {');
+  lines.push('    d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);');
+  lines.push('  } else {');
 
   // --- additive fold, cluster by cluster ------------------------------------
   body.clusters.forEach((c, ci) => {
@@ -127,6 +136,7 @@ export function specialiseMapBody(body: BuildResult): string {
     lines.push(`  }`);
   });
 
+  lines.push('  }');
   lines.push('  d = applyWounds(d, p, data, woundCfg, woundCfg2);');
   // Same guard as the generic version: the silhouette fbm is the single most
   // expensive term in the shader and must stay branched out at zero amplitude.

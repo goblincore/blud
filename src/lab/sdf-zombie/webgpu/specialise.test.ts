@@ -40,6 +40,20 @@ describe('specialiseMapBody', () => {
     expect(src).toContain('noiseAmp: f32');
     expect(src).toContain('woundCfg: vec4<f32>');
     expect(src).toContain('woundCfg2: vec4<f32>');
+    // Volume block (X1.26): same params, same branch — the specialised mapBody
+    // replaces the generic one IN PLACE in the helper list, so a signature
+    // drift is a WGSL compile error at runtime, not a test failure.
+    expect(src).toContain('volumeTex: texture_3d<f32>');
+    expect(src).toContain('volumePose0: vec4<f32>');
+    expect(src).toContain('volumePose1: vec4<f32>');
+    expect(src).toContain('volumeMin: vec3<f32>');
+    expect(src).toContain('volumeInvExtent: vec3<f32>');
+    expect(src).toContain('volumeWarp: vec4<f32>');
+    expect(src).toContain('if (volumePose0.w > 0.5) {');
+    expect(src).toContain('d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp);');
+    // The primitive fold must live in the else arm, after the branch.
+    expect(src.indexOf('} else {')).toBeGreaterThan(src.indexOf('if (volumePose0.w > 0.5) {'));
+    expect(src.indexOf('d = applyWounds')).toBeGreaterThan(src.indexOf('} else {'));
   });
 
   it('folds every additive primitive exactly once, in array order', () => {

@@ -11,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, float,
+  wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add, screenUV,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
@@ -24,6 +24,7 @@ import type { Primitive, Vec3 } from '../types';
 import { sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { specialiseMapBody } from './specialise';
+import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
@@ -37,6 +38,10 @@ export interface ZombieGpuView {
   coneObject: THREE.Object3D;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
+  /** The 3D texture bound to the march's volume slot (X1.26). The shared
+   *  1-cubed fallback while the volume branch stays disabled; a view that
+   *  created its own fallback disposes it in dispose(). */
+  volumeTexture: THREE.Texture;
   /**
    * Re-upload after the body changes (sever, override edit, rig step).
    * `rest` is the same body in its authored rest pose (motion-polish task 6 —
@@ -220,6 +225,19 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     faceGlowColor: uniform(new THREE.Color(1.9, 0.012, 0.005)),
     /** The face sheet itself. Swapped by the panel; see setFaceTexture(). */
     faceTex: texture(faceTex),
+    /** VOLUME BRANCH (X1.26 task B3), disabled by default so every existing
+     *  view marches the primitive fold bit-for-bit as before:
+     *  volumePose0.xyz = the volume's world centre, .w = enable flag;
+     *  volumePose1 = local-to-world quaternion (identity);
+     *  volumeMin / volumeInvExtent = the manifest AABB in local metres and
+     *    its per-axis uv normaliser;
+     *  volumeWarp.xyz = distal warp offset in local metres (CPU clamps it to
+     *    12 mm), zero = no warp. */
+    volumePose0: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    volumePose1: uniform(new THREE.Vector4(0, 0, 0, 1)),
+    volumeMin: uniform(new THREE.Vector3(0, 0, 0)),
+    volumeInvExtent: uniform(new THREE.Vector3(0, 0, 0)),
+    volumeWarp: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /**
      * x = aoEnabled, w = goreStrength (0 body, 1 chunk views).
      *
@@ -341,16 +359,33 @@ export interface ConeSource {
 }
 
 /** Builds the march material (depth-writing proxy-box shader). Exported for
- *  the hands view — one material builder, one look. */
+ *  the hands view — one material builder, one look.
+ *
+ *  `volumeTex` (X1.26) may be the raw THREE.Texture (wrapped here in a
+ *  texture3D node) or a pre-built texture3D node — the hands view passes its
+ *  own node so it can rebind .value between the fallback and a loaded volume
+ *  without recompiling a pipeline. */
 export function createMarchMaterial(
-  dataTex: THREE.Texture, u: MarchUniforms, march = marchBody,
+  dataTex: THREE.Texture,
+  volumeTex: THREE.Texture | ReturnType<typeof texture3D>,
+  u: MarchUniforms,
+  march = marchBody,
   cone?: ConeSource, occluder?: OccluderSource,
 ) {
+  const volumeNode = volumeTex instanceof THREE.Texture
+    ? texture3D(volumeTex)
+    : volumeTex as ReturnType<typeof texture3D>;
   const marched = march({
     worldPos: positionWorld,
     camPos: cameraPosition,
     data: texture(dataTex),
+    volumeTex: volumeNode,
     faceTex: u.faceTex,
+    volumePose0: u.volumePose0,
+    volumePose1: u.volumePose1,
+    volumeMin: u.volumeMin,
+    volumeInvExtent: u.volumeInvExtent,
+    volumeWarp: u.volumeWarp,
     counts: u.counts,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
@@ -504,6 +539,13 @@ export interface GpuViewOpts {
    * pipeline compile per distinct structure, so it is opt-in until measured.
    */
   specialise?: boolean;
+  /**
+   * The 3D texture bound to the volume slot (X1.26). Omitted, the view binds
+   * its own 1-cubed fallback and disposes it in dispose(); pass one to share
+   * a single fallback across every non-volume view (the lab renderer owns
+   * and disposes it — this view will not).
+   */
+  volumeTex?: THREE.Texture;
 }
 
 export function createZombieGpuView(
@@ -511,6 +553,10 @@ export function createZombieGpuView(
 ): ZombieGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(blankFaceTexture());
+  // Volume slot (X1.26): bind the shared fallback when the caller owns one,
+  // else create (and later dispose) our own. The branch stays disabled.
+  const ownsVolume = !opts.volumeTex;
+  const volumeTex = opts.volumeTex ?? createFallbackHandVolumeTexture();
 
   function upload(next: BuildResult, rest?: BuildResult) {
     const p = packBody(next, rest);
@@ -529,7 +575,7 @@ export function createZombieGpuView(
 
   const packed = upload(body);
   const material = createMarchMaterial(
-    dataTex, u,
+    dataTex, volumeTex, u,
     opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
     opts.cone, opts.occluder);
 
@@ -542,6 +588,12 @@ export function createZombieGpuView(
     worldPos: positionWorld,
     camPos: cameraPosition,
     data: texture(dataTex),
+    volumeTex: texture3D(volumeTex),
+    volumePose0: u.volumePose0,
+    volumePose1: u.volumePose1,
+    volumeMin: u.volumeMin,
+    volumeInvExtent: u.volumeInvExtent,
+    volumeWarp: u.volumeWarp,
     counts: u.counts,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
@@ -606,6 +658,7 @@ export function createZombieGpuView(
     object: mesh,
     coneObject: coneMesh,
     uniforms: u,
+    volumeTexture: volumeTex,
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -653,6 +706,7 @@ export function createZombieGpuView(
       material.dispose();
       coneMaterial.dispose();
       dataTex.dispose();
+      if (ownsVolume) volumeTex.dispose();
     },
   };
 }
@@ -662,6 +716,9 @@ export interface ChunkGpuView {
   /** Live uniforms (copied from the body template at spawn; the noise root
    *  shift zw is re-anchored to the chunk's own position on every update). */
   uniforms: MarchUniforms;
+  /** The 3D texture bound to the volume slot (X1.26) — the shared fallback;
+   *  self-created ones are disposed with the view. */
+  volumeTexture: THREE.Texture;
   update(chunk: Chunk): void;
   dispose(): void;
 }
@@ -688,9 +745,14 @@ export function createChunkGpuView(
   template: MarchUniforms,
   /** World positions where this limb was attached — become torn ends. */
   tornAt?: Vec3[],
+  /** Shared volume-slot texture (X1.26); omitted, a private fallback is
+   *  created and disposed with the chunk. */
+  volumeTex?: THREE.Texture,
 ): ChunkGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
+  const ownsVolume = !volumeTex;
+  const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
   // Copy the body's look across. Anything not copied here is a deliberate
   // per-chunk override further down.
@@ -774,7 +836,7 @@ export function createChunkGpuView(
   u.headCentre.value.set(chunk.pos[0], chunk.pos[1], chunk.pos[2]);
   u.headAxes.value.set(extent, extent, extent);
 
-  const material = createMarchMaterial(dataTex, u);
+  const material = createMarchMaterial(dataTex, volTex, u);
   const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
   mesh.frustumCulled = false;
@@ -835,6 +897,7 @@ export function createChunkGpuView(
   return {
     object: mesh,
     uniforms: u,
+    volumeTexture: volTex,
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
@@ -844,6 +907,7 @@ export function createChunkGpuView(
       mesh.geometry.dispose();
       material.dispose();
       dataTex.dispose();
+      if (ownsVolume) volTex.dispose();
     },
   };
 }
