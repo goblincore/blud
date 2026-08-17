@@ -95,11 +95,13 @@ describe('hand sheet weights are RELIEF-ONLY', () => {
     expect(HAND_SHEET_TUNING.detailStrength).toBe(0);
   });
 
-  it('keeps a gentle relief term — that is the whole point of the sheet', () => {
+  it('drives relief — the sheet’s only channel, and the point of having one', () => {
     expect(HAND_SHEET_TUNING.relief).toBeGreaterThan(0);
-    // Gentle until the march rotates its bump into the projection frame; see
-    // HAND_SHEET_TUNING's note and the dev note's shader-change request.
-    expect(HAND_SHEET_TUNING.relief).toBeLessThanOrEqual(1);
+    // The march rotates its bump into the projection frame as of 94b12ac, so
+    // this is a real weight rather than the earlier low workaround. Bounded
+    // only against a runaway value; the panel slider tops out at 3.
+    expect(HAND_SHEET_TUNING.relief).toBeLessThanOrEqual(3);
+    expect(HAND_SHEET_TUNING.relief).toBeGreaterThan(HAND_SHEET_TUNING.detailStrength);
   });
 
   it('cannot glow: a height map’s bright pixels are near flesh, not emission', () => {

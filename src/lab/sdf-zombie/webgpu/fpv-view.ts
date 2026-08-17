@@ -104,15 +104,16 @@ export const HAND_SHEET_TUNING = {
    *  latex pink. mix(albedo, albedo*detail, …*0) is exactly `albedo`, so the
    *  sheet's levels and its mean cannot tint the hands at all. */
   detailStrength: 0,
-  /** The only channel the sheet drives. Kept gentle for now because the face
-   *  path adds its bump in WORLD axes without rotating it into the projection's
-   *  frame — fine for a head (authored roughly world-aligned), but the hands'
-   *  frame is a large rotation, so a strong bump would shade its grooves from a
-   *  skewed direction. See the dev note: the one-line shader fix is to rotate
-   *  `bump` by headQuat before adding it to `n`, which is a no-op for an
-   *  unrotated head. Until that lands this stays low enough to read as surface
-   *  break-up rather than directional streaks. */
-  relief: 0.55,
+  /** The only channel the sheet drives, and now a real value rather than the
+   *  0.55 workaround: as of 94b12ac the march rotates its relief bump by
+   *  headQuat into world before adding it to the normal, so a hand's grooves
+   *  shade from the correct direction instead of a skewed one. Set to the face
+   *  path's own default (defaultUniforms' faceCfg.w) — the same lighting maths
+   *  on the same kind of sheet wants the same weight, and the bake's clamped
+   *  0.35..1 height range makes its gradients gentler than a full-range map's,
+   *  so this is not as strong as it looks. The panel's handRelief slider is
+   *  there to dial it against the real render. */
+  relief: 1.4,
   /** The face path treats bright pixels as an emissive mask. A height map's
    *  brightest pixels are just the nearest flesh, so the threshold sits at the
    *  very top of the range — and the glow STRENGTH (faceCfg2.w) is zeroed
