@@ -27,6 +27,7 @@
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
+import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
 import { createZombieGpuView, createChunkGpuView, type ChunkGpuView } from './zombie-gpu';
 import { createOccluderHull } from './occluder-hull';
 import { translateBody } from '../translate';
@@ -196,9 +197,17 @@ async function main() {
   // composite back over the polygonal scene. Cost is close to linear in
   // pixels, so this is the biggest lever available without compute.
   const sdfLayer = createSdfLayer(handle.renderer);
+  // Post chain (X1.25): FXAA + temporal smear + sharp-bilinear upscale. It
+  // owns the frame's tail — with every effect off it is an exact
+  // pass-through, so the pre-X1.25 draw path is untouched by default-off.
+  // Created before sizeSdfLayer because the SDF layer sizes from its
+  // contentSize (the capped render size), which must NOT follow the canvas
+  // when the sharp-upscale toggle grows the canvas backing to the window.
+  const postAa = createPostAa(handle.renderer);
+  postAa.addSink(sdfLayer);
   function sizeSdfLayer() {
-    const s = handle.renderer.getDrawingBufferSize(new THREE.Vector2());
-    sdfLayer.setSize(s.x, s.y);
+    const s = postAa.contentSize;
+    sdfLayer.setSize(s.width, s.height);
     const t = sdfLayer.targetSize;
     resEl.textContent = `sdf ${t.width}x${t.height} (${sdfLayer.scale.toFixed(2)}x)`;
     // Cone footprint radius per unit distance: a tile spans CONE_TILE pixels
@@ -216,7 +225,9 @@ async function main() {
   // interleaves with flesh and floor). gooLayer is declared further down —
   // safe in a closure because everything between here and the end of main()
   // is synchronous, so no frame can fire before it initialises.
-  handle.setDrawFn(() => gooLayer.render(camera, () => sdfLayer.render(scene, camera)));
+  handle.setDrawFn(() => postAa.render(
+    () => gooLayer.render(camera, () => sdfLayer.render(scene, camera)),
+  ));
 
   // The occluder hull. Its own layer, rendered before the march, so every ray
   // can stop at the distance something solid already covers — the early-Z that
@@ -259,6 +270,7 @@ async function main() {
   const gooLayer = createGooLayer(handle.renderer, {
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
   });
+  postAa.addSink(gooLayer);
   {
     const t = sdfLayer.targetSize;
     gooLayer.setSize(t.width, t.height);
@@ -1849,6 +1861,28 @@ async function main() {
     set: (v) => { gooLayer.setBlurPx(v); },
   });
 
+  // Post (X1.25): jaggie cleanup that keeps the chunky low-res look. FXAA
+  // softens stair-steps in the captured frame, smear is a temporal
+  // exponential blend that hides edge crawl (ghosting on fast gibs is
+  // on-aesthetic), sharp upscale swaps the CSS nearest stretch for a
+  // UV-snapped bilinear (fat pixels, antialiased borders). Defaults per the
+  // owner brief: FXAA on, smear 0.25, sharp upscale off.
+  const postBox = addSection(panelEl, 'post');
+  const fxaaBtn = addButton(postBox, `fxaa: ${postAa.fxaa ? 'on' : 'off'}`, () => {
+    postAa.setFxaa(!postAa.fxaa);
+    fxaaBtn.textContent = `fxaa: ${postAa.fxaa ? 'on' : 'off'}`;
+  });
+  addSlider(postBox, {
+    label: 'smear', min: 0, max: POST_AA_SMEAR_MAX, step: 0.01,
+    get: () => postAa.smear,
+    set: (v) => { postAa.setSmear(v); },
+  });
+  const sharpBtn = addButton(
+    postBox, `sharp upscale: ${postAa.sharpUpscale ? 'on' : 'off'}`, () => {
+      postAa.setSharpUpscale(!postAa.sharpUpscale);
+      sharpBtn.textContent = `sharp upscale: ${postAa.sharpUpscale ? 'on' : 'off'}`;
+    });
+
   // Motion (X1.22): master + wander toggles, the forced-collapse hook for
   // the K key's panel twin, and the live damage-meter readout.
   const motionBox = addSection(panelEl, 'motion');
@@ -2123,6 +2157,25 @@ async function main() {
     },
     /** The K key's console twin: forces the collapse next frame. */
     forceCollapse() { forcedCollapse = true; },
+    /**
+     * The X1.25 post chain (FXAA / temporal smear / sharp-bilinear upscale)
+     * — the panel's post section, from the console. All-off is an exact
+     * pass-through of the pre-X1.25 draw path (the A/B parity gate).
+     */
+    post: {
+      setFxaa(on: boolean) {
+        postAa.setFxaa(on);
+        fxaaBtn.textContent = `fxaa: ${postAa.fxaa ? 'on' : 'off'}`;
+      },
+      setSmear(v: number) { postAa.setSmear(v); },
+      setSharpUpscale(on: boolean) {
+        postAa.setSharpUpscale(on);
+        sharpBtn.textContent = `sharp upscale: ${postAa.sharpUpscale ? 'on' : 'off'}`;
+      },
+      get fxaa() { return postAa.fxaa; },
+      get smear() { return postAa.smear; },
+      get sharpUpscale() { return postAa.sharpUpscale; },
+    },
     /** Shell-displacement silhouettes on every live body view. */
     setShellDisplace,
     setLegacyGamma,

@@ -1,0 +1,50 @@
+{
+  "backend": "webgpu",
+  "sharpCanvas": {
+    "w": 1280,
+    "h": 800,
+    "cssW": "1280px",
+    "ir": "auto"
+  },
+  "normalCanvas": {
+    "w": 864,
+    "h": 540,
+    "ir": "pixelated"
+  },
+  "benchAllOff": {
+    "bodies": 1,
+    "n": 240,
+    "median": 2.02,
+    "p05": 1.91,
+    "p95": 6.64,
+    "sdfScale": 0.7,
+    "cone": false,
+    "lod": false,
+    "hiddenSteps": 0,
+    "adaptive": "off"
+  },
+  "benchDefault": {
+    "bodies": 1,
+    "n": 240,
+    "median": 2.35,
+    "p05": 2.1,
+    "p95": 5.71,
+    "sdfScale": 0.7,
+    "cone": false,
+    "lod": false,
+    "hiddenSteps": 0,
+    "adaptive": "off"
+  },
+  "benchAllOn": {
+    "bodies": 1,
+    "n": 240,
+    "median": 2.49,
+    "p05": 2.44,
+    "p95": 2.59,
+    "sdfScale": 0.7,
+    "cone": false,
+    "lod": false,
+    "hiddenSteps": 0,
+    "adaptive": "off"
+  }
+}

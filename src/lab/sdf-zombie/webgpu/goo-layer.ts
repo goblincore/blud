@@ -257,6 +257,13 @@ export interface GooLayer {
    * pass composited onto the canvas.
    */
   render(camera: THREE.PerspectiveCamera, between: () => void): void;
+  /**
+   * Redirects the surface composite (normally canvas-bound) into this
+   * target; null restores the canvas. post-aa captures the frame this way.
+   * The target MUST carry a depth buffer — the surface depth-tests against
+   * what the sdf composite left behind.
+   */
+  setOutputTarget(t: THREE.RenderTarget | null): void;
   /** Re-pose the density quads from sim state; call once per frame, before render. */
   sync(sim: BloodSim, camera: THREE.Camera): void;
   /** Density target = densityScale * the SDF layer's size. */
@@ -440,6 +447,9 @@ export function createGooLayer(
   const emptyScene = new THREE.Scene();
   const clearColorScratch = new THREE.Color();
 
+  /** Where the surface composite draws — null is the canvas. See setOutputTarget. */
+  let outputTarget: THREE.RenderTarget | null = null;
+
   // Scratch for sync — the same matrix compose blood-view-gpu uses,
   // including the velocity stretch: stretched blobs overlap along their
   // motion, which is what fuses a trail into a strand.
@@ -518,7 +528,7 @@ export function createGooLayer(
       // blurPx = 0 line so the steady frame mutates nothing.
       const wantMat = blurred ? surfBlurMat : surfRawMat;
       if (quad.material !== wantMat) quad.material = wantMat;
-      renderer.setRenderTarget(null);
+      renderer.setRenderTarget(outputTarget);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
@@ -585,6 +595,7 @@ export function createGooLayer(
       // would return on the next frame without a fresh explicit clear.
       targetsNeedInit = true;
     },
+    setOutputTarget(t) { outputTarget = t; },
     setFlipY(on) { uFlipY.value = on ? 1 : 0; },
     setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(0.95, v)); },
     setEdge(v) { uEdge.value = Math.max(1.01, Math.min(4, v)); },
