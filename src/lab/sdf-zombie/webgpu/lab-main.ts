@@ -67,20 +67,29 @@ import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
 import { CIG_EMBER_HOT, STICK_IN_HAND, buildHandPrims } from '../hands';
 import {
-  EMPTY_FPV_INPUT, enterFpvMode, exitFpvMode, forceThrow, handFieldFrame,
-  handPoseTargets, handPrimsToWorld, handPropPoses, handSheetProjections,
-  makeFpvMode, makeHandFieldUi, posedHandPrims, requestHandField,
-  settleHandVolume, splitHandWounds, stepFpvMode,
+  EMPTY_FPV_INPUT, clipBundlePresented, enterFpvMode, exitFpvMode, forceThrow,
+  handFieldFrame, handPropPoses, handPoseTargets, handPrimsToWorld,
+  handReleaseVelocity, handSheetProjections, makeFpvMode, makeHandFieldUi,
+  posedHandPrims, releasePendingThrow, requestHandField, settleHandClip,
+  settleStaticHandVolume, splitHandWounds, stepFpvMode,
   type FpvGorePort, type FpvModeState, type HandFieldMode, type HandFieldUi,
 } from '../fpv-mode';
-import { cookCharge } from '../fpv';
+import { cookCharge, throwOrigin } from '../fpv';
 import {
   HAND_SHEET_TUNING, createBurstLayer, createCigaretteProp, createHandsGpuView,
   createStickProp,
 } from './fpv-view';
 import { loadBakedHandSheets, proceduralHandSheets } from './hands-sheet';
 import { loadHandVolume, type HandVolume } from './hand-volume';
-import { bakedHandPose } from '../hand-volume-pose';
+import { gripFrameSample, loadHandClip, type DynamitePropContract, type HandClipVolume } from './hand-volume-clip';
+import { loadDynamiteProp, type DynamiteProp } from './dynamite-prop';
+import {
+  applyGripMotion, bakedDynamitePose, bakedHandPose,
+  type BakedHandPose, type BakedPropPose,
+} from '../hand-volume-pose';
+import {
+  gripCameraQuaternion, makeGripMotion, stepGripMotion, type GripMotionState,
+} from '../hand-grip-clip';
 import {
   initialAdaptiveState, scaleForRung, stepAdaptive,
 } from '../adaptive-scale';
@@ -1027,34 +1036,209 @@ async function main() {
     handViews.left.setSheet(baked.pinch);
     handViews.right.setSheet(baked.grip);
   });
-  // ——— Baked hand volume (X1.26 task C2) ——————————————————————————
-  // Loaded ONCE, beside the sheets. Success binds the volume WITHOUT
-  // switching modes (primitive stays primitive until the owner asks);
-  // failure records the message, forces prims (settleHandVolume) and —
-  // because both handlers are attached — never leaves an unhandled
-  // rejection behind.
+  // ——— Baked hand volumes (X1.26 static → X1.27 task F2: + clip/GLB) ————
+  // Two INDEPENDENT loads. The static (X1.26) volume loads on its own;
+  // the clip path loads and validates the v2 manifest/texture FIRST, then
+  // its relative hash-matched GLB, and settles the UI only after BOTH
+  // objects are ready (settleHandClip is the combined clip+GLB settlement —
+  // the plan's coherence contract, so `clipLoad === 'ready'` can never mean
+  // "clip ready but prop missing"). On either clip failure ONE clipError is
+  // stored and the policy falls back to the X1.26 static baked hand (prims
+  // if that failed too); the clip is never paired with the procedural prop.
+  // Both handlers are attached, so no load can leave an unhandled rejection.
   const HAND_VOLUME_URL = '/assets/lab/hand-sdf-relaxed-r.json';
+  const HAND_CLIP_URL = '/assets/lab/hand-sdf-dynamite-grip-r.json';
   let handFieldUi = makeHandFieldUi();
   let handVolume: HandVolume | null = null;
+  /** The static volume's own failure text — surfaced inline; the POLICY
+   *  keeps only clipError (its fallback field decision). */
+  let staticVolumeError = '';
   loadHandVolume(HAND_VOLUME_URL).then(
     v => {
       handVolume = v;
-      applyHandField(settleHandVolume(handFieldUi, true));
+      applyHandField(settleStaticHandVolume(handFieldUi, true));
     },
     err => {
-      applyHandField(settleHandVolume(
-        handFieldUi, false,
-        err instanceof Error ? err.message : String(err),
-      ));
+      staticVolumeError = err instanceof Error ? err.message : String(err);
+      applyHandField(settleStaticHandVolume(handFieldUi, false));
     },
   );
-  // The lab owns the loaded volume; each view owns its own 1³ fallback
-  // (disposed in its dispose). One pagehide, one dispose — the HandVolume's
-  // own dispose is idempotent, so a double fire stays safe.
+  /** The loaded six-frame clip (volume + v2 manifest), once coherent. */
+  let handClip: HandClipVolume | null = null;
+  /** The clip's hash-matched derived GLB wrapper, once coherent. */
+  let dynamiteProp: DynamiteProp | null = null;
+  /** Fine-grained clip-asset diagnostics for the panel/automation:
+   *  idle → loading → clip-ready (manifest+atlas) → glb-ready (coherent) |
+   *  error. The POLICY state is handFieldUi.clipLoad; this is the detail. */
+  let clipLoadDetail: 'loading' | 'clip-ready' | 'glb-ready' | 'error' = 'loading';
+  void (async () => {
+    try {
+      const clip = await loadHandClip(HAND_CLIP_URL);
+      clipLoadDetail = 'clip-ready';
+      // loadDynamiteProp resolves the GLB against its base argument — hand
+      // it the ABSOLUTE manifest URL (a relative base cannot construct a
+      // URL), exactly as loadHandClip already did internally.
+      const absManifest = new URL(HAND_CLIP_URL, location.href).href;
+      const prop = await loadDynamiteProp(absManifest, clip.manifest.prop);
+      handClip = clip;
+      dynamiteProp = prop;
+      scene.add(prop.object);
+      prop.pose({ mode: 'gone' }); // held only when the clip drive says so
+      clipLoadDetail = 'glb-ready';
+      applyHandField(settleHandClip(handFieldUi, true));
+    } catch (err) {
+      clipLoadDetail = 'error';
+      applyHandField(settleHandClip(
+        handFieldUi, false, err instanceof Error ? err.message : String(err)));
+    }
+  })();
+  // The lab owns the loaded volumes + prop; each view owns its own 1³
+  // fallback (disposed in its dispose). One pagehide, one dispose each —
+  // every dispose here is idempotent, so a double fire stays safe.
   window.addEventListener('pagehide', () => {
     handVolume?.dispose();
     handVolume = null;
+    handClip?.dispose();
+    handClip = null;
+    dynamiteProp?.dispose();
+    dynamiteProp = null;
   });
+
+  // ——— X1.27 task F2/F3: the grip-clip drive state ————————————————————
+  /** The pure close/hold/underhand/release controller (hand-grip-clip.ts).
+   *  'open' at rest — the first presented bundle (clipBundlePresented)
+   *  steps it into closing, so entering clip mode re-presents naturally. */
+  let gripMotion: GripMotionState = makeGripMotion(false);
+  let gripPlayback: 'pause' | 'play' | 'loop' = 'play';
+  /** Controller-clock multiplier (captures want 1; the slider tunes it). */
+  let gripSpeed = 1;
+  /** Manual grip01 scrub — VISUAL ONLY (frame sample + held pose); set by
+   *  setGripProgress, which also pauses playback; cleared by play/loop or
+   *  any real throw. Never creates pendingThrow/flight/fuse/explosion. */
+  let gripScrub: number | null = null;
+  /** Marker releases performed this session (automation asserts ≥1). */
+  let releaseCount = 0;
+  /** |heldRoot − flight.pos| at the last marker handoff, metres (the plan's
+   *  <0.1 mm gate; makeFlight copies the position so this is ~0). */
+  let lastHandoffErrorM: number | null = null;
+  /** The PREVIOUS frame's rendered GLB root — the release velocity source
+   *  ((current − previous) / max(dt, 1/240)). */
+  let prevPropRoot: BakedPropPose | null = null;
+  /** This frame's clip outputs, produced in the hands block and consumed by
+   *  the prop block further down the callback. clipPropPose/gripFrame
+   *  PERSIST as the last rendered root/controller frame (a marker firing
+   *  while the hands are hidden still hands off from a real position). */
+  let clipPropPose: BakedPropPose | null = null;
+  /** The latest grip controller frame (sample source + propHeld flag). */
+  let gripFrame: ReturnType<typeof stepGripMotion>['frame'] | null = null;
+  let clipSample = { frame0: 0, frame1: 0, alpha: 0 };
+  let clipReleaseNow = false;
+  /** Who owns the GLB this frame: 'hand' | 'flight' | 'gone'. */
+  let propOwner: 'hand' | 'flight' | 'gone' = 'gone';
+  /** Auto-loop hold before the scripted toss (s): long enough to read the
+   *  firm grip, short enough that the loop stays watchable. */
+  const GRIP_LOOP_HOLD_SEC = 0.45;
+  /** Contact-hull diagnostic (the spec's prop-anchor/contact-hull view): a
+   *  wireframe sphere at the authored grip seat plus the bundle-axis
+   *  capsule (contactRadiusM wide, contactBelow..contactAbove along the
+   *  axis). Unit geometry, rescaled once the clip contract is available. */
+  const contactDebug = new THREE.Group();
+  const contactSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0x66ffcc, wireframe: true }));
+  const contactAxis = new THREE.Mesh(
+    new THREE.CylinderGeometry(1, 1, 1, 10, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x66aaff, wireframe: true }));
+  contactDebug.add(contactSphere, contactAxis);
+  contactDebug.visible = false;
+  scene.add(contactDebug);
+  let contactDebugOn = false;
+
+  // Scratch for the contact diagnostic (avoid per-frame allocation).
+  const cdQ = new THREE.Quaternion();
+  const cdGrip = new THREE.Vector3();
+  const cdAxis = new THREE.Vector3();
+  const cdUp = new THREE.Vector3(0, 1, 0);
+  /** Places the contact-hull diagnostic on one ANIMATED hand pose: the
+   *  sphere at the authored grip seat (centre + q·gripLocal), the capsule
+   * spanning contactBelow..contactAbove along the authored bundle axis —
+   * the exact hull the six poses were solved against. */
+  function poseContactDebug(hand: BakedHandPose, prop: DynamitePropContract): void {
+    cdQ.set(hand.quaternion[0], hand.quaternion[1], hand.quaternion[2], hand.quaternion[3]);
+    cdGrip.set(prop.gripLocal[0], prop.gripLocal[1], prop.gripLocal[2]).applyQuaternion(cdQ)
+      .add(cdAxis.set(hand.centre[0], hand.centre[1], hand.centre[2]));
+    cdAxis.set(prop.axisLocal[0], prop.axisLocal[1], prop.axisLocal[2])
+      .applyQuaternion(cdQ).normalize();
+    contactDebug.position.copy(cdGrip);
+    contactDebug.quaternion.setFromUnitVectors(cdUp, cdAxis);
+    contactSphere.scale.setScalar(prop.contactRadiusM);
+    contactAxis.scale.set(
+      prop.contactRadiusM, prop.contactBelowM + prop.contactAboveM, prop.contactRadiusM);
+    contactAxis.position.set(0, (prop.contactAboveM - prop.contactBelowM) / 2, 0);
+  }
+
+  /** Poses the clip's GLB purely by OWNERSHIP (F2 step 3):
+   *  hand — while propHeld, the root transform derived from this frame's
+   *         animated baked pose (clipPropPose);
+   *  marker — on releaseNow, the parked pending throw releases at the
+   *         CURRENT rendered root with the previous root's velocity
+   *         ((cur−prev)/max(dt,1/240)), and the GLB is re-posed from the
+   *         NEW flight.pos on this SAME render frame with the rendered
+   *         orientation preserved verbatim (releaseQuaternion) — the
+   *         handoff must not move the bundle (tracked in lastHandoffErrorM);
+   *  flight — afterwards the deterministic sim exclusively owns it
+   *         (visible from the god cam too, like the procedural stick);
+   *  gone — at rest. */
+  function poseClipProp(dt: number): void {
+    const prop = dynamiteProp;
+    if (!prop) return;
+    if (clipReleaseNow && clipPropPose && fpvMode.pendingThrow !== null) {
+      const prev = prevPropRoot ?? clipPropPose; // first-frame fallback: no motion yet
+      const vel = handReleaseVelocity(prev.position, clipPropPose.position, dt);
+      fpvMode = releasePendingThrow(fpvMode, clipPropPose.position, vel);
+      const f = fpvMode.flight!;
+      lastHandoffErrorM = Math.hypot(
+        f.pos[0] - clipPropPose.position[0],
+        f.pos[1] - clipPropPose.position[1],
+        f.pos[2] - clipPropPose.position[2]);
+      releaseCount++;
+      prop.pose({
+        mode: 'flight', position: f.pos, spin: f.spin, fuseBurning: true,
+        releaseQuaternion: clipPropPose.quaternion,
+      });
+      propOwner = 'flight';
+      prevPropRoot = {
+        position: [f.pos[0], f.pos[1], f.pos[2]],
+        quaternion: [...clipPropPose.quaternion] as [number, number, number, number],
+      };
+      return;
+    }
+    if (fpvMode.flight) {
+      prop.pose({
+        mode: 'flight', position: fpvMode.flight.pos,
+        spin: fpvMode.flight.spin, fuseBurning: true,
+      });
+      propOwner = 'flight';
+      prevPropRoot = null;
+      return;
+    }
+    if (clipPropPose && gripFrame?.propHeld && fpvMode.mode === 'fpv') {
+      prop.pose({
+        mode: 'hand', position: clipPropPose.position,
+        quaternion: clipPropPose.quaternion,
+        cooking: fpvMode.fpv.cook.phase === 'cooking',
+      });
+      propOwner = 'hand';
+      prevPropRoot = {
+        position: [clipPropPose.position[0], clipPropPose.position[1], clipPropPose.position[2]],
+        quaternion: [...clipPropPose.quaternion] as [number, number, number, number],
+      };
+      return;
+    }
+    prop.pose({ mode: 'gone' });
+    propOwner = 'gone';
+    prevPropRoot = null;
+  }
   const stick = createStickProp();
   scene.add(stick.object);
   const cig = createCigaretteProp();
@@ -1440,10 +1624,42 @@ async function main() {
       : EMPTY_FPV_INPUT;
     fpvMouseDx = 0; fpvMouseDy = 0; fpvPress = false; fpvRelease = false;
     const fpvNow = now / 1000;
+    // X1.27 task F2: CLIP mode alone defers the throw — the release signal
+    // parks a pendingThrow and the grip clip's authored marker owns the
+    // spawn (poseClipProp below). Prims AND the static baked hand keep the
+    // default immediate behavior, unchanged.
     const fpvStep = stepFpvMode(
-      fpvMode, fpvInput, dt, fpvNow, fpvWorld, gorePort, FPV_FLOOR_BOUNDS);
+      fpvMode, fpvInput, dt, fpvNow, fpvWorld, gorePort, FPV_FLOOR_BOUNDS,
+      handFieldUi.field === 'clip' ? 'deferred' : 'immediate');
     fpvMode = fpvStep.state;
     const ff = fpvStep.frame;
+
+    // — X1.27 grip clip drive (F2 steps 2–4) ————————————————
+    // (clipReleaseNow resets each frame; clipPropPose/gripFrame persist as
+    //  the LAST rendered root/controller frame so a marker that fires while
+    //  the hands are hidden still hands off from a real position.)
+    clipReleaseNow = false;
+    if (handFieldUi.field === 'clip' && handClip && dynamiteProp) {
+      // (F2 step 4) the next bundle presents ONLY at recovery: no flight,
+      // no parked throw, hand phase back at idle|light|cook.
+      const presented = clipBundlePresented(fpvMode, ff.handPhase.phase);
+      // Auto-loop: a settled held bundle tosses itself after the hold, so
+      // the loop capture shows close → hold → toss → detonate → next close.
+      if (gripPlayback === 'loop' && gripMotion.phase === 'held'
+        && gripMotion.elapsedSec >= GRIP_LOOP_HOLD_SEC && fpvMode.pendingThrow === null) {
+        playGripThrow(0.5);
+      }
+      // (2) the parked pendingThrow IS the controller's throw-request edge
+      //     (consumed only from held; forceThrow above parks it this frame).
+      const throwEdge = fpvMode.pendingThrow !== null;
+      // (3) step the controller from frame dt. PAUSE freezes the clock at
+      //     0 — the scrub is visual-only and never advances gameplay state.
+      const gdt = gripPlayback === 'pause' ? 0 : dt * gripSpeed;
+      const g = stepGripMotion(
+        gripMotion, { bundlePresented: presented, throwRequested: throwEdge }, gdt);
+      gripMotion = g.state;
+      gripFrame = g.frame;
+    }
 
     // Hands: the pure pose + jiggle landed in fpvMode; march the world-space
     // prims (also the splash target for the next detonation).
@@ -1457,13 +1673,13 @@ async function main() {
         const nL = posedLocalHands.left.length;
         const w = splitHandWounds(handWounds, nL);
         const proj = handSheetProjections(posedLocalHands, ff.eye, ff.yaw, ff.pitch);
-        // BAKED (X1.26): only the right hand marches, from the volume. The
-        // wound ring still uploads (wounds stamp onto the baked field after
-        // either branch), and the volume's rigid placement + clamped distal
-        // warp derive from this frame's prim pair — unjiggled (pose+bob; the
-        // jiggle points pinned AT their targets) versus jiggled (the live
-        // Verlet state) — via hand-volume-pose.
-        if (handFieldUi.field === 'baked') {
+        // BAKED (X1.26) and CLIP (X1.27): only the right hand marches, from
+        // the volume. The wound ring still uploads (wounds stamp onto the
+        // baked field after either branch), and the volume's rigid placement
+        // + clamped distal warp derive from this frame's prim pair —
+        // unjiggled (pose+bob; the jiggle points pinned AT their targets)
+        // versus jiggled (the live Verlet state) — via hand-volume-pose.
+        if (handFieldUi.field === 'baked' || handFieldUi.field === 'clip') {
           handViews.right.update(lastHandWorld.slice(nL), w.right);
           const tgt = handPoseTargets(HAND_REST, ff.handPose);
           const still = {
@@ -1472,9 +1688,33 @@ async function main() {
           };
           const unjiggledWorld = handPrimsToWorld(
             posedHandPrims(HAND_REST, ff.handPose, still), ff.eye, ff.yaw, ff.pitch);
-          const pose = bakedHandPose(
+          const base = bakedHandPose(
             unjiggledWorld.slice(nL), lastHandWorld.slice(nL), proj.right);
-          handViews.right.setVolumePose({ ...pose, warpEnabled: handFieldUi.warp });
+          if (handFieldUi.field === 'baked') {
+            // The X1.26 isolated static hand, unchanged.
+            handViews.right.setVolumePose({ ...base, warpEnabled: handFieldUi.warp });
+          } else if (handClip && gripFrame) {
+            // (4) the adjacent-frame sample — manual scrub overrides grip01
+            //     VISUALLY (frame sample only; never gameplay state).
+            const grip01 = gripScrub !== null
+              ? Math.max(0, Math.min(1, gripScrub))
+              : gripFrame.grip01;
+            clipSample = gripFrameSample(handClip.manifest, grip01);
+            handViews.right.setVolumeFrame(
+              clipSample.frame0, clipSample.frame1, clipSample.alpha);
+            // (5) compose the camera-relative underhand wrist arc through
+            //     THIS frame's hand-placement basis — never the scene
+            //     camera's quaternion, which lands later and carries kick.
+            const animated = applyGripMotion(
+              base, gripFrame, gripCameraQuaternion(ff.yaw, ff.pitch));
+            handViews.right.setVolumePose({ ...animated, warpEnabled: handFieldUi.warp });
+            // (6) the GLB root derives from that EXACT animated pose.
+            clipPropPose = bakedDynamitePose(animated, handClip.manifest.prop);
+            clipReleaseNow = gripFrame.releaseNow;
+            if (contactDebugOn) {
+              poseContactDebug(animated, handClip.manifest.prop);
+            }
+          }
           handViews.right.setVisible(true);
           handViews.left.setVisible(false);
         } else {
@@ -1496,7 +1736,10 @@ async function main() {
     updateChargeHud(ff.mode, ff.charge);
     if (fpvReadEl) {
       fpvReadEl.textContent = ff.mode === 'fpv'
-        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length} · sheet ${handSheetsBaked ? 'baked' : 'proc'} · vol ${handFieldUi.load}`
+        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length} · sheet ${handSheetsBaked ? 'baked' : 'proc'}`
+          + (handFieldUi.field === 'clip'
+            ? ` · grip ${gripMotion.phase}${gripScrub !== null ? ' (scrub)' : ''} rel ${releaseCount}`
+            : ` · vol static ${handFieldUi.staticLoad}/clip ${handFieldUi.clipLoad}`)
         : `god · ${ff.flight ? 'bundle away' : 'idle'} · bursts ${burstLayer.usingAtlas ? 'seq' : 'proc'}`;
     }
 
@@ -1664,18 +1907,22 @@ async function main() {
       camera.lookAt(camTarget);
     }
 
-    // Held props: the bundle in the lead fist, the lighter in the support
-    // fist. Both seats come from handPropPoses, which reads the POSED prims —
-    // so they ride the pose, the idle bob and the jiggle, and (the bug this
-    // replaced) they land in WORLD space instead of camera-local coordinates
-    // used as world, which parked the bundle at the arena origin.
+    // Held props. CLIP mode (F2 step 3): the GLB is posed purely by
+    // ownership — hand root while held, the NEW flight on the marker frame,
+    // flight afterwards (a god-cam spectator watches the arc), gone at
+    // rest — and the procedural pair stays suppressed entirely (never the
+    // twain, the plan's coherence rule). PRIMS: the existing stick +
+    // cigarette path, byte-for-byte. BAKED: the isolated hand, no props.
+    const fieldPolicy = handFieldFrame(handFieldUi, ff.mode, handsEnabled);
     const propSeats = ff.mode === 'fpv' && handsEnabled && posedLocalHands
-      && handFieldFrame(handFieldUi, ff.mode, handsEnabled).heldProps
+      && fieldPolicy.primitiveProps
       ? handPropPoses(posedLocalHands, ff.eye, ff.yaw, ff.pitch)
       : null;
-    // Stick: ballistic once thrown (visible in god mode too — a spectator
-    // watches the arc), held in the lead hand between throws.
-    if (ff.flight) {
+    if (handFieldUi.field === 'clip' && dynamiteProp) {
+      poseClipProp(dt);
+      dynamiteProp.flicker(
+        fpvNow, propOwner === 'hand' && fpvMode.fpv.cook.phase === 'cooking');
+    } else if (ff.flight) {
       stick.pose({ mode: 'flight', pos: ff.flight.pos, spin: ff.flight.spin, fuseBurning: true });
       stick.flicker(fpvNow, false);
     } else if (propSeats && STICK_IN_HAND.includes(ff.handPhase.phase)) {
@@ -2061,12 +2308,18 @@ async function main() {
     get: () => handTexStrength,
     set: (v) => { handTexStrength = v; applyHandSheetTuning(); },
   });
-  // ——— Baked hand field (X1.26): the look gate's controls ——————————
-  // `hand field` A/Bs prims ↔ baked (refused until the volume loaded);
-  // `hand warp` gates the distal jiggle domain warp (static first!);
-  // `hand clay` toggles the neutral-clay shape-gate look.
+  // ——— Hand field + grip clip (X1.26 look gate → X1.27 task F3) ————————
+  // `hand field` cycles prims → baked → clip (a hop the policy refuses —
+  //  load not ready — shows the pending state in the label and retries on
+  //  the next press); `hand warp` gates the distal jiggle domain warp
+  //  (static first!); `hand clay` toggles the neutral-clay look; `grip` —
+  //  play/pause/loop; `grip progress` — the visual-only scrubber; `grip
+  //  speed` — the controller-clock multiplier; `contact debug` — the
+  //  authored grip-seat/bundle-hull diagnostic. Clip/GLB load errors show
+  //  inline below the section.
   const handFieldBtn = addButton(fpvBox, 'hand field: prims', () => {
-    setHandField(handFieldUi.field === 'prims' ? 'baked' : 'prims');
+    const order: HandFieldMode[] = ['prims', 'baked', 'clip'];
+    setHandField(order[(order.indexOf(handFieldUi.field) + 1) % order.length]!);
   });
   const handWarpBtn = addButton(fpvBox, 'hand warp: off', () => {
     setHandWarp(!handFieldUi.warp);
@@ -2074,6 +2327,75 @@ async function main() {
   const handClayBtn = addButton(fpvBox, 'hand clay: off', () => {
     setHandClay(!handFieldUi.clay);
   });
+  const gripPlaybackBtn = addButton(fpvBox, 'grip: play', () => {
+    setGripPlayback(
+      gripPlayback === 'play' ? 'pause' : gripPlayback === 'pause' ? 'loop' : 'play');
+  });
+  addSlider(fpvBox, {
+    label: 'grip progress', min: 0, max: 1, step: 0.01,
+    get: () => gripScrub ?? gripFrame?.grip01 ?? 0,
+    set: (v) => { setGripProgress(v); },
+  });
+  addSlider(fpvBox, {
+    label: 'grip speed', min: 0.25, max: 2, step: 0.05,
+    get: () => gripSpeed,
+    set: (v) => { setGripSpeed(v); },
+  });
+  const contactDebugBtn = addButton(fpvBox, 'contact debug: off', () => {
+    setContactDebug(!contactDebugOn);
+  });
+  /** Inline clip/GLB (and static) load errors — exposed, never swallowed. */
+  const handLoadErrorEl = document.createElement('div');
+  handLoadErrorEl.style.cssText =
+    'font:11px monospace;color:#ff6464;white-space:pre-wrap;max-width:230px;';
+  fpvBox.appendChild(handLoadErrorEl);
+  function refreshHandLoadErrors() {
+    handLoadErrorEl.textContent = [
+      staticVolumeError ? `static: ${staticVolumeError}` : '',
+      handFieldUi.clipError ? `clip: ${handFieldUi.clipError}` : '',
+    ].filter(Boolean).join('\n');
+  }
+  /** Playback setter: play/loop clear the visual scrub override (scrub is
+   *  pause-only by construction); pause just freezes the controller clock. */
+  function setGripPlayback(mode: 'pause' | 'play' | 'loop') {
+    gripPlayback = mode;
+    if (mode !== 'pause') gripScrub = null;
+    gripPlaybackBtn.textContent = `grip: ${mode}`;
+  }
+  /** SCRUB IS VISUAL ONLY (F3 step 2): sets the manual grip01 that drives
+   *  the frame sample + held prop pose, and pauses the controller clock so
+   *  the pose holds. It never parks a pendingThrow, never spawns a flight,
+   *  and touches no fuse — only a pointer release or playGripThrow enters
+   *  the deferred throw flow. */
+  function setGripProgress(grip01: number) {
+    gripScrub = Number.isFinite(grip01) ? Math.max(0, Math.min(1, grip01)) : null;
+    gripPlayback = 'pause';
+    gripPlaybackBtn.textContent = 'grip: pause';
+  }
+  function setGripSpeed(multiplier: number) {
+    gripSpeed = Number.isFinite(multiplier) ? Math.max(0.05, Math.min(4, multiplier)) : 1;
+  }
+  function setContactDebug(on: boolean) {
+    contactDebugOn = on;
+    contactDebug.visible = on;
+    if (!on) return;
+    // Rescale to the loaded contract immediately (a fresh toggle should not
+    // wait a frame), and re-pose on the next clip frame from the drive.
+    if (handClip) {
+      contactSphere.scale.setScalar(handClip.manifest.prop.contactRadiusM);
+    }
+    contactDebugBtn.textContent = `contact debug: ${on ? 'on' : 'off'}`;
+  }
+  /** The scripted toss: parks a DEFERRED pending throw from the stored aim
+   *  (forceThrow 'deferred'); the clip's authored marker performs the
+   *  ownership handoff. The only automation path into the throw flow. */
+  function playGripThrow(charge = 1) {
+    gripScrub = null;
+    gripPlayback = 'play';
+    gripPlaybackBtn.textContent = 'grip: play';
+    fpvMode = forceThrow(
+      fpvMode, Math.max(0, Math.min(1, charge)), performance.now() / 1000, 'deferred');
+  }
   /** Swaps the pure UI state and applies its side effects to the views.
    *  Field changes rebind the right view's march field and its sheet (the
    *  prim grip sheet does not fit the open baked hand); label refreshes are
@@ -2086,7 +2408,34 @@ async function main() {
         if (!handVolume) throw new Error('baked hand field: volume not loaded');
         handViews.right.setField('volume', handVolume);
         handViews.right.setSheet(null);
+      } else if (next.field === 'clip') {
+        if (!handClip || !dynamiteProp) {
+          throw new Error('clip hand field: clip/GLB not loaded');
+        }
+        handViews.right.setField('volume', handClip);
+        handViews.right.setSheet(null);
+        // The procedural pair goes dark for the whole clip session — the
+        // clip's GLB replaces it and the plan forbids pairing the two.
+        stick.pose({ mode: 'gone' });
+        cig.pose({ mode: 'gone' });
+        // A fresh entry re-presents naturally: the controller restarts at
+        // open and the first frame's clipBundlePresented steps it into
+        // closing (open → firm-grip from the top).
+        gripMotion = makeGripMotion(false);
+        gripScrub = null;
       } else {
+        // Leaving clip: the GLB goes gone, and a still-parked pending throw
+        // releases EXACTLY as the immediate path would have (at the aim's
+        // throw origin, zero hand velocity) — no input swallowed, no
+        // invisible hand-owned projectile left parked.
+        if (prev.field === 'clip') {
+          dynamiteProp?.pose({ mode: 'gone' });
+          propOwner = 'gone';
+          gripScrub = null;
+          if (fpvMode.pendingThrow !== null) {
+            fpvMode = releasePendingThrow(fpvMode, throwOrigin(fpvMode.fpv), [0, 0, 0]);
+          }
+        }
         handViews.right.setField('prims');
         handViews.right.setSheet(handSheets.grip);
       }
@@ -2097,9 +2446,12 @@ async function main() {
       handViews.left.setVisible(vis.leftHand);
       handViews.right.setVisible(vis.rightHand);
     }
-    handFieldBtn.textContent = `hand field: ${next.field}${next.load !== 'ready' ? ` (${next.load})` : ''}`;
+    const suffix = next.field === 'baked' && next.staticLoad !== 'ready' ? ` (${next.staticLoad})`
+      : next.field === 'clip' && next.clipLoad !== 'ready' ? ` (${next.clipLoad})` : '';
+    handFieldBtn.textContent = `hand field: ${next.field}${suffix}`;
     handWarpBtn.textContent = `hand warp: ${next.warp ? 'on' : 'off'}`;
     handClayBtn.textContent = `hand clay: ${next.clay ? 'on' : 'off'}`;
+    refreshHandLoadErrors();
   }
   function setHandField(field: HandFieldMode) {
     applyHandField(requestHandField(handFieldUi, field));
@@ -2333,8 +2685,12 @@ async function main() {
     enterFpv,
     exitFpv,
     /** Automation throw: releases a bundle at `charge` (0..1) from the
-     *  stored FPV aim without the hold loop. Works in god mode too. */
+     *  stored FPV aim without the hold loop. Works in god mode too. In
+     *  CLIP mode this routes through playGripThrow — the deferred marker
+     *  flow — because an immediate forceThrow would pair the clip hand
+     *  with a second, differently sized bundle (forbidden by the spec). */
     throwDynamite(charge = 1) {
+      if (handFieldUi.field === 'clip') { playGripThrow(charge); return; }
       fpvMode = forceThrow(
         fpvMode, Math.max(0, Math.min(1, charge)), performance.now() / 1000);
     },
@@ -2355,13 +2711,28 @@ async function main() {
     /** Hands A/B — the spec's perf gate is benchGpu with hands on vs off. */
     setFpvHands,
     // ——— X1.26 baked hand field ——————————————————
-    /** The `hand field` button's console twin (baked is refused until the
-     *  volume loaded — check `fpv.handVolume`). */
+    /** The `hand field` button's console twin (baked needs the static
+     *  volume, clip needs the combined clip+GLB settlement — check
+     *  `fpv.staticLoad` / `fpv.clipLoad`). */
     setHandField,
     /** Distal jiggle domain-warp gate (the second look gate; static first). */
     setHandWarp,
     /** Neutral-clay look toggle for the baked shape gate. */
     setHandClay,
+    // ——— X1.27 grip clip (task F3 step 3: deterministic capture hooks) ———
+    /** Playback mode: 'pause' freezes the controller clock (scrub), 'play'
+     *  steps it from frame dt, 'loop' additionally auto-tosses each held
+     *  bundle after a short hold. */
+    setGripPlayback,
+    /** Visual-only scrub of grip01 (pauses playback; never gameplay). */
+    setGripProgress,
+    /** Controller-clock multiplier (1 = authored timing). */
+    setGripSpeed,
+    /** The scripted underhand toss — parks the deferred pending throw; the
+     *  clip's authored release marker performs the ownership handoff. */
+    playGripThrow,
+    /** The authored grip-seat/bundle-hull wireframe diagnostic. */
+    setContactDebug,
     get fpv() {
       return {
         mode: fpvMode.mode,
@@ -2376,8 +2747,38 @@ async function main() {
         handField: handFieldUi.field,
         handWarp: handFieldUi.warp,
         handClay: handFieldUi.clay,
-        handVolume: handFieldUi.load,
-        handVolumeError: handFieldUi.error,
+        // Named load states (F1): static = the X1.26 volume, clip = the
+        // combined clip+GLB settlement. `handVolume`/`handVolumeError` are
+        // the X1.26 keys kept for continuity.
+        handVolume: handFieldUi.staticLoad,
+        handVolumeError: staticVolumeError,
+        staticLoad: handFieldUi.staticLoad,
+        clipLoad: handFieldUi.clipLoad,
+        /** Fine-grained clip asset state: loading → clip-ready → glb-ready. */
+        glbLoad: clipLoadDetail,
+        clipError: handFieldUi.clipError,
+        // — grip clip drive (deterministic capture assertions) —
+        gripPhase: gripMotion.phase,
+        gripElapsedSec: +gripMotion.elapsedSec.toFixed(4),
+        /** The EFFECTIVE grip01 this frame (scrub override when set). */
+        grip01: gripScrub ?? gripFrame?.grip01 ?? null,
+        grip01Controller: gripFrame?.grip01 ?? null,
+        gripScrub,
+        gripPlayback,
+        gripSpeed,
+        frame0: clipSample.frame0,
+        frame1: clipSample.frame1,
+        frameAlpha: +clipSample.alpha.toFixed(4),
+        releaseCount,
+        propOwner,
+        /** The last hand-derived GLB root (world metres) — the handoff
+         *  position source. */
+        glbRoot: clipPropPose
+          ? [clipPropPose.position[0], clipPropPose.position[1], clipPropPose.position[2]]
+          : null,
+        /** |heldRoot − flight.pos| at the latest marker handoff (m); the
+         *  gate is < 1e-4 (0.1 mm). */
+        handoffErrorM: lastHandoffErrorM,
         burstsUseAtlas: burstLayer.usingAtlas,
       };
     },

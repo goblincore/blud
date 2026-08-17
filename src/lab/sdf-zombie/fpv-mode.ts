@@ -433,19 +433,29 @@ export function splitHandWounds<T extends { primIdx: number }>(
   return { left, right };
 }
 
-// ——— Baked hand field (X1.26) ———————————————————————————————————————————
+// ——— Hand field (X1.26 baked → X1.27 task F1: three fields) ——————————­
 
 /** Which field renders the FPV hands: the existing capsule prims (default,
- *  the complete interaction path) or the baked R16F right-hand volume. */
-export type HandFieldMode = 'prims' | 'baked';
+ *  the complete interaction path), the baked R16F STATIC right-hand volume
+ *  (X1.26), or the six-frame baked CLIP (X1.27 — clip mode alone defers
+ *  the throw to the authored release marker). */
+export type HandFieldMode = 'prims' | 'baked' | 'clip';
 
-/** The baked volume's load lifecycle, surfaced on `__sdfLab.fpv`. */
+/** A volume's load lifecycle, surfaced on `__sdfLab.fpv`. */
 export type HandVolumeLoadState = 'loading' | 'ready' | 'error';
 
 /** The lab-side state behind the `hand field` / `hand warp` / `hand clay`
  *  panel buttons. Pure data — the view (webgpu/lab-main.ts) binds it to the
  *  DOM and the GPU views, which is why the transitions live here where they
- *  can be unit-tested without a renderer. */
+ *  can be unit-tested without a renderer.
+ *
+ *  `clipLoad` covers the clip AND its hash-matched GLB as ONE settlement:
+ *  the lab settles it ready only after both objects loaded (the plan's
+ *  coherence contract), so `clipLoad === 'ready'` reads as "clip + GLB
+ *  ready" and the two can never be mixed. The static volume's failure
+ *  MESSAGE is not policy state — the lab owns the load promise and surfaces
+ *  the text itself; `clipError` is here because the clip's failure decides
+ *  the fallback FIELD. */
 export interface HandFieldUi {
   field: HandFieldMode;
   /** Distal jiggle domain warp on the baked field (the SECOND gate — the
@@ -453,50 +463,123 @@ export interface HandFieldUi {
   warp: boolean;
   /** Neutral-clay look toggle for the shape gate. */
   clay: boolean;
-  load: HandVolumeLoadState;
-  /** The failure message when `load === 'error'` (exposed, not swallowed). */
-  error: string;
+  staticLoad: HandVolumeLoadState;
+  clipLoad: HandVolumeLoadState;
+  clipError: string;
 }
 
-/** Fresh state: primitive mode, warp and clay off, volume still loading. */
+/** Fresh state: primitive mode, warp and clay off, both volumes loading. */
 export function makeHandFieldUi(): HandFieldUi {
-  return { field: 'prims', warp: false, clay: false, load: 'loading', error: '' };
+  return {
+    field: 'prims', warp: false, clay: false,
+    staticLoad: 'loading', clipLoad: 'loading', clipError: '',
+  };
 }
 
 /**
- * Requests a field switch. `baked` is REFUSED until the volume loaded —
- * there is nothing to march otherwise — and any refusal returns the state
- * unchanged. `prims` is always honoured (it is also the failed-load
- * fallback).
+ * Requests a field switch. `baked` is REFUSED until the static volume
+ * loaded; `clip` is refused until the combined clip+GLB settlement loaded
+ * (`settleHandClip`) — there is nothing to march otherwise — and any refusal
+ * returns the state unchanged. `prims` is always honoured (it is also the
+ * failed-load fallback).
  */
 export function requestHandField(ui: HandFieldUi, field: HandFieldMode): HandFieldUi {
-  if (field === 'baked' && ui.load !== 'ready') return ui;
+  if (field === 'baked' && ui.staticLoad !== 'ready') return ui;
+  if (field === 'clip' && ui.clipLoad !== 'ready') return ui;
   if (field === ui.field) return ui;
   return { ...ui, field };
 }
 
 /**
- * Settles the volume load. Success keeps the current field (the volume is
- * bound but no mode switches — primitive stays primitive until asked);
- * failure records the message and FORCES prims, which is also why a load
- * error can never strand the lab in a dead baked mode.
+ * Settles the STATIC (X1.26) volume load. Success keeps the current field
+ * (the volume is bound but no mode switches — primitive stays primitive
+ * until asked); failure FORCES prims, which is also why a static load error
+ * can never strand the lab in a dead baked or clip mode. Idempotent.
  */
-export function settleHandVolume(ui: HandFieldUi, ok: boolean, error = ''): HandFieldUi {
-  if (ok) return ui.load === 'ready' ? ui : { ...ui, load: 'ready' };
-  return { ...ui, load: 'error', error, field: 'prims' };
+export function settleStaticHandVolume(ui: HandFieldUi, ok: boolean): HandFieldUi {
+  if (ok) return ui.staticLoad === 'ready' ? ui : { ...ui, staticLoad: 'ready' };
+  return { ...ui, staticLoad: 'error', field: 'prims' };
 }
 
-/** The per-frame FPV tail policy for the current field: baked mode shows
- *  ONLY the relaxed right hand and suppresses the held props (the look
- *  gate's isolation — spec-sanctioned, not a regression). */
+/**
+ * Settles the CLIP load — call it only after the v2 manifest/texture AND its
+ * hash-matched GLB are both ready (`ok`), or when either failed. Success
+ * records readiness without switching modes; failure records the one
+ * `clipError` and falls back to the accepted X1.26 static baked hand when
+ * the static volume is ready — otherwise prims — exactly the lab's
+ * "never pair the clip with a procedural prop" fallback ladder.
+ */
+export function settleHandClip(ui: HandFieldUi, ok: boolean, error = ''): HandFieldUi {
+  if (ok) {
+    return ui.clipLoad === 'ready' && ui.clipError === ''
+      ? ui
+      : { ...ui, clipLoad: 'ready', clipError: '' };
+  }
+  const field: HandFieldMode = ui.staticLoad === 'ready' ? 'baked' : 'prims';
+  return { ...ui, clipLoad: 'error', clipError: error, field };
+}
+
+/** The per-frame FPV tail policy for the current field: `baked` and `clip`
+ *  show ONLY the right hand (the look gate's isolation); `prims` shows both
+ *  hands and its procedural props; `clip` shows the authored GLB bundle in
+ *  place of them. */
+export interface HandFieldFramePolicy {
+  leftHand: boolean;
+  rightHand: boolean;
+  /** The procedural stick + cigarette props (the primitive path's own). */
+  primitiveProps: boolean;
+  /** The clip's hash-matched derived GLB bundle. */
+  clipStick: boolean;
+}
+
 export function handFieldFrame(
   ui: HandFieldUi,
   mode: FpvModeName,
   handsEnabled: boolean,
-): { leftHand: boolean; rightHand: boolean; heldProps: boolean } {
+): HandFieldFramePolicy {
   const right = mode === 'fpv' && handsEnabled;
   const prims = ui.field === 'prims';
-  return { leftHand: right && prims, rightHand: right, heldProps: right && prims };
+  return {
+    leftHand: right && prims,
+    rightHand: right,
+    primitiveProps: right && prims,
+    clipStick: right && ui.field === 'clip',
+  };
+}
+
+// ——— X1.27 task F2: pure helpers the clip-mode frame drive consumes ——————
+
+/**
+ * Whether the grip clip may present its NEXT bundle: only at full recovery —
+ * no live flight, no parked deferred throw, and the cook machine back at a
+ * holding phase (`idle | light | cook` — hands.ts's STICK_IN_HAND set; the
+ * `throw`/`recover` phases are the previous toss still playing out). While a
+ * holding phase persists, a COMPLETED close stays held at grip 1 — a new
+ * presentation is what restarts open → firm-grip.
+ */
+export function clipBundlePresented(state: FpvModeState, handPhase: HandPhase): boolean {
+  return state.flight === null
+    && state.pendingThrow === null
+    && (handPhase === 'idle' || handPhase === 'light' || handPhase === 'cook');
+}
+
+/** The smallest dt a release-velocity derivation may divide by (s): the
+ *  bench/lab frame floor — a hidden-tab stall must not fake an enormous
+ *  hand velocity at the marker. */
+export const HAND_RELEASE_MIN_DT_SEC = 1 / 240;
+
+/**
+ * The marker-frame hand-anchor velocity for a deferred release:
+ * `(currentRoot − previousRoot) / max(dt, 1/240)`, metres/second, from the
+ * two RENDERED GLB roots the lab keeps. Pure — no input is mutated.
+ */
+export function handReleaseVelocity(previousRoot: Vec3, currentRoot: Vec3, dt: number): Vec3 {
+  const d = Number.isFinite(dt) && dt > HAND_RELEASE_MIN_DT_SEC ? dt : HAND_RELEASE_MIN_DT_SEC;
+  return [
+    (currentRoot[0] - previousRoot[0]) / d,
+    (currentRoot[1] - previousRoot[1]) / d,
+    (currentRoot[2] - previousRoot[2]) / d,
+  ];
 }
 
 // ——— Camera kick ——————————————————————————————————————————————————————————

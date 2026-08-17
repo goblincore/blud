@@ -7,10 +7,11 @@
 // envelope, applyExplosionEffect routing, and determinism.
 import { describe, it, expect } from 'vitest';
 import {
-  applyExplosionEffect, enterFpvMode, exitFpvMode, forceThrow,
-  handFieldFrame, handPoseTargets, handPrimsToWorld, handPropPoses,
-  handSheetProjections, kickAngles, makeFpvMode, makeHandFieldUi,
-  requestHandField, settleHandVolume, splitHandWounds,
+  applyExplosionEffect, clipBundlePresented, enterFpvMode, exitFpvMode,
+  forceThrow, handFieldFrame, handReleaseVelocity, handPoseTargets,
+  handPrimsToWorld, handPropPoses, handSheetProjections, kickAngles,
+  makeFpvMode, makeHandFieldUi, requestHandField, settleHandClip,
+  settleStaticHandVolume, splitHandWounds,
   makeHandJiggle, posedHandPrims, releasePendingThrow, stepFpvMode, stepHandJiggle,
   type FpvGorePort, type FpvKick, type FpvModeState, type FpvWorld,
   type HandFieldUi,
@@ -822,81 +823,168 @@ describe('determinism and pose continuity', () => {
   });
 });
 
-// ——— Baked hand field UI (X1.26 task C2) ————————————————————————————————
+// ——— Hand field UI policy (X1.26 task C2 → X1.27 task F1: clip mode) ————
 
 describe('hand field UI state', () => {
-  it('defaults: prims, warp off, clay off, volume loading', () => {
+  it('fresh state: prims, warp/clay off, BOTH loads pending, no clip error', () => {
     expect(makeHandFieldUi()).toEqual({
-      field: 'prims', warp: false, clay: false, load: 'loading', error: '',
+      field: 'prims', warp: false, clay: false,
+      staticLoad: 'loading', clipLoad: 'loading', clipError: '',
     });
   });
 
-  it('refuses baked until the volume is ready', () => {
-    const ui = makeHandFieldUi();
-    expect(requestHandField(ui, 'baked')).toBe(ui);          // loading: refused
-    const errored = settleHandVolume(ui, false, 'fetch 404');
-    expect(requestHandField(errored, 'baked').field).toBe('prims'); // error: refused
-    const ready = settleHandVolume(ui, true);
-    expect(requestHandField(ready, 'baked').field).toBe('baked');   // ready: honoured
+  it('baked requires the STATIC volume ready (clip readiness is irrelevant)', () => {
+    const fresh = makeHandFieldUi();
+    expect(requestHandField(fresh, 'baked')).toBe(fresh);    // static loading: refused
+    const staticErrored = settleStaticHandVolume(fresh, false);
+    expect(requestHandField(staticErrored, 'baked').field).toBe('prims'); // refused
+    const staticReady = settleStaticHandVolume(fresh, true);
+    expect(requestHandField(staticReady, 'baked').field).toBe('baked');   // honoured
+    // Static ready alone does NOT unlock clip.
+    expect(requestHandField(staticReady, 'clip')).toBe(staticReady);
+  });
+
+  it('clip requires the combined clip+GLB settlement (settleHandClip ok)', () => {
+    const staticReady = settleStaticHandVolume(makeHandFieldUi(), true);
+    expect(requestHandField(staticReady, 'clip')).toBe(staticReady); // clip loading
+    const clipReady = settleHandClip(staticReady, true);
+    expect(clipReady.clipLoad).toBe('ready');
+    expect(requestHandField(clipReady, 'clip').field).toBe('clip');
+  });
+
+  it('clip load failure forces baked when static is ready, otherwise prims', () => {
+    const staticReady = settleStaticHandVolume(makeHandFieldUi(), true);
+    const clipFailed = settleHandClip(staticReady, false, 'GLB sha-256 mismatch');
+    expect(clipFailed).toEqual({
+      ...staticReady,
+      clipLoad: 'error', clipError: 'GLB sha-256 mismatch', field: 'baked',
+    });
+
+    const noStatic = settleHandClip(makeHandFieldUi(), false, 'manifest fetch 404');
+    expect(noStatic.field).toBe('prims');
+    expect(noStatic.clipLoad).toBe('error');
+    expect(noStatic.clipError).toBe('manifest fetch 404');
+  });
+
+  it('static settle: success keeps the field; failure forces prims', () => {
+    const fresh = makeHandFieldUi();
+    const ready = settleStaticHandVolume(fresh, true);
+    expect(ready.staticLoad).toBe('ready');
+    expect(ready.field).toBe('prims'); // bound, but no mode switch
+    expect(settleStaticHandVolume(ready, true)).toBe(ready); // idempotent
+
+    // A static failure while IN clip mode drops to the safe primitive path.
+    const inClip = requestHandField(
+      settleHandClip(settleStaticHandVolume(makeHandFieldUi(), true), true), 'clip');
+    const staticFailed = settleStaticHandVolume(inClip, false);
+    expect(staticFailed.staticLoad).toBe('error');
+    expect(staticFailed.field).toBe('prims');
+  });
+
+  it('settleHandClip success is idempotent and clears a stale error', () => {
+    const staticReady = settleStaticHandVolume(makeHandFieldUi(), true);
+    const failedOnce = settleHandClip(staticReady, false, 'x');
+    const ok = settleHandClip(failedOnce, true);
+    expect(ok.clipLoad).toBe('ready');
+    expect(ok.clipError).toBe('');
+    expect(settleHandClip(ok, true)).toBe(ok);
   });
 
   it('prims is always honoured (the failed-load fallback)', () => {
-    let ui: HandFieldUi = settleHandVolume(makeHandFieldUi(), true);
-    ui = requestHandField(ui, 'baked');
-    expect(ui.field).toBe('baked');
-    expect(requestHandField(ui, 'prims').field).toBe('prims');
-  });
-
-  it('settle: success keeps the field; failure forces prims and keeps the message', () => {
-    const loading = makeHandFieldUi();
-    const ready = settleHandVolume(loading, true);
-    expect(ready.load).toBe('ready');
-    expect(ready.field).toBe('prims'); // bound, but no mode switch
-    expect(settleHandVolume(ready, true)).toBe(ready);       // idempotent
-
-    const baked = requestHandField(ready, 'baked');
-    const failed = settleHandVolume(baked, false, 'binary sha-256 mismatch');
-    expect(failed).toEqual({
-      ...baked, load: 'error', error: 'binary sha-256 mismatch', field: 'prims',
-    });
+    const clip = requestHandField(
+      settleHandClip(settleStaticHandVolume(makeHandFieldUi(), true), true), 'clip');
+    expect(clip.field).toBe('clip');
+    expect(requestHandField(clip, 'prims').field).toBe('prims');
   });
 
   it('transitions never mutate the state they were given', () => {
     const ui = makeHandFieldUi();
     const snap = JSON.parse(JSON.stringify(ui));
     requestHandField(ui, 'baked');
-    requestHandField(settleHandVolume(ui, true), 'baked');
-    settleHandVolume(ui, false, 'x');
+    requestHandField(settleStaticHandVolume(ui, true), 'baked');
+    requestHandField(settleHandClip(settleStaticHandVolume(ui, true), true), 'clip');
+    settleHandClip(ui, false, 'x');
+    settleStaticHandVolume(ui, false);
     handFieldFrame(ui, 'fpv', true);
     expect(JSON.parse(JSON.stringify(ui))).toEqual(snap);
   });
 });
 
 describe('hand field frame policy', () => {
-  it('primitive mode shows both hands and the held props in FPV', () => {
-    const ui = settleHandVolume(makeHandFieldUi(), true);
+  /** Fully settled UI (static + clip ready) for per-field assertions. */
+  const settled = () => requestHandField(
+    settleHandClip(settleStaticHandVolume(makeHandFieldUi(), true), true), 'clip');
+
+  it('primitive mode shows both hands and the primitive props in FPV', () => {
+    const ui = settleStaticHandVolume(makeHandFieldUi(), true);
     expect(handFieldFrame(ui, 'fpv', true)).toEqual({
-      leftHand: true, rightHand: true, heldProps: true,
+      leftHand: true, rightHand: true, primitiveProps: true, clipStick: false,
     });
   });
 
-  it('baked mode isolates the right hand and suppresses props', () => {
-    const ui = requestHandField(settleHandVolume(makeHandFieldUi(), true), 'baked');
+  it('baked mode isolates the right hand and suppresses every prop', () => {
+    const ui = requestHandField(settleStaticHandVolume(makeHandFieldUi(), true), 'baked');
     expect(handFieldFrame(ui, 'fpv', true)).toEqual({
-      leftHand: false, rightHand: true, heldProps: false,
+      leftHand: false, rightHand: true, primitiveProps: false, clipStick: false,
     });
   });
 
-  it('god mode or hands-off hides everything, either field', () => {
-    const prims = makeHandFieldUi();
-    const baked = requestHandField(settleHandVolume(prims, true), 'baked');
-    for (const ui of [prims, baked]) {
-      expect(handFieldFrame(ui, 'god', true)).toEqual({
-        leftHand: false, rightHand: false, heldProps: false,
-      });
-      expect(handFieldFrame(ui, 'fpv', false)).toEqual({
-        leftHand: false, rightHand: false, heldProps: false,
-      });
+  it('clip mode shows ONLY the right hand plus the clip stick', () => {
+    const ui = settled();
+    expect(handFieldFrame(ui, 'fpv', true)).toEqual({
+      leftHand: false, rightHand: true, primitiveProps: false, clipStick: true,
+    });
+  });
+
+  it('switching back to prims restores both hands and the primitive props', () => {
+    const prims = requestHandField(settled(), 'prims');
+    expect(handFieldFrame(prims, 'fpv', true)).toEqual({
+      leftHand: true, rightHand: true, primitiveProps: true, clipStick: false,
+    });
+  });
+
+  it('god mode or hands-off hides everything, ANY field', () => {
+    for (const ui of [makeHandFieldUi(), settled()]) {
+      for (const field of ['prims', 'baked', 'clip'] as const) {
+        const f = requestHandField(ui, field);
+        expect(handFieldFrame(f, 'god', true)).toEqual({
+          leftHand: false, rightHand: false, primitiveProps: false, clipStick: false,
+        });
+        expect(handFieldFrame(f, 'fpv', false)).toEqual({
+          leftHand: false, rightHand: false, primitiveProps: false, clipStick: false,
+        });
+      }
     }
+  });
+});
+
+// ——— X1.27 task F2: the lab's pure clip-drive helpers ————————————————————
+
+describe('clipBundlePresented (the next-bundle policy)', () => {
+  it('presents only at recovery: no flight, no pending throw, hand idle|light|cook', () => {
+    const s = enterFpvMode(makeFpvMode());
+    expect(clipBundlePresented(s, 'idle')).toBe(true);
+    expect(clipBundlePresented(s, 'light')).toBe(true);
+    expect(clipBundlePresented(s, 'cook')).toBe(true);
+    expect(clipBundlePresented(s, 'throw')).toBe(false);
+    expect(clipBundlePresented(s, 'recover')).toBe(false);
+    expect(clipBundlePresented({ ...s, flight: makeFlight([0, 1, 0], [0, 0, 0]) }, 'idle'))
+      .toBe(false);
+    expect(clipBundlePresented(
+      { ...s, pendingThrow: { direction: [0, 0, 1], speedMps: 5 } }, 'idle'))
+      .toBe(false);
+  });
+});
+
+describe('handReleaseVelocity (the marker-frame hand velocity)', () => {
+  it('divides the rendered-root delta by dt', () => {
+    expect(handReleaseVelocity([0, 0, 0], [0.1, 0, 0], 0.05)).toEqual([2, 0, 0]);
+  });
+
+  it('floors the divisor at 1/240 s so a stall cannot fake infinite speed', () => {
+    const v = handReleaseVelocity([0, 0, 0], [0.001, 0, 0], 0);
+    expect(v[0]).toBeCloseTo(0.001 * 240, 12);
+    const neg = handReleaseVelocity([0, 0, 0], [0.001, 0, 0], -1);
+    expect(neg[0]).toBeCloseTo(0.001 * 240, 12);
   });
 });
