@@ -45,9 +45,19 @@
 //
 // Render-target discipline copied from sdf-layer/goo-layer: explicit first
 // clear after every (re)allocation (the lazy-init same-encoder trap),
-// autoClear off for the canvas blit, ortho quad camera at z = 1, and the
-// canvas-boundary y-flip as a uniform (target-to-target passes are
-// orientation-preserving on this backend; only the canvas flips).
+// autoClear off for the canvas blit, and the ortho quad camera at z = 1.
+//
+// ORIENTATION (measured on screen, X1.25b — the prior run's 'colour shift'
+// was this, not an encode bug): every target-bound quad pass inverts Y
+// once on this backend, so a naive chain ends up flipped whenever an ODD
+// number of intermediate passes is active (fxaa-only and smear-only came
+// out upside-down while fxaa+smear was accidentally upright — the flips
+// cancelled — which is how it survived the first visual check). The
+// invariant here: the FXAA and blend passes each flip their ENTRY
+// sampling exactly once, so every target always holds the capture's
+// orientation no matter how many passes ran, and the blit's flipY uniform
+// then handles the single canvas boundary identically for every toggle
+// combination.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
@@ -82,7 +92,11 @@ export const POST_AA_FXAA_WGSL = /* wgsl */ `fn postAaFxaa(
 ) -> vec4<f32> {
   let dimsF = vec2<f32>(textureDimensions(srcTex, 0));
   let maxP = vec2<i32>(dimsF) - vec2<i32>(1, 1);
-  let px = clamp(vec2<i32>(floor(texCoord * dimsF)), vec2<i32>(0, 0), maxP);
+  // Entry flip: this pass's target-bound write inverts Y, so flipping the
+  // sampling keeps the output in the source's orientation (the module
+  // invariant — see the file header).
+  let tc = vec2<f32>(texCoord.x, 1.0 - texCoord.y);
+  let px = clamp(vec2<i32>(floor(tc * dimsF)), vec2<i32>(0, 0), maxP);
 
   let cM = postAaFetch(srcTex, px, maxP);
   let lumaNW = dot(postAaFetch(srcTex, px + vec2<i32>(-1, -1), maxP), vec3<f32>(0.299, 0.587, 0.114));
@@ -161,7 +175,10 @@ export const POST_AA_BLEND_WGSL = /* wgsl */ `fn postAaBlend(
 ) -> vec4<f32> {
   let dimsF = vec2<f32>(textureDimensions(curTex, 0));
   let maxP = vec2<i32>(dimsF) - vec2<i32>(1, 1);
-  let px = clamp(vec2<i32>(floor(texCoord * dimsF)), vec2<i32>(0, 0), maxP);
+  // Entry flip, same invariant as the FXAA pass: cur and hist always share
+  // the capture's orientation, and this pass's write inverts once.
+  let tc = vec2<f32>(texCoord.x, 1.0 - texCoord.y);
+  let px = clamp(vec2<i32>(floor(tc * dimsF)), vec2<i32>(0, 0), maxP);
   var cur = textureLoad(curTex, px, 0).rgb;
   if (cfg.y < 0.5) { cur = postAaOetf(cur); }
   let hist = textureLoad(histTex, px, 0).rgb;
@@ -326,9 +343,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const histA = new THREE.RenderTarget(1, 1, passOpts);
   const histB = new THREE.RenderTarget(1, 1, passOpts);
 
-  // Verified-on-screen backend property, left as a uniform: only the canvas
-  // boundary inverts (target-to-target passes preserve orientation), so the
-  // flip lives in the blit alone.
+  // The single canvas-boundary flip. Stays a uniform as a console escape
+  // hatch (setBlitFlipY) — the intermediate passes flip their own sampling
+  // so this is correct for every toggle combination at 1.
   const uFlipY = uniform(1);
   const uSmear = uniform(POST_AA_DEFAULTS.smear);
   // x = effective smear, y = current frame arrives display-encoded.

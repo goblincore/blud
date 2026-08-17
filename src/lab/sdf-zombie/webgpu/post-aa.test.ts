@@ -134,10 +134,15 @@ describe('post-aa smear + sharp-upscale tripwires', () => {
     expect(POST_AA_BLIT_WGSL).toMatch(/\(fr - vec2<f32>\(0\.5, 0\.5\)\) \* ratio/);
   });
 
-  it('the canvas-boundary flip lives in the blit alone', () => {
+  it('orientation invariant: intermediate passes flip entry sampling, the blit flips the canvas boundary', () => {
+    // Measured (X1.25b): every target-bound quad pass inverts Y once, so
+    // the FXAA/blend passes flip their sampling to keep every target in
+    // the capture's orientation, and the blit's uniform flip handles the
+    // one canvas boundary for ANY number of active passes. An odd-count
+    // regression here is what the first run mistook for a colour shift.
     expect(POST_AA_BLIT_WGSL).toContain('st.y = 1.0 - st.y;');
-    expect(POST_AA_FXAA_WGSL).not.toContain('1.0 - st.y');
-    expect(POST_AA_BLEND_WGSL).not.toContain('1.0 - st.y');
+    expect(POST_AA_FXAA_WGSL).toContain('1.0 - texCoord.y');
+    expect(POST_AA_BLEND_WGSL).toContain('1.0 - texCoord.y');
   });
 });
 
