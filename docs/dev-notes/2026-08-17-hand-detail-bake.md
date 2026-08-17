@@ -427,3 +427,98 @@ flagged rows are not violations:
 - `thumbBase` b / `thumbTip` b — the thumb runs **up** the bundle and past the gripped
   zone, angling outward above the fist, so its far end leaves the shell. `thumbTip` a
   (−1.1 mm) is the pad, and that one sits on the shell exactly as expected.
+
+---
+
+## X1.26 addendum — baked relaxed-hand SDF volume (2026-08-17, dispatch task A)
+
+`scripts/bake_hand_sdf.py` (two-stage: headless Blender pose/export → plain
+Python + libigl 2.6.2 bake) produces `public/assets/lab/hand-sdf-relaxed-r.r16f`
++ `.json` manifest v1. Design: `docs/superpowers/specs/2026-08-17-sdf-hand-bake-design.md`.
+
+### Pose (spec table, thumb at rest)
+
+| digit | MCP splay | MCP/PIP/DIP flex |
+|---|---:|---|
+| index | 9° | 12°/18°/8° |
+| middle | 0° | 15°/22°/10° |
+| ring | 5° | 19°/27°/13° |
+| pinky | 11° | 24°/32°/16° |
+
+Splay is *abduction away from the middle column* (`-splay_sign(...)`); flex is
+palmward (`*flex_sign`). Verified: fingertip A-axis span 153.5 mm posed vs
+127.0 mm at rest (the "toward" direction would have narrowed it to 99.4 mm).
+
+### Topology and the no-global-repair decision
+
+Source soup: 4,734 verts / 8,152 tris / 14 components (body 4 + nails 10).
+Kept **whole** connected non-nail components by aggregate right-vs-left skin
+weight — 2 components (1,799-vert hand + 483-vert forearm), 2,282 verts /
+3,984 tris. **No per-vertex threshold** (the old `Hand.hand_faces` path tears
+seams), **no global hole-fill, no voxel remesh** — the finger web spaces must
+survive into the field.
+
+Wrist cut at y = −35 mm (proximal of the posed wrist pivot, along wrist→knuckles):
+boundary edges 586 (source seams, right hand's share of the 1,174) → 572 after
+cut (cut ring = 42 edges) → **530 after cap** (+61 cap faces). The cap closes
+ONLY the cut ring: `bmesh.ops.holes_fill` on the 42 `geom_cut` edges. Trap
+found on the way: the ring was *geometrically* closed but *topologically* open
+(degrees {2:41, 1:2}) because the cut plane crosses a source seam — two
+distinct coincident vertices split the ring into a chain and holes_fill
+silently fills nothing. Fix: `remove_doubles` scoped to the 43 ring vertices at
+1 µm (1 welded pair), then the fill lands and the bake hard-fails if it ever
+doesn't. Final exported soup: 1,912 verts / 3,300 tris.
+
+Frame: +X thumbward (index−pinky MCP axis, flipped toward thumb tip), +Y
+wrist→knuckles, +Z := cross(X,Y) (right-handed by construction). Measured
+`cross(X,Y)·B = −1.000` → **+Z is the PALMAR side for this true right-hand
+mesh** (nail-dorsal `B` points −Z); `dorsal_sign=−1` flips the preview camera
+to the real back of the hand. The manifest's axis name follows the spec's
+construction contract; the measured sign is recorded in the bake diagnostics.
+
+### Volume
+
+- Grid 131×178×86 = 2,005,308 samples, X-fastest/Y/Z (`field[z,y,x]`, C order).
+- Voxel 1.490 × 1.494 × 1.498 mm (target pitch 1.5 mm, 12 mm margin,
+  endpoint-inclusive lattice: `voxel = extent / (dims−1)`).
+- Bounds (metres, local frame):
+  `[−0.0574, −0.0470, −0.0381] … [+0.1363, +0.2175, +0.0892]`.
+- R16F little-endian half floats, 4,010,696 bytes (**3.82 MiB** — above the
+  2–3 MiB guess because the splayed thumb + 264 mm Y extent grow the AABB).
+- Field `[−26.1, +118.8]` mm; inside fraction 11.1 %; AABB boundary min
+  **+12.0 mm** (exactly the margin).
+- Sign: `abs(fast_winding_number) > 0.5` mask over exact unsigned
+  closest-triangle distance — NOT libigl's combined FWN mode (dirty-cube
+  regression: −0.667 vs true −1.0; asserted in tests/self-test).
+- Probes (after cap): carpus interior winding **+0.999**, palm interior
+  **+0.998**, far corner **+0.001**.
+- SHA-256: binary `601bbf32…`, source `71ca50d6…` (full values in the
+  manifest). Duration 3.1 s outer bake (libigl) + ~25 s Blender stage.
+
+### Digit separability (the mitten gate, measured)
+
+MCPs sit at y ≈ 120–127 mm — slices at y ≤ 130 mm are legitimately solid
+(web/knuckle row). Above the web line the field separates:
+
+- y = 145 mm, z = +10 mm: **4 columns** x[−32,−21] [−6,+17] [+25,+51]
+  [+68,+85] mm with **15 / 8 / 17 mm** gaps between them.
+- Thumb separate: x[+38,+124], y[+21,+107] mm.
+- `docs/dev-notes/2026-08-17-sdf-hand-bake/mesh-preview.png` is the neutral
+  768² render of this exact posed/extracted/cut soup (post-cap, pre-libigl).
+
+### Operational traps (cost real debugging time — read before touching)
+
+1. **Interior winding probes must be anatomical points, not the vertex
+   centroid.** With splayed fingers the whole-soup centroid lands *between*
+   digits and reads −0.01 while the true palm reads +0.97 — it looks exactly
+   like an orientation bug. Probes are now fixed offsets (+20 mm carpus,
+   +45 mm palm on the Y axis).
+2. **Blender re-entry argv**: Blender runs this same file as `__main__` with
+   its own flags prepended; the script's args live after `--`. `main()` slices
+   argv there when `import bpy` succeeds.
+3. **`uv run python -m unittest`** uses the repo `.venv` (pyproject has no
+   deps); provision it with `uv pip install libigl==2.6.2 numpy==2.5.2` once
+   per worktree.
+4. The dirty-cube numbers (winding 5/6, combined −1.0 vs FWN-mode −0.667) are
+   asserted in `scripts/test_bake_hand_sdf.py` AND `--self-test` — if libigl's
+   behaviour ever changes, they fail loudly instead of shipping a shrunk field.

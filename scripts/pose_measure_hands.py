@@ -208,7 +208,10 @@ def write_manifest():
     print(f"[hands] manifest -> {MANIFEST_PATH}")
 
 
-if not IN_BLENDER:
+# Manifest mode stays a documented `python3 pose_measure_hands.py --manifest-only`
+# command: only when REALLY executed as a script, never on import (the SDF
+# baker and these tests import the helpers without Blender or the PNGs).
+if not IN_BLENDER and __name__ == "__main__":
     write_manifest()
     sys.exit(0)
 
@@ -1574,4 +1577,5 @@ def main():
     subprocess.run(args, check=True)
 
 
-main()
+if __name__ == "__main__":
+    main()

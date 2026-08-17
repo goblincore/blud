@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "binary": "hand-sdf-relaxed-r.r16f",
+  "encoding": "r16f-le",
+  "order": "x-fastest-y-z",
+  "axes": {
+    "x": "thumbward",
+    "y": "distal",
+    "z": "dorsal"
+  },
+  "dimensions": [
+    131,
+    178,
+    86
+  ],
+  "boundsMin": [
+    -0.057404683798551556,
+    -0.04700000014901161,
+    -0.03814996768534183
+  ],
+  "boundsMax": [
+    0.13634473633766175,
+    0.21751639795303346,
+    0.0891583616733551
+  ],
+  "voxelSize": [
+    0.0014903801548939485,
+    0.0014944429271301983,
+    0.0014977450512787874
+  ],
+  "isoValue": 0.0,
+  "byteLength": 4010696,
+  "sha256": {
+    "binary": "601bbf3277e488eb1a4cabba34ccc5f35e5263e29e434040cf71cb4f18244d97",
+    "source": "71ca50d633f40ff23939e7ea27177a51758d712ba332c44624f86743af78c858"
+  },
+  "attribution": "This work is based on \"First Person hands rigged\" (https://sketchfab.com/3d-models/first-person-hands-rigged-547a45535f0c4fe787948f7a7a6a88db) by DavidFischer (https://sketchfab.com/davidfischer) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+  "bake": {
+    "targetPitchM": 0.0015,
+    "marginM": 0.012,
+    "durationS": 3.147,
+    "min": -0.02607558943006902,
+    "max": 0.11883728765304956,
+    "negatives": 222966,
+    "positives": 1782382,
+    "negativeFraction": 0.11118568946636694,
+    "boundaryMin": 0.011999999999999997,
+    "probes": {
+      "carpusInterior": {
+        "point": [
+          0.0,
+          0.02,
+          0.0
+        ],
+        "winding": 0.9989122063657245
+      },
+      "palmInterior": {
+        "point": [
+          0.0,
+          0.045,
+          0.0
+        ],
+        "winding": 0.9982953643926815
+      },
+      "farCorner": {
+        "point": [
+          0.13634473633766175,
+          0.21751639795303346,
+          0.0891583616733551
+        ],
+        "winding": 0.000905830122738323
+      }
+    },
+    "mesh": {
+      "total": 14,
+      "kept": 2,
+      "keptVerts": 2282,
+      "keptFaces": 3984
+    },
+    "boundaryEdges": {
+      "source": 586,
+      "afterCut": 572,
+      "afterCap": 530,
+      "cutRing": 42,
+      "weldedPairs": 1,
+      "capFaces": 61
+    },
+    "wristCutM": 0.035
+  }
+}

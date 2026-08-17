@@ -38,6 +38,14 @@ used as ground truth for the SDF lab's first-person hands, in two ways:
    rather than copyrightable expression, so this file would carry no obligation
    on its own; it is listed for honesty about provenance, not because the
    licence compels it.
+3. **`public/assets/lab/hand-sdf-relaxed-r.r16f` (+ its `.json` manifest)** —
+   a signed-distance volume baked from one relaxed right-hand pose of the same
+   mesh by `scripts/bake_hand_sdf.py` (X1.26). The volume reproduces the mesh's
+   surface shape in sampled form, so it is a derivative work and carries this
+   attribution, embedded verbatim in the manifest's `attribution` field as
+   well. **`docs/dev-notes/2026-08-17-sdf-hand-bake/mesh-preview.png`** is a
+   neutral render of the same posed mesh taken during the bake and is covered
+   by the same credit.
 
 ### What does NOT derive from it
 
