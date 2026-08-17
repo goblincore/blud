@@ -183,10 +183,11 @@ Key reference docs (open these before touching their area):
   throttle (measurement artifact); the REAL bug was the per-frame dt clamp turning
   throttle into slow-motion sim. Fixed: sub-stepped rig integration (`planSubSteps`)
   + opaque canvas present; collapse 2.5s @ 60fps. [dev-note](docs/dev-notes/2026-08-16-collapse-stall/notes.md)
-- `X1.23` [~] **FPV + dynamite (Spec C)** — 4-task chain DISPATCHED (deepseek: fpv+flight
-  pure; glm: hands, explosion-aoe, wiring): pointer-lock FPV, SDF flesh hands, dynamite
-  on DYNAMITE_COOK constants, explosion into the full gore stack.
-  [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md); after X1.22, before X1.20.
+- `X1.23` [x] **FPV + dynamite (Spec C)** — 4-task chain merged (deepseek: fpv+flight;
+  glm: hands, explosion-aoe, wiring). Verified: Tab FPV, SDF flesh hands, cook-throw-
+  detonate gibs a body point-blank through the existing stack; 1201 tests. Burst
+  billboards use the procedural-flipbook fallback (SEQ atlases are gitignored).
+  [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md)
 - `X1.24` [~] **Grapeshot shotgun (Spec D)** — MODEL DONE, glm-5.3's chosen (owner pick):
   `grapeshot-gun-glm.glb` (1 372 tris, 68 KB; [notes](docs/dev-notes/2026-08-16-grapeshot-model-glm/notes.md));
   kimi/k3's `grapeshot-gun.glb` kept as bake-off reference. Remaining: Blood sawed-off
