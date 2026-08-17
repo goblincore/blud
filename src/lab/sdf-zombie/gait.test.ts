@@ -213,6 +213,43 @@ describe('stepGait — skews', () => {
   });
 });
 
+describe('stepGait — reach style (mummy arms as a shoulder PIVOT spec)', () => {
+  it('emits a rotation spec instead of elbow/hand offsets', () => {
+    const ps = poses(5, NONE, 2, DT, 'reach');
+    for (const p of ps) {
+      expect(p.reach).toBeDefined();
+      // Additive elbow/hand displacements are what popped the shoulder ball
+      // out of the torso — in reach style they must stay zero so the wiring
+      // can rotate the chain rigidly about the shoulder anchor instead.
+      expect(p.offsets.elbowL).toEqual([0, 0, 0]);
+      expect(p.offsets.handL).toEqual([0, 0, 0]);
+      expect(p.offsets.elbowR).toEqual([0, 0, 0]);
+      expect(p.offsets.handR).toEqual([0, 0, 0]);
+      // near-horizontal mummy reach (0 = hang, π/2 = horizon)
+      expect(p.reach!.pitchL).toBeGreaterThan(1);
+      expect(p.reach!.pitchR).toBeGreaterThan(1);
+      expect(p.reach!.drop).toBe(GAIT_TUNING.reachElbowDrop);
+    }
+    // the bob/sway beat rides as ONE rigid shift for the whole arm
+    expect(maxAbs(ps, p => p.reach!.shift[1])).toBeGreaterThan(0.01);
+    expect(maxAbs(ps, p => p.reach!.shift[0])).toBeGreaterThan(0.005);
+  });
+
+  it('a wounded arm reaches less high; a missing arm not at all', () => {
+    const healthy = poses(8, NONE, 1, DT, 'reach')[0]!.reach!;
+    const hurt = poses(8, { ...NONE, wounded: { armL: true } }, 1, DT, 'reach')[0]!.reach!;
+    expect(hurt.pitchL).toBeCloseTo(healthy.pitchL * GAIT_TUNING.woundedArmSwingScale, 9);
+    expect(hurt.pitchR).toBeCloseTo(healthy.pitchR, 9);
+    const gone = poses(8, { ...NONE, missing: { armR: true } }, 1, DT, 'reach')[0]!.reach!;
+    expect(gone.pitchR).toBe(0);
+    expect(gone.pitchL).toBeCloseTo(healthy.pitchL, 9);
+  });
+
+  it('swing style emits no reach spec', () => {
+    for (const p of poses(5, NONE, 1, DT, 'swing')) expect(p.reach).toBeUndefined();
+  });
+});
+
 describe('GAIT_TUNING', () => {
   it('is low-frequency and stance-heavy (claymation bias)', () => {
     expect(GAIT_TUNING.strideFreq).toBeLessThan(2);

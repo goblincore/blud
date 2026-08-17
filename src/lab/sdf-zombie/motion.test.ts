@@ -13,7 +13,7 @@ import {
 import { buildBody } from './build-body';
 import { makeZombie } from './body';
 import { DEFAULT_FACE } from './face';
-import { bindRig } from './rig-bind';
+import { applyRig, bindRig } from './rig-bind';
 import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
@@ -305,6 +305,74 @@ describe('stepMotion — head aim', () => {
     const dh = sub(behind.restPose[j.index.head]!, j.base[j.index.head]!);
     expect(dh[2]).toBeLessThan(-0.05); // visibly swung backward
     expect(len(dh)).toBeLessThan(0.35); // but never past the clamp cone
+  });
+});
+
+describe('stepMotion — reach arm pivot (socketed shoulders)', () => {
+  const CFG_REACH: MotionConfig = { enabled: true, wander: true }; // reach is the default style
+
+  it('keeps both arm segments at rest length and puts the hands out front', () => {
+    const j = realJoints();
+    const { frame } = run(j, cruising(15), CFG_REACH, 120);
+    const fwd = headingDir(frame.heading);
+    for (const side of ['L', 'R'] as const) {
+      const s = frame.restPose[j.index[`shoulder${side}`]!]!;
+      const e = frame.restPose[j.index[`elbow${side}`]!]!;
+      const h = frame.restPose[j.index[`hand${side}`]!]!;
+      // The pivot holds each segment within the rigid bob/sway shift's reach
+      // of its rest length (≤ ~0.043 m) — the additive reach this replaces
+      // contracted the segments by ~0.10 m / ~0.08 m, which is what dragged
+      // the shoulder ball out of the torso.
+      expect(Math.abs(len(sub(e, s)) - j.arm[side][0])).toBeLessThan(0.05);
+      expect(Math.abs(len(sub(h, e)) - j.arm[side][1])).toBeLessThan(0.05);
+      // …and the chain points at the prey, not at the floor.
+      expect(dot(sub(h, s), fwd)).toBeGreaterThan(0.2);
+    }
+  });
+
+  it('the POSED shoulder ball stays socketed in the torso through the full reach cycle', () => {
+    const j = realJoints();
+    const body = buildBody(makeZombie({ ...DEFAULT_FACE }), undefined!, undefined!);
+    // The shoulder ball (deltoid sphere — first arm-limb sphere prim) vs the
+    // chest blob (first torso prim): the owner-visible seam. The additive
+    // reach this replaces let their SURFACES separate by up to ~1.8 cm (the
+    // contracted arm chain levered the shoulder point about the chest joint);
+    // the pivot keeps them overlapping through the whole cycle.
+    let ball = -1, chest = -1;
+    body.prims.forEach((p, i) => {
+      if (ball < 0 && p.limb === 'armL' && len(sub(p.a, p.b)) < 1e-4) ball = i;
+      if (chest < 0 && p.limb === 'torso') chest = i;
+    });
+    expect(ball).toBeGreaterThanOrEqual(0);
+    expect(chest).toBeGreaterThanOrEqual(0);
+    let bound = bindRig(body);
+    // Unpinned, exactly as the lab wiring walks (bindRig pins the lowest
+    // joint as a statue anchor; the rest pull + plants carry a walker).
+    bound = {
+      ...bound,
+      rig: { ...bound.rig, points: bound.rig.points.map(p => ({ ...p, pinned: false })) },
+    };
+    let state = cruising(21);
+    let maxGap = -Infinity;
+    for (let i = 0; i < 240; i++) { // 4 s — several full stride cycles, turns included
+      const step = stepMotion(state, j, CFG_REACH, NO_SIGNALS(), bound.rig.points, BOUNDS, makeRng(21));
+      state = step.state;
+      const points = stepRig(
+        { ...bound.rig, restPose: step.frame.restPose }, DT,
+        {
+          gravity: step.frame.gravity, damping: 0.06, iterations: 4,
+          restStiffness: STANDING_RIG.restStiffness * step.frame.restPull,
+        },
+      ).points;
+      bound = { ...bound, rig: { ...bound.rig, restPose: step.frame.restPose, points } };
+      const posed = applyRig(body, bound, step.frame.bodyYaw);
+      const b = posed.prims[ball]!;
+      const c = posed.prims[chest]!;
+      maxGap = Math.max(maxGap, len(sub(b.a, c.a)) - b.radius - c.radius);
+    }
+    // Socketed = the surfaces keep overlapping (negative gap). 5 mm of grace
+    // for the flesh-breathing jiggle; the detached pose was +18 mm.
+    expect(maxGap).toBeLessThan(0.005);
   });
 });
 

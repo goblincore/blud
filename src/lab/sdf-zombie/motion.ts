@@ -58,7 +58,7 @@
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
-import { add, len, normalize, scale, sub } from './vec';
+import { add, len, normalize, qFromAxisAngle, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName } from './gait';
 import { GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
@@ -516,6 +516,55 @@ export function stepMotion(
       pivot[2] + shift[2] + spun[2] + off[2],
     ];
   });
+
+  // --- reach-style arm pivot (motion-polish) --------------------------------
+  // The reach pose is a ROTATION about the shoulder anchor, not an additive
+  // offset: gait emits the pitch spec, and this — the layer that knows the
+  // rest arm geometry — rotates each rest segment about the shoulder rig
+  // point. Both segments keep their exact rest lengths, so the verlet
+  // constraints are satisfiable WITHOUT moving the shoulder: the ball stays
+  // socketed in the torso silhouette and only the distal chain travels. (The
+  // old additive raise contracted shoulder→elbow ~33% and elbow→hand ~28%;
+  // the constraints won against the soft rest pull and dragged the shoulder
+  // out of the torso — the detached-arms look the owner flagged.)
+  //
+  // Composition: the pivot is about the FINAL shoulder target (sway, stagger
+  // and lean already ride it), and the elbow/hand's own stagger offsets
+  // re-add after the rotation — reactions still move the arms.
+  if (armStyle === 'reach' && gait.pose.reach) {
+    const r = gait.pose.reach;
+    const right = rotateYaw([1, 0, 0], bodyYaw); // the body's right axis, world
+    const applyArm = (side: 'L' | 'R') => {
+      if (side === 'L' ? sig.missing.armL : sig.missing.armR) return;
+      const sJ = side === 'L' ? 'shoulderL' : 'shoulderR';
+      const eJ = side === 'L' ? 'elbowL' : 'elbowR';
+      const hJ = side === 'L' ? 'handL' : 'handR';
+      const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
+      // Positive pitch = forward reach: about +right the hang swings BACK,
+      // so the rotation angle is negated.
+      const pitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const qUp = qFromAxisAngle(right, -pitch);
+      const qFore = qFromAxisAngle(right, -(pitch - r.drop * armPresence));
+      // The rest segments in world (the generic assembly rotates the base
+      // pose by the same bodyYaw, so these line up with the targets).
+      const s1 = rotateYaw(sub(joints.base[idx[eJ]]!, joints.base[idx[sJ]]!), bodyYaw);
+      const s2 = rotateYaw(sub(joints.base[idx[hJ]]!, joints.base[idx[eJ]]!), bodyYaw);
+      // The bob/sway beat as ONE rigid shift (scaled by presence), plus this
+      // chain's share of the turn lean the generic loop would have added.
+      const shiftW = add(
+        scale(rotateYaw(r.shift, bodyYaw), armPresence),
+        rotateYaw([lean * (LEAN_SHARE[eJ] ?? 0), 0, 0], bodyYaw),
+      );
+      const eGeom = add(targets[iS]!, qRotate(qUp, s1));
+      targets[iE] = add(add(eGeom, shiftW), rotateYaw(stagger.offsets[eJ] ?? Z, bodyYaw));
+      targets[iH] = add(
+        add(add(eGeom, qRotate(qFore, s2)), shiftW),
+        rotateYaw(stagger.offsets[hJ] ?? Z, bodyYaw),
+      );
+    };
+    applyArm('L');
+    applyArm('R');
+  }
 
   // --- IK override 1: foot plants ------------------------------------------
   // A blast's recoveryStep releases both locks for one frame (a forced

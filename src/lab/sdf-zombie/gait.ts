@@ -87,17 +87,17 @@ export const GAIT_TUNING = {
    *  (both arms raised toward the heading, slight bob/sway). Default reach:
    *  it is a zombie. */
   armStyle: 'reach' as ArmStyle,
-  /** Reach style: hand raise off the hanging rest pose (m). The authored
-   *  arms hang ~0.55 m below the shoulder (body.ts: two 0.30 m segments
-   *  pointing down), so this plus reachHandFwd straightens them forward. */
-  reachHandUp: 0.52,
-  /** Reach style: hand push toward the heading (m). */
-  reachHandFwd: 0.40,
-  /** Reach style: elbow raise (m) — half the hand's, so the arm reads as a
-   *  shallow ramp, not a right angle. */
-  reachElbowUp: 0.30,
-  /** Reach style: elbow push toward the heading (m). */
-  reachElbowFwd: 0.20,
+  /** Reach style: shoulder pivot pitch (rad) — 0 is the authored hang,
+   *  π/2 is straight at the horizon. The reach pose is a ROTATION about the
+   *  shoulder anchor, never an additive displacement (see GaitPose.reach):
+   *  displacing the elbow/hand rest targets shortens both arm segments, the
+   *  verlet length constraints win against the soft rest pull, and the
+   *  shoulder ball gets dragged out of the torso (owner playtest). ~1.42 rad
+   *  reproduces the old pose's hand placement with the chain rigid. */
+  reachPitch: 1.42,
+  /** Reach style: forearm droop relative to the upper arm (rad) — the arm
+   *  reads as a shallow ramp toward the prey, not a locked straight bar. */
+  reachElbowDrop: 0.22,
   /** Reach style: shoulder lift (m) — the whole arm rides up a touch. */
   reachShoulderUp: 0.03,
   /** Reach style: vertical bob riding the footfall beat (m). */
@@ -177,12 +177,37 @@ export interface GaitSkew {
   };
 }
 
+/**
+ * The reach style's per-frame arm pose — a ROTATION SPEC, not offsets.
+ * gait.ts owns the animation (pitch/droop/bob/sway as pure clock functions);
+ * the wiring (motion.ts) owns the actual pivot, because only it knows the
+ * rest arm geometry: each arm rotates about its shoulder rig point by
+ * `pitch`, so both segments keep their exact rest lengths and the shoulder
+ * ball stays socketed in the torso silhouette — only the distal chain
+ * travels. While this is present, the elbow and hand offset entries are ZERO.
+ */
+export interface ReachPose {
+  /** Shoulder pivot pitch per side (rad): 0 = the authored hang,
+   *  GAIT_TUNING.reachPitch = full mummy reach, wounded/asymmetry-scaled. */
+  pitchL: number;
+  pitchR: number;
+  /** Forearm droop relative to the upper arm (rad). */
+  drop: number;
+  /** Rigid bob/sway translation riding the stride beat — applied to the
+   *  WHOLE arm (shoulder-relative), so it never changes a segment length. */
+  shift: Vec3;
+}
+
 /** One frame of gait output — rest-pose TARGET offsets, body-local. */
 export interface GaitPose {
   /** Offset for the root (pelvis) rig point — translation, bob, rock, lurch. */
   rootOffset: Vec3;
-  /** Offset per joint. Every joint except pelvis is present; zero = no offset. */
+  /** Offset per joint. Every joint except pelvis is present; zero = no offset.
+   *  In 'reach' style the elbow/hand entries are zero — the reach pivot
+   *  spec drives them instead. */
   offsets: Record<Exclude<GaitJointName, 'pelvis'>, Vec3>;
+  /** The reach-style arm pivot spec — present only when armStyle === 'reach'. */
+  reach?: ReachPose;
   /** Normalised stride phase in [0, 1) — 0 = left-foot stance start. */
   phase: number;
   /** Which feet are currently planted. */
@@ -339,24 +364,16 @@ export function stepGait(
   };
 
   // One arm. 'swing': the hand swings opposite the ipsilateral leg.
-  // 'reach': mummy-arms — raised toward the heading, bobbing on the footfall
-  // beat and swaying with the hips. Missing arm ⇒ no offsets either way (the
-  // shoulder droop below carries the visual); a wounded arm swings less or
-  // droops in its raise.
+  // 'reach': NO offsets here — the pivot spec (below) drives the arm, so the
+  // chain rotates rigidly about the shoulder instead of dragging it out of
+  // the torso. Missing arm ⇒ no offsets either way (the shoulder droop below
+  // carries the visual); a wounded arm swings less or reaches less high.
   const arm = (legPhi: number, side: 'L' | 'R'): { elbow: Vec3; hand: Vec3 } => {
     const missing = side === 'L' ? missingArmL : missingArmR;
     if (missing) return { elbow: Z, hand: Z };
     const wounded = side === 'L' ? woundedArmL : woundedArmR;
     const aSide = side === 'L' ? aL : aR;
-    if (armStyle === 'reach') {
-      const raise = (wounded ? T.woundedArmSwingScale : 1) * aSide;
-      const bob = -T.reachBobAmp * bobCurve;
-      const armSway = T.reachSwayAmp * Math.sin(swayPhase);
-      return {
-        elbow: [armSway * 0.5, T.reachElbowUp * raise + bob * 0.5, T.reachElbowFwd * raise],
-        hand: [armSway, T.reachHandUp * raise + bob, T.reachHandFwd * raise],
-      };
-    }
+    if (armStyle === 'reach') return { elbow: Z, hand: Z };
     const boost = (side === 'L' ? missingArmR : missingArmL) ? T.missingArmSwingBoost : 1;
     const sideScale = aSide * boost * (wounded ? T.woundedArmSwingScale : 1);
     const swing = Math.sin(Math.PI * stanceProgress(legPhi, duty(side)).u);
@@ -380,6 +397,21 @@ export function stepGait(
     const reachLift = armStyle === 'reach' && !missing ? T.reachShoulderUp : 0;
     return [-sway * T.shoulderSway * (side === 'L' ? aL : aR), droop + armsUp + reachLift, 0];
   };
+
+  // The reach pivot spec: pitch per side (wounded arms reach less, missing
+  // arms not at all), a shared forearm droop, and the bob/sway beat as ONE
+  // rigid shift for the whole arm.
+  let reach: ReachPose | undefined;
+  if (armStyle === 'reach') {
+    const raiseL = missingArmL ? 0 : (woundedArmL ? T.woundedArmSwingScale : 1) * aL;
+    const raiseR = missingArmR ? 0 : (woundedArmR ? T.woundedArmSwingScale : 1) * aR;
+    reach = {
+      pitchL: T.reachPitch * raiseL,
+      pitchR: T.reachPitch * raiseR,
+      drop: T.reachElbowDrop,
+      shift: [T.reachSwayAmp * Math.sin(swayPhase), -T.reachBobAmp * bobCurve, 0],
+    };
+  }
 
   const legA = leg(phiL, 'L');
   const legB = leg(phiR, 'R');
@@ -413,6 +445,7 @@ export function stepGait(
     pose: {
       rootOffset,
       offsets,
+      reach,
       phase: p,
       stance: { legL: legA.stance, legR: legB.stance },
       hop,
