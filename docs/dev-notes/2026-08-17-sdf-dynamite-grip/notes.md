@@ -261,28 +261,30 @@ saw, while both clip legs hold p95 < 3 ms). Assets: GLB **923 236 B**
 footprint 131×178×86×2 ≈ 3.82 MiB. No gate tripped; nothing to investigate;
 the visual gate is NOT waived for performance.
 
-### Owner verdict: PENDING
+### Owner verdict: PASS (2026-08-17)
 
 Ten-point checklist for the owner (watch `grip-release-loop.webm` first,
 then `grip-release-loop-jiggle.webm`, then the eight stills):
 
 ```text
-[ ] closure is visible and continuous at normal speed
-[ ] five fingers and web spaces survive every midpoint
-[ ] thumb lock visibly secures the bundle
-[ ] prop scale/silhouette reads as a dynamite bundle
-[ ] no distracting hand/prop penetration or floating contact
-[ ] wrist arc reads as an underhand toss
-[ ] fingers open late rather than before the swing
-[ ] bundle visibly continues out of the palm
-[ ] held→flight position/orientation has no visible jump
-[ ] follow-through and replacement close read cleanly
+[x] closure is visible and continuous at normal speed
+[x] five fingers and web spaces survive every midpoint
+[x] thumb lock visibly secures the bundle
+[x] prop scale/silhouette reads as a dynamite bundle
+[x] no distracting hand/prop penetration or floating contact
+[x] wrist arc reads as an underhand toss
+[x] fingers open late rather than before the swing
+[x] bundle visibly continues out of the palm
+[x] held→flight position/orientation has no visible jump
+[x] follow-through and replacement close read cleanly
 ```
 
-Owner decision after dispatch (per the plan): PASS → mark X1.27 complete;
-FAIL — prop/pose → revise Task A's GLB/contact solve and rebake (no runtime
-scaling); FAIL — midpoint artifact → add/reposition an authored frame; FAIL —
-release discontinuity → fix the shared rendered-root handoff.
+The owner inspected the live preview, said the result looked substantially
+better than expected, and approved integration. The dispatch chain was
+fast-forwarded into `claude/gib-wound-bugs-b8c728` at `42ab78d`; the merged
+tree was re-verified at 1512/1512 tests plus a successful TypeScript/Vite
+production build. The visible wrist cutoff is accepted for X1.27 and tracked
+separately as a future forearm-extension slice.
 
 ### Provenance
 
