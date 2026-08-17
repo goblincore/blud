@@ -1,4 +1,6 @@
 // src/lab/sdf-zombie/types.ts
+import type { Quat } from './vec';
+
 export type Vec3 = readonly [number, number, number];
 
 /** Fixed fold order. Index into this array IS the cluster id. Never reorder. */
@@ -83,6 +85,17 @@ export interface Primitive {
    * means alive.
    */
   dead?: boolean;
+  /**
+   * Per-prim ORIENTATION (motion-polish task 3): the quaternion that carries
+   * the prim's local frame into world space. Absent means identity — almost
+   * every prim is identity; applyRig sets it to the head's rigid rotation on
+   * skull-owned prims so the anisotropically scaled face ellipsoids (brow,
+   * nose, jaw, cranium) rotate WITH the head instead of staying world-aligned
+   * (the detached-visor bug). sdPrim/sdPrimitive rotate the sample point into
+   * the prim's local frame by the CONJUGATE about the prim midpoint before
+   * the scale-divide. Optional so fixtures compile — same pattern as `dead`.
+   */
+  orient?: Quat;
 }
 
 export interface ClusterInfo {

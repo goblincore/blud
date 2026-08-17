@@ -5,8 +5,10 @@ import { IK_TUNING } from './ik';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
-import { add, dot, len, normalize, sub } from './vec';
-import type { Vec3 } from './types';
+import { sdPrimitive } from './validate';
+import { add, dot, len, normalize, qRotate, scale as vscale, sub } from './vec';
+import type { Primitive, Vec3 } from './types';
+import type { Quat } from './vec';
 
 describe('bindRig', () => {
   const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -187,5 +189,99 @@ describe('applyRig — rigid head cluster (motion-polish)', () => {
     const posedOff = len(sub(centre(out.prims, cranium), pivotPos));
     expect(posedOff).toBeLessThanOrEqual(restOff + HEAD_RIGID_TUNING.driftMax + 1e-9);
     expect(len(shove) - (posedOff - restOff)).toBeGreaterThan(0.4); // the clamp bit
+  });
+});
+
+describe('applyRig — per-prim orientation (motion-polish task 3)', () => {
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(body);
+
+  // The brow: the anisotropic face prim that read as a detached visor when
+  // its [1.55, 0.42, 0.80] squash stayed world-aligned under a turned head.
+  const browIdx = body.prims.findIndex(
+    p => p.limb === 'head' && p.scale[0] > 1.4 && p.scale[1] < 0.5);
+  expect(browIdx).toBeGreaterThanOrEqual(0);
+
+  /** Head tipped ~60° sideways — past the 0.85 rad clamp, so the pose is the
+   *  clamped corner, the worst case the visor bug ever shows. */
+  const moved = { ...bound, rig: { ...bound.rig, points: bound.rig.points.map((p, i) =>
+    i === bound.head!.tip ? { ...p, pos: add(p.pos, [0.5, 0.02, 0.12]) as Vec3 } : p) } };
+
+  it('stamps the head quat on skull-owned prims and leaves everything else absent', () => {
+    const out = applyRig(body, moved);
+    let stamped = 0;
+    out.prims.forEach((p, i) => {
+      if (bound.head!.prims.has(i)) {
+        stamped++;
+        expect(p.orient).toBeDefined();
+      } else {
+        expect(p.orient).toBeUndefined();
+      }
+    });
+    expect(stamped).toBeGreaterThanOrEqual(4); // cranium+jaw+brow+nose
+  });
+
+  it('is the EXACT identity at rest, so statue bodies pay nothing', () => {
+    const out = applyRig(body, bound);
+    const q = out.prims[browIdx]!.orient!;
+    expect(Math.abs(q[0]) + Math.abs(q[1]) + Math.abs(q[2])).toBeLessThan(1e-12);
+    expect(q[3]).toBeCloseTo(1, 12);
+  });
+
+  it('REGRESSION: the brow ledge follows the turned face — surface extents rotate with the head', () => {
+    const out = applyRig(body, moved);
+    const brow = out.prims[browIdx]!;
+    const q = brow.orient!;
+    expect(Math.abs(1 - q[3])).toBeGreaterThan(0.05); // a real rotation, clamped corner
+    const qc: Quat = [-q[0], -q[1], -q[2], q[3]];
+
+    // Bisect for the zero crossing along a world direction — exact, since
+    // sdPrimitive's zero is exactly |S^-1 p_local| = radius.
+    const surf = (prim: Primitive, dir: Vec3): number => {
+      let lo = 0, hi = prim.radius * 3;
+      for (let k = 0; k < 48; k++) {
+        const m = (lo + hi) / 2;
+        if (sdPrimitive(add(prim.a, vscale(dir, m)), prim) > 0) hi = m; else lo = m;
+      }
+      return (lo + hi) / 2;
+    };
+    // Analytic extent of the oriented ellipsoid along unit v: t = r / |S^-1 (q* v)|.
+    const predicted = (dir: Vec3): number => {
+      const l = qRotate(qc, dir);
+      return brow.radius / Math.hypot(
+        l[0] / brow.scale[0], l[1] / brow.scale[1], l[2] / brow.scale[2]);
+    };
+
+    const AXES: Vec3[] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    const restExtents = AXES.map(d => surf(body.prims[browIdx]!, d));
+    const posedExtents = AXES.map(d => surf(brow, d));
+
+    // The field's surface extent along the WORLD axes changes with the pose...
+    const maxShift = Math.max(...AXES.map((_, i) => Math.abs(posedExtents[i]! - restExtents[i]!)));
+    expect(maxShift).toBeGreaterThan(0.2 * brow.radius);
+    // ...and lands exactly where the ROTATED ellipsoid says — the ledge hugs
+    // the skull at the clamped angle instead of sticking out as a visor.
+    AXES.forEach((d, i) => {
+      const want = predicted(d);
+      expect(Math.abs(posedExtents[i]! - want)).toBeLessThan(0.02 * want + 1e-5);
+    });
+
+    // Pre-fix behaviour pinned as the regression: WITHOUT orient the squash
+    // stays world-aligned and the extent does NOT follow the face.
+    const noOrient: Primitive = { ...brow, orient: undefined };
+    const stale = AXES.map(d => surf(noOrient, d));
+    expect(Math.max(...AXES.map((_, i) => Math.abs(stale[i]! - posedExtents[i]!))))
+      .toBeGreaterThan(0.2 * brow.radius);
+  });
+
+  it('the rotated brow agrees with the CPU field probes along its turned axes', () => {
+    const out = applyRig(body, moved);
+    const brow = out.prims[browIdx]!;
+    const q = brow.orient!;
+    const d = brow.radius * 1.1; // between the 0.80 and 1.55 horizontal extents
+    const longAxis = qRotate(q, [1, 0, 0]);
+    const shortAxis = qRotate(q, [0, 0, 1]);
+    expect(sdPrimitive(add(brow.a, vscale(longAxis, d)), brow)).toBeLessThan(0);
+    expect(sdPrimitive(add(brow.a, vscale(shortAxis, d)), brow)).toBeGreaterThan(0);
   });
 });

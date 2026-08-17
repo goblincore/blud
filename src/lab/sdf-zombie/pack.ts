@@ -14,8 +14,9 @@ export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
   primB: Float32Array;         // xyz = endpoint B, w = blendK
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
+  primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
   clusterBounds: Float32Array; // xyz = centre, w = radius
-  clusterRange: Float32Array;  // x = start, y = count, z = alive, w = unused
+  clusterRange: Float32Array;  // x = start, y = count, z = alive, w = 1 when the cluster carries oriented prims
   primCount: number;
   clusterCount: number;
   /** Cull margin: a cluster can still pull the surface from up to this far away. */
@@ -28,6 +29,7 @@ export function packBody(body: BuiltBody): PackedBody {
   const primA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primQuat = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
   let carveCount = 0;
@@ -51,6 +53,10 @@ export function packBody(body: BuiltBody): PackedBody {
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
     primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], w], o);
+    // Identity default: sdPrim branches on |1 - w| so an unoriented prim
+    // costs one compare. Only rig-posed skull prims ever carry a real quat.
+    const q = p.orient;
+    primQuat.set(q ? [q[0], q[1], q[2], q[3]] : [0, 0, 0, 1], o);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
@@ -60,11 +66,19 @@ export function packBody(body: BuiltBody): PackedBody {
   body.clusters.forEach((c, i) => {
     const o = i * CLUSTER_STRIDE;
     clusterBounds.set([c.center[0], c.center[1], c.center[2], c.radius], o);
-    clusterRange.set([c.start, c.count, c.alive ? 1 : 0, 0], o);
+    // w: oriented-cluster flag. The shader hoists the per-prim quat branch to
+    // cluster granularity with it (a second textureLoad per sdPrim call cost
+    // a measured ~10-18% frame time — see the sdPrimO note in march.wgsl.ts),
+    // so a cluster whose prims are ALL identity takes the plain world-axis
+    // path, which is every cluster except a turned head. Bit-identical either
+    // way: sdPrimO with an identity quat runs the identical op sequence.
+    const oriented = body.prims.slice(c.start, c.start + c.count)
+      .some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+    clusterRange.set([c.start, c.count, c.alive ? 1 : 0, oriented ? 1 : 0], o);
   });
 
   return {
-    primA, primB, primScale, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, clusterBounds, clusterRange,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,
