@@ -222,7 +222,7 @@ export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<
 //
 // Carves come first: they are part of the body's own definition. Wounds are
 // damage stamped on top of the finished body.
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> f32 {
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> f32 {
   var d = 1e9;
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
@@ -262,19 +262,23 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // this call costing nothing: fbm is two 3D value-noise lookups, sixteen
   // hash13 calls, and without the branch a zero amplitude still pays in full.
   if (noiseAmp <= 0.0) { return dmg; }
-  return dmg + fbm(p * 3.0) * noiseAmp;
+  // NOISE ANCHOR (motion-polish): the field is packed in WORLD space but the
+  // noise must ride the FLESH — sampled at p minus the body's root shift
+  // (faceCfg3.zw), so a walking body does not slide through a stationary
+  // noise field. Callers with noiseAmp 0 may pass any shift; the term is dead.
+  return dmg + fbm((p - noiseShift) * 3.0) * noiseAmp;
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec3<f32> {
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2) +
-    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2) +
-    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2) +
-    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2));
+    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift) +
+    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift) +
+    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift) +
+    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift));
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -353,8 +357,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   for (var i = 0; i < 64; i = i + 1) {
     // 0.0 for the noise: it lives on the normal now, not in the field. The
     // pre-pass must see the same field the march does, or the distance it
-    // certifies as empty is not a distance the march can trust.
-    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
+    // certifies as empty is not a distance the march can trust. The noise
+    // shift is irrelevant at amplitude 0 (mapBody short-circuits the fbm), so
+    // the zero vector keeps this pass independent of the motion plumbing.
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0));
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -387,7 +393,8 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   faceCfg    x enabled, y strength, z forward (+1/-1), w relief
 //   faceCfg2   x projMode (0 planar, 1 spherical), y mean, z glowThreshold,
 //              w glowStrength
-//   faceCfg3   x glowFlicker, y timeSeconds
+//   faceCfg3   x glowFlicker, y timeSeconds, zw = noise root shift (xz world;
+//              the y shift is zero — root translation is ground-plane)
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
 //   lodCfg     x aoEnabled, y legacyGamma, w goreStrength (0 body, 1 chunk views)
@@ -452,6 +459,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // undisplaced bound is bit-identical.
   let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
   let steps = i32(marchCfg.x);
+  // NOISE ANCHOR (motion-polish): every fbm below samples at p - noiseShift
+  // so surface noise, silhouette noise, shell displacement and gore mottle
+  // ride the flesh instead of staying pinned to world space while the body
+  // walks. Packed into faceCfg3.zw — the only spare vec2 in the uniform set
+  // (see zombie-gpu.ts). Zero = the pre-motion behaviour, bit-identical.
+  let noiseShift = vec3<f32>(faceCfg3.z, 0.0, faceCfg3.w);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).
   //
@@ -498,7 +511,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    var d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2);
+    var d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift);
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz
@@ -506,7 +519,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     let shellAmp = woundCfg2.z;
     var conservative = false;
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm((camPos + rd * t) * 3.0) * shellAmp;
+      d = d + fbm((camPos + rd * t - noiseShift) * 3.0) * shellAmp;
       conservative = true;
     }
     let radius = abs(d);
@@ -548,13 +561,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   if (!hit) { discard; }
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2);
+  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift);
   // Micro-detail perturbs the normal only — costs no march safety. Three more
   // fbm calls though, so it is guarded: once per hit pixel rather than per
   // step, but still six noise lookups a body does not always need.
   if (surfCfg2.y > 0.0) {
     n = normalize(n + vec3<f32>(
-      fbm(p * 22.0), fbm(p * 22.0 + 5.0), fbm(p * 22.0 + 11.0)) * surfCfg2.y);
+      fbm((p - noiseShift) * 22.0), fbm((p - noiseShift) * 22.0 + 5.0), fbm((p - noiseShift) * 22.0 + 11.0)) * surfCfg2.y);
   }
 
   let wm = woundMask(p, data, woundCfg);
@@ -571,7 +584,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let goreStrength = lodCfg.w;
   var gore = 0.0;
   if (goreStrength > 0.0) {
-    let mottle = clamp(fbm(p * 6.0) * 0.5 + 0.5, 0.0, 1.0);
+    let mottle = clamp(fbm((p - noiseShift) * 6.0) * 0.5 + 0.5, 0.0, 1.0);
     gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
     let clot = deepColor * 0.55;
     albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);

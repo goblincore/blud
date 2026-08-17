@@ -73,3 +73,21 @@ export function qRotate(q: Quat, v: Vec3): Vec3 {
   const t = scale(cross(u, v), 2);
   return add(v, add(scale(t, q[3]), cross(u, t)));
 }
+
+/**
+ * Shortest-arc rotation taking unit vector `a` onto unit vector `b`.
+ * Parallel inputs return the exact identity (bit-identical rest poses);
+ * anti-parallel inputs pick any perpendicular axis — the rotation is a
+ * half turn either way. Inputs need not be normalised.
+ */
+export function qFromTo(a: Vec3, b: Vec3): Quat {
+  const na = normalize(a);
+  const nb = normalize(b);
+  const d = Math.max(-1, Math.min(1, dot(na, nb)));
+  if (d >= 1 - 1e-9) return qIdentity();
+  if (d <= -1 + 1e-9) {
+    const seed: Vec3 = Math.abs(na[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    return qFromAxisAngle(normalize(cross(na, seed)), Math.PI);
+  }
+  return qNormalize(qFromAxisAngle(cross(na, nb), Math.acos(d)));
+}

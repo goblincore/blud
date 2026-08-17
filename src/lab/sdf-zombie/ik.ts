@@ -248,8 +248,13 @@ export function stepAim(
  * Clamps `dir` to within ±maxYaw / ±maxPitch of `rest` in the (forward,
  * right, up) frame — right = horizontal ⊥ rest, up = rest × right. Yaw sign
  * matches wander.ts: 0 = rest, positive = clockwise seen from above.
+ *
+ * Exported for rig-bind.ts's rigid head pass: the head cluster's posed
+ * rotation is clamped in the SAME cone the look-at uses (IK_TUNING), so the
+ * visual head can never nod past what the neck allows — one clamp, two
+ * consumers (target-side in stepAim, pose-side in applyRig).
  */
-function clampDir(dir: Vec3, rest: Vec3, maxYaw: number, maxPitch: number): Vec3 {
+export function clampDir(dir: Vec3, rest: Vec3, maxYaw: number, maxPitch: number): Vec3 {
   const w: Vec3 = len(rest) < 1e-9 ? [0, 0, 1] : normalize(rest);
   let u = normalize(cross(UP, w));
   if (len(u) < 1e-6) u = [1, 0, 0]; // rest straight up/down — arbitrary right

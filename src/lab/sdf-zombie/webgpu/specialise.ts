@@ -50,7 +50,7 @@ export function specialiseMapBody(body: BuildResult): string {
   const lines: string[] = [];
   lines.push(
     'fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, ' +
-    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> f32 {',
+    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>) -> f32 {',
   );
   lines.push('  var d = 1e9;');
 
@@ -107,7 +107,8 @@ export function specialiseMapBody(body: BuildResult): string {
   // Same guard as the generic version: the silhouette fbm is the single most
   // expensive term in the shader and must stay branched out at zero amplitude.
   lines.push('  if (noiseAmp <= 0.0) { return d; }');
-  lines.push('  return d + fbm(p * 3.0) * noiseAmp;');
+  // Same noise anchor as the generic version — the fbm rides the flesh.
+  lines.push('  return d + fbm((p - noiseShift) * 3.0) * noiseAmp;');
   lines.push('}');
   return lines.join('\n');
 }

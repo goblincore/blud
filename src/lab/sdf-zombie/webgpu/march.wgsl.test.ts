@@ -168,8 +168,10 @@ describe('ported features reach the entry point', () => {
     // lodCfg.w is goreStrength: 0 on the body, 1 on chunk views. The body's
     // clean-latex read must stay reachable, and the gore block's own fbm is
     // what makes a chunk read as mottled torn meat rather than a red ball.
+    // Anchored to the noise shift (motion-polish) so the mottle rides the
+    // chunk's own translation, not the world.
     expect(MARCH_BODY).toContain('goreStrength');
-    expect(MARCH_BODY).toContain('fbm(p * 6.0)');
+    expect(MARCH_BODY).toContain('fbm((p - noiseShift) * 6.0)');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
@@ -190,7 +192,27 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
     expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
     expect(MARCH_BODY)
-      .toMatch(/d = d \+ fbm\(\(camPos \+ rd \* t\) \* 3\.0\) \* shellAmp;/);
+      .toMatch(/d = d \+ fbm\(\(camPos \+ rd \* t - noiseShift\) \* 3\.0\) \* shellAmp;/);
+  });
+
+  it('anchors every noise site to the root shift, so texture rides the flesh (motion-polish)', () => {
+    // The field is packed in world space, but the fbm — silhouette, shell,
+    // micro surface detail, gore mottle — must sample the BODY's frame or a
+    // walking body slides through a stationary noise field. The shift packs
+    // into faceCfg3.zw (the only spare vec2 — see zombie-gpu.ts) with y
+    // structurally zero: root translation is ground-plane only. mapBody and
+    // calcNormal thread it so the normal-warping warps with the same anchor.
+    expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, 0.0, faceCfg3.w);');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift)');
+    expect(MARCH_BODY).toContain('fbm((p - noiseShift) * 22.0)');
+    expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
+    const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
+    expect(mapBody).toContain('fbm((p - noiseShift) * 3.0) * noiseAmp');
+    // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
+    // independent of the motion plumbing — zero shift, dead noise term.
+    const coneMarch = CONE_MARCH;
+    expect(coneMarch).toContain(
+      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0))');
   });
 
   it('steps the shell conservatively and never retracts a displaced sample', () => {

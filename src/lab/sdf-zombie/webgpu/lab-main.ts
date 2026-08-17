@@ -1195,6 +1195,9 @@ async function main() {
           forcedCollapse = false;
         }
         lastRootShift = f.rootShift;
+        // Noise anchor (motion-polish): the march's fbm rides the body's root
+        // translation so the skin texture does not swim while walking.
+        view.setRootShift(f.rootShift[0], f.rootShift[2]);
 
         let points = stepRig(
           { ...bound.rig, restPose: f.restPose }, sdt,
@@ -1245,6 +1248,7 @@ async function main() {
           restStiffness: 0.18,
         }),
       };
+      view.setRootShift(0, 0); // statue: world-anchored noise, as before
     }
     const posed = applyRig(current, bound);
     lastPosed = posed;

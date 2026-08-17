@@ -48,6 +48,15 @@ export interface ZombieGpuView {
   /** Drives the eye-glow flicker. Seconds. */
   setTime(seconds: number): void;
   /**
+   * Anchors the surface/gore/silhouette noise to the body's root translation
+   * (motion-polish): every fbm in the march samples at p - (x, 0, z), so the
+   * texture rides the flesh while the body walks instead of the body sliding
+   * through a stationary noise field. Ground-plane only — the y shift is
+   * structurally zero (wander translates on the floor), which is why the
+   * packed channel is a vec2. Statue bodies leave the default (0, 0).
+   */
+  setRootShift(x: number, z: number): void;
+  /**
    * Swaps the face sheet, its crop rect (as uv scale/offset) and its mean.
    *
    * Does NOT dispose the outgoing texture: one sheet is shared across every
@@ -175,7 +184,9 @@ function defaultUniforms(faceTex: THREE.Texture) {
     // the flesh under it, a loose threshold paints a solid red patch across
     // the brow. Re-measure this if the art changes.
     faceCfg2: uniform(new THREE.Vector4(0, 0.5, 0.88, 1.6)),
-    /** x glowFlicker, y timeSeconds */
+    /** x glowFlicker, y timeSeconds, zw = noise root shift xz (setRootShift —
+     *  the only spare vec2 in this uniform set; see march.wgsl.ts). Chunks
+     *  overwrite zw per frame with their own position instead. */
     faceCfg3: uniform(new THREE.Vector4(0.45, 0, 0, 0)),
     faceProj: uniform(new THREE.Vector4(1.15, 1.15, 0.5, 0.52)),
     faceAtlas: uniform(new THREE.Vector4(1, 1, 0, 0)),
@@ -592,6 +603,7 @@ export function createZombieGpuView(
       u.headAxes.value.set(...axes);
     },
     setTime(seconds) { u.faceCfg3.value.y = seconds; },
+    setRootShift(x, z) { u.faceCfg3.value.z = x; u.faceCfg3.value.w = z; },
     setFaceTexture(tex, atlas, mean) {
       u.faceTex.value = tex;
       u.faceAtlas.value.copy(atlas);
@@ -619,6 +631,9 @@ export function createZombieGpuView(
 
 export interface ChunkGpuView {
   object: THREE.Object3D;
+  /** Live uniforms (copied from the body template at spawn; the noise root
+   *  shift zw is re-anchored to the chunk's own position on every update). */
+  uniforms: MarchUniforms;
   update(chunk: Chunk): void;
   dispose(): void;
 }
@@ -756,6 +771,14 @@ export function createChunkGpuView(
 
     if (u.faceCfg.value.x > 0.5) u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
 
+    // Noise anchor: the chunk's gore mottle rides the CHUNK, not the world.
+    // Overwrites the body root shift the template copy brought over — a
+    // severed limb tumbling away keeps its own mottle glued to its flesh
+    // (translation only; tumble rotation still slides it, same as the body's
+    // minimum fix).
+    u.faceCfg3.value.z = c.pos[0];
+    u.faceCfg3.value.w = c.pos[2];
+
     dataTex.needsUpdate = true;
     return { sx, sy, sz };
   }
@@ -770,6 +793,7 @@ export function createChunkGpuView(
 
   return {
     object: mesh,
+    uniforms: u,
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);

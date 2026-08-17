@@ -430,21 +430,28 @@ export function stepMotion(
   // would also erase the authored hunch — so the aim is applied as a DELTA:
   // solved chain minus the same chain laid out along the authored (rest)
   // direction. Looking dead ahead reproduces the authored pose exactly.
+  //
+  // NECK PIVOT (motion-polish): the head rotates about the NECK joint, not
+  // the chest. The old chest-rooted chain swung the head rest-target on a
+  // chest→head lever (~0.32 m) — alone worth a quarter-metre of drift inside
+  // the clamp cone — and the verlet skull constraint (length only, never
+  // direction) then let the skull orbit the neck point to chase it: the
+  // "loose neck". Rooting the aim at the neck bounds the target to a
+  // rotation of the neck→head lever, and applyRig's rigid pass clamps the
+  // POSED head to the same IK_TUNING cone regardless.
   let aim = state.aim;
   if (!collapsed && sig.headAlive) {
-    const restDir = normalize(sub(joints.base[idx.head!]!, joints.base[idx.chest!]!));
+    const restDir = normalize(sub(joints.base[idx.head!]!, joints.base[idx.neck!]!));
     const t = wander.target ?? add(wander.pos, scale(headingDir(wander.heading), 2));
     const look: Vec3 = [t[0], joints.base[idx.head!]![1] + shift[1], t[2]];
-    const stepped = stepAim(aim, targets[idx.chest!]!, restDir, look, joints.neck, {
+    const stepped = stepAim(aim, targets[idx.neck!]!, restDir, look, [joints.neck[1]], {
       maxYaw: IK_TUNING.headMaxYaw,
       maxPitch: IK_TUNING.headMaxPitch,
       turnRate: IK_TUNING.headTurnRate,
     }, dt);
     aim = stepped.state;
-    const restNeck = add(targets[idx.chest!]!, scale(restDir, joints.neck[0]));
-    const restHead = add(restNeck, scale(restDir, joints.neck[1]));
-    targets[idx.neck!] = add(targets[idx.neck!]!, sub(stepped.points[1]!, restNeck));
-    targets[idx.head!] = add(targets[idx.head!]!, sub(stepped.points[2]!, restHead));
+    const restHead = add(targets[idx.neck!]!, scale(restDir, joints.neck[1]));
+    targets[idx.head!] = add(targets[idx.head!]!, sub(stepped.points[1]!, restHead));
   }
 
   // --- IK override 3: wound clutch ------------------------------------------

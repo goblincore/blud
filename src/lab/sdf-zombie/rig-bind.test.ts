@@ -1,10 +1,12 @@
 // src/lab/sdf-zombie/rig-bind.test.ts
 import { describe, it, expect } from 'vitest';
-import { bindRig, applyRig } from './rig-bind';
+import { bindRig, applyRig, HEAD_RIGID_TUNING } from './rig-bind';
+import { IK_TUNING } from './ik';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
-import { len, sub } from './vec';
+import { add, dot, len, normalize, sub } from './vec';
+import type { Vec3 } from './types';
 
 describe('bindRig', () => {
   const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -80,5 +82,110 @@ describe('applyRig', () => {
       rig = stepRig(rig, 1 / 60, { gravity: [0, -9.8, 0], damping: 0.04, iterations: 4, restStiffness: 0.2 });
     const out = applyRig(body, { ...bound, rig });
     for (const p of out.prims) for (const v of [...p.a, ...p.b]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe('applyRig — rigid head cluster (motion-polish)', () => {
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(body);
+
+  /** The worst-case angle the clamp cone permits off the rest direction:
+   *  acos(cos(maxYaw)·cos(maxPitch)) — the cone's corner, where both yaw and
+   *  pitch sit at their bounds simultaneously. */
+  const CONE = Math.acos(
+    Math.cos(IK_TUNING.headMaxYaw) * Math.cos(IK_TUNING.headMaxPitch));
+
+  // The rigid set: head-limb sphere prims (cranium/jaw/brow/nose).
+  const rigidIdx = body.prims
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.limb === 'head' && len(sub(p.a, p.b)) < 1e-9)
+    .map(({ i }) => i);
+  const centre = (prims: typeof body.prims, i: number) => prims[i]!.a; // spheres: a === b
+
+  // Deterministic pseudo-rotation of the whole upper rig, so the head
+  // transform is arbitrary rather than axis-aligned (a rotated frame is the
+  // general case the rigidity property must hold in).
+  const posedRig = (headDelta: readonly [number, number, number], neckDelta: readonly [number, number, number]) =>
+    ({ ...bound, rig: { ...bound.rig, points: bound.rig.points.map((p, i) => {
+      if (i === bound.head!.tip) return { ...p, pos: add(p.pos, headDelta) as Vec3 };
+      if (i === bound.head!.pivot) return { ...p, pos: add(p.pos, neckDelta) as Vec3 };
+      return p;
+    }) } });
+
+  it('binds a head rigid frame with the face spheres as its members', () => {
+    expect(bound.head).not.toBeNull();
+    expect(bound.head!.prims.size).toBe(rigidIdx.length);
+    expect(rigidIdx.length).toBeGreaterThanOrEqual(4); // cranium+jaw+brow+nose
+    // The neck-flesh capsule is NOT a member: it must keep spanning
+    // chest→neck per-endpoint, or its chest end tears loose.
+    const neckCapsule = body.prims.findIndex(p => p.limb === 'head' && len(sub(p.a, p.b)) >= 1e-9);
+    expect(neckCapsule).toBeGreaterThanOrEqual(0);
+    expect(bound.head!.prims.has(neckCapsule)).toBe(false);
+  });
+
+  it('RIGIDITY: face prims preserve rest-pose relative offsets under an arbitrary head pose', () => {
+    // Rotate+translate the skull points arbitrarily (a tilted direction the
+    // clamp will have to work against, plus neck drift). Every pair of rigid
+    // prim centres must keep its rest separation EXACTLY — one rigid unit,
+    // no shear — which is precisely what the per-endpoint binding broke.
+    const moved = posedRig([0.09, -0.05, 0.12], [0.02, -0.01, 0.03]);
+    const out = applyRig(body, moved);
+    for (const i of rigidIdx) for (const j of rigidIdx) {
+      const rest = len(sub(centre(body.prims, i), centre(body.prims, j)));
+      const posed = len(sub(centre(out.prims, i), centre(out.prims, j)));
+      expect(Math.abs(posed - rest)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('NECK CLAMP: an extreme head-point direction never rotates the face past the look-at cone', () => {
+    // Shove the tip 90°+ sideways — far past every clamp. The posed face may
+    // rotate up to the cone corner (both yaw and pitch at their IK_TUNING
+    // bounds), never beyond: pairwise face vectors rotate by at most CONE.
+    const pivot = bound.rig.points[bound.head!.pivot]!.pos;
+    const tip = bound.rig.points[bound.head!.tip]!.pos;
+    const along = normalize(sub(tip, pivot));
+    const side: Vec3 = [-along[2], 0.2, along[0]]; // ⊥-ish, unnormalised on purpose
+    const moved = posedRig(
+      [side[0] * 0.5 - along[0] * 0.16, side[1] * 0.5, side[2] * 0.5 - along[2] * 0.16], [0, 0, 0]);
+    const out = applyRig(body, moved);
+    for (const i of rigidIdx) for (const j of rigidIdx) {
+      if (i === j) continue;
+      const a = normalize(sub(centre(out.prims, i), centre(out.prims, j)));
+      const b = normalize(sub(centre(body.prims, i), centre(body.prims, j)));
+      const ang = Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
+      expect(ang).toBeLessThanOrEqual(CONE + 1e-6);
+    }
+  });
+
+  it('SOCKET: the cranium stays on the neck no matter how far the head point drifts', () => {
+    // The owner screenshot: head floating half a metre off the shoulders.
+    // The rigid unit's origin may trail the head point by at most
+    // HEAD_RIGID_TUNING.driftMax beyond the rigid prediction — so the posed
+    // cranium sits within rest-offset + driftMax of the pivot, always.
+    const moved = posedRig([0.5, 0.05, -0.35], [0, 0, 0]);
+    const out = applyRig(body, moved);
+    const pivotPos = moved.rig.points[bound.head!.pivot]!.pos;
+    const cranium = rigidIdx[0]!; // prims are cluster-sorted; head cluster first
+    const restOff = len(sub(centre(body.prims, cranium), bound.rig.points[bound.head!.pivot]!.pos));
+    const posedOff = len(sub(centre(out.prims, cranium), pivotPos));
+    expect(posedOff).toBeLessThanOrEqual(restOff + HEAD_RIGID_TUNING.driftMax + 1e-9);
+  });
+
+  it('TUNABLE clamp: the drift bound ENGAGES — a half-metre head-point shove moves the posed cranium by centimetres, not decimetres', () => {
+    // The owner screenshot: head floating half a metre off the shoulders.
+    // Without the clamp the rigid unit's origin would trail the head point's
+    // full drift; with driftMax = 0.01 the cranium must sit orders of
+    // magnitude closer to its socket than the raw shove. (Cranking
+    // HEAD_RIGID_TUNING.driftMax is the loose-neck creature dial — this test
+    // pins the near-rigid DEFAULT.)
+    const shove: readonly [number, number, number] = [0.5, 0.05, -0.35];
+    const moved = posedRig(shove, [0, 0, 0]);
+    const out = applyRig(body, moved);
+    const pivotPos = moved.rig.points[bound.head!.pivot]!.pos;
+    const cranium = rigidIdx[0]!;
+    const restOff = len(sub(centre(body.prims, cranium), bound.rig.points[bound.head!.pivot]!.pos));
+    const posedOff = len(sub(centre(out.prims, cranium), pivotPos));
+    expect(posedOff).toBeLessThanOrEqual(restOff + HEAD_RIGID_TUNING.driftMax + 1e-9);
+    expect(len(shove) - (posedOff - restOff)).toBeGreaterThan(0.4); // the clamp bit
   });
 });
