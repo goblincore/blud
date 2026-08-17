@@ -15,6 +15,8 @@ export interface PackedBody {
   primB: Float32Array;         // xyz = endpoint B, w = blendK
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
   primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
+  restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
+  restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = 1 when the cluster carries oriented prims
   primCount: number;
@@ -25,11 +27,25 @@ export interface PackedBody {
   carveCount: number;
 }
 
-export function packBody(body: BuiltBody): PackedBody {
+/**
+ * Packs one body for the data texture.
+ *
+ * `rest` (motion-polish task 6) is the SAME body in its authored rest pose —
+ * buildBody's un-rigged output, where applyRig produces the posed one. The
+ * shader maps every noise sample into the DOMINANT prim's rest frame so the
+ * flesh texture rides every limb (the texture-swimming fix), which needs the
+ * rest endpoints alongside the posed ones. Prim indices correspond 1:1
+ * (applyRig maps prims without reordering — the fold order is sacred).
+ * Omitted, the posed prims double as the rest pose: the right answer for
+ * never-rigged bodies (crowd statues, chunk views at spawn).
+ */
+export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
   const primA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primQuat = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
   let carveCount = 0;
@@ -57,6 +73,14 @@ export function packBody(body: BuiltBody): PackedBody {
     // costs one compare. Only rig-posed skull prims ever carry a real quat.
     const q = p.orient;
     primQuat.set(q ? [q[0], q[1], q[2], q[3]] : [0, 0, 0, 1], o);
+    // Rest endpoints (motion-polish task 6). A missing rest prim packs as
+    // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
+    // always has radius > 0), which falls back to the old noiseLocal anchor.
+    const rp = (rest ?? body).prims[i];
+    if (rp) {
+      restA.set([rp.a[0], rp.a[1], rp.a[2], rp.radius], o);
+      restB.set([rp.b[0], rp.b[1], rp.b[2], rp.blendK], o);
+    }
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
@@ -78,7 +102,7 @@ export function packBody(body: BuiltBody): PackedBody {
   });
 
   return {
-    primA, primB, primScale, primQuat, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, restA, restB, clusterBounds, clusterRange,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,

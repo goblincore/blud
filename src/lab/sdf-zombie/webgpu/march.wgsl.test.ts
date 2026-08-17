@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
-  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
+  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
@@ -173,7 +173,7 @@ describe('ported features reach the entry point', () => {
     // Anchored to the noise shift (motion-polish) so the mottle rides the
     // chunk's own translation, not the world.
     expect(MARCH_BODY).toContain('goreStrength');
-    expect(MARCH_BODY).toContain('fbm(noiseLocal(p, noiseShift) * 6.0)');
+    expect(MARCH_BODY).toContain('fbm(anchor * 6.0)');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
@@ -190,31 +190,42 @@ describe('ported features reach the entry point', () => {
     // field relaxed until |d| enters the shell, then the silhouette fbm
     // displaces the stepped distance itself. Same 3.0 scale as mapBody's
     // noise term, so calcNormal's warped normals match the displaced skin.
-    expect(MARCH_BODY).toContain('var d = mapBody(');
+    expect(MARCH_BODY).toContain('let dres = mapBody(');
+    expect(MARCH_BODY).toContain('var d = dres.x;');
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
     expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
+    // The shell's fbm samples the dominant prim's REST frame (task 6) — the
+    // displaced silhouette rides the same flesh as the normal-warped skin.
     expect(MARCH_BODY)
-      .toMatch(/d = d \+ fbm\(noiseLocal\(camPos \+ rd \* t, noiseShift\) \* 3\.0\) \* shellAmp;/);
+      .toMatch(/d = d \+ fbm\(restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\)\) \* 3\.0\) \* shellAmp;/);
   });
 
-  it('anchors every noise site to the root shift, so texture rides the flesh (motion-polish)', () => {
+  it('anchors every noise site in REST space, so texture rides every limb (task 6)', () => {
     // The field is packed in world space, but the fbm — silhouette, shell,
-    // micro surface detail, gore mottle — must sample the BODY's frame or a
-    // walking body slides through a stationary noise field. The shift packs
-    // into faceCfg3.zw (the only spare vec2 — see zombie-gpu.ts) with y
-    // structurally zero: root translation is ground-plane only. mapBody and
-    // calcNormal thread it so the normal-warping warps with the same anchor.
+    // micro surface detail, gore mottle — must sample the DOMINANT prim's
+    // REST frame or a limb slides through the world-frame noise field as it
+    // moves (owner playtest: "you can see the arms move but the texture
+    // doesn't"). mapBody tracks the argmin prim in its fold and every noise
+    // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
+    // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
     expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift)');
-    expect(MARCH_BODY).toContain('fbm(noiseLocal(p, noiseShift) * 22.0)');
+    expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
+    expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
     const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
-    expect(mapBody).toContain('fbm(noiseLocal(p, noiseShift) * 3.0) * noiseAmp');
+    // Argmin tripwire: ONE sd evaluation feeds both the fold and the tracker.
+    expect(mapBody).toContain('var sd = sdPrim(p, idx, data);');
+    expect(mapBody).toContain('if (ori) { sd = sdPrimO(p, idx, data); }');
+    expect(mapBody).toContain('if (sd < best) { best = sd; bestIdx = idx; }');
+    expect(mapBody).toContain('d = smin(d, sd, k);');
+    expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
+    expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
     // independent of the motion plumbing — zero shift, dead noise term.
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0))');
+      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0)).x');
   });
 
   it('steps the shell conservatively and never retracts a displaced sample', () => {
@@ -253,6 +264,7 @@ describe('data texture layout', () => {
     const rows = [
       ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
+      ROW_REST_A, ROW_REST_B,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -327,7 +339,7 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // the WGSL actually contains the branch being mirrored.
     expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
-    expect(DATA_ROWS).toBe(8);
+    expect(DATA_ROWS).toBe(10);
   });
 
   it('sdPrim stays the plain world-axis capsule, diffable against the frozen GLSL', () => {

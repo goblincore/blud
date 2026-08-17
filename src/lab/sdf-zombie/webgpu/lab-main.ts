@@ -1571,7 +1571,11 @@ async function main() {
     }
     const posed = applyRig(current, bound, lastBodyYaw);
     lastPosed = posed;
-    view.update(posed);
+    // Rest-space noise anchor (motion-polish task 6): `current` is the
+    // authored, un-rigged body — the rest pose the noise texture is baked
+    // into. Prim indices correspond 1:1 with the posed body (applyRig maps
+    // prims without reordering; severing flips flags, never order).
+    view.update(posed, current);
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     view.setTime(performance.now() / 1000);
     // Re-derive the skull's sphere from the POSED primitives so the face

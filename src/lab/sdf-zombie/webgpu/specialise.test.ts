@@ -16,8 +16,11 @@ const body = buildBody(makeZombie({ ...DEFAULT_FACE }), DEFAULT_BUILD_OPTS);
 
 /** Primitive indices in the order the generated source folds them. */
 function foldOrder(src: string, op: 'smin' | 'smax'): number[] {
+  // The additive fold evaluates sdPrim on its own line so the ONE result
+  // feeds both the smin and the argmin tracker (motion-polish task 6); the
+  // smin then folds the shared `sd`. Carves keep the inline form.
   const re = op === 'smin'
-    ? /d = smin\(d, sdPrim\(p, (\d+), data\)/g
+    ? /^\s*sd = sdPrim\(p, (\d+), data\);$/gm
     : /d = smax\(d, -sdPrim\(p, (\d+), data\)/g;
   return [...src.matchAll(re)].map(m => Number(m[1]));
 }
@@ -71,6 +74,21 @@ describe('specialiseMapBody', () => {
     // The silhouette fbm runs ~100x per pixel and is the most expensive term
     // in the shader; losing its branch would undo the biggest LOD lever.
     expect(src).toContain('noiseAmp <= 0.0');
+  });
+
+  it('keeps the argmin tracking and the rest-space noise anchor (task 6)', () => {
+    // PARITY with the generic mapBody: the specialised fold must track the
+    // dominant prim (argmin over the SAME sd the fold uses — no second
+    // sdPrim call) and anchor the noise term in that prim's rest frame, or
+    // crowd/chunk bodies would shade with a different noise field than the
+    // hero. The rest endpoints are runtime texture rows, so nothing about
+    // them is baked — this is a text tripwire, not a value pin.
+    expect(src).toContain('var bestIdx = -1;');
+    expect(src).toContain('if (sd < best) { best = sd; bestIdx = ');
+    expect(src).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
+    expect(src).toContain('return vec4<f32>(d + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), 0.0, 0.0);');
+    // And the return packing matches the generic signature (x field, y argmin).
+    expect(src).toContain('-> vec4<f32> {');
   });
 
   it('emits no dynamic loop at all — that is the whole point', () => {

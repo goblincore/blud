@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
-import { add, cross, len, lerp, scale as vscale, sub } from './vec';
+import type { Quat } from './vec';
+import { add, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
  * Shader array ceilings. THE canonical declaration — `march.glsl.ts` imports
@@ -166,6 +167,123 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
     }
 
   return errs;
+}
+
+// ——— REST-SPACE NOISE ANCHOR, CPU mirror (motion-polish task 6) ————————————
+// The WGSL samples every fbm in the DOMINANT prim's rest frame (restPoint in
+// march.wgsl.ts) so the flesh texture rides every limb. These are the exact
+// CPU twins, needed so tests can assert pose-invariance of the noise term
+// without a GPU. The raycast field itself (sdBody above) never included the
+// noise term and still does not — the noise warps SHADING normals and the
+// silhouette shell only, so click-to-shoot is untouched by this change.
+
+/** fract() as WGSL defines it: x - floor(x), per component. */
+const fract3 = (p: Vec3): Vec3 => [p[0] - Math.floor(p[0]), p[1] - Math.floor(p[1]), p[2] - Math.floor(p[2])];
+
+/** CPU twin of HASH13 in march.wgsl.ts. */
+export function hash13(pIn: Vec3): number {
+  let p = fract3(vscale(pIn, 0.1031));
+  const s = dot(p, [p[1] + 33.33, p[2] + 33.33, p[0] + 33.33]);
+  p = [p[0] + s, p[1] + s, p[2] + s];
+  const v = (p[0] + p[1]) * p[2];
+  return v - Math.floor(v);
+}
+
+/** CPU twin of NOISE3 in march.wgsl.ts. */
+export function noise3(p: Vec3): number {
+  const i: Vec3 = [Math.floor(p[0]), Math.floor(p[1]), Math.floor(p[2])];
+  let f = fract3(p);
+  f = [f[0] * f[0] * (3 - 2 * f[0]), f[1] * f[1] * (3 - 2 * f[1]), f[2] * f[2] * (3 - 2 * f[2])];
+  const h = (x: number, y: number, z: number) => hash13([i[0] + x, i[1] + y, i[2] + z]);
+  const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+  const n = mix(
+    mix(mix(h(0, 0, 0), h(1, 0, 0), f[0]), mix(h(0, 1, 0), h(1, 1, 0), f[0]), f[1]),
+    mix(mix(h(0, 0, 1), h(1, 0, 1), f[0]), mix(h(0, 1, 1), h(1, 1, 1), f[0]), f[1]),
+    f[2]);
+  return n * 2 - 1;
+}
+
+/** CPU twin of FBM in march.wgsl.ts. */
+export function fbm(p: Vec3): number {
+  return noise3(vscale(p, 4)) * 0.6 + noise3(vscale(p, 9)) * 0.3;
+}
+
+/**
+ * Shortest-arc quat taking unit vector u onto v, in the cheap half-angle
+ * form (cross, 1+d) — the SAME rotation vec.qFromTo's acos form produces,
+ * computed the way qFromToV in march.wgsl.ts does so the mirror stays tight.
+ */
+function qFromToCheap(u: Vec3, v: Vec3): Quat {
+  const d = Math.max(-1, Math.min(1, dot(u, v)));
+  if (d >= 1 - 1e-6) return [0, 0, 0, 1];
+  if (d <= -1 + 1e-6) {
+    const seed: Vec3 = Math.abs(u[0]) >= 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const c = normalize(cross(u, seed));
+    return [c[0], c[1], c[2], 0];
+  }
+  const c = cross(u, v);
+  return qNormalize([c[0], c[1], c[2], 1 + d]);
+}
+
+/**
+ * CPU twin of restPoint in march.wgsl.ts: maps a world point into the
+ * DOMINANT primitive's rest frame — the additive prim whose own sdPrimitive
+ * is smallest at p (the argmin the WGSL fold tracks), then the rigid
+ * transform between the posed and rest capsule frames (midpoint translation,
+ * shortest-arc axis swing composed over the orient conjugate). `rest` is the
+ * same body in its authored rest pose; omitted, the posed prims double as
+ * rest (never-rigged bodies). Returns p unchanged when no live additive prim
+ * exists — the WGSL falls back to the noiseLocal anchor there, which at zero
+ * root shift is also p.
+ *
+ * ROLL about the capsule axis is deliberately unresolved (shortest arc picks
+ * any roll) — the noise is statistical, so a consistent arbitrary roll reads
+ * as the same flesh. The CPU argmin runs WITHOUT the shader's cluster-bounds
+ * cull; a culled cluster can only hold prims farther than the fold's margin,
+ * so the two agree except in cases that resolve to a neighbouring prim's
+ * frame — the accepted seam behaviour.
+ */
+export function restSpacePoint(p: Vec3, body: Body, rest?: Body): Vec3 {
+  let best = Infinity;
+  let bestIdx = -1;
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const prim = body.prims[i]!;
+      if (prim.op === 'sub' || prim.dead) continue;
+      const sd = sdPrimitive(p, prim);
+      if (sd < best) { best = sd; bestIdx = i; }
+    }
+  }
+  if (bestIdx < 0) return p;
+  const rp = (rest ?? body).prims[bestIdx];
+  // restA.w <= 0 is the WGSL's 'unwritten rest row' sentinel; a real prim
+  // always has radius > 0.
+  if (!rp || rp.radius <= 0) return p;
+  const prim = body.prims[bestIdx]!;
+  const midP = vscale(add(prim.a, prim.b), 0.5);
+  const midR = vscale(add(rp.a, rp.b), 0.5);
+  let q: Quat = [0, 0, 0, 1];
+  const O = prim.orient;
+  if (O && Math.abs(1 - O[3]) > 1e-6) q = [-O[0], -O[1], -O[2], O[3]];
+  const axisP = sub(prim.b, prim.a);
+  const axisR = sub(rp.b, rp.a);
+  const lenP = len(axisP);
+  const lenR = len(axisR);
+  if (lenP > 1e-6 && lenR > 1e-6) {
+    // Swing AFTER the orient frame: qMul(swing, q) applies q first.
+    q = qMul(qFromToCheap(qRotate(q, vscale(axisP, 1 / lenP)), vscale(axisR, 1 / lenR)), q);
+  }
+  return add(midR, qRotate(q, sub(p, midP)));
+}
+
+/**
+ * The noise term exactly as mapBody evaluates it: fbm at the rest-space
+ * anchor scaled by 3. Pose-invariance of THIS value is the whole feature —
+ * the same material point must read the same noise in every pose.
+ */
+export function surfaceNoise(p: Vec3, body: Body, rest?: Body): number {
+  return fbm(vscale(restSpacePoint(p, body, rest), 3));
 }
 
 /**

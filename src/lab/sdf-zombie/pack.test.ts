@@ -91,6 +91,40 @@ describe('packBody', () => {
   it('reports the largest blendK, which the shader needs as its cull margin', () => {
     expect(packed.maxBlendK).toBe(Math.max(...built.prims.map(p => p.blendK)));
   });
+
+  it('packs the rest rows from the rest body when one is given (task 6)', () => {
+    // Two data rows ride alongside the posed endpoints: restA = [a, radius],
+    // restB = [b, blendK] of the SAME prim in the authored rest pose.
+    const rest = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const shifted = {
+      ...rest,
+      prims: rest.prims.map(p => ({
+        ...p,
+        a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3,
+        b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3,
+      })),
+    };
+    const p = packBody(shifted, rest);
+    expect(Array.from(p.restA.slice(0, 4))).toEqual([...rest.prims[0]!.a, rest.prims[0]!.radius].map(f32));
+    expect(Array.from(p.restB.slice(0, 4))).toEqual([...rest.prims[0]!.b, rest.prims[0]!.blendK].map(f32));
+    // The posed rows carry the shifted endpoints — the two never mix.
+    expect(Array.from(p.primA.slice(0, 4))).toEqual([...shifted.prims[0]!.a, shifted.prims[0]!.radius].map(f32));
+    // restA.w is the 'written' sentinel: a real radius is always > 0.
+    for (let i = 0; i < p.primCount; i++) expect(p.restA[i * PRIM_STRIDE + 3]).toBeGreaterThan(0);
+  });
+
+  it('defaults the rest rows to the posed prims (never-rigged bodies)', () => {
+    // Crowd statues and chunk views pack no separate rest body; the posed
+    // prims double as rest, which keeps their noise anchored exactly as the
+    // explicit-rest path would anchor a motionless rig.
+    expect(Array.from(packed.restA)).toEqual(Array.from(packed.primA));
+    expect(Array.from(packed.restB)).toEqual(Array.from(packed.primB));
+  });
+
+  it('packs a missing rest prim as zeros — the shader\'s unwritten sentinel', () => {
+    const p = packBody(built, { prims: [], clusters: [], bones: new Map() });
+    expect(Array.from(p.restA.slice(0, 4))).toEqual([0, 0, 0, 0]);
+  });
 });
 
 it('packs a carve as a negative blend constant', () => {
