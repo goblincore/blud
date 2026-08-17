@@ -520,6 +520,9 @@ async function main() {
   let wanderOn = true;
   let armStyle: ArmStyle = GAIT_TUNING.armStyle;
   let headingFollow: number = MOTION_TUNING.headingFollow;
+  /** Gaze-follow gain — 1 looks where the body walks, 0 pins the gaze to the
+   *  wander target (the creepy variant the owner wants kept reachable). */
+  let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
   let lastRootShift: Vec3 = [0, 0, 0];
   /** The body's applied yaw — feeds applyRig's rigid-head clamp cone. */
@@ -616,9 +619,9 @@ async function main() {
     return null;
   }
 
-  function uploadWounds(prims: BuildResult['prims']) {
+  function uploadWounds(prims: BuildResult['prims'], yaw = lastBodyYaw) {
     view.setWounds(
-      wounds.map(w => woundWorldPos(prims, w)),
+      wounds.map(w => woundWorldPos(prims, w, yaw)),
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
@@ -626,7 +629,9 @@ async function main() {
       wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
     );
   }
-  function refreshWounds() { uploadWounds(current.prims); }
+  // Rest prims pair with the yaw-0 frame (they ARE the yaw-0 body); the
+  // next frame's uploadWounds(posed) overwrites this transient anyway.
+  function refreshWounds() { uploadWounds(current.prims, 0); }
 
   /**
    * The hero's wounds as world-space removal spheres, from the SAME posed
@@ -634,7 +639,7 @@ async function main() {
    * the jiggle exactly as the rendered craters do.
    */
   function woundSpheres(prims: BuildResult['prims']) {
-    return wounds.map(w => ({ centre: woundWorldPos(prims, w), radius: w.radius }));
+    return wounds.map(w => ({ centre: woundWorldPos(prims, w, lastBodyYaw), radius: w.radius }));
   }
 
   // -------------------------------------------------------------------------
@@ -798,7 +803,9 @@ async function main() {
     if (!hit) return;
 
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type);
+    // The wound frame is the body's CURRENT yaw — the same transform the
+    // heading rotation puts the prims through, so the crater rides the turn.
+    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, lastBodyYaw);
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and, for torso blasts,
@@ -1469,7 +1476,7 @@ async function main() {
       for (const sdt of planSubSteps(dt)) {
         const step = stepMotion(
           motionState, motionJoints,
-          { enabled: true, wander: wanderOn, armStyle, headingFollow },
+          { enabled: true, wander: wanderOn, armStyle, headingFollow, gazeFollow },
           {
             dt: sdt,
             shot: pendingShot,
@@ -2002,6 +2009,15 @@ async function main() {
   function setHeadingFollow(v: number) {
     headingFollow = Math.max(0, Math.min(1, v));
   }
+  /** Gaze-follow gain 0..1 — 0 pins the gaze to the wander target. */
+  function setGazeFollow(v: number) {
+    gazeFollow = Math.max(0, Math.min(1, v));
+  }
+  addSlider(motionBox, {
+    label: 'gaze follow', min: 0, max: 1, step: 0.05,
+    get: () => gazeFollow,
+    set: setGazeFollow,
+  });
 
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
@@ -2068,7 +2084,7 @@ async function main() {
         const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1], lastPosed);
         if (!hit) continue;
         const w = worldHitToWound(
-          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast');
+          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', lastBodyYaw);
         wounds = pushWound(wounds, w, MAX_WOUNDS);
         pendingWounds.push(w); // stamped blasts feed the damage meter too
       }
@@ -2148,6 +2164,7 @@ async function main() {
         bodyYaw: motionState.bodyYaw,
         armStyle,
         headingFollow,
+        gazeFollow,
         recoil: motionState.recoil.joint,
         pos: motionState.wander.pos as unknown as number[],
         speed: motionState.wander.speed,
@@ -2161,6 +2178,8 @@ async function main() {
     setArmStyle,
     /** Heading-follow gain — 0 keeps the body facing one way (strafe-walker). */
     setHeadingFollow,
+    /** Gaze-follow gain — 0 pins the gaze to the wander target (creepy variant). */
+    setGazeFollow,
     /** Motion master toggle — off is the pre-X1.22 statue. */
     setMotionEnabled,
     // — X1.23 FPV + dynamite ——————————————————————

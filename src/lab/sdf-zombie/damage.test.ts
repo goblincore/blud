@@ -1,11 +1,21 @@
 // src/lab/sdf-zombie/damage.test.ts
 import { describe, it, expect } from 'vitest';
 import { worldHitToWound, woundWorldPos, pushWound, MAX_WOUNDS, WOUND_PROFILES } from './damage';
-import type { Primitive } from './types';
-import { add, len, sub } from './vec';
+import { rotateYaw } from './gait';
+import type { Primitive, Vec3 } from './types';
+import { add, len, qFromAxisAngle, qMul, qRotate, sub } from './vec';
 
 const capsule = (a: [number, number, number], b: [number, number, number]): Primitive =>
   ({ a, b, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'armL', cluster: 2 });
+
+const sphere = (c: Vec3): Primitive =>
+  ({ a: c, b: c, radius: 0.14, scale: [1, 1, 1], blendK: 0.02, limb: 'torso', cluster: 1 });
+
+/** Rigid body turn: rotate p by `yaw` about the root pivot's vertical axis —
+ *  the same transform motion.ts's heading rotation puts every rest target
+ *  (and so every posed prim endpoint) through. */
+const rotAbout = (p: Vec3, pivot: Vec3, yaw: number): Vec3 =>
+  add(pivot, rotateYaw(sub(p, pivot), yaw));
 
 describe('worldHitToWound / woundWorldPos', () => {
   const prims = [capsule([0, 1, 0], [0, 1.4, 0]), capsule([1, 1, 0], [1, 1.4, 0])];
@@ -46,6 +56,61 @@ describe('worldHitToWound / woundWorldPos', () => {
     expect(w.type).toBe('burn');
     expect(w.radius).toBe(0.09);
     expect(w.ageSec).toBe(0);
+  });
+});
+
+describe('wounds ride the heading rotation (motion-polish regression)', () => {
+  // Owner playtest: a wound stamped on the turning body stayed fixed
+  // relative to the VIEWER — the wound frame was world-axis-locked for
+  // sphere prims (no axis) and vertical capsules (degenerate basis). The
+  // world mapping must go through the SAME yaw the heading rotation applies.
+  const pivot: Vec3 = [0, 0.92, 0]; // the pelvis line the body turns about
+  const YAW = Math.PI / 2;
+
+  it('sphere prim (torso blob): a 90° turn carries the crater with the flesh', () => {
+    const atRest = sphere([0.05, 1.25, 0.12]);
+    const hit: Vec3 = [0.14, 1.3, 0.2];
+    const w = worldHitToWound([atRest], hit, 0.05, 'pellet', 0);
+    const turned = [sphere(rotAbout(atRest.a, pivot, YAW))];
+    const back = woundWorldPos(turned, w, YAW);
+    expect(len(sub(back, rotAbout(hit, pivot, YAW)))).toBeCloseTo(0, 8);
+  });
+
+  it('vertical capsule (thigh, degenerate axis basis): same 90° guarantee', () => {
+    const atRest = capsule([0.1, 1.3, 0.02], [0.1, 0.9, 0.02]); // axis exactly ±y
+    const hit: Vec3 = [0.16, 1.1, 0.08];
+    const w = worldHitToWound([atRest], hit, 0.05, 'pellet', 0);
+    const turned = [capsule(
+      rotAbout(atRest.a as Vec3, pivot, YAW) as [number, number, number],
+      rotAbout(atRest.b as Vec3, pivot, YAW) as [number, number, number],
+    )];
+    const back = woundWorldPos(turned, w, YAW);
+    expect(len(sub(back, rotAbout(hit, pivot, YAW)))).toBeCloseTo(0, 8);
+  });
+
+  it('oriented prim (rigid head sphere): the crater rides the orient quat', () => {
+    const neck: Vec3 = [0, 1.5, 0.1];
+    const q1 = qFromAxisAngle([0, 1, 0], 0.3);
+    const atRest: Primitive = { ...sphere(add(neck, [0, 0.1, 0.05])), orient: q1 };
+    const hit: Vec3 = add(atRest.a, [0.06, 0.03, 0.02]);
+    const w = worldHitToWound([atRest], hit, 0.05, 'pellet');
+    // The head turns 90° more about the neck: origin swings, quat composes.
+    const dq = qFromAxisAngle([0, 1, 0], YAW);
+    const turned: Primitive = {
+      ...atRest,
+      a: add(neck, qRotate(dq, sub(atRest.a, neck))),
+      b: add(neck, qRotate(dq, sub(atRest.b, neck))),
+      orient: qMul(dq, q1),
+    };
+    const back = woundWorldPos([turned], w);
+    expect(len(sub(back, add(neck, qRotate(dq, sub(hit, neck)))))).toBeCloseTo(0, 8);
+  });
+
+  it('round-trips exactly at a nonzero yaw (stamp frame === upload frame)', () => {
+    const turned = [sphere(rotAbout([0.05, 1.25, 0.12], pivot, YAW))];
+    const hit: Vec3 = [0.0, 1.28, 0.2];
+    const w = worldHitToWound(turned, hit, 0.05, 'blast', YAW);
+    expect(len(sub(woundWorldPos(turned, w, YAW), hit))).toBeCloseTo(0, 8);
   });
 });
 

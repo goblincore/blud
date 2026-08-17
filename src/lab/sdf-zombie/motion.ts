@@ -58,7 +58,7 @@
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
-import { add, len, normalize, scale, sub } from './vec';
+import { add, len, normalize, qFromAxisAngle, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName } from './gait';
 import { GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
@@ -91,6 +91,16 @@ export const MOTION_TUNING = {
    *  authored direction while moving any direction. A tunable, not a code
    *  path — do not build the variant, just leave the knob. */
   headingFollow: 1,
+  /** Gaze-follow gain 0..1 — how much the head look-at target is the
+   *  LOOK-AHEAD point along the wander heading (1 = the head looks where the
+   *  body walks, leading into turns inside the clamp cone) versus pinned to
+   *  the fixed wander target (0 = the owner-flagged "creepy" variant: the
+   *  gaze stays locked on a point while the body turns under it — kept
+   *  reachable as a tuning, not a code path). Composed with the existing
+   *  yaw/pitch clamps either way. */
+  gazeFollow: 1,
+  /** How far ahead of the root the gaze's look-ahead point sits (m). */
+  gazeAhead: 2,
   /** Lean into the turn: metres of lateral upper-body offset per rad/s of
    *  applied yaw rate. */
   turnLean: 0.05,
@@ -308,6 +318,9 @@ export interface MotionConfig {
   /** Heading-follow gain override 0..1 — defaults to MOTION_TUNING
    *  .headingFollow. 0 reproduces the strafe-walker (body never turns). */
   headingFollow?: number;
+  /** Gaze-follow gain override 0..1 — defaults to MOTION_TUNING.gazeFollow.
+   *  0 pins the gaze to the wander target (the creepy variant). */
+  gazeFollow?: number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -517,6 +530,55 @@ export function stepMotion(
     ];
   });
 
+  // --- reach-style arm pivot (motion-polish) --------------------------------
+  // The reach pose is a ROTATION about the shoulder anchor, not an additive
+  // offset: gait emits the pitch spec, and this — the layer that knows the
+  // rest arm geometry — rotates each rest segment about the shoulder rig
+  // point. Both segments keep their exact rest lengths, so the verlet
+  // constraints are satisfiable WITHOUT moving the shoulder: the ball stays
+  // socketed in the torso silhouette and only the distal chain travels. (The
+  // old additive raise contracted shoulder→elbow ~33% and elbow→hand ~28%;
+  // the constraints won against the soft rest pull and dragged the shoulder
+  // out of the torso — the detached-arms look the owner flagged.)
+  //
+  // Composition: the pivot is about the FINAL shoulder target (sway, stagger
+  // and lean already ride it), and the elbow/hand's own stagger offsets
+  // re-add after the rotation — reactions still move the arms.
+  if (armStyle === 'reach' && gait.pose.reach) {
+    const r = gait.pose.reach;
+    const right = rotateYaw([1, 0, 0], bodyYaw); // the body's right axis, world
+    const applyArm = (side: 'L' | 'R') => {
+      if (side === 'L' ? sig.missing.armL : sig.missing.armR) return;
+      const sJ = side === 'L' ? 'shoulderL' : 'shoulderR';
+      const eJ = side === 'L' ? 'elbowL' : 'elbowR';
+      const hJ = side === 'L' ? 'handL' : 'handR';
+      const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
+      // Positive pitch = forward reach: about +right the hang swings BACK,
+      // so the rotation angle is negated.
+      const pitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const qUp = qFromAxisAngle(right, -pitch);
+      const qFore = qFromAxisAngle(right, -(pitch - r.drop * armPresence));
+      // The rest segments in world (the generic assembly rotates the base
+      // pose by the same bodyYaw, so these line up with the targets).
+      const s1 = rotateYaw(sub(joints.base[idx[eJ]]!, joints.base[idx[sJ]]!), bodyYaw);
+      const s2 = rotateYaw(sub(joints.base[idx[hJ]]!, joints.base[idx[eJ]]!), bodyYaw);
+      // The bob/sway beat as ONE rigid shift (scaled by presence), plus this
+      // chain's share of the turn lean the generic loop would have added.
+      const shiftW = add(
+        scale(rotateYaw(r.shift, bodyYaw), armPresence),
+        rotateYaw([lean * (LEAN_SHARE[eJ] ?? 0), 0, 0], bodyYaw),
+      );
+      const eGeom = add(targets[iS]!, qRotate(qUp, s1));
+      targets[iE] = add(add(eGeom, shiftW), rotateYaw(stagger.offsets[eJ] ?? Z, bodyYaw));
+      targets[iH] = add(
+        add(add(eGeom, qRotate(qFore, s2)), shiftW),
+        rotateYaw(stagger.offsets[hJ] ?? Z, bodyYaw),
+      );
+    };
+    applyArm('L');
+    applyArm('R');
+  }
+
   // --- IK override 1: foot plants ------------------------------------------
   // A blast's recoveryStep releases both locks for one frame (a forced
   // stance edge): the feet catch up to the shoved root, then re-plant.
@@ -575,7 +637,14 @@ export function stepMotion(
     // clamp cone must be anchored to the applied yaw, not the authored +z.
     const restDir = rotateYaw(
       normalize(sub(joints.base[idx.head!]!, joints.base[idx.neck!]!)), bodyYaw);
-    const t = wander.target ?? add(wander.pos, scale(headingDir(wander.heading), 2));
+    // The gaze target: the look-ahead point along the heading (the head
+    // looks where the body walks and leads into turns) blended against the
+    // fixed wander target by the gazeFollow gain — 0 keeps the old
+    // pinned-gaze behaviour as a pure tuning.
+    const gazeFollow = cfg.gazeFollow ?? MOTION_TUNING.gazeFollow;
+    const ahead = add(wander.pos, scale(headingDir(wander.heading), MOTION_TUNING.gazeAhead));
+    const pinned = wander.target ?? ahead;
+    const t = add(scale(pinned, 1 - gazeFollow), scale(ahead, gazeFollow));
     const look: Vec3 = [t[0], joints.base[idx.head!]![1] + shift[1], t[2]];
     const stepped = stepAim(aim, targets[idx.neck!]!, restDir, look, [joints.neck[1]], {
       maxYaw: IK_TUNING.headMaxYaw,

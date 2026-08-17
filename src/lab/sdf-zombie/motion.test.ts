@@ -13,7 +13,7 @@ import {
 import { buildBody } from './build-body';
 import { makeZombie } from './body';
 import { DEFAULT_FACE } from './face';
-import { bindRig } from './rig-bind';
+import { applyRig, bindRig } from './rig-bind';
 import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
@@ -297,14 +297,127 @@ describe('stepMotion — head aim', () => {
     const ahead = run(j, st, cfg, 30).frame;
     expect(len(sub(ahead.restPose[j.index.head]!, j.base[j.index.head]!))).toBeLessThan(0.25);
 
-    // Target behind (−z): damped + clamped — the head swings backward but
-    // stays within the clamp cone of its rest direction (bounded offset).
+    // Target behind (−z) with the gaze PINNED to it (gazeFollow 0): damped
+    // + clamped — the head swings backward but stays within the clamp cone
+    // of its rest direction (bounded offset).
     const st2 = makeMotionState(31, [0, 0, 0]);
     st2.wander = { pos: [0, 0, 0], heading: 0, speed: 0, target: [0, 1.5, -3], idle: 0 };
-    const behind = run(j, st2, cfg, 240).frame;
+    const behind = run(j, st2, { ...cfg, gazeFollow: 0 }, 240).frame;
     const dh = sub(behind.restPose[j.index.head]!, j.base[j.index.head]!);
     expect(dh[2]).toBeLessThan(-0.05); // visibly swung backward
     expect(len(dh)).toBeLessThan(0.35); // but never past the clamp cone
+  });
+
+  /** World yaw of the head target's direction off the neck, in the heading
+   *  convention (0 = +z, positive = clockwise from above). */
+  const headYaw = (frame: ReturnType<typeof stepMotion>['frame'], j: MotionJoints): number => {
+    const d = sub(frame.restPose[j.index.head]!, frame.restPose[j.index.neck]!);
+    return Math.atan2(d[0], d[2]);
+  };
+
+  it('default gaze: the head yaw converges toward the heading (looks where it walks)', () => {
+    const j = realJoints();
+    // Body already mid-turn toward a +90° heading, no fixed target: the gaze
+    // must chase the HEADING, not a point.
+    const st = makeMotionState(41, [0, 0, 0]);
+    st.wander = { pos: [0, 0, 0], heading: Math.PI / 2, speed: 0, target: null, idle: 0 };
+    const cfg: MotionConfig = { enabled: true, wander: false };
+    // Early: the body is still turned away, but the head already leads —
+    // pulled to the heading side of the clamp cone.
+    const early = run(j, st, cfg, 20);
+    expect(early.frame.bodyYaw).toBeLessThan(Math.PI / 2 - 0.1);
+    expect(headYaw(early.frame, j)).toBeGreaterThan(early.frame.bodyYaw + 0.1);
+    // Late: body yaw and gaze have both converged on the heading.
+    const late = run(j, st, cfg, 240);
+    expect(Math.abs(late.frame.bodyYaw - Math.PI / 2)).toBeLessThan(0.05);
+    expect(Math.abs(headYaw(late.frame, j) - Math.PI / 2)).toBeLessThan(0.2);
+  });
+
+  it('pinned-gaze tuning (gazeFollow 0): the gaze does NOT follow the turn', () => {
+    const j = realJoints();
+    // Same turn, fixed target dead ahead: at gain 0 the head stays locked on
+    // the point (as the existing cone clamp allows) while the body yaw
+    // leaves — the owner's creepy variant, reachable as a pure tuning. The
+    // follow/pinned contract is what gets pinned here, not an exact angle:
+    // the cone frame (anchored to the up-tilted rest gaze) drags a
+    // world-fixed target off-axis as the body turns, which IS the variant's
+    // uncanny character.
+    const st = makeMotionState(43, [0, 0, 0]);
+    st.wander = { pos: [0, 0, 0], heading: 0.3, speed: 0, target: [0, 1.5, 3], idle: 0 };
+    const cfg: MotionConfig = { enabled: true, wander: false };
+    const follow = run(j, st, cfg, 240);
+    const pinned = run(j, st, { ...cfg, gazeFollow: 0 }, 240);
+    expect(Math.abs(pinned.frame.bodyYaw - 0.3)).toBeLessThan(0.05); // the body turned
+    expect(Math.abs(headYaw(follow.frame, j) - 0.3)).toBeLessThan(0.1); // follow tracks it
+    expect(Math.abs(headYaw(pinned.frame, j) - 0.3)).toBeGreaterThan(0.2); // pinned does not
+  });
+});
+
+describe('stepMotion — reach arm pivot (socketed shoulders)', () => {
+  const CFG_REACH: MotionConfig = { enabled: true, wander: true }; // reach is the default style
+
+  it('keeps both arm segments at rest length and puts the hands out front', () => {
+    const j = realJoints();
+    const { frame } = run(j, cruising(15), CFG_REACH, 120);
+    const fwd = headingDir(frame.heading);
+    for (const side of ['L', 'R'] as const) {
+      const s = frame.restPose[j.index[`shoulder${side}`]!]!;
+      const e = frame.restPose[j.index[`elbow${side}`]!]!;
+      const h = frame.restPose[j.index[`hand${side}`]!]!;
+      // The pivot holds each segment within the rigid bob/sway shift's reach
+      // of its rest length (≤ ~0.043 m) — the additive reach this replaces
+      // contracted the segments by ~0.10 m / ~0.08 m, which is what dragged
+      // the shoulder ball out of the torso.
+      expect(Math.abs(len(sub(e, s)) - j.arm[side][0])).toBeLessThan(0.05);
+      expect(Math.abs(len(sub(h, e)) - j.arm[side][1])).toBeLessThan(0.05);
+      // …and the chain points at the prey, not at the floor.
+      expect(dot(sub(h, s), fwd)).toBeGreaterThan(0.2);
+    }
+  });
+
+  it('the POSED shoulder ball stays socketed in the torso through the full reach cycle', () => {
+    const j = realJoints();
+    const body = buildBody(makeZombie({ ...DEFAULT_FACE }), undefined!, undefined!);
+    // The shoulder ball (deltoid sphere — first arm-limb sphere prim) vs the
+    // chest blob (first torso prim): the owner-visible seam. The additive
+    // reach this replaces let their SURFACES separate by up to ~1.8 cm (the
+    // contracted arm chain levered the shoulder point about the chest joint);
+    // the pivot keeps them overlapping through the whole cycle.
+    let ball = -1, chest = -1;
+    body.prims.forEach((p, i) => {
+      if (ball < 0 && p.limb === 'armL' && len(sub(p.a, p.b)) < 1e-4) ball = i;
+      if (chest < 0 && p.limb === 'torso') chest = i;
+    });
+    expect(ball).toBeGreaterThanOrEqual(0);
+    expect(chest).toBeGreaterThanOrEqual(0);
+    let bound = bindRig(body);
+    // Unpinned, exactly as the lab wiring walks (bindRig pins the lowest
+    // joint as a statue anchor; the rest pull + plants carry a walker).
+    bound = {
+      ...bound,
+      rig: { ...bound.rig, points: bound.rig.points.map(p => ({ ...p, pinned: false })) },
+    };
+    let state = cruising(21);
+    let maxGap = -Infinity;
+    for (let i = 0; i < 240; i++) { // 4 s — several full stride cycles, turns included
+      const step = stepMotion(state, j, CFG_REACH, NO_SIGNALS(), bound.rig.points, BOUNDS, makeRng(21));
+      state = step.state;
+      const points = stepRig(
+        { ...bound.rig, restPose: step.frame.restPose }, DT,
+        {
+          gravity: step.frame.gravity, damping: 0.06, iterations: 4,
+          restStiffness: STANDING_RIG.restStiffness * step.frame.restPull,
+        },
+      ).points;
+      bound = { ...bound, rig: { ...bound.rig, restPose: step.frame.restPose, points } };
+      const posed = applyRig(body, bound, step.frame.bodyYaw);
+      const b = posed.prims[ball]!;
+      const c = posed.prims[chest]!;
+      maxGap = Math.max(maxGap, len(sub(b.a, c.a)) - b.radius - c.radius);
+    }
+    // Socketed = the surfaces keep overlapping (negative gap). 5 mm of grace
+    // for the flesh-breathing jiggle; the detached pose was +18 mm.
+    expect(maxGap).toBeLessThan(0.005);
   });
 });
 
