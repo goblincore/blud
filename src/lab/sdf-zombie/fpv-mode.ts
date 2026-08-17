@@ -45,9 +45,11 @@ import {
 } from './fpv';
 import { makeFlight, stepFlight, type FlightState } from './dynamite-flight';
 import {
-  HAND_JIGGLE, HAND_PROPS, HAND_SIDE_OF_ROLE, buildHandPrims, handPhaseFromCook,
-  poseAt, propAnchor,
-  type HandPhase, type HandPhaseRef, type HandPoseSample, type PropAnchor,
+  HAND_JIGGLE, HAND_JIGGLE_OF_SIDE, HAND_PROPS, HAND_ROLE_OF_SIDE,
+  HAND_SIDE_OF_ROLE, buildHandPrims, handPhaseFromCook, handSheetPose, poseAt,
+  propAnchor,
+  type HandPhase, type HandPhaseRef, type HandPoseSample, type HandRole,
+  type PropAnchor,
 } from './hands';
 import {
   resolveExplosion, type BurstVisual, type ChunkImpulse, type LiveChunkRef,
@@ -175,9 +177,12 @@ export function stepHandJiggle(
   dt: number,
 ): HandJigglePoints {
   const J = HAND_JIGGLE;
-  const step = (side: readonly HandJigglePoint[], tgt: readonly Vec3[]): HandJigglePoint[] =>
+  const step = (
+    side: readonly HandJigglePoint[], tgt: readonly Vec3[],
+    perPrim: readonly { stiffness: number; damping: number; pinned: boolean }[],
+  ): HandJigglePoint[] =>
     side.map((p, i) => {
-      const spec = J.perPrim[i] ?? { stiffness: 1, damping: 1, pinned: false };
+      const spec = perPrim[i] ?? { stiffness: 1, damping: 1, pinned: false };
       const rest = tgt[i] ?? p.pos;
       if (spec.pinned) return { pos: rest, prev: rest };
       // Frame-rate independent rest pull, same shaping as rig.ts.
@@ -193,11 +198,14 @@ export function stepHandJiggle(
       return { pos: [x, y, z], prev: p.pos };
     });
 
-  let left = step(jiggle.left, targets.left);
-  let right = step(jiggle.right, targets.right);
+  const left = step(jiggle.left, targets.left, HAND_JIGGLE_OF_SIDE.left);
+  const right = step(jiggle.right, targets.right, HAND_JIGGLE_OF_SIDE.right);
 
   // Link relaxation: adjacent prims keep their authored spacing, loosely.
-  const relax = (side: HandJigglePoint[], tgt: readonly Vec3[]) => {
+  const relax = (
+    side: HandJigglePoint[], tgt: readonly Vec3[],
+    perPrim: readonly { pinned: boolean }[],
+  ) => {
     for (let it = 0; it < J.iterations; it++) {
       for (let i = 0; i + 1 < side.length; i++) {
         const a = side[i]!, b = side[i + 1]!;
@@ -209,15 +217,15 @@ export function stepHandJiggle(
         if (l < 1e-9) continue;
         const corr = ((l - rest) / l) * J.linkStiffness * 0.5;
         const cx = d[0] * corr, cy = d[1] * corr, cz = d[2] * corr;
-        const pinnedA = J.perPrim[i]?.pinned ?? false;
-        const pinnedB = J.perPrim[i + 1]?.pinned ?? false;
+        const pinnedA = perPrim[i]?.pinned ?? false;
+        const pinnedB = perPrim[i + 1]?.pinned ?? false;
         if (!pinnedA) a.pos = [a.pos[0] + cx, a.pos[1] + cy, a.pos[2] + cz];
         if (!pinnedB) b.pos = [b.pos[0] - cx, b.pos[1] - cy, b.pos[2] - cz];
       }
     }
   };
-  relax(left, targets.left);
-  relax(right, targets.right);
+  relax(left, targets.left, HAND_JIGGLE_OF_SIDE.left);
+  relax(right, targets.right, HAND_JIGGLE_OF_SIDE.right);
   return { left, right };
 }
 
@@ -327,18 +335,18 @@ export interface HeldPropPose {
 }
 
 /**
- * Seat the bundle and the lighter on the POSED hands. `posed` is what
+ * Seat the bundle and the cigarette on the POSED hands. `posed` is what
  * posedHandPrims returned this frame (camera-local, jiggle folded in), so a
  * prop inherits the pose, the idle bob and the wobble without any of them
- * being re-implemented here — which is the whole reason the anchors are
- * defined against prim midpoints in hands.ts rather than as fixed offsets.
+ * being re-implemented here — which is the whole reason the anchors ride prim
+ * midpoints in hands.ts rather than sitting at fixed offsets.
  */
 export function handPropPoses(
   posed: { left: Primitive[]; right: Primitive[] },
   eye: Vec3,
   yaw: number,
   pitch: number,
-): { stick: HeldPropPose; lighter: HeldPropPose } {
+): { stick: HeldPropPose; cig: HeldPropPose } {
   const { f, r, u } = camBasis(yaw, pitch);
   const toWorld = (p: Vec3): Vec3 => [
     eye[0] + r[0] * p[0] + u[0] * p[1] + f[0] * p[2],
@@ -346,10 +354,83 @@ export function handPropPoses(
     eye[2] + r[2] * p[0] + u[2] * p[1] + f[2] * p[2],
   ];
   const seat = (a: PropAnchor): HeldPropPose => ({ pos: toWorld(a.pos), axis: a.axis });
-  return {
-    stick: seat(propAnchor(posed[HAND_SIDE_OF_ROLE[HAND_PROPS.stick.role]], HAND_PROPS.stick)),
-    lighter: seat(propAnchor(posed[HAND_SIDE_OF_ROLE[HAND_PROPS.lighter.role]], HAND_PROPS.lighter)),
+  const on = (spec: typeof HAND_PROPS.stick): HeldPropPose =>
+    seat(propAnchor(posed[HAND_SIDE_OF_ROLE[spec.role]], spec));
+  return { stick: on(HAND_PROPS.stick), cig: on(HAND_PROPS.cig) };
+}
+
+// ——— The hand-detail sheet's live projection ——————————————————————————————
+
+/** One hand's sheet projection, ready for the march's face-path uniforms:
+ *  WORLD centre, WORLD basis columns (x across, y along, z out of the back),
+ *  and the head-space half-extents. */
+export interface HandSheetProjection {
+  centre: Vec3;
+  basis: { x: Vec3; y: Vec3; z: Vec3 };
+  halfExtent: Vec3;
+}
+
+/**
+ * Where to project each hand's detail sheet this frame. The centre rides the
+ * POSED prims (so the detail is pinned to the flesh through pose, bob and
+ * jiggle — a projection anchored to anything else swims), and the basis is the
+ * hand's authored frame carried into world by the camera basis.
+ *
+ * HANDEDNESS: camera-local (x, y, z) → world is right·x + up·y + forward·z,
+ * and that camera frame is LEFT-handed (camera +z is forward, which is world
+ * −Z at yaw 0). So a right-handed hand frame comes out of here left-handed,
+ * and feeding it straight to Matrix4.makeBasis would build a REFLECTION —
+ * from which setFromRotationMatrix extracts garbage. The consumer
+ * (fpv-view's setProjection) negates the x column to get a real rotation and
+ * mirrors the sheet's u back with faceProj; the basis returned here is the
+ * honest one, so this stays the geometry and that stays the shader plumbing.
+ */
+export function handSheetProjections(
+  posed: { left: Primitive[]; right: Primitive[] },
+  eye: Vec3,
+  yaw: number,
+  pitch: number,
+): Record<'left' | 'right', HandSheetProjection> {
+  const { f, r, u } = camBasis(yaw, pitch);
+  const dirToWorld = (p: Vec3): Vec3 => [
+    r[0] * p[0] + u[0] * p[1] + f[0] * p[2],
+    r[1] * p[0] + u[1] * p[1] + f[1] * p[2],
+    r[2] * p[0] + u[2] * p[1] + f[2] * p[2],
+  ];
+  const one = (side: 'left' | 'right'): HandSheetProjection => {
+    const role: HandRole = HAND_ROLE_OF_SIDE[side];
+    const s = handSheetPose(posed[side], role);
+    const c = dirToWorld(s.centre);
+    return {
+      centre: [eye[0] + c[0], eye[1] + c[1], eye[2] + c[2]],
+      basis: {
+        x: dirToWorld(s.basis.x), y: dirToWorld(s.basis.y), z: dirToWorld(s.basis.z),
+      },
+      halfExtent: s.halfExtent,
+    };
   };
+  return { left: one('left'), right: one('right') };
+}
+
+// ——— Hand wounds, split per side ——————————————————————————————————————————
+
+/**
+ * Split hand-splash wounds by side. explosion-aoe binds every hand wound's
+ * primIdx to the CONCATENATED [...left, ...right] prim list (the order
+ * handPrimsToWorld produces), but the two hands are marched as separate views
+ * with separate wound rings — so the right hand's indices have to be rebased.
+ * Pure index arithmetic; no wound is dropped or duplicated.
+ */
+export function splitHandWounds<T extends { primIdx: number }>(
+  wounds: readonly T[],
+  leftCount: number,
+): { left: T[]; right: T[] } {
+  const left: T[] = [], right: T[] = [];
+  for (const w of wounds) {
+    if (w.primIdx < leftCount) left.push(w);
+    else right.push({ ...w, primIdx: w.primIdx - leftCount });
+  }
+  return { left, right };
 }
 
 // ——— Camera kick ——————————————————————————————————————————————————————————

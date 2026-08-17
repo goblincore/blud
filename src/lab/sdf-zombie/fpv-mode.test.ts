@@ -8,14 +8,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyExplosionEffect, enterFpvMode, exitFpvMode, forceThrow,
-  handPoseTargets, handPrimsToWorld, handPropPoses, kickAngles, makeFpvMode,
+  handPoseTargets, handPrimsToWorld, handPropPoses, handSheetProjections,
+  kickAngles, makeFpvMode, splitHandWounds,
   makeHandJiggle, posedHandPrims, stepFpvMode, stepHandJiggle,
   type FpvGorePort, type FpvKick, type FpvModeState, type FpvWorld,
 } from './fpv-mode';
 import { EMPTY_FPV_INPUT, throwOrigin, throwSpeedMps, type FpvInput } from './fpv';
 import { makeFlight } from './dynamite-flight';
 import {
-  HAND_PRIMS, HAND_PRIM_COUNT, HAND_PRIM_GROUPS, HAND_PROPS, buildHandPrims,
+  HAND_PRIMS, HAND_PRIM_COUNTS, HAND_PRIM_GROUPS, HAND_PROPS, buildHandPrims,
   poseAt, propAnchor,
 } from './hands';
 import { resolveExplosion, type ExplosionEffect } from './explosion-aoe';
@@ -367,7 +368,7 @@ describe('hand jiggle + posing', () => {
     expect(out.b[1] - rest.b[1]).toBeCloseTo(tr.pos[1], 1.5);
     // Scale multiplies: the light gesture swells the DIGITS (the grip
     // tightens on the bundle), so read the swell off a finger tube.
-    const finger = HAND_PRIM_GROUPS.fingers[1]!;
+    const finger = HAND_PRIM_GROUPS.lead.digits[0]!;
     expect(posed.right[finger]!.scale[0]).toBeCloseTo(
       prims.right[finger]!.scale[0] * pose.right[finger]!.scale[0], 6);
     expect(pose.right[finger]!.scale[0]).toBeGreaterThan(1);
@@ -375,7 +376,8 @@ describe('hand jiggle + posing', () => {
     // point-driven by design; the jiggle carries the pose.
     const fresh = posedHandPrims(prims, pose, makeHandJiggle());
     expect(fresh.right[3]!.a[0] - rest.a[0]).toBeCloseTo(0, 6);
-    expect(targets.right.length).toBe(HAND_PRIM_COUNT);
+    expect(targets.right.length).toBe(HAND_PRIM_COUNTS.lead);
+    expect(targets.left.length).toBe(HAND_PRIM_COUNTS.support);
   });
 });
 
@@ -415,17 +417,17 @@ describe('handPropPoses', () => {
     expect(seats.stick.pos[0]).toBeCloseTo(eye[0] + stick.pos[0], 9);
     expect(seats.stick.pos[1]).toBeCloseTo(eye[1] + stick.pos[1], 9);
     expect(seats.stick.pos[2]).toBeCloseTo(eye[2] - stick.pos[2], 9);
-    const lighter = propAnchor(posed.left, HAND_PROPS.lighter);
-    expect(seats.lighter.pos[0]).toBeCloseTo(eye[0] + lighter.pos[0], 9);
-    // The bundle rides the right of the view, the lighter the left.
-    expect(seats.stick.pos[0]).toBeGreaterThan(seats.lighter.pos[0]);
+    const cig = propAnchor(posed.left, HAND_PROPS.cig);
+    expect(seats.cig.pos[0]).toBeCloseTo(eye[0] + cig.pos[0], 9);
+    // The bundle rides the right of the view, the cigarette the left.
+    expect(seats.stick.pos[0]).toBeGreaterThan(seats.cig.pos[0]);
   });
 
   it('keeps the axis CAMERA-local — turning does not re-tilt the prop', () => {
     const a = handPropPoses(posed, [0, 1.75, 0], 0, 0);
     const b = handPropPoses(posed, [0, 1.75, 0], 1.1, -0.3);
     expect(b.stick.axis).toEqual(a.stick.axis);
-    expect(b.lighter.axis).toEqual(a.lighter.axis);
+    expect(b.cig.axis).toEqual(a.cig.axis);
     // …while the world seat DOES follow the turn.
     expect(b.stick.pos).not.toEqual(a.stick.pos);
   });
@@ -444,6 +446,75 @@ describe('handPropPoses', () => {
       cooked.stick.pos[2] - rest.stick.pos[2],
     );
     expect(d).toBeGreaterThan(0.01); // the cocked hold takes the bundle with it
+  });
+});
+
+// ——— Sheet projection + wound split ————————————————————————————————————————
+
+describe('handSheetProjections', () => {
+  const posed = buildHandPrims();
+
+  it('gives each hand its own WORLD-space frame, orthonormal and handed', () => {
+    const eye: Vec3 = [2, 1.75, -3];
+    const proj = handSheetProjections(posed, eye, 0.7, -0.2);
+    for (const side of ['left', 'right'] as const) {
+      const b = proj[side].basis;
+      for (const v of [b.x, b.y, b.z]) expect(Math.hypot(...v)).toBeCloseTo(1, 9);
+      const d = (p: Vec3, q: Vec3): number => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+      expect(d(b.x, b.y)).toBeCloseTo(0, 9);
+      expect(d(b.y, b.z)).toBeCloseTo(0, 9);
+      // LEFT-handed on purpose: x × y = −z. The camera frame this rides is
+      // left-handed (camera +z is forward), so an honest hand frame comes out
+      // that way, and fpv-view's setProjection negates the x column to get a
+      // real rotation matrix out of it. Asserted so nobody "fixes" one half of
+      // that pair without the other.
+      const cx: Vec3 = [
+        b.x[1] * b.y[2] - b.x[2] * b.y[1],
+        b.x[2] * b.y[0] - b.x[0] * b.y[2],
+        b.x[0] * b.y[1] - b.x[1] * b.y[0],
+      ];
+      for (let k = 0; k < 3; k++) expect(cx[k]).toBeCloseTo(-b.z[k]!, 9);
+      for (const v of proj[side].halfExtent) expect(v).toBeGreaterThan(0);
+    }
+    // The two centres are metres apart — one projection could never serve both,
+    // which is why each hand gets its own view.
+    const dx = proj.left.centre.map((v, i) => v - proj.right.centre[i]!);
+    expect(Math.hypot(...dx)).toBeGreaterThan(0.1);
+  });
+
+  it('centres on the hand and follows it when the pose moves', () => {
+    const eye: Vec3 = [0, 1.75, 0];
+    const rest = handSheetProjections(posed, eye, 0, 0);
+    const moved = handSheetProjections({
+      left: posed.left.map(p => ({ ...p,
+        a: [p.a[0], p.a[1] + 0.05, p.a[2]] as Vec3,
+        b: [p.b[0], p.b[1] + 0.05, p.b[2]] as Vec3 })),
+      right: posed.right,
+    }, eye, 0, 0);
+    expect(moved.left.centre[1] - rest.left.centre[1]).toBeCloseTo(0.05, 9);
+    expect(moved.right.centre[1]).toBeCloseTo(rest.right.centre[1], 9);
+  });
+});
+
+describe('splitHandWounds', () => {
+  it('routes each wound to its own hand and rebases the right hand’s indices', () => {
+    const ws = [
+      { primIdx: 0, tag: 'l0' }, { primIdx: 6, tag: 'l6' },
+      { primIdx: 7, tag: 'r0' }, { primIdx: 13, tag: 'r6' },
+    ];
+    const { left, right } = splitHandWounds(ws, 7);
+    expect(left.map(w => w.tag)).toEqual(['l0', 'l6']);
+    expect(left.map(w => w.primIdx)).toEqual([0, 6]);
+    expect(right.map(w => w.tag)).toEqual(['r0', 'r6']);
+    expect(right.map(w => w.primIdx)).toEqual([0, 6]);
+  });
+
+  it('never drops, duplicates or mutates a wound', () => {
+    const ws = Array.from({ length: 14 }, (_, i) => ({ primIdx: i }));
+    const { left, right } = splitHandWounds(ws, 7);
+    expect(left.length + right.length).toBe(ws.length);
+    expect(ws.map(w => w.primIdx)).toEqual([...Array(14).keys()]); // inputs intact
+    expect(splitHandWounds([], 7)).toEqual({ left: [], right: [] });
   });
 });
 

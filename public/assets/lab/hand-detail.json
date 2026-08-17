@@ -1,0 +1,12 @@
+{
+  "sheets": {
+    "grip": {
+      "file": "hand-detail-grip.png",
+      "mean": 0.779
+    },
+    "pinch": {
+      "file": "hand-detail-pinch.png",
+      "mean": 0.697
+    }
+  }
+}
