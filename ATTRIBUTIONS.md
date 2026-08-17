@@ -46,6 +46,17 @@ used as ground truth for the SDF lab's first-person hands, in two ways:
    well. **`docs/dev-notes/2026-08-17-sdf-hand-bake/mesh-preview.png`** is a
    neutral render of the same posed mesh taken during the bake and is covered
    by the same credit.
+4. **`public/assets/lab/hand-sdf-dynamite-grip-r.r16f` (+ its `.json`
+   manifest)** — the X1.27 six-frame grip clip: six right-hand poses of the
+   same mesh (posed against the derived DJMaesen dynamite bundle below by
+   `scripts/author_dynamite_grip.py`), each baked to a signed-distance volume
+   by `scripts/bake_hand_sdf_clip.py` on one common grid and depth-packed
+   into a single atlas. Same derivative-work status as the static volume; the
+   same credit is embedded verbatim in the manifest's `attribution` field.
+   **`docs/dev-notes/2026-08-17-sdf-dynamite-grip/clip-midpoints-sheet.png`**
+   (adjacent-frame midpoint isosurfaces) and
+   **`pose-contact-sheet.png`** render those posed meshes and are covered by
+   the same credit.
 
 ### What does NOT derive from it
 
@@ -99,6 +110,10 @@ imported, opened or measured.
    consumed by the pose authoring stage and the runtime clip loader.
 3. **`docs/dev-notes/2026-08-17-sdf-dynamite-grip/`** — preview renders of the
    derived prop and of hand poses solved against it.
+4. **`public/assets/lab/hand-sdf-dynamite-grip-r.json`** — the X1.27 clip
+   manifest embeds this prop contract (hashes, contact hull, anchors, this
+   credit) so the runtime clip and its held prop are hash-bound to the exact
+   derived geometry the poses were authored against.
 
 ### What does NOT derive from it
 

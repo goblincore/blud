@@ -1,0 +1,104 @@
+{
+  "version": 2,
+  "kind": "hand-sdf-clip",
+  "binary": "hand-sdf-dynamite-grip-r.r16f",
+  "encoding": "r16f-le",
+  "order": "x-fastest-y-z",
+  "axes": {
+    "x": "thumbward",
+    "y": "distal",
+    "z": "dorsal"
+  },
+  "dimensions": [
+    131,
+    178,
+    102
+  ],
+  "atlasDimensions": [
+    131,
+    178,
+    612
+  ],
+  "frameDepth": 102,
+  "frameCount": 6,
+  "frames": [
+    {
+      "label": "open",
+      "key": 0.0
+    },
+    {
+      "label": "approach",
+      "key": 0.2
+    },
+    {
+      "label": "first-contact",
+      "key": 0.4
+    },
+    {
+      "label": "wrap",
+      "key": 0.6
+    },
+    {
+      "label": "thumb-lock",
+      "key": 0.8
+    },
+    {
+      "label": "firm-grip",
+      "key": 1.0
+    }
+  ],
+  "timing": {
+    "closeSec": 0.22,
+    "releaseSec": 0.12,
+    "swingSec": 0.24,
+    "releaseAtSec": 0.15
+  },
+  "boundsMin": [
+    -0.05740465772151947,
+    -0.04700000014901161,
+    -0.03815854330360889
+  ],
+  "boundsMax": [
+    0.13716452372074128,
+    0.21751648736000062,
+    0.11225899112224579
+  ],
+  "voxelSize": [
+    0.0014966860110943133,
+    0.0014944434322543064,
+    0.001489282519067868
+  ],
+  "isoValue": 0,
+  "byteLength": 28541232,
+  "sha256": {
+    "binary": "90b4cc4ca38034cf0d21be762149395c321b0de5d74dccc60ec8fe1125a49acb",
+    "source": "71ca50d633f40ff23939e7ea27177a51758d712ba332c44624f86743af78c858"
+  },
+  "attribution": "This work is based on \"First Person hands rigged\" (https://sketchfab.com/3d-models/first-person-hands-rigged-547a45535f0c4fe787948f7a7a6a88db) by DavidFischer (https://sketchfab.com/davidfischer) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+  "prop": {
+    "url": "dynamite-bundle-grip.glb",
+    "sha256": "4b900499c36d5ee3c13ca6b0f02ef9e1acb403b48952aeecf10306626b4ad836",
+    "gripLocal": [
+      0.015144629403948784,
+      0.0971030667424202,
+      0.05464467778801918
+    ],
+    "axisLocal": [
+      1.0,
+      1.4901161193847656e-08,
+      7.450580596923828e-09
+    ],
+    "modelGripOffsetM": -0.015,
+    "modelRotationLocal": [
+      2.634178208893445e-09,
+      0.7071068286895752,
+      0.7071068286895752,
+      2.634178208893445e-09
+    ],
+    "contactRadiusM": 0.037,
+    "contactBelowM": 0.115,
+    "contactAboveM": 0.135,
+    "fuseTipNode": "FuseTip",
+    "flightPivotNode": "FlightPivot"
+  }
+}
