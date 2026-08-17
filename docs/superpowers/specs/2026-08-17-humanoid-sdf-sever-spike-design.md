@@ -131,9 +131,9 @@ inputs must reproduce byte-identical manifests and atlases.
 
 `humanoid-sdf-spike.html` owns only the prototype scene and compact controls.
 It reuses existing renderer setup, lighting, camera conventions, SDF shader
-helpers, and Rapier/gib stepping where those modules are already separable. It
-must not duplicate the entire current lab or add humanoid-only behavior to the
-normal game entry point.
+helpers, and the lab's deterministic `gib-chunks.ts` stepper where those
+modules are already separable. It must not duplicate the entire current lab or
+add humanoid-only behavior to the normal game entry point.
 
 The page contains:
 
@@ -190,10 +190,11 @@ The softness control affects three related cues:
 - stronger impact-excited deformation on the detached piece, decaying toward
   rest, with a subtle settling pulse at the torn cap.
 
-This is not a soft-body solver. Rapier owns the detached piece's rigid-body
-translation, rotation, contacts, and sleep state. The shader adds bounded
-visual deformation driven by acceleration/impact impulses. The highest slider
-value may be intentionally exaggerated for diagnosis; the default is moderate.
+This is not a soft-body solver. The existing pure `gib-chunks.ts` stepper owns
+the detached piece's translation, rotation, floor contact, bounce, topple, and
+settling state. The shader adds bounded visual deformation driven by
+acceleration/impact impulses. The highest slider value may be intentionally
+exaggerated for diagnosis; the default is moderate.
 
 ## Mid-forearm sever
 
@@ -230,7 +231,7 @@ After transfer:
 
 - the proximal stump continues following the animated upper arm/elbow;
 - the distal forearm and hand stop following live skeleton transforms;
-- Rapier advances the detached root;
+- the deterministic chunk stepper advances the detached root;
 - the internal forearm-to-hand relationship remains frozen at the sever pose;
 - reset disables and re-parks the detached object, restores the intact masks,
   clears impulses, and returns the elbow to its inspectable initial state.
