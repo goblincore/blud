@@ -73,7 +73,8 @@ import {
 } from '../fpv-mode';
 import { cookCharge } from '../fpv';
 import {
-  createBurstLayer, createCigaretteProp, createHandsGpuView, createStickProp,
+  HAND_SHEET_TUNING, createBurstLayer, createCigaretteProp, createHandsGpuView,
+  createStickProp,
 } from './fpv-view';
 import { loadBakedHandSheets, proceduralHandSheets } from './hands-sheet';
 import {
@@ -1940,6 +1941,27 @@ async function main() {
     }
     handsBtn.textContent = `hands: ${on ? 'on' : 'off'}`;
   }
+  // Hand-detail sheet weights, split like the face box's texStrength/texRelief.
+  // handTexStrength defaults to 0 ON PURPOSE: the sheet is a HEIGHT map, and
+  // feeding it into the albedo multiply is what stained the flesh (see
+  // HAND_SHEET_TUNING). It is exposed only so the effect can be re-seen.
+  let handTexStrength: number = HAND_SHEET_TUNING.detailStrength;
+  let handRelief: number = HAND_SHEET_TUNING.relief;
+  function applyHandSheetTuning() {
+    handViews.left.setSheetTuning(handTexStrength, handRelief);
+    handViews.right.setSheetTuning(handTexStrength, handRelief);
+  }
+  applyHandSheetTuning();
+  addSlider(fpvBox, {
+    label: 'handRelief', min: 0, max: 3, step: 0.05,
+    get: () => handRelief,
+    set: (v) => { handRelief = v; applyHandSheetTuning(); },
+  });
+  addSlider(fpvBox, {
+    label: 'handTexStrength', min: 0, max: 1, step: 0.01,
+    get: () => handTexStrength,
+    set: (v) => { handTexStrength = v; applyHandSheetTuning(); },
+  });
   fpvReadEl = document.createElement('div');
   fpvReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
   fpvBox.appendChild(fpvReadEl);

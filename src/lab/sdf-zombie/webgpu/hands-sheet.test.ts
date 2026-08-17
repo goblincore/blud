@@ -3,6 +3,7 @@ import {
   MANIFEST_URL, SHEET_LAYOUTS, clampMean, layoutMean,
   type HandSheetId, type SheetLayout,
 } from './hands-sheet';
+import { HAND_SHEET_TUNING } from './fpv-view';
 
 const ids: HandSheetId[] = ['grip', 'pinch'];
 
@@ -78,5 +79,30 @@ describe('clampMean', () => {
 describe('manifest url', () => {
   it('points at the baked sheets the Blender script writes', () => {
     expect(MANIFEST_URL).toBe('/assets/lab/hand-detail.json');
+  });
+});
+
+// ——— The staining regression ————————————————————————————————————————————————
+
+describe('hand sheet weights are RELIEF-ONLY', () => {
+  it('contributes NOTHING to albedo — a height map is not an albedo map', () => {
+    // The owner's round-2 playtest bug: at 0.55 the sheet's dark creases
+    // painted onto the flesh ("looks like a bad tattoo") and the right hand
+    // went brown, because the march's albedo term is `albedo * (tex.rgb/mean)`.
+    // The shader weight is `facing * tex.a * faceCfg.y * (1 - faceGlow)`, so a
+    // zero strength makes mix() return albedo EXACTLY: the flesh colour can no
+    // longer be touched by the sheet's levels or its mean.
+    expect(HAND_SHEET_TUNING.detailStrength).toBe(0);
+  });
+
+  it('keeps a gentle relief term — that is the whole point of the sheet', () => {
+    expect(HAND_SHEET_TUNING.relief).toBeGreaterThan(0);
+    // Gentle until the march rotates its bump into the projection frame; see
+    // HAND_SHEET_TUNING's note and the dev note's shader-change request.
+    expect(HAND_SHEET_TUNING.relief).toBeLessThanOrEqual(1);
+  });
+
+  it('cannot glow: a height map’s bright pixels are near flesh, not emission', () => {
+    expect(HAND_SHEET_TUNING.glowThreshold).toBeGreaterThanOrEqual(0.98);
   });
 });

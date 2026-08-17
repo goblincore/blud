@@ -77,26 +77,42 @@ export interface HandsGpuView {
   setSheet(sheet: HandSheet | null): void;
   /** Re-aims the sheet projection at this frame's posed hand. */
   setProjection(p: HandSheetProjectionIn): void;
+  /** Live tuning of the sheet's two weights (the panel's handTexStrength /
+   *  handRelief sliders). Albedo strength should stay at ~0 — see
+   *  HAND_SHEET_TUNING for why. */
+  setSheetTuning(strength: number, relief: number): void;
   setVisible(on: boolean): void;
   dispose(): void;
 }
 
-/** Detail strength / relief of the hand sheet, and the glow threshold that
- *  keeps a HEIGHT map from being mistaken for an emissive mask (the face path
- *  treats bright pixels as glowing; a height map's brightest pixels are just
- *  the nearest flesh, so the threshold sits at the very top of the range and
- *  the glow STRENGTH is zeroed outright). */
+/**
+ * How much of the hand sheet reaches the shading, split exactly the way the
+ * face pipeline splits it (the panel's texStrength = faceCfg.y multiplies
+ * ALBEDO; texRelief = faceCfg.w perturbs the NORMAL).
+ *
+ * HANDS ARE RELIEF-ONLY. The first pass ran albedo at 0.55 and it was the
+ * dominant bug in the owner's playtest: the sheet's dark crease lines painted
+ * onto the flesh as marks ("looks like a bad tattoo") and the whole right hand
+ * went brown, because the shader's albedo term is `albedo * (tex.rgb / mean)`
+ * — a height map's dark regions multiply the latex pink toward black, and the
+ * mean shifts the overall level. A height map is not an albedo map and must
+ * never be used as one. The flesh colour now comes ENTIRELY from the material;
+ * the sheet only bends the normal.
+ */
 export const HAND_SHEET_TUNING = {
-  /** Albedo modulation, kept MODEST on purpose. The sheet is a height map, and
-   *  the march uses it as an albedo multiplier (`tex.rgb / mean`) — so the
-   *  bake's near-black regions, where a fingertip angles away from the camera,
-   *  would drive albedo toward black at full strength. Those same regions are
-   *  where the projection's `facing` term is already fading, so a modest weight
-   *  reads as crevice shadow instead of a smudge. */
-  detailStrength: 0.55,
-  /** Relief does the real work: it shades from the luminance GRADIENT, which is
-   *  strongest exactly at the knuckle mounds and the valleys between digits. */
-  relief: 1.25,
+  /** ZERO, deliberately: no albedo contribution, so the flesh stays uniform
+   *  latex pink. mix(albedo, albedo*detail, …*0) is exactly `albedo`, so the
+   *  sheet's levels and its mean cannot tint the hands at all. */
+  detailStrength: 0,
+  /** The only channel the sheet drives. Kept gentle for now because the face
+   *  path adds its bump in WORLD axes without rotating it into the projection's
+   *  frame — fine for a head (authored roughly world-aligned), but the hands'
+   *  frame is a large rotation, so a strong bump would shade its grooves from a
+   *  skewed direction. See the dev note: the one-line shader fix is to rotate
+   *  `bump` by headQuat before adding it to `n`, which is a no-op for an
+   *  unrotated head. Until that lands this stays low enough to read as surface
+   *  break-up rather than directional streaks. */
+  relief: 0.55,
   /** The face path treats bright pixels as an emissive mask. A height map's
    *  brightest pixels are just the nearest flesh, so the threshold sits at the
    *  very top of the range — and the glow STRENGTH (faceCfg2.w) is zeroed
@@ -215,6 +231,10 @@ export function createHandsGpuView(
       u.faceTex.value = sheet.tex;
       u.faceCfg2.value.y = sheet.mean;
       u.faceCfg.value.x = 1;
+    },
+    setSheetTuning(strength, relief) {
+      u.faceCfg.value.y = strength;
+      u.faceCfg.value.w = relief;
     },
     setProjection(p) {
       u.headCentre.value.set(p.centre[0], p.centre[1], p.centre[2]);
