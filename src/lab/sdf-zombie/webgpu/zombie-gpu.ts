@@ -45,6 +45,8 @@ export interface ZombieGpuView {
     splayScales?: number[], offsetScales?: number[]): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
+  /** The rigid head rotation (rig-bind headQuatOf); identity resets it. */
+  setHeadRotation(q: [number, number, number, number]): void;
   /** Drives the eye-glow flicker. Seconds. */
   setTime(seconds: number): void;
   /**
@@ -191,6 +193,8 @@ function defaultUniforms(faceTex: THREE.Texture) {
     faceProj: uniform(new THREE.Vector4(1.15, 1.15, 0.5, 0.52)),
     faceAtlas: uniform(new THREE.Vector4(1, 1, 0, 0)),
     headCentre: uniform(new THREE.Vector3(0, 1.6, 0)),
+    /** Rigid head rotation (xyzw quat); identity for statues and chunks. */
+    headQuat: uniform(new THREE.Vector4(0, 0, 0, 1)),
     headAxes: uniform(new THREE.Vector3(0.12, 0.13, 0.12)),
     // Bright red, and deliberately over 1.0 on the red channel: an emissive
     // that only reaches 1.0 cannot read as a LIGHT, and a value above it is
@@ -354,6 +358,7 @@ function createMarchMaterial(
     faceAtlas: u.faceAtlas,
     headCentre: u.headCentre,
     headAxes: u.headAxes,
+    headQuat: u.headQuat,
     faceGlowColor: u.faceGlowColor,
     lodCfg: u.lodCfg,
     startT: cone
@@ -602,6 +607,7 @@ export function createZombieGpuView(
       u.headCentre.value.set(...centre);
       u.headAxes.value.set(...axes);
     },
+    setHeadRotation(q) { u.headQuat.value.set(q[0], q[1], q[2], q[3]); },
     setTime(seconds) { u.faceCfg3.value.y = seconds; },
     setRootShift(x, z) { u.faceCfg3.value.z = x; u.faceCfg3.value.w = z; },
     setFaceTexture(tex, atlas, mean) {
@@ -682,6 +688,7 @@ export function createChunkGpuView(
   u.faceCfg3.value.copy(template.faceCfg3.value);
   u.lodCfg.value.copy(template.lodCfg.value);
   u.faceProj.value.copy(template.faceProj.value);
+  u.headQuat.value.copy(template.headQuat.value);
   u.faceAtlas.value.copy(template.faceAtlas.value);
   u.faceGlowColor.value.copy(template.faceGlowColor.value);
 

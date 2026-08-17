@@ -396,6 +396,9 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   faceCfg3   x glowFlicker, y timeSeconds, zw = noise root shift (xz world;
 //              the y shift is zero — root translation is ground-plane)
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
+//   headQuat   xyzw = the rigid head rotation (rig-bind headQuatOf); the face
+//              projection un-rotates by its conjugate so the painted face
+//              rides the rotating skull. Identity (0,0,0,1) on statues/chunks.
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
 //   lodCfg     x aoEnabled, y legacyGamma, w goreStrength (0 body, 1 chunk views)
 //
@@ -429,6 +432,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   faceAtlas: vec4<f32>,
   headCentre: vec3<f32>,
   headAxes: vec3<f32>,
+  headQuat: vec4<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
   startT: f32,
@@ -601,7 +605,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // rides the head as it jiggles without a full rest-space transform. One
     // scalar radius put whichever axis was largest exactly on the head-mask
     // cutoff, and raising headDepth then erased the entire face.
-    let hs = (p - headCentre) / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
+    // Un-rotate into the head's REST frame before projecting (motion-polish):
+    // the rigid head pass rotates the skull masses, and a projection that
+    // stays axis-aligned paints the face onto whichever side happens to face
+    // front — nose mass out the ear, eyes off the brow. Rotation by the
+    // CONJUGATE of the head quaternion (v' = v + 2*cross(-q.xyz, cross(-q.xyz, v) + q.w*v)).
+    let hql = -headQuat.xyz;
+    let hpv = p - headCentre;
+    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + headQuat.w * hpv);
+    let hs = hrot / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
     var raw = vec2<f32>(hs.x * forward, hs.y);
     if (faceCfg2.x > 0.5) {
       let dir = normalize(hs);
@@ -618,7 +630,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // projection derives uv from x/y alone, so as the surface turns away it
     // repeats the same uv column and STREAKS; fading out well before edge-on
     // hides that.
-    var facing = smoothstep(0.28, 0.66, dot(n, vec3<f32>(0.0, 0.0, forward)));
+    // The facing axis is the head's rotated forward, not world +z.
+    let hfw = vec3<f32>(0.0, 0.0, forward);
+    let hfr = hfw + 2.0 * cross(headQuat.xyz, cross(headQuat.xyz, hfw) + headQuat.w * hfw);
+    var facing = smoothstep(0.28, 0.66, dot(n, hfr));
     // Confine it to the HEAD. Generous, because the surface now sits at
     // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
     // against wrapping onto the neck.

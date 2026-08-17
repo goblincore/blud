@@ -50,7 +50,7 @@ import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../bloo
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
-import { bindRig, applyRig, impulseAt } from '../rig-bind';
+import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import {
@@ -1256,9 +1256,13 @@ async function main() {
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     view.setTime(performance.now() / 1000);
     // Re-derive the skull's sphere from the POSED primitives so the face
-    // projection tracks the head through the jiggle.
+    // projection tracks the head through the jiggle — and hand it the rigid
+    // head rotation so the PAINTED face rotates with the skull masses
+    // instead of staying camera-front (owner playtest: eyes/brow sliding,
+    // nose mass out the ear).
     const skull = headShape(posed);
     if (skull) view.setHeadShape(skull.centre, skull.axes);
+    view.setHeadRotation(headQuatOf(bound) ?? [0, 0, 0, 1]);
     uploadWounds(posed.prims);
 
     if (autoSpin) camYaw += dt * 0.35;

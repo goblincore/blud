@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/rig-bind.ts
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
+import type { Quat } from './vec';
 import { makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import {
@@ -203,6 +204,22 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[]): {
   const prims = new Map<number, { a: Vec3; b: Vec3 }>();
   h.prims.forEach((rest, i) => prims.set(i, { a: qRotate(q, rest.a), b: qRotate(q, rest.b) }));
   return { origin, prims };
+}
+
+/**
+ * The rigid head's CURRENT clamped rotation (the same quaternion applyRig
+ * poses the face with), for consumers outside the pose path — the face
+ * texture projection un-rotates by it so the painted face rides the skull.
+ * Null when the body has no skull (gibbed).
+ */
+export function headQuatOf(bound: BoundRig): Quat | null {
+  const h = bound.head;
+  if (!h) return null;
+  const pivot = bound.rig.points[h.pivot]!.pos;
+  const tip = bound.rig.points[h.tip]!.pos;
+  const clamped = clampDir(
+    normalize(sub(tip, pivot)), h.restDir, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  return qFromTo(h.restDir, clamped);
 }
 
 /** Shoves the rig point nearest a world position — used to make hits push flesh. */
