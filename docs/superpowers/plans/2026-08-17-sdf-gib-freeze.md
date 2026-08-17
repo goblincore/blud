@@ -4,6 +4,15 @@
 
 **Goal:** Make a full 18-piece WebGPU SDF gib complete without any gameplay frame exceeding 50 ms, on both the first gib and repeated gibs.
 
+> **Implementation outcome (2026-08-17):** Profiling narrowed the reusable
+> boundary below the original 40-exclusive-material design. One asynchronously
+> precompiled NodeMaterial is safe to share because TSL `onObjectUpdate` selects
+> each mesh's exclusive texture/uniform state before its draw. Mesh identities
+> are still pooled at the existing 40-chunk cap because Three r185 retains a
+> `RenderObject` until its material is disposed. The precompiled mesh becomes
+> slot zero, so warm-up and gameplay use the same object and float SDF target
+> context. See the [evidence note](../../dev-notes/2026-08-17-sdf-gib-freeze/notes.md).
+
 **Architecture:** Replace per-spawn construction of complete chunk views and NodeMaterials with a bounded pool of persistent, exclusive chunk-view slots. Each slot owns its mutable data texture, uniforms, proxy meshes, and materials; spawning resets and uploads a slot, while despawning hides and returns it without disposing renderer objects. Prove the reuse boundary with profiling before completing the refactor, and amortize any unavoidable startup preparation outside gameplay frames.
 
 **Tech Stack:** TypeScript, Three.js r185 WebGPU/TSL, WGSL, Vitest, the SDF zombie lab's visible-window rAF probe and in-page benchmark.

@@ -28,7 +28,10 @@ import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
 import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
-import { createZombieGpuView, createChunkGpuView, type ChunkGpuView } from './zombie-gpu';
+import {
+  createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
+  type ChunkGpuView,
+} from './zombie-gpu';
 import { createOccluderHull } from './occluder-hull';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
@@ -135,7 +138,7 @@ const FACE_TEXTURES: Record<
 
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
-/** Chunks are disposed oldest-first past this, so a long session can't leak.
+/** Chunk mesh/render-object slots are recycled oldest-first at this cap.
  *  A per-prim gib is ~15 pieces, so 40 lets two full gibs coexist. */
 const MAX_CHUNKS = 40;
 
@@ -204,6 +207,10 @@ async function main() {
   benchEl.style.fontSize = '11px';
   benchEl.style.color = '#fc9';
   statusBox.appendChild(benchEl);
+  const gibProbeEl = document.createElement('div');
+  gibProbeEl.style.fontSize = '11px';
+  gibProbeEl.style.color = '#9cf';
+  statusBox.appendChild(gibProbeEl);
   // Motion status line (filled by the motion panel section further down;
   // declared here so the frame callback can always reach it).
   let motionReadEl: HTMLDivElement | null = null;
@@ -278,6 +285,42 @@ async function main() {
   scene.add(view.object);
   scene.add(view.coneObject);
   const u = view.uniforms;
+
+  // One node graph for every gib. Three r185 still runs its expensive
+  // NodeMaterial builder/generator once per fresh material/render object even
+  // when the generated program key is identical; the first full gib used to
+  // repeat that work for every spawned chunk and freeze the page for seconds.
+  // compileAsync performs the one unavoidable build during loading and yields
+  // between builder phases, before the lab accepts interaction.
+  const chunkMaterial = createSharedChunkGpuMaterial();
+  const warmPrims = body.prims.filter(p => p.limb === 'armL' && p.op !== 'sub').slice(0, 2);
+  const warmOrigin = body.clusters.find(c => c.limb === 'armL')?.center ?? [0, 1, 0] as Vec3;
+  const warmChunk = makeChunk(
+    'armL', warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0],
+    () => 0.5,
+  );
+  const warmView = createChunkGpuView(
+    warmChunk, warmPrims, u, undefined, view.volumeTexture, chunkMaterial,
+  );
+  warmView.object.layers.set(SDF_LAYER);
+  const chunkMaterialWarmupStarted = performance.now();
+  handle.setLoopRunning(false);
+  try {
+    await sdfLayer.precompile(warmView.object, scene, camera);
+  } finally {
+    handle.setLoopRunning(true);
+  }
+  const chunkMaterialWarmupMs = performance.now() - chunkMaterialWarmupStarted;
+  // Keep the compiled object itself as slot zero. compileAsync's cache is
+  // keyed by object identity, so throwing this view away would retain a dead
+  // RenderObject and make the first real chunk start from a fresh one.
+  let spareChunkView: ChunkGpuView | null = warmView;
+  window.addEventListener('pagehide', () => {
+    for (const chunk of chunks) chunk.view.dispose();
+    spareChunkView?.dispose();
+    spareChunkView = null;
+    chunkMaterial.dispose();
+  }, { once: true });
 
   // The metaball blood layer (gobs-and-goo task 5). It shares the march's
   // light uniform NODES — not copies — so any panel re-tune of lightDir /
@@ -944,23 +987,57 @@ async function main() {
     // Collision radius = the limb's real visual extent; chunk.radius's 0.14 is
     // smaller than any limb and would bury it half-way into the floor.
     const state = makeChunk(limb, origin, v, chunkExtent(prims, origin), primsLongAxis(prims, origin), Math.random, kind);
-    const chunkView = createChunkGpuView(state, prims, u, tornAt);
-    chunkView.object.layers.set(SDF_LAYER);
-    scene.add(chunkView.object);
-    chunks.push({ id: nextChunkId++, state, view: chunkView });
+    const oldest = chunks.length >= MAX_CHUNKS ? chunks.shift() : undefined;
+    if (oldest) {
+      // Keep the same mesh/material pair. Three keys its RenderObject cache by
+      // object identity and does not evict it when geometry alone is disposed;
+      // recycling at the existing cap keeps that cache bounded at 40.
+      oldest.view.reset(state, prims, tornAt);
+      chunks.push({ id: nextChunkId++, state, view: oldest.view });
+    } else {
+      const chunkView = spareChunkView ?? createChunkGpuView(
+        state, prims, u, tornAt, view.volumeTexture, chunkMaterial,
+      );
+      if (spareChunkView) {
+        spareChunkView = null;
+        chunkView.reset(state, prims, tornAt);
+      }
+      chunkView.object.layers.set(SDF_LAYER);
+      scene.add(chunkView.object);
+      chunks.push({ id: nextChunkId++, state, view: chunkView });
+    }
     // Goo at the tear: a droplet burst where the piece ripped away.
     burst(bloodSim, origin, Math.random);
 
-    while (chunks.length > MAX_CHUNKS) {
-      const oldest = chunks.shift();
-      if (!oldest) break;
-      scene.remove(oldest.view.object);
-      oldest.view.dispose();
-    }
+  }
+
+  let lastGibWorstFrameMs: number | null = null;
+  /** Samples after the renderer's already-registered rAF callback, so the
+   * first gap includes the first rendered gib frame rather than only the
+   * synchronous key handler. Kept visible for repeatable owner/automation
+   * checks; p95 can hide exactly the one frame this bug stalled. */
+  function beginGibFrameProbe() {
+    let previous = performance.now();
+    let worst = 0;
+    let remaining = 5;
+    const sample = () => {
+      const now = performance.now();
+      worst = Math.max(worst, now - previous);
+      previous = now;
+      remaining--;
+      if (remaining > 0) {
+        requestAnimationFrame(sample);
+      } else {
+        lastGibWorstFrameMs = worst;
+        gibProbeEl.textContent = `gib worst frame: ${worst.toFixed(1)} ms`;
+      }
+    };
+    requestAnimationFrame(sample);
   }
 
   /** Blows the whole body apart — every live cluster becomes a chunk. */
   function gibEverything() {
+    beginGibFrameProbe();
     const centre = torsoCentre();
     // gibAllPieces does the alive-flag bookkeeping; the PIECES come from
     // makeGobs instead — amorphous hunks + scraps, not anatomy prims
@@ -2548,6 +2625,12 @@ async function main() {
     get wounds() { return wounds; },
     get current() { return current; },
     get chunkCount() { return chunks.length; },
+    /** One shared NodeMaterial, asynchronously prepared before interaction. */
+    chunkMaterial: {
+      count: 1,
+      warmupMs: chunkMaterialWarmupMs,
+      get lastGibWorstFrameMs() { return lastGibWorstFrameMs; },
+    },
     get bodyCount() { return crowd.length + 1; },
     /** The march uniforms — lets any of them be tuned live from the console. */
     uniforms: u,

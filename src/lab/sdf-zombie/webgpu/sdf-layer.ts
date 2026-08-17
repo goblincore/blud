@@ -137,6 +137,13 @@ const composite = wgslFn(COMPOSITE_WGSL);
 export interface SdfLayer {
   /** Draws the polygonal scene, then the SDF layer, then composites. */
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void;
+  /** Builds a prospective SDF object's pipeline in this layer's real float
+   * render-target context, before the object enters the live scene. */
+  precompile(
+    object: THREE.Object3D,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+  ): Promise<void>;
   /**
    * Redirects the two passes that normally go to the canvas (the polygonal
    * scene and the final composite) into this target instead; null restores
@@ -317,6 +324,18 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   }
 
   return {
+    async precompile(object, scene, camera) {
+      const previousTarget = renderer.getRenderTarget();
+      const previousMask = camera.layers.mask;
+      try {
+        camera.layers.set(SDF_LAYER);
+        renderer.setRenderTarget(target);
+        await renderer.compileAsync(object, camera, scene);
+      } finally {
+        renderer.setRenderTarget(previousTarget);
+        camera.layers.mask = previousMask;
+      }
+    },
     render(scene, camera) {
       const restore = camera.layers.mask;
 

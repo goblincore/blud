@@ -374,19 +374,22 @@ export interface ConeSource {
  *  own node so it can rebind .value between the fallback and a loaded volume
  *  without recompiling a pipeline. */
 export function createMarchMaterial(
-  dataTex: THREE.Texture,
+  dataTex: THREE.Texture | ReturnType<typeof texture>,
   volumeTex: THREE.Texture | ReturnType<typeof texture3D>,
   u: MarchUniforms,
   march = marchBody,
   cone?: ConeSource, occluder?: OccluderSource,
 ) {
+  const dataNode = dataTex instanceof THREE.Texture
+    ? texture(dataTex)
+    : dataTex as ReturnType<typeof texture>;
   const volumeNode = volumeTex instanceof THREE.Texture
     ? texture3D(volumeTex)
     : volumeTex as ReturnType<typeof texture3D>;
   const marched = march({
     worldPos: positionWorld,
     camPos: cameraPosition,
-    data: texture(dataTex),
+    data: dataNode,
     volumeTex: volumeNode,
     faceTex: u.faceTex,
     volumePose0: u.volumePose0,
@@ -467,6 +470,76 @@ export function createMarchMaterial(
   // the framebuffer alpha is never read.
   material.outputNode = vec4(marched.xyz as never, depth);
   return material;
+}
+
+/** Per-object inputs consumed by the one NodeMaterial shared by every gib.
+ *
+ * Three's object uniform group is rewritten before each draw. The update
+ * callbacks below select this state from the mesh currently being rendered,
+ * so simultaneous chunks share the expensive node graph while retaining
+ * exclusive textures and values. */
+interface ChunkMaterialState {
+  dataTexture: THREE.Texture;
+  volumeTexture: THREE.Texture;
+  uniforms: MarchUniforms;
+}
+
+const CHUNK_MATERIAL_STATE = '__sdfChunkMaterialState';
+
+function chunkMaterialState(object: THREE.Object3D): ChunkMaterialState {
+  const state = object.userData[CHUNK_MATERIAL_STATE] as ChunkMaterialState | undefined;
+  if (!state) throw new Error('shared chunk material rendered without per-object state');
+  return state;
+}
+
+type ObjectUpdatedNode = {
+  onObjectUpdate(callback: (frame: { object: THREE.Object3D }) => unknown): unknown;
+};
+
+function bindObjectValue<T>(node: T, value: (state: ChunkMaterialState) => unknown): T {
+  (node as unknown as ObjectUpdatedNode).onObjectUpdate(
+    ({ object }) => value(chunkMaterialState(object)),
+  );
+  return node;
+}
+
+/** A single externally-owned march material for every simultaneously-live
+ * gib chunk. Creating a fresh NodeMaterial per chunk makes Three rebuild the
+ * complete WGSL node graph for each render object even when program keys
+ * match; this object-update binding keeps that graph singular. */
+export interface SharedChunkGpuMaterial {
+  material: MeshBasicNodeMaterial;
+  dispose(): void;
+}
+
+export function createSharedChunkGpuMaterial(): SharedChunkGpuMaterial {
+  // These seeds establish the binding types before any chunk exists. They are
+  // never sampled by a chunk draw: every node below swaps to the current
+  // mesh's state through onObjectUpdate first.
+  const seedFace = blankFaceTexture();
+  const seedUniforms = defaultUniforms(seedFace);
+  const { tex: seedData } = createDataTexture();
+  const seedVolume = createFallbackHandVolumeTexture();
+
+  for (const key of Object.keys(seedUniforms) as (keyof MarchUniforms)[]) {
+    bindObjectValue(seedUniforms[key], state => state.uniforms[key].value);
+  }
+  const dataNode = bindObjectValue(texture(seedData), state => state.dataTexture);
+  const volumeNode = bindObjectValue(texture3D(seedVolume), state => state.volumeTexture);
+  const material = createMarchMaterial(dataNode, volumeNode, seedUniforms);
+
+  let disposed = false;
+  return {
+    material,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      material.dispose();
+      seedData.dispose();
+      seedVolume.dispose();
+      seedFace.dispose();
+    },
+  };
 }
 
 /**
@@ -729,6 +802,8 @@ export interface ChunkGpuView {
   /** The 3D texture bound to the volume slot (X1.26) — the shared fallback;
    *  self-created ones are disposed with the view. */
   volumeTexture: THREE.Texture;
+  /** Reuses this mesh/render-object slot for a newly spawned chunk. */
+  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[]): void;
   update(chunk: Chunk): void;
   dispose(): void;
 }
@@ -758,98 +833,57 @@ export function createChunkGpuView(
   /** Shared volume-slot texture (X1.26); omitted, a private fallback is
    *  created and disposed with the chunk. */
   volumeTex?: THREE.Texture,
+  /** One NodeMaterial shared by every live chunk. Omit for isolated tests or
+   * callers that intentionally retain the old privately-owned lifecycle. */
+  sharedMaterial?: SharedChunkGpuMaterial,
 ): ChunkGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
   const ownsVolume = !volumeTex;
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
-  // Copy the body's look across. Anything not copied here is a deliberate
-  // per-chunk override further down.
-  u.baseColor.value.copy(template.baseColor.value);
-  u.deepColor.value.copy(template.deepColor.value);
-  u.charColor.value.copy(template.charColor.value);
-  u.lightDir.value.copy(template.lightDir.value);
-  u.keyColor.value.copy(template.keyColor.value);
-  u.lightCfg.value.copy(template.lightCfg.value);
-  u.surfCfg.value.copy(template.surfCfg.value);
-  u.surfCfg2.value.copy(template.surfCfg2.value);
-  u.marchCfg.value.copy(template.marchCfg.value);
-  u.woundCfg.value.copy(template.woundCfg.value);
-  u.woundCfg2.value.copy(template.woundCfg2.value);
-  u.faceCfg.value.copy(template.faceCfg.value);
-  u.faceCfg2.value.copy(template.faceCfg2.value);
-  u.faceCfg3.value.copy(template.faceCfg3.value);
-  u.lodCfg.value.copy(template.lodCfg.value);
-  u.faceProj.value.copy(template.faceProj.value);
-  u.headQuat.value.copy(template.headQuat.value);
-  u.faceAtlas.value.copy(template.faceAtlas.value);
-  u.faceGlowColor.value.copy(template.faceGlowColor.value);
-
-  // chunk.pos is the cluster centre at sever time, so this recentres the
-  // severed limb's rest-space primitives around the chunk's own origin.
-  const local = prims.map(p => ({
-    ...p,
-    cluster: 0,
-    a: vsub(p.a, chunk.pos),
-    b: vsub(p.b, chunk.pos),
-  }));
-
-  // The chunk's TRUE extent, not chunk.radius: a real limb is 0.3-0.45 across
-  // where chunk.radius is 0.14, and the shader's cluster-bounds cull would
-  // erase anything reaching past it.
-  const extent = chunkExtent(prims, chunk.pos);
-  const tornLocals: Vec3[] = (tornAt ?? []).map(t => vsub(t, chunk.pos));
-  // Girth at the tear, NOT extent: extent is length-dominated, and a wound
-  // radius that scales with length swallows the capsule silhouette (X1.16).
-  const tornRadii = tornLocals.map(t => tornEndRadius(local, t));
-
-  const packed = packBody({
-    prims: local,
-    clusters: [{
-      id: 0, limb: chunk.limb, start: 0, count: local.length,
-      center: [0, 0, 0], radius: extent, alive: true,
-    }],
-    bones: new Map(),
-  });
-
-  writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
-  writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
-  writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
-  writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
-  // The rest rows are the chunk-LOCAL prims, written ONCE here: apply()
-  // rewrites only the posed endpoint rows per frame as the chunk tumbles, so
-  // the noise anchor maps every frame back into the chunk's own rest space —
-  // the torn flesh keeps its texture through the tumble (task 6).
-  writeRow(ROW_REST_A, packed.restA, MAX_PRIMS);
-  writeRow(ROW_REST_B, packed.restB, MAX_PRIMS);
-  writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
-  // The quat row is written ONCE, here: a chunk's tumble rotates its packed
-  // ENDPOINTS (apply() below) but leaves each prim's orient frozen at its
-  // sever-time value — so a severed head's face ellipsoids keep the pose the
-  // head had when it came off. sever.ts's prim copies preserve the field via
-  // spread; a copy without it would silently drop the face's orientation.
-  // A severed head keeps its face: the cluster slice carries its carves, and
-  // apply() below rewrites only xyz per endpoint, leaving the packed sign in .w.
-  u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
-  // Chunks are small; fewer steps.
-  u.marchCfg.value.x = 48;
-  // Gore mask (gobs-and-goo §2): a chunk is torn meat, not clean latex. The
-  // body view keeps w=0, so the shader skips the block entirely there. The
-  // head keeps gore too — it just tore off; its face still paints over it.
-  u.lodCfg.value.w = 1;
-  // Only a severed HEAD carries the face. Without this a flying arm would get
-  // one projected onto it, since every chunk's own cluster 0 is itself.
-  u.faceCfg.value.x = chunk.limb === 'head' ? 1 : 0;
-  // A severed head keeps its face, so give it its own skull sphere centred on
-  // the chunk — the body's points at the original, now-absent head.
-  u.headCentre.value.set(chunk.pos[0], chunk.pos[1], chunk.pos[2]);
-  u.headAxes.value.set(extent, extent, extent);
-
-  const material = createMarchMaterial(dataTex, volTex, u);
-  const size = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
+  const ownsMaterial = !sharedMaterial;
+  const material = sharedMaterial?.material ?? createMarchMaterial(dataTex, volTex, u);
+  // A unit proxy lets reset() resize this exact mesh with scale instead of
+  // replacing its geometry. Object identity is what bounds Three's
+  // RenderObject cache when the lab recycles its oldest 40 chunk slots.
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  mesh.userData[CHUNK_MATERIAL_STATE] = {
+    dataTexture: dataTex,
+    volumeTexture: volTex,
+    uniforms: u,
+  } satisfies ChunkMaterialState;
   mesh.frustumCulled = false;
+
+  let local: Primitive[] = [];
+  let extent = 0;
+  let tornLocals: Vec3[] = [];
+  let tornRadii: number[] = [];
+  let packed!: ReturnType<typeof packBody>;
+  let proxySize = 1;
+
+  function copyTemplateLook() {
+    u.faceTex.value = template.faceTex.value;
+    u.baseColor.value.copy(template.baseColor.value);
+    u.deepColor.value.copy(template.deepColor.value);
+    u.charColor.value.copy(template.charColor.value);
+    u.lightDir.value.copy(template.lightDir.value);
+    u.keyColor.value.copy(template.keyColor.value);
+    u.lightCfg.value.copy(template.lightCfg.value);
+    u.surfCfg.value.copy(template.surfCfg.value);
+    u.surfCfg2.value.copy(template.surfCfg2.value);
+    u.marchCfg.value.copy(template.marchCfg.value);
+    u.woundCfg.value.copy(template.woundCfg.value);
+    u.woundCfg2.value.copy(template.woundCfg2.value);
+    u.faceCfg.value.copy(template.faceCfg.value);
+    u.faceCfg2.value.copy(template.faceCfg2.value);
+    u.faceCfg3.value.copy(template.faceCfg3.value);
+    u.lodCfg.value.copy(template.lodCfg.value);
+    u.faceProj.value.copy(template.faceProj.value);
+    u.headQuat.value.copy(template.headQuat.value);
+    u.faceAtlas.value.copy(template.faceAtlas.value);
+    u.faceGlowColor.value.copy(template.faceGlowColor.value);
+  }
 
   /** Writes the local prims into the world-space data rows for state `c`. */
   function apply(c: Chunk): { sx: number; sy: number; sz: number } {
@@ -896,28 +930,74 @@ export function createChunkGpuView(
     return { sx, sy, sz };
   }
 
-  const firstApply = apply(chunk);
-  mesh.position.set(chunk.pos[0], chunk.pos[1], chunk.pos[2]);
-  // No mesh rotation: the proxy box stays axis-aligned — its size
-  // (extent * 2 * 1.4 + ...) already covers every orientation of the rotated
-  // field, and rotating the box while squash acts in world axes would
-  // under-cover.
-  mesh.scale.set(firstApply.sx, firstApply.sy, firstApply.sz);
+  function reset(c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[]) {
+    copyTemplateLook();
+
+    // c.pos is the cluster centre at sever time, so this recentres the
+    // severed limb's rest-space primitives around the chunk's own origin.
+    local = nextPrims.map(p => ({
+      ...p,
+      cluster: 0,
+      a: vsub(p.a, c.pos),
+      b: vsub(p.b, c.pos),
+    }));
+    extent = chunkExtent(nextPrims, c.pos);
+    tornLocals = (nextTornAt ?? []).map(t => vsub(t, c.pos));
+    // Girth at the tear, not the length-dominated proxy extent (X1.16).
+    tornRadii = tornLocals.map(t => tornEndRadius(local, t));
+
+    packed = packBody({
+      prims: local,
+      clusters: [{
+        id: 0, limb: c.limb, start: 0, count: local.length,
+        center: [0, 0, 0], radius: extent, alive: true,
+      }],
+      bones: new Map(),
+    });
+
+    // Full-width copies intentionally zero any rows left by the previous
+    // occupant of this slot.
+    writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
+    writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
+    writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
+    writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
+    writeRow(ROW_REST_A, packed.restA, MAX_PRIMS);
+    writeRow(ROW_REST_B, packed.restB, MAX_PRIMS);
+    writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
+
+    u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
+    u.marchCfg.value.x = 48; // chunks are small; fewer steps
+    u.lodCfg.value.w = 1;    // torn-meat gore mask
+    u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;
+    u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
+    u.headAxes.value.set(extent, extent, extent);
+    proxySize = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
+
+    const { sx, sy, sz } = apply(c);
+    mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
+    // No mesh rotation: this box covers every orientation of the rotated
+    // field, while squash remains in world axes.
+    mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+  }
+
+  reset(chunk, prims, tornAt);
 
   return {
     object: mesh,
     uniforms: u,
     volumeTexture: volTex,
+    reset,
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
-      mesh.scale.set(sx, sy, sz);
+      mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
     },
     dispose() {
       mesh.geometry.dispose();
-      material.dispose();
+      if (ownsMaterial) material.dispose();
       dataTex.dispose();
       if (ownsVolume) volTex.dispose();
+      delete mesh.userData[CHUNK_MATERIAL_STATE];
     },
   };
 }

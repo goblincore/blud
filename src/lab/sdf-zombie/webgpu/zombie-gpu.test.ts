@@ -7,7 +7,8 @@ import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import {
-  createZombieGpuView, createChunkGpuView, defaultUniforms, blankFaceTexture,
+  createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
+  defaultUniforms, blankFaceTexture,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
@@ -52,6 +53,70 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     expect(view.uniforms.faceCfg3.value.z).toBeCloseTo(1.5, 6);
     expect(view.uniforms.faceCfg3.value.w).toBeCloseTo(2.5, 6);
     view.dispose();
+    template.dispose();
+  });
+});
+
+describe('shared gib chunk material', () => {
+  it('reuses one externally-owned material while keeping per-chunk uniforms isolated', () => {
+    // Regression: creating a fresh NodeMaterial per gib chunk makes Three run
+    // its multi-second node builder/generator path once per render object.
+    // The lab owns one prebuilt material; chunk views own only their mutable
+    // data texture and uniforms.
+    const shared = createSharedChunkGpuMaterial();
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunkA = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const chunkB = makeChunk('armL', [-0.6, 0.7, 0.9], [-1, 1, 0], 0.1, [0, 0, 1]);
+    const template = createZombieGpuView(body, {});
+
+    const viewA = createChunkGpuView(chunkA, prims, template.uniforms, undefined, undefined, shared);
+    const viewB = createChunkGpuView(chunkB, prims, template.uniforms, undefined, undefined, shared);
+
+    expect((viewA.object as THREE.Mesh).material).toBe(shared.material);
+    expect((viewB.object as THREE.Mesh).material).toBe(shared.material);
+    expect(viewA.uniforms).not.toBe(viewB.uniforms);
+    viewA.update({ ...chunkA, pos: [1.25, 0.4, -1.5] });
+    expect(viewA.uniforms.faceCfg3.value.z).toBeCloseTo(1.25, 6);
+    expect(viewB.uniforms.faceCfg3.value.z).toBeCloseTo(-0.6, 6);
+
+    let sharedDisposed = false;
+    shared.material.addEventListener('dispose', () => { sharedDisposed = true; });
+    viewA.dispose();
+    viewB.dispose();
+    expect(sharedDisposed).toBe(false);
+    shared.dispose();
+    expect(sharedDisposed).toBe(true);
+    template.dispose();
+  });
+
+  it('reconfigures a bounded mesh slot without allocating a new render object', () => {
+    const shared = createSharedChunkGpuMaterial();
+    const template = createZombieGpuView(body, {});
+    const armPrims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const headPrims = body.prims.filter(p => p.limb === 'head').slice(0, 4);
+    const arm = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const head = makeChunk('head', [-0.2, 1.5, 0.3], [-1, 1, 0], 0.2, [0, 1, 0]);
+    const view = createChunkGpuView(arm, armPrims, template.uniforms, undefined, undefined, shared);
+    const object = view.object;
+    const uniforms = view.uniforms;
+
+    // The lab recycles at its 40-chunk cap. Repeated churn must keep the
+    // object/material identity that keys Three's RenderObject cache while
+    // replacing the field data and head/limb-specific configuration.
+    for (let i = 0; i < 80; i++) {
+      const next = i % 2 === 0 ? head : arm;
+      view.reset(next, i % 2 === 0 ? headPrims : armPrims);
+      expect(view.object).toBe(object);
+      expect(view.uniforms).toBe(uniforms);
+    }
+    expect(view.uniforms.counts.value.x).toBe(armPrims.length);
+    expect(view.uniforms.faceCfg.value.x).toBe(0);
+    view.reset(head, headPrims);
+    expect(view.uniforms.counts.value.x).toBe(headPrims.length);
+    expect(view.uniforms.faceCfg.value.x).toBe(1);
+
+    view.dispose();
+    shared.dispose();
     template.dispose();
   });
 });
