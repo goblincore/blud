@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Screenshake } from './screenshake';
 
 describe('Screenshake', () => {
@@ -46,13 +46,21 @@ describe('Screenshake', () => {
   });
 
   it('stacks overlapping impulses additively in magnitude', () => {
-    sh.shake(1.0, 0.5);
-    const mid = sh.sampleOffset(0.016);
-    sh.shake(1.0, 0.5);  // second shake while first still active
-    const after = sh.sampleOffset(0.016);
-    // Second impulse should bump residual magnitude up
-    const mMid = Math.abs(mid.pitch) + Math.abs(mid.yaw);
-    const mAft = Math.abs(after.pitch) + Math.abs(after.yaw);
-    expect(mAft).toBeGreaterThan(mMid * 0.5); // not strictly ≥ because random phase, but close
+    // Pin the random phase so |pitch|+|yaw| measures the amplitude envelope
+    // directly — the envelope is what stacking affects, and it's deterministic.
+    vi.spyOn(Math, 'random').mockReturnValue(0.75);
+    try {
+      sh.shake(1.0, 0.5);
+      const mid = sh.sampleOffset(0.016);
+      sh.shake(1.0, 0.5); // second shake while first still active
+      const after = sh.sampleOffset(0.016);
+      const mMid = Math.abs(mid.pitch) + Math.abs(mid.yaw);
+      const mAft = Math.abs(after.pitch) + Math.abs(after.yaw);
+      // Residual energy (~0.45 after one frame of decay) + fresh 0.5 ≈ 1.9× the
+      // mid amplitude; assert well above the mid level to prove stacking.
+      expect(mAft).toBeGreaterThan(mMid * 1.5);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
