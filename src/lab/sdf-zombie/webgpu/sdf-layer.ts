@@ -137,6 +137,14 @@ const composite = wgslFn(COMPOSITE_WGSL);
 export interface SdfLayer {
   /** Draws the polygonal scene, then the SDF layer, then composites. */
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void;
+  /**
+   * Redirects the two passes that normally go to the canvas (the polygonal
+   * scene and the final composite) into this target instead; null restores
+   * the canvas. post-aa uses this to capture the frame for its FXAA/smear
+   * chain. The target MUST carry a depth buffer — the composite depth-tests
+   * against what the polygonal pass left behind.
+   */
+  setOutputTarget(t: THREE.RenderTarget | null): void;
   /** Full-resolution size of the output, in device pixels. */
   setSize(width: number, height: number): void;
   /** 1 = full resolution, 0.5 = quarter the pixels. */
@@ -227,6 +235,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const clearColorScratch = new THREE.Color();
 
   /**
+   * Where the canvas-bound passes draw — null is the canvas. See
+   * setOutputTarget; one member rather than a render() argument because the
+   * redirect is a session-long wiring decision (post-aa toggles), not a
+   * per-call choice.
+   */
+  let outputTarget: THREE.RenderTarget | null = null;
+
+  /**
    * Pre-pass targets need an explicit first clear whenever they are
    * (re)allocated. The march materials bind the cone and occluder textures
    * UNCONDITIONALLY — the enable uniforms gate the fetch, not the binding —
@@ -315,10 +331,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         }
       }
 
-      // Pass 1 — the polygonal scene, at full resolution, straight to the
-      // canvas. This leaves the depth the composite will test against.
+      // Pass 1 — the polygonal scene, at full resolution, to the output
+      // (canvas, or post-aa's capture target). This leaves the depth the
+      // composite will test against.
       camera.layers.disable(SDF_LAYER);
-      renderer.setRenderTarget(null);
+      renderer.setRenderTarget(outputTarget);
       void renderer.render(scene, camera);
 
       // Pass 1b — the cone pre-pass, wide level then narrow, each starting
@@ -374,12 +391,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       camera.layers.mask = restore;
-      renderer.setRenderTarget(null);
+      renderer.setRenderTarget(outputTarget);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
     },
+    setOutputTarget(t) { outputTarget = t; },
     setSize(width, height) {
       fullW = width;
       fullH = height;

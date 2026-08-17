@@ -68,6 +68,31 @@ export interface LabRendererHandle {
 const MAX_RENDER_W = 960;
 const MAX_RENDER_H = 540;
 
+/**
+ * The capped internal render size for a window of winW x winH. Exported for
+ * post-aa.ts: its content targets (and, via lab-main, the SDF layer) follow
+ * THIS size even when the sharp-upscale toggle grows the canvas backing to
+ * the full window, so the chunky low-res grid is what gets upscaled either
+ * way — by CSS when sharp is off, by the blit pass when it is on.
+ */
+export function computeRenderSize(
+  winW: number, winH: number,
+): { width: number; height: number } {
+  const winAspect = winW / winH;
+  let renderW: number;
+  let renderH: number;
+  if (winAspect > MAX_RENDER_W / MAX_RENDER_H) {
+    renderH = Math.min(winH, MAX_RENDER_H);
+    renderW = Math.round(renderH * winAspect);
+    if (renderW > MAX_RENDER_W) { renderW = MAX_RENDER_W; renderH = Math.round(renderW / winAspect); }
+  } else {
+    renderW = Math.min(winW, MAX_RENDER_W);
+    renderH = Math.round(renderW / winAspect);
+    if (renderH > MAX_RENDER_H) { renderH = MAX_RENDER_H; renderW = Math.round(renderH * winAspect); }
+  }
+  return { width: renderW, height: renderH };
+}
+
 export async function createLabRenderer(mount: HTMLElement): Promise<LabRendererHandle> {
   // trackTimestamp turns on the WebGPU timestamp-query pool. It is the whole
   // reason the perf work can be honest: wall-clock frame time pins to vsync
@@ -114,17 +139,7 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
     const winW = window.innerWidth;
     const winH = window.innerHeight;
     const winAspect = winW / winH;
-    let renderW: number;
-    let renderH: number;
-    if (winAspect > MAX_RENDER_W / MAX_RENDER_H) {
-      renderH = Math.min(winH, MAX_RENDER_H);
-      renderW = Math.round(renderH * winAspect);
-      if (renderW > MAX_RENDER_W) { renderW = MAX_RENDER_W; renderH = Math.round(renderW / winAspect); }
-    } else {
-      renderW = Math.min(winW, MAX_RENDER_W);
-      renderH = Math.round(renderW / winAspect);
-      if (renderH > MAX_RENDER_H) { renderH = MAX_RENDER_H; renderW = Math.round(renderH * winAspect); }
-    }
+    const { width: renderW, height: renderH } = computeRenderSize(winW, winH);
     renderer.setSize(renderW, renderH, false);
     camera.aspect = winAspect;
     camera.updateProjectionMatrix();
