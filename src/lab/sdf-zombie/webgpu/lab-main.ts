@@ -58,6 +58,7 @@ import {
   planSubSteps, STANDING_RIG, stepMotion,
   type MotionJoints, type MotionSignals,
 } from '../motion';
+import { GAIT_TUNING, type ArmStyle } from '../gait';
 import { makeRng, type WanderBounds } from '../wander';
 import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
@@ -502,8 +503,12 @@ async function main() {
   let motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
   let motionEnabled = true;
   let wanderOn = true;
+  let armStyle: ArmStyle = GAIT_TUNING.armStyle;
+  let headingFollow: number = MOTION_TUNING.headingFollow;
   let forcedCollapse = false;
   let lastRootShift: Vec3 = [0, 0, 0];
+  /** The body's applied yaw — feeds applyRig's rigid-head clamp cone. */
+  let lastBodyYaw = 0;
   // bindRig pins the lowest joint as a static anchor; walking releases it —
   // the rest pull + plants carry the body instead (and collapse wants the
   // pin gone anyway, so it lives in one place).
@@ -547,6 +552,7 @@ async function main() {
     }
     motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
     lastRootShift = [0, 0, 0];
+    lastBodyYaw = 0;
     pendingShot = null;
     pendingWounds.length = 0;
     pendingSevered.length = 0;
@@ -779,8 +785,10 @@ async function main() {
       torso: lastPosed.prims[wound.primIdx]?.limb === 'torso',
     };
     // A hit shoves the nearest joint along the shot direction — the rest-pose
-    // pull springs it back, so the limb visibly recoils and lags.
-    const push = type === 'blast' ? 0.10 : 0.04;
+    // pull springs it back, so the limb visibly recoils and lags. Scaled up
+    // in the motion-polish pass (0.04/0.10 was sub-perceptual at god-cam
+    // distance); the sustained decay lives in motion.ts's recoil state.
+    const push = type === 'blast' ? 0.16 : type === 'pellet' ? 0.06 : 0.04;
     bound = impulseAt(bound, hit, [d.x * push, d.y * push, d.z * push]);
     refreshWounds();
 
@@ -863,7 +871,7 @@ async function main() {
 
   function spawnChunk(
     limb: LimbId, origin: Vec3, prims: typeof current.prims,
-    vel?: Vec3, tornAt?: Vec3[],
+    vel?: Vec3, tornAt?: Vec3[], kind: 'limb' | 'gob' = 'limb',
   ) {
     if (prims.length === 0) return;
     // The sever results are authored rest-space; chunks live in world space.
@@ -879,7 +887,7 @@ async function main() {
     ];
     // Collision radius = the limb's real visual extent; chunk.radius's 0.14 is
     // smaller than any limb and would bury it half-way into the floor.
-    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin), primsLongAxis(prims, origin));
+    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin), primsLongAxis(prims, origin), Math.random, kind);
     const chunkView = createChunkGpuView(state, prims, u, tornAt);
     chunkView.object.layers.set(SDF_LAYER);
     scene.add(chunkView.object);
@@ -919,7 +927,7 @@ async function main() {
         (0.8 + Math.random() * 0.8) * speed * 0.8,
         (dz / l) * speed + (Math.random() - 0.5) * 1.2,
       ];
-      spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt);
+      spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt, 'gob');
     }
     current = next;
     wounds = [];
@@ -1170,7 +1178,8 @@ async function main() {
       let first = true;
       for (const sdt of planSubSteps(dt)) {
         const step = stepMotion(
-          motionState, motionJoints, { enabled: true, wander: wanderOn },
+          motionState, motionJoints,
+          { enabled: true, wander: wanderOn, armStyle, headingFollow },
           {
             dt: sdt,
             shot: pendingShot,
@@ -1195,6 +1204,7 @@ async function main() {
           forcedCollapse = false;
         }
         lastRootShift = f.rootShift;
+        lastBodyYaw = f.bodyYaw;
         // Noise anchor (motion-polish): the march's fbm rides the body's root
         // translation so the skin texture does not swim while walking.
         view.setRootShift(f.rootShift[0], f.rootShift[2]);
@@ -1250,7 +1260,7 @@ async function main() {
       };
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
     }
-    const posed = applyRig(current, bound);
+    const posed = applyRig(current, bound, lastBodyYaw);
     lastPosed = posed;
     view.update(posed);
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
@@ -1561,6 +1571,9 @@ async function main() {
   const wanderBtn = addButton(motionBox, `wander: ${wanderOn ? 'on' : 'off'}`, () => {
     setWander(!wanderOn);
   });
+  const armStyleBtn = addButton(motionBox, `arms: ${armStyle}`, () => {
+    setArmStyle(armStyle === 'reach' ? 'swing' : 'reach');
+  });
   addButton(motionBox, 'force collapse', () => { forcedCollapse = true; });
   motionReadEl = document.createElement('div');
   motionReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
@@ -1592,6 +1605,15 @@ async function main() {
   function setWander(on: boolean) {
     wanderOn = on;
     wanderBtn.textContent = `wander: ${on ? 'on' : 'off'}`;
+  }
+  /** Arm style: 'reach' (mummy-arms, the default) or 'swing' (counter-swing). */
+  function setArmStyle(s: ArmStyle) {
+    armStyle = s;
+    armStyleBtn.textContent = `arms: ${s}`;
+  }
+  /** Heading-follow gain 0..1 — 0 is the strafe-walker (body never turns). */
+  function setHeadingFollow(v: number) {
+    headingFollow = Math.max(0, Math.min(1, v));
   }
 
   const actionBox = addSection(panelEl, 'actions');
@@ -1736,6 +1758,10 @@ async function main() {
         stagger: motionState.stagger.kind,
         clutch: motionState.clutch.arm,
         heading: motionState.wander.heading,
+        bodyYaw: motionState.bodyYaw,
+        armStyle,
+        headingFollow,
+        recoil: motionState.recoil.joint,
         pos: motionState.wander.pos as unknown as number[],
         speed: motionState.wander.speed,
         blend: motionState.blend,
@@ -1744,6 +1770,10 @@ async function main() {
     },
     /** Locomotion toggle — gait/stagger/IK stay live regardless. */
     setWander,
+    /** Arm style toggle: 'reach' (default mummy-arms) or 'swing'. */
+    setArmStyle,
+    /** Heading-follow gain — 0 keeps the body facing one way (strafe-walker). */
+    setHeadingFollow,
     /** Motion master toggle — off is the pre-X1.22 statue. */
     setMotionEnabled,
     /** The K key's console twin: forces the collapse next frame. */
@@ -1795,7 +1825,7 @@ async function main() {
       // in the same tick would otherwise measure an EMPTY hull and read as a
       // free win.
       if (on) {
-        const posed = applyRig(current, bound);
+        const posed = applyRig(current, bound, lastBodyYaw);
         occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
       }
     },

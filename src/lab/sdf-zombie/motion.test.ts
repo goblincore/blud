@@ -115,8 +115,9 @@ describe('stepMotion — standing', () => {
   it('idle frame with no inputs reproduces the authored rest pose exactly', () => {
     const j = realJoints();
     // Wander off + head severed disables every offset path (aim included):
-    // the rest targets ARE the authored pose, bit for bit.
-    const cfg: MotionConfig = { enabled: true, wander: false };
+    // the rest targets ARE the authored pose, bit for bit. Swing style: the
+    // reach style's idle presence floor intentionally lifts the arms.
+    const cfg: MotionConfig = { enabled: true, wander: false, armStyle: 'swing' };
     const { frame } = run(j, makeMotionState(1, [0, 0, 0]), cfg, 3,
       () => ({ ...NO_SIGNALS(), headAlive: false }));
     expect(frame.restPose).toEqual(j.base.map(v => [...v] as Vec3));
