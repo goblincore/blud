@@ -67,10 +67,11 @@ import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
 import { CIG_EMBER_HOT, STICK_IN_HAND, buildHandPrims } from '../hands';
 import {
-  EMPTY_FPV_INPUT, enterFpvMode, exitFpvMode, forceThrow, handPrimsToWorld,
-  handPropPoses, handSheetProjections, makeFpvMode, posedHandPrims,
-  splitHandWounds, stepFpvMode,
-  type FpvGorePort, type FpvModeState,
+  EMPTY_FPV_INPUT, enterFpvMode, exitFpvMode, forceThrow, handFieldFrame,
+  handPoseTargets, handPrimsToWorld, handPropPoses, handSheetProjections,
+  makeFpvMode, makeHandFieldUi, posedHandPrims, requestHandField,
+  settleHandVolume, splitHandWounds, stepFpvMode,
+  type FpvGorePort, type FpvModeState, type HandFieldMode, type HandFieldUi,
 } from '../fpv-mode';
 import { cookCharge } from '../fpv';
 import {
@@ -78,6 +79,8 @@ import {
   createStickProp,
 } from './fpv-view';
 import { loadBakedHandSheets, proceduralHandSheets } from './hands-sheet';
+import { loadHandVolume, type HandVolume } from './hand-volume';
+import { bakedHandPose } from '../hand-volume-pose';
 import {
   initialAdaptiveState, scaleForRung, stepAdaptive,
 } from '../adaptive-scale';
@@ -1024,6 +1027,34 @@ async function main() {
     handViews.left.setSheet(baked.pinch);
     handViews.right.setSheet(baked.grip);
   });
+  // ——— Baked hand volume (X1.26 task C2) ——————————————————————————
+  // Loaded ONCE, beside the sheets. Success binds the volume WITHOUT
+  // switching modes (primitive stays primitive until the owner asks);
+  // failure records the message, forces prims (settleHandVolume) and —
+  // because both handlers are attached — never leaves an unhandled
+  // rejection behind.
+  const HAND_VOLUME_URL = '/assets/lab/hand-sdf-relaxed-r.json';
+  let handFieldUi = makeHandFieldUi();
+  let handVolume: HandVolume | null = null;
+  loadHandVolume(HAND_VOLUME_URL).then(
+    v => {
+      handVolume = v;
+      applyHandField(settleHandVolume(handFieldUi, true));
+    },
+    err => {
+      applyHandField(settleHandVolume(
+        handFieldUi, false,
+        err instanceof Error ? err.message : String(err),
+      ));
+    },
+  );
+  // The lab owns the loaded volume; each view owns its own 1³ fallback
+  // (disposed in its dispose). One pagehide, one dispose — the HandVolume's
+  // own dispose is idempotent, so a double fire stays safe.
+  window.addEventListener('pagehide', () => {
+    handVolume?.dispose();
+    handVolume = null;
+  });
   const stick = createStickProp();
   scene.add(stick.object);
   const cig = createCigaretteProp();
@@ -1133,7 +1164,7 @@ async function main() {
   function enterFpv() {
     fpvMode = enterFpvMode(fpvMode);
     fpvMouseDx = 0; fpvMouseDy = 0; fpvPress = false; fpvRelease = false;
-    handViews.left.setVisible(handsEnabled);
+    handViews.left.setVisible(handsEnabled && handFieldUi.field === 'prims');
     handViews.right.setVisible(handsEnabled);
     fpvBtn.textContent = 'fpv: exit';
     try {
@@ -1426,12 +1457,34 @@ async function main() {
         const nL = posedLocalHands.left.length;
         const w = splitHandWounds(handWounds, nL);
         const proj = handSheetProjections(posedLocalHands, ff.eye, ff.yaw, ff.pitch);
-        handViews.left.update(lastHandWorld.slice(0, nL), w.left);
-        handViews.left.setProjection(proj.left);
-        handViews.right.update(lastHandWorld.slice(nL), w.right);
-        handViews.right.setProjection(proj.right);
-        handViews.left.setVisible(true);
-        handViews.right.setVisible(true);
+        // BAKED (X1.26): only the right hand marches, from the volume. The
+        // wound ring still uploads (wounds stamp onto the baked field after
+        // either branch), and the volume's rigid placement + clamped distal
+        // warp derive from this frame's prim pair — unjiggled (pose+bob; the
+        // jiggle points pinned AT their targets) versus jiggled (the live
+        // Verlet state) — via hand-volume-pose.
+        if (handFieldUi.field === 'baked') {
+          handViews.right.update(lastHandWorld.slice(nL), w.right);
+          const tgt = handPoseTargets(HAND_REST, ff.handPose);
+          const still = {
+            left: tgt.left.map(t => ({ pos: t, prev: t })),
+            right: tgt.right.map(t => ({ pos: t, prev: t })),
+          };
+          const unjiggledWorld = handPrimsToWorld(
+            posedHandPrims(HAND_REST, ff.handPose, still), ff.eye, ff.yaw, ff.pitch);
+          const pose = bakedHandPose(
+            unjiggledWorld.slice(nL), lastHandWorld.slice(nL), proj.right);
+          handViews.right.setVolumePose({ ...pose, warpEnabled: handFieldUi.warp });
+          handViews.right.setVisible(true);
+          handViews.left.setVisible(false);
+        } else {
+          handViews.left.update(lastHandWorld.slice(0, nL), w.left);
+          handViews.left.setProjection(proj.left);
+          handViews.right.update(lastHandWorld.slice(nL), w.right);
+          handViews.right.setProjection(proj.right);
+          handViews.left.setVisible(true);
+          handViews.right.setVisible(true);
+        }
       } else {
         handViews.left.setVisible(false);
         handViews.right.setVisible(false);
@@ -1443,7 +1496,7 @@ async function main() {
     updateChargeHud(ff.mode, ff.charge);
     if (fpvReadEl) {
       fpvReadEl.textContent = ff.mode === 'fpv'
-        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length} · sheet ${handSheetsBaked ? 'baked' : 'proc'}`
+        ? `charge ${(ff.charge * 100).toFixed(0)}% · ${ff.flight ? 'bundle away' : 'hands full'} · hand wounds ${handWounds.length} · sheet ${handSheetsBaked ? 'baked' : 'proc'} · vol ${handFieldUi.load}`
         : `god · ${ff.flight ? 'bundle away' : 'idle'} · bursts ${burstLayer.usingAtlas ? 'seq' : 'proc'}`;
     }
 
@@ -1617,6 +1670,7 @@ async function main() {
     // replaced) they land in WORLD space instead of camera-local coordinates
     // used as world, which parked the bundle at the arena origin.
     const propSeats = ff.mode === 'fpv' && handsEnabled && posedLocalHands
+      && handFieldFrame(handFieldUi, ff.mode, handsEnabled).heldProps
       ? handPropPoses(posedLocalHands, ff.eye, ff.yaw, ff.pitch)
       : null;
     // Stick: ballistic once thrown (visible in god mode too — a spectator
@@ -1981,7 +2035,7 @@ async function main() {
   function setFpvHands(on: boolean) {
     handsEnabled = on;
     if (fpvMode.mode === 'fpv') {
-      handViews.left.setVisible(on);
+      handViews.left.setVisible(on && handFieldUi.field === 'prims');
       handViews.right.setVisible(on);
     }
     handsBtn.textContent = `hands: ${on ? 'on' : 'off'}`;
@@ -2007,6 +2061,57 @@ async function main() {
     get: () => handTexStrength,
     set: (v) => { handTexStrength = v; applyHandSheetTuning(); },
   });
+  // ——— Baked hand field (X1.26): the look gate's controls ——————————
+  // `hand field` A/Bs prims ↔ baked (refused until the volume loaded);
+  // `hand warp` gates the distal jiggle domain warp (static first!);
+  // `hand clay` toggles the neutral-clay shape-gate look.
+  const handFieldBtn = addButton(fpvBox, 'hand field: prims', () => {
+    setHandField(handFieldUi.field === 'prims' ? 'baked' : 'prims');
+  });
+  const handWarpBtn = addButton(fpvBox, 'hand warp: off', () => {
+    setHandWarp(!handFieldUi.warp);
+  });
+  const handClayBtn = addButton(fpvBox, 'hand clay: off', () => {
+    setHandClay(!handFieldUi.clay);
+  });
+  /** Swaps the pure UI state and applies its side effects to the views.
+   *  Field changes rebind the right view's march field and its sheet (the
+   *  prim grip sheet does not fit the open baked hand); label refreshes are
+   *  idempotent so load-settle can call this too. */
+  function applyHandField(next: HandFieldUi) {
+    const prev = handFieldUi;
+    handFieldUi = next;
+    if (next.field !== prev.field) {
+      if (next.field === 'baked') {
+        if (!handVolume) throw new Error('baked hand field: volume not loaded');
+        handViews.right.setField('volume', handVolume);
+        handViews.right.setSheet(null);
+      } else {
+        handViews.right.setField('prims');
+        handViews.right.setSheet(handSheets.grip);
+      }
+      // Visibility is normally the frame block's job, but a switch while
+      // NOT in FPV would otherwise leave a stale hidden/shown left view
+      // until the next entry — set it from the same policy now.
+      const vis = handFieldFrame(next, fpvMode.mode, handsEnabled);
+      handViews.left.setVisible(vis.leftHand);
+      handViews.right.setVisible(vis.rightHand);
+    }
+    handFieldBtn.textContent = `hand field: ${next.field}${next.load !== 'ready' ? ` (${next.load})` : ''}`;
+    handWarpBtn.textContent = `hand warp: ${next.warp ? 'on' : 'off'}`;
+    handClayBtn.textContent = `hand clay: ${next.clay ? 'on' : 'off'}`;
+  }
+  function setHandField(field: HandFieldMode) {
+    applyHandField(requestHandField(handFieldUi, field));
+  }
+  function setHandWarp(on: boolean) {
+    applyHandField({ ...handFieldUi, warp: on });
+  }
+  function setHandClay(on: boolean) {
+    handViews.right.setClay(on); // saves/restores the flesh settings itself
+    applyHandField({ ...handFieldUi, clay: on });
+  }
+  applyHandField(handFieldUi);
   fpvReadEl = document.createElement('div');
   fpvReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
   fpvBox.appendChild(fpvReadEl);
@@ -2249,6 +2354,14 @@ async function main() {
     },
     /** Hands A/B — the spec's perf gate is benchGpu with hands on vs off. */
     setFpvHands,
+    // ——— X1.26 baked hand field ——————————————————
+    /** The `hand field` button's console twin (baked is refused until the
+     *  volume loaded — check `fpv.handVolume`). */
+    setHandField,
+    /** Distal jiggle domain-warp gate (the second look gate; static first). */
+    setHandWarp,
+    /** Neutral-clay look toggle for the baked shape gate. */
+    setHandClay,
     get fpv() {
       return {
         mode: fpvMode.mode,
@@ -2260,6 +2373,11 @@ async function main() {
         flightPos: (fpvMode.flight?.pos ?? null) as number[] | null,
         handWounds: handWounds.length,
         handsEnabled,
+        handField: handFieldUi.field,
+        handWarp: handFieldUi.warp,
+        handClay: handFieldUi.clay,
+        handVolume: handFieldUi.load,
+        handVolumeError: handFieldUi.error,
         burstsUseAtlas: burstLayer.usingAtlas,
       };
     },

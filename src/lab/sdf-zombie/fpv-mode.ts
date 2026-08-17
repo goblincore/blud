@@ -433,6 +433,72 @@ export function splitHandWounds<T extends { primIdx: number }>(
   return { left, right };
 }
 
+// ——— Baked hand field (X1.26) ———————————————————————————————————————————
+
+/** Which field renders the FPV hands: the existing capsule prims (default,
+ *  the complete interaction path) or the baked R16F right-hand volume. */
+export type HandFieldMode = 'prims' | 'baked';
+
+/** The baked volume's load lifecycle, surfaced on `__sdfLab.fpv`. */
+export type HandVolumeLoadState = 'loading' | 'ready' | 'error';
+
+/** The lab-side state behind the `hand field` / `hand warp` / `hand clay`
+ *  panel buttons. Pure data — the view (webgpu/lab-main.ts) binds it to the
+ *  DOM and the GPU views, which is why the transitions live here where they
+ *  can be unit-tested without a renderer. */
+export interface HandFieldUi {
+  field: HandFieldMode;
+  /** Distal jiggle domain warp on the baked field (the SECOND gate — the
+   *  static hand is judged first, warp off). */
+  warp: boolean;
+  /** Neutral-clay look toggle for the shape gate. */
+  clay: boolean;
+  load: HandVolumeLoadState;
+  /** The failure message when `load === 'error'` (exposed, not swallowed). */
+  error: string;
+}
+
+/** Fresh state: primitive mode, warp and clay off, volume still loading. */
+export function makeHandFieldUi(): HandFieldUi {
+  return { field: 'prims', warp: false, clay: false, load: 'loading', error: '' };
+}
+
+/**
+ * Requests a field switch. `baked` is REFUSED until the volume loaded —
+ * there is nothing to march otherwise — and any refusal returns the state
+ * unchanged. `prims` is always honoured (it is also the failed-load
+ * fallback).
+ */
+export function requestHandField(ui: HandFieldUi, field: HandFieldMode): HandFieldUi {
+  if (field === 'baked' && ui.load !== 'ready') return ui;
+  if (field === ui.field) return ui;
+  return { ...ui, field };
+}
+
+/**
+ * Settles the volume load. Success keeps the current field (the volume is
+ * bound but no mode switches — primitive stays primitive until asked);
+ * failure records the message and FORCES prims, which is also why a load
+ * error can never strand the lab in a dead baked mode.
+ */
+export function settleHandVolume(ui: HandFieldUi, ok: boolean, error = ''): HandFieldUi {
+  if (ok) return ui.load === 'ready' ? ui : { ...ui, load: 'ready' };
+  return { ...ui, load: 'error', error, field: 'prims' };
+}
+
+/** The per-frame FPV tail policy for the current field: baked mode shows
+ *  ONLY the relaxed right hand and suppresses the held props (the look
+ *  gate's isolation — spec-sanctioned, not a regression). */
+export function handFieldFrame(
+  ui: HandFieldUi,
+  mode: FpvModeName,
+  handsEnabled: boolean,
+): { leftHand: boolean; rightHand: boolean; heldProps: boolean } {
+  const right = mode === 'fpv' && handsEnabled;
+  const prims = ui.field === 'prims';
+  return { leftHand: right && prims, rightHand: right, heldProps: right && prims };
+}
+
 // ——— Camera kick ——————————————————————————————————————————————————————————
 
 export const KICK_TUNING = {

@@ -8,10 +8,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyExplosionEffect, enterFpvMode, exitFpvMode, forceThrow,
-  handPoseTargets, handPrimsToWorld, handPropPoses, handSheetProjections,
-  kickAngles, makeFpvMode, splitHandWounds,
+  handFieldFrame, handPoseTargets, handPrimsToWorld, handPropPoses,
+  handSheetProjections, kickAngles, makeFpvMode, makeHandFieldUi,
+  requestHandField, settleHandVolume, splitHandWounds,
   makeHandJiggle, posedHandPrims, stepFpvMode, stepHandJiggle,
   type FpvGorePort, type FpvKick, type FpvModeState, type FpvWorld,
+  type HandFieldUi,
 } from './fpv-mode';
 import { EMPTY_FPV_INPUT, throwOrigin, throwSpeedMps, type FpvInput } from './fpv';
 import { makeFlight } from './dynamite-flight';
@@ -673,5 +675,84 @@ describe('determinism and pose continuity', () => {
     const r = stepFpvMode(s, EMPTY_FPV_INPUT, DT, 1 + DT, world, port);
     expect(r.state.flight).not.toBeNull();
     expect(r.state.flight!.age).toBeGreaterThan(0);
+  });
+});
+
+// ——— Baked hand field UI (X1.26 task C2) ————————————————————————————————
+
+describe('hand field UI state', () => {
+  it('defaults: prims, warp off, clay off, volume loading', () => {
+    expect(makeHandFieldUi()).toEqual({
+      field: 'prims', warp: false, clay: false, load: 'loading', error: '',
+    });
+  });
+
+  it('refuses baked until the volume is ready', () => {
+    const ui = makeHandFieldUi();
+    expect(requestHandField(ui, 'baked')).toBe(ui);          // loading: refused
+    const errored = settleHandVolume(ui, false, 'fetch 404');
+    expect(requestHandField(errored, 'baked').field).toBe('prims'); // error: refused
+    const ready = settleHandVolume(ui, true);
+    expect(requestHandField(ready, 'baked').field).toBe('baked');   // ready: honoured
+  });
+
+  it('prims is always honoured (the failed-load fallback)', () => {
+    let ui: HandFieldUi = settleHandVolume(makeHandFieldUi(), true);
+    ui = requestHandField(ui, 'baked');
+    expect(ui.field).toBe('baked');
+    expect(requestHandField(ui, 'prims').field).toBe('prims');
+  });
+
+  it('settle: success keeps the field; failure forces prims and keeps the message', () => {
+    const loading = makeHandFieldUi();
+    const ready = settleHandVolume(loading, true);
+    expect(ready.load).toBe('ready');
+    expect(ready.field).toBe('prims'); // bound, but no mode switch
+    expect(settleHandVolume(ready, true)).toBe(ready);       // idempotent
+
+    const baked = requestHandField(ready, 'baked');
+    const failed = settleHandVolume(baked, false, 'binary sha-256 mismatch');
+    expect(failed).toEqual({
+      ...baked, load: 'error', error: 'binary sha-256 mismatch', field: 'prims',
+    });
+  });
+
+  it('transitions never mutate the state they were given', () => {
+    const ui = makeHandFieldUi();
+    const snap = JSON.parse(JSON.stringify(ui));
+    requestHandField(ui, 'baked');
+    requestHandField(settleHandVolume(ui, true), 'baked');
+    settleHandVolume(ui, false, 'x');
+    handFieldFrame(ui, 'fpv', true);
+    expect(JSON.parse(JSON.stringify(ui))).toEqual(snap);
+  });
+});
+
+describe('hand field frame policy', () => {
+  it('primitive mode shows both hands and the held props in FPV', () => {
+    const ui = settleHandVolume(makeHandFieldUi(), true);
+    expect(handFieldFrame(ui, 'fpv', true)).toEqual({
+      leftHand: true, rightHand: true, heldProps: true,
+    });
+  });
+
+  it('baked mode isolates the right hand and suppresses props', () => {
+    const ui = requestHandField(settleHandVolume(makeHandFieldUi(), true), 'baked');
+    expect(handFieldFrame(ui, 'fpv', true)).toEqual({
+      leftHand: false, rightHand: true, heldProps: false,
+    });
+  });
+
+  it('god mode or hands-off hides everything, either field', () => {
+    const prims = makeHandFieldUi();
+    const baked = requestHandField(settleHandVolume(prims, true), 'baked');
+    for (const ui of [prims, baked]) {
+      expect(handFieldFrame(ui, 'god', true)).toEqual({
+        leftHand: false, rightHand: false, heldProps: false,
+      });
+      expect(handFieldFrame(ui, 'fpv', false)).toEqual({
+        leftHand: false, rightHand: false, heldProps: false,
+      });
+    }
   });
 });

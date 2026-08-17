@@ -405,10 +405,15 @@ export const SAMPLE_VOLUME = /* wgsl */ `fn sampleHandVolume(pWorld: vec3<f32>, 
   let diffMax = local - (volumeMin + extent);
   let outside = length(max(max(diffMin, diffMax), vec3<f32>(0.0, 0.0, 0.0)));
   let dims = textureDimensions(volumeTex, 0);
+  // dims is vec3<u32>: WGSL has no u32−i32 overload, so the i1 clamp
+  // narrows through an explicit vec3<i32> conversion (a u32−i32 mix here
+  // failed pipeline compilation and froze the whole canvas — found by
+  // task C's live gate, invisible to the string-level tests).
+  let dimsI = vec3<i32>(dims);
   let dimsF = vec3<f32>(dims);
   let q = clamp(uv * (dimsF - vec3<f32>(1.0, 1.0, 1.0)), vec3<f32>(0.0, 0.0, 0.0), dimsF - vec3<f32>(1.0, 1.0, 1.0));
   let i0 = vec3<i32>(floor(q));
-  let i1 = min(i0 + vec3<i32>(1, 1, 1), dims - vec3<i32>(1, 1, 1));
+  let i1 = min(i0 + vec3<i32>(1, 1, 1), dimsI - vec3<i32>(1, 1, 1));
   let fr = q - floor(q);
   let s000 = textureLoad(volumeTex, i0, 0).r;
   let s100 = textureLoad(volumeTex, vec3<i32>(i1.x, i0.y, i0.z), 0).r;

@@ -285,7 +285,11 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // Nested mix: 4 edges, 2 faces, 1 slab = exactly seven.
     expect((SAMPLE_VOLUME.match(/mix\(/g) ?? []).length).toBe(7);
     // Degenerate top corner: floor == dims-1 clamps i1 back onto i0.
-    expect(SAMPLE_VOLUME).toContain('min(i0 + vec3<i32>(1, 1, 1), dims - vec3<i32>(1, 1, 1))');
+    expect(SAMPLE_VOLUME).toContain('min(i0 + vec3<i32>(1, 1, 1), dimsI - vec3<i32>(1, 1, 1))');
+    // textureDimensions is vec3<u32> — WGSL has no u32−i32 overload, and a
+    // mixed subtraction fails pipeline compilation at runtime (the canvas
+    // freeze task C diagnosed live).
+    expect(SAMPLE_VOLUME).toContain('let dimsI = vec3<i32>(dims);');
   });
 
   it('transforms world to local with the conjugate of the local-to-world quat', () => {
