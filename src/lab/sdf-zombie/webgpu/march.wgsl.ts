@@ -743,7 +743,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
         let hU = dot(texel(faceTex, base + vec2<f32>(0.0, e.y)).rgb, W);
         // Negated: the gradient points UPHILL, and a normal tilts away from
         // rising ground. Without this the sockets would bulge instead of sink.
-        let bump = vec3<f32>(-(hR - hL) * forward, -(hU - hD), 0.0);
+        let bumpL = vec3<f32>(-(hR - hL) * forward, -(hU - hD), 0.0);
+        // The bump lives in the PROJECTION frame (the un-rotated head/hand
+        // space the uv was derived in) — rotate it by headQuat into world,
+        // the same rotation hfr gets above. Identity for an unrotated head;
+        // load-bearing for the hands view, whose frame is a large rotation
+        // (Opus hands round 3 — grooves shaded from a skewed direction).
+        let bump = bumpL
+          + 2.0 * cross(headQuat.xyz, cross(headQuat.xyz, bumpL) + headQuat.w * bumpL);
         // Suppressed where it glows: bright means RAISED to a height map, so
         // without this the eyes bulge out of their sockets.
         n = normalize(n + bump * faceCfg.w * facing * tex.a * (1.0 - faceGlow));
