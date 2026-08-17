@@ -188,6 +188,9 @@ Key reference docs (open these before touching their area):
   detonate gibs a body point-blank through the existing stack; 1201 tests. Burst
   billboards use the procedural-flipbook fallback (SEQ atlases are gitignored).
   [spec](docs/superpowers/specs/2026-08-16-sdf-lab-fpv-dynamite-design.md)
+- `X1.25` [~] **PSX-AA post pass** — keep the low-res chunky look, kill the jaggies:
+  FXAA at internal res + temporal smear (owner-tunable) + optional sharp-bilinear
+  upscale. Dispatched (kimi-oai). Owner slider session after merge.
 - `X1.24` [~] **Grapeshot shotgun (Spec D)** — MODEL DONE, glm-5.3's chosen (owner pick):
   `grapeshot-gun-glm.glb` (1 372 tris, 68 KB; [notes](docs/dev-notes/2026-08-16-grapeshot-model-glm/notes.md));
   kimi/k3's `grapeshot-gun.glb` kept as bake-off reference. Remaining: Blood sawed-off
