@@ -100,16 +100,19 @@ mode-dependent.)
 
 ## Checklist for the owner
 
-Owner verdict: PENDING
+Owner verdict: **PASS** (2026-08-17) — the baked result reads immediately as a
+proper hand in the FPV capture. Claw-like posing, hollow-looking fingertip/nail
+recesses, and the hard wrist cutoff are optional animation/polish follow-ups,
+not blockers for X1.26.
 
 ```text
-[ ] five digits separable at normal FPV size
-[ ] thumb root/opposition reads
-[ ] web spaces open; no mitten bridges
-[ ] knuckle and palm structure read
-[ ] no objectionable voxel stair-step
-[ ] wounds/material match the primitive flesh family
-[ ] warp adds weight without collapse or swimming
+[x] five digits separable at normal FPV size
+[x] thumb root/opposition reads
+[x] web spaces open; no mitten bridges
+[x] knuckle and palm structure read
+[x] no objectionable voxel stair-step
+[x] wounds/material match the primitive flesh family
+[x] warp adds weight without collapse or swimming
 ```
 
 ## Verification (task C)
