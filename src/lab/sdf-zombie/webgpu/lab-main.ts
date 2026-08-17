@@ -2183,6 +2183,9 @@ async function main() {
     /** Same run the B key starts; result also lands on `window.__benchResult`. */
     runBench,
     setLodEnabled(on: boolean) { lodEnabled = on; },
+    /** The POSED hero body the shader is drawing right now (applyRig's
+     *  output) — the diagnostic peek for facing/pose verification. */
+    heroPosed: () => lastPosed,
     /** X1.22 rig motion — the whole pipeline's state peek. */
     get motion() {
       return {

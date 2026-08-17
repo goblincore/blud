@@ -1,0 +1,106 @@
+[
+  {
+    "shot": "t5-walk-01-+z",
+    "tag": "walk",
+    "heading": 0.973,
+    "bodyYaw": 0.973,
+    "speed": 0.48,
+    "phase": "standing",
+    "pos": [
+      0.13,
+      0,
+      0.2
+    ]
+  },
+  {
+    "shot": "t5-walk-02-+x",
+    "tag": "turn +z→+x",
+    "heading": 2.277,
+    "bodyYaw": 2.277,
+    "speed": 0.66,
+    "phase": "standing",
+    "pos": [
+      0.45,
+      0,
+      0.16
+    ]
+  },
+  {
+    "shot": "t5-walk-03--z",
+    "tag": "turn +x→-z",
+    "heading": 2.961,
+    "bodyYaw": 2.961,
+    "speed": 0.8,
+    "phase": "standing",
+    "pos": [
+      0.58,
+      0,
+      -0.1
+    ]
+  },
+  {
+    "shot": "t5-walk-04--x",
+    "tag": "turn -z→-x",
+    "heading": -1.765,
+    "bodyYaw": -1.765,
+    "speed": 0.81,
+    "phase": "standing",
+    "pos": [
+      0.18,
+      0,
+      -0.67
+    ]
+  },
+  {
+    "shot": "t5-walk-05-+z",
+    "tag": "turn -x→+z",
+    "heading": -0.239,
+    "bodyYaw": -0.239,
+    "speed": 0.46,
+    "phase": "standing",
+    "pos": [
+      -0.27,
+      0,
+      -0.42
+    ]
+  },
+  {
+    "shot": "t5-walk-06-+z",
+    "tag": "walk",
+    "heading": -0.807,
+    "bodyYaw": -0.807,
+    "speed": 0.44,
+    "phase": "standing",
+    "pos": [
+      -0.23,
+      0,
+      0.15
+    ]
+  },
+  {
+    "shot": "t5-walk-07-+z",
+    "tag": "walk",
+    "heading": -0.208,
+    "bodyYaw": -0.208,
+    "speed": 1.07,
+    "phase": "standing",
+    "pos": [
+      -0.54,
+      0,
+      0.47
+    ]
+  },
+  {
+    "shot": "t5-walk-08-+x",
+    "tag": "turn +z→+x",
+    "heading": 1.347,
+    "bodyYaw": 1.347,
+    "speed": 1.15,
+    "phase": "standing",
+    "pos": [
+      -0.01,
+      0,
+      1.26
+    ]
+  }
+]
