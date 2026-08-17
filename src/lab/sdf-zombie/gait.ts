@@ -24,6 +24,9 @@ import type { BuildResult } from './build-body';
 const TAU = Math.PI * 2;
 const Z: Vec3 = [0, 0, 0];
 
+/** The two authored arm styles — see GAIT_TUNING.armStyle. */
+export type ArmStyle = 'swing' | 'reach';
+
 // ---------------------------------------------------------------------------
 // Joint schema — one name per rig point.
 // ---------------------------------------------------------------------------
@@ -79,6 +82,28 @@ export const GAIT_TUNING = {
   armSwing: 0.09,
   /** Elbow flex during the arm swing (m). */
   elbowFlex: 0.04,
+  /** The authored arm style — the wiring may override per body. 'swing' is
+   *  the natural counter-swing; 'reach' is the classic zombie mummy-arms
+   *  (both arms raised toward the heading, slight bob/sway). Default reach:
+   *  it is a zombie. */
+  armStyle: 'reach' as ArmStyle,
+  /** Reach style: hand raise off the hanging rest pose (m). The authored
+   *  arms hang ~0.55 m below the shoulder (body.ts: two 0.30 m segments
+   *  pointing down), so this plus reachHandFwd straightens them forward. */
+  reachHandUp: 0.52,
+  /** Reach style: hand push toward the heading (m). */
+  reachHandFwd: 0.40,
+  /** Reach style: elbow raise (m) — half the hand's, so the arm reads as a
+   *  shallow ramp, not a right angle. */
+  reachElbowUp: 0.30,
+  /** Reach style: elbow push toward the heading (m). */
+  reachElbowFwd: 0.20,
+  /** Reach style: shoulder lift (m) — the whole arm rides up a touch. */
+  reachShoulderUp: 0.03,
+  /** Reach style: vertical bob riding the footfall beat (m). */
+  reachBobAmp: 0.035,
+  /** Reach style: lateral sway riding the hip-sway beat (m). */
+  reachSwayAmp: 0.025,
   /** Head counter-bob as a fraction of the root bob. */
   headBob: 0.5,
   /** Seeded per-side asymmetry magnitude — the claymation "hand-posed" jitter. */
@@ -220,10 +245,19 @@ function stanceProgress(phi: number, duty: number): { stance: boolean; u: number
  *
  * Wiring (task 4): add pose.rootOffset to the pelvis rig point's rest target
  * and pose.offsets[joint] to every other point's, rotated into world space by
- * the wander heading via rotateYaw. The rig integrates toward the targets,
+ * the body yaw via rotateYaw. The rig integrates toward the targets,
  * so no further smoothing is needed here.
+ *
+ * `armStyle` selects the arm animation (GAIT_TUNING.armStyle is the default):
+ * 'swing' counter-swings the arms against the legs; 'reach' holds both arms
+ * raised toward the heading with a slow bob/sway riding the stride clock.
+ * The severed/wounded skews apply to both styles — a missing arm gets no
+ * offsets either way, a wounded arm swings less or droops in its raise.
  */
-export function stepGait(state: GaitState, skew: GaitSkew, dt: number): GaitStep {
+export function stepGait(
+  state: GaitState, skew: GaitSkew, dt: number,
+  armStyle: ArmStyle = GAIT_TUNING.armStyle,
+): GaitStep {
   const time = state.time + Math.max(dt, 0);
   const s = state.seed;
   const T = GAIT_TUNING;
@@ -304,14 +338,27 @@ export function stepGait(state: GaitState, skew: GaitSkew, dt: number): GaitStep
     return { foot: [0, 0, -T.footPush * sideScale * Math.sin(Math.PI * v)], knee: Z, stance: true };
   };
 
-  // One arm: the hand swings opposite the ipsilateral leg. Missing arm ⇒ no
-  // offsets (the shoulder droop below carries the visual).
+  // One arm. 'swing': the hand swings opposite the ipsilateral leg.
+  // 'reach': mummy-arms — raised toward the heading, bobbing on the footfall
+  // beat and swaying with the hips. Missing arm ⇒ no offsets either way (the
+  // shoulder droop below carries the visual); a wounded arm swings less or
+  // droops in its raise.
   const arm = (legPhi: number, side: 'L' | 'R'): { elbow: Vec3; hand: Vec3 } => {
     const missing = side === 'L' ? missingArmL : missingArmR;
     if (missing) return { elbow: Z, hand: Z };
     const wounded = side === 'L' ? woundedArmL : woundedArmR;
+    const aSide = side === 'L' ? aL : aR;
+    if (armStyle === 'reach') {
+      const raise = (wounded ? T.woundedArmSwingScale : 1) * aSide;
+      const bob = -T.reachBobAmp * bobCurve;
+      const armSway = T.reachSwayAmp * Math.sin(swayPhase);
+      return {
+        elbow: [armSway * 0.5, T.reachElbowUp * raise + bob * 0.5, T.reachElbowFwd * raise],
+        hand: [armSway, T.reachHandUp * raise + bob, T.reachHandFwd * raise],
+      };
+    }
     const boost = (side === 'L' ? missingArmR : missingArmL) ? T.missingArmSwingBoost : 1;
-    const sideScale = (side === 'L' ? aL : aR) * boost * (wounded ? T.woundedArmSwingScale : 1);
+    const sideScale = aSide * boost * (wounded ? T.woundedArmSwingScale : 1);
     const swing = Math.sin(Math.PI * stanceProgress(legPhi, duty(side)).u);
     return {
       elbow: [0, T.elbowFlex * 0.4 * sideScale * swing, T.elbowFlex * 0.7 * sideScale * swing],
@@ -330,7 +377,8 @@ export function stepGait(state: GaitState, skew: GaitSkew, dt: number): GaitStep
     const missing = side === 'L' ? missingArmL : missingArmR;
     const droop = missing ? -T.missingArmDrop : 0;
     const armsUp = hop && !missing ? T.hopArmsUp : 0;
-    return [-sway * T.shoulderSway * (side === 'L' ? aL : aR), droop + armsUp, 0];
+    const reachLift = armStyle === 'reach' && !missing ? T.reachShoulderUp : 0;
+    return [-sway * T.shoulderSway * (side === 'L' ? aL : aR), droop + armsUp + reachLift, 0];
   };
 
   const legA = leg(phiL, 'L');
