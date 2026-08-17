@@ -1581,7 +1581,7 @@ async function main() {
     // nose mass out the ear).
     const skull = headShape(posed);
     if (skull) view.setHeadShape(skull.centre, skull.axes);
-    view.setHeadRotation(headQuatOf(bound) ?? [0, 0, 0, 1]);
+    view.setHeadRotation(headQuatOf(bound, lastBodyYaw) ?? [0, 0, 0, 1]);
     uploadWounds(posed.prims);
 
     if (ff.mode === 'fpv') {

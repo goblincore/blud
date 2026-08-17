@@ -5,6 +5,7 @@ import {
   makeAim,
   makeClutch,
   makePlant,
+  poleReflect,
   solveChain,
   solvePlantedLeg,
   stepAim,
@@ -184,6 +185,86 @@ describe('foot plant — stepPlant / solvePlantedLeg', () => {
     const hipToKnee = sub(leg.knee, hip);
     expect(len(cross(hipToPlant, hipToKnee))).toBeLessThan(1e-9);
     expect(dot(hipToKnee, hipToPlant)).toBeGreaterThan(0); // toward the plant, not away
+  });
+});
+
+describe('pole bias — poleReflect (motion-polish task 5)', () => {
+  const ROOT: Vec3 = [0, 0.9, 0];
+  const END: Vec3 = [0, 0.1, 0.5]; // hip→ankle-ish axis, tilted forward
+  const FWD: Vec3 = [0, 0, 1]; // knees bow +z (travel side)
+
+  /** Signed side of `mid` off the root→end axis, along `pole`. */
+  const side = (root: Vec3, mid: Vec3, end: Vec3, pole: Vec3): number => {
+    const axis = sub(end, root);
+    const t = dot(sub(mid, root), axis) / dot(axis, axis);
+    const onAxis: Vec3 = [root[0] + axis[0] * t, root[1] + axis[1] * t, root[2] + axis[2] * t];
+    return dot(sub(mid, onAxis), pole);
+  };
+
+  it('flips a BACKWARD-bowed mid joint to the pole side, preserving both segment lengths', () => {
+    const back: Vec3 = [0, 0.5, -0.05]; // clearly behind the axis (cow knee)
+    expect(side(ROOT, back, END, FWD)).toBeLessThan(-IK_TUNING.poleDeadband);
+    const out = poleReflect(ROOT, back, END, FWD);
+    expect(side(ROOT, out, END, FWD)).toBeGreaterThan(IK_TUNING.poleDeadband);
+    expect(seg(out, ROOT)).toBeCloseTo(seg(back, ROOT), 12);
+    expect(seg(out, END)).toBeCloseTo(seg(back, END), 12);
+  });
+
+  it('leaves a mid joint on the pole side bit-identical', () => {
+    const fwd: Vec3 = [0, 0.5, 0.45];
+    expect(poleReflect(ROOT, fwd, END, FWD)).toEqual(fwd);
+  });
+
+  it('leaves a near-axis mid joint inside the deadband untouched (rest poses stay bit-exact)', () => {
+    // The authored rest knee sits ~1 cm behind the hip→ankle line — inside
+    // the deadband, so the bias must NOT fight the authored pose.
+    const near: Vec3 = [0, 0.5, 0.24];
+    const s = side(ROOT, near, END, FWD);
+    expect(s).toBeLessThan(0);
+    expect(s).toBeGreaterThan(-IK_TUNING.poleDeadband);
+    expect(poleReflect(ROOT, near, END, FWD)).toEqual(near);
+  });
+
+  it('is safe on a degenerate (zero-length) axis', () => {
+    const mid: Vec3 = [0.1, 0.5, -0.2];
+    expect(poleReflect(ROOT, mid, ROOT, FWD)).toEqual(mid);
+  });
+
+  it('elbow rule: bows an inverted elbow DOWN (the opposite side to knees)', () => {
+    const shoulder: Vec3 = [0.2, 1.4, 0];
+    const hand: Vec3 = [0.2, 1.1, 0.5]; // reaching forward
+    const elbowUp: Vec3 = [0.2, 1.35, 0.25]; // bowed UP — a broken-arm read
+    const out = poleReflect(shoulder, elbowUp, hand, [0, -1, 0]);
+    expect(side(shoulder, out, hand, [0, -1, 0])).toBeGreaterThan(IK_TUNING.poleDeadband);
+    expect(seg(out, shoulder)).toBeCloseTo(seg(elbowUp, shoulder), 12);
+    expect(seg(out, hand)).toBeCloseTo(seg(elbowUp, hand), 12);
+  });
+
+  it('solvePlantedLeg with a pole yields a FORWARD knee from every start pose', () => {
+    const FEMUR = 0.5;
+    const TIBIA = 0.5;
+    const PLANT: Vec3 = [0.2, 0, 0.1];
+    const plant = stepPlant(makePlant(), { stance: true, footPos: PLANT, groundY: 0 }, DT);
+    const hip: Vec3 = [0, 0.9, 0];
+    // Knee hints that fold the FABRIK start every which way: forward,
+    // backward, near the axis, and far off to the side. (A hint EXACTLY on
+    // the hip→plant line is FABRIK's degenerate collinear start — it
+    // converges only linearly from there; the pole bias governs the fold
+    // SIDE, not the iteration count, so the hints stay off the line.)
+    const hints: Vec3[] = [
+      [0, 0.5, 0.3],
+      [0, 0.5, -0.4],
+      [0.1, 0.45, 0.1],
+      [0.6, 0.5, 0.1],
+    ];
+    for (const hint of hints) {
+      const leg = solvePlantedLeg(hip, hint, PLANT, plant, [FEMUR, TIBIA], SOLVE, FWD);
+      expect(close(leg.foot, PLANT, 1e-12)).toBe(true); // still locked
+      expect(seg(leg.knee, hip)).toBeCloseTo(FEMUR, 6); // lengths still hold
+      expect(Math.abs(seg(leg.foot, leg.knee) - TIBIA)).toBeLessThan(1e-3);
+      // …and the knee is never on the backward side of the hip→ankle axis.
+      expect(side(hip, leg.knee, PLANT, FWD)).toBeGreaterThan(-1e-9);
+    }
   });
 });
 

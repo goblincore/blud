@@ -6,7 +6,8 @@ import { makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
 import {
-  add, len, normalize, qFromTo, qRotate, scale as vscale, sub,
+  add, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
+  scale as vscale, sub,
 } from './vec';
 
 /** Which rig point an endpoint follows, and its fixed offset from that point. */
@@ -190,6 +191,18 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
  * At rest this is the exact identity: clampedDir === restDir makes qFromTo the
  * identity quaternion and the tip prediction lands on the tip point, so the
  * drift vector is zero — bit-identical to the pre-rigid posed body.
+ *
+ * THE YAW MUST BE EXPLICIT (motion-polish task 5): the pivot→tip axis is
+ * near-VERTICAL in every walking direction, so a bare qFromTo(restDir,
+ * clamped) — the shortest arc between two near-vertical directions — carries
+ * the head's pitch but ZERO azimuth: the body's 180° turn about the head's
+ * long axis is invisible to it, and the face prims kept pointing the authored
+ * way (nose lead 0.17 m walking +z but 0.02 m walking -z — quadrant-
+ * dependent, the owner's "head turned around" screenshot). The rotation is
+ * therefore composed as qMul(residual, qYaw): the known body turn first (the
+ * exact rotateYaw quaternion), then the shortest-arc residual from the TURNED
+ * rest direction to the clamped solve — the residual only ever expresses the
+ * in-cone look-at tilt it can see.
  */
 function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   origin: Vec3;
@@ -203,7 +216,9 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
   const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
-  const q = qFromTo(h.restDir, clamped);
+  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
+  // qMul(a, b) applies b first: the body turn, then the in-cone residual.
+  const q = qMul(qFromTo(rest, clamped), qYaw);
 
   // Translation: the neck pivot plus a bounded share of the drift the rigid
   // rotation does not explain (verlet lag, gait bob, whatever pulled the head
@@ -226,14 +241,19 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
  * texture projection un-rotates by it so the painted face rides the skull.
  * Null when the body has no skull (gibbed).
  */
-export function headQuatOf(bound: BoundRig): Quat | null {
+export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
   const h = bound.head;
   if (!h) return null;
   const pivot = bound.rig.points[h.pivot]!.pos;
   const tip = bound.rig.points[h.tip]!.pos;
+  // Same composition as headTransform (the painted face must ride the SAME
+  // rotation the skull masses were posed with): explicit body yaw first,
+  // then the in-cone residual off the TURNED rest direction.
+  const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
   const clamped = clampDir(
-    normalize(sub(tip, pivot)), h.restDir, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
-  return qFromTo(h.restDir, clamped);
+    normalize(sub(tip, pivot)), rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
+  return qMul(qFromTo(rest, clamped), qYaw);
 }
 
 /** Shoves the rig point nearest a world position — used to make hits push flesh. */
