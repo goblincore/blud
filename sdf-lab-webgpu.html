@@ -7,9 +7,16 @@
   body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
   #app { width: 100vw; height: 100vh; }
   #panel {
-    position: fixed; top: 8px; right: 8px; z-index: 10;
+    position: fixed; top: 38px; right: 8px; z-index: 10;
     background: rgba(0,0,0,0.78); padding: 10px; border: 1px solid #444;
-    width: 260px; max-height: 92vh; overflow-y: auto; line-height: 1.4;
+    width: 260px; max-height: calc(100vh - 58px); overflow-y: auto; line-height: 1.4;
+  }
+  #panel[hidden] { display: none; }
+  #panel-toggle {
+    position: fixed; top: 8px; right: 8px; z-index: 11;
+    width: 140px; padding: 5px 8px; border: 1px solid #555;
+    background: rgba(0,0,0,0.78); color: #d88; font: 11px monospace;
+    cursor: pointer;
   }
   #panel h2 { margin: 8px 0 4px; font-size: 12px; color: #d88; }
   #panel label { display: block; font-size: 11px; margin: 3px 0; }
@@ -25,6 +32,7 @@
 </head>
 <body>
   <div id="app"></div>
+  <button id="panel-toggle" type="button" aria-controls="panel" aria-expanded="true">debug: hide (H)</button>
   <div id="panel"><div id="errors"></div></div>
   <div id="controls">
     <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom &nbsp;·&nbsp; <b>click</b> shoot

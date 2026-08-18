@@ -5,6 +5,19 @@ import type { FaceParams } from './face';
 
 export const STORAGE_KEY = 'blud.sdf-lab.override.v1';
 
+/** Applies the debug-panel's collapsed state while keeping its external
+ * toggle usable and screen-reader legible. The caller owns event wiring so
+ * the same state can be driven by the button and the FPV-safe H shortcut. */
+export function applyDebugPanelVisibility(
+  panel: HTMLElement,
+  toggle: HTMLButtonElement,
+  hidden: boolean,
+): void {
+  panel.hidden = hidden;
+  toggle.textContent = hidden ? 'debug: show (H)' : 'debug: hide (H)';
+  toggle.setAttribute('aria-expanded', String(!hidden));
+}
+
 export function loadOverride(): BodyOverride {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

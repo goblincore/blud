@@ -102,7 +102,7 @@ import {
 } from '../lod';
 import type { LimbId, Vec3 } from '../types';
 import {
-  addButton, addSection, addSelect, addSlider, clearOverride,
+  addButton, addSection, addSelect, addSlider, applyDebugPanelVisibility, clearOverride,
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
 } from '../panel';
 
@@ -183,6 +183,17 @@ async function main() {
   // can fire the moment the callback is installed and would hit these in their
   // temporal dead zone if they were declared alongside the rest of the panel.
   const panelEl = document.getElementById('panel')!;
+  const panelToggleEl = document.getElementById('panel-toggle') as HTMLButtonElement;
+  let debugPanelHidden = false;
+  function setDebugPanelHidden(hidden: boolean) {
+    debugPanelHidden = hidden;
+    applyDebugPanelVisibility(panelEl, panelToggleEl, hidden);
+  }
+  function toggleDebugPanel() {
+    setDebugPanelHidden(!debugPanelHidden);
+  }
+  panelToggleEl.addEventListener('click', toggleDebugPanel);
+  setDebugPanelHidden(false);
   const statusBox = addSection(panelEl, 'renderer');
   // Backend first, and loud. WebGPURenderer falls back to a WebGL2 backend
   // silently, and "it worked" on the fallback is not evidence the WebGPU path
@@ -1456,6 +1467,11 @@ async function main() {
     }
   });
   window.addEventListener('keydown', (ev) => {
+    if (ev.code === 'KeyH' && !ev.repeat) {
+      ev.preventDefault();
+      toggleDebugPanel();
+      return;
+    }
     if (ev.key === 'Tab') {
       ev.preventDefault();
       if (fpvMode.mode === 'fpv') exitFpv(); else enterFpv();

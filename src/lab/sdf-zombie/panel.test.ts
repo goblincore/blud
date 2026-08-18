@@ -1,6 +1,26 @@
 // src/lab/sdf-zombie/panel.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadOverride, saveOverride, clearOverride, serializeOverride, STORAGE_KEY } from './panel';
+import {
+  applyDebugPanelVisibility, loadOverride, saveOverride, clearOverride,
+  serializeOverride, STORAGE_KEY,
+} from './panel';
+
+describe('debug panel visibility', () => {
+  it('collapses the panel while leaving an accessible show control', () => {
+    const panel = document.createElement('div');
+    const toggle = document.createElement('button');
+
+    applyDebugPanelVisibility(panel, toggle, true);
+    expect(panel.hidden).toBe(true);
+    expect(toggle.textContent).toBe('debug: show (H)');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    applyDebugPanelVisibility(panel, toggle, false);
+    expect(panel.hidden).toBe(false);
+    expect(toggle.textContent).toBe('debug: hide (H)');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+});
 
 describe('override persistence', () => {
   beforeEach(() => localStorage.clear());
