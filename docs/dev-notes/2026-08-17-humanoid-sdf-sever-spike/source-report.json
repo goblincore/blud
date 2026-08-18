@@ -1,0 +1,1403 @@
+{
+  "kind": "humanoid-sdf-source-report",
+  "task": "2026-08-17-humanoid-sdf-sever-spike/1",
+  "constants": {
+    "elbowOverlapM": 0.03,
+    "limbPitchM": 0.006,
+    "detailPitchM": 0.003,
+    "marginM": 0.012,
+    "equalInfluenceMaxDiff": 0.15,
+    "strongFaceWeight": 0.5,
+    "foldRule": "zero-skin-fold-to-nearest-deforming-ancestor"
+  },
+  "source": {
+    "checkedIn": "assets-source/humanoid-sdf/zombie-rigged.glb",
+    "originalFilename": "Meshy_AI_zombie_biped_Character_output.glb",
+    "originalPath": "/Users/donny/Downloads/zombietest2/Meshy_AI_zombie_biped/Meshy_AI_zombie_biped_Character_output.glb",
+    "byteLength": 10234820,
+    "sha256": "2b23530a64466ca650ead74e49feaf54b6463c254ecccc9b3d56ba993a33cd28",
+    "expectedSha256": "2b23530a64466ca650ead74e49feaf54b6463c254ecccc9b3d56ba993a33cd28"
+  },
+  "topology": {
+    "vertexCount": 62166,
+    "triangleCount": 98003,
+    "boundaryEdges": 26985,
+    "nonManifoldEdges": 0,
+    "interiorEdges": 133512,
+    "faceComponents": 237,
+    "floatingIslandFaces": 306,
+    "largestComponentFaces": 97697
+  },
+  "texture": {
+    "width": 2048,
+    "height": 2048,
+    "sha256": "7a30076ca339a9c467109c67b36f3a980cfd9c3e13fa5863decb41759a239d3e",
+    "uvConvention": "glb",
+    "baseColorFactor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "textureTransform": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "skeleton": {
+    "jointCount": 24,
+    "bindFrame": "rigid metres (uniform source scene scale 0.01 divided out of bone-local coordinates)",
+    "bones": [
+      {
+        "index": 0,
+        "name": "Hips",
+        "parent": null,
+        "parentIndex": -1,
+        "bindPositionModel": [
+          0.0033480897397969883,
+          0.8980484994624579,
+          0.003114029388432836
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 1,
+        "name": "LeftUpLeg",
+        "parent": "Hips",
+        "parentIndex": 0,
+        "bindPositionModel": [
+          0.11607106852171764,
+          0.8115101766454127,
+          0.02105674643770169
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 2,
+        "name": "LeftLeg",
+        "parent": "LeftUpLeg",
+        "parentIndex": 1,
+        "bindPositionModel": [
+          0.17049401455471327,
+          0.4653575477848387,
+          0.09282733854225449
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 3,
+        "name": "LeftFoot",
+        "parent": "LeftLeg",
+        "parentIndex": 2,
+        "bindPositionModel": [
+          0.16418283594438993,
+          0.1611456314326765,
+          -0.020744888863215828
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 4,
+        "name": "LeftToeBase",
+        "parent": "LeftFoot",
+        "parentIndex": 3,
+        "bindPositionModel": [
+          0.15274899900817537,
+          0.03960436665888253,
+          0.11826923833371066
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 5,
+        "name": "RightUpLeg",
+        "parent": "Hips",
+        "parentIndex": 0,
+        "bindPositionModel": [
+          -0.10934902514695374,
+          0.8115101512393829,
+          0.022740572723555622
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 6,
+        "name": "RightLeg",
+        "parent": "RightUpLeg",
+        "parentIndex": 5,
+        "bindPositionModel": [
+          -0.17049405079330257,
+          0.46535756152498053,
+          0.10124659992541808
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 7,
+        "name": "RightFoot",
+        "parent": "RightLeg",
+        "parentIndex": 6,
+        "bindPositionModel": [
+          -0.1642072798339269,
+          0.16114569239957865,
+          -0.04562882287079188
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 8,
+        "name": "RightToeBase",
+        "parent": "RightFoot",
+        "parentIndex": 7,
+        "bindPositionModel": [
+          -0.19761030040654848,
+          0.041265895634382266,
+          0.09509017325446328
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 9,
+        "name": "Spine02",
+        "parent": "Hips",
+        "parentIndex": 0,
+        "bindPositionModel": [
+          0.002917760492339624,
+          1.0092651267845976,
+          -0.0031901781756610514
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 10,
+        "name": "Spine01",
+        "parent": "Spine02",
+        "parentIndex": 9,
+        "bindPositionModel": [
+          0.002487429986651131,
+          1.120482234637657,
+          -0.009494415363940738
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 11,
+        "name": "Spine",
+        "parent": "Spine01",
+        "parentIndex": 10,
+        "bindPositionModel": [
+          0.0020571028163169414,
+          1.2316987310564864,
+          -0.015798625627158412
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 12,
+        "name": "LeftShoulder",
+        "parent": "Spine",
+        "parentIndex": 11,
+        "bindPositionModel": [
+          0.050788070823540636,
+          1.2571079768594522,
+          -0.03735159921441459
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 13,
+        "name": "LeftArm",
+        "parent": "LeftShoulder",
+        "parentIndex": 12,
+        "bindPositionModel": [
+          0.24571182108730788,
+          1.257108067218722,
+          -0.05890460556935689
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 14,
+        "name": "LeftForeArm",
+        "parent": "LeftArm",
+        "parentIndex": 13,
+        "bindPositionModel": [
+          0.4510930534098488,
+          1.1580725582120173,
+          -0.140572594962587
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 15,
+        "name": "LeftHand",
+        "parent": "LeftForeArm",
+        "parentIndex": 14,
+        "bindPositionModel": [
+          0.6784779124351851,
+          1.0810671263431897,
+          -0.05604536893834253
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 16,
+        "name": "RightShoulder",
+        "parent": "Spine",
+        "parentIndex": 11,
+        "bindPositionModel": [
+          -0.045298575045628,
+          1.2644426282445267,
+          -0.03715492150475994
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 17,
+        "name": "RightArm",
+        "parent": "RightShoulder",
+        "parentIndex": 16,
+        "bindPositionModel": [
+          -0.23472139230137345,
+          1.2644426568786766,
+          -0.058511188662669744
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 18,
+        "name": "RightForeArm",
+        "parent": "RightArm",
+        "parentIndex": 17,
+        "bindPositionModel": [
+          -0.43644843672056216,
+          1.1580725526340576,
+          -0.13926135298755388
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 19,
+        "name": "RightHand",
+        "parent": "RightForeArm",
+        "parentIndex": 18,
+        "bindPositionModel": [
+          -0.6674892237559469,
+          1.0884016775558676,
+          -0.06151214090924776
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 20,
+        "name": "neck",
+        "parent": "Spine",
+        "parentIndex": 11,
+        "bindPositionModel": [
+          0.0013800416357516113,
+          1.3066918540959875,
+          -0.02004952129371728
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 21,
+        "name": "Head",
+        "parent": "neck",
+        "parentIndex": 20,
+        "bindPositionModel": [
+          0.0007661166224407859,
+          1.3746918278962095,
+          -0.02390409456522692
+        ],
+        "retained": true,
+        "foldedInto": null
+      },
+      {
+        "index": 22,
+        "name": "head_end",
+        "parent": "Head",
+        "parentIndex": 21,
+        "bindPositionModel": [
+          -0.001859879285833387,
+          1.655129165436813,
+          0.01191415904374581
+        ],
+        "retained": false,
+        "foldedInto": "Head"
+      },
+      {
+        "index": 23,
+        "name": "headfront",
+        "parent": "Head",
+        "parentIndex": 21,
+        "bindPositionModel": [
+          0.0007661166186311771,
+          1.3746917723926197,
+          0.10976526718163714
+        ],
+        "retained": false,
+        "foldedInto": "Head"
+      }
+    ]
+  },
+  "faceOwnership": {
+    "facesPerPartition": {
+      "Hips": 12752,
+      "LeftUpLeg": 3040,
+      "LeftLeg": 8696,
+      "LeftFoot": 1594,
+      "LeftToeBase": 2331,
+      "RightUpLeg": 2736,
+      "RightLeg": 13047,
+      "RightFoot": 1526,
+      "RightToeBase": 2411,
+      "Spine02": 568,
+      "Spine01": 1008,
+      "Spine": 0,
+      "LeftShoulder": 3599,
+      "LeftArm": 3947,
+      "LeftForeArm": 3564,
+      "LeftHand": 11234,
+      "RightShoulder": 1778,
+      "RightArm": 2103,
+      "RightForeArm": 1592,
+      "RightHand": 3767,
+      "neck": 0,
+      "Head": 16710
+    },
+    "weakFaces": 8620,
+    "unownedFaces": 0,
+    "isolatedFacesAssignedByOwnWeight": 16
+  },
+  "foldedBones": [
+    {
+      "bone": "head_end",
+      "into": "Head",
+      "rule": "zero-skin-fold-to-nearest-deforming-ancestor"
+    },
+    {
+      "bone": "headfront",
+      "into": "Head",
+      "rule": "zero-skin-fold-to-nearest-deforming-ancestor"
+    }
+  ],
+  "sharpBoundaries": [],
+  "partitions": [
+    {
+      "name": "Hips",
+      "jointIndex": 0,
+      "parentIndex": -1,
+      "pitchM": 0.006,
+      "supportPlanes": 3,
+      "dominantVertices": 7112,
+      "boundVertices": 7676,
+      "boundsLocalMin": [
+        -0.2107469635278869,
+        -0.22282964376266645,
+        -0.27686334255056255
+      ],
+      "boundsLocalMax": [
+        0.23232052579445192,
+        0.20157630873193522,
+        0.17908121095167284
+      ],
+      "faces": 12752
+    },
+    {
+      "name": "LeftUpLeg",
+      "jointIndex": 1,
+      "parentIndex": 0,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1666,
+      "boundVertices": 2391,
+      "boundsLocalMin": [
+        -0.11679185137165397,
+        -0.09393512759412803,
+        -0.07098582097973483
+      ],
+      "boundsLocalMax": [
+        0.1471687393547486,
+        0.3613056826628863,
+        0.23291600951119884
+      ],
+      "faces": 3040
+    },
+    {
+      "name": "LeftLeg",
+      "jointIndex": 2,
+      "parentIndex": 1,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 5438,
+      "boundVertices": 5547,
+      "boundsLocalMin": [
+        -0.1300007121308845,
+        -0.055439509178390856,
+        -0.14023313795131978
+      ],
+      "boundsLocalMax": [
+        0.08885899822233737,
+        0.3497150586054186,
+        0.14067523465036708
+      ],
+      "faces": 8696
+    },
+    {
+      "name": "LeftFoot",
+      "jointIndex": 3,
+      "parentIndex": 2,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 893,
+      "boundVertices": 1095,
+      "boundsLocalMin": [
+        -0.07575774277489859,
+        -0.06222504321845432,
+        -0.04503504187074099
+      ],
+      "boundsLocalMax": [
+        0.08061649280367061,
+        0.2105893295895603,
+        0.15469528707955033
+      ],
+      "faces": 1594
+    },
+    {
+      "name": "LeftToeBase",
+      "jointIndex": 4,
+      "parentIndex": 3,
+      "pitchM": 0.006,
+      "supportPlanes": 1,
+      "dominantVertices": 1283,
+      "boundVertices": 1325,
+      "boundsLocalMin": [
+        -0.07790844935265484,
+        -0.036548022355062854,
+        -0.03458670476290905
+      ],
+      "boundsLocalMax": [
+        0.08264042600931953,
+        0.13725819646940932,
+        0.03641967042151387
+      ],
+      "faces": 2331
+    },
+    {
+      "name": "RightUpLeg",
+      "jointIndex": 5,
+      "parentIndex": 0,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1519,
+      "boundVertices": 2700,
+      "boundsLocalMin": [
+        -0.08874779004319619,
+        -0.08525499474694842,
+        -0.1035002582937686
+      ],
+      "boundsLocalMax": [
+        0.12688630242660026,
+        0.3695162407149528,
+        0.2530142387946206
+      ],
+      "faces": 2736
+    },
+    {
+      "name": "RightLeg",
+      "jointIndex": 6,
+      "parentIndex": 5,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 8554,
+      "boundVertices": 8806,
+      "boundsLocalMin": [
+        -0.10576041080256482,
+        -0.0660939597425857,
+        -0.17798284635615563
+      ],
+      "boundsLocalMax": [
+        0.14456622227054833,
+        0.3675414231779064,
+        0.1717121558236383
+      ],
+      "faces": 13047
+    },
+    {
+      "name": "RightFoot",
+      "jointIndex": 7,
+      "parentIndex": 6,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 875,
+      "boundVertices": 812,
+      "boundsLocalMin": [
+        -0.0847070639447699,
+        -0.06888738674104677,
+        -0.048870274506640804
+      ],
+      "boundsLocalMax": [
+        0.06869335115766273,
+        0.20180293256955945,
+        0.14730887208654253
+      ],
+      "faces": 1526
+    },
+    {
+      "name": "RightToeBase",
+      "jointIndex": 8,
+      "parentIndex": 7,
+      "pitchM": 0.006,
+      "supportPlanes": 1,
+      "dominantVertices": 1282,
+      "boundVertices": 1319,
+      "boundsLocalMin": [
+        -0.09122340218330027,
+        -0.03862394238255777,
+        -0.043773171508147794
+      ],
+      "boundsLocalMax": [
+        0.08165241088195531,
+        0.13316486383429357,
+        0.04126605751180989
+      ],
+      "faces": 2411
+    },
+    {
+      "name": "Spine02",
+      "jointIndex": 9,
+      "parentIndex": 0,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1674,
+      "boundVertices": 1797,
+      "boundsLocalMin": [
+        -0.2346728371889803,
+        -0.00039340698890044656,
+        -0.1954836219775883
+      ],
+      "boundsLocalMax": [
+        0.22295426810311791,
+        0.10725272662549812,
+        0.16237814379830903
+      ],
+      "faces": 568
+    },
+    {
+      "name": "Spine01",
+      "jointIndex": 10,
+      "parentIndex": 9,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1218,
+      "boundVertices": 1651,
+      "boundsLocalMin": [
+        -0.23467283674976974,
+        -0.03407858685925658,
+        -0.2004329251112021
+      ],
+      "boundsLocalMax": [
+        0.19401218566580516,
+        0.16910406772397524,
+        0.16450082407312436
+      ],
+      "faces": 1008
+    },
+    {
+      "name": "Spine",
+      "jointIndex": 11,
+      "parentIndex": 10,
+      "pitchM": 0.006,
+      "supportPlanes": 4,
+      "dominantVertices": 181,
+      "boundVertices": 861,
+      "boundsLocalMin": [
+        -0.15878114408693092,
+        -0.00651793601326367,
+        -0.1784141804419634
+      ],
+      "boundsLocalMax": [
+        0.13568509873127907,
+        0.1362397128307391,
+        0.1262142522845211
+      ],
+      "faces": 0
+    },
+    {
+      "name": "LeftShoulder",
+      "jointIndex": 12,
+      "parentIndex": 11,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 3128,
+      "boundVertices": 3037,
+      "boundsLocalMin": [
+        -0.1786276795710539,
+        -0.04277281994379299,
+        -0.10681855827265596
+      ],
+      "boundsLocalMax": [
+        0.18699419809820417,
+        0.21876150417250112,
+        0.18154466285872406
+      ],
+      "faces": 3599
+    },
+    {
+      "name": "LeftArm",
+      "jointIndex": 13,
+      "parentIndex": 12,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 2084,
+      "boundVertices": 2581,
+      "boundsLocalMin": [
+        -0.09678609097011559,
+        -0.03228171988897727,
+        -0.10513230040454702
+      ],
+      "boundsLocalMax": [
+        0.12367489121361519,
+        0.2669610594245779,
+        0.12949941147504063
+      ],
+      "faces": 3947
+    },
+    {
+      "name": "LeftForeArm",
+      "jointIndex": 14,
+      "parentIndex": 13,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1785,
+      "boundVertices": 1935,
+      "boundsLocalMin": [
+        -0.06932250450470129,
+        -0.04630039299473542,
+        -0.08556576387366222
+      ],
+      "boundsLocalMax": [
+        0.09178192129118912,
+        0.27075799156813346,
+        0.04543659518769738
+      ],
+      "faces": 3564
+    },
+    {
+      "name": "LeftHand",
+      "jointIndex": 15,
+      "parentIndex": 14,
+      "pitchM": 0.003,
+      "supportPlanes": 1,
+      "dominantVertices": 7102,
+      "boundVertices": 7197,
+      "boundsLocalMin": [
+        -0.09181446299527296,
+        -0.019213903266008983,
+        -0.05820878949312114
+      ],
+      "boundsLocalMax": [
+        0.08342627704873351,
+        0.20989871413266034,
+        0.056693017443855576
+      ],
+      "faces": 11234
+    },
+    {
+      "name": "RightShoulder",
+      "jointIndex": 16,
+      "parentIndex": 11,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1550,
+      "boundVertices": 1259,
+      "boundsLocalMin": [
+        -0.17999893945972487,
+        -0.029573975092044194,
+        -0.09492822341352425
+      ],
+      "boundsLocalMax": [
+        0.16230750897513194,
+        0.205696932922374,
+        0.15266959227732757
+      ],
+      "faces": 1778
+    },
+    {
+      "name": "RightArm",
+      "jointIndex": 17,
+      "parentIndex": 16,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 1187,
+      "boundVertices": 1504,
+      "boundsLocalMin": [
+        -0.11454596795635152,
+        -0.029280759705019643,
+        -0.11137325559573541
+      ],
+      "boundsLocalMax": [
+        0.14142056010863957,
+        0.25728558224810627,
+        0.15900366725580173
+      ],
+      "faces": 2103
+    },
+    {
+      "name": "RightForeArm",
+      "jointIndex": 18,
+      "parentIndex": 17,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 848,
+      "boundVertices": 938,
+      "boundsLocalMin": [
+        -0.09636626588570074,
+        -0.0502023044382086,
+        -0.08668546988666637
+      ],
+      "boundsLocalMax": [
+        0.06850315400492057,
+        0.2698328858340052,
+        0.044219852881976385
+      ],
+      "faces": 1592
+    },
+    {
+      "name": "RightHand",
+      "jointIndex": 19,
+      "parentIndex": 18,
+      "pitchM": 0.003,
+      "supportPlanes": 1,
+      "dominantVertices": 2016,
+      "boundVertices": 2060,
+      "boundsLocalMin": [
+        -0.08033597066405906,
+        -0.019707448258670726,
+        -0.060776410341752074
+      ],
+      "boundsLocalMax": [
+        0.09350980460130076,
+        0.2240496762455163,
+        0.05417959195296884
+      ],
+      "faces": 3767
+    },
+    {
+      "name": "neck",
+      "jointIndex": 20,
+      "parentIndex": 11,
+      "pitchM": 0.006,
+      "supportPlanes": 2,
+      "dominantVertices": 118,
+      "boundVertices": 1185,
+      "boundsLocalMin": [
+        -0.08929138603857237,
+        -0.0032453954758699943,
+        -0.14873537174293647
+      ],
+      "boundsLocalMax": [
+        0.10350139836061181,
+        0.0774388271222366,
+        0.12969172913686328
+      ],
+      "faces": 0
+    },
+    {
+      "name": "Head",
+      "jointIndex": 21,
+      "parentIndex": 20,
+      "pitchM": 0.003,
+      "supportPlanes": 1,
+      "dominantVertices": 10653,
+      "boundVertices": 10144,
+      "boundsLocalMin": [
+        -0.13705687979202918,
+        -0.09240573142116526,
+        -0.23801482493646642
+      ],
+      "boundsLocalMax": [
+        0.14080723722116525,
+        0.25225434101025224,
+        0.12040193704131052
+      ],
+      "faces": 16710
+    }
+  ],
+  "jointBands": [
+    {
+      "parent": "Hips",
+      "child": "LeftUpLeg",
+      "centerModel": [
+        0.1468167515338117,
+        0.7861016773360541,
+        -0.04345981232332163
+      ],
+      "axisModel": [
+        0.7869595922211673,
+        -0.6041551063635338,
+        0.12526455071552017
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 321,
+      "verticesInBand": 2746,
+      "parentExtensionM": 0.014975380098488469,
+      "childExtensionM": 0.014785056066849711,
+      "facesInBandByOwner": {
+        "Hips": 807,
+        "LeftUpLeg": 269
+      }
+    },
+    {
+      "parent": "LeftUpLeg",
+      "child": "LeftLeg",
+      "centerModel": [
+        0.14983267950661042,
+        0.4749683357921301,
+        0.09989774111411809
+      ],
+      "axisModel": [
+        0.1521556836695107,
+        -0.9677735906899774,
+        0.2006562361106479
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 102,
+      "verticesInBand": 628,
+      "parentExtensionM": 0.01465241067342498,
+      "childExtensionM": 0.014975535560550528,
+      "facesInBandByOwner": {
+        "LeftUpLeg": 135,
+        "LeftLeg": 329
+      }
+    },
+    {
+      "parent": "LeftLeg",
+      "child": "LeftFoot",
+      "centerModel": [
+        0.14318305367810857,
+        0.15625523154934248,
+        -0.03497235004195116
+      ],
+      "axisModel": [
+        -0.019432043284976698,
+        -0.9366648436619126,
+        -0.3496875267171761
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 72,
+      "verticesInBand": 512,
+      "parentExtensionM": 0.014969147379246373,
+      "childExtensionM": 0.014793703074652456,
+      "facesInBandByOwner": {
+        "LeftLeg": 43,
+        "LeftFoot": 138
+      }
+    },
+    {
+      "parent": "LeftFoot",
+      "child": "LeftToeBase",
+      "centerModel": [
+        0.1861539387124048,
+        0.03479066441210804,
+        0.1309158193657724
+      ],
+      "axisModel": [
+        -0.06180187027574017,
+        -0.6569516008146131,
+        0.7513954504903112
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 139,
+      "verticesInBand": 380,
+      "parentExtensionM": 0.014980915202170021,
+      "childExtensionM": 0.01493109477287627,
+      "facesInBandByOwner": {
+        "LeftFoot": 76,
+        "LeftToeBase": 299
+      }
+    },
+    {
+      "parent": "Hips",
+      "child": "RightUpLeg",
+      "centerModel": [
+        -0.07734724083701175,
+        0.7575841569110174,
+        -0.017289478293856738
+      ],
+      "axisModel": [
+        -0.7856801144540305,
+        -0.6033114459486646,
+        0.13682856769999832
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 181,
+      "verticesInBand": 1100,
+      "parentExtensionM": 0.014967319222862529,
+      "childExtensionM": 0.014965283872808651,
+      "facesInBandByOwner": {
+        "Hips": 815,
+        "RightUpLeg": 243
+      }
+    },
+    {
+      "parent": "RightUpLeg",
+      "child": "RightLeg",
+      "centerModel": [
+        -0.14955663910278907,
+        0.46854151991697457,
+        0.10592217791306141
+      ],
+      "axisModel": [
+        -0.16976640788094613,
+        -0.9610770641325275,
+        0.21796844623385772
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 130,
+      "verticesInBand": 624,
+      "parentExtensionM": 0.01494009603878595,
+      "childExtensionM": 0.014501422508360076,
+      "facesInBandByOwner": {
+        "RightUpLeg": 119,
+        "RightLeg": 527
+      }
+    },
+    {
+      "parent": "RightLeg",
+      "child": "RightFoot",
+      "centerModel": [
+        -0.14252735041081904,
+        0.15773384838054577,
+        -0.07158799902244936
+      ],
+      "axisModel": [
+        0.018607018673118963,
+        -0.9003789013434838,
+        -0.43470865286027977
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 120,
+      "verticesInBand": 1837,
+      "parentExtensionM": 0.014910491917250196,
+      "childExtensionM": 0.014954779113165971,
+      "facesInBandByOwner": {
+        "RightLeg": 65,
+        "RightFoot": 278
+      }
+    },
+    {
+      "parent": "RightFoot",
+      "child": "RightToeBase",
+      "centerModel": [
+        -0.21238652657378804,
+        0.04644268418619917,
+        0.09485753612084823
+      ],
+      "axisModel": [
+        -0.177814642728417,
+        -0.6381573542373106,
+        0.7490908783747144
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 55,
+      "verticesInBand": 466,
+      "parentExtensionM": 0.014800312662757022,
+      "childExtensionM": 0.01474556881493212,
+      "facesInBandByOwner": {
+        "RightFoot": 46,
+        "RightToeBase": 111
+      }
+    },
+    {
+      "parent": "Hips",
+      "child": "Spine02",
+      "centerModel": [
+        -0.008259077057052507,
+        1.023396541328278,
+        -0.010381165110637969
+      ],
+      "axisModel": [
+        -0.003863058720150492,
+        0.9983898713393545,
+        -0.0565927697176206
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 1003,
+      "verticesInBand": 3553,
+      "parentExtensionM": 0.014927192120020128,
+      "childExtensionM": 0.014952208332714718,
+      "facesInBandByOwner": {
+        "Hips": 185,
+        "Spine02": 177
+      }
+    },
+    {
+      "parent": "Spine02",
+      "child": "Spine01",
+      "centerModel": [
+        0.03677594174271333,
+        1.1089595345412793,
+        0.1230658648151254
+      ],
+      "axisModel": [
+        -0.0038630533196708653,
+        0.9983898701500825,
+        -0.0565927910669791
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 441,
+      "verticesInBand": 1200,
+      "parentExtensionM": 0.014994818374166757,
+      "childExtensionM": 0.01494007815096833,
+      "facesInBandByOwner": {
+        "Spine02": 62,
+        "Spine01": 12
+      }
+    },
+    {
+      "parent": "Spine01",
+      "child": "Spine",
+      "centerModel": [
+        0.02795738001025581,
+        1.2807225616914886,
+        0.08509031596726604
+      ],
+      "axisModel": [
+        -0.003863044601050096,
+        0.9983898662610935,
+        -0.056592860270233254
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 112,
+      "verticesInBand": 1386,
+      "parentExtensionM": 0.014572983342666778,
+      "childExtensionM": 0.014982690414441942,
+      "facesInBandByOwner": {
+        "Spine01": 1,
+        "Spine": 0
+      }
+    },
+    {
+      "parent": "Spine",
+      "child": "LeftShoulder",
+      "centerModel": [
+        0.05235520343776443,
+        1.306164239346981,
+        -0.0324643675936386
+      ],
+      "axisModel": [
+        0.825490142894373,
+        0.4304261295531662,
+        -0.365101863843652
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 80,
+      "verticesInBand": 2466,
+      "parentExtensionM": 0.014868709285871494,
+      "childExtensionM": 0.01495267617674266,
+      "facesInBandByOwner": {
+        "Spine": 0,
+        "LeftShoulder": 233
+      }
+    },
+    {
+      "parent": "LeftShoulder",
+      "child": "LeftArm",
+      "centerModel": [
+        0.2510426357869179,
+        1.241808465219313,
+        -0.08183904334962849
+      ],
+      "axisModel": [
+        0.9939424631524909,
+        4.607540903359135e-07,
+        -0.10990168307240228
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 155,
+      "verticesInBand": 498,
+      "parentExtensionM": 0.01483077247868428,
+      "childExtensionM": 0.014968979858886039,
+      "facesInBandByOwner": {
+        "LeftShoulder": 100,
+        "LeftArm": 189
+      }
+    },
+    {
+      "parent": "LeftArm",
+      "child": "LeftForeArm",
+      "centerModel": [
+        0.46645422766083167,
+        1.1900478475972225,
+        -0.1697150098650079
+      ],
+      "axisModel": [
+        0.847994231643673,
+        -0.40890562110218465,
+        -0.33719723624326053
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 95,
+      "verticesInBand": 1342,
+      "parentExtensionM": 0.014986540488058692,
+      "childExtensionM": 0.014904760695267801,
+      "facesInBandByOwner": {
+        "LeftArm": 87,
+        "LeftForeArm": 508
+      }
+    },
+    {
+      "parent": "LeftForeArm",
+      "child": "LeftHand",
+      "centerModel": [
+        0.6826452640599983,
+        1.087384212848752,
+        -0.05728169887998076
+      ],
+      "axisModel": [
+        0.8933998789158273,
+        -0.30255595646236894,
+        0.33210924341596715
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 86,
+      "verticesInBand": 309,
+      "parentExtensionM": 0.01484041327192337,
+      "childExtensionM": 0.01458496361272252,
+      "facesInBandByOwner": {
+        "LeftForeArm": 181,
+        "LeftHand": 300
+      }
+    },
+    {
+      "parent": "Spine",
+      "child": "RightShoulder",
+      "centerModel": [
+        -0.018945121452869737,
+        1.295068835510927,
+        -0.17326495451304844
+      ],
+      "axisModel": [
+        -0.7711777290268012,
+        0.5332278073724286,
+        -0.3477830008753414
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 34,
+      "verticesInBand": 1933,
+      "parentExtensionM": 0.014864433640979311,
+      "childExtensionM": 0.014786735562233144,
+      "facesInBandByOwner": {
+        "Spine": 0,
+        "RightShoulder": 280
+      }
+    },
+    {
+      "parent": "RightShoulder",
+      "child": "RightArm",
+      "centerModel": [
+        -0.2323503759400598,
+        1.2199346123070551,
+        -0.08222066288954952
+      ],
+      "axisModel": [
+        -0.993704362109274,
+        1.5021358098736638e-07,
+        -0.11203410518667234
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 145,
+      "verticesInBand": 1727,
+      "parentExtensionM": 0.014773813492913915,
+      "childExtensionM": 0.014925521453764546,
+      "facesInBandByOwner": {
+        "RightShoulder": 149,
+        "RightArm": 117
+      }
+    },
+    {
+      "parent": "RightArm",
+      "child": "RightForeArm",
+      "centerModel": [
+        -0.4547114484839969,
+        1.1991159478823343,
+        -0.14897026717662812
+      ],
+      "axisModel": [
+        -0.8338321112088768,
+        -0.4396773315505045,
+        -0.3337781515281899
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 90,
+      "verticesInBand": 617,
+      "parentExtensionM": 0.01493488191329179,
+      "childExtensionM": 0.014915236725307566,
+      "facesInBandByOwner": {
+        "RightArm": 110,
+        "RightForeArm": 205
+      }
+    },
+    {
+      "parent": "RightForeArm",
+      "child": "RightHand",
+      "centerModel": [
+        -0.6720839911385587,
+        1.0938253998756409,
+        -0.06560983158353913
+      ],
+      "axisModel": [
+        -0.9112860470641976,
+        -0.2748003811802441,
+        0.3066634815710888
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 38,
+      "verticesInBand": 291,
+      "parentExtensionM": 0.01486011697512719,
+      "childExtensionM": 0.014987456517477645,
+      "facesInBandByOwner": {
+        "RightForeArm": 78,
+        "RightHand": 106
+      }
+    },
+    {
+      "parent": "Spine",
+      "child": "neck",
+      "centerModel": [
+        -0.027362501433734514,
+        1.318514142717634,
+        -0.013970620431272047
+      ],
+      "axisModel": [
+        -0.009013474711778189,
+        0.9983567770188988,
+        -0.056590662251442984
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 14,
+      "verticesInBand": 2382,
+      "parentExtensionM": 0.014533669566936646,
+      "childExtensionM": 0.014963270013910674,
+      "facesInBandByOwner": {
+        "Spine": 0,
+        "neck": 0
+      }
+    },
+    {
+      "parent": "neck",
+      "child": "Head",
+      "centerModel": [
+        -0.02908147401026573,
+        1.3655466575340685,
+        -0.081520888493901
+      ],
+      "axisModel": [
+        -0.00901347639846678,
+        0.9983567140215952,
+        -0.056591773352819674
+      ],
+      "widthM": 0.03,
+      "equalInfluenceVertices": 203,
+      "verticesInBand": 580,
+      "parentExtensionM": 0.014927424275706695,
+      "childExtensionM": 0.014985893732108882,
+      "facesInBandByOwner": {
+        "neck": 0,
+        "Head": 624
+      }
+    }
+  ],
+  "rightArmChain": {
+    "chain": "RightArm -> RightForeArm -> RightHand",
+    "bones": [
+      "RightArm",
+      "RightForeArm",
+      "RightHand"
+    ],
+    "bands": [
+      {
+        "parent": "RightArm",
+        "child": "RightForeArm",
+        "centerModel": [
+          -0.4547114484839969,
+          1.1991159478823343,
+          -0.14897026717662812
+        ],
+        "axisModel": [
+          -0.8338321112088768,
+          -0.4396773315505045,
+          -0.3337781515281899
+        ],
+        "widthM": 0.03,
+        "equalInfluenceVertices": 90,
+        "verticesInBand": 617,
+        "parentExtensionM": 0.01493488191329179,
+        "childExtensionM": 0.014915236725307566,
+        "facesInBandByOwner": {
+          "RightArm": 110,
+          "RightForeArm": 205
+        }
+      },
+      {
+        "parent": "RightForeArm",
+        "child": "RightHand",
+        "centerModel": [
+          -0.6720839911385587,
+          1.0938253998756409,
+          -0.06560983158353913
+        ],
+        "axisModel": [
+          -0.9112860470641976,
+          -0.2748003811802441,
+          0.3066634815710888
+        ],
+        "widthM": 0.03,
+        "equalInfluenceVertices": 38,
+        "verticesInBand": 291,
+        "parentExtensionM": 0.01486011697512719,
+        "childExtensionM": 0.014987456517477645,
+        "facesInBandByOwner": {
+          "RightForeArm": 78,
+          "RightHand": 106
+        }
+      }
+    ]
+  }
+}
