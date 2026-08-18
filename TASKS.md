@@ -197,7 +197,30 @@ Key reference docs (open these before touching their area):
 - `X1.27` [x] **Baked-SDF dynamite grip + underhand release — OWNER VISUAL GATE PASS** — six-frame grip, authored underhand release, and exact held→flight handoff landed at `42ab78d`; owner approved the live preview on 2026-08-17. 1512 tests + production build pass; handoff error 0.000 mm and clip-vs-static bench delta −0.07 ms. [design](docs/superpowers/specs/2026-08-17-sdf-dynamite-grip-release-design.md) · [plan](docs/superpowers/plans/2026-08-17-sdf-dynamite-grip-release.md) · [notes+evidence](docs/dev-notes/2026-08-17-sdf-dynamite-grip/notes.md)
 - `X1.gib-freeze` [x] **Shared/prewarmed WebGPU gib material + bounded view slots** — first and repeated full gibs measure 16.8–18.0 ms worst frame in a visible WebGPU run; eight cycles churned the 40-slot cap with no errors or stale visuals. 1515 tests + build pass. [evidence](docs/dev-notes/2026-08-17-sdf-gib-freeze/notes.md)
 - `X1.texture-seams` [ ] **Shading-only rest-anchor seam blend** — X1.27 dependency is clear. Approved direction: sparse smooth-joint adjacency + CPU pose-to-rest transforms, evaluated once after the final hit; do not restore hot-path second-nearest tracking or bake the whole animated body. Implementation plan/execution handed to the other agent.
-- `X1.hand-followups` [~] **FPV hand polish / articulated forearm** — the accepted long-forearm atlas exists at `bfbe85c`, but owner playtest found the hand+forearm still behaves as one rigid tube, especially while shaking/cooking and throwing. Whole-volume FOV/offset reframing (`150a22a`) and an appended upper-arm-only patch (`be3a72f`) do not address the root cause and remain unmerged. Approved next pass: sample the same atlas as separately posed hand and forearm regions, overlap/smooth-union at the wrist, aim the forearm toward an offscreen elbow, and preserve the exact X1.27 hand/dynamite transform. [design](docs/superpowers/specs/2026-08-17-sdf-fpv-articulated-forearm-design.md) · [plan](docs/superpowers/plans/2026-08-17-sdf-fpv-articulated-forearm.md)
+- `X1.sdf-authoring` [ ] **Blender-native SDF grid qualification** — shared
+  prerequisite for the full humanoid bake and FPV distal-arm rerun. Prove
+  headless Mesh to SDF Grid + SDF Grid Boolean, metre-space sign/transforms,
+  determinism, and direct OpenVDB extraction; otherwise pin the explicit Grid
+  to Mesh (`threshold=0`, `adaptivity=0`) + libigl fallback. No Chisel purchase
+  is required. [design](docs/superpowers/specs/2026-08-18-blender-sdf-grid-authoring-design.md)
+  · [plan](docs/superpowers/plans/2026-08-18-blender-sdf-grid-authoring.md)
+- `X1.humanoid-sever-spike` [ ] **Textured full humanoid SDF + forearm sever** —
+  revised to use the qualified Blender grid backend. The complete body mesh is
+  intersected with closed weight-derived support SDFs to produce articulated
+  bone-local bricks; source texture projection, elbow scrub, softness and
+  prewarmed sever gate remain unchanged. Blocked by `X1.sdf-authoring`.
+  [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
+  · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
+- `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
+  later one-piece synthetic-forearm reference were both owner-rejected. The
+  next run uses Blender-native SDF union for one hand+wrist+native-forearm field,
+  retains an articulated upper arm, and pins the original Blud two-hand
+  performance first: low bundle hold, short lighter-to-fuse reach, withdrawal,
+  cook, then casual underhand toss. Modest 3D adjustment is allowed inside that
+  keyframe corridor; football/overhand posing is not. Blocked by
+  `X1.sdf-authoring` and intentionally paused until usage resets.
+  [design](docs/superpowers/specs/2026-08-18-sdf-fpv-full-distal-arm-rebuild-design.md)
+  · [plan](docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md)
 - `X1.25` [x] **PSX-AA post pass** — FXAA at internal res + temporal smear + optional
   sharp-bilinear upscale, `post` panel sliders, all-off = pixel parity. The first
   run's 'color shift' was a Y-flip (kimi-oai, 2 runs). Owner slider session open.

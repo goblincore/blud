@@ -4,14 +4,15 @@
 
 **Goal:** Build a dedicated WebGPU spike that renders the owner's textured rigged zombie from bone-local SDF/color atlases, scrubs its right elbow through 0–100 degrees, and severs a physics-driven distal forearm with matching fleshy cut surfaces and no first-use pause.
 
-**Architecture:** A Blender export stage writes bind-pose geometry, UVs, skin weights, texture pixels, and skeleton metadata into a deterministic interchange file. A plain-Python/libigl stage samples the full source surface into tightly packed bone-local distance and color bricks whose weight-derived planar overlaps reconstruct the body. A strict TypeScript loader feeds a dedicated clustered WGSL marcher; pure pose/sever state drives elbow lag, softness, complementary cut masks, and the existing deterministic chunk stepper. The new page remains isolated from the production game and current zombie lab.
+**Architecture:** A Blender export stage writes bind-pose geometry, UVs, skin weights, texture pixels, skeleton metadata and closed weight-derived support volumes. The qualified Blender 5.2 Geometry Nodes backend converts the complete source body and each support volume to SDF grids, intersects them into tightly packed bone-local bricks, and uses either proven direct OpenVDB samples or the explicit Grid-to-Mesh/libigl fallback. A strict TypeScript loader feeds a dedicated clustered WGSL marcher; pure pose/sever state drives elbow lag, softness, complementary cut masks, and the existing deterministic chunk stepper. The new page remains isolated from the production game and current zombie lab.
 
-**Tech Stack:** TypeScript 5.6, Vitest, Three.js 0.185 WebGPU/TSL, WGSL, Vite 5, Python 3.12 via `uv`, Blender 5.x Python, NumPy 2.5, libigl 2.6, existing `gib-chunks.ts` physics.
+**Tech Stack:** TypeScript 5.6, Vitest, Three.js 0.185 WebGPU/TSL, WGSL, Vite 5, Python 3.12 via `uv`, Blender 5.2 Geometry Nodes/Python, OpenVDB when qualified, NumPy 2.5, libigl 2.6 fallback, existing `gib-chunks.ts` physics.
 
 **Spec:** `docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md`
 
 ## Global Constraints
 
+- Complete and review `docs/superpowers/plans/2026-08-18-blender-sdf-grid-authoring.md` first. This plan consumes its selected route and canonical node contract; it may not reimplement them or silently switch routes.
 - Read the spec, `TASKS.md`, `AGENTS.md`, `scripts/bake_hand_sdf.py`, `src/lab/sdf-zombie/webgpu/hand-volume.ts`, `src/lab/sdf-zombie/webgpu/zombie-gpu.ts`, and `src/lab/sdf-zombie/gib-chunks.ts` before editing.
 - The canonical owner-created input is `/Users/donny/Downloads/zombietest2/Meshy_AI_zombie_biped/Meshy_AI_zombie_biped_Character_output.glb`, currently 10,234,820 bytes with observed SHA-256 `2b23530a64466ca650ead74e49feaf54b6463c254ecccc9b3d56ba993a33cd28`. Recompute and verify; never modify Downloads.
 - Commit the normalized source GLB and generated atlas assets. Preserve original filename, byte length, and hash in the manifest.
@@ -27,6 +28,20 @@
 
 ---
 
+### Prerequisite P0: Qualify the shared Blender-native SDF backend
+
+**Plan:** `docs/superpowers/plans/2026-08-18-blender-sdf-grid-authoring.md`
+
+- [ ] Execute both shared tasks and obtain a reviewed
+  `docs/dev-notes/2026-08-18-blender-sdf-grid/qualification.json`.
+- [ ] Require one explicit selected route (`direct-vdb` or
+  `grid-to-mesh-libigl`), passing analytic sign/transform/boolean probes and
+  byte-deterministic R16F fixtures.
+- [ ] Stop this plan if the shared qualification is absent, failed, uses an
+  unpinned Blender version or depends on an opaque manually edited `.blend`.
+
+---
+
 ### Task 1: Canonical source export and weight-derived partitions
 
 **Files:**
@@ -37,8 +52,8 @@
 - Create: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/partition-preview.png`
 
 **Interfaces:**
-- Consumes: canonical Downloads GLB named in Global Constraints; the reusable `GridSpec`, `grid_points`, `bake_chunk`, and `validate_field` behavior in `scripts/bake_hand_sdf.py`.
-- Produces: `SourceSoup`, `BonePartition`, `JointBand`, `inspect_source(path)`, `derive_joint_band(...)`, `joint_halfspaces(...)`, `inside_support(...)`, `derive_partitions(source)`, `export_source_npz(path)`, and CLI modes `--inspect-only`, `--blender-export`, and `--render-partitions`; Task 2 imports these symbols directly.
+- Consumes: canonical Downloads GLB named in Global Constraints; P0's qualified node contract; the reusable `GridSpec`, `grid_points`, `bake_chunk`, and `validate_field` behavior in `scripts/bake_hand_sdf.py`.
+- Produces: `SourceSoup`, `BonePartition`, `JointBand`, `inspect_source(path)`, `derive_joint_band(...)`, `joint_halfspaces(...)`, `support_mesh(...)`, `inside_support(...)`, `derive_partitions(source)`, `export_source_npz(path)`, and CLI modes `--inspect-only`, `--blender-export`, and `--render-partitions`; Task 2 imports these symbols directly.
 
 - [ ] **Step 1: Copy and hash the canonical owner asset without changing it**
 
@@ -94,6 +109,12 @@ class PartitionContractTest(unittest.TestCase):
         self.assertFalse(BAKE.inside_support(np.array([ 0.050, 0, 0]), parent))
         self.assertFalse(BAKE.inside_support(np.array([-0.050, 0, 0]), child))
 ```
+
+Add `test_support_mesh_is_closed_outward_and_matches_halfspaces`: construct the
+same synthetic band inside `[-0.1, 0.1]^3`, call `support_mesh`, require every
+edge incidence to equal two, signed volume to be positive, all vertices to
+satisfy the declared planes within `1e-9`, and points at ±50 mm on the rejected
+side to lie outside. This test must fail before `support_mesh` exists.
 
 The fixture must encode actual dominant and secondary skin weights around a synthetic parent/child joint; do not make the tests call the implementation to construct their expected planes.
 
@@ -181,7 +202,16 @@ the supplied normalized axis, and returns the named centre/axis/width.
 `joint_halfspaces` returns the parent and child plane sets expanded by half the
 declared width; this is the only operation allowed to create the elbow overlap.
 
-`inside_support(point, partition)` evaluates all `support_planes`. The outer baker will later compute `max(source_sdf, support_sdf)`; the support planes only partition the real source surface and never replace its silhouette.
+`inside_support(point, partition)` evaluates all `support_planes`. The support
+planes only partition the real source surface and never replace its silhouette;
+Task 2 realizes their intersection through the qualified Blender SDF backend.
+
+`support_mesh(partition, brick_bounds)` clips a closed box against the same
+planes and emits one finite, outward-wound, manifold support mesh. Its signed
+volume must be positive and every retained corner must satisfy
+`inside_support`. Task 2 converts this mesh to an SDF and intersects it with the
+complete source-body SDF; open partition surface patches are never voxelized as
+standalone solids.
 
 - [ ] **Step 6: Run tests GREEN and generate the real source report/preview**
 
@@ -216,7 +246,7 @@ git commit -m "feat(sdf-lab): define humanoid bone partitions"
 - Create: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/bind-textured-preview.png`
 
 **Interfaces:**
-- Consumes: Task 1 `SourceSoup`, `BonePartition`, `JointBand`, `derive_partitions`, plus the canonical source asset.
+- Consumes: Task 1 `SourceSoup`, `BonePartition`, `JointBand`, `derive_partitions`, `support_mesh`; P0 `bake_mesh_intersection_to_dense`, `DenseSdfResult`, selected route and canonical node contract; plus the canonical source asset.
 - Produces: manifest version 1 with `kind: "humanoid-bone-sdf"`; `BrickRequest`, `AtlasBrick`, `AtlasLayout`, `pack_bricks`, `layout_has_overlap`, `barycentric_uv`, `sample_bone_brick`, `sample_surface_color`, `sample_rgba_bilinear`, `bake_distance_and_color`, `build_manifest_dict`, `validate_checked_in`; real checked-in R16F/RGBA8 logical atlases for Task 3.
 
 - [ ] **Step 1: Write failing grid, packing, color, and manifest tests**
@@ -268,7 +298,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(result["sourceTextureSha256"], source.texture_sha256)
 ```
 
-Also test R16F little-endian order, RGBA8 x-fastest-y-z order, <=64 MiB transport part splitting/reassembly, per-part and combined hashes, positive brick boundaries, negative interiors, real atlas byte lengths, and rejection of a part reordered or truncated by one byte.
+Also test R16F little-endian order, RGBA8 x-fastest-y-z order, <=64 MiB transport part splitting/reassembly, per-part and combined hashes, positive brick boundaries, negative interiors, real atlas byte lengths, and rejection of a part reordered or truncated by one byte. Mutation tests must reject a changed Blender version, selected route, node-contract hash, SDF grid transform, threshold, adaptivity or support-mesh hash.
 
 - [ ] **Step 2: Run focused tests and confirm RED**
 
@@ -276,21 +306,34 @@ Run: `uv run scripts/test_bake_humanoid_sdf.py -v`
 
 Expected: the new atlas/manifest tests fail for missing functions and outputs while Task 1 tests remain green.
 
-- [ ] **Step 3: Implement bone-local distance/color sampling**
+- [ ] **Step 3: Implement Blender-native bone-local SDF intersections and source-color sampling**
 
-For each `BonePartition`, build an endpoint-inclusive local grid over its dominant-weight points plus 12 mm exterior margin. Use 3 mm pitch for bone names containing `Head` or `Hand`; use 6 mm for all others. Transform grid points through `bind_to_model`, then process in bounded chunks:
+For each `BonePartition`, build an endpoint-inclusive local grid over its dominant-weight points plus 12 mm exterior margin. Use 3 mm pitch for bone names containing `Head` or `Hand`; use 6 mm for all others. Transform the complete source mesh into the bone's bind-local basis, create `support_mesh(partition, bounds)`, and call P0's qualified adapter:
 
 ```python
-unsigned, tri_index, closest = igl.point_mesh_squared_distance(model_points, soup.vertices, soup.faces)
-winding = np.abs(igl.fast_winding_number_for_meshes(soup.vertices, soup.faces, model_points))
-body_sdf = np.sqrt(unsigned)
-body_sdf[winding > 0.5] *= -1.0
-support_sdf = np.max(local_points @ planes[:, :3].T + planes[:, 3], axis=1)
-bone_sdf = np.maximum(body_sdf, support_sdf)
-bone_rgba = sample_surface_color(soup, closest, tri_index)
+dense = bake_mesh_intersection_to_dense(
+    source_mesh=source_mesh_in_bone_bind,
+    support_mesh=support_mesh(partition, brick_bounds),
+    grid_spec=GridSpec(bounds=brick_bounds, voxel_size_m=pitch_m),
+    required_route=qualification.selected_route,
+    required_contract_sha256=qualification.node_contract_sha256,
+)
+bone_sdf = dense.values_f32
 ```
 
-`sample_surface_color` computes barycentric coordinates on the returned source triangle, interpolates its three face-corner UVs, applies the exported GLB texture transform and base-color factor, resolves the recorded V-axis convention once, and bilinearly samples the RGBA8 base color. Fill the complete brick so trilinear color is defined on both sides of the isosurface.
+The Blender graph converts both closed meshes with **Mesh to SDF Grid** and
+combines them with **SDF Grid Boolean: Intersection**. Direct-grid mode consumes
+the resulting signed metre-space values. Fallback mode polygonizes that exact
+intersection with threshold zero/adaptivity zero and invokes the existing
+libigl winding-number sampler only for the final dense grid. No standalone open
+bone patch is a signing input.
+
+Use libigl closest-triangle queries against the original source mesh only for
+color projection. `sample_surface_color` computes barycentric coordinates on
+the returned source triangle, interpolates its three face-corner UVs, applies
+the exported GLB texture transform and base-color factor, resolves the recorded
+V-axis convention once, and bilinearly samples the RGBA8 base color. Fill the
+complete brick so trilinear color is defined on both sides of the isosurface.
 
 Each brick must independently pass finite/negative-core/positive-boundary validation. At every declared joint, probe the two brick fields along the measured axis and require simultaneous inside coverage within the overlap but not 50 mm across the boundary.
 
@@ -324,7 +367,7 @@ Sort candidates by descending volume then bone name. Place with deterministic fi
 
 Write logical bytes in x-fastest-y-z order. Split transport files at 64 MiB boundaries without changing the logical concatenated byte stream. The manifest records ordered `parts: [{url, byteLength, sha256}]`, `combinedByteLength`, and `combinedSha256` separately for distance and color.
 
-Build deterministic runtime metadata in the same pass. Record the exported source-to-runtime and inverse basis matrices, source texture-pixel hash, every numeric bake parameter, each brick's padding/page index/occupied local bounds/field stats, and a one-page atlas count. Build clusters that cover every retained bone exactly once as a primary member, add only directly adjacent joint bones as helpers, cap each cluster at four sampled bones, and emit conservative bind/sweep bounds. The named right-arm cluster must contain `RightArm`, `RightForeArm`, and `RightHand` and its sweep bounds must include the measured 0–100 degree flexion plus maximum warp.
+Build deterministic runtime metadata in the same pass. Record the exported source-to-runtime and inverse basis matrices, source texture-pixel hash, Blender version, selected SDF route, canonical node-contract hash, support-mesh hashes, every numeric bake parameter, each brick's padding/page index/occupied local bounds/field stats, and a one-page atlas count. Build clusters that cover every retained bone exactly once as a primary member, add only directly adjacent joint bones as helpers, cap each cluster at four sampled bones, and emit conservative bind/sweep bounds. The named right-arm cluster must contain `RightArm`, `RightForeArm`, and `RightHand` and its sweep bounds must include the measured 0–100 degree flexion plus maximum warp.
 
 Derive the sever plane deterministically in `RightForeArm` bind-local space: use the normalized proximal-to-distal forearm axis, place the plane halfway between the occupied forearm bounds projected onto that axis, and store its normalized `[nx, ny, nz, w]`. Store `cutSeed: 12648430`, `irregularityM: 0.004`, and `rimWidthM: 0.008` in the right-arm manifest section; Tasks 4–7 consume these values and may not invent replacements.
 

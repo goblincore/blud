@@ -1,8 +1,12 @@
 # Textured Humanoid SDF Forearm-Sever Spike Design
 
 **Date:** 2026-08-17
-**Status:** Approved design; implementation planned in
-`docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md`
+**Status:** Approved design; revised 2026-08-18 to consume Blender's built-in
+SDF grid authoring qualification before the full bake. Implementation is
+planned in `docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md`.
+
+**Shared prerequisite:**
+`docs/superpowers/specs/2026-08-18-blender-sdf-grid-authoring-design.md`
 
 ## Purpose
 
@@ -54,6 +58,19 @@ or edit the files in Downloads.
 
 ## Offline pipeline
 
+### Blender-native SDF qualification
+
+The full-body bake starts only after the shared Blender 5.2 Geometry Nodes SDF
+qualification passes. The canonical node graph uses **Mesh to SDF Grid** and
+**SDF Grid Boolean**, then either consumes a proven direct OpenVDB grid or uses
+**Grid to Mesh** at threshold zero/adaptivity zero before the existing
+deterministic libigl sampler. The selected route and node contract are recorded
+in the humanoid manifest; this plan may not silently switch routes.
+
+This stage replaces hand-written mesh-distance voxelization as the preferred
+surface conversion path. It does not replace source validation, skeletal
+partitioning, source-color projection, atlas packing or runtime articulation.
+
 ### Canonical bind-pose import
 
 The baker loads the normalized rigged GLB and validates one coherent skinned
@@ -82,7 +99,15 @@ forearm partitions include this band. The baker emits joint landmarks and
 coverage diagnostics so the runtime does not invent a separate elbow point.
 
 The same algorithm is applied to all bones needed to reconstruct the visible
-body. Tiny helper, twist, or zero-area bones may be folded into their nearest
+body. Each partition becomes a closed planar support mesh. For each target
+bone, Blender transforms the complete source body into that bone's bind-local
+coordinates, converts it with **Mesh to SDF Grid**, converts the support mesh
+to a second SDF grid, and intersects the two with **SDF Grid Boolean**. This
+preserves the source silhouette while producing a closed independently
+transformable brick and the exact declared parent/child overlap; it never asks
+an open triangle patch to define inside/outside.
+
+Tiny helper, twist, or zero-area bones may be folded into their nearest
 deforming parent only through a deterministic named rule recorded in the
 manifest. The right upper arm, right forearm, and right hand may never be
 folded together because their independent transforms and sever mask are the
@@ -90,12 +115,18 @@ core experiment.
 
 ### Distance bricks and atlas packing
 
-Each bone-local partition is voxelized inside a tightly cropped brick with a
-positive exterior margin and padding sufficient for trilinear sampling. The
-initial target pitch is at most 6 mm for torso and limb masses and at most 3 mm
-for the head and hands. The baker may choose a finer pitch. It may not choose a
-coarser pitch without stopping and reporting measured dimensions and the visual
-reason for requesting a design change.
+Each bone-local body/support intersection is evaluated inside a tightly cropped
+brick with a positive exterior margin and padding sufficient for trilinear
+sampling. The initial target pitch is at most 6 mm for torso and limb masses
+and at most 3 mm for the head and hands. The baker may choose a finer pitch. It
+may not choose a coarser pitch without stopping and reporting measured
+dimensions and the visual reason for requesting a design change.
+
+When the shared qualification selects direct-grid output, the brick consumes
+Blender's signed metre-space values without a mesh round trip. When it selects
+the fallback, Blender first polygonizes the same intersection grid and libigl
+resamples that closed mesh on the approved final grid. Both routes must agree
+on negative-inside sign, bounds, pitch and bone-local basis within one voxel.
 
 Distance is stored as R16F. Bricks are packed deterministically into the
 smallest supported 3D atlas container that satisfies padding and the target
@@ -259,6 +290,8 @@ enabled.
 ### Offline deterministic gates
 
 - Re-import and bake are byte deterministic.
+- The Blender version, selected SDF output route and canonical Geometry Nodes
+  contract match the shared qualification report.
 - All distance bricks contain finite values, a negative interior core, and a
   positive padded boundary.
 - Manifest dimensions, byte lengths, hashes, bone names, transforms, atlas

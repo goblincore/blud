@@ -2,22 +2,30 @@
 
 **Date:** 2026-08-18
 
-**Status:** approved fallback after the hybrid wrist gate was rejected
+**Status:** replanned after both the hybrid wrist and synthetic-forearm
+reference were rejected; the next run uses Blender-native SDF fusion and the
+original Blud two-hand choreography as pose authority.
 
 **Implementation plan:** `docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md`
 
 **Supersedes:** `2026-08-18-sdf-fpv-hybrid-full-arm-design.md`
 
+**Shared prerequisite:**
+`docs/superpowers/specs/2026-08-18-blender-sdf-grid-authoring-design.md`
+
 **Depends on:** the accepted X1.27 grip hand, dynamite seat, release marker and
 flight handoff; the checked-in humanoid `RightArm` and `RightForeArm` source and
-distance contracts; the reviewed fixed-length arm solver and compact toss
-motion from the rejected hybrid branch
+distance contracts; the reviewed fixed-length arm solver and exactly-once
+handoff mechanics from the rejected hybrid branch. Its compact pose is negative
+evidence, not motion authority.
 
 **Owner gate:** the held pose must read as one continuous hand, wrist, forearm,
-elbow and upper arm. There may be no dark wrist separation, stepped cuff,
-floating hand, swollen join or visible shoulder. At rest the elbow stays outside
-the viewport. During the compact toss it may briefly enter only the lower-right
-periphery.
+elbow and upper arm while preserving the original Blud animation's low, casual
+dynamite hold. There may be no dark wrist separation, stepped cuff, floating
+hand, swollen join or visible shoulder. The left lighter hand must reach the
+fuse with a small plausible movement, ignite it and withdraw. At rest the right
+elbow stays outside the viewport. During the underhand toss it may briefly enter
+only the lower-right periphery.
 
 ## Why a new bake is required
 
@@ -39,12 +47,22 @@ source pose is open and the humanoid skeleton has no finger articulation needed
 for the accepted dynamite grip. The X1.27 hand shape, six grip keys and prop seat
 therefore remain authoritative.
 
+The rejected synthetic-forearm reference also proved that a continuous asset is
+not sufficient when its camera-space pose changes the performance. Its upright,
+football-like hold moved the bundle away from the original low presentation,
+made the lighter-to-fuse reach implausibly large, and suggested an overhand throw
+instead of the accepted casual underhand toss. The rerun therefore evaluates
+geometry and paired-hand choreography together.
+
 ## Decisions
 
 - Bake one continuous **distal arm** field for every accepted X1.27 grip key.
   Each frame contains the complete hand, wrist bridge and humanoid forearm.
 - Build the bridge from source meshes before voxelization. Runtime WGSL must
   never union, clip or taper separate hand and forearm fields at the wrist.
+- Use Blender 5.2's built-in **Mesh to SDF Grid** and **SDF Grid Boolean** for
+  offline hand/forearm fusion. Consume the shared qualification's selected
+  direct-grid or explicit Grid-to-Mesh/libigl route; Chisel is not required.
 - Preserve the grip hand's anatomical wrist frame, finger motion and
   hand-to-dynamite relationship exactly. The bridge and forearm remain rigid
   across all six grip frames.
@@ -53,8 +71,14 @@ therefore remain authoritative.
 - Articulate only at the elbow for the first browser gate. The fused distal field
   carries hand and forearm under one rigid transform, so the wrist angle is
   authored rather than solved independently.
-- Reuse the reviewed fixed-length two-bone chain, compact wrist trajectory and
-  exactly-once release semantics. Remove the hybrid wrist-swing/taper path.
+- Reuse the reviewed fixed-length two-bone chain and exactly-once release
+  semantics, but do not treat the rejected compact wrist trajectory as pose
+  authority. Refit modest 3D offsets inside the original Blud keyframe corridor
+  and remove the hybrid wrist-swing/taper path.
+- Judge the right distal arm together with the existing left pinch/lighter hand:
+  low hold, short reach to the named fuse tip, ignition, withdrawal, cook and
+  casual underhand release. The left hand is choreography scope, not a second
+  full-arm rebake unless its existing geometry independently fails review.
 - Shade distal and upper fields with one existing X1.27 flesh material. Do not
   sample humanoid color bricks.
 - Keep the safe accepted hand-only fallback if rebuilt assets are missing or
@@ -96,10 +120,16 @@ same forearm vertices and transform.
 
 For each grip key, the baker overlaps the aligned forearm with the hand's wrist
 by an authored 35 mm band. A short bridge surface interpolates the two boundary
-loops with monotone cross-sections and consistent winding. Blender's voxel
-remesh is then applied to the combined mesh at no coarser than 1.5 mm, followed
-by a restrained smoothing pass that cannot move the grip/contact region or the
-elbow boundary.
+loops with monotone cross-sections and consistent winding. Blender converts the
+closed hand, bridge and forearm inputs onto one explicit 1.5 mm SDF grid and
+unions them with **SDF Grid Boolean**. The shared qualification decides whether
+the baker consumes that direct signed grid or uses **Grid to Mesh** at threshold
+zero/adaptivity zero before the deterministic libigl final sampler.
+
+Filtering is local and restrained. It may not move the grip/contact region or
+elbow boundary, erase fingers, inflate the palm, or alter the source pose. If a
+clean wrist requires global smoothing, the asset fails rather than trading one
+visible regression for another.
 
 The remeshed result must be one closed connected component. It is rejected if
 it contains a wrist bottleneck, self-intersection, internal shell, open edge,
@@ -127,12 +157,36 @@ The version-1 manifest records:
 - elbow centre, elbow axis and the retained elbow overlap width;
 - remesh pitch, connected-component count, boundary-edge count, contact error,
   and bridge cross-section diagnostics; and
+- Blender version, selected SDF output route, canonical Geometry Nodes contract
+  hash and all intermediate source/support hashes; and
 - a hash-covered canonical JSON source section sufficient to reproduce and
   verify the bake.
 
 The loader rejects unknown versions/kinds, missing fields, non-finite or
 non-invertible matrices, path traversal, byte/hash mismatches, changed grip
 labels/timing, changed prop seat, or incompatible humanoid elbow metadata.
+
+## Animation authority and paired-hand sequence
+
+Before any new arm motion is authored, capture the existing Blud-derived
+dynamite timeline and accepted X1.27 output at deterministic camera settings.
+The rerun records a small keyframe corridor rather than requiring pixel-identical
+2D sprites: the right hand/bundle and left pinch hand may receive modest depth,
+roll and anatomical adjustments, but their screen-space centres, silhouettes
+and ordering must still read as the same performance.
+
+The first complete motion gate is:
+
+1. low right-hand bundle hold;
+2. left lighter/pinch hand enters from its existing side;
+3. its ignition point reaches the named `FuseTip` with a short movement;
+4. ignition occurs without moving the bundle into a football pose;
+5. the left hand withdraws and the right hand cooks in the low hold; and
+6. the right arm performs the accepted casual underhand release.
+
+The lighter reach and right-hand hold are solved together. Tuning one while the
+other is hidden is forbidden because their spatial relationship is the reason
+the previous candidate failed.
 
 ## Runtime arm architecture
 
@@ -161,7 +215,7 @@ distal segment transform is derived directly from the solved elbow-to-wrist
 frame. The authored hand-from-distal transform then yields the final hand and
 prop pose. No independent wrist swing or hand-target correction is applied.
 
-The compact toss remains reach-constrained. The shoulder stays outside the
+The Blud-faithful underhand toss remains reach-constrained. The shoulder stays outside the
 viewport in all phases; the elbow stays outside at rest and may enter only the
 outer lower/right 15% briefly during toss. Limb screen coverage is explicitly
 bounded so the forearm cannot dominate the frame again.
@@ -191,9 +245,19 @@ Neutral placement is calibrated against the accepted viewport before motion:
 
 ## Verification gates
 
+### Historical reference gate — rejected
+
+The previously validated one-piece X1.27 hand plus synthetic 190 mm forearm was
+articulated against the humanoid upper arm and reviewed on 2026-08-18. Although
+it removed the floating wrist, its synthetic forearm and upright bundle pose
+regressed from the accepted hand, read like an overhand football hold, and made
+the lighter-to-fuse movement implausibly large. It remains diagnostic evidence
+only and may not be promoted or used as the next motion baseline.
+
 ### Gate A — offline bake
 
 - deterministic repeated output bytes and canonical manifest;
+- shared Blender SDF qualification, selected route and node-contract hash match;
 - exactly six ordered frames on one common grid;
 - one closed connected component per frame and zero boundary edges;
 - contact-region error at or below 0.75 mm;
@@ -215,16 +279,25 @@ field and upper arm. Automated evidence must establish:
 - elbow and shoulder are outside the viewport; and
 - the rebuilt asset, not a debug proxy or old hand, produced the pixels.
 
-The owner then gives the static verdict. Any dark wrist gap, cuff, scale jump,
-floating hand, oversized/cropped limb or visible shoulder rejects the asset and
-stops the plan before motion.
+The owner then gives the static verdict against a side-by-side capture of the
+accepted X1.27 low hold. Any dark wrist gap, cuff, scale jump, floating hand,
+oversized/cropped limb, visible shoulder, football-like hold or excessive
+lighter-to-fuse distance rejects the asset and stops the plan before motion.
 
-### Gate C — motion and release
+### Gate C — two-hand lighting performance
 
-After Gate B approval, capture idle, cook, pre-release, release, follow-through
-and recovery in a real headed run. Verify finite matrices, fixed bone lengths,
-temporal quaternion continuity, compact screen coverage, allowed elbow exposure,
-exactly one release, zero prop seating jump and clean pointer-lock cleanup.
+Capture low hold, lighter entry, fuse contact/ignition, lighter withdrawal and
+cook. Verify short fuse reach, no bundle relocation to accommodate the lighter,
+stable prop seating, elbow/shoulder visibility bounds and the approved brighter
+skin response. Owner approval is required before the toss gate.
+
+### Gate D — motion and release
+
+After Gate C approval, capture cook, pre-release, casual underhand release,
+follow-through and recovery in a real headed run. Verify finite matrices, fixed
+bone lengths, temporal quaternion continuity, original-keyframe corridor,
+compact screen coverage, allowed elbow exposure, exactly one release, zero prop
+seating jump and clean pointer-lock cleanup.
 
 ## Scope exclusions
 
@@ -232,6 +305,8 @@ exactly one release, zero prop seating jump and clean pointer-lock cleanup.
 - No humanoid color-atlas sampling for the FPV arm.
 - No per-finger runtime skeleton; the accepted six baked grip frames remain the
   hand animation.
+- No full left-arm rebake in this pass; the existing left pinch/lighter hand is
+  included to constrain and judge the right-hand pose.
 - No shoulder visibility or torso geometry.
 - No reuse of the rejected runtime wrist adaptor, taper or clip logic.
 - No development-only extracted Blood asset in runtime or git.
