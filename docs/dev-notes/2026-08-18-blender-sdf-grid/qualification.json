@@ -1,0 +1,1018 @@
+{
+  "availableNodes": {
+    "GeometryNodeBake": true,
+    "GeometryNodeGridToMesh": true,
+    "GeometryNodeMeshToSDFGrid": true,
+    "GeometryNodeObjectInfo": true,
+    "GeometryNodeSDFGridBoolean": true,
+    "GeometryNodeStoreNamedGrid": true
+  },
+  "blenderPath": "/opt/homebrew/bin/blender",
+  "blenderVersion": "5.2.0 LTS",
+  "capabilities": {
+    "routeA": {
+      "reason": "StoreNamedGrid -> Bake(DISK) -> openvdb.read succeeded",
+      "supported": true,
+      "vdb": {
+        "activeVoxelCount": 27906,
+        "backgroundM": 0.05999999865889549,
+        "deepInteriorProbeM": -0.05999999865889549,
+        "gridClass": "level set",
+        "gridName": "sdf",
+        "interiorProbeInactive": true,
+        "transform": [
+          [
+            0.0,
+            0.009999999776482582,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.009999999776482582,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.009999999776482582
+          ]
+        ],
+        "valueTypeName": "float",
+        "vdbPath": "/private/tmp/blud-blender-sdf-caps-x7gwoawc/route_a/blobs/00001_00000_file_1.vdb",
+        "voxelSizeM": [
+          0.009999999776482582,
+          0.009999999776482582,
+          0.009999999776482582
+        ]
+      }
+    },
+    "routeB": {
+      "adaptivity": 0.0,
+      "boundaryEdges": 0,
+      "closed": true,
+      "components": 1,
+      "reason": "GridToMesh(threshold=0, adaptivity=0) evaluated headless",
+      "supported": true,
+      "threshold": 0.0,
+      "timings": {
+        "isosurfaceS": 0.023
+      },
+      "triangles": 5292,
+      "vertices": 2648
+    },
+    "sampleGridFieldEval": {
+      "negativeInside": true,
+      "positiveOutside": true,
+      "probes": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.11,
+          0.0,
+          0.0
+        ],
+        [
+          0.05,
+          0.0,
+          0.0
+        ]
+      ],
+      "values": [
+        -0.05999999865889549,
+        0.009999901987612247,
+        -0.05000009760260582
+      ]
+    },
+    "sdfGridBoolean": {
+      "expectedValuesM": [
+        -0.05,
+        -0.05
+      ],
+      "grid1Ignored": true,
+      "measuredValuesM": [
+        0.05999999865889549,
+        -0.05000009760260582
+      ],
+      "operation": "UNION",
+      "probePointsM": [
+        [
+          -0.08,
+          0.0,
+          0.0
+        ],
+        [
+          0.08,
+          0.0,
+          0.0
+        ]
+      ],
+      "verdict": "GeometryNodeSDFGridBoolean evaluates to its Grid 2 input regardless of operation in Blender 5.2.0; union uses Join Geometry + one Mesh to SDF Grid and intersection uses openvdb combine(max) on baked named grids instead"
+    }
+  },
+  "commands": [
+    "uv run scripts/test_blender_sdf_grid.py -v",
+    "uv run scripts/blender_sdf_grid.py --probe-capabilities",
+    "uv run scripts/blender_sdf_grid.py --analytic-fixture"
+  ],
+  "determinism": {
+    "canonicalJsonEqual": true,
+    "fixtures": [
+      "cube",
+      "sphere",
+      "union-pair",
+      "body-support-intersect",
+      "rotated-cube",
+      "translated-cube"
+    ],
+    "r16fBytesEqual": true,
+    "route": "direct-vdb"
+  },
+  "fixtures": [
+    {
+      "boundsMaxM": [
+        0.12,
+        0.12,
+        0.12
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "label": "0.1 m cube",
+      "maxSurfaceErrorM": 0.0,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.12,
+          0.12
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.12,
+          -0.12
+        ],
+        "dimensions": [
+          25,
+          25,
+          25
+        ],
+        "nodeContractSha256": "e8c74af775915cfe88b3412226026c0a5a92aa5b165614d530a8463bc9258f01",
+        "r16fSha256": "7de5ebb81a49ea306760e36a75ffd20b2b250211c3d4eb53c3e63392124d14bd",
+        "route": "direct-vdb",
+        "sourceSha256": "b213edf680871b421bde8e6f77e158c248024045b641d1d61b11e21e6b479a55",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "direct-vdb",
+      "shape": "cube",
+      "surfaceErrorPoints": 6749,
+      "timings": {
+        "bakeS": 0.046,
+        "blenderS": 0.75,
+        "denseConvertS": 0.023,
+        "totalS": 0.098
+      },
+      "validate": {
+        "boundaryMin": 0.06,
+        "max": 0.06,
+        "min": -0.05,
+        "negativeFraction": 0.085184,
+        "negatives": 1331,
+        "positives": 14294
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.12,
+        0.12
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "label": "0.1 m cube",
+      "maxSurfaceErrorM": 0.0,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.12,
+          0.12
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.12,
+          -0.12
+        ],
+        "dimensions": [
+          25,
+          25,
+          25
+        ],
+        "nodeContractSha256": "e8c74af775915cfe88b3412226026c0a5a92aa5b165614d530a8463bc9258f01",
+        "r16fSha256": "06ae3f21eef467cae23623217bafd7001d2e228400e165898d5235dff954c457",
+        "route": "grid-to-mesh-libigl",
+        "sourceSha256": "f95ea969145f89b68c54f304906e4f291a509d72047c3eaa33d1af0b3bffe4f6",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "grid-to-mesh-libigl",
+      "shape": "cube",
+      "surfaceErrorPoints": 6749,
+      "timings": {
+        "blenderS": 0.67,
+        "isosurfaceS": 0.012,
+        "totalS": 0.036
+      },
+      "validate": {
+        "boundaryMin": 0.07,
+        "max": 0.121244,
+        "min": -0.05,
+        "negativeFraction": 0.085184,
+        "negatives": 1331,
+        "positives": 14294
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.12,
+        0.12
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "label": "0.1 m sphere",
+      "maxSurfaceErrorM": 0.001387,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.12,
+          0.12
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.12,
+          -0.12
+        ],
+        "dimensions": [
+          25,
+          25,
+          25
+        ],
+        "nodeContractSha256": "e8c74af775915cfe88b3412226026c0a5a92aa5b165614d530a8463bc9258f01",
+        "r16fSha256": "a36787f0ec8d52db991338a439fa69879b42f10cf017b51d8b4a16b77e0f5005",
+        "route": "direct-vdb",
+        "sourceSha256": "ed0a473d3f8c6498b500d13cbd6c590195b72f1e8f8de8ca652e1625fb75a4bd",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "direct-vdb",
+      "shape": "sphere",
+      "surfaceErrorPoints": 4153,
+      "timings": {
+        "bakeS": 0.06,
+        "blenderS": 0.813,
+        "denseConvertS": 0.022,
+        "totalS": 0.139
+      },
+      "validate": {
+        "boundaryMin": 0.06,
+        "max": 0.06,
+        "min": -0.04988,
+        "negativeFraction": 0.031424,
+        "negatives": 491,
+        "positives": 15134
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.12,
+        0.12
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "label": "0.1 m sphere",
+      "maxSurfaceErrorM": 0.00125,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.12,
+          0.12
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.12,
+          -0.12
+        ],
+        "dimensions": [
+          25,
+          25,
+          25
+        ],
+        "nodeContractSha256": "e8c74af775915cfe88b3412226026c0a5a92aa5b165614d530a8463bc9258f01",
+        "r16fSha256": "d5cf41e5b0636e7ff699714f209420bc4ded474a6432e307a6a95819a6d756c3",
+        "route": "grid-to-mesh-libigl",
+        "sourceSha256": "6dfea118b713ac2dbdd40a3e97470e4862d142c9909863c50602c2b2c5c96092",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "grid-to-mesh-libigl",
+      "shape": "sphere",
+      "surfaceErrorPoints": 4153,
+      "timings": {
+        "blenderS": 0.722,
+        "isosurfaceS": 0.015,
+        "totalS": 0.068
+      },
+      "validate": {
+        "boundaryMin": 0.07,
+        "max": 0.158172,
+        "min": -0.048737,
+        "negativeFraction": 0.031424,
+        "negatives": 491,
+        "positives": 15134
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.09,
+        0.09
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.09,
+        -0.09
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        19,
+        19
+      ],
+      "label": "overlapping pair union",
+      "maxSurfaceErrorM": 0.0,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.09,
+          0.09
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.09,
+          -0.09
+        ],
+        "dimensions": [
+          25,
+          19,
+          19
+        ],
+        "nodeContractSha256": "ee33c7a97c327d07e8d563e3d86be871cf2cf8e9cce3c9f28783f2f8c0dfb143",
+        "r16fSha256": "a091ae7e3549ce26aab01ad10f2c5e4cef6d67b8aa91c9bb3580d4de50958753",
+        "route": "direct-vdb",
+        "sourceSha256": "e8992f45bf35d1706d87e2973efcc6810b1f55ae4a994a06f37bba171f4a8fc2",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "direct-vdb",
+      "shape": "union-pair",
+      "surfaceErrorPoints": 8503,
+      "timings": {
+        "bakeS": 0.078,
+        "blenderS": 0.754,
+        "denseConvertS": 0.013,
+        "totalS": 0.119
+      },
+      "validate": {
+        "boundaryMin": 0.04,
+        "max": 0.06,
+        "min": -0.05,
+        "negativeFraction": 0.227922,
+        "negatives": 2057,
+        "positives": 6968
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.09,
+        0.09
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.09,
+        -0.09
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        19,
+        19
+      ],
+      "label": "overlapping pair union",
+      "maxSurfaceErrorM": 0.03,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.09,
+          0.09
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.09,
+          -0.09
+        ],
+        "dimensions": [
+          25,
+          19,
+          19
+        ],
+        "nodeContractSha256": "ee33c7a97c327d07e8d563e3d86be871cf2cf8e9cce3c9f28783f2f8c0dfb143",
+        "r16fSha256": "476481fea08b4ee17ae5e6861f0800b374d1e2fbf3c9a51cd932153618c516bd",
+        "route": "grid-to-mesh-libigl",
+        "sourceSha256": "e8d54a3214a046cca2b129d6b0a16d5d1a3fdeeae3e6929035ea806aea5d0332",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "grid-to-mesh-libigl",
+      "shape": "union-pair",
+      "surfaceErrorPoints": 8503,
+      "timings": {
+        "blenderS": 0.744,
+        "isosurfaceS": 0.09,
+        "totalS": 0.114
+      },
+      "validate": {
+        "boundaryMin": 0.04,
+        "max": 0.069282,
+        "min": -0.05,
+        "negativeFraction": 0.227922,
+        "negatives": 2057,
+        "positives": 6968
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.12,
+        0.12
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "label": "body cube intersected by support sphere",
+      "maxSurfaceErrorM": 0.000573,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.12,
+          0.12
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.12,
+          -0.12
+        ],
+        "dimensions": [
+          25,
+          25,
+          25
+        ],
+        "nodeContractSha256": "e8c74af775915cfe88b3412226026c0a5a92aa5b165614d530a8463bc9258f01",
+        "r16fSha256": "6a2ef20d705fac5abb341eb68f4f78c5ef16fa5c229b0c8c48ced966a7cc1984",
+        "route": "direct-vdb",
+        "sourceSha256": "e47e8691690aeeec45d64ca4dc87d810722f489537721541d00c227ead7d6af4",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "direct-vdb",
+      "shape": "body-support-intersect",
+      "surfaceErrorPoints": 512,
+      "timings": {
+        "bakeS": 0.091,
+        "blenderS": 0.808,
+        "denseConvertS": 0.022,
+        "totalS": 0.17
+      },
+      "validate": {
+        "boundaryMin": 0.06,
+        "max": 0.06,
+        "min": -0.02497,
+        "negativeFraction": 0.00704,
+        "negatives": 110,
+        "positives": 15515
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.12,
+        0.12
+      ],
+      "boundsMinM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "components": 1,
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "label": "body cube intersected by support sphere",
+      "maxSurfaceErrorM": 0.001958,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.12,
+          0.12
+        ],
+        "boundsMinM": [
+          -0.12,
+          -0.12,
+          -0.12
+        ],
+        "dimensions": [
+          25,
+          25,
+          25
+        ],
+        "nodeContractSha256": "e8c74af775915cfe88b3412226026c0a5a92aa5b165614d530a8463bc9258f01",
+        "r16fSha256": "ad08b0252641eb31ebd95f0ea889d0352d060afc157e229b2deedaf7d2aa8706",
+        "route": "grid-to-mesh-libigl",
+        "sourceSha256": "4d6831156997d3a6bbff82beeef672b7d0bae1dd9649173c01624849d2ea002f",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "grid-to-mesh-libigl",
+      "shape": "body-support-intersect",
+      "surfaceErrorPoints": 512,
+      "timings": {
+        "blenderS": 0.811,
+        "isosurfaceS": 0.098,
+        "totalS": 0.153
+      },
+      "validate": {
+        "boundaryMin": 0.076791,
+        "max": 0.188139,
+        "min": -0.023209,
+        "negativeFraction": 0.00704,
+        "negatives": 110,
+        "positives": 15515
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.11,
+        0.11,
+        0.09
+      ],
+      "boundsMinM": [
+        -0.11,
+        -0.11,
+        -0.09
+      ],
+      "components": 1,
+      "dimensions": [
+        23,
+        23,
+        19
+      ],
+      "label": "cube rotated 30 deg about Z",
+      "maxSurfaceErrorM": 0.000359,
+      "metrics": {
+        "boundsMaxM": [
+          0.11,
+          0.11,
+          0.09
+        ],
+        "boundsMinM": [
+          -0.11,
+          -0.11,
+          -0.09
+        ],
+        "dimensions": [
+          23,
+          23,
+          19
+        ],
+        "nodeContractSha256": "b7756d91737ce9b080e3f0fe9a9a1d1092b426511d1192a49f0c0c2b77721667",
+        "r16fSha256": "24073a39afa8c633598038944fcb51d26a6733d050ce498b12053e0f72d88764",
+        "route": "direct-vdb",
+        "sourceSha256": "d41cd7379b9f0d4b4f342957264923370dc2bf104e7b5323c7e09135e9e9d0cb",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "direct-vdb",
+      "shape": "rotated-cube",
+      "surfaceErrorPoints": 6654,
+      "timings": {
+        "bakeS": 0.046,
+        "blenderS": 0.735,
+        "denseConvertS": 0.015,
+        "totalS": 0.09
+      },
+      "validate": {
+        "boundaryMin": 0.04,
+        "max": 0.06,
+        "min": -0.05,
+        "negativeFraction": 0.110536,
+        "negatives": 1111,
+        "positives": 8940
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.11,
+        0.11,
+        0.09
+      ],
+      "boundsMinM": [
+        -0.11,
+        -0.11,
+        -0.09
+      ],
+      "components": 1,
+      "dimensions": [
+        23,
+        23,
+        19
+      ],
+      "label": "cube rotated 30 deg about Z",
+      "maxSurfaceErrorM": 0.007696,
+      "metrics": {
+        "boundsMaxM": [
+          0.11,
+          0.11,
+          0.09
+        ],
+        "boundsMinM": [
+          -0.11,
+          -0.11,
+          -0.09
+        ],
+        "dimensions": [
+          23,
+          23,
+          19
+        ],
+        "nodeContractSha256": "b7756d91737ce9b080e3f0fe9a9a1d1092b426511d1192a49f0c0c2b77721667",
+        "r16fSha256": "0caa73ab028535b9970659133180319de9aee795badf35d56e3872f0d34bf3cf",
+        "route": "grid-to-mesh-libigl",
+        "sourceSha256": "f59db14a2e38bb4638905b083139c8e5fba88ff166d9a7e67437daee50bc484f",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "grid-to-mesh-libigl",
+      "shape": "rotated-cube",
+      "surfaceErrorPoints": 6654,
+      "timings": {
+        "blenderS": 0.692,
+        "isosurfaceS": 0.014,
+        "totalS": 0.04
+      },
+      "validate": {
+        "boundaryMin": 0.04,
+        "max": 0.110453,
+        "min": -0.05,
+        "negativeFraction": 0.110536,
+        "negatives": 1111,
+        "positives": 8940
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.09,
+        0.13
+      ],
+      "boundsMinM": [
+        -0.08,
+        -0.11,
+        -0.07
+      ],
+      "components": 1,
+      "dimensions": [
+        21,
+        21,
+        21
+      ],
+      "label": "cube translated (0.02, -0.01, 0.03)",
+      "maxSurfaceErrorM": 0.001478,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.09,
+          0.13
+        ],
+        "boundsMinM": [
+          -0.08,
+          -0.11,
+          -0.07
+        ],
+        "dimensions": [
+          21,
+          21,
+          21
+        ],
+        "nodeContractSha256": "d2c280f3585c8d8db05b736fccf75c10190269121f23ba90146b342ab748b29d",
+        "r16fSha256": "f8155e50cbd6f77d487c63a1665ae604a8a10ba53cf47d130a59430ad72aeb98",
+        "route": "direct-vdb",
+        "sourceSha256": "b715ef08b4b0b044a129e2a3cd5ebf502ecb266113b5da36ac389a6697de2be9",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "direct-vdb",
+      "shape": "translated-cube",
+      "surfaceErrorPoints": 6475,
+      "timings": {
+        "bakeS": 0.048,
+        "blenderS": 0.744,
+        "denseConvertS": 0.013,
+        "totalS": 0.093
+      },
+      "validate": {
+        "boundaryMin": 0.05,
+        "max": 0.06,
+        "min": -0.05,
+        "negativeFraction": 0.143721,
+        "negatives": 1331,
+        "positives": 7930
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "boundsMaxM": [
+        0.12,
+        0.09,
+        0.13
+      ],
+      "boundsMinM": [
+        -0.08,
+        -0.11,
+        -0.07
+      ],
+      "components": 1,
+      "dimensions": [
+        21,
+        21,
+        21
+      ],
+      "label": "cube translated (0.02, -0.01, 0.03)",
+      "maxSurfaceErrorM": 0.0,
+      "metrics": {
+        "boundsMaxM": [
+          0.12,
+          0.09,
+          0.13
+        ],
+        "boundsMinM": [
+          -0.08,
+          -0.11,
+          -0.07
+        ],
+        "dimensions": [
+          21,
+          21,
+          21
+        ],
+        "nodeContractSha256": "d2c280f3585c8d8db05b736fccf75c10190269121f23ba90146b342ab748b29d",
+        "r16fSha256": "4c25a829a37f80e8301aec610f04cda7175d64ecae3fb3c78d957c8ecb168bba",
+        "route": "grid-to-mesh-libigl",
+        "sourceSha256": "9be63dbcd6f3954e65027ffb5d290e82b9c98616215db0e1a7716c4344239e72",
+        "voxelSizeM": [
+          0.01,
+          0.01,
+          0.01
+        ]
+      },
+      "route": "grid-to-mesh-libigl",
+      "shape": "translated-cube",
+      "surfaceErrorPoints": 6475,
+      "timings": {
+        "blenderS": 0.673,
+        "isosurfaceS": 0.013,
+        "totalS": 0.038
+      },
+      "validate": {
+        "boundaryMin": 0.05,
+        "max": 0.086602,
+        "min": -0.05,
+        "negativeFraction": 0.143721,
+        "negatives": 1331,
+        "positives": 7930
+      },
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    }
+  ],
+  "generatedBy": "scripts/blender_sdf_grid.py --analytic-fixture",
+  "nodeContract": {
+    "adaptivity": 0.0,
+    "backgroundM": 0.06,
+    "bake": {
+      "bakeTarget": "DISK",
+      "operator": "bpy.ops.object.geometry_node_bake_single",
+      "useCustomPath": true
+    },
+    "bandWidth": 6,
+    "basis": "right-handed-y-up-blender",
+    "blenderVersionConstraint": "5.2.x",
+    "composition": {
+      "intersection": "mesh-to-sdf-grid x2 -> store-named-grid+bake(DISK) per grid -> openvdb read x2 -> combine(max)",
+      "single": "object-info -> mesh-to-sdf-grid",
+      "union": "mesh-to-sdf-grid x2 -> store-named-grid+bake(DISK) per grid -> openvdb read x2 -> combine(min)"
+    },
+    "gridName": "sdf",
+    "indexToMetres": {
+      "basis": "right-handed-y-up-blender",
+      "dimensions": [
+        25,
+        25,
+        25
+      ],
+      "endpointInclusive": true,
+      "formula": "p = bounds_min_m + index * voxel_size_m",
+      "originM": [
+        -0.12,
+        -0.12,
+        -0.12
+      ],
+      "voxelSizeM": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    "interpolation": "trilinear",
+    "operationNodes": {
+      "bake": "GeometryNodeBake",
+      "getNamedGrid": "GeometryNodeGetNamedGrid",
+      "gridToMesh": "GeometryNodeGridToMesh",
+      "joinGeometry": "GeometryNodeJoinGeometry",
+      "meshToSdfGrid": "GeometryNodeMeshToSDFGrid",
+      "sdfGridBoolean": "GeometryNodeSDFGridBoolean (registered, UNUSED: evaluates to Grid 2 only in Blender 5.2.0)",
+      "storeNamedGrid": "GeometryNodeStoreNamedGrid"
+    },
+    "signConvention": "negative-inside-positive-outside",
+    "threshold": 0.0,
+    "units": "metres",
+    "voxelSizeM": 0.01
+  },
+  "notes": [
+    "Route A bakes Store Named Grid via GeometryNodeBake (bake_target=DISK) and reads the .vdb back with Blender's bundled openvdb module; the signed background keeps deep interior samples negative.",
+    "Mesh to SDF Grid is narrow-band: samples deeper than band_width * voxel_size clamp at -/+band; band_width must cover the fixture's max |distance| / voxel_size.",
+    "GeometryNodeSDFGridBoolean is BROKEN in Blender 5.2.0 headless: it evaluates to its Grid 2 input regardless of operation (capabilities.sdfGridBoolean carries the measured evidence). Union therefore uses Join Geometry + one Mesh to SDF Grid and intersection composes baked named grids with openvdb combine(max); Route B intersections re-import the composed grid as a volume object and mesh it through Get Named Grid.",
+    "Route B resamples the Grid to Mesh (threshold=0, adaptivity=0) isosurface through bake_hand_sdf.py's existing libigl unsigned + fast-winding-number sampler."
+  ],
+  "previewPanels": [
+    "cube",
+    "sphere",
+    "union-pair",
+    "body-support-intersect"
+  ],
+  "previewPng": "docs/dev-notes/2026-08-18-blender-sdf-grid/analytic-preview.png",
+  "selectedRoute": "direct-vdb",
+  "timings": {
+    "totalS": 9.2
+  }
+}
