@@ -582,6 +582,27 @@ class MeshArrayContractTest(unittest.TestCase):
         np.testing.assert_array_equal(vertices, original_v)
         np.testing.assert_array_equal(triangles, original_f)
 
+    def test_canonicalize_never_aliases_an_already_canonical_input(self) -> None:
+        vertices, triangles = tetrahedron_arrays()
+        owned = np.array(vertices, dtype="<f8", order="C")
+        mesh = SDF.MeshArrayInput(
+            label="tetra", vertices_m=owned,
+            triangles=np.array(triangles, dtype="<u4", order="C"),
+            source_sha256=TETRA_SOURCE_SHA)
+        canonical = SDF.canonicalize_mesh_array(mesh)
+        self.assertIsNot(canonical.vertices_m, owned)
+        self.assertFalse(np.shares_memory(canonical.vertices_m, owned))
+        self.assertTrue(canonical.vertices_m.flags.owndata)
+        self.assertTrue(canonical.vertices_m.flags.writeable)
+        # a read-only frombuffer view must still canonicalize to owned memory
+        blob = owned.tobytes("C")
+        view = np.frombuffer(blob, dtype="<f8").reshape(-1, 3)
+        self.assertFalse(view.flags.writeable)
+        from_view = SDF.canonicalize_mesh_array(
+            dataclasses.replace(mesh, vertices_m=view))
+        self.assertTrue(from_view.vertices_m.flags.owndata)
+        self.assertTrue(SDF._is_canonical_mesh_array(from_view))
+
     def test_canonicalize_is_idempotent(self) -> None:
         once = SDF.canonicalize_mesh_array(canonical_tetra_input())
         twice = SDF.canonicalize_mesh_array(once)

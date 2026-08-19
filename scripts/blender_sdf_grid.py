@@ -539,13 +539,16 @@ def canonicalize_mesh_array(mesh: MeshArrayInput) -> MeshArrayInput:
 
     if not np.issubdtype(vertices.dtype, np.floating):
         raise ValueError(f"vertices dtype {vertices.dtype} is not floating point")
-    verts64 = np.ascontiguousarray(vertices, dtype="<f8")
+    # An explicit copy, never np.ascontiguousarray: that ALIASES an input that
+    # is already <f8 and C-contiguous, so the canonical mesh would share memory
+    # with (and inherit the writeability/ownership of) the caller's array.
+    verts64 = np.array(vertices, dtype="<f8", order="C", copy=True)
     if not np.isfinite(verts64).all():
         raise ValueError(f"mesh {label!r} vertices contain non-finite values")
 
     if not np.issubdtype(triangles.dtype, np.integer):
         raise ValueError(f"triangles dtype {triangles.dtype} is not integral")
-    tri64 = np.ascontiguousarray(triangles, dtype=np.int64)
+    tri64 = np.array(triangles, dtype=np.int64, order="C", copy=True)
     if int(tri64.min()) < 0 or int(tri64.max()) >= verts64.shape[0]:
         raise ValueError(
             f"mesh {label!r} triangle indices out of range [0, "
@@ -561,7 +564,7 @@ def canonicalize_mesh_array(mesh: MeshArrayInput) -> MeshArrayInput:
     return MeshArrayInput(
         label=label,
         vertices_m=verts64,
-        triangles=np.ascontiguousarray(tri64, dtype="<u4"),
+        triangles=np.array(tri64, dtype="<u4", order="C", copy=True),
         source_sha256=source_sha,
         source_to_grid_m=transform,
     )

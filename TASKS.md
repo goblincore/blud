@@ -197,18 +197,28 @@ Key reference docs (open these before touching their area):
 - `X1.27` [x] **Baked-SDF dynamite grip + underhand release — OWNER VISUAL GATE PASS** — six-frame grip, authored underhand release, and exact held→flight handoff landed at `42ab78d`; owner approved the live preview on 2026-08-17. 1512 tests + production build pass; handoff error 0.000 mm and clip-vs-static bench delta −0.07 ms. [design](docs/superpowers/specs/2026-08-17-sdf-dynamite-grip-release-design.md) · [plan](docs/superpowers/plans/2026-08-17-sdf-dynamite-grip-release.md) · [notes+evidence](docs/dev-notes/2026-08-17-sdf-dynamite-grip/notes.md)
 - `X1.gib-freeze` [x] **Shared/prewarmed WebGPU gib material + bounded view slots** — first and repeated full gibs measure 16.8–18.0 ms worst frame in a visible WebGPU run; eight cycles churned the 40-slot cap with no errors or stale visuals. 1515 tests + build pass. [evidence](docs/dev-notes/2026-08-17-sdf-gib-freeze/notes.md)
 - `X1.texture-seams` [ ] **Shading-only rest-anchor seam blend** — X1.27 dependency is clear. Approved direction: sparse smooth-joint adjacency + CPU pose-to-rest transforms, evaluated once after the final hit; do not restore hot-path second-nearest tracking or bake the whole animated body. Implementation plan/execution handed to the other agent.
-- `X1.sdf-authoring` [ ] **Blender-native SDF grid qualification** — shared
-  prerequisite for the full humanoid bake and FPV distal-arm rerun. Prove
-  headless Mesh to SDF Grid + SDF Grid Boolean, metre-space sign/transforms,
-  determinism, and direct OpenVDB extraction; otherwise pin the explicit Grid
-  to Mesh (`threshold=0`, `adaptivity=0`) + libigl fallback. No Chisel purchase
-  is required. [design](docs/superpowers/specs/2026-08-18-blender-sdf-grid-authoring-design.md)
+- `X1.sdf-authoring` [x] **Blender-native SDF grid qualification — COMPLETE** —
+  Blender 5.2.0 LTS headless grid backend plus deterministic array-mesh
+  union/intersection adapters are qualified. `direct-vdb` is the selected
+  route. Booleans fold explicit OpenVDB `min`/`max` because Blender 5.2's
+  `GeometryNodeSDFGridBoolean` returns its Grid 2 input for every operation
+  (measured); Join Geometry is not a substitute either (internal faces).
+  Analytic, firm-grip hand union (99x135x78 @ 2 mm) and humanoid
+  RightForeArm intersection (44x40x38 @ 6 mm, one negative component) all
+  repeat byte-identically across separate Blender processes. Chisel 4.0.1 was
+  evaluated and stays OPTIONAL development-only authoring/diagnostic tooling,
+  never a production dependency. 48 grid + 15 qualifier + 20 humanoid Python
+  tests, 1516 Vitest and the production build pass.
+  [design](docs/superpowers/specs/2026-08-18-blender-sdf-grid-authoring-design.md)
   · [plan](docs/superpowers/plans/2026-08-18-blender-sdf-grid-authoring.md)
+  · [adapters plan](docs/superpowers/plans/2026-08-19-blender-sdf-grid-adapters-continuation.md)
+  · [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json)
+  · [chisel findings](docs/dev-notes/2026-08-19-chisel-sdf-qualification/notes.md)
 - `X1.humanoid-sever-spike` [ ] **Textured full humanoid SDF + forearm sever** —
   revised to use the qualified Blender grid backend. The complete body mesh is
   intersected with closed weight-derived support SDFs to produce articulated
   bone-local bricks; source texture projection, elbow scrub, softness and
-  prewarmed sever gate remain unchanged. Blocked by `X1.sdf-authoring`.
+  prewarmed sever gate remain unchanged.
   [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
   · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
 - `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
@@ -217,8 +227,8 @@ Key reference docs (open these before touching their area):
   retains an articulated upper arm, and pins the original Blud two-hand
   performance first: low bundle hold, short lighter-to-fuse reach, withdrawal,
   cook, then casual underhand toss. Modest 3D adjustment is allowed inside that
-  keyframe corridor; football/overhand posing is not. Blocked by
-  `X1.sdf-authoring` and intentionally paused until usage resets.
+  keyframe corridor; football/overhand posing is not. Intentionally paused
+  until usage resets.
   [design](docs/superpowers/specs/2026-08-18-sdf-fpv-full-distal-arm-rebuild-design.md)
   · [plan](docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md)
 - `X1.25` [x] **PSX-AA post pass** — FXAA at internal res + temporal smear + optional
