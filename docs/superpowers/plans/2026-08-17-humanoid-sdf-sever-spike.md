@@ -2,13 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a dedicated WebGPU spike that renders the owner's textured rigged zombie from bone-local SDF/color atlases, scrubs its right elbow through 0–100 degrees, and severs a physics-driven distal forearm with matching fleshy cut surfaces and no first-use pause.
+**Goal:** Build a dedicated WebGPU spike that renders the owner's textured rigged zombie from bone-local SDF/color atlases, scrubs its right elbow through 0–100 degrees, severs a physics-driven distal forearm with matching fleshy cut surfaces and no first-use pause, and takes aimed wounds on the baked flesh through the same layered material as the cut cap.
 
 **Architecture:** A Blender export stage writes bind-pose geometry, UVs, skin weights, texture pixels, skeleton metadata and closed weight-derived support volumes. The qualified Blender 5.2 Geometry Nodes backend converts the complete source body and each support volume to SDF grids, intersects them into tightly packed bone-local bricks, and uses either proven direct OpenVDB samples or the explicit Grid-to-Mesh/libigl fallback. A strict TypeScript loader feeds a dedicated clustered WGSL marcher; pure pose/sever state drives elbow lag, softness, complementary cut masks, and the existing deterministic chunk stepper. The new page remains isolated from the production game and current zombie lab.
 
 **Tech Stack:** TypeScript 5.6, Vitest, Three.js 0.185 WebGPU/TSL, WGSL, Vite 5, Python 3.12 via `uv`, Blender 5.2 Geometry Nodes/Python, OpenVDB when qualified, NumPy 2.5, libigl 2.6 fallback, existing `gib-chunks.ts` physics.
 
 **Spec:** `docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md`
+
+**Wound spec (folded in, owner call 2026-08-19):** `docs/superpowers/specs/2026-08-19-humanoid-sdf-wound-damage-design.md`. It supersedes its own "lands after the gate" sequencing: the spike's owner gate is judging whether a baked representation keeps the procedural zombie's live-wound feel, so the testable build has to carry wounds. Wounds are the LAST slice of this plan (Tasks 8–10), not a parallel one — they consume the atlas, manifest, pose model, cluster marcher and sever masks that Tasks 2–6 produce.
 
 ## Global Constraints
 
@@ -23,7 +25,11 @@
 - All detached render objects, materials, shader variants, physics state, and proxy geometry must exist and be warmed before **Sever Forearm** becomes enabled.
 - Pressing sever must not change pipeline/material creation counters and must not produce a deterministic frame above 50 ms from first-use work.
 - Atlas bytes, bake time, and steady GPU time are reported diagnostics. Visual fidelity and no-pause interaction are the gates.
-- Do not add walking, click-to-shoot, torso blasts, multiple wounds, compression/LOD, full soft-body physics, or game integration.
+- Do not add walking, torso blasts, multi-wound blast clusters, whole-body gib chains, wound fluid/gushing gore, skeleton reveal, compression/LOD, full soft-body physics, or game integration. Click-to-shoot and single aimed wounds are now IN scope, in Tasks 8–10 only.
+- Severing stays the one baked mid-forearm cut plane. Arbitrary cut planes are out of scope.
+- The wound slice re-keys `damage.ts`'s model onto bone bricks; it does not re-invent it. `WoundType`, `WOUND_PROFILES`, `pushWound`, `writeWounds()`, the `APPLY_WOUNDS`/`WOUND_MASK`/`CHAR_MASK` WGSL and the `ROW_WOUND`/`ROW_WOUND_META` texel layout are reused. `frame()`, `basisFromAxis`, `qRotate`-on-`prim.orient`, the `bodyYaw` de-yaw/re-yaw threading and the `p.op === 'sub'` carve skip are deliberately NOT ported.
+- Every bounds test in the wound path reads `occupiedBoundsMin/Max` derived from the partition's weight-derived bind bounds (`coverage.partitions[].boundsLocalMin/Max`), never `boundsMin/Max` and never a raw `face_owners` owned-face AABB.
+- The spike's 50 ms first-use interaction gate extends to the FIRST SHOT after page load, not just the first sever.
 - Do not touch unrelated user files. Each task commits only its focused changes on its dispatch branch.
 
 ---
@@ -242,12 +248,18 @@ git commit -m "feat(sdf-lab): define humanoid bone partitions"
 - Create: `public/assets/lab/humanoid-sdf/zombie-humanoid.json`
 - Create: `public/assets/lab/humanoid-sdf/zombie-distance-*.r16f`
 - Create: `public/assets/lab/humanoid-sdf/zombie-color-*.rgba8`
+- Create: `public/assets/lab/humanoid-sdf/zombie-coarse.f32`
 - Create: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/bake-report.json`
 - Create: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/bind-textured-preview.png`
 
 **Interfaces:**
 - Consumes: Task 1 `SourceSoup`, `BonePartition`, `JointBand`, `derive_partitions`, `support_mesh`; P0 `bake_mesh_intersection_to_dense`, `DenseSdfResult`, selected route and canonical node contract; plus the canonical source asset.
-- Produces: manifest version 1 with `kind: "humanoid-bone-sdf"`; `BrickRequest`, `AtlasBrick`, `AtlasLayout`, `pack_bricks`, `layout_has_overlap`, `barycentric_uv`, `sample_bone_brick`, `sample_surface_color`, `sample_rgba_bilinear`, `bake_distance_and_color`, `build_manifest_dict`, `validate_checked_in`; real checked-in R16F/RGBA8 logical atlases for Task 3.
+- Produces: manifest version 1 with `kind: "humanoid-bone-sdf"`; `support_mesh`, `BrickRequest`, `AtlasBrick`, `AtlasLayout`, `pack_bricks`, `layout_has_overlap`, `barycentric_uv`, `sample_bone_brick`, `sample_surface_color`, `sample_rgba_bilinear`, `bake_distance_and_color`, `resample_coarse_brick`, `build_manifest_dict`, `validate_checked_in`; real checked-in R16F/RGBA8 logical atlases plus the coarse f32 brick pack for Tasks 3 and 10.
+
+**Two carried-forward requirements this task must absorb (read before starting):**
+
+1. **`support_mesh` does not exist yet.** Task 1's declared interface promised it, but only `derive_joint_band`, `joint_halfspaces` and `inside_support` landed in `scripts/bake_humanoid_sdf.py`; the per-partition `supportPlanes` are recorded in `source-report.json` and nothing consumes them. This task implements it, and Task 1's unwritten test `test_support_mesh_is_closed_outward_and_matches_halfspaces` comes with it.
+2. **The coarse CPU brick is a requirement of this pass, not a later add-on.** It is emitted here so the manifest never needs a version bump plus a full byte-determinism revalidation to acquire it. See Step 4b.
 
 - [ ] **Step 1: Write failing grid, packing, color, and manifest tests**
 
@@ -335,7 +347,18 @@ the exported GLB texture transform and base-color factor, resolves the recorded
 V-axis convention once, and bilinearly samples the RGBA8 base color. Fill the
 complete brick so trilinear color is defined on both sides of the isosurface.
 
-Each brick must independently pass finite/negative-core/positive-boundary validation. At every declared joint, probe the two brick fields along the measured axis and require simultaneous inside coverage within the overlap but not 50 mm across the boundary.
+**`support_mesh(partition, bounds)` must produce a GEOMETRICALLY closed operand.**
+Build it as the convex polytope of the partition's recorded `supportPlanes`
+intersected with the brick bounds box, emitted as an outward-wound manifold
+triangle mesh. This is not a style preference: `X1.sdf-authoring` measured that
+Blender's **Mesh to SDF Grid** emits an *unsigned shell* rather than a solid
+when handed an operand with a real hole — the hand soup kept 66 boundary edges
+after a 1 um weld and contributed 302 of 38,702 negative voxels. Judge closedness
+with `blender_sdf_grid.welded_mesh_info()`, never raw indexed boundary edges, and
+fail the bake loudly on a nonzero boundary-edge count. Reuse
+`blender_sdf_grid.closed_box_mesh` for the degenerate all-planes-cull case.
+
+Each brick must independently pass finite/negative-core/positive-boundary validation, and additionally a **per-operand interior gate**: both the source mesh and the support mesh must each contribute a plausible negative-voxel count on their own, so a silently unsigned operand cannot pass by riding the other one's interior. At every declared joint, probe the two brick fields along the measured axis and require simultaneous inside coverage within the overlap but not 50 mm across the boundary.
 
 - [ ] **Step 4: Implement deterministic 3D packing and transport parts**
 
@@ -371,6 +394,46 @@ Build deterministic runtime metadata in the same pass. Record the exported sourc
 
 Derive the sever plane deterministically in `RightForeArm` bind-local space: use the normalized proximal-to-distal forearm axis, place the plane halfway between the occupied forearm bounds projected onto that axis, and store its normalized `[nx, ny, nz, w]`. Store `cutSeed: 12648430`, `irregularityM: 0.004`, and `rimWidthM: 0.008` in the right-arm manifest section; Tasks 4–7 consume these values and may not invent replacements.
 
+- [ ] **Step 4b: Emit the coarse CPU distance bricks and the occupied bounds**
+
+The click-to-shoot path in Task 10 needs a CPU-readable field. The 33.5 MiB R16F
+distance atlas is a GPU upload and stays one; instead resample each retained
+bone's brick to a coarse f32 grid in the same pass:
+
+```python
+def resample_coarse_brick(dense_f32, dims, max_dim: int = 16) -> tuple[np.ndarray, tuple[int, int, int]]:
+    """Trilinear resample a bone's dense field to at most `max_dim` per axis,
+    preserving the brick's aspect ratio (never up-sampling a short axis)."""
+```
+
+Requirements:
+
+- At most 16 per axis, f32, little-endian, x-fastest-y-z — the same logical
+  ordering as the R16F atlas so one reader convention serves both. Roughly
+  16 KiB per bone and ~350 KiB for 22 bones.
+- Concatenated into one `zombie-coarse.f32` transport file in `manifest.bones[]`
+  array order, with per-bone `{offset, dims, byteLength}` plus a
+  `combinedByteLength` and `combinedSha256` in the manifest — the identical hash
+  contract the distance/color atlases use. A truncated or reordered coarse pack
+  must be rejected by `validate_checked_in()` exactly as a bad atlas part is.
+- Values are metre-space signed distance in the bone's BIND-LOCAL frame, so the
+  Task 10 sphere-trace runs in bind-local with no extra transform.
+- Record the achieved pitch per bone in `bake-report.json`. A 16³ brick over a
+  forearm is roughly 20 mm; that is the accuracy Task 10's refinement step is
+  budgeted against.
+
+In the same pass, record per bone in the manifest:
+
+- `occupiedBoundsMin/Max` — the tight occupied region, derived from the
+  partition's **weight-derived bind bounds** (`coverage.partitions[].boundsLocalMin/Max`),
+  NOT from a `face_owners` owned-face AABB. The owned-face AABB was historically
+  contaminated (a body-sized 0.60 x 0.43 x 0.73 m `RightForeArm` box swallowing
+  11,872 `Hips` faces) by the `_edge_adjacency` defect fixed in `01fd701`; the
+  weight-derived bounds never depended on face ownership at all and are the
+  stable choice. Tasks 8 and 10 broad-phase against these and are forbidden from
+  reading `boundsMin/Max`, which carries the exterior margin plus trilinear
+  padding and would hand shoulder hits to the spine.
+
 - [ ] **Step 5: Bake, validate, repeat, and render the real asset**
 
 Run:
@@ -379,6 +442,7 @@ Run:
 uv run scripts/bake_humanoid_sdf.py
 uv run scripts/bake_humanoid_sdf.py --validate-only
 shasum -a 256 public/assets/lab/humanoid-sdf/zombie-*
+cmp <(uv run scripts/bake_humanoid_sdf.py --print-coarse-hash) <(uv run scripts/bake_humanoid_sdf.py --print-coarse-hash)
 cp public/assets/lab/humanoid-sdf/zombie-humanoid.json /tmp/zombie-humanoid-first.json
 uv run scripts/bake_humanoid_sdf.py
 cmp /tmp/zombie-humanoid-first.json public/assets/lab/humanoid-sdf/zombie-humanoid.json
@@ -389,7 +453,7 @@ Before accepting byte determinism, exclude wall-clock duration from the hashed/c
 
 - [ ] **Step 6: Record measured evidence and commit Task 2**
 
-`bake-report.json` must list duration, logical and transport bytes, atlas dimensions, per-brick pitch/dimensions/field stats, combined hashes, color coverage, joint probes, and source hash.
+`bake-report.json` must list duration, logical and transport bytes, atlas dimensions, per-brick pitch/dimensions/field stats, combined hashes, color coverage, joint probes, source hash, per-bone coarse-brick dims/achieved-pitch/hash, and the per-operand interior counts from the support-mesh gate.
 
 ```bash
 git add scripts/bake_humanoid_sdf.py scripts/test_bake_humanoid_sdf.py public/assets/lab/humanoid-sdf docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike
@@ -405,8 +469,24 @@ git commit -m "feat(sdf-lab): bake textured humanoid bone atlases"
 - Create: `src/lab/sdf-zombie/webgpu/humanoid-volume.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2 manifest and ordered distance/color transport parts.
-- Produces: `HumanoidVolumeManifest`, `HumanoidBrickManifest`, `HumanoidJointManifest`, `HumanoidClusterManifest`, `HumanoidVolumeAssets`, `validateHumanoidVolumeManifest(input)`, `loadHumanoidVolume(url)`, `createRgba8Texture(bits, dims)`, and idempotent `dispose()`; Tasks 4–7 import these exact names.
+- Consumes: Task 2 manifest, ordered distance/color transport parts, and the `zombie-coarse.f32` pack.
+- Produces: `HumanoidVolumeManifest`, `HumanoidBrickManifest`, `HumanoidJointManifest`, `HumanoidClusterManifest`, `HumanoidVolumeAssets`, `HumanoidCoarseBricks`, `validateHumanoidVolumeManifest(input)`, `loadHumanoidVolume(url)`, `createRgba8Texture(bits, dims)`, and idempotent `dispose()`; Tasks 4–10 import these exact names.
+
+**Coarse-pack addendum (wound slice dependency).** The loader validates and
+exposes the coarse f32 bricks alongside the GPU atlases:
+
+- `HumanoidCoarseBricks` holds one `Float32Array` view per bone plus its `dims`
+  and bind-local `boundsMin/Max`, indexed by **`manifest.bones[]` array
+  position**, the same index space as `poseMatrices`, `HumanoidPoseState.bones`
+  and `humanoid-sever`'s `distalIndices`.
+- Validation is as strict as the atlas path: reject a wrong `combinedByteLength`,
+  a `combinedSha256` mismatch, a per-bone `offset + byteLength` that overruns the
+  pack, any bone whose `dims` exceed 16 per axis, and any non-finite value. These
+  are blocking errors, not warnings.
+- The coarse bricks stay CPU-side and are never uploaded as a texture.
+- `HumanoidBrickManifest` exposes `occupiedBoundsMin/Max` as a required field.
+  Add a validator test asserting a manifest missing it is REJECTED, so the wound
+  broad phase can never silently fall back to `boundsMin/Max`.
 
 - [ ] **Step 1: Write failing validator tests against the real manifest**
 
@@ -908,7 +988,15 @@ git commit -m "feat(sdf-lab): sever textured humanoid forearm"
 
 ---
 
-### Task 7: Dedicated spike page, automation, and owner gate
+### Task 7: Dedicated spike page, automation, and sever gate
+
+> **Scope note (wound fold-in).** This task's gate is now the **sever** gate, not
+> the final owner gate. It ships the page, the automation API and contact-sheet
+> panels 1–10. Panels 11–17 and the final owner verdict belong to Task 10. Do
+> **not** mark `X1.humanoid-sever-spike` complete in `TASKS.md` here; leave it in
+> progress with "next: Task 8 (wound keying)" as the exact next action. This is
+> also the second of the two owner review gates in the dispatch chain — the
+> chain pauses here for review before Tasks 8–10 are released.
 
 **Files:**
 - Create: `humanoid-sdf-spike.html`
@@ -1027,6 +1115,234 @@ git add humanoid-sdf-spike.html vite.config.ts src/lab/sdf-zombie/webgpu/humanoi
 git commit -m "feat(sdf-lab): add textured humanoid sever spike"
 ```
 
+---
+
+### Task 8: Pure bone-wound keying, cut partition, and slot budget
+
+**Files:**
+- Create: `src/lab/sdf-zombie/humanoid-damage.ts`
+- Create: `src/lab/sdf-zombie/humanoid-damage.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3 `HumanoidVolumeManifest`/`HumanoidBrickManifest`; Task 4 `HumanoidPoseState`, `HumanoidBonePose`, `poseMatrices`; Task 6 `SeverRenderState` and `distalIndices`; existing `WoundType`, `WOUND_PROFILES`, `pushWound` from `damage.ts`.
+- Produces: `BoneWound`, `MAX_BONE_WOUNDS`, `MAX_WOUND_SLOTS`, `worldHitToBoneWound`, `boneWoundWorldPos`, `ownerBrickForHit`, `partitionWoundsByCut`, `woundSlotsForClusters`, `WoundUploadLists`, `WoundSlotBudget`; Tasks 9 and 10 import these exact names. **No renderer, no WebGPU, no DOM in this task.**
+
+- [ ] **Step 1: Write the failing keying and invariance tests**
+
+Every test runs against the real checked-in manifest, as Task 4's do.
+
+```typescript
+export interface BoneWound {
+  /** Index into manifest.bones[] — the same index space as poseMatrices,
+   *  HumanoidPoseState.bones, and humanoid-sever's distalIndices. */
+  boneIdx: number;
+  /** Hit position in that bone's BIND-LOCAL frame, metres. */
+  local: Vec3;
+  radius: number;
+  type: WoundType;   // reused verbatim from damage.ts
+  ageSec: number;
+}
+
+export const MAX_BONE_WOUNDS = 12;   // logical wounds in the ring
+export const MAX_WOUND_SLOTS = 24;   // texture columns written and scanned
+```
+
+Pin these, each as its own test:
+
+- **Round trip.** `boneWoundWorldPos(state, worldHitToBoneWound(state, hit))` returns `hit` to 1e-6 m at rest and at 100 degrees of elbow flexion.
+- **Articulation invariance.** A wound stamped at 0 degrees has a bit-identical `local` when read at 50 and 100 degrees, and its world position tracks the flexed forearm.
+- **Rigid inverse, not matrix inversion.** Assert the implementation uses `local = qConj(q) * (hitWorld - t)` against `HumanoidPoseState.bones[boneIdx]`. A test constructs a pose with a deliberately non-normalised quaternion and requires the function to reject or renormalise rather than silently skew.
+- **`boneIdx` is array position, not `jointIndex`.** The real manifest reports `boneCount: 24` with `bones.length: 22` because `head_end` and `headfront` fold into `Head`. Assert `manifest.boneCount !== manifest.bones.length` on the real asset, and that a wound keyed to a bone after the first fold addresses the same anatomy in `poseMatrices` as in `bones[]`.
+- **Owner selection.** A hit on the mid-forearm shaft keys to `RightForeArm`, not `RightArm` or `RightHand`. A hit inside the 30 mm elbow overlap band resolves deterministically and stably across the whole 0–100 sweep. Ties break on the lower `boneIdx`.
+- **Bounds discipline.** A static test asserts no `humanoid-damage.ts` code path references `boundsMin`, `boundsMax`, or any owned-face extent — read the module source and fail on the identifier. Only `occupiedBoundsMin/Max` is permitted.
+- **Never fails to wound.** A hit far outside every posed AABB still produces a wound, falling back to the nearest bone origin. This preserves `damage.ts`'s "a body that can be hit always takes the wound" guarantee.
+
+- [ ] **Step 2: Write the failing cut-partition and slot-budget tests**
+
+```typescript
+// forearm-local signed distance to the cut plane
+// s = dot(n, wound.local) + w
+// s < 0                        -> attached list (proximal stump)
+// s > 0                        -> detached list (distal forearm + hand)
+// |s| <= radius + irregularityM -> BOTH lists
+```
+
+- Wounds either side of `manifest.rightArm.cutPlaneLocal` land in exactly **one** list; a wound within `radius + irregularityM` lands in **both**. The two lists' union minus duplicates equals the ring exactly.
+- **Straddlers are duplicated, never assigned.** A test constructs a wound at `|s| < radius` and asserts it appears in both lists. Assigning it to one side leaves the other side's cut cap showing a bite on one face and not the other, which fails the spike's own complementary-mask gate and reads on screen as a gap.
+- Wounds on any other bone route by ownership: everything in `distalIndices` is detached, everything else attached.
+- **Reset idempotence.** `severForearm` -> `resetArm` -> `severForearm` produces identical lists, and the ring is bit-identical before and after a reset. `severForearm` and `resetArm` must never touch the ring — the lists are derived per frame, not migrated at the sever frame.
+- **Detachment continuity.** After `severForearm`, a hand wound's world position is continuous across the sever frame (no pop) and thereafter follows `chunkRootPose ∘ frozenDistalBones[k]` using the identical `local -> world` formula.
+- **Cluster ranges.** `woundSlotsForClusters` sorts wounds by cluster and emits `(start, count)` per cluster; the ranges partition the slot array with no gaps and no overlap except declared boundary duplicates.
+- **Cluster-boundary duplication.** A wound within `radius + rimReach` of a neighbouring cluster's `sweepBoundsMin/Max` is written into both clusters' ranges. `rimReach` must be computed as `radius * woundCfg.w * rimOffsetScale + radius * woundCfg2.x` — the same quantity `applyWounds` uses to place the Gaussian ring — so the duplication test cannot drift from the geometry it protects. A test asserts the two agree.
+- **Slot budget.** Duplication never writes past `MAX_WOUND_SLOTS`. On overflow, drop the **oldest duplicate copies first and never a primary entry**, so an old wound degrades to "visible from one cluster" rather than vanishing. The drop count is returned in `WoundSlotBudget` for the page readout.
+
+- [ ] **Step 3: Run RED**
+
+Run: `npx vitest run src/lab/sdf-zombie/humanoid-damage.test.ts`
+
+Expected: import fails or every new assertion fails for missing exports.
+
+- [ ] **Step 4: Implement `humanoid-damage.ts`**
+
+Owner-brick selection is two phases:
+
+1. **Broad phase.** For each retained brick, push the eight corners of `occupiedBoundsMin/Max` through the bone's posed transform and keep bricks whose posed AABB is within `radius + margin` of the hit. This is the same posed-corner sweep `humanoid-sever.ts` already does in `distalRadius` — reuse it, do not write a second one.
+2. **Narrow phase.** Map the hit into bind-local and score by point-to-AABB distance against `occupiedBoundsMin/Max`: zero inside, positive outside. Take the minimum; ties break on lower `boneIdx`.
+
+Reuse `pushWound` for the ring with `MAX_BONE_WOUNDS` as the cap parameter. Do **not** store a `bone: string` field — it doubles the ring's footprint to defend against a hot-swapped manifest that the loader already rejects.
+
+Do not port `frame()`, `basisFromAxis`, `qRotate`-on-`prim.orient`, the `bodyYaw` de-yaw/re-yaw threading, the stamp-yaw/read-yaw matching contract, or the `p.op === 'sub'` carve skip. A bone brick carries its full rotation in `q_i`, so the workaround those existed for has nothing left to fix; the yaw-matching contract was itself a silent drift source.
+
+- [ ] **Step 5: Run GREEN and commit Task 8**
+
+```bash
+npx vitest run src/lab/sdf-zombie/humanoid-damage.test.ts
+npx tsc --noEmit
+git add src/lab/sdf-zombie/humanoid-damage.ts src/lab/sdf-zombie/humanoid-damage.test.ts
+git commit -m "feat(sdf-lab): key wounds to humanoid bone bricks"
+```
+
+---
+
+### Task 9: Wound payload, per-cluster ranges, and the shared interior material
+
+**Files:**
+- Modify: `src/lab/sdf-zombie/webgpu/humanoid.wgsl.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/humanoid.wgsl.test.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/humanoid-view.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/humanoid-view.test.ts`
+
+**Interfaces:**
+- Consumes: Task 8 `WoundUploadLists`, `woundSlotsForClusters`, `MAX_WOUND_SLOTS`; Task 5/6 `HumanoidView`; existing `writeWounds()` from `zombie-gpu.ts` and the `APPLY_WOUNDS`/`WOUND_MASK`/`CHAR_MASK` WGSL.
+- Produces: `ROW_WOUND_RANGE`, `HumanoidView.setWounds(lists)`, `interiorDepth` WGSL, and unchanged `resourceCounts()` across every wound update.
+
+- [ ] **Step 1: Write the failing payload and range tests**
+
+- `ROW_WOUND_RANGE = 10`. Rows 0–9 are taken (`ROW_PRIM_A`..`ROW_REST_B` in `march.wgsl.ts`), and row 10 mirrors the existing `ROW_CLUSTER_RANGE` convention (`x = start, y = count, zw = 0`) rather than inventing a second one. Assert the constant and the layout.
+- `writeWounds()` is imported and reused **verbatim** — it already takes parallel world-position/radius/type/age/splay/offset arrays and returns the written count. Only its `n` clamp changes, from `MAX_WOUNDS` to a parameter. Assert `humanoid-view.ts` does not define its own texel writer.
+- The three WGSL loop bounds become a template constant driven by `MAX_WOUND_SLOTS`; the literal `16`s are already inside template strings, so this is a parameter change, not a rewrite. Assert no literal `16` wound bound survives in the humanoid shader source.
+- `applyWounds`, `woundMask` and `charMask` take the active cluster's `(start, count)` instead of `(0, woundCfg.x)`. `woundCfg.x` keeps its meaning as the total written count for the untouched non-clustered chunk/hands paths — assert those paths are not modified.
+- `ROW_WOUND` / `ROW_WOUND_META` texel layout is unchanged (xyz+radius, then type/age/splay/offset), and `woundCfg`/`woundCfg2` vec4 semantics are unchanged including the `X1.21.2` shell-amp and relaxation channels.
+- **Resource stability.** `view.setWounds(lists)` across 0, 6 and 12 logical wounds leaves `resourceCounts()` bit-identical. No pipeline, material or texture is created by taking a wound.
+
+- [ ] **Step 2: Write the failing shared-material tests**
+
+The wound interior and the sever cut cap share **one** interior-depth function and one ramp:
+
+```
+interiorDepth(p) = max(woundInterior(p), cutCapInterior(p))
+```
+
+- Assert the shader defines exactly one `interiorDepth` and that both the wound path and the cap path read it. Fail on a second, cap-shaped wetness producer.
+- Drive one ramp off it: skin edge -> wet red tissue -> darker central depth. `charMask` stays **separate** — burns are a surface state, not a depth.
+- **The everted rim is NOT shared.** `applyWounds` splays displaced flesh into a raised lip because a projectile peels flesh outward; a sever is a clean torn cross-section with a narrow analytic torn rim. Rim geometry stays wound-only, keyed by `rimSplayScale`/`rimOffsetScale` from `WOUND_PROFILES`. Summary: **shading layer shared, rim geometry not shared.**
+- **Source-colour suppression is mandatory, not cosmetic.** The colour brick stores nearest-surface source colour extended through the sampling band, so voxels *inside* the flesh carry skin colour; sampling it normally inside a crater paints skin tone on the inside of a bullet hole. Assert colour is suppressed wherever `interiorDepth > eps`, for wounds and the cap alike, through **one** code path. Add a CPU-mirror test sampling a point inside a crater and requiring the baked albedo contribution to be zero.
+- **No wetness white-out.** `X1.17` was two wetness terms stacking: wound wetness plus fresnel rim-light clipped whole patches to white, fixed by fading fresnel inside wounds. Assert the fresnel fade keys off the shared `interiorDepth`, so the cap picks it up for free and a crater meeting the cap cannot re-stack it. Add a CPU-mirror test at the crater/cap intersection requiring the shading term to stay below the clamp.
+
+- [ ] **Step 3: Run RED**
+
+Run: `npx vitest run src/lab/sdf-zombie/webgpu/humanoid.wgsl.test.ts src/lab/sdf-zombie/webgpu/humanoid-view.test.ts`
+
+- [ ] **Step 4: Implement the payload and the shared ramp**
+
+Order of operations per marched point, per cluster, and it is not negotiable:
+
+1. sample each member brick, apply the bone-local softness warp;
+2. apply the brick's half-space cut mask (`smax` against the irregular plane);
+3. union the bricks — `smin` inside declared overlap bands, hard `min` outside;
+4. `applyWounds` on the **composed** result.
+
+Wounds carve last, against the composed field, exactly as `mapBody` does today. Two consequences to preserve: a crater near the elbow correctly eats into both the upper arm and the forearm because it sees the union; and a crater overlapping the cut cap composes as two `smax` subtractions, keeping the cap's flat irregular profile except where the crater bit through it.
+
+The detached piece keeps its own view with its own small ring (typically one to three wounds plus the torn-end blast the chunk path already parks there), using unmodified `writeWounds` and the existing single-cluster chunk shader.
+
+**Known limitation to leave alone.** The softness warp is bone-local and applied inside the brick sample; a world-space wound sphere subtracted after the union does not wobble with it, so at maximum latex the crater lip can appear to slide by up to the warp amplitude — a few millimetres. The current procedural lab has exactly this behaviour, so it is not a regression. Do **not** pre-emptively implement either fix. If Task 10's visual gate flags it, the cheap mitigation (CPU-evaluate the owning bone's warp at the wound centre once per frame, <= 24 evaluations, and pre-displace the uploaded world position) comes first; bone-local carving inside each brick sample is explicitly deferred.
+
+- [ ] **Step 5: Run GREEN and commit Task 9**
+
+```bash
+npx vitest run src/lab/sdf-zombie/webgpu
+npx tsc --noEmit
+git add src/lab/sdf-zombie/webgpu/humanoid.wgsl.ts src/lab/sdf-zombie/webgpu/humanoid.wgsl.test.ts src/lab/sdf-zombie/webgpu/humanoid-view.ts src/lab/sdf-zombie/webgpu/humanoid-view.test.ts
+git commit -m "feat(sdf-lab): carve bone-brick wounds with a shared interior ramp"
+```
+
+---
+
+### Task 10: Click-to-shoot targeting, wound contact sheet, and the final owner gate
+
+**Files:**
+- Create: `src/lab/sdf-zombie/humanoid-target.ts`
+- Create: `src/lab/sdf-zombie/humanoid-target.test.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/humanoid-spike-main.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/humanoid-spike-main.test.ts`
+- Modify: `scripts/verify-humanoid-sdf-spike.mjs`
+- Modify: `TASKS.md`
+- Modify: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/notes.md`
+- Create: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/live-wound-*.png`
+- Modify: `docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/live-contact-sheet.png`
+
+**Interfaces:**
+- Consumes: Task 3 `HumanoidCoarseBricks`; Task 8 `worldHitToBoneWound`, `partitionWoundsByCut`; Task 9 `setWounds`; Task 7 page and automation API; existing `WOUND_PROFILES` calibres and `lab-main.ts`'s pointer->ray path.
+- Produces: `traceHumanoidRay`, `HumanoidRayHit`, `shoot(x, y)` on the automation API, panels 11–17, and the final owner verdict.
+
+- [ ] **Step 1: Write the failing targeting tests**
+
+- **Sphere-trace the coarse brick, not the bounding box.** Ray-versus-posed-OBB alone lands the hit on a box, so craters float off thin limbs like forearms and fingers by centimetres. Broad phase is ray-versus each bone's posed occupied-bounds OBB giving the candidate set and an entry `t`; then sphere-trace that bone's coarse brick in bind-local from its entry point and take the nearest surface crossing. Add a test asserting a forearm hit lands within 5 mm of the true surface, not on the OBB face.
+- **The minimal-field bone IS the owner.** No nearest-endpoint heuristic. Assert the returned `boneIdx` comes from the trace, and that a hit in the elbow band picks the bone whose coarse field is actually smaller.
+- **Raycast the POSED body, never the bind pose.** Rays are tested against `poseMatrices`. Pin it: a flexed-elbow ray that WOULD hit the bind-pose forearm and MISSES the flexed one must miss. This is the same rule `X1.22` task 4 recorded for the procedural path.
+- **Refinement.** A 16-cubed brick over a forearm is roughly a 20 mm pitch, so the raw trace lands within about a voxel; a short secondary refinement along the ray using the same field must converge to a few millimetres — well inside a 55 mm pellet crater. Assert the refined error bound.
+- **The detached piece is a target too.** After a sever, include the distal chunk in the broad phase against `chunkRootPose ∘ frozenDistalBones` and route its hits to the detached ring. A severed arm that ignores gunfire while lying on the floor reads as a bug immediately. Assert a ray at the grounded chunk produces a wound on the detached ring.
+- No GPU readback anywhere in this path.
+
+- [ ] **Step 2: Run RED, implement, run GREEN**
+
+```bash
+npx vitest run src/lab/sdf-zombie/humanoid-target.test.ts
+```
+
+Plumb `shoot(x, y)` through the existing pointer->ray path and the existing `WOUND_PROFILES` calibres. `explosion-aoe.ts`'s blast fan-out needs no change beyond the new hit->bone mapping, but torso blasts and multi-wound clusters stay deferred.
+
+- [ ] **Step 3: Extend the prewarm gate to the first shot**
+
+The 50 ms first-use interaction gate now covers the first shot after page load: firing must not compile a pipeline or allocate a view for the first time. Extend `prewarm()` and assert `resourceCounts()` is unchanged across the first `shoot()`, exactly as Task 6 asserts it across the first `sever()`.
+
+- [ ] **Step 4: Capture wound panels 11–17 and report performance**
+
+Extend the existing contact sheet — do not start a second one:
+
+11. three pellets across the mid-forearm, elbow at 0 degrees;
+12. the same three at 100 degrees flexion (craters ride the flesh, no slide, no seam);
+13. a pellet placed deliberately ON the cut plane, pre-sever;
+14. the sever frame for that straddling wound — both halves show the bite;
+15. the detached piece in flight, bullet holes intact;
+16. a crater spanning the shoulder cluster boundary (no slicing at the seam);
+17. a fresh crater beside the settled cut cap, for side-by-side comparison of the shared layered ramp.
+
+Report the wound-scan cost as a delta against the spike's steady-state timing at **0, 6 and 12** logical wounds, and the click-to-shoot trace cost per hit. A nonzero slot-drop counter during the gate means the budget is wrong and must be RAISED, not silently tolerated — say so in `notes.md`.
+
+**Harness note for whoever verifies in the browser pane:** the pane fires a real pointer click at the last cursor position on re-composite, which stealth-stamps pellets. Park verification reads early and treat wound-count growth *between* tool calls as harness noise, not as an input loop.
+
+- [ ] **Step 5: Final owner gate**
+
+Reject on any of: colour swimming or skin tone visible inside a crater; a wetness white-out where a crater meets the cap; a crater sliced at a cluster seam; a crater that drifts off its landmark under flexion; a straddling wound that bites only one half; a wound that survives on the stump but vanishes from the detached piece or the reverse.
+
+Update `TASKS.md` to mark `X1.humanoid-sever-spike` passed **only after both the automated and the visual gates pass**; otherwise leave it in progress with the exact next action. A green headless report is not owner visual approval.
+
+- [ ] **Step 6: Commit Task 10**
+
+```bash
+git add src/lab/sdf-zombie/humanoid-target.ts src/lab/sdf-zombie/humanoid-target.test.ts src/lab/sdf-zombie/webgpu/humanoid-spike-main.ts src/lab/sdf-zombie/webgpu/humanoid-spike-main.test.ts scripts/verify-humanoid-sdf-spike.mjs docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike TASKS.md
+git commit -m "feat(sdf-lab): aim wounds at the baked humanoid"
+```
+
 ## Final integration gate
 
-The seven task branches form one serial chain. Do not merge an intermediate task directly to `main`. After Task 7 reports success, review the complete chained diff, rerun the final verification from a clean worktree, open `/humanoid-sdf-spike.html` for the owner, and use `superpowers:finishing-a-development-branch` to choose merge/PR/keep/discard. A green headless report is not the owner visual approval.
+Task 1 is complete and merged to `main` (`14d62dc`, plus the `_edge_adjacency` fix at `01fd701`). Tasks 2–10 form one serial chain; do not merge an intermediate task directly to `main`.
+
+The chain has **two owner review gates**:
+
+- **After Task 2** — the atlas everything downstream consumes. Review `bake-report.json`, `bind-textured-preview.png`, the coarse-brick pitches, and independently re-run the determinism comparison before releasing Tasks 3–7. A bad bake here wastes six tasks.
+- **After Task 6** — the marcher and cut surfaces, before the wound slice goes in. Task 7 ships the page and panels 1–10 so this gate has something to look at.
+
+After Task 10 reports success, review the complete chained diff, rerun the final verification from a clean worktree, open `/humanoid-sdf-spike.html` for the owner, and use `superpowers:finishing-a-development-branch` to choose merge/PR/keep/discard. A green headless report is not the owner visual approval.
