@@ -333,12 +333,54 @@ dense = bake_mesh_intersection_to_dense(
 bone_sdf = dense.values_f32
 ```
 
-The Blender graph converts both closed meshes with **Mesh to SDF Grid** and
-combines them with **SDF Grid Boolean: Intersection**. Direct-grid mode consumes
-the resulting signed metre-space values. Fallback mode polygonizes that exact
-intersection with threshold zero/adaptivity zero and invokes the existing
-libigl winding-number sampler only for the final dense grid. No standalone open
-bone patch is a signing input.
+**This line was stale and is corrected here.** The Blender graph converts each
+mesh with its own **Mesh to SDF Grid** tree, bakes each grid to disk, and folds
+them with an explicit OpenVDB `combine(max)` read back through Blender's bundled
+`openvdb` module. `GeometryNodeSDFGridBoolean` is REGISTERED BUT DELIBERATELY
+UNUSED: in Blender 5.2.0 headless it evaluates to its Grid 2 input regardless of
+operation, measured across four wirings. A `Join Geometry` + single Mesh to SDF
+Grid shortcut is also wrong for overlapping inputs — OpenVDB distances hit the
+internal faces of the joined soup (measured: overlap centre reads −0.01 instead
+of −0.05). All of this is already handled inside
+`bake_mesh_intersection_to_dense`; call it and do not rewire the graph.
+
+Direct-grid mode consumes the resulting signed metre-space values. Fallback mode
+polygonizes that exact intersection with threshold zero/adaptivity zero and
+invokes the existing libigl winding-number sampler only for the final dense grid.
+No standalone open bone patch is a signing input.
+
+**Measured closedness of the canonical source (2026-08-19, probe on the checked-in
+GLB — do not re-derive, but do re-check if the source hash changes).** After a
+1 um positional weld the body is ONE connected component with a positive signed
+volume of 0.137 m3, but it is NOT closed: `welded_mesh_info()` reports 137 edges
+with an incidence other than two, which splits into **76 true boundary edges in
+44 distinct pinhole loops** plus **61 non-manifold edges**. Every loop is 2–5
+vertices spanning 1–8 mm — dropped triangles from the source generator, not open
+cuffs, hems, or a hollow interior. The raw indexed count of 26,985 is UV-seam
+vertex splitting and is meaningless; this is exactly why the qualification says
+to judge with `welded_mesh_info()`.
+
+Where the holes are, by dominant-weight bone (boundary-loop vertices):
+`LeftHand` 54, `Head` 26, `LeftShoulder` 17, `RightLeg` 10, `LeftLeg` 4,
+`RightToeBase` 3, `RightArm` 2, `Hips` 2, `LeftForeArm` 2. **`RightForeArm` and
+`RightHand` have none**, which is why the qualification's humanoid
+`RightForeArm` intersection came back with exactly one negative component and
+repeated byte-identically. The spike's critical chain is clean.
+
+What this means for you:
+
+- Do **not** pre-emptively repair the mesh. Every pinhole is at or below the
+  6 mm limb pitch and most are below the 3 mm detail pitch, so the level-set
+  conversion may well bridge them. Measure first.
+- The **per-operand interior gate is what catches a sign leak.** A bone whose
+  source operand bakes as an unsigned shell will show a collapsed negative-voxel
+  count against its support operand — the hand-soup signature was 302 of 38,702.
+  `Head` and `LeftHand` are the two bricks most at risk. `Head` matters most: it
+  is a 3 mm detail brick and the face is a visual gate item.
+- If a brick does fail the gate, the fix is to fill **only** that brick's pinhole
+  loops (each is a 2–5 vertex ring; fan-triangulate it) and re-bake, and to record
+  the fill in `bake-report.json`. It is NOT to weaken the gate, coarsen the pitch,
+  switch routes, or fall back to libigl.
 
 Use libigl closest-triangle queries against the original source mesh only for
 color projection. `sample_surface_color` computes barycentric coordinates on
