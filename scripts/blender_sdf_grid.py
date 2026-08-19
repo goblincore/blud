@@ -718,6 +718,131 @@ def validate_adapter_request(meshes: Sequence[MeshArrayInput],
     return canonical
 
 
+def closed_box_mesh(minimum: Sequence[float], maximum: Sequence[float],
+                    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]:
+    """A closed, outward-wound axis-aligned box: 8 vertices, 12 triangles.
+
+    Intersection support primitives MUST be closed, so this is the one shared
+    generator for every support/continuation volume the adapters and the real
+    source qualifier build.
+    """
+    lo = tuple(float(v) for v in minimum)
+    hi = tuple(float(v) for v in maximum)
+    if len(lo) != 3 or len(hi) != 3:
+        raise ValueError(f"box bounds must be 3-vectors, got {lo} .. {hi}")
+    if not all(math.isfinite(v) for v in lo + hi):
+        raise ValueError(f"box bounds not finite: {lo} .. {hi}")
+    if any(b <= a for a, b in zip(lo, hi)):
+        raise ValueError(f"box bounds not strictly ordered: {lo} .. {hi}")
+    x0, y0, z0 = lo
+    x1, y1, z1 = hi
+    vertices = np.array([
+        [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+        [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
+    ], dtype=np.float64)
+    faces = np.array([
+        [0, 2, 1], [0, 3, 2],          # -z
+        [4, 5, 6], [4, 6, 7],          # +z
+        [0, 1, 5], [0, 5, 4],          # -y
+        [3, 7, 6], [3, 6, 2],          # +y
+        [0, 4, 7], [0, 7, 3],          # -x
+        [1, 2, 6], [1, 6, 5],          # +x
+    ], dtype=np.int64)
+    return vertices, faces
+
+
+def _resolve_payload_file(request_dir: Path, name: Any) -> Path:
+    """Payload names are plain sibling file names -- never paths."""
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"payload file name must be a non-empty string: {name!r}")
+    if name != Path(name).name or name in (".", "..") or ".." in name \
+            or "/" in name or "\\" in name or Path(name).is_absolute():
+        raise ValueError(
+            f"payload file {name!r} must be a plain name beside request.json")
+    resolved = (Path(request_dir) / name).resolve()
+    if resolved.parent != Path(request_dir).resolve():
+        raise ValueError(f"payload file {name!r} escapes the request directory")
+    if not resolved.is_file():
+        raise ValueError(f"payload file {name!r} does not exist in {request_dir}")
+    return resolved
+
+
+def _read_payload_blob(request_dir: Path, name: Any, expect_bytes: int,
+                       expect_sha: Any, what: str) -> bytes:
+    path = _resolve_payload_file(request_dir, name)
+    blob = path.read_bytes()
+    if len(blob) != expect_bytes:
+        raise ValueError(
+            f"{what} payload size {len(blob)} != declared {expect_bytes} bytes "
+            f"({name})")
+    actual = sha256_bytes(blob)
+    if actual != hex64(str(expect_sha), f"{what}Sha256"):
+        raise ValueError(f"{what} payload hash mismatch for {name}: {actual}")
+    return blob
+
+
+def load_mesh_payload(request_dir: Path, entry: dict[str, Any]) -> MeshArrayInput:
+    """Inner-side loader: verify bytes, revalidate, apply the transform ONCE.
+
+    The returned mesh is already expressed in the common grid-local metre
+    basis, so its transform is the identity: nothing downstream may apply
+    `sourceToGridM` a second time.
+    """
+    if entry.get("kind") != "array-payload":
+        raise ValueError(f"not an array payload entry: {entry.get('kind')!r}")
+    vertex_count = int(entry["vertexCount"])
+    triangle_count = int(entry["triangleCount"])
+    if vertex_count <= 0 or triangle_count <= 0:
+        raise ValueError(
+            f"payload counts must be positive: {vertex_count}, {triangle_count}")
+    vertices_blob = _read_payload_blob(
+        request_dir, entry["verticesFile"], 8 * 3 * vertex_count,
+        entry["verticesSha256"], "vertices")
+    triangles_blob = _read_payload_blob(
+        request_dir, entry["trianglesFile"], 4 * 3 * triangle_count,
+        entry["trianglesSha256"], "triangles")
+    vertices = np.frombuffer(vertices_blob, dtype="<f8").reshape(vertex_count, 3)
+    triangles = np.frombuffer(triangles_blob, dtype="<u4").reshape(triangle_count, 3)
+    canonical = canonicalize_mesh_array(MeshArrayInput(
+        label=str(entry["label"]),
+        vertices_m=vertices,
+        triangles=triangles,
+        source_sha256=str(entry["sourceSha256"]),
+        source_to_grid_m=tuple(tuple(float(v) for v in row)
+                               for row in entry["sourceToGridM"]),
+    ))
+    declared = hex64(str(entry["payloadSha256"]), "payloadSha256")
+    actual = mesh_payload_hash(canonical)
+    if actual != declared:
+        raise ValueError(
+            f"payload hash mismatch for {canonical.label!r}: {actual} != {declared}")
+    matrix = np.asarray(canonical.source_to_grid_m, dtype=np.float64)
+    placed = canonical.vertices_m @ matrix[:3, :3].T + matrix[:3, 3]
+    return canonicalize_mesh_array(dataclasses.replace(
+        canonical, vertices_m=placed, source_to_grid_m=IDENTITY_4X4))
+
+
+def check_route_agreement(requested: str, payload: dict[str, Any]) -> str:
+    """A route is always explicit: the inner result must be the one asked for."""
+    route = SdfGridRoute.check(payload["dense"]["route"])
+    if route != SdfGridRoute.check(requested):
+        raise RuntimeError(
+            f"route drift: requested {requested}, inner returned {route}")
+    return route
+
+
+def adapter_operation_hash(operation: str,
+                           descriptors: Sequence[MeshPayloadDescriptor],
+                           route: str, spec: SdfGridSpec) -> str:
+    """Identity of one array-backed bake: operation, operands, route, lattice."""
+    return sha256_text(canonical_json({
+        "operation": operation,
+        "route": SdfGridRoute.check(route),
+        "payloadSha256": [d.payload_sha256 for d in descriptors],
+        "grid": grid_to_json(spec),
+    }))
+
+
 # ===========================================================================
 # Analytic fixtures (shared by outer requests and their reference distances)
 # ===========================================================================
@@ -850,22 +975,27 @@ def _inverse_rot_z(x: float, y: float, a: float) -> tuple[float, float]:
 # Outer -> inner process boundary
 # ===========================================================================
 
+def grid_to_json(spec: SdfGridSpec) -> dict[str, Any]:
+    """The canonical grid block shared by analytic and array-backed requests."""
+    return {
+        "voxelSizeM": spec.voxel_size_m,
+        "bandWidth": spec.band_width,
+        "gridName": spec.grid_name,
+        "threshold": spec.threshold,
+        "adaptivity": spec.adaptivity,
+        "interpolation": spec.interpolation,
+        "boundsMinM": list(spec.bounds_min_m),
+        "boundsMaxM": list(spec.bounds_max_m),
+        "dimensions": list(spec.dimensions),
+    }
+
+
 def request_to_json(request: SdfGridRequest) -> dict[str, Any]:
     return {
         "mode": "bake",
         "operation": request.operation,
         "route": SdfGridRoute.check(request.route),
-        "grid": {
-            "voxelSizeM": request.spec.voxel_size_m,
-            "bandWidth": request.spec.band_width,
-            "gridName": request.spec.grid_name,
-            "threshold": request.spec.threshold,
-            "adaptivity": request.spec.adaptivity,
-            "interpolation": request.spec.interpolation,
-            "boundsMinM": list(request.spec.bounds_min_m),
-            "boundsMaxM": list(request.spec.bounds_max_m),
-            "dimensions": list(request.spec.dimensions),
-        },
+        "grid": grid_to_json(request.spec),
         "meshes": [{
             "kind": m.kind,
             "size": m.size,
@@ -875,28 +1005,32 @@ def request_to_json(request: SdfGridRequest) -> dict[str, Any]:
     }
 
 
-def run_blender_sdf(request: SdfGridRequest, *,
-                    diagnostics: dict[str, Any] | None = None,
-                    keep_tmp: bool = True) -> DenseSdfResult:
-    """Launch headless Blender on this file and convert the result.
+def _run_blender_pipeline(request_json: dict[str, Any], *,
+                          tmp: Path,
+                          route: str,
+                          spec: SdfGridSpec,
+                          source_sha: str,
+                          blender_bin: str | None,
+                          diagnostics: dict[str, Any] | None,
+                          keep_tmp: bool) -> DenseSdfResult:
+    """Write the canonical request, run headless Blender, convert the result.
 
-    Temporary .blend/.vdb/.bin/.ply intermediates live in a mkdtemp directory
-    outside git. The inner process receives and produces canonical JSON only.
+    The single outer runner shared by analytic (`MeshInput`) and array-backed
+    (`MeshArrayInput`) requests. It NEVER catches a Route A failure and retries
+    Route B: callers ask for a route explicitly and get that route or an error.
     """
-    blender = blender_executable(request.blender_bin)
-    tmp = Path(tempfile.mkdtemp(prefix="blud-blender-sdf-"))
+    blender = blender_executable(blender_bin)
     req_path = (tmp / "request.json").resolve()
     res_path = (tmp / "result.json").resolve()
-    req_text = canonical_json(request_to_json(request))
-    req_path.write_text(req_text)
-    source_sha = sha256_text(req_text)
-    contract = build_node_contract(request.spec)
+    req_path.write_text(canonical_json(request_json))
+    contract = build_node_contract(spec)
     contract_sha = sha256_text(canonical_json(contract))
     cmd = [blender, "--background", "--factory-startup",
            "--python", str(Path(__file__).resolve()), "--",
            "--blender-inner", str(req_path), str(res_path)]
     t0 = time.monotonic()
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    proc = subprocess.run(cmd, capture_output=True, text=True,
+                          timeout=BLENDER_TIMEOUT_S)
     blender_s = time.monotonic() - t0
     if not res_path.exists():
         tail = (proc.stderr or proc.stdout or "")[-4000:]
@@ -908,7 +1042,6 @@ def run_blender_sdf(request: SdfGridRequest, *,
         raise RuntimeError(
             f"inner Blender run failed: {payload.get('error', '?')}\ntmp={tmp}")
     if diagnostics is not None:
-        diagnostics.clear()
         diagnostics.update({
             "blenderVersion": payload.get("blenderVersion"),
             "blenderCommand": cmd,
@@ -919,15 +1052,12 @@ def run_blender_sdf(request: SdfGridRequest, *,
             "nodes": payload.get("nodes", {}),
             "inner": payload,
         })
-    route = SdfGridRoute.check(payload["dense"]["route"])
-    if route != request.route:
-        raise RuntimeError(
-            f"route drift: requested {request.route}, inner returned {route}")
+    resolved = check_route_agreement(route, payload)
     dims = tuple(int(v) for v in payload["dense"]["dimensions"])
     lo = tuple(float(v) for v in payload["dense"]["boundsMinM"])
     hi = tuple(float(v) for v in payload["dense"]["boundsMaxM"])
     voxel = tuple((b - a) / (n - 1) for a, b, n in zip(lo, hi, dims))
-    if route == SdfGridRoute.DIRECT_VDB:
+    if resolved == SdfGridRoute.DIRECT_VDB:
         values_path = Path(payload["dense"]["valuesPath"])
         blob = values_path.read_bytes()
         if len(blob) != 4 * int(np.prod(dims)):
@@ -950,9 +1080,127 @@ def run_blender_sdf(request: SdfGridRequest, *,
         if diagnostics is not None:
             diagnostics["tmpDir"] = None
     return DenseSdfResult(
-        route=route, dimensions=dims, bounds_min_m=lo, bounds_max_m=hi,
+        route=resolved, dimensions=dims, bounds_min_m=lo, bounds_max_m=hi,
         voxel_size_m=voxel, values_f32=values,
         source_sha256=source_sha, node_contract_sha256=contract_sha)
+
+
+def run_blender_sdf(request: SdfGridRequest, *,
+                    diagnostics: dict[str, Any] | None = None,
+                    keep_tmp: bool = True) -> DenseSdfResult:
+    """Launch headless Blender on an analytic request and convert the result.
+
+    Temporary .blend/.vdb/.bin/.ply intermediates live in a mkdtemp directory
+    outside git. The inner process receives and produces canonical JSON only.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="blud-blender-sdf-"))
+    request_json = request_to_json(request)
+    source_sha = sha256_text(canonical_json(request_json))
+    if diagnostics is not None:
+        diagnostics.clear()
+    return _run_blender_pipeline(
+        request_json, tmp=tmp, route=request.route, spec=request.spec,
+        source_sha=source_sha, blender_bin=request.blender_bin,
+        diagnostics=diagnostics, keep_tmp=keep_tmp)
+
+
+# ---------------------------------------------------------------------------
+# Public array-mesh adapters (the only supported way to bake caller geometry)
+# ---------------------------------------------------------------------------
+
+_ADAPTER_ARITY = {
+    "union": (2, MAX_MESHES, "union requires at least two meshes"),
+    "intersection": (2, 2, "intersection requires exactly two meshes"),
+}
+
+
+def _bake_mesh_arrays(*, operation: str,
+                      meshes: tuple[MeshArrayInput, ...],
+                      spec: SdfGridSpec,
+                      route: str,
+                      blender_bin: str | None,
+                      keep_tmp: bool,
+                      diagnostics: dict[str, Any] | None) -> DenseSdfResult:
+    """Canonicalize, freeze payload bytes, and fold OpenVDB level sets."""
+    SdfGridRoute.check(route)
+    canonical = validate_adapter_request(meshes, spec)
+    low, high, message = _ADAPTER_ARITY[operation]
+    if not low <= len(canonical) <= high:
+        raise ValueError(f"{message}; got {len(canonical)}")
+
+    topology = [closed_mesh_info(m.vertices_m, m.triangles.astype(np.int64))
+                for m in canonical]
+    tmp = Path(tempfile.mkdtemp(prefix="blud-blender-sdf-adapter-"))
+    descriptors = write_mesh_payloads(tmp, canonical)
+    request_json = {
+        "mode": "bake",
+        "operation": operation,
+        "route": route,
+        "grid": grid_to_json(spec),
+        "meshes": [descriptor_to_json(d) for d in descriptors],
+    }
+    source_sha = adapter_operation_hash(operation, descriptors, route, spec)
+    if diagnostics is not None:
+        diagnostics.clear()
+        diagnostics.update({
+            "operation": operation,
+            "selectedRoute": route,
+            "operationSourceSha256": source_sha,
+            "payloads": [descriptor_to_json(d) for d in descriptors],
+            "topology": [{"label": m.label, **info}
+                         for m, info in zip(canonical, topology)],
+            "resources": {
+                "meshCount": len(canonical),
+                "vertexCounts": [int(m.vertices_m.shape[0]) for m in canonical],
+                "triangleCounts": [int(m.triangles.shape[0]) for m in canonical],
+                "denseVoxels": int(np.prod(spec.dimensions)),
+                "limits": {
+                    "maxMeshes": MAX_MESHES,
+                    "maxVerticesPerMesh": MAX_VERTICES_PER_MESH,
+                    "maxTrianglesPerMesh": MAX_TRIANGLES_PER_MESH,
+                    "maxDenseVoxels": MAX_DENSE_VOXELS,
+                    "blenderTimeoutS": BLENDER_TIMEOUT_S,
+                },
+            },
+            "tmpDirPolicy": "tempfile.mkdtemp outside git",
+        })
+    return _run_blender_pipeline(
+        request_json, tmp=tmp, route=route, spec=spec, source_sha=source_sha,
+        blender_bin=blender_bin, diagnostics=diagnostics, keep_tmp=keep_tmp)
+
+
+def bake_mesh_union_to_dense(
+    meshes: Sequence[MeshArrayInput],
+    spec: SdfGridSpec,
+    *,
+    route: str = SdfGridRoute.DIRECT_VDB,
+    blender_bin: str | None = None,
+    keep_tmp: bool = False,
+    diagnostics: dict[str, Any] | None = None,
+) -> DenseSdfResult:
+    """Union 2..MAX_MESHES array meshes with an explicit OpenVDB min fold."""
+    return _bake_mesh_arrays(
+        operation="union", meshes=tuple(meshes), spec=spec, route=route,
+        blender_bin=blender_bin, keep_tmp=keep_tmp, diagnostics=diagnostics,
+    )
+
+
+def bake_mesh_intersection_to_dense(
+    source: MeshArrayInput,
+    support: MeshArrayInput,
+    spec: SdfGridSpec,
+    *,
+    route: str = SdfGridRoute.DIRECT_VDB,
+    blender_bin: str | None = None,
+    keep_tmp: bool = False,
+    diagnostics: dict[str, Any] | None = None,
+) -> DenseSdfResult:
+    """Clip `source` by a CLOSED `support` volume with an OpenVDB max fold."""
+    return _bake_mesh_arrays(
+        operation="intersection", meshes=(source, support), spec=spec,
+        route=route, blender_bin=blender_bin, keep_tmp=keep_tmp,
+        diagnostics=diagnostics,
+    )
 
 
 def run_analytic_fixture(shape: str, *,
@@ -1203,8 +1451,36 @@ def _bl_determinize_mesh(obj) -> None:
     bpy.data.meshes.remove(me)
 
 
-def _bl_add_mesh(mesh: dict[str, Any], index: int):
+def _bl_add_array_mesh(entry: dict[str, Any], index: int, out_dir: Path):
+    """Rebuild one caller-supplied array mesh as a conventional Blender mesh.
+
+    Every array source stays its OWN object (and therefore its own level set):
+    joining overlapping soups keeps their internal faces, which is not a union.
+    The transform has already been applied exactly once by load_mesh_payload,
+    so the object is created at the identity and never moved again.
+    """
     import bpy
+    mesh = load_mesh_payload(out_dir, entry)
+    name = f"blud_sdf_src_{index}"
+    data = bpy.data.meshes.new(name + ".payload")
+    data.from_pydata([tuple(float(c) for c in v) for v in mesh.vertices_m], [],
+                     [[int(i) for i in f] for f in mesh.triangles])
+    if data.validate():
+        raise RuntimeError(
+            f"array payload {mesh.label!r} needed Blender corrections (validate)")
+    obj = bpy.data.objects.new(name, data)
+    bpy.context.collection.objects.link(obj)
+    _bl_determinize_mesh(obj)
+    return obj
+
+
+def _bl_add_mesh(mesh: dict[str, Any], index: int, out_dir: Path | None = None):
+    """Analytic primitive or caller-supplied array payload, by tagged kind."""
+    import bpy
+    if mesh.get("kind") == "array-payload":
+        if out_dir is None:
+            raise RuntimeError("array payloads need the request directory")
+        return _bl_add_array_mesh(mesh, index, out_dir)
     name = f"blud_sdf_src_{index}"
     loc = tuple(float(v) for v in mesh["location"])
     rot = tuple(float(v) for v in mesh["rotationEuler"])
@@ -1346,8 +1622,8 @@ def _bl_bake_vdb(obj, mod, out_dir: Path, grid_name: str) -> Path:
     return Path(vdbs[0])
 
 
-def _bl_bake_two_grids(request, objs, out_dir: Path) -> Path:
-    """Union/intersection: bake each grid separately, then combine.
+def _bl_bake_grids(request, objs, out_dir: Path) -> tuple[Path, list]:
+    """Union/intersection: bake each grid separately, then fold 1..N of them.
 
     Each mesh gets its OWN tree (Object Info -> Mesh to SDF Grid -> Store
     Named Grid -> Bake) because linking a grid socket across node trees is
@@ -1359,6 +1635,13 @@ def _bl_bake_two_grids(request, objs, out_dir: Path) -> Path:
     import bpy
     import openvdb
     grid = request["grid"]
+    operation = request["operation"]
+    if operation == "union" and len(objs) < 2:
+        raise RuntimeError(f"union needs at least two meshes, got {len(objs)}")
+    if operation == "intersection" and len(objs) != 2:
+        raise RuntimeError(f"intersection needs exactly two meshes, got {len(objs)}")
+    if not 1 <= len(objs) <= MAX_MESHES:
+        raise RuntimeError(f"mesh count {len(objs)} outside 1..{MAX_MESHES}")
     baked = []
     for i, obj in enumerate(objs):
         sub = out_dir / f"grid_{i}"
@@ -1393,14 +1676,19 @@ def _bl_bake_two_grids(request, objs, out_dir: Path) -> Path:
         bpy.context.view_layer.update()
         vdb_path = _bl_bake_vdb(c, mod_i, sub, grid["gridName"])
         baked.append(openvdb.read(str(vdb_path), f"{grid['gridName']}_{i}"))
+    # Component diagnostics are captured BEFORE the fold: combine() consumes
+    # its operand, so a reordered or omitted grid must be visible here.
+    components = [{"index": i, "gridName": f"{grid['gridName']}_{i}",
+                   **_bl_grid_diagnostics(g)}
+                  for i, g in enumerate(baked)]
     op = min if request["operation"] == "union" else max
-    g0 = baked[0]
-    g1 = baked[1]
-    g0.combine(g1, op)
-    g0.name = grid["gridName"]
+    result = baked[0]
+    for nxt in baked[1:]:
+        result.combine(nxt, op)
+    result.name = grid["gridName"]
     combined_path = out_dir / "combined.vdb"
-    openvdb.write(str(combined_path), g0)
-    return combined_path
+    openvdb.write(str(combined_path), result)
+    return combined_path, components
 
 
 def _bl_grid_diagnostics(g, vdb_path: Path | None = None) -> dict[str, Any]:
@@ -1481,6 +1769,8 @@ def _bl_route_b(request: dict[str, Any], objs, out_dir: Path) -> dict[str, Any]:
     import bpy
     t0 = time.monotonic()
     if request["operation"] == "single":
+        if len(objs) != 1:
+            raise RuntimeError(f"single needs exactly one mesh, got {len(objs)}")
         consumer = _bl_consumer()
         ng, n_in, n_out, final, infos, grids = _bl_build_tree(request, objs)
         links = ng.links
@@ -1495,7 +1785,7 @@ def _bl_route_b(request: dict[str, Any], objs, out_dir: Path) -> dict[str, Any]:
         # union/intersection: compose the two grids first (combine min/max),
         # then re-import the combined level set as a volume object and mesh
         # THAT through Get Named Grid -> Grid to Mesh in a fresh graph.
-        combined_path = _bl_bake_two_grids(request, objs, out_dir)
+        combined_path, _components = _bl_bake_grids(request, objs, out_dir)
         bpy.ops.object.volume_import(filepath=str(combined_path))
         vol_obj = bpy.context.object
         vol_obj.name = "blud_sdf_combined_volume"
@@ -1575,7 +1865,7 @@ def _bl_route_a(request: dict[str, Any], objs, out_dir: Path) -> dict[str, Any]:
     else:
         # union/intersection: bake both named grids, compose with combine
         t0 = time.monotonic()
-        combined_path = _bl_bake_two_grids(request, objs, out_dir)
+        combined_path, components = _bl_bake_grids(request, objs, out_dir)
         g = openvdb.read(str(combined_path), grid["gridName"])
         method = ("openvdb-combine-min" if request["operation"] == "union"
                   else "openvdb-combine-max")
@@ -1589,6 +1879,8 @@ def _bl_route_a(request: dict[str, Any], objs, out_dir: Path) -> dict[str, Any]:
                           "the node contract and qualification capabilities.",
                 "sourceGrids": [f"{grid['gridName']}_{i}"
                                 for i in range(len(objs))],
+                "foldOrder": "stable request order, left to right",
+                "componentGrids": components,
             },
         }
     t_bake = time.monotonic() - t0
@@ -1613,7 +1905,7 @@ def _inner_run(request: dict[str, Any], payload: dict[str, Any]) -> dict[str, An
     if mode == "capabilities":
         payload.update(_bl_capabilities(out_dir))
         return payload
-    objs = [_bl_add_mesh(m, i) for i, m in enumerate(request["meshes"])]
+    objs = [_bl_add_mesh(m, i, out_dir) for i, m in enumerate(request["meshes"])]
     route = SdfGridRoute.check(request["route"])
     if route == SdfGridRoute.DIRECT_VDB:
         payload["routeA"] = _bl_route_a(request, objs, out_dir)
@@ -1756,7 +2048,7 @@ def _bl_capabilities(out_dir: Path) -> dict[str, Any]:
         spec=spec, meshes=FIXTURES["cube-large"].meshes, operation="single",
         route=SdfGridRoute.DIRECT_VDB))
     _bl_new_scene()
-    objs = [_bl_add_mesh(m, i) for i, m in enumerate(request["meshes"])]
+    objs = [_bl_add_mesh(m, i, out_dir) for i, m in enumerate(request["meshes"])]
     (out_dir / "route_a").mkdir(parents=True, exist_ok=True)
     route_a = _bl_route_a(request, objs, out_dir / "route_a")
     result["routeA"] = {
@@ -1766,7 +2058,7 @@ def _bl_capabilities(out_dir: Path) -> dict[str, Any]:
     }
     # -- Sample Grid direct field evaluation (capability evidence).
     _bl_new_scene()
-    objs = [_bl_add_mesh(m, i) for i, m in enumerate(request["meshes"])]
+    objs = [_bl_add_mesh(m, i, out_dir) for i, m in enumerate(request["meshes"])]
     consumer = _bl_consumer()
     ng2, n_in2, n_out2, final2, infos2, _grids2 = _bl_build_tree(request, objs)
     probe = _bl_sample_grid_probe(final2)
@@ -1783,7 +2075,7 @@ def _bl_capabilities(out_dir: Path) -> dict[str, Any]:
     result["sdfGridBoolean"] = _bl_boolean_evidence()
     # -- Route B smoke on the same grid.
     _bl_new_scene()
-    objs = [_bl_add_mesh(m, i) for i, m in enumerate(request["meshes"])]
+    objs = [_bl_add_mesh(m, i, out_dir) for i, m in enumerate(request["meshes"])]
     request_b = dict(request, route=SdfGridRoute.GRID_TO_MESH_LIBIGL)
     (out_dir / "route_b").mkdir(parents=True, exist_ok=True)
     result["routeB"] = {

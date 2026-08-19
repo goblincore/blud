@@ -680,5 +680,240 @@ class MeshArrayContractTest(unittest.TestCase):
                         Path(tmp), (SDF.canonicalize_mesh_array(mesh),))
 
 
+# ===========================================================================
+# Task 2 (adapters continuation): array meshes through the Blender/OpenVDB core
+# ===========================================================================
+
+def box_arrays(minimum, maximum) -> tuple[np.ndarray, np.ndarray]:
+    """Closed, outward-wound axis-aligned box: 8 vertices, 12 triangles."""
+    return SDF.closed_box_mesh(minimum, maximum)
+
+
+def box_input(label: str, minimum, maximum, source_byte: str = "11",
+              transform=None):
+    vertices, triangles = box_arrays(minimum, maximum)
+    return SDF.MeshArrayInput(
+        label=label, vertices_m=vertices, triangles=triangles,
+        source_sha256=source_byte * 32,
+        source_to_grid_m=transform or SDF.IDENTITY_4X4)
+
+
+def three_overlapping_boxes():
+    """Three 0.1 m boxes overlapping along x; their union is one component."""
+    return (
+        box_input("box-a", (-0.08, -0.05, -0.05), (0.02, 0.05, 0.05), "11"),
+        box_input("box-b", (-0.05, -0.05, -0.05), (0.05, 0.05, 0.05), "22"),
+        box_input("box-c", (-0.02, -0.05, -0.05), (0.08, 0.05, 0.05), "33"),
+    )
+
+
+def overlapping_closed_cubes_as_arrays():
+    """source x in [-0.05, 0.05]; support x in [-0.02, 0.08]."""
+    return (
+        box_input("source-cube", (-0.05, -0.05, -0.05), (0.05, 0.05, 0.05), "44"),
+        box_input("support-cube", (-0.02, -0.05, -0.05), (0.08, 0.05, 0.05), "55"),
+    )
+
+
+def adapter_spec(minimum, maximum, voxel_size_m: float = 0.01):
+    dims = tuple(int(round((b - a) / voxel_size_m)) + 1
+                 for a, b in zip(minimum, maximum))
+    return SDF.SdfGridSpec(
+        voxel_size_m=voxel_size_m, band_width=SDF.DEFAULT_BAND_WIDTH,
+        bounds_min_m=tuple(float(v) for v in minimum),
+        bounds_max_m=tuple(float(v) for v in maximum),
+        dimensions=dims)
+
+
+def union_fixture_spec():
+    return adapter_spec((-0.12, -0.09, -0.09), (0.12, 0.09, 0.09))
+
+
+def intersect_fixture_spec():
+    return adapter_spec((-0.12, -0.12, -0.12), (0.12, 0.12, 0.12))
+
+
+def write_tetra_payload(tmp: Path):
+    meshes = SDF.validate_adapter_request(
+        (canonical_tetra_input(),), SDF.fixture_spec("cube"))
+    return SDF.write_mesh_payloads(tmp, meshes)[0]
+
+
+ROT_Z_90 = (
+    (0.0, -1.0, 0.0, 0.02),
+    (1.0, 0.0, 0.0, -0.01),
+    (0.0, 0.0, 1.0, 0.03),
+    (0.0, 0.0, 0.0, 1.0),
+)
+
+
+class MeshArrayLoaderTest(unittest.TestCase):
+    """Pure gates on the inner payload loader and the route guard."""
+
+    def test_inner_loader_round_trips_geometry_and_applies_the_transform_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            descriptor = write_tetra_payload(Path(tmp))
+            loaded = SDF.load_mesh_payload(
+                Path(tmp), SDF.descriptor_to_json(descriptor))
+            vertices, triangles = tetrahedron_arrays()
+            np.testing.assert_array_equal(loaded.vertices_m, vertices)
+            np.testing.assert_array_equal(loaded.triangles, triangles)
+            self.assertEqual(loaded.source_to_grid_m, SDF.IDENTITY_4X4)
+
+            moved = dataclasses.replace(canonical_tetra_input(),
+                                        source_to_grid_m=ROT_Z_90)
+            descriptor_b = SDF.write_mesh_payloads(
+                Path(tmp), (SDF.canonicalize_mesh_array(moved),))[0]
+            loaded_b = SDF.load_mesh_payload(
+                Path(tmp), SDF.descriptor_to_json(descriptor_b))
+            matrix = np.asarray(ROT_Z_90, dtype=np.float64)
+            expected = vertices @ matrix[:3, :3].T + matrix[:3, 3]
+            np.testing.assert_array_equal(loaded_b.vertices_m, expected)
+
+    def test_inner_loader_rejects_truncated_or_hash_changed_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            descriptor = write_tetra_payload(Path(tmp))
+            entry = SDF.descriptor_to_json(descriptor)
+            Path(tmp, descriptor.vertices_file).write_bytes(b"short")
+            with self.assertRaisesRegex(ValueError, "vertices.*(size|hash)"):
+                SDF.load_mesh_payload(Path(tmp), entry)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            descriptor = write_tetra_payload(Path(tmp))
+            entry = SDF.descriptor_to_json(descriptor)
+            blob = bytearray(Path(tmp, descriptor.triangles_file).read_bytes())
+            blob[0] ^= 0x01
+            Path(tmp, descriptor.triangles_file).write_bytes(bytes(blob))
+            with self.assertRaisesRegex(ValueError, "triangles.*(size|hash)"):
+                SDF.load_mesh_payload(Path(tmp), entry)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            descriptor = write_tetra_payload(Path(tmp))
+            entry = SDF.descriptor_to_json(descriptor)
+            entry["payloadSha256"] = "ff" * 32
+            with self.assertRaisesRegex(ValueError, "payload hash"):
+                SDF.load_mesh_payload(Path(tmp), entry)
+
+    def test_inner_loader_rejects_absolute_and_traversal_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            descriptor = write_tetra_payload(Path(tmp))
+            for bad in ("/etc/passwd", "../mesh-000.vertices.f64le",
+                        "sub/mesh-000.vertices.f64le"):
+                entry = SDF.descriptor_to_json(descriptor)
+                entry["verticesFile"] = bad
+                with self.subTest(path=bad), \
+                        self.assertRaisesRegex(ValueError, "payload file"):
+                    SDF.load_mesh_payload(Path(tmp), entry)
+
+    def test_adapter_never_silently_changes_route(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "route drift"):
+            SDF.check_route_agreement(
+                SDF.SdfGridRoute.DIRECT_VDB,
+                {"dense": {"route": SDF.SdfGridRoute.GRID_TO_MESH_LIBIGL}})
+        self.assertEqual(
+            SDF.check_route_agreement(SDF.SdfGridRoute.DIRECT_VDB,
+                                      {"dense": {"route": "direct-vdb"}}),
+            "direct-vdb")
+
+    def test_operation_arity_is_enforced_before_blender(self) -> None:
+        source, support = overlapping_closed_cubes_as_arrays()
+        with self.assertRaisesRegex(ValueError, "union requires"):
+            SDF.bake_mesh_union_to_dense((source,), union_fixture_spec())
+        with self.assertRaisesRegex(ValueError, "mesh count"):
+            SDF.bake_mesh_union_to_dense(
+                tuple(source for _ in range(SDF.MAX_MESHES + 1)),
+                union_fixture_spec())
+
+    def test_closed_box_mesh_is_closed_and_right_handed(self) -> None:
+        vertices, faces = SDF.closed_box_mesh((-1.0, -2.0, -3.0), (1.0, 2.0, 3.0))
+        self.assertEqual(vertices.shape, (8, 3))
+        self.assertEqual(faces.shape, (12, 3))
+        info = SDF.closed_mesh_info(vertices, faces.astype(np.int64))
+        self.assertTrue(info["closed"])
+        self.assertEqual(info["boundaryEdges"], 0)
+        self.assertEqual(info["components"], 1)
+        # outward winding => positive signed volume via the divergence theorem
+        a = vertices[faces[:, 0]]
+        b = vertices[faces[:, 1]]
+        c = vertices[faces[:, 2]]
+        volume = float(np.einsum("ij,ij->i", a, np.cross(b, c)).sum() / 6.0)
+        self.assertAlmostEqual(volume, 2.0 * 4.0 * 6.0, places=9)
+        with self.assertRaisesRegex(ValueError, "bounds"):
+            SDF.closed_box_mesh((0.0, 0.0, 0.0), (0.0, 1.0, 1.0))
+
+
+@unittest.skipIf(BLENDER_BIN is None, "no blender on PATH")
+class MeshArrayAdapterTest(unittest.TestCase):
+    """Real headless bakes of caller-supplied array meshes."""
+
+    def test_union_of_three_array_meshes_is_deterministic(self) -> None:
+        meshes = three_overlapping_boxes()
+        a = SDF.bake_mesh_union_to_dense(meshes, union_fixture_spec())
+        b = SDF.bake_mesh_union_to_dense(meshes, union_fixture_spec())
+        self.assertEqual(a.route, SDF.SdfGridRoute.DIRECT_VDB)
+        self.assertEqual(a.source_sha256, b.source_sha256)
+        self.assertEqual(a.values_f32.tobytes(), b.values_f32.tobytes())
+        self.assertEqual(SDF.encode_r16f_bytes(a), SDF.encode_r16f_bytes(b))
+        self.assertEqual(SDF.canonical_json(SDF.result_metrics(a)),
+                         SDF.canonical_json(SDF.result_metrics(b)))
+        SDF.validate_dense_sdf(a)
+        self.assertLess(a.sample((0.0, 0.0, 0.0)), 0.0)
+        self.assertLess(a.sample((-0.07, 0.0, 0.0)), 0.0)
+        self.assertLess(a.sample((0.07, 0.0, 0.0)), 0.0)
+        self.assertGreater(a.sample((0.0, 0.08, 0.0)), 0.0)
+        self.assertEqual(SDF.count_negative_components(a), 1)
+
+    def test_intersection_uses_max_and_preserves_input_arrays(self) -> None:
+        source, support = overlapping_closed_cubes_as_arrays()
+        before = tuple(x.copy() for x in (
+            source.vertices_m, source.triangles,
+            support.vertices_m, support.triangles))
+        result = SDF.bake_mesh_intersection_to_dense(
+            source, support, intersect_fixture_spec())
+        SDF.validate_dense_sdf(result)
+        self.assertLess(result.sample((0.0, 0.0, 0.0)), 0.0)
+        self.assertGreater(result.sample((0.07, 0.0, 0.0)), 0.0)
+        self.assertGreater(result.sample((-0.04, 0.0, 0.0)), 0.0)
+        for actual, expected in zip(
+                (source.vertices_m, source.triangles,
+                 support.vertices_m, support.triangles), before):
+            np.testing.assert_array_equal(actual, expected)
+
+    def test_transformed_input_matches_pretransformed_input(self) -> None:
+        vertices, triangles = box_arrays((-0.05, -0.05, -0.05),
+                                         (0.05, 0.05, 0.05))
+        matrix = np.asarray(ROT_Z_90, dtype=np.float64)
+        moved = SDF.MeshArrayInput(
+            label="box", vertices_m=vertices, triangles=triangles,
+            source_sha256="66" * 32, source_to_grid_m=ROT_Z_90)
+        baked_in = SDF.MeshArrayInput(
+            label="box", vertices_m=vertices @ matrix[:3, :3].T + matrix[:3, 3],
+            triangles=triangles, source_sha256="66" * 32,
+            source_to_grid_m=SDF.IDENTITY_4X4)
+        support = box_input("support", (-0.20, -0.20, -0.20),
+                            (0.20, 0.20, 0.20), "77")
+        spec = intersect_fixture_spec()
+        a = SDF.bake_mesh_intersection_to_dense(moved, support, spec)
+        b = SDF.bake_mesh_intersection_to_dense(baked_in, support, spec)
+        self.assertEqual(a.values_f32.tobytes(), b.values_f32.tobytes())
+        self.assertEqual(SDF.encode_r16f_bytes(a), SDF.encode_r16f_bytes(b))
+
+    def test_diagnostics_record_payloads_route_and_component_grids(self) -> None:
+        diagnostics: dict = {}
+        SDF.bake_mesh_union_to_dense(
+            three_overlapping_boxes(), union_fixture_spec(),
+            diagnostics=diagnostics, keep_tmp=False)
+        self.assertEqual(len(diagnostics["payloads"]), 3)
+        self.assertEqual(len(diagnostics["operationSourceSha256"]), 64)
+        self.assertEqual(diagnostics["selectedRoute"], "direct-vdb")
+        self.assertEqual(diagnostics["operation"], "union")
+        self.assertEqual(diagnostics["resources"]["meshCount"], 3)
+        self.assertEqual(len(diagnostics["topology"]), 3)
+        self.assertTrue(all(t["closed"] for t in diagnostics["topology"]))
+        self.assertIsNone(diagnostics["tmpDir"])
+        component = diagnostics["routeA"]["composition"]["componentGrids"]
+        self.assertEqual(len(component), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
