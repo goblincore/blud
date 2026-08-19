@@ -658,6 +658,21 @@ class ManifestMutationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             BAKE.validate_manifest(self._mutate(**{"bake.adaptivity": 1.0}))
 
+    def test_rejects_changed_band_width(self) -> None:
+        # The humanoid band is 16 voxels, NOT blender_sdf_grid's default of 6.
+        # It is a real bake parameter (it decides how far the field is a true
+        # distance before clamping, which the coarse targeting brick depends
+        # on), so a silent change to it must fail validation like any other.
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(self._mutate(**{"bake.bandWidth": 6}))
+
+    def test_band_width_is_the_humanoid_constant_not_the_grid_default(self) -> None:
+        SDF = BAKE._sdf_module()
+        self.assertEqual(BAKE.HUMANOID_BAND_WIDTH, 16)
+        self.assertNotEqual(BAKE.HUMANOID_BAND_WIDTH, SDF.DEFAULT_BAND_WIDTH)
+        self.assertEqual(self._real()["bake"]["bandWidth"],
+                         BAKE.HUMANOID_BAND_WIDTH)
+
     def test_rejects_changed_support_mesh_hash(self) -> None:
         m = self._real()
         if not m["bones"]:

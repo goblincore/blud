@@ -24,7 +24,7 @@
         15,
         16
       ],
-      "coarseSha256": "d0188be95a2b81ea0713c53aeb4e218c927e791982f7f6a6ef31d7bb42e556a8",
+      "coarseSha256": "cfd039a1a54a62c065e3ef4e844311882c25a0705f1e5d903bbd040bcf4eec3c",
       "dimensions": [
         80,
         77,
@@ -32,13 +32,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012918686494231224,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09600000083446503,
         "negativeFraction": 0.2762987012987013,
         "negatives": 139564,
         "positives": 365556,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.09600000083446503
       },
       "negativeComponents": 2,
       "pitchM": 0.006,
@@ -58,7 +58,7 @@
         16,
         10
       ],
-      "coarseSha256": "e07499d0898700ffcfb05af3f4a4f5fd018d4cd4869b0b017903aae139af3268",
+      "coarseSha256": "4c2d42479029b43b224e32ea293eecf7aa8a8eea278328df04abae81e151765d",
       "dimensions": [
         50,
         82,
@@ -66,13 +66,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013083882629871368,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09184741228818893,
         "negativeFraction": 0.23949041811846689,
         "negatives": 54987,
         "positives": 174613,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.09184741228818893
       },
       "negativeComponents": 3,
       "pitchM": 0.006,
@@ -92,7 +92,7 @@
         16,
         11
       ],
-      "coarseSha256": "aef07b67d5007a20517ebc40df9edf1c76bb8916b0627a3c55847b7c0ae2fe90",
+      "coarseSha256": "6b6e44e57df9b70c8b5242902e93a99365e3aac8679cceb3319b539a5b1e4fdc",
       "dimensions": [
         42,
         74,
@@ -100,13 +100,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013231179676949978,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07928336411714554,
         "negativeFraction": 0.19739078701342852,
         "negatives": 32515,
         "positives": 132209,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.07928336411714554
       },
       "negativeComponents": 2,
       "pitchM": 0.006,
@@ -126,7 +126,7 @@
         16,
         12
       ],
-      "coarseSha256": "03831d7547ef82783ea8c1d91b5ccf18bf3c5ce8853dd18c2513066ec818d9c5",
+      "coarseSha256": "b154c3ad2a647410afde36a149a82689d5406edcc32b2c4dc8697299b96629f0",
       "dimensions": [
         32,
         52,
@@ -134,13 +134,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013402815908193588,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.04832959175109863,
         "negativeFraction": 0.19102872287968442,
         "negatives": 12397,
         "positives": 52499,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.04832959175109863
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -160,7 +160,7 @@
         16,
         8
       ],
-      "coarseSha256": "ce7c26bb5d3fa08f9b12f07cd9d5da6ebb6f3076cb7f0b11fc6525def15adffd",
+      "coarseSha256": "112f0ad73d8c4c8f67c3a32c85e508f26af58dc41b33cda39491c7f5758da7c6",
       "dimensions": [
         32,
         35,
@@ -168,12 +168,12 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012126156128942966,
-        "max": 0.035999998450279236,
+        "max": 0.09600000083446503,
         "min": -0.019890891388058662,
         "negativeFraction": 0.1307043650793651,
         "negatives": 2635,
         "positives": 17525,
-        "valueMaxM": 0.035999998450279236,
+        "valueMaxM": 0.09600000083446503,
         "valueMinM": -0.019890891388058662
       },
       "negativeComponents": 1,
@@ -194,7 +194,7 @@
         16,
         12
       ],
-      "coarseSha256": "1e0ec666a7bf4cb774bd79af30c2bac965241c73fe86a009ecd5d971e7065136",
+      "coarseSha256": "871b126f2431bec6101711bf7f3f77c0455fc66cee882fdaf6a5cc249ec3f4c8",
       "dimensions": [
         42,
         82,
@@ -202,13 +202,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013252107426524162,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.08384721726179123,
         "negativeFraction": 0.23982420019005385,
         "negatives": 54513,
         "positives": 172791,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.08384721726179123
       },
       "negativeComponents": 4,
       "pitchM": 0.006,
@@ -228,7 +228,7 @@
         16,
         12
       ],
-      "coarseSha256": "c9753d0ff06fb31e6ae299836466c9a3ff790036386045ae9c98727cd014b2d4",
+      "coarseSha256": "b05aa88caea0cc6c9589f9bc8354f42ed0cd2abd4917f44c368b088c6a5b79f7",
       "dimensions": [
         48,
         79,
@@ -236,13 +236,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.014017045497894287,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07799292355775833,
         "negativeFraction": 0.14876714135021096,
         "negatives": 36104,
         "positives": 206584,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.07799292355775833
       },
       "negativeComponents": 12,
       "pitchM": 0.006,
@@ -262,7 +262,7 @@
         16,
         12
       ],
-      "coarseSha256": "a3c4eb52197238e525d304a8aa884fccdaef06fa03d9ef55f947af733c7f367c",
+      "coarseSha256": "a0a08e95ad72bc6d2ad668847b1e3ef1367677b424e6b26c179e1461240c3270",
       "dimensions": [
         32,
         51,
@@ -270,13 +270,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.014196958392858505,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.05163466930389404,
         "negativeFraction": 0.19298328305681248,
         "negatives": 12283,
         "positives": 51365,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.05163466930389404
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -296,7 +296,7 @@
         16,
         9
       ],
-      "coarseSha256": "806609978f70899e2bb0748a0b390fb47e9fb0cefaf92a83c92dc351b81cca85",
+      "coarseSha256": "abf0794bb0a88a390a129ec0476eb327138f390df07f9cd3c848eff0a6a83ee5",
       "dimensions": [
         35,
         35,
@@ -304,12 +304,12 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012815678492188454,
-        "max": 0.035999998450279236,
+        "max": 0.09600000083446503,
         "min": -0.029708830639719963,
         "negativeFraction": 0.16151020408163266,
         "negatives": 3957,
         "positives": 20543,
-        "valueMaxM": 0.035999998450279236,
+        "valueMaxM": 0.09600000083446503,
         "valueMinM": -0.029708830639719963
       },
       "negativeComponents": 1,
@@ -330,7 +330,7 @@
         4,
         12
       ],
-      "coarseSha256": "30a80c3fd0c135210c9a49727371f37b415485ca728e77b0c482438211fcfdce",
+      "coarseSha256": "4bd7283c1cff24614dd4a24bcdfebcaeff380434fcb2089836d68679b9956e21",
       "dimensions": [
         83,
         24,
@@ -338,13 +338,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012747175060212612,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.05325282737612724,
         "negativeFraction": 0.4571467688937568,
         "negatives": 60102,
         "positives": 71370,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.05325282737612724
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -364,7 +364,7 @@
         8,
         13
       ],
-      "coarseSha256": "05d84c719795c135294b4a0df8e9fc58b9d8e8df099e5690eb76ca5e5121d8c0",
+      "coarseSha256": "e91edae7c5236e375db3162bc7006b3f30dda94e7e971d5d9a3f38d9f932a5a3",
       "dimensions": [
         78,
         40,
@@ -372,13 +372,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013921314850449562,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09600000083446503,
         "negativeFraction": 0.5969288174512055,
         "negatives": 124782,
         "positives": 84258,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.09600000083446503
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -398,7 +398,7 @@
         8,
         16
       ],
-      "coarseSha256": "6e7e8ef431532a74950e1669665d9567c3b6642d12778b4b21dda2361d49f134",
+      "coarseSha256": "cdb55d476038b80b93fc736a6929e089d9a70a4ffabd0befac539cf4ec1c05c7",
       "dimensions": [
         55,
         30,
@@ -406,13 +406,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013585716485977173,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.03703692555427551,
         "negativeFraction": 0.14106326422115895,
         "negatives": 13267,
         "positives": 80783,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.03703692555427551
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -432,7 +432,7 @@
         11,
         12
       ],
-      "coarseSha256": "57a3a1f5811831a5ad380bd6db9c6e34b7965f0103e395f6437ebd4619b04779",
+      "coarseSha256": "50bd964ce3941914022b530be0d691b222f6bd887439a9be8b895dc2166cb1ed",
       "dimensions": [
         67,
         50,
@@ -440,13 +440,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013181340880692005,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09276160597801208,
         "negativeFraction": 0.2838474295190713,
         "negatives": 51348,
         "positives": 129552,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.09276160597801208
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -466,7 +466,7 @@
         16,
         12
       ],
-      "coarseSha256": "33c62c14b395a956482973b0b05f3d2fac1a220e9690d0126764fbc3cc63335c",
+      "coarseSha256": "211b84d04cf0d3c591cafc44a071196ff00338bbbd2a5a354f666125a4a78da7",
       "dimensions": [
         43,
         56,
@@ -474,13 +474,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.014452303759753704,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07006938010454178,
         "negativeFraction": 0.22475083056478407,
         "negatives": 24354,
         "positives": 84006,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.07006938010454178
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -500,7 +500,7 @@
         16,
         7
       ],
-      "coarseSha256": "19908e2babc9e9883b10edd156c390b6fdd3319b1ed3bc01a8ad77cc9f012bcc",
+      "coarseSha256": "46bd743f927d0ee903f21d4289742f2878c6c9f2d85fb47744ae3635ea4257ac",
       "dimensions": [
         33,
         59,
@@ -508,13 +508,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013699506409466267,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.0599663220345974,
         "negativeFraction": 0.24290116662998018,
         "negatives": 13242,
         "positives": 41274,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.0599663220345974
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -534,7 +534,7 @@
         16,
         8
       ],
-      "coarseSha256": "e550dea3947eda930b2b6b468fcf4083a42a511b9ff3482e3bec717471610fd9",
+      "coarseSha256": "a0cad7f6a2e5528ec087e75dbd60350da5e1748fde7cf276efd105b753ac5fbd",
       "dimensions": [
         68,
         86,
@@ -542,13 +542,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012109695933759212,
-        "max": 0.017999999225139618,
-        "min": -0.017999999225139618,
+        "max": 0.04800000041723251,
+        "min": -0.03743909299373627,
         "negativeFraction": 0.15974478454172367,
         "negatives": 44841,
         "positives": 235863,
-        "valueMaxM": 0.017999999225139618,
-        "valueMinM": -0.017999999225139618
+        "valueMaxM": 0.04800000041723251,
+        "valueMinM": -0.03743909299373627
       },
       "negativeComponents": 1,
       "pitchM": 0.003,
@@ -568,7 +568,7 @@
         11,
         11
       ],
-      "coarseSha256": "fb23bc20264a4f3c69ae44613b2c5b34cd25ecabe2f5bfa81dc32a6142995d75",
+      "coarseSha256": "9de090d8ea31f52ef8d4bb4dc395a44f46e43b7bd4ccbdce9877d2d55176f5eb",
       "dimensions": [
         63,
         45,
@@ -576,13 +576,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012209583073854446,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07594142854213715,
         "negativeFraction": 0.2506435513527712,
         "negatives": 33397,
         "positives": 99848,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.07594142854213715
       },
       "negativeComponents": 4,
       "pitchM": 0.006,
@@ -602,7 +602,7 @@
         16,
         15
       ],
-      "coarseSha256": "b44600ad31eeb5a32b531073682c3fb0fd085634d210c98df56dcec95347af5a",
+      "coarseSha256": "e46c063e205c6f2f0e55554a3c00dd3cdaa5d4be1debfc311322b8b67db9e22f",
       "dimensions": [
         49,
         53,
@@ -610,13 +610,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012714304961264133,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07198094576597214,
         "negativeFraction": 0.1986907970735464,
         "negatives": 26316,
         "positives": 106131,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.07198094576597214
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -636,7 +636,7 @@
         16,
         7
       ],
-      "coarseSha256": "d96810f34dbcf1ef5c36d7971355a257e171d9a2c1aa82c69a9271d280b250a1",
+      "coarseSha256": "73214a8387b73ddea44a27e4e3fbd925f46a677356727bd32295e90c89edbaa8",
       "dimensions": [
         34,
         59,
@@ -644,13 +644,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012167026288807392,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.06102560833096504,
         "negativeFraction": 0.25153112092294544,
         "negatives": 14128,
         "positives": 42040,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.09600000083446503,
+        "valueMinM": -0.06102560833096504
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -670,7 +670,7 @@
         16,
         8
       ],
-      "coarseSha256": "99aa5c588089b706c07bd9a7773ff3601414e358b76966b075028475938d7221",
+      "coarseSha256": "4452dd3ecece1090f05c7a6f56f218c539e5f5cf0cccdb1ad29a25a9cb367536",
       "dimensions": [
         68,
         91,
@@ -678,13 +678,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012713262811303139,
-        "max": 0.017999999225139618,
-        "min": -0.017999999225139618,
+        "max": 0.04800000041723251,
+        "min": -0.03743676096200943,
         "negativeFraction": 0.15484215664287693,
         "negatives": 46950,
         "positives": 256262,
-        "valueMaxM": 0.017999999225139618,
-        "valueMinM": -0.017999999225139618
+        "valueMaxM": 0.04800000041723251,
+        "valueMinM": -0.03743676096200943
       },
       "negativeComponents": 1,
       "pitchM": 0.003,
@@ -704,7 +704,7 @@
         5,
         16
       ],
-      "coarseSha256": "ca62869805ae073558e166a53084e03fe842617c191875f9f16237b89a04c6d6",
+      "coarseSha256": "17028e444767cdd6f7c8a868cb751add5489953f50f68ac5d278c8ffdc50e930",
       "dimensions": [
         38,
         19,
@@ -712,13 +712,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012561077252030373,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.07952706515789032,
+        "min": -0.039245497435331345,
         "negativeFraction": 0.35078840826763263,
         "negatives": 13170,
         "positives": 24374,
-        "valueMaxM": 0.035999998450279236,
-        "valueMinM": -0.035999998450279236
+        "valueMaxM": 0.07952706515789032,
+        "valueMinM": -0.039245497435331345
       },
       "negativeComponents": 1,
       "pitchM": 0.006,
@@ -738,7 +738,7 @@
         15,
         16
       ],
-      "coarseSha256": "cbc8061456faee7e4488a2e32fcfd774ee57ce486600baae5f5415fd97f38019",
+      "coarseSha256": "f37d6fc57120bc9f18be83d1859991e98b36456779a91a24426ff2af85d7d8ec",
       "dimensions": [
         102,
         125,
@@ -746,13 +746,13 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012234948575496674,
-        "max": 0.017999999225139618,
-        "min": -0.017999999225139618,
+        "max": 0.04800000041723251,
+        "min": -0.04800000041723251,
         "negativeFraction": 0.3004156862745098,
         "negatives": 497939,
         "positives": 1159561,
-        "valueMaxM": 0.017999999225139618,
-        "valueMinM": -0.017999999225139618
+        "valueMaxM": 0.04800000041723251,
+        "valueMinM": -0.04800000041723251
       },
       "negativeComponents": 2,
       "pitchM": 0.003,
@@ -910,24 +910,24 @@
       ]
     }
   ],
-  "durationS": 130.834,
+  "durationS": 210.16,
   "hashes": {
-    "coarseCombined": "eb624639029ea7b44378687b48e996caece4eac24e8496432293b691573bb70b",
+    "coarseCombined": "3d9180fe8cac2c1250e7291ce04d8ae6d1d38c537f6a2d6b8e48a106d2e65809",
     "colorCombined": "80f5122a192724bc9f4df4f5c8b72ef5f65fe3e78eabab63724c65f4d5cf14b5",
-    "distanceCombined": "58a1b7764f07a3eb933f7dd5a72db94289c07e8c96ec9498c65ada658fc18205",
-    "manifestInput": "d28f5023ed3d12e0cce2a4b0a848fd3093280760c47f79f305c36cb589839477",
+    "distanceCombined": "d5e3def43eda5f5dacb32b084d86e26d09961d3bdcfd4962e409494b49766d55",
+    "manifestInput": "998f1d5e0fd1a92441db2845bdd5a583ba2e465c33e267f56e0d9339713bc399",
     "nodeContract": "bd6238a8889ddd1f14169b12c31bfd9240571de2a14ff5ee7b2f7f814d98d4f4"
   },
   "jointProbes": [
     {
       "across": {
         "+50mm": {
-          "child": -0.03599999845027923,
-          "parent": 0.03426470906191335
+          "child": -0.061438575317136236,
+          "parent": 0.034999899172118494
         },
         "-50mm": {
-          "child": 0.03445472382676647,
-          "parent": -0.035999998450279236
+          "child": 0.03499989909548699,
+          "parent": -0.06500009563553924
         }
       },
       "acrossBoundaryOk": true,
@@ -941,12 +941,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.03599999845027923,
+          "child": -0.03895849988700534,
           "parent": 0.016694216057658195
         },
         "-50mm": {
-          "child": 0.03445849458150494,
-          "parent": -0.035999998450279236
+          "child": 0.03499990050456464,
+          "parent": -0.04646518832343717
         }
       },
       "acrossBoundaryOk": true,
@@ -960,12 +960,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.03397238008682828,
+          "child": -0.03393179649495736,
           "parent": 0.016284838318824768
         },
         "-50mm": {
-          "child": 0.03450626024855857,
-          "parent": -0.03517202276180558
+          "child": 0.03499989781903308,
+          "parent": -0.036305947906161026
         }
       },
       "acrossBoundaryOk": true,
@@ -983,7 +983,7 @@
           "parent": 0.017410572618246082
         },
         "-50mm": {
-          "child": 0.034172745412148216,
+          "child": 0.03499989751441451,
           "parent": -0.007708383303781076
         }
       },
@@ -998,12 +998,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.035999998450279236,
-          "parent": 0.03442308121424001
+          "child": -0.06348809046078678,
+          "parent": 0.03499990249627532
         },
         "-50mm": {
-          "child": 0.034879828807963115,
-          "parent": -0.035999998450279236
+          "child": 0.03499989783342678,
+          "parent": -0.06500009554502148
         }
       },
       "acrossBoundaryOk": true,
@@ -1017,12 +1017,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.035999998450279236,
+          "child": -0.04760121079267692,
           "parent": 0.014483653008937836
         },
         "-50mm": {
-          "child": 0.0344842223149731,
-          "parent": -0.035999998450279236
+          "child": 0.03499989923759522,
+          "parent": -0.048927165315608964
         }
       },
       "acrossBoundaryOk": true,
@@ -1040,8 +1040,8 @@
           "parent": 0.01645846851170063
         },
         "-50mm": {
-          "child": 0.03431682893929722,
-          "parent": -0.034232578238082706
+          "child": 0.03499989737657637,
+          "parent": -0.034971816607772266
         }
       },
       "acrossBoundaryOk": true,
@@ -1059,7 +1059,7 @@
           "parent": 0.014196958392858507
         },
         "-50mm": {
-          "child": 0.03541409741223554,
+          "child": 0.03499989790990673,
           "parent": -0.0252545936754408
         }
       },
@@ -1074,12 +1074,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.035999998450279236,
-          "parent": 0.034163025839241995
+          "child": -0.04269402979768234,
+          "parent": 0.034999903038733474
         },
         "-50mm": {
           "child": 0.017606493085622787,
-          "parent": -0.035999998450279236
+          "parent": -0.0650000968711727
         }
       },
       "acrossBoundaryOk": true,
@@ -1132,10 +1132,10 @@
       "across": {
         "+50mm": {
           "child": -0.004962263697355402,
-          "parent": 0.03437314928469955
+          "parent": 0.034999894305984706
         },
         "-50mm": {
-          "child": 0.034782565568801355,
+          "child": 0.03499990019845374,
           "parent": -0.02459900478732884
         }
       },
@@ -1150,12 +1150,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.03599999845027923,
+          "child": -0.03899959462910691,
           "parent": 0.015238393098115921
         },
         "-50mm": {
-          "child": 0.03426393615036347,
-          "parent": -0.035999998450279236
+          "child": 0.034999896532153095,
+          "parent": -0.06482170112778149
         }
       },
       "acrossBoundaryOk": true,
@@ -1173,8 +1173,8 @@
           "parent": 0.015038830228149893
         },
         "-50mm": {
-          "child": 0.03423649913044913,
-          "parent": -0.035999998450279236
+          "child": 0.03499989755144516,
+          "parent": -0.041424019526289546
         }
       },
       "acrossBoundaryOk": true,
@@ -1188,12 +1188,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.017999999225139614,
+          "child": -0.02832466552928269,
           "parent": 0.017241887748241425
         },
         "-50mm": {
-          "child": 0.017999999225139618,
-          "parent": -0.03249094120787675
+          "child": 0.019281027916127763,
+          "parent": -0.03249445939958987
         }
       },
       "acrossBoundaryOk": true,
@@ -1208,7 +1208,7 @@
       "across": {
         "+50mm": {
           "child": 0.010898033281071718,
-          "parent": 0.03487642733022146
+          "parent": 0.034999900150219775
         },
         "-50mm": {
           "child": 0.027588968250506468,
@@ -1226,12 +1226,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.03599999845027923,
+          "child": -0.061172648392360675,
           "parent": 0.016302967444062233
         },
         "-50mm": {
-          "child": 0.034621144493731534,
-          "parent": -0.035999998450279236
+          "child": 0.03499990056150788,
+          "parent": -0.06350773478218323
         }
       },
       "acrossBoundaryOk": true,
@@ -1245,12 +1245,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.03558686029688908,
+          "child": -0.038057302242338865,
           "parent": 0.012714304961264135
         },
         "-50mm": {
-          "child": 0.034439814842960485,
-          "parent": -0.034977013214141
+          "child": 0.03499989832594342,
+          "parent": -0.03581013004366543
         }
       },
       "acrossBoundaryOk": true,
@@ -1264,12 +1264,12 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.01799999922513962,
+          "child": -0.026905744216155728,
           "parent": 0.012167026288807392
         },
         "-50mm": {
-          "child": 0.017999999225139618,
-          "parent": -0.03520218804676632
+          "child": 0.019670592248396932,
+          "parent": -0.03730379020458974
         }
       },
       "acrossBoundaryOk": true,
@@ -1284,7 +1284,7 @@
       "across": {
         "+50mm": {
           "child": -0.015721001619442603,
-          "parent": 0.034072986436755395
+          "parent": 0.03499990423997347
         },
         "-50mm": {
           "child": 0.014754503965377808,
@@ -1302,11 +1302,11 @@
     {
       "across": {
         "+50mm": {
-          "child": -0.017999999225139614,
+          "child": -0.04800000041723251,
           "parent": 0.012561077252030373
         },
         "-50mm": {
-          "child": 0.017999999225139618,
+          "child": 0.03499990379177674,
           "parent": -0.01575689191172739
         }
       },

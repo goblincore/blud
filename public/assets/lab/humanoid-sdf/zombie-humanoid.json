@@ -7,7 +7,7 @@
   "bake": {
     "adaptivity": 0.0,
     "atlasPadding": 2,
-    "bandWidth": 6,
+    "bandWidth": 16,
     "blenderVersion": "5.2.0 LTS",
     "detailPitchM": 0.003,
     "jointOverlapM": 0.03,
@@ -19,7 +19,7 @@
     "route": "direct-vdb",
     "threshold": 0.0
   },
-  "bakeInputSha256": "d28f5023ed3d12e0cce2a4b0a848fd3093280760c47f79f305c36cb589839477",
+  "bakeInputSha256": "998f1d5e0fd1a92441db2845bdd5a583ba2e465c33e267f56e0d9339713bc399",
   "boneCount": 24,
   "bones": [
     {
@@ -59,8 +59,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012918686494231224,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09600000083446503,
         "negativeCount": 139564,
         "positiveCount": 365556
       },
@@ -149,8 +149,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013083882629871368,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09184741228818893,
         "negativeCount": 54987,
         "positiveCount": 174613
       },
@@ -239,8 +239,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013231179676949978,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07928336411714554,
         "negativeCount": 32515,
         "positiveCount": 132209
       },
@@ -329,8 +329,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013402815908193588,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.04832959175109863,
         "negativeCount": 12397,
         "positiveCount": 52499
       },
@@ -419,7 +419,7 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012126156128942966,
-        "max": 0.035999998450279236,
+        "max": 0.09600000083446503,
         "min": -0.019890891388058662,
         "negativeCount": 2635,
         "positiveCount": 17525
@@ -509,8 +509,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013252107426524162,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.08384721726179123,
         "negativeCount": 54513,
         "positiveCount": 172791
       },
@@ -599,8 +599,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.014017045497894287,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07799292355775833,
         "negativeCount": 36104,
         "positiveCount": 206584
       },
@@ -689,8 +689,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.014196958392858505,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.05163466930389404,
         "negativeCount": 12283,
         "positiveCount": 51365
       },
@@ -779,7 +779,7 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012815678492188454,
-        "max": 0.035999998450279236,
+        "max": 0.09600000083446503,
         "min": -0.029708830639719963,
         "negativeCount": 3957,
         "positiveCount": 20543
@@ -869,8 +869,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012747175060212612,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.05325282737612724,
         "negativeCount": 60102,
         "positiveCount": 71370
       },
@@ -959,8 +959,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013921314850449562,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09600000083446503,
         "negativeCount": 124782,
         "positiveCount": 84258
       },
@@ -1049,8 +1049,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013585716485977173,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.03703692555427551,
         "negativeCount": 13267,
         "positiveCount": 80783
       },
@@ -1139,8 +1139,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013181340880692005,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.09276160597801208,
         "negativeCount": 51348,
         "positiveCount": 129552
       },
@@ -1229,8 +1229,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.014452303759753704,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07006938010454178,
         "negativeCount": 24354,
         "positiveCount": 84006
       },
@@ -1319,8 +1319,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.013699506409466267,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.0599663220345974,
         "negativeCount": 13242,
         "positiveCount": 41274
       },
@@ -1409,8 +1409,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012109695933759212,
-        "max": 0.017999999225139618,
-        "min": -0.017999999225139618,
+        "max": 0.04800000041723251,
+        "min": -0.03743909299373627,
         "negativeCount": 44841,
         "positiveCount": 235863
       },
@@ -1499,8 +1499,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012209583073854446,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07594142854213715,
         "negativeCount": 33397,
         "positiveCount": 99848
       },
@@ -1589,8 +1589,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012714304961264133,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.07198094576597214,
         "negativeCount": 26316,
         "positiveCount": 106131
       },
@@ -1679,8 +1679,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012167026288807392,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.09600000083446503,
+        "min": -0.06102560833096504,
         "negativeCount": 14128,
         "positiveCount": 42040
       },
@@ -1769,8 +1769,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012713262811303139,
-        "max": 0.017999999225139618,
-        "min": -0.017999999225139618,
+        "max": 0.04800000041723251,
+        "min": -0.03743676096200943,
         "negativeCount": 46950,
         "positiveCount": 256262
       },
@@ -1859,8 +1859,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012561077252030373,
-        "max": 0.035999998450279236,
-        "min": -0.035999998450279236,
+        "max": 0.07952706515789032,
+        "min": -0.039245497435331345,
         "negativeCount": 13170,
         "positiveCount": 24374
       },
@@ -1949,8 +1949,8 @@
       ],
       "fieldStats": {
         "boundaryMin": 0.012234948575496674,
-        "max": 0.017999999225139618,
-        "min": -0.017999999225139618,
+        "max": 0.04800000041723251,
+        "min": -0.04800000041723251,
         "negativeCount": 497939,
         "positiveCount": 1159561
       },
@@ -2162,7 +2162,7 @@
           16
         ],
         "offset": 0,
-        "sha256": "d0188be95a2b81ea0713c53aeb4e218c927e791982f7f6a6ef31d7bb42e556a8"
+        "sha256": "cfd039a1a54a62c065e3ef4e844311882c25a0705f1e5d903bbd040bcf4eec3c"
       },
       {
         "byteLength": 5760,
@@ -2172,7 +2172,7 @@
           10
         ],
         "offset": 14400,
-        "sha256": "e07499d0898700ffcfb05af3f4a4f5fd018d4cd4869b0b017903aae139af3268"
+        "sha256": "4c2d42479029b43b224e32ea293eecf7aa8a8eea278328df04abae81e151765d"
       },
       {
         "byteLength": 6336,
@@ -2182,7 +2182,7 @@
           11
         ],
         "offset": 20160,
-        "sha256": "aef07b67d5007a20517ebc40df9edf1c76bb8916b0627a3c55847b7c0ae2fe90"
+        "sha256": "6b6e44e57df9b70c8b5242902e93a99365e3aac8679cceb3319b539a5b1e4fdc"
       },
       {
         "byteLength": 6912,
@@ -2192,7 +2192,7 @@
           12
         ],
         "offset": 26496,
-        "sha256": "03831d7547ef82783ea8c1d91b5ccf18bf3c5ce8853dd18c2513066ec818d9c5"
+        "sha256": "b154c3ad2a647410afde36a149a82689d5406edcc32b2c4dc8697299b96629f0"
       },
       {
         "byteLength": 7168,
@@ -2202,7 +2202,7 @@
           8
         ],
         "offset": 33408,
-        "sha256": "ce7c26bb5d3fa08f9b12f07cd9d5da6ebb6f3076cb7f0b11fc6525def15adffd"
+        "sha256": "112f0ad73d8c4c8f67c3a32c85e508f26af58dc41b33cda39491c7f5758da7c6"
       },
       {
         "byteLength": 6144,
@@ -2212,7 +2212,7 @@
           12
         ],
         "offset": 40576,
-        "sha256": "1e0ec666a7bf4cb774bd79af30c2bac965241c73fe86a009ecd5d971e7065136"
+        "sha256": "871b126f2431bec6101711bf7f3f77c0455fc66cee882fdaf6a5cc249ec3f4c8"
       },
       {
         "byteLength": 6912,
@@ -2222,7 +2222,7 @@
           12
         ],
         "offset": 46720,
-        "sha256": "c9753d0ff06fb31e6ae299836466c9a3ff790036386045ae9c98727cd014b2d4"
+        "sha256": "b05aa88caea0cc6c9589f9bc8354f42ed0cd2abd4917f44c368b088c6a5b79f7"
       },
       {
         "byteLength": 7680,
@@ -2232,7 +2232,7 @@
           12
         ],
         "offset": 53632,
-        "sha256": "a3c4eb52197238e525d304a8aa884fccdaef06fa03d9ef55f947af733c7f367c"
+        "sha256": "a0a08e95ad72bc6d2ad668847b1e3ef1367677b424e6b26c179e1461240c3270"
       },
       {
         "byteLength": 9216,
@@ -2242,7 +2242,7 @@
           9
         ],
         "offset": 61312,
-        "sha256": "806609978f70899e2bb0748a0b390fb47e9fb0cefaf92a83c92dc351b81cca85"
+        "sha256": "abf0794bb0a88a390a129ec0476eb327138f390df07f9cd3c848eff0a6a83ee5"
       },
       {
         "byteLength": 3072,
@@ -2252,7 +2252,7 @@
           12
         ],
         "offset": 70528,
-        "sha256": "30a80c3fd0c135210c9a49727371f37b415485ca728e77b0c482438211fcfdce"
+        "sha256": "4bd7283c1cff24614dd4a24bcdfebcaeff380434fcb2089836d68679b9956e21"
       },
       {
         "byteLength": 6656,
@@ -2262,7 +2262,7 @@
           13
         ],
         "offset": 73600,
-        "sha256": "05d84c719795c135294b4a0df8e9fc58b9d8e8df099e5690eb76ca5e5121d8c0"
+        "sha256": "e91edae7c5236e375db3162bc7006b3f30dda94e7e971d5d9a3f38d9f932a5a3"
       },
       {
         "byteLength": 7680,
@@ -2272,7 +2272,7 @@
           16
         ],
         "offset": 80256,
-        "sha256": "6e7e8ef431532a74950e1669665d9567c3b6642d12778b4b21dda2361d49f134"
+        "sha256": "cdb55d476038b80b93fc736a6929e089d9a70a4ffabd0befac539cf4ec1c05c7"
       },
       {
         "byteLength": 8448,
@@ -2282,7 +2282,7 @@
           12
         ],
         "offset": 87936,
-        "sha256": "57a3a1f5811831a5ad380bd6db9c6e34b7965f0103e395f6437ebd4619b04779"
+        "sha256": "50bd964ce3941914022b530be0d691b222f6bd887439a9be8b895dc2166cb1ed"
       },
       {
         "byteLength": 9216,
@@ -2292,7 +2292,7 @@
           12
         ],
         "offset": 96384,
-        "sha256": "33c62c14b395a956482973b0b05f3d2fac1a220e9690d0126764fbc3cc63335c"
+        "sha256": "211b84d04cf0d3c591cafc44a071196ff00338bbbd2a5a354f666125a4a78da7"
       },
       {
         "byteLength": 3584,
@@ -2302,7 +2302,7 @@
           7
         ],
         "offset": 105600,
-        "sha256": "19908e2babc9e9883b10edd156c390b6fdd3319b1ed3bc01a8ad77cc9f012bcc"
+        "sha256": "46bd743f927d0ee903f21d4289742f2878c6c9f2d85fb47744ae3635ea4257ac"
       },
       {
         "byteLength": 6144,
@@ -2312,7 +2312,7 @@
           8
         ],
         "offset": 109184,
-        "sha256": "e550dea3947eda930b2b6b468fcf4083a42a511b9ff3482e3bec717471610fd9"
+        "sha256": "a0cad7f6a2e5528ec087e75dbd60350da5e1748fde7cf276efd105b753ac5fbd"
       },
       {
         "byteLength": 7744,
@@ -2322,7 +2322,7 @@
           11
         ],
         "offset": 115328,
-        "sha256": "fb23bc20264a4f3c69ae44613b2c5b34cd25ecabe2f5bfa81dc32a6142995d75"
+        "sha256": "9de090d8ea31f52ef8d4bb4dc395a44f46e43b7bd4ccbdce9877d2d55176f5eb"
       },
       {
         "byteLength": 13440,
@@ -2332,7 +2332,7 @@
           15
         ],
         "offset": 123072,
-        "sha256": "b44600ad31eeb5a32b531073682c3fb0fd085634d210c98df56dcec95347af5a"
+        "sha256": "e46c063e205c6f2f0e55554a3c00dd3cdaa5d4be1debfc311322b8b67db9e22f"
       },
       {
         "byteLength": 4032,
@@ -2342,7 +2342,7 @@
           7
         ],
         "offset": 136512,
-        "sha256": "d96810f34dbcf1ef5c36d7971355a257e171d9a2c1aa82c69a9271d280b250a1"
+        "sha256": "73214a8387b73ddea44a27e4e3fbd925f46a677356727bd32295e90c89edbaa8"
       },
       {
         "byteLength": 5632,
@@ -2352,7 +2352,7 @@
           8
         ],
         "offset": 140544,
-        "sha256": "99aa5c588089b706c07bd9a7773ff3601414e358b76966b075028475938d7221"
+        "sha256": "4452dd3ecece1090f05c7a6f56f218c539e5f5cf0cccdb1ad29a25a9cb367536"
       },
       {
         "byteLength": 3520,
@@ -2362,7 +2362,7 @@
           16
         ],
         "offset": 146176,
-        "sha256": "ca62869805ae073558e166a53084e03fe842617c191875f9f16237b89a04c6d6"
+        "sha256": "17028e444767cdd6f7c8a868cb751add5489953f50f68ac5d278c8ffdc50e930"
       },
       {
         "byteLength": 11520,
@@ -2372,11 +2372,11 @@
           16
         ],
         "offset": 149696,
-        "sha256": "cbc8061456faee7e4488a2e32fcfd774ee57ce486600baae5f5415fd97f38019"
+        "sha256": "f37d6fc57120bc9f18be83d1859991e98b36456779a91a24426ff2af85d7d8ec"
       }
     ],
     "combinedByteLength": 161216,
-    "combinedSha256": "eb624639029ea7b44378687b48e996caece4eac24e8496432293b691573bb70b",
+    "combinedSha256": "3d9180fe8cac2c1250e7291ce04d8ae6d1d38c537f6a2d6b8e48a106d2e65809",
     "encoding": "f32-le"
   },
   "color": {
@@ -2393,12 +2393,12 @@
   },
   "distance": {
     "combinedByteLength": 16777216,
-    "combinedSha256": "58a1b7764f07a3eb933f7dd5a72db94289c07e8c96ec9498c65ada658fc18205",
+    "combinedSha256": "d5e3def43eda5f5dacb32b084d86e26d09961d3bdcfd4962e409494b49766d55",
     "encoding": "r16f-le",
     "parts": [
       {
         "byteLength": 16777216,
-        "sha256": "58a1b7764f07a3eb933f7dd5a72db94289c07e8c96ec9498c65ada658fc18205",
+        "sha256": "d5e3def43eda5f5dacb32b084d86e26d09961d3bdcfd4962e409494b49766d55",
         "url": "zombie-distance-000.r16f"
       }
     ]

@@ -76,6 +76,27 @@ LIMB_PITCH_M = 0.006
 DETAIL_PITCH_M = 0.003
 MARGIN_M = 0.012
 
+# Narrow-band half-width in VOXELS for every humanoid brick.
+#
+# blender_sdf_grid.DEFAULT_BAND_WIDTH is 6, which clamps the field at +/-36 mm
+# on a 6 mm limb brick and +/-18 mm on a 3 mm detail brick. That is narrower
+# than ONE coarse voxel on the head and hands (their coarse pitch is 20-28 mm),
+# so the coarse resample cannot localise its zero crossing: neighbouring
+# samples jump from saturated-negative to saturated-positive with nothing
+# between them, and the click-to-shoot sphere-trace in the wound slice degrades
+# to roughly half a coarse voxel instead of the few millimetres it budgets for.
+# It also caps the marcher's step length in empty space.
+#
+# 16 makes the band span at least three coarse voxels on every brick (worst
+# cases: Head 3.5, Spine02 4.2). The bricks are DENSE, so a wider band costs no
+# storage at all -- only bake time.
+#
+# This is deliberately NOT a change to blender_sdf_grid.DEFAULT_BAND_WIDTH:
+# that default is pinned by the X1.sdf-authoring analytic fixtures and their
+# byte-determinism hashes, and the canonical node-contract hash is built from
+# the default spec. Only the humanoid bricks widen.
+HUMANOID_BAND_WIDTH = 16
+
 # Weight-difference below which a vertex counts as equal-influence for a
 # parent/child pair (design: boundary centre from the blend cross-section).
 EQUAL_INFLUENCE_MAX_DIFF = 0.15
@@ -2219,7 +2240,7 @@ def _bake_one_bone(soup: SourceSoup, partition: BonePartition,
     SDF = _sdf_module()
     lo, hi, dims = _brick_spec(occupied_min, occupied_max, partition.pitch_m)
     spec = SDF.SdfGridSpec(
-        voxel_size_m=float(partition.pitch_m), band_width=SDF.DEFAULT_BAND_WIDTH,
+        voxel_size_m=float(partition.pitch_m), band_width=HUMANOID_BAND_WIDTH,
         bounds_min_m=tuple(float(v) for v in lo),
         bounds_max_m=tuple(float(v) for v in hi),
         dimensions=dims)
@@ -2682,7 +2703,7 @@ def build_manifest_dict(record: dict, soup: SourceSoup, glb: dict,
             "nodeContractSha256": _canonical_node_contract_sha256(),
             "threshold": SDF_THRESHOLD,
             "adaptivity": SDF_ADAPTIVITY,
-            "bandWidth": SDF.DEFAULT_BAND_WIDTH,
+            "bandWidth": HUMANOID_BAND_WIDTH,
             "maxAtlasDimension": MAX_ATLAS_DIM,
         },
         "atlasDimensions": list(record["layout"].dimensions),
