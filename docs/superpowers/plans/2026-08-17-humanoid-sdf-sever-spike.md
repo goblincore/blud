@@ -476,6 +476,43 @@ In the same pass, record per bone in the manifest:
   reading `boundsMin/Max`, which carries the exterior margin plus trilinear
   padding and would hand shoulder hits to the spine.
 
+- [ ] **Step 4c: Pin the narrow band at `HUMANOID_BAND_WIDTH = 16`**
+
+`blender_sdf_grid.DEFAULT_BAND_WIDTH` is 6, which clamps the field at ±36 mm on
+a 6 mm limb brick and **±18 mm on a 3 mm detail brick**. That is narrower than
+ONE coarse voxel on the head and hands, whose coarse pitch is 20–28 mm. The
+coarse resample then cannot localise its zero crossing — neighbouring samples
+jump from saturated-negative to saturated-positive with nothing between them —
+so Task 10's sphere-trace degrades to roughly half a coarse voxel (~10 mm)
+instead of the few millimetres it budgets for. It also caps the marcher's step
+length in empty space.
+
+Define `HUMANOID_BAND_WIDTH = 16` in `bake_humanoid_sdf.py` and pass it at the
+`SdfGridSpec` site and into `manifest.bake.bandWidth`. **Do not change
+`blender_sdf_grid.DEFAULT_BAND_WIDTH`**: that default is pinned by the
+`X1.sdf-authoring` analytic fixtures and their byte-determinism hashes, and the
+canonical node-contract hash is built from the default spec. Only the humanoid
+bricks widen.
+
+Measured consequences (2026-08-19, band 6 → 16):
+
+- Band becomes ±96 mm on limb bricks and ±48 mm on detail bricks, spanning at
+  least 3 coarse voxels on every bone (worst: `Head` 3.5, `Spine02` 4.2).
+- **The isosurface does not move.** Across the whole 8.4 M-voxel atlas: 0 sign
+  flips, identical negative count (1,312,790), and a max delta of exactly
+  0.000000 mm for every voxel within 15 mm of the surface. The only voxels that
+  changed had `|d| >= 15.18 mm` — the far field that used to be clamped.
+- Coarse-brick saturation drops from ~50 % to under 10 % on most bones
+  (`RightHand` 67.1 → 20.5 %, `Head` 75.4 → 40.9 %), and what remains is almost
+  entirely **exterior** saturation in far brick corners, where a conservative
+  step is exactly what a sphere tracer wants. Interior saturation is ~0 %
+  except `Head` at 5.2 %.
+- Bake cost 130.8 s → 182.2 s. The bricks are dense, so storage is unchanged.
+
+Add two guards: a mutation test that a changed `bake.bandWidth` is rejected,
+and a test asserting `HUMANOID_BAND_WIDTH == 16`, that it differs from
+`SDF.DEFAULT_BAND_WIDTH`, and that the checked-in manifest carries it.
+
 - [ ] **Step 5: Bake, validate, repeat, and render the real asset**
 
 Run:
