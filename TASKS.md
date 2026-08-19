@@ -261,6 +261,12 @@ Key reference docs (open these before touching their area):
   [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
   · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
   · [wound design](docs/superpowers/specs/2026-08-19-humanoid-sdf-wound-damage-design.md)
+  - **Sever gate shipped (Task 7, 2026-08-19):** `/humanoid-sdf-spike.html` +
+    `window.__humanoidSdfSpike` automation API + deterministic CDP verifier;
+    17/17 gates, ten captures + contact sheet, first sever 18.4 ms, ten
+    sever/reset cycles with identical resource counts. **Next: Task 8 (wound
+    keying)** — this is the dispatch-chain owner review pause; Tasks 8–10
+    release after the gate.
 - `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
   later one-piece synthetic-forearm reference were both owner-rejected. The
   next run uses Blender-native SDF union for one hand+wrist+native-forearm field,
