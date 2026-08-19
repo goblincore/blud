@@ -1,4 +1,48 @@
 {
+  "arrayMeshAdapters": {
+    "booleanWorkaround": "Blender 5.2 GeometryNodeSDFGridBoolean returns Grid 2 for every operation; unions fold OpenVDB min and intersections fold max.",
+    "command": "uv run scripts/qualify_blender_sdf_real_sources.py --hand --humanoid --output docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json",
+    "gates": {
+      "firm-grip-hand-union": {
+        "dimensions": [
+          99,
+          135,
+          78
+        ],
+        "f32Sha256": "ac560f252282c357c3728c42c7b93982acbdee2a85285ed08f190a55f3bbbb3a",
+        "negativeComponents": 106,
+        "passed": true,
+        "r16fSha256": "9b140430a45a23eef02ae80e31bf8fa80575fa1039b35fc4c7be237803f1dbfd",
+        "repeat": {
+          "f32Equal": true,
+          "metadataEqual": true,
+          "passed": true,
+          "r16fEqual": true
+        }
+      },
+      "humanoid-right-forearm-intersection": {
+        "dimensions": [
+          44,
+          40,
+          38
+        ],
+        "f32Sha256": "aa74bd27004aebc53f2cf976c4480d9aa81c298625f078946c443501271a4a60",
+        "negativeComponents": 1,
+        "passed": true,
+        "r16fSha256": "5d0ac0627a4d678af8441a9c4d3e600a511bd7a1bbf640bc98bb1cf60e078392",
+        "repeat": {
+          "f32Equal": true,
+          "metadataEqual": true,
+          "passed": true,
+          "r16fEqual": true
+        }
+      }
+    },
+    "passed": true,
+    "reportPath": "docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json",
+    "reportSha256": "e7f3b46dff637629656afadcc127ef596785b7a889092271d4fcc827384e139f",
+    "selectedRoute": "direct-vdb"
+  },
   "availableNodes": {
     "GeometryNodeBake": true,
     "GeometryNodeGridToMesh": true,

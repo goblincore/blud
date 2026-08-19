@@ -612,12 +612,16 @@ def _first_true(fn, lo: float, hi: float, steps: int = 64, iters: int = 48) -> f
     raise SystemExit(f"predicate never became true on [{lo},{hi}]")
 
 
-def export_pose_soups(output_dir: Path) -> Path:
+def export_pose_soups(output_dir: Path, *, contact_sheet: bool = True) -> Path:
     """Outer driver: solve + export the six posed/capped hand soups.
 
     Writes pose-00-open.npz .. pose-05-firm-grip.npz plus authoring.json into
     the CALLER-OWNED directory and returns it. Task B runs this inside its own
     TemporaryDirectory; no temporary soup is ever committed.
+
+    `contact_sheet=False` skips the tracked POSE_SHEET_OUT re-render. Consumers
+    that only need the soups (the SDF adapter qualifier) must pass it: the
+    preview lives in git, and a smoke run has no business rewriting it.
     """
     contract = load_checked_in_contract()
     validate_prop_contract(contract)
@@ -631,6 +635,8 @@ def export_pose_soups(output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     cmd = ["blender", "--background", "--python", str(Path(__file__).resolve()),
            "--", "--blender-poses", str(output_dir)]
+    if not contact_sheet:
+        cmd.append("--no-contact-sheet")
     print("[poses] " + " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
     for i, label in enumerate(LABELS):
@@ -641,7 +647,7 @@ def export_pose_soups(output_dir: Path) -> Path:
     return output_dir
 
 
-def blender_pose_stage(output_dir: Path) -> None:
+def blender_pose_stage(output_dir: Path, *, contact_sheet: bool = True) -> None:
     """Runs INSIDE Blender (`--blender-poses DIR`). Solves open/firm with the
     trusted code paths, slerps the four intermediate keys, and runs EXACTLY the
     X1.26 extraction/skin/cut/cap helpers for all six rotations."""
@@ -993,7 +999,10 @@ def blender_pose_stage(output_dir: Path) -> None:
     (output_dir / "authoring.json").write_text(json.dumps(authoring, indent=2) + "\n")
     print(f"[poses] authoring.json -> {output_dir / 'authoring.json'}")
 
-    render_contact_sheet(poses, r_model, grip_local, axis_local, contract)
+    if contact_sheet:
+        render_contact_sheet(poses, r_model, grip_local, axis_local, contract)
+    else:
+        print("[poses] contact sheet skipped (--no-contact-sheet)")
 
 
 def render_contact_sheet(poses: dict, r_model, grip_local, axis_local,
@@ -1128,6 +1137,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                     help=argparse.SUPPRESS)   # internal: re-entry inside Blender
     ap.add_argument("--blender-poses", type=Path, metavar="DIR",
                     help=argparse.SUPPRESS)   # internal: re-entry inside Blender
+    ap.add_argument("--no-contact-sheet", action="store_true",
+                    help=argparse.SUPPRESS)   # internal: leave the tracked PNG
     return ap.parse_args(argv)
 
 
@@ -1144,7 +1155,8 @@ def main(argv: list[str] | None = None) -> int:
         blender_prop_stage()
         return 0
     if args.blender_poses is not None:
-        blender_pose_stage(args.blender_poses)
+        blender_pose_stage(args.blender_poses,
+                           contact_sheet=not args.no_contact_sheet)
         return 0
     if args.validate_only:
         validate_checked_in()

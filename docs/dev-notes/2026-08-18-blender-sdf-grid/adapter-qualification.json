@@ -1,0 +1,364 @@
+{
+  "generatedAt": "2026-08-19T11:43:16Z",
+  "passed": true,
+  "runs": [
+    {
+      "f32Sha256": "ac560f252282c357c3728c42c7b93982acbdee2a85285ed08f190a55f3bbbb3a",
+      "gates": {
+        "bothSigns": true,
+        "boundaryMinM": 0.01199999451637268,
+        "boundaryOutside": true,
+        "negativeComponentStats": {
+          "count": 106,
+          "largestComponentFraction": 0.9921967856958297,
+          "largestComponentSizes": [
+            38400,
+            94,
+            40,
+            38,
+            8,
+            8,
+            3,
+            3
+          ],
+          "largestComponentVoxels": 38400,
+          "negativeSamples": 38702,
+          "singleVoxelComponents": 89
+        },
+        "negativeComponents": 106,
+        "negativeFraction": 0.037125288977140826,
+        "negativeSamples": 38702,
+        "positiveSamples": 1003768,
+        "requiredComponents": null,
+        "route": "direct-vdb",
+        "valueMaxM": 0.012000000104308128,
+        "valueMinM": -0.012000000104308128
+      },
+      "grid": {
+        "bandWidth": 6,
+        "boundsMaxM": [
+          0.134,
+          0.17,
+          0.11199999999999999
+        ],
+        "boundsMinM": [
+          -0.062,
+          -0.098,
+          -0.042
+        ],
+        "denseVoxels": 1042470,
+        "dimensions": [
+          99,
+          135,
+          78
+        ],
+        "gridName": "sdf",
+        "nodeContractSha256": "fa55d473589cca03bd55e9e67bcd3ff907c523cb36811707040c5e5128ab74e6",
+        "valueMaxM": 0.012000000104308128,
+        "valueMinM": -0.012000000104308128,
+        "voxelSizeDeclaredM": 0.002,
+        "voxelSizeMeasuredM": [
+          0.002,
+          0.002,
+          0.002
+        ]
+      },
+      "operationSourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
+      "passed": true,
+      "r16fSha256": "9b140430a45a23eef02ae80e31bf8fa80575fa1039b35fc4c7be237803f1dbfd",
+      "repeat": {
+        "f32Equal": true,
+        "metadataEqual": true,
+        "passed": true,
+        "r16fEqual": true
+      },
+      "source": "firm-grip-hand-union",
+      "sourceContract": {
+        "contactSheetSha256": "7241b36ba6f87700cac1047d2efec1e295c0613caedca8d11663bd4aa4cbdb32",
+        "handSourceSha256": "71ca50d633f40ff23939e7ea27177a51758d712ba332c44624f86743af78c858",
+        "indexedTopology": [
+          {
+            "boundaryEdges": 530,
+            "closed": false,
+            "components": 2,
+            "label": "firm-grip-hand",
+            "triangles": 3300,
+            "vertices": 1912
+          },
+          {
+            "boundaryEdges": 0,
+            "closed": true,
+            "components": 1,
+            "label": "wrist-continuation",
+            "triangles": 12,
+            "vertices": 8
+          }
+        ],
+        "operands": [
+          "firm-grip-hand",
+          "wrist-continuation"
+        ],
+        "payloadSha256": [
+          "68569edcafcc0c863e5c0945b3eeb315194af5d098709f24d85b7b89a937cb5e",
+          "0a0b7da506adffc0c931978bb48a8314eff5bc1d36e9fb44307873213f592f6a"
+        ],
+        "pose": "pose-05-firm-grip.npz",
+        "propSha256": "4b900499c36d5ee3c13ca6b0f02ef9e1acb403b48952aeecf10306626b4ad836",
+        "soupSha256": "372adecf8e4cbb5e0563cf0d5537a61337c61071c8f4ba65ba6fe7d969bb4023",
+        "soupTriangleCount": 3300,
+        "soupVertexCount": 1912,
+        "wristBox": {
+          "bandVertexCount": 45,
+          "maximumM": [
+            0.03157133340835571,
+            -0.02500000014901161,
+            0.03422246418893337
+          ],
+          "minimumM": [
+            -0.0487081940472126,
+            -0.08500000014901161,
+            -0.02977899566292763
+          ]
+        },
+        "wristBoxSha256": "1c6f52b83bec1de2ea399bcd52aea8d0052ac9bdfa5146466af353569bb1d8f5",
+        "wristCutM": 0.035
+      },
+      "sourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
+      "timings": {
+        "firstBlenderS": 2.293,
+        "firstRunS": 2.303,
+        "secondBlenderS": 2.317,
+        "secondRunS": 2.328
+      }
+    },
+    {
+      "f32Sha256": "aa74bd27004aebc53f2cf976c4480d9aa81c298625f078946c443501271a4a60",
+      "gates": {
+        "bothSigns": true,
+        "boundaryMinM": 0.025314435362815857,
+        "boundaryOutside": true,
+        "deepestSampleM": -0.035999998450279236,
+        "negativeComponentStats": {
+          "count": 1,
+          "largestComponentFraction": 1.0,
+          "largestComponentSizes": [
+            12746
+          ],
+          "largestComponentVoxels": 12746,
+          "negativeSamples": 12746,
+          "singleVoxelComponents": 0
+        },
+        "negativeComponents": 1,
+        "negativeFraction": 0.19058014354066985,
+        "negativeSamples": 12746,
+        "positiveSamples": 54134,
+        "requiredComponents": 1,
+        "route": "direct-vdb",
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "grid": {
+        "bandWidth": 6,
+        "boundsMaxM": [
+          0.11399999999999999,
+          0.138,
+          0.09
+        ],
+        "boundsMinM": [
+          -0.14400000000000002,
+          -0.096,
+          -0.132
+        ],
+        "denseVoxels": 66880,
+        "dimensions": [
+          44,
+          40,
+          38
+        ],
+        "gridName": "sdf",
+        "nodeContractSha256": "4369d2f0de5a079745b087b93d98bebfd59cefc99e78047662d226a2da3a62f2",
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236,
+        "voxelSizeDeclaredM": 0.006,
+        "voxelSizeMeasuredM": [
+          0.006,
+          0.006,
+          0.006
+        ]
+      },
+      "operationSourceSha256": "dfb55d18db13278c852619f9d017cb296c85f12cce82ed53639bd464a1911cb5",
+      "passed": true,
+      "r16fSha256": "5d0ac0627a4d678af8441a9c4d3e600a511bd7a1bbf640bc98bb1cf60e078392",
+      "repeat": {
+        "f32Equal": true,
+        "metadataEqual": true,
+        "passed": true,
+        "r16fEqual": true
+      },
+      "source": "humanoid-right-forearm-intersection",
+      "sourceContract": {
+        "bindBounds": {
+          "basis": "weight-bound-vertices",
+          "maximumM": [
+            0.06850315400492057,
+            0.2698328858340052,
+            0.044219852881976385
+          ],
+          "minimumM": [
+            -0.09636626588570074,
+            -0.0502023044382086,
+            -0.08668546988666637
+          ],
+          "modelToBind": [
+            [
+              0.36445591664020244,
+              -0.19164955633860678,
+              0.911286087011738,
+              0.5079172394273993
+            ],
+            [
+              -0.9112859822232504,
+              -0.27480060984007654,
+              0.3066634693518732,
+              -0.036783928990007264
+            ],
+            [
+              0.19165005460305795,
+              -0.9422075527115754,
+              -0.2748002623432289,
+              1.136521016073445
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "name": "RightForeArm",
+          "ownedFaceCount": 1592,
+          "ownedVertexCount": 938,
+          "partitionRow": 18,
+          "pitchM": 0.006
+        },
+        "bodyLocalSha256": "d3b66ee62a529dee783958f4818838567970d8084db8d027f7182a7cd0cad49a",
+        "bodyTriangleCount": 98003,
+        "bodyVertexCount": 62166,
+        "indexedTopology": [
+          {
+            "boundaryEdges": 26985,
+            "closed": false,
+            "components": 758,
+            "label": "humanoid-body",
+            "triangles": 98003,
+            "vertices": 62166
+          },
+          {
+            "boundaryEdges": 0,
+            "closed": true,
+            "components": 1,
+            "label": "right-forearm-support",
+            "triangles": 12,
+            "vertices": 8
+          }
+        ],
+        "operands": [
+          "humanoid-body",
+          "right-forearm-support"
+        ],
+        "ownedFaceBounds": {
+          "basis": "owned-face-vertices",
+          "maximumM": [
+            0.46625113703580545,
+            0.26518005639787606,
+            0.5369101847840091
+          ],
+          "minimumM": [
+            -0.09636626588570074,
+            -0.5493841834966563,
+            -0.14887783067475913
+          ],
+          "modelToBind": [
+            [
+              0.36445591664020244,
+              -0.19164955633860678,
+              0.911286087011738,
+              0.5079172394273993
+            ],
+            [
+              -0.9112859822232504,
+              -0.27480060984007654,
+              0.3066634693518732,
+              -0.036783928990007264
+            ],
+            [
+              0.19165005460305795,
+              -0.9422075527115754,
+              -0.2748002623432289,
+              1.136521016073445
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "name": "RightForeArm",
+          "ownedFaceCount": 1592,
+          "ownedVertexCount": 1206,
+          "partitionRow": 18,
+          "pitchM": 0.006
+        },
+        "ownedFaceStrays": {
+          "facesPartlyOutsideBindBounds": 168,
+          "facesWhollyOutsideBindBounds": 168,
+          "ownedFaces": 1592,
+          "toleranceM": 0.0001
+        },
+        "payloadSha256": [
+          "8c88bdb5cf38b0d7d0e678bcc0570f3a8bcdedff548bee43c70390e9a0c10429",
+          "117af5cfbf9534d58ad40fe09f791cc624ce69851c100397d52e9245c57b7b94"
+        ],
+        "sourceGlbSha256": "2b23530a64466ca650ead74e49feaf54b6463c254ecccc9b3d56ba993a33cd28",
+        "supportBox": {
+          "bandVertexCount": 0,
+          "maximumM": [
+            0.08850315400492058,
+            0.1098152906978983,
+            0.06421985288197639
+          ],
+          "minimumM": [
+            -0.11636626588570075,
+            -0.0702023044382086,
+            -0.10668546988666637
+          ]
+        },
+        "supportBoxSha256": "b103410856f65b77476b107cb9c176e895fb80bd7051e3653b324f9cb3c634df",
+        "supportPlanes": [
+          [
+            0.5237984665270048,
+            -0.7783255473737144,
+            -0.3461856565043773,
+            -0.014576941413422598
+          ],
+          [
+            -5.6319021172004797e-08,
+            0.9999999999999719,
+            -2.3122963586005937e-07,
+            -0.2699727669778777
+          ]
+        ]
+      },
+      "sourceSha256": "dfb55d18db13278c852619f9d017cb296c85f12cce82ed53639bd464a1911cb5",
+      "timings": {
+        "firstBlenderS": 1.968,
+        "firstRunS": 2.175,
+        "secondBlenderS": 1.96,
+        "secondRunS": 2.17
+      }
+    }
+  ],
+  "schemaVersion": 1,
+  "selectedRoute": "direct-vdb"
+}

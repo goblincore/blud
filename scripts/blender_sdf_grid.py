@@ -2284,8 +2284,18 @@ def run_qualification(out_dir: Path = NOTES_DIR) -> dict[str, Any]:
         [(s, first[(s, SdfGridRoute.selected_default())]) for s in preview_shapes])
     report["previewPng"] = "docs/dev-notes/2026-08-18-blender-sdf-grid/analytic-preview.png"
     report["previewPanels"] = preview_shapes
-    (out_dir / "qualification.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n")
+    # The array-mesh adapter section is owned by the Task 3 real-source
+    # qualifier; carry it forward so regenerating the analytic fixtures never
+    # silently drops evidence this run did not produce.
+    existing = out_dir / "qualification.json"
+    if existing.exists():
+        try:
+            previous = json.loads(existing.read_text())
+        except json.JSONDecodeError:
+            previous = {}
+        if "arrayMeshAdapters" in previous:
+            report["arrayMeshAdapters"] = previous["arrayMeshAdapters"]
+    existing.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
 
 
