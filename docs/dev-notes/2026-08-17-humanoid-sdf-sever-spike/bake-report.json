@@ -1,0 +1,1345 @@
+{
+  "atlas": {
+    "coarseBytes": 161216,
+    "colorBytes": 33554432,
+    "colorParts": 1,
+    "dimensions": [
+      128,
+      128,
+      512
+    ],
+    "distanceBytes": 16777216,
+    "distanceParts": 1
+  },
+  "bones": [
+    {
+      "bone": "Hips",
+      "coarseAchievedPitchM": [
+        0.033857142857142856,
+        0.03257142857142857,
+        0.0324
+      ],
+      "coarseDims": [
+        15,
+        15,
+        16
+      ],
+      "coarseSha256": "d0188be95a2b81ea0713c53aeb4e218c927e791982f7f6a6ef31d7bb42e556a8",
+      "dimensions": [
+        80,
+        77,
+        82
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012918686494231224,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.2762987012987013,
+        "negatives": 139564,
+        "positives": 365556,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 2,
+      "pitchM": 0.006,
+      "sourceInterior": 230145,
+      "supportInterior": 270221,
+      "supportMeshSha256": "7514a592fa2b5ad19e04e712b6ba97fbe700d40ae23708f6eca654956dc9822e"
+    },
+    {
+      "bone": "LeftUpLeg",
+      "coarseAchievedPitchM": [
+        0.03675,
+        0.0324,
+        0.03666666666666667
+      ],
+      "coarseDims": [
+        9,
+        16,
+        10
+      ],
+      "coarseSha256": "e07499d0898700ffcfb05af3f4a4f5fd018d4cd4869b0b017903aae139af3268",
+      "dimensions": [
+        50,
+        82,
+        56
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013083882629871368,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.23949041811846689,
+        "negatives": 54987,
+        "positives": 174613,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 3,
+      "pitchM": 0.006,
+      "sourceInterior": 103922,
+      "supportInterior": 126326,
+      "supportMeshSha256": "0b4f781259a7e0a50f7025c6ab55bdca77405c13cd5c84bf02bc8d07c90c41ea"
+    },
+    {
+      "bone": "LeftLeg",
+      "coarseAchievedPitchM": [
+        0.03075,
+        0.0292,
+        0.0312
+      ],
+      "coarseDims": [
+        9,
+        16,
+        11
+      ],
+      "coarseSha256": "aef07b67d5007a20517ebc40df9edf1c76bb8916b0627a3c55847b7c0ae2fe90",
+      "dimensions": [
+        42,
+        74,
+        53
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013231179676949978,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.19739078701342852,
+        "negatives": 32515,
+        "positives": 132209,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 2,
+      "pitchM": 0.006,
+      "sourceInterior": 42300,
+      "supportInterior": 103668,
+      "supportMeshSha256": "4cd786e0d856ad49bad03c77dcda0e8ed78a1b1035047c9fc0b6e037fbf69e74"
+    },
+    {
+      "bone": "LeftFoot",
+      "coarseAchievedPitchM": [
+        0.02325,
+        0.020399999999999998,
+        0.02072727272727273
+      ],
+      "coarseDims": [
+        9,
+        16,
+        12
+      ],
+      "coarseSha256": "03831d7547ef82783ea8c1d91b5ccf18bf3c5ce8853dd18c2513066ec818d9c5",
+      "dimensions": [
+        32,
+        52,
+        39
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013402815908193588,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.19102872287968442,
+        "negatives": 12397,
+        "positives": 52499,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 15519,
+      "supportInterior": 35625,
+      "supportMeshSha256": "0488510191c61c972012221c99abb2a1e706c6245f93d85e0545f857bcb76e41"
+    },
+    {
+      "bone": "LeftToeBase",
+      "coarseAchievedPitchM": [
+        0.014307692307692308,
+        0.013600000000000001,
+        0.014571428571428572
+      ],
+      "coarseDims": [
+        14,
+        16,
+        8
+      ],
+      "coarseSha256": "ce7c26bb5d3fa08f9b12f07cd9d5da6ebb6f3076cb7f0b11fc6525def15adffd",
+      "dimensions": [
+        32,
+        35,
+        18
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012126156128942966,
+        "max": 0.035999998450279236,
+        "min": -0.019890891388058662,
+        "negativeFraction": 0.1307043650793651,
+        "negatives": 2635,
+        "positives": 17525,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.019890891388058662
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 4675,
+      "supportInterior": 7462,
+      "supportMeshSha256": "8fd264b738b60f2918f94d6cd1a804e8a26230e9697f106f455bc9f9e0abe93a"
+    },
+    {
+      "bone": "RightUpLeg",
+      "coarseAchievedPitchM": [
+        0.03514285714285714,
+        0.0324,
+        0.035454545454545454
+      ],
+      "coarseDims": [
+        8,
+        16,
+        12
+      ],
+      "coarseSha256": "1e0ec666a7bf4cb774bd79af30c2bac965241c73fe86a009ecd5d971e7065136",
+      "dimensions": [
+        42,
+        82,
+        66
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013252107426524162,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.23982420019005385,
+        "negatives": 54513,
+        "positives": 172791,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 4,
+      "pitchM": 0.006,
+      "sourceInterior": 97784,
+      "supportInterior": 129064,
+      "supportMeshSha256": "87aa25f38780eba4f194dc6a24cee3caaa0de5b80dc45a30a23e9833bed9d11e"
+    },
+    {
+      "bone": "RightLeg",
+      "coarseAchievedPitchM": [
+        0.035250000000000004,
+        0.031200000000000002,
+        0.03436363636363637
+      ],
+      "coarseDims": [
+        9,
+        16,
+        12
+      ],
+      "coarseSha256": "c9753d0ff06fb31e6ae299836466c9a3ff790036386045ae9c98727cd014b2d4",
+      "dimensions": [
+        48,
+        79,
+        64
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.014017045497894287,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.14876714135021096,
+        "negatives": 36104,
+        "positives": 206584,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 12,
+      "pitchM": 0.006,
+      "sourceInterior": 53615,
+      "supportInterior": 152852,
+      "supportMeshSha256": "3a0cac9d6ca53cbfc5b25f642e35dc5be503885f2c6e78a6c1c40d5b6ba1faf1"
+    },
+    {
+      "bone": "RightFoot",
+      "coarseAchievedPitchM": [
+        0.020666666666666667,
+        0.02,
+        0.02072727272727273
+      ],
+      "coarseDims": [
+        10,
+        16,
+        12
+      ],
+      "coarseSha256": "a3c4eb52197238e525d304a8aa884fccdaef06fa03d9ef55f947af733c7f367c",
+      "dimensions": [
+        32,
+        51,
+        39
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.014196958392858505,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.19298328305681248,
+        "negatives": 12283,
+        "positives": 51365,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 16314,
+      "supportInterior": 32032,
+      "supportMeshSha256": "54220795e27e6f72c1c0bd98cdd5602835e5c7d35d8baf230d2e8416387c74e8"
+    },
+    {
+      "bone": "RightToeBase",
+      "coarseAchievedPitchM": [
+        0.013600000000000001,
+        0.013600000000000001,
+        0.01425
+      ],
+      "coarseDims": [
+        16,
+        16,
+        9
+      ],
+      "coarseSha256": "806609978f70899e2bb0748a0b390fb47e9fb0cefaf92a83c92dc351b81cca85",
+      "dimensions": [
+        35,
+        35,
+        20
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012815678492188454,
+        "max": 0.035999998450279236,
+        "min": -0.029708830639719963,
+        "negativeFraction": 0.16151020408163266,
+        "negatives": 3957,
+        "positives": 20543,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.029708830639719963
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 5886,
+      "supportInterior": 10266,
+      "supportMeshSha256": "6243ced1433868c3db9f04d508de927dab6ddc7387032fb82055e91e790b6164"
+    },
+    {
+      "bone": "Spine02",
+      "coarseAchievedPitchM": [
+        0.0328,
+        0.046000000000000006,
+        0.035454545454545454
+      ],
+      "coarseDims": [
+        16,
+        4,
+        12
+      ],
+      "coarseSha256": "30a80c3fd0c135210c9a49727371f37b415485ca728e77b0c482438211fcfdce",
+      "dimensions": [
+        83,
+        24,
+        66
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012747175060212612,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.4571467688937568,
+        "negatives": 60102,
+        "positives": 71370,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 80114,
+      "supportInterior": 83160,
+      "supportMeshSha256": "1ac6a0d1b9ba52e8927d040670ed68b0659e830f7c6c29ad6b98b1b378000a8d"
+    },
+    {
+      "bone": "Spine01",
+      "coarseAchievedPitchM": [
+        0.0308,
+        0.033428571428571426,
+        0.033
+      ],
+      "coarseDims": [
+        16,
+        8,
+        13
+      ],
+      "coarseSha256": "05d84c719795c135294b4a0df8e9fc58b9d8e8df099e5690eb76ca5e5121d8c0",
+      "dimensions": [
+        78,
+        40,
+        67
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013921314850449562,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.5969288174512055,
+        "negatives": 124782,
+        "positives": 84258,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 150007,
+      "supportInterior": 149328,
+      "supportMeshSha256": "8199c654680a9e88f2f425d34c042c9505aa0a5709969810ac866887781077b8"
+    },
+    {
+      "bone": "Spine",
+      "coarseAchievedPitchM": [
+        0.023142857142857142,
+        0.02485714285714286,
+        0.0224
+      ],
+      "coarseDims": [
+        15,
+        8,
+        16
+      ],
+      "coarseSha256": "6e7e8ef431532a74950e1669665d9567c3b6642d12778b4b21dda2361d49f134",
+      "dimensions": [
+        55,
+        30,
+        57
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013585716485977173,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.14106326422115895,
+        "negatives": 13267,
+        "positives": 80783,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 65762,
+      "supportInterior": 16476,
+      "supportMeshSha256": "fb34d0ceb77e1fcf2b6e29ec4d7ef318bdd6762d956aaf5de7f57f7c47beb553"
+    },
+    {
+      "bone": "LeftShoulder",
+      "coarseAchievedPitchM": [
+        0.0264,
+        0.0294,
+        0.02890909090909091
+      ],
+      "coarseDims": [
+        16,
+        11,
+        12
+      ],
+      "coarseSha256": "57a3a1f5811831a5ad380bd6db9c6e34b7965f0103e395f6437ebd4619b04779",
+      "dimensions": [
+        67,
+        50,
+        54
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013181340880692005,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.2838474295190713,
+        "negatives": 51348,
+        "positives": 129552,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 97581,
+      "supportInterior": 94008,
+      "supportMeshSha256": "0598afcfc6bed147032b09503fb5e75f95f53601cf63c9db797e540662bec7f5"
+    },
+    {
+      "bone": "LeftArm",
+      "coarseAchievedPitchM": [
+        0.02290909090909091,
+        0.022000000000000002,
+        0.024
+      ],
+      "coarseDims": [
+        12,
+        16,
+        12
+      ],
+      "coarseSha256": "33c62c14b395a956482973b0b05f3d2fac1a220e9690d0126764fbc3cc63335c",
+      "dimensions": [
+        43,
+        56,
+        45
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.014452303759753704,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.22475083056478407,
+        "negatives": 24354,
+        "positives": 84006,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 38850,
+      "supportInterior": 63684,
+      "supportMeshSha256": "df89e39c82a6114c1488b55e46e9fa8b8ae3070741aa6792c9cf3c756286e74f"
+    },
+    {
+      "bone": "LeftForeArm",
+      "coarseAchievedPitchM": [
+        0.02742857142857143,
+        0.023200000000000002,
+        0.027
+      ],
+      "coarseDims": [
+        8,
+        16,
+        7
+      ],
+      "coarseSha256": "19908e2babc9e9883b10edd156c390b6fdd3319b1ed3bc01a8ad77cc9f012bcc",
+      "dimensions": [
+        33,
+        59,
+        28
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.013699506409466267,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.24290116662998018,
+        "negatives": 13242,
+        "positives": 41274,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 18235,
+      "supportInterior": 27442,
+      "supportMeshSha256": "09ed14168ff3bc338c8c46350488d8bb5bca90b05eec54ff8b148aa6d719d0d6"
+    },
+    {
+      "bone": "LeftHand",
+      "coarseAchievedPitchM": [
+        0.018272727272727274,
+        0.017,
+        0.020142857142857146
+      ],
+      "coarseDims": [
+        12,
+        16,
+        8
+      ],
+      "coarseSha256": "e550dea3947eda930b2b6b468fcf4083a42a511b9ff3482e3bec717471610fd9",
+      "dimensions": [
+        68,
+        86,
+        48
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012109695933759212,
+        "max": 0.017999999225139618,
+        "min": -0.017999999225139618,
+        "negativeFraction": 0.15974478454172367,
+        "negatives": 44841,
+        "positives": 235863,
+        "valueMaxM": 0.017999999225139618,
+        "valueMinM": -0.017999999225139618
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.003,
+      "sourceInterior": 48828,
+      "supportInterior": 163231,
+      "supportMeshSha256": "a29377df3e406f285781fa0ecc15eaecb9217cd77662afc93de1532baf9bb6bc"
+    },
+    {
+      "bone": "RightShoulder",
+      "coarseAchievedPitchM": [
+        0.0248,
+        0.0264,
+        0.027600000000000003
+      ],
+      "coarseDims": [
+        16,
+        11,
+        11
+      ],
+      "coarseSha256": "fb23bc20264a4f3c69ae44613b2c5b34cd25ecabe2f5bfa81dc32a6142995d75",
+      "dimensions": [
+        63,
+        45,
+        47
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012209583073854446,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.2506435513527712,
+        "negatives": 33397,
+        "positives": 99848,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 4,
+      "pitchM": 0.006,
+      "sourceInterior": 78947,
+      "supportInterior": 59288,
+      "supportMeshSha256": "18b070c94e2253e4854b6e579cd5551df01c59e1d0ed25d3bf7e64b75f49aebf"
+    },
+    {
+      "bone": "RightArm",
+      "coarseAchievedPitchM": [
+        0.022153846153846156,
+        0.0208,
+        0.02142857142857143
+      ],
+      "coarseDims": [
+        14,
+        16,
+        15
+      ],
+      "coarseSha256": "b44600ad31eeb5a32b531073682c3fb0fd085634d210c98df56dcec95347af5a",
+      "dimensions": [
+        49,
+        53,
+        51
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012714304961264133,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.1986907970735464,
+        "negatives": 26316,
+        "positives": 106131,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 44337,
+      "supportInterior": 80097,
+      "supportMeshSha256": "055ec9db6465715cfd73e3630215a6550544f77912703223c6a7feae096b52fb"
+    },
+    {
+      "bone": "RightForeArm",
+      "coarseAchievedPitchM": [
+        0.02475,
+        0.023200000000000002,
+        0.027
+      ],
+      "coarseDims": [
+        9,
+        16,
+        7
+      ],
+      "coarseSha256": "d96810f34dbcf1ef5c36d7971355a257e171d9a2c1aa82c69a9271d280b250a1",
+      "dimensions": [
+        34,
+        59,
+        28
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012167026288807392,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.25153112092294544,
+        "negatives": 14128,
+        "positives": 42040,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 19555,
+      "supportInterior": 28998,
+      "supportMeshSha256": "8559d3277171aaff1ce023921cf1d91f463f1a7a3630cda26bec9f690899c0db"
+    },
+    {
+      "bone": "RightHand",
+      "coarseAchievedPitchM": [
+        0.0201,
+        0.018000000000000002,
+        0.020571428571428574
+      ],
+      "coarseDims": [
+        11,
+        16,
+        8
+      ],
+      "coarseSha256": "99aa5c588089b706c07bd9a7773ff3601414e358b76966b075028475938d7221",
+      "dimensions": [
+        68,
+        91,
+        49
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012713262811303139,
+        "max": 0.017999999225139618,
+        "min": -0.017999999225139618,
+        "negativeFraction": 0.15484215664287693,
+        "negatives": 46950,
+        "positives": 256262,
+        "valueMaxM": 0.017999999225139618,
+        "valueMinM": -0.017999999225139618
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.003,
+      "sourceInterior": 51297,
+      "supportInterior": 178458,
+      "supportMeshSha256": "9909136c50d13b54929ed96c833651db8f65b77571096b7c07dff212108686f4"
+    },
+    {
+      "bone": "neck",
+      "coarseAchievedPitchM": [
+        0.0222,
+        0.027,
+        0.020399999999999998
+      ],
+      "coarseDims": [
+        11,
+        5,
+        16
+      ],
+      "coarseSha256": "ca62869805ae073558e166a53084e03fe842617c191875f9f16237b89a04c6d6",
+      "dimensions": [
+        38,
+        19,
+        52
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012561077252030373,
+        "max": 0.035999998450279236,
+        "min": -0.035999998450279236,
+        "negativeFraction": 0.35078840826763263,
+        "negatives": 13170,
+        "positives": 24374,
+        "valueMaxM": 0.035999998450279236,
+        "valueMinM": -0.035999998450279236
+      },
+      "negativeComponents": 1,
+      "pitchM": 0.006,
+      "sourceInterior": 22233,
+      "supportInterior": 19136,
+      "supportMeshSha256": "a50ed281406a5b7ca2d004dc2741d261e15b4e904d22f7c725479bb08af21148"
+    },
+    {
+      "bone": "Head",
+      "coarseAchievedPitchM": [
+        0.027545454545454543,
+        0.026571428571428572,
+        0.0258
+      ],
+      "coarseDims": [
+        12,
+        15,
+        16
+      ],
+      "coarseSha256": "cbc8061456faee7e4488a2e32fcfd774ee57ce486600baae5f5415fd97f38019",
+      "dimensions": [
+        102,
+        125,
+        130
+      ],
+      "fieldStats": {
+        "boundaryMin": 0.012234948575496674,
+        "max": 0.017999999225139618,
+        "min": -0.017999999225139618,
+        "negativeFraction": 0.3004156862745098,
+        "negatives": 497939,
+        "positives": 1159561,
+        "valueMaxM": 0.017999999225139618,
+        "valueMinM": -0.017999999225139618
+      },
+      "negativeComponents": 2,
+      "pitchM": 0.003,
+      "sourceInterior": 670433,
+      "supportInterior": 1102238,
+      "supportMeshSha256": "f8bacf14e854e4c6715e7854bf7b935398b7ab7e511509be92ca4bf8f7801672"
+    }
+  ],
+  "clusters": [
+    {
+      "name": "spine",
+      "primaryBones": [
+        "Hips",
+        "Spine02",
+        "Spine01",
+        "Spine"
+      ],
+      "sampleBones": [
+        "Hips",
+        "Spine02",
+        "Spine01",
+        "Spine"
+      ],
+      "sweepBoundsMax": [
+        0.24783305750971624,
+        1.4133642582148198,
+        0.2748059219813705
+      ],
+      "sweepBoundsMin": [
+        -0.24350746175627205,
+        0.5634548656611158,
+        -0.34613282717311983
+      ]
+    },
+    {
+      "name": "left-leg",
+      "primaryBones": [
+        "LeftUpLeg",
+        "LeftLeg",
+        "LeftFoot",
+        "LeftToeBase"
+      ],
+      "sampleBones": [
+        "LeftUpLeg",
+        "LeftLeg",
+        "LeftFoot",
+        "LeftToeBase"
+      ],
+      "sweepBoundsMax": [
+        0.334082694964172,
+        0.9460798418161095,
+        0.2718397365227078
+      ],
+      "sweepBoundsMin": [
+        -0.05132716588900182,
+        -0.10564493793927161,
+        -0.2555944834601607
+      ]
+    },
+    {
+      "name": "right-leg",
+      "primaryBones": [
+        "RightUpLeg",
+        "RightLeg",
+        "RightFoot",
+        "RightToeBase"
+      ],
+      "sampleBones": [
+        "RightUpLeg",
+        "RightLeg",
+        "RightFoot",
+        "RightToeBase"
+      ],
+      "sweepBoundsMax": [
+        0.07290171588233084,
+        0.9403443135740676,
+        0.3021981775964045
+      ],
+      "sweepBoundsMin": [
+        -0.32712264984217615,
+        -0.09510354825520352,
+        -0.26407486836774174
+      ]
+    },
+    {
+      "name": "left-arm",
+      "primaryBones": [
+        "LeftShoulder",
+        "LeftArm",
+        "LeftForeArm",
+        "LeftHand"
+      ],
+      "sampleBones": [
+        "LeftShoulder",
+        "LeftArm",
+        "LeftForeArm",
+        "LeftHand"
+      ],
+      "sweepBoundsMax": [
+        0.920855294377563,
+        1.4236204117992386,
+        0.15489487301916655
+      ],
+      "sweepBoundsMin": [
+        -0.02227662481116373,
+        0.9036039317097966,
+        -0.3167517978643279
+      ]
+    },
+    {
+      "name": "right-arm",
+      "primaryBones": [
+        "RightShoulder",
+        "RightArm",
+        "RightForeArm",
+        "RightHand"
+      ],
+      "sampleBones": [
+        "RightShoulder",
+        "RightArm",
+        "RightForeArm",
+        "RightHand"
+      ],
+      "sweepBoundsMax": [
+        0.0520922706224835,
+        1.7059196669888148,
+        0.3578334519298523
+      ],
+      "sweepBoundsMin": [
+        -0.9615151675904774,
+        0.6923122287758539,
+        -0.6557739862831086
+      ]
+    },
+    {
+      "name": "head",
+      "primaryBones": [
+        "neck",
+        "Head"
+      ],
+      "sampleBones": [
+        "neck",
+        "Head",
+        "Spine"
+      ],
+      "sweepBoundsMax": [
+        0.15338380035171065,
+        1.724327970030453,
+        0.22073814843472983
+      ],
+      "sweepBoundsMin": [
+        -0.1679983852209003,
+        1.1550452358570715,
+        -0.2864928665532992
+      ]
+    }
+  ],
+  "durationS": 130.834,
+  "hashes": {
+    "coarseCombined": "eb624639029ea7b44378687b48e996caece4eac24e8496432293b691573bb70b",
+    "colorCombined": "80f5122a192724bc9f4df4f5c8b72ef5f65fe3e78eabab63724c65f4d5cf14b5",
+    "distanceCombined": "58a1b7764f07a3eb933f7dd5a72db94289c07e8c96ec9498c65ada658fc18205",
+    "manifestInput": "d28f5023ed3d12e0cce2a4b0a848fd3093280760c47f79f305c36cb589839477",
+    "nodeContract": "bd6238a8889ddd1f14169b12c31bfd9240571de2a14ff5ee7b2f7f814d98d4f4"
+  },
+  "jointProbes": [
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.03599999845027923,
+          "parent": 0.03426470906191335
+        },
+        "-50mm": {
+          "child": 0.03445472382676647,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftUpLeg",
+      "overlapOk": true,
+      "parent": "Hips",
+      "surfaceVertices": 87,
+      "worstChildM": 0.0012573603164568023,
+      "worstParentM": 0.0007556388459617617
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.03599999845027923,
+          "parent": 0.016694216057658195
+        },
+        "-50mm": {
+          "child": 0.03445849458150494,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftLeg",
+      "overlapOk": true,
+      "parent": "LeftUpLeg",
+      "surfaceVertices": 34,
+      "worstChildM": 0.0014442664525477285,
+      "worstParentM": 0.0017259271751230271
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.03397238008682828,
+          "parent": 0.016284838318824768
+        },
+        "-50mm": {
+          "child": 0.03450626024855857,
+          "parent": -0.03517202276180558
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftFoot",
+      "overlapOk": true,
+      "parent": "LeftLeg",
+      "surfaceVertices": 36,
+      "worstChildM": 0.0010074303399216409,
+      "worstParentM": 0.00042881180299354
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": 0.014089497228436151,
+          "parent": 0.017410572618246082
+        },
+        "-50mm": {
+          "child": 0.034172745412148216,
+          "parent": -0.007708383303781076
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftToeBase",
+      "overlapOk": true,
+      "parent": "LeftFoot",
+      "surfaceVertices": 110,
+      "worstChildM": 0.0013726892930638938,
+      "worstParentM": 0.0014578706917726385
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.035999998450279236,
+          "parent": 0.03442308121424001
+        },
+        "-50mm": {
+          "child": 0.034879828807963115,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightUpLeg",
+      "overlapOk": true,
+      "parent": "Hips",
+      "surfaceVertices": 73,
+      "worstChildM": 0.0022669647485452507,
+      "worstParentM": 0.0008597395116140736
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.035999998450279236,
+          "parent": 0.014483653008937836
+        },
+        "-50mm": {
+          "child": 0.0344842223149731,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightLeg",
+      "overlapOk": true,
+      "parent": "RightUpLeg",
+      "surfaceVertices": 26,
+      "worstChildM": 0.0009155816659017715,
+      "worstParentM": 0.0016735653837954977
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.017227842596252593,
+          "parent": 0.01645846851170063
+        },
+        "-50mm": {
+          "child": 0.03431682893929722,
+          "parent": -0.034232578238082706
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightFoot",
+      "overlapOk": true,
+      "parent": "RightLeg",
+      "surfaceVertices": 61,
+      "worstChildM": 0.0018813587533502113,
+      "worstParentM": 0.000978681562602749
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.0004535380546259807,
+          "parent": 0.014196958392858507
+        },
+        "-50mm": {
+          "child": 0.03541409741223554,
+          "parent": -0.0252545936754408
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightToeBase",
+      "overlapOk": true,
+      "parent": "RightFoot",
+      "surfaceVertices": 44,
+      "worstChildM": 0.0016361436063781559,
+      "worstParentM": 0.0011478319631575834
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.035999998450279236,
+          "parent": 0.034163025839241995
+        },
+        "-50mm": {
+          "child": 0.017606493085622787,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "Spine02",
+      "overlapOk": true,
+      "parent": "Hips",
+      "surfaceVertices": 350,
+      "worstChildM": 0.0007146641444727077,
+      "worstParentM": 0.0016943501304027822
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": 0.0013862698193095986,
+          "parent": 0.012747175060212612
+        },
+        "-50mm": {
+          "child": 0.013921314850449562,
+          "parent": 0.004585437004513307
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "Spine01",
+      "overlapOk": true,
+      "parent": "Spine02",
+      "surfaceVertices": 200,
+      "worstChildM": 0.0007188546714824363,
+      "worstParentM": 0.001393437875614014
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": 0.005491809778805627,
+          "parent": 0.017003189665754283
+        },
+        "-50mm": {
+          "child": 0.024110269506872777,
+          "parent": -0.004325160606451508
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "Spine",
+      "overlapOk": true,
+      "parent": "Spine01",
+      "surfaceVertices": 89,
+      "worstChildM": 0.0007277091133492165,
+      "worstParentM": 0.0010656804812139097
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.004962263697355402,
+          "parent": 0.03437314928469955
+        },
+        "-50mm": {
+          "child": 0.034782565568801355,
+          "parent": -0.02459900478732884
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftShoulder",
+      "overlapOk": true,
+      "parent": "Spine",
+      "surfaceVertices": 38,
+      "worstChildM": 0.0014385950146239336,
+      "worstParentM": 0.0021894949851544625
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.03599999845027923,
+          "parent": 0.015238393098115921
+        },
+        "-50mm": {
+          "child": 0.03426393615036347,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftArm",
+      "overlapOk": true,
+      "parent": "LeftShoulder",
+      "surfaceVertices": 118,
+      "worstChildM": 0.0009582127266410307,
+      "worstParentM": 0.0016195382535249205
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.016092809315721848,
+          "parent": 0.015038830228149893
+        },
+        "-50mm": {
+          "child": 0.03423649913044913,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftForeArm",
+      "overlapOk": true,
+      "parent": "LeftArm",
+      "surfaceVertices": 50,
+      "worstChildM": 0.0013079299568526065,
+      "worstParentM": 0.0016171834253661198
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.017999999225139614,
+          "parent": 0.017241887748241425
+        },
+        "-50mm": {
+          "child": 0.017999999225139618,
+          "parent": -0.03249094120787675
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "LeftHand",
+      "overlapOk": true,
+      "parent": "LeftForeArm",
+      "surfaceVertices": 86,
+      "worstChildM": 0.00028253290969069484,
+      "worstParentM": 0.001067952445766725
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": 0.010898033281071718,
+          "parent": 0.03487642733022146
+        },
+        "-50mm": {
+          "child": 0.027588968250506468,
+          "parent": -0.012372362415879995
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightShoulder",
+      "overlapOk": true,
+      "parent": "Spine",
+      "surfaceVertices": 26,
+      "worstChildM": 0.0003373735241823683,
+      "worstParentM": 0.0015032477580875561
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.03599999845027923,
+          "parent": 0.016302967444062233
+        },
+        "-50mm": {
+          "child": 0.034621144493731534,
+          "parent": -0.035999998450279236
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightArm",
+      "overlapOk": true,
+      "parent": "RightShoulder",
+      "surfaceVertices": 127,
+      "worstChildM": 0.0015056285228786412,
+      "worstParentM": 0.0007629610549778295
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.03558686029688908,
+          "parent": 0.012714304961264135
+        },
+        "-50mm": {
+          "child": 0.034439814842960485,
+          "parent": -0.034977013214141
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightForeArm",
+      "overlapOk": true,
+      "parent": "RightArm",
+      "surfaceVertices": 45,
+      "worstChildM": 0.0006615168267940888,
+      "worstParentM": 0.0011145663835138335
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.01799999922513962,
+          "parent": 0.012167026288807392
+        },
+        "-50mm": {
+          "child": 0.017999999225139618,
+          "parent": -0.03520218804676632
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "RightHand",
+      "overlapOk": true,
+      "parent": "RightForeArm",
+      "surfaceVertices": 37,
+      "worstChildM": 0.0003569996436654111,
+      "worstParentM": 0.0005575702400483353
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.015721001619442603,
+          "parent": 0.034072986436755395
+        },
+        "-50mm": {
+          "child": 0.014754503965377808,
+          "parent": -0.008551340559089326
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "neck",
+      "overlapOk": true,
+      "parent": "Spine",
+      "surfaceVertices": 13,
+      "worstChildM": -0.00023409038246571112,
+      "worstParentM": 0.0001340072938464009
+    },
+    {
+      "across": {
+        "+50mm": {
+          "child": -0.017999999225139614,
+          "parent": 0.012561077252030373
+        },
+        "-50mm": {
+          "child": 0.017999999225139618,
+          "parent": -0.01575689191172739
+        }
+      },
+      "acrossBoundaryOk": true,
+      "child": "Head",
+      "overlapOk": true,
+      "parent": "neck",
+      "surfaceVertices": 77,
+      "worstChildM": 0.00020927058032267856,
+      "worstParentM": 0.0013351441688728403
+    }
+  ],
+  "kind": "humanoid-bone-sdf-bake-report",
+  "rightArm": {
+    "cutAxisLocal": [
+      -0.5237984665270049,
+      0.7783255473737142,
+      0.3461856565043771
+    ],
+    "cutPlaneLocal": [
+      -0.5237984665270049,
+      0.7783255473737142,
+      0.3461856565043771,
+      -0.08541888012954074
+    ],
+    "cutSeed": 12648430,
+    "irregularityM": 0.004,
+    "rimWidthM": 0.008
+  },
+  "source": {
+    "byteLength": 10234820,
+    "sha256": "2b23530a64466ca650ead74e49feaf54b6463c254ecccc9b3d56ba993a33cd28",
+    "textureSha256": "7a30076ca339a9c467109c67b36f3a980cfd9c3e13fa5863decb41759a239d3e"
+  },
+  "task": "2026-08-17-humanoid-sdf-sever-spike/2"
+}

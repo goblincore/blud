@@ -44,11 +44,13 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
+import time
 import zlib
 from pathlib import Path
 
@@ -90,6 +92,37 @@ FOLD_RULE_NAME = "zero-skin-fold-to-nearest-deforming-ancestor"
 DETAIL_NAME_TOKENS = ("Head", "Hand")
 
 UV_CONVENTION = "glb"          # v = 0 at the image's top row
+
+# -- Task 2 atlas / manifest constants ---------------------------------------
+MANIFEST_VERSION = 1
+MANIFEST_KIND = "humanoid-bone-sdf"
+ATLAS_ORDER = "x-fastest-y-z"
+ATLAS_PADDING = 2
+ATLAS_PAGE_COUNT = 1
+MAX_ATLAS_DIM = 2048            # WebGPU maxTextureDimension3D minimum
+MAX_TRANSPORT_PART_BYTES = 64 * 1024 * 1024
+COARSE_MAX_DIM = 16             # per-bone coarse CPU brick, per axis
+EMPTY_DISTANCE_M = 1.0          # positive distance for empty atlas texels
+EMPTY_COLOR = (0, 0, 0, 0)      # transparent black for empty atlas texels
+
+# Sever parameters (Tasks 4-7 consume these values and may not invent
+# replacements).
+SEVER_CUT_SEED = 12648430
+SEVER_IRREGULARITY_M = 0.004
+SEVER_RIM_WIDTH_M = 0.008
+
+# Selected SDF route + pinned Blender version, from the shared qualification
+# (docs/dev-notes/2026-08-18-blender-sdf-grid/qualification.json).
+SELECTED_ROUTE = "direct-vdb"
+EXPECTED_BLENDER_VERSION = "5.2.0 LTS"
+SDF_THRESHOLD = 0.0
+SDF_ADAPTIVITY = 0.0
+
+# Conservative sweep bound for cluster proxy boxes: the documented maximum
+# bone-local surface-warp amplitude plus a margin for the 0-100 deg elbow
+# sweep discretisation (see build_clusters).
+MAX_WARP_M = 0.010
+MAX_SAMPLED_BONES_PER_CLUSTER = 4
 
 
 # ===========================================================================
@@ -149,6 +182,70 @@ class PartitionResult:
     unowned_face_indices: np.ndarray   # (U,) int64, expected empty
     bands: tuple[JointBand, ...]
     coverage: dict                     # per-joint + global diagnostics
+
+
+# -- Task 2 atlas packing / transport types ----------------------------------
+
+@dataclasses.dataclass(frozen=True)
+class BrickRequest:
+    bone: str
+    dims: tuple[int, int, int]
+
+
+@dataclasses.dataclass(frozen=True)
+class AtlasBrick:
+    bone: str
+    dims: tuple[int, int, int]
+    offset: tuple[int, int, int]
+    bounds_min: tuple[float, float, float]
+    bounds_max: tuple[float, float, float]
+    voxel: tuple[float, float, float]
+
+
+@dataclasses.dataclass(frozen=True)
+class AtlasLayout:
+    dimensions: tuple[int, int, int]
+    padding: int
+    bricks: tuple[AtlasBrick, ...]
+
+    def to_json(self) -> dict:
+        return {
+            "dimensions": list(self.dimensions),
+            "padding": int(self.padding),
+            "bricks": [{
+                "bone": b.bone,
+                "dims": list(b.dims),
+                "offset": list(b.offset),
+                "boundsMin": list(b.bounds_min),
+                "boundsMax": list(b.bounds_max),
+                "voxel": list(b.voxel),
+            } for b in self.bricks],
+        }
+
+
+# ===========================================================================
+# Lazy loader for the shared qualified Blender backend (import-safe; bpy and
+# libigl stay function-local there, so importing under uv or inside Blender
+# never touches them).
+# ===========================================================================
+
+_SDF_MODULE = None
+
+
+def _sdf_module():
+    """The shared blender_sdf_grid module, loaded once (import-safe)."""
+    global _SDF_MODULE
+    if _SDF_MODULE is None:
+        import importlib.util
+        path = Path(__file__).resolve().parent / "blender_sdf_grid.py"
+        spec = importlib.util.spec_from_file_location("blender_sdf_grid_for_hum",
+                                                      path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _SDF_MODULE = module
+    return _SDF_MODULE
 
 
 # ===========================================================================
@@ -582,6 +679,372 @@ def _edge_adjacency(faces: npt.NDArray[np.integer]
     rows = np.tile(np.arange(len(f), dtype=np.int64), 3)[order]
     same = (keys[1:] == keys[:-1]).all(axis=1)
     return rows[:-1][same], rows[1:][same]
+
+
+# ===========================================================================
+# Task 2: support volume, color projection helpers, packing, transport, field
+# encodings. Everything here is pure numpy + stdlib (no Blender, no libigl).
+# ===========================================================================
+
+_IT = None
+
+
+def _combinations():
+    global _IT
+    if _IT is None:
+        from itertools import combinations as _comb
+        _IT = _comb
+    return _IT
+
+
+def _convex_polytope_mesh(planes: npt.NDArray[np.floating],
+                          box_min: Sequence[float],
+                          box_max: Sequence[float]
+                          ) -> tuple[npt.NDArray[np.float64],
+                                     npt.NDArray[np.int64]]:
+    """Triangulate `box ∩ {dot(n,p)+w <= 0 for each plane}` as a closed,
+    outward-wound, manifold triangle mesh.
+
+    The polytope is the intersection of the box (6 half-spaces) and the
+    support planes. Every vertex is the solution of three active half-space
+    equalities; every face is the polygon of vertices lying on one plane,
+    fanned and oriented outward. Fully deterministic (numpy-only).
+    """
+    planes = np.asarray(planes, dtype=np.float64).reshape(-1, 4)
+    if planes.shape[0] and not np.all(np.abs(planes[:, :3].sum(axis=1)) > 0.0):
+        raise ValueError("support planes must have non-zero normals")
+    lo = np.asarray(box_min, dtype=np.float64).reshape(3)
+    hi = np.asarray(box_max, dtype=np.float64).reshape(3)
+    if not np.all(hi > lo):
+        raise ValueError(f"box bounds not strictly ordered: {lo} .. {hi}")
+    box = np.array([
+        [-1.0, 0.0, 0.0, lo[0]], [1.0, 0.0, 0.0, -hi[0]],
+        [0.0, -1.0, 0.0, lo[1]], [0.0, 1.0, 0.0, -hi[1]],
+        [0.0, 0.0, -1.0, lo[2]], [0.0, 0.0, 1.0, -hi[2]],
+    ], dtype=np.float64)
+    all_planes = np.vstack([box, planes]) if len(planes) else box
+    n = all_planes[:, :3]
+    w = all_planes[:, 3]
+    m = len(all_planes)
+
+    # 1. vertices: solve every triple of plane equalities, keep feasible ones.
+    verts: list[npt.NDArray[np.float64]] = []
+    for i, j, k in _combinations()(range(m), 3):
+        a = np.stack([n[i], n[j], n[k]])
+        if abs(float(np.linalg.det(a))) < 1e-12:
+            continue
+        p = np.linalg.solve(a, -np.stack([w[i], w[j], w[k]]))
+        if bool((n @ p + w <= 1e-9).all()):
+            verts.append(p)
+    if not verts:
+        return _sdf_module().closed_box_mesh(lo, hi)  # planes cull the box away
+    verts = np.array(verts)
+    keys = np.round(verts / 1e-9).astype(np.int64)
+    _, first = np.unique(keys, axis=0, return_index=True)
+    verts = verts[np.sort(first)]
+
+    # 2. faces: one polygon per plane, fan-triangulated and outward-oriented.
+    faces: list[npt.NDArray[np.int64]] = []
+    for i in range(m):
+        on = np.abs(verts @ n[i] + w[i]) <= 1e-7
+        idx = np.flatnonzero(on)
+        if len(idx) < 3:
+            continue
+        centre = verts[idx].mean(axis=0)
+        e1 = np.cross(n[i], np.array([1.0, 0.0, 0.0]))
+        if float(np.linalg.norm(e1)) < 1e-9:
+            e1 = np.cross(n[i], np.array([0.0, 1.0, 0.0]))
+        e1 = e1 / np.linalg.norm(e1)
+        e2 = np.cross(n[i], e1)
+        rel = verts[idx] - centre
+        ang = np.arctan2(rel @ e2, rel @ e1)
+        idx = idx[np.argsort(ang)]
+        for a in range(1, len(idx) - 1):
+            tri = np.array([idx[0], idx[a], idx[a + 1]], dtype=np.int64)
+            v0, v1, v2 = verts[tri]
+            if float(np.dot(np.cross(v1 - v0, v2 - v0), n[i])) < 0.0:
+                tri = tri[[0, 2, 1]]
+            faces.append(tri)
+    return verts, np.array(faces, dtype=np.int64)
+
+
+def support_mesh(partition: "BonePartition | npt.NDArray[np.floating]",
+                 bounds: Sequence[Sequence[float]]
+                 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]:
+    """A GEOMETRICALLY closed, outward-wound support volume for one bone.
+
+    The convex polytope of the partition's recorded `supportPlanes` (inside
+    when dot(n,p)+w <= 0, bone-local) intersected with the brick bounds box.
+    Blender's Mesh to SDF Grid needs a closed operand to sign an interior, so
+    this mesh must survive `welded_mesh_info()` with zero boundary edges; the
+    baker fails loudly otherwise. No planes -> the full box.
+    """
+    planes = getattr(partition, "support_planes", partition)
+    planes = np.asarray(planes, dtype=np.float64).reshape(-1, 4)
+    bounds = np.asarray(bounds, dtype=np.float64).reshape(2, 3)
+    vertices, faces = _convex_polytope_mesh(planes, bounds[0], bounds[1])
+    SDF = _sdf_module()
+    info = SDF.welded_mesh_info(vertices, faces)
+    if info["boundaryEdges"] != 0 or not info["closed"]:
+        raise ValueError(
+            f"support_mesh is not a closed manifold: {info['boundaryEdges']} "
+            f"boundary edges after a 1 um weld; the support volume would bake "
+            "as an unsigned shell")
+    if info["signedVolumeM3"] <= 0.0:
+        raise ValueError(
+            f"support_mesh signed volume {info['signedVolumeM3']:.3e} is not "
+            "positive (inward winding)")
+    return vertices, faces
+
+
+def barycentric_uv(bary: npt.NDArray[np.floating],
+                   face_uvs: npt.NDArray[np.floating]) -> npt.NDArray[np.float64]:
+    """Interpolate triangle UVs with barycentric weights: (N,3) @ (N,3,2)."""
+    bary = np.asarray(bary, dtype=np.float64).reshape(-1, 3)
+    face_uvs = np.asarray(face_uvs, dtype=np.float64).reshape(-1, 3, 2)
+    if bary.shape[0] != face_uvs.shape[0]:
+        raise ValueError("bary/face_uvs row count mismatch")
+    return np.einsum("ij,ijk->ik", bary, face_uvs)
+
+
+def sample_rgba_bilinear(tex: npt.NDArray[np.uint8],
+                         uvs: npt.NDArray[np.floating]
+                         ) -> npt.NDArray[np.uint8]:
+    """Bilinear RGBA8 sampling in the recorded GLB convention (v=0 at the
+    image's top row; tex is stored top-first (H,W,4)). Clamps to edges."""
+    tex = np.asarray(tex, dtype=np.float64)
+    h, w = tex.shape[0], tex.shape[1]
+    uvs = np.asarray(uvs, dtype=np.float64).reshape(-1, 2)
+    u = np.clip(uvs[:, 0], 0.0, 1.0) * (w - 1)
+    v = np.clip(uvs[:, 1], 0.0, 1.0) * (h - 1)
+    x0 = np.floor(u).astype(np.int64)
+    y0 = np.floor(v).astype(np.int64)
+    x1 = np.minimum(x0 + 1, w - 1)
+    y1 = np.minimum(y0 + 1, h - 1)
+    fx = (u - x0)[:, None]
+    fy = (v - y0)[:, None]
+    top = tex[y0, x0] * (1.0 - fx) + tex[y0, x1] * fx
+    bot = tex[y1, x0] * (1.0 - fx) + tex[y1, x1] * fx
+    out = top * (1.0 - fy) + bot * fy
+    return np.rint(out).astype(np.uint8)
+
+
+def sample_bone_brick(field: npt.NDArray[np.floating],
+                      bounds_min: Sequence[float],
+                      voxel: Sequence[float],
+                      point: Sequence[float]) -> float:
+    """Trilinear sample of a dense brick (field[z,y,x]) at a bone-local point,
+    clamped to the brick bounds (distance outside the window is undefined)."""
+    field = np.asarray(field, dtype=np.float64)
+    lo = np.asarray(bounds_min, dtype=np.float64)
+    vx = np.asarray(voxel, dtype=np.float64)
+    p = np.asarray(point, dtype=np.float64)
+    nz, ny, nx = field.shape
+    f = (p - lo) / vx
+    cx = min(max(f[0], 0.0), nx - 1.0)
+    cy = min(max(f[1], 0.0), ny - 1.0)
+    cz = min(max(f[2], 0.0), nz - 1.0)
+    x0, y0, z0 = int(math.floor(cx)), int(math.floor(cy)), int(math.floor(cz))
+    x1, y1, z1 = min(x0 + 1, nx - 1), min(y0 + 1, ny - 1), min(z0 + 1, nz - 1)
+    ax, ay, az = cx - x0, cy - y0, cz - z0
+    g = field
+    c000 = g[z0, y0, x0]; c100 = g[z0, y0, x1]
+    c010 = g[z0, y1, x0]; c110 = g[z0, y1, x1]
+    c001 = g[z1, y0, x0]; c101 = g[z1, y0, x1]
+    c011 = g[z1, y1, x0]; c111 = g[z1, y1, x1]
+    return float(
+        c000 * (1 - ax) * (1 - ay) * (1 - az) + c100 * ax * (1 - ay) * (1 - az) +
+        c010 * (1 - ax) * ay * (1 - az) + c110 * ax * ay * (1 - az) +
+        c001 * (1 - ax) * (1 - ay) * az + c101 * ax * (1 - ay) * az +
+        c011 * (1 - ax) * ay * az + c111 * ax * ay * az)
+
+
+def resample_coarse_brick(dense_f32: npt.NDArray[np.floating],
+                          dims: Sequence[int],
+                          max_dim: int = COARSE_MAX_DIM
+                          ) -> tuple[npt.NDArray[np.float32],
+                                     tuple[int, int, int]]:
+    """Trilinear resample a bone's dense field to at most `max_dim` per axis,
+    preserving aspect ratio (a short axis is never up-sampled)."""
+    dense = np.asarray(dense_f32, dtype=np.float32)
+    dims = tuple(int(n) for n in dims)
+    if dense.shape != (dims[2], dims[1], dims[0]):
+        raise ValueError(f"dense shape {dense.shape} != (z,y,x) of dims {dims}")
+    scale = 1.0
+    if max(dims) > max_dim:
+        scale = max_dim / float(max(dims))
+    cdims = tuple(int(math.floor(n * scale)) for n in dims)
+    cdims = tuple(min(max(n, 1), max_dim) for n in cdims)
+    # endpoint-inclusive grid coordinates in the dense frame
+    xs = np.linspace(0.0, dims[0] - 1.0, cdims[0])
+    ys = np.linspace(0.0, dims[1] - 1.0, cdims[1])
+    zs = np.linspace(0.0, dims[2] - 1.0, cdims[2])
+    x0 = np.floor(xs).astype(np.int64)
+    y0 = np.floor(ys).astype(np.int64)
+    z0 = np.floor(zs).astype(np.int64)
+    fx = (xs - x0).astype(np.float32)
+    fy = (ys - y0).astype(np.float32)
+    fz = (zs - z0).astype(np.float32)
+    x1 = np.minimum(x0 + 1, dims[0] - 1)
+    y1 = np.minimum(y0 + 1, dims[1] - 1)
+    z1 = np.minimum(z0 + 1, dims[2] - 1)
+    # interpolate x
+    ix = dense[:, :, x0] * (1 - fx) + dense[:, :, x1] * fx     # (z,y,cx)
+    # interpolate y
+    iy = ix[:, y0, :] * (1 - fy[None, :, None]) + ix[:, y1, :] * fy[None, :, None]
+    # interpolate z
+    iz = iy[z0, :, :] * (1 - fz[:, None, None]) + iy[z1, :, :] * fz[:, None, None]
+    return iz.astype(np.float32), cdims
+
+
+def encode_r16f_field(field: npt.NDArray[np.floating]) -> bytes:
+    """Little-endian float16, x-fastest C order (Blud's R16F encoding)."""
+    return np.ascontiguousarray(field, dtype=np.float32).astype("<f2").tobytes("C")
+
+
+def encode_rgba8_field(color: npt.NDArray[np.integer]) -> bytes:
+    """RGBA8 in x-fastest-y-z order (C order of the (z,y,x,4) array)."""
+    return np.ascontiguousarray(color, dtype=np.uint8).tobytes("C")
+
+
+def split_transport_parts(data: bytes, max_bytes: int) -> list[bytes]:
+    """Split a logical byte stream at `max_bytes` boundaries, never changing
+    the concatenated stream."""
+    if not data:
+        return [b""]
+    return [data[i:i + max_bytes] for i in range(0, len(data), max_bytes)]
+
+
+def build_transport_contract(parts: Sequence[bytes],
+                             urls: Sequence[str]) -> dict:
+    """Per-part + combined hashes; the identical hash contract the atlases and
+    the coarse pack use."""
+    parts = list(parts)
+    urls = list(urls)
+    if len(parts) != len(urls):
+        raise ValueError("parts/urls count mismatch")
+    combined = b"".join(parts)
+    return {
+        "parts": [{"url": u, "byteLength": len(p),
+                   "sha256": hashlib.sha256(p).hexdigest()}
+                  for u, p in zip(urls, parts)],
+        "combinedByteLength": len(combined),
+        "combinedSha256": hashlib.sha256(combined).hexdigest(),
+    }
+
+
+def verify_transport_contract(parts: Sequence[bytes], contract: dict) -> None:
+    """Reject a reordered, truncated, or padded transport part stream."""
+    parts = list(parts)
+    listed = list(contract["parts"])
+    if len(parts) != len(listed):
+        raise ValueError(f"part count {len(parts)} != contract {len(listed)}")
+    for p, entry in zip(parts, listed):
+        if len(p) != int(entry["byteLength"]):
+            raise ValueError(f"part byteLength {len(p)} != "
+                             f"{entry['byteLength']}")
+        if hashlib.sha256(p).hexdigest() != entry["sha256"]:
+            raise ValueError("part sha256 mismatch")
+    combined = b"".join(parts)
+    if len(combined) != int(contract["combinedByteLength"]):
+        raise ValueError("combined byteLength mismatch")
+    if hashlib.sha256(combined).hexdigest() != contract["combinedSha256"]:
+        raise ValueError("combined sha256 mismatch")
+
+
+def _try_pack(ordered: Sequence[BrickRequest], dims: Sequence[int],
+              padding: int) -> list[tuple[tuple[int, int, int],
+                                          tuple[int, int, int], str]] | None:
+    """Extreme-point first-fit 3D placement; deterministic and non-overlapping."""
+    W, H, D = (int(n) for n in dims)
+    placed: list[tuple[int, int, int, int, int, int]] = []
+    # leading padding border on the (0,0,0) corner so every brick starts at
+    # offset >= padding in every axis (atlas edge halo, plan-pinned test).
+    points = [(padding, padding, padding)]
+
+    def fits(p: tuple[int, int, int], bw: int, bh: int, bd: int) -> bool:
+        x, y, z = p
+        if x + bw > W or y + bh > H or z + bd > D:
+            return False
+        for (px, py, pz, pw, ph, pd) in placed:
+            if (x < px + pw + padding and px < x + bw + padding
+                    and y < py + ph + padding and py < y + bh + padding
+                    and z < pz + pd + padding and pz < z + bd + padding):
+                return False
+        return True
+
+    for req in ordered:
+        bw, bh, bd = req.dims
+        best = None
+        for p in sorted(set(points)):
+            if fits(p, bw, bh, bd):
+                best = p
+                break
+        if best is None:
+            return None
+        x, y, z = best
+        placed.append((x, y, z, bw, bh, bd))
+        for cand in ((x + bw + padding, y, z), (x, y + bh + padding, z),
+                     (x, y, z + bd + padding),
+                     (x + bw + padding, y + bh + padding, z),
+                     (x + bw + padding, y, z + bd + padding),
+                     (x, y + bh + padding, z + bd + padding),
+                     (x + bw + padding, y + bh + padding, z + bd + padding)):
+            points.append(cand)
+    return [((p[0], p[1], p[2]), (p[3], p[4], p[5]), req.bone)
+            for p, req in zip(placed, ordered)]
+
+
+def pack_bricks(requests: Sequence[BrickRequest], max_dim: int = 256,
+                padding: int = ATLAS_PADDING) -> AtlasLayout:
+    """Deterministic first-fit 3D packing into the smallest power-of-two-ish
+    container (each axis a power of two <= max_dim) that holds every brick."""
+    ordered = sorted(requests,
+                     key=lambda r: (-(r.dims[0] * r.dims[1] * r.dims[2]), r.bone))
+    min_vol = sum(r.dims[0] * r.dims[1] * r.dims[2] for r in ordered)
+    powers = [2 ** k for k in range(1, 21) if 2 ** k <= max_dim]
+    candidates: list[tuple[int, tuple[int, int, int]]] = []
+    for x in powers:
+        for y in powers:
+            for z in powers:
+                if x * y * z >= min_vol:
+                    candidates.append((x * y * z, (x, y, z)))
+    candidates.sort()
+    for _, dims in candidates:
+        placed = _try_pack(ordered, dims, padding)
+        if placed is not None:
+            bricks = tuple(AtlasBrick(
+                bone=bone, dims=bd, offset=off,
+                bounds_min=(0.0, 0.0, 0.0), bounds_max=(0.0, 0.0, 0.0),
+                voxel=(0.0, 0.0, 0.0)) for off, bd, bone in placed)
+            return AtlasLayout(dims, padding, bricks)
+    raise ValueError(
+        f"no power-of-two container up to {max_dim} fits {len(ordered)} bricks")
+
+
+def layout_has_overlap(layout: AtlasLayout) -> bool:
+    """True when any two bricks' voxel ranges intersect."""
+    bricks = list(layout.bricks)
+    for i in range(len(bricks)):
+        for j in range(i + 1, len(bricks)):
+            a, b = bricks[i], bricks[j]
+            if all(a.offset[k] < b.offset[k] + b.dims[k]
+                   and b.offset[k] < a.offset[k] + a.dims[k] for k in range(3)):
+                return True
+    return False
+
+
+def _canonical_node_contract_sha256() -> str:
+    """Hash of the FIXED node-graph contract (per-spec fields excluded), the
+    value the manifest pins so a Blender node or sign-convention change is a
+    blocking mutation rather than a silent atlas difference."""
+    SDF = _sdf_module()
+    full = SDF.build_node_contract(SDF.SdfGridSpec())
+    fixed = {k: full[k] for k in (
+        "blenderVersionConstraint", "operationNodes", "composition",
+        "units", "basis", "signConvention", "gridName", "bandWidth",
+        "threshold", "adaptivity", "interpolation", "bake")}
+    return SDF.sha256_text(SDF.canonical_json(fixed))
 
 
 def derive_partitions(source: SourceSoup) -> PartitionResult:
@@ -1641,17 +2104,1179 @@ def run_render_partitions() -> int:
     return 0
 
 
+# ===========================================================================
+# Task 2: color projection, per-bone bake, atlas packing, manifest, validation
+# ===========================================================================
+
+BAKE_REPORT_PATH = SPIKE_NOTES_DIR / "bake-report.json"
+PREVIEW_TEXTURED_PATH = SPIKE_NOTES_DIR / "bind-textured-preview.png"
+MANIFEST_PATH = OUT_DIR / "zombie-humanoid.json"
+
+
+def sample_surface_color(query_points_model: npt.NDArray[np.floating],
+                         soup: SourceSoup,
+                         *, chunk_points: int = 250_000
+                         ) -> npt.NDArray[np.uint8]:
+    """Source-texture color for query points via libigl closest-triangle.
+
+    For every query point (model space) find the closest surface point on the
+    ORIGINAL source mesh, compute its barycentric coordinates on that triangle,
+    interpolate the three face-corner UVs, apply the exported texture transform
+    and base-color factor, and bilinearly sample the RGBA8 base color. This is
+    color projection only; the SDF never comes from libigl.
+    """
+    import igl
+    vertices = np.asarray(soup.vertices, dtype=np.float64)
+    faces = np.asarray(soup.faces, dtype=np.int64)
+    pts = np.asarray(query_points_model, dtype=np.float64).reshape(-1, 3)
+    albedo = np.asarray(soup.albedo_rgba, dtype=np.uint8)
+    tt = np.asarray(soup.texture_transform, dtype=np.float64)
+    factor = np.asarray(soup.base_color_factor, dtype=np.float64)
+    out = np.empty((len(pts), 4), dtype=np.uint8)
+    for s in range(0, len(pts), chunk_points):
+        e = min(s + chunk_points, len(pts))
+        q = np.ascontiguousarray(pts[s:e])
+        _, idx, closest, _ = igl.signed_distance(
+            q, vertices, faces,
+            igl.SignedDistanceType.SIGNED_DISTANCE_TYPE_UNSIGNED)
+        idx = np.asarray(idx, dtype=np.int64)
+        closest = np.asarray(closest, dtype=np.float64)
+        a = vertices[faces[idx, 0]]
+        b = vertices[faces[idx, 1]]
+        c = vertices[faces[idx, 2]]
+        v0 = b - a
+        v1 = c - a
+        v2 = closest - a
+        d00 = np.einsum("ij,ij->i", v0, v0)
+        d01 = np.einsum("ij,ij->i", v0, v1)
+        d11 = np.einsum("ij,ij->i", v1, v1)
+        d20 = np.einsum("ij,ij->i", v2, v0)
+        d21 = np.einsum("ij,ij->i", v2, v1)
+        denom = d00 * d11 - d01 * d01
+        denom = np.where(np.abs(denom) < 1e-30, 1.0, denom)
+        w = (d11 * d20 - d01 * d21) / denom
+        v = (d00 * d21 - d01 * d20) / denom
+        u = 1.0 - v - w
+        bary = np.stack([u, v, w], axis=1)
+        uv = barycentric_uv(bary, np.asarray(soup.face_uvs, dtype=np.float64)[idx])
+        uv3 = np.column_stack([uv, np.ones(len(uv))])
+        uv_t = uv3 @ tt
+        rgba = sample_rgba_bilinear(albedo, uv_t[:, :2]).astype(np.float64)
+        rgba[:, :3] *= factor[:3]
+        rgba[:, 3] *= factor[3]
+        out[s:e] = np.rint(rgba).astype(np.uint8)
+    return out
+
+
+def _brick_spec(occupied_min: Sequence[float], occupied_max: Sequence[float],
+                pitch_m: float) -> tuple[npt.NDArray[np.float64],
+                                         npt.NDArray[np.float64],
+                                         tuple[int, int, int]]:
+    """Endpoint-inclusive lattice: occupied bounds + 12 mm margin snapped
+    OUTWARD to pitch multiples (voxel is exactly the declared pitch)."""
+    lo = np.asarray(occupied_min, dtype=np.float64)
+    hi = np.asarray(occupied_max, dtype=np.float64)
+    if not np.all(hi > lo):
+        raise ValueError(f"occupied bounds not strictly ordered: {lo} .. {hi}")
+    lo = np.floor((lo - MARGIN_M) / pitch_m - 1e-9) * pitch_m
+    hi = np.ceil((hi + MARGIN_M) / pitch_m + 1e-9) * pitch_m
+    dims = tuple(int(round((hi[i] - lo[i]) / pitch_m)) + 1 for i in range(3))
+    hi = lo + (np.array(dims, dtype=np.float64) - 1.0) * pitch_m
+    return lo, hi, dims
+
+
+def _support_analytic_negatives(partition: BonePartition,
+                                occupied_min: Sequence[float],
+                                occupied_max: Sequence[float],
+                                grid_lo: Sequence[float], grid_hi: Sequence[float],
+                                dims: Sequence[int]) -> int:
+    """Exact negative-voxel count of the convex support polytope over the brick
+    lattice (a convex polytope's signed distance is the max of its half-space
+    distances, so the analytic count matches a Mesh-to-SDF bake of the closed
+    support mesh to within grid resolution). The support polytope is the
+    support planes intersected with the TIGHT occupied box, evaluated over the
+    12 mm-padded grid lattice."""
+    SDF = _sdf_module()
+    points = SDF.lattice_points(grid_lo, grid_hi, dims)
+    lo = np.asarray(occupied_min, dtype=np.float64)
+    hi = np.asarray(occupied_max, dtype=np.float64)
+    box = np.array([
+        [-1.0, 0.0, 0.0, lo[0]], [1.0, 0.0, 0.0, -hi[0]],
+        [0.0, -1.0, 0.0, lo[1]], [0.0, 1.0, 0.0, -hi[1]],
+        [0.0, 0.0, -1.0, lo[2]], [0.0, 0.0, 1.0, -hi[2]],
+    ], dtype=np.float64)
+    planes = np.asarray(partition.support_planes, dtype=np.float64).reshape(-1, 4)
+    all_planes = np.vstack([box, planes]) if len(planes) else box
+    d = points @ all_planes[:, :3].T + all_planes[:, 3]
+    return int((d <= 0.0).all(axis=1).sum())
+
+
+def _bake_one_bone(soup: SourceSoup, partition: BonePartition,
+                   occupied_min: Sequence[float], occupied_max: Sequence[float]
+                   ) -> dict:
+    """Bake one bone's dense SDF (body ∩ support), its color brick, its coarse
+    brick, and the per-operand interior gate, all in bind-local metres."""
+    SDF = _sdf_module()
+    lo, hi, dims = _brick_spec(occupied_min, occupied_max, partition.pitch_m)
+    spec = SDF.SdfGridSpec(
+        voxel_size_m=float(partition.pitch_m), band_width=SDF.DEFAULT_BAND_WIDTH,
+        bounds_min_m=tuple(float(v) for v in lo),
+        bounds_max_m=tuple(float(v) for v in hi),
+        dimensions=dims)
+
+    m2b = np.asarray(partition.model_to_bind, dtype=np.float64)
+    source_local = (np.asarray(soup.vertices, dtype=np.float64)
+                    @ m2b[:3, :3].T + m2b[:3, 3])
+    body_sha = SDF.sha256_bytes(
+        np.ascontiguousarray(source_local, dtype="<f8").tobytes("C")
+        + np.ascontiguousarray(soup.faces, dtype="<u4").tobytes("C"))
+    source = SDF.MeshArrayInput(
+        label="humanoid-body", vertices_m=source_local,
+        triangles=np.asarray(soup.faces, dtype=np.int64),
+        source_sha256=body_sha, source_to_grid_m=SDF.IDENTITY_4X4)
+
+    # The support volume is the support planes intersected with the TIGHT
+    # occupied box (NOT the 12 mm-padded grid). The grid extends MARGIN_M beyond
+    # the occupied box so the support SDF is strictly positive at the grid
+    # boundary -- otherwise max(body, support) is exactly 0 on the box faces
+    # and the boundary gate fails (the torso body extends past its own brick).
+    sv, sf = support_mesh(partition, (occupied_min, occupied_max))
+    support_sha = SDF.sha256_bytes(
+        np.ascontiguousarray(sv, dtype="<f8").tobytes("C")
+        + np.ascontiguousarray(sf, dtype="<u4").tobytes("C"))
+    support = SDF.MeshArrayInput(
+        label=f"{partition.name}-support", vertices_m=sv,
+        triangles=np.asarray(sf, dtype=np.int64),
+        source_sha256=support_sha, source_to_grid_m=SDF.IDENTITY_4X4)
+
+    diag: dict = {}
+    dense = SDF.bake_mesh_intersection_to_dense(
+        source, support, spec, route=SELECTED_ROUTE, diagnostics=diag)
+    metrics = SDF.validate_dense_sdf(dense)
+
+    # per-operand interior gate: the body alone (clipped by the full box, so
+    # the intersection equals the body inside the brick) must contribute a
+    # negative core of its own -- a holed body bakes as an unsigned shell with
+    # zero negatives here.
+    box_v, box_f = SDF.closed_box_mesh(lo, hi)
+    full_box = SDF.MeshArrayInput(
+        label="full-box", vertices_m=box_v,
+        triangles=np.asarray(box_f, dtype=np.int64),
+        source_sha256=SDF.sha256_bytes(
+            np.ascontiguousarray(box_v, dtype="<f8").tobytes("C")),
+        source_to_grid_m=SDF.IDENTITY_4X4)
+    body_only = SDF.bake_mesh_intersection_to_dense(
+        source, full_box, spec, route=SELECTED_ROUTE)
+    source_interior = int((np.asarray(body_only.values_f32) < 0.0).sum())
+    support_interior = _support_analytic_negatives(
+        partition, occupied_min, occupied_max, lo, hi, dims)
+    if source_interior == 0:
+        raise ValueError(
+            f"{partition.name}: the source body contributed no interior over "
+            "its own brick (0 negative voxels); it would bake as an unsigned "
+            "shell")
+    if support_interior == 0:
+        raise ValueError(
+            f"{partition.name}: the support volume contributed no interior "
+            "(0 negative voxels); the support mesh is degenerate")
+
+    # color projection: every brick lattice point gets its closest-surface color
+    b2m = np.asarray(partition.bind_to_model, dtype=np.float64)
+    lattice = SDF.lattice_points(lo, hi, dims)
+    lattice_model = lattice @ b2m[:3, :3].T + b2m[:3, 3]
+    color = sample_surface_color(lattice_model, soup).reshape(
+        dims[2], dims[1], dims[0], 4)
+
+    coarse, coarse_dims = resample_coarse_brick(dense.values_f32, dims)
+    return {
+        "name": partition.name,
+        "dense": dense,
+        "color": color,
+        "coarse": coarse,
+        "coarse_dims": coarse_dims,
+        "dims": dims,
+        "bounds_min": lo,
+        "bounds_max": hi,
+        "occupied_min": np.asarray(occupied_min, dtype=np.float64),
+        "occupied_max": np.asarray(occupied_max, dtype=np.float64),
+        "pitch_m": partition.pitch_m,
+        "field_stats": {**metrics, "valueMinM": float(np.asarray(
+            dense.values_f32).min()), "valueMaxM": float(np.asarray(
+            dense.values_f32).max())},
+        "negativeComponents": SDF.count_negative_components(dense),
+        "support_mesh_sha256": support_sha,
+        "support_interior": support_interior,
+        "source_interior": source_interior,
+        "node_contract_sha256": dense.node_contract_sha256,
+        "operation_source_sha256": diag.get("operationSourceSha256"),
+    }
+
+
+_CLUSTER_NAMES = {
+    "LeftToeBase": "left-leg", "RightToeBase": "right-leg",
+    "LeftHand": "left-arm", "RightHand": "right-arm", "Head": "head",
+}
+
+
+def build_clusters(result: PartitionResult) -> list[dict]:
+    """Skeleton-chain clusters: every retained bone is primary in exactly one
+    cluster, helpers are directly adjacent (parent/child) bones, and each
+    cluster samples at most four bones. Deterministic (joint-index ordered)."""
+    by_joint = {p.joint_index: p for p in result.partitions}
+    children: dict[int, list[int]] = {j: [] for j in by_joint}
+    for p in result.partitions:
+        if p.parent_index in by_joint:
+            children[p.parent_index].append(p.joint_index)
+    leaves = sorted(j for j in by_joint if not children[j])
+    chains: list[list[int]] = []
+    assigned: set[int] = set()
+    for leaf in leaves:
+        chain = [leaf]
+        assigned.add(leaf)
+        cur = leaf
+        while True:
+            par = by_joint[cur].parent_index
+            if par not in by_joint or len(children[par]) != 1:
+                break
+            chain.append(par)
+            assigned.add(par)
+            cur = par
+        chains.append(chain[::-1])            # proximal -> distal
+
+    def depth(j: int) -> int:
+        d, cur = 0, j
+        while by_joint[cur].parent_index in by_joint:
+            d += 1
+            cur = by_joint[cur].parent_index
+        return d
+
+    remaining = sorted((j for j in by_joint if j not in assigned), key=depth)
+    chains.append(remaining)                   # the spine (branch-to-branch) chain
+    chains.sort(key=lambda c: min(c))
+    clusters: list[dict] = []
+    for chain in chains:
+        primaries = [by_joint[j].name for j in chain]
+        helpers: list[str] = []
+        root_par = by_joint[chain[0]].parent_index
+        if root_par in by_joint and root_par not in chain:
+            helpers.append(by_joint[root_par].name)
+        for cj in sorted(children[chain[-1]]):
+            if cj not in chain:
+                helpers.append(by_joint[cj].name)
+        sampled = primaries + [h for h in helpers if h not in primaries]
+        sampled = sampled[:MAX_SAMPLED_BONES_PER_CLUSTER]
+        clusters.append({
+            "name": _CLUSTER_NAMES.get(by_joint[chain[-1]].name, "spine"),
+            "primaryBones": primaries,
+            "sampleBones": sampled,
+        })
+    return clusters
+
+
+def _occupied_corners_model(partition: BonePartition,
+                            occ_min: Sequence[float],
+                            occ_max: Sequence[float]) -> npt.NDArray[np.float64]:
+    b2m = np.asarray(partition.bind_to_model, dtype=np.float64)
+    lo = np.asarray(occ_min, dtype=np.float64)
+    hi = np.asarray(occ_max, dtype=np.float64)
+    corners = np.array([[x, y, z]
+                        for x in (lo[0], hi[0]) for y in (lo[1], hi[1])
+                        for z in (lo[2], hi[2])], dtype=np.float64)
+    return corners @ b2m[:3, :3].T + b2m[:3, 3]
+
+
+def _derive_sever_plane(result: PartitionResult) -> tuple[list[float], list[float]]:
+    """The mid-forearm cut plane in RightForeArm bind-local space.
+
+    Normal = normalized proximal-to-distal forearm axis (the RightArm ->
+    RightForeArm band axis, rotated into forearm bind-local). The plane passes
+    through the mid-point of the forearm's occupied bounds projected onto that
+    axis; stored as normalized [nx, ny, nz, w] (inside dot(n,p)+w <= 0)."""
+    band = next(b for b in result.bands
+                if b.parent == "RightArm" and b.child == "RightForeArm")
+    forearm = next(p for p in result.partitions if p.name == "RightForeArm")
+    entry = next(e for e in result.coverage["partitions"]
+                 if e["name"] == "RightForeArm")
+    m2b = np.asarray(forearm.model_to_bind, dtype=np.float64)
+    axis_local = band.axis @ m2b[:3, :3].T
+    axis_local = axis_local / float(np.linalg.norm(axis_local))
+    lo = np.asarray(entry["boundsLocalMin"], dtype=np.float64)
+    hi = np.asarray(entry["boundsLocalMax"], dtype=np.float64)
+    t_lo = float(np.dot(axis_local, lo))
+    t_hi = float(np.dot(axis_local, hi))
+    mid = 0.5 * (t_lo + t_hi)
+    w = -mid
+    plane = [float(axis_local[0]), float(axis_local[1]), float(axis_local[2]),
+             float(w)]
+    return plane, [float(v) for v in axis_local]
+
+
+def _joint_probe(soup: SourceSoup, bones: dict, result: PartitionResult) -> list[dict]:
+    """Probe every declared joint: both bones must cover the equal-influence
+    surface (no gap) across the 30 mm overlap, and NOT 50 mm across the
+    boundary (a capsule-like support would). The torso is a hollow shell, so
+    the probe points are the equal-influence SURFACE vertices, never the band
+    centroid (which sits in the hollow interior)."""
+    by_name = {p.name: p for p in result.partitions}
+    joints = np.asarray(soup.joints, dtype=np.int64)
+    weights = np.asarray(soup.weights, dtype=np.float64)
+    order = np.lexsort((joints, -weights), axis=1)
+    dom = np.take_along_axis(joints, order[:, :1], axis=1)[:, 0].astype(np.int64)
+    domw = np.take_along_axis(weights, order[:, :1], axis=1)[:, 0]
+    run = np.take_along_axis(joints, order[:, 1:2], axis=1)[:, 0].astype(np.int64)
+    runw = np.take_along_axis(weights, order[:, 1:2], axis=1)[:, 0]
+    name_to_idx = {n: i for i, n in enumerate(soup.bone_names)}
+    probes: list[dict] = []
+    for band in result.bands:
+        p = name_to_idx[band.parent]
+        c = name_to_idx[band.child]
+        leads = (((dom == p) & (run == c)) | ((dom == c) & (run == p)))
+        sel = leads & (np.abs(domw - runw) <= EQUAL_INFLUENCE_MAX_DIFF)
+        surface = np.asarray(soup.vertices, dtype=np.float64)[sel]
+        if surface.shape[0] == 0:
+            raise ValueError(
+                f"joint {band.parent}->{band.child}: no equal-influence "
+                "surface vertices to probe")
+        # Restrict to the boundary cross-section: the equal-influence selection
+        # spreads over a broad blend region, but the overlap is only the 30 mm
+        # band around the boundary centre along the joint axis.
+        axial = (surface - np.asarray(band.center)) @ np.asarray(band.axis)
+        in_band = np.abs(axial) <= band.width_m / 2.0 - 1e-6
+        surface = surface[in_band]
+        if surface.shape[0] == 0:
+            raise ValueError(
+                f"joint {band.parent}->{band.child}: no equal-influence "
+                "vertices inside the 30 mm overlap band")
+        step = max(1, surface.shape[0] // 48)
+        sample = surface[::step]
+        ppart = by_name[band.parent]
+        cpart = by_name[band.child]
+        pvox = float(np.asarray(bones[band.parent]["dense"].voxel_size_m).max())
+        cvox = float(np.asarray(bones[band.child]["dense"].voxel_size_m).max())
+        worst_parent = -math.inf
+        worst_child = -math.inf
+        for model_pt in sample:
+            p_local = (model_pt @ ppart.model_to_bind[:3, :3].T
+                       + ppart.model_to_bind[:3, 3])
+            c_local = (model_pt @ cpart.model_to_bind[:3, :3].T
+                       + cpart.model_to_bind[:3, 3])
+            pv = sample_bone_brick(bones[band.parent]["dense"].values_f32,
+                                   bones[band.parent]["bounds_min"],
+                                   bones[band.parent]["dense"].voxel_size_m,
+                                   p_local)
+            cv = sample_bone_brick(bones[band.child]["dense"].values_f32,
+                                   bones[band.child]["bounds_min"],
+                                   bones[band.child]["dense"].voxel_size_m,
+                                   c_local)
+            worst_parent = max(worst_parent, float(pv))
+            worst_child = max(worst_child, float(cv))
+        overlap_ok = worst_parent <= 0.75 * pvox and worst_child <= 0.75 * cvox
+        # capsule gate: 50 mm across the boundary, the non-owning bone must be
+        # OUTSIDE (its support ends at +-15 mm) regardless of the hollow shell.
+        across = {}
+        for off_m in (-0.050, 0.050):
+            model_pt = np.asarray(band.center) + np.asarray(band.axis) * off_m
+            p_local = (model_pt @ ppart.model_to_bind[:3, :3].T
+                       + ppart.model_to_bind[:3, 3])
+            c_local = (model_pt @ cpart.model_to_bind[:3, :3].T
+                       + cpart.model_to_bind[:3, 3])
+            pv = sample_bone_brick(bones[band.parent]["dense"].values_f32,
+                                   bones[band.parent]["bounds_min"],
+                                   bones[band.parent]["dense"].voxel_size_m,
+                                   p_local)
+            cv = sample_bone_brick(bones[band.child]["dense"].values_f32,
+                                   bones[band.child]["bounds_min"],
+                                   bones[band.child]["dense"].voxel_size_m,
+                                   c_local)
+            across[f"{int(off_m * 1000):+d}mm"] = {"parent": float(pv),
+                                                    "child": float(cv)}
+        across_ok = across["+50mm"]["parent"] >= 0.0 \
+            and across["-50mm"]["child"] >= 0.0
+        if not overlap_ok:
+            raise ValueError(
+                f"joint {band.parent}->{band.child}: a bone does not cover the "
+                f"equal-influence surface (gap): parent worst "
+                f"{worst_parent:.4f}, child worst {worst_child:.4f}")
+        if not across_ok:
+            raise ValueError(
+                f"joint {band.parent}->{band.child}: overlap extends 50 mm "
+                f"across the boundary (capsule-like support): {across}")
+        probes.append({"parent": band.parent, "child": band.child,
+                       "surfaceVertices": int(surface.shape[0]),
+                       "worstParentM": float(worst_parent),
+                       "worstChildM": float(worst_child),
+                       "across": across,
+                       "overlapOk": overlap_ok,
+                       "acrossBoundaryOk": across_ok})
+    return probes
+
+
+def _bake_input_sha256(manifest: dict) -> str:
+    """Self-checksum over every mutation-sensitive manifest field (everything
+    except this hash itself and the on-disk transport contracts, which are
+    checked against the files separately)."""
+    SDF = _sdf_module()
+    payload = {k: v for k, v in manifest.items() if k != "bakeInputSha256"}
+    return SDF.sha256_text(SDF.canonical_json(payload))
+
+
+def bake_distance_and_color(soup: SourceSoup, result: PartitionResult) -> dict:
+    """Bake every bone's dense/colour/coarse brick and assemble the atlases."""
+    bones: dict[str, dict] = {}
+    ordered_names: list[str] = []
+    for part in result.partitions:
+        entry = next(e for e in result.coverage["partitions"]
+                     if e["name"] == part.name)
+        rec = _bake_one_bone(soup, part, entry["boundsLocalMin"],
+                             entry["boundsLocalMax"])
+        bones[part.name] = rec
+        ordered_names.append(part.name)
+
+    requests = [BrickRequest(name, bones[name]["dims"]) for name in ordered_names]
+    layout = pack_bricks(requests, max_dim=MAX_ATLAS_DIM, padding=ATLAS_PADDING)
+    offset_by_name = {b.bone: b.offset for b in layout.bricks}
+
+    adx, ady, adz = layout.dimensions
+    atlas_dist = np.full((adz, ady, adx), EMPTY_DISTANCE_M, dtype=np.float32)
+    atlas_color = np.zeros((adz, ady, adx, 4), dtype=np.uint8)
+    for name in ordered_names:
+        rec = bones[name]
+        ox, oy, oz = offset_by_name[name]
+        dx, dy, dz = rec["dims"]
+        atlas_dist[oz:oz + dz, oy:oy + dy, ox:ox + dx] = rec["dense"].values_f32
+        atlas_color[oz:oz + dz, oy:oy + dy, ox:ox + dx] = rec["color"]
+
+    clusters = build_clusters(result)
+    by_name = {p.name: p for p in result.partitions}
+    elbow = next(b for b in result.bands
+                 if b.parent == "RightArm" and b.child == "RightForeArm")
+    for cl in clusters:
+        mins, maxs = [], []
+        for name in cl["sampleBones"]:
+            part = by_name[name]
+            rec = bones[name]
+            corners = _occupied_corners_model(part, rec["occupied_min"],
+                                              rec["occupied_max"])
+            mins.append(corners.min(axis=0))
+            maxs.append(corners.max(axis=0))
+        lo = np.min(np.stack(mins), axis=0)
+        hi = np.max(np.stack(maxs), axis=0)
+        if cl["name"] == "right-arm":
+            pivot = np.asarray(elbow.center, dtype=np.float64)
+            distal_names = ["RightForeArm", "RightHand"]
+            radius = 0.0
+            for name in distal_names:
+                corners = _occupied_corners_model(
+                    by_name[name], bones[name]["occupied_min"],
+                    bones[name]["occupied_max"])
+                radius = max(radius,
+                             float(np.linalg.norm(corners - pivot, axis=1).max()))
+            lo = np.minimum(lo, pivot - radius)
+            hi = np.maximum(hi, pivot + radius)
+        lo = lo - MAX_WARP_M
+        hi = hi + MAX_WARP_M
+        cl["sweepBoundsMin"] = [float(v) for v in lo]
+        cl["sweepBoundsMax"] = [float(v) for v in hi]
+
+    cut_plane, cut_axis = _derive_sever_plane(result)
+    joints = [{
+        "parent": b.parent, "child": b.child,
+        "centerModel": [float(v) for v in b.center],
+        "axisModel": [float(v) for v in b.axis],
+        "overlapM": float(b.width_m),
+    } for b in result.bands]
+    return {
+        "bones": {n: bones[n] for n in ordered_names},
+        "ordered_names": ordered_names,
+        "layout": layout,
+        "atlas_distance_f32": atlas_dist,
+        "atlas_color_rgba8": atlas_color,
+        "clusters": clusters,
+        "joints": joints,
+        "joint_probes": _joint_probe(soup, bones, result),
+        "cut_plane_local": cut_plane,
+        "cut_axis_local": cut_axis,
+    }
+
+
+def _mat16_col_major(m: npt.NDArray[np.floating]) -> list[float]:
+    """A 4x4 as 16 column-major floats (the runtime matrix convention)."""
+    return [float(v) for v in np.asarray(m, dtype=np.float64).flatten(order="F")]
+
+
+_IDENTITY_16 = _mat16_col_major(np.eye(4))
+
+
+def _texture_sha256(soup: SourceSoup) -> str:
+    return hashlib.sha256(
+        np.ascontiguousarray(soup.albedo_rgba).tobytes()).hexdigest()
+
+
+def build_manifest_dict(record: dict, soup: SourceSoup, glb: dict,
+                        distance_contract: dict, color_contract: dict,
+                        coarse_contract: dict) -> dict:
+    """The version-1 `humanoid-bone-sdf` manifest (deterministic; no timing)."""
+    SDF = _sdf_module()
+    by_name = {p.name: p for p in record["source_partitions"].partitions}
+    offset_by_name = {b.bone: b.offset for b in record["layout"].bricks}
+    bones = []
+    for name in record["ordered_names"]:
+        rec = record["bones"][name]
+        part = by_name[name]
+        bones.append({
+            "bone": name,
+            "jointIndex": int(part.joint_index),
+            "parentIndex": int(part.parent_index),
+            "offset": list(offset_by_name[name]),
+            "dimensions": list(rec["dims"]),
+            "boundsMin": [float(v) for v in rec["bounds_min"]],
+            "boundsMax": [float(v) for v in rec["bounds_max"]],
+            "voxelSize": [float(v) for v in rec["dense"].voxel_size_m],
+            "padding": ATLAS_PADDING,
+            "pageIndex": 0,
+            "occupiedBoundsMin": [float(v) for v in rec["occupied_min"]],
+            "occupiedBoundsMax": [float(v) for v in rec["occupied_max"]],
+            "fieldStats": {
+                "min": float(rec["field_stats"]["min"]),
+                "max": float(rec["field_stats"]["max"]),
+                "negativeCount": int(rec["field_stats"]["negatives"]),
+                "positiveCount": int(rec["field_stats"]["positives"]),
+                "boundaryMin": float(rec["field_stats"]["boundaryMin"]),
+            },
+            "bindToModel": _mat16_col_major(part.bind_to_model),
+            "modelToBind": _mat16_col_major(part.model_to_bind),
+            "supportMeshSha256": rec["support_mesh_sha256"],
+            "pitchM": float(rec["pitch_m"]),
+            "sourceInterior": int(rec["source_interior"]),
+            "supportInterior": int(rec["support_interior"]),
+            "negativeComponents": int(rec["negativeComponents"]),
+        })
+    manifest = {
+        "version": MANIFEST_VERSION,
+        "kind": MANIFEST_KIND,
+        "order": ATLAS_ORDER,
+        "boneCount": int(len(soup.bone_names)),
+        "pageCount": ATLAS_PAGE_COUNT,
+        "maxLimbPitchM": LIMB_PITCH_M,
+        "maxDetailPitchM": DETAIL_PITCH_M,
+        "unownedFaces": int(record["source_partitions"].unowned_face_indices.size),
+        "sourceTextureSha256": _texture_sha256(soup),
+        "source": {
+            "url": os.path.relpath(SOURCE_GLB, OUT_DIR),
+            "originalFilename": glb["filename"],
+            "byteLength": int(glb["byteLength"]),
+            "sha256": glb["sha256"],
+            "textureSha256": _texture_sha256(soup),
+        },
+        "sourceToRuntime": _IDENTITY_16,
+        "runtimeToSource": _IDENTITY_16,
+        "bake": {
+            "limbPitchM": LIMB_PITCH_M,
+            "detailPitchM": DETAIL_PITCH_M,
+            "marginM": MARGIN_M,
+            "jointOverlapM": ELBOW_OVERLAP_M,
+            "atlasPadding": ATLAS_PADDING,
+            "maxTransportPartBytes": MAX_TRANSPORT_PART_BYTES,
+            "route": SELECTED_ROUTE,
+            "blenderVersion": EXPECTED_BLENDER_VERSION,
+            "nodeContractSha256": _canonical_node_contract_sha256(),
+            "threshold": SDF_THRESHOLD,
+            "adaptivity": SDF_ADAPTIVITY,
+            "bandWidth": SDF.DEFAULT_BAND_WIDTH,
+            "maxAtlasDimension": MAX_ATLAS_DIM,
+        },
+        "atlasDimensions": list(record["layout"].dimensions),
+        "distance": {"encoding": "r16f-le", **distance_contract},
+        "color": {"encoding": "rgba8", **color_contract},
+        "coarse": {"encoding": "f32-le", **coarse_contract},
+        "bones": bones,
+        "joints": record["joints"],
+        "clusters": record["clusters"],
+        "rightArm": {
+            "upperArm": "RightArm",
+            "forearm": "RightForeArm",
+            "hand": "RightHand",
+            "cutPlaneLocal": record["cut_plane_local"],
+            "cutSeed": SEVER_CUT_SEED,
+            "irregularityM": SEVER_IRREGULARITY_M,
+            "rimWidthM": SEVER_RIM_WIDTH_M,
+        },
+    }
+    manifest["bakeInputSha256"] = _bake_input_sha256(manifest)
+    return manifest
+
+
+def _expect_hex64(value, what: str) -> str:
+    value = str(value)
+    if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+        raise ValueError(f"{what} is not a lowercase hex sha256: {value!r}")
+    return value
+
+
+def _reject(msg: str) -> None:
+    raise ValueError(f"[manifest] {msg}")
+
+
+def validate_manifest(manifest: dict) -> dict:
+    """Reject a manifest that breaks the pinned bake contract or was tampered
+    (self-checksum). Pure dict validation; does not touch disk."""
+    if manifest.get("kind") != MANIFEST_KIND:
+        _reject(f"kind {manifest.get('kind')!r} != {MANIFEST_KIND!r}")
+    if manifest.get("version") != MANIFEST_VERSION:
+        _reject(f"version {manifest.get('version')!r} != {MANIFEST_VERSION}")
+    if manifest.get("order") != ATLAS_ORDER:
+        _reject(f"order {manifest.get('order')!r} != {ATLAS_ORDER!r}")
+    bake = manifest.get("bake") or {}
+    if bake.get("route") != SELECTED_ROUTE:
+        _reject(f"route {bake.get('route')!r} != {SELECTED_ROUTE!r}")
+    if bake.get("blenderVersion") != EXPECTED_BLENDER_VERSION:
+        _reject(f"blenderVersion {bake.get('blenderVersion')!r} != "
+                f"{EXPECTED_BLENDER_VERSION!r}")
+    if bake.get("nodeContractSha256") != _canonical_node_contract_sha256():
+        _reject("nodeContractSha256 drifted from the canonical contract")
+    if bake.get("threshold") != SDF_THRESHOLD:
+        _reject(f"threshold {bake.get('threshold')!r} != {SDF_THRESHOLD}")
+    if bake.get("adaptivity") != SDF_ADAPTIVITY:
+        _reject(f"adaptivity {bake.get('adaptivity')!r} != {SDF_ADAPTIVITY}")
+    if bake.get("limbPitchM") != LIMB_PITCH_M \
+            or bake.get("detailPitchM") != DETAIL_PITCH_M:
+        _reject("pitch caps drifted")
+    if bake.get("jointOverlapM") != ELBOW_OVERLAP_M:
+        _reject("joint overlap drifted")
+    if manifest.get("pageCount") != ATLAS_PAGE_COUNT:
+        _reject("pageCount != 1")
+    if manifest.get("source", {}).get("sha256") != EXPECTED_SOURCE_SHA256:
+        _reject("source sha256 drifted from the canonical owner asset")
+    ra = manifest.get("rightArm") or {}
+    for key, want in (("upperArm", "RightArm"), ("forearm", "RightForeArm"),
+                      ("hand", "RightHand")):
+        if ra.get(key) != want:
+            _reject(f"rightArm.{key} {ra.get(key)!r} != {want!r}")
+    if ra.get("cutSeed") != SEVER_CUT_SEED:
+        _reject("cutSeed drifted")
+    if ra.get("irregularityM") != SEVER_IRREGULARITY_M:
+        _reject("irregularityM drifted")
+    if ra.get("rimWidthM") != SEVER_RIM_WIDTH_M:
+        _reject("rimWidthM drifted")
+    n = ra.get("cutPlaneLocal")
+    if n is None or len(n) != 4 or not all(math.isfinite(float(v)) for v in n):
+        _reject("cutPlaneLocal is not a finite 4-vector")
+    if abs(math.hypot(float(n[0]), float(n[1]), float(n[2])) - 1.0) > 1e-6:
+        _reject("cutPlaneLocal normal is not unit length")
+
+    # structural checks
+    bones = manifest.get("bones") or []
+    if not bones or len(bones) >= int(manifest.get("boneCount", 0)):
+        _reject(f"bones length {len(bones)} invalid vs boneCount "
+                f"{manifest.get('boneCount')}")
+    dims = tuple(int(v) for v in manifest.get("atlasDimensions", (0, 0, 0)))
+    if len(dims) != 3 or min(dims) < 2:
+        _reject(f"atlasDimensions {dims} invalid")
+    seen_names: set[str] = set()
+    for b in bones:
+        name = b.get("bone")
+        if not name or name in seen_names:
+            _reject(f"duplicate/missing bone name {name!r}")
+        seen_names.add(name)
+        off = b.get("offset")
+        bd = b.get("dimensions")
+        if len(off) != 3 or len(bd) != 3:
+            _reject(f"bone {name} offset/dimensions not 3-vectors")
+        for o, d, m in zip(off, bd, dims):
+            if int(o) < 0 or int(o) + int(d) > m:
+                _reject(f"bone {name} brick {off}+{bd} exceeds atlas {dims}")
+        if b.get("padding") != ATLAS_PADDING or b.get("pageIndex") != 0:
+            _reject(f"bone {name} padding/pageIndex drifted")
+        _expect_hex64(b.get("supportMeshSha256"), f"bone {name} supportMeshSha256")
+        # voxel consistency (an SDF grid transform change breaks this)
+        bmin = np.asarray(b["boundsMin"], dtype=np.float64)
+        bmax = np.asarray(b["boundsMax"], dtype=np.float64)
+        vox = np.asarray(b["voxelSize"], dtype=np.float64)
+        want_vox = (bmax - bmin) / (np.asarray(bd, dtype=np.float64) - 1.0)
+        if not np.allclose(vox, want_vox, atol=1e-9):
+            _reject(f"bone {name} voxelSize {vox} != bounds/dims {want_vox}")
+        pitch = float(b["pitchM"])
+        if not np.allclose(vox, pitch, atol=1e-9):
+            _reject(f"bone {name} voxelSize {vox} != pitch {pitch}")
+        # bind matrices are finite inverses
+        b2m = np.asarray(b["bindToModel"], dtype=np.float64).reshape(4, 4, order="F")
+        m2b = np.asarray(b["modelToBind"], dtype=np.float64).reshape(4, 4, order="F")
+        if not np.isfinite(b2m).all() or not np.isfinite(m2b).all():
+            _reject(f"bone {name} bind matrices are not finite")
+        if not np.allclose(b2m @ m2b, np.eye(4), atol=1e-4):
+            _reject(f"bone {name} bindToModel/modelToBind are not inverses")
+    # no overlap
+    from dataclasses import replace as _replace
+    layout = AtlasLayout(dims, ATLAS_PADDING, tuple(
+        AtlasBrick(b["bone"], tuple(b["dimensions"]), tuple(b["offset"]),
+                   (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+        for b in bones))
+    if layout_has_overlap(layout):
+        _reject("atlas bricks overlap")
+    # clusters
+    clusters = manifest.get("clusters") or []
+    primaries: set[str] = set()
+    for c in clusters:
+        for name in c.get("sampleBones", []):
+            if name not in seen_names:
+                _reject(f"cluster {c.get('name')} samples unknown bone {name!r}")
+        if len(c.get("sampleBones", [])) > MAX_SAMPLED_BONES_PER_CLUSTER:
+            _reject(f"cluster {c.get('name')} samples > "
+                    f"{MAX_SAMPLED_BONES_PER_CLUSTER} bones")
+        primaries.update(c.get("primaryBones", []))
+    if primaries != seen_names:
+        _reject("cluster primaries do not partition the retained bones exactly")
+    right_arm = next((c for c in clusters if c.get("name") == "right-arm"), None)
+    if right_arm is None:
+        _reject("no right-arm cluster")
+    for want in ("RightArm", "RightForeArm", "RightHand"):
+        if want not in right_arm.get("sampleBones", []):
+            _reject(f"right-arm cluster missing {want}")
+    # coarse pack structural checks
+    coarse = manifest.get("coarse") or {}
+    _expect_hex64(coarse.get("combinedSha256"), "coarse combinedSha256")
+    total = int(coarse.get("combinedByteLength", 0))
+    if total <= 0:
+        _reject("coarse combinedByteLength is not positive")
+    for cb in coarse.get("bones", []):
+        cd = cb.get("dims")
+        if len(cd) != 3 or any(int(n) > COARSE_MAX_DIM or int(n) < 1 for n in cd):
+            _reject(f"coarse dims {cd} exceed {COARSE_MAX_DIM}")
+        if int(cb.get("offset", -1)) < 0 \
+                or int(cb.get("offset", 0)) + int(cb.get("byteLength", 0)) > total:
+            _reject("coarse bone offset/byteLength overruns the pack")
+    # transport hash formats
+    for which in ("distance", "color"):
+        c = manifest.get(which) or {}
+        _expect_hex64(c.get("combinedSha256"), f"{which} combinedSha256")
+        for p in c.get("parts", []):
+            _expect_hex64(p.get("sha256"), f"{which} part sha256")
+            if not isinstance(p.get("url"), str) or not p.get("url"):
+                _reject(f"{which} part url invalid")
+    # self-checksum last: any tampered field (support mesh hash, grid bounds,
+    # bind matrices, etc.) changes the recomputed hash.
+    if manifest.get("bakeInputSha256") != _bake_input_sha256(manifest):
+        _reject("bakeInputSha256 mismatch (a bake input field was tampered)")
+    return manifest
+
+
+def _read_transport_contract(contract: dict, base: Path) -> bytes:
+    parts = [(base / p["url"]).read_bytes() for p in contract["parts"]]
+    verify_transport_contract(parts, contract)
+    return b"".join(parts)
+
+
+def validate_checked_in() -> dict:
+    """Read + validate the checked-in manifest, then verify every on-disk
+    transport file (distance parts, color parts, coarse pack) byte-for-byte."""
+    if not MANIFEST_PATH.exists():
+        raise FileNotFoundError(
+            f"checked-in manifest missing: {MANIFEST_PATH} (run the bake first)")
+    manifest = json.loads(MANIFEST_PATH.read_text())
+    validate_manifest(manifest)
+    _read_transport_contract(manifest["distance"], OUT_DIR)
+    _read_transport_contract(manifest["color"], OUT_DIR)
+    coarse = manifest["coarse"]
+    blob = (OUT_DIR / COARSE_FILENAME).read_bytes()
+    if len(blob) != int(coarse["combinedByteLength"]):
+        _reject("coarse pack byteLength mismatch on disk")
+    if hashlib.sha256(blob).hexdigest() != coarse["combinedSha256"]:
+        _reject("coarse pack sha256 mismatch on disk")
+    for cb in coarse["bones"]:
+        lo = int(cb["offset"])
+        hi = lo + int(cb["byteLength"])
+        if hi > len(blob):
+            _reject("coarse bone overruns the on-disk pack")
+        if hashlib.sha256(blob[lo:hi]).hexdigest() != cb["sha256"]:
+            _reject("coarse bone sha256 mismatch on disk")
+    return manifest
+
+
+COARSE_FILENAME = "zombie-coarse.f32"
+
+
+def _split_and_write(data: bytes, prefix: str, suffix: str) -> dict:
+    parts = split_transport_parts(data, MAX_TRANSPORT_PART_BYTES)
+    urls = [f"{prefix}-{i:03d}.{suffix}" for i in range(len(parts))]
+    for url, blob in zip(urls, parts):
+        (OUT_DIR / url).write_bytes(blob)
+    return build_transport_contract(parts, urls)
+
+
+def build_coarse_contract(record: dict) -> tuple[bytes, dict]:
+    blobs: list[bytes] = []
+    bone_entries: list[dict] = []
+    offset = 0
+    for name in record["ordered_names"]:
+        rec = record["bones"][name]
+        blob = np.ascontiguousarray(rec["coarse"], dtype=np.float32).tobytes("C")
+        blobs.append(blob)
+        bone_entries.append({
+            "offset": offset,
+            "dims": list(rec["coarse_dims"]),
+            "byteLength": len(blob),
+            "sha256": hashlib.sha256(blob).hexdigest(),
+        })
+        offset += len(blob)
+    combined = b"".join(blobs)
+    return combined, {
+        "combinedByteLength": len(combined),
+        "combinedSha256": hashlib.sha256(combined).hexdigest(),
+        "bones": bone_entries,
+    }
+
+
+def run_bake(*, render_preview: bool = True) -> dict:
+    """The full Task 2 bake: export -> partitions -> per-bone bake -> pack ->
+    write atlases/manifest/coarse/report -> optional bind-textured preview."""
+    t0 = time.monotonic()
+    glb = read_glb(SOURCE_GLB)
+    with tempfile.TemporaryDirectory(prefix="humanoid-sdf-") as tmp:
+        soup = export_source_npz(Path(tmp) / "source.npz")
+    result = derive_partitions(soup)
+    _check_report_gates(build_source_report(soup, result, glb))
+    record = bake_distance_and_color(soup, result)
+    record["source_partitions"] = result
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    dist_data = encode_r16f_field(record["atlas_distance_f32"])
+    color_data = encode_rgba8_field(record["atlas_color_rgba8"])
+    dist_contract = _split_and_write(dist_data, "zombie-distance", "r16f")
+    color_contract = _split_and_write(color_data, "zombie-color", "rgba8")
+    coarse_blob, coarse_contract = build_coarse_contract(record)
+    (OUT_DIR / COARSE_FILENAME).write_bytes(coarse_blob)
+
+    manifest = build_manifest_dict(record, soup, glb, dist_contract,
+                                   color_contract, coarse_contract)
+    MANIFEST_PATH.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+    validate_manifest(manifest)
+
+    report = write_bake_report(record, soup, glb, manifest, t0)
+    print(f"[bake] atlas {record['layout'].dimensions} "
+          f"({len(dist_data) // (1024 * 1024)} MiB dist, "
+          f"{len(color_data) // (1024 * 1024)} MiB colour), "
+          f"coarse {len(coarse_blob)} B, manifest {MANIFEST_PATH.name}")
+    if render_preview:
+        render_bind_textured_preview(record)
+    report["bindTexturedPreview"] = str(PREVIEW_TEXTURED_PATH.relative_to(REPO_ROOT))
+    return report
+
+
+def write_bake_report(record: dict, soup: SourceSoup, glb: dict,
+                      manifest: dict, t0: float) -> dict:
+    """Measured evidence (wall-clock lives HERE, never in the manifest)."""
+    duration = time.monotonic() - t0
+    coarse = manifest["coarse"]
+    coarse_by_index = {i: b["sha256"] for i, b in enumerate(coarse["bones"])}
+    bones = []
+    for i, name in enumerate(record["ordered_names"]):
+        rec = record["bones"][name]
+        lo, hi = rec["bounds_min"], rec["bounds_max"]
+        cd = rec["coarse_dims"]
+        achieved_pitch = [float((hi[i] - lo[i]) / (cd[i] - 1)) for i in range(3)]
+        bones.append({
+            "bone": name,
+            "pitchM": rec["pitch_m"],
+            "dimensions": list(rec["dims"]),
+            "coarseDims": list(cd),
+            "coarseAchievedPitchM": achieved_pitch,
+            "fieldStats": rec["field_stats"],
+            "negativeComponents": rec["negativeComponents"],
+            "sourceInterior": rec["source_interior"],
+            "supportInterior": rec["support_interior"],
+            "supportMeshSha256": rec["support_mesh_sha256"],
+            "coarseSha256": coarse_by_index[i],
+        })
+    report = {
+        "task": "2026-08-17-humanoid-sdf-sever-spike/2",
+        "kind": "humanoid-bone-sdf-bake-report",
+        "durationS": round(duration, 3),
+        "source": {
+            "sha256": glb["sha256"],
+            "byteLength": glb["byteLength"],
+            "textureSha256": _texture_sha256(soup),
+        },
+        "atlas": {
+            "dimensions": list(record["layout"].dimensions),
+            "distanceBytes": manifest["distance"]["combinedByteLength"],
+            "colorBytes": manifest["color"]["combinedByteLength"],
+            "coarseBytes": manifest["coarse"]["combinedByteLength"],
+            "distanceParts": len(manifest["distance"]["parts"]),
+            "colorParts": len(manifest["color"]["parts"]),
+        },
+        "hashes": {
+            "distanceCombined": manifest["distance"]["combinedSha256"],
+            "colorCombined": manifest["color"]["combinedSha256"],
+            "coarseCombined": manifest["coarse"]["combinedSha256"],
+            "manifestInput": manifest["bakeInputSha256"],
+            "nodeContract": manifest["bake"]["nodeContractSha256"],
+        },
+        "rightArm": {
+            "cutPlaneLocal": manifest["rightArm"]["cutPlaneLocal"],
+            "cutAxisLocal": record["cut_axis_local"],
+            "cutSeed": SEVER_CUT_SEED,
+            "irregularityM": SEVER_IRREGULARITY_M,
+            "rimWidthM": SEVER_RIM_WIDTH_M,
+        },
+        "jointProbes": record["joint_probes"],
+        "clusters": record["clusters"],
+        "bones": bones,
+    }
+    BAKE_REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BAKE_REPORT_PATH.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
+    print(f"[report] {BAKE_REPORT_PATH.relative_to(REPO_ROOT)} "
+          f"({duration:.1f}s, {len(bones)} bones)")
+    return report
+
+
+# ===========================================================================
+# Bind-textured preview: marching-tetrahedra isosurface + Blender EEVEE render
+# ===========================================================================
+
+_TET_CORNERS = np.array([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0),
+                         (0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)])
+_TETS = ((0, 1, 2, 6), (0, 2, 3, 6), (0, 3, 7, 6),
+         (0, 7, 4, 6), (0, 4, 5, 6), (0, 5, 1, 6))
+
+
+def _tet_triangles(pos: npt.NDArray[np.float64], vals: npt.NDArray[np.float64],
+                   iso: float) -> list[npt.NDArray[np.float64]]:
+    inside = vals < iso
+    n_inside = int(inside.sum())
+    if n_inside == 0 or n_inside == 4:
+        return []
+
+    def interp(i: int, j: int) -> npt.NDArray[np.float64]:
+        t = (iso - vals[i]) / (vals[j] - vals[i])
+        return pos[i] + t * (pos[j] - pos[i])
+
+    if n_inside == 1:
+        a = int(np.argmax(inside))
+        others = [k for k in range(4) if k != a]
+        return [[interp(a, others[0]), interp(a, others[1]), interp(a, others[2])]]
+    if n_inside == 3:
+        d = int(np.argmin(inside))
+        others = [k for k in range(4) if k != d]
+        return [[interp(d, others[0]), interp(d, others[1]), interp(d, others[2])]]
+    in_v = [k for k in range(4) if inside[k]]
+    out_v = [k for k in range(4) if not inside[k]]
+    a, b = in_v
+    c, d = out_v
+    p = [interp(a, c), interp(a, d), interp(b, d), interp(b, c)]
+    return [[p[0], p[1], p[2]], [p[0], p[2], p[3]]]
+
+
+def _marching_tetrahedra(field: npt.NDArray[np.floating],
+                         bounds_min: Sequence[float], voxel: Sequence[float],
+                         iso: float = 0.0) -> npt.NDArray[np.float64]:
+    f = np.asarray(field, dtype=np.float64) - iso
+    nz, ny, nx = f.shape
+    lo = np.asarray(bounds_min, dtype=np.float64)
+    vx = np.asarray(voxel, dtype=np.float64)
+    corners = [f[:-1, :-1, :-1], f[:-1, :-1, 1:], f[:-1, 1:, 1:], f[:-1, 1:, :-1],
+               f[1:, :-1, :-1], f[1:, :-1, 1:], f[1:, 1:, 1:], f[1:, 1:, :-1]]
+    stack = np.stack(corners)
+    crossing = (stack.min(axis=0) < 0.0) & (stack.max(axis=0) >= 0.0)
+    zs, ys, xs = np.nonzero(crossing)
+    tris: list[npt.NDArray[np.float64]] = []
+    for x, y, z in zip(xs.tolist(), ys.tolist(), zs.tolist()):
+        pos = np.array([lo + np.array([(x + dx) * vx[0], (y + dy) * vx[1],
+                                       (z + dz) * vx[2]])
+                        for (dx, dy, dz) in _TET_CORNERS], dtype=np.float64)
+        vals = np.array([f[z + dz, y + dy, x + dx]
+                         for (dx, dy, dz) in _TET_CORNERS], dtype=np.float64)
+        for tet in _TETS:
+            for tri in _tet_triangles(pos[list(tet)], vals[list(tet)], iso):
+                tris.append(np.asarray(tri))
+    if not tris:
+        return np.zeros((0, 3), dtype=np.float64)
+    return np.vstack(tris)
+
+
+def _trilinear_rgba(color: npt.NDArray[np.uint8], bounds_min: Sequence[float],
+                    voxel: Sequence[float],
+                    points: npt.NDArray[np.floating]) -> npt.NDArray[np.uint8]:
+    color = np.asarray(color, dtype=np.float64)
+    nz, ny, nx = color.shape[:3]
+    lo = np.asarray(bounds_min, dtype=np.float64)
+    vx = np.asarray(voxel, dtype=np.float64)
+    f = (np.asarray(points, dtype=np.float64) - lo) / vx
+    fx = np.clip(f[:, 0], 0.0, nx - 1.0)
+    fy = np.clip(f[:, 1], 0.0, ny - 1.0)
+    fz = np.clip(f[:, 2], 0.0, nz - 1.0)
+    x0 = np.floor(fx).astype(np.int64)
+    y0 = np.floor(fy).astype(np.int64)
+    z0 = np.floor(fz).astype(np.int64)
+    x1 = np.minimum(x0 + 1, nx - 1)
+    y1 = np.minimum(y0 + 1, ny - 1)
+    z1 = np.minimum(z0 + 1, nz - 1)
+    ax = (fx - x0)[:, None]
+    ay = (fy - y0)[:, None]
+    az = (fz - z0)[:, None]
+    c000 = color[z0, y0, x0]; c100 = color[z0, y0, x1]
+    c010 = color[z0, y1, x0]; c110 = color[z0, y1, x1]
+    c001 = color[z1, y0, x0]; c101 = color[z1, y0, x1]
+    c011 = color[z1, y1, x0]; c111 = color[z1, y1, x1]
+    t = c000 * (1 - ax) + c100 * ax
+    b = c010 * (1 - ax) + c110 * ax
+    ty = t * (1 - ay) + b * ay
+    t2 = c001 * (1 - ax) + c101 * ax
+    b2 = c011 * (1 - ax) + c111 * ax
+    by = t2 * (1 - ay) + b2 * ay
+    return np.rint(ty * (1 - az) + by * az).astype(np.uint8)
+
+
+def _write_textured_preview_npz(record: dict, path: Path) -> None:
+    by_name = {p.name: p for p in record["source_partitions"].partitions}
+    verts: list[npt.NDArray[np.float64]] = []
+    cols: list[npt.NDArray[np.uint8]] = []
+    for name in record["ordered_names"]:
+        rec = record["bones"][name]
+        part = by_name[name]
+        local = _marching_tetrahedra(rec["dense"].values_f32, rec["bounds_min"],
+                                     rec["dense"].voxel_size_m)
+        if local.shape[0] == 0:
+            continue
+        color = _trilinear_rgba(rec["color"], rec["bounds_min"],
+                                rec["dense"].voxel_size_m, local)
+        b2m = np.asarray(part.bind_to_model, dtype=np.float64)
+        model = local @ b2m[:3, :3].T + b2m[:3, 3]
+        # one flat color per triangle (average of its 3 corner colors)
+        face_color = np.rint(
+            color.reshape(-1, 3, 4)[:, :, :3].astype(np.float64).mean(axis=1)
+        ).astype(np.uint8)
+        verts.append(model)
+        cols.append(face_color)
+    verts = np.vstack(verts) if verts else np.zeros((0, 3), dtype=np.float64)
+    cols = np.vstack(cols) if cols else np.zeros((0, 3), dtype=np.uint8)
+    faces = np.arange(len(verts), dtype=np.int64).reshape(-1, 3)
+    np.savez(path, vertices=verts, faces=faces, colors=cols)
+
+
+def blender_render_textured_preview_stage(preview_npz: Path,
+                                          out_prefix: Path) -> None:
+    import bpy
+    from mathutils import Vector
+    with np.load(preview_npz) as data:
+        verts = np.asarray(data["vertices"], dtype=np.float64)
+        faces = np.asarray(data["faces"], dtype=np.int64)
+        cols = np.asarray(data["colors"], dtype=np.float64) / 255.0
+    rx90 = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
+    verts = verts @ rx90.T
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    mesh = bpy.data.meshes.new("HumanoidTextured")
+    mesh.from_pydata([tuple(map(float, v)) for v in verts], [],
+                     [tuple(map(int, f)) for f in faces])
+    mesh.validate()
+    mesh.calc_loop_triangles()
+    attr = mesh.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
+    for tri in mesh.loop_triangles:
+        c = cols[tri.index]
+        for li in tri.loops:
+            attr.data[li].color = (*c, 1.0)
+    mat = bpy.data.materials.new("TexColors")
+    mat.use_nodes = True
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    attr_node = nodes.new("ShaderNodeAttribute")
+    attr_node.attribute_name = "Col"
+    principled = next(n for n in nodes if n.type == "BSDF_PRINCIPLED")
+    principled.inputs["Roughness"].default_value = 0.8
+    links.new(attr_node.outputs["Color"], principled.inputs["Base Color"])
+    mesh.materials.append(mat)
+    obj = bpy.data.objects.new("HumanoidTextured", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    scene = bpy.context.scene
+    for engine in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
+        try:
+            scene.render.engine = engine
+            break
+        except TypeError:
+            continue
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("PreviewWorld")
+        scene.world.use_nodes = True
+    bg = scene.world.node_tree.nodes["Background"]
+    bg.inputs[0].default_value = (0.11, 0.115, 0.13, 1.0)
+    bg.inputs[1].default_value = 1.0
+    scene.render.resolution_x = 880
+    scene.render.resolution_y = 1320
+    scene.render.film_transparent = False
+    try:
+        scene.view_settings.view_transform = "Standard"
+        scene.eevee.taa_render_samples = 32
+    except AttributeError:
+        pass
+    target = Vector(tuple(map(float, verts.mean(axis=0))))
+    reach = max((Vector(tuple(map(float, v))) - target).length for v in verts)
+    up = Vector((0.0, 0.0, 1.0))
+
+    def aim_at(ob: bpy.types.Object, at: Vector) -> None:
+        ob.rotation_euler = (at - ob.location).normalized().to_track_quat(
+            "-Z", "Y").to_euler()
+
+    for label, direction in (("front", Vector((0.0, -1.0, 0.0))),
+                             ("side", Vector((1.0, 0.0, 0.0)))):
+        bpy.ops.object.camera_add(location=target + direction * reach * 4.0)
+        cam = bpy.context.active_object
+        cam.name = f"Cam{label}"
+        cam.data.lens = 42
+        aim_at(cam, target)
+        scene.camera = cam
+        for d, power in ((direction + up * 0.6, 4.0),
+                         (-direction + up * 0.2 - Vector((0.0, 1.0, 0.0)) * 0.4, 1.6),
+                         (-direction + up * 0.5 + Vector((0.0, 1.0, 0.0)) * 0.8, 2.2)):
+            bpy.ops.object.light_add(
+                type="AREA", location=target + d.normalized() * reach * 3.0)
+            light = bpy.context.active_object
+            light.data.energy = power * (reach * 3.0) ** 2
+            light.data.size = max(reach * 0.4, 0.2)
+            aim_at(light, target)
+        out = Path(str(out_prefix) + "-" + label + ".png")
+        scene.render.filepath = str(out)
+        bpy.ops.render.render(write_still=True)
+        for ob in list(scene.objects):
+            if ob.type in ("CAMERA", "LIGHT"):
+                bpy.data.objects.remove(ob, do_unlink=True)
+        print(f"[preview] panel -> {out}")
+
+
+def render_bind_textured_preview(record: dict) -> None:
+    with tempfile.TemporaryDirectory(prefix="humanoid-sdf-preview-") as tmp:
+        tmpdir = Path(tmp)
+        _write_textured_preview_npz(record, tmpdir / "textured.npz")
+        _run_blender(["--blender-render-textured", str(tmpdir / "textured.npz"),
+                      str(tmpdir / "panel")])
+        panels = []
+        for label in ("front", "side"):
+            rgba = decode_png_rgba((tmpdir / f"panel-{label}.png").read_bytes())
+            panels.append(np.ascontiguousarray(rgba[:, :, :3]))
+        composed = np.ascontiguousarray(np.concatenate(panels, axis=1))
+    PREVIEW_TEXTURED_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PREVIEW_TEXTURED_PATH.write_bytes(encode_png_rgb(composed))
+    print(f"[preview] {PREVIEW_TEXTURED_PATH.relative_to(REPO_ROOT)}: "
+          f"{composed.shape[1]}x{composed.shape[0]} bind-textured")
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description="Humanoid bone-local SDF spike baker (Task 1: source "
-                    "export + weight-derived partitions)")
+                    "export + weight-derived partitions; Task 2: distance/colour "
+                    "atlases)")
     ap.add_argument("--inspect-only", action="store_true",
                     help="export via Blender, verify, write source-report.json")
     ap.add_argument("--render-partitions", action="store_true",
                     help="write partition-preview.png (front + side)")
+    ap.add_argument("--validate-only", action="store_true",
+                    help="re-read and validate the checked-in manifest + atlases")
+    ap.add_argument("--print-coarse-hash", action="store_true",
+                    help=argparse.SUPPRESS)
+    ap.add_argument("--no-preview", action="store_true",
+                    help="skip the bind-textured preview render")
     ap.add_argument("--blender-export", type=Path, metavar="NPZ",
                     help=argparse.SUPPRESS)      # internal: re-entry in Blender
     ap.add_argument("--blender-render-preview", type=Path, nargs=2,
+                    metavar=("NPZ", "PREFIX"), help=argparse.SUPPRESS)
+    ap.add_argument("--blender-render-textured", type=Path, nargs=2,
                     metavar=("NPZ", "PREFIX"), help=argparse.SUPPRESS)
     return ap.parse_args(argv)
 
@@ -1672,14 +3297,28 @@ def main(argv: list[str] | None = None) -> int:
         npz, prefix = args.blender_render_preview
         blender_render_preview_stage(npz, prefix)
         return 0
+    if args.blender_render_textured is not None:
+        npz, prefix = args.blender_render_textured
+        blender_render_textured_preview_stage(npz, prefix)
+        return 0
     if args.inspect_only:
         return run_inspect_only()
     if args.render_partitions:
         return run_render_partitions()
-    print(__doc__.splitlines()[0], file=sys.stderr)
-    print("choose --inspect-only or --render-partitions "
-          "(the Task 2 atlas bake arrives in the next task)", file=sys.stderr)
-    return 2
+    if args.validate_only:
+        manifest = validate_checked_in()
+        print(f"[validate] {MANIFEST_PATH.relative_to(REPO_ROOT)} OK: "
+              f"{len(manifest['bones'])} bones, atlas "
+              f"{manifest['atlasDimensions']}, coarse "
+              f"{manifest['coarse']['combinedByteLength']} B")
+        return 0
+    if args.print_coarse_hash:
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        print(manifest["coarse"]["combinedSha256"])
+        return 0
+    # default: run the full Task 2 bake
+    run_bake(render_preview=not args.no_preview)
+    return 0
 
 
 if __name__ == "__main__":
