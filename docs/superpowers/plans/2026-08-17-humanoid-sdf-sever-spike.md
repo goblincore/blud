@@ -1385,6 +1385,6 @@ Task 1 is complete and merged to `main` (`14d62dc`, plus the `_edge_adjacency` f
 The chain has **two owner review gates**:
 
 - **After Task 2** — the atlas everything downstream consumes. Review `bake-report.json`, `bind-textured-preview.png`, the coarse-brick pitches, and independently re-run the determinism comparison before releasing Tasks 3–7. A bad bake here wastes six tasks.
-- **After Task 6** — the marcher and cut surfaces, before the wound slice goes in. Task 7 ships the page and panels 1–10 so this gate has something to look at.
+- **After Task 7** — this is the "after Task 6" gate in substance: it judges Tasks 5–6's marcher and cut surfaces, but the pause point is after Task 7, because Task 7 is what ships the page and panels 1–10 that make them viewable. You cannot review a marcher without a page. Tasks 8–10 are released only after this gate.
 
 After Task 10 reports success, review the complete chained diff, rerun the final verification from a clean worktree, open `/humanoid-sdf-spike.html` for the owner, and use `superpowers:finishing-a-development-branch` to choose merge/PR/keep/discard. A green headless report is not the owner visual approval.
