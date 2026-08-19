@@ -80,3 +80,42 @@ closedness precondition is untouched by that route choice. The path that does no
 care about closedness is the libigl generalized-winding-number sampler in
 `scripts/bake_hand_sdf.py`, which is what shipped the hand volume and what
 `X1.hand-soup-closure` names as the escape hatch for the hand.
+
+## Addendum — does Chisel dodge this?
+
+Raised 2026-08-19. Relevant, because Chisel is the one evaluated backend whose
+mesh-to-SDF would likely not care about the 44 pinholes.
+
+`armesher.bake_mesh_sdf` is headless-callable (Chisel's Blender *operator* is
+modal; the low-level native API is not) and it reports a **winding confidence**
+per bake — 0.95915 on the firm-grip hand, 0.86076 on the `RightForeArm` crop.
+A per-bake winding confidence means it signs by generalized winding number,
+the same family as the libigl sampler in `scripts/bake_hand_sdf.py`, which is
+tolerant of exactly this kind of open geometry. **Inference from the recorded
+metric, not a measurement** — confirm with a bounded bake of the `Head` region
+before relying on it.
+
+It is still not the move for this spike:
+
+- Its real forearm/support **intersection gate is unresolved** — 33,810 sentinel
+  samples and up to 41 mm error. The note is careful that this was a failed test
+  setup (the support envelope never covered the lattice), not a proven quality
+  failure, but unresolved is unresolved.
+- Boolean composition would still need `SDFEvaluator.from_csdl(..., mesh_grids=)`
+  or the OpenVDB path anyway. Mesh joining is not a union — it retains internal
+  faces. So Chisel does not remove OpenVDB from the pipeline.
+- Add-on bootstrap is fragile headless: `--factory-startup` clears the extracted
+  wheel directory, enabling re-extracts it, and `read_factory_settings` after
+  enable unregisters the add-on. Plus a pinned arm64 cp313 native wheel.
+- It is **GPL-3.0-or-later**. Nothing may be vendored or copied, and using it as
+  a build-time authoring tool for a shipping game is an owner licensing call, not
+  a drift-into-it decision.
+
+**Escalation ladder if the interior gate does leak**, cheapest first:
+
+1. Fan-triangulate the failing brick's own loops — each is a 2–5 vertex ring, and
+   only `Head` / `LeftHand` / `LeftShoulder` carry any.
+2. Route that brick through the already-qualified libigl winding-number sampler
+   in `scripts/bake_hand_sdf.py` — same escape hatch `X1.hand-soup-closure` names
+   for the hand, already in-repo, no new dependency.
+3. Only then reconsider Chisel, which means first resolving its intersection gate.
