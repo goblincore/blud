@@ -203,17 +203,36 @@ Key reference docs (open these before touching their area):
   route. Booleans fold explicit OpenVDB `min`/`max` because Blender 5.2's
   `GeometryNodeSDFGridBoolean` returns its Grid 2 input for every operation
   (measured); Join Geometry is not a substitute either (internal faces).
-  Analytic, firm-grip hand union (99x135x78 @ 2 mm) and humanoid
-  RightForeArm intersection (44x40x38 @ 6 mm, one negative component) all
-  repeat byte-identically across separate Blender processes. Chisel 4.0.1 was
-  evaluated and stays OPTIONAL development-only authoring/diagnostic tooling,
-  never a production dependency. 48 grid + 15 qualifier + 20 humanoid Python
-  tests, 1516 Vitest and the production build pass.
+  Analytic fixtures, the firm-grip hand union (99x135x78 @ 2 mm) and the
+  humanoid RightForeArm intersection (44x40x38 @ 6 mm, one negative component)
+  all repeat byte-identically across separate Blender processes.
+  **Precondition, measured:** Mesh to SDF Grid needs GEOMETRICALLY closed
+  operands. Given a real hole it emits an unsigned shell, not a solid — the
+  hand soup keeps 66 boundary edges after welding and contributed only 302 of
+  the union's 38,702 negative voxels (the closed wrist box supplied the rest).
+  Judge closedness with `SDF.welded_mesh_info()`, never raw indexed boundary
+  edges. Chisel 4.0.1 was evaluated and stays OPTIONAL development-only
+  authoring/diagnostic tooling, never a production dependency. 48 grid + 17
+  qualifier + 20 humanoid Python tests, 1516 Vitest and the production build
+  pass.
   [design](docs/superpowers/specs/2026-08-18-blender-sdf-grid-authoring-design.md)
   · [plan](docs/superpowers/plans/2026-08-18-blender-sdf-grid-authoring.md)
   · [adapters plan](docs/superpowers/plans/2026-08-19-blender-sdf-grid-adapters-continuation.md)
   · [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json)
+  · [notes + previews](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
   · [chisel findings](docs/dev-notes/2026-08-19-chisel-sdf-qualification/notes.md)
+- `X1.hand-soup-closure` [ ] **Weld + cap the authored hand poses** — new
+  prerequisite discovered by the adapter qualification. `pose-05-firm-grip`
+  still has 66 boundary edges after a 1 um weld, so Blender-native SDF union
+  bakes it as an unsigned shell (302 interior voxels instead of ~35k). Either
+  close the soup in `scripts/author_dynamite_grip.py` (the wrist cap does not
+  actually close the surface) or route hand fields through the existing
+  winding-number baker `scripts/bake_hand_sdf.py`, which is what produced the
+  SHIPPED hand volume. Re-run
+  `uv run scripts/qualify_blender_sdf_real_sources.py --hand` until its
+  per-operand interior gate passes. Blocks the Blender-native union in
+  `X1.hand-followups`.
+  [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
 - `X1.humanoid-sever-spike` [ ] **Textured full humanoid SDF + forearm sever** —
   revised to use the qualified Blender grid backend. The complete body mesh is
   intersected with closed weight-derived support SDFs to produce articulated
@@ -227,8 +246,9 @@ Key reference docs (open these before touching their area):
   retains an articulated upper arm, and pins the original Blud two-hand
   performance first: low bundle hold, short lighter-to-fuse reach, withdrawal,
   cook, then casual underhand toss. Modest 3D adjustment is allowed inside that
-  keyframe corridor; football/overhand posing is not. Intentionally paused
-  until usage resets.
+  keyframe corridor; football/overhand posing is not. The Blender-native union
+  leg is blocked by `X1.hand-soup-closure`; an articulated upper arm and the
+  performance work are not. Intentionally paused until usage resets.
   [design](docs/superpowers/specs/2026-08-18-sdf-fpv-full-distal-arm-rebuild-design.md)
   · [plan](docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md)
 - `X1.25` [x] **PSX-AA post pass** — FXAA at internal res + temporal smear + optional

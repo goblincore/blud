@@ -1,7 +1,9 @@
 # Array-mesh SDF adapters — qualification notes
 
 **Date:** 2026-08-19
-**Status:** Qualified. `X1.sdf-authoring` complete.
+**Status:** Qualified **for geometrically closed operands**.
+`X1.sdf-authoring` complete; the humanoid path is unblocked, the hand-union
+path needs a closed hand soup first (see the finding below).
 **Evidence:** `adapter-qualification.json` (machine-readable, regenerate with
 the command recorded in `qualification.json` → `arrayMeshAdapters.command`).
 
@@ -25,21 +27,79 @@ on failure: a route is requested explicitly or the call raises `route drift`.
 | --- | --- | --- |
 | Lattice | 99 x 135 x 78 @ 2 mm | 44 x 40 x 38 @ 6 mm |
 | Repeat f32/R16F/metadata | identical | identical |
+| Route | `direct-vdb` | `direct-vdb` |
 | Negative components | 106 (99.22 % in one body) | 1 |
 | Boundary minimum | +12.000 mm | +25.314 mm |
+| Per-operand interior | **FAIL** | pass |
 | Wall clock per run | 2.3 s | 2.2 s |
 
-The hand's 106 components are **not** a shattered field: one body holds 38,400
-of 38,702 negative voxels, and 89 of the remaining components are single
-isosurface-speck voxels. `negativeComponentStats` records the distribution so a
-future regression that genuinely fragments the field is distinguishable from
-this benign speckle. The humanoid intersection is a single solid body.
+**The humanoid intersection qualifies. The hand union does not.** Both bake
+deterministically and both repeat byte-identically — the adapters are correct.
+The hand union fails on its INPUT, for the reason below.
 
-Neither source is closed by index — the humanoid soup has 26,985 boundary edges
-across 758 components, the hand soup 530 across 2 — because both carry
-duplicated seam/cut vertices. The dense sign and boundary gates are the
-qualification, not a watertightness claim. Support primitives, by contrast, are
-mandatory closed boxes and measure 0 boundary edges.
+## Finding: `direct-vdb` needs GEOMETRICALLY closed operands
+
+Mesh to SDF Grid (OpenVDB `meshToLevelSet`) cannot sign an interior through a
+real hole. Given one, it emits an **unsigned shell**: a thin band of near-zero
+values around the surface with "outside" on both sides of it.
+
+Measured on the firm-grip hand union:
+
+| Operand | Exclusive negatives | Exclusive voxels | Filled |
+| --- | ---: | ---: | ---: |
+| `firm-grip-hand` | 302 | 490,201 | 0.06 % |
+| `wrist-continuation` (closed box) | 32,665 | 32,665 | 100 % |
+
+38,400 of the union's 38,702 negative voxels are the **box**. The hand
+contributes 302. Yet 36,503 voxels above the box carry `|d| < 1 voxel` — the
+hand is present, as a shell. `preview-hand-union-slices.png` shows it directly:
+the box is a filled rectangle, the hand is a hollow outline.
+
+Indexed boundary edges are NOT the test. Both character sources duplicate
+seam/cut vertices and read as wildly open by index while being closed as
+surfaces. `SDF.welded_mesh_info()` welds coincident vertices first; what
+survives is a real hole:
+
+| Mesh | Boundary edges (indexed) | Boundary edges (welded) | Closed |
+| --- | ---: | ---: | --- |
+| `humanoid-body` | 26,985 | 137 | no (0.14 % of 98,003 tris) |
+| `firm-grip-hand` | 530 | **66** | no (2.0 % of 3,300 tris) |
+| support / wrist boxes | 0 | 0 | yes |
+
+The humanoid's 137 residual edges are negligible against 98,003 triangles and
+it bakes as a clean solid. The hand's 66 residual edges are a substantial open
+ring on a 3,300-triangle mesh — the wrist cap does not actually close the
+surface — and the interior leaks.
+
+**This was originally missed** because the plan's dense gates only ask for
+*some* negatives, both signs, and no negative on the lattice boundary. The
+closed wrist box satisfied all three on its own. `score_operand_coverage()` +
+`require_operand_interior()` now score each union operand inside the region no
+other operand covers, so a silent non-contributor fails the run.
+
+**Consequences:**
+
+- Any Blender-native SDF union of the authored hand poses must weld and cap the
+  soup first, or use the winding-number route (`bake_hand_sdf.py` libigl
+  unsigned + fast winding number) that produced the SHIPPED hand volume. This
+  directly affects `X1.hand-followups`, whose plan is to build one
+  hand+wrist+native-forearm field via Blender-native union.
+- The humanoid path is unaffected and qualified.
+
+## Previews
+
+There is no runtime humanoid page yet (Tasks 2-7 of the sever spike), so
+`scripts/preview_adapter_fields.py` CPU sphere-traces the dense fields:
+
+- `preview-humanoid-forearm.png` / `-slices.png` — a solid forearm with visible
+  musculature and flat cut caps where the closed support box clipped it.
+- `preview-hand-union.png` / `-slices.png` — the solid wrist box and the hand's
+  hollow shell, i.e. the finding above.
+
+The tracer lands on the first positive->non-positive **sign change**, refined by
+linear interpolation. An epsilon-on-distance test with a step floor is wrong on
+a discrete grid: the floor overrides `step <= |d|`, and rays jump the surface
+(measured: 2,585 rays passed within one voxel and never registered).
 
 ## Finding: `face_owners` flood-fill contaminates owned-face AABBs
 

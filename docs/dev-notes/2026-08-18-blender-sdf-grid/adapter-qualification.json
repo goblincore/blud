@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-19T11:43:16Z",
-  "passed": true,
+  "generatedAt": "2026-08-19T12:56:24Z",
+  "passed": false,
   "runs": [
     {
       "f32Sha256": "ac560f252282c357c3728c42c7b93982acbdee2a85285ed08f190a55f3bbbb3a",
@@ -28,6 +28,44 @@
         "negativeComponents": 106,
         "negativeFraction": 0.037125288977140826,
         "negativeSamples": 38702,
+        "operandCoverage": [
+          {
+            "aabbMaxM": [
+              0.12194062769412994,
+              0.15746593475341797,
+              0.0985521450638771
+            ],
+            "aabbMinM": [
+              -0.0437081940472126,
+              -0.03500000014901161,
+              -0.026157258078455925
+            ],
+            "aabbNegatives": 6037,
+            "aabbVoxels": 495936,
+            "exclusiveNegatives": 302,
+            "exclusiveVoxels": 490201,
+            "label": "firm-grip-hand"
+          },
+          {
+            "aabbMaxM": [
+              0.03157133340835571,
+              -0.02500000014901161,
+              0.03422246418893337
+            ],
+            "aabbMinM": [
+              -0.0487081940472126,
+              -0.08500000014901161,
+              -0.02977899566292763
+            ],
+            "aabbNegatives": 38400,
+            "aabbVoxels": 38400,
+            "exclusiveNegatives": 32665,
+            "exclusiveVoxels": 32665,
+            "label": "wrist-continuation"
+          }
+        ],
+        "operandInteriorError": "operand 'firm-grip-hand' contributed no interior: 302 negative of 490201 exclusive voxels (0.0616% < 2.00%). An open (holed) mesh bakes as an unsigned shell through Mesh to SDF Grid; weld and cap it, or use the winding-number route.",
+        "operandInteriorPassed": false,
         "positiveSamples": 1003768,
         "requiredComponents": null,
         "route": "direct-vdb",
@@ -64,7 +102,7 @@
         ]
       },
       "operationSourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
-      "passed": true,
+      "passed": false,
       "r16fSha256": "9b140430a45a23eef02ae80e31bf8fa80575fa1039b35fc4c7be237803f1dbfd",
       "repeat": {
         "f32Equal": true,
@@ -107,6 +145,32 @@
         "soupSha256": "372adecf8e4cbb5e0563cf0d5537a61337c61071c8f4ba65ba6fe7d969bb4023",
         "soupTriangleCount": 3300,
         "soupVertexCount": 1912,
+        "weldedTopology": [
+          {
+            "boundaryEdges": 66,
+            "closed": false,
+            "components": 1,
+            "degenerateFacesAfterWeld": 0,
+            "label": "firm-grip-hand",
+            "signedVolumeM3": 0.0006871938658437479,
+            "triangles": 3300,
+            "vertices": 1680,
+            "verticesBeforeWeld": 1912,
+            "weldToleranceM": 1e-06
+          },
+          {
+            "boundaryEdges": 0,
+            "closed": true,
+            "components": 1,
+            "degenerateFacesAfterWeld": 0,
+            "label": "wrist-continuation",
+            "signedVolumeM3": 0.0003082804172024357,
+            "triangles": 12,
+            "vertices": 8,
+            "verticesBeforeWeld": 8,
+            "weldToleranceM": 1e-06
+          }
+        ],
         "wristBox": {
           "bandVertexCount": 45,
           "maximumM": [
@@ -125,10 +189,10 @@
       },
       "sourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
       "timings": {
-        "firstBlenderS": 2.293,
-        "firstRunS": 2.303,
-        "secondBlenderS": 2.317,
-        "secondRunS": 2.328
+        "firstBlenderS": 2.291,
+        "firstRunS": 2.301,
+        "secondBlenderS": 2.304,
+        "secondRunS": 2.314
       }
     },
     {
@@ -348,14 +412,40 @@
             -2.3122963586005937e-07,
             -0.2699727669778777
           ]
+        ],
+        "weldedTopology": [
+          {
+            "boundaryEdges": 137,
+            "closed": false,
+            "components": 1,
+            "degenerateFacesAfterWeld": 0,
+            "label": "humanoid-body",
+            "signedVolumeM3": 0.13708112989795368,
+            "triangles": 98003,
+            "vertices": 48969,
+            "verticesBeforeWeld": 62166,
+            "weldToleranceM": 1e-06
+          },
+          {
+            "boundaryEdges": 0,
+            "closed": true,
+            "components": 1,
+            "degenerateFacesAfterWeld": 0,
+            "label": "right-forearm-support",
+            "signedVolumeM3": 0.006303005443057039,
+            "triangles": 12,
+            "vertices": 8,
+            "verticesBeforeWeld": 8,
+            "weldToleranceM": 1e-06
+          }
         ]
       },
       "sourceSha256": "dfb55d18db13278c852619f9d017cb296c85f12cce82ed53639bd464a1911cb5",
       "timings": {
-        "firstBlenderS": 1.968,
-        "firstRunS": 2.175,
-        "secondBlenderS": 1.96,
-        "secondRunS": 2.17
+        "firstBlenderS": 1.956,
+        "firstRunS": 2.163,
+        "secondBlenderS": 1.969,
+        "secondRunS": 2.175
       }
     }
   ],

@@ -1295,6 +1295,43 @@ def closed_mesh_info(verts: npt.NDArray[np.float64],
     }
 
 
+def welded_mesh_info(verts: npt.NDArray[np.float64],
+                     faces: npt.NDArray[np.int64],
+                     tolerance_m: float = 1e-6) -> dict[str, Any]:
+    """closed_mesh_info() after welding coincident vertices onto one index.
+
+    Indexed boundary edges are not the same question as geometric holes. Both
+    canonical character sources duplicate seam/cut vertices, so they read as
+    wildly open by index while being closed as a surface. Welding separates
+    the two: what survives is a REAL hole, and OpenVDB's mesh-to-level-set
+    cannot sign an interior through one (measured: the firm-grip hand soup
+    keeps 66 boundary edges after welding and bakes as an unsigned shell).
+    """
+    verts = np.asarray(verts, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if tolerance_m <= 0.0:
+        raise ValueError(f"weld tolerance must be positive, got {tolerance_m}")
+    keys = np.round(verts / tolerance_m).astype(np.int64)
+    unique, inverse = np.unique(keys, axis=0, return_inverse=True)
+    welded = np.zeros((len(unique), 3), dtype=np.float64)
+    welded[inverse] = verts
+    remapped = inverse[faces]
+    keep = ((remapped[:, 0] != remapped[:, 1])
+            & (remapped[:, 1] != remapped[:, 2])
+            & (remapped[:, 2] != remapped[:, 0]))
+    info = closed_mesh_info(welded, remapped[keep])
+    a = welded[remapped[keep][:, 0]]
+    b = welded[remapped[keep][:, 1]]
+    c = welded[remapped[keep][:, 2]]
+    return {
+        **info,
+        "weldToleranceM": float(tolerance_m),
+        "verticesBeforeWeld": int(verts.shape[0]),
+        "degenerateFacesAfterWeld": int((~keep).sum()),
+        "signedVolumeM3": float(np.einsum("ij,ij->i", a, np.cross(b, c)).sum() / 6.0),
+    }
+
+
 _HAND_MODULE: Any = None
 
 

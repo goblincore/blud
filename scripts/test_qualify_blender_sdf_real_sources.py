@@ -218,6 +218,42 @@ class RealSourceQualificationContractTest(unittest.TestCase):
             self.assertEqual(QUAL.count_negative_components(result),
                              SDF.count_negative_components(result))
 
+    def test_operand_coverage_catches_a_non_contributing_union_operand(self) -> None:
+        # a 9^3 lattice over [-0.04, 0.04]; the negative blob sits in the
+        # middle third, so only an operand claiming that region contributes
+        result = dense_result()
+        scored = QUAL.score_operand_coverage(result, (
+            ("solid", (-0.01, -0.01, -0.01), (0.01, 0.01, 0.01)),
+            ("empty", (0.025, 0.025, 0.025), (0.04, 0.04, 0.04)),
+        ))
+        by_label = {e["label"]: e for e in scored}
+        self.assertGreater(by_label["solid"]["exclusiveNegatives"], 0)
+        self.assertEqual(by_label["empty"]["exclusiveNegatives"], 0)
+        self.assertGreater(by_label["empty"]["exclusiveVoxels"], 0)
+        with self.assertRaisesRegex(ValueError, "contributed no interior"):
+            QUAL.require_operand_interior(scored)
+        QUAL.require_operand_interior([by_label["solid"]])
+        # an operand entirely covered by another is skipped, not failed
+        QUAL.require_operand_interior([
+            {"label": "covered", "exclusiveVoxels": 0, "exclusiveNegatives": 0}])
+
+    def test_welded_info_separates_seam_duplicates_from_real_holes(self) -> None:
+        vertices, faces = QUAL.closed_box_mesh((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
+        self.assertEqual(SDF.welded_mesh_info(vertices, faces)["boundaryEdges"], 0)
+        # split every face onto its own vertices: open by index, closed welded
+        split_v = vertices[faces.reshape(-1)]
+        split_f = np.arange(len(split_v), dtype=np.int64).reshape(-1, 3)
+        self.assertGreater(
+            SDF.closed_mesh_info(split_v, split_f)["boundaryEdges"], 0)
+        welded = SDF.welded_mesh_info(split_v, split_f)
+        self.assertEqual(welded["boundaryEdges"], 0)
+        self.assertTrue(welded["closed"])
+        self.assertAlmostEqual(welded["signedVolumeM3"], 1.0, places=9)
+        # a real hole survives welding
+        holed = SDF.welded_mesh_info(split_v, split_f[:-2])
+        self.assertGreater(holed["boundaryEdges"], 0)
+        self.assertFalse(holed["closed"])
+
     def test_forearm_bounds_use_owned_faces_in_bind_local_metres(self) -> None:
         bounds = QUAL.partition_owned_bounds(
             tiny_source_soup(), tiny_partition_result(), "RightForeArm")

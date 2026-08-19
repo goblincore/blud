@@ -183,6 +183,72 @@ def score_dense_gate(result: "SDF.DenseSdfResult", *, expected_route: str,
     }
 
 
+def score_operand_coverage(result: "SDF.DenseSdfResult",
+                           operands: Sequence[tuple[str, Sequence[float],
+                                                    Sequence[float]]],
+                           ) -> list[dict[str, Any]]:
+    """Negative voxels each union operand contributes in its EXCLUSIVE region.
+
+    A union gate that only asks "are there negatives?" is satisfied by ONE
+    solid operand. Measured on the firm-grip hand union: 38,400 of 38,702
+    negatives were the closed wrist box and just 302 were the hand, because
+    the open hand soup bakes as an unsigned shell. This scores each operand in
+    the part of its AABB no other operand covers, so a silent non-contributor
+    is visible.
+    """
+    lo = np.asarray(result.bounds_min_m, dtype=np.float64)
+    voxel = np.asarray(result.voxel_size_m, dtype=np.float64)
+    field = np.asarray(result.values_f32)
+    nz, ny, nx = field.shape
+    axes = [lo[i] + np.arange((nx, ny, nz)[i]) * voxel[i] for i in range(3)]
+
+    def box_mask(minimum, maximum):
+        per_axis = [
+            (axes[i] >= float(minimum[i]) - 1e-9)
+            & (axes[i] <= float(maximum[i]) + 1e-9) for i in range(3)
+        ]
+        return (per_axis[2][:, None, None] & per_axis[1][None, :, None]
+                & per_axis[0][None, None, :])
+
+    masks = [box_mask(mn, mx) for _, mn, mx in operands]
+    negative = field < 0.0
+    scored: list[dict[str, Any]] = []
+    for i, (label, mn, mx) in enumerate(operands):
+        others = np.zeros_like(masks[i])
+        for j, other in enumerate(masks):
+            if j != i:
+                others |= other
+        exclusive = masks[i] & ~others
+        scored.append({
+            "label": label,
+            "aabbMinM": [float(v) for v in mn],
+            "aabbMaxM": [float(v) for v in mx],
+            "aabbVoxels": int(masks[i].sum()),
+            "aabbNegatives": int((masks[i] & negative).sum()),
+            "exclusiveVoxels": int(exclusive.sum()),
+            "exclusiveNegatives": int((exclusive & negative).sum()),
+        })
+    return scored
+
+
+def require_operand_interior(scored: Sequence[dict[str, Any]], *,
+                             minimum_fraction: float = 0.02) -> None:
+    """Every operand with an exclusive region must actually fill some of it."""
+    for entry in scored:
+        exclusive = int(entry["exclusiveVoxels"])
+        if exclusive == 0:
+            continue                        # fully covered by another operand
+        filled = int(entry["exclusiveNegatives"]) / exclusive
+        if filled < minimum_fraction:
+            raise ValueError(
+                f"operand {entry['label']!r} contributed no interior: "
+                f"{entry['exclusiveNegatives']} negative of {exclusive} "
+                f"exclusive voxels ({filled:.4%} < {minimum_fraction:.2%}). "
+                "An open (holed) mesh bakes as an unsigned shell through "
+                "Mesh to SDF Grid; weld and cap it, or use the winding-number "
+                "route.")
+
+
 # ===========================================================================
 # Pure source preparation
 # ===========================================================================
@@ -612,14 +678,27 @@ def qualify_hand_union(*, blender_bin: str | None = None) -> QualificationRun:
             diagnostics=diag),
         expected_route=SDF.SdfGridRoute.DIRECT_VDB, expect_components=None)
 
+    coverage = score_operand_coverage(first, (
+        ("firm-grip-hand", vertices.min(axis=0), vertices.max(axis=0)),
+        ("wrist-continuation", box.minimum_m, box.maximum_m),
+    ))
+    operand_error: str | None = None
+    try:
+        require_operand_interior(coverage)
+    except ValueError as exc:                 # recorded, never swallowed
+        operand_error = str(exc)
+
     f32_sha, r16f_sha = _result_hashes(first)
     repeat = RepeatGate(extra["repeat"]["metadataEqual"],
                         extra["repeat"]["f32Equal"],
                         extra["repeat"]["r16fEqual"])
     topology = extra["diagnostics"]["topology"]
+    gate = {**gate, "operandCoverage": coverage,
+            "operandInteriorPassed": operand_error is None,
+            "operandInteriorError": operand_error}
     return QualificationRun(
         source="firm-grip-hand-union",
-        passed=bool(repeat.passed),
+        passed=bool(repeat.passed and operand_error is None),
         source_sha256=first.source_sha256,
         operation_source_sha256=extra["diagnostics"]["operationSourceSha256"],
         f32_sha256=f32_sha, r16f_sha256=r16f_sha, repeat=repeat,
@@ -632,6 +711,12 @@ def qualify_hand_union(*, blender_bin: str | None = None) -> QualificationRun:
             "soupVertexCount": int(vertices.shape[0]),
             "soupTriangleCount": int(faces.shape[0]),
             "soupSha256": soup_sha,
+            "weldedTopology": [
+                {"label": "firm-grip-hand",
+                 **SDF.welded_mesh_info(vertices, faces)},
+                {"label": "wrist-continuation",
+                 **SDF.welded_mesh_info(box_vertices, box_faces)},
+            ],
             "wristBox": box.to_json(),
             "wristBoxSha256": box_sha,
             "indexedTopology": topology,
@@ -710,6 +795,12 @@ def qualify_humanoid_intersection(*, blender_bin: str | None = None
             "supportPlanes": [[float(v) for v in row]
                               for row in np.asarray(forearm.support_planes)],
             "indexedTopology": extra["diagnostics"]["topology"],
+            "weldedTopology": [
+                {"label": "humanoid-body",
+                 **SDF.welded_mesh_info(body_local, faces)},
+                {"label": "right-forearm-support",
+                 **SDF.welded_mesh_info(box_vertices, box_faces)},
+            ],
             "operands": [d["label"] for d in extra["diagnostics"]["payloads"]],
             "payloadSha256": [d["payloadSha256"]
                               for d in extra["diagnostics"]["payloads"]],
