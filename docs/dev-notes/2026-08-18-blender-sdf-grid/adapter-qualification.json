@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-19T12:56:24Z",
+  "generatedAt": "2026-08-19T13:47:10Z",
   "passed": false,
   "runs": [
     {
@@ -189,10 +189,10 @@
       },
       "sourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
       "timings": {
-        "firstBlenderS": 2.291,
-        "firstRunS": 2.301,
-        "secondBlenderS": 2.304,
-        "secondRunS": 2.314
+        "firstBlenderS": 2.319,
+        "firstRunS": 2.329,
+        "secondBlenderS": 2.343,
+        "secondRunS": 2.353
       }
     },
     {
@@ -300,7 +300,7 @@
             ]
           ],
           "name": "RightForeArm",
-          "ownedFaceCount": 1592,
+          "ownedFaceCount": 1424,
           "ownedVertexCount": 938,
           "partitionRow": 18,
           "pitchM": 0.006
@@ -333,14 +333,14 @@
         "ownedFaceBounds": {
           "basis": "owned-face-vertices",
           "maximumM": [
-            0.46625113703580545,
+            0.06850315400492057,
             0.26518005639787606,
-            0.5369101847840091
+            0.044219852881976385
           ],
           "minimumM": [
             -0.09636626588570074,
-            -0.5493841834966563,
-            -0.14887783067475913
+            -0.026324875919416034,
+            -0.08668546988666637
           ],
           "modelToBind": [
             [
@@ -369,15 +369,15 @@
             ]
           ],
           "name": "RightForeArm",
-          "ownedFaceCount": 1592,
-          "ownedVertexCount": 1206,
+          "ownedFaceCount": 1424,
+          "ownedVertexCount": 890,
           "partitionRow": 18,
           "pitchM": 0.006
         },
         "ownedFaceStrays": {
-          "facesPartlyOutsideBindBounds": 168,
-          "facesWhollyOutsideBindBounds": 168,
-          "ownedFaces": 1592,
+          "facesPartlyOutsideBindBounds": 0,
+          "facesWhollyOutsideBindBounds": 0,
+          "ownedFaces": 1424,
           "toleranceM": 0.0001
         },
         "payloadSha256": [
@@ -442,10 +442,10 @@
       },
       "sourceSha256": "dfb55d18db13278c852619f9d017cb296c85f12cce82ed53639bd464a1911cb5",
       "timings": {
-        "firstBlenderS": 1.956,
-        "firstRunS": 2.163,
-        "secondBlenderS": 1.969,
-        "secondRunS": 2.175
+        "firstBlenderS": 1.968,
+        "firstRunS": 2.175,
+        "secondBlenderS": 1.977,
+        "secondRunS": 2.185
       }
     }
   ],

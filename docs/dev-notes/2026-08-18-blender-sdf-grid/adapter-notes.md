@@ -101,6 +101,82 @@ linear interpolation. An epsilon-on-distance test with a step floor is wrong on
 a discrete grid: the floor overrides `step <= |d|`, and rays jump the surface
 (measured: 2,585 rays passed within one voxel and never registered).
 
+## Finding (FIXED): `_edge_adjacency` mislabelled almost every face pair
+
+Sizing the forearm support from faces owned by `RightForeArm` originally
+produced a **body-sized** box (0.60 x 0.43 x 0.73 m) that swallowed 11,872
+`Hips` faces, the head and both legs, plus 168 stray owned faces sitting ~0.5 m
+away in bind-local metres.
+
+Root cause, in `scripts/bake_humanoid_sdf.py::_edge_adjacency`:
+
+```python
+edges = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])   # BLOCKS
+rows  = np.repeat(np.arange(len(f)), 3)[order]                       # interleaved!
+```
+
+`concatenate` stacks the three edge slots as blocks, so entry `i` belongs to
+face `i % F` — `np.tile`, not `np.repeat`. Two triangles sharing an edge came
+back as `(face 0, face 0)`, a self-pair. On the real mesh only **2 of the first
+4,000** reported pairs genuinely shared an edge. The weak-face flood fill
+(8,620 of 98,003 faces, resolved by "strongest ADJACENT partition") was voting
+on essentially random faces.
+
+Fixed to `np.tile`, with an octahedron/two-triangle regression test in
+`scripts/test_bake_humanoid_sdf.py::EdgeAdjacencyTest`:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Adjacent faces with different owners | 7.48 % | **0.68 %** |
+| Chest adjacent-pair disagreement | 16.77 % | **1.15 %** |
+| `RightForeArm` owned-face bbox | 0.563 x 0.815 x 0.686 m | **0.165 x 0.292 x 0.131 m** |
+| `RightForeArm` faces outside its bind bounds | 168 | **0** |
+| `isolatedFacesAssignedByOwnWeight` | 16 | 447 (real islands now found) |
+
+`partition-preview.png` before/after shows it plainly: the speckled chest
+mosaic becomes clean anatomical regions. The partition **bind** bounds
+(`coverage.partitions[].boundsLocalMin/Max`) never moved, because they come
+from the weight-bound vertex mask rather than face ownership — which is why
+the humanoid intersection's f32 hash is unchanged at `aa74bd27004a` across the
+fix, and why `partition_bind_bounds()` was the stable thing to size from.
+
+**Keep sizing support volumes from `partition_bind_bounds()`.** It is now
+belt-and-braces rather than a workaround, and `stray_owned_faces()` stays in
+the report as a regression tripwire (it must read 0).
+
+The preview palette was fixed in the same pass: golden-angle hue stepping is
+right for unknown n but worse than even spacing for a fixed count, and at 22
+partitions it collapsed to a 7.7 deg minimum gap (Hips vs Head both dusty red;
+RightHand vs RightLeg both purple, 12.4 deg apart). Even spacing with an
+interleaved ring and a 3-cycle saturation/value modulation raises the minimum
+RGB separation from 23 to 56.
+
+## Note: the source sculpt is not bilaterally symmetric
+
+Only **2.5 %** of vertices have a mirror twin within 1 mm of the x midplane
+(median mirror distance 7.6 mm, p90 25 mm, max 80 mm) — the zombie is a hand
+sculpt with independent left/right topology. Where a twin does exist, weights
+mirror within 0.01 for 87.4 % of them, and **97.5 %** of mirrored faces get the
+mirrored partition; the 342 mismatches all sit on region boundaries
+(ForeArm/Hand, Shoulder/Spine01). Left/right partitions are also distinct
+bones, so they carry distinct hues by design. Visible left/right differences in
+the preview are the asset, not the partitioner.
+
+## Previews
+
+There is no runtime humanoid page yet (Tasks 2-7 of the sever spike), so
+`scripts/preview_adapter_fields.py` CPU sphere-traces the dense fields:
+
+- `preview-humanoid-forearm.png` / `-slices.png` — a solid forearm with visible
+  musculature and flat cut caps where the closed support box clipped it.
+- `preview-hand-union.png` / `-slices.png` — the solid wrist box and the hand's
+  hollow shell, i.e. the finding above.
+
+The tracer lands on the first positive->non-positive **sign change**, refined by
+linear interpolation. An epsilon-on-distance test with a step floor is wrong on
+a discrete grid: the floor overrides `step <= |d|`, and rays jump the surface
+(measured: 2,585 rays passed within one voxel and never registered).
+
 ## Finding: `face_owners` flood-fill contaminates owned-face AABBs
 
 Sizing the forearm support volume from faces owned by `RightForeArm` produced a

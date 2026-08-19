@@ -574,7 +574,12 @@ def _edge_adjacency(faces: npt.NDArray[np.integer]
     keys = np.sort(edges, axis=1)
     order = np.lexsort((keys[:, 1], keys[:, 0]))
     keys = keys[order]
-    rows = np.repeat(np.arange(len(f), dtype=np.int64), 3)[order]
+    # np.tile, NOT np.repeat: concatenate stacks the three edge slots as
+    # BLOCKS ([all 0-1], [all 1-2], [all 2-0]), so entry i belongs to face
+    # i % F. np.repeat assumes an interleaved layout and mislabels almost
+    # every edge -- measured on this source, only 2 of the first 4,000 pairs
+    # genuinely shared an edge, which fed the weak-face flood fill noise.
+    rows = np.tile(np.arange(len(f), dtype=np.int64), 3)[order]
     same = (keys[1:] == keys[:-1]).all(axis=1)
     return rows[:-1][same], rows[1:][same]
 
@@ -1538,12 +1543,28 @@ def _check_report_gates(report: dict) -> None:
 
 
 def _partition_palette(n: int) -> npt.NDArray[np.uint8]:
-    """Deterministic golden-angle HSV palette, one distinct color/partition."""
+    """Deterministic HSV palette, one readably distinct color per partition.
+
+    Golden-angle hue stepping is the right choice when n is unknown, but n is
+    known here and the angle is WORSE than even spacing for a fixed count: at
+    22 partitions it collapsed the minimum gap to 7.7 deg (Hips vs Head both
+    read dusty red; RightHand vs RightLeg both read purple, 12.4 deg apart).
+    Space hues evenly instead, interleave the ring so neighbouring partition
+    rows are never adjacent hues, and modulate saturation/value on a 3-cycle
+    so even a residual hue clash separates by lightness.
+    """
     import colorsys
     out = np.zeros((n, 3), dtype=np.uint8)
+    if n <= 0:
+        return out
+    half = (n + 1) // 2
     for i in range(n):
-        r, g, b = colorsys.hsv_to_rgb((i * 0.618033988749895) % 1.0,
-                                      0.72, 0.95)
+        # interleave: 0, half, 1, half+1, ... keeps consecutive rows apart
+        slot = (i % 2) * half + i // 2
+        hue = (slot / float(n)) % 1.0
+        saturation = (0.85, 0.62, 0.95)[i % 3]
+        value = (0.95, 0.99, 0.72)[i % 3]
+        r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
         out[i] = (int(r * 255), int(g * 255), int(b * 255))
     return out
 

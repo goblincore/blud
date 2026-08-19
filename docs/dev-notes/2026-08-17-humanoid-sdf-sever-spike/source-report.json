@@ -24,9 +24,9 @@
     "boundaryEdges": 26985,
     "nonManifoldEdges": 0,
     "interiorEdges": 133512,
-    "faceComponents": 237,
-    "floatingIslandFaces": 306,
-    "largestComponentFaces": 97697
+    "faceComponents": 1043,
+    "floatingIslandFaces": 10891,
+    "largestComponentFaces": 1476
   },
   "texture": {
     "width": 2048,
@@ -377,32 +377,32 @@
   },
   "faceOwnership": {
     "facesPerPartition": {
-      "Hips": 12752,
-      "LeftUpLeg": 3040,
-      "LeftLeg": 8696,
-      "LeftFoot": 1594,
-      "LeftToeBase": 2331,
-      "RightUpLeg": 2736,
-      "RightLeg": 13047,
-      "RightFoot": 1526,
-      "RightToeBase": 2411,
-      "Spine02": 568,
-      "Spine01": 1008,
-      "Spine": 0,
-      "LeftShoulder": 3599,
-      "LeftArm": 3947,
-      "LeftForeArm": 3564,
-      "LeftHand": 11234,
-      "RightShoulder": 1778,
-      "RightArm": 2103,
-      "RightForeArm": 1592,
-      "RightHand": 3767,
-      "neck": 0,
-      "Head": 16710
+      "Hips": 12441,
+      "LeftUpLeg": 2814,
+      "LeftLeg": 7783,
+      "LeftFoot": 1454,
+      "LeftToeBase": 2165,
+      "RightUpLeg": 2622,
+      "RightLeg": 11933,
+      "RightFoot": 1405,
+      "RightToeBase": 2238,
+      "Spine02": 1498,
+      "Spine01": 1978,
+      "Spine": 81,
+      "LeftShoulder": 5187,
+      "LeftArm": 3636,
+      "LeftForeArm": 3116,
+      "LeftHand": 10134,
+      "RightShoulder": 3602,
+      "RightArm": 2106,
+      "RightForeArm": 1424,
+      "RightHand": 3403,
+      "neck": 1,
+      "Head": 16982
     },
     "weakFaces": 8620,
     "unownedFaces": 0,
-    "isolatedFacesAssignedByOwnWeight": 16
+    "isolatedFacesAssignedByOwnWeight": 447
   },
   "foldedBones": [
     {
@@ -436,7 +436,7 @@
         0.20157630873193522,
         0.17908121095167284
       ],
-      "faces": 12752
+      "faces": 12441
     },
     {
       "name": "LeftUpLeg",
@@ -456,7 +456,7 @@
         0.3613056826628863,
         0.23291600951119884
       ],
-      "faces": 3040
+      "faces": 2814
     },
     {
       "name": "LeftLeg",
@@ -476,7 +476,7 @@
         0.3497150586054186,
         0.14067523465036708
       ],
-      "faces": 8696
+      "faces": 7783
     },
     {
       "name": "LeftFoot",
@@ -496,7 +496,7 @@
         0.2105893295895603,
         0.15469528707955033
       ],
-      "faces": 1594
+      "faces": 1454
     },
     {
       "name": "LeftToeBase",
@@ -516,7 +516,7 @@
         0.13725819646940932,
         0.03641967042151387
       ],
-      "faces": 2331
+      "faces": 2165
     },
     {
       "name": "RightUpLeg",
@@ -536,7 +536,7 @@
         0.3695162407149528,
         0.2530142387946206
       ],
-      "faces": 2736
+      "faces": 2622
     },
     {
       "name": "RightLeg",
@@ -556,7 +556,7 @@
         0.3675414231779064,
         0.1717121558236383
       ],
-      "faces": 13047
+      "faces": 11933
     },
     {
       "name": "RightFoot",
@@ -576,7 +576,7 @@
         0.20180293256955945,
         0.14730887208654253
       ],
-      "faces": 1526
+      "faces": 1405
     },
     {
       "name": "RightToeBase",
@@ -596,7 +596,7 @@
         0.13316486383429357,
         0.04126605751180989
       ],
-      "faces": 2411
+      "faces": 2238
     },
     {
       "name": "Spine02",
@@ -616,7 +616,7 @@
         0.10725272662549812,
         0.16237814379830903
       ],
-      "faces": 568
+      "faces": 1498
     },
     {
       "name": "Spine01",
@@ -636,7 +636,7 @@
         0.16910406772397524,
         0.16450082407312436
       ],
-      "faces": 1008
+      "faces": 1978
     },
     {
       "name": "Spine",
@@ -656,7 +656,7 @@
         0.1362397128307391,
         0.1262142522845211
       ],
-      "faces": 0
+      "faces": 81
     },
     {
       "name": "LeftShoulder",
@@ -676,7 +676,7 @@
         0.21876150417250112,
         0.18154466285872406
       ],
-      "faces": 3599
+      "faces": 5187
     },
     {
       "name": "LeftArm",
@@ -696,7 +696,7 @@
         0.2669610594245779,
         0.12949941147504063
       ],
-      "faces": 3947
+      "faces": 3636
     },
     {
       "name": "LeftForeArm",
@@ -716,7 +716,7 @@
         0.27075799156813346,
         0.04543659518769738
       ],
-      "faces": 3564
+      "faces": 3116
     },
     {
       "name": "LeftHand",
@@ -736,7 +736,7 @@
         0.20989871413266034,
         0.056693017443855576
       ],
-      "faces": 11234
+      "faces": 10134
     },
     {
       "name": "RightShoulder",
@@ -756,7 +756,7 @@
         0.205696932922374,
         0.15266959227732757
       ],
-      "faces": 1778
+      "faces": 3602
     },
     {
       "name": "RightArm",
@@ -776,7 +776,7 @@
         0.25728558224810627,
         0.15900366725580173
       ],
-      "faces": 2103
+      "faces": 2106
     },
     {
       "name": "RightForeArm",
@@ -796,7 +796,7 @@
         0.2698328858340052,
         0.044219852881976385
       ],
-      "faces": 1592
+      "faces": 1424
     },
     {
       "name": "RightHand",
@@ -816,7 +816,7 @@
         0.2240496762455163,
         0.05417959195296884
       ],
-      "faces": 3767
+      "faces": 3403
     },
     {
       "name": "neck",
@@ -836,7 +836,7 @@
         0.0774388271222366,
         0.12969172913686328
       ],
-      "faces": 0
+      "faces": 1
     },
     {
       "name": "Head",
@@ -856,7 +856,7 @@
         0.25225434101025224,
         0.12040193704131052
       ],
-      "faces": 16710
+      "faces": 16982
     }
   ],
   "jointBands": [
@@ -879,8 +879,8 @@
       "parentExtensionM": 0.014975380098488469,
       "childExtensionM": 0.014785056066849711,
       "facesInBandByOwner": {
-        "Hips": 807,
-        "LeftUpLeg": 269
+        "Hips": 810,
+        "LeftUpLeg": 284
       }
     },
     {
@@ -971,8 +971,8 @@
       "parentExtensionM": 0.014967319222862529,
       "childExtensionM": 0.014965283872808651,
       "facesInBandByOwner": {
-        "Hips": 815,
-        "RightUpLeg": 243
+        "Hips": 823,
+        "RightUpLeg": 273
       }
     },
     {
@@ -1063,8 +1063,8 @@
       "parentExtensionM": 0.014927192120020128,
       "childExtensionM": 0.014952208332714718,
       "facesInBandByOwner": {
-        "Hips": 185,
-        "Spine02": 177
+        "Hips": 479,
+        "Spine02": 419
       }
     },
     {
@@ -1086,8 +1086,8 @@
       "parentExtensionM": 0.014994818374166757,
       "childExtensionM": 0.01494007815096833,
       "facesInBandByOwner": {
-        "Spine02": 62,
-        "Spine01": 12
+        "Spine02": 211,
+        "Spine01": 131
       }
     },
     {
@@ -1109,8 +1109,8 @@
       "parentExtensionM": 0.014572983342666778,
       "childExtensionM": 0.014982690414441942,
       "facesInBandByOwner": {
-        "Spine01": 1,
-        "Spine": 0
+        "Spine01": 108,
+        "Spine": 32
       }
     },
     {
@@ -1133,7 +1133,7 @@
       "childExtensionM": 0.01495267617674266,
       "facesInBandByOwner": {
         "Spine": 0,
-        "LeftShoulder": 233
+        "LeftShoulder": 767
       }
     },
     {
@@ -1155,8 +1155,8 @@
       "parentExtensionM": 0.01483077247868428,
       "childExtensionM": 0.014968979858886039,
       "facesInBandByOwner": {
-        "LeftShoulder": 100,
-        "LeftArm": 189
+        "LeftShoulder": 140,
+        "LeftArm": 272
       }
     },
     {
@@ -1225,7 +1225,7 @@
       "childExtensionM": 0.014786735562233144,
       "facesInBandByOwner": {
         "Spine": 0,
-        "RightShoulder": 280
+        "RightShoulder": 551
       }
     },
     {
@@ -1247,8 +1247,8 @@
       "parentExtensionM": 0.014773813492913915,
       "childExtensionM": 0.014925521453764546,
       "facesInBandByOwner": {
-        "RightShoulder": 149,
-        "RightArm": 117
+        "RightShoulder": 185,
+        "RightArm": 243
       }
     },
     {
@@ -1316,7 +1316,7 @@
       "parentExtensionM": 0.014533669566936646,
       "childExtensionM": 0.014963270013910674,
       "facesInBandByOwner": {
-        "Spine": 0,
+        "Spine": 16,
         "neck": 0
       }
     },
@@ -1339,8 +1339,8 @@
       "parentExtensionM": 0.014927424275706695,
       "childExtensionM": 0.014985893732108882,
       "facesInBandByOwner": {
-        "neck": 0,
-        "Head": 624
+        "neck": 1,
+        "Head": 728
       }
     }
   ],

@@ -211,7 +211,12 @@ Key reference docs (open these before touching their area):
   hand soup keeps 66 boundary edges after welding and contributed only 302 of
   the union's 38,702 negative voxels (the closed wrist box supplied the rest).
   Judge closedness with `SDF.welded_mesh_info()`, never raw indexed boundary
-  edges. Chisel 4.0.1 was evaluated and stays OPTIONAL development-only
+  edges. Also fixed a real defect in humanoid Task 1: `_edge_adjacency` used
+  `np.repeat` on block-stacked edges, so only 2 of every 4,000 reported face
+  pairs actually shared an edge and the weak-face flood fill voted on noise
+  (chest partition mosaic; 168 stray `RightForeArm` faces). `np.tile` + a
+  regression test; partition bind bounds and the humanoid f32 hash are
+  unchanged. Chisel 4.0.1 was evaluated and stays OPTIONAL development-only
   authoring/diagnostic tooling, never a production dependency. 48 grid + 17
   qualifier + 20 humanoid Python tests, 1516 Vitest and the production build
   pass.

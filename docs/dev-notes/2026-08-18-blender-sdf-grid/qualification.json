@@ -40,7 +40,7 @@
     },
     "passed": false,
     "reportPath": "docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json",
-    "reportSha256": "a42d7c75b2d7030627b508bdc5e4f865c1c3063e78af9eb77d07f9aec8b182c8",
+    "reportSha256": "59df58593121dcf0e64dd417eb4fd482c4e9a6017ca12788f339cd928bbdb2d9",
     "selectedRoute": "direct-vdb"
   },
   "availableNodes": {

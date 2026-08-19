@@ -355,5 +355,45 @@ class DerivePartitionsTest(unittest.TestCase):
             self.assertEqual(p.pitch_m, BAKE.LIMB_PITCH_M)
 
 
+class EdgeAdjacencyTest(unittest.TestCase):
+    """The weak-face flood fill is only as good as this adjacency."""
+
+    def test_two_triangles_sharing_an_edge_pair_with_each_other(self) -> None:
+        faces = np.array([[0, 1, 2], [1, 2, 3]], dtype=np.int64)
+        fa, fb = BAKE._edge_adjacency(faces)
+        self.assertEqual(len(fa), 1)
+        self.assertEqual({int(fa[0]), int(fb[0])}, {0, 1},
+                         "a shared edge must pair the two DIFFERENT faces")
+
+    def test_every_reported_pair_actually_shares_an_edge(self) -> None:
+        # closed octahedron: 6 vertices, 8 faces, 12 edges, each interior
+        verts = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0],
+                          [0, -1, 0], [0, 0, 1], [0, 0, -1]], dtype=np.float64)
+        faces = np.array([
+            [0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4],
+            [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5],
+        ], dtype=np.int64)
+        fa, fb = BAKE._edge_adjacency(faces)
+        self.assertEqual(len(fa), 12, "a closed octahedron has 12 shared edges")
+        self.assertEqual(int((fa == fb).sum()), 0, "no face may pair with itself")
+        for a, b in zip(fa, fb):
+            shared = set(faces[int(a)].tolist()) & set(faces[int(b)].tolist())
+            self.assertGreaterEqual(
+                len(shared), 2, f"faces {int(a)},{int(b)} do not share an edge")
+        # every face must reach every other face through the adjacency graph
+        seen, stack = {0}, [0]
+        neighbours: dict[int, list[int]] = {i: [] for i in range(len(faces))}
+        for a, b in zip(fa, fb):
+            neighbours[int(a)].append(int(b))
+            neighbours[int(b)].append(int(a))
+        while stack:
+            for nxt in neighbours[stack.pop()]:
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        self.assertEqual(len(seen), len(faces), "adjacency graph is disconnected")
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
