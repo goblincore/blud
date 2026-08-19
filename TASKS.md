@@ -238,13 +238,29 @@ Key reference docs (open these before touching their area):
   per-operand interior gate passes. Blocks the Blender-native union in
   `X1.hand-followups`.
   [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
-- `X1.humanoid-sever-spike` [ ] **Textured full humanoid SDF + forearm sever** —
-  revised to use the qualified Blender grid backend. The complete body mesh is
-  intersected with closed weight-derived support SDFs to produce articulated
-  bone-local bricks; source texture projection, elbow scrub, softness and
-  prewarmed sever gate remain unchanged.
+- `X1.humanoid-sever-spike` [ ] **Textured full humanoid SDF + forearm sever
+  + aimed wounds** — the zombie fleshing-out spike, now unblocked. The complete
+  body mesh is intersected with closed weight-derived support SDFs to produce
+  articulated bone-local bricks; source texture projection, elbow scrub,
+  softness and the prewarmed sever gate remain unchanged.
+  **Wound damage is folded in (owner call, 2026-08-19)** rather than deferred:
+  the gate is judging whether a baked representation keeps the procedural
+  zombie's live-wound feel, so the testable build has to carry wounds. Wounds
+  re-key from `damage.ts`'s `primIdx` to a bone-brick index and reach local
+  space through the bone's posed rigid inverse, which deletes `frame()`,
+  `basisFromAxis` and the `bodyYaw` de-yaw/re-yaw contract outright.
+  Two consequences for the baker, both cheap now and expensive later: emit a
+  **coarse CPU distance brick per bone** (≤16³ f32, ~350 KiB total) in the same
+  pass as the atlases, and size every brick and bounds test from the
+  weight-derived bind bounds — never a raw `face_owners` owned-face AABB.
+  Do **not** build on the 2026-08-18 atlas at `ac0c28f`
+  (`codex/fpv-full-distal-arm-rebuild`): it was an FPV-arm prerequisite on a
+  branch whose gate was owner-rejected, it never merged, and it predates
+  `X1.sdf-authoring` so it uses libigl rather than the qualified `direct-vdb`
+  route. Re-bake through the qualified backend.
   [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
   · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
+  · [wound design](docs/superpowers/specs/2026-08-19-humanoid-sdf-wound-damage-design.md)
 - `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
   later one-piece synthetic-forearm reference were both owner-rejected. The
   next run uses Blender-native SDF union for one hand+wrist+native-forearm field,

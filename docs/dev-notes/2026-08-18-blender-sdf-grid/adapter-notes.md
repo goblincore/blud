@@ -151,6 +151,32 @@ RightHand vs RightLeg both purple, 12.4 deg apart). Even spacing with an
 interleaved ring and a 3-cycle saturation/value modulation raises the minimum
 RGB separation from 23 to 56.
 
+## The adjacency defect did NOT reach the baked atlas
+
+Measured against the one humanoid atlas that exists (`ac0c28f` on
+`codex/fpv-full-distal-arm-rebuild`), rebuilding its `RightForeArm` brick with
+buggy vs corrected `_edge_adjacency` on the shipped 33x60x27 lattice:
+
+| Check | Result |
+| --- | --- |
+| SDF sign flips | 0 of 53,460 |
+| Max abs distance delta | 0.000 mm |
+| Winding samples crossing 0.5 | 0 (max delta 0.031) |
+| Closest surface point moved | 0.00 mm |
+| Colour delta, visible shell (\|sdf\| < 4 mm) | mean 0.00/255, max 9 |
+
+The face subset the baker feeds to libigl *did* change (9,240 -> 10,535 faces)
+and 12.77 % of samples resolve to a different triangle **index** — but to the
+identical closest point, because the source duplicates seam vertices and the
+coincident triangles are geometrically the same surface. The strays sit ~0.5 m
+away and never win a closest-triangle test, and the winding perturbation never
+reaches the 0.5 threshold.
+
+So the defect corrupted **diagnostics** (the partition preview, owned-face
+AABBs) but not **geometry**. Any re-bake is warranted for other reasons — that
+atlas predates `X1.sdf-authoring` and uses libigl rather than the qualified
+`direct-vdb` route, and its branch was owner-rejected — not because of this.
+
 ## Note: the source sculpt is not bilaterally symmetric
 
 Only **2.5 %** of vertices have a mirror twin within 1 mm of the x midplane
