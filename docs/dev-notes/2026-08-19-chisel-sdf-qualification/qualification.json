@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-08-19",
+  "status": "cancelled-before-forearm-repeat",
+  "dispatcherStatus": "failed-after-manual-cancel",
+  "finalDecision": "openvdb-default-chisel-optional-authoring",
+  "productionBackendQualified": false,
+  "recommendedUse": [
+    "interactive-sdf-authoring-in-blender",
+    "development-only-mesh-bake-comparison",
+    "diagnostics"
+  ],
+  "recommendedHybrid": "chisel-authoring-to-conventional-mesh-to-openvdb-pipeline",
+  "environment": {
+    "blender": "5.2.0 LTS",
+    "python": "3.13.13",
+    "chisel": "4.0.1",
+    "armesher": {
+      "version": "4.0.1",
+      "buildHash": "43defedee93e24556b5f5246236c48fbef75c24655d497657e09e2d910dda0b8",
+      "wheelStateHash": "c0e0d896de692a8f8034ba636ad7377fa8679d251959ec063a2f900657add0b5"
+    }
+  },
+  "provenance": {
+    "manifestSha256": "c83734e8cc67fea01aae3f909dddb2d0d2d48a3427016d63048cea0fcb0b75ea",
+    "wheelSha256": "c47dcb0f48f69fa64b33f6446d8de5095f75993fadf01a92cff3ab3be02b352b",
+    "nativeModuleSha256": "f8cc857b90eb3ee16848d978acaf9be669ea6875e4d929a9d3ab6a820e50b662",
+    "license": "GPL-3.0-or-later",
+    "policy": "optional-local-development-dependency-do-not-copy-or-vendor"
+  },
+  "layoutContract": {
+    "dtype": "float32",
+    "nativeFlatOrder": "x-fastest",
+    "numpyShape": "z-y-x",
+    "samplePosition": "origin+(index+0.5)*spacing",
+    "canonicalNormals": null,
+    "minimumNativePaddingVoxels": 6,
+    "documentedUiMaximumPaddingVoxels": 64
+  },
+  "headlessLifecycle": {
+    "modalUiOperatorAvoided": true,
+    "lowLevelArmesherWorked": true,
+    "factoryStartupClearsExtractedWheelDirectory": true,
+    "addonEnableReextractsWheel": true,
+    "factorySettingsAfterEnableUnregistersAddon": true
+  },
+  "analytic": {
+    "union": {
+      "determinism": {
+        "bakeHashesEqual": true,
+        "f32BytesEqual": true,
+        "probeValuesEqual": true,
+        "r16fEqual": true
+      },
+      "dimensions": [25, 19, 19],
+      "components": 1,
+      "negativeSamples": 1566,
+      "sentinelSamples": 0,
+      "boundaryMinM": 0.039844,
+      "maxSurfaceErrorM": 0.000779,
+      "surfaceErrorPoints": 8503,
+      "bakeBothSeconds": [0.269, 0.249],
+      "r16fSha256": "b1dcf0822ebd24a8168a67ec202080aea9cdf31c9aff98025e99142677dc1a96"
+    },
+    "intersection": {
+      "determinism": {
+        "bakeHashesEqual": true,
+        "f32BytesEqual": true,
+        "probeValuesEqual": true,
+        "r16fEqual": true
+      },
+      "dimensions": [25, 25, 25],
+      "components": 1,
+      "negativeSamples": 110,
+      "sentinelSamples": 0,
+      "boundaryMinM": 0.075012,
+      "maxSurfaceErrorM": 0.00021,
+      "surfaceErrorPoints": 512,
+      "bakeBothSeconds": [1.194, 1.237],
+      "r16fSha256": "91904be09dcdca5d703d61fc249cffd5db1ca42fb254acf7ee9988265186d2bb"
+    }
+  },
+  "realSources": {
+    "firmGripHand": {
+      "status": "passed-as-diagnostic",
+      "source": "pose-05-firm-grip.npz",
+      "vertices": 1912,
+      "triangles": 3300,
+      "resolution": 128,
+      "paddingVoxels": 41,
+      "dimensions": [193, 210, 165],
+      "spacingM": 0.001503640116425231,
+      "bakeSeconds": 1.1249,
+      "windingConfidence": 0.9591547846794128,
+      "exactShellCoversMargin": true,
+      "gridSha256": "59f7641470741079dc77f080c2d5c2bf9ec8eab30d3039126f17a82955139d16",
+      "shippedComparison": {
+        "signAgreement": 0.999788,
+        "chiselNegativeSamples": 215486,
+        "shippedNegativeSamples": 215774,
+        "medianAbsDiffM": 0.0,
+        "percentile99_9AbsDiffM": 0.00063,
+        "samplesOver5mm": 17,
+        "maxAbsDiffM": 0.010651,
+        "resampledR16fSha256": "750cf586304519a7a065ab1d3821acd6ce876a41f9b849bc804cc3a387254d04",
+        "shippedR16fSha256": "879e35cee52c409594f25875920ef399b5667f5d6a91fd8250f8cf71722c3dd4"
+      }
+    },
+    "rightForearm": {
+      "status": "crop-bake-passed-support-intersection-invalid",
+      "vertices": 935,
+      "triangles": 1506,
+      "resolution": 128,
+      "paddingVoxels": 8,
+      "dimensions": [82, 144, 69],
+      "spacingM": 0.00250027485890314,
+      "bakeSeconds": 0.2338,
+      "windingConfidence": 0.8607603311538696,
+      "exactShellM": 0.020002,
+      "gridSha256": "a15a81552c6e4a5ee76c8b58df3e613c7592974a9dc981cf1fd6295be1f5716d",
+      "supportIntersection": {
+        "qualified": false,
+        "reason": "support-envelope-exact-field-did-not-cover-target-lattice",
+        "sentinelSamples": 33810,
+        "maxCropFieldDiffM": 0.041191,
+        "repeatCompleted": false
+      }
+    }
+  },
+  "openvdbControl": {
+    "sourceBranch": "dispatch/blender-sdf-grid-authoring-task-1",
+    "sourceCommit": "4019415",
+    "testsPassed": 28,
+    "selectedRoute": "direct-vdb",
+    "booleanWorkaround": "openvdb-floatgrid-combine-min-max",
+    "blender52SdfGridBooleanQualified": false
+  },
+  "discardedTask2": {
+    "branch": "dispatch/blender-sdf-grid-authoring-task-2",
+    "commit": "cf1d2e7",
+    "mergeOrCherryPick": false,
+    "reason": "binary-only-asset-change-no-adapters-and-unbounded-diagnostic"
+  },
+  "rawEvidenceLocalOnly": "/private/tmp/blud-chisel-sdf-qual"
+}
