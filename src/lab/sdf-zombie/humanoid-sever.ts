@@ -100,6 +100,20 @@ function finiteChunk(c: Chunk): boolean {
     .every(Number.isFinite);
 }
 
+/**
+ * World pose of a frozen distal bone under the chunk root: `root ⊕ frozen`.
+ * This is the ONE recomposition the detached view (`setDetachedChunk`) and
+ * Task 8's wound continuity both use — hand-rolling it again is how the
+ * rendered piece drifts from the physics. `position = chunk.pos +
+ * rotate(chunk.quat, frozen.position)`, `quaternion = chunk.quat ⊗ frozen.q`.
+ */
+export function chunkBoneWorldPose(chunk: Chunk, frozen: HumanoidBonePose): HumanoidBonePose {
+  return {
+    position: add(chunk.pos, qRotate(chunk.quat, frozen.position)),
+    quaternion: qNormalize(qMul(chunk.quat, frozen.quaternion)),
+  };
+}
+
 /** Intact state with the sever control parked. Stepping it is a no-op. */
 export function makeHumanoidSever(manifest: HumanoidVolumeManifest): HumanoidSeverState {
   const fa = manifest.bones.find(b => b.bone === manifest.rightArm.forearm);

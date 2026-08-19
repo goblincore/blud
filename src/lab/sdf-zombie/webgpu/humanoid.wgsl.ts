@@ -30,9 +30,10 @@
 // THE ENTRY writes real WebGPU depth exactly as zombie-gpu.ts does (clip.z /
 // clip.w, no GLSL remap), starts from the existing latex lighting constants,
 // and multiplies the exterior albedo by the baked colour decoded to linear.
-// cutField / tornCapMaterial are the complementary cut mask and the layered
-// cap ramp — Task 6 fills their bodies; Task 5 calls them in identity mode
-// (cutMode 0), which is why they still parse but never change a frame.
+// mapHumanoidCut applies the complementary irregular cut mask (cutNoise + the
+// manifest plane/seed) and tornCapMaterial shades the layered cap ramp — both
+// are Task 6's; cutMode 0 collapses them to identity, which is why uncut
+// clusters still parse but never change a frame.
 //
 // ============================ HOW wgslFn PARSES =============================
 // Same two hard constraints as march.wgsl.ts (see its header):
@@ -63,6 +64,10 @@ export const HUMANOID_SURFACE_WARP_AMP = 0.008;
 /** Pinned sever constants — consumed from manifest.rightArm, never invented. */
 export const HUMANOID_CUT_SEED = 12648430;
 export const HUMANOID_CUT_IRREGULARITY_M = 0.004;
+/** The cut plane's torn rim band (metres) — manifest.rightArm.rimWidthM. */
+export const HUMANOID_CUT_RIM_WIDTH_M = 0.008;
+/** Radial depth scale (metres) the cap ramp maps skin -> meat -> deep over. */
+export const HUMANOID_CAP_DEPTH_M = 0.03;
 
 // iq quadratic polynomial smooth-min. Conservative (never overestimates, so
 // sphere tracing stays safe) and non-associative, hence the fixed fold order
@@ -178,24 +183,42 @@ export const SURFACE_WARP = /* wgsl */ `fn surfaceWarp(local: vec3<f32>, timeSec
   return n * amp;
 }`;
 
-/** The complementary cut mask (Task 6 fills the jagged irregular mask; Task 5
- *  runs identity). cutMode: 0 none, 1 proximal (keeps q >= 0), 2 distal
- *  (keeps q <= 0). One shared perturbed distance q = planeD + jagged so the
- *  two signs are complementary by construction. */
+/** The ONE deterministic low-frequency cut noise, shared by both cut signs
+ *  so the proximal and distal masks read the same q = planeD + cutNoise *
+ *  irregularityM — their contours coincide by construction. */
+export const CUT_NOISE = /* wgsl */ `fn cutNoise(local: vec3<f32>, seed: f32) -> f32 {
+  return noise3(local * 90.0 + vec3<f32>(seed, seed * 1.7, seed * 2.3));
+}`;
+
+/** The complementary cut mask. cutMode: 0 none, 1 proximal (keeps q <= 0),
+ *  2 distal (keeps q >= 0). One shared perturbed distance q = planeD +
+ *  cutNoise(local, seed) * irregularityM, so `max(bodyD, q)` and
+ *  `max(bodyD, -q)` are complementary by construction. */
 export const CUT_FIELD = /* wgsl */ `fn cutField(bodyD: f32, local: vec3<f32>, cutPlane: vec4<f32>, cutMode: f32, seed: f32, irregularityM: f32) -> f32 {
   if (cutMode < 0.5) { return bodyD; }
   let planeD = dot(cutPlane.xyz, local) + cutPlane.w;
-  let jagged = noise3(local * 90.0 + vec3<f32>(seed, seed * 1.7, seed * 2.3)) * irregularityM;
+  let jagged = cutNoise(local, seed) * irregularityM;
   let q = planeD + jagged;
   if (cutMode < 1.5) { return max(bodyD, q); }
   return max(bodyD, -q);
 }`;
 
-/** The layered cap ramp (Task 6 fills skin-edge -> wet-red -> dark-centre;
- *  Task 5 runs identity because cutMode 0 gates interior to zero). */
-export const TORN_CAP_MATERIAL = /* wgsl */ `fn tornCapMaterial(albedo: vec3<f32>, capDepth: f32, cutMode: f32, deepColor: vec3<f32>) -> vec3<f32> {
-  let interior = clamp(capDepth, 0.0, 1.0) * min(cutMode, 1.0);
-  return mix(albedo, deepColor, interior);
+/** Normalised radial depth of a point INTO the cut cross-section: 0 at the
+ *  original exterior (skin edge), 1 at the cap centre. Gated by cutMode so
+ *  uncut clusters contribute nothing. */
+export const CAP_DEPTH = /* wgsl */ `fn capDepth(bodyD: f32, cutMode: f32) -> f32 {
+  return clamp(-bodyD / ${HUMANOID_CAP_DEPTH_M}, 0.0, 1.0) * min(cutMode, 1.0);
+}`;
+
+/** The layered cap ramp: exterior skin edge (albedo) -> wet red tissue ->
+ *  dark centre, driven by capDepth. The rim band (rimWidth / capDepth) is the
+ *  skin -> meat transition width; the baked exterior albedo is DISABLED on the
+ *  cap because the caller passes the un-baked lit skin colour as `albedo`. */
+export const TORN_CAP_MATERIAL = /* wgsl */ `fn tornCapMaterial(albedo: vec3<f32>, depth: f32, cutMode: f32, meatColor: vec3<f32>, deepColor: vec3<f32>) -> vec3<f32> {
+  let d = clamp(depth, 0.0, 1.0) * min(cutMode, 1.0);
+  let rimRatio = ${HUMANOID_CUT_RIM_WIDTH_M} / ${HUMANOID_CAP_DEPTH_M};
+  let meat = mix(albedo, meatColor, smoothstep(0.0, rimRatio, d));
+  return mix(meat, deepColor, smoothstep(rimRatio, 1.0, d));
 }`;
 
 /** The baked colour at a hit, for ONE bone index: world -> bind-local, then
@@ -270,12 +293,32 @@ export const MAP_HUMANOID_FIELD = /* wgsl */ `fn mapHumanoidField(p: vec3<f32>, 
   return vec4<f32>(d, bestIdx, secondIdx, blendW);
 }`;
 
+/** The fold PLUS the complementary cut: returns (cutD, bestIdx, secondIdx,
+ *  blendW) — identical layout to mapHumanoidField except .x is the POST-cut
+ *  distance. The cut is evaluated in the CUT bone's bind-local frame (read
+ *  from `cutBone`), so for the detached proxy the cut plane tumbles with the
+ *  chunk while the attached view keeps it in the posed elbow frame. */
+export const MAP_HUMANOID_CUT = /* wgsl */ `fn mapHumanoidCut(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, cutPlane: vec4<f32>, cutBone: f32, timeSec: f32) -> vec4<f32> {
+  let dres = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec);
+  let bodyD = dres.x;
+  let cutMode = clusterCfg.y;
+  var cutD = bodyD;
+  if (cutMode >= 0.5) {
+    let bi = i32(cutBone);
+    let cq = textureLoad(data, vec2<i32>(bi, ${ROW_POSE_QUAT}), 0);
+    let cp = textureLoad(data, vec2<i32>(bi, ${ROW_POSE_POS}), 0);
+    let local = rotateConj(cq, p - cp.xyz);
+    cutD = cutField(bodyD, local, cutPlane, cutMode, ${HUMANOID_CUT_SEED}, ${HUMANOID_CUT_IRREGULARITY_M});
+  }
+  return vec4<f32>(cutD, dres.y, dres.z, dres.w);
+}`;
+
 /**
  * The entry point. Returns rgb plus the hit distance in w, so the view's
  * depth node reconstructs the hit point without a second march — the exact
- * contract march.wgsl.ts's marchBody keeps. Task 5 runs cutMode 0 (cutField
- * and tornCapMaterial are identity), reserving the complementary masks and
- * the layered cap for Task 6.
+ * contract march.wgsl.ts's marchBody keeps. cutMode 0 (uncut clusters)
+ * leaves mapHumanoidCut and tornCapMaterial in identity; cutMode 1/2 carve
+ * the complementary proximal/distal masks and shade the layered cap.
  */
 export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   worldPos: vec3<f32>,
@@ -286,8 +329,10 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   boneIdx: vec4<f32>,
   clusterCfg: vec4<f32>,
   cutPlane: vec4<f32>,
+  cutBone: f32,
   timeSec: f32,
   baseColor: vec3<f32>,
+  meatColor: vec3<f32>,
   deepColor: vec3<f32>,
   keyColor: vec3<f32>,
   lightDir: vec3<f32>,
@@ -303,22 +348,22 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   var hit = false;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
-    let dres = mapHumanoidField(camPos + rd * t, data, distAtlas, boneIdx, clusterCfg, timeSec);
-    let d = dres.x;
+    let d = mapHumanoidCut(camPos + rd * t, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x;
     if (d < hitEps) { hit = true; break; }
     t = t + d * marchCfg.y;
     if (t > tMax) { break; }
   }
   if (!hit) { discard; }
   let p = camPos + rd * t;
-  let dres = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec);
-  // Tetrahedron normal on the composed field.
+  let dres = mapHumanoidCut(p, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec);
+  // Tetrahedron normal on the COMPOSED (post-cut) field, so the cut surface
+  // shades its own torn normal rather than the flesh it displaced.
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   let n = normalize(
-    e.xyy * mapHumanoidField(p + e.xyy, data, distAtlas, boneIdx, clusterCfg, timeSec).x +
-    e.yyx * mapHumanoidField(p + e.yyx, data, distAtlas, boneIdx, clusterCfg, timeSec).x +
-    e.yxy * mapHumanoidField(p + e.yxy, data, distAtlas, boneIdx, clusterCfg, timeSec).x +
-    e.xxx * mapHumanoidField(p + e.xxx, data, distAtlas, boneIdx, clusterCfg, timeSec).x);
+    e.xyy * mapHumanoidCut(p + e.xyy, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x +
+    e.yyx * mapHumanoidCut(p + e.yyx, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x +
+    e.yxy * mapHumanoidCut(p + e.yxy, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x +
+    e.xxx * mapHumanoidCut(p + e.xxx, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x);
   // Baked colour: the two dominant bones, blended with the fold's exact
   // weight, decoded to linear, multiplied into the latex albedo.
   var baked = sampleBoneColor(p, i32(dres.y), data, colorAtlas);
@@ -326,19 +371,27 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
     let c2 = sampleBoneColor(p, i32(dres.z), data, colorAtlas);
     baked = mix(baked, c2, dres.w);
   }
-  let albedo = baseColor * srgbToLinear(baked);
-  // Cut + cap (Task 6). Task 5: cutMode 0, capDepth 0, both identity.
-  let cutMode = clusterCfg.y;
-  let capDepth = 0.0;
-  let _cut = cutField(dres.x, p, cutPlane, cutMode, ${HUMANOID_CUT_SEED}, ${HUMANOID_CUT_IRREGULARITY_M});
   let L = normalize(lightDir);
   let V = -rd;
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
   let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
   let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z;
-  let lit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor + keyColor * (shine * surfCfg.x + fres);
-  let litOut = tornCapMaterial(lit, capDepth, cutMode, deepColor);
+  let diffuseLight = lightCfg.y + diff * lightCfg.x;
+  let specLight = keyColor * (shine * surfCfg.x + fres);
+  // Two lit variants: the flesh keeps the baked source colour; the cap's
+  // skin edge uses the UN-baked latex colour (baked albedo is disabled on
+  // the cap) so the ramp owns the cut surface entirely.
+  let litSkin = baseColor * diffuseLight * keyColor + specLight;
+  let litBaked = baseColor * srgbToLinear(baked) * diffuseLight * keyColor + specLight;
+  let cutMode = clusterCfg.y;
+  // The cut is the binding surface wherever the pre-cut field is inside the
+  // flesh (bodyD < 0); blend to the cap ramp over the rim band.
+  let bodyD = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec).x;
+  let capD = capDepth(bodyD, cutMode);
+  let capMask = (1.0 - smoothstep(-${HUMANOID_CUT_RIM_WIDTH_M}, 0.0, bodyD)) * min(cutMode, 1.0);
+  let capColor = tornCapMaterial(litSkin, capD, cutMode, meatColor, deepColor);
+  let litOut = mix(litBaked, capColor, capMask);
   return vec4<f32>(litOut, t);
 }`;
 
@@ -349,5 +402,6 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
 export const HUMANOID_HELPERS = [
   SMIN, HASH13, NOISE3, SRGB_TO_LINEAR, ROTATE_CONJ,
   SAMPLE_DISTANCE_BRICK, SAMPLE_COLOR_BRICK, JOINT_BLEND_WEIGHT, SURFACE_WARP,
-  CUT_FIELD, TORN_CAP_MATERIAL, SAMPLE_BONE_COLOR, MAP_HUMANOID_FIELD,
+  CUT_NOISE, CUT_FIELD, CAP_DEPTH, TORN_CAP_MATERIAL, SAMPLE_BONE_COLOR,
+  MAP_HUMANOID_FIELD, MAP_HUMANOID_CUT,
 ];

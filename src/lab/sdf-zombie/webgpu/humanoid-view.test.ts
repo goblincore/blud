@@ -11,11 +11,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
-  createHumanoidView, type HumanoidView,
+  createHumanoidView, type HumanoidView, type PrewarmReport,
 } from './humanoid-view';
 import type { HumanoidVolumeAssets, HumanoidVolumeManifest } from './humanoid-volume';
-import type { HumanoidPoseState } from '../humanoid-pose';
+import type { HumanoidPoseState, HumanoidBonePose } from '../humanoid-pose';
 import type { SeverRenderState } from '../humanoid-sever';
+import { makeChunk } from '../gib-chunks';
 import { HUMANOID_MAX_BONES } from './humanoid.wgsl';
 
 /** A minimal two-bone manifest — the view reads bones/joints/clusters/rightArm
@@ -139,6 +140,14 @@ const severed: SeverRenderState = {
   jiggleImpulse: 0,
 };
 
+const intact: SeverRenderState = {
+  attachedCutMode: 'none',
+  detachedCutMode: 'none',
+  cutPlaneLocal: [0, 1, 0, 0],
+  detachedVisible: false,
+  jiggleImpulse: 0,
+};
+
 describe('createHumanoidView lifecycle', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
@@ -234,6 +243,87 @@ describe('createHumanoidView lifecycle', () => {
     expect(assets.manifest.bones.length).toBeLessThanOrEqual(HUMANOID_MAX_BONES);
     const view = createHumanoidView(assets);
     view.setPose(poseState());
+    view.dispose();
+  });
+
+  it('setCut + setDetachedChunk keep resource counts constant and flip the cut modes', () => {
+    const view = createHumanoidView(makeAssets());
+    const before = view.resourceCounts();
+    // The two-bone manifest has exactly one distal bone (RightForeArm).
+    const chunk = makeChunk(
+      'armR', [0.3, 0.2, 0.1], [0, 0, 0], 0.04, [0, 1, 0], () => 0.5, 'limb',
+    );
+    const frozenBones: readonly HumanoidBonePose[] = [
+      { position: [0, 0, 0], quaternion: [0, 0, 0, 1] },
+    ];
+    view.setCut(severed);
+    view.setDetachedChunk(chunk, frozenBones);
+    const after = view.resourceCounts();
+    expect(after).toEqual(before);
+    expect(view.detachedVisible).toBe(true);
+    expect(view.attachedCutMode).toBe('proximal');
+    expect(view.detachedCutMode).toBe('distal');
+    view.dispose();
+  });
+
+  it('reset hides/re-parks without disposal and repeated sever/reset cycles stay constant', () => {
+    const view = createHumanoidView(makeAssets());
+    const before = view.resourceCounts();
+    const chunk = makeChunk(
+      'armR', [0.3, 0.2, 0.1], [0, 0, 0], 0.04, [0, 1, 0], () => 0.5, 'limb',
+    );
+    const frozenBones: readonly HumanoidBonePose[] = [
+      { position: [0, 0, 0], quaternion: [0, 0, 0, 1] },
+    ];
+    for (let i = 0; i < 3; i++) {
+      view.setCut(severed);
+      view.setDetachedChunk(chunk, frozenBones);
+      view.setCut(intact);
+    }
+    expect(view.resourceCounts()).toEqual(before);
+    expect(view.detachedVisible).toBe(false);
+    expect(view.detachedGroup.visible).toBe(false);
+    expect(view.attachedCutMode).toBe('none');
+    expect(view.detachedCutMode).toBe('none');
+    view.dispose();
+  });
+
+  it('prewarm compiles attached and detached once each and reports stable material counts', async () => {
+    const view = createHumanoidView(makeAssets());
+    const renderer = {
+      compileAsync: vi.fn().mockResolvedValue(undefined),
+      render: vi.fn(),
+    };
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    scene.add(view.attachedGroup);
+    scene.add(view.detachedGroup);
+
+    const report: PrewarmReport = await view.prewarm(renderer, scene, camera);
+
+    expect(renderer.compileAsync).toHaveBeenCalledTimes(2);
+    expect(renderer.compileAsync).toHaveBeenNthCalledWith(1, view.attachedGroup, camera, scene);
+    expect(renderer.compileAsync).toHaveBeenNthCalledWith(2, view.detachedGroup, camera, scene);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    expect(renderer.render).toHaveBeenCalledWith(scene, camera);
+    expect(report.materialCountBefore).toBe(report.materialCountAfter);
+    expect(report.compileCallsAfter).toBe(report.compileCallsBefore + 2);
+    expect(report.renderedAttached).toBe(true);
+    expect(report.renderedDetached).toBe(true);
+    expect(report.elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(view.resourceCounts().compileCalls).toBe(2);
+    // Hidden state is restored: the detached proxy is parked back out of view.
+    expect(view.detachedGroup.visible).toBe(false);
+    view.dispose();
+  });
+
+  it('only prewarm increments compileCalls; sever/reset/setPose never do', () => {
+    const view = createHumanoidView(makeAssets());
+    expect(view.resourceCounts().compileCalls).toBe(0);
+    view.setPose(poseState());
+    view.setCut(severed);
+    view.setCut(intact);
+    expect(view.resourceCounts().compileCalls).toBe(0);
     view.dispose();
   });
 });

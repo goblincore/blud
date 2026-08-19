@@ -1,11 +1,11 @@
 // src/lab/sdf-zombie/webgpu/humanoid-view.ts
 //
-// Task 5 — the clustered proxy view. One proxy box per manifest cluster plus a
-// hidden detached right-arm proxy, all marching the SAME clustered bone-atlas
-// field (humanoid.wgsl.ts) through one shared descriptor texture and the two
-// shared 3D atlases from HumanoidVolumeAssets.
+// Task 5 + Task 6 — the clustered proxy view. One proxy box per manifest
+// cluster plus a hidden detached right-arm proxy, all marching the SAME
+// clustered bone-atlas field (humanoid.wgsl.ts) through one shared descriptor
+// texture and the two shared 3D atlases from HumanoidVolumeAssets.
 //
-// LIFE-CYCLE CONTRACT (the plan Step 5):
+// LIFE-CYCLE CONTRACT (Task 5 Step 5):
 //   - every attached cluster mesh exists at load; the detached proxy exists
 //     too but is hidden;
 //   - materials are created BEFORE the view is exposed, all sharing the one
@@ -20,9 +20,16 @@
 //     exactly once and NEVER touches the shared distance/colour atlases, whose
 //     sole owner stays HumanoidVolumeAssets.dispose().
 //
-// The detached right-arm proxy samples the forearm + hand bricks (the distal
-// subtree) so Task 6 can re-pose them under the chunk root without touching
-// the attached view; Task 5 leaves it hidden at the same pose.
+// TASK 6 CUT + DETACH + PREWARM. The cut mask lives in mapHumanoidCut; the
+// attached right-arm cluster runs cutMode 1 (proximal) and the detached proxy
+// runs cutMode 2 (distal), both sampling the SAME cutPlane so their contours
+// are complementary by construction. Because one descriptor texture backs
+// every material, the detached distal bones are written to the two SPARE
+// columns (HUMANOID_MAX_BONES - distalIndices.length .. HUMANOID_MAX_BONES)
+// — the retained bone array is 22 and the padded budget is 24, so exactly the
+// two distal bones fit. `setDetachedChunk` re-poses those spare rows under the
+// chunk root; `prewarm` compiles attached + detached once each before the
+// sever control arms, so sever never pays a first-use compile.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
@@ -30,15 +37,19 @@ import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D,
   cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add,
 } from 'three/tsl';
-import type { HumanoidVolumeAssets } from './humanoid-volume';
+import type { HumanoidVolumeAssets, HumanoidBrickManifest } from './humanoid-volume';
 import { HUMANOID_SURFACE_WARP_AMP, HUMANOID_DATA_ROWS, HUMANOID_MAX_BONES } from './humanoid.wgsl';
 import {
   ROW_POSE_POS, ROW_POSE_QUAT, ROW_BRICK_OFFSET, ROW_BRICK_DIMS,
   ROW_BOUNDS_MIN, ROW_BOUNDS_INV, ROW_JOINT, ROW_JOINT_AXIS,
   HUMANOID_HELPERS, MARCH_HUMANOID,
 } from './humanoid.wgsl';
-import { distalBoneIndices, type HumanoidPoseState } from '../humanoid-pose';
+import {
+  distalBoneIndices, type HumanoidPoseState, type HumanoidBonePose,
+} from '../humanoid-pose';
 import type { CutMode, SeverRenderState } from '../humanoid-sever';
+import { chunkBoneWorldPose } from '../humanoid-sever';
+import type { Chunk } from '../gib-chunks';
 import type { Vec3 } from '../types';
 import type { Quat } from '../vec';
 
@@ -49,6 +60,22 @@ export interface HumanoidResourceCounts {
   attachedClusters: number;
   detachedClusters: number;
   compileCalls: number;
+}
+
+export interface PrewarmReport {
+  materialCountBefore: number;
+  materialCountAfter: number;
+  compileCallsBefore: number;
+  compileCallsAfter: number;
+  renderedAttached: boolean;
+  renderedDetached: boolean;
+  elapsedMs: number;
+}
+
+/** The subset of WebGPURenderer prewarm needs — structural so tests can mock it. */
+export interface PrewarmRenderer {
+  compileAsync(scene: THREE.Object3D, camera: THREE.Camera, targetScene?: THREE.Scene | null): Promise<unknown>;
+  render(scene: THREE.Scene, camera: THREE.Camera): void;
 }
 
 export interface HumanoidView {
@@ -62,15 +89,17 @@ export interface HumanoidView {
   setTime(timeSec: number): void;
   setCut(state: SeverRenderState): void;
   setDetachedTransform(position: Vec3, quaternion: Quat): void;
+  setDetachedChunk(chunk: Chunk, frozenDistalBones: readonly HumanoidBonePose[]): void;
   setVisible(visible: boolean): void;
   warmupObjects(): readonly THREE.Object3D[];
+  prewarm(renderer: PrewarmRenderer, scene: THREE.Scene, camera: THREE.Camera): Promise<PrewarmReport>;
   resourceCounts(): HumanoidResourceCounts;
   dispose(): void;
 }
 
 /** The one marching entry, built once and shared by every cluster material —
  *  the per-cluster bone indices are a uniform, not baked literals, so all
- *  seven materials produce the identical WGSL and hit Three's pipeline cache. */
+ *  materials produce the identical WGSL and hit Three's pipeline cache. */
 const marchHumanoidFn = (() => {
   const nodes = HUMANOID_HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
     (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
@@ -89,8 +118,12 @@ function createHumanoidUniforms() {
     clusterCfg: uniform(new THREE.Vector4(0, 0, 0, 0.004)),
     /** xyz = unit cut normal, w = plane offset (RightForeArm bind-local). */
     cutPlane: uniform(new THREE.Vector4(0, 0, 1, 0)),
+    /** Data-texture column of the bone the cut is evaluated in (the forearm). */
+    cutBone: uniform(0),
     timeSec: uniform(0),
     baseColor: uniform(new THREE.Color(0xc46a72)),
+    /** Wet red tissue — the cap's mid band between skin edge and dark centre. */
+    meatColor: uniform(new THREE.Color(0x9e1b24)),
     deepColor: uniform(new THREE.Color(0x8c1420)),
     keyColor: uniform(new THREE.Color(1, 0.96, 0.92)),
     lightDir: uniform(new THREE.Vector3(0.45, 0.72, 0.53)),
@@ -121,8 +154,10 @@ function createHumanoidMarchMaterial(
     boneIdx: u.boneIdx,
     clusterCfg: u.clusterCfg,
     cutPlane: u.cutPlane,
+    cutBone: u.cutBone,
     timeSec: u.timeSec,
     baseColor: u.baseColor,
+    meatColor: u.meatColor,
     deepColor: u.deepColor,
     keyColor: u.keyColor,
     lightDir: u.lightDir,
@@ -178,6 +213,11 @@ function createHumanoidDataTexture() {
   return { tex, texels };
 }
 
+/** Maps a CutMode to the shader's 0/1/2 cutMode uniform. */
+function cutModeValue(mode: CutMode): number {
+  return mode === 'proximal' ? 1 : mode === 'distal' ? 2 : 0;
+}
+
 export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
   const { manifest } = assets;
   if (manifest.bones.length > HUMANOID_MAX_BONES) {
@@ -199,13 +239,12 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
 
   // -- static per-bone rows (brick layout + joint bands, written once) --------
   const jointByChild = new Map(manifest.joints.map(j => [j.child, j]));
-  for (let i = 0; i < manifest.bones.length; i++) {
-    const b = manifest.bones[i]!;
-    writeBone(ROW_BRICK_OFFSET, i, b.offset[0], b.offset[1], b.offset[2], 0);
-    writeBone(ROW_BRICK_DIMS, i, b.dimensions[0], b.dimensions[1], b.dimensions[2], 0);
-    writeBone(ROW_BOUNDS_MIN, i, b.boundsMin[0], b.boundsMin[1], b.boundsMin[2], 0);
+  function writeStaticRows(column: number, b: HumanoidBrickManifest): void {
+    writeBone(ROW_BRICK_OFFSET, column, b.offset[0], b.offset[1], b.offset[2], 0);
+    writeBone(ROW_BRICK_DIMS, column, b.dimensions[0], b.dimensions[1], b.dimensions[2], 0);
+    writeBone(ROW_BOUNDS_MIN, column, b.boundsMin[0], b.boundsMin[1], b.boundsMin[2], 0);
     writeBone(
-      ROW_BOUNDS_INV, i,
+      ROW_BOUNDS_INV, column,
       1 / (b.boundsMax[0] - b.boundsMin[0]),
       1 / (b.boundsMax[1] - b.boundsMin[1]),
       1 / (b.boundsMax[2] - b.boundsMin[2]),
@@ -216,13 +255,59 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
     if (joint) {
       const center = matPoint(b.modelToBind, joint.centerModel);
       const axis = matVec(b.modelToBind, joint.axisModel);
-      writeBone(ROW_JOINT, i, center[0], center[1], center[2], joint.overlapM * 0.5);
-      writeBone(ROW_JOINT_AXIS, i, axis[0], axis[1], axis[2], 0);
+      writeBone(ROW_JOINT, column, center[0], center[1], center[2], joint.overlapM * 0.5);
+      writeBone(ROW_JOINT_AXIS, column, axis[0], axis[1], axis[2], 0);
     } else {
-      writeBone(ROW_JOINT, i, 0, 0, 0, 0);
-      writeBone(ROW_JOINT_AXIS, i, 0, 0, 0, 0);
+      writeBone(ROW_JOINT, column, 0, 0, 0, 0);
+      writeBone(ROW_JOINT_AXIS, column, 0, 0, 0, 0);
     }
   }
+  for (let i = 0; i < manifest.bones.length; i++) {
+    writeStaticRows(i, manifest.bones[i]!);
+  }
+
+  // -- distal subtree + spare descriptor columns -------------------------------
+  const forearmIdx = assets.boneIndex.get(manifest.rightArm.forearm);
+  if (forearmIdx === undefined) {
+    throw new Error(`humanoid view: manifest is missing the ${manifest.rightArm.forearm} brick`);
+  }
+  const distalIndices = distalBoneIndices(manifest, manifest.rightArm.forearm);
+  // The retained bone array is 22 with a 24-column budget, leaving exactly
+  // enough spare columns for the distal subtree to get its OWN detached pose.
+  const spareColumns = HUMANOID_MAX_BONES - manifest.bones.length;
+  if (distalIndices.length > spareColumns) {
+    throw new Error(
+      `humanoid view: ${distalIndices.length} distal bones exceed the ${spareColumns} spare descriptor columns`,
+    );
+  }
+  const detachedBase = HUMANOID_MAX_BONES - distalIndices.length;
+  // Copy the distal bones' static rows into the spare columns; setDetachedChunk
+  // writes the chunk-composed pose rows there, leaving the attached pose intact.
+  for (let k = 0; k < distalIndices.length; k++) {
+    writeStaticRows(detachedBase + k, manifest.bones[distalIndices[k]!]!);
+  }
+
+  // The detached proxy is an orientation-invariant cube centred on the chunk
+  // root: its radius is the farthest occupied-bound corner of any distal bone
+  // from the cut-plane centre (bind pose), so the tumbling piece never clips.
+  const fa = manifest.bones[forearmIdx]!;
+  const [nx, ny, nz, w] = manifest.rightArm.cutPlaneLocal;
+  const planePoint: Vec3 = [-w * nx, -w * ny, -w * nz];
+  const cutCentreModel = matPoint(fa.bindToModel, planePoint);
+  let distalRadius = 0;
+  for (const bi of distalIndices) {
+    const b = manifest.bones[bi]!;
+    const bindPos: Vec3 = [b.bindToModel[12]!, b.bindToModel[13]!, b.bindToModel[14]!];
+    const occRad = Math.max(
+      Math.hypot(b.occupiedBoundsMin[0], b.occupiedBoundsMin[1], b.occupiedBoundsMin[2]),
+      Math.hypot(b.occupiedBoundsMax[0], b.occupiedBoundsMax[1], b.occupiedBoundsMax[2]),
+    );
+    const centreDist = Math.hypot(
+      bindPos[0] - cutCentreModel[0], bindPos[1] - cutCentreModel[1], bindPos[2] - cutCentreModel[2],
+    );
+    distalRadius = Math.max(distalRadius, centreDist + occRad);
+  }
+  distalRadius += HUMANOID_SURFACE_WARP_AMP;
 
   // -- material + proxy construction (before exposing the view) ---------------
   const attachedGroup = new THREE.Group();
@@ -236,22 +321,30 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
   const materialUniforms: HumanoidUniforms[] = [];
   const proxyMeshes: THREE.Mesh[] = [];
 
-  function buildProxy(
-    parent: THREE.Group, boneIndices: number[], sweepMin: Vec3, sweepMax: Vec3,
-  ): void {
+  function makeProxyMaterial(
+    dataColumns: number[], boneIndices: number[],
+  ): { u: HumanoidUniforms; material: MeshBasicNodeMaterial } {
     const u = createHumanoidUniforms();
     // Hit epsilon: at least half the largest voxel pitch in this cluster.
     let maxPitch = 0;
     for (const bi of boneIndices) {
       maxPitch = Math.max(maxPitch, ...manifest.bones[bi]!.voxelSize);
     }
-    u.clusterCfg.value.set(boneIndices.length, 0, 0, Math.max(0.004, maxPitch * 0.5));
+    u.clusterCfg.value.set(dataColumns.length, 0, 0, Math.max(0.004, maxPitch * 0.5));
     u.boneIdx.value.set(
-      boneIndices[0] ?? 0, boneIndices[1] ?? 0, boneIndices[2] ?? 0, boneIndices[3] ?? 0,
+      dataColumns[0] ?? 0, dataColumns[1] ?? 0, dataColumns[2] ?? 0, dataColumns[3] ?? 0,
     );
     const material = createHumanoidMarchMaterial(
       dataTex, assets.distanceTexture, assets.colorTexture, u,
     );
+    return { u, material };
+  }
+
+  function buildProxy(
+    parent: THREE.Group, dataColumns: number[], boneIndices: number[],
+    sweepMin: Vec3, sweepMax: Vec3,
+  ): void {
+    const { u, material } = makeProxyMaterial(dataColumns, boneIndices);
 
     // The proxy covers the cluster's swept field plus the max softness warp
     // amplitude on every side, so a warped surface can never clip the box.
@@ -281,11 +374,6 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
   if (!rightArmCluster) {
     throw new Error('humanoid view: manifest has no right-arm cluster');
   }
-  const forearmIdx = assets.boneIndex.get(manifest.rightArm.forearm);
-  if (forearmIdx === undefined) {
-    throw new Error(`humanoid view: manifest is missing the ${manifest.rightArm.forearm} brick`);
-  }
-  const distalIndices = distalBoneIndices(manifest, manifest.rightArm.forearm);
 
   for (const cluster of manifest.clusters) {
     const boneIndices = cluster.sampleBones.map(name => {
@@ -293,16 +381,24 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
       if (idx === undefined) throw new Error(`humanoid view: cluster samples unknown bone ${name}`);
       return idx;
     });
-    buildProxy(attachedGroup, boneIndices, cluster.sweepBoundsMin, cluster.sweepBoundsMax);
+    buildProxy(attachedGroup, boneIndices, boneIndices, cluster.sweepBoundsMin, cluster.sweepBoundsMax);
   }
+  const rightArmMaterialIdx = manifest.clusters.findIndex(c => c.name === 'right-arm');
 
-  // The detached proxy: the distal forearm + hand, hidden at load. Task 6
-  // re-poses these bricks under the chunk root; Task 5 just parks the proxy.
-  buildProxy(
-    detachedGroup, distalIndices,
-    rightArmCluster.sweepBoundsMin, rightArmCluster.sweepBoundsMax,
-  );
-  const detachedMesh = detachedGroup.children[0] as THREE.Mesh;
+  // The detached proxy: the distal forearm + hand, hidden at load, sampled from
+  // the SPARE columns so its pose can diverge from the attached forearm.
+  const detachedDataColumns = distalIndices.map((_, k) => detachedBase + k);
+  const { u: detachedU, material: detachedMaterial } = makeProxyMaterial(detachedDataColumns, distalIndices);
+  const detachedGeometry = new THREE.BoxGeometry(distalRadius * 2, distalRadius * 2, distalRadius * 2);
+  const detachedMesh = new THREE.Mesh(detachedGeometry, detachedMaterial);
+  detachedMesh.position.set(cutCentreModel[0], cutCentreModel[1], cutCentreModel[2]);
+  detachedMesh.frustumCulled = false;
+  detachedGroup.add(detachedMesh);
+  proxyMeshes.push(detachedMesh);
+  materials.push(detachedMaterial);
+  geometries.push(detachedGeometry);
+  materialUniforms.push(detachedU);
+  const detachedMaterialIdx = materialUniforms.length - 1;
 
   // -- live state -------------------------------------------------------------
   let detachedVisible = false;
@@ -310,6 +406,7 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
   let detachedCutMode: CutMode = 'none';
   let visible = true;
   let disposed = false;
+  let compileCalls = 0;
 
   /** Writes every bone's pose row from the state's per-bone world pose. The
    *  quaternion is the bind->world (local->world) orientation; the shader
@@ -330,6 +427,58 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
       );
     }
     dataTex.needsUpdate = true;
+  }
+
+  async function prewarm(
+    renderer: PrewarmRenderer, scene: THREE.Scene, camera: THREE.Camera,
+  ): Promise<PrewarmReport> {
+    const materialCountBefore = materials.length;
+    const compileCallsBefore = compileCalls;
+    const t0 = performance.now();
+
+    const prevAttachedVisible = attachedGroup.visible;
+    const prevDetachedVisible = detachedGroup.visible;
+    const prevDetachedPos = detachedMesh.position.clone();
+
+    let renderedAttached = false;
+    let renderedDetached = false;
+
+    // Park the detached proxy off-camera so its compile/render never lands in
+    // view; restore the parked transform afterwards.
+    detachedMesh.position.set(0, -1000, 0);
+
+    try {
+      // Compile the attached group first (detached hidden), then the detached
+      // proxy. Only prewarm touches compileAsync — sever/reset/render never do.
+      attachedGroup.visible = true;
+      detachedGroup.visible = false;
+      await renderer.compileAsync(attachedGroup, camera, scene);
+      compileCalls++;
+
+      detachedGroup.visible = true;
+      await renderer.compileAsync(detachedGroup, camera, scene);
+      compileCalls++;
+
+      // Render at least one frame through the same draw path sever uses, so
+      // the detached pipeline is fenced before the sever control arms.
+      renderer.render(scene, camera);
+      renderedAttached = true;
+      renderedDetached = true;
+    } finally {
+      attachedGroup.visible = prevAttachedVisible;
+      detachedGroup.visible = prevDetachedVisible;
+      detachedMesh.position.copy(prevDetachedPos);
+    }
+
+    return {
+      materialCountBefore,
+      materialCountAfter: materials.length,
+      compileCallsBefore,
+      compileCallsAfter: compileCalls,
+      renderedAttached,
+      renderedDetached,
+      elapsedMs: performance.now() - t0,
+    };
   }
 
   return {
@@ -355,16 +504,52 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
       detachedCutMode = state.detachedCutMode;
       detachedVisible = state.detachedVisible;
       detachedGroup.visible = visible && detachedVisible;
-      const [nx, ny, nz, w] = state.cutPlaneLocal;
-      for (const u of materialUniforms) u.cutPlane.value.set(nx, ny, nz, w);
+      const [cnx, cny, cnz, cw] = state.cutPlaneLocal;
+      const attachedMode = cutModeValue(state.attachedCutMode);
+      const detachedMode = cutModeValue(state.detachedCutMode);
+      for (let i = 0; i < materialUniforms.length; i++) {
+        const u = materialUniforms[i]!;
+        u.cutPlane.value.set(cnx, cny, cnz, cw);
+        if (i === rightArmMaterialIdx) {
+          u.clusterCfg.value.y = attachedMode;
+          u.cutBone.value = forearmIdx;
+        } else if (i === detachedMaterialIdx) {
+          u.clusterCfg.value.y = detachedMode;
+          u.cutBone.value = detachedBase;
+        } else {
+          u.clusterCfg.value.y = 0;
+          u.cutBone.value = 0;
+        }
+      }
     },
 
     setDetachedTransform(position, _quaternion) {
-      // Task 6 composes the chunk quaternion with the frozen distal bones;
-      // Task 5 just parks the (hidden) proxy box. The quaternion is consumed
-      // by Task 6 — an axis-aligned box covers every orientation, so it is
-      // deliberately not applied to the mesh here.
+      // Task 5 kept this reposition-only; Task 6's setDetachedChunk is the
+      // pose-uploading path. Kept for the parked-proxy lifecycle.
       detachedMesh.position.set(position[0], position[1], position[2]);
+    },
+
+    setDetachedChunk(chunk, frozenDistalBones) {
+      if (disposed) return;
+      if (frozenDistalBones.length !== distalIndices.length) {
+        throw new Error(
+          `humanoid view: ${frozenDistalBones.length} frozen bones for ${distalIndices.length} distal bones`,
+        );
+      }
+      // Compose the chunk root (quat/pos) with each frozen distal bone pose
+      // (relative to the root) and write the result to the spare columns. The
+      // distal coordinates stay frozen under the chunk root, so texture and
+      // cut noise tumble with the piece.
+      for (let k = 0; k < distalIndices.length; k++) {
+        const rel = frozenDistalBones[k]!;
+        const column = detachedBase + k;
+        const worldPose = chunkBoneWorldPose(chunk, rel);
+        writeBone(ROW_POSE_POS, column, worldPose.position[0], worldPose.position[1], worldPose.position[2], 1);
+        writeBone(ROW_POSE_QUAT, column, worldPose.quaternion[0], worldPose.quaternion[1], worldPose.quaternion[2], worldPose.quaternion[3]);
+      }
+      dataTex.needsUpdate = true;
+      // Reposition (and never rebuild) the existing detached proxy box.
+      detachedMesh.position.set(chunk.pos[0], chunk.pos[1], chunk.pos[2]);
     },
 
     setVisible(v) {
@@ -377,6 +562,8 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
       return proxyMeshes;
     },
 
+    prewarm,
+
     resourceCounts() {
       return {
         materials: materials.length,
@@ -384,7 +571,7 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
         textures: 1,
         attachedClusters: manifest.clusters.length,
         detachedClusters: 1,
-        compileCalls: 0,
+        compileCalls,
       };
     },
 

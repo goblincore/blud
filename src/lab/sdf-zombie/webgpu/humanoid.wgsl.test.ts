@@ -9,13 +9,18 @@
 // step with each other.
 
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
 import {
   HUMANOID_HELPERS, MARCH_HUMANOID,
   HUMANOID_DATA_ROWS,
   ROW_POSE_POS, ROW_POSE_QUAT, ROW_BRICK_OFFSET, ROW_BRICK_DIMS,
   ROW_BOUNDS_MIN, ROW_BOUNDS_INV, ROW_JOINT, ROW_JOINT_AXIS,
   HUMANOID_MAX_CLUSTER_BONES, HUMANOID_JOINT_SMIN_K, HUMANOID_SURFACE_WARP_AMP,
+  HUMANOID_CUT_SEED, HUMANOID_CUT_IRREGULARITY_M,
+  HUMANOID_CUT_RIM_WIDTH_M, HUMANOID_CAP_DEPTH_M,
 } from './humanoid.wgsl';
+import { validateHumanoidVolumeManifest } from './humanoid-volume';
 import type { Vec3 } from '../types';
 import { sub, dot } from '../vec';
 
@@ -84,19 +89,24 @@ describe('no WGSL reserved words as identifiers', () => {
 
 describe('the six bone-field helpers are wired', () => {
   it('shades and cuts through the entry, samples and folds through its helpers', () => {
-    // The entry shades/cuts directly; the fold (mapHumanoidField) and the
-    // colour helper (sampleBoneColor) carry the distance/warp/blend/colour
-    // leaves. This mirrors march.wgsl.test.ts, which checks applyCarves on
-    // mapBody rather than MARCH_BODY.
+    // The entry shades/cuts directly; the fold (mapHumanoidField), the cut
+    // wrapper (mapHumanoidCut) and the colour helper (sampleBoneColor) carry
+    // the distance/warp/blend/colour leaves. This mirrors march.wgsl.test.ts,
+    // which checks applyCarves on mapBody rather than MARCH_BODY.
     expect(MARCH_HUMANOID).toContain('mapHumanoidField');
+    expect(MARCH_HUMANOID).toContain('mapHumanoidCut');
     expect(MARCH_HUMANOID).toContain('sampleBoneColor');
-    expect(MARCH_HUMANOID).toContain('cutField');
+    expect(MARCH_HUMANOID).toContain('capDepth');
     expect(MARCH_HUMANOID).toContain('tornCapMaterial');
 
     const fold = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidField')!;
     expect(fold).toContain('sampleDistanceBrick');
     expect(fold).toContain('surfaceWarp');
     expect(fold).toContain('jointBlendWeight');
+
+    const cut = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidCut')!;
+    expect(cut).toContain('mapHumanoidField');
+    expect(cut).toContain('cutField');
 
     const color = HUMANOID_HELPERS.find(h => declaredName(h) === 'sampleBoneColor')!;
     expect(color).toContain('sampleColorBrick');
@@ -330,5 +340,144 @@ describe('CPU field mirror — outside-atlas distance', () => {
     const far = outsideBoxMirror([2.0, 0.1, 0.1], boundsMin, invExtent);
     expect(Number.isFinite(far)).toBe(true);
     expect(far).toBeCloseTo(1.8, 6);
+  });
+});
+
+// ========================== CUT + CAP MIRROR ================================
+// Task 6 — the complementary irregular cut and the layered cap ramp. The
+// noise mirrors (hash13/noise3) transcribe the WGSL VALUE noise so the CPU
+// mirror and the shader share one definition of `q = planeD + cutNoise *
+// irregularityM`; the complementary-occupancy property they prove does not
+// depend on the exact noise value, only that BOTH signs read the same q.
+
+const frac = (x: number): number => x - Math.floor(x);
+const hash13Mirror = (p: Vec3): number => {
+  let px = frac(p[0] * 0.1031);
+  let py = frac(p[1] * 0.1031);
+  let pz = frac(p[2] * 0.1031);
+  const d = px * (py + 33.33) + py * (pz + 33.33) + pz * (px + 33.33);
+  px += d; py += d; pz += d;
+  return frac((px + py) * pz);
+};
+const noise3Mirror = (p: Vec3): number => {
+  const ix = Math.floor(p[0]), iy = Math.floor(p[1]), iz = Math.floor(p[2]);
+  let fx = frac(p[0]), fy = frac(p[1]), fz = frac(p[2]);
+  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); fz = fz * fz * (3 - 2 * fz);
+  const h = (dx: number, dy: number, dz: number) => hash13Mirror([ix + dx, iy + dy, iz + dz]);
+  const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+  const n = mix(
+    mix(mix(h(0, 0, 0), h(1, 0, 0), fx), mix(h(0, 1, 0), h(1, 1, 0), fx), fy),
+    mix(mix(h(0, 0, 1), h(1, 0, 1), fx), mix(h(0, 1, 1), h(1, 1, 1), fx), fy),
+    fz);
+  return n * 2 - 1;
+};
+const cutNoiseMirror = (local: Vec3, seed: number): number =>
+  noise3Mirror([local[0] * 90 + seed, local[1] * 90 + seed * 1.7, local[2] * 90 + seed * 2.3]);
+
+/** One shared q drives both signs, exactly as cutField does in WGSL. */
+const cutFieldMirrorFull = (
+  bodyD: number, local: Vec3,
+  plane: readonly [number, number, number, number],
+  cutMode: number, seed: number, irregularityM: number,
+): number => {
+  if (cutMode < 0.5) return bodyD;
+  const planeD = plane[0] * local[0] + plane[1] * local[1] + plane[2] * local[2] + plane[3];
+  const jagged = cutNoiseMirror(local, seed) * irregularityM;
+  const q = planeD + jagged;
+  if (cutMode < 1.5) return Math.max(bodyD, q);
+  return Math.max(bodyD, -q);
+};
+
+describe('complementary cut and cap (source pins)', () => {
+  it('shares one cutNoise across both cut signs and pins the manifest seed', () => {
+    const noise = HUMANOID_HELPERS.find(h => declaredName(h) === 'cutNoise')!;
+    const cut = HUMANOID_HELPERS.find(h => declaredName(h) === 'cutField')!;
+    const mapCut = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidCut')!;
+    expect(noise).toBeDefined();
+    // cutField references cutNoise EXACTLY once — one q, complementary signs.
+    expect((cut.match(/cutNoise\s*\(/g) ?? []).length).toBe(1);
+    expect(cut).toContain('max(bodyD, q)');
+    expect(cut).toContain('max(bodyD, -q)');
+    // The manifest seed + irregularity are pinned where the cut is invoked.
+    expect(mapCut).toContain(`${HUMANOID_CUT_SEED}`);
+    expect(mapCut).toContain(`${HUMANOID_CUT_IRREGULARITY_M}`);
+  });
+
+  it('shades the cap through explicit skin/rim/meat/deep bands', () => {
+    const cap = HUMANOID_HELPERS.find(h => declaredName(h) === 'tornCapMaterial')!;
+    expect(cap).toContain('meatColor');
+    expect(cap).toContain('deepColor');
+    expect(cap).toContain('rimRatio');
+    expect(cap).toContain(`${HUMANOID_CUT_RIM_WIDTH_M}`);
+    expect(cap).toContain(`${HUMANOID_CAP_DEPTH_M}`);
+    // skin (albedo) -> meat -> deep, via two smoothstep bands.
+    expect((cap.match(/smoothstep\(/g) ?? []).length).toBe(2);
+  });
+});
+
+describe('CPU field mirror — complementary cut occupancy', () => {
+  const realManifest = validateHumanoidVolumeManifest(JSON.parse(
+    readFileSync('public/assets/lab/humanoid-sdf/zombie-humanoid.json', 'utf8'),
+  ));
+  // The EXACT manifest plane and seed — the test may not invent replacements.
+  const [nx, ny, nz, w] = realManifest.rightArm.cutPlaneLocal;
+  const plane: readonly [number, number, number, number] = [nx, ny, nz, w];
+  const seed = realManifest.rightArm.cutSeed;
+  const irregularityM = realManifest.rightArm.irregularityM;
+
+  // A synthetic body centred ON the plane so the cut genuinely bisects it.
+  const cx = -w * nx, cy = -w * ny, cz = -w * nz;
+  const bodyD = (p: Vec3): number =>
+    Math.hypot(p[0] - cx, p[1] - cy, p[2] - cz) - 0.05;
+
+  it('covers intact occupancy exactly outside a <=2-voxel analytic rim', () => {
+    const rimTolerance = 2 * 0.006; // two limb voxels
+    let checked = 0, proxCount = 0, distCount = 0;
+    const step = 0.006;
+    for (let x = cx - 0.085; x <= cx + 0.085; x += step) {
+      for (let y = cy - 0.085; y <= cy + 0.085; y += step) {
+        for (let z = cz - 0.085; z <= cz + 0.085; z += step) {
+          const p: Vec3 = [x, y, z];
+          const bd = bodyD(p);
+          const intact = bd < 0;
+          const proxOcc = cutFieldMirrorFull(bd, p, plane, 1, seed, irregularityM) < 0;
+          const distOcc = cutFieldMirrorFull(bd, p, plane, 2, seed, irregularityM) < 0;
+          // Complementary masks never both claim a point.
+          expect(proxOcc && distOcc).toBe(false);
+          const planeD = nx * x + ny * y + nz * z + w;
+          const q = planeD + cutNoiseMirror(p, seed) * irregularityM;
+          if (Math.abs(q) > rimTolerance) {
+            expect(proxOcc || distOcc, `union mismatch at ${p} (q=${q})`).toBe(intact);
+            checked++;
+          }
+          if (proxOcc) proxCount++;
+          if (distOcc) distCount++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+    // The plane genuinely bisects the body: both sides of the cut are occupied.
+    expect(proxCount).toBeGreaterThan(100);
+    expect(distCount).toBeGreaterThan(100);
+  });
+
+  it('applies the same q to both signs, so the two cut contours coincide', () => {
+    // A point just inside the flesh on the distal side is kept by the distal
+    // mask and culled by the proximal mask, and vice versa — the contours are
+    // the SAME q zero-set, never two independent noises.
+    const onPlane: Vec3 = [cx, cy, cz];
+    const distalPoint: Vec3 = [cx + 0.02 * nx, cy + 0.02 * ny, cz + 0.02 * nz];
+    const proxPoint: Vec3 = [cx - 0.02 * nx, cy - 0.02 * ny, cz - 0.02 * nz];
+    const bdDistal = bodyD(distalPoint); // inside flesh
+    expect(bdDistal).toBeLessThan(0);
+    expect(cutFieldMirrorFull(bdDistal, distalPoint, plane, 1, seed, irregularityM)).toBeGreaterThan(0);
+    expect(cutFieldMirrorFull(bdDistal, distalPoint, plane, 2, seed, irregularityM)).toBeLessThan(0);
+    const bdProx = bodyD(proxPoint);
+    expect(cutFieldMirrorFull(bdProx, proxPoint, plane, 1, seed, irregularityM)).toBeLessThan(0);
+    expect(cutFieldMirrorFull(bdProx, proxPoint, plane, 2, seed, irregularityM)).toBeGreaterThan(0);
+    // On the plane itself both masks read the same (zero-ish) q.
+    const qBoth = cutFieldMirrorFull(bodyD(onPlane), onPlane, plane, 1, seed, irregularityM)
+      === -cutFieldMirrorFull(bodyD(onPlane), onPlane, plane, 2, seed, irregularityM);
+    expect(qBoth).toBe(true);
   });
 });

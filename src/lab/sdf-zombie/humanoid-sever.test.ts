@@ -17,6 +17,7 @@ import {
 } from './humanoid-pose';
 import {
   makeHumanoidSever, severForearm, stepHumanoidSever, resetHumanoidSever,
+  chunkBoneWorldPose,
   SEVER_JIGGLE_MAX, SEVER_JIGGLE_DECAY_PER_S,
   type HumanoidSeverState, type ReleaseVelocity,
 } from './humanoid-sever';
@@ -135,6 +136,21 @@ describe('humanoid sever ownership', () => {
       const relQuat = qMul(qConj(fa!.quaternion), hand!.quaternion);
       relQuat.forEach((v, k) => expect(v).toBeCloseTo(relQuatAtSever[k]!, 9));
     }
+  });
+
+  it('chunkBoneWorldPose recomposes the severed piece exactly (root ⊕ frozen)', () => {
+    const pose = posedAt(63, 0.55);
+    const cut = severForearm(makeHumanoidSever(realManifest), pose, zeroVelocity());
+    const root = cut.chunk!;
+    // At release, the recomposed world poses equal the severed poses.
+    const faWorld = chunkBoneWorldPose(root, cut.frozenDistalBones[0]!);
+    const handWorld = chunkBoneWorldPose(root, cut.frozenDistalBones[1]!);
+    expectVecClose(faWorld.position, pose.bones[faIdx]!.position, 9);
+    expectVecClose(handWorld.position, pose.bones[handIdx]!.position, 9);
+    // The helper is the SAME composition the view uses, so it must match the
+    // inline root ⊕ frozen formula to the last ulp.
+    const inlineFa = add(root.pos, qRotate(root.quat, cut.frozenDistalBones[0]!.position));
+    faWorld.position.forEach((v, k) => expect(v).toBeCloseTo(inlineFa[k]!, 12));
   });
 
   it('pauses physics while keeping the render pose', () => {
