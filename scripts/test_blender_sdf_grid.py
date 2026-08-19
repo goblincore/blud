@@ -25,6 +25,7 @@ import json
 import math
 import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -411,6 +412,272 @@ class DeterminismTest(unittest.TestCase):
                          SDF.canonical_json(SDF.result_metrics(b)))
         self.assertEqual(SDF.encode_r16f_bytes(a), SDF.encode_r16f_bytes(b))
         self.assertTrue(np.array_equal(a.values_f32, b.values_f32))
+
+
+# ===========================================================================
+# Task 1 (adapters continuation): public array-mesh + canonical payload
+# ===========================================================================
+
+def tetrahedron_arrays() -> tuple[np.ndarray, np.ndarray]:
+    """Small closed, outward-wound tetrahedron: pure, instant, deterministic."""
+    vertices = np.array([
+        [0.00, 0.00, 0.00],
+        [0.04, 0.00, 0.00],
+        [0.00, 0.04, 0.00],
+        [0.00, 0.00, 0.04],
+    ], dtype=np.float64)
+    triangles = np.array([
+        [0, 2, 1],
+        [0, 1, 3],
+        [0, 3, 2],
+        [1, 2, 3],
+    ], dtype=np.int64)
+    return vertices, triangles
+
+
+TETRA_SOURCE_SHA = "ab" * 32
+
+
+def canonical_tetra_input():
+    vertices, triangles = tetrahedron_arrays()
+    return SDF.MeshArrayInput(
+        label="tetra",
+        vertices_m=vertices,
+        triangles=triangles,
+        source_sha256=TETRA_SOURCE_SHA,
+        source_to_grid_m=SDF.IDENTITY_4X4,
+    )
+
+
+def rot_z_4x4(degrees: float, translation=(0.0, 0.0, 0.0)):
+    a = math.radians(degrees)
+    c, s = math.cos(a), math.sin(a)
+    return (
+        (c, -s, 0.0, float(translation[0])),
+        (s, c, 0.0, float(translation[1])),
+        (0.0, 0.0, 1.0, float(translation[2])),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+
+
+def payload_hash_with_one_vertex_changed(base):
+    vertices = base.vertices_m.copy()
+    vertices[2, 1] += 1e-4
+    changed = dataclasses.replace(base, vertices_m=vertices)
+    return SDF.mesh_payload_hash(SDF.canonicalize_mesh_array(changed))
+
+
+def payload_hash_with_source_hash_changed(base):
+    changed = dataclasses.replace(base, source_sha256="cd" * 32)
+    return SDF.mesh_payload_hash(SDF.canonicalize_mesh_array(changed))
+
+
+def payload_hash_with_translation_changed(base):
+    changed = dataclasses.replace(
+        base, source_to_grid_m=rot_z_4x4(0.0, (0.0, 0.001, 0.0)))
+    return SDF.mesh_payload_hash(SDF.canonicalize_mesh_array(changed))
+
+
+def invalid_mesh_cases() -> list[tuple[object, str]]:
+    """(MeshArrayInput, expected ValueError regex) for every rejection gate."""
+    vertices, triangles = tetrahedron_arrays()
+
+    def mesh(**over):
+        return dataclasses.replace(canonical_tetra_input(), **over)
+
+    non_finite = vertices.copy()
+    non_finite[1, 0] = math.nan
+    infinite = vertices.copy()
+    infinite[3, 2] = math.inf
+
+    cases: list[tuple[object, str]] = [
+        (mesh(vertices_m=vertices[:, :2]), "vertices.*shape"),
+        (mesh(vertices_m=vertices.ravel()), "vertices.*shape"),
+        (mesh(triangles=triangles[:, :2]), "triangles.*shape"),
+        (mesh(vertices_m=np.zeros((0, 3))), "vertices.*empty"),
+        (mesh(triangles=np.zeros((0, 3), dtype=np.int64)), "triangles.*empty"),
+        (mesh(vertices_m=non_finite), "vertices.*non-finite"),
+        (mesh(vertices_m=infinite), "vertices.*non-finite"),
+        (mesh(triangles=triangles - 1), "triangle indices out of range"),
+        (mesh(triangles=triangles + 1), "triangle indices out of range"),
+        (mesh(triangles=np.array([[0, 1, 1], [0, 1, 2], [0, 2, 3], [1, 2, 3]])),
+         "degenerate triangle"),
+        (mesh(source_sha256="AB" * 32), "not a lowercase hex sha256"),
+        (mesh(source_sha256="ab" * 31), "not a lowercase hex sha256"),
+        (mesh(label="   "), "label.*empty"),
+        (mesh(source_to_grid_m=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))),
+         "transform.*4x4"),
+        (mesh(source_to_grid_m=(
+            (1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0, math.nan), (0.0, 0.0, 0.0, 1.0))),
+         "transform.*non-finite"),
+        (mesh(source_to_grid_m=(
+            (1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.1, 1.0))),
+         "transform final row"),
+        # reflection: det(R) = -1
+        (mesh(source_to_grid_m=(
+            (-1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0))),
+         "not a proper rigid rotation"),
+        # anisotropic scale
+        (mesh(source_to_grid_m=(
+            (2.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0))),
+         "not a proper rigid rotation"),
+        # uniform scale
+        (mesh(source_to_grid_m=(
+            (2.0, 0.0, 0.0, 0.0), (0.0, 2.0, 0.0, 0.0),
+            (0.0, 0.0, 2.0, 0.0), (0.0, 0.0, 0.0, 1.0))),
+         "not a proper rigid rotation"),
+        # shear
+        (mesh(source_to_grid_m=(
+            (1.0, 0.3, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0))),
+         "not a proper rigid rotation"),
+        # non-orthonormal "rotation" (columns not unit length)
+        (mesh(source_to_grid_m=(
+            (0.9, -0.5, 0.0, 0.0), (0.5, 0.9, 0.0, 0.0),
+            (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0))),
+         "not a proper rigid rotation"),
+    ]
+
+    over_v = np.zeros((SDF.MAX_VERTICES_PER_MESH + 1, 3), dtype=np.float64)
+    cases.append((mesh(vertices_m=over_v), "vertex count"))
+    over_f = np.zeros((SDF.MAX_TRIANGLES_PER_MESH + 1, 3), dtype=np.int64)
+    cases.append((mesh(triangles=over_f), "triangle count"))
+    return cases
+
+
+class MeshArrayContractTest(unittest.TestCase):
+    """Pure, Blender-free gates on the public array-mesh adapter contract."""
+
+    def test_canonical_copy_is_little_endian_owned_and_does_not_mutate_input(self) -> None:
+        vertices, triangles = tetrahedron_arrays()
+        original_v = vertices.copy()
+        original_f = triangles.copy()
+        padded = np.zeros((len(vertices), 4), dtype=np.float64)
+        padded[:, :3] = vertices
+        view = padded[:, :3]                        # genuinely non-contiguous
+        self.assertFalse(view.flags.c_contiguous)
+        mesh = SDF.MeshArrayInput(
+            label="  tetra  ",
+            vertices_m=view,
+            triangles=triangles.astype(">i8"),
+            source_sha256=TETRA_SOURCE_SHA,
+            source_to_grid_m=SDF.IDENTITY_4X4,
+        )
+        canonical = SDF.canonicalize_mesh_array(mesh)
+        self.assertEqual(canonical.vertices_m.dtype.str, "<f8")
+        self.assertEqual(canonical.triangles.dtype.str, "<u4")
+        self.assertTrue(canonical.vertices_m.flags.c_contiguous)
+        self.assertTrue(canonical.vertices_m.flags.owndata)
+        self.assertTrue(canonical.triangles.flags.c_contiguous)
+        self.assertTrue(canonical.triangles.flags.owndata)
+        self.assertEqual(canonical.label, "tetra")
+        self.assertIsInstance(canonical.source_to_grid_m, tuple)
+        self.assertIsInstance(canonical.source_to_grid_m[0], tuple)
+        np.testing.assert_array_equal(canonical.vertices_m, vertices)
+        np.testing.assert_array_equal(canonical.triangles, triangles)
+        np.testing.assert_array_equal(vertices, original_v)
+        np.testing.assert_array_equal(triangles, original_f)
+
+    def test_canonicalize_is_idempotent(self) -> None:
+        once = SDF.canonicalize_mesh_array(canonical_tetra_input())
+        twice = SDF.canonicalize_mesh_array(once)
+        self.assertEqual(SDF.mesh_payload_hash(once), SDF.mesh_payload_hash(twice))
+
+    def test_payload_hash_is_stable_but_covers_geometry_source_and_transform(self) -> None:
+        base = canonical_tetra_input()
+        h0 = SDF.mesh_payload_hash(SDF.canonicalize_mesh_array(base))
+        h1 = SDF.mesh_payload_hash(SDF.canonicalize_mesh_array(base))
+        self.assertEqual(h0, h1)
+        self.assertEqual(len(h0), 64)
+        self.assertNotEqual(h0, payload_hash_with_one_vertex_changed(base))
+        self.assertNotEqual(h0, payload_hash_with_source_hash_changed(base))
+        self.assertNotEqual(h0, payload_hash_with_translation_changed(base))
+
+    def test_payload_hash_covers_face_order_and_label(self) -> None:
+        base = SDF.canonicalize_mesh_array(canonical_tetra_input())
+        h0 = SDF.mesh_payload_hash(base)
+        permuted = dataclasses.replace(base, triangles=base.triangles[::-1].copy())
+        self.assertNotEqual(h0, SDF.mesh_payload_hash(permuted))
+        relabelled = dataclasses.replace(base, label="tetra-2")
+        self.assertNotEqual(h0, SDF.mesh_payload_hash(relabelled))
+
+    def test_rejects_invalid_geometry_and_transforms_before_blender(self) -> None:
+        for mesh, message in invalid_mesh_cases():
+            with self.subTest(message=message), \
+                    self.assertRaisesRegex(ValueError, message):
+                SDF.canonicalize_mesh_array(mesh)
+
+    def test_accepts_proper_rigid_rotation_and_translation(self) -> None:
+        mesh = dataclasses.replace(
+            canonical_tetra_input(),
+            source_to_grid_m=rot_z_4x4(30.0, (0.01, -0.02, 0.03)))
+        canonical = SDF.canonicalize_mesh_array(mesh)
+        self.assertAlmostEqual(canonical.source_to_grid_m[0][3], 0.01)
+
+    def test_resource_limits_are_checked_without_launching_blender(self) -> None:
+        spec = SDF.fixture_spec("cube")
+        tetra = canonical_tetra_input()
+        with self.assertRaisesRegex(ValueError, "dense voxel count"):
+            SDF.validate_adapter_request(
+                (tetra,),
+                dataclasses.replace(
+                    spec, dimensions=(257, 257, 257),
+                    bounds_min_m=(0.0, 0.0, 0.0),
+                    bounds_max_m=(2.56, 2.56, 2.56)))
+        with self.assertRaisesRegex(ValueError, "mesh count"):
+            SDF.validate_adapter_request((), spec)
+        with self.assertRaisesRegex(ValueError, "mesh count"):
+            SDF.validate_adapter_request(
+                tuple(tetra for _ in range(SDF.MAX_MESHES + 1)), spec)
+        with self.assertRaisesRegex(ValueError, "voxel size"):
+            SDF.validate_adapter_request(
+                (tetra,), dataclasses.replace(spec, voxel_size_m=0.05))
+        with self.assertRaisesRegex(ValueError, "dimensions"):
+            SDF.validate_adapter_request(
+                (tetra,), dataclasses.replace(spec, dimensions=(1, 25, 25)))
+        with self.assertRaisesRegex(ValueError, "bounds"):
+            SDF.validate_adapter_request(
+                (tetra,), dataclasses.replace(spec, bounds_max_m=(-1.0, 0.12, 0.12)))
+        ok = SDF.validate_adapter_request((tetra,), spec)
+        self.assertEqual(len(ok), 1)
+        self.assertEqual(ok[0].vertices_m.dtype.str, "<f8")
+
+    def test_payload_files_are_written_and_verified_deterministically(self) -> None:
+        meshes = SDF.validate_adapter_request(
+            (canonical_tetra_input(),
+             dataclasses.replace(canonical_tetra_input(), label="tetra-b")),
+            SDF.fixture_spec("cube"))
+        with tempfile.TemporaryDirectory() as tmp_a, \
+                tempfile.TemporaryDirectory() as tmp_b:
+            first = SDF.write_mesh_payloads(Path(tmp_a), meshes)
+            second = SDF.write_mesh_payloads(Path(tmp_b), meshes)
+            self.assertEqual(len(first), 2)
+            self.assertEqual([d.vertices_file for d in first],
+                             ["mesh-000.vertices.f64le", "mesh-001.vertices.f64le"])
+            self.assertEqual([d.triangles_file for d in first],
+                             ["mesh-000.triangles.u32le", "mesh-001.triangles.u32le"])
+            self.assertEqual([SDF.descriptor_to_json(d) for d in first],
+                             [SDF.descriptor_to_json(d) for d in second])
+            for d in first:
+                blob = Path(tmp_a, d.vertices_file).read_bytes()
+                self.assertEqual(len(blob), 8 * 3 * d.vertex_count)
+                self.assertEqual(SDF.sha256_bytes(blob), d.vertices_sha256)
+                faces = Path(tmp_a, d.triangles_file).read_bytes()
+                self.assertEqual(len(faces), 4 * 3 * d.triangle_count)
+                self.assertEqual(SDF.sha256_bytes(faces), d.triangles_sha256)
+                self.assertEqual(SDF.descriptor_to_json(d)["kind"], "array-payload")
+
+    def test_payload_writer_rejects_path_separators_in_labels(self) -> None:
+        for bad in ("../escape", "a/b", "a\\b"):
+            mesh = dataclasses.replace(canonical_tetra_input(), label=bad)
+            with self.subTest(label=bad), tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaisesRegex(ValueError, "label"):
+                    SDF.write_mesh_payloads(
+                        Path(tmp), (SDF.canonicalize_mesh_array(mesh),))
 
 
 if __name__ == "__main__":

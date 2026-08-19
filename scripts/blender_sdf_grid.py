@@ -78,6 +78,29 @@ DEFAULT_BAND_WIDTH = 6                 # band_depth = 0.06 m at the default pitc
 GRID_NAME = "sdf"
 FIELD_DTYPE = "<f4"                    # dense result values, little endian
 
+# --- array-mesh adapter ceilings (rejected BEFORE Blender is launched) ----
+MAX_MESHES = 8
+MAX_VERTICES_PER_MESH = 250_000
+MAX_TRIANGLES_PER_MESH = 500_000
+MAX_DENSE_VOXELS = 16_000_000
+BLENDER_TIMEOUT_S = 300
+
+# Rigid source->grid transform identity, in row-major (row-vector-last) form.
+IDENTITY_4X4: tuple[tuple[float, float, float, float], ...] = (
+    (1.0, 0.0, 0.0, 0.0),
+    (0.0, 1.0, 0.0, 0.0),
+    (0.0, 0.0, 1.0, 0.0),
+    (0.0, 0.0, 0.0, 1.0),
+)
+
+# Byte formats pinned into every payload hash; changing one changes the hash.
+PAYLOAD_FORMATS = {
+    "verticesFormat": "f64le",
+    "trianglesFormat": "u32le",
+    "vertexOrder": "x-y-z",
+    "faceKind": "triangles",
+}
+
 # Node identifiers that MUST be registered before anything else runs.
 REQUIRED_NODES = (
     "GeometryNodeMeshToSDFGrid",
@@ -123,6 +146,25 @@ class MeshInput:
     size: float = 0.1
     location: tuple[float, float, float] = (0.0, 0.0, 0.0)
     rotation_euler: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+@dataclasses.dataclass(frozen=True, eq=False)
+class MeshArrayInput:
+    """One caller-supplied conventional triangle mesh, in array form.
+
+    `source_to_grid_m` maps source coordinates into the adapter's common
+    grid-local metre basis. Translation and a PROPER rotation are allowed;
+    scale, shear, and reflection are rejected, because the caller must strip
+    source scene scale and declare a rigid metre-space frame before baking.
+    Array fields are never mutated: canonicalize_mesh_array() always returns
+    owned, C-contiguous, little-endian copies.
+    """
+
+    label: str
+    vertices_m: npt.NDArray[np.floating]
+    triangles: npt.NDArray[np.integer]
+    source_sha256: str
+    source_to_grid_m: tuple[tuple[float, float, float, float], ...] = IDENTITY_4X4
 
 
 @dataclasses.dataclass(frozen=True)
@@ -405,6 +447,275 @@ def count_negative_components(result: DenseSdfResult) -> int:
                             seen[zz, yy, xx] = True
                             stack.append((zz, yy, xx))
     return count
+
+
+# ===========================================================================
+# Public array-mesh contract: canonicalization, payload bytes, request guards
+# ===========================================================================
+
+def _check_label(label: Any) -> str:
+    if not isinstance(label, str):
+        raise ValueError(f"mesh label must be a string, got {type(label).__name__}")
+    stripped = label.strip()
+    if not stripped:
+        raise ValueError("mesh label must not be empty")
+    return stripped
+
+
+def _validate_rigid_transform(transform: Any) -> tuple[tuple[float, ...], ...]:
+    """Accept only a finite 4x4 affine whose 3x3 block is a proper rotation."""
+    try:
+        matrix = np.asarray(transform, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"source_to_grid_m transform must be 4x4: {exc}") from exc
+    if matrix.shape != (4, 4):
+        raise ValueError(
+            f"source_to_grid_m transform must be 4x4, got shape {matrix.shape}")
+    if not np.isfinite(matrix).all():
+        raise ValueError("source_to_grid_m transform contains non-finite values")
+    if not np.allclose(matrix[3], (0.0, 0.0, 0.0, 1.0), rtol=0.0, atol=1e-9):
+        raise ValueError(
+            f"source_to_grid_m transform final row must be (0, 0, 0, 1), "
+            f"got {tuple(matrix[3])}")
+    rot = matrix[:3, :3]
+    if not np.allclose(rot.T @ rot, np.eye(3), rtol=0.0, atol=1e-6) or \
+            abs(float(np.linalg.det(rot)) - 1.0) > 1e-6:
+        raise ValueError(
+            "source_to_grid_m transform rotation is not a proper rigid rotation "
+            "(scale, shear, and reflection are rejected)")
+    return tuple(tuple(float(v) for v in row) for row in matrix)
+
+
+def _is_canonical_mesh_array(mesh: Any) -> bool:
+    """O(1) check: already the exact owned/little-endian/tuple canonical form."""
+    if not isinstance(mesh, MeshArrayInput):
+        return False
+    v, f = mesh.vertices_m, mesh.triangles
+    return (isinstance(v, np.ndarray) and isinstance(f, np.ndarray)
+            and v.dtype.str == "<f8" and f.dtype.str == "<u4"
+            and v.flags.c_contiguous and f.flags.c_contiguous
+            and v.flags.owndata and f.flags.owndata
+            and isinstance(mesh.source_to_grid_m, tuple)
+            and len(mesh.source_to_grid_m) == 4
+            and all(isinstance(r, tuple) for r in mesh.source_to_grid_m)
+            and isinstance(mesh.label, str) and mesh.label == mesh.label.strip()
+            and bool(mesh.label))
+
+
+def canonicalize_mesh_array(mesh: MeshArrayInput) -> MeshArrayInput:
+    """Validate a public array mesh and return an owned canonical copy.
+
+    Checks run cheapest-first (shape, emptiness, ceilings, then content) so a
+    rejected oversized input never pays for a full finite/index scan. All work
+    is vectorized O(V + F); no vertex is ever compared against every face.
+    The caller's arrays are never written to.
+    """
+    if not isinstance(mesh, MeshArrayInput):
+        raise ValueError(f"expected MeshArrayInput, got {type(mesh).__name__}")
+    label = _check_label(mesh.label)
+    source_sha = hex64(str(mesh.source_sha256), "source_sha256")
+    transform = _validate_rigid_transform(mesh.source_to_grid_m)
+
+    vertices = np.asarray(mesh.vertices_m)
+    triangles = np.asarray(mesh.triangles)
+    if vertices.ndim != 2 or vertices.shape[1] != 3:
+        raise ValueError(
+            f"vertices must have shape (V, 3), got {vertices.shape}")
+    if triangles.ndim != 2 or triangles.shape[1] != 3:
+        raise ValueError(
+            f"triangles must have shape (F, 3), got {triangles.shape}")
+    if vertices.shape[0] == 0:
+        raise ValueError("vertices array is empty")
+    if triangles.shape[0] == 0:
+        raise ValueError("triangles array is empty")
+    if vertices.shape[0] > MAX_VERTICES_PER_MESH:
+        raise ValueError(
+            f"mesh {label!r} vertex count {vertices.shape[0]} exceeds limit "
+            f"{MAX_VERTICES_PER_MESH}")
+    if triangles.shape[0] > MAX_TRIANGLES_PER_MESH:
+        raise ValueError(
+            f"mesh {label!r} triangle count {triangles.shape[0]} exceeds limit "
+            f"{MAX_TRIANGLES_PER_MESH}")
+
+    if not np.issubdtype(vertices.dtype, np.floating):
+        raise ValueError(f"vertices dtype {vertices.dtype} is not floating point")
+    verts64 = np.ascontiguousarray(vertices, dtype="<f8")
+    if not np.isfinite(verts64).all():
+        raise ValueError(f"mesh {label!r} vertices contain non-finite values")
+
+    if not np.issubdtype(triangles.dtype, np.integer):
+        raise ValueError(f"triangles dtype {triangles.dtype} is not integral")
+    tri64 = np.ascontiguousarray(triangles, dtype=np.int64)
+    if int(tri64.min()) < 0 or int(tri64.max()) >= verts64.shape[0]:
+        raise ValueError(
+            f"mesh {label!r} triangle indices out of range [0, "
+            f"{verts64.shape[0]}): [{int(tri64.min())}, {int(tri64.max())}]")
+    degenerate = ((tri64[:, 0] == tri64[:, 1]) | (tri64[:, 1] == tri64[:, 2])
+                  | (tri64[:, 2] == tri64[:, 0]))
+    if bool(degenerate.any()):
+        first = int(np.argmax(degenerate))
+        raise ValueError(
+            f"mesh {label!r} has {int(degenerate.sum())} degenerate triangle(s); "
+            f"first at row {first}: {tuple(int(i) for i in tri64[first])}")
+
+    return MeshArrayInput(
+        label=label,
+        vertices_m=verts64,
+        triangles=np.ascontiguousarray(tri64, dtype="<u4"),
+        source_sha256=source_sha,
+        source_to_grid_m=transform,
+    )
+
+
+def mesh_payload_hash(mesh: MeshArrayInput) -> str:
+    """SHA-256 over geometry bytes, label, upstream source, and transform."""
+    canonical = mesh if _is_canonical_mesh_array(mesh) else \
+        canonicalize_mesh_array(mesh)
+    vertices_bytes = canonical.vertices_m.tobytes("C")
+    triangles_bytes = canonical.triangles.tobytes("C")
+    return sha256_text(canonical_json({
+        **PAYLOAD_FORMATS,
+        "label": canonical.label,
+        "vertexCount": int(canonical.vertices_m.shape[0]),
+        "triangleCount": int(canonical.triangles.shape[0]),
+        "verticesSha256": sha256_bytes(vertices_bytes),
+        "trianglesSha256": sha256_bytes(triangles_bytes),
+        "sourceSha256": canonical.source_sha256,
+        "sourceToGridM": [list(row) for row in canonical.source_to_grid_m],
+    }))
+
+
+@dataclasses.dataclass(frozen=True)
+class MeshPayloadDescriptor:
+    """One array mesh as it crosses the outer -> inner process boundary.
+
+    File names are RELATIVE to request.json; an absolute temporary path never
+    enters a canonical hash, so the same geometry hashes identically in every
+    temporary directory.
+    """
+
+    label: str
+    vertex_count: int
+    triangle_count: int
+    vertices_file: str
+    triangles_file: str
+    vertices_sha256: str
+    triangles_sha256: str
+    source_sha256: str
+    source_to_grid_m: tuple[tuple[float, float, float, float], ...]
+    payload_sha256: str
+
+
+def descriptor_to_json(descriptor: MeshPayloadDescriptor) -> dict[str, Any]:
+    """The tagged request entry the inner Blender loader consumes."""
+    return {
+        "kind": "array-payload",
+        "label": descriptor.label,
+        "vertexCount": int(descriptor.vertex_count),
+        "triangleCount": int(descriptor.triangle_count),
+        "verticesFile": descriptor.vertices_file,
+        "trianglesFile": descriptor.triangles_file,
+        "verticesSha256": descriptor.vertices_sha256,
+        "trianglesSha256": descriptor.triangles_sha256,
+        "sourceSha256": descriptor.source_sha256,
+        "sourceToGridM": [list(row) for row in descriptor.source_to_grid_m],
+        "payloadSha256": descriptor.payload_sha256,
+        **PAYLOAD_FORMATS,
+    }
+
+
+_LABEL_FORBIDDEN = ("/", "\\", ":", "\x00")
+
+
+def _check_payload_label(label: str) -> str:
+    """Labels are evidence, never a path: no separators, no traversal."""
+    clean = _check_label(label)
+    for ch in _LABEL_FORBIDDEN:
+        if ch in clean:
+            raise ValueError(
+                f"mesh label {label!r} must not contain a path separator ({ch!r})")
+    if clean in (".", "..") or clean.startswith(".."):
+        raise ValueError(f"mesh label {label!r} must not be a path traversal")
+    return clean
+
+
+def write_mesh_payloads(out_dir: Path, meshes: Sequence[MeshArrayInput],
+                        ) -> tuple[MeshPayloadDescriptor, ...]:
+    """Write raw little-endian geometry blobs and describe them canonically.
+
+    File names come from the numeric mesh index only. Every blob is read back
+    and re-hashed before its descriptor is returned, so a short or corrupted
+    write fails here rather than inside Blender.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    descriptors: list[MeshPayloadDescriptor] = []
+    for index, mesh in enumerate(meshes):
+        canonical = mesh if _is_canonical_mesh_array(mesh) else \
+            canonicalize_mesh_array(mesh)
+        label = _check_payload_label(canonical.label)
+        vertices_file = f"mesh-{index:03d}.vertices.f64le"
+        triangles_file = f"mesh-{index:03d}.triangles.u32le"
+        vertices_bytes = canonical.vertices_m.tobytes("C")
+        triangles_bytes = canonical.triangles.tobytes("C")
+        (out_dir / vertices_file).write_bytes(vertices_bytes)
+        (out_dir / triangles_file).write_bytes(triangles_bytes)
+        vertices_sha = sha256_bytes((out_dir / vertices_file).read_bytes())
+        triangles_sha = sha256_bytes((out_dir / triangles_file).read_bytes())
+        if vertices_sha != sha256_bytes(vertices_bytes) or \
+                triangles_sha != sha256_bytes(triangles_bytes):
+            raise RuntimeError(
+                f"payload write/read hash mismatch for mesh {label!r} in {out_dir}")
+        descriptors.append(MeshPayloadDescriptor(
+            label=label,
+            vertex_count=int(canonical.vertices_m.shape[0]),
+            triangle_count=int(canonical.triangles.shape[0]),
+            vertices_file=vertices_file,
+            triangles_file=triangles_file,
+            vertices_sha256=vertices_sha,
+            triangles_sha256=triangles_sha,
+            source_sha256=canonical.source_sha256,
+            source_to_grid_m=canonical.source_to_grid_m,
+            payload_sha256=mesh_payload_hash(canonical),
+        ))
+    return tuple(descriptors)
+
+
+def validate_adapter_request(meshes: Sequence[MeshArrayInput],
+                             spec: SdfGridSpec) -> tuple[MeshArrayInput, ...]:
+    """Reject every resource/contract violation BEFORE Blender is launched.
+
+    Operation-specific arity (union needs >= 2, intersection needs exactly 2)
+    stays with the public adapters; this helper is the shared gate.
+    """
+    count = len(meshes)
+    if not 1 <= count <= MAX_MESHES:
+        raise ValueError(
+            f"mesh count {count} outside the allowed range 1..{MAX_MESHES}")
+    canonical = tuple(canonicalize_mesh_array(m) for m in meshes)
+
+    dims = tuple(int(n) for n in spec.dimensions)
+    if len(dims) != 3 or min(dims) < 2:
+        raise ValueError(f"dimensions {dims} must be >= 2 on every axis")
+    lo = tuple(float(v) for v in spec.bounds_min_m)
+    hi = tuple(float(v) for v in spec.bounds_max_m)
+    if not all(math.isfinite(v) for v in lo + hi):
+        raise ValueError(f"bounds not finite: {lo} .. {hi}")
+    if any(b <= a for a, b in zip(lo, hi)):
+        raise ValueError(f"bounds not strictly ordered: {lo} .. {hi}")
+
+    voxels = int(dims[0]) * int(dims[1]) * int(dims[2])
+    if voxels > MAX_DENSE_VOXELS:
+        raise ValueError(
+            f"dense voxel count {voxels} for dimensions {dims} exceeds limit "
+            f"{MAX_DENSE_VOXELS}")
+
+    want = float(spec.voxel_size_m)
+    measured = tuple(float(v) for v in spec.voxel_measured())
+    if any(abs(v - want) > 1e-9 + 1e-6 * abs(want) for v in measured):
+        raise ValueError(
+            f"declared voxel size {want} disagrees with measured {measured}")
+    return canonical
 
 
 # ===========================================================================
