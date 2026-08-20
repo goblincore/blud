@@ -446,6 +446,8 @@ Key reference docs (open these before touching their area):
 - `P5`  [-]  Prune old `dispatch/blud-m1-task-*` branches
 - `P6`  [x]  Theme-preview schema merge — `scripts/build_theme_patterns.py` joins `patterns.raw.json` + `labels.json` → theme-shaped `patterns.json` (`{texture_families[weighted floors/walls/ceilings], map_archetypes, geometry}`); validates clean; 30 families/39 maps; doorFreq 0.0413 cross-checks R5's 4.1%. Feeds procgen levels §5.1 + deferred theming.
 - `P7`  [x]  BUNFUSE extraction + cooking visual — `dynamite-fuse-burn.json`, `7081c14`
+- `P8`  [~]  **SDF character language** — WAM-style text format → `BodyDef`, checks on `sdBody()`, turntable, agent skill. Design sections 1–2 approved; section 3 + open questions pending review, no plan yet.
+  [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · Obsidian: `Claude Notes/Blud/2026-08-20-sdf-character-language.md`
 
 ---
 
