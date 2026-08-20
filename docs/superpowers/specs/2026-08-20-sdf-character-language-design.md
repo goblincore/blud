@@ -1,8 +1,9 @@
 # SDF character language — design
 
-> **Status:** sections 1–2 owner-approved 2026-08-20. Section 3 (checks,
-> testing, scope) is proposed and not yet reviewed. No implementation plan
-> exists yet.
+> **Status:** owner-approved 2026-08-20 — all three sections, and all four open
+> questions resolved. Ready for an implementation plan; none written yet.
+> `MAX_PRIMS` was raised and the per-cluster truncation bug fixed as part of the
+> review (`ee3d10e`); everything else here is still unbuilt.
 
 **Goal:** make authoring SDF characters for Blud easy enough that both a human
 and an LLM can do it — a terse, commented text format that compiles to the
@@ -99,7 +100,7 @@ downstream of `BodyDef` is rewritten.
   Body { prims, clusters }
        │
        ├── validateBody() ───────── EXISTS (structural lint)
-       ├── checks battery ───────── ← new: named, in-file, evaluated on sdBody()
+       ├── fused / clear ────────── ← new: always-on, evaluated on sdBody()
        ▼
   lab raymarcher (WGSL) ─────────── EXISTS — the SHIPPING evaluator
        │
@@ -164,7 +165,7 @@ ceiling entirely. Worth doing only if a character actually presses 128.
 | --- | --- | --- |
 | `blob-parse.ts` | text → `BlobAst`; errors carry line/col | nothing |
 | `blob-compile.ts` | `BlobAst` → `BodyDef`; angles → `dir` vectors | `types.ts` |
-| `blob-checks.ts` | named checks battery, evaluated on `sdBody()` | `validate.ts` |
+| `blob-checks.ts` | always-on `fused`/`clear` correctness checks on `sdBody()` | `validate.ts` |
 | `blob-emit.ts` | `BodyDef` + panel state → `.blob` text, comments preserved | `types.ts` |
 | `scripts/blob-turntable.mjs` | N-angle deterministic capture + contact sheet | `verify-*.mjs` pattern |
 | `.claude/skills/authoring-sdf-characters/` | the agent loop: write → compile → check → look → revise | — |
@@ -225,27 +226,39 @@ Four deliberate choices:
   `mirrorOffset` (bilateral features on a non-mirrored bone, e.g. eye sockets on
   a single skull), which is distinct from `mirror`.
 
-## Section 3 — Checks, errors, testing *(PROPOSED — not yet reviewed)*
+## Section 3 — Checks, errors, testing *(approved)*
 
-### Checks battery
+### Checks battery *(resolved 2026-08-20)*
 
-WAM-style named checks, written in the character file and evaluated against the
-SDF. Because the field answers inside/outside directly, each is a handful of
-lines rather than a triangle raycast:
+Two kinds of check were originally conflated, and they have different answers.
 
-```
-checks
-  fused(arm.l, torso)        # both cluster cores connect through negative field
-  clear(hand.l, thigh.l)     # WAM's noclip — min distance stays positive
-  below(hand.l, knee.l)      # silhouette intent: knuckles hang below the knee
-  reads(silhouette)          # non-empty at turntable resolution from all angles
-end
-```
+**Correctness checks — built in, always on, no syntax.** A limb not fused to the
+body, or a hand intersecting a thigh, is objectively wrong and fails *silently*:
+the render looks plausible while the geometry is not. `fused` already exists
+inside `validateBody` as the cluster connectivity probe; `clear` is its inverse.
+Because the field answers inside/outside directly, each is a handful of lines
+rather than WAM's triangle raycast. These run on every compile and need no
+per-character declaration.
 
-`fused` already exists inside `validateBody` as the cluster connectivity probe;
-this exposes it as a named, per-character assertion. `clear` is its inverse.
-Open question: whether `below`-style intent assertions earn their keep or are
-better left to the turntable and the eye.
+**Intent checks — NOT in v1.** Assertions like `below(hand.l, knee.l)` encode
+artistic intent ("this creature is apelike"), and a human reading a turntable
+judges that better than an assertion that has to be maintained.
+
+The case for them later is real but different from the one first proposed, and
+it is worth writing down so it is not re-argued:
+
+1. **They belong to a cast, not a character.** `troll.wam` describes itself as
+   *"copied from goblin.wam (the cast template) — same bone names, same six
+   animations, same checks battery"*. The value was a shared battery every
+   creature satisfies, not troll-specific lines.
+2. **They catch regression, which a turntable cannot.** Retune the arms months
+   later and the knuckles drift above the knee; the eye may not notice on a
+   turntable, an assertion does.
+3. **Therefore they are a ratchet, not an authoring aid** — applied *after* a
+   character is approved, to hold it still.
+
+Revisit once a cast exists and there is something worth freezing. Cheap to add
+then: the checks engine is built either way, and this is a parser addition.
 
 ### Error handling
 
@@ -273,8 +286,8 @@ Three failure classes, deliberately distinct:
 
 ### Scope (YAGNI)
 
-**In:** the language, compiler, checks, emitter, turntable, skill, and
-`zombie.blob` as the proof.
+**In:** the language (including the `face` parameter block), compiler, always-on
+correctness checks, emitter, turntable, skill, and `zombie.blob` as the proof.
 
 **Out for now:** animation (Blud has its own animation system and a deterministic
 sim — the language describes a *rest body*, not clips); palette/materials (the
@@ -285,13 +298,49 @@ authority now would fight it); a direct-manipulation GUI.
 shape" needs a drag-a-blob GUI. Text plus a fast turntable may be enough; that
 is cheaper to learn than to guess.
 
-## Open questions
+## Resolved questions
 
-1. Do intent assertions (`below`, `reads`) earn their keep, or is the turntable
-   enough?
-2. Does the face stay a separate parameterised `FaceParams` (live-tunable in the
-   panel) or fold into the language? Today `facePrims()` is generated, not
-   authored, precisely so the panel can drive it.
-3. File extension and name — `.blob` is a working title.
-4. ~~Should `MAX_PRIMS` be lifted?~~ **Answered 2026-08-20** — raised 48 → 128
-   and the per-cluster silent-truncation hole closed. See *Ceiling check* above.
+All four are settled as of 2026-08-20. Kept here with reasoning so they are not
+re-litigated.
+
+1. **Do intent assertions earn their keep?** *No, not in v1.* Correctness checks
+   (`fused`/`clear`) ship as always-on built-ins; intent assertions are deferred
+   as a post-approval ratchet belonging to a cast. See *Checks battery*.
+2. **Does the face fold into the language?** *Yes — as parameters, not prims.* A
+   `face` block carries `FaceParams`; the compiler calls the existing
+   `facePrims()`. See *Face* below.
+3. **File extension.** `.blob`, confirmed.
+4. **Should `MAX_PRIMS` be lifted?** *Done* — 48 → 128, and the per-cluster
+   silent-truncation hole closed. See *Ceiling check*.
+
+## Face — a parameterised generator, not authored geometry
+
+The face is **in** the language, but as a `FaceParams` block rather than as
+primitives:
+
+```
+face
+  headRadius 0.118
+  headWidth  0.760
+  browJut    0.021
+```
+
+`blob-compile.ts` passes these to the existing `facePrims()`. Writing the face
+out as ~13 explicit prim lines was rejected: it would lose the parameterisation
+*and* the live panel tuning, and it would mean hand-placing exactly the geometry
+`face.ts` records four failed rebuilds trying to hand-place. The lesson there —
+*geometry carries silhouette, texture carries features* — depends on the face
+staying a small parameterised generator.
+
+This block is also **the first target for `blob-emit.ts`**. Tuning `FaceParams`
+in the panel and hand-copying them into `face.ts` is the exact pain the code
+complains about today (*"bake a tuned FaceParams back into DEFAULT_FACE"*), so
+round-tripping the `face` block is the shortest path from this work to a felt
+improvement.
+
+### Consequence: the language has generators
+
+`.blob` now carries two kinds of content — explicit primitives
+(`blob`/`bar`/`carve`) and **parameterised generators** (`face`). That is a
+deliberate extension point; a `hand` generator over the baked hand volume is the
+obvious next one. Build only `face` for now.
