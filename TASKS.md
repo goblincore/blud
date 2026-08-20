@@ -261,6 +261,20 @@ Key reference docs (open these before touching their area):
   [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
   · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
   · [wound design](docs/superpowers/specs/2026-08-19-humanoid-sdf-wound-damage-design.md)
+- `X1.humanoid-walk` [ ] **Walk cycle on the baked humanoid** — owner ask
+  (2026-08-19), explicitly NOT a blocker for the sever/wound live test, which
+  only needs click-to-shoot (Task 10). The spike plan forbids walking on
+  purpose, so this lands after it. Cheaper than it looks: `X1.22` already built
+  `gait.ts` / `wander.ts` / `ik.ts` / `motion.ts` / `stagger.ts` / `collapse.ts`
+  and they are pure. The work is a retarget, not a new rig — those drive the
+  PROCEDURAL body's own skeleton, while the baked humanoid has 22 glTF-named
+  bones addressed by `manifest.bones[]` array position, so the join is a bone-name
+  map feeding `HumanoidPoseState.bones` (position + unit quaternion per bone,
+  which is exactly what `poseMatrices` consumes).
+  Two things already proven that this inherits: wounds are bone-local, so they
+  ride any pose for free (the elbow scrub is the existing proof); and `X1.22.1`
+  found the collapse "stall" was a per-frame dt clamp turning browser throttle
+  into slow motion — reuse `planSubSteps`, do not re-derive it.
 - `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
   later one-piece synthetic-forearm reference were both owner-rejected. The
   next run uses Blender-native SDF union for one hand+wrist+native-forearm field,
