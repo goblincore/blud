@@ -276,6 +276,24 @@ Key reference docs (open these before touching their area):
   `verify-humanoid-sdf-spike.mjs`'s `settledPieceSeparated` has a dead clause
   (`dist >= 80 && dist >= 60`), and the notes describe that gate in a way that
   reads as a failure by conflating the centroid distance with the component size.
+- `X1.humanoid-shader-gen-cost` [ ] **The 33 s first load is TSL codegen, not
+  asset loading** — profiled 2026-08-20 on real Metal-3: 32.5 s to `ready`, of
+  which **ScriptDuration 25.1 s**, and the entire profile top is `build` /
+  `generate` in the prebundled `three/webgpu` chunk (TSL's node-graph → WGSL
+  emitters), a dozen-plus calls at 300–550 ms each. Ruled out with numbers:
+  fetch 120 ms for 48 MiB on loopback, SHA-256 60 ms, DOM complete 69–108 ms,
+  30 resources, `LayoutDuration` 0, adapter real Metal-3 (not SwiftShader).
+  Cause: the page builds **7 separate cluster materials** (6 attached + 1
+  detached), each a full clustered marcher, and prewarm compiles all of them up
+  front — which is what buys the no-first-use-pause guarantee, so the cost is
+  deliberate, just entirely front-loaded.
+  Lever already proven here: `X1.gib-freeze` shipped a **shared, prewarmed**
+  WebGPU gib material for this exact shape of problem. Seven near-identical
+  materials differing only in uniforms should collapse to one with per-cluster
+  uniforms. Do NOT fold this into the dynamics chain.
+  Aside, cheap: `humanoid-volume.ts` SHA-256s each transport part and then the
+  combined buffer again — with `parts.length === 1` those are the same bytes,
+  so ~48 MiB is hashed twice. Worth ~60 ms; tidiness, not the load cost.
 - `X1.humanoid-walk` [ ] **Walk cycle on the baked humanoid** — owner ask
   (2026-08-19), explicitly NOT a blocker for the sever/wound live test, which
   only needs click-to-shoot (Task 10). The spike plan forbids walking on
