@@ -34,6 +34,7 @@
 import type { Vec3 } from './types';
 import { qFromAxisAngle, qMul, qNormalize, qRotate, type Quat } from './vec';
 import type { HumanoidVolumeManifest } from './webgpu/humanoid-volume';
+import type { HumanoidVerletState } from './humanoid-verlet';
 
 /** One bone's world pose: the joint position (bind origin under the pose)
  *  and the bind→world unit quaternion. */
@@ -55,6 +56,12 @@ export interface HumanoidPoseState {
   elbowPivot: Vec3;
   /** manifest.bones[] positions of RightForeArm and every descendant. */
   distalIndices: readonly number[];
+  /** Per-bone verlet translation applied on top of the elbow pose —
+   *  `bones[i].position = elbowPosed[i] + verletOffset[i]`. All zeros when no
+   *  verlet layer is wired (the pure elbow pose this module always produced).
+   *  Optional so external HumanoidPoseState literals (e.g. the view tests)
+   *  keep compiling; `makeHumanoidPose` always sets it. */
+  verletOffset?: readonly Vec3[];
 }
 
 export interface HumanoidPoseOptions {
@@ -77,6 +84,8 @@ export const HUMANOID_SOFT_MAX_HZ = 3;
 export const HUMANOID_SPRING_DT_CLAMP_S = 1 / 30;
 
 const DEG_TO_RAD = Math.PI / 180;
+
+const ZERO: Vec3 = [0, 0, 0];
 
 function clamp01(v: number): number {
   if (!Number.isFinite(v)) return 0;
@@ -257,6 +266,7 @@ export function makeHumanoidPose(
     elbowAxis,
     elbowPivot,
     distalIndices,
+    verletOffset: bind.map(() => [0, 0, 0] as Vec3),
   };
 }
 
@@ -272,6 +282,7 @@ export function stepHumanoidPose(
   state: HumanoidPoseState,
   opts: HumanoidStepOptions,
   dt: number,
+  verlet?: HumanoidVerletState,
 ): HumanoidPoseState {
   if (!Number.isFinite(dt) || dt <= 0) return state;
   const softness01 = clamp01(opts.softness01);
@@ -297,6 +308,61 @@ export function stepHumanoidPose(
     elbowVelocityDeg = e * (b - omega * (a + b * dtc));
   }
 
+  if (!verlet) {
+    // No verlet layer: the elbow-only behaviour this task preserves.
+    return {
+      ...state,
+      elbowTargetDeg: target,
+      elbowDeg,
+      elbowVelocityDeg,
+      softness01,
+      timeSec: state.timeSec + dt,
+      bones: applyElbow(
+        state.bones,
+        elbowDeg - state.elbowDeg,
+        state.elbowAxis,
+        state.elbowPivot,
+        state.distalIndices,
+      ),
+    };
+  }
+
+  // Verlet layer: strip the offset applied last step so the incremental elbow
+  // rotates the PURE pose (never the recoil translation), apply the elbow
+  // delta, then re-apply the current verlet offset. This keeps the offset from
+  // compounding step-over-step or being rotated with the distal bones.
+  const stripped: HumanoidBonePose[] = state.bones.map((b, i) => {
+    const o = state.verletOffset?.[i] ?? ZERO;
+    return {
+      position: [
+        b.position[0] - o[0],
+        b.position[1] - o[1],
+        b.position[2] - o[2],
+      ],
+      quaternion: b.quaternion,
+    };
+  });
+  const elbowBones = applyElbow(
+    stripped,
+    elbowDeg - state.elbowDeg,
+    state.elbowAxis,
+    state.elbowPivot,
+    state.distalIndices,
+  );
+  const verletOffset: Vec3[] = state.bones.map((_b, i) => [
+    verlet.positions[i]![0] - verlet.bindOrigins[i]![0],
+    verlet.positions[i]![1] - verlet.bindOrigins[i]![1],
+    verlet.positions[i]![2] - verlet.bindOrigins[i]![2],
+  ]);
+  const bones: HumanoidBonePose[] = elbowBones.map((b, i) => ({
+    position: [
+      b.position[0] + verletOffset[i]![0],
+      b.position[1] + verletOffset[i]![1],
+      b.position[2] + verletOffset[i]![2],
+    ],
+    quaternion: b.quaternion,
+  }));
+
   return {
     ...state,
     elbowTargetDeg: target,
@@ -304,13 +370,8 @@ export function stepHumanoidPose(
     elbowVelocityDeg,
     softness01,
     timeSec: state.timeSec + dt,
-    bones: applyElbow(
-      state.bones,
-      elbowDeg - state.elbowDeg,
-      state.elbowAxis,
-      state.elbowPivot,
-      state.distalIndices,
-    ),
+    bones,
+    verletOffset,
   };
 }
 

@@ -22,6 +22,9 @@ import {
   distalBoneIndices,
   HUMANOID_SPRING_DT_CLAMP_S,
 } from './humanoid-pose';
+import {
+  makeHumanoidVerlet, stepHumanoidVerlet, impulseAtBone, verletBonePositions,
+} from './humanoid-verlet';
 
 const realManifest = validateHumanoidVolumeManifest(JSON.parse(
   readFileSync('public/assets/lab/humanoid-sdf/zombie-humanoid.json', 'utf8'),
@@ -223,5 +226,33 @@ describe('humanoid softness spring', () => {
 
   it('throws for an unknown bone name', () => {
     expect(() => jointWorldPosition(matrices(0), realManifest, 'NoSuchBone')).toThrow();
+  });
+});
+
+describe('humanoid verlet offset application', () => {
+  it('stepHumanoidPose offsets each bone by the verlet translation, leaving quaternions alone', () => {
+    const idx = realManifest.bones.findIndex(b => b.bone === 'RightForeArm');
+    const state = makeHumanoidPose(realManifest, { elbowDeg: 0, softness01: 0 });
+    let verlet = makeHumanoidVerlet(realManifest);
+    const at = verletBonePositions(verlet)[idx]!;
+    verlet = impulseAtBone(verlet, at, [0.06, 0, 0]);
+    verlet = stepHumanoidVerlet(verlet, 1 / 60);
+
+    const posed = stepHumanoidPose(state, { elbowTargetDeg: 0, softness01: 0 }, 1 / 60, verlet);
+
+    // The forearm brick moved along +X with the recoil (translation only)…
+    const bindX = realManifest.bones[idx]!.bindToModel[12]!;
+    expect(posed.bones[idx]!.position[0]).toBeGreaterThan(bindX + 0.01);
+    // …and its rotation is untouched.
+    expect(posed.bones[idx]!.quaternion).toEqual(state.bones[idx]!.quaternion);
+    // The stored offset matches the verlet displacement exactly.
+    expect(posed.verletOffset![idx]![0]).toBeCloseTo(
+      verlet.positions[idx]![0] - verlet.bindOrigins[idx]![0], 9);
+  });
+
+  it('without a verlet layer the pose is bit-identical to the pre-task elbow pose', () => {
+    let s = makeHumanoidPose(realManifest, { elbowDeg: 0, softness01: 0 });
+    for (let i = 0; i < 60; i++) s = stepHumanoidPose(s, { elbowTargetDeg: 80, softness01: 0.5 }, 1 / 60);
+    expect(s.verletOffset!.every(o => o[0] === 0 && o[1] === 0 && o[2] === 0)).toBe(true);
   });
 });

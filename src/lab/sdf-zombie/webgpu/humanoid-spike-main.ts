@@ -31,6 +31,8 @@ import { loadHumanoidVolume, type HumanoidVolumeManifest, type HumanoidCoarseBri
 import { createHumanoidView, type HumanoidResourceCounts, type PrewarmReport } from './humanoid-view';
 import type { HumanoidPoseState, HumanoidBonePose } from '../humanoid-pose';
 import { makeHumanoidPose, stepHumanoidPose } from '../humanoid-pose';
+import type { HumanoidVerletState } from '../humanoid-verlet';
+import { makeHumanoidVerlet, stepHumanoidVerlet, impulseAtBone } from '../humanoid-verlet';
 import type { HumanoidSeverState, SeverPhase, SeverRenderState, ReleaseVelocity } from '../humanoid-sever';
 import { makeHumanoidSever, severForearm, stepHumanoidSever, resetHumanoidSever, chunkBoneWorldPose } from '../humanoid-sever';
 import type { BoneWound, WoundUploadLists } from '../humanoid-damage';
@@ -183,6 +185,7 @@ export class HumanoidSpikeController {
   private prewarmReport: PrewarmReport | null = null;
 
   private pose: HumanoidPoseState;
+  private verlet: HumanoidVerletState;
   private severState: HumanoidSeverState;
   private _physicsPaused = false;
   private _elbowTargetDeg: number;
@@ -213,6 +216,7 @@ export class HumanoidSpikeController {
     this.pose = makeHumanoidPose(manifest, {
       elbowDeg: this._elbowTargetDeg, softness01: this._softness01,
     });
+    this.verlet = makeHumanoidVerlet(manifest);
     this.severState = makeHumanoidSever(manifest);
     this.applyView();
   }
@@ -317,6 +321,7 @@ export class HumanoidSpikeController {
     this.pose = makeHumanoidPose(this.manifest, {
       elbowDeg: this._elbowTargetDeg, softness01: this._softness01,
     });
+    this.verlet = makeHumanoidVerlet(this.manifest);
     this.applyView();
     this.notify();
   }
@@ -329,9 +334,10 @@ export class HumanoidSpikeController {
       this.frames.push(dtSec * 1000);
       if (this.frames.length > TIMING_WINDOW) this.frames.shift();
     }
+    this.verlet = stepHumanoidVerlet(this.verlet, dtSec);
     this.pose = stepHumanoidPose(this.pose, {
       elbowTargetDeg: this._elbowTargetDeg, softness01: this._softness01,
-    }, dtSec);
+    }, dtSec, this.verlet);
     this.severState = stepHumanoidSever(this.severState, dtSec, this._physicsPaused);
     this.applyView();
     this.notify();
@@ -396,6 +402,17 @@ export class HumanoidSpikeController {
     // inlined rather than re-typed (damage.ts is outside this task's files).
     const next = [...this.wounds, wound];
     this.wounds = next.length > MAX_BONE_WOUNDS ? next.slice(next.length - MAX_BONE_WOUNDS) : next;
+    // Verlet recoil: shove the nearest joint along the shot direction; the
+    // rest-pose spring pulls it back, so the body visibly recoils and lags.
+    // Port of the procedural zombie's plain-click impact (lab-main.ts:902)
+    // with its exact push constants (0.16 blast / 0.06 pellet / 0.04 burn).
+    const push = type === 'blast' ? 0.16 : type === 'pellet' ? 0.06 : 0.04;
+    const dLen = Math.hypot(dir[0], dir[1], dir[2]);
+    if (dLen > 0) {
+      this.verlet = impulseAtBone(this.verlet, hit.point, [
+        (dir[0] / dLen) * push, (dir[1] / dLen) * push, (dir[2] / dLen) * push,
+      ]);
+    }
     this.applyView();
     this.notify();
     return true;

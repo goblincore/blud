@@ -13,6 +13,7 @@
 // through the controller adapter.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as THREE from 'three/webgpu';
 import type { HumanoidVolumeManifest, HumanoidCoarseBricks, HumanoidCoarseBrick } from './humanoid-volume';
 import type { HumanoidResourceCounts, PrewarmReport } from './humanoid-view';
 import type { SeverRenderState } from '../humanoid-sever';
@@ -556,5 +557,26 @@ describe('HumanoidSpikeController — click-to-shoot targeting', () => {
     controller.reset();
     expect(controller.diagnostics().woundCount).toBe(count);
     expect(stub.calls.setWounds).toBeGreaterThan(0);
+  });
+
+  it('a shot recoils the body: shootWorld moves a bone and resources are unchanged', () => {
+    const { controller } = readyWithCoarse();
+    // shootWorld needs a camera to build its ray; the canvas is irrelevant.
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0.01, 1.01, 3);
+    const api = createHumanoidSpikeApi(controller, camera, null);
+
+    const before = api.worldOnBone('RightForeArm')!;
+    const resources = api.resourceCounts();
+
+    // Aim straight at the forearm centre from +Z: lands a hit, then recoils.
+    expect(api.shootWorld([0.01, 1.01, 0.01])).toBe(true);
+    api.step(1 / 60); // the verlet offset reaches the pose on the next step
+
+    const after = api.worldOnBone('RightForeArm')!;
+    expect(Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2]))
+      .toBeGreaterThan(0.001);
+    // No pipeline/texture/material is created by a shot or a step.
+    expect(api.resourceCounts()).toEqual(resources);
   });
 });
