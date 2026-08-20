@@ -13,11 +13,13 @@
 // through the controller adapter.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { HumanoidVolumeManifest } from './humanoid-volume';
+import type { HumanoidVolumeManifest, HumanoidCoarseBricks, HumanoidCoarseBrick } from './humanoid-volume';
 import type { HumanoidResourceCounts, PrewarmReport } from './humanoid-view';
 import type { SeverRenderState } from '../humanoid-sever';
 import type { HumanoidBonePose, HumanoidPoseState } from '../humanoid-pose';
+import type { WoundUploadLists } from '../humanoid-damage';
 import type { Chunk } from '../gib-chunks';
+import type { Vec3 } from '../types';
 import {
   HumanoidSpikeController,
   SpikeDomAdapter,
@@ -102,25 +104,28 @@ const BASE_COUNTS: HumanoidResourceCounts = {
 
 interface ViewStub {
   view: SpikeViewLike;
-  calls: Record<'setPose' | 'setSoftness' | 'setTime' | 'setCut' | 'setDetachedChunk', number>;
+  calls: Record<'setPose' | 'setSoftness' | 'setTime' | 'setCut' | 'setWounds' | 'setDetachedChunk', number>;
   lastCut: SeverRenderState | null;
+  lastWounds: WoundUploadLists | null;
   lastChunk: { chunk: Chunk; frozen: readonly HumanoidBonePose[] } | null;
 }
 
 /** Records every call so tests can assert the controller drove the view. */
 function makeViewStub(): ViewStub {
   const calls: ViewStub['calls'] = {
-    setPose: 0, setSoftness: 0, setTime: 0, setCut: 0, setDetachedChunk: 0,
+    setPose: 0, setSoftness: 0, setTime: 0, setCut: 0, setWounds: 0, setDetachedChunk: 0,
   };
   const stub: ViewStub = {
     calls,
     lastCut: null,
+    lastWounds: null,
     lastChunk: null,
     view: {
       setPose: (_state: HumanoidPoseState) => { calls.setPose++; },
       setSoftness: () => { calls.setSoftness++; },
       setTime: () => { calls.setTime++; },
       setCut: (s: SeverRenderState) => { calls.setCut++; stub.lastCut = s; },
+      setWounds: (lists: WoundUploadLists) => { calls.setWounds++; stub.lastWounds = lists; },
       setDetachedChunk: (chunk: Chunk, frozen: readonly HumanoidBonePose[]) => {
         calls.setDetachedChunk++; stub.lastChunk = { chunk, frozen };
       },
@@ -309,6 +314,18 @@ describe('HumanoidSpikeController — automation contract', () => {
     expect(controller.cameraState().distance).toBe(0.9);
   });
 
+  it('setCameraTarget repoints the orbit target and survives NaN', () => {
+    const controller = new HumanoidSpikeController(manifest, stub.view, { backend: 'webgpu' });
+    controller.setCameraTarget(-1, 0.1, 0.3);
+    expect(controller.cameraState().targetX).toBe(-1);
+    expect(controller.cameraState().targetY).toBe(0.1);
+    expect(controller.cameraState().targetZ).toBe(0.3);
+    controller.setCameraTarget(Number.NaN, 5, Number.NaN);
+    expect(controller.cameraState().targetX).toBe(-1); // unchanged
+    expect(controller.cameraState().targetY).toBe(5);
+    expect(controller.cameraState().targetZ).toBe(0.3); // unchanged
+  });
+
   it('the API surface exposes exactly the pinned contract', () => {
     const { controller } = makeReady(manifest);
     const api = createHumanoidSpikeApi(controller);
@@ -327,6 +344,22 @@ describe('HumanoidSpikeController — automation contract', () => {
     api.step(1 / 60);
     api.reset();
     expect(api.status().severPhase).toBe('intact');
+  });
+
+  it('the API surface carries the click-to-shoot entry points', () => {
+    const { controller } = makeReady(manifest);
+    const api = createHumanoidSpikeApi(controller);
+    expect(typeof api.shoot).toBe('function');
+    expect(typeof api.shootWorld).toBe('function');
+    expect(typeof api.worldOnBone).toBe('function');
+    // Without a camera/canvas, shoot refuses rather than throwing.
+    expect(api.shoot(100, 100)).toBe(false);
+    expect(api.shootWorld([0, 0, 0])).toBe(false);
+    // worldOnBone resolves a known bone's occupied centre.
+    const fa = api.worldOnBone('RightForeArm');
+    expect(fa).not.toBeNull();
+    expect(fa![1]).toBeCloseTo(1.01, 6);
+    expect(api.worldOnBone('NotABone')).toBeNull();
   });
 });
 
@@ -419,5 +452,98 @@ describe('SpikeDomAdapter — button disabled state through the controller', () 
     for (const v of [...DEFAULT_RELEASE_VELOCITY.linear, ...DEFAULT_RELEASE_VELOCITY.angular]) {
       expect(Number.isFinite(v)).toBe(true);
     }
+  });
+});
+
+describe('HumanoidSpikeController — click-to-shoot targeting', () => {
+  /** A self-contained coarse pack: one fat sphere per bone, centred at its
+   *  occupied centre, so the controller's trace lands a hit in tests. */
+  function spikeCoarse(): HumanoidCoarseBricks {
+    const mk = (cx: number, cy: number, cz: number): HumanoidCoarseBrick => {
+      const radius = 0.02;
+      const boundsMin: [number, number, number] = [cx - 0.05, cy - 0.05, cz - 0.05];
+      const boundsMax: [number, number, number] = [cx + 0.05, cy + 0.05, cz + 0.05];
+      const dims: [number, number, number] = [8, 8, 8];
+      const data = new Float32Array(512);
+      for (let z = 0; z < 8; z++) {
+        for (let y = 0; y < 8; y++) {
+          for (let x = 0; x < 8; x++) {
+            const lx = boundsMin[0] + (boundsMax[0] - boundsMin[0]) * (x / 7);
+            const ly = boundsMin[1] + (boundsMax[1] - boundsMin[1]) * (y / 7);
+            const lz = boundsMin[2] + (boundsMax[2] - boundsMin[2]) * (z / 7);
+            data[x + y * 8 + z * 64] = Math.hypot(lx - cx, ly - cy, lz - cz) - radius;
+          }
+        }
+      }
+      return { data, dims, boundsMin, boundsMax };
+    };
+    return {
+      bones: [mk(0.01, 0.01, 0.01), mk(0.01, 0.01, 0.01)],
+      combinedByteLength: 0, combinedSha256: '0'.repeat(64), dispose() {},
+    };
+  }
+
+  function readyWithCoarse() {
+    const stub = makeViewStub();
+    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, {
+      backend: 'webgpu', coarse: spikeCoarse(),
+    });
+    controller.markPrewarming();
+    controller.markReady(makePrewarmReport());
+    return { controller, stub };
+  }
+
+  it('a shot before ready is refused and changes nothing', () => {
+    const stub = makeViewStub();
+    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, {
+      backend: 'webgpu', coarse: spikeCoarse(),
+    });
+    const beforeCalls = stub.calls.setWounds;
+    expect(controller.shootRay([0.01, 1.01, 3], [0, 0, -1])).toBe(false);
+    expect(controller.diagnostics().woundCount).toBe(0);
+    expect(stub.calls.setWounds).toBe(beforeCalls);
+  });
+
+  it('a hit adds one wound, uploads it, and never changes resource counts', () => {
+    const { controller, stub } = readyWithCoarse();
+    const before = controller.resourceCounts();
+    // The forearm centre sits at world (0.01, 1.01, 0.01); aim straight at it.
+    const ok = controller.shootRay([0.01, 1.01, 3], [0, 0, -1]);
+    expect(ok).toBe(true);
+    expect(controller.diagnostics().woundCount).toBe(1);
+    expect(controller.diagnostics().woundSlotDrops).toBe(0);
+    // The wound reached the view (straddler around the cut plane: both lists).
+    const union = new Set([...stub.lastWounds!.attached, ...stub.lastWounds!.detached]);
+    expect(union.size).toBe(1);
+    // The first shot after page load must not allocate: the prewarm gate holds.
+    expect(controller.resourceCounts()).toEqual(before);
+  });
+
+  it('a miss leaves the ring empty', () => {
+    const { controller } = readyWithCoarse();
+    // Aim at empty space well off the tiny two-bone body.
+    expect(controller.shootRay([5, 5, 5], [0, 0, -1])).toBe(false);
+    expect(controller.diagnostics().woundCount).toBe(0);
+  });
+
+  it('the ring evicts oldest-first at MAX_BONE_WOUNDS', () => {
+    const { controller } = readyWithCoarse();
+    const origin: Vec3 = [0.01, 1.01, 3];
+    const dir: Vec3 = [0, 0, -1];
+    for (let i = 0; i < 20; i++) {
+      expect(controller.shootRay(origin, dir)).toBe(true);
+    }
+    expect(controller.diagnostics().woundCount).toBe(12); // MAX_BONE_WOUNDS
+  });
+
+  it('wounds survive sever and reset untouched', () => {
+    const { controller, stub } = readyWithCoarse();
+    controller.shootRay([0.01, 1.01, 3], [0, 0, -1]);
+    const count = controller.diagnostics().woundCount;
+    controller.sever();
+    expect(controller.diagnostics().woundCount).toBe(count);
+    controller.reset();
+    expect(controller.diagnostics().woundCount).toBe(count);
+    expect(stub.calls.setWounds).toBeGreaterThan(0);
   });
 });

@@ -121,3 +121,93 @@ know when reviewing:
 None blocking. `TASKS.md` leaves `X1.humanoid-sever-spike` in progress with
 next action "Task 8 (wound keying)". The spike is the sever gate: panels
 11–17, click-to-shoot wounds, and the final owner verdict belong to Task 10.
+
+---
+
+# Task 10 — click-to-shoot targeting, wound contact sheet, final owner gate (2026-08-20)
+
+Ships the wound slice's targeting half: `traceHumanoidRay` sphere-traces the
+coarse CPU brick (never the bounding box), `shoot`/`shootWorld` on the
+automation API, the wound panels 11–17, and the wound-scan/click-to-shoot
+performance numbers.
+
+## Targeting (`src/lab/sdf-zombie/humanoid-target.ts`)
+
+- **Broad phase** = ray-vs-posed-occupied-OBB (the ray transformed into each
+  bone's bind-local so the box stays axis-aligned and exact) → candidate set +
+  entry/exit `t`. **Narrow phase** = sphere-trace each candidate's coarse brick
+  in bind-local from the entry point, bisect the zero crossing (16 halvings →
+  sub-millimetre), take the nearest surface crossing. The owner IS the bone
+  whose field was minimal at the hit — no nearest-endpoint / occupied-box
+  heuristic.
+- The coarse brick is sampled on the baker's endpoint-inclusive lattice plus
+  the outside-box metric distance — the exact convention `sampleDistanceBrick`
+  + `mapHumanoidField` use, so CPU targeting and the GPU field never disagree.
+- **POSED, not bind**: the ray is tested against `HumanoidPoseState.bones[i]`,
+  and after a sever against `chunkRootPose ∘ frozenDistalBones` for the distal
+  subtree. A flexed-elbow ray that hit the bind forearm misses the flexed one.
+- The detached chunk is a target: its hits are flagged `detached` and route to
+  the detached wound list (the severed forearm does not ignore gunfire).
+- **No GPU readback** anywhere — the coarse pack stays CPU-side f32.
+
+Pinned in 9 targeting tests + 5 controller-shoot tests (sphere/cylinder
+analytic fixtures for the 5 mm surface / not-on-OBB-face / refinement
+contracts; the real manifest + `zombie-coarse.f32` for owner selection, the
+30 mm elbow band, the posed-ray rule and the detached-piece rule).
+
+## Verification — live WebGPU run (29/29 gates)
+
+Commands (lsof-verified ports, task-owned processes only):
+
+- Vite: `npx vite --port 5277 --strictPort`.
+- Chrome 151.0.7922.138 headed: `--remote-debugging-port=9223
+  --enable-unsafe-webgpu --user-data-dir=/tmp/chrome-humanoid-sdf`.
+- Verifier: `node scripts/verify-humanoid-sdf-spike.mjs 5277
+  docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike 9223`.
+
+Result: **VERIFY PASS — 29/29 gates** (17 existing sever gates + 12 wound
+gates). The ten sever/reset cycles still report identical resource counts and
+no first-use frame above 16.4 ms.
+
+Wound gates (panels 11–17, crater = meat/deep ramp pixels via the shared
+capMask):
+
+- `wound-craters-visible` — 808 / 394 / 640 / 640 / 2294 / 667 / 3218 px
+  across forearm-0, forearm-100, cut-plane, sever-frame, detached-flight,
+  shoulder-seam, beside-cap.
+- `wound-rides-flexion` — 0°→100° moves 4,812 px with the craters intact.
+- `straddling-wound-bites` — the on-plane wound's bite shows at the sever frame.
+- `detached-keeps-wound` — the flight capture keeps 2,294 px of crater+cap on
+  the tumbling piece.
+- `shoulder-seam-no-slice` — the shoulder crater is one contiguous 667-px
+  component (no cluster-seam slice).
+- `no-slot-drops` — **0** slot drops across every panel; the 24-slot budget
+  held at ≤12 logical wounds.
+
+## Performance (Step 4)
+
+- **Wound-scan cost**: steady-state frame median **16.70 / 16.70 / 16.70 ms**
+  at 0 / 6 / 12 logical wounds — a zero delta (vsync-pinned wall clock; the
+  clustered wound scan is ≤24 slots and is not the frame bottleneck at these
+  counts).
+- **Click-to-shoot trace cost**: **0.072 ms/hit** (a 200-shot burst of
+  aim-and-fire through the same landmark, divided).
+- **Slot-drop counter**: 0 during the whole gate — the budget did not need
+  raising.
+
+## Visual-gate notes (honest)
+
+Machine-checkable failure modes are cleared above; the organic items that need
+the owner's eye are the seven `live-wound-*.png` captures + the extended
+contact sheet: skin tone must not show inside a crater, no wetness white-out
+where a crater meets the cap, no crater sliced at the shoulder cluster seam,
+no crater drifting off its landmark under flexion, and the straddling wound
+must bite both severed halves. Panel 17 (`live-wound-beside-cap.png`) re-frames
+the settled detached piece cap-face-on so the fresh crater and the settled cap
+are side-by-side — the shared interior ramp is compared there.
+
+## Test counts
+
+- `npx vitest run` — **1738/1738** (114 files; +9 targeting + 6 controller
+  shoot + 1 setCameraTarget over the Task 8/9 baseline).
+- `npx tsc --noEmit` — clean. `git diff --check` — clean.

@@ -27,13 +27,18 @@
 
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
-import { loadHumanoidVolume, type HumanoidVolumeManifest } from './humanoid-volume';
+import { loadHumanoidVolume, type HumanoidVolumeManifest, type HumanoidCoarseBricks } from './humanoid-volume';
 import { createHumanoidView, type HumanoidResourceCounts, type PrewarmReport } from './humanoid-view';
 import type { HumanoidPoseState, HumanoidBonePose } from '../humanoid-pose';
 import { makeHumanoidPose, stepHumanoidPose } from '../humanoid-pose';
 import type { HumanoidSeverState, SeverPhase, SeverRenderState, ReleaseVelocity } from '../humanoid-sever';
 import { makeHumanoidSever, severForearm, stepHumanoidSever, resetHumanoidSever, chunkBoneWorldPose } from '../humanoid-sever';
+import type { BoneWound, WoundUploadLists } from '../humanoid-damage';
+import { partitionWoundsByCut, MAX_BONE_WOUNDS, woundSlotsForClusters, boneWoundWorldPos } from '../humanoid-damage';
+import { WOUND_PROFILES, type WoundType } from '../damage';
+import { traceHumanoidRay } from '../humanoid-target';
 import type { Chunk } from '../gib-chunks';
+import type { Vec3 } from '../types';
 import { qRotate } from '../vec';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +67,17 @@ export interface HumanoidSpikeApi {
   setPhysicsPaused(paused: boolean): void;
   step(dtSec: number): void;
   setCamera(yaw: number, pitch: number, distance: number): void;
+  setCameraTarget(x: number, y: number, z: number): void;
+  /** Aim a shot at client pixel coordinates — the page's pointer path. */
+  shoot(x: number, y: number): boolean;
+  /** Aim a shot through a world position (deterministic aiming for the CDP
+   *  verifier's wound panels). */
+  shootWorld(world: readonly [number, number, number]): boolean;
+  /** Clears the wound ring (staging aid for the verifier's wound panels). */
+  clearWounds(): void;
+  /** World position of a bone's occupied centre (plus an optional bind-local
+   *  offset), posed under the chunk root after a sever. */
+  worldOnBone(boneName: string, local?: readonly [number, number, number]): [number, number, number] | null;
   status(): HumanoidSpikeStatus;
   resourceCounts(): HumanoidResourceCounts;
   timing(): { median: number; p95: number; max: number; samples: number } | null;
@@ -80,6 +96,7 @@ export interface SpikeViewLike {
   setSoftness(value01: number): void;
   setTime(timeSec: number): void;
   setCut(state: SeverRenderState): void;
+  setWounds(lists: WoundUploadLists): void;
   setDetachedChunk(chunk: Chunk, frozenDistalBones: readonly HumanoidBonePose[]): void;
   resourceCounts(): HumanoidResourceCounts;
 }
@@ -91,6 +108,11 @@ export interface HumanoidSpikeDiagnostics {
   chunkPos: [number, number, number] | null;
   grounded: boolean;
   jiggleImpulse: number;
+  /** Logical wounds in the ring (0..MAX_BONE_WOUNDS). */
+  woundCount: number;
+  /** Slots dropped by the wound slot budget this frame — a nonzero count means
+   *  the budget is wrong and must be RAISED, not silently tolerated. */
+  woundSlotDrops: number;
   /** World-space unit normal of the DISTAL cut surface (the piece's cap),
    *  tumbling with the chunk — the verifier polls it to catch a cap-facing
    *  flight frame. Computed exactly as the shader does: the cut plane normal
@@ -106,6 +128,9 @@ export interface HumanoidSpikeOptions {
   backend: string;
   initialElbowDeg?: number;
   initialSoftness01?: number;
+  /** The coarse CPU brick pack (click-to-shoot). Omitted in DOM-free unit
+   *  tests; a controller without it simply can never land a hit. */
+  coarse?: HumanoidCoarseBricks;
 }
 
 /** The fixed deterministic release impulse: the severed forearm flies away
@@ -152,6 +177,7 @@ export class HumanoidSpikeController {
 
   private readonly manifest: HumanoidVolumeManifest;
   private readonly view: SpikeViewLike;
+  private readonly coarse: HumanoidCoarseBricks | null;
   private phase: HumanoidSpikeStatus['phase'] = 'loading';
   private error: string | null = null;
   private prewarmReport: PrewarmReport | null = null;
@@ -161,6 +187,11 @@ export class HumanoidSpikeController {
   private _physicsPaused = false;
   private _elbowTargetDeg: number;
   private _softness01: number;
+  /** The one authoritative wound ring (bone-local). Derived per frame, never
+   *  migrated at the sever frame — reset stays a no-op on it. */
+  private wounds: BoneWound[] = [];
+  /** Slots dropped by the wound slot budget in the last derived layout. */
+  private _woundSlotDrops = 0;
 
   private camera = { yaw: 0.35, pitch: 0.12, distance: 2.4, targetX: 0, targetY: 0.95, targetZ: 0 };
 
@@ -175,6 +206,7 @@ export class HumanoidSpikeController {
   ) {
     this.manifest = manifest;
     this.view = view;
+    this.coarse = opts.coarse ?? null;
     this.backend = opts.backend;
     this._elbowTargetDeg = clampDeg(opts.initialElbowDeg ?? 0);
     this._softness01 = clamp01(opts.initialSoftness01 ?? 0);
@@ -255,6 +287,18 @@ export class HumanoidSpikeController {
     this.notify();
   }
 
+  /** Repoints the orbit target (additive — the verifier frames the settled
+   *  detached piece by aiming at it before panel 17). */
+  setCameraTarget(x: number, y: number, z: number): void {
+    if (!Number.isFinite(x)) x = this.camera.targetX;
+    if (!Number.isFinite(y)) y = this.camera.targetY;
+    if (!Number.isFinite(z)) z = this.camera.targetZ;
+    this.camera.targetX = x;
+    this.camera.targetY = y;
+    this.camera.targetZ = z;
+    this.notify();
+  }
+
   /** Exactly-once per reset: the FIRST call severs, later calls refuse until
    *  reset(). Applies the complementary cut + chunk to the view synchronously
    *  so the very next rendered frame shows the severed forearm. */
@@ -293,8 +337,8 @@ export class HumanoidSpikeController {
     this.notify();
   }
 
-  /** Pushes the current pose/sever state into the view. Called from the
-   *  constructor, sever, reset and every step. */
+  /** Pushes the current pose/sever/wound state into the view. Called from the
+   *  constructor, sever, reset, shoot and every step. */
   private applyView(): void {
     this.view.setPose(this.pose);
     this.view.setSoftness(this._softness01);
@@ -303,6 +347,82 @@ export class HumanoidSpikeController {
     if (this.severState.phase === 'detached' && this.severState.chunk) {
       this.view.setDetachedChunk(this.severState.chunk, this.severState.frozenDistalBones);
     }
+    const lists = this.deriveWoundLists();
+    this.view.setWounds(lists);
+    this._woundSlotDrops = this.computeSlotDrops(lists);
+  }
+
+  /** The one authoritative ring, split into the attached/detached upload lists
+   *  around the baked cut plane (straddlers duplicated). Derived per frame. */
+  private deriveWoundLists(): WoundUploadLists {
+    return partitionWoundsByCut(this.manifest, this.wounds, this.pose.distalIndices);
+  }
+
+  /** Slots the wound layout drops under MAX_WOUND_SLOTS — computed exactly as
+   *  the view does (attached poses for the full ring), so the reported counter
+   *  cannot drift from what the shader actually scans. */
+  private computeSlotDrops(lists: WoundUploadLists): number {
+    const fullRing: BoneWound[] = [...new Set([...lists.attached, ...lists.detached])];
+    const fullWorld: Vec3[] = fullRing.map(w => boneWoundWorldPos(this.pose.bones[w.boneIdx]!, w));
+    return woundSlotsForClusters(this.manifest, fullRing, fullWorld).dropped;
+  }
+
+  /** World pose of a bone, composed under the chunk root after a sever. */
+  private boneWorldPose(boneIdx: number): HumanoidBonePose {
+    if (this.severState.phase === 'detached' && this.severState.chunk) {
+      const k = this.pose.distalIndices.indexOf(boneIdx);
+      if (k >= 0) return chunkBoneWorldPose(this.severState.chunk, this.severState.frozenDistalBones[k]!);
+    }
+    return this.pose.bones[boneIdx]!;
+  }
+
+  /** Traces the coarse field and, on a hit, stamps one wound on the owning
+   *  bone brick. Pure apart from appending to the ring — no pipeline, no
+   *  texture, no view allocation, so `resourceCounts()` never changes. */
+  shootRay(origin: Vec3, dir: Vec3, type: WoundType = 'pellet'): boolean {
+    if (this.phase !== 'ready') return false;
+    if (!this.coarse) return false;
+    const hit = traceHumanoidRay(this.manifest, this.coarse, this.pose, this.severState, origin, dir);
+    if (!hit) return false;
+    const wound: BoneWound = {
+      boneIdx: hit.boneIdx,
+      local: hit.local,
+      radius: WOUND_PROFILES[type].radius,
+      type,
+      ageSec: 0,
+    };
+    // Ring append with oldest-first eviction — the same contract as
+    // damage.ts's pushWound, but the ring holds BoneWound, so the append is
+    // inlined rather than re-typed (damage.ts is outside this task's files).
+    const next = [...this.wounds, wound];
+    this.wounds = next.length > MAX_BONE_WOUNDS ? next.slice(next.length - MAX_BONE_WOUNDS) : next;
+    this.applyView();
+    this.notify();
+    return true;
+  }
+
+  /** Clears the wound ring and re-uploads an empty layout. Additive to the
+   *  pinned contract — the verifier needs it to stage each wound panel. */
+  clearWounds(): void {
+    this.wounds = [];
+    this.applyView();
+    this.notify();
+  }
+
+  /** World position of a bone's occupied centre (or a specific bind-local
+   *  offset from the bind origin), posed under the chunk root after a sever. */
+  worldOnBone(boneName: string, local?: readonly [number, number, number]): [number, number, number] | null {
+    const boneIdx = this.manifest.bones.findIndex(b => b.bone === boneName);
+    if (boneIdx < 0) return null;
+    const b = this.manifest.bones[boneIdx]!;
+    const offset: Vec3 = local ?? [
+      (b.occupiedBoundsMin[0] + b.occupiedBoundsMax[0]) / 2,
+      (b.occupiedBoundsMin[1] + b.occupiedBoundsMax[1]) / 2,
+      (b.occupiedBoundsMin[2] + b.occupiedBoundsMax[2]) / 2,
+    ];
+    const pose = this.boneWorldPose(boneIdx);
+    const p = qRotate(pose.quaternion, offset);
+    return [pose.position[0] + p[0], pose.position[1] + p[1], pose.position[2] + p[2]];
   }
 
   // -- reporting -------------------------------------------------------------
@@ -349,6 +469,8 @@ export class HumanoidSpikeController {
       chunkPos: chunk ? [...chunk.pos] as [number, number, number] : null,
       grounded: chunk !== null && chunk.pos[1] <= chunk.radius + 1e-9,
       jiggleImpulse: this.severState.render.jiggleImpulse,
+      woundCount: this.wounds.length,
+      woundSlotDrops: this._woundSlotDrops,
       capNormal,
       camera: { ...this.camera },
     };
@@ -359,8 +481,34 @@ export class HumanoidSpikeController {
   }
 }
 
-/** The pinned automation surface over a controller. */
-export function createHumanoidSpikeApi(controller: HumanoidSpikeController): HumanoidSpikeApi {
+/** The pinned automation surface over a controller. `camera`/`canvas` are the
+ *  DOM/WebGPU glue for `shoot` (client pixel -> ray); pass null in unit tests
+ *  (then `shoot` simply refuses, while `shootWorld` needs only the camera). */
+export function createHumanoidSpikeApi(
+  controller: HumanoidSpikeController,
+  camera: THREE.PerspectiveCamera | null = null,
+  canvas: HTMLCanvasElement | null = null,
+): HumanoidSpikeApi {
+  const rayFromScreen = (x: number, y: number): { origin: Vec3; dir: Vec3 } | null => {
+    if (!camera || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const ndcX = ((x - rect.left) / rect.width) * 2 - 1;
+    const ndcY = -((y - rect.top) / rect.height) * 2 + 1;
+    const v = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera);
+    const d = v.sub(camera.position).normalize();
+    return {
+      origin: [camera.position.x, camera.position.y, camera.position.z],
+      dir: [d.x, d.y, d.z],
+    };
+  };
+  const rayFromWorld = (world: readonly [number, number, number]): { origin: Vec3; dir: Vec3 } | null => {
+    if (!camera) return null;
+    const d = new THREE.Vector3(world[0], world[1], world[2]).sub(camera.position).normalize();
+    return {
+      origin: [camera.position.x, camera.position.y, camera.position.z],
+      dir: [d.x, d.y, d.z],
+    };
+  };
   return {
     backend: controller.backend,
     get ready() { return controller.ready; },
@@ -372,6 +520,17 @@ export function createHumanoidSpikeApi(controller: HumanoidSpikeController): Hum
     setPhysicsPaused: (paused) => controller.setPhysicsPaused(paused),
     step: (dtSec) => controller.step(dtSec),
     setCamera: (yaw, pitch, distance) => controller.setCamera(yaw, pitch, distance),
+    setCameraTarget: (x, y, z) => controller.setCameraTarget(x, y, z),
+    shoot: (x, y) => {
+      const r = rayFromScreen(x, y);
+      return r ? controller.shootRay(r.origin, r.dir) : false;
+    },
+    shootWorld: (world) => {
+      const r = rayFromWorld(world);
+      return r ? controller.shootRay(r.origin, r.dir) : false;
+    },
+    clearWounds: () => controller.clearWounds(),
+    worldOnBone: (name, local) => controller.worldOnBone(name, local),
     status: () => controller.status(),
     resourceCounts: () => controller.resourceCounts(),
     timing: () => controller.timing(),
@@ -392,7 +551,11 @@ export function createFailedSpikeApi(message: string): HumanoidSpikeApi {
     get ready() { return false; },
     get severEnabled() { return false; },
     setElbow() {}, setSoftness() {}, sever() { return false; },
-    reset() {}, setPhysicsPaused() {}, step() {}, setCamera() {},
+    reset() {}, setPhysicsPaused() {}, step() {}, setCamera() {}, setCameraTarget() {},
+    shoot() { return false; },
+    shootWorld() { return false; },
+    clearWounds() {},
+    worldOnBone() { return null; },
     status() { return { ...status }; },
     resourceCounts() {
       return { materials: 0, geometries: 0, textures: 0, attachedClusters: 0, detachedClusters: 0, compileCalls: 0 };
@@ -501,28 +664,40 @@ function addFloorAndReference(scene: THREE.Scene): void {
 }
 
 /** Orbit controls matching the small existing spike — drag to orbit, wheel to
- *  zoom. Never imports the full lab panel. */
+ *  zoom, and a LEFT press that does not travel far enough to count as a drag
+ *  fires a shot (the same pointer->ray path as lab-main.ts). */
 function attachOrbitControls(
   canvas: HTMLCanvasElement,
   controller: HumanoidSpikeController,
+  shoot: (x: number, y: number) => boolean,
 ): void {
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
+  let dragTravel = 0;
+  const DRAG_SLOP = 5;
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('pointerdown', (e) => {
-    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    dragging = true; dragTravel = 0; lastX = e.clientX; lastY = e.clientY;
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointerup', (e) => {
+    const wasDragging = dragging;
     dragging = false; canvas.releasePointerCapture(e.pointerId);
+    if (wasDragging && e.button === 0 && dragTravel < DRAG_SLOP) {
+      shoot(e.clientX, e.clientY);
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    dragTravel += Math.hypot(dx, dy);
+    if (dragTravel < DRAG_SLOP) return;
     const cam = controller.cameraState();
     controller.setCamera(
-      cam.yaw - (e.clientX - lastX) * 0.008,
-      cam.pitch + (e.clientY - lastY) * 0.006,
+      cam.yaw - dx * 0.008,
+      cam.pitch + dy * 0.006,
       cam.distance,
     );
     lastX = e.clientX; lastY = e.clientY;
@@ -573,22 +748,24 @@ export async function bootstrapHumanoidSpike(): Promise<HumanoidSpikeApi> {
     addFloorAndReference(scene);
 
     // 4. Controller + DOM adapter first (so loading status is visible), then prewarm.
-    controller = new HumanoidSpikeController(assets.manifest, view, { backend: handle.backend });
+    controller = new HumanoidSpikeController(assets.manifest, view, {
+      backend: handle.backend, coarse: assets.coarse,
+    });
     const adapter = new SpikeDomAdapter(controller, els);
     controller.markPrewarming();
     const report = await view.prewarm(renderer, scene, camera);
     controller.markReady(report);
 
     // 5. Expose the enabled controls + the automation API.
-    const api = createHumanoidSpikeApi(controller);
+    const api = createHumanoidSpikeApi(controller, camera, canvas);
     window.__humanoidSdfSpike = api;
 
-    // 6. Start the render/update loop + orbit controls.
+    // 6. Start the render/update loop + orbit controls + click-to-shoot.
     handle.setRenderCallback((dtSec) => {
       controller?.step(dtSec);
       if (controller) applyCamera(camera, controller.cameraState());
     });
-    attachOrbitControls(canvas, controller);
+    attachOrbitControls(canvas, controller, (x, y) => api.shoot(x, y));
 
     // Prevent the adapter from leaking the frame subscription on navigation.
     window.addEventListener('beforeunload', () => adapter.dispose());

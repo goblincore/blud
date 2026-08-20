@@ -563,6 +563,119 @@ console.log('timing:', JSON.stringify(timing));
 console.log('final status:', JSON.stringify({ phase: finalStatus.phase, severPhase: finalStatus.severPhase }));
 
 // ---------------------------------------------------------------------------
+// Wound panels 11-17 (click-to-shoot) + wound-scan / trace perf
+// ---------------------------------------------------------------------------
+
+const shootAt = (expr) => evaluate(`window.__humanoidSdfSpike.shootWorld(${expr})`);
+
+// Panel 11: three pellets across the mid-forearm, elbow 0.
+await evaluate('window.__humanoidSdfSpike.setElbow(0), true');
+await evaluate('window.__humanoidSdfSpike.setSoftness(0), true');
+await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+await raf(3);
+for (const ox of [-0.03, 0, 0.03]) {
+  await shootAt(`window.__humanoidSdfSpike.worldOnBone('RightForeArm', [${ox}, 0.11, 0])`);
+}
+const w11 = await evaluate('window.__humanoidSdfSpike.diagnostics().woundCount');
+captures['live-wound-forearm-0'] = await shot('live-wound-forearm-0');
+console.log(`captured live-wound-forearm-0 (${w11} wounds)`);
+
+// Panel 12: the same three at 100° flexion — craters ride the flesh.
+await evaluate('window.__humanoidSdfSpike.setElbow(100), true');
+await raf(2);
+captures['live-wound-forearm-100'] = await shot('live-wound-forearm-100');
+console.log('captured live-wound-forearm-100');
+
+// Panel 13: a pellet placed deliberately ON the cut plane, pre-sever.
+await evaluate('window.__humanoidSdfSpike.setElbow(0), true');
+await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+await raf(3);
+await shootAt("window.__humanoidSdfSpike.worldOnBone('RightForeArm')"); // occupied centre ≈ on the plane
+captures['live-wound-cut-plane'] = await shot('live-wound-cut-plane');
+console.log('captured live-wound-cut-plane');
+
+// Panel 14: the sever frame for that straddling wound (both halves bite).
+await evaluate('window.__humanoidSdfSpike.setPhysicsPaused(true), true');
+await evaluate('window.__humanoidSdfSpike.sever(), true');
+await raf(3);
+captures['live-wound-sever-frame'] = await shot('live-wound-sever-frame');
+console.log('captured live-wound-sever-frame');
+
+// Panel 15: the detached piece in flight, bullet holes intact.
+await evaluate('window.__humanoidSdfSpike.setPhysicsPaused(false), true');
+await raf(21); // ~0.35 s into flight
+captures['live-wound-detached-flight'] = await shot('live-wound-detached-flight');
+console.log('captured live-wound-detached-flight');
+
+// Panel 16: a crater spanning the shoulder cluster boundary (no seam slice).
+await evaluate('window.__humanoidSdfSpike.reset(), true');
+await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+await raf(3);
+await shootAt("window.__humanoidSdfSpike.worldOnBone('RightShoulder')");
+captures['live-wound-shoulder-seam'] = await shot('live-wound-shoulder-seam');
+console.log('captured live-wound-shoulder-seam');
+
+// Panel 17: a fresh crater beside the settled cut cap. Frame the settled piece
+// cap-face-on (its cap normal points away from the body camera), then aim a
+// fresh pellet just distal of the cap.
+await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+await evaluate('window.__humanoidSdfSpike.setElbow(0), true');
+await evaluate('window.__humanoidSdfSpike.sever(), true');
+const settled17 = await waitFor('window.__humanoidSdfSpike.diagnostics().grounded', 8000);
+await raf(150);
+await evaluate(`(() => {
+  const d = window.__humanoidSdfSpike.diagnostics();
+  const p = d.chunkPos, n = d.capNormal;
+  window.__humanoidSdfSpike.setCameraTarget(p[0], p[1], p[2]);
+  const yaw = Math.atan2(n[0], n[2]);
+  const pitch = Math.asin(Math.max(-1, Math.min(1, n[1])));
+  window.__humanoidSdfSpike.setCamera(yaw, pitch, 0.55);
+})()`);
+await raf(3);
+const hit17 = await shootAt("window.__humanoidSdfSpike.worldOnBone('RightForeArm', [0, 0.18, 0])");
+await raf(3);
+captures['live-wound-beside-cap'] = await shot('live-wound-beside-cap');
+console.log(`captured live-wound-beside-cap (settled=${settled17} hit=${hit17})`);
+
+// Slot-drop counter across the wound panels (0 == the budget held).
+const slotDrops = await evaluate('window.__humanoidSdfSpike.diagnostics().woundSlotDrops');
+
+// Wound-scan cost: steady-state frame timing at 0, 6 and 12 logical wounds.
+const woundTiming = {};
+async function timingAt(wounds) {
+  await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+  if (wounds > 0) {
+    await evaluate(`(() => {
+      const xs = [-0.04, -0.024, -0.008, 0.008, 0.024, 0.04];
+      for (let i = 0; i < ${wounds}; i++) {
+        window.__humanoidSdfSpike.shootWorld(window.__humanoidSdfSpike.worldOnBone('RightForeArm', [xs[i % 6], 0.11 + 0.025 * Math.floor(i / 6), 0]));
+      }
+    })()`);
+  }
+  await raf(150); // fill the 120-frame rolling window with the new state
+  return evaluate('window.__humanoidSdfSpike.timing()');
+}
+await evaluate('window.__humanoidSdfSpike.reset(), true');
+await evaluate('window.__humanoidSdfSpike.setElbow(0), true');
+woundTiming['0'] = await timingAt(0);
+woundTiming['6'] = await timingAt(6);
+woundTiming['12'] = await timingAt(12);
+console.log('wound-scan timing:', JSON.stringify(woundTiming));
+
+// Click-to-shoot trace cost per hit (a burst of aim-and-fire through the same
+// landmark, then cleared).
+const traceCost = await evaluate(`(async () => {
+  window.__humanoidSdfSpike.clearWounds();
+  const p = window.__humanoidSdfSpike.worldOnBone('RightForeArm');
+  const t0 = performance.now();
+  for (let i = 0; i < 200; i++) window.__humanoidSdfSpike.shootWorld(p);
+  const t1 = performance.now();
+  window.__humanoidSdfSpike.clearWounds();
+  return (t1 - t0) / 200;
+})()`, true);
+console.log('click-to-shoot ms/hit:', traceCost);
+
+// ---------------------------------------------------------------------------
 // Offline grading of the ten captures
 // ---------------------------------------------------------------------------
 
@@ -811,12 +924,40 @@ const badConsole = consoleEvents.filter(e =>
 gate('no-filtered-gpu-shader-errors', badConsole.length === 0, `filtered=${badConsole.length}`);
 for (const e of badConsole.slice(0, 8)) console.log('  |', e.slice(0, 300));
 
+// -- wound gates (click-to-shoot panels 11-17) ---------------------------------
+const woundPanelNames = [
+  'live-wound-forearm-0', 'live-wound-forearm-100', 'live-wound-cut-plane',
+  'live-wound-sever-frame', 'live-wound-detached-flight',
+  'live-wound-shoulder-seam', 'live-wound-beside-cap',
+];
+for (const n of woundPanelNames) {
+  const g = grade[n];
+  gate(`wound-craters-visible:${n}`, !!(g && g.capPx >= 25),
+    `craterPx=${g ? g.capPx : 'missing'}`);
+}
+gate('wound-rides-flexion',
+  pixelDiff(captures['live-wound-forearm-0'], captures['live-wound-forearm-100']) > 500,
+  `diffPx=${pixelDiff(captures['live-wound-forearm-0'], captures['live-wound-forearm-100'])}`);
+gate('straddling-wound-bites', grade['live-wound-sever-frame'].capPx >= 25,
+  `craterPx=${grade['live-wound-sever-frame'].capPx}`);
+gate('detached-keeps-wound', grade['live-wound-detached-flight'].capPx >= 25,
+  `craterPx=${grade['live-wound-detached-flight'].capPx}`);
+{
+  const s = captures['live-wound-shoulder-seam'];
+  const cap = capMask(s.rgba, s.w, s.h);
+  const cc = connectedComponents(cap, s.w, s.h);
+  const biggest = cc.comps[0]?.size ?? 0;
+  gate('shoulder-seam-no-slice', biggest >= 25 && (cc.comps[1]?.size ?? 0) < biggest * 0.6,
+    `comps=${cc.comps.map(c => c.size).slice(0, 4).join(',')}`);
+}
+gate('no-slot-drops', slotDrops === 0, `drops=${slotDrops}`);
+
 // ---------------------------------------------------------------------------
-// Contact sheet — annotated masks/contours, 5x2 panels + labels
+// Contact sheet — annotated masks/contours (dynamic grid over all 17 panels)
 // ---------------------------------------------------------------------------
 
 const PANEL_W = 256, PANEL_H = 160, LABEL_H = 14, GAP = 8, MARGIN = 10;
-const cols = 5, rows = 2;
+const cols = 5, rows = Math.ceil(Object.keys(captures).length / cols);
 const sheetW = MARGIN * 2 + cols * PANEL_W + (cols - 1) * GAP;
 const sheetH = MARGIN * 2 + rows * (LABEL_H + PANEL_H) + (rows - 1) * GAP;
 const sheet = Buffer.alloc(sheetW * sheetH * 4);
@@ -917,6 +1058,10 @@ for (const [name, g] of Object.entries(grade)) {
 console.log(`maxLandmarkDelta=${grade.maxLandmarkDelta} bindVsElbow0=${grade.bindVsElbow0Diff} ` +
   `elbow0to100=${grade.elbow0to100DiffPx}px elbowSpan=${grade.elbowContinuity.span} elbowGap=${grade.elbowContinuity.maxGap} ` +
   `severVsPre=${grade.severVsPreDiffPx}px settledDist=${grade.settledSecondCenterDist}px`);
+console.log(`wound-scan timing(0/6/12): ` +
+  `${JSON.stringify(woundTiming['0']?.median ?? null)}/${JSON.stringify(woundTiming['6']?.median ?? null)}/` +
+  `${JSON.stringify(woundTiming['12']?.median ?? null)} ms median · ` +
+  `click-to-shoot ${(+traceCost).toFixed(3)} ms/hit · slotDrops=${slotDrops}`);
 
 const passed = gates.every(g => g.ok);
 console.log(`\n${passed ? 'VERIFY PASS' : 'VERIFY FAIL'} — ${gates.filter(g => g.ok).length}/${gates.length} gates`);

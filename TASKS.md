@@ -264,9 +264,17 @@ Key reference docs (open these before touching their area):
   - **Sever gate shipped (Task 7, 2026-08-19):** `/humanoid-sdf-spike.html` +
     `window.__humanoidSdfSpike` automation API + deterministic CDP verifier;
     17/17 gates, ten captures + contact sheet, first sever 18.4 ms, ten
-    sever/reset cycles with identical resource counts. **Next: Task 8 (wound
-    keying)** — this is the dispatch-chain owner review pause; Tasks 8–10
-    release after the gate.
+    sever/reset cycles with identical resource counts.
+  - **Wound slice shipped (Tasks 8–10, 2026-08-20):** bone-brick wound keying
+    (`humanoid-damage.ts`), the shared wound/cap interior ramp + cluster-range
+    upload (`humanoid.wgsl.ts`/`humanoid-view.ts`), and click-to-shoot
+    targeting (`humanoid-target.ts` sphere-traces the coarse CPU brick; `shoot`/
+    `shootWorld` on the automation API). The extended CDP verifier now runs
+    **29/29 gates** (17 sever + 12 wound panels 11–17), wound-scan delta 0 ms
+    at 0/6/12 wounds, click-to-shoot 0.072 ms/hit, 0 slot drops. **Next: owner
+    visual review of panels 11–17** (`live-wound-*.png` + the extended contact
+    sheet) — a green headless report is NOT owner visual approval, so this row
+    stays in progress until the visual gate passes.
 - `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
   later one-piece synthetic-forearm reference were both owner-rejected. The
   next run uses Blender-native SDF union for one hand+wrist+native-forearm field,
