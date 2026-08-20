@@ -269,8 +269,18 @@ Key reference docs (open these before touching their area):
   · [seam diagnosis](docs/dev-notes/2026-08-20-humanoid-dynamics/seam-diagnosis.md)
   · [closedness](docs/dev-notes/2026-08-19-humanoid-source-closedness/notes.md)
   · [albedo](docs/dev-notes/2026-08-19-humanoid-albedo/notes.md)
-  · branches `dispatch/humanoid-sdf-spike-r2-task-{2..10}` +
-  `dispatch/humanoid-dynamics-task-{1..4}` (tip `10cc5f4`), unmerged.
+  - **Measured, from the chain's own gates:** spike 29/29 (17 sever + 12 wound),
+    first sever 18.4 ms, wound-scan delta 0 ms at 0/6/12 wounds, click-to-shoot
+    0.072 ms/hit, 0 slot drops. Dynamics 32/32 (elbow-folds 0.156,
+    hit-moves-body 1506 px, no-seam-line 80.5 <= 198.8).
+  - **KNOWN GAP recorded by Task 4 and NOT closed by the owner gate:** the
+    spike controller never advances `wounds[].ageSec`, so the wound-driven
+    flesh wobble never decays — it reads as a static bulge instead of an
+    impact that settles. The owner's "cratering is nonexistent" verdict was
+    therefore rendered against a partially-broken wobble. One-line fix
+    (`ageSec += dt` in the controller); worth doing before anyone re-judges.
+  · merged to main 2026-08-20; branches `dispatch/humanoid-sdf-spike-r2-task-{2..10}` +
+  `dispatch/humanoid-dynamics-task-{1..4}` (tip `10cc5f4`).
 - `X1.humanoid-shader-gen-cost` [ ] **The 33 s first load is TSL codegen, not
   asset loading** — profiled 2026-08-20 on real Metal-3: 32.5 s to `ready`, of
   which **ScriptDuration 25.1 s**, and the entire profile top is `build` /

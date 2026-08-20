@@ -582,16 +582,33 @@ export function createDataTexture() {
  * meta texel = (type, age, rimSplayScale, rimOffsetScale); the scale slots
  * default to 1 so callers that pass nothing (chunk torn ends) keep the global
  * woundCfg rim settings unchanged.
- * Exported for the hands view, which owns its own (splash-wound) ring.
+ * Exported for the hands view, which owns its own (splash-wound) ring, and for
+ * the humanoid view, whose data texture uses a different stride and wound rows
+ * (Task 9 — the texel layout is identical, only the clamp/rows/stride differ).
  */
+export interface WriteWoundsLayout {
+  /** Clamp on the number of slots written (was MAX_WOUNDS). */
+  maxWounds?: number;
+  /** Row index for the wound world-position texels (was ROW_WOUND). */
+  woundRow?: number;
+  /** Row index for the wound meta texels (was ROW_WOUND_META). */
+  metaRow?: number;
+  /** Data-texture column stride (was MAX_PRIMS). */
+  stride?: number;
+}
+
 export function writeWounds(
   texels: Float32Array,
   worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
   splayScales?: number[], offsetScales?: number[],
+  layout: WriteWoundsLayout = {},
 ): number {
-  const n = Math.min(worldPositions.length, MAX_WOUNDS);
-  const wBase = ROW_WOUND * MAX_PRIMS * 4;
-  const mBase = ROW_WOUND_META * MAX_PRIMS * 4;
+  const stride = layout.stride ?? MAX_PRIMS;
+  const woundRow = layout.woundRow ?? ROW_WOUND;
+  const metaRow = layout.metaRow ?? ROW_WOUND_META;
+  const n = Math.min(worldPositions.length, layout.maxWounds ?? MAX_WOUNDS);
+  const wBase = woundRow * stride * 4;
+  const mBase = metaRow * stride * 4;
   for (let i = 0; i < n; i++) {
     const p = worldPositions[i]!;
     texels[wBase + i * 4] = p[0];

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>humanoid sdf sever spike</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #1a1116; color: #d8ccd0;
+    font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  }
+  #panel {
+    position: fixed; top: 10px; left: 10px; z-index: 10; width: 252px;
+    padding: 10px 12px; box-sizing: border-box;
+    background: rgba(24, 14, 18, 0.92); border: 1px solid #4a3a40; border-radius: 6px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  }
+  #status { color: #9fd8c8; min-height: 18px; }
+  #status.failed { color: #ff6464; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row label { flex: 0 0 auto; color: #b8aab0; }
+  .row .val { flex: 0 0 44px; text-align: right; color: #e8dce0; }
+  input[type="range"] { flex: 1; accent-color: #a03040; }
+  .btns { display: flex; gap: 8px; }
+  button {
+    flex: 1; background: #3a2a30; color: #e8dce0;
+    border: 1px solid #5a4a50; border-radius: 4px;
+    padding: 6px 8px; cursor: pointer; font: inherit;
+  }
+  button:disabled, input:disabled { opacity: 0.4; cursor: default; }
+  #severBtn { background: #7a1a20; border-color: #a03040; }
+  #hint { color: #8a7a80; font-size: 11px; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div id="status">phase: loading</div>
+  <div class="row">
+    <label for="elbow">elbow</label>
+    <input id="elbow" type="range" min="0" max="100" step="1" value="0" disabled/>
+    <span class="val" id="elbowValue">0°</span>
+  </div>
+  <div class="row">
+    <label for="softness">softness</label>
+    <input id="softness" type="range" min="0" max="1" step="0.01" value="0" disabled/>
+    <span class="val" id="softnessValue">0.00</span>
+  </div>
+  <div class="btns">
+    <button id="severBtn" disabled>Sever Forearm</button>
+    <button id="resetBtn" disabled>Reset</button>
+  </div>
+  <div class="row">
+    <input id="pauseChk" type="checkbox" disabled/>
+    <label for="pauseChk">pause physics</label>
+  </div>
+  <div id="hint">drag to orbit · wheel to zoom</div>
+</div>
+<div id="app"></div>
+<script type="module" src="/src/lab/sdf-zombie/webgpu/humanoid-spike-main.ts"></script>
+</body>
+</html>

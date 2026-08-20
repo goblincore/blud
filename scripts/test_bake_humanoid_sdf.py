@@ -16,7 +16,10 @@ Run (PEP 723 deps mirror the baker plus Pillow for image assertions):
 """
 
 import dataclasses
+import hashlib
 import importlib.util
+import json
+import struct
 import sys
 import unittest
 from pathlib import Path
@@ -393,6 +396,310 @@ class EdgeAdjacencyTest(unittest.TestCase):
                     stack.append(nxt)
         self.assertEqual(len(seen), len(faces), "adjacency graph is disconnected")
 
+
+
+# ===========================================================================
+# Task 2: support-mesh closedness (carried-forward Task 1 declared test)
+# ===========================================================================
+
+class SupportMeshTest(unittest.TestCase):
+    def _edge_incidence(self, faces):
+        edges: dict[tuple[int, int], int] = {}
+        for a, b, c in faces:
+            for u, v in ((a, b), (b, c), (c, a)):
+                key = (u, v) if u < v else (v, u)
+                edges[key] = edges.get(key, 0) + 1
+        return edges
+
+    def test_support_mesh_is_closed_outward_and_matches_halfspaces(self) -> None:
+        parent, child = BAKE.joint_halfspaces(
+            center=np.zeros(3), axis=np.array([1.0, 0.0, 0.0]), width_m=0.030)
+        planes = np.vstack([parent, child])
+        bounds = ((-0.1, -0.1, -0.1), (0.1, 0.1, 0.1))
+        verts, faces = BAKE.support_mesh(planes, bounds)
+        # every undirected edge bounds exactly two triangles -> closed manifold
+        incidence = self._edge_incidence(faces)
+        self.assertTrue(all(n == 2 for n in incidence.values()),
+                        f"boundary/non-manifold edges: "
+                        f"{[k for k, n in incidence.items() if n != 2]}")
+        # outward-wound: signed volume positive
+        a = verts[faces[:, 0]]
+        b = verts[faces[:, 1]]
+        c = verts[faces[:, 2]]
+        vol = float(np.einsum("ij,ij->i", a, np.cross(b, c)).sum() / 6.0)
+        self.assertGreater(vol, 0.0)
+        # every vertex satisfies the declared planes (inside <= 0) within 1e-9
+        for p in verts:
+            self.assertLessEqual(
+                float(np.max(p @ planes[:, :3].T + planes[:, 3])), 1e-9)
+        # points at +-50 mm on the rejected side lie outside the slab
+        for x in (0.050, -0.050):
+            self.assertFalse(
+                BAKE.inside_support(np.array([x, 0.0, 0.0]), planes))
+        # the closedness is also visible to the qualified welded_mesh_info gate
+        info = BAKE._sdf_module().welded_mesh_info(verts, faces)
+        self.assertEqual(info["boundaryEdges"], 0)
+        self.assertTrue(info["closed"])
+        self.assertGreater(info["signedVolumeM3"], 0.0)
+
+    def test_support_mesh_no_planes_is_a_closed_box(self) -> None:
+        bounds = ((-0.05, -0.06, -0.07), (0.05, 0.06, 0.07))
+        verts, faces = BAKE.support_mesh(np.zeros((0, 4)), bounds)
+        self.assertEqual(verts.shape, (8, 3))
+        self.assertEqual(faces.shape, (12, 3))
+        incidence = self._edge_incidence(faces)
+        self.assertTrue(all(n == 2 for n in incidence.values()))
+
+
+# ===========================================================================
+# Task 2: deterministic 3D atlas packing
+# ===========================================================================
+
+class AtlasPackingTest(unittest.TestCase):
+    def test_pack_is_deterministic_non_overlapping_and_padded(self) -> None:
+        specs = [
+            BAKE.BrickRequest("Torso", (41, 80, 30)),
+            BAKE.BrickRequest("RightHand", (32, 25, 18)),
+            BAKE.BrickRequest("Head", (35, 42, 33)),
+        ]
+        a = BAKE.pack_bricks(specs, max_dim=256, padding=2)
+        b = BAKE.pack_bricks(list(reversed(specs)), max_dim=256, padding=2)
+        self.assertEqual(a.to_json(), b.to_json())
+        self.assertFalse(BAKE.layout_has_overlap(a))
+        self.assertTrue(all(min(x.offset) >= 2 for x in a.bricks))
+        self.assertTrue(all(max(x.offset) < max(a.dimensions) for x in a.bricks))
+        # every brick fits inside the container
+        for x in a.bricks:
+            for d, o, m in zip(x.dims, x.offset, a.dimensions):
+                self.assertLessEqual(o + d, m)
+
+    def test_pack_places_largest_brick_first(self) -> None:
+        specs = [
+            BAKE.BrickRequest("small", (5, 5, 5)),
+            BAKE.BrickRequest("big", (40, 40, 40)),
+        ]
+        layout = BAKE.pack_bricks(specs, max_dim=256, padding=1)
+        self.assertEqual(layout.bricks[0].bone, "big")
+
+    def test_layout_has_overlap_detects_touching_boxes(self) -> None:
+        brick = lambda bone, off: BAKE.AtlasBrick(  # noqa: E731
+            bone, (4, 4, 4), off, (0.0, 0.0, 0.0), (0.1, 0.1, 0.1),
+            (0.01, 0.01, 0.01))
+        ok = BAKE.AtlasLayout((32, 32, 32), 1, (
+            brick("a", (0, 0, 0)), brick("b", (5, 0, 0))))
+        self.assertFalse(BAKE.layout_has_overlap(ok))
+        bad = BAKE.AtlasLayout((32, 32, 32), 1, (
+            brick("a", (0, 0, 0)), brick("b", (2, 0, 0))))
+        self.assertTrue(BAKE.layout_has_overlap(bad))
+
+
+# ===========================================================================
+# Task 2: color projection + resampling
+# ===========================================================================
+
+class ColorProjectionTest(unittest.TestCase):
+    def test_bilinear_rgba_sampling_pins_uv_orientation(self) -> None:
+        tex = np.array([
+            [[255, 0, 0, 255], [0, 255, 0, 255]],
+            [[0, 0, 255, 255], [255, 255, 255, 255]],
+        ], dtype=np.uint8)
+        rgba = BAKE.sample_rgba_bilinear(
+            tex, np.array([[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]]))
+        np.testing.assert_array_equal(rgba[0], np.array([255, 0, 0, 255], dtype=np.uint8))
+        np.testing.assert_array_equal(rgba[1], np.array([255, 255, 255, 255], dtype=np.uint8))
+        np.testing.assert_allclose(rgba[2], np.array([128, 128, 128, 255]), atol=1)
+
+    def test_barycentric_uv_uses_all_three_face_corners(self) -> None:
+        uv = BAKE.barycentric_uv(
+            np.array([[0.2, 0.3, 0.5]]),
+            np.array([[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]]),
+        )
+        np.testing.assert_allclose(uv[0], np.array([0.3, 0.5]), atol=1e-12)
+
+    def test_resample_coarse_brick_preserves_aspect_and_caps_at_16(self) -> None:
+        # 33 x 17 x 9 dense -> max axis 33 scales to 16, aspect preserved
+        dense = np.zeros((9, 17, 33), dtype=np.float32)
+        coarse, dims = BAKE.resample_coarse_brick(dense, (33, 17, 9), max_dim=16)
+        self.assertLessEqual(max(dims), 16)
+        self.assertEqual(dims, (16, 8, 4))          # uniform scale 16/33
+        self.assertEqual(coarse.dtype, np.float32)
+        self.assertEqual(coarse.shape, (dims[2], dims[1], dims[0]))
+
+    def test_resample_coarse_brick_never_upsamples_a_small_brick(self) -> None:
+        dense = np.zeros((3, 5, 10), dtype=np.float32)
+        coarse, dims = BAKE.resample_coarse_brick(dense, (10, 5, 3), max_dim=16)
+        self.assertEqual(dims, (10, 5, 3))          # already under cap: no up-sample
+
+    def test_resample_coarse_brick_is_trilinear_average_of_uniform_field(self) -> None:
+        dense = np.full((4, 4, 4), 0.5, dtype=np.float32)
+        coarse, dims = BAKE.resample_coarse_brick(dense, (4, 4, 4), max_dim=16)
+        np.testing.assert_allclose(coarse, 0.5, atol=1e-6)
+
+    def test_sample_bone_brick_trilinear(self) -> None:
+        # field[z,y,x] with value = x (so trilinear of x is exact)
+        nx, ny, nz = 4, 3, 2
+        xs = np.arange(nx, dtype=np.float32)
+        field = np.broadcast_to(xs, (nz, ny, nx)).copy()
+        bounds_min = (0.0, 0.0, 0.0)
+        voxel = (0.1, 0.2, 0.3)
+        p = (0.15, 0.0, 0.0)
+        val = BAKE.sample_bone_brick(field, bounds_min, voxel, p)
+        self.assertAlmostEqual(float(val), 1.5, places=6)
+
+
+# ===========================================================================
+# Task 2: R16F / RGBA8 / transport contract
+# ===========================================================================
+
+class EncodingContractTest(unittest.TestCase):
+    def test_r16f_little_endian_x_fastest(self) -> None:
+        field = np.zeros((2, 2, 2), dtype=np.float32)
+        field[0, 0, 0] = 1.0
+        field[0, 0, 1] = 2.0
+        blob = BAKE.encode_r16f_field(field)
+        self.assertEqual(len(blob), 2 * 8)
+        arr = np.frombuffer(blob, dtype="<f2")
+        self.assertEqual(float(arr[0]), 1.0)   # x fastest, index 0
+        self.assertEqual(float(arr[1]), 2.0)
+        self.assertEqual(float(arr[2]), 0.0)   # next y
+
+    def test_rgba8_x_fastest_y_z_order(self) -> None:
+        color = np.zeros((2, 2, 2, 4), dtype=np.uint8)
+        color[0, 0, 1] = (1, 2, 3, 4)
+        blob = BAKE.encode_rgba8_field(color)
+        self.assertEqual(len(blob), 2 * 2 * 2 * 4)
+        self.assertEqual(list(blob[4:8]), [1, 2, 3, 4])
+
+    def test_transport_split_and_reassemble_round_trips(self) -> None:
+        data = b"".join(hashlib.sha256(str(i).encode()).digest()
+                         for i in range(32768))          # 1 MiB non-periodic
+        parts = BAKE.split_transport_parts(data, max_bytes=100_000)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(len(p) <= 100_000 for p in parts))
+        self.assertEqual(b"".join(parts), data)
+        contract = BAKE.build_transport_contract(
+            parts, [f"p{i:03d}.bin" for i in range(len(parts))])
+        self.assertEqual(contract["combinedByteLength"], len(data))
+        self.assertEqual(contract["combinedSha256"],
+                         hashlib.sha256(data).hexdigest())
+        for p, e in zip(parts, contract["parts"]):
+            self.assertEqual(len(p), e["byteLength"])
+            self.assertEqual(hashlib.sha256(p).hexdigest(), e["sha256"])
+        BAKE.verify_transport_contract(parts, contract)     # must not raise
+
+    def test_transport_rejection_on_truncation_or_reorder(self) -> None:
+        data = bytes(range(256)) * 4096
+        parts = BAKE.split_transport_parts(data, max_bytes=100_000)
+        contract = BAKE.build_transport_contract(
+            parts, [f"p{i:03d}.bin" for i in range(len(parts))])
+        # truncation by one byte
+        bad = list(parts)
+        bad[0] = bad[0][:-1]
+        with self.assertRaises(ValueError):
+            BAKE.verify_transport_contract(bad, contract)
+        # reorder
+        swapped = [parts[1], parts[0]] + parts[2:]
+        with self.assertRaises(ValueError):
+            BAKE.verify_transport_contract(swapped, contract)
+
+
+# ===========================================================================
+# Task 2: manifest build + validation (pinned constants + mutation rejection)
+# ===========================================================================
+
+class ManifestTest(unittest.TestCase):
+    def test_real_checked_in_assets_validate(self) -> None:
+        result = BAKE.validate_checked_in()
+        source = BAKE.inspect_source(BAKE.SOURCE_GLB)
+        self.assertEqual(result["kind"], "humanoid-bone-sdf")
+        self.assertEqual(result["boneCount"], 24)
+        self.assertLessEqual(result["maxLimbPitchM"], 0.006 + 1e-9)
+        self.assertLessEqual(result["maxDetailPitchM"], 0.003 + 1e-9)
+        self.assertEqual(result["unownedFaces"], 0)
+        self.assertEqual(result["pageCount"], 1)
+        self.assertEqual(result["sourceTextureSha256"], source.texture_sha256)
+
+
+class ManifestMutationTest(unittest.TestCase):
+    def _real(self) -> dict:
+        path = BAKE.OUT_DIR / "zombie-humanoid.json"
+        if not path.exists():
+            self.skipTest("checked-in manifest not baked yet")
+        return json.loads(path.read_text())
+
+    def _mutate(self, **changes) -> dict:
+        m = self._real()
+        for dotted, value in changes.items():
+            node = m
+            parts = dotted.split(".")
+            for key in parts[:-1]:
+                node = node[key]
+            node[parts[-1]] = value
+        return m
+
+    def test_rejects_changed_blender_version(self) -> None:
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(self._mutate(**{"bake.blenderVersion": "9.9.9"}))
+
+    def test_rejects_changed_route(self) -> None:
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(self._mutate(**{"bake.route": "grid-to-mesh-libigl"}))
+
+    def test_rejects_changed_node_contract_hash(self) -> None:
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(
+                self._mutate(**{"bake.nodeContractSha256": "0" * 64}))
+
+    def test_rejects_changed_threshold(self) -> None:
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(self._mutate(**{"bake.threshold": 0.5}))
+
+    def test_rejects_changed_adaptivity(self) -> None:
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(self._mutate(**{"bake.adaptivity": 1.0}))
+
+    def test_rejects_changed_band_width(self) -> None:
+        # The humanoid band is 16 voxels, NOT blender_sdf_grid's default of 6.
+        # It is a real bake parameter (it decides how far the field is a true
+        # distance before clamping, which the coarse targeting brick depends
+        # on), so a silent change to it must fail validation like any other.
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(self._mutate(**{"bake.bandWidth": 6}))
+
+    def test_band_width_is_the_humanoid_constant_not_the_grid_default(self) -> None:
+        SDF = BAKE._sdf_module()
+        self.assertEqual(BAKE.HUMANOID_BAND_WIDTH, 16)
+        self.assertNotEqual(BAKE.HUMANOID_BAND_WIDTH, SDF.DEFAULT_BAND_WIDTH)
+        self.assertEqual(self._real()["bake"]["bandWidth"],
+                         BAKE.HUMANOID_BAND_WIDTH)
+
+    def test_rejects_changed_support_mesh_hash(self) -> None:
+        m = self._real()
+        if not m["bones"]:
+            self.skipTest("no bones")
+        m["bones"][0]["supportMeshSha256"] = "f" * 64
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(m)
+
+    def test_rejects_changed_sdf_grid_transform(self) -> None:
+        m = self._real()
+        if not m["bones"]:
+            self.skipTest("no bones")
+        m["bones"][0]["boundsMin"][0] += 0.01
+        with self.assertRaises(ValueError):
+            BAKE.validate_manifest(m)
+
+    def test_rejects_reordered_or_truncated_parts(self) -> None:
+        # validation of the checked-in contract re-reads every part from disk;
+        # prove a truncated atlas part is a blocking error via the pure contract
+        data = bytes(range(256)) * 4096
+        parts = BAKE.split_transport_parts(data, max_bytes=100_000)
+        contract = BAKE.build_transport_contract(
+            parts, [f"p{i:03d}.bin" for i in range(len(parts))])
+        bad = list(parts)
+        bad[-1] = bad[-1][:-1]
+        with self.assertRaises(ValueError):
+            BAKE.verify_transport_contract(bad, contract)
 
 
 if __name__ == "__main__":
