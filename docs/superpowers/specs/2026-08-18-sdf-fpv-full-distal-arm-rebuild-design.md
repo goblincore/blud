@@ -79,6 +79,17 @@ geometry and paired-hand choreography together.
   low hold, short reach to the named fuse tip, ignition, withdrawal, cook and
   casual underhand release. The left hand is choreography scope, not a second
   full-arm rebake unless its existing geometry independently fails review.
+- **How much left arm is visible: measured, not estimated (2026-08-20).** The
+  question came up at dispatch time. The reference answers it — the original
+  Blud lighter frames are tiles **3211 (108x102)** and **3212 (109x104)** from
+  `dynamite-lighter-ignite.json`, and both draw the **hand plus a sliver of
+  wrist, cropped hard at the bottom frame edge**. No forearm length, no elbow,
+  no upper arm. (The other tiles that clip references — 3216, 3217, 3218, 3221 —
+  are 5x8 to 17x15 flame and spark bits, not anatomy.)
+  So the left side needs **no arm build at all**: the existing measured hand
+  plus wrist covers the whole reference. If a later gate wants more, that is a
+  deviation from the reference and needs an explicit owner call, not a quiet
+  extension.
 - Shade distal and upper fields with one existing X1.27 flesh material. Do not
   sample humanoid color bricks.
 - Keep the safe accepted hand-only fallback if rebuilt assets are missing or
