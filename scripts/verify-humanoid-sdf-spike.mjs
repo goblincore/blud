@@ -676,6 +676,88 @@ const traceCost = await evaluate(`(async () => {
 console.log('click-to-shoot ms/hit:', traceCost);
 
 // ---------------------------------------------------------------------------
+// Task 4 (humanoid dynamics pass) — elbow fold + hit recoil/settle captures.
+// The fold captures re-frame the pinned camera (panel 17 re-aimed it), then
+// read hand/shoulder/elbow world positions so the offline gates can project
+// them to screen. The hit captures fire one pellet and grab the recoiled and
+// settled frames 1.5 s apart with physics running.
+// ---------------------------------------------------------------------------
+
+const DYNAMICS_OUT = process.argv[5] ?? 'docs/dev-notes/2026-08-20-humanoid-dynamics';
+mkdirSync(DYNAMICS_OUT, { recursive: true });
+const shotInto = async (dir, name) => {
+  await raf(3);
+  const s = await send('Page.captureScreenshot', { format: 'png' });
+  const png = Buffer.from(s.result?.data ?? s.data, 'base64');
+  writeFileSync(`${dir}/${name}.png`, png);
+  return decodePng(png);
+};
+
+// World -> screen, mirroring applyCamera (orbit target (0,0.95,0)) plus
+// THREE.PerspectiveCamera(75, aspect 1280/800). The canvas backing store is
+// upscaled to the 1280x800 screenshot, so NDC maps directly onto it.
+const TARGET = { x: 0, y: 0.95, z: 0 };
+function projectToScreen(world) {
+  if (!world) return null;
+  const cp = Math.cos(CAMERA.pitch);
+  const eye = [
+    TARGET.x + Math.sin(CAMERA.yaw) * cp * CAMERA.distance,
+    TARGET.y + Math.sin(CAMERA.pitch) * CAMERA.distance,
+    TARGET.z + Math.cos(CAMERA.yaw) * cp * CAMERA.distance,
+  ];
+  let zx = eye[0] - TARGET.x, zy = eye[1] - TARGET.y, zz = eye[2] - TARGET.z;
+  const zl = Math.hypot(zx, zy, zz); zx /= zl; zy /= zl; zz /= zl;
+  let xx = zz, xy = 0, xz = -zx; // x = normalize(cross(up=(0,1,0), z))
+  const xl = Math.hypot(xx, xy, xz); xx /= xl; xy /= xl; xz /= xl;
+  const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+  const dx = world[0] - eye[0], dy = world[1] - eye[1], dz = world[2] - eye[2];
+  const cx = xx * dx + xy * dy + xz * dz;
+  const cy = yx * dx + yy * dy + yz * dz;
+  const cz = zx * dx + zy * dy + zz * dz;
+  if (cz >= -1e-6) return null; // behind the camera
+  const f = 1 / Math.tan((75 * Math.PI / 180) / 2);
+  const aspect = 1280 / 800;
+  const sx = ((f / aspect) * cx / -cz * 0.5 + 0.5) * 1280;
+  const sy = (1 - (f * cy / -cz * 0.5 + 0.5)) * 800;
+  return [sx, sy];
+}
+
+// Re-frame to the pinned camera (panel 17 re-aimed at the settled piece).
+await evaluate('window.__humanoidSdfSpike.reset(), true');
+await evaluate('window.__humanoidSdfSpike.setCameraTarget(0, 0.95, 0), true');
+await evaluate(`window.__humanoidSdfSpike.setCamera(${CAMERA.yaw}, ${CAMERA.pitch}, ${CAMERA.distance}), true`);
+await evaluate('window.__humanoidSdfSpike.setElbow(0), true');
+await evaluate('window.__humanoidSdfSpike.setSoftness(0), true');
+await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+await raf(4);
+
+const fold0Hand = await evaluate("window.__humanoidSdfSpike.worldOnBone('RightHand', [0,0,0])");
+const fold0Shoulder = await evaluate("window.__humanoidSdfSpike.worldOnBone('RightArm', [0,0,0])");
+const fold0Elbow = await evaluate("window.__humanoidSdfSpike.worldOnBone('RightForeArm', [0,0,0])");
+captures['live-elbow-fold-0'] = await shotInto(DYNAMICS_OUT, 'live-elbow-fold-0');
+
+await evaluate('window.__humanoidSdfSpike.setElbow(100), true');
+await raf(3);
+const fold100Hand = await evaluate("window.__humanoidSdfSpike.worldOnBone('RightHand', [0,0,0])");
+const fold100Shoulder = await evaluate("window.__humanoidSdfSpike.worldOnBone('RightArm', [0,0,0])");
+captures['live-elbow-fold-100'] = await shotInto(DYNAMICS_OUT, 'live-elbow-fold-100');
+
+const foldMeasure = {
+  hand0: fold0Hand, shoulder0: fold0Shoulder, elbow0: fold0Elbow,
+  hand100: fold100Hand, shoulder100: fold100Shoulder,
+};
+
+// Hit recoil/settle: one pellet into the forearm, capture the recoiled frame
+// immediately and the settled frame ~1.5 s later (rAF-driven physics).
+await evaluate('window.__humanoidSdfSpike.setElbow(0), true');
+await evaluate('window.__humanoidSdfSpike.clearWounds(), true');
+await raf(3);
+await shootAt("window.__humanoidSdfSpike.worldOnBone('RightForeArm')");
+captures['live-hit-recoil'] = await shotInto(DYNAMICS_OUT, 'live-hit-recoil');
+await raf(90); // ~1.5 s @ 60 fps
+captures['live-hit-settled'] = await shotInto(DYNAMICS_OUT, 'live-hit-settled');
+
+// ---------------------------------------------------------------------------
 // Offline grading of the ten captures
 // ---------------------------------------------------------------------------
 
@@ -811,7 +893,7 @@ grade.severVsPreDiffPx = pixelDiff(captures['live-pre-sever'], captures['live-se
 // pixels) from the upper arm down to the forearm — a real joint-crease
 // separation would break the span. Also require a meaningful span length so
 // the check sees an upper arm AND a forearm, not a stray speck. ---------------
-function elbowRowGap(elbow0Img, e0, e100) {
+function elbowRowGap(elbow0Img, e0, e100, scanStartY = null) {
   const { w, h, rgba } = elbow0Img;
   const stride = w * 4;
   let minX = w, maxX = 0, minY = h, maxY = 0;
@@ -824,9 +906,15 @@ function elbowRowGap(elbow0Img, e0, e100) {
       if (d > 30) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
     }
   }
+  // The corrected fold (Task 1) brings the forearm UP into the SHOULDER
+  // junction, whose arm-meets-torso crease is a natural flesh-mask gap — a
+  // false positive, not an elbow seam. Scope the scan to start just above the
+  // world elbow (projected to screen) so the shoulder junction is excluded
+  // while the elbow crease and the whole forearm below it stay in span.
+  const startY = scanStartY != null ? Math.max(minY, Math.round(scanStartY) - 10) : minY;
   const flesh = fleshMask(rgba, w, h);
   const rows = [];
-  for (let y = minY; y <= maxY; y++) {
+  for (let y = startY; y <= maxY; y++) {
     let c = 0;
     for (let x = minX; x <= maxX; x++) if (flesh[y * w + x]) c++;
     rows.push(c);
@@ -838,9 +926,10 @@ function elbowRowGap(elbow0Img, e0, e100) {
   for (let y = first; y <= last; y++) {
     if (rows[y] < 3) { run++; maxGap = Math.max(maxGap, run); } else run = 0;
   }
-  return { span: last - first + 1, maxGap, bbox: [minX, minY, maxX, maxY] };
+  return { span: last - first + 1, maxGap, bbox: [minX, Math.round(startY), maxX, maxY] };
 }
-grade.elbowContinuity = elbowRowGap(elbow0, captures['live-elbow-0'], captures['live-elbow-100']);
+const elbowScreen = projectToScreen(foldMeasure.elbow0);
+grade.elbowContinuity = elbowRowGap(elbow0, captures['live-elbow-0'], captures['live-elbow-100'], elbowScreen ? elbowScreen[1] : null);
 
 // -- straight cut edge metric on the cap mask (0 pre-sever by construction) ---
 function capStraightRuns(cap, w, h) {
@@ -953,6 +1042,104 @@ gate('detached-keeps-wound', grade['live-wound-detached-flight'].capPx >= 25,
 gate('no-slot-drops', slotDrops === 0, `drops=${slotDrops}`);
 
 // ---------------------------------------------------------------------------
+// Task 4 gates — elbow-folds, hit-moves-body, no-seam-line (humanoid dynamics
+// pass). These supplement the 29 existing gates; they do not replace them.
+// ---------------------------------------------------------------------------
+
+// elbow-folds: the hand's screen-space distance to the shoulder at 100° must
+// be under 70% of its distance at 0° — the browser mirror of Task 1's unit
+// test (folding brings the hand toward the shoulder; a cone sweep cannot).
+{
+  const h0 = projectToScreen(foldMeasure.hand0);
+  const h100 = projectToScreen(foldMeasure.hand100);
+  const s0 = projectToScreen(foldMeasure.shoulder0);
+  const s100 = projectToScreen(foldMeasure.shoulder100);
+  const d0 = h0 && s0 ? Math.hypot(h0[0] - s0[0], h0[1] - s0[1]) : 0;
+  const d100 = h100 && s100 ? Math.hypot(h100[0] - s100[0], h100[1] - s100[1]) : 0;
+  grade.elbowFoldRatio = d0 > 0 ? d100 / d0 : 1;
+  grade.elbowFoldD0 = d0;
+  grade.elbowFoldD100 = d100;
+  gate('elbow-folds', grade.elbowFoldRatio < 0.7,
+    `hand-shoulder ${d0.toFixed(1)}px@0° → ${d100.toFixed(1)}px@100° (ratio ${grade.elbowFoldRatio.toFixed(3)})`);
+}
+
+// hit-moves-body: the body recoils and settles — ≥300 changed pixels outside
+// the crater region between the immediate and 1.5 s-later frames proves the
+// shot moved the flesh, not only carved a static hole.
+function dilateMask(mask, w, h, r) {
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!mask[y * w + x]) continue;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h) out[ny * w + nx] = 1;
+        }
+      }
+    }
+  }
+  return out;
+}
+function pixelDiffExcluding(a, b, exclude) {
+  const { w, h } = a;
+  const stride = w * 4;
+  let n = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (exclude[i]) continue;
+    const j = i * 4;
+    if (Math.abs(a.rgba[j] - b.rgba[j]) + Math.abs(a.rgba[j + 1] - b.rgba[j + 1]) + Math.abs(a.rgba[j + 2] - b.rgba[j + 2]) > 24) n++;
+  }
+  return n;
+}
+{
+  const a = captures['live-hit-recoil'];
+  const b = captures['live-hit-settled'];
+  const crater = new Uint8Array(a.w * a.h);
+  const ca = capMask(a.rgba, a.w, a.h);
+  const cb = capMask(b.rgba, b.w, b.h);
+  for (let i = 0; i < a.w * a.h; i++) crater[i] = ca[i] | cb[i];
+  grade.hitMovedPx = pixelDiffExcluding(a, b, dilateMask(crater, a.w, a.h, 4));
+  gate('hit-moves-body', grade.hitMovedPx >= 300, `changed=${grade.hitMovedPx}px outside the crater region`);
+}
+
+// no-seam-line: along a scanline crossing the elbow band, the luma step must
+// not exceed the largest step found elsewhere on the same limb (a brick seam
+// reads as a sharp brightness step at the band).
+function lumaAt(img, x, y) {
+  const i = (y * img.w + x) * 4;
+  return 0.299 * img.rgba[i] + 0.587 * img.rgba[i + 1] + 0.114 * img.rgba[i + 2];
+}
+function maxLumaStep(img, y, x0, x1) {
+  let m = 0;
+  for (let x = Math.max(1, Math.round(x0)); x <= Math.min(img.w - 1, Math.round(x1)); x++) {
+    m = Math.max(m, Math.abs(lumaAt(img, x, y) - lumaAt(img, x - 1, y)));
+  }
+  return m;
+}
+{
+  const e = captures['live-elbow-0'];
+  const ef = fleshMask(e.rgba, e.w, e.h);
+  const ep = projectToScreen(foldMeasure.elbow0);
+  let band = null, elsewhere = null;
+  if (ep) {
+    const ey = Math.round(ep[1]);
+    const ex = Math.round(ep[0]);
+    let x0 = -1, x1 = -1;
+    for (let x = 0; x < e.w; x++) if (ef[ey * e.w + x]) { if (x0 < 0) x0 = x; x1 = x; }
+    if (x0 >= 0 && x1 > x0 + 12) {
+      band = maxLumaStep(e, ey, ex - 8, ex + 8);
+      elsewhere = Math.max(maxLumaStep(e, ey, x0, ex - 9), maxLumaStep(e, ey, ex + 9, x1));
+    }
+  }
+  grade.seamBandStep = band;
+  grade.seamElsewhereStep = elsewhere;
+  const ok = band != null && elsewhere != null && band <= Math.max(elsewhere, 6);
+  gate('no-seam-line', ok,
+    `elbow-band step ${band != null ? band.toFixed(1) : 'n/a'} vs limb elsewhere ${elsewhere != null ? elsewhere.toFixed(1) : 'n/a'}`);
+}
+
+// ---------------------------------------------------------------------------
 // Contact sheet — annotated masks/contours (dynamic grid over all 17 panels)
 // ---------------------------------------------------------------------------
 
@@ -1058,6 +1245,10 @@ for (const [name, g] of Object.entries(grade)) {
 console.log(`maxLandmarkDelta=${grade.maxLandmarkDelta} bindVsElbow0=${grade.bindVsElbow0Diff} ` +
   `elbow0to100=${grade.elbow0to100DiffPx}px elbowSpan=${grade.elbowContinuity.span} elbowGap=${grade.elbowContinuity.maxGap} ` +
   `severVsPre=${grade.severVsPreDiffPx}px settledDist=${grade.settledSecondCenterDist}px`);
+console.log(`fold: hand-shoulder ${grade.elbowFoldD0 != null ? grade.elbowFoldD0.toFixed(1) : 'n/a'}px@0° → ` +
+  `${grade.elbowFoldD100 != null ? grade.elbowFoldD100.toFixed(1) : 'n/a'}px@100° (ratio ${grade.elbowFoldRatio != null ? grade.elbowFoldRatio.toFixed(3) : 'n/a'}) · ` +
+  `hit-moved ${grade.hitMovedPx}px · seam band/elsewhere ` +
+  `${grade.seamBandStep != null ? grade.seamBandStep.toFixed(1) : 'n/a'}/${grade.seamElsewhereStep != null ? grade.seamElsewhereStep.toFixed(1) : 'n/a'}`);
 console.log(`wound-scan timing(0/6/12): ` +
   `${JSON.stringify(woundTiming['0']?.median ?? null)}/${JSON.stringify(woundTiming['6']?.median ?? null)}/` +
   `${JSON.stringify(woundTiming['12']?.median ?? null)} ms median · ` +

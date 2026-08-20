@@ -275,6 +275,13 @@ Key reference docs (open these before touching their area):
     visual review of panels 11–17** (`live-wound-*.png` + the extended contact
     sheet) — a green headless report is NOT owner visual approval, so this row
     stays in progress until the visual gate passes.
+  - **Dynamics pass (Tasks 1–4, 2026-08-20):** elbow folds about a perpendicular
+    flexion axis (T1), brick seam diagnosed as a distance pinch with the
+    smin-widen fix blocked (T2), verlet recoil + wound-driven flesh wobble
+    (T3–T4); verifier **32/32** (elbow-folds 0.156, hit-moves-body 1506 px,
+    no-seam-line band 80.5 ≤ 198.8). **Gap:** `ageSec` never advances, so the
+    wobble does not decay at runtime — advance `wounds[].ageSec += dt` in the
+    spike controller, then owner re-review vs `/sdf-lab-webgpu.html`.
 - `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
   later one-piece synthetic-forearm reference were both owner-rejected. The
   next run uses Blender-native SDF union for one hand+wrist+native-forearm field,

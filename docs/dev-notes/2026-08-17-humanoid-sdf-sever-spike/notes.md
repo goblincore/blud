@@ -211,3 +211,90 @@ are side-by-side — the shared interior ramp is compared there.
 - `npx vitest run` — **1738/1738** (114 files; +9 targeting + 7 controller
   shoot/API/setCameraTarget over the Task 8/9 baseline).
 - `npx tsc --noEmit` — clean. `git diff --check` — clean.
+
+---
+
+# Humanoid dynamics pass — Tasks 1–4 (2026-08-20)
+
+The owner rejected the Task 10 sever spike on *feel*, so this pass fixed three
+defects in certainty order — elbow fold (T1), brick-seam diagnosis (T2), verlet
+recoil + flesh wobble (T3–T4). T1 (`e4d9cbc`), T2 (`b0af8b7`), T3 (`4cd0727`)
+are committed; this section records the Task 4 measurements and the final
+owner gate.
+
+## Measured hand-to-shoulder distance (Task 1 fold, world space)
+
+| elbow° | `|hand − shoulder|` (world, m) | ratio |
+| ---: | ---: | ---: |
+| 0 | 0.4672 | 1.000 |
+| 50 | 0.3538 | 0.757 |
+| 100 | 0.1743 | 0.373 |
+
+Browser mirror (`elbow-folds` gate, screen space, pinned camera): **108.6 px @
+0° → 17.0 px @ 100°** (ratio **0.156** — even smaller than the world-space
+ratio, because the fold also foreshortens toward the camera). The old
+`axisModel` cone sweep held the world distance at exactly 0.4672 through 100°.
+
+## Seam diagnosis outcome (Task 2, from seam-diagnosis.md)
+
+The visible brick seam is a **distance pinch**, not a colour or normal
+break: `maxDistJump` gradient **1.96×** (fails `pitch × 1.5`), normal swing
+**6.28°** (< 15°, passes), colour step **0.0225** (< 0.1, passes). Widening
+`HUMANOID_JOINT_SMIN_K` makes it **worse** (gradient ≈ 196 × k), so the
+prescribed fix is unreachable and left blocked. The Task 4 `no-seam-line` gate
+confirms the diagnosis from the rendered frame: the elbow-band luma step is
+**80.5** vs **198.8** elsewhere on the limb — the seam is *not* a luma/brightness
+line (there is no brightness step to fix in the shading), it is a surface-normal
+pinch whose correction (reduce k / widen the band smoothstep) is the owner's
+call, not this pass's prescribed sweep.
+
+## Recoil + settle (Task 3 verlet, ported constants)
+
+`impulseAtBone` reuses the procedural zombie's exact push constants (0.16 blast
+/ 0.06 pellet / 0.04 burn, `rig-bind.ts:260` + `lab-main.ts:902`). Unit test:
+peak displacement > 0.03 m, settles < 0.002 m. Browser (`hit-moves-body` gate):
+**1506 px** changed between the recoiled frame and the 1.5 s-later settled
+frame, outside the crater region — the body recoils and settles, not merely
+carved.
+
+## Wound-driven warp amplitude (Task 4)
+
+`surfaceWarp`'s amplitude is now `max(softness01, woundWarpAmp(...)) ×
+HUMANOID_SURFACE_WARP_AMP (0.008) × WOUND_WARP_GAIN (2.0)`. At age 0 the term is
+**0.016 m** (twice the softness slider's peak); at age 2 s it is **3.97e-5 m**
+(`exp(−age·3)`), i.e. settled. The CPU mirror pins both ends (`fresh > 0.004`,
+`old < fresh × 0.2`, `far == 0`).
+
+**Honest gap — the age never advances.** The spike controller stamps every
+wound `ageSec: 0` and nothing increments it (the procedural zombie's `damage.ts`
+has the same vestigial field; its `frame()` age advance was deliberately not
+ported, per `humanoid-damage.ts`). The shader reads the age correctly, but at
+runtime the wobble is full-strength and does **not** decay — the "settles in ~1 s"
+behaviour is inert until `HumanoidSpikeController.step()` advances
+`wounds[].ageSec += dt`. That controller is outside Task 4's file list, so it is
+recorded here rather than patched.
+
+## Steady-state frame cost delta vs Task 10 baseline
+
+Wound-scan median at 0 / 6 / 12 logical wounds: **16.70 / 16.60 / 16.70 ms** —
+zero delta against the Task 10 baseline (16.70 ms). The added `woundWarpAmp`
+scan (≤ 24 slots, gated by `d >= reach` early-out) is not a frame bottleneck.
+
+## Verifier result — 32/32 gates
+
+29 existing sever + wound gates still pass, plus the three new dynamics gates:
+`elbow-folds` (ratio 0.156 < 0.7), `hit-moves-body` (1506 px), `no-seam-line`
+(band 80.5 ≤ elsewhere 198.8). The Task 1 false positive on
+`flesh-continuity-across-elbow` (the fold pushed the motion bbox into the
+shoulder junction) is fixed by scoping the scan to start just above the world
+elbow — `span=46 maxGap=0` (was `maxGap=8`). Captures `live-elbow-fold-0/100`
+and `live-hit-recoil/settled` are in
+`docs/dev-notes/2026-08-20-humanoid-dynamics/`.
+
+**Owner gate (comparison, not a checklist):** side by side with
+`/sdf-lab-webgpu.html`, a plain click on the baked humanoid now lands with the
+procedural zombie's verlet recoil and a full-strength local flesh wobble. If
+plain-click impact still reads weak, the remaining suspect is that rigid bricks
+cannot deform locally the way smin-blended blobs do — a representation limit,
+not a missing feature. The wobble's age-decay gap above is the one unfinished
+thread to revisit before that call.

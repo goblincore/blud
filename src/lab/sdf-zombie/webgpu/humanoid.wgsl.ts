@@ -71,6 +71,9 @@ export const HUMANOID_MAX_CLUSTER_BONES = 4;
 export const HUMANOID_JOINT_SMIN_K = 0.01;
 /** Peak surface-warp amplitude (metres) at softness 1. Softness 0 = no warp. */
 export const HUMANOID_SURFACE_WARP_AMP = 0.008;
+/** Gain on the wound-driven warp term, so a fresh hit wobbles harder than the
+ *  softness slider ever does (amp 0.016 m at age 0) and settles in ~1 s. */
+export const WOUND_WARP_GAIN = 2.0;
 /** Pinned sever constants — consumed from manifest.rightArm, never invented. */
 export const HUMANOID_CUT_SEED = 12648430;
 export const HUMANOID_CUT_IRREGULARITY_M = 0.004;
@@ -192,12 +195,33 @@ export const JOINT_BLEND_WEIGHT = /* wgsl */ `fn jointBlendWeight(local: vec3<f3
   return 1.0 - smoothstep(halfWidth * 0.5, halfWidth, s);
 }`;
 
-/** Bounded bone-local surface warp: softness-scaled noise, nonzero only
- *  inside a FOUR-amplitude shell of the surface (the amplitude is the max
+/** Per-wound surface-warp amplitude: the maximum, over the active cluster's
+ *  wounds, of a radial falloff (reach = wound radius x2.5) times an
+ *  exponential age decay (m.y is ageSec — settles in ~1 s). 0 when no wound
+ *  is within reach, so an unwounded field stays bit-identical. */
+export const WOUND_WARP_AMP = /* wgsl */ `fn woundWarpAmp(p: vec3<f32>, data: texture_2d<f32>, start: i32, count: i32) -> f32 {
+  var amp = 0.0;
+  for (var i = 0; i < count; i = i + 1) {
+    let w = textureLoad(data, vec2<i32>(start + i, ${ROW_WOUND}), 0);
+    let m = textureLoad(data, vec2<i32>(start + i, ${ROW_WOUND_META}), 0);
+    let reach = w.w * 2.5;
+    let d = length(p - w.xyz);
+    if (d >= reach) { continue; }
+    let radial = 1.0 - smoothstep(0.0, reach, d);
+    let decay = exp(-m.y * 3.0);
+    amp = max(amp, radial * decay);
+  }
+  return amp;
+}`;
+
+/** Bounded bone-local surface warp: noise whose amplitude is the larger of
+ *  the softness slider and the wound-driven term, nonzero only inside a
+ *  FOUR-amplitude shell of the surface (the amplitude is the max
  *  displacement, so 4x is the reach of the smooth field it rides on). Zero at
- *  softness 0, so the undisplaced field is bit-identical. */
-export const SURFACE_WARP = /* wgsl */ `fn surfaceWarp(local: vec3<f32>, timeSec: f32, softness01: f32, baseD: f32) -> f32 {
-  let amp = softness01 * ${HUMANOID_SURFACE_WARP_AMP};
+ *  softness 0 with no wound nearby, so the undisplaced field is bit-identical. */
+export const SURFACE_WARP = /* wgsl */ `fn surfaceWarp(local: vec3<f32>, p: vec3<f32>, timeSec: f32, softness01: f32, baseD: f32, data: texture_2d<f32>, start: i32, count: i32) -> f32 {
+  let wound = woundWarpAmp(p, data, start, count);
+  let amp = max(softness01, wound) * ${HUMANOID_SURFACE_WARP_AMP} * ${WOUND_WARP_GAIN};
   if (amp <= 0.0 || abs(baseD) >= amp * 4.0) { return 0.0; }
   let n = noise3(local * 6.0 + vec3<f32>(0.0, timeSec * 1.5, 0.0));
   return n * amp;
@@ -323,7 +347,7 @@ export const SAMPLE_BONE_COLOR = /* wgsl */ `fn sampleBoneColor(p: vec3<f32>, bi
  *  distance plus the two dominant bone indices and the colour blend weight
  *  (joint weight x proximity), so the entry re-derives colour with the
  *  IDENTICAL weight the distance fold used. */
-export const MAP_HUMANOID_FIELD = /* wgsl */ `fn mapHumanoidField(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, timeSec: f32) -> vec4<f32> {
+export const MAP_HUMANOID_FIELD = /* wgsl */ `fn mapHumanoidField(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, timeSec: f32, start: i32, count: i32) -> vec4<f32> {
   let n = i32(clusterCfg.x);
   var best = 1e9;
   var bestIdx = -1.0;
@@ -351,7 +375,7 @@ export const MAP_HUMANOID_FIELD = /* wgsl */ `fn mapHumanoidField(p: vec3<f32>, 
     let diffMin = bmin.xyz - local;
     let diffMax = local - (bmin.xyz + extent);
     let outside = length(max(max(diffMin, diffMax), vec3<f32>(0.0)));
-    let sw = surfaceWarp(local, timeSec, clusterCfg.z, sd);
+    let sw = surfaceWarp(local, p, timeSec, clusterCfg.z, sd, data, start, count);
     let sdd = sd + sw + outside;
     if (sdd < best) {
       second = best; secondIdx = bestIdx; secondSlot = bestSlot; secondLocal = bestLocal;
@@ -382,8 +406,8 @@ export const MAP_HUMANOID_FIELD = /* wgsl */ `fn mapHumanoidField(p: vec3<f32>, 
  *  distance. The cut is evaluated in the CUT bone's bind-local frame (read
  *  from `cutBone`), so for the detached proxy the cut plane tumbles with the
  *  chunk while the attached view keeps it in the posed elbow frame. */
-export const MAP_HUMANOID_CUT = /* wgsl */ `fn mapHumanoidCut(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, cutPlane: vec4<f32>, cutBone: f32, timeSec: f32) -> vec4<f32> {
-  let dres = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec);
+export const MAP_HUMANOID_CUT = /* wgsl */ `fn mapHumanoidCut(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, cutPlane: vec4<f32>, cutBone: f32, timeSec: f32, start: i32, count: i32) -> vec4<f32> {
+  let dres = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec, start, count);
   let bodyD = dres.x;
   let cutMode = clusterCfg.y;
   var cutD = bodyD;
@@ -403,8 +427,8 @@ export const MAP_HUMANOID_CUT = /* wgsl */ `fn mapHumanoidCut(p: vec3<f32>, data
  *  does. The active cluster's (start, count) is read from ROW_WOUND_RANGE via
  *  the material's woundRangeIdx. */
 export const MAP_HUMANOID_WOUND = /* wgsl */ `fn mapHumanoidWound(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, cutPlane: vec4<f32>, cutBone: f32, timeSec: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, woundRangeIdx: f32) -> vec4<f32> {
-  let dres = mapHumanoidCut(p, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec);
   let wr = textureLoad(data, vec2<i32>(i32(woundRangeIdx), ${ROW_WOUND_RANGE}), 0);
+  let dres = mapHumanoidCut(p, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, i32(wr.x), i32(wr.y));
   let d = applyWounds(dres.x, p, data, woundCfg, woundCfg2, i32(wr.x), i32(wr.y));
   return vec4<f32>(d, dres.y, dres.z, dres.w);
 }`;
@@ -481,11 +505,12 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   let diff = max(dot(n, L), 0.0);
   let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
   let cutMode = clusterCfg.y;
-  let bodyD = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec).x;
-  // The active cluster's wound range — read once for the shared interior term.
+  // The active cluster's wound range — read once for the shared interior term
+  // AND the wound-driven surface warp.
   let wr = textureLoad(data, vec2<i32>(i32(woundRangeIdx), ${ROW_WOUND_RANGE}), 0);
   let woundStart = i32(wr.x);
   let woundCount = i32(wr.y);
+  let bodyD = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec, woundStart, woundCount).x;
   let interiorD = interiorDepth(p, data, woundStart, woundCount, bodyD, cutMode);
   let cm = charMask(p, data, woundStart, woundCount);
   // Fresnel fades INSIDE openings, keyed off the shared interiorDepth so a
@@ -517,7 +542,8 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
  */
 export const HUMANOID_HELPERS = [
   SMIN, SMAX, HASH13, NOISE3, SRGB_TO_LINEAR, ROTATE_CONJ,
-  SAMPLE_DISTANCE_BRICK, SAMPLE_COLOR_BRICK, JOINT_BLEND_WEIGHT, SURFACE_WARP,
+  SAMPLE_DISTANCE_BRICK, SAMPLE_COLOR_BRICK, JOINT_BLEND_WEIGHT,
+  WOUND_WARP_AMP, SURFACE_WARP,
   CUT_NOISE, CUT_FIELD, CAP_DEPTH, TORN_CAP_MATERIAL, APPLY_WOUNDS,
   WOUND_MASK, CHAR_MASK, INTERIOR_DEPTH, SAMPLE_BONE_COLOR,
   MAP_HUMANOID_FIELD, MAP_HUMANOID_CUT, MAP_HUMANOID_WOUND,

@@ -18,6 +18,7 @@ import {
   ROW_BOUNDS_MIN, ROW_BOUNDS_INV, ROW_JOINT, ROW_JOINT_AXIS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_RANGE,
   HUMANOID_MAX_CLUSTER_BONES, HUMANOID_JOINT_SMIN_K, HUMANOID_SURFACE_WARP_AMP,
+  WOUND_WARP_GAIN,
   HUMANOID_CUT_SEED, HUMANOID_CUT_IRREGULARITY_M,
   HUMANOID_CUT_RIM_WIDTH_M, HUMANOID_CAP_DEPTH_M, HUMANOID_INTERIOR_EPS,
 } from './humanoid.wgsl';
@@ -200,7 +201,7 @@ describe('distance/colour brick sampling (string pins)', () => {
 
   it('gates the surface warp to a four-amplitude shell and zeroes it at softness 0', () => {
     const warp = HUMANOID_HELPERS.find(h => declaredName(h) === 'surfaceWarp')!;
-    expect(warp).toContain(`let amp = softness01 * ${HUMANOID_SURFACE_WARP_AMP};`);
+    expect(warp).toContain(`let amp = max(softness01, wound) * ${HUMANOID_SURFACE_WARP_AMP} * ${WOUND_WARP_GAIN};`);
     expect(warp).toContain('amp <= 0.0 || abs(baseD) >= amp * 4.0');
   });
 
@@ -667,6 +668,48 @@ describe('CPU mirror — shared interior depth', () => {
     expect(fresnel).toBe(0);
     const withFade = 1 * (1 * surfCfgX + fresnel);
     expect(withFade).toBeLessThan(1);
+  });
+});
+
+// ==================== WOUND-DRIVEN SURFACE WARP AMPLITUDE ===================
+// Task 4 (humanoid dynamics pass) — the flesh wobble. `surfaceWarp`'s
+// amplitude becomes max(softness01, woundWarpAmp(...)) so a fresh wound
+// displaces the surface harder than the softness slider ever does, then decays
+// with wound age. These mirrors transcribe woundWarpAmp's radial falloff and
+// exponential age decay (kept in sync BY HAND with the WGSL, like the other
+// mirrors here).
+
+const cpuWoundWarpAmp = (distToWound: number, woundRadius: number, ageSec: number): number => {
+  const reach = woundRadius * 2.5;
+  if (distToWound >= reach) return 0;
+  const radial = 1 - smoothstep(0, reach, distToWound);
+  const decay = Math.exp(-ageSec * 3.0); // m.y is ageSec
+  return radial * decay;
+};
+
+const cpuSurfaceWarpAmp = (args: {
+  distToWound: number; woundRadius: number; ageSec: number; softness01: number;
+}): number => {
+  const wound = cpuWoundWarpAmp(args.distToWound, args.woundRadius, args.ageSec);
+  return Math.max(args.softness01, wound) * HUMANOID_SURFACE_WARP_AMP * WOUND_WARP_GAIN;
+};
+
+describe('wound-driven surface warp amplitude', () => {
+  it('adds a decaying local amplitude around a young wound', () => {
+    // woundWarpAmp exists and surfaceWarp consumes it (the entry reaches it
+    // transitively via mapHumanoidField, asserted by the reachability test).
+    const warp = HUMANOID_HELPERS.find(h => declaredName(h) === 'surfaceWarp')!;
+    expect(warp).toContain('woundWarpAmp');
+    const fresh = cpuSurfaceWarpAmp({ distToWound: 0.0, woundRadius: 0.055, ageSec: 0.0, softness01: 0 });
+    const old = cpuSurfaceWarpAmp({ distToWound: 0.0, woundRadius: 0.055, ageSec: 2.0, softness01: 0 });
+    const far = cpuSurfaceWarpAmp({ distToWound: 0.5, woundRadius: 0.055, ageSec: 0.0, softness01: 0 });
+    expect(fresh).toBeGreaterThan(0.004);
+    expect(old).toBeLessThan(fresh * 0.2);
+    expect(far).toBe(0);
+  });
+
+  it('leaves the undisplaced field bit-identical with no wounds and softness 0', () => {
+    expect(cpuSurfaceWarpAmp({ distToWound: Infinity, woundRadius: 0, ageSec: 0, softness01: 0 })).toBe(0);
   });
 });
 
