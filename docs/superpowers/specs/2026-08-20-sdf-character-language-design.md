@@ -133,13 +133,30 @@ pair starts failing"*), and `body.ts` already writes in that voice. The emitter
 **must preserve comments across a round trip**, or the first tweak-and-save
 destroys the reasoning. This is a hard constraint on `blob-emit.ts`.
 
-### Ceiling check
+### Ceiling check — RESOLVED 2026-08-20
 
-`MAX_PRIMS = 48` (`validate.ts:19`) is a **dead WebGL-era constant**.
-`march.wgsl.ts:27` records that prims now ride a texture which *"has no such
-ceiling (this device reports a 4 GB storage limit)"*; the 48 was a floor imposed
-by the old uniform-array path. A cast will not hit a wall, but the constant and
-its `validateBody` check must be revisited rather than designed around blind.
+An earlier draft of this spec called `MAX_PRIMS = 48` a "dead constant worth
+deleting". **That was wrong**, and the correction matters for P8:
+
+- `MAX_PRIMS` is the **allocation width** of the prim data texture
+  (`zombie-gpu.ts` creates `MAX_PRIMS x DATA_ROWS` RGBA-float) and of six
+  `Float32Array`s in `pack.ts`. It cannot simply be removed; removing it means
+  threading a dynamic per-body stride through pack → zombie-gpu → fpv-view.
+- It is not the shader's real bound. The WGSL folds a cluster with a fixed
+  `for (var i = 0; i < 64)` that breaks out on the live count, so widening the
+  texture costs memory but no GPU time.
+
+Resolution: raised to **128** (~20 KiB of texture, no GPU cost), and the
+genuinely dangerous ceiling was closed. `MAX_CLUSTER_PRIMS = 64` now matches the
+WGSL literal, `validateBody` rejects any single cluster over it, and a test
+asserts the constant against the literal in both cluster folds. Before this, a
+cluster past 64 prims **silently truncated** — the shader stopped folding and
+the surface quietly lost geometry, with no error. At 48 total the case was
+unreachable; at 128 it is reachable, which is exactly the risk a cast
+introduces.
+
+Remaining option, deferred: a dynamic per-body stride, which would remove the
+ceiling entirely. Worth doing only if a character actually presses 128.
 
 ## Section 2 — Components and language surface *(approved)*
 
@@ -276,5 +293,5 @@ is cheaper to learn than to guess.
    panel) or fold into the language? Today `facePrims()` is generated, not
    authored, precisely so the panel can drive it.
 3. File extension and name — `.blob` is a working title.
-4. Should `MAX_PRIMS` be lifted as part of this work, or separately once a real
-   cast presses it?
+4. ~~Should `MAX_PRIMS` be lifted?~~ **Answered 2026-08-20** — raised 48 → 128
+   and the per-cluster silent-truncation hole closed. See *Ceiling check* above.

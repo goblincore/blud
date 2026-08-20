@@ -9,15 +9,42 @@ import { add, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale
  * cannot drift apart. They were separately declared in both files until
  * 2026-08-15; if they disagree the shader reads past the uniform array.
  *
- * 48 fits the 21-primitive body plus a ~13-primitive face with headroom. The
- * cost is uniform space: the fragment shader lands around 300 vec4 against a
- * GLES 3.0 guaranteed minimum of 224. The development machine (Apple M3)
- * reports MAX_FRAGMENT_UNIFORM_VECTORS = 1024, so this is a portability note
- * rather than a blocker. The escape hatch, if a low-end GLES 3.0 target ever
- * matters, is a float data texture read with texelFetch.
+ * 128 is sized for a CAST, not for the one zombie. It was 48 — the 21-primitive
+ * body plus a ~13-primitive face with headroom — which is a fine ceiling right
+ * up until you try to author a second character (see `P8`, the SDF character
+ * language). Raising it is close to free on the shipping WebGPU path: prims
+ * ride a data texture there (`zombie-gpu.ts` allocates MAX_PRIMS x DATA_ROWS
+ * RGBA-float, so 128 costs ~20 KiB against 48's ~7.7 KiB), and the WGSL folds
+ * break out on the live prim count rather than looping the full width.
+ *
+ * The only thing this cost anything was the WebGL twin, which declares three
+ * `uniform vec4[MAX_PRIMS]` arrays and so grows three vec4 per added prim. That
+ * used to be the reason not to raise this: the GLSL shader already sat near 300
+ * vec4 against a GLES 3.0 guaranteed minimum of 224, and 128 puts it near 540.
+ * It is NOT a reason any more — Blud is WebGPU-only (`X1.11`), the GLSL twin is
+ * unsupported reference kept until it is deleted, and it still compiles on the
+ * development machine (Apple M3 reports MAX_FRAGMENT_UNIFORM_VECTORS = 1024)
+ * for as long as it survives. Do not let it constrain the shipping path.
  */
-export const MAX_PRIMS = 48;
+export const MAX_PRIMS = 128;
 export const MAX_CLUSTERS = 6;
+
+/**
+ * Per-cluster primitive ceiling — the REAL shader bound, and the one that used
+ * to go unchecked.
+ *
+ * `march.wgsl.ts` folds a cluster with a fixed `for (var i = 0; i < 64)` that
+ * breaks out on the cluster's live count. So a cluster carrying more than 64
+ * primitives does not error: the shader silently stops folding at 64 and the
+ * surface quietly loses geometry. Nothing validated this before — MAX_PRIMS
+ * bounded the TOTAL, never a single cluster, and at 48 total the case was
+ * unreachable. Raising MAX_PRIMS to 128 makes it reachable, so it is checked.
+ *
+ * Keep this equal to the literal in march.wgsl.ts's cluster loops; the WGSL is
+ * a template string, so `validate.test.ts` asserts the literal is present
+ * rather than trusting them to stay in step.
+ */
+export const MAX_CLUSTER_PRIMS = 64;
 
 export interface ValidateOpts {
   silhouetteNoiseAmp: number;
@@ -115,6 +142,17 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
     errs.push(`primitive count ${body.prims.length} exceeds shader ceiling ${MAX_PRIMS}`);
   if (body.clusters.length > MAX_CLUSTERS)
     errs.push(`cluster count ${body.clusters.length} exceeds shader ceiling ${MAX_CLUSTERS}`);
+
+  // Per-cluster ceiling. The total staying under MAX_PRIMS does not save a
+  // single fat cluster: the WGSL folds each one with a fixed 64-iteration loop,
+  // so prim 65 onward is dropped WITHOUT an error and the surface just loses
+  // geometry. Report it as the count against the bound so the author knows
+  // which way to move.
+  for (const c of body.clusters)
+    if (c.count > MAX_CLUSTER_PRIMS)
+      errs.push(
+        `cluster "${c.limb}" holds ${c.count} primitives, over the per-cluster ` +
+        `shader ceiling ${MAX_CLUSTER_PRIMS} — the fold silently truncates`);
 
   // Fold order: each cluster must own a contiguous run of same-limb primitives.
   for (const c of body.clusters) {

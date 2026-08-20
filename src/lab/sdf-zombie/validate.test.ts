@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, MAX_PRIMS, MAX_CLUSTERS } from './validate';
+import { validateBody, sdBody, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
+import { APPLY_CARVES, MAP_BODY } from './webgpu/march.wgsl';
 import type { LimbId, Primitive, Vec3 } from './types';
 
 describe('shader caps', () => {
@@ -13,6 +14,20 @@ describe('shader caps', () => {
 
   it('has room for the 21-primitive body plus a face', () => {
     expect(MAX_PRIMS).toBeGreaterThanOrEqual(40);
+  });
+
+  // The WGSL is a template string, so tsc cannot see this literal and neither
+  // can a type. If someone widens the cluster fold without moving the constant,
+  // validateBody starts rejecting bodies the shader would have folded fine; if
+  // they NARROW it, validateBody starts passing bodies the shader truncates in
+  // silence. Assert the literal both cluster folds actually use.
+  it('keeps MAX_CLUSTER_PRIMS equal to the WGSL cluster-fold literal', () => {
+    expect(MAP_BODY).toContain(`for (var i = 0; i < ${MAX_CLUSTER_PRIMS}; i = i + 1)`);
+    expect(APPLY_CARVES).toContain(`for (var i = 0; i < ${MAX_CLUSTER_PRIMS}; i = i + 1)`);
+  });
+
+  it('can hold a cast, not just the one zombie', () => {
+    expect(MAX_PRIMS).toBeGreaterThanOrEqual(128);
   });
 });
 
@@ -59,6 +74,17 @@ describe('validateBody', () => {
     const many = Array.from({ length: MAX_PRIMS + 1 }, (_, i) => prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));
     const errs = validateBody(assignClusters(many), { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
     expect(errs.join(' ')).toMatch(/primitive count/i);
+  });
+
+  // Regression: the total can sit well under MAX_PRIMS while ONE cluster runs
+  // past the shader's 64-iteration fold. Before MAX_CLUSTER_PRIMS this passed
+  // validation and the surface silently lost every primitive past the 64th.
+  it('fails when a single cluster exceeds the per-cluster fold ceiling', () => {
+    const fat = Array.from({ length: MAX_CLUSTER_PRIMS + 1 }, (_, i) =>
+      prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));
+    expect(fat.length).toBeLessThanOrEqual(MAX_PRIMS); // total is legal…
+    const errs = validateBody(assignClusters(fat), { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
+    expect(errs.join(' ')).toMatch(/per-cluster shader ceiling/i); // …the cluster is not
   });
 
   it('fails when a cluster is not contiguous in the primitive array', () => {
