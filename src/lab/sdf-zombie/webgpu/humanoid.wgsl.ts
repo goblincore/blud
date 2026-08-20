@@ -43,7 +43,9 @@
 //      requires declaration before use, and three emits includes as given.
 // Comments inside a template string must not contain backticks.
 
-export const HUMANOID_DATA_ROWS = 8;
+import { MAX_WOUND_SLOTS } from '../humanoid-damage';
+
+export const HUMANOID_DATA_ROWS = 11;
 export const ROW_POSE_POS = 0;
 export const ROW_POSE_QUAT = 1;
 export const ROW_BRICK_OFFSET = 2;
@@ -52,6 +54,14 @@ export const ROW_BOUNDS_MIN = 4;
 export const ROW_BOUNDS_INV = 5;
 export const ROW_JOINT = 6;
 export const ROW_JOINT_AXIS = 7;
+/** Wound world-position + radius row (world-space spheres, MAX_WOUND_SLOTS
+ *  columns) — the same texel layout as march.wgsl.ts's ROW_WOUND. */
+export const ROW_WOUND = 8;
+/** Wound meta row: (type, age, rimSplayScale, rimOffsetScale) per slot. */
+export const ROW_WOUND_META = 9;
+/** Per-cluster wound range row: x = start slot, y = count, zw = 0 — mirrors
+ *  march.wgsl.ts's ROW_CLUSTER_RANGE layout rather than inventing a second. */
+export const ROW_WOUND_RANGE = 10;
 
 /** Data-texture width (columns) — the retained bone array is 22, padded. */
 export const HUMANOID_MAX_BONES = 24;
@@ -68,6 +78,10 @@ export const HUMANOID_CUT_IRREGULARITY_M = 0.004;
 export const HUMANOID_CUT_RIM_WIDTH_M = 0.008;
 /** Radial depth scale (metres) the cap ramp maps skin -> meat -> deep over. */
 export const HUMANOID_CAP_DEPTH_M = 0.03;
+/** Interior-depth threshold below which the baked source colour is NOT
+ *  suppressed — a crater or cap opening suppresses baked albedo once its
+ *  shared interiorDepth passes this (1 mm). */
+export const HUMANOID_INTERIOR_EPS = 0.001;
 
 // iq quadratic polynomial smooth-min. Conservative (never overestimates, so
 // sphere tracing stays safe) and non-associative, hence the fixed fold order
@@ -78,6 +92,12 @@ export const SMIN = /* wgsl */ `fn smin(a: f32, b: f32, kIn: f32) -> f32 {
   if (k <= 0.0) { return min(a, b); }
   let h = max(k - abs(a - b), 0.0) / k;
   return min(a, b) - h * h * k * 0.25;
+}`;
+
+/** Smooth-max as the negation of smin — the subtractive twin applyWounds uses
+ *  to carve wounds out of the composed field (same as march.wgsl.ts's SMAX). */
+export const SMAX = /* wgsl */ `fn smax(a: f32, b: f32, k: f32) -> f32 {
+  return -smin(-a, -b, k);
 }`;
 
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
@@ -210,15 +230,79 @@ export const CAP_DEPTH = /* wgsl */ `fn capDepth(bodyD: f32, cutMode: f32) -> f3
   return clamp(-bodyD / ${HUMANOID_CAP_DEPTH_M}, 0.0, 1.0) * min(cutMode, 1.0);
 }`;
 
-/** The layered cap ramp: exterior skin edge (albedo) -> wet red tissue ->
- *  dark centre, driven by capDepth. The rim band (rimWidth / capDepth) is the
- *  skin -> meat transition width; the baked exterior albedo is DISABLED on the
- *  cap because the caller passes the un-baked lit skin colour as `albedo`. */
-export const TORN_CAP_MATERIAL = /* wgsl */ `fn tornCapMaterial(albedo: vec3<f32>, depth: f32, cutMode: f32, meatColor: vec3<f32>, deepColor: vec3<f32>) -> vec3<f32> {
-  let d = clamp(depth, 0.0, 1.0) * min(cutMode, 1.0);
+/** The shared layered flesh ramp: exterior skin edge (albedo) -> wet red
+ *  tissue -> dark centre, driven by the ONE interiorDepth term so a wound
+ *  crater and the sever cap read as the same tissue at different depths. The
+ *  rim band (rimWidth / capDepth) is the skin -> meat transition width; the
+ *  baked exterior albedo is suppressed elsewhere (see interiorDepth). */
+export const TORN_CAP_MATERIAL = /* wgsl */ `fn tornCapMaterial(albedo: vec3<f32>, depth: f32, meatColor: vec3<f32>, deepColor: vec3<f32>) -> vec3<f32> {
+  let d = clamp(depth, 0.0, 1.0);
   let rimRatio = ${HUMANOID_CUT_RIM_WIDTH_M} / ${HUMANOID_CAP_DEPTH_M};
   let meat = mix(albedo, meatColor, smoothstep(0.0, rimRatio, d));
   return mix(meat, deepColor, smoothstep(rimRatio, 1.0, d));
+}`;
+
+/** Carves every wound out of the composed field. Wounds are WORLD-space
+ *  spheres subtracted after the cut/union, exactly as mapBody does. Scans the
+ *  active cluster's [start, start+count) slots instead of (0, woundCfg.x).
+ *  woundCfg = (unused, blendK, rimSplay, rimOffset); woundCfg2 = (rimWidth,
+ *  relax, shellAmp, spare) — channel semantics match march.wgsl.ts. */
+export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, start: i32, count: i32) -> f32 {
+  var d = dIn;
+  for (var i = 0; i < ${MAX_WOUND_SLOTS}; i = i + 1) {
+    if (i >= count) { break; }
+    let idx = start + i;
+    let w = textureLoad(data, vec2<i32>(idx, ${ROW_WOUND}), 0);
+    let wMeta = textureLoad(data, vec2<i32>(idx, ${ROW_WOUND_META}), 0);
+    let isBurn = wMeta.x > 1.5;
+    // A burn only opens up as it cooks; a pellet/blast subtracts immediately.
+    let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
+    let r = length(p - w.xyz);
+    d = smax(d, -(r - depth), woundCfg.y);
+    // Everted rim: the displaced flesh splays outward into a raised lip.
+    let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
+    let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
+    let rimLocal = 1.0 - smoothstep(amp * 0.35, amp * 0.7, dIn);
+    d = d - exp(-x * x) * amp * rimLocal;
+  }
+  return d;
+}`;
+
+/** 0 at the surface far from wounds, 1 deep inside one — the wound interior
+ *  term interiorDepth folds with the cap. */
+export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, data: texture_2d<f32>, start: i32, count: i32) -> f32 {
+  var m = 0.0;
+  for (var i = 0; i < ${MAX_WOUND_SLOTS}; i = i + 1) {
+    if (i >= count) { break; }
+    let idx = start + i;
+    let w = textureLoad(data, vec2<i32>(idx, ${ROW_WOUND}), 0);
+    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
+  }
+  return m;
+}`;
+
+/** 0 unburned, 1 fully charred — a SURFACE state, kept separate from the
+ *  interiorDepth ramp. */
+export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<f32>, start: i32, count: i32) -> f32 {
+  var m = 0.0;
+  for (var i = 0; i < ${MAX_WOUND_SLOTS}; i = i + 1) {
+    if (i >= count) { break; }
+    let idx = start + i;
+    let wMeta = textureLoad(data, vec2<i32>(idx, ${ROW_WOUND_META}), 0);
+    if (wMeta.x < 1.5) { continue; }
+    let w = textureLoad(data, vec2<i32>(idx, ${ROW_WOUND}), 0);
+    m = max(m, (1.0 - smoothstep(0.0, w.w * 2.2, length(p - w.xyz))) * clamp(wMeta.y, 0.0, 1.0));
+  }
+  return m;
+}`;
+
+/** THE one interior-depth term: max(wound interior, cap interior). Both the
+ *  wound crater and the sever cap read this — there is deliberately no second
+ *  cap-shaped wetness producer (X1.17's white-out was two terms stacking). */
+export const INTERIOR_DEPTH = /* wgsl */ `fn interiorDepth(p: vec3<f32>, data: texture_2d<f32>, start: i32, count: i32, bodyD: f32, cutMode: f32) -> f32 {
+  let woundD = woundMask(p, data, start, count);
+  let capD = capDepth(bodyD, cutMode);
+  return max(woundD, capD);
 }`;
 
 /** The baked colour at a hit, for ONE bone index: world -> bind-local, then
@@ -313,12 +397,26 @@ export const MAP_HUMANOID_CUT = /* wgsl */ `fn mapHumanoidCut(p: vec3<f32>, data
   return vec4<f32>(cutD, dres.y, dres.z, dres.w);
 }`;
 
+/** The cut PLUS the wound carve: returns (postWoundD, bestIdx, secondIdx,
+ *  blendW) — mapHumanoidCut's layout with .x advanced through applyWounds.
+ *  Wounds carve LAST, against the composed cut/union field, exactly as mapBody
+ *  does. The active cluster's (start, count) is read from ROW_WOUND_RANGE via
+ *  the material's woundRangeIdx. */
+export const MAP_HUMANOID_WOUND = /* wgsl */ `fn mapHumanoidWound(p: vec3<f32>, data: texture_2d<f32>, distAtlas: texture_3d<f32>, boneIdx: vec4<f32>, clusterCfg: vec4<f32>, cutPlane: vec4<f32>, cutBone: f32, timeSec: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, woundRangeIdx: f32) -> vec4<f32> {
+  let dres = mapHumanoidCut(p, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec);
+  let wr = textureLoad(data, vec2<i32>(i32(woundRangeIdx), ${ROW_WOUND_RANGE}), 0);
+  let d = applyWounds(dres.x, p, data, woundCfg, woundCfg2, i32(wr.x), i32(wr.y));
+  return vec4<f32>(d, dres.y, dres.z, dres.w);
+}`;
+
 /**
  * The entry point. Returns rgb plus the hit distance in w, so the view's
  * depth node reconstructs the hit point without a second march — the exact
  * contract march.wgsl.ts's marchBody keeps. cutMode 0 (uncut clusters)
  * leaves mapHumanoidCut and tornCapMaterial in identity; cutMode 1/2 carve
- * the complementary proximal/distal masks and shade the layered cap.
+ * the complementary proximal/distal masks and shade the layered cap. Wounds
+ * carve last (mapHumanoidWound) and share the ONE interiorDepth ramp with
+ * the cap, so a crater and a severed cross-section read as one tissue.
  */
 export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   worldPos: vec3<f32>,
@@ -335,10 +433,14 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   bakedTint: vec3<f32>,
   meatColor: vec3<f32>,
   deepColor: vec3<f32>,
+  charColor: vec3<f32>,
   keyColor: vec3<f32>,
   lightDir: vec3<f32>,
   lightCfg: vec2<f32>,
   surfCfg: vec4<f32>,
+  woundCfg: vec4<f32>,
+  woundCfg2: vec4<f32>,
+  woundRangeIdx: f32,
   marchCfg: vec3<f32>
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
@@ -349,22 +451,23 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   var hit = false;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
-    let d = mapHumanoidCut(camPos + rd * t, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x;
+    let d = mapHumanoidWound(camPos + rd * t, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, woundCfg, woundCfg2, woundRangeIdx).x;
     if (d < hitEps) { hit = true; break; }
     t = t + d * marchCfg.y;
     if (t > tMax) { break; }
   }
   if (!hit) { discard; }
   let p = camPos + rd * t;
-  let dres = mapHumanoidCut(p, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec);
-  // Tetrahedron normal on the COMPOSED (post-cut) field, so the cut surface
-  // shades its own torn normal rather than the flesh it displaced.
+  let dres = mapHumanoidWound(p, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, woundCfg, woundCfg2, woundRangeIdx);
+  // Tetrahedron normal on the COMPOSED (post-cut, post-wound) field, so the
+  // crater and the cut surface shade their own normals rather than the flesh
+  // they displaced.
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   let n = normalize(
-    e.xyy * mapHumanoidCut(p + e.xyy, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x +
-    e.yyx * mapHumanoidCut(p + e.yyx, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x +
-    e.yxy * mapHumanoidCut(p + e.yxy, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x +
-    e.xxx * mapHumanoidCut(p + e.xxx, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec).x);
+    e.xyy * mapHumanoidWound(p + e.xyy, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, woundCfg, woundCfg2, woundRangeIdx).x +
+    e.yyx * mapHumanoidWound(p + e.yyx, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, woundCfg, woundCfg2, woundRangeIdx).x +
+    e.yxy * mapHumanoidWound(p + e.yxy, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, woundCfg, woundCfg2, woundRangeIdx).x +
+    e.xxx * mapHumanoidWound(p + e.xxx, data, distAtlas, boneIdx, clusterCfg, cutPlane, cutBone, timeSec, woundCfg, woundCfg2, woundRangeIdx).x);
   // Baked colour: the two dominant bones, blended with the fold's exact
   // weight, decoded to linear, multiplied into the latex albedo.
   var baked = sampleBoneColor(p, i32(dres.y), data, colorAtlas);
@@ -377,31 +480,34 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
   let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
-  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z;
+  let cutMode = clusterCfg.y;
+  let bodyD = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec).x;
+  // The active cluster's wound range — read once for the shared interior term.
+  let wr = textureLoad(data, vec2<i32>(i32(woundRangeIdx), ${ROW_WOUND_RANGE}), 0);
+  let woundStart = i32(wr.x);
+  let woundCount = i32(wr.y);
+  let interiorD = interiorDepth(p, data, woundStart, woundCount, bodyD, cutMode);
+  let cm = charMask(p, data, woundStart, woundCount);
+  // Fresnel fades INSIDE openings, keyed off the shared interiorDepth so a
+  // crater meeting the cap cannot re-stack a second wetness term (X1.17).
+  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - interiorD);
   let diffuseLight = lightCfg.y + diff * lightCfg.x;
   let specLight = keyColor * (shine * surfCfg.x + fres);
-  // Two lit variants: the flesh keeps the baked source colour; the cap's
-  // skin edge uses the UN-baked latex colour (baked albedo is disabled on
-  // the cap) so the ramp owns the cut surface entirely.
-  //
-  // The baked path is tinted by bakedTint, NOT by baseColor. Multiplying a
-  // full-colour authored texture into the pink latex albedo double-counts
-  // albedo: pale skin x pink latex reads maroon and the blue-grey trousers go
-  // black. That rule was inherited from the FACE (X1.1), where the texture is
-  // a flat GREYSCALE map whose whole job is to modulate one latex tone. A
-  // full-colour body texture already carries the art, so its tint is neutral
-  // and baseColor stays with the cut cap, which has no baked colour of its
-  // own. See docs/dev-notes/2026-08-19-humanoid-albedo/notes.md.
+  // Two lit variants: the flesh keeps the baked source colour; the shared
+  // ramp's skin edge uses the UN-baked latex colour. See the bakedTint note
+  // in docs/dev-notes/2026-08-19-humanoid-albedo/notes.md.
   let litSkin = baseColor * diffuseLight * keyColor + specLight;
   let litBaked = bakedTint * srgbToLinear(baked) * diffuseLight * keyColor + specLight;
-  let cutMode = clusterCfg.y;
-  // The cut is the binding surface wherever the pre-cut field is inside the
-  // flesh (bodyD < 0); blend to the cap ramp over the rim band.
-  let bodyD = mapHumanoidField(p, data, distAtlas, boneIdx, clusterCfg, timeSec).x;
-  let capD = capDepth(bodyD, cutMode);
-  let capMask = (1.0 - smoothstep(-${HUMANOID_CUT_RIM_WIDTH_M}, 0.0, bodyD)) * min(cutMode, 1.0);
-  let capColor = tornCapMaterial(litSkin, capD, cutMode, meatColor, deepColor);
-  let litOut = mix(litBaked, capColor, capMask);
+  // The shared ramp (skin edge -> wet red tissue -> darker depth) driven by
+  // the ONE interiorDepth, so wound and cap are the same tissue.
+  let rampColor = tornCapMaterial(litSkin, interiorD, meatColor, deepColor);
+  // Baked source colour is suppressed wherever interiorDepth > eps — ONE code
+  // path for wounds and the cap alike, so skin tone never shows inside a
+  // crater or on the cut cross-section.
+  let opening = smoothstep(0.0, ${HUMANOID_INTERIOR_EPS}, interiorD);
+  var litOut = mix(litBaked, rampColor, opening);
+  // Burns are a surface state, not a depth.
+  litOut = mix(litOut, charColor, cm);
   return vec4<f32>(litOut, t);
 }`;
 
@@ -410,8 +516,9 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
  * Same contract as march.wgsl.ts's HELPERS: wgslFn emits includes as given.
  */
 export const HUMANOID_HELPERS = [
-  SMIN, HASH13, NOISE3, SRGB_TO_LINEAR, ROTATE_CONJ,
+  SMIN, SMAX, HASH13, NOISE3, SRGB_TO_LINEAR, ROTATE_CONJ,
   SAMPLE_DISTANCE_BRICK, SAMPLE_COLOR_BRICK, JOINT_BLEND_WEIGHT, SURFACE_WARP,
-  CUT_NOISE, CUT_FIELD, CAP_DEPTH, TORN_CAP_MATERIAL, SAMPLE_BONE_COLOR,
-  MAP_HUMANOID_FIELD, MAP_HUMANOID_CUT,
+  CUT_NOISE, CUT_FIELD, CAP_DEPTH, TORN_CAP_MATERIAL, APPLY_WOUNDS,
+  WOUND_MASK, CHAR_MASK, INTERIOR_DEPTH, SAMPLE_BONE_COLOR,
+  MAP_HUMANOID_FIELD, MAP_HUMANOID_CUT, MAP_HUMANOID_WOUND,
 ];

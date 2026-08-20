@@ -16,10 +16,12 @@ import {
   HUMANOID_DATA_ROWS,
   ROW_POSE_POS, ROW_POSE_QUAT, ROW_BRICK_OFFSET, ROW_BRICK_DIMS,
   ROW_BOUNDS_MIN, ROW_BOUNDS_INV, ROW_JOINT, ROW_JOINT_AXIS,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_RANGE,
   HUMANOID_MAX_CLUSTER_BONES, HUMANOID_JOINT_SMIN_K, HUMANOID_SURFACE_WARP_AMP,
   HUMANOID_CUT_SEED, HUMANOID_CUT_IRREGULARITY_M,
-  HUMANOID_CUT_RIM_WIDTH_M, HUMANOID_CAP_DEPTH_M,
+  HUMANOID_CUT_RIM_WIDTH_M, HUMANOID_CAP_DEPTH_M, HUMANOID_INTERIOR_EPS,
 } from './humanoid.wgsl';
+import { MAX_WOUND_SLOTS } from '../humanoid-damage';
 import { validateHumanoidVolumeManifest } from './humanoid-volume';
 import type { Vec3 } from '../types';
 import { sub, dot } from '../vec';
@@ -87,16 +89,15 @@ describe('no WGSL reserved words as identifiers', () => {
   );
 });
 
-describe('the six bone-field helpers are wired', () => {
+describe('the field and interior helpers are wired', () => {
   it('shades and cuts through the entry, samples and folds through its helpers', () => {
-    // The entry shades/cuts directly; the fold (mapHumanoidField), the cut
-    // wrapper (mapHumanoidCut) and the colour helper (sampleBoneColor) carry
-    // the distance/warp/blend/colour leaves. This mirrors march.wgsl.test.ts,
-    // which checks applyCarves on mapBody rather than MARCH_BODY.
+    // The entry marches through the wound wrapper, reads the shared interior
+    // term, and shades through the ramp; the fold/cut/colour leaves are the
+    // same helpers as before.
     expect(MARCH_HUMANOID).toContain('mapHumanoidField');
-    expect(MARCH_HUMANOID).toContain('mapHumanoidCut');
+    expect(MARCH_HUMANOID).toContain('mapHumanoidWound');
     expect(MARCH_HUMANOID).toContain('sampleBoneColor');
-    expect(MARCH_HUMANOID).toContain('capDepth');
+    expect(MARCH_HUMANOID).toContain('interiorDepth');
     expect(MARCH_HUMANOID).toContain('tornCapMaterial');
 
     const fold = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidField')!;
@@ -107,6 +108,14 @@ describe('the six bone-field helpers are wired', () => {
     const cut = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidCut')!;
     expect(cut).toContain('mapHumanoidField');
     expect(cut).toContain('cutField');
+
+    const wound = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidWound')!;
+    expect(wound).toContain('mapHumanoidCut');
+    expect(wound).toContain('applyWounds');
+
+    const interior = HUMANOID_HELPERS.find(h => declaredName(h) === 'interiorDepth')!;
+    expect(interior).toContain('woundMask');
+    expect(interior).toContain('capDepth');
 
     const color = HUMANOID_HELPERS.find(h => declaredName(h) === 'sampleBoneColor')!;
     expect(color).toContain('sampleColorBrick');
@@ -153,6 +162,7 @@ describe('data texture layout', () => {
     const rows = [
       ROW_POSE_POS, ROW_POSE_QUAT, ROW_BRICK_OFFSET, ROW_BRICK_DIMS,
       ROW_BOUNDS_MIN, ROW_BOUNDS_INV, ROW_JOINT, ROW_JOINT_AXIS,
+      ROW_WOUND, ROW_WOUND_META, ROW_WOUND_RANGE,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(HUMANOID_DATA_ROWS - 1);
@@ -503,5 +513,155 @@ describe('baked albedo is not double-counted', () => {
 
   it('declares bakedTint as its own shader parameter', () => {
     expect(MARCH_HUMANOID).toContain('bakedTint: vec3<f32>');
+  });
+});
+
+// ============================ WOUND PAYLOAD =================================
+// Task 9 — the clustered wound payload and the shared interior material. The
+// wound rows reuse march.wgsl.ts's texel layout, but the humanoid data
+// texture is HUMANOID_MAX_BONES wide with the wound rows at 8/9 and the
+// per-cluster range row at 10.
+
+describe('wound payload rows and loop bounds', () => {
+  it('pins ROW_WOUND_RANGE = 10 with x = start, y = count, zw = 0', () => {
+    expect(ROW_WOUND).toBe(8);
+    expect(ROW_WOUND_META).toBe(9);
+    expect(ROW_WOUND_RANGE).toBe(10);
+    const wound = HUMANOID_HELPERS.find(h => declaredName(h) === 'mapHumanoidWound')!;
+    expect(wound).toContain('vec2<i32>(i32(woundRangeIdx), 10)');
+    expect(wound).toContain('i32(wr.x)');
+    expect(wound).toContain('i32(wr.y)');
+    expect(MARCH_HUMANOID).toContain('vec2<i32>(i32(woundRangeIdx), 10)');
+  });
+
+  it('drives all three wound loop bounds from MAX_WOUND_SLOTS, never a literal 16', () => {
+    for (const name of ['applyWounds', 'woundMask', 'charMask']) {
+      const fn = HUMANOID_HELPERS.find(h => declaredName(h) === name)!;
+      expect(fn).toContain(`i < ${MAX_WOUND_SLOTS}`);
+      expect(fn).not.toContain('i < 16');
+    }
+  });
+
+  it('scans the active cluster (start, count) range, not (0, woundCfg.x)', () => {
+    for (const name of ['applyWounds', 'woundMask', 'charMask']) {
+      const fn = HUMANOID_HELPERS.find(h => declaredName(h) === name)!;
+      expect(fn).toContain('start: i32, count: i32');
+      expect(fn).toContain('let idx = start + i;');
+      expect(fn).not.toContain('i32(woundCfg.x)');
+    }
+  });
+
+  it('keeps the ROW_WOUND / ROW_WOUND_META texel layout and woundCfg channels', () => {
+    const apply = HUMANOID_HELPERS.find(h => declaredName(h) === 'applyWounds')!;
+    // xyz + radius, then type/age/splay/offset.
+    expect(apply).toContain('let w = textureLoad(data, vec2<i32>(idx, 8), 0);');
+    expect(apply).toContain('let wMeta = textureLoad(data, vec2<i32>(idx, 9), 0);');
+    expect(apply).toContain('let r = length(p - w.xyz);');
+    expect(apply).toContain('wMeta.x > 1.5'); // type (burn)
+    expect(apply).toContain('wMeta.y');       // age
+    expect(apply).toContain('wMeta.z');       // rimSplay
+    expect(apply).toContain('wMeta.w');       // rimOffset
+    // woundCfg / woundCfg2 channels: blendK, rimSplay, rimOffset, rimWidth.
+    expect(apply).toContain('smax(d, -(r - depth), woundCfg.y)');
+    expect(apply).toContain('woundCfg.w * wMeta.w');
+    expect(apply).toContain('woundCfg.z * wMeta.z');
+    expect(apply).toContain('woundCfg2.x');
+  });
+});
+
+// ========================== SHARED INTERIOR MATERIAL ========================
+// Task 9 — the wound crater and the sever cap share ONE interior-depth term
+// and ONE ramp, with the everted rim staying wound-only and baked source
+// colour suppressed inside every opening.
+
+describe('shared interior material (source pins)', () => {
+  it('defines exactly one interiorDepth that both the wound and cap paths read', () => {
+    const ids = HUMANOID_HELPERS.filter(h => declaredName(h) === 'interiorDepth');
+    expect(ids).toHaveLength(1);
+    const interior = ids[0]!;
+    expect(interior).toContain('woundMask');
+    expect(interior).toContain('capDepth');
+    expect(interior).toContain('max(woundD, capD)');
+    // The entry reads it once, and there is no second cap-shaped wetness
+    // producer (X1.17 was two terms stacking).
+    expect(MARCH_HUMANOID).toContain('interiorDepth(');
+    expect(HUMANOID_HELPERS.filter(h => declaredName(h) === 'tornCapMaterial')).toHaveLength(1);
+  });
+
+  it('drives one ramp off interiorDepth: skin edge -> wet red -> deeper', () => {
+    const ramp = HUMANOID_HELPERS.find(h => declaredName(h) === 'tornCapMaterial')!;
+    // The ramp no longer gates on cutMode — the shared interiorDepth drives it.
+    expect(ramp).not.toContain('cutMode');
+    expect(ramp).toContain('meatColor');
+    expect(ramp).toContain('deepColor');
+    expect(ramp).toContain('rimRatio');
+    expect((ramp.match(/smoothstep\(/g) ?? []).length).toBe(2);
+    expect(MARCH_HUMANOID).toContain('tornCapMaterial(litSkin, interiorD');
+  });
+
+  it('keeps the everted rim wound-only and charMask a separate surface state', () => {
+    const apply = HUMANOID_HELPERS.find(h => declaredName(h) === 'applyWounds')!;
+    expect(apply).toContain('exp(-x * x) * amp'); // the raised lip lives here
+    const ramp = HUMANOID_HELPERS.find(h => declaredName(h) === 'tornCapMaterial')!;
+    expect(ramp).not.toContain('exp(-x * x)');
+    // charMask is separate from the depth ramp — burns are a surface state.
+    const char = HUMANOID_HELPERS.find(h => declaredName(h) === 'charMask')!;
+    expect(char).toContain('wMeta.x < 1.5');
+    expect(MARCH_HUMANOID).toContain('mix(litOut, charColor, cm)');
+  });
+
+  it('suppresses baked source colour through one interiorDepth > eps code path', () => {
+    // The colour brick stores nearest-surface source colour extended through
+    // the sampling band, so voxels INSIDE the flesh carry skin tone. One
+    // opening gate suppresses it for wounds and the cap alike.
+    expect(HUMANOID_INTERIOR_EPS).toBe(0.001);
+    expect(MARCH_HUMANOID).toContain('let opening = smoothstep(0.0, 0.001, interiorD);');
+    expect(MARCH_HUMANOID).toContain('mix(litBaked, rampColor, opening)');
+  });
+});
+
+// ============================ CPU MIRROR ====================================
+describe('CPU mirror — shared interior depth', () => {
+  // Transcriptions of woundMask, capDepth, interiorDepth and the fresnel fade
+  // (kept in sync BY HAND with the WGSL, like the other mirrors here).
+  const woundMaskMirror = (p: Vec3, wounds: readonly { c: Vec3; r: number }[]): number => {
+    let m = 0;
+    for (const w of wounds) {
+      m = Math.max(m, 1 - smoothstep(0, w.r * 1.6, Math.hypot(p[0] - w.c[0], p[1] - w.c[1], p[2] - w.c[2])));
+    }
+    return m;
+  };
+  const capDepthMirror = (bodyD: number, cutMode: number): number =>
+    clamp(-bodyD / HUMANOID_CAP_DEPTH_M, 0, 1) * Math.min(cutMode, 1);
+  const interiorMirror = (
+    p: Vec3, wounds: readonly { c: Vec3; r: number }[], bodyD: number, cutMode: number,
+  ): number => Math.max(woundMaskMirror(p, wounds), capDepthMirror(bodyD, cutMode));
+
+  it('requires the baked albedo contribution to be zero inside a crater', () => {
+    const wounds = [{ c: [0, 0, 0] as Vec3, r: 0.055 }];
+    const p: Vec3 = [0, 0, 0]; // crater centre: woundMask == 1
+    const interior = interiorMirror(p, wounds, 0.02, 0);
+    expect(interior).toBeGreaterThan(HUMANOID_INTERIOR_EPS);
+    const opening = smoothstep(0, HUMANOID_INTERIOR_EPS, interior);
+    expect(opening).toBe(1);
+    expect(1 - opening).toBe(0); // baked albedo contribution is zero
+  });
+
+  it('fades fresnel off the shared interiorDepth so crater/cap cannot white-out', () => {
+    // A point at the crater/cap intersection: interiorDepth saturates at 1.
+    const wounds = [{ c: [0, 0, 0] as Vec3, r: 0.055 }];
+    const interior = interiorMirror([0, 0, 0], wounds, -0.05, 1);
+    expect(interior).toBeCloseTo(1, 6);
+    const surfCfgZ = 0.85;
+    const surfCfgX = 0.95;
+    // Without the fade, a grazing fresnel rim-light stacks on the specular and
+    // clips the channel past white — the X1.17 white-out.
+    const withoutFade = 1 * (1 * surfCfgX + Math.pow(1 - 0, 4) * surfCfgZ);
+    expect(withoutFade).toBeGreaterThan(1);
+    // The fade (1 - interiorDepth) zeroes fresnel inside the opening.
+    const fresnel = Math.pow(1 - 0, 4) * surfCfgZ * (1 - interior);
+    expect(fresnel).toBe(0);
+    const withFade = 1 * (1 * surfCfgX + fresnel);
+    expect(withFade).toBeLessThan(1);
   });
 });

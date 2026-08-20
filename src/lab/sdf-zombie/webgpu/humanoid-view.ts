@@ -42,8 +42,15 @@ import { HUMANOID_SURFACE_WARP_AMP, HUMANOID_DATA_ROWS, HUMANOID_MAX_BONES } fro
 import {
   ROW_POSE_POS, ROW_POSE_QUAT, ROW_BRICK_OFFSET, ROW_BRICK_DIMS,
   ROW_BOUNDS_MIN, ROW_BOUNDS_INV, ROW_JOINT, ROW_JOINT_AXIS,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_RANGE,
   HUMANOID_HELPERS, MARCH_HUMANOID,
 } from './humanoid.wgsl';
+import { writeWounds } from './zombie-gpu';
+import {
+  boneWoundWorldPos, woundSlotsForClusters, MAX_WOUND_SLOTS,
+  type WoundUploadLists, type BoneWound,
+} from '../humanoid-damage';
+import { WOUND_PROFILES, type WoundType } from '../damage';
 import {
   distalBoneIndices, type HumanoidPoseState, type HumanoidBonePose,
 } from '../humanoid-pose';
@@ -88,6 +95,7 @@ export interface HumanoidView {
   setSoftness(value01: number): void;
   setTime(timeSec: number): void;
   setCut(state: SeverRenderState): void;
+  setWounds(lists: WoundUploadLists): void;
   setDetachedTransform(position: Vec3, quaternion: Quat): void;
   setDetachedChunk(chunk: Chunk, frozenDistalBones: readonly HumanoidBonePose[]): void;
   setVisible(visible: boolean): void;
@@ -134,6 +142,17 @@ function createHumanoidUniforms() {
     lightDir: uniform(new THREE.Vector3(0.45, 0.72, 0.53)),
     lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
+    /** x unused (total count is woundCfg's old meaning; the clustered path
+     *  reads per-cluster ranges), y blendK, z rimSplay, w rimOffset. */
+    woundCfg: uniform(new THREE.Vector4(0, 0.015, 0.55, 1.15)),
+    /** x rimWidth, y relaxation factor, z shellAmp (silhouette), w spare. */
+    woundCfg2: uniform(new THREE.Vector4(0.42, 1.4, 0, 0)),
+    /** Data-texture column of this material's (start, count) in
+     *  ROW_WOUND_RANGE — the cluster index, or clusters.length for the
+     *  detached proxy. */
+    woundRangeIdx: uniform(0),
+    /** Burn char — a SURFACE state applied after the interior ramp. */
+    charColor: uniform(new THREE.Color(0x1a1214)),
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0)),
   };
 }
@@ -165,10 +184,14 @@ function createHumanoidMarchMaterial(
     bakedTint: u.bakedTint,
     meatColor: u.meatColor,
     deepColor: u.deepColor,
+    charColor: u.charColor,
     keyColor: u.keyColor,
     lightDir: u.lightDir,
     lightCfg: u.lightCfg,
     surfCfg: u.surfCfg,
+    woundCfg: u.woundCfg,
+    woundCfg2: u.woundCfg2,
+    woundRangeIdx: u.woundRangeIdx,
     marchCfg: u.marchCfg,
   }) as unknown as Swizzled;
 
@@ -278,6 +301,10 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
     throw new Error(`humanoid view: manifest is missing the ${manifest.rightArm.forearm} brick`);
   }
   const distalIndices = distalBoneIndices(manifest, manifest.rightArm.forearm);
+  // bone array position -> its index within distalIndices (for detached wounds).
+  const distalIndexOf = new Map<number, number>(
+    distalIndices.map((bi, k) => [bi, k]),
+  );
   // The retained bone array is 22 with a 24-column budget, leaving exactly
   // enough spare columns for the distal subtree to get its OWN detached pose.
   const spareColumns = HUMANOID_MAX_BONES - manifest.bones.length;
@@ -328,7 +355,7 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
   const proxyMeshes: THREE.Mesh[] = [];
 
   function makeProxyMaterial(
-    dataColumns: number[], boneIndices: number[],
+    dataColumns: number[], boneIndices: number[], woundRangeIdx: number,
   ): { u: HumanoidUniforms; material: MeshBasicNodeMaterial } {
     const u = createHumanoidUniforms();
     // Hit epsilon: at least half the largest voxel pitch in this cluster.
@@ -340,6 +367,7 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
     u.boneIdx.value.set(
       dataColumns[0] ?? 0, dataColumns[1] ?? 0, dataColumns[2] ?? 0, dataColumns[3] ?? 0,
     );
+    u.woundRangeIdx.value = woundRangeIdx;
     const material = createHumanoidMarchMaterial(
       dataTex, assets.distanceTexture, assets.colorTexture, u,
     );
@@ -348,9 +376,9 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
 
   function buildProxy(
     parent: THREE.Group, dataColumns: number[], boneIndices: number[],
-    sweepMin: Vec3, sweepMax: Vec3,
+    sweepMin: Vec3, sweepMax: Vec3, woundRangeIdx: number,
   ): void {
-    const { u, material } = makeProxyMaterial(dataColumns, boneIndices);
+    const { u, material } = makeProxyMaterial(dataColumns, boneIndices, woundRangeIdx);
 
     // The proxy covers the cluster's swept field plus the max softness warp
     // amplitude on every side, so a warped surface can never clip the box.
@@ -381,20 +409,23 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
     throw new Error('humanoid view: manifest has no right-arm cluster');
   }
 
-  for (const cluster of manifest.clusters) {
+  for (let ci = 0; ci < manifest.clusters.length; ci++) {
+    const cluster = manifest.clusters[ci]!;
     const boneIndices = cluster.sampleBones.map(name => {
       const idx = assets.boneIndex.get(name);
       if (idx === undefined) throw new Error(`humanoid view: cluster samples unknown bone ${name}`);
       return idx;
     });
-    buildProxy(attachedGroup, boneIndices, boneIndices, cluster.sweepBoundsMin, cluster.sweepBoundsMax);
+    buildProxy(attachedGroup, boneIndices, boneIndices, cluster.sweepBoundsMin, cluster.sweepBoundsMax, ci);
   }
   const rightArmMaterialIdx = manifest.clusters.findIndex(c => c.name === 'right-arm');
 
   // The detached proxy: the distal forearm + hand, hidden at load, sampled from
   // the SPARE columns so its pose can diverge from the attached forearm.
   const detachedDataColumns = distalIndices.map((_, k) => detachedBase + k);
-  const { u: detachedU, material: detachedMaterial } = makeProxyMaterial(detachedDataColumns, distalIndices);
+  const { u: detachedU, material: detachedMaterial } = makeProxyMaterial(
+    detachedDataColumns, distalIndices, manifest.clusters.length,
+  );
   const detachedGeometry = new THREE.BoxGeometry(distalRadius * 2, distalRadius * 2, distalRadius * 2);
   const detachedMesh = new THREE.Mesh(detachedGeometry, detachedMaterial);
   detachedMesh.position.set(cutCentreModel[0], cutCentreModel[1], cutCentreModel[2]);
@@ -413,6 +444,11 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
   let visible = true;
   let disposed = false;
   let compileCalls = 0;
+  // Retained for setWounds: the live attached pose and the last chunk-composed
+  // distal pose, so wound bind-local positions can be lifted to world space.
+  let poseState: HumanoidPoseState | null = null;
+  let detachedChunk: Chunk | null = null;
+  let detachedFrozenBones: readonly HumanoidBonePose[] = [];
 
   /** Writes every bone's pose row from the state's per-bone world pose. The
    *  quaternion is the bind->world (local->world) orientation; the shader
@@ -432,6 +468,7 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
         bone.quaternion[0], bone.quaternion[1], bone.quaternion[2], bone.quaternion[3],
       );
     }
+    poseState = state;
     dataTex.needsUpdate = true;
   }
 
@@ -487,6 +524,83 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
     };
   }
 
+  // Wound-type -> shader ring id, mirroring lab-main's TYPE_ID (the shader's
+  // isBurn test is `meta.x > 1.5`, so burn == 2).
+  const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
+
+  /** Uploads the wound ring into the descriptor texture. Writes the wound
+   *  slots (world-position + radius, then type/age/splay/offset) into rows 8/9
+   *  and each material's (start, count) into row 10 — reusing writeWounds and
+   *  woundSlotsForClusters verbatim. Takes NO pipeline/material/texture:
+   *  resourceCounts() is bit-identical across any wound update.
+   *
+   *  The attached clusters scan the FULL ring (attached ∪ detached, straddlers
+   *  deduped by reference) so a pre-sever distal wound still renders on the
+   *  intact right-arm cluster; the severed distal part is culled by the cut
+   *  mask anyway. The detached proxy scans the detached list riding the
+   *  chunk-composed pose. */
+  function setWounds(lists: WoundUploadLists): void {
+    if (disposed) return;
+
+    const fullRing: BoneWound[] = [...new Set([...lists.attached, ...lists.detached])];
+    const fullWorld: Vec3[] = fullRing.map(w => {
+      const pose = poseState?.bones[w.boneIdx];
+      return pose ? boneWoundWorldPos(pose, w) : ([0, 0, 0] as Vec3);
+    });
+
+    // Attached cluster ranges (cluster-boundary duplication + slot budget).
+    const budget = woundSlotsForClusters(manifest, fullRing, fullWorld);
+
+    // Detached proxy slots: the detached list riding the chunk-composed pose.
+    const detachedCount = Math.max(0, MAX_WOUND_SLOTS - budget.slots.length);
+    const detachedSlots = lists.detached.slice(0, detachedCount);
+
+    const worldPositions: Vec3[] = [];
+    const radii: number[] = [];
+    const types: number[] = [];
+    const ages: number[] = [];
+    const splayScales: number[] = [];
+    const offsetScales: number[] = [];
+    const pushSlot = (w: BoneWound, world: Vec3) => {
+      worldPositions.push(world);
+      radii.push(w.radius);
+      types.push(TYPE_ID[w.type]);
+      ages.push(w.ageSec);
+      splayScales.push(WOUND_PROFILES[w.type].rimSplayScale);
+      offsetScales.push(WOUND_PROFILES[w.type].rimOffsetScale);
+    };
+
+    for (const s of budget.slots) {
+      pushSlot(fullRing[s.woundIdx]!, fullWorld[s.woundIdx]!);
+    }
+    for (const w of detachedSlots) {
+      const k = distalIndexOf.get(w.boneIdx);
+      const world = (k !== undefined && detachedChunk !== null)
+        ? boneWoundWorldPos(chunkBoneWorldPose(detachedChunk, detachedFrozenBones[k]!), w)
+        : fullWorld[fullRing.indexOf(w)]!;
+      pushSlot(w, world);
+    }
+
+    writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {
+      maxWounds: MAX_WOUND_SLOTS,
+      woundRow: ROW_WOUND,
+      metaRow: ROW_WOUND_META,
+      stride: HUMANOID_MAX_BONES,
+    });
+
+    // Per-cluster (start, count) — attached clusters from the budget, then the
+    // detached proxy's range at column clusters.length.
+    for (const r of budget.ranges) {
+      writeBone(ROW_WOUND_RANGE, r.clusterIdx, r.start, r.count, 0, 0);
+    }
+    writeBone(
+      ROW_WOUND_RANGE, manifest.clusters.length,
+      budget.slots.length, detachedSlots.length, 0, 0,
+    );
+
+    dataTex.needsUpdate = true;
+  }
+
   return {
     attachedGroup,
     detachedGroup,
@@ -495,6 +609,7 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
     get detachedCutMode() { return detachedCutMode; },
 
     setPose,
+    setWounds,
 
     setSoftness(value01) {
       const s = Math.min(1, Math.max(0, value01));
@@ -542,6 +657,8 @@ export function createHumanoidView(assets: HumanoidVolumeAssets): HumanoidView {
           `humanoid view: ${frozenDistalBones.length} frozen bones for ${distalIndices.length} distal bones`,
         );
       }
+      detachedChunk = chunk;
+      detachedFrozenBones = frozenDistalBones;
       // Compose the chunk root (quat/pos) with each frozen distal bone pose
       // (relative to the root) and write the result to the spare columns. The
       // distal coordinates stay frozen under the chunk root, so texture and

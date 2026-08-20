@@ -9,6 +9,8 @@
 // HumanoidVolumeAssets.dispose().
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three/webgpu';
 import {
   createHumanoidView, type HumanoidView, type PrewarmReport,
@@ -18,6 +20,9 @@ import type { HumanoidPoseState, HumanoidBonePose } from '../humanoid-pose';
 import type { SeverRenderState } from '../humanoid-sever';
 import { makeChunk } from '../gib-chunks';
 import { HUMANOID_MAX_BONES } from './humanoid.wgsl';
+import type { BoneWound } from '../humanoid-damage';
+import type { WoundType } from '../damage';
+import type { Vec3 } from '../types';
 
 /** A minimal two-bone manifest — the view reads bones/joints/clusters/rightArm
  *  and never re-validates, so it only carries what the view consumes. */
@@ -324,6 +329,59 @@ describe('createHumanoidView lifecycle', () => {
     view.setCut(severed);
     view.setCut(intact);
     expect(view.resourceCounts().compileCalls).toBe(0);
+    view.dispose();
+  });
+});
+
+describe('setWounds uploads without allocating', () => {
+  const wound = (boneIdx: number, local: Vec3, type: WoundType = 'pellet'): BoneWound => ({
+    boneIdx, local, radius: 0.055, type, ageSec: 0,
+  });
+
+  it('imports writeWounds from zombie-gpu and never defines its own texel writer', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/humanoid-view.ts', 'utf8');
+    expect(src).toContain("import { writeWounds } from './zombie-gpu'");
+    expect(src).toContain('writeWounds(texels');
+    expect(src).not.toMatch(/\bfunction writeWounds\b/);
+  });
+
+  it('leaves resourceCounts() bit-identical across 0, 6 and 12 logical wounds', () => {
+    const view = createHumanoidView(makeAssets());
+    view.setPose(poseState());
+    const before = view.resourceCounts();
+
+    // 0 wounds.
+    view.setWounds({ attached: [], detached: [] });
+    expect(view.resourceCounts()).toEqual(before);
+
+    // 6 attached wounds (non-distal bone 0).
+    const sixAttached = Array.from({ length: 6 }, (_, i) => wound(0, [0.001 * i, 0, 0]));
+    view.setWounds({ attached: sixAttached, detached: [] });
+    expect(view.resourceCounts()).toEqual(before);
+
+    // 6 more detached wounds (distal bone 1) riding a chunk-composed pose.
+    const chunk = makeChunk('armR', [0.3, 0.2, 0.1], [0, 0, 0], 0.04, [0, 1, 0], () => 0.5, 'limb');
+    view.setDetachedChunk(chunk, [{ position: [0, 0, 0], quaternion: [0, 0, 0, 1] }]);
+    const sixDetached = Array.from({ length: 6 }, (_, i) => wound(1, [0.001 * i, 0, 0]));
+    view.setWounds({ attached: sixAttached, detached: sixDetached });
+    expect(view.resourceCounts()).toEqual(before);
+    view.dispose();
+  });
+
+  it('never creates a pipeline, material or texture by taking a wound', () => {
+    const view = createHumanoidView(makeAssets());
+    view.setPose(poseState());
+    const before = view.resourceCounts();
+    const list = Array.from({ length: 12 }, (_, i) => wound(i % 2, [0.001 * i, 0, 0]));
+    view.setWounds({
+      attached: list.filter(w => w.boneIdx === 0),
+      detached: list.filter(w => w.boneIdx === 1),
+    });
+    const after = view.resourceCounts();
+    expect(after.materials).toBe(before.materials);
+    expect(after.geometries).toBe(before.geometries);
+    expect(after.textures).toBe(before.textures);
+    expect(after.compileCalls).toBe(before.compileCalls);
     view.dispose();
   });
 });
