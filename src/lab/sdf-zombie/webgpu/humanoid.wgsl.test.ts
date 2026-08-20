@@ -22,9 +22,13 @@ import {
   HUMANOID_CUT_RIM_WIDTH_M, HUMANOID_CAP_DEPTH_M, HUMANOID_INTERIOR_EPS,
 } from './humanoid.wgsl';
 import { MAX_WOUND_SLOTS } from '../humanoid-damage';
-import { validateHumanoidVolumeManifest } from './humanoid-volume';
+import {
+  validateHumanoidVolumeManifest,
+  type HumanoidVolumeManifest,
+  type HumanoidBrickManifest,
+} from './humanoid-volume';
 import type { Vec3 } from '../types';
-import { sub, dot } from '../vec';
+import { sub, dot, add, cross, normalize, scale } from '../vec';
 
 /** `fn name(` — the shape three's ^-anchored declarationRegexp needs. */
 function declaredName(src: string): string | null {
@@ -663,5 +667,276 @@ describe('CPU mirror — shared interior depth', () => {
     expect(fresnel).toBe(0);
     const withFade = 1 * (1 * surfCfgX + fresnel);
     expect(withFade).toBeLessThan(1);
+  });
+});
+
+// ========================== SEAM DIAGNOSIS PROBE ============================
+// Task 2 (humanoid dynamics pass) — a CPU mirror of `mapHumanoidField` that
+// walks a dense line straight across the RightArm/RightForeArm joint band in
+// BIND POSE and records, per sample, the composed smin distance, the shader's
+// tetrahedral normal (0.0015 m taps, exactly as `calcNormal`), and the colour
+// blend weight. The three maxima tell the visible brick seam apart:
+//   - a distance step (the smin carve pinches the surface), vs
+//   - a >15 deg normal swing (a hard-min crease), vs
+//   - a colour step (the blend is narrower than the distance blend).
+//
+// The field is sampled from the REAL dense R16F distance atlas on disk — the
+// same bytes the GPU marches — so the diagnosis is the actual field, not a
+// synthetic stand-in. See docs/dev-notes/2026-08-20-humanoid-dynamics/
+// seam-diagnosis.md for the measured numbers and the sweep.
+
+const ATLAS_X = 128;
+const ATLAS_Y = 128;
+
+/** r16f-le -> f32, the same half-float decode the loader uploads. */
+function decodeR16fLe(u16: Uint16Array): Float32Array {
+  const out = new Float32Array(u16.length);
+  for (let i = 0; i < u16.length; i++) {
+    const u = u16[i]!;
+    const sign = (u & 0x8000) !== 0 ? -1 : 1;
+    const exp = (u >>> 10) & 0x1f;
+    const frac = u & 0x3ff;
+    if (exp === 0) out[i] = sign * (frac / 1024) * 2 ** -14;
+    else if (exp === 31) out[i] = frac === 0 ? sign * Infinity : NaN;
+    else out[i] = sign * (1 + frac / 1024) * 2 ** (exp - 15);
+  }
+  return out;
+}
+
+/** Column-major 4x4 point transform (model -> bind-local), as humanoid-view.ts. */
+function matPoint16(m: readonly number[], p: Vec3): Vec3 {
+  return [
+    m[0]! * p[0] + m[4]! * p[1] + m[8]! * p[2] + m[12]!,
+    m[1]! * p[0] + m[5]! * p[1] + m[9]! * p[2] + m[13]!,
+    m[2]! * p[0] + m[6]! * p[1] + m[10]! * p[2] + m[14]!,
+  ];
+}
+
+/** Column-major 4x4 direction transform (rotation only). */
+function matVec16(m: readonly number[], v: Vec3): Vec3 {
+  return [
+    m[0]! * v[0] + m[4]! * v[1] + m[8]! * v[2],
+    m[1]! * v[0] + m[5]! * v[1] + m[9]! * v[2],
+    m[2]! * v[0] + m[6]! * v[1] + m[10]! * v[2],
+  ];
+}
+
+/** Inverse of a rigid column-major 4x4 (R, t) -> (R^T, -R^T t). The checked-in
+ *  bind matrices are exactly orthonormal, so this is exact. */
+function invertRigid16(bind: readonly number[]): number[] {
+  const r00 = bind[0]!, r01 = bind[4]!, r02 = bind[8]!;
+  const r10 = bind[1]!, r11 = bind[5]!, r12 = bind[9]!;
+  const r20 = bind[2]!, r21 = bind[6]!, r22 = bind[10]!;
+  const tx = bind[12]!, ty = bind[13]!, tz = bind[14]!;
+  const ix = -(r00 * tx + r10 * ty + r20 * tz);
+  const iy = -(r01 * tx + r11 * ty + r21 * tz);
+  const iz = -(r02 * tx + r12 * ty + r22 * tz);
+  return [
+    r00, r01, r02, 0,
+    r10, r11, r12, 0,
+    r20, r21, r22, 0,
+    ix, iy, iz, 1,
+  ];
+}
+
+/** Trilinear sample of ONE bone's distance brick at a model-space point, on
+ *  the baker's endpoint-inclusive lattice, plus the true metric distance to
+ *  the brick box outside it — the exact reduce `mapHumanoidField` runs. */
+function sampleBoneDistanceAtlas(
+  atlas: Float32Array, bone: HumanoidBrickManifest, p: Vec3,
+): { d: number; local: Vec3 } {
+  const m2b = invertRigid16(bone.bindToModel);
+  const local = matPoint16(m2b, p);
+  const [ox, oy, oz] = bone.offset;
+  const [dx, dy, dz] = bone.dimensions;
+  const bmin = bone.boundsMin;
+  const bmax = bone.boundsMax;
+  const invExt: Vec3 = [
+    1 / (bmax[0] - bmin[0]), 1 / (bmax[1] - bmin[1]), 1 / (bmax[2] - bmin[2]),
+  ];
+  const u = clamp((local[0] - bmin[0]) * invExt[0], 0, 1) * (dx - 1);
+  const v = clamp((local[1] - bmin[1]) * invExt[1], 0, 1) * (dy - 1);
+  const w = clamp((local[2] - bmin[2]) * invExt[2], 0, 1) * (dz - 1);
+  const i0 = Math.floor(u), j0 = Math.floor(v), k0 = Math.floor(w);
+  const i1 = Math.min(i0 + 1, dx - 1), j1 = Math.min(j0 + 1, dy - 1), k1 = Math.min(k0 + 1, dz - 1);
+  const fu = u - i0, fv = v - j0, fw = w - k0;
+  const idx = (x: number, y: number, z: number) => x + y * ATLAS_X + z * ATLAS_X * ATLAS_Y;
+  const g = (x: number, y: number, z: number) => atlas[idx(ox + x, oy + y, oz + z)]!;
+  const c000 = g(i0, j0, k0), c100 = g(i1, j0, k0), c010 = g(i0, j1, k0), c110 = g(i1, j1, k0);
+  const c001 = g(i0, j0, k1), c101 = g(i1, j0, k1), c011 = g(i0, j1, k1), c111 = g(i1, j1, k1);
+  const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+  const sd = mix(
+    mix(mix(c000, c100, fu), mix(c010, c110, fu), fv),
+    mix(mix(c001, c101, fu), mix(c011, c111, fu), fv),
+    fw,
+  );
+  const extent: Vec3 = [bmax[0] - bmin[0], bmax[1] - bmin[1], bmax[2] - bmin[2]];
+  const dMin: Vec3 = [bmin[0] - local[0], bmin[1] - local[1], bmin[2] - local[2]];
+  const dMax: Vec3 = [
+    local[0] - (bmin[0] + extent[0]),
+    local[1] - (bmin[1] + extent[1]),
+    local[2] - (bmin[2] + extent[2]),
+  ];
+  const outside = Math.hypot(
+    Math.max(dMin[0], dMax[0], 0), Math.max(dMin[1], dMax[1], 0), Math.max(dMin[2], dMax[2], 0),
+  );
+  return { d: sd + outside, local };
+}
+
+/** One-field sample of the parent/child fold: composed smin distance plus the
+ *  colour blend weight, exactly the reduce `mapHumanoidField` runs for a
+ *  parent/child pair (the joint band is read in the CHILD's bind-local frame).
+ *  `k` overrides HUMANOID_JOINT_SMIN_K for the sweep in seam-diagnosis.md. */
+function foldAtlasPair(
+  atlas: Float32Array,
+  arm: HumanoidBrickManifest, fa: HumanoidBrickManifest,
+  jCenterLocal: Vec3, jAxisLocal: Vec3, halfW: number,
+  p: Vec3, k: number = HUMANOID_JOINT_SMIN_K,
+): { d: number; blendW: number } {
+  const a = sampleBoneDistanceAtlas(atlas, arm, p);
+  const b = sampleBoneDistanceAtlas(atlas, fa, p);
+  const best = Math.min(a.d, b.d);
+  const second = Math.max(a.d, b.d);
+  const bandW = jointBlendMirror(b.local, jCenterLocal, jAxisLocal, halfW);
+  const kBand = k * bandW;
+  const gap = second - best;
+  const proximity = clamp(1 - gap / Math.max(kBand * 4, 1e-5), 0, 1);
+  const blendW = bandW * proximity * 0.5;
+  const d = sminMirror(best, second, kBand);
+  return { d, blendW };
+}
+
+/** The shader's tetrahedral normal (calcNormal's e = (1,-1) * eps taps) on the
+ *  composed fold field. */
+function tetraNormalAtlas(
+  atlas: Float32Array,
+  arm: HumanoidBrickManifest, fa: HumanoidBrickManifest,
+  jCenterLocal: Vec3, jAxisLocal: Vec3, halfW: number,
+  p: Vec3, eps = 0.0015,
+): Vec3 {
+  const ex = eps, ey = -eps;
+  const f = (q: Vec3) => foldAtlasPair(atlas, arm, fa, jCenterLocal, jAxisLocal, halfW, q).d;
+  const f1 = f([p[0] + ex, p[1] + ey, p[2] + ey]);
+  const f2 = f([p[0] + ey, p[1] + ey, p[2] + ex]);
+  const f3 = f([p[0] + ey, p[1] + ex, p[2] + ey]);
+  const f4 = f([p[0] + ex, p[1] + ex, p[2] + ex]);
+  return normalize([
+    ex * f1 + ey * f2 + ey * f3 + ex * f4,
+    ey * f1 + ey * f2 + ex * f3 + ex * f4,
+    ey * f1 + ex * f2 + ey * f3 + ex * f4,
+  ]);
+}
+
+interface JointBandSample {
+  distance: number;
+  normal: Vec3;
+  colorWeight: number;
+  pitch: number;
+}
+
+/** Walks `n` samples along the limb axis through the joint centre, at the
+ *  bisected surface radius in the (inner-elbow) flexion direction, returning
+ *  the composed distance, tetrahedral normal and colour weight at each. */
+function sampleAcrossJointBand(
+  manifest: HumanoidVolumeManifest,
+  atlas: Float32Array,
+  parentBone: string,
+  childBone: string,
+  n: number,
+): JointBandSample[] {
+  const arm = manifest.bones.find(b => b.bone === parentBone)!;
+  const fa = manifest.bones.find(b => b.bone === childBone)!;
+  const joint = manifest.joints.find(j => j.child === childBone)!;
+  const hand = manifest.bones.find(b => b.bone === manifest.rightArm.hand)!;
+
+  const m2b = invertRigid16(fa.bindToModel);
+  const jCenterLocal = matPoint16(m2b, joint.centerModel);
+  const jAxisLocal = matVec16(m2b, joint.axisModel);
+  const halfW = joint.overlapM * 0.5;
+
+  const armOrigin: Vec3 = [arm.bindToModel[12]!, arm.bindToModel[13]!, arm.bindToModel[14]!];
+  const faOrigin: Vec3 = [fa.bindToModel[12]!, fa.bindToModel[13]!, fa.bindToModel[14]!];
+  const handOrigin: Vec3 = [hand.bindToModel[12]!, hand.bindToModel[13]!, hand.bindToModel[14]!];
+  const upper = normalize(sub(faOrigin, armOrigin));
+  const fore = normalize(sub(handOrigin, faOrigin));
+  const flexion = normalize(cross(upper, fore));
+  const lateral = scale(flexion, -1); // inner elbow
+
+  const center: Vec3 = joint.centerModel;
+  const axis: Vec3 = joint.axisModel;
+
+  // Bisect the surface radius at the joint centre (composed distance -> 0).
+  const foldAt = (p: Vec3) => foldAtlasPair(atlas, arm, fa, jCenterLocal, jAxisLocal, halfW, p).d;
+  let lo = 0, hi = 0.15;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (foldAt(add(center, scale(lateral, mid))) < 0) lo = mid; else hi = mid;
+  }
+  const radius = (lo + hi) / 2;
+
+  const span = 0.045;
+  const pitch = (2 * span) / (n - 1);
+  const samples: JointBandSample[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = -span + pitch * i;
+    const p = add(add(center, scale(axis, t)), scale(lateral, radius));
+    const fold = foldAtlasPair(atlas, arm, fa, jCenterLocal, jAxisLocal, halfW, p);
+    samples.push({
+      distance: fold.d,
+      normal: tetraNormalAtlas(atlas, arm, fa, jCenterLocal, jAxisLocal, halfW, p),
+      colorWeight: fold.blendW,
+      pitch,
+    });
+  }
+  return samples;
+}
+
+function maxAbsDelta(xs: number[]): number {
+  let m = 0;
+  for (let i = 1; i < xs.length; i++) m = Math.max(m, Math.abs(xs[i]! - xs[i - 1]!));
+  return m;
+}
+
+function maxAngleDelta(ns: Vec3[]): number {
+  let m = 0;
+  for (let i = 1; i < ns.length; i++) {
+    m = Math.max(m, Math.acos(clamp(dot(ns[i - 1]!, ns[i]!), -1, 1)));
+  }
+  return m;
+}
+
+describe('seam diagnosis probe — which quantity is discontinuous across the joint band', () => {
+  const manifest = validateHumanoidVolumeManifest(JSON.parse(
+    readFileSync('public/assets/lab/humanoid-sdf/zombie-humanoid.json', 'utf8'),
+  ));
+  let atlas: Float32Array | null = null;
+  const getAtlas = (): Float32Array => {
+    if (!atlas) {
+      const raw = readFileSync('public/assets/lab/humanoid-sdf/zombie-distance-000.r16f');
+      const u16 = new Uint16Array(raw.byteLength / 2);
+      new Uint8Array(u16.buffer).set(raw);
+      atlas = decodeR16fLe(u16);
+    }
+    return atlas;
+  };
+
+  it('reports which quantity is discontinuous across the joint band', () => {
+    const samples = sampleAcrossJointBand(manifest, getAtlas(), 'RightArm', 'RightForeArm', 400);
+    const maxDistJump = maxAbsDelta(samples.map(s => s.distance));
+    const maxNormalJump = maxAngleDelta(samples.map(s => s.normal));
+    const maxColorJump = maxAbsDelta(samples.map(s => s.colorWeight));
+    // Distance must be C0: no step larger than the sampling pitch.
+    //
+    // DIAGNOSIS: this assertion FAILS (maxDistJump / pitch == 1.962 > 1.5).
+    // The seam is a distance pinch, not a normal crease or a colour line, and
+    // the prescribed "widen HUMANOID_JOINT_SMIN_K" fix is contradicted by the
+    // sweep in docs/dev-notes/2026-08-20-humanoid-dynamics/seam-diagnosis.md
+    // (the gradient scales ~linearly with k). It is left RED deliberately — a
+    // truthful blocker, not a passing lie.
+    expect(maxDistJump).toBeLessThan(samples[0]!.pitch * 1.5);
+    // Normals must not swing more than 15 degrees between adjacent samples.
+    expect(maxNormalJump).toBeLessThan(15 * Math.PI / 180);
+    // The colour weight must not step; it must ramp.
+    expect(maxColorJump).toBeLessThan(0.1);
   });
 });
