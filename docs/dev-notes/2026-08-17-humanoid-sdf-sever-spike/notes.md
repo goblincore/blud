@@ -208,6 +208,6 @@ are side-by-side — the shared interior ramp is compared there.
 
 ## Test counts
 
-- `npx vitest run` — **1738/1738** (114 files; +9 targeting + 6 controller
-  shoot + 1 setCameraTarget over the Task 8/9 baseline).
+- `npx vitest run` — **1738/1738** (114 files; +9 targeting + 7 controller
+  shoot/API/setCameraTarget over the Task 8/9 baseline).
 - `npx tsc --noEmit` — clean. `git diff --check` — clean.
