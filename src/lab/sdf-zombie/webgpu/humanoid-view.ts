@@ -121,7 +121,12 @@ function createHumanoidUniforms() {
     /** Data-texture column of the bone the cut is evaluated in (the forearm). */
     cutBone: uniform(0),
     timeSec: uniform(0),
+    /** Latex flesh — the CUT CAP's skin edge only; the baked path never uses it. */
     baseColor: uniform(new THREE.Color(0xc46a72)),
+    /** Neutral tint for the baked source colour. The atlas already carries the
+     *  authored art, so this is white by default: anything else double-counts
+     *  albedo the way `baseColor` did. */
+    bakedTint: uniform(new THREE.Color(0xffffff)),
     /** Wet red tissue — the cap's mid band between skin edge and dark centre. */
     meatColor: uniform(new THREE.Color(0x9e1b24)),
     deepColor: uniform(new THREE.Color(0x8c1420)),
@@ -157,6 +162,7 @@ function createHumanoidMarchMaterial(
     cutBone: u.cutBone,
     timeSec: u.timeSec,
     baseColor: u.baseColor,
+    bakedTint: u.bakedTint,
     meatColor: u.meatColor,
     deepColor: u.deepColor,
     keyColor: u.keyColor,

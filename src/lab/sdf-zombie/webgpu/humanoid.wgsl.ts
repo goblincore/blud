@@ -332,6 +332,7 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   cutBone: f32,
   timeSec: f32,
   baseColor: vec3<f32>,
+  bakedTint: vec3<f32>,
   meatColor: vec3<f32>,
   deepColor: vec3<f32>,
   keyColor: vec3<f32>,
@@ -382,8 +383,17 @@ export const MARCH_HUMANOID = /* wgsl */ `fn marchHumanoid(
   // Two lit variants: the flesh keeps the baked source colour; the cap's
   // skin edge uses the UN-baked latex colour (baked albedo is disabled on
   // the cap) so the ramp owns the cut surface entirely.
+  //
+  // The baked path is tinted by bakedTint, NOT by baseColor. Multiplying a
+  // full-colour authored texture into the pink latex albedo double-counts
+  // albedo: pale skin x pink latex reads maroon and the blue-grey trousers go
+  // black. That rule was inherited from the FACE (X1.1), where the texture is
+  // a flat GREYSCALE map whose whole job is to modulate one latex tone. A
+  // full-colour body texture already carries the art, so its tint is neutral
+  // and baseColor stays with the cut cap, which has no baked colour of its
+  // own. See docs/dev-notes/2026-08-19-humanoid-albedo/notes.md.
   let litSkin = baseColor * diffuseLight * keyColor + specLight;
-  let litBaked = baseColor * srgbToLinear(baked) * diffuseLight * keyColor + specLight;
+  let litBaked = bakedTint * srgbToLinear(baked) * diffuseLight * keyColor + specLight;
   let cutMode = clusterCfg.y;
   // The cut is the binding surface wherever the pre-cut field is inside the
   // flesh (bodyD < 0); blend to the cap ramp over the rim band.

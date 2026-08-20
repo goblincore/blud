@@ -481,3 +481,27 @@ describe('CPU field mirror — complementary cut occupancy', () => {
     expect(qBoth).toBe(true);
   });
 });
+
+describe('baked albedo is not double-counted', () => {
+  it('tints the baked path with bakedTint, never with the latex baseColor', () => {
+    // Multiplying the full-colour authored texture into the pink latex albedo
+    // stacks two albedos: pale skin x pink latex renders maroon and the
+    // blue-grey trousers go black. The bake is correct -- the Blender
+    // bind-pose preview reconstructs the right colours from the same atlas --
+    // so this is purely the shader's composition rule.
+    expect(MARCH_HUMANOID).toContain('bakedTint * srgbToLinear(baked)');
+    expect(MARCH_HUMANOID).not.toContain('baseColor * srgbToLinear');
+  });
+
+  it('keeps baseColor on the cut cap, which has no baked colour of its own', () => {
+    // tornCapMaterial is deliberately handed the UN-baked lit skin, so the
+    // latex tone still owns the cap's outer edge. Fixing the flesh path must
+    // not strip that.
+    expect(MARCH_HUMANOID).toContain('let litSkin = baseColor *');
+    expect(MARCH_HUMANOID).toContain('tornCapMaterial(litSkin');
+  });
+
+  it('declares bakedTint as its own shader parameter', () => {
+    expect(MARCH_HUMANOID).toContain('bakedTint: vec3<f32>');
+  });
+});
