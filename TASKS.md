@@ -244,6 +244,9 @@ Key reference docs (open these before touching their area):
   (+56 faces, vertex sets identical, max delta 0.0000 mm); the X1.26 static bake
   keeps the default so the SHIPPED hand volume is untouched. Qualifier hand gate
   passes. Unblocks `X1.hand-followups`.
+  Gate result: **86,659 of 490,201 exclusive interior voxels (17.68 %, was
+  302 / 0.06 %)**, one negative component, byte-identical across two Blender
+  processes.
   [notes](docs/dev-notes/2026-08-20-hand-soup-closure/notes.md)
 - `X1.humanoid-sever-spike` [x] **ANSWERED: baked SDF buys detail, costs
   deformability — keep the primitive zombie** (owner verdict 2026-08-20, after
@@ -299,6 +302,17 @@ Key reference docs (open these before touching their area):
   Aside, cheap: `humanoid-volume.ts` SHA-256s each transport part and then the
   combined buffer again — with `parts.length === 1` those are the same bytes,
   so ~48 MiB is hashed twice. Worth ~60 ms; tidiness, not the load cost.
+- `X1.humanoid-spike-cleanup` [ ] **Three small things found while reviewing the
+  chain**, none blocking, all cheap. (1) `HUMAN_WOUND_RIM_OFFSET` / `_WIDTH` in
+  `humanoid-damage.ts` are hand-copied from `zombie-gpu.ts`'s inline `woundCfg`
+  defaults and pinned to literals, so retuning `woundCfg.w` silently desyncs the
+  cluster-duplication guard from the geometry it protects — export the constants
+  and consume them in both places. (2) Every bone's negative region carries 1–11
+  slivers of 1–5 voxels at support-plane grazing angles (`RightLeg` worst at 12
+  components, largest 99.95 %); cull them in the baker. (3)
+  `verify-humanoid-sdf-spike.mjs`'s `settledPieceSeparated` has a dead clause
+  (`dist >= 80 && dist >= 60`), and the notes describe that gate in a way that
+  reads as a failure by conflating the centroid distance with the component size.
 - `X1.humanoid-walk` [ ] **Walk cycle on the baked humanoid** — owner ask
   (2026-08-19), explicitly NOT a blocker for the sever/wound live test, which
   only needs click-to-shoot (Task 10). The spike plan forbids walking on

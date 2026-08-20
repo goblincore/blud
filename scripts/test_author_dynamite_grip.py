@@ -56,6 +56,7 @@ def load_module(path: Path, name: str):
 
 PM = load_module(POSE_SCRIPT, "pose_measure_hands_under_test")
 AUTHOR = load_module(AUTHOR_SCRIPT, "author_dynamite_grip_under_test")
+SDF = load_module(SCRIPTS_DIR / "blender_sdf_grid.py", "blender_sdf_grid_under_test")
 
 
 def blender_available() -> bool:
@@ -221,6 +222,29 @@ class ExportedPoseSoupsTest(unittest.TestCase):
             with np.load(p.path) as data:
                 counts.append(np.asarray(data["faces"]).shape[0])
         assert len(set(counts)) == 1, counts
+
+    def test_every_pose_is_welded_closed(self):
+        """X1.hand-soup-closure: Mesh to SDF Grid signs only closed solids.
+
+        The wrist cap closes the cut, but the nail-mesh exclusion leaves five
+        open nail-bed rings (measured 2026-08-20: 66 welded boundary edges =
+        4x14-edge finger rings + 1x10-edge thumb ring, tracking the digits).
+        Blender's Mesh to SDF Grid emits an UNSIGNED SHELL through a real hole
+        (the firm-grip union contributed 302 of 490,201 interior voxels), so
+        every exported pose must be welded-closed: zero boundary edges, one
+        component, positive signed volume. Welded, never indexed: the source
+        duplicates seam vertices, which read as open by index while being
+        closed as a surface.
+        """
+        for p in self.poses:
+            with np.load(p.path) as data:
+                verts = np.asarray(data["vertices"], dtype=np.float64)
+                faces = np.asarray(data["faces"], dtype=np.int64)
+            info = SDF.welded_mesh_info(verts, faces)
+            assert info["boundaryEdges"] == 0, f"{p.label}: {info}"
+            assert info["components"] == 1, f"{p.label}: {info}"
+            assert info["closed"] is True, f"{p.label}: {info}"
+            assert info["signedVolumeM3"] > 0.0, f"{p.label}: {info}"
 
     def test_authoring_json_records_contract_and_keys(self):
         meta = json.loads((self.fixture_dir / "authoring.json").read_text())

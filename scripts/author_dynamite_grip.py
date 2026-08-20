@@ -858,7 +858,13 @@ def blender_pose_stage(output_dir: Path, *, contact_sheet: bool = True) -> None:
         world = hand.globals(rots)
         posed = bh.inverse_bind_skin(hand, world, extract)
         local = [to_local(Vector(p)) for p in posed]
-        cut = bh.wrist_cut_cap(local, kept_faces, f"Hand{idx}_{label}")
+        # close_nail_beds: the nail-mesh exclusion leaves one open ring per
+        # digit (4x14-edge fingers + 1x10-edge thumb = 66 welded boundary
+        # edges); Mesh to SDF Grid signs those as an unsigned shell, so the
+        # pose soups must export welded-closed. The X1.26 static bake keeps
+        # the default (its shipped input soup is unchanged).
+        cut = bh.wrist_cut_cap(local, kept_faces, f"Hand{idx}_{label}",
+                               close_nail_beds=True)
         verts_out, faces_out = cut["vertices"], cut["faces"]
         face_counts.add(int(faces_out.shape[0]))
         if not np.isfinite(verts_out).all():

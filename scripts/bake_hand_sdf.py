@@ -604,12 +604,109 @@ def anatomical_frame(hand, world):
     return x_axis, y_axis, z_axis, origin, dorsal_sign
 
 
-def wrist_cut_cap(local_verts, kept_faces, mesh_name: str = "HandRelaxedR") -> dict:
+def _welded_hole_loops(bm, tol: float = 1e-6) -> list[list]:
+    """REAL hole loops: boundary edges that have no coincident boundary twin.
+
+    Indexed boundary edges come in two kinds on this source. UV-seam duplicates
+    read as open by index (two coincident edges, one link face each) but are
+    closed as a surface; a genuine hole edge has no partner at its endpoint
+    positions. Chain the partnerless edges by rounded position key so a ring
+    that is seam-SPLIT in the indexed mesh still comes back as one loop.
+    """
+    def key(v) -> tuple[int, int, int]:
+        return (round(v.co.x / tol), round(v.co.y / tol), round(v.co.z / tol))
+
+    by_pos: dict[tuple, list] = {}
+    for e in bm.edges:
+        if not e.is_boundary:
+            continue
+        a, b = key(e.verts[0]), key(e.verts[1])
+        by_pos.setdefault((a, b) if a <= b else (b, a), []).append(e)
+    hole_edges = [es[0] for es in by_pos.values() if len(es) == 1]
+    adj: dict[tuple, list] = {}
+    for e in hole_edges:
+        adj.setdefault(key(e.verts[0]), []).append(e)
+        adj.setdefault(key(e.verts[1]), []).append(e)
+    loops: list[list] = []
+    seen: set[int] = set()
+    for start in hole_edges:
+        if id(start) in seen:
+            continue
+        loop = [start]
+        seen.add(id(start))
+        cur = key(start.verts[1])
+        entry = key(start.verts[0])
+        while cur != entry:
+            nxt = [e for e in adj.get(cur, []) if id(e) not in seen]
+            if not nxt:
+                raise SystemExit("hole boundary chain is open even in the "
+                                 "welded sense; not a fillable ring")
+            e = nxt[0]
+            seen.add(id(e))
+            loop.append(e)
+            a, b = key(e.verts[0]), key(e.verts[1])
+            cur = b if a == cur else a
+        loops.append(loop)
+    return loops
+
+
+def _fill_nail_bed_holes(bm) -> dict:
+    """Weld and fill every remaining real boundary loop (the nail beds).
+
+    The nail-mesh exclusion in extract_right_hand_components drops the ten
+    nail plate shells; the skin has a matching cutout per digit, so the soup
+    keeps one open ring per digit (measured 2026-08-20: 4x14-edge finger
+    rings + 1x10-edge thumb ring = 66 welded boundary edges on every pose).
+    The wrist cap never touches them and Mesh to SDF Grid cannot sign an
+    interior through them. Same recipe as the cut ring: weld each ring's
+    seam-split vertices, then holes_fill + triangulate.
+    """
+    import bmesh
+
+    loops = _welded_hole_loops(bm)
+    if not loops:
+        return {"loops": 0, "loopEdges": [], "fillFaces": 0}
+    ring_verts = list({v.index: v
+                       for loop in loops for e in loop for v in e.verts}.values())
+    bmesh.ops.remove_doubles(bm, verts=ring_verts, dist=1e-6)
+    loops = _welded_hole_loops(bm)          # re-chain on the welded topology
+    fill_faces = 0
+    for loop in loops:
+        # After the weld every consecutive edge pair must share an actual
+        # vertex, or holes_fill refuses the chain (the cut-ring trap).
+        for prev, cur in zip(loop, loop[1:] + loop[:1]):
+            if not (set(prev.verts) & set(cur.verts)):
+                raise SystemExit("nail-bed ring is still seam-split after "
+                                 "the 1 um weld; refusing a partial fill")
+        before = len(bm.faces)
+        filled = bmesh.ops.holes_fill(bm, edges=loop, sides=512)["faces"]
+        ngons = [f for f in filled if len(f.verts) > 3]
+        if ngons:
+            bmesh.ops.triangulate(bm, faces=ngons)
+        added = len(bm.faces) - before
+        if added == 0:
+            raise SystemExit(f"nail-bed fill closed nothing on a "
+                             f"{len(loop)}-edge ring")
+        fill_faces += added
+    return {"loops": len(loops),
+            "loopEdges": sorted((len(l) for l in loops), reverse=True),
+            "fillFaces": fill_faces}
+
+
+def wrist_cut_cap(local_verts, kept_faces, mesh_name: str = "HandRelaxedR",
+                  *, close_nail_beds: bool = False) -> dict:
     """35 mm wrist cut: bisect, weld ONLY the cut ring, cap ONLY cut edges.
 
     Returns numpy arrays + boundary diagnostics. Hard-fails whenever the cap
     fills nothing (the X1.26 wrist-cap trap: an open cut ring silently leaves
     an uncapped wrist).
+
+    With close_nail_beds=True the five open nail-bed rings the nail-mesh
+    exclusion leaves behind are welded and filled too, and the result is
+    verified welded-closed via blender_sdf_grid.welded_mesh_info (indexed
+    boundary edges are NOT the test -- this source duplicates seam vertices).
+    Default False: the X1.26 static bake that produced the SHIPPED volume
+    keeps its exact input soup.
     """
     import bmesh
     import bpy
@@ -665,11 +762,19 @@ def wrist_cut_cap(local_verts, kept_faces, mesh_name: str = "HandRelaxedR") -> d
     bm.faces.ensure_lookup_table()
     bm.verts.ensure_lookup_table()
     after_cap_boundary = boundary_edges(bm)
+    nail_bed = {"loops": 0, "loopEdges": [], "fillFaces": 0}
+    if close_nail_beds:
+        nail_bed = _fill_nail_bed_holes(bm)
+        bm.faces.ensure_lookup_table()
+        bm.verts.ensure_lookup_table()
     print(f"[blender] wrist cut at y={-WRIST_CUT_M * 1000:.0f} mm: "
           f"boundary edges {before_boundary} -> cut {after_cut_boundary} "
           f"(cut ring {len(cut_edges)}, welded {welded_pairs}) -> cap "
           f"{after_cap_boundary} (+{cap_faces} faces); "
-          f"faces {len(kept_faces)} -> {len(bm.faces)}")
+          f"faces {len(kept_faces)} -> {len(bm.faces)}"
+          + (f"; nail beds: {nail_bed['loops']} rings "
+             f"{nail_bed['loopEdges']} edges -> +{nail_bed['fillFaces']} faces"
+             if close_nail_beds else ""))
 
     bm.verts.index_update()
     bm.faces.index_update()
@@ -678,13 +783,23 @@ def wrist_cut_cap(local_verts, kept_faces, mesh_name: str = "HandRelaxedR") -> d
                          dtype=np.int64)
     bm.free()
     bpy.data.meshes.remove(me)
+    if close_nail_beds:
+        # Judge the result with the same welded contract the qualifier uses;
+        # indexed boundary edges keep counting the (harmless) seam duplicates.
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        from blender_sdf_grid import welded_mesh_info
+        welded = welded_mesh_info(verts_out, faces_out)
+        if not welded["closed"]:
+            raise SystemExit(f"nail-bed closure incomplete: {welded}")
     return {"vertices": verts_out, "faces": faces_out,
             "boundaryEdges": {"source": before_boundary,
                               "afterCut": after_cut_boundary,
                               "afterCap": after_cap_boundary,
                               "cutRing": len(cut_edges),
                               "weldedPairs": welded_pairs,
-                              "capFaces": cap_faces}}
+                              "capFaces": cap_faces,
+                              "nailBedLoops": nail_bed["loopEdges"],
+                              "nailBedFillFaces": nail_bed["fillFaces"]}}
 
 
 def blender_stage(npz_path: Path) -> None:

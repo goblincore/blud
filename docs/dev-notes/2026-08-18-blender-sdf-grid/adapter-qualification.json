@@ -1,33 +1,26 @@
 {
-  "generatedAt": "2026-08-19T13:47:10Z",
-  "passed": false,
+  "generatedAt": "2026-08-20T07:28:29Z",
+  "passed": true,
   "runs": [
     {
-      "f32Sha256": "ac560f252282c357c3728c42c7b93982acbdee2a85285ed08f190a55f3bbbb3a",
+      "f32Sha256": "49448a3f8d133a174d141d8bdecc58ca4eb0b71b7574466311fc86557e6cd476",
       "gates": {
         "bothSigns": true,
         "boundaryMinM": 0.01199999451637268,
         "boundaryOutside": true,
         "negativeComponentStats": {
-          "count": 106,
-          "largestComponentFraction": 0.9921967856958297,
+          "count": 1,
+          "largestComponentFraction": 1.0,
           "largestComponentSizes": [
-            38400,
-            94,
-            40,
-            38,
-            8,
-            8,
-            3,
-            3
+            125059
           ],
-          "largestComponentVoxels": 38400,
-          "negativeSamples": 38702,
-          "singleVoxelComponents": 89
+          "largestComponentVoxels": 125059,
+          "negativeSamples": 125059,
+          "singleVoxelComponents": 0
         },
-        "negativeComponents": 106,
-        "negativeFraction": 0.037125288977140826,
-        "negativeSamples": 38702,
+        "negativeComponents": 1,
+        "negativeFraction": 0.11996412366782737,
+        "negativeSamples": 125059,
         "operandCoverage": [
           {
             "aabbMaxM": [
@@ -40,9 +33,9 @@
               -0.03500000014901161,
               -0.026157258078455925
             ],
-            "aabbNegatives": 6037,
+            "aabbNegatives": 92394,
             "aabbVoxels": 495936,
-            "exclusiveNegatives": 302,
+            "exclusiveNegatives": 86659,
             "exclusiveVoxels": 490201,
             "label": "firm-grip-hand"
           },
@@ -64,13 +57,13 @@
             "label": "wrist-continuation"
           }
         ],
-        "operandInteriorError": "operand 'firm-grip-hand' contributed no interior: 302 negative of 490201 exclusive voxels (0.0616% < 2.00%). An open (holed) mesh bakes as an unsigned shell through Mesh to SDF Grid; weld and cap it, or use the winding-number route.",
-        "operandInteriorPassed": false,
-        "positiveSamples": 1003768,
+        "operandInteriorError": null,
+        "operandInteriorPassed": true,
+        "positiveSamples": 917411,
         "requiredComponents": null,
         "route": "direct-vdb",
         "valueMaxM": 0.012000000104308128,
-        "valueMinM": -0.012000000104308128
+        "valueMinM": -0.0120000708848238
       },
       "grid": {
         "bandWidth": 6,
@@ -93,7 +86,7 @@
         "gridName": "sdf",
         "nodeContractSha256": "fa55d473589cca03bd55e9e67bcd3ff907c523cb36811707040c5e5128ab74e6",
         "valueMaxM": 0.012000000104308128,
-        "valueMinM": -0.012000000104308128,
+        "valueMinM": -0.0120000708848238,
         "voxelSizeDeclaredM": 0.002,
         "voxelSizeMeasuredM": [
           0.002,
@@ -101,9 +94,9 @@
           0.002
         ]
       },
-      "operationSourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
-      "passed": false,
-      "r16fSha256": "9b140430a45a23eef02ae80e31bf8fa80575fa1039b35fc4c7be237803f1dbfd",
+      "operationSourceSha256": "1ba9935cca93af6d3cde6d71ef87d220fb36201454649c53b2e7ad0cfef9a78c",
+      "passed": true,
+      "r16fSha256": "51d538cccd898abf9096d4c179a6f804534576a6f98b340796ad5c7f7e6d3f4e",
       "repeat": {
         "f32Equal": true,
         "metadataEqual": true,
@@ -112,15 +105,15 @@
       },
       "source": "firm-grip-hand-union",
       "sourceContract": {
-        "contactSheetSha256": "7241b36ba6f87700cac1047d2efec1e295c0613caedca8d11663bd4aa4cbdb32",
+        "contactSheetSha256": "24366bf32bec193511105c8396cb3e088be079a4ab274ecee642a6011762c8cd",
         "handSourceSha256": "71ca50d633f40ff23939e7ea27177a51758d712ba332c44624f86743af78c858",
         "indexedTopology": [
           {
-            "boundaryEdges": 530,
+            "boundaryEdges": 464,
             "closed": false,
             "components": 2,
             "label": "firm-grip-hand",
-            "triangles": 3300,
+            "triangles": 3356,
             "vertices": 1912
           },
           {
@@ -137,23 +130,23 @@
           "wrist-continuation"
         ],
         "payloadSha256": [
-          "68569edcafcc0c863e5c0945b3eeb315194af5d098709f24d85b7b89a937cb5e",
+          "3fff1ad0272ae188f46853a77975ceedf198842fb25e2b1bd9fb0dbbd7bcf0e4",
           "0a0b7da506adffc0c931978bb48a8314eff5bc1d36e9fb44307873213f592f6a"
         ],
         "pose": "pose-05-firm-grip.npz",
         "propSha256": "4b900499c36d5ee3c13ca6b0f02ef9e1acb403b48952aeecf10306626b4ad836",
-        "soupSha256": "372adecf8e4cbb5e0563cf0d5537a61337c61071c8f4ba65ba6fe7d969bb4023",
-        "soupTriangleCount": 3300,
+        "soupSha256": "a2d4a8dd9f1505c30f7a8ffe1c681bd24d232612dbaca05505478d6ec2266e4f",
+        "soupTriangleCount": 3356,
         "soupVertexCount": 1912,
         "weldedTopology": [
           {
-            "boundaryEdges": 66,
-            "closed": false,
+            "boundaryEdges": 0,
+            "closed": true,
             "components": 1,
             "degenerateFacesAfterWeld": 0,
             "label": "firm-grip-hand",
-            "signedVolumeM3": 0.0006871938658437479,
-            "triangles": 3300,
+            "signedVolumeM3": 0.0007209010014782987,
+            "triangles": 3356,
             "vertices": 1680,
             "verticesBeforeWeld": 1912,
             "weldToleranceM": 1e-06
@@ -187,12 +180,12 @@
         "wristBoxSha256": "1c6f52b83bec1de2ea399bcd52aea8d0052ac9bdfa5146466af353569bb1d8f5",
         "wristCutM": 0.035
       },
-      "sourceSha256": "00600cd52edf0e674f8be99d982c89a6db7446d7e7f37fd0f91a5a4c5a43de58",
+      "sourceSha256": "1ba9935cca93af6d3cde6d71ef87d220fb36201454649c53b2e7ad0cfef9a78c",
       "timings": {
-        "firstBlenderS": 2.319,
-        "firstRunS": 2.329,
-        "secondBlenderS": 2.343,
-        "secondRunS": 2.353
+        "firstBlenderS": 2.322,
+        "firstRunS": 2.333,
+        "secondBlenderS": 2.317,
+        "secondRunS": 2.327
       }
     },
     {
@@ -442,10 +435,10 @@
       },
       "sourceSha256": "dfb55d18db13278c852619f9d017cb296c85f12cce82ed53639bd464a1911cb5",
       "timings": {
-        "firstBlenderS": 1.968,
-        "firstRunS": 2.175,
-        "secondBlenderS": 1.977,
-        "secondRunS": 2.185
+        "firstBlenderS": 2.056,
+        "firstRunS": 2.266,
+        "secondBlenderS": 2.032,
+        "secondRunS": 2.234
       }
     }
   ],
