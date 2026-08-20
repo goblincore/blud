@@ -23,11 +23,23 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
 **Next session — pick up (prioritized):**
-0. **`X1.hand-followups` — FPV full distal-arm rerun (owner pick, 2026-08-20).**
-   Now unblocked: `X1.hand-soup-closure` closed the nail-bed rings, so the
-   Blender-native SDF union leg can run. The plan and design exist; the dispatch
-   tasks still need generating from
-   [the plan](docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md).
+0. **`X1.hand-followups` — FPV full distal-arm rerun. PAUSED mid-chain on a
+   rate limit (2026-08-20).** Tasks 0-4 were dispatched as
+   `2026-08-20-fpv-distal-arm-task-{0..4}`; **tasks 0 and 1 are real and
+   committed**, tasks 2-4 are NOT done despite the board saying so.
+   - `dispatch/fpv-distal-arm-task-0` — `077a919`, choreography corridor pinned.
+   - `dispatch/fpv-distal-arm-task-1` — `4468817`, the bake. All gates passed:
+     6/6 frames 1 component + 0 boundary edges, contact error 0.48-0.65 mm
+     (<=0.75), atlas 60.5 MiB (<=128), 1.5 mm pitch, `direct-vdb` route,
+     byte-identical across four bakes.
+   - **Tasks 2-4 silently no-opped** — kimi k3 hit 100% rate limit the instant
+     task-1 finished, and dispatch recorded three 3-second runs as `done`
+     exit 0. Their empty branches were deleted. To resume: reset those three
+     task files to pending (they will fire immediately, so only do that AFTER
+     the limit resets), and consider rebasing onto the current branch tip first
+     so they pick up the `MAX_PRIMS` change.
+   - Still ahead: Task 4 is **Gate B**, owner visual inspection. Tasks 5-6 were
+     never dispatched and remain blocked on that approval.
    Scope already settled so it is not re-litigated: rebuild the RIGHT distal arm
    only — the left hand is choreography scope and the reference draws it as hand
    + wrist with no forearm (tiles 3211/3212).
