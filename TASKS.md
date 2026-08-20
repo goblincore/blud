@@ -23,6 +23,16 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
 **Next session — pick up (prioritized):**
+0. **`X1.hand-followups` — FPV full distal-arm rerun (owner pick, 2026-08-20).**
+   Now unblocked: `X1.hand-soup-closure` closed the nail-bed rings, so the
+   Blender-native SDF union leg can run. The plan and design exist; the dispatch
+   tasks still need generating from
+   [the plan](docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md).
+   Scope already settled so it is not re-litigated: rebuild the RIGHT distal arm
+   only — the left hand is choreography scope and the reference draws it as hand
+   + wrist with no forearm (tiles 3211/3212).
+   **The baked-SDF zombie line is closed** — see `X1.humanoid-sever-spike` for
+   the verdict; the primitive zombie stays for enemies.
 1. **Pipeline + a full weapon/feel polish pass — DONE + playtested (2026-06-17):** `gibSpawns` drive ChunkSystem (`a1e6b1d`); then a sweep of NotBlood-sourced fixes all merged + playtest-confirmed (`72f27d2`, `c38b34e`): flare flight/stick (segment-sweep; flesh-only stick; extinguish on death), flare strafe-origin, cultist burn-death sprite, player eye scale (1.75 from feet), and dynamite throw RANGE (costable 2^30 fix → ~2× velocity). All F2 rows below marked `[x]`. Next: port a new behavior on the pipeline+tables (`F2.cultist.dodge` / `F2.cultist.search`, or a new bestiary enemy).
 2. **120-tic deterministic core** (ALL PLANS LANDED + playtest-confirmed 2026-06-23) — strangler vertical slice: deterministic sim spine (fixed 120-tic loop, integer Build units, plain-data SimState, seeded RNG, determinism harness) proven on `{player, dynamite, shotgun cultist}`; cosmetic VFX (Rapier gibs/particles) stays per-client. Targets P2P deterministic lockstep (rollback-extensible); transport is a later spec. **The shotgun-cultist AI port (`F2.cultist.*`: dodge/search/goto/real-LOS) folds INTO this milestone**, built natively deterministic.
    - Spec → [docs/superpowers/specs/2026-06-18-blud-deterministic-core-design.md](docs/superpowers/specs/2026-06-18-blud-deterministic-core-design.md)
@@ -226,56 +236,41 @@ Key reference docs (open these before touching their area):
   · [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json)
   · [notes + previews](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
   · [chisel findings](docs/dev-notes/2026-08-19-chisel-sdf-qualification/notes.md)
-- `X1.hand-soup-closure` [ ] **Weld + cap the authored hand poses** — new
-  prerequisite discovered by the adapter qualification. `pose-05-firm-grip`
-  still has 66 boundary edges after a 1 um weld, so Blender-native SDF union
-  bakes it as an unsigned shell (302 interior voxels instead of ~35k). Either
-  close the soup in `scripts/author_dynamite_grip.py` (the wrist cap does not
-  actually close the surface) or route hand fields through the existing
-  winding-number baker `scripts/bake_hand_sdf.py`, which is what produced the
-  SHIPPED hand volume. Re-run
-  `uv run scripts/qualify_blender_sdf_real_sources.py --hand` until its
-  per-operand interior gate passes. Blocks the Blender-native union in
-  `X1.hand-followups`.
-  [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
-- `X1.humanoid-sever-spike` [~] **Textured full humanoid SDF + forearm sever
-  + aimed wounds** — Tasks 1–9 of 10 landed on the r2 dispatch chain; Task 10
-  (click-to-shoot targeting + panels 11–17 + final owner verdict) is the last.
-  Both interim gates passed: the bake (byte-deterministic, reconstructs clean)
-  and the sever (live WebGPU, 17/17 verifier gates, first sever 18.4 ms,
-  resource counts identical across ten cycles). Wounds are folded in per the
-  owner call — they re-key to a bone-brick index through the bone's posed rigid
-  inverse, which deletes `frame()`, `basisFromAxis` and the `bodyYaw` contract.
-  Chain tip: `dispatch/humanoid-sdf-spike-r2-task-9`.
-  [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
-  · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
-  · [wound design](docs/superpowers/specs/2026-08-19-humanoid-sdf-wound-damage-design.md)
-  · [sever gate notes](docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/notes.md)
-  - **Three findings worth keeping**, each with its own dev-note:
-    the source GLB is NOT closed (44 pinhole loops) but the bake bridged them —
-    `LeftHand` at 54 boundary verts and `RightHand` at 0 came out 16.0 % vs
-    15.5 % negative ([note](docs/dev-notes/2026-08-19-humanoid-source-closedness/notes.md));
-    the narrow band had to widen 6 → 16 voxels or the coarse targeting brick
-    could not localise its zero crossing on head/hands; and the baked albedo was
-    being multiplied into the latex `baseColor`, rendering the body maroon
-    ([note](docs/dev-notes/2026-08-19-humanoid-albedo/notes.md)).
-  - **`direct-vdb` is not a move off Blender's Mesh to SDF Grid.** OpenVDB owns
-    the boolean fold and the dense readback only, so the closedness precondition
-    stands. The path that ignores closedness is the libigl winding-number
-    sampler in `scripts/bake_hand_sdf.py`. Chisel would too (it signs by winding
-    number) but is GPL-3.0 with an unresolved intersection gate —
-    [why](docs/dev-notes/2026-08-19-chisel-sdf-qualification/notes.md).
-- `X1.humanoid-spike-cleanup` [ ] **Three small things found while reviewing the
-  chain**, none blocking, all cheap. (1) `HUMAN_WOUND_RIM_OFFSET` / `_WIDTH` in
-  `humanoid-damage.ts` are hand-copied from `zombie-gpu.ts`'s inline `woundCfg`
-  defaults and pinned to literals, so retuning `woundCfg.w` silently desyncs the
-  cluster-duplication guard from the geometry it protects — export the constants
-  and consume them in both places. (2) Every bone's negative region carries 1–11
-  slivers of 1–5 voxels at support-plane grazing angles (`RightLeg` worst at 12
-  components, largest 99.95 %); cull them in the baker. (3)
-  `verify-humanoid-sdf-spike.mjs`'s `settledPieceSeparated` has a dead clause
-  (`dist >= 80 && dist >= 60`), and the notes describe that gate in a way that
-  reads as a failure by conflating the centroid distance with the component size.
+- `X1.hand-soup-closure` [x] **Nail beds, not the wrist cap** — the 66 welded
+  boundary edges on every authored grip pose were five nail-bed rings (4x14
+  finger + 1x10 thumb) left open because `X1.26` deliberately excludes the nail
+  plate meshes while the skin keeps a matching cutout per digit. The cap chain
+  was sound all along. `wrist_cut_cap(..., close_nail_beds=True)` fills them
+  (+56 faces, vertex sets identical, max delta 0.0000 mm); the X1.26 static bake
+  keeps the default so the SHIPPED hand volume is untouched. Qualifier hand gate
+  passes. Unblocks `X1.hand-followups`.
+  [notes](docs/dev-notes/2026-08-20-hand-soup-closure/notes.md)
+- `X1.humanoid-sever-spike` [x] **ANSWERED: baked SDF buys detail, costs
+  deformability — keep the primitive zombie** (owner verdict 2026-08-20, after
+  10 spike tasks + a 4-task dynamics pass, all green: 1751 tests, 29/29 browser
+  gates, byte-deterministic bake).
+  What it delivered: a textured 22-bone SDF humanoid marched from baked
+  distance+colour bricks, forearm severing with complementary cut caps,
+  bone-keyed wounds that ride articulation, and coarse-brick click-to-shoot.
+  Face, hands and clothing read genuinely well.
+  **Why the primitive still wins for enemies:** bricks are rigid, so (a) flexing
+  the elbow opens a real gap at the back — two solids rotating apart leave a
+  void and there is no flesh to fill it, and (b) craters cannot bulge, tear or
+  splay, because the brick field is fixed data. The procedural body gets both
+  for free: its limbs are overlapping blobs whose smin re-forms around any
+  configuration. Detail and deformability pulled opposite the whole way.
+  **The technique is worth keeping for things that do not deform much** — heads,
+  hands, props. If anyone resumes it, the open leads are the joint-gap filler
+  and scaling the joint smin by FIELD DIFFERENCE rather than band position (see
+  the seam diagnosis; standard smin carves most exactly when the two fields
+  already agree).
+  [spike plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
+  · [dynamics plan](docs/superpowers/plans/2026-08-20-humanoid-dynamics-pass.md)
+  · [seam diagnosis](docs/dev-notes/2026-08-20-humanoid-dynamics/seam-diagnosis.md)
+  · [closedness](docs/dev-notes/2026-08-19-humanoid-source-closedness/notes.md)
+  · [albedo](docs/dev-notes/2026-08-19-humanoid-albedo/notes.md)
+  · branches `dispatch/humanoid-sdf-spike-r2-task-{2..10}` +
+  `dispatch/humanoid-dynamics-task-{1..4}` (tip `10cc5f4`), unmerged.
 - `X1.humanoid-shader-gen-cost` [ ] **The 33 s first load is TSL codegen, not
   asset loading** — profiled 2026-08-20 on real Metal-3: 32.5 s to `ready`, of
   which **ScriptDuration 25.1 s**, and the entire profile top is `build` /
@@ -308,17 +303,28 @@ Key reference docs (open these before touching their area):
   ride any pose for free (the elbow scrub is the existing proof); and `X1.22.1`
   found the collapse "stall" was a per-frame dt clamp turning browser throttle
   into slow motion — reuse `planSubSteps`, do not re-derive it.
-- `X1.hand-followups` [ ] **FPV full distal-arm rerun** — hybrid wrist and the
+- `X1.hand-followups` [ ] **>>> NEXT SESSION: FPV full distal-arm rerun** — hybrid wrist and the
   later one-piece synthetic-forearm reference were both owner-rejected. The
   next run uses Blender-native SDF union for one hand+wrist+native-forearm field,
   retains an articulated upper arm, and pins the original Blud two-hand
   performance first: low bundle hold, short lighter-to-fuse reach, withdrawal,
   cook, then casual underhand toss. Modest 3D adjustment is allowed inside that
   keyframe corridor; football/overhand posing is not. The Blender-native union
-  leg is blocked by `X1.hand-soup-closure`; an articulated upper arm and the
+  leg is **UNBLOCKED as of 2026-08-20** (`X1.hand-soup-closure` closed the nail
+  beds; all six poses weld-closed and the qualifier hand gate passes); the
+  articulated upper arm and the
   performance work are not. Intentionally paused until usage resets.
   [design](docs/superpowers/specs/2026-08-18-sdf-fpv-full-distal-arm-rebuild-design.md)
   · [plan](docs/superpowers/plans/2026-08-18-sdf-fpv-full-distal-arm-rebuild.md)
+  **How much LEFT arm is visible: measured, not guessed.** Tiles 3211 (108x102)
+  and 3212 (109x104) of `dynamite-lighter-ignite` are the only anatomy frames
+  and both draw hand + a sliver of wrist, cropped at the frame edge — no
+  forearm, no elbow. The other referenced tiles (3216/3217/3218/3221) are 5x8
+  to 17x15 flame and spark bits. So the left side needs NO arm build; wanting
+  more is a deviation from the reference needing an explicit owner call.
+  A ready-to-run dispatch brief already exists for the closure prerequisite at
+  `~/.claude/dispatch/plans/2026-08-20-hand-soup-closure.md` (done); the rerun
+  itself still needs its tasks generated from the plan.
 - `X1.25` [x] **PSX-AA post pass** — FXAA at internal res + temporal smear + optional
   sharp-bilinear upscale, `post` panel sliders, all-off = pixel parity. The first
   run's 'color shift' was a Y-flip (kimi-oai, 2 runs). Owner slider session open.
