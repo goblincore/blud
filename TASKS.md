@@ -272,6 +272,9 @@ Key reference docs (open these before touching their area):
   · [seam diagnosis](docs/dev-notes/2026-08-20-humanoid-dynamics/seam-diagnosis.md)
   · [closedness](docs/dev-notes/2026-08-19-humanoid-source-closedness/notes.md)
   · [albedo](docs/dev-notes/2026-08-19-humanoid-albedo/notes.md)
+  · Obsidian writeup: `Claude Notes/Blud/2026-08-20-baked-sdf-humanoid-findings.md`
+  · Seam fix shipped at `k = 0.002` — owner assessment 2026-08-20: "mostly not
+  that bothersome now though still visible if you take a closer look", accepted.
   - **Measured, from the chain's own gates:** spike 29/29 (17 sever + 12 wound),
     first sever 18.4 ms, wound-scan delta 0 ms at 0/6/12 wounds, click-to-shoot
     0.072 ms/hit, 0 slot drops. Dynamics 32/32 (elbow-folds 0.156,
