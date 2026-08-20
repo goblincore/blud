@@ -29,16 +29,17 @@ import {
   type SpikeViewLike,
 } from './humanoid-spike-main';
 
-/** A minimal two-bone manifest — the controller feeds it to the pure
+/** A minimal right-arm-chain manifest — the controller feeds it to the pure
  *  pose/sever modules, which read bones/joints/rightArm/occupiedBounds and
- *  never re-validate. Identical shape to humanoid-view.test.ts's fixture. */
-function twoBoneManifest(): HumanoidVolumeManifest {
+ *  never re-validate. Includes `RightHand` because the pose module's
+ *  flexion-axis derivation reads `rightArm.hand` (a real bone origin). */
+function armChainManifest(): HumanoidVolumeManifest {
   const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   return {
     version: 1,
     kind: 'humanoid-bone-sdf',
     order: 'x-fastest-y-z',
-    boneCount: 2,
+    boneCount: 3,
     pageCount: 1,
     atlasDimensions: [8, 8, 8],
     source: {
@@ -74,6 +75,16 @@ function twoBoneManifest(): HumanoidVolumeManifest {
         occupiedBoundsMin: [0, 0, 0], occupiedBoundsMax: [0.02, 0.02, 0.02],
         fieldStats: { min: -1, max: 1, negativeCount: 1, positiveCount: 1, boundaryMin: 0.01 },
         bindToModel: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1],
+        modelToBind: identity,
+      },
+      {
+        bone: 'RightHand', jointIndex: 2, parentIndex: 1,
+        offset: [10, 2, 2], dimensions: [3, 3, 3],
+        boundsMin: [0, 0, 0], boundsMax: [0.02, 0.02, 0.02],
+        voxelSize: [0.01, 0.01, 0.01], padding: 2, pageIndex: 0,
+        occupiedBoundsMin: [0, 0, 0], occupiedBoundsMax: [0.02, 0.02, 0.02],
+        fieldStats: { min: -1, max: 1, negativeCount: 1, positiveCount: 1, boundaryMin: 0.01 },
+        bindToModel: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1],
         modelToBind: identity,
       },
     ],
@@ -144,7 +155,7 @@ function makePrewarmReport(): PrewarmReport {
 }
 
 function makeReady(
-  manifest: HumanoidVolumeManifest = twoBoneManifest(),
+  manifest: HumanoidVolumeManifest = armChainManifest(),
   backend = 'webgpu',
 ): { controller: HumanoidSpikeController; stub: ViewStub } {
   const stub = makeViewStub();
@@ -159,7 +170,7 @@ describe('HumanoidSpikeController — automation contract', () => {
   let stub: ViewStub;
 
   beforeEach(() => {
-    manifest = twoBoneManifest();
+    manifest = armChainManifest();
     stub = makeViewStub();
   });
 
@@ -238,7 +249,7 @@ describe('HumanoidSpikeController — automation contract', () => {
     expect(stub.lastCut!.detachedVisible).toBe(true);
     expect(stub.lastChunk).not.toBeNull();
     expect(stub.lastChunk!.chunk.limb).toBe('armR');
-    expect(stub.lastChunk!.frozen.length).toBe(1); // RightForeArm only
+    expect(stub.lastChunk!.frozen.length).toBe(2); // RightForeArm + RightHand
     expect(controller.resourceCounts()).toEqual(BASE_COUNTS);
   });
 
@@ -384,7 +395,7 @@ describe('SpikeDomAdapter — button disabled state through the controller', () 
   it('controls stay disabled until ready; sever gates on intact', () => {
     const els = makeEls();
     const stub = makeViewStub();
-    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, { backend: 'webgpu' });
+    const controller = new HumanoidSpikeController(armChainManifest(), stub.view, { backend: 'webgpu' });
     const adapter = new SpikeDomAdapter(controller, els);
 
     // loading: everything disabled, sever refused.
@@ -414,7 +425,7 @@ describe('SpikeDomAdapter — button disabled state through the controller', () 
   it('failure surfaces a visible FAILED message and keeps sever disabled', () => {
     const els = makeEls();
     const stub = makeViewStub();
-    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, { backend: 'webgpu' });
+    const controller = new HumanoidSpikeController(armChainManifest(), stub.view, { backend: 'webgpu' });
     const adapter = new SpikeDomAdapter(controller, els);
     controller.markReady(makePrewarmReport());
     controller.fail(new Error('atlas corrupt'));
@@ -429,7 +440,7 @@ describe('SpikeDomAdapter — button disabled state through the controller', () 
   it('slider input drives the controller through the adapter', () => {
     const els = makeEls();
     const stub = makeViewStub();
-    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, { backend: 'webgpu' });
+    const controller = new HumanoidSpikeController(armChainManifest(), stub.view, { backend: 'webgpu' });
     const adapter = new SpikeDomAdapter(controller, els);
     controller.markReady(makePrewarmReport());
     els.elbow.value = '55';
@@ -485,7 +496,7 @@ describe('HumanoidSpikeController — click-to-shoot targeting', () => {
 
   function readyWithCoarse() {
     const stub = makeViewStub();
-    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, {
+    const controller = new HumanoidSpikeController(armChainManifest(), stub.view, {
       backend: 'webgpu', coarse: spikeCoarse(),
     });
     controller.markPrewarming();
@@ -495,7 +506,7 @@ describe('HumanoidSpikeController — click-to-shoot targeting', () => {
 
   it('a shot before ready is refused and changes nothing', () => {
     const stub = makeViewStub();
-    const controller = new HumanoidSpikeController(twoBoneManifest(), stub.view, {
+    const controller = new HumanoidSpikeController(armChainManifest(), stub.view, {
       backend: 'webgpu', coarse: spikeCoarse(),
     });
     const beforeCalls = stub.calls.setWounds;

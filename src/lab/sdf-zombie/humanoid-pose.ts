@@ -1,8 +1,10 @@
 // src/lab/sdf-zombie/humanoid-pose.ts
 //
 // Task 4 — the humanoid's ONE articulation: a pure right-elbow pose model.
-// The rig is otherwise bind pose; the elbow scrubber flexes the forearm
-// about the manifest's measured `RightArm -> RightForeArm` joint axis, and
+// The rig is otherwise bind pose; the elbow scrubber folds the forearm
+// about a FLEXION axis derived at runtime from the two limb segments —
+// NOT `manifest.joints[].axisModel`, which is the joint band normal and
+// runs along the limb (rotating about it sweeps a cone, not a fold) — and
 // the softness slider turns the flexion into a critically damped spring
 // (18 Hz at rigid-near down to 3 Hz at maximum softness) whose surface-warp
 // amplitude is deliberately NOT baked into the matrices — Task 5 consumes
@@ -156,6 +158,46 @@ function bindPose(manifest: HumanoidVolumeManifest): HumanoidBonePose[] {
   }));
 }
 
+/** Bind-pose model-space origin of a bone, from its column-major bindToModel. */
+function boneOrigin(manifest: HumanoidVolumeManifest, name: string): Vec3 {
+  const b = manifest.bones.find(x => x.bone === name);
+  if (!b) throw new Error(`humanoid pose: manifest is missing the ${name} brick`);
+  return [b.bindToModel[12]!, b.bindToModel[13]!, b.bindToModel[14]!];
+}
+
+/**
+ * The elbow's FLEXION axis: perpendicular to both limb segments, so rotating
+ * the forearm about it folds the arm.
+ *
+ * This is deliberately NOT `manifest.joints[].axisModel`. That vector is the
+ * joint BAND normal — the 30 mm planar overlap runs across the limb, so its
+ * normal runs ALONG the limb, and on the checked-in asset it is parallel to
+ * the upper arm to within |dot| = 1.0000. Rotating about it sweeps a cone
+ * through the shoulder and cannot change |hand - shoulder| at all.
+ *
+ * Falls back to the upper arm's own local X basis when the bind arm is
+ * straight (the cross product degenerates). The checked-in asset is bent ~39
+ * degrees, so the fallback is defensive, not the normal path.
+ */
+function flexionAxis(manifest: HumanoidVolumeManifest): Vec3 {
+  const shoulder = boneOrigin(manifest, manifest.rightArm.upperArm);
+  const elbow = boneOrigin(manifest, manifest.rightArm.forearm);
+  const wrist = boneOrigin(manifest, manifest.rightArm.hand);
+  const upper: Vec3 = [elbow[0] - shoulder[0], elbow[1] - shoulder[1], elbow[2] - shoulder[2]];
+  const fore: Vec3 = [wrist[0] - elbow[0], wrist[1] - elbow[1], wrist[2] - elbow[2]];
+  const cross: Vec3 = [
+    upper[1] * fore[2] - upper[2] * fore[1],
+    upper[2] * fore[0] - upper[0] * fore[2],
+    upper[0] * fore[1] - upper[1] * fore[0],
+  ];
+  const n = Math.hypot(cross[0], cross[1], cross[2]);
+  if (n > 1e-4) return [cross[0] / n, cross[1] / n, cross[2] / n];
+  const b = manifest.bones.find(x => x.bone === manifest.rightArm.upperArm)!;
+  const xa: Vec3 = [b.bindToModel[0]!, b.bindToModel[1]!, b.bindToModel[2]!];
+  const xn = Math.hypot(xa[0], xa[1], xa[2]);
+  return [xa[0] / xn, xa[1] / xn, xa[2] / xn];
+}
+
 /**
  * Applies an elbow flexion `elbowDeg` (degrees, 0 = identity) about
  * `elbowAxis` through `elbowPivot`, rigidly rotating only `distalIndices`.
@@ -199,19 +241,10 @@ export function makeHumanoidPose(
 ): HumanoidPoseState {
   const softness01 = clamp01(opts.softness01);
   const deg = clampElbowDeg(opts.elbowDeg);
-  const joint = manifest.joints.find(j => j.child === manifest.rightArm.forearm);
-  if (!joint) {
-    throw new Error(`humanoid pose: manifest is missing the ${manifest.rightArm.upperArm} -> ${manifest.rightArm.forearm} joint`);
-  }
   const bind = bindPose(manifest);
   const faIdx = manifest.bones.findIndex(b => b.bone === manifest.rightArm.forearm);
   if (faIdx < 0) throw new Error(`humanoid pose: manifest is missing the ${manifest.rightArm.forearm} brick`);
-  const axisLen = Math.hypot(joint.axisModel[0], joint.axisModel[1], joint.axisModel[2]);
-  const elbowAxis: Vec3 = [
-    joint.axisModel[0] / axisLen,
-    joint.axisModel[1] / axisLen,
-    joint.axisModel[2] / axisLen,
-  ];
+  const elbowAxis: Vec3 = flexionAxis(manifest);
   const elbowPivot = bind[faIdx]!.position;
   const distalIndices = distalBoneIndices(manifest, manifest.rightArm.forearm);
   return {

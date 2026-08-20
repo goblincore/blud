@@ -29,10 +29,18 @@ const realManifest = validateHumanoidVolumeManifest(JSON.parse(
 
 const faIdx = realManifest.bones.findIndex(b => b.bone === 'RightForeArm');
 const handIdx = realManifest.bones.findIndex(b => b.bone === 'RightHand');
+const shoulderIdx = realManifest.bones.findIndex(b => b.bone === 'RightArm');
 const elbowJoint = realManifest.joints.find(j => j.child === 'RightForeArm');
-if (faIdx < 0 || handIdx < 0 || !elbowJoint) {
+if (faIdx < 0 || handIdx < 0 || shoulderIdx < 0 || !elbowJoint) {
   throw new Error('checked-in manifest is missing the right-arm chain');
 }
+
+const handToShoulder = (deg: number): number => {
+  const poses = poseMatrices(makeHumanoidPose(realManifest, { elbowDeg: deg, softness01: 0 }), realManifest);
+  const s = [poses[shoulderIdx * 16 + 12]!, poses[shoulderIdx * 16 + 13]!, poses[shoulderIdx * 16 + 14]!];
+  const h = [poses[handIdx * 16 + 12]!, poses[handIdx * 16 + 13]!, poses[handIdx * 16 + 14]!];
+  return Math.hypot(h[0]! - s[0]!, h[1]! - s[1]!, h[2]! - s[2]!);
+};
 
 const matrices = (elbowDeg: number, softness01 = 0): Float32Array =>
   poseMatrices(makeHumanoidPose(realManifest, { elbowDeg, softness01 }), realManifest);
@@ -59,14 +67,43 @@ describe('humanoid pose articulation', () => {
     expect(Math.hypot(...hand0.map((v, i) => v - hand100[i]!))).toBeGreaterThan(0.001);
   });
 
-  it('derives the elbow axis and pivot from the manifest RightArm -> RightForeArm joint', () => {
+  it('folds the arm: flexing brings the hand closer to the shoulder', () => {
+    const d0 = handToShoulder(0);
+    const d50 = handToShoulder(50);
+    const d100 = handToShoulder(100);
+    expect(d50).toBeLessThan(d0 - 0.05);
+    expect(d100).toBeLessThan(d50 - 0.05);
+    expect(d100).toBeLessThan(d0 * 0.5);
+  });
+
+  it('does not rotate about the upper-arm axis (that is a cone sweep, not a fold)', () => {
+    const state = makeHumanoidPose(realManifest, { elbowDeg: 0, softness01: 0 });
+    const joint = realManifest.joints.find(j => j.child === realManifest.rightArm.forearm)!;
+    const n = Math.hypot(joint.axisModel[0]!, joint.axisModel[1]!, joint.axisModel[2]!);
+    const dot = Math.abs(
+      state.elbowAxis[0]! * joint.axisModel[0]! / n +
+      state.elbowAxis[1]! * joint.axisModel[1]! / n +
+      state.elbowAxis[2]! * joint.axisModel[2]! / n);
+    expect(dot).toBeLessThan(0.2);
+  });
+
+  it('derives the elbow axis and pivot from the manifest right-arm chain', () => {
     const s = makeHumanoidPose(realManifest, { elbowDeg: 40, softness01: 0 });
     expect(s.elbowPivot).toEqual([
       realManifest.bones[faIdx]!.bindToModel[12],
       realManifest.bones[faIdx]!.bindToModel[13],
       realManifest.bones[faIdx]!.bindToModel[14],
     ]);
-    expect(Math.hypot(...s.elbowAxis.map((v, i) => v - elbowJoint.axisModel[i]!))).toBeLessThan(1e-6);
+    // The flexion axis is the cross product of the limb segments: unit length
+    // and perpendicular to the band normal `axisModel` (which runs along the
+    // limb). It must NOT equal axisModel — rotating about that is a cone sweep.
+    expect(Math.hypot(...s.elbowAxis)).toBeCloseTo(1, 6);
+    const n = Math.hypot(elbowJoint.axisModel[0]!, elbowJoint.axisModel[1]!, elbowJoint.axisModel[2]!);
+    const dot = Math.abs(
+      s.elbowAxis[0]! * elbowJoint.axisModel[0]! / n +
+      s.elbowAxis[1]! * elbowJoint.axisModel[1]! / n +
+      s.elbowAxis[2]! * elbowJoint.axisModel[2]! / n);
+    expect(dot).toBeLessThan(0.2);
     expect(s.distalIndices).toEqual(distalBoneIndices(realManifest, 'RightForeArm'));
     expect(s.distalIndices).toContain(faIdx);
     expect(s.distalIndices).toContain(handIdx);
