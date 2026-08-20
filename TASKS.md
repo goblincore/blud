@@ -238,29 +238,44 @@ Key reference docs (open these before touching their area):
   per-operand interior gate passes. Blocks the Blender-native union in
   `X1.hand-followups`.
   [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
-- `X1.humanoid-sever-spike` [ ] **Textured full humanoid SDF + forearm sever
-  + aimed wounds** — the zombie fleshing-out spike, now unblocked. The complete
-  body mesh is intersected with closed weight-derived support SDFs to produce
-  articulated bone-local bricks; source texture projection, elbow scrub,
-  softness and the prewarmed sever gate remain unchanged.
-  **Wound damage is folded in (owner call, 2026-08-19)** rather than deferred:
-  the gate is judging whether a baked representation keeps the procedural
-  zombie's live-wound feel, so the testable build has to carry wounds. Wounds
-  re-key from `damage.ts`'s `primIdx` to a bone-brick index and reach local
-  space through the bone's posed rigid inverse, which deletes `frame()`,
-  `basisFromAxis` and the `bodyYaw` de-yaw/re-yaw contract outright.
-  Two consequences for the baker, both cheap now and expensive later: emit a
-  **coarse CPU distance brick per bone** (≤16³ f32, ~350 KiB total) in the same
-  pass as the atlases, and size every brick and bounds test from the
-  weight-derived bind bounds — never a raw `face_owners` owned-face AABB.
-  Do **not** build on the 2026-08-18 atlas at `ac0c28f`
-  (`codex/fpv-full-distal-arm-rebuild`): it was an FPV-arm prerequisite on a
-  branch whose gate was owner-rejected, it never merged, and it predates
-  `X1.sdf-authoring` so it uses libigl rather than the qualified `direct-vdb`
-  route. Re-bake through the qualified backend.
+- `X1.humanoid-sever-spike` [~] **Textured full humanoid SDF + forearm sever
+  + aimed wounds** — Tasks 1–9 of 10 landed on the r2 dispatch chain; Task 10
+  (click-to-shoot targeting + panels 11–17 + final owner verdict) is the last.
+  Both interim gates passed: the bake (byte-deterministic, reconstructs clean)
+  and the sever (live WebGPU, 17/17 verifier gates, first sever 18.4 ms,
+  resource counts identical across ten cycles). Wounds are folded in per the
+  owner call — they re-key to a bone-brick index through the bone's posed rigid
+  inverse, which deletes `frame()`, `basisFromAxis` and the `bodyYaw` contract.
+  Chain tip: `dispatch/humanoid-sdf-spike-r2-task-9`.
   [design](docs/superpowers/specs/2026-08-17-humanoid-sdf-sever-spike-design.md)
   · [plan](docs/superpowers/plans/2026-08-17-humanoid-sdf-sever-spike.md)
   · [wound design](docs/superpowers/specs/2026-08-19-humanoid-sdf-wound-damage-design.md)
+  · [sever gate notes](docs/dev-notes/2026-08-17-humanoid-sdf-sever-spike/notes.md)
+  - **Three findings worth keeping**, each with its own dev-note:
+    the source GLB is NOT closed (44 pinhole loops) but the bake bridged them —
+    `LeftHand` at 54 boundary verts and `RightHand` at 0 came out 16.0 % vs
+    15.5 % negative ([note](docs/dev-notes/2026-08-19-humanoid-source-closedness/notes.md));
+    the narrow band had to widen 6 → 16 voxels or the coarse targeting brick
+    could not localise its zero crossing on head/hands; and the baked albedo was
+    being multiplied into the latex `baseColor`, rendering the body maroon
+    ([note](docs/dev-notes/2026-08-19-humanoid-albedo/notes.md)).
+  - **`direct-vdb` is not a move off Blender's Mesh to SDF Grid.** OpenVDB owns
+    the boolean fold and the dense readback only, so the closedness precondition
+    stands. The path that ignores closedness is the libigl winding-number
+    sampler in `scripts/bake_hand_sdf.py`. Chisel would too (it signs by winding
+    number) but is GPL-3.0 with an unresolved intersection gate —
+    [why](docs/dev-notes/2026-08-19-chisel-sdf-qualification/notes.md).
+- `X1.humanoid-spike-cleanup` [ ] **Three small things found while reviewing the
+  chain**, none blocking, all cheap. (1) `HUMAN_WOUND_RIM_OFFSET` / `_WIDTH` in
+  `humanoid-damage.ts` are hand-copied from `zombie-gpu.ts`'s inline `woundCfg`
+  defaults and pinned to literals, so retuning `woundCfg.w` silently desyncs the
+  cluster-duplication guard from the geometry it protects — export the constants
+  and consume them in both places. (2) Every bone's negative region carries 1–11
+  slivers of 1–5 voxels at support-plane grazing angles (`RightLeg` worst at 12
+  components, largest 99.95 %); cull them in the baker. (3)
+  `verify-humanoid-sdf-spike.mjs`'s `settledPieceSeparated` has a dead clause
+  (`dist >= 80 && dist >= 60`), and the notes describe that gate in a way that
+  reads as a failure by conflating the centroid distance with the component size.
 - `X1.humanoid-walk` [ ] **Walk cycle on the baked humanoid** — owner ask
   (2026-08-19), explicitly NOT a blocker for the sever/wound live test, which
   only needs click-to-shoot (Task 10). The spike plan forbids walking on
