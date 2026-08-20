@@ -68,7 +68,7 @@ export const HUMANOID_MAX_BONES = 24;
 /** A cluster samples at most four bricks (primaries + direct joint helpers). */
 export const HUMANOID_MAX_CLUSTER_BONES = 4;
 /** Smooth-min blend radius at a joint (metres), scaled by jointBlendWeight. */
-export const HUMANOID_JOINT_SMIN_K = 0.01;
+export const HUMANOID_JOINT_SMIN_K = 0.002;
 /** Peak surface-warp amplitude (metres) at softness 1. Softness 0 = no warp. */
 export const HUMANOID_SURFACE_WARP_AMP = 0.008;
 /** Gain on the wound-driven warp term, so a fresh hit wobbles harder than the
