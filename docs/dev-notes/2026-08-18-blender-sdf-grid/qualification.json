@@ -9,10 +9,10 @@
           135,
           78
         ],
-        "f32Sha256": "ac560f252282c357c3728c42c7b93982acbdee2a85285ed08f190a55f3bbbb3a",
-        "negativeComponents": 106,
-        "passed": false,
-        "r16fSha256": "9b140430a45a23eef02ae80e31bf8fa80575fa1039b35fc4c7be237803f1dbfd",
+        "f32Sha256": "49448a3f8d133a174d141d8bdecc58ca4eb0b71b7574466311fc86557e6cd476",
+        "negativeComponents": 1,
+        "passed": true,
+        "r16fSha256": "51d538cccd898abf9096d4c179a6f804534576a6f98b340796ad5c7f7e6d3f4e",
         "repeat": {
           "f32Equal": true,
           "metadataEqual": true,
@@ -38,9 +38,9 @@
         }
       }
     },
-    "passed": false,
+    "passed": true,
     "reportPath": "docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json",
-    "reportSha256": "59df58593121dcf0e64dd417eb4fd482c4e9a6017ca12788f339cd928bbdb2d9",
+    "reportSha256": "297e1d9eeb49b2b3e105b98d7980301055c257af09bbb6cd09fe281cc42fa106",
     "selectedRoute": "direct-vdb"
   },
   "availableNodes": {

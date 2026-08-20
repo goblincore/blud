@@ -37,6 +37,13 @@ on failure: a route is requested explicitly or the call raises `route drift`.
 deterministically and both repeat byte-identically — the adapters are correct.
 The hand union fails on its INPUT, for the reason below.
 
+> **Superseded 2026-08-20:** the hand union now PASSES (86,659 of 490,201
+> exclusive interior voxels, 17.68 %). The input holes were the five nail-bed
+> rings left by the nail-mesh exclusion, not the wrist cap; they are welded
+> and filled at authoring time. See
+> [2026-08-20-hand-soup-closure/notes.md](../2026-08-20-hand-soup-closure/notes.md);
+> `adapter-qualification.json` has been regenerated and records the pass.
+
 ## Finding: `direct-vdb` needs GEOMETRICALLY closed operands
 
 Mesh to SDF Grid (OpenVDB `meshToLevelSet`) cannot sign an interior through a

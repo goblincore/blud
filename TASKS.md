@@ -226,18 +226,15 @@ Key reference docs (open these before touching their area):
   · [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-qualification.json)
   · [notes + previews](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
   · [chisel findings](docs/dev-notes/2026-08-19-chisel-sdf-qualification/notes.md)
-- `X1.hand-soup-closure` [ ] **Weld + cap the authored hand poses** — new
-  prerequisite discovered by the adapter qualification. `pose-05-firm-grip`
-  still has 66 boundary edges after a 1 um weld, so Blender-native SDF union
-  bakes it as an unsigned shell (302 interior voxels instead of ~35k). Either
-  close the soup in `scripts/author_dynamite_grip.py` (the wrist cap does not
-  actually close the surface) or route hand fields through the existing
-  winding-number baker `scripts/bake_hand_sdf.py`, which is what produced the
-  SHIPPED hand volume. Re-run
-  `uv run scripts/qualify_blender_sdf_real_sources.py --hand` until its
-  per-operand interior gate passes. Blocks the Blender-native union in
-  `X1.hand-followups`.
-  [evidence](docs/dev-notes/2026-08-18-blender-sdf-grid/adapter-notes.md)
+- `X1.hand-soup-closure` [x] **Weld + cap the authored hand poses** — the 66
+  welded boundary edges were the five nail-bed rings left by the nail-mesh
+  exclusion (4x14-edge fingers + 1x10-edge thumb), not the wrist cap;
+  `wrist_cut_cap(close_nail_beds=True)` welds + fills them at authoring time,
+  all six poses export welded-closed, and the hand union gate passes: 86,659
+  of 490,201 exclusive interior voxels (17.68 %, was 302 / 0.06 %), 1 negative
+  component. Visible shell bit-identical apart from the 56 fill triangles.
+  Unblocks the Blender-native union in `X1.hand-followups`.
+  [notes](docs/dev-notes/2026-08-20-hand-soup-closure/notes.md)
 - `X1.humanoid-sever-spike` [~] **Textured full humanoid SDF + forearm sever
   + aimed wounds** — Tasks 1–9 of 10 landed on the r2 dispatch chain; Task 10
   (click-to-shoot targeting + panels 11–17 + final owner verdict) is the last.
