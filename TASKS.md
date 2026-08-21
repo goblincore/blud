@@ -40,6 +40,16 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
      so they pick up the `MAX_PRIMS` change.
    - Still ahead: Task 4 is **Gate B**, owner visual inspection. Tasks 5-6 were
      never dispatched and remain blocked on that approval.
+   - **Owner review of the bake previews (2026-08-20): hand GOOD, wrist NOT.**
+     The hand is well stylised and smooth — what the rerun existed to protect.
+     But the hand-to-forearm transition does not merge naturally: the 35 mm
+     bridge is a straight loft between two loops, continuous but not anatomical
+     (no taper, no tendon structure, no ulnar head). **The topological gates
+     cannot see this** — 0 boundary edges says closed, not convincing. A resume
+     must address bridge SHAPE, not closure. Note also the previews tint the
+     bridge blue (`BridgeClay` accent), which reads as a wristband and already
+     caused one false seam alarm; the shipped asset is single-channel distance
+     and carries no colour. Ship an untinted preview too.
    Scope already settled so it is not re-litigated: rebuild the RIGHT distal arm
    only — the left hand is choreography scope and the reference draws it as hand
    + wrist with no forearm (tiles 3211/3212).
