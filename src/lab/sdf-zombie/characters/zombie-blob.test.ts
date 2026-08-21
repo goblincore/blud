@@ -26,19 +26,19 @@ describe('zombie.blob is the zombie', () => {
     expect([...a.keys()].sort()).toEqual([...b.keys()].sort());
     for (const [name, bone] of a) {
       const ref = b.get(name)!;
-      bone.head.forEach((v, i) => expect(v).toBeCloseTo(ref.head[i]!, 4));
-      bone.tail.forEach((v, i) => expect(v).toBeCloseTo(ref.tail[i]!, 4));
+      bone.head.forEach((v, i) => expect(v, `${name} head[${i}]`).toBeCloseTo(ref.head[i]!, 4));
+      bone.tail.forEach((v, i) => expect(v, `${name} tail[${i}]`).toBeCloseTo(ref.tail[i]!, 4));
     }
   });
 
   it('places every primitive at the same endpoints and radius', () => {
     const a = fromBlob().prims, b = fromTs().prims;
     a.forEach((p, i) => {
-      expect(p.radius).toBeCloseTo(b[i]!.radius, 6);
-      expect(p.blendK).toBeCloseTo(b[i]!.blendK, 6);
-      expect(p.limb).toBe(b[i]!.limb);
-      p.a.forEach((v, j) => expect(v).toBeCloseTo(b[i]!.a[j]!, 4));
-      p.b.forEach((v, j) => expect(v).toBeCloseTo(b[i]!.b[j]!, 4));
+      expect(p.radius, `prim[${i}] ${p.limb} radius`).toBeCloseTo(b[i]!.radius, 6);
+      expect(p.blendK, `prim[${i}] ${p.limb} blendK`).toBeCloseTo(b[i]!.blendK, 6);
+      expect(p.limb, `prim[${i}] limb`).toBe(b[i]!.limb);
+      p.a.forEach((v, j) => expect(v, `prim[${i}] ${p.limb} a[${j}]`).toBeCloseTo(b[i]!.a[j]!, 4));
+      p.b.forEach((v, j) => expect(v, `prim[${i}] ${p.limb} b[${j}]`).toBeCloseTo(b[i]!.b[j]!, 4));
     });
   });
 });
