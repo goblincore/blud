@@ -39,6 +39,7 @@ import { buildBody, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } fr
 import { makeZombie } from '../body';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import goblinBlobSrc from '../characters/goblin.blob?raw';
+import clownBlobSrc from '../characters/clown.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -51,6 +52,7 @@ import goblinBlobSrc from '../characters/goblin.blob?raw';
 const CHARACTERS: Record<string, string> = {
   zombie: zombieBlobSrc,
   goblin: goblinBlobSrc,
+  clown: clownBlobSrc,
 };
 
 /**
@@ -64,6 +66,7 @@ const CHARACTERS: Record<string, string> = {
  */
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
+  clown: '/assets/lab/clown-kit.gltf',
 };
 
 function activeCharacterName(): string {
