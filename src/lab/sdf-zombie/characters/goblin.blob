@@ -227,13 +227,21 @@ body
   # height — so smooth-min fused them into one broad snout with a spike on the
   # front. The owner read it as "a big broad disk intersecting the nose", and
   # that is exactly what two features competing for the same flesh looks like.
-  # Dropped to 0.23, a clear 2 cm of face between them.
+  # Dropped to 0.12 — 5.6 cm of face between the nose tip and the upper lip.
+  # 0.23 was a first attempt and STILL merged: 2 cm is inside the reach of the
+  # nose's own blend plus the lips', so the two masses found each other anyway.
+  # Separation has to beat the sum of the blends, not just be nonzero.
+  #
+  # The jaw grew to make the room (jawDrop 0.072 to 0.104). Lengthening the
+  # lower face is the honest fix: cramming three features into a short muzzle
+  # is what forced them to overlap, and shrinking the lips instead just makes
+  # a goblin with no mouth.
   #
   # Their reach came down with the move. The cranium is an ellipsoid, so its
   # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
   # the nose — and lips sized against the wrong number stick out too far.
-  blob head on skull at=0.23 r=0.029 r2=0.022 wide=1.25 tall=0.44 blend=0.0022 chamfer offset=(0,0.008,0.070) tip=(0,-0.006,0.050)
-  blob head on skull at=0.23 r=0.025 r2=0.019 wide=1.12 tall=0.42 blend=0.0018 chamfer offset=(0,-0.030,0.064) tip=(0,-0.020,0.044)
+  blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044)
+  blob head on skull at=0.12 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,-0.028,0.056) tip=(0,-0.018,0.038)
 
   # ARMS AND LEGS — ball joints, deliberately.
   #
@@ -274,8 +282,8 @@ face
   headHeight 1.02
   headDepth  0.94
   jawWidth   0.70
-  jawHeight  0.82
-  jawDrop    0.072
+  jawHeight  0.90
+  jawDrop    0.104
   jawJut     0.072
   noseLength 0.006
   noseWidth  0.34
@@ -310,7 +318,7 @@ sheet
   # land on them or the head wears two mouths — a dark smear on the jaw below a
   # protruding pout. 0.63 is where the lip prims sit in face-space: they ride
   # the skull at 0.31, which is 63% down a face spanning y 1.096..1.354.
-  mouthRise  0.69
+  mouthRise  0.80
   mouthCurve -0.50
   # A SEAM, not a slab. With no geometry to help, the sheet's mouth had to do
   # all the work and was drawn thick; over a real pout that thickness just
