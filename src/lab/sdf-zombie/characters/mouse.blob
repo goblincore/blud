@@ -1,0 +1,260 @@
+# Mouse — the third .blob character authored from scratch, and the second
+# built to be CUTE (after the clown). Authored against
+# docs/dev-notes/refs/mouse-reference.png, which is the brief; this file only
+# records the numbers that image implied.
+#
+# SILHOUETTE INTENT, read off the reference: a lollipop. Head plus ears take
+# the TOP 40% of the standing height, and the ears alone are as wide as the
+# head — enormous FLAT plates, angled outward, reaching well above the crown.
+# Below them: a long thin neck, a small torso in a loose tee, spindly arms
+# held well out from the body with big spread fingers, stubby legs, and shoes
+# as oversized as the ears. Everything hard (tee, shorts, shoes, shades,
+# brows) lives in mouse-kit.wam; the flesh here is yellow skin, ears, pout.
+#
+# THE EARS ARE THE WHOLE CHARACTER. Every other feature serves them. They are
+# NOT spheres — a sphere ear is Mickey; these are plates (deep well under 1),
+# nearly touching at the top and splaying out past the head's own width.
+model mouse
+  height 1.10
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # LOLLIPOP STACK. Measured off the reference: crotch at ~0.22 of height,
+  # shoulders at ~0.52, chin at ~0.59, crown at ~0.81, ears to 1.00. So the
+  # legs are HALF the goblin's proportion and the head carries the top of the
+  # file. The pelvis/root numbers look absurdly small next to the goblin's —
+  # that is the character, not an error; the tee and shorts (kit) carry most
+  # of the visual torso anyway.
+  root pelvis at 0.235 len=0.075
+
+  bone spine1 parent=pelvis dir=up pitch=2 len=0.095
+  bone chest  parent=spine1 dir=up pitch=2 len=0.105
+  # LONG and THIN — the reference shows a neck as long as the torso is tall
+  # and about a quarter its width. This is the opposite failure mode from the
+  # goblin's no-neck note: here the danger is the huge skull swallowing a
+  # short neck, so the neck is given real length and the skull bone starts
+  # high. See mouse-blob.test.ts, which pins the neck's visibility.
+  bone neck   parent=chest  dir=up pitch=-5 len=0.095
+  # Skull bone LONG relative to the head radius (same trick as the clown):
+  # facePrims centres the cranium at t=0.45 along it, so the extra length
+  # lifts the crown without growing the head. Cranium lands near y 0.88;
+  # crown near 1.02 of the 1.10 file.
+  bone skull  parent=neck   dir=up pitch=-3 len=0.290
+
+  mirror
+    # Arms: SPINDLY and HELD OUT. Upperarm tilt=34 is more than twice the
+    # goblin's — the reference arms hang at roughly 35 degrees off vertical,
+    # hands out beside the hips, fingers spread. The splay is load-bearing
+    # twice over: it is the pose AND the clearance (see daylightOf in
+    # mouse-blob.test.ts — a small torso leaves little room, so the elbows
+    # must already be outside it).
+    bone clavicle parent=chest    side=0.030 dir=side  len=0.030
+    bone upperarm parent=clavicle dir=down pitch=-3 tilt=42 len=0.135
+    bone forearm  parent=upperarm dir=down pitch=2  tilt=28 len=0.120
+    bone hand     parent=forearm  dir=down             len=0.060
+    # forearm nearly continues the upperarm line: the reference arms are
+    # STRAIGHT diagonals, not bent acacias. TRAP: bone tilt is a WORLD-axis
+    # rotation, not parent-relative — a negative tilt here hangs the forearm
+    # straight back INBOARD from the elbow no matter what the upperarm is
+    # doing (first render did exactly that). 28 continues the 42 upperarm
+    # with a slight straightening, which is the reference's gentle bow.
+    # Legs: SHORT and stubby — hip line at 0.31 of a 1.10 m body, barely 0.30
+    # m of leg under it including the ankle. Thigh forward/shin back (the
+    # kangaroo-knee rule: positive pitch always carries toward +z, so a
+    # humanoid knee wants exactly this sign pattern).
+    bone thigh    parent=pelvis   dir=down tilt=5  pitch=8  side=0.034 len=0.145
+    bone shin     parent=thigh    dir=down tilt=-5 pitch=-10         len=0.130
+    bone foot     parent=shin     dir=fwd                            len=0.100
+    # FINGER BONES, not tipped prims. The obvious way to author a finger fan
+    # is four bars on the hand bone aimed by their own tip=(x,y,z) — but
+    # expandMirror does NOT flip a mirrored prim's tip (it flips the BONE's
+    # dir only), so every finger would keep its world-x tip on both sides and
+    # the right hand's index finger would point INWARD across the chest.
+    # Measured, before this fix: clearOf(armL,legL) +0.026 vs clearOf(armR,
+    # legR) +0.004 — the R fan reaching 4 cm further inboard than the L.
+    # Bones DO mirror correctly (r copy negates dir x), so each finger gets a
+    # real bone fanned by tilt, and its bar rides it straight. Splay: index
+    # out ±24, little in ∓22, middle/ring nearly parallel — the reference
+    # hands spread wide.
+    bone f_index  parent=hand dir=down tilt=24 pitch=4 len=0.054
+    bone f_middle parent=hand dir=down tilt=9  pitch=5 len=0.059
+    bone f_ring   parent=hand dir=down tilt=-8 pitch=5 len=0.056
+    bone f_little parent=hand dir=down tilt=-22 pitch=3 len=0.049
+  end
+
+body
+  # Torso: SMALL and narrow — the tee wears this, not the other way round.
+  # Deep in z like every character here (bulk where the arms are not), but
+  # the absolute widths are toy-scale: the widest ring is 0.148 across,
+  # against the goblin's 0.192 and the ears' 0.5-plus.
+  blob torso on pelvis at=0.00 r=0.058 deep=1.15 blend=0.0045
+  blob torso on pelvis at=0.95 r=0.070 deep=1.30 blend=0.0050
+  blob torso on spine1 at=0.60 r=0.066 deep=1.20 blend=0.0050
+  blob torso on chest  at=0.50 r=0.060 deep=1.05 blend=0.0042
+  blob torso on chest  at=1.00 r=0.052 deep=0.95 blend=0.0040
+
+  # Neck column — a stick. Thin on purpose; the skull above it is 4.5 times
+  # its width, which IS the reference's read.
+  bar head on neck from=0.00 to=1.00 r=0.027 deep=0.95 blend=0.0014
+
+  # ============================================================
+  # EARS — the character. Read this block before touching anything.
+  # ============================================================
+  #
+  # WHAT THE REFERENCE SHOWS, measured: each plate is ~0.245 wide on a 1.10 m
+  # body — wider than the head itself (head full width ~0.26) — reaches
+  # ~0.21 ABOVE the crown, is ~0.23 tall, and is FLAT: roughly 0.05 thick
+  # against 0.245 of width, a 5:1 plate. The inner edges run nearly VERTICAL
+  # at x ~0.055, so the plates almost meet above the crown and OVERHANG it —
+  # the visible crown between them sits well below the ear tops. The outer
+  # edges stand ~0.30 from the centreline at the bottom, leaning IN ~13
+  # degrees by the top (top-outer 0.245). Upright plates, not splayed ones:
+  # every earlier pass here angled them outward like Mickey and read wrong.
+  #
+  # ONE tapered flattened prim each. `tip=` sweeps the far end out AND UP out
+  # of a skull bone that runs straight up — without it the ear would hang at
+  # the cranium's latitude and read as a wing. `deep=0.38` is the flatness;
+  # do not "fix" it toward 1 without looking at the reference again.
+  # `chamfer` creases the plate into the skull instead of melting it in.
+  #
+  # REACH: the base centre sits INSIDE the cranium on purpose (attachment) —
+  # at (0.075, +0.095) from the cranium centre it is at 0.83 of the ellipsoid
+  # radius in the x-y plane, buried. Everything visible happens past the
+  # crown.
+  blob head on skull at=0.48 r=0.105 r2=0.095 wide=1.00 deep=0.24 blend=0.0016 chamfer offset=(0.160,0.076,-0.008) tip=(-0.020,0.190,-0.004) both
+
+  # A second, lower lobe fills the plate's bottom-inner corner — the
+  # reference ear's inner edge descends all the way to shade level, and one
+  # tapered cone leaves that corner hollow. Smaller, flatter, tucked against
+  # the skull's upper side; its base is buried like the big plate's.
+  blob head on skull at=0.44 r=0.062 r2=0.052 wide=0.90 deep=0.30 blend=0.0014 chamfer offset=(0.130,0.030,-0.006) tip=(0.010,0.090,-0.004) both
+
+  # ============================================================
+  # THE POUT — a broad protruding muzzle, the second identifying feature.
+  # ============================================================
+  #
+  # REACH, the lesson the goblin paid for twice: the cranium's semi-depth is
+  # headRadius 0.140 x headDepth 0.95 = 0.133 m AT ITS EQUATOR, and LESS at
+  # the pout's latitude — the ellipsoid shrinks as you drop. The pout sits
+  # ~0.055 below the cranium centre, where the skull's own surface stands
+  # near z 0.122. So the lips reach z 0.168 — 46 mm proud, which is what
+  # makes them a muzzle instead of a smear.
+  #
+  # Two prims, creased with `chamfer`: a fat upper lip and a shallower lower
+  # one, `wide` spreading them across the face (the reference pout is as
+  # broad as the eyes), `tall` keeping each a band rather than a ball.
+  blob head on skull at=0.36 r=0.044 r2=0.030 wide=1.45 tall=0.50 blend=0.0020 chamfer offset=(0,-0.030,0.100) tip=(0,-0.006,0.040)
+  blob head on skull at=0.33 r=0.036 r2=0.026 wide=1.20 tall=0.46 blend=0.0016 chamfer offset=(0,-0.072,0.094) tip=(0,-0.010,0.032)
+
+  # THE MOUTH SEAM — a groove, not a gap. Cuts a channel where this flat
+  # primitive's zero-set crosses the assembled pout: 5 mm across, biting
+  # 4 mm in, running horizontally across the muzzle just below the lip
+  # midline. `tall=0.08` flattens the cutter vertically so the channel is a
+  # LINE. This is the seam the reference shows under the pout.
+  groove head on skull at=0.345 r=0.040 wide=1.30 tall=0.08 deep=1.00 depth=0.004 width=0.005 offset=(0,-0.052,0.106)
+
+  # ARMS AND LEGS — ball joints at every knuckle, the house stylisation. The
+  # shafts are THIN (0.020-0.026 against the goblin's 0.028-0.032 on a
+  # smaller body): spindly is the brief.
+  blob arm on clavicle at=1.00 r=0.034 blend=0.0014 mirror
+  bar  arm on upperarm from=0.02 to=0.96 r=0.021 blend=0.0018 mirror
+  blob arm on forearm  at=0.00 r=0.026 blend=0.0030 mirror
+  bar  arm on forearm  from=0.06 to=0.94 r=0.019 blend=0.0024 mirror
+  blob arm on forearm  at=1.00 r=0.024 blend=0.0026 mirror
+
+  # HAND: a paddle plus FOUR SPREAD FINGERS riding the finger bones above
+  # (see the skeleton note for why they are bones and not tips). Hair-thin
+  # tapered bars, 8 mm falling to 3 mm — cartoon fingers at 1.10 m, which is
+  # the intent. The palm reaches y 0.247 and the knuckles start at 0.233, so
+  # every finger base starts INSIDE the palm and merges.
+  blob arm on hand at=0.40 r=0.030 deep=0.85 wide=1.15 blend=0.0030 mirror
+  bar  arm on f_index  from=0.00 to=0.92 r=0.009 r2=0.003 blend=0.0010 mirror
+  bar  arm on f_middle from=0.00 to=0.92 r=0.009 r2=0.003 blend=0.0010 mirror
+  bar  arm on f_ring   from=0.00 to=0.92 r=0.007 r2=0.003 blend=0.0010 mirror
+  bar  arm on f_little from=0.00 to=0.90 r=0.007 r2=0.002 blend=0.0010 mirror
+
+  blob leg on thigh at=0.00 r=0.042 blend=0.0038 mirror
+  bar  leg on thigh from=0.08 to=0.92 r=0.030 blend=0.0030 mirror
+  blob leg on shin  at=0.00 r=0.032 blend=0.0036 mirror
+  bar  leg on shin  from=0.08 to=0.92 r=0.024 blend=0.0028 mirror
+  blob leg on shin  at=1.00 r=0.026 blend=0.0030 mirror
+
+  # Feet: mostly swallowed by the kit's oversized shoes, but the shoes are
+  # open shells, so what shows above the topline must be shaped like a foot.
+  bar  leg on foot from=0.10 to=0.80 r=0.024 tall=0.80 blend=0.0028 mirror
+  blob leg on foot at=0.92 r=0.028 wide=1.20 tall=0.70 deep=0.95 blend=0.0030 mirror
+
+# A round young skull — clown direction, not goblin. No brow ridge at all
+# (the BROWS are thick black kit slabs above the shades; a flesh brow would
+# fight them), no parameterised nose (the pout prims ARE the nose/mouth mass
+# — a nose bead between the eyes would just crowd the shades), and a
+# vestigial jaw rounding the bottom of the egg.
+face
+  headRadius 0.140
+  headWidth  0.94
+  headHeight 1.02
+  headDepth  0.95
+  jawWidth   0.74
+  jawHeight  0.84
+  jawDrop    0.058
+  jawJut     0.012
+  noseLength 0.0004
+  noseWidth  0.30
+  noseDrop   0.010
+  browHeavy  0.0004
+  browRise   0.030
+  headBlend  0.0030
+
+# The mouse's own face sheet. The SHADES (kit) cover the eye line, so the
+# painted eyes barely matter — kept small and dark so nothing peeks around
+# the lenses. No painted mouth: the groove in the pout is the mouth, and a
+# painted one would double it. Mostly this sheet is grain and jaw shading.
+sheet
+  eyeGap     0.42
+  eyeSize    0.050
+  eyeRise    0.44
+  eyeTilt    0
+  eyeSquash  1.20
+  # 0, not a pupil — hidden behind the shades anyway.
+  eyePupil   0
+  # Zero: the brows are GEOMETRY (black kit slabs). A painted brow under
+  # them would show as a dark halo at the wrong angle.
+  browHeavy  0.0
+  browAngle  0
+  # Painted mouth OFF — the groove owns the seam. Width 0 draws nothing.
+  mouthWidth 0.0
+  mouthRise  0.70
+  mouthCurve 0.0
+  mouthOpen  0.0
+  # No nostrils in the reference — the pout is blank yellow.
+  nostril    0.0
+  noseRidge  0.0
+  noseWide   0.0
+  noseLong   0.0
+  jawShade   0.35
+  # Toy-smooth, like the clown: stage-prop skin, not rotting flesh.
+  grain      0.06
+  seed       11
+
+# BRIGHT TOY YELLOW, read off the reference (sRGB ~#e8dc00 -> linear here).
+# Matte vinyl rather than latex: low specular, low wetness. The mottle is a
+# warm ORANGE-yellow, far enough from the base in hue to read as shading IN
+# the skin rather than dirt ON it, at low amplitude — the reference is very
+# flat, and heavy blotching would read as decay next to the zombie.
+palette
+  baseColor     0.80 0.71 0.02
+  # Wounds stay red, as for every character.
+  deepColor     0.50 0.08 0.08
+  charColor     0.10 0.09 0.02
+  specIntensity 0.42
+  specRoughness 0.48
+  fresnelBoost  0.40
+  translucency  0.22
+  wetness       0.28
+  # Low: the reference skin is near-flat. Raising this shifts the mean
+  # toward mottleColor (dark orange), so the base is set a touch bright to
+  # compensate.
+  mottleAmp     0.12
+  mottleScale   1.5
+  mottleColor   0.62 0.40 0.04
