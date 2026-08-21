@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/extent.ts
 import type { Primitive, Vec3 } from './types';
-import { len, sub } from './vec';
+import { bendCtrl, len, sub } from './vec';
 
 /**
  * Furthest reach of a set of primitives from `origin` (same recipe as
@@ -17,7 +17,13 @@ export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   for (const p of prims) {
     if (p.op === 'sub') continue;
     const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    r = Math.max(r, len(sub(p.a, origin)) + p.radius * ms, len(sub(p.b, origin)) + p.radius * ms);
+    const rMax = Math.max(p.radius, p.radiusB ?? p.radius);
+    // A bent prim swings out to its ctrl — include it or the proxy box clips
+    // the very horn that prompted the bend.
+    const ends = p.bend === undefined
+      ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
+    for (const e of ends)
+      r = Math.max(r, len(sub(e, origin)) + rMax * ms);
   }
   return r;
 }

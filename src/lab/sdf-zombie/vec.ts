@@ -18,6 +18,19 @@ export function normalize(a: Vec3): Vec3 {
   return l === 0 ? [0, 0, 0] : scale(a, 1 / l);
 }
 
+/**
+ * The quadratic Bezier control point for endpoints `a`,`b` under an optional
+ * mid-relative displacement. THE shared definition of that point — the CPU
+ * field, the cluster bounds, the extent and the packer must all agree on it,
+ * and it is deliberately derived from whatever a/b are RIGHT NOW so rigging
+ * and translation carry a bent prim for free (the displacement is defined
+ * against the midpoint, which moves with them).
+ */
+export const bendCtrl = (a: Vec3, b: Vec3, disp?: Vec3): Vec3 => {
+  const mid = scale(add(a, b), 0.5);
+  return disp === undefined ? mid : add(mid, disp);
+};
+
 export const lerp = (a: Vec3, b: Vec3, t: number): Vec3 => [
   a[0] + (b[0] - a[0]) * t,
   a[1] + (b[1] - a[1]) * t,

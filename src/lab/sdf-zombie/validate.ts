@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { add, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
+import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
  * Shader array ceilings. THE canonical declaration — `march.glsl.ts` imports
@@ -58,6 +58,9 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   let qv: Vec3 = p;
   let av = prim.a;
   let bv = prim.b;
+  // The bent branch rotates its control point with the same conjugate — the
+  // curve is defined in the prim's frame exactly as the endpoints are.
+  let cv = prim.bend === undefined ? undefined : bendCtrl(prim.a, prim.b, prim.bend);
   // Per-prim orientation, the exact CPU mirror of sdPrimO in march.wgsl.ts:
   // conjugate rotation about the prim midpoint BEFORE the scale-divide, so a
   // rig-posed face ellipsoid's squash turns with the head. The WGSL hoists
@@ -77,6 +80,7 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
     qv = rot(qv);
     av = rot(av);
     bv = rot(bv);
+    if (cv !== undefined) cv = rot(cv);
   }
   const inv: Vec3 = [1 / prim.scale[0], 1 / prim.scale[1], 1 / prim.scale[2]];
   const q: Vec3 = [qv[0] * inv[0], qv[1] * inv[1], qv[2] * inv[2]];
@@ -87,6 +91,12 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   const t = abLen2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / abLen2));
   const closest = add(a, vscale(ab, t));
   const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+  // Bent before tapered: a curved horn of CONSTANT radius is legitimate, so
+  // the bend branch cannot sit below the untapered shortcut.
+  if (cv !== undefined) {
+    const c: Vec3 = [cv[0] * inv[0], cv[1] * inv[1], cv[2] * inv[2]];
+    return sdBentCone(q, a, b, c, prim.radius, prim.radiusB ?? prim.radius) * minScale;
+  }
   if (prim.radiusB === undefined || prim.radiusB === prim.radius)
     return (len(sub(q, closest)) - prim.radius) * minScale;
   return sdRoundCone(q, a, b, prim.radius, prim.radiusB) * minScale;
@@ -128,6 +138,135 @@ function sdRoundCone(p: Vec3, a: Vec3, b: Vec3, r1: number, r2: number): number 
   if (Math.sign(z) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
   if (Math.sign(y) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
   return (Math.sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
+}
+
+/**
+ * Closest-point parameters t of a quadratic Bezier to p — ALL clamped
+ * candidates, not just the nearest. iq's exact construction (shadertoy
+ * MlKcDD): the closest point of d(t) = b·t² + c·t + d solves a cubic, here
+ * put in depressed form and solved by Cardano's discriminant — one real
+ * root, or three by the trigonometric method.
+ *
+ * The CALLER evaluates distance-minus-radius at every candidate plus both
+ * endpoints and keeps the minimum. That is deliberate conservatism: the true
+ * SDF of a variable-radius sweep is min-over-t of (dist(t) − r(t)), and its
+ * minimiser is NOT the geometrically closest t when the radius changes fast,
+ * so evaluating only at the closest t can OVERESTIMATE — which punches holes
+ * in a raymarcher. Candidates of |d(t)| plus the ends are still only a subset
+ * of G's own stationary points, so this is closer-to-correct, not provably
+ * exact; see sdBentCone for the honest statement.
+ *
+ * MUST match sdBezierT in march.wgsl.ts; this field backs click-to-shoot.
+ * f32 on the GPU and f64 here agree only to packing precision, which is what
+ * every other mirror in this project accepts.
+ */
+function sdBezierTs(p: Vec3, A: Vec3, B: Vec3, C: Vec3): number[] {
+  const a = sub(B, A);
+  const b: Vec3 = [A[0] - 2 * B[0] + C[0], A[1] - 2 * B[1] + C[1], A[2] - 2 * B[2] + C[2]];
+  const dv = sub(A, p);
+
+  const kk = 1 / dot(b, b);
+  const kx = kk * dot(a, b);
+  const ky = kk * (2 * dot(a, a) + dot(dv, b)) / 3;
+  const kz = kk * dot(dv, a);
+
+  // Depressed cubic u³ + p·u + q = 0, with t = u − kx.
+  const pp = ky - kx * kx;
+  const qq = kx * (2 * kx * kx - 3 * ky) + kz;
+  const h = qq * qq + 4 * pp ** 3;
+  const clamp01 = (u: number) => Math.max(0, Math.min(1, u));
+
+  if (h >= 0) {
+    // One real root: the squared distance falls monotonically to it and rises
+    // after, so the clamped root covers the interior — but the caller still
+    // checks the endpoints, because outside [0,1] either end can win once the
+    // RADIUS term joins the objective.
+    // The |p| ~ 0 branch is iq's numerical-stability fix: with pp near zero,
+    // (±sqrt(h) − q)/2 cancels catastrophically.
+    const h2 = Math.sqrt(h);
+    let x1 = (h2 - qq) / 2;
+    let x2 = (-h2 - qq) / 2;
+    if (Math.abs(pp) < 1e-4 && qq !== 0) {
+      const k = pp ** 3 / qq;
+      x1 = k;
+      x2 = -k - qq;
+    }
+    const u1 = Math.sign(x1) * Math.abs(x1) ** (1 / 3);
+    const u2 = Math.sign(x2) * Math.abs(x2) ** (1 / 3);
+    return [clamp01(u1 + u2 - kx)];
+  }
+  // Three real roots, by the trigonometric method.
+  const z = Math.sqrt(-pp);
+  const v = Math.acos(Math.max(-1, Math.min(1, qq / (pp * z * 2)))) / 3;
+  const m = Math.cos(v);
+  const n = Math.sin(v) * 1.7320508075688772;
+  return [clamp01((m + n) * z - kx), clamp01(-(m + n) * z - kx), clamp01((n - m) * z - kx)];
+}
+
+/**
+ * A capsule swept along a quadratic Bezier from `a` through control point
+ * `c` to `b`, radius lerping r1 → r2 along the curve parameter. MUST match
+ * coneBend in march.wgsl.ts.
+ *
+ * APPROXIMATE, deliberately and openly: the exact SDF of a variable-radius
+ * sweep is min-over-t of (dist(t) − r(t)), whose stationary points differ
+ * from the pure-distance ones solved above. Evaluating at those candidates,
+ * both ends, quarters, and a short local refinement around the running best
+ * bounds the error by how much the radius moves across the final refinement
+ * step — small for the gentle tapers characters author — and errs toward
+ * OVERestimating distance outside, never toward swallowing the solid. What
+ * absorbs the residual: the march's relaxed tracer detects and retracts
+ * overshoots, and steps inside the silhouette shell are under-relaxed. Do
+ * not tighten this into "exact" without solving G's own cubic; a wrong
+ * "exact" here eats horn tips silently.
+ *
+ * THE DEGENERATE CASE IS NOT OPTIONAL. With a collinear control point the
+ * curve coefficient b = a − 2c + end is the zero vector, kk = 1/dot(b,b) is
+ * infinity, and the whole thing returns NaN — and ONE NaN in a smooth-min
+ * fold takes the entire body with it, presenting as a vanished character
+ * rather than an error. Fall back to the straight round cone whenever the
+ * control point hugs the chord; there sdRoundCone IS the exact answer, so
+ * the fallback costs nothing but the test.
+ */
+function sdBentCone(q: Vec3, a: Vec3, b: Vec3, c: Vec3, r1: number, r2: number): number {
+  // Curve coefficient of the quadratic term, a − 2c + b. Its magnitude is
+  // twice the curve's worst deviation from the chord, so dot(bb,bb) under
+  // 1e-12 means straight to far below authoring precision.
+  const bb: Vec3 = [a[0] - 2 * c[0] + b[0], a[1] - 2 * c[1] + b[1], a[2] - 2 * c[2] + b[2]];
+  if (dot(bb, bb) < 1e-12) return sdRoundCone(q, a, b, r1, r2);
+  // Coincident ends collapse the curve toward the control point; the cubic
+  // solve survives it, but the straight fallback reads better and matches
+  // sdRoundCone's own guard.
+  const ab2 = dot(sub(b, a), sub(b, a));
+  if (ab2 < 1e-12) return sdRoundCone(q, a, b, r1, r2);
+
+  const e1 = vscale(sub(c, a), 2);           // 2(B − A)
+  const e2 = bb;                             // A − 2B + C
+  const at = (t: number): Vec3 => [
+    a[0] + e1[0] * t + e2[0] * t * t,
+    a[1] + e1[1] * t + e2[1] * t * t,
+    a[2] + e1[2] * t + e2[2] * t * t,
+  ];
+  const g = (t: number): number => len(sub(q, at(t))) - (r1 + (r2 - r1) * t);
+  // Pass 1: every cubic root, both ends, and quarters. Passes 2-3 refine
+  // locally around the best so far (steps 1/8 then 1/32) — the objective's
+  // own minimiser drifts off the pure-distance candidates where the taper is
+  // steep, and these two passes chase it. Monotone: the min can only improve.
+  let best = Infinity;
+  let bestT = 0;
+  const ts = [...sdBezierTs(q, a, c, b), 0, 0.25, 0.5, 0.75, 1];
+  for (const t of ts) {
+    const v = g(t);
+    if (v < best) { best = v; bestT = t; }
+  }
+  for (const step of [0.125, 0.03125]) {
+    for (const dt of [-step, 0, step]) {
+      const t = Math.max(0, Math.min(1, bestT + dt));
+      const v = g(t);
+      if (v < best) { best = v; bestT = t; }
+    }
+  }
+  return best;
 }
 
 /** Quadratic polynomial smooth-min — must match the shader exactly. */
@@ -276,8 +415,15 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
       if (prim.op === 'sub' || prim.dead) continue;
       const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
-      for (const end of [prim.a, prim.b])
-        if (len(sub(end, c.center)) + prim.radius * maxScale > c.radius + 1e-6)
+      // A bent prim's surface swings out to its control point, not just its
+      // chord — sample the ctrl too or every strongly-bent horn reports as
+      // escaping a sphere it actually stays inside.
+      const ends = prim.bend === undefined
+        ? [prim.a, prim.b]
+        : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
+      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius);
+      for (const end of ends)
+        if (len(sub(end, c.center)) + rMax * maxScale > c.radius + 1e-6)
           errs.push(`primitive in cluster "${c.limb}" escapes its bounding sphere`);
     }
 

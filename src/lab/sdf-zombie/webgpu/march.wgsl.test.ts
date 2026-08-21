@@ -18,9 +18,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
-  SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE,
+  SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
+  ROW_PRIM_BEND,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
@@ -197,7 +198,7 @@ describe('ported features reach the entry point', () => {
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
     // ONE sd evaluation feeds both branches, the same invariant mapBody's fold
     // keeps — evaluating the field twice is how the two paths drift apart.
-    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2), sdPrimO(p, idx, data, r2), ori);');
+    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2, prof, cpos), sdPrimO(p, idx, data, r2, prof, cpos), ori);');
     expect(applyCarves).toContain('if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }');
     // Depth and width ride primShape.zw, spare since the taper claimed xy.
     expect(applyCarves).toContain('gr = T.zw;');
@@ -239,13 +240,14 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
     const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
     // Argmin tripwire: ONE sd evaluation feeds both the fold and the tracker.
-    // Same invariant, now carrying the taper radius: ONE sd evaluation still
-    // feeds both the fold and the argmin tracker. `r2` is -1 for every
-    // untapered prim, which is the plain-capsule branch inside coneCap.
-    expect(mapBody).toContain('var sd = sdPrim(p, idx, data, r2);');
-    expect(mapBody).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2); }');
+    // Same invariant, now carrying the taper radius AND the profile+bend
+    // encoding: ONE sd evaluation still feeds both. `r2` is -1 for every
+    // untapered prim (plain-capsule branch inside coneCap); `cpos` is zero
+    // unless prof > 1.5, which is the Bezier branch inside sdPrim.
+    expect(mapBody).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos);');
+    expect(mapBody).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos); }');
     expect(mapBody).toContain('if (sd < best) { best = sd; bestIdx = idx; }');
-    expect(mapBody).toContain('if (prof > 0.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+    expect(mapBody).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
     expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
@@ -449,7 +451,7 @@ describe('data texture layout', () => {
     const rows = [
       ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
-      ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
+      ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -556,13 +558,67 @@ describe('tapered primitive and chamfer fold', () => {
   });
 });
 
+describe('arc capsule — bent primitives', () => {
+  // The Bezier path is gated on primShape.y >= 2 (profile + bend), so an
+  // unbent cluster never pays for ROW_PRIM_BEND — the same hoist that keeps
+  // an untapered body from paying for the shape row, which measured +10-18%
+  // frame time when it was missing.
+  it('loads ROW_PRIM_BEND only for prims whose profile encodes bend', () => {
+    for (const src of [MAP_BODY, APPLY_CARVES]) {
+      expect(src).toContain(`cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;`);
+      const gateAt = src.indexOf('if (prof > 1.5) {');
+      expect(gateAt).toBeGreaterThan(-1);
+      expect(gateAt).toBeLessThan(src.indexOf('cpos = textureLoad'));
+    }
+  });
+
+  // Bend rides profile bit 1 (+2), so the old "prof > 0.5" chamfer test would
+  // wrongly chamfer a plain-bent round prim — the fold must bound it above.
+  it('bounds the chamfer test below the bend encoding in the fold', () => {
+    const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
+    expect(mapBody).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+  });
+
+  // One NaN takes the entire body: the degenerate guard must sit before the
+  // Bezier evaluation it protects, exactly as coneCap's l2 guard sits before
+  // its division.
+  it('coneBend guards collinear control points before evaluating the curve', () => {
+    const guard = CONE_BEND.indexOf('if (dot(bb, bb) < 1e-12) { return coneCap(q, a, b, r1, r2, minScale); }');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(CONE_BEND.indexOf('sdBezierT('));
+    // ...and the coincident-ends twin right beside it.
+    expect(CONE_BEND).toContain('if (dot(b - a, b - a) < 1e-12) { return coneCap(q, a, b, r1, r2, minScale); }');
+  });
+
+  // iq's construction divides by dot of the quadratic coefficient; that is
+  // where infinity comes from. The guard's position relative to the call is
+  // pinned above; this pins that the helper really carries the division.
+  it('sdBezierT is the Cardano/trigonometric cubic solve with the stability fix', () => {
+    expect(SD_BEZIER_T).toContain('let kk = 1.0 / dot(bv, bv);');
+    expect(SD_BEZIER_T).toContain('if (abs(pp) < 1e-4 && qq != 0.0) {');
+    expect(SD_BEZIER_T).toContain('acos(clamp(qq / (pp * z * 2.0), -1.0, 1.0)) / 3.0');
+  });
+
+  it('sits in HELPERS between CONE_CAP and sdPrim, declared before use', () => {
+    // WGSL requires declaration before use; an omitted helper passes every
+    // unit test and fails at pipeline creation (the empty-SDF-layer trap).
+    expect(HELPERS.indexOf(CONE_CAP)).toBeLessThan(HELPERS.indexOf(SD_BEZIER_T));
+    expect(HELPERS.indexOf(SD_BEZIER_T)).toBeLessThan(HELPERS.indexOf(CONE_BEND));
+    expect(HELPERS.indexOf(CONE_BEND)).toBeLessThan(HELPERS.indexOf(SD_PRIM));
+    expect(SD_PRIM).toContain('coneBend(p * inv');
+    expect(SD_PRIM_ORIENTED).toContain('coneBend(qq, a, b, c * inv');
+  });
+});
+
 describe('per-prim orientation (motion-polish task 3)', () => {
   it('sdPrimO reads the quat row and guards identity prims with a cheap branch', () => {
     // String pins: the parity test below proves the CPU mirror, these prove
     // the WGSL actually contains the branch being mirrored.
     expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
+    // Was 11; the arc capsule added ROW_PRIM_BEND without displacing any
+    // existing row.
+    expect(DATA_ROWS).toBe(12);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
-    expect(DATA_ROWS).toBe(11);
   });
 
   it('sdPrim stays the plain world-axis capsule, diffable against the frozen GLSL', () => {
@@ -581,8 +637,8 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     expect(MAP_BODY).toContain('let ori = (flags & 1) != 0;');
     expect(MAP_BODY).toContain('let shaped = (flags & 2) != 0;');
     expect(MAP_BODY).toContain('if (shaped) {');
-    expect(MAP_BODY).toContain('sdPrimO(p, idx, data, r2)');
-    expect(MAP_BODY).toContain('sdPrim(p, idx, data, r2)');
+    expect(MAP_BODY).toContain('sdPrimO(p, idx, data, r2, prof, cpos)');
+    expect(MAP_BODY).toContain('sdPrim(p, idx, data, r2, prof, cpos)');
     // The carve pass reads the same bitfield, so a tapered carve is a taper in
     // BOTH fields. This one backs click-to-shoot; a divergence here lands
     // shots where nothing is drawn.

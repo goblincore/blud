@@ -6,7 +6,7 @@ import { makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
 import {
-  add, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
+  add, bendCtrl, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
   scale as vscale, sub,
 } from './vec';
 
@@ -167,14 +167,24 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
 
   const clusters: ClusterInfo[] = body.clusters.map(c => {
     const members = prims.slice(c.start, c.start + c.count);
+    // Same bent-prim rule as assignClusters: the ctrl point joins the fit or
+    // a swung horn escapes the sphere the shader culls by.
     let sum: Vec3 = [0, 0, 0];
-    for (const m of members) sum = add(sum, add(m.a, m.b));
-    const center = vscale(sum, 1 / (members.length * 2));
+    let pts = 0;
+    for (const m of members) {
+      sum = add(sum, add(m.a, m.b));
+      pts += 2;
+      if (m.bend !== undefined) { sum = add(sum, bendCtrl(m.a, m.b, m.bend)); pts += 1; }
+    }
+    const center = vscale(sum, 1 / pts);
     let radius = 0;
     for (const m of members) {
       const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
-      for (const end of [m.a, m.b])
-        radius = Math.max(radius, len(sub(end, center)) + m.radius * maxScale);
+      const ends = m.bend === undefined
+        ? [m.a, m.b] : [m.a, m.b, bendCtrl(m.a, m.b, m.bend)];
+      const rMax = Math.max(m.radius, m.radiusB ?? m.radius);
+      for (const end of ends)
+        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale);
     }
     return { ...c, center, radius };
   });

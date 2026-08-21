@@ -82,8 +82,14 @@ export function expandMirror(def: BodyDef): ExpandedBody {
       // this whole `both` path exists to avoid for offsets.
       const t = rest.tip;
       const flipT = t === undefined ? undefined : ([-t[0], t[1], t[2]] as const);
-      prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side });
-      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), limb: side });
+      // The bend mirrors in x alongside offset and tip. A control point that
+      // hooks one ear's horn outward would hook its twin INWARD across the
+      // skull if only the endpoints reflected — same failure the tip flip
+      // exists for, arriving through the curve instead of the endpoint.
+      const bn = rest.bend;
+      const flipB = bn === undefined ? undefined : ([-bn[0], bn[1], bn[2]] as const);
+      prims.push({ ...rest, offset: [o[0], o[1], o[2]], ...(flipB ? { bend: flipB } : {}), limb: side });
+      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), limb: side });
       continue;
     }
 
