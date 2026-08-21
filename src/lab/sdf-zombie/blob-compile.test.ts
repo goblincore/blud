@@ -53,28 +53,27 @@ describe('dirVector', () => {
     near([v[2] / -v[1], 0, 0], [0.05, 0, 0], 1e-6);
   });
 
-  // foreArm is [0.05,-1,0.1]; atan(0.1) = 5.710593 degrees of pitch and
-  // atan(0.05) = 2.862405 degrees of tilt, combined on a `down` base — the
-  // one case the plan's original two tests never covered together. This is
+  // foreArm is [0.05,-1,0.1], the one case the plan's original two tests
+  // never covered together: pitch and tilt combined on a `down` base — and
   // exactly the combination that was silently wrong before the pitch fix
   // (z ≈ -0.1001 instead of +0.1001).
   //
-  // x/-y matches tan(tilt) to float precision regardless of pitch: tilt
-  // rotates (0, y1) rigidly, and that rotation preserves the ratio of its
-  // own two components no matter how big y1 is. z, however, is fixed by
-  // pitch BEFORE tilt runs and tilt never touches it, while tilt DOES shrink
-  // |y| by cos(tilt) — so z/-y comes out as tan(pitch) / cos(tilt), not
-  // tan(pitch) exactly. That is a real, name-able ~sec(tilt) coupling
-  // between sequential single-axis rotations, not slop: at tilt =
-  // 2.862405°, sec(tilt) - 1 ≈ 1.25e-3 relative, i.e. ≈ 1.25e-4 absolute on
-  // a 0.1 target — hence the looser (but still tight, 5e-4) epsilon on the
-  // z assertion only; `near`'s eps→decimal-places conversion needs it above
-  // 2e-4 to actually buy that many digits (toBeCloseTo(x, 4)'s threshold of
-  // 5e-5 is tighter than the residual and would still fail).
-  it('combines pitch and tilt on a down base, matching the authored forearm', () => {
-    const v = dirVector('down', 5.710593, 2.862405);
+  // The pitch value below is NOT atan(0.1) (5.710593°, the naive per-axis
+  // angle used elsewhere in this file) — it's 5.703515°, the value
+  // `derive_blob_angles.mjs` actually emits for this bone. Composing tilt
+  // AFTER pitch is not commutative: tilt shrinks |y| by cos(tilt) without
+  // touching z, so z/-y comes out as tan(pitch) / cos(tilt), not tan(pitch)
+  // — feeding in the naive atan(0.1) reproduces the target only to ~1.25e-4.
+  // `derive_blob_angles.mjs` accounts for that by deriving
+  // pitch = atan((z/|y|) * cos(tilt)) instead of atan2(z, |y|), which
+  // inverts this exact composition rather than an idealised independent-axes
+  // one — so feeding its output back through `dirVector` round-trips to
+  // float precision, and the tolerance below can be as tight as every other
+  // test in this file.
+  it('combines pitch and tilt on a down base, matching the derived forearm angles', () => {
+    const v = dirVector('down', 5.703515, 2.862405);
     near([v[0] / -v[1]], [0.05], 1e-6);
-    near([v[2] / -v[1]], [0.1], 5e-4);
+    near([v[2] / -v[1]], [0.1], 1e-6);
   });
 });
 

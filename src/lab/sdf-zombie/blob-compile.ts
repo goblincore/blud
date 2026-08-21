@@ -16,14 +16,18 @@ const RAD = Math.PI / 180;
 /**
  * Angles → a direction vector, the ergonomic win borrowed from WAM.
  *
- * Both angles are AUTHOR-FACING conventions, and neither depends on which
- * base direction they're applied to: positive `pitch` always tips the
- * direction toward +z, and positive `tilt` always swings it toward +x. An
- * author writing `pitch=5` means "tip it forward" whether that's a spine
- * pointing `up` or a forearm pointing `down` — so the zombie's 7-degree
- * forward hunch is a number you can reason about instead of the opaque
- * `[0, 1, 0.12]`, and the SAME number means the same thing lower down the
- * skeleton.
+ * On `up`/`down` bases, both angles are AUTHOR-FACING conventions that don't
+ * depend on which way the bone points: positive `pitch` tips the direction
+ * toward +z, and positive `tilt` swings it toward +x, for both. An author
+ * writing `pitch=5` means "tip it forward" whether that's a spine pointing
+ * `up` or a forearm pointing `down` — so the zombie's 7-degree forward hunch
+ * is a number you can reason about instead of the opaque `[0, 1, 0.12]`, and
+ * the SAME number means the same thing lower down the skeleton.
+ *
+ * `side` and `fwd` don't follow that contract — see the inline comments
+ * below for why. In short: on `side`, pitch is a no-op and tilt swings
+ * toward +y, not +x (a sideways clavicle tilting "up"). On `fwd`, both
+ * angles are inert.
  *
  * Magnitude is irrelevant: resolveBones normalises `dir` (resolve.ts:26), so
  * only the direction has to be right.
