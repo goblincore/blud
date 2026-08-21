@@ -328,8 +328,14 @@ export function surfaceNoise(p: Vec3, body: Body, rest?: Body): number {
  * A point guaranteed to be inside a cluster's flesh: the midpoint of its
  * fattest solid primitive, which sits `radius * minScale` deep inside that
  * primitive's own surface and therefore inside the union.
+ *
+ * Exported for `blob-checks.ts`'s `fused` check, which needs exactly this
+ * "a point guaranteed inside" concept for its own segment probe and would
+ * otherwise have to re-derive it — this is the one place that reasoning is
+ * allowed to live. `body` only needs `prims`/`clusters`, so a `BuiltBody` or
+ * any narrower same-shaped object works.
  */
-function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
+export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let best: Primitive | null = null;
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
