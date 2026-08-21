@@ -49,10 +49,19 @@ export interface FaceSheetParams {
    */
   eyeSquash: number;
   /**
-   * A dark pupil inside the bright eye, as a fraction of eye radius. 0 leaves
-   * the eye a plain glowing blob. A pupil reads as a creature looking at you
-   * rather than as a lamp, but it also breaks up the emissive core, so keep it
-   * well under 1.
+   * A dark pupil inside the bright eye, as a fraction of eye radius.
+   *
+   * **This fights the glow, and usually loses.** The shader's emissive mask is
+   * `smoothstep(0.88, 1, luma)`, so only the brightest part of the eye lights
+   * up — and a pupil darkens exactly those pixels. At 0.42 it pulled the eye's
+   * centre to ~0.25 luma, well under the threshold, so instead of a pupil you
+   * get a glowing ring with a hole in it, which at eye size just reads as a
+   * smaller, dimmer eye. The glow is also scaled by how squarely the face
+   * points at the camera, so a three-quarter view dims it further and the
+   * hollow core is what disappears first.
+   *
+   * Left in because it is genuinely wanted on a non-glowing eye (drop eyeGlow
+   * below the threshold and the pupil becomes the feature). Default 0.
    */
   eyePupil: number;
   /** Vertical eye position, 0 = top of sheet, 1 = bottom. */

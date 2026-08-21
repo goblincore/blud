@@ -67,9 +67,17 @@ skeleton
     # attaches and clears the torso. What separates them is a FATTER shoulder
     # ball (so more of it protrudes past the chest) and a TIGHTER blend at the
     # join, so the two crease against each other instead of smearing together.
-    bone clavicle parent=chest    side=0.046 dir=side  len=0.052
-    bone upperarm parent=clavicle dir=down pitch=-12 tilt=7 len=0.235
-    bone forearm  parent=upperarm dir=down pitch=11    len=0.235
+    #
+    # The shoulder was only half of it, though. The arms also merged along their
+    # LENGTH: at tilt=7 the upper arm descended nearly vertically, inner edge
+    # around x 0.066-0.095 against a gut half-width of 0.098, so it ran inside
+    # the torso the whole way down. Swinging it out to 19 clears the gut, and
+    # the forearm tilts back in at -9 so the hands still hang beside the hips
+    # instead of out at the elbows' width — a bowed arm rather than a splayed
+    # one.
+    bone clavicle parent=chest    side=0.040 dir=side  len=0.046
+    bone upperarm parent=clavicle dir=down pitch=-12 tilt=19 len=0.235
+    bone forearm  parent=upperarm dir=down pitch=11 tilt=-9 len=0.235
     bone hand     parent=forearm  dir=down             len=0.072
     # Long bowed legs: splay out at the thigh, back in at the shin, so the knee
     # stands proud of the ankle line.
@@ -126,7 +134,7 @@ body
   # pipe, and this is the stylisation rather than something to blend away, so
   # the nubs are fatter than the shafts they join and the blends are kept tight
   # enough not to swallow them.
-  blob arm on clavicle at=1.00 r=0.050 blend=0.0014 mirror
+  blob arm on clavicle at=1.00 r=0.054 blend=0.0014 mirror
   bar  arm on upperarm from=0.02 to=0.96 r=0.032 blend=0.0018 mirror
   blob arm on forearm  at=0.00 r=0.038 blend=0.0030 mirror
   bar  arm on forearm  from=0.06 to=0.94 r=0.028 blend=0.0024 mirror
@@ -180,11 +188,13 @@ face
 # — a scowl is mostly brow angle and mouth curve, not eye shape.
 sheet
   eyeGap     0.44
-  eyeSize    0.062
+  eyeSize    0.070
   eyeRise    0.44
   eyeTilt    16
   eyeSquash  1.70
-  eyePupil   0.42
+  # 0, not a pupil: a pupil darkens the very pixels the glow keys off, so it
+  # trades a pupil for a dimmer eye. See blob-face-sheet.ts.
+  eyePupil   0
   browHeavy  0.90
   browAngle  24
   mouthWidth 0.54
