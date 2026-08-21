@@ -18,129 +18,106 @@
 # face level, arms hang long and slightly ahead, legs bow out at the thigh and
 # back in at the shin. None of that is animation — it is all rest pose.
 model goblin
-  height 1.15
+  height 1.30
 
 skeleton
-  root pelvis at 0.425
+  # ELONGATED, not squat. The first pass put the hip at 0.425 of a 1.15 m body
+  # with 0.385 of leg under it, and the result was an egg with stumps: the
+  # torso was the whole silhouette and the limbs barely escaped it. Legs are
+  # now roughly half the standing height, the torso is longer and much
+  # narrower, and every limb segment is a distinct length rather than a blob.
+  root pelvis at 0.60 len=0.105
 
-  bone spine1 parent=pelvis dir=up pitch=13 len=0.10
-  bone chest  parent=spine1 dir=up pitch=9  len=0.12
-  # Neck pitches BACK against the spine's forward lean, or the goblin stares at
-  # its own feet. -17 then -5 lands the face roughly level.
-  #
-  # WAM's neck is 0.045 and that works there, because its neckcol is a separate
-  # mesh sitting proud of the torso. Here the chest's top blob (r 0.143) simply
-  # swallowed a 0.045 neck whole and the head sat straight on the shoulders.
-  # Lengthened until the head clears the shoulder mass.
+  bone spine1 parent=pelvis dir=up pitch=13 len=0.135
+  bone chest  parent=spine1 dir=up pitch=9  len=0.150
+  # No-neck syndrome took four changes, and the non-obvious one was the head.
+  # facePrims centres the cranium partway along the skull bone, so an oversized
+  # headRadius on a short skull bone puts the bottom of that ellipsoid BELOW
+  # the neck's top — the head does not sit near the shoulders, it encloses the
+  # whole neck, and thinning the column cannot reveal something inside a
+  # sphere. Cranium size, skull length, neck length and the chest cap all move
+  # together; none of them works alone.
   bone neck   parent=chest  dir=up pitch=-17 len=0.140
-  # Named `skull`, not `head` as in the WAM file: facePrims() hardcodes that
-  # bone name, and a .blob character without one throws from resolveBones
-  # before validation ever runs.
-  bone skull  parent=neck   dir=up pitch=-5 len=0.235
+  bone skull  parent=neck   dir=up pitch=-5  len=0.235
 
   mirror
     # WAM's own comment says the shoulder must land INSIDE the chest mass or
-    # "the arm floats free". That is right for WAM, where the arm is a separate
-    # mesh that has to overlap to look attached — and exactly WRONG here. In an
-    # SDF, overlapping IS merging: at len=0.058 the shoulder sat at x 0.13
-    # against a chest half-width of 0.146, and smooth-min swallowed both arms
-    # into the torso completely. But overshooting is just as wrong: at len=0.115
-    # fusedOf(torso, armL) went POSITIVE (+0.0027), i.e. the core-to-core path
-    # left the flesh and the arm was hanging on by nothing. 0.092 is the band
-    # between swallowed and detached — the checks found both edges of it.
-    # (WAM also tilts this -14; dropped, because on a `side` base tilt swings
-    # toward +y, not +x, so it does not mean what it means on the arms.)
-    bone clavicle parent=chest    side=0.080 dir=side   len=0.092
-    bone upperarm parent=clavicle dir=down pitch=-14 tilt=9 len=0.17
-    bone forearm  parent=upperarm dir=down pitch=13     len=0.17
-    bone hand     parent=forearm  dir=down              len=0.055
-    # Bowed legs: splay out at the thigh, back in at the shin, so the knee
+    # "the arm floats free". Right for WAM, where the arm is a separate mesh
+    # that has to overlap to look attached — and exactly WRONG here, because in
+    # an SDF overlapping IS merging and smooth-min swallowed both arms whole.
+    # Overshooting is just as wrong: too far out and fusedOf goes POSITIVE, the
+    # core-to-core path leaves the flesh and the arm hangs on by nothing. The
+    # checks find both edges of a narrow band, and the band MOVES when the
+    # torso changes: narrowing the chest to fix the egg silhouette pushed the
+    # old shoulder reach outside the flesh and detached both arms outright
+    # (fusedOf +0.0076, and validateBody reported the clusters disconnected).
+    # Shoulder reach is a function of chest width, not a constant.
+    bone clavicle parent=chest    side=0.044 dir=side  len=0.050
+    bone upperarm parent=clavicle dir=down pitch=-12 tilt=7 len=0.235
+    bone forearm  parent=upperarm dir=down pitch=11    len=0.235
+    bone hand     parent=forearm  dir=down             len=0.072
+    # Long bowed legs: splay out at the thigh, back in at the shin, so the knee
     # stands proud of the ankle line.
-    bone thigh    parent=pelvis   dir=down tilt=8  pitch=-9 side=0.092 len=0.195
-    bone shin     parent=thigh    dir=down tilt=-8 pitch=11 len=0.19
-    bone foot     parent=shin     dir=fwd               len=0.10
+    bone thigh    parent=pelvis   dir=down tilt=7  pitch=-8 side=0.072 len=0.290
+    bone shin     parent=thigh    dir=down tilt=-7 pitch=10 len=0.270
+    bone foot     parent=shin     dir=fwd              len=0.130
   end
 
 body
-  # Pot belly. The widest ring sits low and forward — a goblin's gut hangs over
-  # the belt. .blob cannot split the depth axis the way WAM's dtop/dbot do, so
-  # the gut is symmetric front-to-back here; the back reads flatter in WAM.
-  blob torso on pelvis at=0.00 r=0.128 deep=0.86 blend=0.0075
-  blob torso on pelvis at=0.87 r=0.173 deep=0.84 blend=0.0080
-  blob torso on spine1 at=0.69 r=0.165 deep=0.82 blend=0.0080
-  blob torso on chest  at=0.46 r=0.146 deep=0.82 blend=0.0075
-  blob torso on chest  at=1.00 r=0.108 deep=0.82 blend=0.0060
+  # Torso: long and narrow with the gut low, rather than one wide ovoid. The
+  # widest ring is barely half what it was.
+  blob torso on pelvis at=0.00 r=0.078 deep=0.88 blend=0.0045
+  blob torso on pelvis at=0.90 r=0.098 deep=0.86 blend=0.0050
+  blob torso on spine1 at=0.62 r=0.094 deep=0.84 blend=0.0050
+  blob torso on chest  at=0.45 r=0.086 deep=0.84 blend=0.0045
+  blob torso on chest  at=1.00 r=0.070 deep=0.84 blend=0.0040
 
-  # Neck column.
-  #
-  # No-neck syndrome took FOUR changes, and the non-obvious one is the head.
-  #
-  # facePrims centres the cranium partway along the skull bone, so with
-  # headRadius 0.150 on a 0.18 skull bone the bottom of that ellipsoid sat
-  # BELOW the neck's top — the head was not merely close to the shoulders, it
-  # enclosed the entire neck, and no amount of thinning the column could show
-  # something buried inside a sphere. Shrinking the cranium (0.150 -> 0.126)
-  # and lengthening the skull bone (0.18 -> 0.235) lifts it clear.
-  #
-  # The other three: a longer neck bone (0.085 -> 0.140), a thinner column, and
-  # a smaller chest cap for it to rise out of. None of them works alone.
-  bar head on neck from=0.00 to=1.00 r=0.048 deep=0.94 blend=0.0016
+  # Neck column — thin, and rising out of a small chest cap.
+  bar head on neck from=0.00 to=1.00 r=0.046 deep=0.94 blend=0.0016
 
-  # Ears: small and pointed, not round flaps.
-  #
-  # A single fat ellipsoid gives a Mickey Mouse ear — an ellipsoid cannot taper,
-  # so it is round whatever you scale it to. Two prims per ear can: a flattened
-  # base, then a much smaller tip pushed further out and up. The taper between
-  # them under smooth-min is what reads as a point.
-  #
-  # `both` mirrors the offset across a bone that is not itself mirrored — the
-  # same mechanism the zombie's eye sockets use.
+  # Ears: small and pointed. One ellipsoid cannot taper — it is round whatever
+  # you scale it to — so each ear is a flattened base plus a much smaller tip
+  # pushed further out and up. The smooth-min taper between them is the point.
   blob head on skull at=0.60 r=0.040 wide=0.75 tall=1.45 deep=0.40 blend=0.0022 offset=(0.098,0.028,-0.010) both
   blob head on skull at=0.66 r=0.020 wide=0.55 tall=1.30 deep=0.34 blend=0.0018 offset=(0.128,0.082,-0.020) both
 
-  # Nose — shaded by the sheet for the front view, built for the PROFILE.
-  #
-  # The sheet's noseRidge is what makes a nose read head-on, and it does that
-  # job well. It does nothing for the silhouette, though, and the first version
-  # here did not either: at offset z 0.062 with a half-depth of 0.046 the tip
-  # reached z 0.108, against a skull semi-depth of 0.126 x 0.94 = 0.118. The
-  # nose was entirely INSIDE the cranium — a slight bump in profile because
-  # that is all it geometrically was.
-  #
-  # Pushed out past the skull surface, and split in two so it hooks: the tip
-  # sits lower and further forward than the bridge. That is WAM's bent `sweep`
-  # approximated with the two prims .blob has.
-  #
-  # This is the tradeoff face.ts's header names: a nose that juts past the
-  # planar face projection picks up texture from behind it and reads flatter
-  # than the shading suggests. Accepted deliberately here — the owner wants the
-  # profile — but it is why the ridge shading carries the front view rather
-  # than the geometry being pushed further still.
+  # Nose — shaded by the sheet for the front view, built for the PROFILE. The
+  # first version sat entirely inside the cranium (tip at z 0.108 against a
+  # skull semi-depth of 0.118), which is why it read as a slight bump: that is
+  # all it geometrically was. Two prims so it hooks, approximating WAM's bent
+  # sweep. The tradeoff face.ts names is accepted here — a nose past the planar
+  # projection picks up texture from behind it — which is why the ridge shading
+  # carries the front and the geometry only carries the silhouette.
   blob head on skull at=0.46 r=0.029 wide=0.85 deep=2.05 blend=0.0032 offset=(0,-0.020,0.094)
   blob head on skull at=0.42 r=0.019 wide=0.68 deep=1.70 blend=0.0026 offset=(0,-0.058,0.118)
 
-  # Spindly arms with a knobbly elbow.
+  # ARMS AND LEGS — ball joints, deliberately.
   #
-  # These were five blobs, one per WAM ring, and they read as a STRING OF BEADS.
-  # A loft is a continuous swept surface, so ring-per-slice is natural in WAM; in
-  # an SDF the equivalent of a tapering loft is a CAPSULE, and blobs are for the
-  # lumps that interrupt it. Shafts are bars now, and the one surviving blob is
-  # the elbow knob — the thing the taper exists to sell.
-  bar  arm on upperarm from=0.05 to=0.95 r=0.050 blend=0.0045 mirror
-  blob arm on forearm  at=0.00        r=0.049 blend=0.0050 mirror
-  bar  arm on forearm  from=0.05 to=0.95 r=0.037 blend=0.0045 mirror
+  # Every segment is a bar with a nub at each joint, and the nubs are meant to
+  # read: shoulder, elbow, wrist, hip, knee, ankle. A shaft alone reads as a
+  # pipe, and this is the stylisation rather than something to blend away, so
+  # the nubs are fatter than the shafts they join and the blends are kept tight
+  # enough not to swallow them.
+  blob arm on clavicle at=1.00 r=0.044 blend=0.0030 mirror
+  bar  arm on upperarm from=0.06 to=0.94 r=0.033 blend=0.0026 mirror
+  blob arm on forearm  at=0.00 r=0.038 blend=0.0030 mirror
+  bar  arm on forearm  from=0.06 to=0.94 r=0.028 blend=0.0024 mirror
+  blob arm on forearm  at=1.00 r=0.030 blend=0.0026 mirror
 
   # Big grabby hands. Goblins are all nose, ears and hands.
-  blob arm on hand at=0.45 r=0.056 deep=0.91 blend=0.0050 mirror
+  blob arm on hand at=0.55 r=0.046 deep=0.90 blend=0.0034 mirror
 
-  # Bowed legs, same treatment: shaft as a bar, calf bulge as the one blob.
-  # The bulge sits at the knee joint, not mid-shin.
-  bar  leg on thigh from=0.02 to=0.95 r=0.068 blend=0.0050 mirror
-  blob leg on shin  at=0.11         r=0.064 blend=0.0050 mirror
-  bar  leg on shin  from=0.05 to=0.95 r=0.048 blend=0.0045 mirror
+  blob leg on thigh at=0.00 r=0.058 blend=0.0038 mirror
+  bar  leg on thigh from=0.08 to=0.92 r=0.044 blend=0.0030 mirror
+  blob leg on shin  at=0.00 r=0.050 blend=0.0036 mirror
+  bar  leg on shin  from=0.08 to=0.92 r=0.035 blend=0.0028 mirror
+  blob leg on shin  at=1.00 r=0.038 blend=0.0030 mirror
 
-  # Splayed, oversized feet — they anchor a top-heavy silhouette.
-  blob leg on foot at=0.50 r=0.070 tall=0.75 deep=0.90 blend=0.0045 mirror
+  # Feet: an ankle nub, a shaft forward along the foot bone, and a toe nub.
+  # Splayed and slightly oversized, which is what stops a long-legged creature
+  # reading as stilts.
+  bar  leg on foot from=0.10 to=0.80 r=0.032 tall=0.80 blend=0.0028 mirror
+  blob leg on foot at=0.92 r=0.038 wide=1.15 tall=0.70 deep=0.95 blend=0.0030 mirror
 
 # The head itself is facePrims(), not geometry authored here — .blob gets the
 # zombie's parameterised skull whatever character it is. Pushed toward goblin
