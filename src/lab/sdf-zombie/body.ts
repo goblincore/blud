@@ -8,6 +8,14 @@ import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
  *
  * Proportions are deliberately wrong in a B-movie way: long arms hanging past
  * the hip line, head pitched forward of the spine, heavy gut.
+ *
+ * FROZEN REFERENCE — not what the lab renders any more. As of Task 6 the lab
+ * builds the zombie from `characters/zombie.blob`; this stays only as the
+ * value the `.blob` language is pinned against by the anchor test
+ * (`characters/zombie-blob.test.ts`), which fails loudly if the two diverge.
+ * Tune `zombie.blob`, not this — a change here with no matching `.blob`
+ * change just breaks that test instead of changing anything the game or lab
+ * shows.
  */
 const ZOMBIE_BASE: BodyDef = {
   name: 'zombie',

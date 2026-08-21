@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { parseBlob } from './blob-parse';
 import { BlobError } from './blob-ast';
 import { compileBlob, compileFace, dirVector } from './blob-compile';
+import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import zombieBlobSrc from './characters/zombie.blob?raw';
 
 const near = (a: readonly number[], b: readonly number[], eps = 1e-9) =>
   a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, Math.round(-Math.log10(eps))));
@@ -184,5 +186,17 @@ face
     expect(face.jawDrop).toBe(0.05);
     // Every other field keeps DEFAULT_FACE's value — spot-check one.
     expect(face.headWidth).toBe(0.76);
+  });
+});
+
+// The lab (webgpu/lab-main.ts) builds the zombie by feeding compileBlob's
+// output straight into buildBody — this pins that exact path so a change to
+// either compiler stage that breaks the shipped document is caught here,
+// not by a blank canvas.
+describe('the shipped zombie.blob', () => {
+  it('compiles through the same path lab-main uses, with no validation errors', () => {
+    const built = buildBody(compileBlob(parseBlob(zombieBlobSrc)), DEFAULT_BUILD_OPTS, {});
+    expect(built.errors).toEqual([]);
+    expect(built.prims.length).toBeGreaterThan(20);
   });
 });

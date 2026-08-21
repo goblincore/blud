@@ -34,8 +34,12 @@ import {
 } from './zombie-gpu';
 import { createOccluderHull } from './occluder-hull';
 import { translateBody } from '../translate';
-import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
+import { buildBody, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
+import zombieBlobSrc from '../characters/zombie.blob?raw';
+import { parseBlob } from '../blob-parse';
+import { compileBlob, compileFace } from '../blob-compile';
+import { BlobError } from '../blob-ast';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
 } from '../face';
@@ -100,7 +104,7 @@ import {
   LOD_LEVELS, LOD_LEVERS, pickLodSticky, screenHeightPx,
   type LodLevel, type LodLever,
 } from '../lod';
-import type { LimbId, Vec3 } from '../types';
+import type { BodyDef, LimbId, Vec3 } from '../types';
 import {
   addButton, addSection, addSelect, addSlider, applyDebugPanelVisibility, clearOverride,
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
@@ -142,6 +146,78 @@ const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
  *  A per-prim gib is ~15 pieces, so 40 lets two full gibs coexist. */
 const MAX_CHUNKS = 40;
 
+// ---------------------------------------------------------------------------
+// zombie.blob wiring
+//
+// The zombie is authored in zombie.blob now; makeZombie() in body.ts stays
+// only as the frozen reference the anchor test (zombie-blob.test.ts) pins
+// the language against. Every place in this file that used to call
+// makeZombie() directly — the initial body, the crowd spawner, and
+// rebuildBody()'s panel-driven rebuild — goes through buildZombieBody()
+// below instead, so all three render the same document and none of them can
+// silently drift back to the TS body.
+//
+// Logged once per failure kind so a spammy [ crowd-spawn doesn't flood the
+// console with the same BlobError fifteen times.
+let blobCompileWarned = false;
+
+/**
+ * Parses and compiles zombie.blob for the given face, or null if the
+ * document is broken. Never throws: a bad .blob must not blank the lab.
+ * Sets `lastBlobCompileError` as a side effect so callers can surface the
+ * failure on-screen instead of only in the console — a silent fallback
+ * would hide exactly the typed BlobError this format exists to catch.
+ *
+ * `compileFace(doc)` is called explicitly rather than left to compileBlob's
+ * default parameter. compileBlob's signature is
+ * `(doc, face = compileFace(doc))` — a default that only fires when the
+ * CALLER omits the argument. This function always supplies an explicit
+ * `face` (DEFAULT_FACE merged with the panel's live overrides, computed by
+ * the caller), so relying on that default here would mean compileFace(doc)
+ * — and with it every bit of validation against zombie.blob's OWN `face`
+ * block, including the unknown-key check this format exists to give — never
+ * runs at all. The panel override still wins for the values actually
+ * rendered (unchanged from before this format existed); this call exists
+ * purely so a typo in zombie.blob's face section is caught instead of
+ * silently compiling with the panel's values and no diagnostic.
+ */
+let lastBlobCompileError: string | null = null;
+function compileZombie(face: FaceParams): BodyDef | null {
+  try {
+    const doc = parseBlob(zombieBlobSrc);
+    compileFace(doc); // validates zombie.blob's face block; return value unused, see above
+    const compiled = compileBlob(doc, face);
+    lastBlobCompileError = null;
+    return compiled;
+  } catch (e) {
+    const msg = e instanceof BlobError ? e.message : e instanceof Error ? e.message : String(e);
+    lastBlobCompileError = msg;
+    if (!blobCompileWarned) {
+      blobCompileWarned = true;
+      console.error('[blob] zombie.blob failed to compile, falling back to the TS zombie', e);
+    }
+    return null;
+  }
+}
+
+/**
+ * Builds a zombie body from zombie.blob, falling back to makeZombie(face)
+ * (the pinned TS reference) if the document fails to compile. The single
+ * seam used by the initial body, the crowd spawner, and rebuildBody() — see
+ * the comment above compileZombie().
+ */
+function buildZombieBody(face: FaceParams, opts: BodyOverride): BuildResult {
+  const compiled = compileZombie(face);
+  const result = buildBody(compiled ?? makeZombie(face), DEFAULT_BUILD_OPTS, opts);
+  if (lastBlobCompileError) {
+    result.errors = [
+      `zombie.blob failed to compile, rendering the fallback TS zombie: ${lastBlobCompileError}`,
+      ...result.errors,
+    ];
+  }
+  return result;
+}
+
 // Everything lives inside an async bootstrap rather than using top-level await.
 // WebGPURenderer needs `await renderer.init()`, and the project's build target
 // predates top-level await.
@@ -170,7 +246,7 @@ async function main() {
 
   let override = loadOverride();
   const face: FaceParams = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
-  const body = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
+  const body = buildZombieBody(face, override);
 
   const errorsEl = document.getElementById('errors');
   function showErrors(b: BuildResult) {
@@ -775,7 +851,7 @@ async function main() {
       // that can vary — every zombie shares one face sheet — so it is the only
       // place variety can come from. Built once at spawn, not per frame.
       const crowdFace = pickFace(Math.random());
-      const crowdBody = buildBody(makeZombie(crowdFace), DEFAULT_BUILD_OPTS, override);
+      const crowdBody = buildZombieBody(crowdFace, override);
       const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
       const v = createZombieGpuView(placed,
@@ -2064,7 +2140,7 @@ async function main() {
   function rebuildBody() {
     override = { ...override, faceParams: face };
     saveOverride(override);
-    current = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
+    current = buildZombieBody(face, override);
     showErrors(current);
     view.update(current);
     refreshWounds();
