@@ -371,11 +371,15 @@ const DIRS = ['up', 'down', 'side', 'fwd'] as const;
 type DirName = (typeof DIRS)[number];
 
 function dirArg(l: BlobLine): DirName {
-  const hit = l.words.find(w => w.startsWith('dir='));
-  if (!hit) throw new BlobError('missing required "dir="', l.line, l.indent + 1);
-  const v = hit.slice(4) as DirName;
+  const idx = l.words.findIndex(w => w.startsWith('dir='));
+  if (idx === -1) throw new BlobError('missing required "dir="', l.line, l.indent + 1);
+  const v = l.words[idx]!.slice(4) as DirName;
+  // Point at the dir= word, not the start of the line. Every enumerated
+  // validator in this file reports the column of the OFFENDING TOKEN — that
+  // invariant is why the root-line shim was removed — and dirArg is the
+  // template anyone writing the next one will copy.
   if (!DIRS.includes(v))
-    throw new BlobError(`dir must be one of ${DIRS.join('|')}, got "${v}"`, l.line, l.indent + 1);
+    throw new BlobError(`dir must be one of ${DIRS.join('|')}, got "${v}"`, l.line, wordCol(l, idx));
   return v;
 }
 
