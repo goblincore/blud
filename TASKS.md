@@ -468,8 +468,9 @@ Key reference docs (open these before touching their area):
 - `P5`  [-]  Prune old `dispatch/blud-m1-task-*` branches
 - `P6`  [x]  Theme-preview schema merge — `scripts/build_theme_patterns.py` joins `patterns.raw.json` + `labels.json` → theme-shaped `patterns.json` (`{texture_families[weighted floors/walls/ceilings], map_archetypes, geometry}`); validates clean; 30 families/39 maps; doorFreq 0.0413 cross-checks R5's 4.1%. Feeds procgen levels §5.1 + deferred theming.
 - `P7`  [x]  BUNFUSE extraction + cooking visual — `dynamite-fuse-burn.json`, `7081c14`
-- `P8`  [~]  **SDF character language** — WAM-style `.blob` text → `BodyDef`, checks on `sdBody()`, turntable, agent skill. Spec approved; 11-task plan written, none executed.
-  [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · Obsidian: `Claude Notes/Blud/2026-08-20-sdf-character-language.md`
+- `P8`  [~]  **SDF character language** — `.blob` text → `BodyDef`, rendered by the lab, byte-exact round trip, checks, turntable, skill. **Tasks 1-10 landed** (`9cad898..969907a`); 1817 tests, tsc + build clean. `zombie.blob` reproduces `makeZombie()` to **3.77e-9 m**.
+  Open: wire `emitBlob` to the panel (the localStorage override exists only because there was no way back to source); `carve` is hardcoded to `limb: 'head'` whatever bone it targets; `compileZombie`'s validation guard is untested (`lab-main.ts` will not import under vitest). Next: port the WAM cast (goblin/troll/knight/…) — the real test of what the format cannot say.
+  [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · skill: `.claude/skills/authoring-sdf-characters/`
 
 ---
 
