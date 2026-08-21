@@ -1620,6 +1620,21 @@ git commit -m "docs(sdf-lab): skill for authoring .blob characters"
 
 ## Task 11: Close out
 
+**Two corrections found while writing the skill (Task 10), both verified:**
+
+1. **`carve` is hardcoded to `limb: 'head'`** (`blob-parse.ts:310`) whatever bone it
+   targets. A carved stump on an arm or leg compiles and lands in the head
+   cluster. `sdBody` applies carves globally in its second pass so the surface
+   may still look right, but cluster assignment — and therefore severing — is
+   wrong. The cast port will want carves on limbs, so decide: give `carve` a
+   limb word, or infer it from the target bone.
+2. **"Keep primitives contiguous per cluster" was overstated** throughout this
+   plan. `assignClusters` SORTS by cluster (`clusters.ts:17-19`), so contiguity
+   is established for you. What is actually load-bearing is the relative order
+   of primitives *within the same limb*, because smooth-min is non-associative.
+   Reordering across limbs is harmless; reordering within one changes the
+   surface.
+
 **Known gap to decide on, do not let it pass silently.** `compileZombie()` in
 `lab-main.ts` calls `compileFace(doc)` explicitly to restore the face-key
 validation that an explicit-face `compileBlob` skips. That guard is **not
