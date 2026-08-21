@@ -130,23 +130,66 @@ export function fusedOf(body: Field, a: ClusterInfo, b: ClusterInfo): number {
  * its two (nearly identical) ends; capped at 32 intervals so a long, thin
  * primitive can't blow up the sample count.
  *
- * HONEST LIMIT: this is sampling, not an exact test. A crossing primitive
- * THINNER than the one being sampled (so its overlap region is narrower
- * than our spacing) can still be stepped over — e.g. a hair-thin carve
- * crossing a thick limb at a shallow angle near a sample gap. Real body
- * primitives in this project sit in a narrow band of radii (a few cm to a
- * few tens of cm), so that gap is not expected to bite in practice, but it
- * is not proven closed. A closed-form segment-to-segment distance test
- * (accounting for the ellipsoidal `scale`) would close it exactly; sampling
- * was chosen instead because it is simple, cheap enough for authoring-time
- * checks (tens of samples per primitive, not per frame), and — per review —
- * an honest bound stated in a comment beats an implied guarantee from an
- * exact-looking method that quietly doesn't handle `scale`.
+ * HONEST LIMIT: this is sampling, not an exact test, and there are TWO
+ * distinct ways it can miss a real crossing — not one.
+ *
+ * 1. A crossing primitive THINNER than the one being sampled (so its
+ *    overlap region is narrower than our spacing) can still be stepped
+ *    over — e.g. a hair-thin carve crossing a thick limb at a shallow angle
+ *    near a sample gap. Real body primitives in this project sit in a
+ *    narrow band of radii (a few cm to a few tens of cm), so this is not
+ *    expected to bite in practice, but it is not proven closed.
+ * 2. The `intervals` cap below (32) exists to bound cost, but the whole
+ *    "can't step over a crossing of comparable thickness" argument only
+ *    holds while actual spacing equals `effRadius`. Once
+ *    `length / effRadius` exceeds the cap, spacing becomes `length / 32`
+ *    instead — which can be far coarser than `effRadius`, and at that point
+ *    the invariant fails even against a THICK crossing primitive, not just
+ *    a thin one at a shallow angle. Not triggered by anything on the lab
+ *    zombie today (its longest thin primitive, the thigh bar, has a
+ *    length/radius ratio around 4-5, nowhere near 32), but the project
+ *    plan commits to porting a cast of eight further characters, and
+ *    slender limbs, tails, and held weapons are exactly where this ratio
+ *    crosses 32. Handled below with a loud `console.warn` rather than left
+ *    to fail silently — the mismatch is per-primitive and would otherwise
+ *    show up only as a quiet false "clear" on whichever future character
+ *    first has a limb long and thin enough to trigger it.
+ *
+ * A closed-form segment-to-segment distance test (accounting for the
+ * ellipsoidal `scale`) would close gap 1 exactly and make gap 2 moot;
+ * sampling was chosen instead because it is simple, cheap enough for
+ * authoring-time checks (tens of samples per primitive, not per frame), and
+ * — per review — an honest bound stated in a comment beats an implied
+ * guarantee from an exact-looking method that quietly doesn't handle
+ * `scale`.
+ *
+ * The cap itself stays at 32 rather than growing to chase this: the
+ * project's own review already measured that an all-pairs check across a
+ * full MAX_CLUSTERS (6) x MAX_CLUSTER_PRIMS (64) cast stays in the low
+ * millions of `sdPrimitive` evaluations at 32 intervals/primitive, but no
+ * FINITE cap can be proven to cover every primitive a future character
+ * might author — a longer cap just moves the threshold, it doesn't remove
+ * the possibility. The warning is what actually closes this, by making the
+ * threshold's existence visible instead of assumed away.
  */
 function samplesAlong(prim: Primitive): Vec3[] {
   const length = len(sub(prim.b, prim.a));
   const effRadius = prim.radius * Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
-  const intervals = Math.min(32, Math.max(2, Math.ceil(length / Math.max(effRadius, 1e-4))));
+  const CAP = 32;
+  const needed = Math.ceil(length / Math.max(effRadius, 1e-4));
+  const intervals = Math.min(CAP, Math.max(2, needed));
+  if (needed > CAP) {
+    const spacing = length / intervals;
+    console.warn(
+      `blob-checks: primitive on limb "${prim.limb}" (length ${length.toFixed(3)}, effective ` +
+      `radius ${effRadius.toFixed(4)}) would need ${needed} sampling intervals to keep spacing ` +
+      `at or under its own radius, but clearOf caps sampling at ${CAP} intervals to bound cost. ` +
+      `Actual spacing is ${spacing.toFixed(4)} (${(spacing / effRadius).toFixed(1)}x the radius) ` +
+      `— a crossing primitive of comparable or even GREATER thickness than this one could now be ` +
+      `stepped over and missed, producing a false "clear". If this fires for a real character, ` +
+      `thicken the primitive, shorten it, or split it into multiple bones.`,
+    );
+  }
   const pts: Vec3[] = [];
   for (let i = 0; i <= intervals; i++) pts.push(lerp(prim.a, prim.b, i / intervals));
   return pts;

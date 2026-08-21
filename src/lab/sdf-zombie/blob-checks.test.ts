@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/blob-checks.test.ts
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { compileBlob } from './blob-compile';
 import { clearOf, fusedOf, worstFieldOnSegment } from './blob-checks';
 import { parseBlob } from './blob-parse';
@@ -62,6 +62,97 @@ describe('worstFieldOnSegment', () => {
     const p2: Vec3 = [0, 0, 0.3];
     const { field } = syntheticField([{ a: p1, b: p1, radius: 0.1 }, { a: p2, b: p2, radius: 0.1 }]);
     expect(worstFieldOnSegment(field, p1, p2)).toBeGreaterThan(0);
+  });
+});
+
+describe('clearOf — sampling cap warning', () => {
+  it('warns when a long, thin primitive exceeds the sampling cap', () => {
+    // length 10, effective radius 0.05 -> needs ceil(10 / 0.05) = 200
+    // sampling intervals to keep spacing at or under its own radius, far
+    // past the 32-interval cap. This is exactly the case Fix 1 exists for:
+    // proof the cap-forced coarse-spacing gap announces itself instead of
+    // silently reporting a false "clear".
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const longThin: Primitive = {
+      a: [-5, 0, 0], b: [5, 0, 0], radius: 0.05, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 0,
+    };
+    const other: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.05, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 1,
+    };
+    const longCluster: ClusterInfo = { id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 5, alive: true };
+    const otherCluster: ClusterInfo = { id: 1, limb: 'torso', start: 1, count: 1, center: [0, 0, 0], radius: 0.05, alive: true };
+    const body = { prims: [longThin, other], clusters: [longCluster, otherCluster] };
+
+    clearOf(body, longCluster, otherCluster);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('would need 200 sampling intervals');
+    warn.mockRestore();
+  });
+
+  it('does not warn for any primitive pair on the lab zombie', () => {
+    // Exercises clearOf across every distinct cluster pair — the same shape
+    // of call an all-pairs authoring check would make — to prove nothing on
+    // the shipped zombie is anywhere near the 32-interval cap today. (The
+    // longest thin primitive, the thigh bar, sits around a 4-5 ratio.)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const b = zombie();
+    for (let i = 0; i < b.clusters.length; i++) {
+      for (let j = i + 1; j < b.clusters.length; j++) {
+        clearOf(b, b.clusters[i]!, b.clusters[j]!);
+      }
+    }
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('fusedOf — no live primitive to probe from', () => {
+  it('reports Infinity (never fused) when a cluster has no live additive primitive', () => {
+    // clusterCore only considers live, additive (non-carve, non-dead)
+    // primitives — a cluster made ENTIRELY of carves has nothing to probe
+    // from and clusterCore returns null. fusedOf must not crash or silently
+    // treat that as "fused"; Infinity reads as "never inside solid flesh",
+    // the correct answer for a cluster with no flesh of its own.
+    const carveOnly: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 0, op: 'sub',
+    };
+    const solid: Primitive = {
+      a: [1, 0, 0], b: [1, 0, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 1,
+    };
+    const emptyCluster: ClusterInfo = { id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true };
+    const otherCluster: ClusterInfo = { id: 1, limb: 'torso', start: 1, count: 1, center: [1, 0, 0], radius: 0.1, alive: true };
+    const body = { prims: [carveOnly, solid], clusters: [emptyCluster, otherCluster] };
+
+    expect(fusedOf(body, emptyCluster, otherCluster)).toBe(Infinity);
+  });
+});
+
+describe("clearOf — a target cluster's own carve still applies", () => {
+  it('reads clear when the only overlap sits inside the target\'s carved-out cavity', () => {
+    // b is a solid sphere (radius 0.3 at the origin) with a carve (radius
+    // 0.15, op 'sub') removing a cavity centred at [0.1, 0, 0]. a is a
+    // single point sitting exactly at that carve's centre — deep inside b's
+    // UNCARVED solid (0.3 - 0.1 = 0.2 of clearance), which would read as a
+    // clear collision if clearOf ignored the carve when building b's
+    // isolated field. Because restrictedTo keeps every primitive belonging
+    // to a cluster (carves included) and sdBody already applies op 'sub'
+    // correctly, the carve removes exactly that material and the point
+    // reads OUTSIDE (clear) instead.
+    const solid: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.3, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 1,
+    };
+    const carve: Primitive = {
+      a: [0.1, 0, 0], b: [0.1, 0, 0], radius: 0.15, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 1, op: 'sub',
+    };
+    const probe: Primitive = {
+      a: [0.1, 0, 0], b: [0.1, 0, 0], radius: 0.01, scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 0,
+    };
+    const bCluster: ClusterInfo = { id: 1, limb: 'torso', start: 0, count: 2, center: [0.05, 0, 0], radius: 0.3, alive: true };
+    const aCluster: ClusterInfo = { id: 0, limb: 'torso', start: 2, count: 1, center: [0.1, 0, 0], radius: 0.01, alive: true };
+    const body = { prims: [solid, carve, probe], clusters: [bCluster, aCluster] };
+
+    expect(clearOf(body, aCluster, bCluster)).toBeGreaterThan(0);
   });
 });
 
