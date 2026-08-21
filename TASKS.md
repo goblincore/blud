@@ -468,9 +468,36 @@ Key reference docs (open these before touching their area):
 - `P5`  [-]  Prune old `dispatch/blud-m1-task-*` branches
 - `P6`  [x]  Theme-preview schema merge — `scripts/build_theme_patterns.py` joins `patterns.raw.json` + `labels.json` → theme-shaped `patterns.json` (`{texture_families[weighted floors/walls/ceilings], map_archetypes, geometry}`); validates clean; 30 families/39 maps; doorFreq 0.0413 cross-checks R5's 4.1%. Feeds procgen levels §5.1 + deferred theming.
 - `P7`  [x]  BUNFUSE extraction + cooking visual — `dynamite-fuse-burn.json`, `7081c14`
-- `P8`  [~]  **Blobforge** — the `.blob` SDF character pipeline: text → `BodyDef`, rendered by the lab, byte-exact round trip, `fused`/`clear`/`stance` checks, generated face textures, turntable, agent skill. Tasks 1-10 landed plus a first ported character; 1834 tests, tsc + build clean. `zombie.blob` reproduces `makeZombie()` to **3.77e-9 m**; `goblin.blob` is the first non-zombie.
-  **Next session:** forearm still melds into the gut (measured: 0 mm air gap at fore-mid, 16-56 mm everywhere else — the `tilt=-9` brings it back where the gut is widest; shoulders are capped, `side=0.046` already detaches). Then colour variation (biggest visual lever, needs a WGSL row), then polygon props for hard parts. Smaller: `carve` is limb-locked to head; `emitBlob` unwired from the panel; a glowing eye and a pupil are near-exclusive.
-  [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · skill: `.claude/skills/authoring-sdf-characters/` · Obsidian: `Claude Notes/Blud/2026-08-21-blobforge-sdf-character-pipeline.md`
+- `P8`  [~]  **Blobforge** — the `.blob` SDF character pipeline: text → `BodyDef`,
+  rendered by the lab, byte-exact round trip, `fused`/`clear`/`daylight`/`stance`
+  checks, generated face textures, per-character palettes + albedo mottle,
+  polygon kits authored in WAM, turntable, agent skill. 1295 sdf-zombie tests,
+  tsc + build clean. `zombie.blob` reproduces `makeZombie()` to **3.77e-9 m**.
+  **SHARP FEATURES LANDED** — the vocabulary was the bottleneck, not the loop:
+  `r2=` (tapered capsule; `r2=0` is a true point), `tip=` (displaces the far end
+  alone, so a prim points off-bone), `chamfer` (flat-bevel fold, keeps a crease),
+  `groove` (4th part kind, cuts a channel along where its surface crosses the
+  body). The goblin's nose and ears were multi-blob fakes whose own comments
+  described the limit; both are single prims now.
+  **Two rules that cost rounds:** *reach is the whole game* — a point that stops
+  inside the mass it grows from reads as a bump (cranium semi-depth 0.118, the
+  first tapered nose tipped at 0.122 and was still a bump); and *two features at
+  the same height fuse* — separation must beat the SUM of the two blends.
+  **Next session: the rest of the primitives**, in roadmap order — arc capsule
+  (quadratic Bézier + taper; the biggest gap, since horns/tusks/tails/claws are
+  all N-prim chains today and every link has its own round base), rounded box
+  (the first flat face in the format), blend exponent, torus, prism.
+  **Also open:** lab cold boot is 19-30 s and it is three's TSL node builder, not
+  the GPU or the network — ~85% of a CPU profile; deferring the warm-up made it
+  WORSE (36.8 s vs 18.8 s) because nothing paints until `main()` returns, so the
+  fix has to get a first frame up before the builds. Eye shape/angle/spacing
+  sliders (params exist in the `sheet` block, only read at load). `carve` is
+  limb-locked to head; `emitBlob` unwired from the panel.
+  **ox-alpha modelling tests:** clown on `dispatch/ox-alpha-clown-character` —
+  NOT merged, fails 3 of its own tests (asserted a material list, then rebuilt
+  the glTF without re-running; ruff 88 mm inside the body) despite exit 0 and a
+  "gates green" report. Mouse dispatched 2026-08-21.
+  [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · [primitive roadmap](docs/superpowers/specs/2026-08-21-blob-primitive-roadmap.md) · [chisel spike](docs/dev-notes/2026-08-21-chisel-primitive-sculpt/notes.md) · skill: `.claude/skills/authoring-sdf-characters/` · Obsidian: `Claude Notes/Blud/2026-08-21-blobforge-sharp-features-and-kits.md`
 
 ---
 
