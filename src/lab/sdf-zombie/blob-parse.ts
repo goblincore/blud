@@ -2,11 +2,27 @@
 import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, BlobError } from './blob-ast';
 
 /**
+ * A `BlobLine[]` with one extra property: the comment/blank trivia that
+ * followed the LAST significant line, if any. `tokenize` hangs trivia off
+ * the NEXT significant line as it scans (see below) — trivia after the
+ * final significant line has no "next line" to hang off, so it has to be
+ * surfaced separately instead of silently falling out of the loop's local
+ * state. `parseBlob` copies this into `BlobDoc.trailingTrivia`.
+ *
+ * Shaped as an array-plus-property, rather than `{ lines, trailing }`,
+ * so every existing `tokenize(...)` call site — 25+ tests included — that
+ * treats the result as a plain `BlobLine[]` keeps working unchanged.
+ */
+export interface TokenizedLines extends Array<BlobLine> {
+  trailing: string[];
+}
+
+/**
  * Splits source into significant lines, hanging comment/blank trivia off the
  * next significant line. Deliberately dumb: no grammar knowledge lives here,
  * so the grammar can change without risking the trivia contract.
  */
-export function tokenize(src: string): BlobLine[] {
+export function tokenize(src: string): TokenizedLines {
   const out: BlobLine[] = [];
   let leading: string[] = [];
 
@@ -17,7 +33,14 @@ export function tokenize(src: string): BlobLine[] {
     if (trimmed === '' || trimmed.startsWith('#')) {
       // A trailing blank at end of file is not trivia for anything; the
       // document collects those separately.
-      leading.push(trimmed);
+      //
+      // Pushing `raw`, not `trimmed`, matters for comment lines: zombie.blob
+      // indents comments inside `skeleton`/`body`/`face` blocks (e.g. line 9,
+      // "  # The upper body hunches..."), and `trimmed` throws that indent
+      // away. Blank lines are unaffected either way — a line only reaches
+      // this branch as "blank" once it already trims to '', so `raw` and
+      // `trimmed` agree for those.
+      leading.push(raw);
       return;
     }
 
@@ -32,11 +55,17 @@ export function tokenize(src: string): BlobLine[] {
       words: code.trim().split(/\s+/).filter(Boolean),
       leading,
       trailing,
+      raw,
     });
     leading = [];
   });
 
-  return out;
+  // Whatever is still sitting in `leading` once the scan ends belongs to no
+  // line — it's comment/blank trivia after the last significant line. Before
+  // this, that trivia was silently dropped: a `.blob` file ending in a
+  // comment lost it on round trip with no error, because nothing downstream
+  // ever looked at the loop's final `leading` value.
+  return Object.assign(out, { trailing: leading });
 }
 
 /**
@@ -360,5 +389,6 @@ export function parseBlob(src: string): BlobDoc {
 
   if (s.inMirror) throw new BlobError('mirror block is never closed', s.mirrorOpenedAt, 1);
   if (!s.doc.rootBone) throw new BlobError('no "root" bone declared', 1, 1);
+  s.doc.trailingTrivia = lines.trailing;
   return s.doc;
 }

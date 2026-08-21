@@ -16,6 +16,17 @@ export interface BlobLine {
   words: string[];
   leading: string[];
   trailing: string | null;
+  /**
+   * The exact original source line (indent, code, and any trailing comment —
+   * everything except the newline). `words` is split on `/\s+/`, which
+   * collapses the multi-space padding the shipped character files use to
+   * keep `len=`/`blend=` columns aligned; rebuilding a line from
+   * `words.join(' ')` therefore loses that alignment. `blob-emit.ts` uses
+   * `raw` to replay a line byte-for-byte when nothing about it changed,
+   * falling back to reconstructing from `words` only for the fields an
+   * override actually touches.
+   */
+  raw: string;
 }
 
 export interface BlobBone {
