@@ -60,6 +60,25 @@ export interface FaceSheetParams {
   mouthOpen: number;
   /** Nostril darkness, 0 removes them. */
   nostril: number;
+  /**
+   * A shaded nose: a lit ridge down the centre with shadowed flanks.
+   *
+   * The sheet drives the normal as well as albedo, so a nose can be SHADED in
+   * rather than built. That is the whole lesson in face.ts's header — geometry
+   * carries silhouette, texture carries features, and a protruding geometric
+   * nose both fails to read and breaks the planar projection. 0 removes it.
+   */
+  noseRidge: number;
+  /** Nose ridge width, fraction of sheet width. */
+  noseWide: number;
+  /** How far the ridge runs down the face from the brow. */
+  noseLong: number;
+  /**
+   * A dark band under the jaw. Without it the chin runs straight into the neck
+   * and the head reads as fused to the shoulders — no-neck syndrome, which the
+   * geometry alone cannot fix once smooth-min has joined skull to torso.
+   */
+  jawShade: number;
   /** Mottling amplitude. This is what stops a generated face reading as clip art. */
   grain: number;
   /** Seed for the grain. Integer. */
@@ -79,6 +98,10 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   mouthCurve: -0.25,
   mouthOpen: 0.055,
   nostril: 0.35,
+  noseRidge: 0.85,
+  noseWide: 0.085,
+  noseLong: 0.20,
+  jawShade: 0.40,
   grain: 0.085,
   seed: 1,
 };
@@ -161,6 +184,26 @@ export function generateFaceSheet(
         // a solid core no matter how small the eye is authored.
         const k = falloff(d, p.eyeSize, Math.min(soft * 2.5, p.eyeSize * 0.33));
         v = v * (1 - k) + p.eyeGlow * k;
+      }
+
+      // Nose: a lit ridge with shadowed flanks. Brightened, but deliberately
+      // nowhere near the 0.88 glow threshold — this is relief, not an emitter.
+      if (p.noseRidge > 0) {
+        const top = eyeY - 0.030;
+        const bot = top + p.noseLong;
+        const span = falloff(Math.abs(y - (top + bot) / 2), (bot - top) / 2, 0.045);
+        const w = Math.max(p.noseWide, 1e-4);
+        v += p.noseRidge * 0.26 * falloff(sx, w * 0.40, w * 0.60) * span;
+        // The shadow either side is what actually sells it; a bright stripe on
+        // its own just looks like a highlight.
+        const flank = falloff(Math.abs(sx - w * 1.15), w * 0.55, w * 0.60);
+        v -= p.noseRidge * 0.30 * flank * span;
+      }
+
+      // Jaw shade: a dark band low on the face, separating chin from neck.
+      if (p.jawShade > 0) {
+        const band = falloff(Math.abs(y - (p.mouthRise + 0.135)), 0.055, 0.05);
+        v -= p.jawShade * 0.34 * band * falloff(sx, 0.30, 0.10);
       }
 
       // Nostrils: two small dark dots, close in.

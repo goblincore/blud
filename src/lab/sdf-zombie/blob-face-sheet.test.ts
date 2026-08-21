@@ -80,7 +80,12 @@ describe('generateFaceSheet', () => {
   });
 
   it('removes a feature entirely when its amplitude is zero', () => {
-    const off: FaceSheetParams = { ...DEFAULT_SHEET, grain: 0, mouthOpen: 0, nostril: 0 };
+    // jawShade off too: it darkens a band near the chin, which is exactly
+    // where this samples. A feature being removable is the property under
+    // test, so every feature overlapping the probe has to be off.
+    const off: FaceSheetParams = {
+      ...DEFAULT_SHEET, grain: 0, mouthOpen: 0, nostril: 0, jawShade: 0, noseRidge: 0,
+    };
     const s = generateFaceSheet(off);
     const mouth = at(s, 0.5, DEFAULT_SHEET.mouthRise);
     const chin = at(s, 0.5, Math.min(0.97, DEFAULT_SHEET.mouthRise + 0.15));

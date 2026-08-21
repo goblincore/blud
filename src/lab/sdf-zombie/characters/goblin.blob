@@ -32,11 +32,11 @@ skeleton
   # mesh sitting proud of the torso. Here the chest's top blob (r 0.143) simply
   # swallowed a 0.045 neck whole and the head sat straight on the shoulders.
   # Lengthened until the head clears the shoulder mass.
-  bone neck   parent=chest  dir=up pitch=-17 len=0.085
+  bone neck   parent=chest  dir=up pitch=-17 len=0.140
   # Named `skull`, not `head` as in the WAM file: facePrims() hardcodes that
   # bone name, and a .blob character without one throws from resolveBones
   # before validation ever runs.
-  bone skull  parent=neck   dir=up pitch=-5 len=0.18
+  bone skull  parent=neck   dir=up pitch=-5 len=0.235
 
   mirror
     # WAM's own comment says the shoulder must land INSIDE the chest mass or
@@ -69,22 +69,55 @@ body
   blob torso on pelvis at=0.87 r=0.173 deep=0.84 blend=0.0080
   blob torso on spine1 at=0.69 r=0.165 deep=0.82 blend=0.0080
   blob torso on chest  at=0.46 r=0.146 deep=0.82 blend=0.0075
-  blob torso on chest  at=1.00 r=0.126 deep=0.82 blend=0.0075
+  blob torso on chest  at=1.00 r=0.108 deep=0.82 blend=0.0060
 
   # Neck column.
-  bar head on neck from=0.00 to=1.00 r=0.062 deep=0.94 blend=0.0030
+  #
+  # No-neck syndrome took FOUR changes, and the non-obvious one is the head.
+  #
+  # facePrims centres the cranium partway along the skull bone, so with
+  # headRadius 0.150 on a 0.18 skull bone the bottom of that ellipsoid sat
+  # BELOW the neck's top — the head was not merely close to the shoulders, it
+  # enclosed the entire neck, and no amount of thinning the column could show
+  # something buried inside a sphere. Shrinking the cranium (0.150 -> 0.126)
+  # and lengthening the skull bone (0.18 -> 0.235) lifts it clear.
+  #
+  # The other three: a longer neck bone (0.085 -> 0.140), a thinner column, and
+  # a smaller chest cap for it to rise out of. None of them works alone.
+  bar head on neck from=0.00 to=1.00 r=0.048 deep=0.94 blend=0.0016
 
-  # Signature ears, swept back and angled up. `both` mirrors the offset across
-  # a bone that is not itself mirrored — the same mechanism the zombie's eye
-  # sockets use. WAM yaws these 44 degrees; a blob has no yaw, so the sweep is
-  # faked by stretching wide and flattening deep.
-  blob head on skull at=0.58 r=0.068 wide=1.75 tall=1.35 deep=0.42 blend=0.0028 offset=(0.105,0.030,-0.012) both
+  # Ears: small and pointed, not round flaps.
+  #
+  # A single fat ellipsoid gives a Mickey Mouse ear — an ellipsoid cannot taper,
+  # so it is round whatever you scale it to. Two prims per ear can: a flattened
+  # base, then a much smaller tip pushed further out and up. The taper between
+  # them under smooth-min is what reads as a point.
+  #
+  # `both` mirrors the offset across a bone that is not itself mirrored — the
+  # same mechanism the zombie's eye sockets use.
+  blob head on skull at=0.60 r=0.040 wide=0.75 tall=1.45 deep=0.40 blend=0.0022 offset=(0.098,0.028,-0.010) both
+  blob head on skull at=0.66 r=0.020 wide=0.55 tall=1.30 deep=0.34 blend=0.0018 offset=(0.128,0.082,-0.020) both
 
-  # Long hooked nose — the single biggest cue separating "goblin" from "pig".
-  # WAM bends it with a `sweep`; .blob has no bend, so two blobs stagger down
-  # and forward to suggest the hook.
-  blob head on skull at=0.46 r=0.030 wide=0.90 deep=1.90 blend=0.0035 offset=(0,-0.020,0.055)
-  blob head on skull at=0.42 r=0.020 wide=0.80 deep=1.50 blend=0.0028 offset=(0,-0.045,0.078)
+  # Nose — shaded by the sheet for the front view, built for the PROFILE.
+  #
+  # The sheet's noseRidge is what makes a nose read head-on, and it does that
+  # job well. It does nothing for the silhouette, though, and the first version
+  # here did not either: at offset z 0.062 with a half-depth of 0.046 the tip
+  # reached z 0.108, against a skull semi-depth of 0.126 x 0.94 = 0.118. The
+  # nose was entirely INSIDE the cranium — a slight bump in profile because
+  # that is all it geometrically was.
+  #
+  # Pushed out past the skull surface, and split in two so it hooks: the tip
+  # sits lower and further forward than the bridge. That is WAM's bent `sweep`
+  # approximated with the two prims .blob has.
+  #
+  # This is the tradeoff face.ts's header names: a nose that juts past the
+  # planar face projection picks up texture from behind it and reads flatter
+  # than the shading suggests. Accepted deliberately here — the owner wants the
+  # profile — but it is why the ridge shading carries the front view rather
+  # than the geometry being pushed further still.
+  blob head on skull at=0.46 r=0.029 wide=0.85 deep=2.05 blend=0.0032 offset=(0,-0.020,0.094)
+  blob head on skull at=0.42 r=0.019 wide=0.68 deep=1.70 blend=0.0026 offset=(0,-0.058,0.118)
 
   # Spindly arms with a knobbly elbow.
   #
@@ -115,13 +148,13 @@ body
 # snout, and a heavier brow for the scowl. The pointed cranium taper and the
 # tusks in the WAM file have no analog at all.
 face
-  headRadius 0.150
+  headRadius 0.126
   headWidth  0.96
   headHeight 1.02
   headDepth  0.94
   jawWidth   0.70
-  jawHeight  0.78
-  jawDrop    0.062
+  jawHeight  0.82
+  jawDrop    0.072
   jawJut     0.072
   noseLength 0.006
   noseWidth  0.34
@@ -152,5 +185,9 @@ sheet
   mouthCurve -0.50
   mouthOpen  0.075
   nostril    0.45
+  noseRidge  1.00
+  noseWide   0.080
+  noseLong   0.235
+  jawShade   0.55
   grain      0.10
   seed       5
