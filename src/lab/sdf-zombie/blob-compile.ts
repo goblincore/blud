@@ -2,6 +2,7 @@
 import { type BlobDoc, BlobError } from './blob-ast';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
+import { DEFAULT_SHEET, type FaceSheetParams } from './blob-face-sheet';
 
 /**
  * The only valid `.blob` face parameter names — every key of `FaceParams`,
@@ -119,6 +120,28 @@ export function compileFace(doc: BlobDoc): FaceParams {
 }
 
 /**
+ * A character's own face-sheet parameters, or null if it did not declare a
+ * `sheet` block — in which case it wears the shared zombie sheet, which is what
+ * every character did before generated faces existed.
+ *
+ * Validated the same way `compileFace` validates the `face` block, and for the
+ * same reason: an unknown key would otherwise be silently ignored while the
+ * intended parameter quietly kept its default.
+ */
+export function compileSheet(doc: BlobDoc): FaceSheetParams | null {
+  if (doc.sheet === null) return null;
+  const valid = new Set(Object.keys(DEFAULT_SHEET));
+  for (const key of Object.keys(doc.sheet)) {
+    if (valid.has(key)) continue;
+    const at = doc.sheetTrivia.find(l => l.words[0] === key);
+    throw new BlobError(
+      `unknown sheet parameter "${key}" — expected one of ${[...valid].join(', ')}`,
+      at ? at.line : 0, at ? at.indent + 1 : 1);
+  }
+  return { ...DEFAULT_SHEET, ...doc.sheet } as FaceSheetParams;
+}
+
+/**
  * `face` defaults to `compileFace(doc)`, which validates `doc.face`'s keys and
  * throws on an unknown one — but a default parameter only fires when the caller
  * OMITS the argument. Passing an explicit face (say, one merged from live panel
@@ -132,7 +155,7 @@ export function compileFace(doc: BlobDoc): FaceParams {
  */
 export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
   const bones: BoneDef[] = [
-    { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: 0.14 },
+    { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: doc.rootLen },
     ...doc.bones.map(b => ({
       name: b.name,
       parent: b.parent,

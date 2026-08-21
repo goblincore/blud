@@ -129,3 +129,28 @@ face
   browHeavy  0.014
   browRise   0.038
   headBlend  0.0030
+
+# The goblin's own face, generated rather than inherited.
+#
+# Before this, every .blob character wore /assets/lab/zombie-face.png, because
+# a shared 64x64 greyscale sheet was the only way to have a face at all — which
+# is most of why this thing still read as "the zombie with different limbs".
+# The sheet is drawn from these numbers instead: features are DARKENINGS of a
+# grainy base, because the shader uses the sheet as an albedo multiplier.
+#
+# Small close-set eyes under a heavy slanted brow, and a wide down-turned mouth
+# — a scowl is mostly brow angle and mouth curve, not eye shape.
+sheet
+  eyeGap     0.30
+  eyeSize    0.072
+  eyeRise    0.44
+  eyeTilt    16
+  browHeavy  0.90
+  browAngle  24
+  mouthWidth 0.54
+  mouthRise  0.73
+  mouthCurve -0.50
+  mouthOpen  0.075
+  nostril    0.45
+  grain      0.10
+  seed       5

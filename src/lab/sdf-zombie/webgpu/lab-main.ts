@@ -59,7 +59,8 @@ function activeCharacterSrc(): string {
   return (want && CHARACTERS[want]) || zombieBlobSrc;
 }
 import { parseBlob } from '../blob-parse';
-import { compileBlob, compileFace } from '../blob-compile';
+import { generateFaceSheet } from '../blob-face-sheet';
+import { compileBlob, compileFace, compileSheet } from '../blob-compile';
 import { BlobError } from '../blob-ast';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
@@ -637,8 +638,74 @@ async function main() {
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, def.mean);
   }
 
+  /**
+   * Builds this character's face sheet from its own `sheet` block instead of
+   * loading a shared PNG.
+   *
+   * Same contract as the PNG path — pixels, an atlas rect, and a MEAN — so the
+   * shader cannot tell the difference. The mean is measured off the generated
+   * pixels rather than assumed, for the reason the registry's hand-entered
+   * means are commented "MEASURED off the file": it is the level the shader
+   * divides out, so a wrong one shifts the whole head's brightness.
+   *
+   * Returns false when the character declared no `sheet` block, in which case
+   * the caller falls back to the shared zombie sheet — which is what every
+   * character wore before this existed.
+   */
+  function loadGeneratedFace(): boolean {
+    let params;
+    try {
+      params = compileSheet(parseBlob(activeCharacterSrc()));
+    } catch {
+      return false; // a broken sheet block is reported by the body compile path
+    }
+    if (params === null) return false;
+
+    const gen = generateFaceSheet(params, 64);
+    // Expanded to RGBA even though the source is greyscale.
+    //
+    // A RedFormat upload looks like the efficient choice — one byte per texel
+    // instead of four — and is wrong here: the shader reads `tex.rgb`, both as
+    // an albedo MULTIPLIER and through `luma()` for the glow mask. With only
+    // the red channel populated, `tex.rgb` is (r, 0, 0), so multiplying albedo
+    // by it zeroes green and blue and the whole head renders blood red. Four
+    // equal channels cost 16 KiB at 64x64 and mean the shader cannot tell a
+    // generated sheet from the PNG it replaces.
+    //
+    // Rows are also flipped here. The PNG path leans on three's `flipY` at
+    // upload to turn a top-left image into what the shader samples; a
+    // DataTexture does not get that treatment, so an unflipped buffer renders
+    // the face upside down — which read as a brow-coloured bar sitting where
+    // the mouth belongs. generateFaceSheet keeps writing top-left rows,
+    // matching the registry's rect convention and staying easy to assert on;
+    // the flip lives here, at the one place that uploads.
+    const rgba = new Uint8Array(gen.size * gen.size * 4);
+    for (let y = 0; y < gen.size; y++) {
+      const src = (gen.size - 1 - y) * gen.size;
+      for (let x = 0; x < gen.size; x++) {
+        const v = gen.pixels[src + x]!;
+        const o = (y * gen.size + x) * 4;
+        rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
+      }
+    }
+    const tex = new THREE.DataTexture(rgba, gen.size, gen.size, THREE.RGBAFormat);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    // The PNG path relies on three's flipY at upload; a DataTexture is handed
+    // over in the orientation we wrote it, and generateFaceSheet writes rows
+    // from the TOP-LEFT to match the registry's rect convention. So no flip.
+    tex.flipY = false;
+    tex.needsUpdate = true;
+
+    faceSheet?.tex.dispose();
+    faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: gen.mean };
+    for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, gen.mean);
+    return true;
+  }
+
   let faceTexName: FaceTexName = 'zombie-flat';
-  loadFaceTexture(faceTexName);
+  if (!loadGeneratedFace()) loadFaceTexture(faceTexName);
   u.faceCfg.value.x = 1;      // face on
   u.faceCfg.value.y = 1.0;    // strength
   // Baked projection: uv = hs * scale + centre, hs normalised PER AXIS by the

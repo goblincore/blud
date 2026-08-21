@@ -67,10 +67,20 @@ export interface BlobDoc {
   height: number | null;
   rootBone: string;
   rootHeight: number;
+  /** Root bone length. `root <name> at <h> len=<l>`; 0.14 when omitted. */
+  rootLen: number;
   bones: BlobBone[];
   parts: BlobPart[];
   face: Record<string, number> | null;
   faceTrivia: BlobLine[];
+  /**
+   * A `sheet` block's parameters, or null when the character did not declare
+   * one. Present means "generate this character's face texture from these
+   * numbers"; absent means "use the shared zombie sheet", which is what every
+   * character did before generated faces existed.
+   */
+  sheet: Record<string, number> | null;
+  sheetTrivia: BlobLine[];
   /**
    * Lines that no node owns — `model`, `skeleton`, `body`, `face`, `mirror`,
    * `end`, `height`, `root`. The emitter needs them to rebuild the document in

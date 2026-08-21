@@ -250,6 +250,12 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
     if (!Number.isFinite(height))
       throw new BlobError('"at" value is not a number', l.line, wordCol(l, 3));
     s.doc.rootHeight = height;
+    // Optional `len=`. The root bone's LENGTH was hardcoded at 0.14 in
+    // compileBlob — the zombie's pelvis — so every character inherited it
+    // whatever its own height. On a 1.15 m goblin that is proportionally
+    // almost twice what it should be. Defaults to 0.14, so zombie.blob and
+    // its anchor test are unaffected.
+    s.doc.rootLen = numArg(l, 'len', 0.14);
     s.known.add(s.doc.rootBone);
     return;
   }
@@ -339,7 +345,14 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
  * for each entry — same reason `src` rides along on every `BlobPart` — so
  * Task 8's emitter has the comment/blank trivia to re-attach on round trip.
  */
-function parseFaceLine(l: BlobLine, s: ParseState): void {
+/**
+ * `face` and `sheet` are the same shape — a block of `name value` pairs — so
+ * they share a parser. Splitting them into two near-identical functions is how
+ * the two drift: one grows a check the other does not.
+ */
+function parseNamedNumberLine(
+  l: BlobLine, s: ParseState, what: 'face' | 'sheet',
+): void {
   const [head, ...rest] = l.words;
   // `tokenize` guarantees every emitted `BlobLine` has at least one word —
   // a source line that's pure whitespace or a comment is trivia and never
@@ -350,13 +363,18 @@ function parseFaceLine(l: BlobLine, s: ParseState): void {
   // invariant is ever loosened, a degenerate face line should fail loudly,
   // not vanish from `doc.face` and `doc.faceTrivia` with no trace.
   if (head === undefined)
-    throw new BlobError('face line has no parameter name', l.line, l.indent + 1);
+    throw new BlobError(`${what} line has no parameter name`, l.line, l.indent + 1);
   const v = Number(rest[0]);
   if (!Number.isFinite(v))
-    throw new BlobError(`face parameter "${head}" is not a number`, l.line, wordCol(l, 1));
-  s.doc.face ??= {};
-  s.doc.face[head] = v;
-  s.doc.faceTrivia.push(l);
+    throw new BlobError(`${what} parameter "${head}" is not a number`, l.line, wordCol(l, 1));
+  if (what === 'sheet') {
+    s.doc.sheet ??= {};
+    s.doc.sheet[head] = v;
+  } else {
+    s.doc.face ??= {};
+    s.doc.face[head] = v;
+  }
+  (what === 'sheet' ? s.doc.sheetTrivia : s.doc.faceTrivia).push(l);
 }
 
 /**
@@ -366,8 +384,8 @@ export function parseBlob(src: string): BlobDoc {
   const lines = tokenize(src);
   const s: ParseState = {
     doc: {
-      name: '', height: null, rootBone: '', rootHeight: 0,
-      bones: [], parts: [], face: null, faceTrivia: [], structure: [], trailingTrivia: [],
+      name: '', height: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
+      bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),
     inMirror: false,
@@ -380,11 +398,12 @@ export function parseBlob(src: string): BlobDoc {
 
     if (head === 'model') { s.doc.name = rest[0] ?? ''; section = 'model'; s.doc.structure.push(l); continue; }
     if (head === 'height' && section === 'model') { s.doc.height = Number(rest[0]); s.doc.structure.push(l); continue; }
-    if (head === 'skeleton' || head === 'body' || head === 'face') { section = head; s.doc.structure.push(l); continue; }
+    if (head === 'skeleton' || head === 'body' || head === 'face' || head === 'sheet') { section = head; s.doc.structure.push(l); continue; }
 
     if (section === 'skeleton') { parseSkeletonLine(l, s); continue; }
     if (section === 'body') { parseBodyLine(l, s); continue; }
-    if (section === 'face') { parseFaceLine(l, s); continue; }
+    if (section === 'face') { parseNamedNumberLine(l, s, 'face'); continue; }
+    if (section === 'sheet') { parseNamedNumberLine(l, s, 'sheet'); continue; }
   }
 
   if (s.inMirror) throw new BlobError('mirror block is never closed', s.mirrorOpenedAt, 1);
