@@ -87,12 +87,23 @@ export function numArg(l: BlobLine, key: string, fallback: number | null = null)
 const DIRS = ['up', 'down', 'side', 'fwd'] as const;
 type DirName = (typeof DIRS)[number];
 
+/**
+ * Finds `dir=` by search rather than a fixed word index — unlike `on` in
+ * `parseBodyLine` or the limb word in `limbArg`, `dir=` isn't pinned to a
+ * particular position in the line, so a bad value's column has to be
+ * located the same way `numArg` locates `key=` before reporting a column:
+ * `findIndex` first, then `wordCol` on that index. This used to report a
+ * bad `dir=` value at `l.indent + 1` (the start of the line) instead —
+ * the same "points at the wrong end of the line" bug the `root ... at`
+ * column fix addressed for a different keyword; `col` is supposed to
+ * always land on the offending token.
+ */
 function dirArg(l: BlobLine): DirName {
-  const hit = l.words.find(w => w.startsWith('dir='));
-  if (!hit) throw new BlobError('missing required "dir="', l.line, l.indent + 1);
-  const v = hit.slice(4) as DirName;
+  const idx = l.words.findIndex(w => w.startsWith('dir='));
+  if (idx === -1) throw new BlobError('missing required "dir="', l.line, l.indent + 1);
+  const v = l.words[idx]!.slice(4) as DirName;
   if (!DIRS.includes(v))
-    throw new BlobError(`dir must be one of ${DIRS.join('|')}, got "${v}"`, l.line, l.indent + 1);
+    throw new BlobError(`dir must be one of ${DIRS.join('|')}, got "${v}"`, l.line, wordCol(l, idx));
   return v;
 }
 
@@ -114,10 +125,19 @@ type LimbName = (typeof LIMBS)[number];
  * names. That let a typo (`torzo`) or an outright missing limb word (which
  * shifts `rest[0]` to whatever comes next, typically `"on"`) through
  * silently, producing a `BlobPart` whose `limb` field doesn't match its own
- * type. Same shape as `dirArg` above; mirrors that fix.
+ * type. Same shape as `dirArg` above.
+ *
+ * `word` is typed `string`, not `string | undefined`: unlike `dir=`, the
+ * limb word's position is pinned (it's always `l.words[1]`), and by the
+ * time the caller reaches this, it has already confirmed `on <bone>` is
+ * present later in the line — which means `l.words` has at least 3
+ * entries, so index 1 always exists. A parameter typed `string |
+ * undefined` here would document a case that cannot happen at the one call
+ * site there is; see the `!` at that call site for where the guarantee is
+ * actually established.
  */
-function limbArg(l: BlobLine, word: string | undefined): LimbName {
-  if (word === undefined || !LIMBS.includes(word as LimbName))
+function limbArg(l: BlobLine, word: string): LimbName {
+  if (!LIMBS.includes(word as LimbName))
     throw new BlobError(`limb must be one of ${LIMBS.join('|')}, got "${word}"`, l.line, wordCol(l, 1));
   return word as LimbName;
 }
@@ -255,7 +275,10 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
   if (!s.known.has(bone))
     throw new BlobError(`unknown bone "${bone}"`, l.line, wordCol(l, onIdx + 1));
 
-  const limb: BlobPart['limb'] = kind === 'carve' ? 'head' : limbArg(l, rest[0]);
+  // `rest[0]!` is safe here, not merely convenient: the checks above already
+  // require `on <bone>` to appear at index >= 1, so `l.words.length >= 3`
+  // by this point, which guarantees index 1 (== rest[0]) exists.
+  const limb: BlobPart['limb'] = kind === 'carve' ? 'head' : limbArg(l, rest[0]!);
 
   const isBar = kind === 'bar';
   if (isBar && strArg(l, 'to') === null)
@@ -289,7 +312,16 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
  */
 function parseFaceLine(l: BlobLine, s: ParseState): void {
   const [head, ...rest] = l.words;
-  if (head === undefined) return;
+  // `tokenize` guarantees every emitted `BlobLine` has at least one word —
+  // a source line that's pure whitespace or a comment is trivia and never
+  // reaches here (see `tokenize`'s blank/`#` branch), so `head` can't
+  // actually be `undefined` today. This throws rather than silently
+  // returning anyway, for the same reason every other silent-skip in this
+  // file has already been replaced with a throw: if that tokenizer
+  // invariant is ever loosened, a degenerate face line should fail loudly,
+  // not vanish from `doc.face` and `doc.faceTrivia` with no trace.
+  if (head === undefined)
+    throw new BlobError('face line has no parameter name', l.line, l.indent + 1);
   const v = Number(rest[0]);
   if (!Number.isFinite(v))
     throw new BlobError(`face parameter "${head}" is not a number`, l.line, wordCol(l, 1));

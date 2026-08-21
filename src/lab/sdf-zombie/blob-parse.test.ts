@@ -146,6 +146,28 @@ describe('parseBlob — skeleton', () => {
     expect(reconstructed.slice(err!.col - 1, err!.col - 1 + 'oops'.length)).toBe('oops');
     expect(err!.col).not.toBe(rootLine.indent + 1);
   });
+
+  // Regression guard: dirArg used to report every bad "dir=" value at
+  // col = indent + 1 (the start of the line) instead of the "dir=" token
+  // itself — the same class of bug the "at" column test above already
+  // guards for "root", just never pinned for "dir=". Same
+  // reconstruct-and-slice technique.
+  it('reports the "dir=" column on a bad dir value, pointing at the token rather than the start of the line', () => {
+    const bad = SKEL.replace('dir=up pitch=7', 'dir=sideways pitch=7');
+    const boneLine = tokenize(bad)[4]!;
+    const reconstructed = ' '.repeat(boneLine.indent) + boneLine.words.join(' ');
+    expect(reconstructed).toBe('  bone spine parent=pelvis dir=sideways pitch=7 len=0.34');
+
+    let err: BlobError | undefined;
+    try {
+      parseBlob(bad);
+    } catch (e) {
+      err = e as BlobError;
+    }
+    expect(err).toBeInstanceOf(BlobError);
+    expect(reconstructed.slice(err!.col - 1, err!.col - 1 + 'dir=sideways'.length)).toBe('dir=sideways');
+    expect(err!.col).not.toBe(boneLine.indent + 1);
+  });
 });
 
 const FULL = `model zombie
@@ -220,5 +242,25 @@ describe('parseBlob — body and face', () => {
   it('rejects an offset with a non-numeric component', () => {
     const bad = FULL.replace('offset=(0.035,0.01,0.06)', 'offset=(0.035,x,0.06)');
     expect(() => parseBlob(bad)).toThrow(/offset has a non-numeric component/);
+  });
+
+  // Regression guard, same reasoning as the "dir=" column test above:
+  // pin limbArg's column so it can't silently regress to indent + 1 the
+  // way dirArg did.
+  it('reports the limb column on a typo, pointing at the token rather than the start of the line', () => {
+    const bad = FULL.replace('blob torso on spine', 'blob torzo on spine');
+    const blobLine = tokenize(bad)[9]!;
+    const reconstructed = ' '.repeat(blobLine.indent) + blobLine.words.join(' ');
+    expect(reconstructed).toBe('  blob torzo on spine at=0.80 r=0.150 wide=1.28 deep=0.78 blend=0.014');
+
+    let err: BlobError | undefined;
+    try {
+      parseBlob(bad);
+    } catch (e) {
+      err = e as BlobError;
+    }
+    expect(err).toBeInstanceOf(BlobError);
+    expect(reconstructed.slice(err!.col - 1, err!.col - 1 + 'torzo'.length)).toBe('torzo');
+    expect(err!.col).not.toBe(blobLine.indent + 1);
   });
 });
