@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/blob-compile.test.ts
 import { describe, it, expect } from 'vitest';
 import { parseBlob } from './blob-parse';
-import { compileBlob, dirVector } from './blob-compile';
+import { BlobError } from './blob-ast';
+import { compileBlob, compileFace, dirVector } from './blob-compile';
 
 const near = (a: readonly number[], b: readonly number[], eps = 1e-9) =>
   a.forEach((v, i) => expect(v).toBeCloseTo(b[i]!, Math.round(-Math.log10(eps))));
@@ -29,14 +30,23 @@ describe('dirVector', () => {
 
 describe('compileBlob', () => {
   // `skull` and the second `torso` blob (on the root `pelvis` bone) aren't in
-  // the plan's original fixture: without a `skull` bone, facePrims (always
-  // emitted — see compileBlob's doc comment) reference a bone that doesn't
-  // exist, and without a pelvis-region blob bridging the spine's torso blob
-  // down to the legs, buildBody's connectivity check reports the head and
-  // both legs as disconnected — exactly what it's supposed to catch. Every
-  // real `.blob` character (the pelvis-anchored zombie included) carries
-  // both; this fixture needs them too to exercise the "existing builder
-  // accepts without errors" test honestly rather than vacuously.
+  // the plan's original fixture, and both are needed:
+  //
+  // Without a `skull` bone, facePrims (always emitted — see compileBlob's doc
+  // comment) reference a bone that doesn't exist, and buildBody throws
+  // outright ("prim references unknown bone \"skull\"") before validation
+  // even runs.
+  //
+  // Add just the `skull` bone and buildBody gets past that throw, but
+  // validateBody's connectivity check then reports `legL`/`legR` as
+  // disconnected — NOT the head. The spine's torso blob (at=0.8) already
+  // sits close enough to fuse with the skull on its own; it's the mirrored
+  // `thigh` bones, parented straight onto `pelvis` with no torso mass nearby,
+  // that have nothing to fuse to. The pelvis-anchored `blob torso` below
+  // (mirroring the real zombie's own pelvis blob in body.ts) bridges that
+  // gap. Every real `.blob` character carries geometry like it; this fixture
+  // needs it too to exercise the "existing builder accepts without errors"
+  // test honestly rather than vacuously.
   const doc = parseBlob(`model t
 skeleton
   root pelvis at 0.92
@@ -78,5 +88,52 @@ body
   it('produces a BodyDef the existing builder accepts without errors', async () => {
     const { buildBody } = await import('./build-body');
     expect(buildBody(compileBlob(doc)).errors).toEqual([]);
+  });
+});
+
+describe('compileFace', () => {
+  // Line 6, col 3: "  headRadus 0.3" — indent 2, so the key starts at column 3.
+  const TYPO_SRC = `model t
+skeleton
+  root pelvis at 0.92
+face
+  headRadius 0.2
+  headRadus 0.3
+`;
+
+  it('rejects an unknown face parameter, naming the offending key', () => {
+    const doc = parseBlob(TYPO_SRC);
+    expect(() => compileFace(doc)).toThrow(BlobError);
+    expect(() => compileFace(doc)).toThrow(/unknown face parameter "headRadus"/);
+  });
+
+  it('reports the real source line and column of the bad key, not a synthetic 0', () => {
+    const doc = parseBlob(TYPO_SRC);
+    let err: BlobError | undefined;
+    try {
+      compileFace(doc);
+    } catch (e) {
+      err = e as BlobError;
+    }
+    expect(err).toBeInstanceOf(BlobError);
+    // "headRadus 0.3" is source line 6; the key is the first word after a
+    // 2-space indent, so it starts at column 3.
+    expect(err!.line).toBe(6);
+    expect(err!.col).toBe(3);
+  });
+
+  it('compiles a document whose face keys are all valid, overriding only the named defaults', () => {
+    const doc = parseBlob(`model t
+skeleton
+  root pelvis at 0.92
+face
+  headRadius 0.2
+  jawDrop 0.05
+`);
+    const face = compileFace(doc);
+    expect(face.headRadius).toBe(0.2);
+    expect(face.jawDrop).toBe(0.05);
+    // Every other field keeps DEFAULT_FACE's value — spot-check one.
+    expect(face.headWidth).toBe(0.76);
   });
 });

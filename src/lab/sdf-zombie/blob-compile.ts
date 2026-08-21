@@ -1,7 +1,15 @@
 // src/lab/sdf-zombie/blob-compile.ts
-import type { BlobDoc } from './blob-ast';
+import { type BlobDoc, BlobError } from './blob-ast';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
+
+/**
+ * The only valid `.blob` face parameter names — every key of `FaceParams`,
+ * read off `DEFAULT_FACE` rather than duplicated by hand so the two can never
+ * drift apart.
+ */
+const FACE_KEYS = Object.keys(DEFAULT_FACE) as (keyof FaceParams)[];
+const FACE_KEY_SET = new Set<string>(FACE_KEYS);
 
 const RAD = Math.PI / 180;
 
@@ -37,9 +45,38 @@ export function dirVector(
   return [x2, y2, z1];
 }
 
-/** Merges a `.blob` face block over the tuned defaults. */
+/**
+ * Merges a `.blob` face block over the tuned defaults.
+ *
+ * Validates every key against `FaceParams` rather than trusting the blanket
+ * spread that used to sit here. `doc.face` is a `Record<string, number>` —
+ * `blob-parse.ts` never checks the parameter NAME, only that its value is a
+ * number — so a typo (`headRadus` for `headRadius`) used to be silently
+ * accepted: the bad key rode along as an inert extra property while
+ * `headRadius` quietly kept `DEFAULT_FACE`'s default, with no error anywhere.
+ * That is exactly the silent-shadowing class already fixed several times in
+ * `blob-parse.ts`, and it bites hardest here: Task 5 hand-types all 14 face
+ * parameter names into `zombie.blob`, where a typo would produce a subtly
+ * wrong face with nothing to catch it.
+ */
 export function compileFace(doc: BlobDoc): FaceParams {
-  return { ...DEFAULT_FACE, ...(doc.face ?? {}) } as FaceParams;
+  const face: FaceParams = { ...DEFAULT_FACE };
+  for (const [key, value] of Object.entries(doc.face ?? {})) {
+    if (!FACE_KEY_SET.has(key)) {
+      // Every entry in `doc.face` was written by `parseFaceLine`, which
+      // pushes the SAME line into `faceTrivia` with that key as `words[0]`
+      // (blob-parse.ts) — so this lookup always finds a real line. The `!`
+      // records that invariant rather than inventing a fake location on a
+      // lookup miss.
+      const line = doc.faceTrivia.find(l => l.words[0] === key)!;
+      throw new BlobError(
+        `unknown face parameter "${key}" — expected one of ${FACE_KEYS.join(', ')}`,
+        line.line, line.indent + 1,
+      );
+    }
+    face[key as keyof FaceParams] = value;
+  }
+  return face;
 }
 
 export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
