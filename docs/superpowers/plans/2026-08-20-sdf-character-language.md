@@ -690,6 +690,21 @@ describe('dirVector', () => {
     const v = dirVector('down', 0, 16.699244);
     near([v[0] / -v[1], 0, 0], [0.30, 0, 0], 1e-6);
   });
+
+  // The cases that caught the sign bug. Positive pitch must reach +z on a DOWN
+  // base too, and pitch and tilt must compose. shin is [0,-1,0.05]; foreArm is
+  // [0.05,-1,0.1]. Do not delete these — a literal rotation passes every test
+  // above and still miscompiles both of these bones.
+  it('pitches a down bone toward +z, matching the authored shin', () => {
+    const v = dirVector('down', 2.862405, 0);
+    expect(v[2] / -v[1]).toBeCloseTo(0.05, 6);
+  });
+
+  it('composes pitch and tilt, matching the authored forearm', () => {
+    const v = dirVector('down', 5.710593, 2.862405);
+    expect(v[0] / -v[1]).toBeCloseTo(0.05, 6);
+    expect(v[2] / -v[1]).toBeCloseTo(0.10, 6);
+  });
 });
 
 describe('compileBlob', () => {
@@ -782,11 +797,20 @@ export function dirVector(
   const [x0, y0, z0] = base[dir]!;
 
   // Pitch about X: y toward z.
-  const p = pitchDeg * RAD;
+  //
+  // BOTH angles are author-facing conventions and must NOT depend on which way
+  // the bone points: positive pitch always carries the direction toward +z,
+  // positive tilt always toward +x. A literal rotation does not give you that —
+  // on a `down` base (y0 = -1) a literal pitch swings toward -z. An earlier
+  // draft compensated tilt for this and forgot pitch, which sign-flipped the
+  // zombie's foreArm and shin (targets [0.05,-1,0.1] and [0,-1,0.05]) and would
+  // have failed Task 5's anchor test looking like an authoring mistake.
+  const flip = y0 < 0 ? -1 : 1;
+  const p = pitchDeg * RAD * flip;
   const y1 = y0 * Math.cos(p) - z0 * Math.sin(p);
   const z1 = y0 * Math.sin(p) + z0 * Math.cos(p);
 
-  // Tilt about Z: y toward x. Negated so a positive tilt on `down` swings +x.
+  // Tilt about Z: y toward x, same convention.
   const t = tiltDeg * RAD;
   const x2 = x0 * Math.cos(t) - y1 * Math.sin(t);
   const y2 = x0 * Math.sin(t) + y1 * Math.cos(t);
