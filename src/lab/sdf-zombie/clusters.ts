@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/clusters.ts
 import { CLUSTER_ORDER, type ClusterInfo, type LimbId, type Primitive, type Vec3 } from './types';
-import { add, len, scale as vscale, sub } from './vec';
+import { add, bendCtrl, len, scale as vscale, sub } from './vec';
 
 /**
  * Sorts primitives into the fixed CLUSTER_ORDER fold sequence and computes a
@@ -34,16 +34,28 @@ export function assignClusters(
     const solid = members.filter(p => p.op !== 'sub');
     const fitTo = solid.length > 0 ? solid : members;
 
-    // Centroid of the capsule endpoints, then the radius that covers them all.
+    // Centroid of the capsule endpoints (plus each bent prim's control point
+    // — the surface swings out there, so a bound fitted on the chord alone
+    // lets the shader's cluster cull drop real horn), then the radius that
+    // covers them all. Unbent prims contribute nothing extra, so every body
+    // without bends gets exactly the centres it has always had.
     let sum: Vec3 = [0, 0, 0];
-    for (const p of fitTo) sum = add(sum, add(p.a, p.b));
-    const center = vscale(sum, 1 / (fitTo.length * 2));
+    let pts = 0;
+    for (const p of fitTo) {
+      sum = add(sum, add(p.a, p.b));
+      pts += 2;
+      if (p.bend !== undefined) { sum = add(sum, bendCtrl(p.a, p.b, p.bend)); pts += 1; }
+    }
+    const center = vscale(sum, 1 / pts);
 
     let radius = 0;
     for (const p of fitTo) {
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-      for (const end of [p.a, p.b])
-        radius = Math.max(radius, len(sub(end, center)) + p.radius * maxScale);
+      const ends = p.bend === undefined
+        ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
+      const rMax = Math.max(p.radius, p.radiusB ?? p.radius);
+      for (const end of ends)
+        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale);
     }
 
     clusters.push({

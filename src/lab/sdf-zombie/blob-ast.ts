@@ -65,6 +65,11 @@ export interface BlobPart {
   offset: readonly [number, number, number] | null;
   /** `tip=` — extra displacement of the FAR end only. */
   tip: readonly [number, number, number] | null;
+  /**
+   * `bend=(x,y,z)` — displacement of the quadratic Bezier CONTROL point from
+   * the midpoint of the primitive's two endpoints. Null means straight.
+   */
+  bend: readonly [number, number, number] | null;
   /** `depth=`/`width=` — how deep and how wide a `groove` cuts. */
   grooveDepth: number;
   grooveWidth: number;

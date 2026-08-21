@@ -157,43 +157,34 @@ body
   # attaches it) and the point stands 52 mm clear.
   blob head on skull at=0.58 r=0.036 r2=0.003 wide=0.80 deep=0.44 blend=0.0020 chamfer offset=(0.086,0.006,-0.006) tip=(0.087,0.104,-0.022) both
 
-  # Nose — A REAL POINT NOW, not two ellipsoids faked into a hook.
+  # Nose — A REAL HOOK, ONE PRIMITIVE.
   #
-  # What was here: `blob ... deep=2.05` plus a second smaller blob, stretched
-  # forward and stacked to suggest a hook. It never read from the side, and the
-  # reason was structural rather than a tuning failure — the format had one
-  # primitive, a capsule, and one fold, the quadratic smooth-min. Smooth-min
-  # rounds every tip it touches, so the sharpest thing authorable was a small
-  # sphere, and a small sphere on the end of a bigger sphere is a bump.
+  # What was here: two tapered prims — a bridge running down and out from
+  # between the eyes, then a smaller hooked tip turning down off its end. That
+  # was itself an upgrade over the ORIGINAL two ellipsoids faked into a hook
+  # (which only read from the front), but it was still a chain: the joint
+  # between bridge and hook carried the bridge's own round base, and under the
+  # smooth-min the two segments read as a sausage with a kink rather than one
+  # curved nose.
   #
-  # Three new pieces of grammar do the work:
-  #   * `tip=(x,y,z)` displaces the FAR end alone, so this runs FORWARD out of
-  #     a vertical skull bone. Every capsule before this ran ALONG its bone.
-  #   * `r2=` is the radius at that far end. 0.004 is 4 mm — effectively a
-  #     point at this scale, and the one shape a capsule cannot make.
-  #   * `chamfer` folds with a flat bevel instead of a fillet, so the bridge
-  #     creases into the brow rather than melting into it.
+  # `bend=` makes the whole thing ONE primitive: a capsule swept along a
+  # quadratic Bezier from the bridge's start to the hook's point, control
+  # point pushed FORWARD of the chord so the curve goes out along the old
+  # bridge direction and then turns down — the bend is the goblin, and the
+  # round base at the old joint is gone entirely. The radius lerps along the
+  # CURVE now, and at the old joint (t ≈ 0.57) it reads 10 mm — the old hook
+  # prim's radius, so the silhouette keeps its slenderness through the turn.
   #
-  # Two prims still, but now for a real reason: the first is the bridge running
-  # down and out from between the eyes, the second the hooked tip turning down
-  # off its end. A single straight cone is a beak; the bend is the goblin.
+  # Aiming the bend: the chord midpoint sits at (0,-0.043,0.116) relative to
+  # the anchor; the control point wants to be where the bridge and hook
+  # TANGENTS intersect, at (0,-0.041,0.143) — so the displacement from the
+  # midpoint is (0, +0.002, +0.027). The apex bulges halfway out, ~13 mm
+  # forward of the chord, which is the hook.
   #
-  # REACH IS THE WHOLE GAME, and it is easy to under-do. The cranium's own
-  # semi-depth is headRadius 0.126 x headDepth 0.94 = 0.118 m, so anything
-  # whose tip lands inside that is INSIDE THE HEAD and reads as a bump no
-  # matter how sharp it is — which is exactly what the old two-ellipsoid nose
-  # was, and what the first tapered version still was at z=0.122. The hook's
-  # point now sits at z=0.162, a good 44 mm proud of the skull.
-  #
-  # SLENDER, and that took a second pass. At r=0.031 the bridge was a 31 mm
-  # radius, so where it broke the cranium's surface it read as a big round
-  # bulb with a small spike on the end — a clown nose wearing a hook, not a
-  # hooked nose. The taper made the TIP sharp and did nothing about the BASE
-  # being fat, which is a distinction easy to miss when the new toy is a
-  # taper. The blend came down with it: at 0.0030 the smooth-min was smearing
-  # the bridge into the brow and widening the bulb further.
-  blob head on skull at=0.47 r=0.019 r2=0.012 wide=0.80 blend=0.0016 chamfer offset=(0,-0.010,0.070) tip=(0,-0.026,0.062)
-  blob head on skull at=0.47 r=0.011 r2=0.003 wide=0.72 blend=0.0011 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
+  # REACH still rules: the point sits at z=0.162, 44 mm proud of the
+  # cranium's 0.118 m semi-depth. SLENDER still rules: r=0.019 at the base
+  # (a fat base read as a bulb wearing a spike), r2=0.003 at the point.
+  blob head on skull at=0.47 r=0.019 r2=0.003 wide=0.80 blend=0.0016 chamfer offset=(0,-0.010,0.070) tip=(0,-0.066,0.092) bend=(0,0.002,0.027)
 
   # BIG LIPS — a protruding muzzle, the cartoon-mouse read.
   #

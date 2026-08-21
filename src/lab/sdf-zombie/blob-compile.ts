@@ -248,6 +248,14 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       throw new BlobError(
         'r2= needs something to taper ALONG: use it on a bar, or give the blob '
         + 'a tip=(x,y,z) so its far end sits somewhere else', p.src.line, p.src.indent + 1);
+    // Same argument for a bend, and for the same reason a bent sphere is not
+    // a shape anyone can reason about: with both ends coincident the control
+    // point is defined against a midpoint that does not exist.
+    if (p.bend !== null && p.kind === 'blob' && p.tip === null)
+      throw new BlobError(
+        'bend= needs two distinct ends to curve BETWEEN: use it on a bar, or '
+        + 'give the blob a tip=(x,y,z) so its far end sits somewhere else',
+        p.src.line, p.src.indent + 1);
     return {
       bone: p.bone,
       at: p.at,
@@ -266,6 +274,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       ...(p.both ? { mirrorOffset: true } : {}),
       ...(p.offset ? { offset: p.offset as Vec3 } : {}),
       ...(p.tip ? { tip: p.tip as Vec3 } : {}),
+      ...(p.bend ? { bend: p.bend as Vec3 } : {}),
     } satisfies PrimDef;
   });
 

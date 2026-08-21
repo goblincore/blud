@@ -38,7 +38,10 @@
 //   row 8  restA        xyz = REST endpoint A, w = radius (0 = unwritten)
 //   row 9  restB        xyz = REST endpoint B, w = blendK
 //   row 10 primShape    x = radius at endpoint B (NEGATIVE = untapered),
-//                       y = fold profile (0 round, 1 chamfer), zw spare
+//                       y = fold profile (0 round, 1 chamfer,
+//                       2 round+BENT, 3 chamfer+BENT), zw spare
+//   row 11 primBend     xyz = quadratic Bezier control point (world space),
+//                       w spare
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -63,7 +66,7 @@
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 11;
+export const DATA_ROWS = 12;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -75,6 +78,7 @@ export const ROW_PRIM_QUAT = 7;
 export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;
 export const ROW_PRIM_SHAPE = 10;
+export const ROW_PRIM_BEND = 11;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -155,12 +159,123 @@ export const CONE_CAP = /* wgsl */ `fn coneCap(q: vec3<f32>, a: vec3<f32>, b: ve
   return ((sqrt(x2 * a2 * il2) + y * rr) * il2 - r1) * minScale;
 }`;
 
-export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32) -> f32 {
+// Closest-point parameters of a quadratic Bezier to p — ALL clamped cubic
+// roots, packed xyz with the count in w. iq's exact construction (shadertoy
+// MlKcDD): the closest point of the curve solves a cubic, here in depressed
+// form, by Cardano's discriminant (one real root) or the trigonometric
+// method (three). Mirrors sdBezierTs in validate.ts; that field backs
+// click-to-shoot, so edit both in the same commit.
+export const SD_BEZIER_T = /* wgsl */ `fn sdBezierT(p: vec3<f32>, A: vec3<f32>, B: vec3<f32>, C: vec3<f32>) -> vec4<f32> {
+  let a = B - A;
+  let bv = A - 2.0 * B + C;
+  let dv = A - p;
+
+  let kk = 1.0 / dot(bv, bv);
+  let kx = kk * dot(a, bv);
+  let ky = kk * (2.0 * dot(a, a) + dot(dv, bv)) / 3.0;
+  let kz = kk * dot(dv, a);
+
+  // Depressed cubic u^3 + pp*u + qq = 0, with t = u - kx.
+  let pp = ky - kx * kx;
+  let qq = kx * (2.0 * kx * kx - 3.0 * ky) + kz;
+  let h = qq * qq + 4.0 * pp * pp * pp;
+
+  if (h >= 0.0) {
+    // One real root: the squared distance is monotone either side of it, so
+    // the clamped root covers the interior. The |pp| ~ 0 branch is iq's
+    // numerical-stability fix — there (plus/minus sqrt(h) - q)/2 cancels
+    // catastrophically.
+    let h2 = sqrt(h);
+    var x1 = (h2 - qq) * 0.5;
+    var x2 = (-h2 - qq) * 0.5;
+    if (abs(pp) < 1e-4 && qq != 0.0) {
+      let k = pp * pp * pp / qq;
+      x1 = k;
+      x2 = -k - qq;
+    }
+    let u1 = sign(x1) * pow(abs(x1), 1.0 / 3.0);
+    let u2 = sign(x2) * pow(abs(x2), 1.0 / 3.0);
+    return vec4<f32>(clamp(u1 + u2 - kx, 0.0, 1.0), 0.0, 0.0, 1.0);
+  }
+  // Three real roots.
+  let z = sqrt(-pp);
+  let v = acos(clamp(qq / (pp * z * 2.0), -1.0, 1.0)) / 3.0;
+  let m = cos(v);
+  let n = sin(v) * 1.7320508;
+  return vec4<f32>(
+    clamp((m + n) * z - kx, 0.0, 1.0),
+    clamp(-(m + n) * z - kx, 0.0, 1.0),
+    clamp((n - m) * z - kx, 0.0, 1.0),
+    3.0);
+}`;
+
+// A capsule swept along a quadratic Bezier from a through control point c to
+// b, radius lerping r1 to r2 along the curve parameter. Mirrors sdBentCone in
+// validate.ts.
+//
+// APPROXIMATE, deliberately and openly: the exact SDF of a variable-radius
+// sweep is the min over t of (dist(t) - r(t)), whose stationary points differ
+// from the pure-distance ones solved above. Evaluating at those candidates
+// plus both ends bounds the error by how much the radius moves between
+// neighbouring candidates — small for the gentle tapers characters author —
+// and errs toward OVERestimating distance outside, never toward swallowing
+// the solid. The march absorbs the residual: its relaxed tracer detects and
+// retracts overshoots, and steps inside the silhouette shell are under-
+// relaxed. Do not tighten this into "exact" without solving G's own cubic.
+export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, minScale: f32) -> f32 {
+  // DEGENERATE GUARD, before the division it protects — same class as the
+  // l2 < 1e-12 guard coneCap carries for coincident endpoints. With a
+  // collinear control point the curve coefficient bv below is the zero
+  // vector, kk = 1/dot(bv,bv) is infinity, and the whole thing returns NaN —
+  // and ONE NaN in a smooth-min fold takes the entire body with it. There
+  // the straight round cone IS the exact answer, so the fallback costs
+  // nothing but the test.
+  let bb = a - 2.0 * c + b;
+  if (dot(bb, bb) < 1e-12) { return coneCap(q, a, b, r1, r2, minScale); }
+  if (dot(b - a, b - a) < 1e-12) { return coneCap(q, a, b, r1, r2, minScale); }
+  let cand = sdBezierT(q, a, c, b);
+  // dist(t) - r(t) at every root AND both ends, keeping the minimum. The
+  // radius term moves the objective's minimiser off the geometric closest
+  // point where the taper is steep, so evaluating only the closest t could
+  // overestimate — and an overestimated distance steps through surfaces.
+  // Passes 2-3 refine locally around the best so far (steps 1/8 then 1/32);
+  // monotone, the min can only improve. Mirrors sdBentCone in validate.ts.
+  let e1 = (c - a) * 2.0;
+  var best = 1e9;
+  var bestT = 0.0;
+  var ts = array<f32, 9>(cand.x, cand.y, cand.z, 0.0, 0.25, 0.5, 0.75, 1.0, 1.0);
+  for (var i = 0; i < 9; i = i + 1) {
+    if (f32(i) >= cand.w && i < 3) { continue; }
+    let t = ts[i];
+    let pt = a + e1 * t + bb * (t * t);
+    let v = length(q - pt) - (r1 + (r2 - r1) * t);
+    if (v < best) { best = v; bestT = t; }
+  }
+  for (var round = 0; round < 2; round = round + 1) {
+    let step = select(0.125, 0.03125, round >= 1);
+    for (var s = -1; s <= 1; s = s + 1) {
+      let t = clamp(bestT + f32(s) * step, 0.0, 1.0);
+      let pt = a + e1 * t + bb * (t * t);
+      let v = length(q - pt) - (r1 + (r2 - r1) * t);
+      if (v < best) { best = v; bestT = t; }
+    }
+  }
+  return best * minScale;
+}`;
+
+export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
+  // Bent above tapered above plain: prof encodes profile + bend (0 round,
+  // 1 chamfer, 2 round+bent, 3 chamfer+bent), so > 1.5 means the Bezier
+  // path and every straight prim keeps the exact expression it has always
+  // run — bit-identical, which is what the zombie pin demands.
+  if (prof > 1.5) {
+    return coneBend(p * inv, A.xyz * inv, B.xyz * inv, cpos * inv, A.w, r2, minScale);
+  }
   return coneCap(p * inv, A.xyz * inv, B.xyz * inv, A.w, r2, minScale);
 }`;
 
@@ -177,13 +292,16 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
 // 2026-08-17, benchGpu 240 frames, hiddenSteps 0). Only a turned head cluster
 // sets the flag; a rest head's quat is the exact identity, so statues and
 // every limb pay nothing.
-export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32) -> f32 {
+export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
   var qq = p;
   var a = A.xyz;
   var b = B.xyz;
+  // The control point rides the same conjugate as the endpoints — the curve
+  // is defined in the prim's frame exactly as they are.
+  var c = cpos;
   let O = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0);
   if (abs(1.0 - O.w) > 1e-6) {
     let mid = (A.xyz + B.xyz) * 0.5;
@@ -199,12 +317,16 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
     let vb = b - mid;
     let tb = 2.0 * cross(u, vb);
     b = mid + vb + tb * O.w + cross(u, tb);
+    let vc = c - mid;
+    let tc = 2.0 * cross(u, vc);
+    c = mid + vc + tc * O.w + cross(u, tc);
   }
   let inv = 1.0 / S.xyz;
   qq = qq * inv;
   a = a * inv;
   b = b * inv;
   let minScale = min(S.x, min(S.y, S.z));
+  if (prof > 1.5) { return coneBend(qq, a, b, c * inv, A.w, r2, minScale); }
   return coneCap(qq, a, b, A.w, r2, minScale);
 }`;
 
@@ -365,12 +487,20 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       // (blob-compile.ts), so this cannot silently do the wrong thing.
       var r2 = -1.0;
       var gr = vec2<f32>(0.0, 0.0);
+      var prof = 0.0;
+      var cpos = vec3<f32>(0.0, 0.0, 0.0);
       if (shaped) {
         let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
         r2 = T.x;
+        prof = T.y;
         gr = T.zw;
+        // Only genuinely-bent prims pay for the bend row; the +2 encoding
+        // keeps every "> 0.5 means chamfer" consumer working unchanged.
+        if (prof > 1.5) {
+          cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
+        }
       }
-      let sd = select(sdPrim(p, idx, data, r2), sdPrimO(p, idx, data, r2), ori);
+      let sd = select(sdPrim(p, idx, data, r2, prof, cpos), sdPrimO(p, idx, data, r2, prof, cpos), ori);
       if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }
     }
   }
@@ -584,15 +714,23 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       // a second call would double the texture fetches this loop lives on.
       var r2 = -1.0;
       var prof = 0.0;
+      var cpos = vec3<f32>(0.0, 0.0, 0.0);
       if (shaped) {
         let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
         r2 = T.x;
         prof = T.y;
+        // Only genuinely-bent prims pay for the bend row; the +2 encoding
+        // keeps every "> 0.5 means chamfer" consumer working unchanged.
+        if (prof > 1.5) {
+          cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
+        }
       }
-      var sd = sdPrim(p, idx, data, r2);
-      if (ori) { sd = sdPrimO(p, idx, data, r2); }
+      var sd = sdPrim(p, idx, data, r2, prof, cpos);
+      if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos); }
       if (sd < best) { best = sd; bestIdx = idx; }
-      if (prof > 0.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
+      // Chamfer is profile bit 0; bend is +2, so the old "prof > 0.5" test
+      // would wrongly chamfer a plain-bent prim — bounded above now.
+      if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
     }
   }
   }
@@ -1214,7 +1352,8 @@ export const HELPERS = [
   // ordering test below only checks what is IN the list, so an omitted helper
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
-  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
+  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_PRIM, SD_PRIM_ORIENTED,
+  HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,
