@@ -238,7 +238,14 @@ export function tokenize(src: string): BlobLine[] {
   return out;
 }
 
-/** `key=value` → value, with a typed error naming the offending line. */
+/**
+ * `key=value` → value, with a typed error naming the offending line.
+ *
+ * `col` is a 1-based CHARACTER offset in both error branches. An earlier draft
+ * reported the missing-key case as a character offset and the bad-number case
+ * as a word INDEX, which silently pointed callers at the wrong place — the
+ * whole reason BlobError carries a column is so an author can jump to the spot.
+ */
 export function numArg(l: BlobLine, key: string, fallback: number | null = null): number {
   const hit = l.words.find(w => w.startsWith(`${key}=`));
   if (hit === undefined) {
@@ -246,9 +253,26 @@ export function numArg(l: BlobLine, key: string, fallback: number | null = null)
     throw new BlobError(`missing required "${key}="`, l.line, l.indent + 1);
   }
   const v = Number(hit.slice(key.length + 1));
-  if (!Number.isFinite(v))
-    throw new BlobError(`"${key}=" is not a number`, l.line, l.words.indexOf(hit) + 1);
+  if (!Number.isFinite(v)) throw new BlobError(`"${key}=" is not a number`, l.line, wordCol(l, idx));
   return v;
+}
+
+/**
+ * 1-based character column of `l.words[idx]`, reconstructed as
+ * `indent + words joined by single spaces`.
+ *
+ * `BlobLine` doesn't retain the raw line text, so this is a reconstruction,
+ * exact only when words were separated by ONE space each. `tokenize` splits on
+ * `\s+`, so a line padded for column alignment (the character files do this to
+ * keep `len=` tidy) reconstructs one character short per extra space. Accepted:
+ * the column points a human at roughly the right token, and retaining raw text
+ * on every BlobLine would cost more than the precision is worth. Do NOT fix
+ * this by changing BlobLine — the emitter's trivia contract needs that shape.
+ */
+function wordCol(l: BlobLine, idx: number): number {
+  let col = l.indent;
+  for (let i = 0; i < idx; i++) col += l.words[i]!.length + 1;
+  return col + 1;
 }
 ```
 

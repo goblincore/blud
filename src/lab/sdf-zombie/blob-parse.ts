@@ -41,11 +41,20 @@ export function tokenize(src: string): BlobLine[] {
 
 /**
  * 1-based character column of `l.words[idx]`, reconstructed as
- * `indent + words joined by single spaces`. `BlobLine` doesn't retain the
- * raw line text, so this is a reconstruction rather than a measurement: it
- * is exact for lines whose words really were single-space-separated (which
- * covers everything `tokenize` collapses runs of whitespace into), but a
- * hand-built `BlobLine` with irregular internal spacing would throw it off.
+ * `indent + words joined by single spaces`.
+ *
+ * `BlobLine` doesn't retain the raw line text, so this is a reconstruction
+ * rather than a measurement, and it is exact only for lines whose words really
+ * were separated by ONE space each. `tokenize` splits on `\s+`, so a source
+ * line padded for column alignment — which the shipped character files do, to
+ * keep `len=` and `blend=` in tidy columns — reconstructs one character short
+ * per extra space, and the drift grows across the line.
+ *
+ * That is accepted: the column exists to point a human at roughly the right
+ * token, and being a few characters early on an aligned line still does that.
+ * Retaining the raw text on every `BlobLine` to make it exact would cost more
+ * than the precision is worth. Do NOT "fix" this by changing `BlobLine` — the
+ * emitter's trivia contract depends on that shape.
  */
 function wordCol(l: BlobLine, idx: number): number {
   let col = l.indent;
