@@ -15,6 +15,11 @@ export interface PackedBody {
   primB: Float32Array;         // xyz = endpoint B, w = blendK
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
   primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
+  /** x = radius at endpoint B, NEGATIVE when untapered; y = fold profile
+   *  (0 round, 1 chamfer); zw spare. Negative is the sentinel rather than
+   *  "equal to radius" because 0 is a LEGITIMATE taper target — a true point
+   *  is the whole reason the taper exists. */
+  primShape: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
@@ -44,6 +49,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
   const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primQuat = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primShape = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
@@ -73,6 +79,14 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
     // costs one compare. Only rig-posed skull prims ever carry a real quat.
     const q = p.orient;
     primQuat.set(q ? [q[0], q[1], q[2], q[3]] : [0, 0, 0, 1], o);
+    // -1 for an untapered prim, which is the plain-capsule branch in coneCap.
+    // A radiusB EQUAL to radius is still written as a taper: it is a
+    // no-op geometrically, and rewriting it to -1 to save a branch would make
+    // the packed data depend on a float comparison the author did not make.
+    primShape.set([
+      p.radiusB === undefined ? -1 : p.radiusB,
+      p.blendProfile === 'chamfer' ? 1 : 0, 0, 0,
+    ], o);
     // Rest endpoints (motion-polish task 6). A missing rest prim packs as
     // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
     // always has radius > 0), which falls back to the old noiseLocal anchor.
@@ -96,13 +110,21 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
     // so a cluster whose prims are ALL identity takes the plain world-axis
     // path, which is every cluster except a turned head. Bit-identical either
     // way: sdPrimO with an identity quat runs the identical op sequence.
-    const oriented = body.prims.slice(c.start, c.start + c.count)
-      .some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
-    clusterRange.set([c.start, c.count, c.alive ? 1 : 0, oriented ? 1 : 0], o);
+    //
+    // It is a BITFIELD now, not a bool: bit 1 is that oriented flag, bit 2 says
+    // some prim here is tapered or chamfered. ROW_PRIM_SHAPE is hoisted the
+    // same way and for the same measured reason — a cluster with no shaped
+    // prim never reads that row, so a body with one pointed nose does not make
+    // its legs pay for it.
+    const own = body.prims.slice(c.start, c.start + c.count);
+    const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+    const shaped = own.some(p => p.radiusB !== undefined || p.blendProfile === 'chamfer');
+    clusterRange.set(
+      [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
 
   return {
-    primA, primB, primScale, primQuat, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, restA, restB, clusterBounds, clusterRange,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,

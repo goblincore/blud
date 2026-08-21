@@ -30,10 +30,33 @@ export interface PrimDef {
   /** When set, the primitive is a capsule spanning `at` → `capTo` on the same bone. */
   capTo?: number;
   radius: number;
+  /**
+   * Radius at the FAR end (`capTo`/`tip`), when the primitive tapers.
+   *
+   * Absent means untapered — a plain capsule of constant `radius`, which is
+   * every primitive authored before tapers existed and which still takes a
+   * bit-identical code path in both fields. Present turns the primitive into a
+   * round cone, and a `radiusB` of 0 gives a TRUE POINT: the one shape a
+   * capsule cannot make, and the reason this exists. A goblin's hooked nose
+   * was two ellipsoids faked into a hook that read as a bump in profile,
+   * because smooth-min rounds every tip it touches.
+   */
+  radiusB?: number;
   /** Ellipsoid axis scale applied to the primitive's local space. */
   scale: Vec3;
   /** Smooth-min strength against the rest of the body. */
   blendK: number;
+  /**
+   * How this primitive folds into the field.
+   *
+   * Absent is `round` — the quadratic polynomial smooth-min that gives every
+   * SDF character its fillets, and the whole reason the aesthetic reads as
+   * SDF. `chamfer` folds with a flat 45-degree bevel instead, which keeps a
+   * CREASE where round gives a fillet. Before this the only alternative to a
+   * fillet was `blendK: 0` — no blend at all, a hard boolean seam — so there
+   * was nothing between "smeared" and "cut".
+   */
+  blendProfile?: 'round' | 'chamfer';
   limb: LimbBase;
   mirror?: boolean;
   /**
@@ -48,6 +71,21 @@ export interface PrimDef {
    * at authoring time.
    */
   offset?: Vec3;
+  /**
+   * Extra displacement applied to the FAR end only, so a primitive can point
+   * somewhere its bone does not.
+   *
+   * Without this every capsule runs ALONG a bone, because both ends come from
+   * `at`/`capTo` on the same bone and `offset` moves both together. A nose
+   * points forward out of a vertical skull bone; a tusk points up out of a jaw.
+   * Both were previously faked by stacking spheres at hand-computed offsets,
+   * which is how the goblin's nose ended up as two ellipsoids that only read
+   * from the front.
+   *
+   * Mirrored in x by `mirrorOffset` exactly as `offset` is — a pair of tusks
+   * has to splay outward, not both lean the same way.
+   */
+  tip?: Vec3;
   /**
    * Emits two copies with `offset.x` negated. For bilateral features on a bone
    * that is NOT itself mirrored — eye sockets on the skull. Distinct from
@@ -69,8 +107,12 @@ export interface Primitive {
   a: Vec3;
   b: Vec3;
   radius: number;
+  /** Radius at `b`. Absent means untapered — see PrimDef.radiusB. */
+  radiusB?: number;
   scale: Vec3;
   blendK: number;
+  /** Absent means `round`. See PrimDef.blendProfile. */
+  blendProfile?: 'round' | 'chamfer';
   limb: LimbId;
   cluster: number;
   /**

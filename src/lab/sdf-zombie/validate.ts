@@ -87,7 +87,47 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   const t = abLen2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / abLen2));
   const closest = add(a, vscale(ab, t));
   const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
-  return (len(sub(q, closest)) - prim.radius) * minScale;
+  if (prim.radiusB === undefined || prim.radiusB === prim.radius)
+    return (len(sub(q, closest)) - prim.radius) * minScale;
+  return sdRoundCone(q, a, b, prim.radius, prim.radiusB) * minScale;
+}
+
+/**
+ * Exact SDF of a round cone — a capsule whose radius runs from `r1` at `a` to
+ * `r2` at `b`. iq's construction; must match sdRoundConeW in march.wgsl.ts.
+ *
+ * Reached only when the primitive actually tapers. An untapered prim keeps the
+ * plain capsule branch above, which matters for more than speed: with
+ * `r1 === r2` this formula is mathematically identical but NOT bit-identical,
+ * and `characters/zombie-blob.test.ts` pins the shipped zombie against
+ * `makeZombie()` to 0.1 mm. Routing every existing primitive through a new
+ * expression to gain nothing is how a "no-op refactor" moves a whole cast.
+ *
+ * The value of the taper is the degenerate case the capsule cannot express:
+ * `r2 = 0` is a TRUE POINT. Smooth-min rounds every tip it touches, so before
+ * this the sharpest thing authorable was a small sphere.
+ */
+function sdRoundCone(p: Vec3, a: Vec3, b: Vec3, r1: number, r2: number): number {
+  const ba = sub(b, a);
+  const l2 = ba[0] ** 2 + ba[1] ** 2 + ba[2] ** 2;
+  const rr = r1 - r2;
+  const a2 = l2 - rr * rr;
+  // Degenerate: the two ends coincide, so there is no axis to taper along and
+  // the shape is just the larger sphere. Guarding here rather than trusting the
+  // divisions below, which would produce NaN and poison the whole fold.
+  if (l2 < 1e-12) return len(sub(p, a)) - Math.max(r1, r2);
+  const il2 = 1 / l2;
+  const pa = sub(p, a);
+  const y = pa[0] * ba[0] + pa[1] * ba[1] + pa[2] * ba[2];
+  const z = y - l2;
+  const x: Vec3 = [pa[0] * l2 - ba[0] * y, pa[1] * l2 - ba[1] * y, pa[2] * l2 - ba[2] * y];
+  const x2 = x[0] ** 2 + x[1] ** 2 + x[2] ** 2;
+  const y2 = y * y * l2;
+  const z2 = z * z * l2;
+  const k = Math.sign(rr) * rr * rr * x2;
+  if (Math.sign(z) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
+  if (Math.sign(y) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
+  return (Math.sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
 }
 
 /** Quadratic polynomial smooth-min — must match the shader exactly. */
@@ -96,6 +136,26 @@ export function smin(a: number, b: number, k: number): number {
   if (kk <= 0) return Math.min(a, b);
   const h = Math.max(kk - Math.abs(a - b), 0) / kk;
   return Math.min(a, b) - h * h * kk * 0.25;
+}
+
+/**
+ * Chamfer union — a flat 45-degree bevel where `smin` gives a fillet.
+ *
+ * The only fold available before this was the quadratic smooth-min, with
+ * `blendK: 0` (a hard boolean seam) as the sole alternative. That left nothing
+ * between "smeared" and "cut": a plate lip, a brow ridge or a jaw line either
+ * dissolved into its neighbour or met it at a raw intersection. A chamfer
+ * keeps a CREASE — two flats meeting at an edge — which is what reads as
+ * carved rather than melted.
+ *
+ * Mercury's `fOpUnionChamfer`. `k * 4` matches `smin`'s width convention so
+ * the same authored `blend=` means a comparable reach in either profile, and
+ * `k <= 0` degenerates to a plain `min` exactly as `smin` does.
+ */
+export function sminChamfer(a: number, b: number, k: number): number {
+  const kk = k * 4;
+  if (kk <= 0) return Math.min(a, b);
+  return Math.min(Math.min(a, b), (a - kk + b) * Math.SQRT1_2);
 }
 
 /** Smooth subtraction. Must match the shader's smax exactly. */
@@ -122,7 +182,9 @@ export function sdBody(p: Vec3, body: Body): number {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
       if (prim.op === 'sub' || prim.dead) continue;
-      d = smin(d, sdPrimitive(p, prim), prim.blendK);
+      d = prim.blendProfile === 'chamfer'
+        ? sminChamfer(d, sdPrimitive(p, prim), prim.blendK)
+        : smin(d, sdPrimitive(p, prim), prim.blendK);
     }
   }
   for (const c of body.clusters) {

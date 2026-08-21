@@ -27,7 +27,7 @@ import { specialiseMapBody } from './specialise';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
-  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
+  ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
   ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
@@ -669,6 +669,7 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_QUAT, p.primQuat, MAX_PRIMS);
     writeRow(ROW_REST_A, p.restA, MAX_PRIMS);
     writeRow(ROW_REST_B, p.restB, MAX_PRIMS);
+    writeRow(ROW_PRIM_SHAPE, p.primShape, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
     dataTex.needsUpdate = true;
@@ -986,6 +987,7 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
     writeRow(ROW_REST_A, packed.restA, MAX_PRIMS);
     writeRow(ROW_REST_B, packed.restB, MAX_PRIMS);
+    writeRow(ROW_PRIM_SHAPE, packed.primShape, MAX_PRIMS);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
 
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);

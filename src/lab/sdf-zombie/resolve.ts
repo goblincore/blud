@@ -43,12 +43,20 @@ export function placePrims(
     const o = p.offset ?? ([0, 0, 0] as const);
     const shift = (v: Vec3): Vec3 => [v[0] + o[0], v[1] + o[1], v[2] + o[2]];
     const a = shift(lerp(bone.head, bone.tail, p.at));
-    const b = p.capTo === undefined ? a : shift(lerp(bone.head, bone.tail, p.capTo));
+    const b0 = p.capTo === undefined ? a : shift(lerp(bone.head, bone.tail, p.capTo));
+    // `tip` displaces the FAR end alone, which is what lets a primitive point
+    // somewhere its bone does not — a nose out of a vertical skull, a tusk out
+    // of a jaw. Applied after `offset`, which moved both ends together.
+    const t = p.tip;
+    const b: Vec3 = t === undefined ? b0 : [b0[0] + t[0], b0[1] + t[1], b0[2] + t[2]];
     return {
       a, b,
       radius: p.radius,
+      ...(p.radiusB === undefined ? {} : { radiusB: p.radiusB }),
       scale: p.scale,
       blendK: p.blendK,
+      ...(p.blendProfile === undefined || p.blendProfile === 'round'
+        ? {} : { blendProfile: p.blendProfile }),
       limb: p.limb as LimbId,
       op: p.op ?? 'add',
     };

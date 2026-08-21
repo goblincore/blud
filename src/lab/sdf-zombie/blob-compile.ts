@@ -223,19 +223,40 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
     } satisfies BoneDef)),
   ];
 
-  const prims: PrimDef[] = doc.parts.map(p => ({
-    bone: p.bone,
-    at: p.at,
-    ...(p.to === null ? {} : { capTo: p.to }),
-    radius: p.radius,
-    scale: [p.wide, p.tall, p.deep] as Vec3,
-    blendK: p.hard ? 0 : p.blend,
-    limb: p.limb,
-    ...(p.mirror ? { mirror: true } : {}),
-    ...(p.kind === 'carve' ? { op: 'sub' as const } : {}),
-    ...(p.both ? { mirrorOffset: true } : {}),
-    ...(p.offset ? { offset: p.offset as Vec3 } : {}),
-  }));
+  const prims: PrimDef[] = doc.parts.map(p => {
+    // A chamfered CARVE would fold through smax, and a chamfered subtraction
+    // is a different operator with its own sign conventions — the shader's
+    // carve pass deliberately does not read the profile. Rejecting it here is
+    // what keeps that from silently doing the wrong thing: without this the
+    // author gets a normal fillet-carve and no diagnostic.
+    if (p.chamfer && p.kind === 'carve')
+      throw new BlobError(
+        'chamfer is not supported on a carve — carving folds through smax, '
+        + 'which has no chamfered form here', p.src.line, p.src.indent + 1);
+    // A taper needs two ENDS to run between. A `blob` is a sphere (a === b
+    // unless `tip=` displaces it), so `r2=` on one with no `tip=` is silently
+    // meaningless — the round cone collapses to its larger sphere.
+    if (p.radiusB !== null && p.kind === 'blob' && p.tip === null)
+      throw new BlobError(
+        'r2= needs something to taper ALONG: use it on a bar, or give the blob '
+        + 'a tip=(x,y,z) so its far end sits somewhere else', p.src.line, p.src.indent + 1);
+    return {
+      bone: p.bone,
+      at: p.at,
+      ...(p.to === null ? {} : { capTo: p.to }),
+      radius: p.radius,
+      ...(p.radiusB === null ? {} : { radiusB: p.radiusB }),
+      scale: [p.wide, p.tall, p.deep] as Vec3,
+      blendK: p.hard ? 0 : p.blend,
+      ...(p.chamfer ? { blendProfile: 'chamfer' as const } : {}),
+      limb: p.limb,
+      ...(p.mirror ? { mirror: true } : {}),
+      ...(p.kind === 'carve' ? { op: 'sub' as const } : {}),
+      ...(p.both ? { mirrorOffset: true } : {}),
+      ...(p.offset ? { offset: p.offset as Vec3 } : {}),
+      ...(p.tip ? { tip: p.tip as Vec3 } : {}),
+    } satisfies PrimDef;
+  });
 
   return {
     name: doc.name,

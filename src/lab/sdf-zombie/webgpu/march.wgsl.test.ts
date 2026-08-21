@@ -18,9 +18,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
-  SAMPLE_VOLUME,
+  SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
-  ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
+  ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
@@ -216,10 +216,13 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
     const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
     // Argmin tripwire: ONE sd evaluation feeds both the fold and the tracker.
-    expect(mapBody).toContain('var sd = sdPrim(p, idx, data);');
-    expect(mapBody).toContain('if (ori) { sd = sdPrimO(p, idx, data); }');
+    // Same invariant, now carrying the taper radius: ONE sd evaluation still
+    // feeds both the fold and the argmin tracker. `r2` is -1 for every
+    // untapered prim, which is the plain-capsule branch inside coneCap.
+    expect(mapBody).toContain('var sd = sdPrim(p, idx, data, r2);');
+    expect(mapBody).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2); }');
     expect(mapBody).toContain('if (sd < best) { best = sd; bestIdx = idx; }');
-    expect(mapBody).toContain('d = smin(d, sd, k);');
+    expect(mapBody).toContain('if (prof > 0.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
     expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
@@ -423,7 +426,7 @@ describe('data texture layout', () => {
     const rows = [
       ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
-      ROW_REST_A, ROW_REST_B,
+      ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -492,13 +495,51 @@ describe('CPU field mirror is pinned', () => {
   });
 });
 
+describe('tapered primitive and chamfer fold', () => {
+  // String pins on the DECISIVE lines. The round cone's three-branch structure
+  // is where a port goes wrong — swap a sign or a comparison and it still
+  // compiles, still returns plausible distances, and quietly reports the wrong
+  // surface. The semantics are proven on the CPU side in taper.test.ts; this
+  // proves the shader is running the same construction, and this field backs
+  // click-to-shoot, so a divergence lands shots where nothing is drawn.
+  it('coneCap keeps the round cone\'s branch structure', () => {
+    expect(CONE_CAP).toContain('if (sign(z) * a2 * z2 > k)');
+    expect(CONE_CAP).toContain('if (sign(y) * a2 * y2 < k)');
+    expect(CONE_CAP).toContain('let k = sign(rr) * rr * rr * x2;');
+  });
+
+  // The untapered branch is not an optimisation. With r1 == r2 the round cone
+  // is mathematically identical but NOT bit-identical, and
+  // characters/zombie-blob.test.ts pins the shipped zombie to 0.1 mm.
+  it('coneCap takes the plain capsule path when r2 is negative', () => {
+    expect(CONE_CAP).toContain('if (r2 < 0.0) {');
+    expect(CONE_CAP).toContain('let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);');
+  });
+
+  // One NaN in a smooth-min fold takes the whole body with it, and a blob with
+  // a zero `tip=` has a === b, which is exactly where the divisions blow up.
+  it('coneCap guards coincident endpoints before dividing by their separation', () => {
+    const guard = CONE_CAP.indexOf('if (l2 < 1e-12)');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(CONE_CAP.indexOf('let il2 = 1.0 / l2;'));
+  });
+
+  it('sminChamfer shares smin\'s width convention and its k <= 0 degenerate', () => {
+    // Same `kIn * 4.0`, so one authored `blend=` means a comparable reach in
+    // either profile and swapping them is not also a size change.
+    expect(SMIN_CHAMFER).toContain('let k = kIn * 4.0;');
+    expect(SMIN_CHAMFER).toContain('if (k <= 0.0) { return min(a, b); }');
+    expect(SMIN_CHAMFER).toContain('(a - k + b) * 0.70710678');
+  });
+});
+
 describe('per-prim orientation (motion-polish task 3)', () => {
   it('sdPrimO reads the quat row and guards identity prims with a cheap branch', () => {
     // String pins: the parity test below proves the CPU mirror, these prove
     // the WGSL actually contains the branch being mirrored.
     expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
-    expect(DATA_ROWS).toBe(10);
+    expect(DATA_ROWS).toBe(11);
   });
 
   it('sdPrim stays the plain world-axis capsule, diffable against the frozen GLSL', () => {
@@ -506,12 +547,24 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     expect(SD_PRIM).not.toContain('cross(');
   });
 
-  it('mapBody hoists the orient branch to the cluster flag (clusterRange.w)', () => {
+  it('mapBody hoists BOTH per-prim branches to the cluster flag (clusterRange.w)', () => {
     // Paying the quat textureLoad per prim measured +10-18% frame time; the
     // hoist makes everything but a turned head cluster take the plain path.
-    expect(MAP_BODY).toContain('range.w > 0.5');
-    expect(MAP_BODY).toContain('sdPrimO(p, idx, data)');
-    expect(MAP_BODY).toContain('sdPrim(p, idx, data)');
+    // ROW_PRIM_SHAPE arrived later and is hoisted the same way for the same
+    // reason, so range.w is now a BITFIELD (1 oriented, 2 shaped) rather than
+    // the bool it started as. A cluster with no tapered or chamfered prim
+    // never reads the shape row at all.
+    expect(MAP_BODY).toContain('let flags = i32(range.w + 0.5);');
+    expect(MAP_BODY).toContain('let ori = (flags & 1) != 0;');
+    expect(MAP_BODY).toContain('let shaped = (flags & 2) != 0;');
+    expect(MAP_BODY).toContain('if (shaped) {');
+    expect(MAP_BODY).toContain('sdPrimO(p, idx, data, r2)');
+    expect(MAP_BODY).toContain('sdPrim(p, idx, data, r2)');
+    // The carve pass reads the same bitfield, so a tapered carve is a taper in
+    // BOTH fields. This one backs click-to-shoot; a divergence here lands
+    // shots where nothing is drawn.
+    expect(APPLY_CARVES).toContain('let flags = i32(range.w + 0.5);');
+    expect(APPLY_CARVES).toContain('if (shaped) { r2 = textureLoad');
   });
 
   /**

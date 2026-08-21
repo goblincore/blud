@@ -58,7 +58,13 @@ export interface BlobPart {
   mirror: boolean;
   hard: boolean;
   both: boolean;
+  /** `chamfer` — fold with a flat bevel instead of the default fillet. */
+  chamfer: boolean;
+  /** `r2=` — radius at the far end. Null means untapered. */
+  radiusB: number | null;
   offset: readonly [number, number, number] | null;
+  /** `tip=` — extra displacement of the FAR end only. */
+  tip: readonly [number, number, number] | null;
   src: BlobLine;
 }
 

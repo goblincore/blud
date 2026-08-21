@@ -37,6 +37,8 @@
 //   row 7  primQuat     xyzw = per-prim orientation (identity = 0,0,0,1)
 //   row 8  restA        xyz = REST endpoint A, w = radius (0 = unwritten)
 //   row 9  restB        xyz = REST endpoint B, w = blendK
+//   row 10 primShape    x = radius at endpoint B (NEGATIVE = untapered),
+//                       y = fold profile (0 round, 1 chamfer), zw spare
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -61,7 +63,7 @@
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 10;
+export const DATA_ROWS = 11;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -72,6 +74,7 @@ export const ROW_WOUND_META = 6;
 export const ROW_PRIM_QUAT = 7;
 export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;
+export const ROW_PRIM_SHAPE = 10;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -80,6 +83,9 @@ export const ROW_REST_B = 9;
 // The k <= 0 short-circuit is load-bearing rather than a guard: blendK 0 is how
 // face features get a HARD crisp edge instead of a smear, and hard min/max ARE
 // associative, so zero-blend features are exempt from the ordering constraint.
+// Chamfer union — a flat 45-degree bevel where smin gives a fillet. The only
+// alternative to a fillet used to be blendK 0, a hard boolean seam, so there
+// was nothing between "smeared" and "cut". Mirrors sminChamfer in validate.ts.
 export const SMIN = /* wgsl */ `fn smin(a: f32, b: f32, kIn: f32) -> f32 {
   let k = kIn * 4.0;
   if (k <= 0.0) { return min(a, b); }
@@ -87,28 +93,61 @@ export const SMIN = /* wgsl */ `fn smin(a: f32, b: f32, kIn: f32) -> f32 {
   return min(a, b) - h * h * k * 0.25;
 }`;
 
+export const SMIN_CHAMFER = /* wgsl */ `fn sminChamfer(a: f32, b: f32, kIn: f32) -> f32 {
+  let k = kIn * 4.0;
+  if (k <= 0.0) { return min(a, b); }
+  return min(min(a, b), (a - k + b) * 0.70710678);
+}`;
+
 export const SMAX = /* wgsl */ `fn smax(a: f32, b: f32, k: f32) -> f32 {
   return -smin(-a, -b, k);
 }`;
 
-// Ellipsoid capsule, world-axis squash. Mirrors the identity-orient path of
-// sdPrimitive() in validate.ts exactly; edit both in the same commit or
-// click-to-shoot drifts from what is drawn.
-export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>) -> f32 {
+// Ellipsoid capsule OR round cone, world-axis squash. Mirrors the
+// identity-orient path of sdPrimitive() in validate.ts exactly; edit both in
+// the same commit or click-to-shoot drifts from what is drawn.
+//
+// `r2` is the radius at endpoint B, and NEGATIVE means untapered — which takes
+// the plain capsule branch, the exact expression this shader has always run.
+// That branch is not an optimisation: with r1 == r2 the round cone is
+// mathematically identical but not bit-identical, and characters/
+// zombie-blob.test.ts pins the shipped zombie to 0.1 mm. The taper's value is
+// the case a capsule cannot express at all — r2 = 0 is a TRUE POINT, where
+// smooth-min rounds every tip it touches.
+export const CONE_CAP = /* wgsl */ `fn coneCap(q: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r1: f32, r2: f32, minScale: f32) -> f32 {
+  if (r2 < 0.0) {
+    let ab = b - a;
+    let ap = q - a;
+    let ab2 = dot(ab, ab);
+    let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
+    return (length(q - (a + ab * t)) - r1) * minScale;
+  }
+  let ba = b - a;
+  let l2 = dot(ba, ba);
+  if (l2 < 1e-12) { return (length(q - a) - max(r1, r2)) * minScale; }
+  let rr = r1 - r2;
+  let a2 = l2 - rr * rr;
+  let il2 = 1.0 / l2;
+  let pa = q - a;
+  let y = dot(pa, ba);
+  let z = y - l2;
+  let x = pa * l2 - ba * y;
+  let x2 = dot(x, x);
+  let y2 = y * y * l2;
+  let z2 = z * z * l2;
+  let k = sign(rr) * rr * rr * x2;
+  if (sign(z) * a2 * z2 > k) { return (sqrt(x2 + z2) * il2 - r2) * minScale; }
+  if (sign(y) * a2 * y2 < k) { return (sqrt(x2 + y2) * il2 - r1) * minScale; }
+  return ((sqrt(x2 * a2 * il2) + y * rr) * il2 - r1) * minScale;
+}`;
+
+export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
   let inv = 1.0 / S.xyz;
-  let q = p * inv;
-  let a = A.xyz * inv;
-  let b = B.xyz * inv;
-  let ab = b - a;
-  let ap = q - a;
-  let ab2 = dot(ab, ab);
-  // select() is (falseValue, trueValue, condition) — reversed from a ternary.
-  let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
   let minScale = min(S.x, min(S.y, S.z));
-  return (length(q - (a + ab * t)) - A.w) * minScale;
+  return coneCap(p * inv, A.xyz * inv, B.xyz * inv, A.w, r2, minScale);
 }`;
 
 // The oriented twin (motion-polish task 3): same ellipsoid capsule, but the
@@ -124,7 +163,7 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
 // 2026-08-17, benchGpu 240 frames, hiddenSteps 0). Only a turned head cluster
 // sets the flag; a rest head's quat is the exact identity, so statues and
 // every limb pay nothing.
-export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>) -> f32 {
+export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
@@ -151,13 +190,8 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   qq = qq * inv;
   a = a * inv;
   b = b * inv;
-  let ab = b - a;
-  let ap = qq - a;
-  let ab2 = dot(ab, ab);
-  // select() is (falseValue, trueValue, condition) — reversed from a ternary.
-  let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
   let minScale = min(S.x, min(S.y, S.z));
-  return (length(qq - (a + ab * t)) - A.w) * minScale;
+  return coneCap(qq, a, b, A.w, r2, minScale);
 }`;
 
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
@@ -289,7 +323,9 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
     // branch to cluster granularity is the measured win — see sdPrimO. The
     // two calls agree bit-for-bit on identity quats, so the CPU mirror
     // (validate.sdBody) branches per prim and stays exact for both.
-    let ori = range.w > 0.5;
+    let flags = i32(range.w + 0.5);
+    let ori = (flags & 1) != 0;
+    let shaped = (flags & 2) != 0;
     for (var i = 0; i < 64; i = i + 1) {
       if (i >= count) { break; }
       let idx = start + i;
@@ -299,7 +335,20 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       // carving too — a severed hand must not keep biting the field it left.
       if (S.w < 0.5 || S.w > 1.5) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
-      if (ori) { d = smax(d, -sdPrimO(p, idx, data), k); } else { d = smax(d, -sdPrim(p, idx, data), k); }
+      // The shape row is read on the CARVE path too, not only in mapBody.
+      // Skipping it would make a tapered carve a plain capsule in the shader
+      // while validate.ts's carve loop honoured the taper: the two fields would
+      // disagree, and this one backs click-to-shoot, so shots would land where
+      // nothing is drawn.
+      //
+      // The PROFILE is deliberately not read here. Carving folds through smax,
+      // and a chamfered subtraction is a different operator with its own
+      // sign conventions — worth having, but not worth guessing at. A
+      // chamfer on a carve is rejected at authoring time instead
+      // (blob-compile.ts), so this cannot silently do the wrong thing.
+      var r2 = -1.0;
+      if (shaped) { r2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0).x; }
+      if (ori) { d = smax(d, -sdPrimO(p, idx, data, r2), k); } else { d = smax(d, -sdPrim(p, idx, data, r2), k); }
     }
   }
   return d;
@@ -492,8 +541,14 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     if (length(p - bounds.xyz) - bounds.w > d + counts.w * 4.0) { continue; }
     let start = i32(range.x);
     let count = i32(range.y);
-    // w: oriented-cluster flag — same hoist as applyCarves, see sdPrimO.
-    let ori = range.w > 0.5;
+    // range.w is a BITFIELD, not a bool: 1 = oriented cluster, 2 = some prim
+    // here is tapered or chamfered. Both are per-cluster hoists of a per-prim
+    // decision, for the reason sdPrimO's header measures — paying an extra
+    // textureLoad for EVERY prim cost +10-18% frame time. A cluster with no
+    // shaped prims never touches ROW_PRIM_SHAPE at all.
+    let flags = i32(range.w + 0.5);
+    let ori = (flags & 1) != 0;
+    let shaped = (flags & 2) != 0;
     for (var i = 0; i < 64; i = i + 1) {
       if (i >= count) { break; }
       let idx = start + i;
@@ -504,10 +559,17 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
       // One sd evaluation feeds BOTH the smin fold and the argmin tracker —
       // a second call would double the texture fetches this loop lives on.
-      var sd = sdPrim(p, idx, data);
-      if (ori) { sd = sdPrimO(p, idx, data); }
+      var r2 = -1.0;
+      var prof = 0.0;
+      if (shaped) {
+        let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
+        r2 = T.x;
+        prof = T.y;
+      }
+      var sd = sdPrim(p, idx, data, r2);
+      if (ori) { sd = sdPrimO(p, idx, data, r2); }
       if (sd < best) { best = sd; bestIdx = idx; }
-      d = smin(d, sd, k);
+      if (prof > 0.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
     }
   }
   }
@@ -1122,7 +1184,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
  * order given.
  */
 export const HELPERS = [
-  SMIN, SMAX, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
+  // ORDER IS LOAD-BEARING: WGSL requires declaration before use, and wgslFn
+  // concatenates this list as-is. CONE_CAP must precede both sdPrim and
+  // sdPrimO, which now call it; SMIN_CHAMFER must precede mapBody. Adding a
+  // helper and forgetting this list entirely is the quieter failure — the
+  // ordering test below only checks what is IN the list, so an omitted helper
+  // passes every unit test and fails at pipeline creation with a bare WGSL
+  // parse error pointing at the call site.
+  SMIN, SMIN_CHAMFER, SMAX, CONE_CAP, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,

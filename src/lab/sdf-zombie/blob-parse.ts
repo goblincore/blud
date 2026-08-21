@@ -172,8 +172,8 @@ function limbArg(l: BlobLine, word: string): LimbName {
 }
 
 /**
- * Parses `offset=(x,y,z)` into a validated 3-tuple, or `null` if the part
- * has no offset at all.
+ * Parses a `<key>=(x,y,z)` argument into a validated 3-tuple, or `null` if the
+ * part does not carry it. Shared by `offset=` and `tip=`.
  *
  * Arity and finiteness both used to be unchecked: `off.split(',').map
  * (Number)` was cast straight to `[number, number, number]` via `as unknown
@@ -188,17 +188,19 @@ function limbArg(l: BlobLine, word: string): LimbName {
  * cast entirely: once length and finiteness are confirmed, `[x, y, z]` is
  * honestly a `[number, number, number]`.
  */
-function parseOffset(l: BlobLine, raw: string | null): readonly [number, number, number] | null {
+function parseVec3Arg(
+  l: BlobLine, key: string, raw: string | null,
+): readonly [number, number, number] | null {
   if (raw === null) return null;
-  const idx = l.words.findIndex(w => w.startsWith('offset='));
+  const idx = l.words.findIndex(w => w.startsWith(`${key}=`));
   const col = wordCol(l, idx);
   const parts = raw.replace(/[()]/g, '').split(',').map(Number);
   if (parts.length !== 3)
-    throw new BlobError(`offset needs exactly 3 components, got ${parts.length}`, l.line, col);
+    throw new BlobError(`${key} needs exactly 3 components, got ${parts.length}`, l.line, col);
   // Safe to assert: the length check above guarantees indices 0-2 exist.
   const x = parts[0]!, y = parts[1]!, z = parts[2]!;
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z))
-    throw new BlobError('offset has a non-numeric component', l.line, col);
+    throw new BlobError(`${key} has a non-numeric component`, l.line, col);
   return [x, y, z];
 }
 
@@ -333,7 +335,20 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     mirror: l.words.includes('mirror'),
     hard: l.words.includes('hard'),
     both: l.words.includes('both'),
-    offset: parseOffset(l, strArg(l, 'offset')),
+    // A bare word, like `hard`/`mirror`/`both`. `chamfer` swaps the fold from
+    // the quadratic smooth-min to a flat 45-degree bevel, which keeps a crease
+    // where the default gives a fillet.
+    chamfer: l.words.includes('chamfer'),
+    // `r2=` is the radius at the FAR end. Absent (null) means untapered, which
+    // is a different thing from `r2=` equal to `r`: the first takes the plain
+    // capsule path in both fields, the second is an author saying "taper, to
+    // the same radius". Keeping them distinct means the packed data never
+    // depends on a float comparison nobody wrote.
+    radiusB: strArg(l, 'r2') === null ? null : numArg(l, 'r2'),
+    offset: parseVec3Arg(l, 'offset', strArg(l, 'offset')),
+    // `tip=` displaces the FAR end only, so a primitive can point somewhere
+    // its bone does not — a nose out of a vertical skull, a tusk out of a jaw.
+    tip: parseVec3Arg(l, 'tip', strArg(l, 'tip')),
     src: l,
   } satisfies BlobPart);
 }

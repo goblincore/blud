@@ -146,15 +146,35 @@ body
   blob head on skull at=0.60 r=0.040 wide=0.75 tall=1.45 deep=0.40 blend=0.0022 offset=(0.098,0.028,-0.010) both
   blob head on skull at=0.66 r=0.020 wide=0.55 tall=1.30 deep=0.34 blend=0.0018 offset=(0.128,0.082,-0.020) both
 
-  # Nose — shaded by the sheet for the front view, built for the PROFILE. The
-  # first version sat entirely inside the cranium (tip at z 0.108 against a
-  # skull semi-depth of 0.118), which is why it read as a slight bump: that is
-  # all it geometrically was. Two prims so it hooks, approximating WAM's bent
-  # sweep. The tradeoff face.ts names is accepted here — a nose past the planar
-  # projection picks up texture from behind it — which is why the ridge shading
-  # carries the front and the geometry only carries the silhouette.
-  blob head on skull at=0.46 r=0.029 wide=0.85 deep=2.05 blend=0.0032 offset=(0,-0.020,0.094)
-  blob head on skull at=0.42 r=0.019 wide=0.68 deep=1.70 blend=0.0026 offset=(0,-0.058,0.118)
+  # Nose — A REAL POINT NOW, not two ellipsoids faked into a hook.
+  #
+  # What was here: `blob ... deep=2.05` plus a second smaller blob, stretched
+  # forward and stacked to suggest a hook. It never read from the side, and the
+  # reason was structural rather than a tuning failure — the format had one
+  # primitive, a capsule, and one fold, the quadratic smooth-min. Smooth-min
+  # rounds every tip it touches, so the sharpest thing authorable was a small
+  # sphere, and a small sphere on the end of a bigger sphere is a bump.
+  #
+  # Three new pieces of grammar do the work:
+  #   * `tip=(x,y,z)` displaces the FAR end alone, so this runs FORWARD out of
+  #     a vertical skull bone. Every capsule before this ran ALONG its bone.
+  #   * `r2=` is the radius at that far end. 0.004 is 4 mm — effectively a
+  #     point at this scale, and the one shape a capsule cannot make.
+  #   * `chamfer` folds with a flat bevel instead of a fillet, so the bridge
+  #     creases into the brow rather than melting into it.
+  #
+  # Two prims still, but now for a real reason: the first is the bridge running
+  # down and out from between the eyes, the second the hooked tip turning down
+  # off its end. A single straight cone is a beak; the bend is the goblin.
+  #
+  # REACH IS THE WHOLE GAME, and it is easy to under-do. The cranium's own
+  # semi-depth is headRadius 0.126 x headDepth 0.94 = 0.118 m, so anything
+  # whose tip lands inside that is INSIDE THE HEAD and reads as a bump no
+  # matter how sharp it is — which is exactly what the old two-ellipsoid nose
+  # was, and what the first tapered version still was at z=0.122. The hook's
+  # point now sits at z=0.162, a good 44 mm proud of the skull.
+  blob head on skull at=0.47 r=0.031 r2=0.017 wide=0.80 blend=0.0030 chamfer offset=(0,-0.010,0.070) tip=(0,-0.026,0.062)
+  blob head on skull at=0.47 r=0.016 r2=0.004 wide=0.72 blend=0.0016 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
 
   # ARMS AND LEGS — ball joints, deliberately.
   #

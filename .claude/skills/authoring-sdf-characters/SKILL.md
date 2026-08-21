@@ -93,6 +93,45 @@ wrist did not merge in an anatomically convincing way.
 Closed is not the same as convincing. Always open the turntable frames
 before calling a character done.
 
+## Sharp features: `r2=`, `tip=`, `chamfer`
+
+For most of this format's life it had exactly one primitive — an axis-scaled
+capsule — and one fold, the quadratic smooth-min. Between them that ruled out
+every SHARP shape: smooth-min rounds any tip it touches, so the sharpest thing
+authorable was a small sphere, and the only alternative to a fillet was
+`hard` (`blendK: 0`), a raw boolean seam. Three additions close that gap:
+
+- **`r2=`** — the radius at the FAR end. The primitive becomes a round cone.
+  `r2=0` is a **true point**, the one shape a capsule cannot make. Omit it and
+  the primitive takes the plain capsule path, bit-identical to before.
+- **`tip=(x,y,z)`** — displaces the far end ALONE, so a primitive can point
+  somewhere its bone does not. Every capsule before this ran *along* its bone;
+  a nose out of a vertical skull or a tusk out of a jaw needs this. `offset=`
+  still moves both ends together. Under `both`, `tip` mirrors in x with
+  `offset`, so a pair of tusks splays instead of both leaning one way.
+- **`chamfer`** — a bare word like `hard`/`mirror`/`both`. Folds with a flat
+  45° bevel, keeping a **crease** where the default gives a fillet.
+
+```
+# the goblin's hooked nose: a bridge, then a hook turning down off its end
+blob head on skull at=0.47 r=0.031 r2=0.017 blend=0.0030 chamfer offset=(0,-0.010,0.070) tip=(0,-0.026,0.062)
+blob head on skull at=0.47 r=0.016 r2=0.004 blend=0.0016 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
+```
+
+**REACH IS THE WHOLE GAME, and it is easy to under-do.** A sharp point still
+reads as a bump if it stops inside the mass it grows from. The goblin's cranium
+has a semi-depth of `headRadius × headDepth` = 0.118 m; the first tapered nose
+tipped out at 0.122 and was still a bump. Compute the host's extent and clear
+it properly.
+
+Two rejections you will meet, both deliberate:
+
+- `r2=` on a `blob` with no `tip=` — a blob is a sphere, so there is nothing
+  to taper *along* and the cone collapses to its larger end. Use a `bar`, or
+  give the blob a `tip=`.
+- `chamfer` on a `carve` — carving folds through `smax`, which has no
+  chamfered form here. Rejected rather than silently ignored.
+
 ## Colour is the biggest lever you have
 
 Before the `palette` block existed, every `.blob` character wore one global

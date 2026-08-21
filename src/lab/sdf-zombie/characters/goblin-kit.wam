@@ -173,15 +173,25 @@ parts
       cap start=none end=point
   end
 
-  # BREASTPLATE — an open shell around the ribcage, from just under the collar
-  # to the bottom of the chest bone. It stops there deliberately: the gut below
-  # is the goblin's silhouette and armouring it would square off the one shape
-  # that reads as a creature rather than a soldier.
-  loft breastplate bones=chest..chest material=iron frame=fwd
-    ring 0.16 w=0.100 d=0.118
-    ring 0.44 w=0.124 d=0.140
-    ring 0.74 w=0.120 d=0.136
-    ring 0.96 w=0.108 d=0.112
+  # BREASTPLATE — a cuirass over the ribs AND the belly, down to the belt.
+  #
+  # It used to stop at the bottom of the chest bone, which left the whole gut
+  # bare: the owner's verdict was "kind of like a crop top". Lofted along the
+  # whole hips..chest CHAIN now rather than one bone, starting just above the
+  # belt (chain t 0.20 lands at hips t 0.74, and the belt tops out at 0.68).
+  #
+  # The profile is not a smooth taper and should not be: it swells over the
+  # gut, pinches at the waist, and swells again over the ribs, because that is
+  # where the flesh under it goes. Every w/d is measured off the .blob field —
+  # a plate that ignores the pinch either floats at the waist or cuts the
+  # belly.
+  loft breastplate bones=hips..chest material=iron frame=fwd
+    ring 0.20 w=0.144 d=0.196
+    ring 0.40 w=0.138 d=0.180
+    ring 0.60 w=0.116 d=0.142
+    ring 0.76 w=0.124 d=0.142
+    ring 0.90 w=0.116 d=0.124
+    ring 1.00 w=0.108 d=0.112
     cap start=none end=none
 
   # BELT — around the pelvis, above the widest part of the gut. Deliberately

@@ -76,8 +76,14 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     if (mirrorOffset) {
       const o = rest.offset ?? ([0, 0, 0] as const);
       const side = limbFor(limb, null);
+      // `tip` mirrors in x with `offset`, not independently of it. A pair of
+      // tusks reflected only at the base would both lean the same way — the
+      // right one splaying inward across the face — which is the exact bug
+      // this whole `both` path exists to avoid for offsets.
+      const t = rest.tip;
+      const flipT = t === undefined ? undefined : ([-t[0], t[1], t[2]] as const);
       prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side });
-      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], limb: side });
+      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), limb: side });
       continue;
     }
 
