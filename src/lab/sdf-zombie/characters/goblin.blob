@@ -1,0 +1,131 @@
+# Goblin — first port from the WAM cast (~/Projects/2026/horse/models/goblin.wam),
+# and the first character authored in .blob that was not the zombie.
+#
+# WAM builds bodies from `loft`s: a profile swept through rings along a bone
+# chain. .blob has no loft, so every ring becomes a `blob` at the same relative
+# position. That mapping is closer than it sounds — a ring IS an ellipse on a
+# bone, which is what a blob is — but two things do not survive it:
+#
+#   * WAM's `w`/`d` are FULL width and depth; a blob's `r` is a radius. So
+#     r = w/2, and deep = d/w to keep the cross-section's aspect.
+#   * WAM rings run over a bone CHAIN with t normalised across the whole chain;
+#     .blob prims ride ONE bone. Every `at` below was recomputed by walking the
+#     chain length. The torso chain is pelvis(0.14) + spine1(0.10) + chest(0.12)
+#     = 0.36, so WAM's t=0.58 lands 0.209 along, i.e. spine1 at 0.69.
+#
+# Silhouette intent, carried over from the WAM file: stooped and scheming, not
+# standing at attention. Spine pitches forward, neck pitches back to bring the
+# face level, arms hang long and slightly ahead, legs bow out at the thigh and
+# back in at the shin. None of that is animation — it is all rest pose.
+model goblin
+  height 1.15
+
+skeleton
+  root pelvis at 0.425
+
+  bone spine1 parent=pelvis dir=up pitch=13 len=0.10
+  bone chest  parent=spine1 dir=up pitch=9  len=0.12
+  # Neck pitches BACK against the spine's forward lean, or the goblin stares at
+  # its own feet. -17 then -5 lands the face roughly level.
+  #
+  # WAM's neck is 0.045 and that works there, because its neckcol is a separate
+  # mesh sitting proud of the torso. Here the chest's top blob (r 0.143) simply
+  # swallowed a 0.045 neck whole and the head sat straight on the shoulders.
+  # Lengthened until the head clears the shoulder mass.
+  bone neck   parent=chest  dir=up pitch=-17 len=0.085
+  # Named `skull`, not `head` as in the WAM file: facePrims() hardcodes that
+  # bone name, and a .blob character without one throws from resolveBones
+  # before validation ever runs.
+  bone skull  parent=neck   dir=up pitch=-5 len=0.18
+
+  mirror
+    # WAM's own comment says the shoulder must land INSIDE the chest mass or
+    # "the arm floats free". That is right for WAM, where the arm is a separate
+    # mesh that has to overlap to look attached — and exactly WRONG here. In an
+    # SDF, overlapping IS merging: at len=0.058 the shoulder sat at x 0.13
+    # against a chest half-width of 0.146, and smooth-min swallowed both arms
+    # into the torso completely. But overshooting is just as wrong: at len=0.115
+    # fusedOf(torso, armL) went POSITIVE (+0.0027), i.e. the core-to-core path
+    # left the flesh and the arm was hanging on by nothing. 0.092 is the band
+    # between swallowed and detached — the checks found both edges of it.
+    # (WAM also tilts this -14; dropped, because on a `side` base tilt swings
+    # toward +y, not +x, so it does not mean what it means on the arms.)
+    bone clavicle parent=chest    side=0.080 dir=side   len=0.092
+    bone upperarm parent=clavicle dir=down pitch=-14 tilt=9 len=0.17
+    bone forearm  parent=upperarm dir=down pitch=13     len=0.17
+    bone hand     parent=forearm  dir=down              len=0.055
+    # Bowed legs: splay out at the thigh, back in at the shin, so the knee
+    # stands proud of the ankle line.
+    bone thigh    parent=pelvis   dir=down tilt=8  pitch=-9 side=0.092 len=0.195
+    bone shin     parent=thigh    dir=down tilt=-8 pitch=11 len=0.19
+    bone foot     parent=shin     dir=fwd               len=0.10
+  end
+
+body
+  # Pot belly. The widest ring sits low and forward — a goblin's gut hangs over
+  # the belt. .blob cannot split the depth axis the way WAM's dtop/dbot do, so
+  # the gut is symmetric front-to-back here; the back reads flatter in WAM.
+  blob torso on pelvis at=0.00 r=0.128 deep=0.86 blend=0.0075
+  blob torso on pelvis at=0.87 r=0.173 deep=0.84 blend=0.0080
+  blob torso on spine1 at=0.69 r=0.165 deep=0.82 blend=0.0080
+  blob torso on chest  at=0.46 r=0.146 deep=0.82 blend=0.0075
+  blob torso on chest  at=1.00 r=0.126 deep=0.82 blend=0.0075
+
+  # Neck column.
+  bar head on neck from=0.00 to=1.00 r=0.062 deep=0.94 blend=0.0030
+
+  # Signature ears, swept back and angled up. `both` mirrors the offset across
+  # a bone that is not itself mirrored — the same mechanism the zombie's eye
+  # sockets use. WAM yaws these 44 degrees; a blob has no yaw, so the sweep is
+  # faked by stretching wide and flattening deep.
+  blob head on skull at=0.58 r=0.068 wide=1.75 tall=1.35 deep=0.42 blend=0.0028 offset=(0.105,0.030,-0.012) both
+
+  # Long hooked nose — the single biggest cue separating "goblin" from "pig".
+  # WAM bends it with a `sweep`; .blob has no bend, so two blobs stagger down
+  # and forward to suggest the hook.
+  blob head on skull at=0.46 r=0.030 wide=0.90 deep=1.90 blend=0.0035 offset=(0,-0.020,0.055)
+  blob head on skull at=0.42 r=0.020 wide=0.80 deep=1.50 blend=0.0028 offset=(0,-0.045,0.078)
+
+  # Spindly arms with a knobbly elbow.
+  #
+  # These were five blobs, one per WAM ring, and they read as a STRING OF BEADS.
+  # A loft is a continuous swept surface, so ring-per-slice is natural in WAM; in
+  # an SDF the equivalent of a tapering loft is a CAPSULE, and blobs are for the
+  # lumps that interrupt it. Shafts are bars now, and the one surviving blob is
+  # the elbow knob — the thing the taper exists to sell.
+  bar  arm on upperarm from=0.05 to=0.95 r=0.050 blend=0.0045 mirror
+  blob arm on forearm  at=0.00        r=0.049 blend=0.0050 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.037 blend=0.0045 mirror
+
+  # Big grabby hands. Goblins are all nose, ears and hands.
+  blob arm on hand at=0.45 r=0.056 deep=0.91 blend=0.0050 mirror
+
+  # Bowed legs, same treatment: shaft as a bar, calf bulge as the one blob.
+  # The bulge sits at the knee joint, not mid-shin.
+  bar  leg on thigh from=0.02 to=0.95 r=0.068 blend=0.0050 mirror
+  blob leg on shin  at=0.11         r=0.064 blend=0.0050 mirror
+  bar  leg on shin  from=0.05 to=0.95 r=0.048 blend=0.0045 mirror
+
+  # Splayed, oversized feet — they anchor a top-heavy silhouette.
+  blob leg on foot at=0.50 r=0.070 tall=0.75 deep=0.90 blend=0.0045 mirror
+
+# The head itself is facePrims(), not geometry authored here — .blob gets the
+# zombie's parameterised skull whatever character it is. Pushed toward goblin
+# proportions: a bigger cranium relative to a 1.15 m body, a jutting jaw for the
+# snout, and a heavier brow for the scowl. The pointed cranium taper and the
+# tusks in the WAM file have no analog at all.
+face
+  headRadius 0.150
+  headWidth  0.96
+  headHeight 1.02
+  headDepth  0.94
+  jawWidth   0.70
+  jawHeight  0.78
+  jawDrop    0.062
+  jawJut     0.072
+  noseLength 0.006
+  noseWidth  0.34
+  noseDrop   0.012
+  browHeavy  0.014
+  browRise   0.038
+  headBlend  0.0030

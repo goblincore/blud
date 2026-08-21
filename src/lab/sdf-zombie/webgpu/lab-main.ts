@@ -37,6 +37,27 @@ import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
+import goblinBlobSrc from '../characters/goblin.blob?raw';
+
+/**
+ * Every authored .blob character, by the name you pass as `?character=`.
+ *
+ * The lab hardcoded zombie.blob until the first port (goblin) had nowhere to be
+ * looked at — and a character you cannot see is one you cannot judge, which is
+ * the whole reason the turntable exists. Unknown or absent falls back to the
+ * zombie rather than erroring, so a bad URL never blanks the lab.
+ */
+const CHARACTERS: Record<string, string> = {
+  zombie: zombieBlobSrc,
+  goblin: goblinBlobSrc,
+};
+
+function activeCharacterSrc(): string {
+  const want = new URLSearchParams(location.search).get('character');
+  if (want && !(want in CHARACTERS))
+    console.warn(`[blob] unknown character "${want}", using zombie. Known: ${Object.keys(CHARACTERS).join(', ')}`);
+  return (want && CHARACTERS[want]) || zombieBlobSrc;
+}
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { BlobError } from '../blob-ast';
@@ -184,7 +205,7 @@ let blobCompileWarned = false;
 let lastBlobCompileError: string | null = null;
 function compileZombie(face: FaceParams): BodyDef | null {
   try {
-    const doc = parseBlob(zombieBlobSrc);
+    const doc = parseBlob(activeCharacterSrc());
     compileFace(doc); // validates zombie.blob's face block; return value unused, see above
     const compiled = compileBlob(doc, face);
     lastBlobCompileError = null;
