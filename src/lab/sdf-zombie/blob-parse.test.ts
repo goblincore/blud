@@ -116,4 +116,34 @@ describe('parseBlob — skeleton', () => {
   it('rejects an unclosed mirror block', () => {
     expect(() => parseBlob(SKEL.replace('  end\n', ''))).toThrow(/mirror block is never closed/);
   });
+
+  it('rejects an unrecognized keyword inside skeleton, naming the word and section', () => {
+    const bad = SKEL.replace('bone spine parent=pelvis', 'boen spine parent=pelvis');
+    expect(() => parseBlob(bad)).toThrow(BlobError);
+    expect(() => parseBlob(bad)).toThrow(/unrecognized "boen" in skeleton block/);
+  });
+
+  // Regression test: a prior implementation reported this error at
+  // col = indent + 1 (the "r" of "root") no matter where the bad value
+  // actually was, because it validated `at`'s value by wrapping it in a
+  // fake single-word BlobLine before handing it to `numArg` — leaving no
+  // preceding words for `wordCol` to sum. Assert the column lands on the
+  // bad token itself, using the same reconstruct-and-slice technique as the
+  // `numArg` column test above.
+  it('reports the "at" column on a malformed root line, pointing at the bad value rather than at "root"', () => {
+    const bad = SKEL.replace('root pelvis at 0.92', 'root pelvis at oops');
+    const rootLine = tokenize(bad)[3]!;
+    const reconstructed = ' '.repeat(rootLine.indent) + rootLine.words.join(' ');
+    expect(reconstructed).toBe('  root pelvis at oops');
+
+    let err: BlobError | undefined;
+    try {
+      parseBlob(bad);
+    } catch (e) {
+      err = e as BlobError;
+    }
+    expect(err).toBeInstanceOf(BlobError);
+    expect(reconstructed.slice(err!.col - 1, err!.col - 1 + 'oops'.length)).toBe('oops');
+    expect(err!.col).not.toBe(rootLine.indent + 1);
+  });
 });

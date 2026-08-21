@@ -102,67 +102,124 @@ function strArg(l: BlobLine, key: string): string | null {
 }
 
 /**
+ * Mutable state threaded through the per-section line handlers below.
+ * `doc` accumulates the parse result; `known`/`inMirror`/`mirrorOpenedAt`
+ * are skeleton-specific bookkeeping that only `parseSkeletonLine` reads or
+ * writes today, but live here (rather than as closured locals in
+ * `parseBlob`) so a future section handler can share the shape without a
+ * second ad-hoc state object.
+ */
+interface ParseState {
+  doc: BlobDoc;
+  known: Set<string>;
+  inMirror: boolean;
+  mirrorOpenedAt: number;
+}
+
+/**
+ * Handles one line already known to be inside a `skeleton` block:
+ * `mirror`/`end`, `root`, or `bone`. Any other keyword is a mistake in the
+ * document — most likely a typo — and must be loud about it. Silently
+ * skipping it would both drop a bone the author thought they declared AND
+ * (since the line isn't pushed to `doc.structure` either) delete the line
+ * outright the next time Task 8's emitter round-trips the document.
+ */
+function parseSkeletonLine(l: BlobLine, s: ParseState): void {
+  const [head, ...rest] = l.words;
+
+  if (head === 'mirror') { s.inMirror = true; s.mirrorOpenedAt = l.line; s.doc.structure.push(l); return; }
+  if (head === 'end') { s.inMirror = false; s.doc.structure.push(l); return; }
+
+  if (head === 'root') {
+    s.doc.structure.push(l);
+    s.doc.rootBone = rest[0]!;
+    // Surface syntax is `root pelvis at 0.92` — space-separated, not
+    // `at=` — so this can't reuse `numArg` directly. It used to anyway, by
+    // wrapping word 3 in a fake single-word `BlobLine` and calling
+    // `numArg` on that. That broke `wordCol`'s column math (which sums the
+    // lengths of the PRECEDING words to find where word 3 starts): with a
+    // one-element `words` array there are no preceding words to sum, so
+    // every error landed on col = indent + 1 — the "r" of "root" — no
+    // matter where "at"'s value actually was. Reading the word directly
+    // and using the real `wordCol(l, 3)` fixes that.
+    const atWord = l.words[3];
+    if (atWord === undefined)
+      throw new BlobError('root needs "at <height>"', l.line, wordCol(l, 3));
+    const height = Number(atWord);
+    if (!Number.isFinite(height))
+      throw new BlobError('"at" value is not a number', l.line, wordCol(l, 3));
+    s.doc.rootHeight = height;
+    s.known.add(s.doc.rootBone);
+    return;
+  }
+
+  if (head === 'bone') {
+    const name = rest[0]!;
+    const parent = strArg(l, 'parent');
+    if (parent === null) throw new BlobError('bone needs "parent="', l.line, l.indent + 1);
+    if (!s.known.has(parent))
+      throw new BlobError(`unknown parent "${parent}"`, l.line, l.indent + 1);
+    s.doc.bones.push({
+      name, parent, dir: dirArg(l),
+      pitchDeg: numArg(l, 'pitch', 0), tiltDeg: numArg(l, 'tilt', 0),
+      len: numArg(l, 'len'), side: numArg(l, 'side', 0),
+      at: strArg(l, 'at') === null ? null : numArg(l, 'at'),
+      mirror: s.inMirror, src: l,
+    } satisfies BlobBone);
+    s.known.add(name);
+    return;
+  }
+
+  throw new BlobError(`unrecognized "${head}" in skeleton block`, l.line, l.indent + 1);
+}
+
+/**
+ * `body` and `face` sections don't have a grammar yet — Task 3 adds one to
+ * each. Until then, every line inside either section is accepted and
+ * silently skipped: not validated, not pushed to `doc.structure`. That's
+ * deliberately permissive rather than strict like `parseSkeletonLine`,
+ * because there is no real grammar yet to be strict against — treating an
+ * unrecognized `body`/`face` line as an error today would stop a document
+ * with either section from parsing at all, before Task 3 exists to give it
+ * one. Task 3 replaces these stubs with real per-line parsing and gets the
+ * same strictness `parseSkeletonLine` already has.
+ */
+function parseBodyLine(_l: BlobLine, _s: ParseState): void {}
+function parseFaceLine(_l: BlobLine, _s: ParseState): void {}
+
+/**
  * Parses a whole document. Throws BlobError on the first problem.
  *
- * Only the `skeleton` block is handled so far (Task 2). `body` and `face`
- * lines are recognized enough to track section/nesting for `structure` (see
- * BlobDoc.structure doc comment — the emitter needs every unowned line, or it
- * silently drops block keywords on round-trip) but their content is parsed
- * by later tasks.
+ * Only the `skeleton` block is fully implemented so far (Task 2) — see
+ * `parseBodyLine`/`parseFaceLine` above for the current state of the other
+ * two.
  */
 export function parseBlob(src: string): BlobDoc {
   const lines = tokenize(src);
-  const doc: BlobDoc = {
-    name: '', height: null, rootBone: '', rootHeight: 0,
-    bones: [], parts: [], face: null, faceTrivia: [], structure: [], trailingTrivia: [],
+  const s: ParseState = {
+    doc: {
+      name: '', height: null, rootBone: '', rootHeight: 0,
+      bones: [], parts: [], face: null, faceTrivia: [], structure: [], trailingTrivia: [],
+    },
+    known: new Set<string>(),
+    inMirror: false,
+    mirrorOpenedAt: 0,
   };
-  const known = new Set<string>();
-  let inMirror = false;
-  let mirrorOpenedAt = 0;
   let section = '';
 
   for (const l of lines) {
     const [head, ...rest] = l.words;
 
-    if (head === 'model') { doc.name = rest[0] ?? ''; section = 'model'; doc.structure.push(l); continue; }
-    if (head === 'height' && section === 'model') { doc.height = Number(rest[0]); doc.structure.push(l); continue; }
-    if (head === 'skeleton' || head === 'body' || head === 'face') { section = head; doc.structure.push(l); continue; }
+    if (head === 'model') { s.doc.name = rest[0] ?? ''; section = 'model'; s.doc.structure.push(l); continue; }
+    if (head === 'height' && section === 'model') { s.doc.height = Number(rest[0]); s.doc.structure.push(l); continue; }
+    if (head === 'skeleton' || head === 'body' || head === 'face') { section = head; s.doc.structure.push(l); continue; }
 
-    if (section === 'skeleton') {
-      if (head === 'mirror') { inMirror = true; mirrorOpenedAt = l.line; doc.structure.push(l); continue; }
-      if (head === 'end') { inMirror = false; doc.structure.push(l); continue; }
-
-      if (head === 'root') {
-        doc.structure.push(l);
-        doc.rootBone = rest[0]!;
-        // Surface syntax is `root pelvis at 0.92` — space-separated, not
-        // `at=`. Rewrap word 3 as `at=<value>` so `numArg` can parse and
-        // report it with its normal column math; do not change the syntax.
-        doc.rootHeight = numArg({ ...l, words: [`at=${l.words[3]}`] }, 'at');
-        known.add(doc.rootBone);
-        continue;
-      }
-
-      if (head === 'bone') {
-        const name = rest[0]!;
-        const parent = strArg(l, 'parent');
-        if (parent === null) throw new BlobError('bone needs "parent="', l.line, l.indent + 1);
-        if (!known.has(parent))
-          throw new BlobError(`unknown parent "${parent}"`, l.line, l.indent + 1);
-        doc.bones.push({
-          name, parent, dir: dirArg(l),
-          pitchDeg: numArg(l, 'pitch', 0), tiltDeg: numArg(l, 'tilt', 0),
-          len: numArg(l, 'len'), side: numArg(l, 'side', 0),
-          at: strArg(l, 'at') === null ? null : numArg(l, 'at'),
-          mirror: inMirror, src: l,
-        } satisfies BlobBone);
-        known.add(name);
-        continue;
-      }
-    }
+    if (section === 'skeleton') { parseSkeletonLine(l, s); continue; }
+    if (section === 'body') { parseBodyLine(l, s); continue; }
+    if (section === 'face') { parseFaceLine(l, s); continue; }
   }
 
-  if (inMirror) throw new BlobError('mirror block is never closed', mirrorOpenedAt, 1);
-  if (!doc.rootBone) throw new BlobError('no "root" bone declared', 1, 1);
-  return doc;
+  if (s.inMirror) throw new BlobError('mirror block is never closed', s.mirrorOpenedAt, 1);
+  if (!s.doc.rootBone) throw new BlobError('no "root" bone declared', 1, 1);
+  return s.doc;
 }
