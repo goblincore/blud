@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/blob-parse.ts
-import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, BlobError } from './blob-ast';
+import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, type BlobStance, BlobError } from './blob-ast';
 
 /**
  * A `BlobLine[]` with one extra property: the comment/blank trivia that
@@ -384,7 +384,7 @@ export function parseBlob(src: string): BlobDoc {
   const lines = tokenize(src);
   const s: ParseState = {
     doc: {
-      name: '', height: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
+      name: '', height: null, stance: 'humanoid', rootBone: '', rootHeight: 0, rootLen: 0.14,
       bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),
@@ -398,6 +398,15 @@ export function parseBlob(src: string): BlobDoc {
 
     if (head === 'model') { s.doc.name = rest[0] ?? ''; section = 'model'; s.doc.structure.push(l); continue; }
     if (head === 'height' && section === 'model') { s.doc.height = Number(rest[0]); s.doc.structure.push(l); continue; }
+    if (head === 'stance' && section === 'model') {
+      const v = rest[0];
+      if (v !== 'humanoid' && v !== 'digitigrade')
+        throw new BlobError(
+          `stance must be humanoid or digitigrade, got "${v ?? ''}"`, l.line, l.indent + 1);
+      s.doc.stance = v as BlobStance;
+      s.doc.structure.push(l);
+      continue;
+    }
     if (head === 'skeleton' || head === 'body' || head === 'face' || head === 'sheet') { section = head; s.doc.structure.push(l); continue; }
 
     if (section === 'skeleton') { parseSkeletonLine(l, s); continue; }

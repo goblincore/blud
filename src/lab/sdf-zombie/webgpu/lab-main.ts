@@ -60,6 +60,7 @@ function activeCharacterSrc(): string {
 }
 import { parseBlob } from '../blob-parse';
 import { generateFaceSheet } from '../blob-face-sheet';
+import { checkStance } from '../blob-checks';
 import { compileBlob, compileFace, compileSheet } from '../blob-compile';
 import { BlobError } from '../blob-ast';
 import {
@@ -204,9 +205,11 @@ let blobCompileWarned = false;
  * silently compiling with the panel's values and no diagnostic.
  */
 let lastBlobCompileError: string | null = null;
+let lastBlobStance: 'humanoid' | 'digitigrade' | null = null;
 function compileZombie(face: FaceParams): BodyDef | null {
   try {
     const doc = parseBlob(activeCharacterSrc());
+    lastBlobStance = doc.stance;
     compileFace(doc); // validates zombie.blob's face block; return value unused, see above
     const compiled = compileBlob(doc, face);
     lastBlobCompileError = null;
@@ -231,6 +234,13 @@ function compileZombie(face: FaceParams): BodyDef | null {
 function buildZombieBody(face: FaceParams, opts: BodyOverride): BuildResult {
   const compiled = compileZombie(face);
   const result = buildBody(compiled ?? makeZombie(face), DEFAULT_BUILD_OPTS, opts);
+  // Declared-vs-actual knee fold. Surfaced next to validateBody's own errors
+  // because it is the same kind of finding — something the author almost
+  // certainly did not mean — and because a backward knee is otherwise
+  // invisible to every geometric check: it is perfectly closed, connected and
+  // non-interpenetrating.
+  if (compiled && lastBlobStance)
+    result.errors = [...checkStance(result.bones, lastBlobStance), ...result.errors];
   if (lastBlobCompileError) {
     result.errors = [
       `zombie.blob failed to compile, rendering the fallback TS zombie: ${lastBlobCompileError}`,

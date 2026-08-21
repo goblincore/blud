@@ -19,6 +19,8 @@
 # back in at the shin. None of that is animation — it is all rest pose.
 model goblin
   height 1.30
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
 
 skeleton
   # ELONGATED, not squat. The first pass put the hip at 0.425 of a 1.15 m body
@@ -58,8 +60,21 @@ skeleton
     bone hand     parent=forearm  dir=down             len=0.072
     # Long bowed legs: splay out at the thigh, back in at the shin, so the knee
     # stands proud of the ankle line.
-    bone thigh    parent=pelvis   dir=down tilt=7  pitch=-8 side=0.072 len=0.290
-    bone shin     parent=thigh    dir=down tilt=-7 pitch=10 len=0.270
+    #
+    # PITCH SIGNS ARE FLIPPED FROM THE WAM SOURCE, deliberately. Ported
+    # verbatim (thigh pitch=-9, shin pitch=+11) they gave a digitigrade leg —
+    # thigh angling BACK and shin forward puts the knee behind the hip-to-ankle
+    # line, which reads as a kangaroo hock rather than a knee. In .blob a
+    # positive pitch always carries a bone toward +z, so a humanoid knee wants
+    # the opposite: thigh FORWARD, shin back, ankle ending up under the hip.
+    #
+    # This is also the rule the motion work already settled for the zombie —
+    # `ik.poleReflect` exists because an unconstrained FABRIK solve folded the
+    # knee backwards and kept it, which is the "cow walk" in that code's own
+    # comments. A character authored with a backward knee at rest would fight
+    # its own IK.
+    bone thigh    parent=pelvis   dir=down tilt=7  pitch=9  side=0.072 len=0.290
+    bone shin     parent=thigh    dir=down tilt=-7 pitch=-11 len=0.270
     bone foot     parent=shin     dir=fwd              len=0.130
   end
 

@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/blob-checks.test.ts
 import { describe, expect, it, vi } from 'vitest';
 import { compileBlob } from './blob-compile';
-import { clearOf, fusedOf, worstFieldOnSegment } from './blob-checks';
+import { clearOf, fusedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
@@ -208,5 +208,50 @@ describe('blob checks — lab zombie', () => {
     const armL = b.clusters.find(c => c.limb === 'armL')!;
     const legL = b.clusters.find(c => c.limb === 'legL')!;
     expect(clearOf(b, armL, legL)).toBeLessThanOrEqual(0);
+  });
+});
+
+describe('knee stance', () => {
+  const legs = (kneeZ: number) => new Map([
+    ['thigh.l', { head: [0, 0.6, 0] as Vec3, tail: [0, 0.32, kneeZ] as Vec3 }],
+    ['shin.l', { head: [0, 0.32, kneeZ] as Vec3, tail: [0, 0.04, 0] as Vec3 }],
+  ]);
+
+  it('reports a forward knee as positive and a backward one as negative', () => {
+    expect(kneeOffset(legs(0.05), 'l')!).toBeGreaterThan(0);
+    expect(kneeOffset(legs(-0.05), 'l')!).toBeLessThan(0);
+  });
+
+  it('returns null for a body with no leg chain, rather than guessing', () => {
+    expect(kneeOffset(new Map(), 'l')).toBeNull();
+  });
+
+  it('passes when the fold matches the declaration, either way round', () => {
+    expect(checkStance(legs(0.05), 'humanoid')).toEqual([]);
+    expect(checkStance(legs(-0.05), 'digitigrade')).toEqual([]);
+  });
+
+  // The failure this exists for: WAM's leg pitches ported verbatim produced a
+  // kangaroo hock that passed every geometric check, because a backward knee
+  // is perfectly closed, connected and non-interpenetrating.
+  it('catches a knee folded the way the model did NOT declare', () => {
+    const errs = checkStance(legs(-0.05), 'humanoid');
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toMatch(/folds digitigrade.*declares stance humanoid/);
+  });
+
+  it('ignores a knee within tolerance of straight, where there is no fold', () => {
+    expect(checkStance(legs(0.001), 'digitigrade')).toEqual([]);
+  });
+
+  it('agrees with the shipped goblin, which declares humanoid', async () => {
+    const src = (await import('./characters/goblin.blob?raw')).default;
+    const { parseBlob } = await import('./blob-parse');
+    const { compileBlob } = await import('./blob-compile');
+    const { buildBody } = await import('./build-body');
+    const doc = parseBlob(src);
+    const b = buildBody(compileBlob(doc));
+    expect(doc.stance).toBe('humanoid');
+    expect(checkStance(b.bones, doc.stance)).toEqual([]);
   });
 });

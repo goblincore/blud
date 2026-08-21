@@ -62,9 +62,22 @@ export interface BlobPart {
   src: BlobLine;
 }
 
+/**
+ * Which way the knee folds.
+ *
+ * `humanoid` puts the knee FORWARD of the hip-to-ankle line; `digitigrade`
+ * puts it behind, the hock of a hound or a kangaroo. Both are legitimate — a
+ * beast wants the backward fold — but getting it by accident is easy and looks
+ * like a modelling mistake, so it is declared and then checked rather than
+ * left implicit in a pitch sign.
+ */
+export type BlobStance = 'humanoid' | 'digitigrade';
+
 export interface BlobDoc {
   name: string;
   height: number | null;
+  /** Declared knee fold. Defaults to humanoid, which is what the IK expects. */
+  stance: BlobStance;
   rootBone: string;
   rootHeight: number;
   /** Root bone length. `root <name> at <h> len=<l>`; 0.14 when omitted. */

@@ -253,3 +253,66 @@ export function clearOf(body: Field, a: ClusterInfo, b: ClusterInfo): number {
   }
   return worst;
 }
+
+// ---------------------------------------------------------------------------
+// Knee stance
+// ---------------------------------------------------------------------------
+
+/**
+ * Signed forward offset of the knee from the straight hip-to-ankle line, in
+ * metres. Positive is FORWARD (+z): a humanoid knee. Negative is a backward
+ * hock — a hound, a kangaroo.
+ *
+ * Returns null when the character has no leg chain by these names, so a body
+ * that simply has no legs is not reported as having the wrong kind.
+ */
+export function kneeOffset(
+  bones: Map<string, { head: Vec3; tail: Vec3 }>, side: 'l' | 'r',
+): number | null {
+  const thigh = bones.get(`thigh.${side}`);
+  const shin = bones.get(`shin.${side}`);
+  if (!thigh || !shin) return null;
+  const [hip, knee, ankle] = [thigh.head, thigh.tail, shin.tail];
+  const span = ankle[1] - hip[1];
+  if (Math.abs(span) < 1e-6) return null; // degenerate: hip and ankle level
+  const t = (knee[1] - hip[1]) / span;
+  return knee[2] - (hip[2] + (ankle[2] - hip[2]) * t);
+}
+
+/**
+ * Checks the knees fold the way the document declared.
+ *
+ * Both folds are legitimate — a beast wants the backward hock — but a knee
+ * folded the wrong way by accident reads as a modelling error, and it also
+ * fights the rig: `ik.poleReflect` exists because an unconstrained FABRIK
+ * solve folded a knee backwards and KEPT it, which that code's comments call
+ * the "cow walk". So the direction is declared in the `.blob` and verified
+ * here rather than left implicit in the sign of a pitch.
+ *
+ * This is the first INTENT check in the format — the spec deferred that whole
+ * category on the grounds that a turntable and an eye judge intent better. It
+ * earns an exception because it has an unambiguous measurable definition, and
+ * because the failure it catches actually happened: porting WAM's leg pitches
+ * verbatim produced a kangaroo hock that passed every geometric check.
+ *
+ * `tolerance` ignores a knee within a few millimetres of straight, where the
+ * fold direction is not meaningfully either way.
+ */
+export function checkStance(
+  bones: Map<string, { head: Vec3; tail: Vec3 }>,
+  stance: 'humanoid' | 'digitigrade',
+  tolerance = 0.004,
+): string[] {
+  const errs: string[] = [];
+  for (const side of ['l', 'r'] as const) {
+    const off = kneeOffset(bones, side);
+    if (off === null || Math.abs(off) <= tolerance) continue;
+    const actual = off > 0 ? 'humanoid' : 'digitigrade';
+    if (actual !== stance)
+      errs.push(
+        `leg ${side} folds ${actual} (knee ${off >= 0 ? '+' : ''}${off.toFixed(4)} m ` +
+        `from the hip-to-ankle line) but the model declares stance ${stance} — ` +
+        `flip the thigh/shin pitch signs, or change the declaration`);
+  }
+  return errs;
+}
