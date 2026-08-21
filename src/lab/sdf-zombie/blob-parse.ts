@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/blob-parse.ts
-import { type BlobBone, type BlobDoc, type BlobLine, BlobError } from './blob-ast';
+import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, BlobError } from './blob-ast';
 
 /**
  * Splits source into significant lines, hanging comment/blank trivia off the
@@ -174,25 +174,79 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
 }
 
 /**
- * `body` and `face` sections don't have a grammar yet — Task 3 adds one to
- * each. Until then, every line inside either section is accepted and
- * silently skipped: not validated, not pushed to `doc.structure`. That's
- * deliberately permissive rather than strict like `parseSkeletonLine`,
- * because there is no real grammar yet to be strict against — treating an
- * unrecognized `body`/`face` line as an error today would stop a document
- * with either section from parsing at all, before Task 3 exists to give it
- * one. Task 3 replaces these stubs with real per-line parsing and gets the
- * same strictness `parseSkeletonLine` already has.
+ * Handles one line already known to be inside a `body` block: `blob`, `bar`,
+ * or `carve`. Like `parseSkeletonLine`, an unrecognized keyword throws
+ * rather than vanishing — silently skipping it would drop the part from
+ * both `doc.parts` and the emitter's output, which is exactly the kind of
+ * silent data loss a typo in a character file must not cause.
+ *
+ * `blob`/`bar` both name a limb as their second word (`blob torso on
+ * spine`); `carve` doesn't — `carve on spine ...` targets a bone directly,
+ * with no limb word to read — so its `limb` is hardcoded to `'head'` rather
+ * than read from `rest[0]`. (Carves in this lab are head/face detail cuts;
+ * if a body carve ever needs a different limb, `'head'` would need to
+ * become a real word in the grammar, not stay guessed here.)
  */
-function parseBodyLine(_l: BlobLine, _s: ParseState): void {}
-function parseFaceLine(_l: BlobLine, _s: ParseState): void {}
+function parseBodyLine(l: BlobLine, s: ParseState): void {
+  const [head, ...rest] = l.words;
+  const kind = head as BlobPartKind;
+  if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve')
+    throw new BlobError(`unrecognized "${head}" in body block`, l.line, l.indent + 1);
+
+  // `carve on skull ...` has no limb word; `blob torso on spine ...` does.
+  const onIdx = l.words.indexOf('on');
+  if (onIdx === -1) throw new BlobError(`${kind} needs "on <bone>"`, l.line, l.indent + 1);
+  const bone = l.words[onIdx + 1];
+  if (bone === undefined) throw new BlobError(`${kind} needs "on <bone>"`, l.line, l.indent + 1);
+  if (!s.known.has(bone))
+    throw new BlobError(`unknown bone "${bone}"`, l.line, wordCol(l, onIdx + 1));
+
+  const isBar = kind === 'bar';
+  if (isBar && strArg(l, 'to') === null)
+    throw new BlobError('bar needs "to="', l.line, l.indent + 1);
+
+  const off = strArg(l, 'offset');
+  s.doc.parts.push({
+    kind,
+    limb: kind === 'carve' ? 'head' : (rest[0] as BlobPart['limb']),
+    bone,
+    at: isBar ? numArg(l, 'from') : numArg(l, 'at'),
+    to: isBar ? numArg(l, 'to') : null,
+    radius: numArg(l, 'r'),
+    wide: numArg(l, 'wide', 1),
+    tall: numArg(l, 'tall', 1),
+    deep: numArg(l, 'deep', 1),
+    blend: numArg(l, 'blend', 0),
+    mirror: l.words.includes('mirror'),
+    hard: l.words.includes('hard'),
+    both: l.words.includes('both'),
+    offset: off === null
+      ? null
+      : (off.replace(/[()]/g, '').split(',').map(Number) as unknown as [number, number, number]),
+    src: l,
+  } satisfies BlobPart);
+}
+
+/**
+ * Handles one line already known to be inside a `face` block: plain
+ * `name value` pairs (`headRadius 0.118`), pushed straight into
+ * `doc.face` as a flat number map. `faceTrivia` keeps the source `BlobLine`
+ * for each entry — same reason `src` rides along on every `BlobPart` — so
+ * Task 8's emitter has the comment/blank trivia to re-attach on round trip.
+ */
+function parseFaceLine(l: BlobLine, s: ParseState): void {
+  const [head, ...rest] = l.words;
+  if (head === undefined) return;
+  const v = Number(rest[0]);
+  if (!Number.isFinite(v))
+    throw new BlobError(`face parameter "${head}" is not a number`, l.line, wordCol(l, 1));
+  s.doc.face ??= {};
+  s.doc.face[head] = v;
+  s.doc.faceTrivia.push(l);
+}
 
 /**
  * Parses a whole document. Throws BlobError on the first problem.
- *
- * Only the `skeleton` block is fully implemented so far (Task 2) — see
- * `parseBodyLine`/`parseFaceLine` above for the current state of the other
- * two.
  */
 export function parseBlob(src: string): BlobDoc {
   const lines = tokenize(src);

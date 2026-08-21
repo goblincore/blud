@@ -147,3 +147,58 @@ describe('parseBlob — skeleton', () => {
     expect(err!.col).not.toBe(rootLine.indent + 1);
   });
 });
+
+const FULL = `model zombie
+  height 1.78
+
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=7 len=0.34
+  mirror
+    bone thigh parent=pelvis dir=down side=0.10 len=0.40
+  end
+
+body
+  blob torso on spine at=0.80 r=0.150 wide=1.28 deep=0.78 blend=0.014
+  bar  leg on thigh from=0.05 to=0.95 r=0.082 blend=0.0175 mirror
+  carve on spine at=0.55 r=0.022 offset=(0.035,0.01,0.06) hard both
+
+face
+  headRadius 0.118
+  headWidth  0.760
+`;
+
+describe('parseBlob — body and face', () => {
+  it('reads a blob part, defaulting unnamed axes to 1', () => {
+    const p = parseBlob(FULL).parts[0]!;
+    expect(p).toMatchObject({
+      kind: 'blob', limb: 'torso', bone: 'spine', at: 0.80, to: null,
+      radius: 0.150, wide: 1.28, tall: 1, deep: 0.78, blend: 0.014,
+      mirror: false, hard: false, both: false, offset: null,
+    });
+  });
+
+  it('reads a bar as a span with from/to', () => {
+    const p = parseBlob(FULL).parts[1]!;
+    expect(p).toMatchObject({ kind: 'bar', limb: 'leg', at: 0.05, to: 0.95, mirror: true });
+  });
+
+  it('reads a carve with its offset triple and hard/both flags', () => {
+    const p = parseBlob(FULL).parts[2]!;
+    expect(p).toMatchObject({ kind: 'carve', hard: true, both: true, offset: [0.035, 0.01, 0.06] });
+  });
+
+  it('reads the face block as plain named parameters', () => {
+    expect(parseBlob(FULL).face).toEqual({ headRadius: 0.118, headWidth: 0.760 });
+  });
+
+  it('rejects a part riding a bone that does not exist', () => {
+    const bad = FULL.replace('blob torso on spine', 'blob torso on ghost');
+    expect(() => parseBlob(bad)).toThrow(/unknown bone "ghost"/);
+  });
+
+  it('rejects a bar without to=', () => {
+    const bad = FULL.replace('from=0.05 to=0.95 ', 'from=0.05 ');
+    expect(() => parseBlob(bad)).toThrow(/bar needs "to="/);
+  });
+});
