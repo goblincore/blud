@@ -1092,6 +1092,15 @@ git commit -m "feat(sdf-lab): author zombie.blob and pin it to the TypeScript zo
 
 ## Task 6: Render a `.blob` character in the lab
 
+> **Settle which file is canonical.** After Task 5 there are two complete
+> descriptions of the zombie: `body.ts`'s `ZOMBIE_BASE` and `zombie.blob`. That
+> is not silent rot today — the anchor test fails loudly if they diverge, which
+> is its whole job — but nothing tells an editor which one to tune. Once the lab
+> renders from `.blob`, mark `ZOMBIE_BASE` as a frozen reference kept honest by
+> the anchor test, so the next person does not tune the file the game no longer
+> reads.
+
+
 **Files:**
 - Modify: `src/lab/sdf-zombie/webgpu/lab-main.ts:172-173`
 - Test: `src/lab/sdf-zombie/blob-compile.test.ts`
