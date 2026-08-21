@@ -294,6 +294,29 @@ sim — the language describes a *rest body*, not clips); palette/materials (the
 lab's flesh presets and `X1.3` retune own that, and adding a second colour
 authority now would fight it); a direct-manipulation GUI.
 
+### Validation plan: port the existing WAM cast *(owner call, 2026-08-20)*
+
+Once the language works, prove it by building a real cast — goblin, troll,
+knight and friends. The strong version of this test is not to invent new
+characters but to **port the eight that already exist** in
+`~/Projects/2026/horse/models/` (goblin, imp, knight, lizardman, ogre, orc,
+skeleton, troll — 3,300 lines of `.wam`).
+
+Why that is the better test:
+
+- They are known-good and owner-approved, so a bad result indicts the language
+  rather than the art.
+- They were authored for a POLYGON backend, so they exercise shapes `.blob` was
+  not designed around — the honest way to find what the format cannot say.
+- It is a direct A/B against WAM, on the same subjects.
+- Eight characters is enough to answer the deferred GUI question: if authoring
+  the eighth is still slow, text plus a turntable was not enough.
+
+Expect the port to surface genuine gaps. `blend` has no `.wam` analog and will
+have to be invented per character; the troll's `boulder` hand and the skeleton's
+exposed ribs may not be expressible as blended primitives at all. Those findings
+are the point.
+
 **Explicitly deferred, pending 2–3 characters authored:** whether "inventing the
 shape" needs a drag-a-blob GUI. Text plus a fast turntable may be enough; that
 is cheaper to learn than to guess.
