@@ -55,9 +55,23 @@ export function dirVector(
   const y1 = y0 * Math.cos(p) - ySign * z0 * Math.sin(p);
   const z1 = Math.abs(y0) * Math.sin(p) + z0 * Math.cos(p);
 
-  // Tilt about Z: y toward x. Negated so a positive tilt on `down` swings +x.
+  // Tilt: y toward x, always toward +x regardless of the sign of y1 — the
+  // exact twin of the pitch fix above, and the same bug: a plain rotation
+  // about Z sends `down` (y1 < 0) toward +x but `up` (y1 > 0) toward -x for
+  // the same positive tilt, because `-y1 * sin(t)` flips sign with y1. Using
+  // `|y1| * sin(t)` instead makes the x contribution positive for both.
+  //
+  // Unlike pitch, the `x0`-cross term in `y2` is deliberately left
+  // UNCOMPENSATED. Across the four base directions `x0` and `y1` are never
+  // both nonzero at this point: `x0` is nonzero only for `side` (where pitch
+  // always leaves `y1` at exactly 0), and `y1` is nonzero only for `up` and
+  // `down` (where `x0` is 0). So `side`'s current behaviour — tilting a
+  // sideways bone swings it toward +y (`troll.wam`'s clavicle relies on
+  // this) — comes entirely from that `x0` term, and reworking it to mirror
+  // pitch's `sign(y1)`-scaled cross term would zero it out for no gain: it
+  // would only ever fire in a combination that cannot occur here.
   const t = tiltDeg * RAD;
-  const x2 = x0 * Math.cos(t) - y1 * Math.sin(t);
+  const x2 = x0 * Math.cos(t) + Math.abs(y1) * Math.sin(t);
   const y2 = x0 * Math.sin(t) + y1 * Math.cos(t);
 
   return [x2, y2, z1];

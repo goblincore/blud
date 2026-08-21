@@ -27,6 +27,20 @@ describe('dirVector', () => {
     near([v[0] / -v[1], 0, 0], [0.30, 0, 0], 1e-6);
   });
 
+  // The exact twin of the pitch bug just fixed, in the other axis: a plain
+  // rotation about Z sends `down` (y1 < 0) toward +x but `up` (y1 > 0)
+  // toward -x for the same positive tilt, because the old `-y1 * sin(t)`
+  // term flips sign with y1. No real zombie bone combines `up` with a
+  // nonzero tilt, so this shipped silently — but the plan's upcoming 8-
+  // character cast (troll.wam's `bone clavicle ... dir=side tilt=15` is
+  // adjacent territory) will hit `up` + tilt almost immediately. Same
+  // synthetic angle as the `down` case above, so the two magnitudes match
+  // and only the sign of y differs.
+  it('tilts up toward +x too, the twin of the down case', () => {
+    const v = dirVector('up', 0, 16.699244);
+    near([v[0] / v[1], 0, 0], [0.30, 0, 0], 1e-6);
+  });
+
   // shin is [0,-1,0.05]; atan(0.05) = 2.862405 degrees. Neither existing
   // test above combines pitch with a `down` base — the previous
   // implementation applied pitch as a literal rotation about world X, so its
