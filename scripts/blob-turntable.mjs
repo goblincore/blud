@@ -40,6 +40,13 @@
 // a byte-diffable golden-image gate.
 //
 // Usage: node scripts/blob-turntable.mjs <vitePort> <outDir> [frames] [cdpPort]
+//
+// Which character gets shot comes from the BLOB_CHARACTER env var, which is
+// passed straight through as the lab's `?character=` query parameter (see the
+// CHARACTERS registry in lab-main.ts). Unset means the lab's own default. It
+// is an env var rather than a positional argument so the four positions above
+// — which the authoring skill documents verbatim — keep their meaning.
+// BLOB_DIST and BLOB_PITCH override the camera framing the same way.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
@@ -47,6 +54,7 @@ const VITE = Number(process.argv[2] ?? 5233);
 const OUT = process.argv[3] ?? '/tmp/turntable';
 const FRAMES = Number(process.argv[4] ?? 8);
 const CDP = Number(process.argv[5] ?? 9223);
+const CHARACTER = process.env.BLOB_CHARACTER ?? '';
 mkdirSync(OUT, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -115,7 +123,10 @@ await send('Emulation.setDeviceMetricsOverride', {
   mobile: false,
 });
 
-await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-lab-webgpu.html` });
+const url = `http://localhost:${VITE}/sdf-lab-webgpu.html`
+  + (CHARACTER ? `?character=${encodeURIComponent(CHARACTER)}` : '');
+console.log(`shooting ${url}`);
+await send('Page.navigate', { url });
 
 // WebGPU pipeline compilation is slow on first load — poll generously rather
 // than sleeping a fixed guess.
@@ -229,7 +240,11 @@ function pngStats(png) {
 
 // Fixed pitch/distance matching __sdfLab.focusBody()'s own framing — only
 // yaw varies frame to frame, orbiting the already-centred camTarget.
-const PITCH = 0.12, DIST = 2.4;
+// DIST is overridable because the default frames the ~1.8 m zombie: a 1.30 m
+// goblin shot at 2.4 m is a small figure in a large empty room, which is
+// exactly the wrong image for judging whether two limbs read as separate.
+const PITCH = Number(process.env.BLOB_PITCH ?? 0.12);
+const DIST = Number(process.env.BLOB_DIST ?? 2.4);
 const MIN_STD = 5; // "a rendered scene, not a flat surface" (verify-clip-smoke.mjs precedent)
 const frameStats = [];
 

@@ -60,24 +60,45 @@ skeleton
     # of 0.086: most of the nub was buried and the arms melted into the torso
     # even though every check passed. Fused is a floor, not the goal.
     #
-    # Reach alone cannot fix it, though — measured sweep: 0.046/0.050 leaves
-    # 5 mm of margin, 0.050/0.056 leaves 0.8 mm, 0.054/0.062 is already
-    # detached by fusedOf, and 0.058/0.068 is detached loudly enough that
-    # validateBody reports both arms disconnected. There is no reach that both
-    # attaches and clears the torso. What separates them is a FATTER shoulder
-    # ball (so more of it protrudes past the chest) and a TIGHTER blend at the
-    # join, so the two crease against each other instead of smearing together.
+    # Reach alone cannot fix it, though — measured sweep against the ORIGINAL
+    # wide torso: 0.046/0.050 left 5 mm of margin, 0.050/0.056 left 0.8 mm,
+    # 0.054/0.062 was already detached by fusedOf, and 0.058/0.068 was detached
+    # loudly enough that validateBody reported both arms disconnected. There is
+    # no reach that both attaches and clears a torso that wide.
     #
-    # The shoulder was only half of it, though. The arms also merged along their
-    # LENGTH: at tilt=7 the upper arm descended nearly vertically, inner edge
-    # around x 0.066-0.095 against a gut half-width of 0.098, so it ran inside
-    # the torso the whole way down. Swinging it out to 19 clears the gut, and
-    # the forearm tilts back in at -9 so the hands still hang beside the hips
-    # instead of out at the elbows' width — a bowed arm rather than a splayed
-    # one.
-    bone clavicle parent=chest    side=0.040 dir=side  len=0.046
-    bone upperarm parent=clavicle dir=down pitch=-12 tilt=19 len=0.235
-    bone forearm  parent=upperarm dir=down pitch=11 tilt=-9 len=0.235
+    # THE FIX WAS NOT ON THE ARM AT ALL — it was the torso's CROSS-SECTION.
+    # Reach, tilt and shoulder radius are all fighting one number: how far out
+    # in x the torso's flesh reaches at the height the arm is passing. The arm
+    # has to start inside that flesh (or it detaches) and then get outside it
+    # (or it melds), so every lever on the arm is trying to win a race the
+    # torso sets the length of. Measured on the wide torso, the upper arm's
+    # closest approach was 5.4 mm of air at its own midpoint and the forearm's
+    # was 18 mm — daylight so thin that at 1.30 m tall neither limb read as
+    # separate from any angle, on either the lit or the shadowed side.
+    #
+    # So the torso gave up width and took it back as DEPTH: every torso ring
+    # narrowed in x and grew its `deep` to match, which keeps the creature's
+    # bulk (it reads as a pot belly in profile, which is more goblin than the
+    # ovoid was) while vacating the exact axis the arms need. That freed the
+    # whole budget at once — with the gut at r=0.086 instead of 0.098 a modest
+    # tilt of 22 clears it, where 26+ was needed before and read as chicken
+    # wings. Measured after: 46 mm at the elbow, 44 mm at the forearm midpoint,
+    # 59 mm at the wrist. The clavicle came in to 0.036/0.042 in step, because
+    # shoulder reach is a function of chest width and the chest moved.
+    #
+    # The knock-on was free: the forearm no longer has to tuck in hard to keep
+    # the hands beside the hips, so tilt went -9 to -5, and the hands stopped
+    # sitting 12 mm INSIDE the thighs (clear(armL,legL) -0.0121 to +0.0227).
+    # The hips narrowed with them (side 0.072 to 0.058, tilt 7 to 5), which the
+    # elongated silhouette wanted anyway.
+    #
+    # characters/goblin-blob.test.ts pins all of this. Arm clearance is not
+    # something you can eyeball from the numbers in this file — it is an
+    # emergent property of the torso, the clavicle and both arm tilts at once,
+    # and it has now silently regressed twice.
+    bone clavicle parent=chest    side=0.036 dir=side  len=0.042
+    bone upperarm parent=clavicle dir=down pitch=-12 tilt=22 len=0.235
+    bone forearm  parent=upperarm dir=down pitch=11 tilt=-5 len=0.235
     bone hand     parent=forearm  dir=down             len=0.072
     # Long bowed legs: splay out at the thigh, back in at the shin, so the knee
     # stands proud of the ankle line.
@@ -94,19 +115,27 @@ skeleton
     # knee backwards and kept it, which is the "cow walk" in that code's own
     # comments. A character authored with a backward knee at rest would fight
     # its own IK.
-    bone thigh    parent=pelvis   dir=down tilt=7  pitch=9  side=0.072 len=0.290
+    bone thigh    parent=pelvis   dir=down tilt=5  pitch=9  side=0.058 len=0.290
     bone shin     parent=thigh    dir=down tilt=-7 pitch=-11 len=0.270
     bone foot     parent=shin     dir=fwd              len=0.130
   end
 
 body
-  # Torso: long and narrow with the gut low, rather than one wide ovoid. The
-  # widest ring is barely half what it was.
-  blob torso on pelvis at=0.00 r=0.078 deep=0.88 blend=0.0045
-  blob torso on pelvis at=0.90 r=0.098 deep=0.86 blend=0.0050
-  blob torso on spine1 at=0.62 r=0.094 deep=0.84 blend=0.0050
-  blob torso on chest  at=0.45 r=0.081 deep=0.84 blend=0.0042
-  blob torso on chest  at=1.00 r=0.070 deep=0.84 blend=0.0040
+  # Torso: long and narrow with the gut low, rather than one wide ovoid.
+  #
+  # Every ring here is narrow in X and DEEP in Z, and that trade is the reason
+  # the arms read — see the shoulder note in the skeleton block. Width in x is
+  # the one budget the arms are competing for; depth in z costs them nothing,
+  # so the bulk moved there and the creature reads pot-bellied in profile
+  # instead of ovoid from the front. Do not "fix" a deep value back toward 1
+  # without re-checking goblin-blob.test.ts: the gut at deep=1.38 is carrying
+  # mass that used to sit in the r, and shrinking it just makes the goblin
+  # thin rather than giving anything back.
+  blob torso on pelvis at=0.00 r=0.072 deep=1.18 blend=0.0045
+  blob torso on pelvis at=0.90 r=0.086 deep=1.38 blend=0.0050
+  blob torso on spine1 at=0.62 r=0.080 deep=1.26 blend=0.0050
+  blob torso on chest  at=0.45 r=0.071 deep=1.14 blend=0.0042
+  blob torso on chest  at=1.00 r=0.062 deep=1.02 blend=0.0040
 
   # Neck column — thin, and rising out of a small chest cap.
   bar head on neck from=0.00 to=1.00 r=0.046 deep=0.94 blend=0.0016

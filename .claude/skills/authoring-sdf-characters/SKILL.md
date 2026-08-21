@@ -42,14 +42,44 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
      --remote-debugging-port=9223 --enable-unsafe-webgpu \
      --user-data-dir=/tmp/chrome-blob-turntable &
-   node scripts/blob-turntable.mjs 5233 /tmp/<name>
+   BLOB_CHARACTER=<name> BLOB_DIST=1.35 node scripts/blob-turntable.mjs 5233 /tmp/<name>
    ```
+   `BLOB_CHARACTER` is passed through as the lab's `?character=`; without it
+   you shoot the lab default and can spend a while judging the wrong body.
+   `BLOB_DIST` (and `BLOB_PITCH`) override the camera framing — the default
+   2.4 m frames the ~1.8 m zombie, and a 1.30 m goblin shot at that distance
+   is a small figure in a large empty room, which is exactly the wrong image
+   for judging whether two limbs read as separate.
    Then open `/tmp/<name>/index.html` (or the individual `frame-NN.png`s) and
    actually look. Read the script's own header comment — it documents a real
    determinism limit (frames match in content, ~0.3-0.4% of pixels differ
    byte-for-byte run to run; treat them as reproducible for review, not as a
    byte-diffable golden image).
 4. **Iterate on the text**, never on compiled output.
+
+## Make the limbs READ, not just connect
+
+`fusedOf` says a limb is attached. `clearOf` says two limbs do not pass
+through each other. Neither says a limb is *visible as a limb*, and that gap
+cost this project two rounds of owner rejection on the goblin: `clearOf(armL,
+torso)` read a comfortable +13.4 mm while the arm's SURFACE was 5.4 mm from
+the body, and the render showed a torso with arm-shaped bulges. `clearOf`
+samples centrelines; two surfaces can be a hair apart with both axes safely
+outside each other.
+
+`daylightOf(body, limb, against, join, joinRadius)` measures the actual air —
+surface to surface, ignoring the region around the joint, where an attached
+limb is deeply merged on purpose. Roughly 2% of standing height is where
+separation became visible from every yaw rather than only on the shadowed
+side.
+
+The lever is usually **not on the limb**. Reach, tilt and joint radius are all
+competing for one number: how far out the torso's flesh reaches at the height
+the limb passes. The limb must start inside that flesh or it detaches, and get
+outside it or it melds — so every arm-side knob is fighting a race the torso
+sets the length of. On the goblin, no shoulder reach both attached and
+cleared. Narrowing the torso in x and taking the mass back as `deep` freed the
+whole budget at once, and made the profile better besides.
 
 ## Look at the render. The checks are not enough.
 

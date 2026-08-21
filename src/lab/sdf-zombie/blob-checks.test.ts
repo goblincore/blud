@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/blob-checks.test.ts
 import { describe, expect, it, vi } from 'vitest';
 import { compileBlob } from './blob-compile';
-import { clearOf, fusedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
+import { clearOf, daylightOf, fusedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
@@ -208,6 +208,57 @@ describe('blob checks — lab zombie', () => {
     const armL = b.clusters.find(c => c.limb === 'armL')!;
     const legL = b.clusters.find(c => c.limb === 'legL')!;
     expect(clearOf(b, armL, legL)).toBeLessThanOrEqual(0);
+  });
+});
+
+describe('daylightOf', () => {
+  // Two unit spheres of radius 1 with centres 5 apart: surfaces 3 apart.
+  const pair = (gap: number) => syntheticField([
+    { a: [0, 0, 0], b: [0, 0, 0], radius: 1 },
+    { a: [2 + gap, 0, 0], b: [2 + gap, 0, 0], radius: 1 },
+  ]);
+
+  it('measures surface-to-surface distance, not centre-to-surface', () => {
+    const { field, clusters } = pair(3);
+    // clearOf reads the centre against the other's surface: 5 - 1 = 4.
+    expect(clearOf(field, clusters[0]!, clusters[1]!)).toBeCloseTo(4, 6);
+    // daylightOf subtracts the sampled prim's own radius: 4 - 1 = 3, the
+    // actual air between them. That difference is the whole point of the
+    // function — see its docstring for the goblin arms it was written for.
+    expect(daylightOf(field, clusters[0]!, clusters[1]!, [0, 0, 99], 0)).toBeCloseTo(3, 6);
+  });
+
+  it('goes negative once the surfaces overlap', () => {
+    const { field, clusters } = pair(-0.5);
+    expect(daylightOf(field, clusters[0]!, clusters[1]!, [0, 0, 99], 0)).toBeLessThan(0);
+  });
+
+  // The exclusion is what makes the check usable on an ATTACHED limb, where
+  // the joint is deeply merged on purpose.
+  it('ignores samples inside joinRadius of the join', () => {
+    const { field, clusters } = pair(-0.5);
+    const buried = daylightOf(field, clusters[0]!, clusters[1]!, [0, 0, 0], 0);
+    expect(buried).toBeLessThan(0);
+    // Every sample of a sphere centred on the join is within any positive
+    // radius of it, so all of them are skipped and nothing is left to report.
+    expect(daylightOf(field, clusters[0]!, clusters[1]!, [0, 0, 0], 0.5)).toBe(Infinity);
+  });
+
+  // Regression: an earlier draft sampled both clusters like clearOf does.
+  // A fat cluster's samples sit on its CENTRELINE, arbitrarily far from the
+  // join and so never excluded, while its surface is right at the join — so
+  // the reverse walk reported the goblin's healthy arms as -38 mm, which is
+  // just the chest cap's own radius measured against the shoulder it is
+  // welded to. Asserting the asymmetry directly: a fat prim overlapping a
+  // thin one at the join must not drag the thin one's clearance negative.
+  it('does not report a fat neighbour\'s own radius as the limb\'s clearance', () => {
+    const { field, clusters } = syntheticField([
+      { a: [3, 0, 0], b: [6, 0, 0], radius: 0.2 },  // thin "limb" reaching away
+      { a: [0, 0, 0], b: [0, 0, 0], radius: 3 },    // fat "torso" it emerges from
+    ]);
+    const join: Vec3 = [3, 0, 0];
+    const d = daylightOf(field, clusters[0]!, clusters[1]!, join, 1.0);
+    expect(d).toBeGreaterThan(0);
   });
 });
 

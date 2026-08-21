@@ -254,6 +254,61 @@ export function clearOf(body: Field, a: ClusterInfo, b: ClusterInfo): number {
   return worst;
 }
 
+/**
+ * How much AIR there is between two clusters' surfaces, in metres, ignoring
+ * the region right around where they join.
+ *
+ * `clearOf` and this answer different questions, and the goblin needed both.
+ * `clearOf` samples a primitive's AXIS and reports the other cluster's field
+ * there, so it detects one limb's centreline entering another's flesh — real
+ * interpenetration. It says nothing about daylight, because two surfaces can
+ * be a hair apart while both centrelines stay comfortably outside each other.
+ * Measured on the goblin before this was fixed: `clearOf(armL, torso)` read a
+ * healthy +13.4 mm while the upper arm's SURFACE was 5.4 mm from the torso's,
+ * and the owner's verdict on the render was that the arms were fused to the
+ * body. A limb reads as a limb when there is visible space around it, and no
+ * check in this file measured that.
+ *
+ * So: subtract each sampled primitive's own effective radius, giving surface-
+ * to-surface distance rather than centre-to-surface.
+ *
+ * `join` / `joinRadius` exist because an ATTACHED limb is deeply negative by
+ * construction at the attachment — the goblin's shoulder ball sits 38 mm
+ * inside the torso, which is the join doing its job, not a defect. Without
+ * excluding it the answer is always "deeply merged" and carries no
+ * information. Pass the attachment point (the clavicle tail, the hip) and a
+ * radius that covers the joint, and the result describes the limb's free
+ * length only.
+ *
+ * DELIBERATELY ONE-DIRECTIONAL, unlike `clearOf`. `clearOf` has to sample both
+ * ways because "is a centreline inside flesh" is asymmetric — a thin prim's
+ * axis can sit deep inside a fat one while the fat one's axis stays far
+ * outside. Surface-to-surface distance is not asymmetric like that: walking
+ * `limb` and reading `against`'s field already measures the air on both sides
+ * of the gap, so a torso ring bulging out toward a thin arm shows up as the
+ * arm's own clearance shrinking. Sampling the second direction adds nothing
+ * and actively breaks the join exclusion, because a torso ring's SAMPLES sit
+ * on its centreline — metres from the shoulder, and so never excluded — while
+ * its SURFACE is right at the join. That reported the goblin's healthy arms as
+ * -38 mm: the chest cap's own radius, measured against the shoulder it is
+ * supposed to be welded to.
+ */
+export function daylightOf(
+  body: Field, limbC: ClusterInfo, against: ClusterInfo, join: Vec3, joinRadius: number,
+): number {
+  const field = restrictedTo(body, [against]);
+  let worst = Infinity;
+  for (const prim of body.prims.slice(limbC.start, limbC.start + limbC.count)) {
+    if (prim.op === 'sub' || prim.dead) continue;
+    const eff = prim.radius * Math.min(...prim.scale);
+    for (const p of samplesAlong(prim)) {
+      if (len(sub(p, join)) < joinRadius) continue;
+      worst = Math.min(worst, sdBody(p, field) - eff);
+    }
+  }
+  return worst;
+}
+
 // ---------------------------------------------------------------------------
 // Knee stance
 // ---------------------------------------------------------------------------
