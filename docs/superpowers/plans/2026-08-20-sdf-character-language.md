@@ -1130,6 +1130,21 @@ it('compiles the shipped zombie.blob through the same path lab-main uses', async
 
 - [ ] **Step 2: Run RED, then wire the lab**
 
+**There are THREE seams, not one.** `lab-main.ts` calls
+`buildBody(makeZombie(...))` at roughly line 173 (initial body), line 778 (the
+`[`/`]` crowd spawner) and line 2067 (`rebuildBody()`, which re-runs whenever a
+face slider moves). Route all three through one shared helper. Wiring only the
+first leaves the lab rendering the `.blob` zombie until someone touches a
+slider, at which point it silently reverts to the TypeScript one.
+
+**Call `compileFace(doc)` explicitly.** `compileBlob(doc, face = compileFace(doc))`
+evaluates that default ONLY when the caller omits the argument. The lab always
+passes an explicit face (defaults merged with panel overrides), so the face-block
+validation from Task 4 — including the unknown-key check — never runs in the
+real path. The unit tests do not catch this because they all call
+`compileBlob(doc)` with no face, so the default fires for them. Call
+`compileFace(doc)` for its validation side effect before compiling.
+
 In `lab-main.ts`, replace the body construction at line 172-173:
 
 ```ts
