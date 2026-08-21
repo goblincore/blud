@@ -1242,9 +1242,13 @@ describe('blob checks', () => {
     expect(clearOf(b, armL, legR)).toBeGreaterThan(0);
   });
 
+  // -20, not -40. Measured sweep: the arm overlaps the leg only in roughly
+  // [-30, -10], deepest at -20 (clearOf -0.0138). At -40 it has swung PAST
+  // the thigh and reads +0.0221 — clear. The original -40 assertion passed
+  // while detecting no collision at all.
   it('catches a hand driven into the opposite thigh', () => {
     const doc = parseBlob(src.replace('bone upperArm parent=clavicle dir=down tilt=16.699244',
-                                      'bone upperArm parent=clavicle dir=down tilt=-40'));
+                                      'bone upperArm parent=clavicle dir=down tilt=-20'));
     const b = buildBody(compileBlob(doc));
     const armL = b.clusters.find(c => c.limb === 'armL')!;
     const legL = b.clusters.find(c => c.limb === 'legL')!;
@@ -1259,31 +1263,36 @@ Expected: FAIL — no module `./blob-checks`.
 
 - [ ] **Step 3: Implement**
 
-```ts
-// src/lab/sdf-zombie/blob-checks.ts
-import type { BuiltBody, ClusterInfo, Vec3 } from './types';
-import { sdBody } from './validate';
-import { lerp } from './vec';
+> **This section was rewritten after measurement. The original design was
+> unsound in three separate ways — do not restore it.**
+>
+> 1. **Probe from `clusterCore`, not `ClusterInfo.center`.** `center` is a
+>    BOUNDING centroid with no guarantee of being inside the flesh; `validate.ts`
+>    already probes from `clusterCore` for exactly this reason and now exports it.
+>    Measured on the zombie: the fused margin is `-0.0366` from cores against
+>    `-0.0133` from centres, so `center` sits ~2.7x closer to flipping positive.
+> 2. **A straight segment between two clusters passes through OTHER clusters.**
+>    `armL` and `legR` never touch, yet the segment between them reads `-0.107`
+>    because it crosses the torso — a false "interpenetrating" verdict on correct
+>    geometry. Segment probing is fine for `fused` (which WANTS the whole path
+>    inside) and wrong for `clear`.
+> 3. **The worst-case sample is the MAXIMUM, not the minimum.** "Fused" requires
+>    every point on the path to be inside; `Math.min` only proves some point is.
+>    This matches `validate.ts`'s `segmentInside`, which bails on the first
+>    positive sample. Name the function for what it returns — a
+>    `minFieldOnSegment` that returns a max is a trap.
+>
+> So: `fused` probes core-to-core along a segment taking the worst (max) sample.
+> `clear` isolates each cluster's own field and tests one cluster's primitives
+> against the other's — and must sample ALONG each primitive's segment, not just
+> at its endpoints. An endpoint-only version reports `+0.9` on two capsules
+> crossing in an X with `sdBody = -0.1` at the crossing, i.e. it misses exactly
+> the mid-shaft collision it exists to catch.
 
-/**
- * WAM answers "am I inside this shape" with 955 lines of triangle raycasting.
- * An SDF answers it directly, which is why these checks are a few lines: the
- * field IS the containment test.
- */
-export function minFieldOnSegment(body: BuiltBody, a: Vec3, b: Vec3, steps = 64): number {
-  let worst = Infinity;
-  for (let i = 0; i <= steps; i++) worst = Math.min(worst, sdBody(lerp(a, b, i / steps), body));
-  return worst;
-}
-
-/** Positive means the two clusters are apart; <= 0 means they interpenetrate. */
-export function clearOf(body: BuiltBody, a: ClusterInfo, b: ClusterInfo): number {
-  return minFieldOnSegment(body, a.center, b.center);
-}
-```
-
-> If `lerp` in `vec.ts` does not accept two `Vec3`s and a scalar, write the
-> three-component interpolation inline rather than changing `vec.ts`.
+Implement `worstFieldOnSegment`, `fusedOf`, `clearOf` and a `restrictedTo`
+helper that remaps a cluster's `start`/`count` onto a compact prims array.
+`clusterCore` is exported from `validate.ts`; use it rather than duplicating its
+"a point guaranteed inside this cluster" reasoning.
 
 - [ ] **Step 4: Run GREEN, then commit**
 
