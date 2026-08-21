@@ -12,8 +12,10 @@
 # brows) lives in mouse-kit.wam; the flesh here is yellow skin, ears, pout.
 #
 # THE EARS ARE THE WHOLE CHARACTER. Every other feature serves them. They are
-# NOT spheres — a sphere ear is Mickey; these are plates (deep well under 1),
-# nearly touching at the top and splaying out past the head's own width.
+# ROUNDED PLATES — wider than tall, closer to circles than rectangles, set LOW
+# so their bottoms overlap the crown at the shade line, their inner edges
+# meeting near the centreline. Not spheres (a sphere ear is Mickey), not
+# columns: the first pass here stood them on end and the owner rejected it.
 model mouse
   height 1.10
   # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
@@ -102,33 +104,30 @@ body
   # EARS — the character. Read this block before touching anything.
   # ============================================================
   #
-  # WHAT THE REFERENCE SHOWS, measured: each plate is ~0.245 wide on a 1.10 m
-  # body — wider than the head itself (head full width ~0.26) — reaches
-  # ~0.21 ABOVE the crown, is ~0.23 tall, and is FLAT: roughly 0.05 thick
-  # against 0.245 of width, a 5:1 plate. The inner edges run nearly VERTICAL
-  # at x ~0.055, so the plates almost meet above the crown and OVERHANG it —
-  # the visible crown between them sits well below the ear tops. The outer
-  # edges stand ~0.30 from the centreline at the bottom, leaning IN ~13
-  # degrees by the top (top-outer 0.245). Upright plates, not splayed ones:
-  # every earlier pass here angled them outward like Mickey and read wrong.
+  # WHAT THE REFERENCE SHOWS, RE-MEASURED. The numbers this block used to
+  # carry ("~0.245 wide, ~0.23 tall, inner edges nearly VERTICAL, outer
+  # edges leaning in 13 degrees") described a plate TALLER than its width
+  # standing on end off the skull, and that is exactly what it rendered as:
+  # two tall narrow columns, which the owner rejected. Measured afresh off
+  # mouse-reference.png (945 px of character, 1.10 m): each ear is a
+  # ROUNDED PLATE ~0.303 m WIDE x ~0.249 m TALL — wider than tall, closer
+  # to a circle than a rectangle — centred at (+/-0.151, 0.977), so the
+  # pair spans ~0.60 m overall and the inner edges meet near the
+  # centreline at mid-height. The bottoms sink INTO the head at y ~0.85,
+  # right at the shade line: the plates are set LOW, overlapping the
+  # crown, not standing on top of it. ~0.05 thick against 0.30 of width.
   #
-  # ONE tapered flattened prim each. `tip=` sweeps the far end out AND UP out
-  # of a skull bone that runs straight up — without it the ear would hang at
-  # the cranium's latitude and read as a wing. `deep=0.38` is the flatness;
-  # do not "fix" it toward 1 without looking at the reference again.
-  # `chamfer` creases the plate into the skull instead of melting it in.
-  #
-  # REACH: the base centre sits INSIDE the cranium on purpose (attachment) —
-  # at (0.075, +0.095) from the cranium centre it is at 0.83 of the ellipsoid
-  # radius in the x-y plane, buried. Everything visible happens past the
-  # crown.
-  blob head on skull at=0.48 r=0.105 r2=0.095 wide=1.00 deep=0.24 blend=0.0016 chamfer offset=(0.160,0.076,-0.008) tip=(-0.020,0.190,-0.004) both
-
-  # A second, lower lobe fills the plate's bottom-inner corner — the
-  # reference ear's inner edge descends all the way to shade level, and one
-  # tapered cone leaves that corner hollow. Smaller, flatter, tucked against
-  # the skull's upper side; its base is buried like the big plate's.
-  blob head on skull at=0.44 r=0.062 r2=0.052 wide=0.90 deep=0.30 blend=0.0014 chamfer offset=(0.130,0.030,-0.006) tip=(0.010,0.090,-0.004) both
+  # ONE tapered flattened prim each, and the fix against the old columns
+  # is the AXIS: the capsule runs OUTWARD (+x), not upward, so the plate's
+  # long axis is horizontal and the round cross-section becomes the plate's
+  # outline. The base is buried in the crown's flank — the cranium's top
+  # at x 0.085 is y ~0.844 and the base sphere bottoms at 0.834, so 10 mm
+  # of it sits inside the skull and the blend welds the rest. wide/tall
+  # stretch the section into the plate; deep=0.32 is the flatness (0.048 m
+  # thick). chamfer keeps a crease where the plate meets the skull, and
+  # where the pair brush at the top centre — the reference reads as two
+  # plates, not one mass.
+  blob head on skull at=0.55 r=0.075 r2=0.072 wide=1.15 tall=1.28 deep=0.32 blend=0.0016 chamfer offset=(0.085,0.165,-0.005) tip=(0.137,0.078,0.000) both
 
   # ============================================================
   # THE POUT — a broad protruding muzzle, the second identifying feature.
@@ -154,14 +153,18 @@ body
   # LINE. This is the seam the reference shows under the pout.
   groove head on skull at=0.345 r=0.040 wide=1.30 tall=0.08 deep=1.00 depth=0.004 width=0.005 offset=(0,-0.052,0.106)
 
-  # ARMS AND LEGS — ball joints at every knuckle, the house stylisation. The
-  # shafts are THIN (0.020-0.026 against the goblin's 0.028-0.032 on a
-  # smaller body): spindly is the brief.
-  blob arm on clavicle at=1.00 r=0.034 blend=0.0014 mirror
-  bar  arm on upperarm from=0.02 to=0.96 r=0.021 blend=0.0018 mirror
-  blob arm on forearm  at=0.00 r=0.026 blend=0.0030 mirror
-  bar  arm on forearm  from=0.06 to=0.94 r=0.019 blend=0.0024 mirror
-  blob arm on forearm  at=1.00 r=0.024 blend=0.0026 mirror
+  # ARMS AND LEGS — ONE FORM, not beads. The house ball-joint stylisation
+  # (nubs fatter than the shafts they join, blends tight enough to keep them
+  # reading) is the goblin's look, and the owner rejected it here: the
+  # reference limbs are smooth rubber-hose tubes. So the nubs are pulled in
+  # toward shaft size and every blend is opened up until the segment joints
+  # stop reading as separate lumps. Spindly stays: the shafts are THIN
+  # (0.019-0.030 against the goblin's 0.028-0.044 on a smaller body).
+  blob arm on clavicle at=1.00 r=0.030 blend=0.0035 mirror
+  bar  arm on upperarm from=0.02 to=0.96 r=0.021 blend=0.0040 mirror
+  blob arm on forearm  at=0.00 r=0.023 blend=0.0045 mirror
+  bar  arm on forearm  from=0.06 to=0.94 r=0.019 blend=0.0040 mirror
+  blob arm on forearm  at=1.00 r=0.021 blend=0.0042 mirror
 
   # HAND: a paddle plus FOUR SPREAD FINGERS riding the finger bones above
   # (see the skeleton note for why they are bones and not tips). Hair-thin
@@ -174,11 +177,11 @@ body
   bar  arm on f_ring   from=0.00 to=0.92 r=0.007 r2=0.003 blend=0.0010 mirror
   bar  arm on f_little from=0.00 to=0.90 r=0.007 r2=0.002 blend=0.0010 mirror
 
-  blob leg on thigh at=0.00 r=0.042 blend=0.0038 mirror
-  bar  leg on thigh from=0.08 to=0.92 r=0.030 blend=0.0030 mirror
-  blob leg on shin  at=0.00 r=0.032 blend=0.0036 mirror
-  bar  leg on shin  from=0.08 to=0.92 r=0.024 blend=0.0028 mirror
-  blob leg on shin  at=1.00 r=0.026 blend=0.0030 mirror
+  blob leg on thigh at=0.00 r=0.042 blend=0.0050 mirror
+  bar  leg on thigh from=0.08 to=0.92 r=0.030 blend=0.0045 mirror
+  blob leg on shin  at=0.00 r=0.032 blend=0.0048 mirror
+  bar  leg on shin  from=0.08 to=0.92 r=0.024 blend=0.0042 mirror
+  blob leg on shin  at=1.00 r=0.026 blend=0.0045 mirror
 
   # Feet: mostly swallowed by the kit's oversized shoes, but the shoes are
   # open shells, so what shows above the topline must be shaped like a foot.
@@ -237,24 +240,30 @@ sheet
   grain      0.06
   seed       11
 
-# BRIGHT TOY YELLOW, read off the reference (sRGB ~#e8dc00 -> linear here).
-# Matte vinyl rather than latex: low specular, low wetness. The mottle is a
-# warm ORANGE-yellow, far enough from the base in hue to read as shading IN
-# the skin rather than dirt ON it, at low amplitude — the reference is very
-# flat, and heavy blotching would read as decay next to the zombie.
+# BRIGHT TOY YELLOW, read off the reference (lit skin ~sRGB #F0ED06 ->
+# linear here). Matte vinyl rather than latex: low specular, low wetness.
 palette
-  baseColor     0.80 0.71 0.02
+  baseColor     0.86 0.78 0.008
   # Wounds stay red, as for every character.
   deepColor     0.50 0.08 0.08
   charColor     0.10 0.09 0.02
-  specIntensity 0.42
-  specRoughness 0.48
+  specIntensity 0.38
+  specRoughness 0.50
   fresnelBoost  0.40
   translucency  0.22
-  wetness       0.28
-  # Low: the reference skin is near-flat. Raising this shifts the mean
-  # toward mottleColor (dark orange), so the base is set a touch bright to
-  # compensate.
-  mottleAmp     0.12
+  # SMOOTH CLAY, the owner's second correction after the ears. The previous
+  # run left these at the henenlotter-latex base values (0.06 / 0.016) and
+  # concluded surface noise was not authorable from a palette — false:
+  # compilePalette accepts ANY FleshMaterial key. surfaceNoiseAmp perturbs
+  # the NORMAL (the warty micro-detail) and silhouetteNoiseAmp perturbs the
+  # DISTANCE; both go to ZERO for latex-smooth toy skin.
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  wetness       0.22
+  # Very low: the reference skin is a flat, even yellow with no blotching at
+  # all — this stays only so the body is not one dead tone under the key.
+  # Raising it shifts the mean toward mottleColor (dark orange), so the base
+  # is set a touch bright to compensate.
+  mottleAmp     0.08
   mottleScale   1.5
   mottleColor   0.62 0.40 0.04
