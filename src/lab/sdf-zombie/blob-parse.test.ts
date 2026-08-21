@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/blob-parse.test.ts
 import { describe, it, expect } from 'vitest';
-import { tokenize, numArg } from './blob-parse';
+import { tokenize, numArg, parseBlob } from './blob-parse';
 import { BlobError } from './blob-ast';
 
 describe('tokenize', () => {
@@ -66,5 +66,54 @@ describe('numArg', () => {
     // Points at the start of "pitch=bad" itself, in the SAME units as above.
     const col = badNumberErr!.col;
     expect(reconstructed.slice(col - 1, col - 1 + 'pitch=bad'.length)).toBe('pitch=bad');
+  });
+});
+
+const SKEL = `model zombie
+  height 1.78
+
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=7 len=0.34
+  mirror
+    bone thigh parent=pelvis dir=down side=0.10 len=0.40
+  end
+`;
+
+describe('parseBlob — skeleton', () => {
+  it('reads the model header', () => {
+    const doc = parseBlob(SKEL);
+    expect(doc.name).toBe('zombie');
+    expect(doc.height).toBe(1.78);
+  });
+
+  it('reads the root bone and its world height', () => {
+    const doc = parseBlob(SKEL);
+    expect(doc.rootBone).toBe('pelvis');
+    expect(doc.rootHeight).toBe(0.92);
+  });
+
+  it('defaults pitch/tilt/side to zero and mirror to false', () => {
+    const spine = parseBlob(SKEL).bones.find(b => b.name === 'spine')!;
+    expect(spine).toMatchObject({
+      parent: 'pelvis', dir: 'up', pitchDeg: 7, tiltDeg: 0, len: 0.34,
+      side: 0, mirror: false,
+    });
+  });
+
+  it('marks bones inside a mirror block, and only those', () => {
+    const doc = parseBlob(SKEL);
+    expect(doc.bones.find(b => b.name === 'thigh')!.mirror).toBe(true);
+    expect(doc.bones.find(b => b.name === 'spine')!.mirror).toBe(false);
+  });
+
+  it('rejects a parent that was never declared, naming the line', () => {
+    const bad = SKEL.replace('parent=pelvis dir=up pitch=7', 'parent=nope dir=up pitch=7');
+    expect(() => parseBlob(bad)).toThrow(BlobError);
+    expect(() => parseBlob(bad)).toThrow(/6:.*unknown parent "nope"/);
+  });
+
+  it('rejects an unclosed mirror block', () => {
+    expect(() => parseBlob(SKEL.replace('  end\n', ''))).toThrow(/mirror block is never closed/);
   });
 });
