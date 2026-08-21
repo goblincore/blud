@@ -102,7 +102,7 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
     // became a plate fauld.
-    expect([...groups.keys()].sort()).toEqual(['brass', 'iron', 'leather']);
+    expect([...groups.keys()].sort()).toEqual(['brass', 'glass', 'iron', 'leather']);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
   });
 

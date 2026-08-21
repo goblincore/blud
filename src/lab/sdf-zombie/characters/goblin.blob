@@ -187,6 +187,35 @@ body
   blob head on skull at=0.47 r=0.031 r2=0.017 wide=0.80 blend=0.0030 chamfer offset=(0,-0.010,0.070) tip=(0,-0.026,0.062)
   blob head on skull at=0.47 r=0.016 r2=0.004 wide=0.72 blend=0.0016 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
 
+  # BIG LIPS — a protruding muzzle, the cartoon-mouse read.
+  #
+  # The face SHEET already draws a mouth, but a painted mouth is flat: it
+  # cannot break the silhouette, so from any angle off dead-front the goblin
+  # had a smooth jaw with a dark smear on it. Lips are the one facial feature
+  # that has to be geometry, because the whole point of them is that they stick
+  # out.
+  #
+  # Two prims, creased against each other with `chamfer` rather than blended:
+  # a fillet between an upper and lower lip fuses them into one sausage, and
+  # the SEAM is what makes it read as a mouth. `wide` well above 1 spreads them
+  # across the face; `tall` well under 1 keeps each one a flat band rather than
+  # a ball.
+  #
+  # Sitting below the nose (skull at=0.47) and above the jaw, so all three
+  # features stack instead of competing for the same flesh.
+  # REACH, again: the cranium's semi-depth is 0.118, so lips whose front edge
+  # lands short of that are a texture with extra steps. These reach 0.130 —
+  # 12 mm proud, and deliberately no more.
+  #
+  # THE NOSE HAS TO STAY THE FACE'S LEAD. A first pass at r=0.040 / wide=1.70
+  # reached 0.142 and spread most of the way across the head, and the goblin
+  # turned into a cartoon mouse: the lips became the muzzle and the hooked nose
+  # read as part of it. The nose tips out at 0.162, so keeping the lips a clear
+  # 30 mm behind it is what preserves the hook as the silhouette's leading
+  # edge. Lips, not a snout.
+  blob head on skull at=0.31 r=0.030 r2=0.023 wide=1.40 tall=0.44 blend=0.0024 chamfer offset=(0,0.008,0.074) tip=(0,-0.006,0.056)
+  blob head on skull at=0.31 r=0.026 r2=0.020 wide=1.25 tall=0.42 blend=0.0019 chamfer offset=(0,-0.032,0.068) tip=(0,-0.022,0.050)
+
   # ARMS AND LEGS — ball joints, deliberately.
   #
   # Every segment is a bar with a nub at each joint, and the nubs are meant to
@@ -258,9 +287,16 @@ sheet
   browHeavy  0.90
   browAngle  24
   mouthWidth 0.54
-  mouthRise  0.73
+  # 0.63, not 0.73. The lips are GEOMETRY now, and the painted mouth has to
+  # land on them or the head wears two mouths — a dark smear on the jaw below a
+  # protruding pout. 0.63 is where the lip prims sit in face-space: they ride
+  # the skull at 0.31, which is 63% down a face spanning y 1.096..1.354.
+  mouthRise  0.63
   mouthCurve -0.50
-  mouthOpen  0.075
+  # A SEAM, not a slab. With no geometry to help, the sheet's mouth had to do
+  # all the work and was drawn thick; over a real pout that thickness just
+  # muddies the crease between the two lips.
+  mouthOpen  0.042
   nostril    0.45
   noseRidge  1.00
   noseWide   0.062

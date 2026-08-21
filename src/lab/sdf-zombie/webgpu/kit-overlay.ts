@@ -69,6 +69,12 @@ const LOOK: Record<string, { metalness: number; roughness: number; envIntensity:
   brass: { metalness: 0.78, roughness: 0.22, envIntensity: 1.25 },
   // Not metal, but not matte either — oiled leather catches a broad sheen.
   leather: { metalness: 0.05, roughness: 0.48, envIntensity: 0.55 },
+  // Sunglass lens. The lowest roughness and the highest env intensity in the
+  // kit, because a lens is almost entirely what it reflects — its near-black
+  // base colour contributes nearly nothing. Metalness stays moderate: a real
+  // lens is dielectric, and pushing it metallic kills the dark body of the
+  // glass and leaves only a chrome smear.
+  glass: { metalness: 0.35, roughness: 0.04, envIntensity: 2.0 },
 };
 
 export interface KitOverlay {

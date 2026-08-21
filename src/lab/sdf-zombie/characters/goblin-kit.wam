@@ -65,6 +65,10 @@ palette
   iron    #6e7378
   leather #4a3526
   brass   #9c7a38
+  # Near-black, because a sunglass lens is almost all reflection — the COLOUR
+  # barely matters and the shine is the whole read. kit-overlay.ts gives it the
+  # lowest roughness and the highest env intensity of anything in the kit.
+  glass   #14161a
 
 skeleton
   # `hips` HAS NO COUNTERPART IN goblin.blob, and leaving it out is a silent
@@ -200,6 +204,35 @@ parts
     ring 0.90 w=0.128 d=0.136
     ring 1.00 w=0.120 d=0.124
     cap start=none end=none
+
+  # SHADES — one bar across both eyes, NOT a mirrored pair.
+  #
+  # A mirror block would author two lenses and leave a gap over the nose; real
+  # sleek shades are a single sweep. Lofted along a free ray running `side`
+  # from a point offset to the goblin's right and forward of the face, so it
+  # crosses at eye height. That height is not a guess: the face sheet puts the
+  # eyes at eyeRise 0.44, which over a face spanning y 1.096..1.354 m lands at
+  # y=1.240 — skull t 0.51.
+  #
+  # `frame=up` pins the ring's axes so `d` is the lens HEIGHT and `w` the
+  # front-to-back thickness. Without it the frame flips somewhere along a
+  # near-horizontal path and half the bar stands at right angles to the rest.
+  # Thin in w, tall in d, pinched at the bridge and flared at the temples, with
+  # both ends drawn to a point — that pinch-flare-point profile is the whole
+  # difference between shades and a blindfold.
+  # t=0.45, not the 0.51 the eyeRise arithmetic gave. That put the bar on the
+  # BROW with both eyes glowing underneath it, which reads as a headband. The
+  # discrepancy is the face projection: the sheet's v runs over the projected
+  # ellipsoid, not linearly down the skull bone, so the painted eyes sit lower
+  # on the actual geometry than their uv suggests. Trust the render here.
+  loft shades bone=skull at=0.45 offset=(-0.094,0.004,0.086) dir=side len=0.188 frame=up material=glass
+    ring 0.00 w=0.016 d=0.024 tip
+    ring 0.10 w=0.023 d=0.046
+    ring 0.40 w=0.020 d=0.036
+    ring 0.60 w=0.020 d=0.036
+    ring 0.90 w=0.023 d=0.046
+    ring 1.00 w=0.016 d=0.024 tip
+    cap start=point end=point
 
   # BELT — around the pelvis, above the widest part of the gut. Deliberately
   # not at the fattest ring: a belt there reads as a stripe painted on the
