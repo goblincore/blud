@@ -101,6 +101,58 @@ function strArg(l: BlobLine, key: string): string | null {
   return hit ? hit.slice(key.length + 1) : null;
 }
 
+const LIMBS = ['head', 'torso', 'arm', 'leg'] as const;
+type LimbName = (typeof LIMBS)[number];
+
+/**
+ * Validates the limb word at `rest[0]` (i.e. `l.words[1]`) for a `blob`/
+ * `bar` part line — `blob torso on spine ...` / `bar leg on thigh ...`.
+ * `carve` has no limb word (see `parseBodyLine`) and never calls this.
+ *
+ * This used to be a bare `rest[0] as BlobPart['limb']` cast in the caller —
+ * a lie, since nothing checked the value was actually one of the four limb
+ * names. That let a typo (`torzo`) or an outright missing limb word (which
+ * shifts `rest[0]` to whatever comes next, typically `"on"`) through
+ * silently, producing a `BlobPart` whose `limb` field doesn't match its own
+ * type. Same shape as `dirArg` above; mirrors that fix.
+ */
+function limbArg(l: BlobLine, word: string | undefined): LimbName {
+  if (word === undefined || !LIMBS.includes(word as LimbName))
+    throw new BlobError(`limb must be one of ${LIMBS.join('|')}, got "${word}"`, l.line, wordCol(l, 1));
+  return word as LimbName;
+}
+
+/**
+ * Parses `offset=(x,y,z)` into a validated 3-tuple, or `null` if the part
+ * has no offset at all.
+ *
+ * Arity and finiteness both used to be unchecked: `off.split(',').map
+ * (Number)` was cast straight to `[number, number, number]` via `as unknown
+ * as`, so `offset=(1,2)` silently produced a 2-element array wearing a
+ * 3-tuple's type (`offset[2]` reads `undefined` at runtime despite the type
+ * saying `number`), and `offset=(1,x,3)` silently produced a `NaN`
+ * component. Both are exactly the kind of silent data loss this file
+ * already refuses to allow elsewhere — and here it's worse, because
+ * `offset` is consumed positionally by Task 8's emitter, so a short or
+ * `NaN`-laced tuple becomes garbage with no error to trace it back to this
+ * line. Checking both up front removes the need for the `as unknown as`
+ * cast entirely: once length and finiteness are confirmed, `[x, y, z]` is
+ * honestly a `[number, number, number]`.
+ */
+function parseOffset(l: BlobLine, raw: string | null): readonly [number, number, number] | null {
+  if (raw === null) return null;
+  const idx = l.words.findIndex(w => w.startsWith('offset='));
+  const col = wordCol(l, idx);
+  const parts = raw.replace(/[()]/g, '').split(',').map(Number);
+  if (parts.length !== 3)
+    throw new BlobError(`offset needs exactly 3 components, got ${parts.length}`, l.line, col);
+  // Safe to assert: the length check above guarantees indices 0-2 exist.
+  const x = parts[0]!, y = parts[1]!, z = parts[2]!;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z))
+    throw new BlobError('offset has a non-numeric component', l.line, col);
+  return [x, y, z];
+}
+
 /**
  * Mutable state threaded through the per-section line handlers below.
  * `doc` accumulates the parse result; `known`/`inMirror`/`mirrorOpenedAt`
@@ -183,9 +235,11 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
  * `blob`/`bar` both name a limb as their second word (`blob torso on
  * spine`); `carve` doesn't — `carve on spine ...` targets a bone directly,
  * with no limb word to read — so its `limb` is hardcoded to `'head'` rather
- * than read from `rest[0]`. (Carves in this lab are head/face detail cuts;
- * if a body carve ever needs a different limb, `'head'` would need to
- * become a real word in the grammar, not stay guessed here.)
+ * than validated via `limbArg`. (Carves in this lab are head/face detail
+ * cuts; if a body carve ever needs a different limb, `'head'` would need to
+ * become a real word in the grammar, not stay guessed here.) `blob`/`bar`
+ * DO validate their limb word, via `limbArg` — see its doc comment for why
+ * that isn't optional.
  */
 function parseBodyLine(l: BlobLine, s: ParseState): void {
   const [head, ...rest] = l.words;
@@ -201,14 +255,15 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
   if (!s.known.has(bone))
     throw new BlobError(`unknown bone "${bone}"`, l.line, wordCol(l, onIdx + 1));
 
+  const limb: BlobPart['limb'] = kind === 'carve' ? 'head' : limbArg(l, rest[0]);
+
   const isBar = kind === 'bar';
   if (isBar && strArg(l, 'to') === null)
     throw new BlobError('bar needs "to="', l.line, l.indent + 1);
 
-  const off = strArg(l, 'offset');
   s.doc.parts.push({
     kind,
-    limb: kind === 'carve' ? 'head' : (rest[0] as BlobPart['limb']),
+    limb,
     bone,
     at: isBar ? numArg(l, 'from') : numArg(l, 'at'),
     to: isBar ? numArg(l, 'to') : null,
@@ -220,9 +275,7 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     mirror: l.words.includes('mirror'),
     hard: l.words.includes('hard'),
     both: l.words.includes('both'),
-    offset: off === null
-      ? null
-      : (off.replace(/[()]/g, '').split(',').map(Number) as unknown as [number, number, number]),
+    offset: parseOffset(l, strArg(l, 'offset')),
     src: l,
   } satisfies BlobPart);
 }

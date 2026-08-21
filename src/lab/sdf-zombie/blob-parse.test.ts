@@ -201,4 +201,24 @@ describe('parseBlob — body and face', () => {
     const bad = FULL.replace('from=0.05 to=0.95 ', 'from=0.05 ');
     expect(() => parseBlob(bad)).toThrow(/bar needs "to="/);
   });
+
+  it('rejects a typo\'d limb name on a blob', () => {
+    const bad = FULL.replace('blob torso on spine', 'blob torzo on spine');
+    expect(() => parseBlob(bad)).toThrow(/limb must be one of head\|torso\|arm\|leg, got "torzo"/);
+  });
+
+  it('rejects an omitted limb word on a blob, rather than silently reading "on" as the limb', () => {
+    const bad = FULL.replace('blob torso on spine', 'blob on spine');
+    expect(() => parseBlob(bad)).toThrow(/limb must be one of head\|torso\|arm\|leg, got "on"/);
+  });
+
+  it('rejects an offset with the wrong number of components', () => {
+    const bad = FULL.replace('offset=(0.035,0.01,0.06)', 'offset=(0.035,0.01)');
+    expect(() => parseBlob(bad)).toThrow(/offset needs exactly 3 components, got 2/);
+  });
+
+  it('rejects an offset with a non-numeric component', () => {
+    const bad = FULL.replace('offset=(0.035,0.01,0.06)', 'offset=(0.035,x,0.06)');
+    expect(() => parseBlob(bad)).toThrow(/offset has a non-numeric component/);
+  });
 });
