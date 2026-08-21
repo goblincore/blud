@@ -88,7 +88,11 @@ export function expandMirror(def: BodyDef): ExpandedBody {
       // exists for, arriving through the curve instead of the endpoint.
       const bn = rest.bend;
       const flipB = bn === undefined ? undefined : ([-bn[0], bn[1], bn[2]] as const);
-      prims.push({ ...rest, offset: [o[0], o[1], o[2]], ...(flipB ? { bend: flipB } : {}), limb: side });
+      // Only the SECOND copy reflects — the first keeps what the author wrote,
+      // exactly as `offset` and `tip` do above. Applying the flip to both
+      // copies negates the authored side too, so a horn pair curves the same
+      // way AND neither one curves the way the .blob asked for.
+      prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side });
       prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), limb: side });
       continue;
     }

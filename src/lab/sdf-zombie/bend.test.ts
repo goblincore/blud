@@ -177,11 +177,18 @@ describe('bend mirroring', () => {
     };
     const out = expandMirror(def);
     expect(out.prims).toHaveLength(2);
-    for (const p of out.prims) {
-      expect(p.bend?.[0]).toBe(-0.06);
-      expect(p.bend?.[1]).toBe(0);
-      expect(p.bend?.[2]).toBe(0.02);
-    }
+    // The AUTHORED copy keeps the authored sign; only its reflection negates.
+    // This originally asserted -0.06 on BOTH copies, which is the failure the
+    // comment above warns about: the pair leans the same way, and the +x side
+    // curves opposite to what the .blob asked for. bend.x must track offset.x
+    // side for side, the way tip.x already does.
+    const plus = out.prims.find(p => p.offset![0] > 0)!;
+    const minus = out.prims.find(p => p.offset![0] < 0)!;
+    expect(plus.bend).toEqual([0.06, 0, 0.02]);
+    expect(minus.bend).toEqual([-0.06, 0, 0.02]);
+    // ...and the flip agrees with tip's, rather than being independent of it.
+    expect(Math.sign(plus.bend![0])).toBe(Math.sign(plus.tip![0]));
+    expect(Math.sign(minus.bend![0])).toBe(Math.sign(minus.tip![0]));
   });
 
   // Under plain `mirror` nothing flips: the BONE mirrors in x, and the
