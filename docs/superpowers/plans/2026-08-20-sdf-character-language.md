@@ -697,6 +697,7 @@ describe('compileBlob', () => {
 skeleton
   root pelvis at 0.92
   bone spine parent=pelvis dir=up pitch=0 len=0.34
+  bone skull parent=spine dir=up len=0.16
   mirror
     bone thigh parent=pelvis dir=down side=0.10 len=0.40
   end
@@ -705,7 +706,16 @@ body
   blob torso on spine at=0.8 r=0.15 wide=1.28 deep=0.78 blend=0.014
   bar  leg on thigh from=0.05 to=0.95 r=0.082 blend=0.0175 mirror
   carve on spine at=0.55 r=0.022 offset=(0.035,0.01,0.06) hard both
+  blob torso on pelvis at=0.40 r=0.16 wide=1.10 tall=0.9 deep=0.92 blend=0.03
 `);
+
+> **Two fixture lines exist for a reason, do not trim them.** `compileBlob`
+> always appends `facePrims(face)`, which targets a bone hardcoded as `skull`
+> in `face.ts` — a skeleton without one throws `prim references unknown bone
+> "skull"` from `resolve.ts` before `validateBody` ever runs. And the pelvis
+> torso blob is what fuses the legs to the body: without it `buildBody`
+> reports `cluster "legL"/"legR" is disconnected`. Both were missing from an
+> earlier draft of this plan, so the fixture could not have passed as written.
 
   it('carries the root height through as BodyDef.root', () => {
     expect(compileBlob(doc).root).toEqual([0, 0.92, 0]);
