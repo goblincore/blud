@@ -42,6 +42,19 @@ export interface FaceSheetParams {
   eyeSize: number;
   /** Eye brightness, 0..1. This is what keys the emissive glow. */
   eyeGlow: number;
+  /**
+   * Vertical squash. 1 is a round eye; above 1 narrows it into a slit or an
+   * almond, below 1 makes it a tall oval. The old hardcoded 1.25 is the
+   * default, so an unspecified eye is unchanged.
+   */
+  eyeSquash: number;
+  /**
+   * A dark pupil inside the bright eye, as a fraction of eye radius. 0 leaves
+   * the eye a plain glowing blob. A pupil reads as a creature looking at you
+   * rather than as a lamp, but it also breaks up the emissive core, so keep it
+   * well under 1.
+   */
+  eyePupil: number;
   /** Vertical eye position, 0 = top of sheet, 1 = bottom. */
   eyeRise: number;
   /** Outer-corner lift in degrees. Positive scowls, negative droops. */
@@ -89,6 +102,8 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyeGap: 0.34,
   eyeSize: 0.075,
   eyeGlow: 1.0,
+  eyeSquash: 1.25,
+  eyePupil: 0,
   eyeRise: 0.42,
   eyeTilt: 8,
   browHeavy: 0.55,

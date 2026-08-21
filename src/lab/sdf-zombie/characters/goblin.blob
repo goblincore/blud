@@ -54,7 +54,20 @@ skeleton
     # old shoulder reach outside the flesh and detached both arms outright
     # (fusedOf +0.0076, and validateBody reported the clusters disconnected).
     # Shoulder reach is a function of chest width, not a constant.
-    bone clavicle parent=chest    side=0.044 dir=side  len=0.050
+    #
+    # And "attached" is not the target — DISTINCT is. At side 0.044 + len 0.050
+    # the shoulder sat at x 0.094 with a 0.044 nub, against a chest half-width
+    # of 0.086: most of the nub was buried and the arms melted into the torso
+    # even though every check passed. Fused is a floor, not the goal.
+    #
+    # Reach alone cannot fix it, though — measured sweep: 0.046/0.050 leaves
+    # 5 mm of margin, 0.050/0.056 leaves 0.8 mm, 0.054/0.062 is already
+    # detached by fusedOf, and 0.058/0.068 is detached loudly enough that
+    # validateBody reports both arms disconnected. There is no reach that both
+    # attaches and clears the torso. What separates them is a FATTER shoulder
+    # ball (so more of it protrudes past the chest) and a TIGHTER blend at the
+    # join, so the two crease against each other instead of smearing together.
+    bone clavicle parent=chest    side=0.046 dir=side  len=0.052
     bone upperarm parent=clavicle dir=down pitch=-12 tilt=7 len=0.235
     bone forearm  parent=upperarm dir=down pitch=11    len=0.235
     bone hand     parent=forearm  dir=down             len=0.072
@@ -84,7 +97,7 @@ body
   blob torso on pelvis at=0.00 r=0.078 deep=0.88 blend=0.0045
   blob torso on pelvis at=0.90 r=0.098 deep=0.86 blend=0.0050
   blob torso on spine1 at=0.62 r=0.094 deep=0.84 blend=0.0050
-  blob torso on chest  at=0.45 r=0.086 deep=0.84 blend=0.0045
+  blob torso on chest  at=0.45 r=0.081 deep=0.84 blend=0.0042
   blob torso on chest  at=1.00 r=0.070 deep=0.84 blend=0.0040
 
   # Neck column — thin, and rising out of a small chest cap.
@@ -113,8 +126,8 @@ body
   # pipe, and this is the stylisation rather than something to blend away, so
   # the nubs are fatter than the shafts they join and the blends are kept tight
   # enough not to swallow them.
-  blob arm on clavicle at=1.00 r=0.044 blend=0.0030 mirror
-  bar  arm on upperarm from=0.06 to=0.94 r=0.033 blend=0.0026 mirror
+  blob arm on clavicle at=1.00 r=0.050 blend=0.0014 mirror
+  bar  arm on upperarm from=0.02 to=0.96 r=0.032 blend=0.0018 mirror
   blob arm on forearm  at=0.00 r=0.038 blend=0.0030 mirror
   bar  arm on forearm  from=0.06 to=0.94 r=0.028 blend=0.0024 mirror
   blob arm on forearm  at=1.00 r=0.030 blend=0.0026 mirror
@@ -166,10 +179,12 @@ face
 # Small close-set eyes under a heavy slanted brow, and a wide down-turned mouth
 # — a scowl is mostly brow angle and mouth curve, not eye shape.
 sheet
-  eyeGap     0.30
-  eyeSize    0.072
+  eyeGap     0.44
+  eyeSize    0.062
   eyeRise    0.44
   eyeTilt    16
+  eyeSquash  1.70
+  eyePupil   0.42
   browHeavy  0.90
   browAngle  24
   mouthWidth 0.54
@@ -178,7 +193,7 @@ sheet
   mouthOpen  0.075
   nostril    0.45
   noseRidge  1.00
-  noseWide   0.080
+  noseWide   0.062
   noseLong   0.235
   jawShade   0.55
   grain      0.10
