@@ -186,12 +186,19 @@ parts
   # a plate that ignores the pinch either floats at the waist or cuts the
   # belly.
   loft breastplate bones=hips..chest material=iron frame=fwd
-    ring 0.20 w=0.144 d=0.196
-    ring 0.40 w=0.138 d=0.180
-    ring 0.60 w=0.116 d=0.142
-    ring 0.76 w=0.124 d=0.142
-    ring 0.90 w=0.116 d=0.124
-    ring 1.00 w=0.108 d=0.112
+    # +10 mm of margin over the measured flesh, not the 2-3 mm the other
+    # pieces use. The measurements are taken AT ring positions, and smooth-min
+    # bulges the torso BETWEEN them — so a plate sized to the samples is
+    # locally too tight and the belly pushes through it in green spots. The
+    # fit test cannot see this: it asks whether armour is inside flesh, and
+    # this is flesh outside armour. Coverage, not containment — the same
+    # distinction that hid the pauldron bug.
+    ring 0.20 w=0.156 d=0.208
+    ring 0.40 w=0.150 d=0.192
+    ring 0.60 w=0.130 d=0.156
+    ring 0.76 w=0.136 d=0.154
+    ring 0.90 w=0.128 d=0.136
+    ring 1.00 w=0.120 d=0.124
     cap start=none end=none
 
   # BELT — around the pelvis, above the widest part of the gut. Deliberately

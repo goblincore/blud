@@ -140,11 +140,22 @@ body
   # Neck column — thin, and rising out of a small chest cap.
   bar head on neck from=0.00 to=1.00 r=0.046 deep=0.94 blend=0.0016
 
-  # Ears: small and pointed. One ellipsoid cannot taper — it is round whatever
-  # you scale it to — so each ear is a flattened base plus a much smaller tip
-  # pushed further out and up. The smooth-min taper between them is the point.
-  blob head on skull at=0.60 r=0.040 wide=0.75 tall=1.45 deep=0.40 blend=0.0022 offset=(0.098,0.028,-0.010) both
-  blob head on skull at=0.66 r=0.020 wide=0.55 tall=1.30 deep=0.34 blend=0.0018 offset=(0.128,0.082,-0.020) both
+  # Ears: ONE tapered prim each, swept out and back to a point.
+  #
+  # This used to be two blobs apiece, and the comment here said why: "one
+  # ellipsoid cannot taper — it is round whatever you scale it to — so each ear
+  # is a flattened base plus a much smaller tip pushed further out and up."
+  # That is a description of the format's limit, not of an ear. The smooth-min
+  # between the two prims was doing the tapering, which meant the taper was a
+  # FILLET — convex, bulging out before it came back in — and the tip was still
+  # a small sphere. Mickey Mouse, which is what the owner called it.
+  #
+  # `r2=0.003` is a real point, and `tip=` sweeps it out and up out of a skull
+  # bone that runs straight up. `chamfer` creases the ear into the head instead
+  # of letting it melt in. The skull's own half-width is headRadius x headWidth
+  # = 0.121, so the base at x 0.086 sits INSIDE the cranium (which is what
+  # attaches it) and the point stands 52 mm clear.
+  blob head on skull at=0.58 r=0.036 r2=0.003 wide=0.80 deep=0.44 blend=0.0020 chamfer offset=(0.086,0.006,-0.006) tip=(0.087,0.104,-0.022) both
 
   # Nose — A REAL POINT NOW, not two ellipsoids faked into a hook.
   #
