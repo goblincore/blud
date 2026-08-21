@@ -64,7 +64,30 @@ import type { Vec3 } from '../types';
  * a mirror of a room that is not the game's room. Around 0.7 keeps a little
  * diffuse so the form still reads in shadow.
  */
-const LOOK: Record<string, { metalness: number; roughness: number; envIntensity: number }> = {
+const LOOK: Record<string, {
+  metalness: number; roughness: number; envIntensity: number;
+  /**
+   * Linear RGB self-illumination, and its strength. Used only by the sunglass
+   * lens, to fake the goblin's glowing eyes reading THROUGH the shades — a
+   * lens that hides them entirely is a blindfold.
+   *
+   * A FAKE, and worth knowing why rather than reaching for real transparency
+   * again. `transparent: true` alone does nothing useful here, because the SDF
+   * layer composites its flesh as a fullscreen quad that depth-tests against
+   * the polygon depth buffer: with `depthWrite: false` the lens leaves no
+   * depth, the composite passes, and the flesh is drawn straight over it — the
+   * shades disappear entirely wherever the face is behind them. With
+   * `depthWrite: true` the lens does survive, but then the composite is
+   * rejected there and the "transparent" lens shows the BACKGROUND through it
+   * rather than the face. Neither is transparency.
+   *
+   * Doing it properly means drawing transparent kit geometry in a third pass
+   * AFTER the composite, which is a change to sdf-layer.ts's pass structure,
+   * not a material flag.
+   */
+  emissive?: [number, number, number];
+  emissiveIntensity?: number;
+}> = {
   iron: { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   brass: { metalness: 0.78, roughness: 0.22, envIntensity: 1.25 },
   // Not metal, but not matte either — oiled leather catches a broad sheen.
@@ -74,6 +97,10 @@ const LOOK: Record<string, { metalness: number; roughness: number; envIntensity:
   // base colour contributes nearly nothing. Metalness stays moderate: a real
   // lens is dielectric, and pushing it metallic kills the dark body of the
   // glass and leaves only a chrome smear.
+  // Solid, not smoked. An emissive tint to fake the eyes glowing through was
+  // tried and rejected on this character — it reads as a lit visor, which is a
+  // different and much less goblin note. See the emissive field's docstring for
+  // why real transparency is not a material flag here.
   glass: { metalness: 0.35, roughness: 0.04, envIntensity: 2.0 },
 };
 
@@ -139,6 +166,10 @@ export async function loadKit(
         std.roughness = look.roughness;
         std.envMap = env;
         std.envMapIntensity = look.envIntensity;
+        if (look.emissive) {
+          std.emissive.setRGB(...look.emissive);
+          std.emissiveIntensity = look.emissiveIntensity ?? 1;
+        }
         std.needsUpdate = true;
       }
     }

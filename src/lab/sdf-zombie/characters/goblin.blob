@@ -184,8 +184,16 @@ body
   # matter how sharp it is — which is exactly what the old two-ellipsoid nose
   # was, and what the first tapered version still was at z=0.122. The hook's
   # point now sits at z=0.162, a good 44 mm proud of the skull.
-  blob head on skull at=0.47 r=0.031 r2=0.017 wide=0.80 blend=0.0030 chamfer offset=(0,-0.010,0.070) tip=(0,-0.026,0.062)
-  blob head on skull at=0.47 r=0.016 r2=0.004 wide=0.72 blend=0.0016 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
+  #
+  # SLENDER, and that took a second pass. At r=0.031 the bridge was a 31 mm
+  # radius, so where it broke the cranium's surface it read as a big round
+  # bulb with a small spike on the end — a clown nose wearing a hook, not a
+  # hooked nose. The taper made the TIP sharp and did nothing about the BASE
+  # being fat, which is a distinction easy to miss when the new toy is a
+  # taper. The blend came down with it: at 0.0030 the smooth-min was smearing
+  # the bridge into the brow and widening the bulb further.
+  blob head on skull at=0.47 r=0.019 r2=0.012 wide=0.80 blend=0.0016 chamfer offset=(0,-0.010,0.070) tip=(0,-0.026,0.062)
+  blob head on skull at=0.47 r=0.011 r2=0.003 wide=0.72 blend=0.0011 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
 
   # BIG LIPS — a protruding muzzle, the cartoon-mouse read.
   #
@@ -213,8 +221,19 @@ body
   # read as part of it. The nose tips out at 0.162, so keeping the lips a clear
   # 30 mm behind it is what preserves the hook as the silhouette's leading
   # edge. Lips, not a snout.
-  blob head on skull at=0.31 r=0.030 r2=0.023 wide=1.40 tall=0.44 blend=0.0024 chamfer offset=(0,0.008,0.074) tip=(0,-0.006,0.056)
-  blob head on skull at=0.31 r=0.026 r2=0.020 wide=1.25 tall=0.42 blend=0.0019 chamfer offset=(0,-0.032,0.068) tip=(0,-0.022,0.050)
+  #
+  # AND THEY HAVE TO SIT BELOW THE NOSE, which is not automatic. At skull 0.31
+  # the upper lip landed at y=1.194 and the nose tip at y=1.1935 — the same
+  # height — so smooth-min fused them into one broad snout with a spike on the
+  # front. The owner read it as "a big broad disk intersecting the nose", and
+  # that is exactly what two features competing for the same flesh looks like.
+  # Dropped to 0.23, a clear 2 cm of face between them.
+  #
+  # Their reach came down with the move. The cranium is an ellipsoid, so its
+  # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
+  # the nose — and lips sized against the wrong number stick out too far.
+  blob head on skull at=0.23 r=0.029 r2=0.022 wide=1.25 tall=0.44 blend=0.0022 chamfer offset=(0,0.008,0.070) tip=(0,-0.006,0.050)
+  blob head on skull at=0.23 r=0.025 r2=0.019 wide=1.12 tall=0.42 blend=0.0018 chamfer offset=(0,-0.030,0.064) tip=(0,-0.020,0.044)
 
   # ARMS AND LEGS — ball joints, deliberately.
   #
@@ -291,7 +310,7 @@ sheet
   # land on them or the head wears two mouths — a dark smear on the jaw below a
   # protruding pout. 0.63 is where the lip prims sit in face-space: they ride
   # the skull at 0.31, which is 63% down a face spanning y 1.096..1.354.
-  mouthRise  0.63
+  mouthRise  0.69
   mouthCurve -0.50
   # A SEAM, not a slab. With no geometry to help, the sheet's mouth had to do
   # all the work and was drawn thick; over a real pout that thickness just
