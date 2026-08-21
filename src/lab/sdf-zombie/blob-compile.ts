@@ -118,6 +118,18 @@ export function compileFace(doc: BlobDoc): FaceParams {
   return face;
 }
 
+/**
+ * `face` defaults to `compileFace(doc)`, which validates `doc.face`'s keys and
+ * throws on an unknown one — but a default parameter only fires when the caller
+ * OMITS the argument. Passing an explicit face (say, one merged from live panel
+ * overrides) silently skips that validation: `doc.face` is never even read.
+ *
+ * This is not hypothetical. `lab-main.ts` always supplies an explicit face, so
+ * the unknown-key check was dead in the lab from the moment it was written, and
+ * every unit test missed it because they all omit the argument and take the
+ * default. **If your caller always supplies a face, call `compileFace(doc)`
+ * yourself first** to get the validation back.
+ */
 export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
   const bones: BoneDef[] = [
     { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: 0.14 },

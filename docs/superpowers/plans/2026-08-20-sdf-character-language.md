@@ -1611,6 +1611,20 @@ git commit -m "docs(sdf-lab): skill for authoring .blob characters"
 
 ## Task 11: Close out
 
+**Known gap to decide on, do not let it pass silently.** `compileZombie()` in
+`lab-main.ts` calls `compileFace(doc)` explicitly to restore the face-key
+validation that an explicit-face `compileBlob` skips. That guard is **not
+covered by a test** — `lab-main.ts` cannot be imported under vitest (module-level
+WebGPU bootstrap, and the helpers are not exported), so deleting the line would
+silently kill the validation again, exactly as it was dead before Task 6 found
+it. `blob-compile.test.ts` pins the underlying contract but not this call site.
+
+Either extract `compileZombie`/`buildZombieBody` into a small non-WebGPU module
+so they can be tested directly, or record the gap explicitly in `TASKS.md`.
+Extraction is the better answer if Tasks 7-9 end up wanting the same
+compile-with-fallback logic.
+
+
 - [ ] Update `TASKS.md` `P8` with the measured state: what shipped, what did not.
 - [ ] Run the full suite, `npx tsc --noEmit`, `npm run build`, `git diff --check`.
 - [ ] Confirm the lab still renders from `zombie.blob` in a real browser.
