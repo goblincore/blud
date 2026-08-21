@@ -5,6 +5,9 @@ description: Use when creating or editing a Blud SDF character - writing a .blob
 
 # Authoring SDF characters
 
+The toolchain is called **Blobforge**: the `.blob` format plus its parser,
+compiler, checks, emitter, turntable and this skill. Use that name.
+
 Blud's characters are raymarched signed-distance fields built from blended
 primitives. You author them in `.blob` text, which compiles to `BodyDef`. You
 never hand-write `BodyDef` TypeScript.
