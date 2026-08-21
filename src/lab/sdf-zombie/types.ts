@@ -61,10 +61,12 @@ export interface PrimDef {
   mirror?: boolean;
   /**
    * 'sub' carves this primitive out of the assembled field instead of adding
-   * to it. Carves apply AFTER the complete additive fold — see applyCarves in
-   * march.glsl.ts for why not per-cluster.
+   * to it. 'groove' cuts a narrow CHANNEL along where this primitive's surface
+   * meets the assembled body — a mouth line, a panel seam, a nostril slit —
+   * rather than removing a solid. Both apply AFTER the complete additive fold;
+   * see applyCarves in march.glsl.ts for why not per-cluster.
    */
-  op?: 'add' | 'sub';
+  op?: 'add' | 'sub' | 'groove';
   /**
    * Displacement from the bone-relative placement, in world axes. The body is
    * authored in a rest pose with no rotations, so world and bone axes coincide
@@ -119,7 +121,10 @@ export interface Primitive {
    * Absent means 'add'. Optional rather than required so the many existing
    * test fixtures that build Primitive literals keep compiling.
    */
-  op?: 'add' | 'sub';
+  op?: 'add' | 'sub' | 'groove';
+  /** Groove depth and width, in metres. Only read when `op` is 'groove'. */
+  grooveDepth?: number;
+  grooveWidth?: number;
   /**
    * Severed mid-limb but never removed — the smooth-min fold order is sacred,
    * so a distal prim goes DEAD instead: packBody writes primScale.w = 2 and

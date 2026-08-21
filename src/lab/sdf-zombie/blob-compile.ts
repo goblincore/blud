@@ -229,6 +229,14 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
     // carve pass deliberately does not read the profile. Rejecting it here is
     // what keeps that from silently doing the wrong thing: without this the
     // author gets a normal fillet-carve and no diagnostic.
+    // A groove that cuts nothing is almost certainly a forgotten argument, not
+    // an intentional no-op: with width 0 the channel is nowhere and with depth
+    // 0 it is infinitely shallow, so the primitive silently does nothing at all
+    // while still costing a slot in the fold and a row in the texture.
+    if (p.kind === 'groove' && (p.grooveDepth <= 0 || p.grooveWidth <= 0))
+      throw new BlobError(
+        'groove needs depth= and width= above zero, or it cuts nothing',
+        p.src.line, p.src.indent + 1);
     if (p.chamfer && p.kind === 'carve')
       throw new BlobError(
         'chamfer is not supported on a carve — carving folds through smax, '
@@ -252,6 +260,9 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       limb: p.limb,
       ...(p.mirror ? { mirror: true } : {}),
       ...(p.kind === 'carve' ? { op: 'sub' as const } : {}),
+      ...(p.kind === 'groove'
+        ? { op: 'groove' as const, grooveDepth: p.grooveDepth, grooveWidth: p.grooveWidth }
+        : {}),
       ...(p.both ? { mirrorOffset: true } : {}),
       ...(p.offset ? { offset: p.offset as Vec3 } : {}),
       ...(p.tip ? { tip: p.tip as Vec3 } : {}),

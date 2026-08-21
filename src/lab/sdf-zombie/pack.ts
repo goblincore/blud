@@ -9,6 +9,9 @@ export const CLUSTER_STRIDE = 4; // vec4
 export const W_ADD = 0;
 export const W_CARVE = 1;
 export const W_DEAD = 2;
+/** Cuts a channel along its surface rather than removing a solid. Handled in
+ *  the carve pass beside W_CARVE — see sdGroove in validate.ts. */
+export const W_GROOVE = 3;
 
 export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
@@ -71,7 +74,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
     // prims, but if a carve ever went dead it must stop carving too.
     const isCarve = p.op === 'sub';
     if (isCarve && !p.dead) carveCount++;
-    const w = p.dead ? W_DEAD : isCarve ? W_CARVE : W_ADD;
+    const w = p.dead ? W_DEAD : p.op === 'groove' ? W_GROOVE : isCarve ? W_CARVE : W_ADD;
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
     primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], w], o);
@@ -83,9 +86,12 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
     // A radiusB EQUAL to radius is still written as a taper: it is a
     // no-op geometrically, and rewriting it to -1 to save a branch would make
     // the packed data depend on a float comparison the author did not make.
+    // zw carry the groove's depth and width, which is why the groove needed no
+    // new row — they were spare here from the moment the taper claimed xy.
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
-      p.blendProfile === 'chamfer' ? 1 : 0, 0, 0,
+      p.blendProfile === 'chamfer' ? 1 : 0,
+      p.grooveDepth ?? 0, p.grooveWidth ?? 0,
     ], o);
     // Rest endpoints (motion-polish task 6). A missing rest prim packs as
     // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
@@ -118,7 +124,8 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
     // its legs pay for it.
     const own = body.prims.slice(c.start, c.start + c.count);
     const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
-    const shaped = own.some(p => p.radiusB !== undefined || p.blendProfile === 'chamfer');
+    const shaped = own.some(p =>
+      p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove');
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });

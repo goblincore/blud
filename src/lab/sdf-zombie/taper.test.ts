@@ -11,7 +11,7 @@
 // goblin's hooked nose is two ellipsoids faked into a hook that reads as a
 // bump in profile, and that is the format's limit showing, not the author's.
 import { describe, it, expect } from 'vitest';
-import { sdPrimitive, smin, sminChamfer } from './validate';
+import { sdBody, sdGroove, sdPrimitive, smin, sminChamfer } from './validate';
 import type { Primitive, Vec3 } from './types';
 
 const prim = (over: Partial<Primitive> = {}): Primitive => ({
@@ -111,5 +111,69 @@ describe('chamfer fold', () => {
   it('leaves far-apart surfaces alone', () => {
     // Well outside the blend reach, a union is a union in either profile.
     expect(sminChamfer(0.02, 9.0, 0.05)).toBeCloseTo(0.02, 9);
+  });
+});
+
+describe('groove', () => {
+  it('leaves the surface alone away from the cutting field', () => {
+    // Far from b's zero-set, `rb - abs(b)` is very negative, so the min picks
+    // it and the max keeps `a`. A groove must not shift the whole surface.
+    expect(sdGroove(0.02, 0.9, 0.01, 0.005)).toBeCloseTo(0.02, 9);
+    expect(sdGroove(-0.05, -0.9, 0.01, 0.005)).toBeCloseTo(-0.05, 9);
+  });
+
+  it('cuts INTO the surface where the cutting field crosses it', () => {
+    // On b's zero-set the channel reaches its full depth: max(a, min(a+ra, rb)).
+    const cut = sdGroove(0, 0, 0.01, 0.005);
+    expect(cut).toBeGreaterThan(0);          // material removed — outside now
+    expect(cut).toBeCloseTo(0.005, 9);       // bounded by the width, not the depth
+  });
+
+  it('is bounded by depth, so a wide groove cannot cut arbitrarily deep', () => {
+    // `min(a + ra, ...)` is the whole point of the depth term: without it a
+    // large width would carve straight through the body.
+    expect(sdGroove(0, 0, 0.002, 0.5)).toBeCloseTo(0.002, 9);
+  });
+
+  it('never ADDS material — a groove only subtracts', () => {
+    for (const a of [-0.4, -0.02, 0, 0.02, 0.4])
+      for (const b of [-0.3, -0.001, 0, 0.001, 0.3])
+        expect(sdGroove(a, b, 0.01, 0.006)).toBeGreaterThanOrEqual(a - 1e-12);
+  });
+
+  // Grooves belong to the CARVE pass. A groove prim that also folded additively
+  // would add a solid lump and then cut a line in it.
+  it('is skipped by the additive fold and applied after it', () => {
+    const base = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.2, scale: [1, 1, 1] as [number, number, number],
+      blendK: 0, limb: 'torso' as const, cluster: 0,
+    };
+    const body = {
+      prims: [
+        { ...base },
+        // A groove prim sitting where it will cross the sphere's surface.
+        { ...base, a: [0.2, 0, 0] as [number, number, number],
+          b: [0.2, 0, 0] as [number, number, number], radius: 0.02,
+          op: 'groove' as const, grooveDepth: 0.01, grooveWidth: 0.006 },
+      ],
+      clusters: [{ id: 0, limb: 'torso' as const, start: 0, count: 2,
+        center: [0, 0, 0] as [number, number, number], radius: 0.3, alive: true }],
+    };
+    // Dead centre of the sphere is deep inside and untouched. This is the
+    // assertion the ungated hg_sdf form fails: it reports -0.19, having lifted
+    // the entire interior by the groove's depth.
+    expect(sdBody([0, 0, 0], body as never)).toBeCloseTo(-0.2, 6);
+
+    // Where the two SURFACES cross, material is removed. The groove prim is
+    // centred on the big sphere's surface, so this point sits on the sphere
+    // (a is ~0.001) and on the groove prim's own zero-set (b is 0).
+    const onSeam: [number, number, number] = [0.2, 0.02, 0];
+    expect(sdBody(onSeam, body as never)).toBeGreaterThan(0.005);
+
+    // ...and a point the same distance out but AROUND the sphere, well away
+    // from the cutting field, is untouched — so the groove really is a
+    // channel and not a global offset.
+    const offSeam: [number, number, number] = [0, 0.2, 0.02];
+    expect(sdBody(offSeam, body as never)).toBeLessThan(0.0015);
   });
 });

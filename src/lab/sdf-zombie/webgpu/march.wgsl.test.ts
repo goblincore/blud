@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
-  SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER,
+  SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
 } from './march.wgsl';
@@ -178,11 +178,34 @@ describe('ported features reach the entry point', () => {
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
-    // primScale.w: 0 add, 1 carve, 2 dead (severed mid-limb). The additive
-    // fold already skips anything above 0.5; a dead prim must ALSO stop
+    // primScale.w: 0 add, 1 carve, 2 dead (severed mid-limb), 3 groove. The
+    // additive fold skips anything above 0.5; a dead prim must ALSO stop
     // carving, or a severed hand keeps biting the field it left behind.
+    //
+    // The bound used to be a single `S.w > 1.5`, which was enough while dead
+    // was the largest value. Adding groove at 3 put a LIVE op on the far side
+    // of dead, so the pass now selects the two subtractive values explicitly
+    // rather than taking everything past a threshold — 2 sits between them and
+    // must fall through both.
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
-    expect(applyCarves).toContain('S.w > 1.5');
+    expect(applyCarves).toContain('let isCarve = S.w > 0.5 && S.w < 1.5;');
+    expect(applyCarves).toContain('let isGroove = S.w > 2.5;');
+    expect(applyCarves).toContain('if (!isCarve && !isGroove) { continue; }');
+  });
+
+  it('grooves cut a channel rather than subtracting a solid', () => {
+    const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
+    // ONE sd evaluation feeds both branches, the same invariant mapBody's fold
+    // keeps — evaluating the field twice is how the two paths drift apart.
+    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2), sdPrimO(p, idx, data, r2), ori);');
+    expect(applyCarves).toContain('if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }');
+    // Depth and width ride primShape.zw, spare since the taper claimed xy.
+    expect(applyCarves).toContain('gr = T.zw;');
+    // The BAND GATE, which hg_sdf's original does not have. Without it the
+    // whole interior lifts by the groove depth — see sdGroove in validate.ts.
+    expect(SD_GROOVE).toContain('let inBand = rb - abs(b);');
+    expect(SD_GROOVE).toContain('if (inBand <= 0.0) { return a; }');
+    expect(SD_GROOVE).toContain('max(a, min(a + ra, inBand))');
   });
 
   it('shell-displaces the real field only inside a thin shell (gobs-and-goo task 4)', () => {
@@ -564,7 +587,8 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // BOTH fields. This one backs click-to-shoot; a divergence here lands
     // shots where nothing is drawn.
     expect(APPLY_CARVES).toContain('let flags = i32(range.w + 0.5);');
-    expect(APPLY_CARVES).toContain('if (shaped) { r2 = textureLoad');
+    expect(APPLY_CARVES).toContain('if (shaped) {');
+    expect(APPLY_CARVES).toContain('r2 = T.x;');
   });
 
   /**

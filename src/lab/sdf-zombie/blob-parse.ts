@@ -301,7 +301,7 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
 function parseBodyLine(l: BlobLine, s: ParseState): void {
   const [head, ...rest] = l.words;
   const kind = head as BlobPartKind;
-  if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve')
+  if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve' && kind !== 'groove')
     throw new BlobError(`unrecognized "${head}" in body block`, l.line, l.indent + 1);
 
   // `carve on skull ...` has no limb word; `blob torso on spine ...` does.
@@ -315,6 +315,9 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
   // `rest[0]!` is safe here, not merely convenient: the checks above already
   // require `on <bone>` to appear at index >= 1, so `l.words.length >= 3`
   // by this point, which guarantees index 1 (== rest[0]) exists.
+  // `carve` is limb-locked to head (see this function's header). `groove`
+  // takes a limb word like blob/bar do — a seam on a limb is a legitimate
+  // thing to want, and a groove has no reason to inherit carve's restriction.
   const limb: BlobPart['limb'] = kind === 'carve' ? 'head' : limbArg(l, rest[0]!);
 
   const isBar = kind === 'bar';
@@ -349,6 +352,8 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     // `tip=` displaces the FAR end only, so a primitive can point somewhere
     // its bone does not — a nose out of a vertical skull, a tusk out of a jaw.
     tip: parseVec3Arg(l, 'tip', strArg(l, 'tip')),
+    grooveDepth: numArg(l, 'depth', 0),
+    grooveWidth: numArg(l, 'width', 0),
     src: l,
   } satisfies BlobPart);
 }

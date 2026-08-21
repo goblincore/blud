@@ -99,6 +99,20 @@ export const SMIN_CHAMFER = /* wgsl */ `fn sminChamfer(a: f32, b: f32, kIn: f32)
   return min(min(a, b), (a - k + b) * 0.70710678);
 }`;
 
+// Carpenter's groove — cuts a channel of width rb and depth ra into surface a,
+// along the line where cutting surface b crosses it. The mirror of sdGroove in
+// validate.ts, which explains why the band gate is there and hg_sdf's original
+// does not have it (short version: the ungated form lifts the whole INTERIOR
+// by the groove depth, which a renderer never notices and every interior query
+// in this project does). Not a blend profile and could not be
+// one: a blend combines two solids, this removes material from one along the
+// other's zero-set, so it lives in the carve pass.
+export const SD_GROOVE = /* wgsl */ `fn sdGroove(a: f32, b: f32, ra: f32, rb: f32) -> f32 {
+  let inBand = rb - abs(b);
+  if (inBand <= 0.0) { return a; }
+  return max(a, min(a + ra, inBand));
+}`;
+
 export const SMAX = /* wgsl */ `fn smax(a: f32, b: f32, k: f32) -> f32 {
   return -smin(-a, -b, k);
 }`;
@@ -333,7 +347,10 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
       // S.w: 0 add, 1 carve, 2 dead (severed mid-limb). Dead prims stop
       // carving too — a severed hand must not keep biting the field it left.
-      if (S.w < 0.5 || S.w > 1.5) { continue; }
+      // 1 = carve, 3 = groove. 0 (additive) and 2 (dead) are skipped.
+      let isCarve = S.w > 0.5 && S.w < 1.5;
+      let isGroove = S.w > 2.5;
+      if (!isCarve && !isGroove) { continue; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
       // The shape row is read on the CARVE path too, not only in mapBody.
       // Skipping it would make a tapered carve a plain capsule in the shader
@@ -347,8 +364,14 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       // chamfer on a carve is rejected at authoring time instead
       // (blob-compile.ts), so this cannot silently do the wrong thing.
       var r2 = -1.0;
-      if (shaped) { r2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0).x; }
-      if (ori) { d = smax(d, -sdPrimO(p, idx, data, r2), k); } else { d = smax(d, -sdPrim(p, idx, data, r2), k); }
+      var gr = vec2<f32>(0.0, 0.0);
+      if (shaped) {
+        let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
+        r2 = T.x;
+        gr = T.zw;
+      }
+      let sd = select(sdPrim(p, idx, data, r2), sdPrimO(p, idx, data, r2), ori);
+      if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }
     }
   }
   return d;
@@ -1191,7 +1214,7 @@ export const HELPERS = [
   // ordering test below only checks what is IN the list, so an omitted helper
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
-  SMIN, SMIN_CHAMFER, SMAX, CONE_CAP, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
+  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_PRIM, SD_PRIM_ORIENTED, HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
   MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,

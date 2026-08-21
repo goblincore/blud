@@ -42,7 +42,7 @@ export interface BlobBone {
   src: BlobLine;
 }
 
-export type BlobPartKind = 'blob' | 'bar' | 'carve';
+export type BlobPartKind = 'blob' | 'bar' | 'carve' | 'groove';
 
 export interface BlobPart {
   kind: BlobPartKind;
@@ -65,6 +65,9 @@ export interface BlobPart {
   offset: readonly [number, number, number] | null;
   /** `tip=` — extra displacement of the FAR end only. */
   tip: readonly [number, number, number] | null;
+  /** `depth=`/`width=` — how deep and how wide a `groove` cuts. */
+  grooveDepth: number;
+  grooveWidth: number;
   src: BlobLine;
 }
 

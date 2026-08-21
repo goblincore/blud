@@ -118,6 +118,21 @@ blob head on skull at=0.47 r=0.031 r2=0.017 blend=0.0030 chamfer offset=(0,-0.01
 blob head on skull at=0.47 r=0.016 r2=0.004 blend=0.0016 chamfer offset=(0,-0.036,0.132) tip=(0,-0.040,0.030)
 ```
 
+**`groove`** is a fourth part kind beside `blob`/`bar`/`carve`. It cuts a
+CHANNEL along where its own surface crosses the assembled body, so a mouth
+line, a panel seam, a nostril slit or a scar is a *line* rather than a
+subtracted solid:
+
+```
+groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
+```
+
+`depth`/`width` are metres and both must be above zero — a groove missing
+either cuts nothing at all while still costing a slot in the fold. Make the
+primitive FLAT in the direction you want the line to run (`tall` right down for
+a horizontal seam): the channel follows its zero-set. Grooves run in the carve
+pass, after the whole additive fold, so they cut the finished surface.
+
 **REACH IS THE WHOLE GAME, and it is easy to under-do.** A sharp point still
 reads as a bump if it stops inside the mass it grows from. The goblin's cranium
 has a semi-depth of `headRadius × headDepth` = 0.118 m; the first tapered nose

@@ -243,6 +243,21 @@ body
   blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044)
   blob head on skull at=0.12 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,-0.028,0.056) tip=(0,-0.018,0.038)
 
+  # THE MOUTH LINE — a groove, not a gap between two lumps.
+  #
+  # The crease between the lips was being faked by creasing the two lip prims
+  # against each other with `chamfer`, which only works while both lips exist,
+  # both touch, and the camera is near enough to front-on to see the join. A
+  # groove cuts a CHANNEL along where this primitive's surface crosses the
+  # assembled face, so the line is a line — it survives the lips changing size,
+  # and it reads from every angle.
+  #
+  # Wide and flat (`wide` up, `tall` right down) so its zero-set is a
+  # horizontal band across the muzzle. `depth`/`width` are millimetres: the
+  # channel is 5 mm across and bites 4 mm in, which on a 1.30 m goblin is a
+  # crease rather than a wound.
+  groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 deep=1.10 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
+
   # ARMS AND LEGS — ball joints, deliberately.
   #
   # Every segment is a bar with a nub at each joint, and the nubs are meant to

@@ -158,6 +158,45 @@ export function sminChamfer(a: number, b: number, k: number): number {
   return Math.min(Math.min(a, b), (a - kk + b) * Math.SQRT1_2);
 }
 
+/**
+ * Carpenter's groove — cuts a channel of width `rb` and depth `ra` into
+ * surface `a`, along the line where cutting surface `b` crosses it.
+ *
+ * Mercury's `fOpGroove`. This is NOT a blend profile and could not be one: a
+ * blend combines two solids, and this removes material from one along the
+ * OTHER's zero-set, so it belongs in the carve pass with `smax`.
+ *
+ * What it buys is the class of feature that is a LINE rather than a lump. A
+ * mouth seam, a panel gap, a nostril slit, a scar. Before this the only way to
+ * cut a line into flesh was to subtract a long thin solid, which needs its own
+ * primitive placed along the whole feature and rounds off at both ends — the
+ * goblin's lip crease was faked with two chamfered lip prims creased against
+ * each other, which works only while both lips exist and are touching.
+ *
+ * `rb - abs(b)` is positive only within `rb` of the cutting surface, so the
+ * channel is confined to a band; `min(a + ra, ...)` bounds how deep it can go.
+ * Must match sdGroove in march.wgsl.ts.
+ */
+export function sdGroove(a: number, b: number, ra: number, rb: number): number {
+  const inBand = rb - Math.abs(b);
+  // GATED ON THE BAND, which hg_sdf's original is not — it is
+  // `max(a, min(a + ra, rb - abs(b)))` unconditionally. That form assumes |b|
+  // grows faster than |a|, which holds for the surface evaluation a renderer
+  // does and fails deep inside a body: with `a` at -0.2 and the cutting
+  // surface 0.18 away, `rb - abs(b)` is -0.174, which is GREATER than
+  // `a + ra`, so the min picks `a + ra` and the whole interior is lifted by
+  // the groove's depth.
+  //
+  // Invisible in a pure renderer, because only the zero-crossing is ever
+  // read. Not invisible here: this same field backs `clearOf`, `daylightOf`,
+  // `fusedOf`, validateBody's connectivity probe and click-to-shoot, all of
+  // which read INTERIOR values, and a systematic few-millimetre shift moves
+  // every one of them. Returning `a` untouched outside the channel is both
+  // correct and what the operator means.
+  if (inBand <= 0) return a;
+  return Math.max(a, Math.min(a + ra, inBand));
+}
+
 /** Smooth subtraction. Must match the shader's smax exactly. */
 export function smax(a: number, b: number, k: number): number {
   return -smin(-a, -b, k);
@@ -181,7 +220,7 @@ export function sdBody(p: Vec3, body: Body): number {
   for (const c of body.clusters) {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.dead) continue;
       d = prim.blendProfile === 'chamfer'
         ? sminChamfer(d, sdPrimitive(p, prim), prim.blendK)
         : smin(d, sdPrimitive(p, prim), prim.blendK);
@@ -190,8 +229,12 @@ export function sdBody(p: Vec3, body: Body): number {
   for (const c of body.clusters) {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op !== 'sub' || prim.dead) continue;
-      d = smax(d, -sdPrimitive(p, prim), prim.blendK);
+      if (prim.dead) continue;
+      if (prim.op === 'sub') {
+        d = smax(d, -sdPrimitive(p, prim), prim.blendK);
+      } else if (prim.op === 'groove') {
+        d = sdGroove(d, sdPrimitive(p, prim), prim.grooveDepth ?? 0, prim.grooveWidth ?? 0);
+      }
     }
   }
   return d;
