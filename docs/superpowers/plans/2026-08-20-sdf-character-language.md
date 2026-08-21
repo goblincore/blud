@@ -410,7 +410,16 @@ export function parseBlob(src: string): BlobDoc {
       if (head === 'root') {
         doc.structure.push(l);
         doc.rootBone = rest[0]!;
-        doc.rootHeight = numArg({ ...l, words: [`at=${l.words[3]}`] }, 'at');
+        // Surface syntax is `root pelvis at 0.92` — space separated, not `at=`.
+        // Read word 3 directly and report with wordCol. Do NOT fabricate a
+        // BlobLine with a truncated `words` array to reuse numArg: wordCol sums
+        // the preceding words, so a one-element array always reports the start
+        // of the line instead of the bad token.
+        const raw = l.words[3];
+        const v = Number(raw);
+        if (raw === undefined || !Number.isFinite(v))
+          throw new BlobError('"at" value is not a number', l.line, wordCol(l, 3));
+        doc.rootHeight = v;
         known.add(doc.rootBone);
         continue;
       }
@@ -530,61 +539,79 @@ Expected: FAIL — `doc.parts` is empty and `doc.face` is null.
 
 - [ ] **Step 3: Implement**
 
-Add to `blob-parse.ts`, inside the `for` loop after the skeleton branch:
+Task 2 decomposed `parseBlob` into per-section handlers, so this task **fills in
+the two stubs** rather than adding branches to a loop. `parseBodyLine` and
+`parseFaceLine` currently exist as no-ops in `blob-parse.ts`; replace them.
+
+Note the shared state object Task 2 introduced:
 
 ```ts
-    if (section === 'body') {
-      const kind = head as BlobPartKind;
-      if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve') continue;
-
-      // `carve on skull ...` has no limb word; `blob torso on spine ...` does.
-      const limb = kind === 'carve' ? 'head' : (rest[0] as BlobPart['limb']);
-      const onIdx = l.words.indexOf('on');
-      if (onIdx === -1) throw new BlobError(`${kind} needs "on <bone>"`, l.line, l.indent + 1);
-      const bone = l.words[onIdx + 1]!;
-      if (!known.has(bone))
-        throw new BlobError(`unknown bone "${bone}"`, l.line, l.indent + 1);
-
-      const isBar = kind === 'bar';
-      if (isBar && strArg(l, 'to') === null)
-        throw new BlobError('bar needs "to="', l.line, l.indent + 1);
-
-      const off = strArg(l, 'offset');
-      doc.parts.push({
-        kind,
-        limb: kind === 'carve' ? 'head' : limb,
-        bone,
-        at: isBar ? numArg(l, 'from') : numArg(l, 'at'),
-        to: isBar ? numArg(l, 'to') : null,
-        radius: numArg(l, 'r'),
-        wide: numArg(l, 'wide', 1),
-        tall: numArg(l, 'tall', 1),
-        deep: numArg(l, 'deep', 1),
-        blend: numArg(l, 'blend', 0),
-        mirror: l.words.includes('mirror'),
-        hard: l.words.includes('hard'),
-        both: l.words.includes('both'),
-        offset: off === null
-          ? null
-          : (off.replace(/[()]/g, '').split(',').map(Number) as unknown as [number, number, number]),
-        src: l,
-      } satisfies BlobPart);
-      continue;
-    }
-
-    if (section === 'face') {
-      doc.face ??= {};
-      doc.face[head!] = Number(rest[0]);
-      doc.faceTrivia.push(l);
-      continue;
-    }
+interface ParseState {
+  doc: BlobDoc;
+  known: Set<string>;        // bone names declared so far — use it to reject `on <ghost>`
+  inMirror: boolean;
+  mirrorOpenedAt: number;
+}
 ```
-
-Also widen the imports at the top of the file:
 
 ```ts
-import type { BlobBone, BlobDoc, BlobLine, BlobPart, BlobPartKind } from './blob-ast';
+function parseBodyLine(l: BlobLine, s: ParseState): void {
+  const [head, ...rest] = l.words;
+  const kind = head as BlobPartKind;
+  if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve')
+    throw new BlobError(`unrecognized "${head}" in body block`, l.line, l.indent + 1);
+
+  // `carve on skull ...` has no limb word; `blob torso on spine ...` does.
+  const onIdx = l.words.indexOf('on');
+  if (onIdx === -1) throw new BlobError(`${kind} needs "on <bone>"`, l.line, l.indent + 1);
+  const bone = l.words[onIdx + 1];
+  if (bone === undefined) throw new BlobError(`${kind} needs "on <bone>"`, l.line, l.indent + 1);
+  if (!s.known.has(bone))
+    throw new BlobError(`unknown bone "${bone}"`, l.line, wordCol(l, onIdx + 1));
+
+  const isBar = kind === 'bar';
+  if (isBar && strArg(l, 'to') === null)
+    throw new BlobError('bar needs "to="', l.line, l.indent + 1);
+
+  const off = strArg(l, 'offset');
+  s.doc.parts.push({
+    kind,
+    limb: kind === 'carve' ? 'head' : (rest[0] as BlobPart['limb']),
+    bone,
+    at: isBar ? numArg(l, 'from') : numArg(l, 'at'),
+    to: isBar ? numArg(l, 'to') : null,
+    radius: numArg(l, 'r'),
+    wide: numArg(l, 'wide', 1),
+    tall: numArg(l, 'tall', 1),
+    deep: numArg(l, 'deep', 1),
+    blend: numArg(l, 'blend', 0),
+    mirror: l.words.includes('mirror'),
+    hard: l.words.includes('hard'),
+    both: l.words.includes('both'),
+    offset: off === null
+      ? null
+      : (off.replace(/[()]/g, '').split(',').map(Number) as unknown as [number, number, number]),
+    src: l,
+  } satisfies BlobPart);
+}
+
+function parseFaceLine(l: BlobLine, s: ParseState): void {
+  const [head, ...rest] = l.words;
+  if (head === undefined) return;
+  const v = Number(rest[0]);
+  if (!Number.isFinite(v))
+    throw new BlobError(`face parameter "${head}" is not a number`, l.line, wordCol(l, 1));
+  s.doc.face ??= {};
+  s.doc.face[head] = v;
+  s.doc.faceTrivia.push(l);
+}
 ```
+
+Note `parseBodyLine` is now STRICT about unrecognized keywords, matching what
+Task 2 did for `skeleton`. Task 2 deliberately left these stubs permissive only
+because the parts grammar did not exist yet; now it does, so an author's typo
+must fail loudly rather than vanishing from both `doc.parts` and the emitter's
+output.
 
 - [ ] **Step 4: Run GREEN**
 
