@@ -454,7 +454,7 @@ async function main() {
   // undressed, which is exactly how it rendered before kits existed.
   const kitUrl = KITS[activeCharacterName()];
   if (kitUrl) {
-    loadKit(kitUrl, [0, 0, 0])
+    loadKit(kitUrl, handle.renderer, [0, 0, 0])
       .then(kit => scene.add(kit.object))
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }

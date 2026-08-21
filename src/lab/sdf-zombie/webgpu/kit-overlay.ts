@@ -42,7 +42,34 @@
 // mesh; moving the object is the correct and only way to move it.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Vec3 } from '../types';
+
+/**
+ * How each WAM material should actually look in the lab.
+ *
+ * WAM hardcodes `metallicFactor: 0, roughnessFactor: 0.9` on every material it
+ * exports (gltf.py) — every surface comes out matte, which is why the first
+ * kit read as dull grey plastic on a shiny creature. The look is decided here
+ * rather than upstream anyway: the lighting lives in the lab, and a material
+ * tuned against WAM's own software renderer would not survive the trip.
+ *
+ * The house rule this is serving: everything in Blud is shiny, fleshy, or
+ * some combination. Plate that does not catch the key light reads as neither.
+ *
+ * `metalness` is deliberately BELOW 1 even on the iron. A physically metallic
+ * surface has no diffuse response at all, so under this lab's single hard key
+ * it would be black everywhere the highlight is not — the env map below is
+ * what makes metal legible, and leaning entirely on it would make the plate
+ * a mirror of a room that is not the game's room. Around 0.7 keeps a little
+ * diffuse so the form still reads in shadow.
+ */
+const LOOK: Record<string, { metalness: number; roughness: number; envIntensity: number }> = {
+  iron: { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
+  brass: { metalness: 0.78, roughness: 0.22, envIntensity: 1.25 },
+  // Not metal, but not matte either — oiled leather catches a broad sheen.
+  leather: { metalness: 0.05, roughness: 0.48, envIntensity: 0.55 },
+};
 
 export interface KitOverlay {
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
@@ -67,8 +94,25 @@ export interface KitOverlay {
  * forbidden by its spec). A kit has no such contract: nothing is gripping it,
  * and it is regenerated from the .wam whenever the art changes.
  */
-export async function loadKit(url: string, root: Vec3 = [0, 0, 0]): Promise<KitOverlay> {
+export async function loadKit(
+  url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
+): Promise<KitOverlay> {
   const gltf = await new GLTFLoader().loadAsync(url);
+
+  // A specular-only environment for the KIT ALONE, not `scene.environment`.
+  //
+  // The lab lights with one directional key and a dim ambient and has no
+  // environment at all, which is fine for the flesh — that is a hand-written
+  // shader with its own specular term — and fatal for PBR metal, which gets
+  // its brightness almost entirely from what it reflects. Without this the
+  // armour is black except for a single highlight dot.
+  //
+  // Assigned per-material rather than to the scene so the floor and the
+  // reference cube, which are MeshStandardMaterial too, keep the look every
+  // previous capture was judged against.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
   const object = new THREE.Group();
   object.add(gltf.scene);
   object.position.set(root[0], root[1], root[2]);
@@ -80,13 +124,25 @@ export async function loadKit(url: string, root: Vec3 = [0, 0, 0]): Promise<KitO
     // under the arm, and a kilt authored with open caps has no back face at
     // all, so a single-sided material makes it vanish from half the turntable.
     const m = (o as THREE.Mesh).material;
-    for (const mat of Array.isArray(m) ? m : m ? [m] : []) mat.side = THREE.DoubleSide;
+    for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+      mat.side = THREE.DoubleSide;
+      const std = mat as THREE.MeshStandardMaterial;
+      const look = LOOK[mat.name];
+      if (look && std.isMeshStandardMaterial) {
+        std.metalness = look.metalness;
+        std.roughness = look.roughness;
+        std.envMap = env;
+        std.envMapIntensity = look.envIntensity;
+        std.needsUpdate = true;
+      }
+    }
   });
 
   return {
     object,
     bones,
     dispose() {
+      env.dispose();
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();

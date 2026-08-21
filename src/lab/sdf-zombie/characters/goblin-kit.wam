@@ -64,7 +64,6 @@ model goblin-kit
 palette
   iron    #6e7378
   leather #4a3526
-  cloth   #7a6644
   brass   #9c7a38
 
 skeleton
@@ -96,61 +95,180 @@ skeleton
   end
 
 parts
+  # EVERY PIECE IS AN OPEN SHELL — `cap ... none` almost throughout, and that
+  # is a correctness decision, not a shortcut. A `cap flat` on a tube that
+  # wraps a limb puts a disc THROUGH the limb, with a vertex dead on the bone
+  # axis: the belt's cap centre sat 61 mm inside the goblin, the greaves' 35 mm.
+  # Hidden while the flesh happens to be thick enough to swallow them, and a
+  # plate poking out of a shin the moment it is not. Real plate is a shell
+  # anyway, so the geometry is also more honest. Rendered double-sided by
+  # kit-overlay.ts, which is what an open shell needs.
+  #
+  # It has a second payoff: with no interior geometry, EVERY vertex is on the
+  # outer surface, so "no vertex may sit inside the flesh" becomes an exact
+  # test rather than one that has to guess which vertices are hidden. That is
+  # goblin-kit.test.ts, and it reads the compiled mesh, not this text.
   mirror
-    # PAULDRON — a dome over the shoulder ball, flaring past it and stopping
-    # before the elbow. The .blob shoulder is w=0.085 at the joint and drops to
-    # 0.055 immediately, so a plate that merely followed the flesh would
-    # disappear; this one stands out to 0.118 at its widest so it reads as a
-    # separate hard object rather than a shiny patch of goblin.
-    loft pauldron bones=upperarm..upperarm material=iron
-      ring 0.00 w=0.104 d=0.100
-      ring 0.16 w=0.118 d=0.112
-      ring 0.40 w=0.086 d=0.082
-      cap start=dome end=flat
+    # PAULDRON — a spherical SHELL over the shoulder orb, continuing into a
+    # flared skirt down the upper arm.
+    #
+    # Not a dome cap on a tube, which is what this was and what the owner
+    # rejected: the orb punched straight through the plate. .blob's shoulder is
+    # a sphere of radius 0.054 m centred on the clavicle tail, reaching y=1.039,
+    # and the plate crowned at 1.020. WAM's `cap dome` is a SHALLOW cap — it
+    # extends about 0.44 of the ring's radius past the last ring, measured —
+    # so cresting the orb that way needs a ring 0.30 m across on a 1.30 m
+    # goblin. The shell is built explicitly instead: a free ray aimed along the
+    # arm, starting 0.070 m ABOVE the orb (a bone loft cannot start at t<0), with
+    # every ring set to the sphere's own cross-section at that distance —
+    # sqrt(R² - s²) for R = orb + 8 mm clearance — so the plate rides the orb
+    # instead of cutting through it. Past the equator it stops following the
+    # sphere and flares over the arm.
+    #
+    # The offset is 0.070 m back along the arm's unit direction
+    # (0.366, -0.906, -0.209), in height fractions. `pitch=12 tilt=22` re-aims
+    # the ray along that same arm axis — NOTE the pitch sign is WAM's, the
+    # negation of .blob's -12 (see the header).
+    #
+    # ITS INNER RIM IS BURIED IN THE CHEST, and that is forced, not sloppy. The
+    # orb is 108 mm across and sits 78 mm from the body axis, so ANY ring that
+    # encloses it reaches past the centreline; there is no shell that both
+    # covers the orb and clears the ribs. Real pauldrons tuck under the same
+    # way. goblin-kit.test.ts allows the tuck and bounds it.
+    loft pauldron bone=upperarm at=0.0 offset=(-0.0197,0.0487,0.0112) dir=down pitch=12 tilt=22 len=0.200 material=iron
+      ring 0.05 w=0.038 d=0.036
+      ring 0.15 w=0.083 d=0.080
+      ring 0.27 w=0.095 d=0.092
+      ring 0.40 w=0.080 d=0.078
+      ring 0.58 w=0.092 d=0.088
+      ring 0.78 w=0.086 d=0.082
+      cap start=dome end=none
 
-    # BRACER — a plain leather cuff on the forearm. Flesh is 0.045 the whole
-    # way, so this is a constant-section tube standing 0.007-0.009 proud.
+    # BRACER — a leather cuff. Flesh is 0.045 the whole way down the forearm.
     loft bracer bones=forearm..forearm material=leather
-      ring 0.32 w=0.058 d=0.058
-      ring 0.55 w=0.064 d=0.064
-      ring 0.82 w=0.060 d=0.060
-      cap start=flat end=flat
+      ring 0.34 w=0.060 d=0.060
+      ring 0.58 w=0.066 d=0.066
+      ring 0.84 w=0.062 d=0.062
+      cap start=none end=none
 
-    # GREAVE — the same idea down the shin, stopping above the ankle nub.
+    # GREAVE — the same idea down the shin, stopping above the ankle.
     loft greave bones=shin..shin material=iron
-      ring 0.16 w=0.070 d=0.070
-      ring 0.45 w=0.074 d=0.074
-      ring 0.70 w=0.066 d=0.066
+      ring 0.14 w=0.078 d=0.078
+      ring 0.45 w=0.076 d=0.076
+      ring 0.72 w=0.070 d=0.070
+      cap start=none end=none
+
+    # BOOT — pointed, and lofted along a FREE RAY rather than the foot bone,
+    # because the foot's toe blob (`at=0.92`, deep=0.95) bulges past the bone's
+    # own tail. A boot ending at t=1.0 of the foot bone stops short of the toe
+    # it is supposed to cover. The ray is the foot bone continued: same origin
+    # (shin tail), same `dir=fwd`, a third longer.
+    loft boot bone=shin at=1.0 dir=fwd len=0.168 frame=up material=leather
+      ring 0.03 w=0.086 d=0.084
+      ring 0.28 w=0.076 d=0.062
+      ring 0.55 w=0.080 d=0.056
+      ring 0.78 w=0.062 d=0.040
+      ring 0.92 w=0.034 d=0.026
+      ring 1.00 w=0.012 d=0.010 tip
+      cap start=none end=point
+  end
+
+  # BREASTPLATE — an open shell around the ribcage, from just under the collar
+  # to the bottom of the chest bone. It stops there deliberately: the gut below
+  # is the goblin's silhouette and armouring it would square off the one shape
+  # that reads as a creature rather than a soldier.
+  loft breastplate bones=chest..chest material=iron frame=fwd
+    ring 0.16 w=0.100 d=0.118
+    ring 0.44 w=0.124 d=0.140
+    ring 0.74 w=0.120 d=0.136
+    ring 0.96 w=0.108 d=0.112
+    cap start=none end=none
+
+  # BELT — around the pelvis, above the widest part of the gut. Deliberately
+  # not at the fattest ring: a belt there reads as a stripe painted on the
+  # stomach, whereas one above it reads as something the stomach hangs over,
+  # which is the goblin note.
+  loft belt bones=hips..hips material=leather
+    ring 0.32 w=0.122 d=0.156
+    ring 0.54 w=0.134 d=0.182
+    ring 0.68 w=0.140 d=0.190
+    cap start=none end=none
+
+  # BUCKLE — brass on the front of the belt. NOT `on=belt`: that snaps the
+  # origin to the belt's surface and then sinks it in by an inset, which buried
+  # this so far that even its FRONT face measured 1 mm inside the goblin. It is
+  # placed by hand and checked by the fit test instead.
+  attach buckle bone=hips kind=box at=0.52 offset=(0,0,0.135) size=0.030 w=0.044 d=0.020 material=brass
+
+  # FAULD — a short flared skirt of plate hanging off the belt. This replaces a
+  # cloth kilt that reached the knees; the owner's verdict was "way too long",
+  # and it also clipped both thighs at the hem and the gut at the waist.
+  #
+  # Short is not just taste here. The thighs splay as they descend, so a skirt
+  # that hangs any distance has to flare very wide to clear them — by the knee
+  # it needs to be wider than the goblin's own belly. Stopping high keeps it
+  # plate-shaped instead of tent-shaped.
+  loft fauld bone=hips at=0.36 dir=down len=0.072 material=iron frame=fwd
+    ring 0.00 w=0.128 d=0.162
+    ring 0.55 w=0.158 d=0.196
+    ring 1.00 w=0.186 d=0.222
+    cap start=none end=none
+
+  # CLEAVER — a compound prop in its own clean local frame: haft along the
+  # group's +Y, blade above the grip. Aiming the GROUP is one number; rotating
+  # a hand-derived world angle for each of two lofts is three, and they have to
+  # agree. `dir=down pitch=-58` drops the blade forward of the fist.
+  group cleaver bone=hand.r at=1.0 dir=up pitch=16 yaw=-20
+    # BLADE-UP, HEAD NEAR THE FIST. Aimed `dir=down` with the blade at the far
+    # end of the haft — which is the obvious way to author "held point down" —
+    # this read as a SPADE from every angle: a long shaft with a flat paddle on
+    # the bottom is a shovel, whatever you call the material. A chopper's mass
+    # sits at the hand end. The haft now hangs BELOW the fist as a stub pommel
+    # and the head rises just above it.
+    #
+    # `yaw=-20` swings the head outward. Without it the blade sweeps through
+    # the fauld — kit-against-kit intersection, which nothing checks: the fit
+    # test measures armour against FLESH, and two pieces of plate occupying the
+    # same space are invisible to it.
+    loft haft at=(0,-0.058,0) dir=up len=0.140 material=leather
+      ring 0.00 w=0.024 d=0.024
+      ring 1.00 w=0.019 d=0.019
+      cap start=dome end=flat
+    loft blade at=(0,0.048,0) dir=up len=0.112 material=iron shape=box
+      # Tapering OUTWARD to the tip is what makes a cleaver read as a cleaver
+      # rather than a paddle: mass at the far edge, thin at the haft.
+      ring 0.00 w=0.038 d=0.014
+      ring 0.32 w=0.070 d=0.012
+      ring 0.74 w=0.090 d=0.010
+      ring 1.00 w=0.094 d=0.007
       cap start=flat end=flat
   end
 
-  # BELT — around the pelvis, above the widest part of the gut. Deliberately
-  # not at t=0.90 where the belly is fattest: a belt at the widest ring reads
-  # as a stripe painted on the stomach, whereas one above it reads as
-  # something the stomach is hanging over, which is the goblin note.
-  loft belt bones=hips..hips material=leather
-    ring 0.30 w=0.117 d=0.152
-    ring 0.52 w=0.130 d=0.178
-    ring 0.66 w=0.136 d=0.186
-    cap start=flat end=flat
-
-  # BUCKLE — a brass plate on the front of the belt. `on=belt` snaps it to the
-  # belt's surface and sinks it in, so it is flush by construction rather than
-  # by an offset guessed against a shape authored ten lines earlier.
-  attach buckle bone=hips kind=box at=0.50 offset=(0,0,0.10) size=0.030 w=0.038 d=0.016 material=brass on=belt
-
-  # KILT — the actual CLOTHING test, and the reason this file exists rather
-  # than four rigid props. It hangs off a free ray below the belt, so it is not
-  # bound to the pelvis bone's own extent, and its hem uses WAM's `follow=`
-  # idiom: hem vertices partially track the mirrored thigh pair, split left and
-  # right, so the skirt swings with the legs instead of the legs walking
-  # through it. Nothing in the SDF path can express that — the flesh has no
-  # skin to weight against.
-  loft kilt bone=hips at=0.34 dir=down len=0.20 material=cloth frame=fwd
-    ring 0.00 w=0.124 d=0.164
-    ring 0.50 w=0.150 d=0.196
-    ring 1.00 w=0.172 d=0.214 follow=thigh:0.80
-    cap start=none end=none
+  # SHIELD — a dished disc on the off hand. `dir=side` points the group's own
+  # +Y out along the arm, so the disc lies across it and the boss faces away
+  # from the goblin.
+  # SHIELD — `dir=fwd`, NOT `dir=side`. A group's aim points its local +Y, and
+  # the disc is lofted along that +Y, so the aim IS the shield's face normal.
+  # Pointed sideways the shield faces out along the arm and presents edge-on
+  # from the front — a thin sliver that reads as a coin, which is what the
+  # first version did. `yaw=-22` turns it slightly outward so it is not a flat
+  # circle head-on either.
+  group shield bone=hand.l at=1.0 dir=fwd yaw=-22
+    # Pushed forward along its own aim so the disc sits IN FRONT of the hip
+    # rather than through the thigh. A shield this size cannot hang beside a
+    # goblin's leg: the hand rests at y=0.47 with the thigh right behind it, so
+    # anything wider than a 5 cm buckler cuts the leg. Standing it off is the
+    # cheap fix; the real one is posing the arm, which needs the kit rigged.
+    loft face at=(0,0.035,0) dir=up len=0.030 material=iron
+      ring 0.00 w=0.146 d=0.146
+      ring 0.60 w=0.168 d=0.168
+      ring 1.00 w=0.132 d=0.132
+      cap start=dome end=flat
+    loft boss at=(0,0.065,0) dir=up len=0.030 material=brass
+      ring 0.00 w=0.052 d=0.052
+      ring 1.00 w=0.030 d=0.030
+      cap start=flat end=dome
+  end
 
 textures
   texture iron base=#6e7378
@@ -161,10 +279,6 @@ textures
     streaks along=v amount=0.09
     noise scale=0.16 amount=0.08
     ao amount=0.20
-  texture cloth base=#7a6644
-    streaks along=u amount=0.10          # weave runs around the skirt
-    noise scale=0.20 amount=0.10
-    ao amount=0.14
   texture brass base=#9c7a38
     gradient axis=v from=-0.10 to=0.22
     ao amount=0.12
