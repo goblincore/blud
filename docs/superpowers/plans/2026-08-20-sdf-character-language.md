@@ -1008,7 +1008,7 @@ skeleton
   mirror
     bone clavicle parent=spine    dir=side                     len=0.20
     bone upperArm parent=clavicle dir=down tilt=16.699244      len=0.30
-    bone foreArm  parent=upperArm dir=down tilt=2.862405 pitch=5.710593 len=0.30
+    bone foreArm  parent=upperArm dir=down tilt=2.862405 pitch=5.703515 len=0.30
     bone thigh    parent=pelvis   dir=down side=0.10           len=0.40
     bone shin     parent=thigh    dir=down pitch=2.862405      len=0.42
   end
@@ -1054,6 +1054,13 @@ face
   browRise   0.045
   headBlend  0.006
 ```
+
+> **Use the script's output, not the numbers printed above.** The block is a
+> worked example and only the forearm carries both a pitch and a tilt, so it is
+> the only line the pitch/tilt coupling touches — an earlier draft had it as
+> `pitch=5.710593`, derived as if the axes were independent, which round-trips
+> to `z/|y| = 0.100124922` against a target of `0.1`. If your generated value
+> disagrees with any number here, trust the script and say so in your report.
 
 - [ ] **Step 5: Teach TypeScript about `?raw`**
 
