@@ -4,6 +4,7 @@ import { parseBlob } from './blob-parse';
 import { BlobError } from './blob-ast';
 import { compileBlob, compileFace, dirVector } from './blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import { DEFAULT_FACE } from './face';
 import zombieBlobSrc from './characters/zombie.blob?raw';
 
 const near = (a: readonly number[], b: readonly number[], eps = 1e-9) =>
@@ -189,14 +190,64 @@ face
   });
 });
 
-// The lab (webgpu/lab-main.ts) builds the zombie by feeding compileBlob's
-// output straight into buildBody — this pins that exact path so a change to
-// either compiler stage that breaks the shipped document is caught here,
-// not by a blank canvas.
+// NOTE: this pins that the shipped document is currently well-formed and
+// compiles clean — a real and useful thing to know on its own. It does NOT
+// pin webgpu/lab-main.ts's actual compile path: that file calls compileBlob
+// with an explicit `face` argument (see the "explicit face" block below),
+// while this test calls compileBlob(doc) with none, so it exercises
+// compileBlob's `face = compileFace(doc)` DEFAULT rather than the lab's
+// real calling convention. lab-main.ts isn't imported here — it runs a live
+// WebGPU bootstrap as a module-level side effect and isn't safely
+// importable in this environment, and it's out of scope to change for
+// testability — so nothing in this file can watch its source directly.
 describe('the shipped zombie.blob', () => {
-  it('compiles through the same path lab-main uses, with no validation errors', () => {
+  it('compiles clean, with no validation errors', () => {
     const built = buildBody(compileBlob(parseBlob(zombieBlobSrc)), DEFAULT_BUILD_OPTS, {});
     expect(built.errors).toEqual([]);
     expect(built.prims.length).toBeGreaterThan(20);
+  });
+});
+
+// Regression coverage for a bug found while wiring webgpu/lab-main.ts to
+// compileBlob: compileBlob(doc, face)'s `face` parameter defaults to
+// compileFace(doc), but a DEFAULT only fires when the caller omits the
+// argument. lab-main.ts's compileZombie() always supplies an explicit face
+// (DEFAULT_FACE merged with the panel's live overrides) — the ONLY calling
+// convention the lab ever uses — so compileFace(doc)'s validation of the
+// document's own face block silently never ran, and a typo'd face key in
+// zombie.blob would have compiled clean with no diagnostic. The fix was to
+// call compileFace(doc) explicitly in compileZombie() before compileBlob.
+//
+// These two tests pin that CONTRACT — they can't watch lab-main.ts's source
+// (see the note above), so they don't fail if compileZombie()'s explicit
+// call is deleted; only re-reading lab-main.ts would catch that specific
+// regression. What they do pin: the second test reproduces the exact
+// two-line pattern compileZombie() relies on (compileFace(doc), then
+// compileBlob(doc, face)), and deleting its own compileFace(doc) line turns
+// it red — verified by hand while writing this, then restored.
+describe('compileBlob(doc, face) with an explicit face', () => {
+  const BAD_FACE_KEY_SRC = `model t
+skeleton
+  root pelvis at 0.92
+face
+  headRadius 0.2
+  headRadus 0.3
+`;
+
+  it('skips validation of the doc\'s own face block — a bad key compiles clean', () => {
+    const doc = parseBlob(BAD_FACE_KEY_SRC);
+    // No compileFace(doc) call: this is the bug on its own, isolated from
+    // any caller. An explicit face argument — even one that has nothing to
+    // do with the doc's face block — bypasses compileBlob's default
+    // entirely, so the bad key is never looked at.
+    expect(() => compileBlob(doc, DEFAULT_FACE)).not.toThrow();
+  });
+
+  it('is only caught if the caller validates explicitly first, as compileZombie() in lab-main.ts does', () => {
+    const doc = parseBlob(BAD_FACE_KEY_SRC);
+    expect(() => {
+      compileFace(doc); // the guard — delete this line and the block below never throws
+      compileBlob(doc, DEFAULT_FACE);
+    }).toThrow(/unknown face parameter "headRadus"/);
   });
 });
