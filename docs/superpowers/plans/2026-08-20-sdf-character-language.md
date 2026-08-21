@@ -1002,8 +1002,8 @@ skeleton
   # forearms angled +z, so in profile the occiput jutted where the face should
   # be and the head read as being on backwards.
   bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
-  bone neck  parent=spine  dir=up pitch=19.290206 len=0.16
-  bone skull parent=neck   dir=up pitch=10.204630 len=0.16
+  bone neck  parent=spine  dir=up pitch=19.290046 len=0.16
+  bone skull parent=neck   dir=up pitch=10.203974 len=0.16
 
   mirror
     bone clavicle parent=spine    dir=side                     len=0.20
