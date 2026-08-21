@@ -1,0 +1,63 @@
+# The lab zombie. Proportions are deliberately wrong in a B-movie way: long
+# arms hanging past the hip line, head pitched forward of the spine, heavy gut.
+model zombie
+  height 1.78
+
+skeleton
+  root pelvis at 0.92
+
+  # The upper body hunches FORWARD (+z). These used to lean -z while the
+  # forearms angled +z, so in profile the occiput jutted where the face should
+  # be and the head read as being on backwards.
+  bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
+  bone neck  parent=spine  dir=up pitch=19.290046 len=0.16
+  bone skull parent=neck   dir=up pitch=10.203974 len=0.16
+
+  mirror
+    bone clavicle parent=spine    dir=side                     len=0.20
+    bone upperArm parent=clavicle dir=down tilt=16.699244      len=0.30
+    bone foreArm  parent=upperArm dir=down tilt=2.862405 pitch=5.703515 len=0.30
+    bone thigh    parent=pelvis   dir=down side=0.10           len=0.40
+    bone shin     parent=thigh    dir=down pitch=2.862405      len=0.42
+  end
+
+body
+  # Head — just the neck here. The skull itself is a parameterised ellipsoid
+  # emitted by the face block, so it stays tunable in the panel.
+  bar head on neck from=0.05 to=1.0 r=0.045 blend=0.007
+
+  # Torso — ribcage tapering into a sagging gut.
+  blob torso on spine  at=0.80 r=0.150 wide=1.28 deep=0.78 blend=0.014
+  blob torso on spine  at=0.50 r=0.150 wide=1.15 deep=0.80 blend=0.02
+  blob torso on spine  at=0.15 r=0.142 wide=1.02 deep=0.95 blend=0.02
+  blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02
+
+  # Arms — shoulder blob, then upper and forearm capsules, then a fist.
+  blob arm on clavicle at=0.90 r=0.072 blend=0.010 mirror
+  bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.007 mirror
+  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
+  blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
+
+  # Legs — thigh, shin, foot.
+  bar  leg on thigh from=0.05 to=0.95 r=0.082 blend=0.0175 mirror
+  bar  leg on shin  from=0.05 to=0.92 r=0.062 blend=0.015 mirror
+  blob leg on shin  at=1.00 r=0.070 wide=0.85 tall=0.6 deep=1.5 blend=0.0125 mirror
+
+# Tuned by hand in the panel, then baked. Keep headHeight near 1: raising it
+# SHARPENS the crown rather than doming it, so the height and the gaunt taper
+# both come from the jaw below.
+face
+  headRadius 0.118
+  headWidth  0.76
+  headHeight 1.161
+  headDepth  0.894
+  jawWidth   0.748
+  jawHeight  0.861
+  jawDrop    0.076
+  jawJut     0.04
+  noseLength 0.007
+  noseWidth  0.379
+  noseDrop   0.009
+  browHeavy  0.008
+  browRise   0.045
+  headBlend  0.006
