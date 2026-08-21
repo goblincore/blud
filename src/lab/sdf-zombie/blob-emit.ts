@@ -76,12 +76,24 @@ function spliceFaceValue(l: BlobLine, oldText: string, newValue: number): string
  * rebuilding from `words` alone would silently re-flow every aligned block
  * to single spaces on the very first save.
  *
- * Ordering is by source `line` number across EVERY owner — bones, parts,
- * face lines, and the structural keywords in `doc.structure` (`model`,
- * `skeleton`, `body`, `face`, `mirror`, `end`, `height`, `root`). Miss the
- * structural lines and the output silently loses every block keyword while
- * still parsing as some document afterward — exactly the kind of quiet
+ * Ordering is by source `line` number across EVERY owner — bones, parts, the
+ * `face`/`sheet`/`palette` parameter lines, and the structural keywords in
+ * `doc.structure` (`model`, `skeleton`, `body`, `face`, `mirror`, `end`,
+ * `height`, `root`). Miss any owner and the output silently loses those lines
+ * while still parsing as some document afterward — exactly the kind of quiet
  * corruption this file exists to avoid.
+ *
+ * THAT IS NOT HYPOTHETICAL: `sheetTrivia` was missing from this list from the
+ * moment generated faces landed. The `sheet` KEYWORD lives in `doc.structure`
+ * and so came through fine, and every parameter under it vanished — so a
+ * re-emitted goblin kept an empty `sheet` block, silently lost its whole
+ * generated face, and still compiled. Nothing failed; the character just wore
+ * the shared zombie sheet again.
+ *
+ * The guard against a fourth block repeating this is
+ * `blob-emit.test.ts`'s round trip over EVERY shipped `.blob`, which fails on
+ * any byte that does not survive. Adding a block to the grammar without adding
+ * its trivia here now breaks that test the moment a character uses it.
  */
 export function emitBlob(doc: BlobDoc, override: EmitOverride = {}): string {
   const owned: Owned[] = [
@@ -92,6 +104,12 @@ export function emitBlob(doc: BlobDoc, override: EmitOverride = {}): string {
     // before pushing one that doesn't have both, so `words[0]` is always
     // present here even though its type is `string | undefined`.
     ...doc.faceTrivia.map((l): Owned => ({ l, faceKey: l.words[0]! })),
+    // `sheet` and `palette` lines are replayed verbatim — `override` only
+    // carries face values today (the panel's live face sliders are the only
+    // tuned-on-screen numbers there is a path to write back), so these need no
+    // key and take the raw branch below.
+    ...doc.sheetTrivia.map((l): Owned => ({ l })),
+    ...doc.paletteTrivia.map((l): Owned => ({ l })),
   ].sort((a, b) => a.l.line - b.l.line);
 
   const out: string[] = [];

@@ -4,20 +4,39 @@ import { parseBlob } from './blob-parse';
 import { emitBlob } from './blob-emit';
 import src from './characters/zombie.blob?raw';
 
+/**
+ * EVERY shipped character, not just the zombie — globbed rather than listed so
+ * a new `.blob` is covered the day it lands.
+ *
+ * The zombie alone was the original coverage, and it hid a real bug for the
+ * whole life of the `sheet` block: `emitBlob` never replayed `sheetTrivia`, so
+ * a re-emitted goblin came back with an empty `sheet` block, silently lost its
+ * entire generated face, and still compiled. zombie.blob declares no sheet, so
+ * nothing failed. Any block added to the grammar from here on is caught the
+ * moment a character uses it.
+ */
+const CHARACTERS = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
 describe('emitBlob', () => {
-  it('round-trips the zombie to an identical document', () => {
-    expect(emitBlob(parseBlob(src))).toBe(src.trimEnd() + '\n');
+  it('has more than one character to check', () => {
+    // Guards the glob itself: a pattern that silently matches nothing turns
+    // every it.each below into zero tests, which reports as a pass.
+    expect(Object.keys(CHARACTERS).length).toBeGreaterThan(1);
   });
 
-  it('is idempotent — parse(emit(parse(x))) emits the same text', () => {
-    const once = emitBlob(parseBlob(src));
+  it.each(Object.entries(CHARACTERS))('round-trips %s to an identical document', (_name, text) => {
+    expect(emitBlob(parseBlob(text))).toBe(text.trimEnd() + '\n');
+  });
+
+  it.each(Object.entries(CHARACTERS))('is idempotent on %s — parse(emit(parse(x))) emits the same text', (_name, text) => {
+    const once = emitBlob(parseBlob(text));
     expect(emitBlob(parseBlob(once))).toBe(once);
   });
 
   // The whole reason trivia exists. troll.wam and body.ts are half reasoning.
-  it('preserves every comment line', () => {
+  it.each(Object.entries(CHARACTERS))('preserves every comment line in %s', (_name, text) => {
     const comments = (t: string) => t.split('\n').filter(l => l.trim().startsWith('#'));
-    expect(comments(emitBlob(parseBlob(src)))).toEqual(comments(src));
+    expect(comments(emitBlob(parseBlob(text)))).toEqual(comments(text));
   });
 
   it('writes tuned face parameters back into the face block', () => {

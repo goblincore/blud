@@ -355,9 +355,14 @@ export function kneeOffset(
  */
 export function checkStance(
   bones: Map<string, { head: Vec3; tail: Vec3 }>,
-  stance: 'humanoid' | 'digitigrade',
+  stance: 'humanoid' | 'digitigrade' | null,
   tolerance = 0.004,
 ): string[] {
+  // Null means the document declared no stance, so there is no intent to check
+  // against. Accepted here rather than left to each caller to guard, because a
+  // caller that forgets turns "undeclared" back into a guess — which is the bug
+  // this parameter's nullability exists to prevent (see BlobDoc.stance).
+  if (stance === null) return [];
   const errs: string[] = [];
   for (const side of ['l', 'r'] as const) {
     const off = kneeOffset(bones, side);

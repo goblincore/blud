@@ -3,6 +3,7 @@ import { type BlobDoc, BlobError } from './blob-ast';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 import { DEFAULT_SHEET, type FaceSheetParams } from './blob-face-sheet';
+import { FLESH_PRESETS, type FleshMaterial } from './material';
 
 /**
  * The only valid `.blob` face parameter names — every key of `FaceParams`,
@@ -139,6 +140,62 @@ export function compileSheet(doc: BlobDoc): FaceSheetParams | null {
       at ? at.line : 0, at ? at.indent + 1 : 1);
   }
   return { ...DEFAULT_SHEET, ...doc.sheet } as FaceSheetParams;
+}
+
+/**
+ * The preset a `palette` block is a PARTIAL override of.
+ *
+ * A character declares only what makes it that character — a goblin says it is
+ * green and matte and leaves scatter and wound colours alone — so the rest has
+ * to come from somewhere fixed. Deliberately a NAMED preset rather than
+ * "whatever the lab panel currently has selected": a character's look must not
+ * depend on a dropdown, or the same `.blob` renders differently in the lab, in
+ * a turntable capture and in the game. `henenlotter-latex` because it is the
+ * lab's own default, so a palette that overrides nothing is a no-op.
+ */
+const PALETTE_BASE = FLESH_PRESETS['henenlotter-latex'];
+
+/**
+ * A character's own flesh material, or null if it declared no `palette` block
+ * — in which case it wears whatever preset the lab has selected, which is what
+ * every character did before palettes existed, and is most of why the whole
+ * cast read as one pink creature in different shapes.
+ *
+ * Keys are `FleshMaterial`'s own field names, read off the base preset rather
+ * than duplicated as a friendlier alias table, for the reason `compileFace`
+ * gives: an alias table is a second list that can silently drift from the
+ * first. The arity of each key comes from the same place — a field whose
+ * reference value is an array wants three numbers, everything else wants one —
+ * so adding a field to `FleshMaterial` makes it authorable here with no change
+ * to this function.
+ */
+export function compilePalette(doc: BlobDoc): FleshMaterial | null {
+  if (doc.palette === null) return null;
+  const out: FleshMaterial = {
+    ...PALETTE_BASE,
+    baseColor: [...PALETTE_BASE.baseColor],
+    deepColor: [...PALETTE_BASE.deepColor],
+    charColor: [...PALETTE_BASE.charColor],
+    mottleColor: [...PALETTE_BASE.mottleColor],
+  };
+  const keys = Object.keys(PALETTE_BASE) as (keyof FleshMaterial)[];
+  for (const [key, nums] of Object.entries(doc.palette)) {
+    const at = doc.paletteTrivia.find(l => l.words[0] === key);
+    const line = at ? at.line : 0, col = at ? at.indent + 1 : 1;
+    if (!keys.includes(key as keyof FleshMaterial))
+      throw new BlobError(
+        `unknown palette parameter "${key}" — expected one of ${keys.join(', ')}`, line, col);
+    const isColor = Array.isArray(PALETTE_BASE[key as keyof FleshMaterial]);
+    if (isColor && nums.length !== 3)
+      throw new BlobError(`palette parameter "${key}" is a colour and needs 3 numbers (linear r g b)`, line, col);
+    if (!isColor && nums.length !== 1)
+      throw new BlobError(`palette parameter "${key}" is a single number, got ${nums.length}`, line, col);
+    // Checked immediately above, so the casts record the arity rather than
+    // asserting past an unknown.
+    if (isColor) (out[key as 'baseColor']) = [nums[0]!, nums[1]!, nums[2]!];
+    else (out[key as 'wetness']) = nums[0]!;
+  }
+  return out;
 }
 
 /**

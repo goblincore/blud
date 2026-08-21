@@ -262,6 +262,28 @@ describe('daylightOf', () => {
   });
 });
 
+describe('knee stance — undeclared', () => {
+  // The bug this fixes: `stance` used to DEFAULT to humanoid, so a document
+  // that said nothing was still judged. zombie.blob declares no stance and its
+  // hunched knees sit 10.2 mm BEHIND the hip-to-ankle line, so the lab showed
+  // two validation errors on its own default character — both false, because
+  // nobody had claimed the zombie was anything. An intent check needs an
+  // intent.
+  it('checks nothing when the document declared no stance', () => {
+    const z = zombie();
+    expect(checkStance(z.bones, null)).toEqual([]);
+    // ...and the geometry it would have complained about is really there, so
+    // this is not passing because the zombie happens to fold forward.
+    expect(kneeOffset(z.bones, 'l')!).toBeLessThan(-0.004);
+  });
+
+  it('still checks a stance that WAS declared', () => {
+    const z = zombie();
+    expect(checkStance(z.bones, 'humanoid')).toHaveLength(2);
+    expect(checkStance(z.bones, 'digitigrade')).toEqual([]);
+  });
+});
+
 describe('knee stance', () => {
   const legs = (kneeZ: number) => new Map([
     ['thigh.l', { head: [0, 0.6, 0] as Vec3, tail: [0, 0.32, kneeZ] as Vec3 }],

@@ -378,14 +378,52 @@ function parseNamedNumberLine(
 }
 
 /**
+ * Handles one line inside a `palette` block: `name` followed by ONE or THREE
+ * numbers (`roughness 0.55`, `base 0.34 0.42 0.22`).
+ *
+ * Deliberately not folded into `parseNamedNumberLine`, which the `face` and
+ * `sheet` blocks share. Those are flat `Record<string, number>` maps and the
+ * shared parser exists because the two are the same shape and would otherwise
+ * drift. A palette is NOT the same shape — it mixes scalars and RGB triples —
+ * so joining them would mean widening `doc.face` and `doc.sheet` to number
+ * arrays too, and every face consumer would then have to unwrap a
+ * one-element array for no gain.
+ *
+ * Arity is recorded here but judged by `compilePalette`, which knows which
+ * keys are colours. Rejecting anything other than 1 or 3 numbers at this
+ * level is still worth doing: it turns a truncated colour into a parse error
+ * pointing at the line, rather than a silently accepted two-channel value.
+ */
+function parsePaletteLine(l: BlobLine, s: ParseState): void {
+  const [head, ...rest] = l.words;
+  if (head === undefined)
+    throw new BlobError('palette line has no parameter name', l.line, l.indent + 1);
+  if (rest.length !== 1 && rest.length !== 3)
+    throw new BlobError(
+      `palette parameter "${head}" takes 1 number or 3 (linear r g b), got ${rest.length}`,
+      l.line, wordCol(l, 1));
+  const nums = rest.map((w, i) => {
+    const v = Number(w);
+    if (!Number.isFinite(v))
+      throw new BlobError(
+        `palette parameter "${head}" is not a number`, l.line, wordCol(l, i + 1));
+    return v;
+  });
+  s.doc.palette ??= {};
+  s.doc.palette[head] = nums;
+  s.doc.paletteTrivia.push(l);
+}
+
+/**
  * Parses a whole document. Throws BlobError on the first problem.
  */
 export function parseBlob(src: string): BlobDoc {
   const lines = tokenize(src);
   const s: ParseState = {
     doc: {
-      name: '', height: null, stance: 'humanoid', rootBone: '', rootHeight: 0, rootLen: 0.14,
-      bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetTrivia: [], structure: [], trailingTrivia: [],
+      name: '', height: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
+      bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetTrivia: [],
+      palette: null, paletteTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),
     inMirror: false,
@@ -407,12 +445,13 @@ export function parseBlob(src: string): BlobDoc {
       s.doc.structure.push(l);
       continue;
     }
-    if (head === 'skeleton' || head === 'body' || head === 'face' || head === 'sheet') { section = head; s.doc.structure.push(l); continue; }
+    if (head === 'skeleton' || head === 'body' || head === 'face' || head === 'sheet' || head === 'palette') { section = head; s.doc.structure.push(l); continue; }
 
     if (section === 'skeleton') { parseSkeletonLine(l, s); continue; }
     if (section === 'body') { parseBodyLine(l, s); continue; }
     if (section === 'face') { parseNamedNumberLine(l, s, 'face'); continue; }
     if (section === 'sheet') { parseNamedNumberLine(l, s, 'sheet'); continue; }
+    if (section === 'palette') { parsePaletteLine(l, s); continue; }
   }
 
   if (s.inMirror) throw new BlobError('mirror block is never closed', s.mirrorOpenedAt, 1);

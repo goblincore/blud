@@ -93,6 +93,47 @@ wrist did not merge in an anatomically convincing way.
 Closed is not the same as convincing. Always open the turntable frames
 before calling a character done.
 
+## Colour is the biggest lever you have
+
+Before the `palette` block existed, every `.blob` character wore one global
+`FLESH_PRESET` the lab panel picked — so the whole cast rendered as the same
+pink creature in different shapes. The first goblin still read as "the zombie
+with different limbs" after its skeleton had been rebuilt end to end. Rebuild
+the proportions all you like; if you skip the palette it will still look like
+the zombie.
+
+```
+palette
+  baseColor     0.34 0.44 0.19   # linear RGB
+  deepColor     0.46 0.09 0.09   # wound interior — keep it red
+  specRoughness 0.42
+  mottleAmp     0.65
+  mottleScale   1.6
+  mottleColor   0.21 0.19 0.06
+```
+
+- Keys are `FleshMaterial`'s own field names (`material.ts`), not friendlier
+  aliases — same rule as the `face` block, and for the same reason.
+- It is a PARTIAL override of `henenlotter-latex`, a NAMED preset rather than
+  whatever the panel has selected, so a character looks the same in the lab, in
+  a turntable capture and in the game.
+- Values are linear RGB and go through an sRGB encode on the WebGPU path, which
+  lifts the low channels hard. Saturated colours come out much paler than the
+  numbers read.
+- **`mottleAmp` is the within-body variation** — `surfaceNoiseAmp` roughens the
+  NORMAL, which reads as texture and never as colour, so without a mottle a
+  body is one flat tone from every angle. It is 0 in every stock preset;
+  turning it on is a per-character decision.
+- `mottleScale` is NOT cycles per metre: the shader's `fbm` multiplies its own
+  input by 4 and 9, so a value near 1 gives patches a hand-span across. By 5 it
+  is freckles; past ~10 it aliases into what reads as compression noise.
+- **Raising `mottleAmp` shifts the mean colour**, because the blotch weight
+  averages ~0.5 — the body lands near `mix(baseColor, mottleColor, amp/2)`.
+  Lift `baseColor` back when you raise the amplitude.
+- Pick a `mottleColor` that differs in HUE, not only in value. A mottle that is
+  just a darker base is nearly invisible; one far from the base reads as dirt
+  ON the creature rather than variation IN it.
+
 ## Comment every non-obvious number
 
 A number without a reason is a number the next author cannot safely change.
@@ -158,6 +199,12 @@ it into the `face` block yourself, or calling `emitBlob` programmatically.
   "not derivable" and expects you to hand-write their `dir=` with no
   pitch/tilt. A cast port will hit this immediately on clavicles (WAM
   characters commonly rig them `dir=side`).
+- **`stance` is optional, and omitting it means "not checked"** — not
+  "humanoid". `checkStance` is the format's one INTENT check, and a defaulted
+  intent is a guess: while `stance` defaulted to humanoid, zombie.blob (which
+  declares none, and whose hunched knees sit 10.2 mm behind the hip-to-ankle
+  line) reported two validation errors in the lab, both false. Declare it when
+  you mean it.
 - The `face` block is `FaceParams` (`face.ts`), not primitives — it's the one
   part of a `.blob` file that isn't geometry, and it stays live-tunable in
   the lab panel.

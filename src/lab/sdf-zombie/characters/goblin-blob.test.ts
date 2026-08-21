@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import src from './goblin.blob?raw';
 import { parseBlob } from '../blob-parse';
-import { compileBlob, compileFace, compileSheet } from '../blob-compile';
+import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf } from '../blob-checks';
 
@@ -29,9 +29,26 @@ describe('goblin.blob', () => {
   // compileBlob's face default only fires when the argument is OMITTED, and
   // the lab always passes one — so a face-key typo is invisible unless
   // something calls compileFace explicitly. Same for the sheet block.
-  it('has no typo in its face or sheet parameter names', () => {
+  it('has no typo in its face, sheet or palette parameter names', () => {
     expect(() => compileFace(doc)).not.toThrow();
     expect(() => compileSheet(doc)).not.toThrow();
+    expect(() => compilePalette(doc)).not.toThrow();
+  });
+
+  // The goblin is the reason palettes exist: before it declared its own flesh
+  // the whole cast wore one global preset and read as the same pink creature
+  // in different shapes. Asserting it is green rather than pinning exact
+  // channels, so art direction stays free to move.
+  it('wears its own green flesh rather than the lab default', () => {
+    const m = compilePalette(doc)!;
+    expect(m).not.toBeNull();
+    const [r, g, b] = m.baseColor;
+    expect(g).toBeGreaterThan(r);
+    expect(g).toBeGreaterThan(b);
+    // Wounds stay red — a green creature bleeding green reads as a plant.
+    expect(m.deepColor[0]).toBeGreaterThan(m.deepColor[1]);
+    // And the mottle is actually on, since it is off in every stock preset.
+    expect(m.mottleAmp).toBeGreaterThan(0);
   });
 
   it('folds its knees the way it declared', () => {

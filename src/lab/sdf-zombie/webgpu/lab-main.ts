@@ -61,7 +61,7 @@ function activeCharacterSrc(): string {
 import { parseBlob } from '../blob-parse';
 import { generateFaceSheet } from '../blob-face-sheet';
 import { checkStance } from '../blob-checks';
-import { compileBlob, compileFace, compileSheet } from '../blob-compile';
+import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { BlobError } from '../blob-ast';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
@@ -206,17 +206,32 @@ let blobCompileWarned = false;
  */
 let lastBlobCompileError: string | null = null;
 let lastBlobStance: 'humanoid' | 'digitigrade' | null = null;
+/**
+ * The character's own flesh material, if it declared a `palette` block, so the
+ * lab can dress the body in it instead of the panel's default preset. Recorded
+ * here rather than re-parsed at the call site for the same reason
+ * `lastBlobStance` is: `compileZombie` already has the parsed document, and a
+ * second parse is a second place for the two to disagree about which character
+ * is loaded. Null means "no palette declared" — wear the panel's preset, which
+ * is what every character did before palettes existed.
+ */
+let lastBlobPalette: FleshMaterial | null = null;
 function compileZombie(face: FaceParams): BodyDef | null {
   try {
     const doc = parseBlob(activeCharacterSrc());
     lastBlobStance = doc.stance;
     compileFace(doc); // validates zombie.blob's face block; return value unused, see above
+    lastBlobPalette = compilePalette(doc);
     const compiled = compileBlob(doc, face);
     lastBlobCompileError = null;
     return compiled;
   } catch (e) {
     const msg = e instanceof BlobError ? e.message : e instanceof Error ? e.message : String(e);
     lastBlobCompileError = msg;
+    // Clear the palette too: the fallback body is the TS zombie, and dressing
+    // it in a half-parsed character's colours would make a compile error look
+    // like a rendering bug instead of the missing character it is.
+    lastBlobPalette = null;
     if (!blobCompileWarned) {
       blobCompileWarned = true;
       console.error('[blob] zombie.blob failed to compile, falling back to the TS zombie', e);
@@ -392,7 +407,13 @@ async function main() {
   scene.add(occluderHull.object);
   sdfLayer.setOccluderEnabled(true);
 
-  let flesh: FleshMaterial = { ...FLESH_PRESETS['henenlotter-latex'] };
+  // The character's own palette if it declared one, else the lab default.
+  // `body` above already ran compileZombie, so lastBlobPalette is populated by
+  // the time this reads it — the ordering is load-bearing, which is why this
+  // sits below the build rather than at the top of the setup block.
+  let flesh: FleshMaterial = lastBlobPalette
+    ? { ...lastBlobPalette }
+    : { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
   const view = createZombieGpuView(body, { cone: sdfLayer.cone, occluder: sdfLayer.occluder });

@@ -213,6 +213,7 @@ export function createHandsGpuView(
   u.lightCfg.value.copy(template.lightCfg.value);
   u.surfCfg.value.copy(template.surfCfg.value);
   u.surfCfg2.value.copy(template.surfCfg2.value);
+  u.mottleColor.value.copy(template.mottleColor.value);
   u.marchCfg.value.copy(template.marchCfg.value);
   u.woundCfg.value.copy(template.woundCfg.value);
   u.woundCfg2.value.copy(template.woundCfg2.value);

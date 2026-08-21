@@ -231,6 +231,33 @@ describe('ported features reach the entry point', () => {
       'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x');
   });
 
+  it('mottles ALBEDO from the rest-space anchor, guarded by its amplitude', () => {
+    // surfaceNoiseAmp perturbs the NORMAL, which reads as texture and never as
+    // colour, so before this every body was one flat tone under the lab's
+    // single broad key. The albedo twin has three properties worth pinning:
+    //
+    // 1. It samples `anchor`, not `p` — a world-space mottle looks right on a
+    //    statue and swims across the surface the moment anything walks. Same
+    //    rule the micro-detail and gore mottle already follow.
+    expect(MARCH_BODY).toContain('fbm(anchor * surfCfg2.w)');
+    expect(MARCH_BODY).not.toContain('fbm(p * surfCfg2.w)');
+    // 2. smoothstep, not a linear remap of the nominal -1..1. Two octaves of
+    //    value noise concentrate near zero, so `0.5 + 0.5*fbm` lands nearly
+    //    every pixel at 0.5 — a uniform half-strength tint rather than
+    //    mottling, which is exactly what the first version did on screen.
+    expect(MARCH_BODY).toContain('smoothstep(-0.35, 0.35, fbm(anchor * surfCfg2.w))');
+    // 3. Amplitude-guarded like every other quality lever here, so the stock
+    //    presets (all mottleAmp 0) skip the fbm entirely and shade exactly as
+    //    they did before this existed.
+    expect(MARCH_BODY).toContain('if (surfCfg2.z > 0.0) {');
+    // Before the gore and face passes: mottle is the flesh's own colour, so
+    // damage and the face paint OVER it.
+    expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
+      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = lodCfg.w;'));
+    expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
+      .toBeLessThan(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'));
+  });
+
   it('steps the shell conservatively and never retracts a displaced sample', () => {
     // The fbm breaks the Lipschitz bound, so inside the shell a relaxed step
     // could tunnel — 0.6 under-relaxation pays for the noise instead. And the

@@ -264,3 +264,70 @@ describe('parseBlob — body and face', () => {
     expect(err!.col).not.toBe(blobLine.indent + 1);
   });
 });
+
+describe('parseBlob — palette', () => {
+  const doc = (palette: string) => parseBlob(
+    `model x\nskeleton\n  root pelvis at 1.0\npalette\n${palette}`);
+
+  it('is null when no palette block is declared', () => {
+    expect(parseBlob('model x\nskeleton\n  root pelvis at 1.0').palette).toBeNull();
+  });
+
+  // Values are ARRAYS even for scalars, because a palette mixes single numbers
+  // with RGB triples. `face` and `sheet` are flat number maps and share a
+  // parser for being the same shape; this block genuinely is not.
+  it('keeps every value as an array, scalars included', () => {
+    expect(doc('  wetness 0.55\n  baseColor 0.26 0.34 0.15\n').palette).toEqual({
+      wetness: [0.55], baseColor: [0.26, 0.34, 0.15],
+    });
+  });
+
+  // Arity is JUDGED by compilePalette, which knows which keys are colours, but
+  // 2 or 4 numbers is wrong for every key — catching it here turns a truncated
+  // colour into an error pointing at the line rather than a silently accepted
+  // two-channel value.
+  it.each([['0.2 0.3', 2], ['0.2 0.3 0.4 0.5', 4], ['', 0]])(
+    'rejects %s numbers on a palette line', (nums, _n) => {
+      expect(() => doc(`  baseColor ${nums}\n`)).toThrow(/1 number or 3/);
+    });
+
+  it('rejects a non-numeric channel and points at that word', () => {
+    try {
+      doc('  baseColor 0.2 green 0.4\n');
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      const err = e as BlobError;
+      expect(err.message).toMatch(/is not a number/);
+      expect(err.line).toBe(5);
+      // 1-based CHARACTER column of "green", not the word index.
+      expect(err.col).toBe('  baseColor 0.2 '.length + 1);
+    }
+  });
+
+  // Trivia is what lets emitBlob replay the block. Without it the palette
+  // keyword survives (it lives in doc.structure) and every parameter under it
+  // silently vanishes on re-emit — exactly the bug the sheet block shipped
+  // with.
+  it('records each palette line as trivia for the emitter', () => {
+    const d = doc('  wetness 0.55\n  baseColor 0.26 0.34 0.15\n');
+    expect(d.paletteTrivia.map(l => l.words[0])).toEqual(['wetness', 'baseColor']);
+  });
+});
+
+describe('parseBlob — stance', () => {
+  const doc = (extra: string) => parseBlob(`model x\n${extra}skeleton\n  root pelvis at 1.0`);
+
+  // Null, not a defaulted 'humanoid'. See BlobDoc.stance — a defaulted intent
+  // check is a guess, and it reported two false errors on zombie.blob.
+  it('is null when the model declares nothing', () => {
+    expect(doc('').stance).toBeNull();
+  });
+
+  it.each(['humanoid', 'digitigrade'] as const)('records a declared %s', v => {
+    expect(doc(`  stance ${v}\n`).stance).toBe(v);
+  });
+
+  it('rejects anything else rather than silently falling back', () => {
+    expect(() => doc('  stance quadruped\n')).toThrow(/humanoid or digitigrade/);
+  });
+});

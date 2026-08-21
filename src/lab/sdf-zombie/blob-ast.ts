@@ -76,8 +76,20 @@ export type BlobStance = 'humanoid' | 'digitigrade';
 export interface BlobDoc {
   name: string;
   height: number | null;
-  /** Declared knee fold. Defaults to humanoid, which is what the IK expects. */
-  stance: BlobStance;
+  /**
+   * Declared knee fold, or null when the document says nothing.
+   *
+   * NULL RATHER THAN A DEFAULT OF `humanoid`, which is what this was. Stance is
+   * the format's one INTENT check — `checkStance` compares the declaration
+   * against the geometry precisely because a knee folded the wrong way by
+   * accident is invisible to every geometric check. An intent check needs an
+   * intent, and a defaulted one is a guess: zombie.blob declares no stance and
+   * its hunched knees measure 10.2 mm behind the hip-to-ankle line, so the
+   * default reported two validation errors on the lab's own default character
+   * for the whole life of the check. Both were false — nobody had claimed the
+   * zombie was anything.
+   */
+  stance: BlobStance | null;
   rootBone: string;
   rootHeight: number;
   /** Root bone length. `root <name> at <h> len=<l>`; 0.14 when omitted. */
@@ -94,6 +106,21 @@ export interface BlobDoc {
    */
   sheet: Record<string, number> | null;
   sheetTrivia: BlobLine[];
+  /**
+   * A `palette` block's parameters, or null when the character did not declare
+   * one — in which case it wears whatever flesh preset the lab has selected,
+   * which is what every character did before palettes existed and is most of
+   * why they all read as the same pink creature in different shapes.
+   *
+   * Values are ARRAYS because a palette mixes scalars (`roughness 0.55`) with
+   * linear-RGB triples (`base 0.34 0.42 0.22`); arity is checked per key by
+   * `compilePalette`, against the shape of the real `FleshMaterial` field.
+   * `face` and `sheet` are flat number maps and share a parser for that
+   * reason; this one cannot join them without making every face parameter a
+   * one-element array.
+   */
+  palette: Record<string, number[]> | null;
+  paletteTrivia: BlobLine[];
   /**
    * Lines that no node owns — `model`, `skeleton`, `body`, `face`, `mirror`,
    * `end`, `height`, `root`. The emitter needs them to rebuild the document in

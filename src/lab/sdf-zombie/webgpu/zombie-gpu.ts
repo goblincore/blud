@@ -188,8 +188,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
     /** x specIntensity, y specRoughness, z fresnelBoost, w translucency */
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
-    /** x wetness, y surfaceNoiseAmp */
-    surfCfg2: uniform(new THREE.Vector2(1.0, 0.06)),
+    /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
+    surfCfg2: uniform(new THREE.Vector4(1.0, 0.06, 0, 1.2)),
+    /** The colour the albedo mottle mixes toward. Inert while surfCfg2.z is 0,
+     *  which is every stock preset — see FleshMaterial.mottleAmp. */
+    mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
     /** x enabled, y strength, z forward (+1/-1), w relief */
     faceCfg: uniform(new THREE.Vector4(0, 0.85, 1, 1.4)),
     /** x projMode (0 planar, 1 spherical), y mean, z glowThreshold, w glowStrength */
@@ -410,6 +413,7 @@ export function createMarchMaterial(
     lightCfg: u.lightCfg,
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
+    mottleColor: u.mottleColor,
     faceCfg: u.faceCfg,
     faceCfg2: u.faceCfg2,
     faceCfg3: u.faceCfg3,
@@ -795,7 +799,8 @@ export function createZombieGpuView(
       u.deepColor.value.setRGB(...m.deepColor);
       u.charColor.value.setRGB(...m.charColor);
       u.surfCfg.value.set(m.specIntensity, m.specRoughness, m.fresnelBoost, m.translucency);
-      u.surfCfg2.value.set(m.wetness, m.surfaceNoiseAmp);
+      u.surfCfg2.value.set(m.wetness, m.surfaceNoiseAmp, m.mottleAmp, m.mottleScale);
+      u.mottleColor.value.setRGB(...m.mottleColor);
       u.marchCfg.value.z = m.silhouetteNoiseAmp;
       u.lightDir.value.set(...light.keyDir);
       u.keyColor.value.setRGB(...light.keyColor);
@@ -889,6 +894,7 @@ export function createChunkGpuView(
     u.lightCfg.value.copy(template.lightCfg.value);
     u.surfCfg.value.copy(template.surfCfg.value);
     u.surfCfg2.value.copy(template.surfCfg2.value);
+    u.mottleColor.value.copy(template.mottleColor.value);
     u.marchCfg.value.copy(template.marchCfg.value);
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);

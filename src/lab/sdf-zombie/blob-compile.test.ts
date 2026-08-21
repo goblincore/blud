@@ -2,9 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { parseBlob } from './blob-parse';
 import { BlobError } from './blob-ast';
-import { compileBlob, compileFace, dirVector } from './blob-compile';
+import { compileBlob, compileFace, compilePalette, dirVector } from './blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { DEFAULT_FACE } from './face';
+import { FLESH_PRESETS } from './material';
 import zombieBlobSrc from './characters/zombie.blob?raw';
 
 const near = (a: readonly number[], b: readonly number[], eps = 1e-9) =>
@@ -249,5 +250,81 @@ face
       compileFace(doc); // the guard — delete this line and the block below never throws
       compileBlob(doc, DEFAULT_FACE);
     }).toThrow(/unknown face parameter "headRadus"/);
+  });
+});
+
+describe('compilePalette', () => {
+  const doc = (palette: string) => parseBlob(
+    `model x\nskeleton\n  root pelvis at 1.0\nbody\n  blob torso on pelvis at=0.5 r=0.1\npalette\n${palette}`);
+  const BASE = FLESH_PRESETS['henenlotter-latex'];
+
+  // A character with no palette wears whatever preset the lab has selected —
+  // the behaviour every character had before palettes existed. Returning a
+  // silently-defaulted material instead would make "no palette" indistinguish-
+  // able from "a palette that happens to match the base", and the lab could no
+  // longer tell whether to honour the panel.
+  it('returns null when the document declares no palette', () => {
+    expect(compilePalette(parseBlob('model x\nskeleton\n  root pelvis at 1.0'))).toBeNull();
+  });
+
+  it('is a PARTIAL override — unnamed fields keep the base preset', () => {
+    const m = compilePalette(doc('  wetness 0.2\n'))!;
+    expect(m.wetness).toBe(0.2);
+    expect(m.baseColor).toEqual(BASE.baseColor);
+    expect(m.specRoughness).toBe(BASE.specRoughness);
+  });
+
+  it('reads a colour as three linear channels', () => {
+    expect(compilePalette(doc('  baseColor 0.26 0.34 0.15\n'))!.baseColor).toEqual([0.26, 0.34, 0.15]);
+  });
+
+  // Identity, not equality — the point is that the compiled material owns its
+  // colour arrays. Spreading a FleshMaterial copies its scalars but SHARES its
+  // Vec3 arrays, so a palette that overrode no colour would hand back the
+  // preset's own arrays. `Vec3` is a readonly tuple so TypeScript blocks the
+  // obvious way to exploit that, which makes this a latent hazard rather than
+  // a live bug — but the lab hands `flesh` straight to the panel to edit, the
+  // preset objects are module-level singletons shared by every view, and one
+  // `as` cast anywhere would turn a stray write into every character silently
+  // changing colour. Copying is four spreads.
+  it('does not alias the base preset\'s colour arrays', () => {
+    const m = compilePalette(doc('  wetness 0.2\n'))!;
+    const base = FLESH_PRESETS['henenlotter-latex'];
+    expect(m.baseColor).toEqual(base.baseColor);
+    expect(m.baseColor).not.toBe(base.baseColor);
+    expect(m.deepColor).not.toBe(base.deepColor);
+    expect(m.charColor).not.toBe(base.charColor);
+    expect(m.mottleColor).not.toBe(base.mottleColor);
+  });
+
+  it('rejects an unknown parameter name rather than ignoring it', () => {
+    // The whole point: a typo must not ride along as an inert extra property
+    // while the intended field quietly keeps the preset's value.
+    expect(() => compilePalette(doc('  baseColour 0.2 0.3 0.1\n'))).toThrow(BlobError);
+    expect(() => compilePalette(doc('  baseColour 0.2 0.3 0.1\n'))).toThrow(/unknown palette parameter/);
+  });
+
+  it('rejects a colour given one number', () => {
+    expect(() => compilePalette(doc('  baseColor 0.2\n'))).toThrow(/needs 3 numbers/);
+  });
+
+  it('rejects a scalar given three numbers', () => {
+    expect(() => compilePalette(doc('  wetness 0.2 0.3 0.1\n'))).toThrow(/single number/);
+  });
+
+  it('reports the offending line', () => {
+    try {
+      compilePalette(doc('  wetness 0.3\n  baseColor 0.2\n'));
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect((e as BlobError).line).toBe(8); // model, skeleton, root, body, blob, palette, wetness, baseColor
+    }
+  });
+
+  it('carries the mottle fields through', () => {
+    const m = compilePalette(doc('  mottleAmp 0.45\n  mottleScale 1.6\n  mottleColor 0.2 0.19 0.06\n'))!;
+    expect(m.mottleAmp).toBe(0.45);
+    expect(m.mottleScale).toBe(1.6);
+    expect(m.mottleColor).toEqual([0.2, 0.19, 0.06]);
   });
 });

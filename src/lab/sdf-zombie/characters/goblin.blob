@@ -237,3 +237,50 @@ sheet
   jawShade   0.55
   grain      0.10
   seed       5
+
+# The goblin's own flesh, rather than the lab's default preset.
+#
+# Before this block existed every .blob character wore whichever FLESH_PRESET
+# the panel had selected — one global object — so the whole cast rendered as
+# the same pink creature in different shapes, which is most of why the first
+# goblin read as "the zombie with different limbs" even after the skeleton was
+# entirely rebuilt. Colour does more work than proportion here.
+#
+# These are the field names of FleshMaterial (material.ts), not friendlier
+# aliases, for the reason the face block uses FaceParams' own names: an alias
+# table is a second list that drifts from the first. Anything not named here
+# keeps henenlotter-latex's value — a palette is a partial override, and the
+# base is a NAMED preset rather than the panel's current selection so the same
+# .blob renders the same in the lab, in a turntable capture and in the game.
+#
+# Linear RGB. These go through the output sRGB encode on the WebGPU path, which
+# lifts the low channels hard — that is why the green is much less saturated
+# here than it looks on screen, and why nudging blue up 0.02 does more than it
+# reads like it should.
+palette
+  baseColor     0.34 0.44 0.19
+  # Wounds stay red. A green creature bleeding green reads as a plant.
+  deepColor     0.46 0.09 0.09
+  charColor     0.06 0.07 0.05
+  # Clammy rather than latex-wet: a lower, broader highlight than the zombie's.
+  specIntensity 0.52
+  specRoughness 0.42
+  fresnelBoost  0.45
+  translucency  0.30
+  wetness       0.55
+  # THE ALBEDO MOTTLE. surfaceNoiseAmp already roughens the NORMAL, which reads
+  # as texture and never as colour, so under this lab's single broad key the
+  # creature was one flat tone whichever way it turned. This is the colour
+  # twin: fbm in REST space, so the blotches ride a limb through gait instead
+  # of swimming over it. Off (0) in every preset, because switching it on
+  # changes how a body looks and that is a per-character decision.
+  mottleAmp     0.65
+  # Low frequency on purpose — patches a hand-span across, not freckles. This
+  # is NOT cycles per metre: the shader's fbm multiplies its own input by 4 and
+  # 9 for its two octaves, so the number here is about a quarter of the
+  # frequency it looks like. The first pass used 5 and produced fine speckle
+  # that read as image noise; by ~10 it aliases outright.
+  mottleScale   1.6
+  # A browner, darker green than the base. Mottling toward something far from
+  # the base colour reads as dirt ON the creature rather than variation IN it.
+  mottleColor   0.21 0.19 0.06
