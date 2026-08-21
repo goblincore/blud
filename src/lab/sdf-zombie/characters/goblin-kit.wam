@@ -1,0 +1,170 @@
+# Goblin kit — the POLYGON half of the goblin, authored in WAM.
+#
+# WHY TWO LANGUAGES FOR ONE CHARACTER. .blob builds flesh out of blended
+# signed-distance primitives, and it is very good at exactly the things a mesh
+# is bad at: everything merges by construction, nothing has a seam, and a limb
+# is four numbers. It is correspondingly bad at anything HARD — smooth-min
+# rounds every edge it touches, so a buckle, a rivet, a plate lip or a blade
+# either smears or has to be carved back with a `hard` blend that fights the
+# whole aesthetic. WAM is a text→glTF mesh compiler, which is the other half of
+# that trade. So: flesh in .blob, plate in .wam.
+#
+# The polygon layer also sidesteps a problem the SDF path has not solved. All
+# the flesh shares ONE material — per-part colour needs a data-texture row and
+# a second weighted fold at every hit pixel to avoid Voronoi seams mid-limb.
+# A separate mesh just has its own material, so steel on green flesh is free.
+#
+# THE SKELETON BELOW MIRRORS characters/goblin.blob AND MUST TRACK IT. Every
+# bone, angle and length is the same joint in the same place; if the .blob
+# skeleton moves and this does not, the plate floats. Two conversions apply
+# and neither is optional:
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. Every
+#     number here is the .blob metre value / 1.30.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
+#     `down` bone BACKWARD; .blob's always carries toward +z. So `up` bones
+#     (spine1, chest, neck, skull) share their pitch verbatim, and every `down`
+#     bone (upperarm, forearm, thigh, shin) has it NEGATED. Getting this wrong
+#     is what gave the .blob goblin kangaroo knees in the first place, and it
+#     is silent — the model compiles either way and just wears its armour on
+#     the wrong side of the limb. `tilt` needs no such flip: both languages
+#     splay a `down` bone outward on +.
+#
+# RING SIZES ARE MEASURED, NOT EYEBALLED. Each piece wraps flesh that is not
+# in this file, so every w/d below comes from marching the .blob field outward
+# from the bone axis, per limb-isolated cluster, and converting to height
+# fractions — the SDF answers "where is the surface" directly, which is the
+# one thing a mesh pipeline has to raycast for. Measured flesh, for reference:
+#
+#   upperarm t0.00 w=0.085  t0.18 w=0.055  t0.42 w=0.051
+#   forearm  w=0.045 all along
+#   hips     t0.40 w=0.109 d=0.146   t0.62 w=0.126 d=0.174   t0.90 w=0.134 d=0.184
+#   shin     w=0.055 all along
+#
+# Every ring here sits a few thousandths proud of those. Re-measure before
+# retuning: the arm-clearance work already moved the torso's whole cross
+# section once.
+# BUILD:  scripts/build-wam-kit.sh goblin
+#   -> public/assets/lab/goblin-kit.gltf, which the lab loads (KITS in
+#      lab-main.ts). WAM lives outside this repo, so the compiled glTF is
+#      committed and that script records how to regenerate it.
+#
+# THREE OF WAM'S LINTS ALWAYS FIRE ON A KIT AND ARE CORRECT TO IGNORE. They
+# check a whole CHARACTER, and this is only the clothes: `spine1`/`neck`/`skull`
+# have no geometry near them (that flesh lives in the .blob), and the lowest
+# geometry floats 0.174 above the ground (there are no feet here). A warning
+# about anything else is real.
+model goblin-kit
+  height 1.30
+  # chunky = 8-sided lofts. Faceted plate against smooth raymarched flesh is
+  # the contrast this experiment is for — if it reads as cheap rather than
+  # deliberate, this is the first knob to try at `smooth`.
+  style chunky
+
+palette
+  iron    #6e7378
+  leather #4a3526
+  cloth   #7a6644
+  brass   #9c7a38
+
+skeleton
+  # `hips` HAS NO COUNTERPART IN goblin.blob, and leaving it out is a silent
+  # 10.5 cm error. .blob's root is a BONE with a length — `root pelvis at 0.60
+  # len=0.105` runs from the crotch up to the hip line, and everything that
+  # says `parent=pelvis` there hangs off its TAIL. WAM's root is a bare POINT,
+  # so parenting spine1 straight to it drops the entire trunk (and every piece
+  # of plate on it) by that length. `hips` restores the missing segment, and
+  # every .blob `parent=pelvis` becomes `parent=hips` here.
+  #
+  # It also carries the belt: `bones=pelvis..pelvis` is a zero-length path and
+  # WAM rejects it outright, which is how this was found.
+  root pelvis at 0.4615
+  bone hips   parent=pelvis dir=up len=0.0808
+  bone spine1 parent=hips dir=up pitch=13 len=0.1038
+  bone chest  parent=spine1 dir=up pitch=9  len=0.1154
+  bone neck   parent=chest  dir=up pitch=-17 len=0.1077
+  bone skull  parent=neck   dir=up pitch=-5  len=0.1808
+  mirror
+    bone clavicle parent=chest    side=0.0277 dir=side len=0.0323
+    # pitch NEGATED from .blob's -12 — see the header.
+    bone upperarm parent=clavicle dir=down pitch=12  tilt=22 len=0.1808
+    bone forearm  parent=upperarm dir=down pitch=-11 tilt=-5 len=0.1808
+    bone hand     parent=forearm  dir=down len=0.0554
+    bone thigh    parent=hips     side=0.0446 dir=down pitch=-9 tilt=5  len=0.2231
+    bone shin     parent=thigh    dir=down pitch=11  tilt=-7 len=0.2077
+    bone foot     parent=shin     dir=fwd len=0.1000
+  end
+
+parts
+  mirror
+    # PAULDRON — a dome over the shoulder ball, flaring past it and stopping
+    # before the elbow. The .blob shoulder is w=0.085 at the joint and drops to
+    # 0.055 immediately, so a plate that merely followed the flesh would
+    # disappear; this one stands out to 0.118 at its widest so it reads as a
+    # separate hard object rather than a shiny patch of goblin.
+    loft pauldron bones=upperarm..upperarm material=iron
+      ring 0.00 w=0.104 d=0.100
+      ring 0.16 w=0.118 d=0.112
+      ring 0.40 w=0.086 d=0.082
+      cap start=dome end=flat
+
+    # BRACER — a plain leather cuff on the forearm. Flesh is 0.045 the whole
+    # way, so this is a constant-section tube standing 0.007-0.009 proud.
+    loft bracer bones=forearm..forearm material=leather
+      ring 0.32 w=0.058 d=0.058
+      ring 0.55 w=0.064 d=0.064
+      ring 0.82 w=0.060 d=0.060
+      cap start=flat end=flat
+
+    # GREAVE — the same idea down the shin, stopping above the ankle nub.
+    loft greave bones=shin..shin material=iron
+      ring 0.16 w=0.070 d=0.070
+      ring 0.45 w=0.074 d=0.074
+      ring 0.70 w=0.066 d=0.066
+      cap start=flat end=flat
+  end
+
+  # BELT — around the pelvis, above the widest part of the gut. Deliberately
+  # not at t=0.90 where the belly is fattest: a belt at the widest ring reads
+  # as a stripe painted on the stomach, whereas one above it reads as
+  # something the stomach is hanging over, which is the goblin note.
+  loft belt bones=hips..hips material=leather
+    ring 0.30 w=0.117 d=0.152
+    ring 0.52 w=0.130 d=0.178
+    ring 0.66 w=0.136 d=0.186
+    cap start=flat end=flat
+
+  # BUCKLE — a brass plate on the front of the belt. `on=belt` snaps it to the
+  # belt's surface and sinks it in, so it is flush by construction rather than
+  # by an offset guessed against a shape authored ten lines earlier.
+  attach buckle bone=hips kind=box at=0.50 offset=(0,0,0.10) size=0.030 w=0.038 d=0.016 material=brass on=belt
+
+  # KILT — the actual CLOTHING test, and the reason this file exists rather
+  # than four rigid props. It hangs off a free ray below the belt, so it is not
+  # bound to the pelvis bone's own extent, and its hem uses WAM's `follow=`
+  # idiom: hem vertices partially track the mirrored thigh pair, split left and
+  # right, so the skirt swings with the legs instead of the legs walking
+  # through it. Nothing in the SDF path can express that — the flesh has no
+  # skin to weight against.
+  loft kilt bone=hips at=0.34 dir=down len=0.20 material=cloth frame=fwd
+    ring 0.00 w=0.124 d=0.164
+    ring 0.50 w=0.150 d=0.196
+    ring 1.00 w=0.172 d=0.214 follow=thigh:0.80
+    cap start=none end=none
+
+textures
+  texture iron base=#6e7378
+    gradient axis=v from=-0.12 to=0.18   # painted top-light on the plate
+    noise scale=0.10 amount=0.06         # hammered, not stamped
+    ao amount=0.18
+  texture leather base=#4a3526
+    streaks along=v amount=0.09
+    noise scale=0.16 amount=0.08
+    ao amount=0.20
+  texture cloth base=#7a6644
+    streaks along=u amount=0.10          # weave runs around the skirt
+    noise scale=0.20 amount=0.10
+    ao amount=0.14
+  texture brass base=#9c7a38
+    gradient axis=v from=-0.10 to=0.22
+    ao amount=0.12

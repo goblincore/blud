@@ -27,6 +27,7 @@
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
+import { loadKit } from './kit-overlay';
 import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
@@ -51,6 +52,24 @@ const CHARACTERS: Record<string, string> = {
   zombie: zombieBlobSrc,
   goblin: goblinBlobSrc,
 };
+
+/**
+ * The POLYGON kit for a character, if it has one — armour, clothing and hard
+ * props authored in a sibling `.wam` and compiled to a self-contained glTF.
+ * Absent means flesh only, which is every character but the goblin today.
+ *
+ * See kit-overlay.ts for what this does and does not do yet: the kit is placed
+ * once at the body root and does NOT follow the rig, so it is only honest with
+ * motion frozen.
+ */
+const KITS: Record<string, string> = {
+  goblin: '/assets/lab/goblin-kit.gltf',
+};
+
+function activeCharacterName(): string {
+  const want = new URLSearchParams(location.search).get('character');
+  return want && want in CHARACTERS ? want : 'zombie';
+}
 
 function activeCharacterSrc(): string {
   const want = new URLSearchParams(location.search).get('character');
@@ -424,6 +443,21 @@ async function main() {
   view.coneObject.layers.set(CONE_LAYER);
   scene.add(view.object);
   scene.add(view.coneObject);
+
+  // The character's polygon kit, on the DEFAULT layer with the floor and the
+  // reference cube — NOT SDF_LAYER. That is what puts it in the polygonal pass
+  // whose depth the march already composites against (sdf-layer.ts's header),
+  // so armour occludes and is occluded by flesh with nothing added here.
+  //
+  // Fire-and-forget: a kit that fails to load must not take the lab down with
+  // it, and there is nothing to fall back to — the character is simply
+  // undressed, which is exactly how it rendered before kits existed.
+  const kitUrl = KITS[activeCharacterName()];
+  if (kitUrl) {
+    loadKit(kitUrl, [0, 0, 0])
+      .then(kit => scene.add(kit.object))
+      .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
+  }
   const u = view.uniforms;
 
   // One node graph for every gib. Three r185 still runs its expensive
