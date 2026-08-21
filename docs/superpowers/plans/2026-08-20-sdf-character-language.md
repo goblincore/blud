@@ -894,8 +894,15 @@ tail ~0.3 mm, which turns the anchor test into a loose approximation.
 
 ```js
 // scripts/derive_blob_angles.mjs
-// Prints the exact pitch/tilt for each ZOMBIE_BASE bone, for authoring
-// zombie.blob. One-off authoring aid; not part of the build.
+// Prints pitch/tilt for each ZOMBIE_BASE bone whose dir is an up/down base,
+// for authoring zombie.blob. One-off authoring aid; not part of the build.
+//
+// LIMITS — read before using this to port another character:
+//   * up/down bases ONLY. A `side` or `fwd` bone (the zombie's clavicle) has
+//     |y| = 0 and is not derivable this way; hand-write its `dir=` with no
+//     pitch or tilt. The script labels those lines rather than printing NaN.
+//   * The root bone is skipped. compileBlob hardcodes the pelvis, and it is
+//     never written as a `bone` line in .blob.
 import { readFileSync } from 'node:fs';
 
 const src = readFileSync('src/lab/sdf-zombie/body.ts', 'utf8');
@@ -960,19 +967,23 @@ describe('zombie.blob is the zombie', () => {
     expect([...a.keys()].sort()).toEqual([...b.keys()].sort());
     for (const [name, bone] of a) {
       const ref = b.get(name)!;
-      bone.head.forEach((v, i) => expect(v).toBeCloseTo(ref.head[i]!, 4));
-      bone.tail.forEach((v, i) => expect(v).toBeCloseTo(ref.tail[i]!, 4));
+      // Name the bone and component. This test is the safety net Tasks 6 and 8
+      // lean on; a bare "expected 0.523 to be close to 0.521" years from now
+      // means bisecting to find which bone moved.
+      bone.head.forEach((v, i) => expect(v, `${name} head[${i}]`).toBeCloseTo(ref.head[i]!, 4));
+      bone.tail.forEach((v, i) => expect(v, `${name} tail[${i}]`).toBeCloseTo(ref.tail[i]!, 4));
     }
   });
 
   it('places every primitive at the same endpoints and radius', () => {
     const a = fromBlob().prims, b = fromTs().prims;
     a.forEach((p, i) => {
-      expect(p.radius).toBeCloseTo(b[i]!.radius, 6);
-      expect(p.blendK).toBeCloseTo(b[i]!.blendK, 6);
-      expect(p.limb).toBe(b[i]!.limb);
-      p.a.forEach((v, j) => expect(v).toBeCloseTo(b[i]!.a[j]!, 4));
-      p.b.forEach((v, j) => expect(v).toBeCloseTo(b[i]!.b[j]!, 4));
+      const at = `prim[${i}] ${p.limb}`;
+      expect(p.radius, `${at} radius`).toBeCloseTo(b[i]!.radius, 6);
+      expect(p.blendK, `${at} blendK`).toBeCloseTo(b[i]!.blendK, 6);
+      expect(p.limb, `${at} limb`).toBe(b[i]!.limb);
+      p.a.forEach((v, j) => expect(v, `${at} a[${j}]`).toBeCloseTo(b[i]!.a[j]!, 4));
+      p.b.forEach((v, j) => expect(v, `${at} b[${j}]`).toBeCloseTo(b[i]!.b[j]!, 4));
     });
   });
 });
