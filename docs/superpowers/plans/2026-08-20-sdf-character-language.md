@@ -573,10 +573,21 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
   if (isBar && strArg(l, 'to') === null)
     throw new BlobError('bar needs "to="', l.line, l.indent + 1);
 
+  // Validate the limb rather than casting. `rest[0]` grabs whatever word
+  // follows the kind, so an omitted limb yields "on" and a typo yields
+  // "torzo" — both outside the union, and `as BlobPart['limb']` would simply
+  // lie about it. Mirrors how dirArg guards `dir=`.
+  const limb = kind === 'carve' ? 'head' : rest[0];
+  if (kind !== 'carve' && (limb === undefined || !LIMBS.includes(limb as BlobPart['limb'])))
+    throw new BlobError(
+      `${kind} needs a limb, one of ${LIMBS.join('|')} — got "${limb ?? ''}"`,
+      l.line, wordCol(l, 1));
+
   const off = strArg(l, 'offset');
+  const offset = off === null ? null : parseOffset(l, off);
   s.doc.parts.push({
     kind,
-    limb: kind === 'carve' ? 'head' : (rest[0] as BlobPart['limb']),
+    limb: limb as BlobPart['limb'],
     bone,
     at: isBar ? numArg(l, 'from') : numArg(l, 'at'),
     to: isBar ? numArg(l, 'to') : null,
@@ -588,11 +599,24 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     mirror: l.words.includes('mirror'),
     hard: l.words.includes('hard'),
     both: l.words.includes('both'),
-    offset: off === null
-      ? null
-      : (off.replace(/[()]/g, '').split(',').map(Number) as unknown as [number, number, number]),
+    offset,
     src: l,
   } satisfies BlobPart);
+}
+
+const LIMBS = ['head', 'torso', 'arm', 'leg'] as const;
+
+/**
+ * `offset=(x,y,z)` → a real 3-tuple. Checks arity and finiteness rather than
+ * casting: a short `offset=(1,2)` would otherwise type as a 3-tuple whose third
+ * element is undefined at runtime, and the emitter consumes offset positionally.
+ */
+function parseOffset(l: BlobLine, raw: string): [number, number, number] {
+  const n = raw.replace(/[()]/g, '').split(',').map(Number);
+  if (n.length !== 3 || n.some(v => !Number.isFinite(v)))
+    throw new BlobError(
+      `offset must be three numbers like (x,y,z) — got "${raw}"`, l.line, l.indent + 1);
+  return [n[0]!, n[1]!, n[2]!];
 }
 
 function parseFaceLine(l: BlobLine, s: ParseState): void {
