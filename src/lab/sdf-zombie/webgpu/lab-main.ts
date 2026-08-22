@@ -40,6 +40,7 @@ import { makeZombie } from '../body';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import goblinBlobSrc from '../characters/goblin.blob?raw';
 import clownBlobSrc from '../characters/clown.blob?raw';
+import clownAltBlobSrc from '../characters/clown-alt.blob?raw';
 import mouseBlobSrc from '../characters/mouse.blob?raw';
 
 /**
@@ -54,6 +55,7 @@ const CHARACTERS: Record<string, string> = {
   zombie: zombieBlobSrc,
   goblin: goblinBlobSrc,
   clown: clownBlobSrc,
+  'clown-alt': clownAltBlobSrc,
   mouse: mouseBlobSrc,
 };
 
@@ -69,6 +71,7 @@ const CHARACTERS: Record<string, string> = {
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
   clown: '/assets/lab/clown-kit.gltf',
+  'clown-alt': '/assets/lab/clown-alt-kit.gltf',
   mouse: '/assets/lab/mouse-kit.gltf',
 };
 

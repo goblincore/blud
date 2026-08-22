@@ -1,0 +1,472 @@
+# CLOWN-ALT KIT — frozen snapshot of clown-kit.wam at d36795f, paired with
+# clown-alt.blob. See that file's header for why it exists.
+#
+# Clown kit — the POLYGON half of the clown (cap, hair tufts, ruff, striped
+# tunic, stockings, sleeves, mitts, shoes), authored in WAM against clown.blob.
+#
+# WHY TWO LANGUAGES FOR ONE CHARACTER: see goblin-kit.wam's header — flesh in
+# .blob because blended SDFs are round by construction, clothes in WAM because
+# smooth-min rounds every edge a garment needs. For THIS character the polygon
+# half is also the only way to own COLOUR: all flesh shares one material and
+# the face sheet only darkens, so the red nose shell, the purple hair, the
+# striped tunic and the red shoes all live here. Attempt one discovered this
+# the hard way — its nose was cream like the skin and the owner's verdict was
+# "no red nose reading".
+#
+# THE SKELETON BELOW MIRRORS characters/clown.blob AND MUST TRACK IT. Two
+# conversions apply, neither optional:
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. The
+#     clown's height is 1.00, so every number here IS the .blob metre value —
+#     but do not let that fool you into skipping the conversion thought if the
+#     height ever changes.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
+#     `down` bone BACKWARD; .blob's always carries toward +z. Up bones
+#     (spine1, chest, neck, skull) share pitch verbatim; down bones (upperarm,
+#     forearm, thigh, shin) NEGATE. Silent either way.
+#
+# FLESH THIS WRAPS, marched off clown.blob with sdBody bisects at each ring's
+# OWN height (full widths; w = 2 x half-width, d = 2 x half-depth). These are
+# the numbers the garment margins add to — re-march them if the .blob moves:
+#
+#   belly    y0.42 w=0.304 d=0.195   y0.44 w=0.314 d=0.193   y0.46 w=0.322 d=0.187
+#   waist    y0.50 w=0.261 d=0.163   y0.52 w=0.252 d=0.160
+#   head     y0.55 w=0.218 (ball)    y0.57 w=0.272 d=0.236   y0.60 w=0.318
+#            y0.70 w=0.424           y0.80 w=0.440           y0.825 w=0.440 d=0.422
+#            y0.925 w=0.334 d=0.320
+#   (the head rows above are the PRE-1.18 skull. headWidth is now 1.18, so the
+#   ball runs ~23% wider in x at every height — the cap band, ruff and tufts
+#   below are re-fitted against that wider ball; re-measure before retuning.)
+#   thigh    hip ball w=0.092        shaft w=0.072           knee ball w=0.080
+#   shin     shaft w=0.060           ankle ball w=0.064
+#   arm      shoulder ball w=0.080   upper shaft w=0.052     elbow ball w=0.062
+#            fore shaft w=0.046      hand mitt-flesh w=0.072
+#
+# Garment margins: +12-16 mm on cloth (it HANGS, and smooth-min bulges the
+# torso BETWEEN sampled rings — attempt one's hem pushed 53 mm through because
+# its ring was sized off the wrong height), +6-8 mm on stockings/sleeves
+# (tight), +8 mm on the cap band.
+#
+# BUILD:  scripts/build-wam-kit.sh clown
+#   -> public/assets/lab/clown-kit.gltf, loaded via KITS in webgpu/lab-main.ts.
+#
+# EXPECTED LINTS, correct to ignore (same three as the goblin kit): this is
+# clothes plus a nose shell, not a whole character, so spine1/chest have no
+# direct geometry, nothing reaches the ground plane except the shoe soles,
+# and skull-side pieces sit far from their own bone's neighbours by design.
+model clown-alt-kit
+  height 1.00
+  # chunky = 8-sided lofts, matching the goblin kit: faceted cloth against
+  # smooth raymarched flesh. On a toy the facets also read as stitching.
+  style chunky
+
+# Values are one notch brighter than the hexes read off the reference: the
+# lab lights the kit with one narrow key and no LOOK-table env (this task may
+# not edit kit-overlay.ts), so flat standard materials render darker than the
+# same hex would in WAM's own viewer. First render came back mud — and the
+# SECOND pass bumped the hexes another notch after the stripes still
+# vanished (see the palette block's own note).
+palette
+  # Second pass on brightness: the FIRST values (one notch over the
+  # reference hexes) still rendered as mud under the lab's single narrow
+  # key — royal read as navy, the pink stripes as grey-mauve, and the stripe
+  # contrast itself nearly vanished. These are two notches over the
+  # reference now. If a LOOK-table env ever reaches this kit, revisit
+  # downward.
+  royal   #555be0
+  blue    #6d76f2
+  pink    #f2a2e6
+  purple  #a878e0
+  # Silver-grey, not white: the ruff is the one piece wearing this, and the
+  # reference reads it as a metallic frill. Was #d2cec6 (both-notches-bright for
+  # the harsh key) which looked white; a touch darker keeps the silver read.
+  grey    #c2bcb0
+  red     #f04a3e
+  # The nose gets its OWN red, brighter and more saturated than the shoes'.
+  # A clown nose is the most saturated thing on the character and it was
+  # sharing the shoe red, which is deep enough to read maroon under the key.
+  nose    #ff2d1c
+  gold    #e2b13f
+  yellow  #f6cf4d
+  white   #f6f1e6
+
+skeleton
+  # .blob's `root pelvis at 0.36 len=0.06` is a BONE from crotch to hip line;
+  # WAM's root is a bare POINT, so `hips` restores the missing segment and
+  # every .blob `parent=pelvis` becomes `parent=hips`. See goblin-kit.wam.
+  root pelvis at 0.36
+  bone hips   parent=pelvis dir=up len=0.06
+  bone spine1 parent=hips   dir=up pitch=2   len=0.075
+  bone chest  parent=spine1 dir=up pitch=2   len=0.075
+  bone neck   parent=chest  dir=up pitch=-10 len=0.045
+  bone skull  parent=neck   dir=up pitch=-4  len=0.34
+  mirror
+    # down-bone pitches NEGATED from .blob: upperarm -8->8, forearm 20->-20,
+    # thigh 8->-8, shin -10->10.
+    bone clavicle parent=chest    side=0.030 dir=side  len=0.032
+    bone upperarm parent=clavicle dir=down pitch=8   tilt=32 len=0.135
+    bone forearm  parent=upperarm dir=down pitch=-20 tilt=-6 len=0.115
+    bone hand     parent=forearm  dir=down             len=0.058
+    bone thigh    parent=hips     side=0.044 dir=down pitch=-8 tilt=6  len=0.175
+    bone shin     parent=thigh    dir=down pitch=10  tilt=-6 len=0.165
+    bone foot     parent=shin     dir=fwd len=0.095
+    # JESTER HORN — one of the cap's two forks. Inside `mirror`, so the .r copy
+    # is generated: solve() flips the RESOLVED direction, so a dir=(x,y,z)
+    # reflects in x exactly like an axis word does.
+    #
+    # Leaves the crown heading up-and-out, rolls over to horizontal, then falls
+    # away and forward, which is the arc the reference hood makes. Aimed with
+    # explicit vectors — none of this is reachable with the six axis words.
+    bone horn1 parent=skull head=(0.070,0.980,-0.010) dir=(0.55,0.78,-0.30) len=0.105
+    bone horn2 parent=horn1 dir=(0.84,0.42,-0.34) len=0.100
+    bone horn3 parent=horn2 dir=(0.95,-0.22,-0.22) len=0.095
+    bone horn4 parent=horn3 dir=(0.74,-0.66,-0.12) len=0.085
+  end
+
+  # RUFF POINTS — eight spikes fanning out from the neck, each aimed with an
+  # explicit dir=(x,y,z). The vector form was added to WAM for exactly this:
+  # a radial fan is not expressible with the six axis words, and an earlier
+  # attempt to aim them by pinning each tail did NOT reorient the bones —
+  # all eight came out pointing the same way.
+  #
+  # DROOP: -0.78 in y, not -0.32. At -0.32 they stuck out as a stiff spiky
+  # collar; this is meant to be POINTY FABRIC, which hangs. The heads also drop
+  # from y 0.576 to 0.548 so the whole frill sits lower on the neck.
+  bone pt1 parent=neck head=(0.000,0.548,0.140) dir=(0.000,-0.78,1.000) len=0.115
+  bone pt2 parent=neck head=(0.099,0.548,0.099) dir=(0.707,-0.78,0.707) len=0.115
+  bone pt3 parent=neck head=(0.140,0.548,0.000) dir=(1.000,-0.78,0.000) len=0.115
+  bone pt4 parent=neck head=(0.099,0.548,-0.099) dir=(0.707,-0.78,-0.707) len=0.115
+  bone pt5 parent=neck head=(0.000,0.548,-0.140) dir=(0.000,-0.78,-1.000) len=0.115
+  bone pt6 parent=neck head=(-0.099,0.548,-0.099) dir=(-0.707,-0.78,-0.707) len=0.115
+  bone pt7 parent=neck head=(-0.140,0.548,-0.000) dir=(-1.000,-0.78,-0.000) len=0.115
+  bone pt8 parent=neck head=(-0.099,0.548,0.099) dir=(-0.707,-0.78,0.707) len=0.115
+
+
+
+parts
+  # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
+  #
+  # Every piece here is an open shell for the goblin kit's reason: a `cap
+  # flat` puts a disc straight through the limb, dead on the bone axis, and
+  # the fit test then finds a vertex 5 cm inside the head. Rendered
+  # double-sided by kit-overlay.ts.
+  #
+  # The band is what keeps the cap ON the head while the cone above slumps
+  # away behind it. Rings are the head ellipsoid's cross-section at each
+  # height PLUS 4 mm: rx(y) = 0.2256 x sqrt(1-(dy/0.235)^2) from headRadius
+  # 0.235 x width 0.96, centre y 0.767. A TILTED cut across the forehead was
+  # tried to match the reference's diagonal cap edge — ray pitched forward,
+  # rings sized along it — and floated a centimetre off the ball: an
+  # elliptical ring hugs a sphere only in the sphere's own horizontal
+  # sections, so horizontal it is.
+  #
+  # SITS HIGH, off the brow: band bottom y 0.851, where the sheet's eye
+  # line lands at y ~0.74-0.80. First version's band bottom was y 0.809 —
+  # 14 mm over the eye line — and from the camera's slight downward pitch
+  # the brim ate the eyes whole (rescue render: "a dark visor band across
+  # the upper face"). The reference sits the cap well BACK off the brow;
+  # high is what this grammar can do. Rings re-marched for the new heights:
+  # the ball narrows fast up here, and keeping the old 0.450 bottom ring
+  # would float the band 15 mm off the scalp.
+  # JESTER CAP — a hood over the skull with TWO FORKED HORNS, a star on each.
+  #
+  # THIRD DESIGN. It was a ring plus a cone (two pieces with a seam that read
+  # as clipping), then one long drooping cone (clean, but still clipped the
+  # brow when pulled forward). The owner's call: "I think I want to redesign
+  # the nightcap to be more of classic jester cap with two forks with a star
+  # attached to the end".
+  #
+  # This is structurally easier than either, which is the real argument for it:
+  # the hood is a short almost-straight loft that only has to hug the skull,
+  # and each horn is thin from the start, so the fold rule that dominated the
+  # single-cone design — ring radius must stay under the bend reach — is
+  # satisfied with room to spare instead of being fought at every ring.
+  #
+  # THE HOOD. Sits low on the brow (skull t 0.640) and domes over the crown.
+  # Rings hug the head as it actually renders, marched with sdBody bisects:
+  # y 0.80 W 0.548 D 0.402, y 0.87 W 0.497 D 0.362, y 0.93 W 0.398 D 0.285.
+  loft caphood bone=skull at=0.640 dir=up len=0.190 frame=fwd material=royal
+    ring 0.00 w=0.576 d=0.428
+    ring 0.30 w=0.552 d=0.408
+    ring 0.55 w=0.492 d=0.366
+    ring 0.75 w=0.408 d=0.308
+    ring 0.90 w=0.296 d=0.226
+    ring 1.00 w=0.150 d=0.118
+    cap start=none end=dome
+
+  mirror
+    # THE HORNS. Thin from the base, which is what keeps every joint clear of
+    # the fold rule (ring radius < bend reach): the widest ring here is 0.075
+    # against reaches of ~0.09-0.10.
+    loft horn bones=horn1..horn4 material=royal
+      ring 0.00 w=0.150 d=0.150
+      ring 0.30 w=0.122 d=0.122
+      ring 0.60 w=0.088 d=0.088
+      ring 0.85 w=0.052 d=0.052
+      ring 1.00 w=0.028 d=0.028
+      cap start=none end=point
+
+    # A star on each fork's tip. Hung off horn4 at t=1.0, so it tracks the
+    # horn — no measuring the built mesh, which is what the single cone's tip
+    # needed and what made that star float twice.
+    attach hornstar bone=horn4 at=1.0 kind=star points=5 size=0.105 inner=0.42 d=0.028 material=yellow
+
+  attach badge bone=skull kind=sphere at=0.70 offset=(0.245,0.030,0.045) size=0.026 material=yellow
+
+  # HAIR — two wide purple tufts sweeping out from under the cap band,
+  # sticking sideways past the cheeks almost like wings. Second-biggest
+  # silhouette element after the head itself in the reference, and absent
+  # from attempt one entirely.
+  #
+
+  # RUFF COLLAR — A POINTED JESTER FRILL, a pom-pom on every point.
+  #
+  # WHAT WAS HERE: a smooth round bell with the pom-poms on a circle 25 mm
+  # WIDER than the cloth's rim, so all eight hung in the air. Owner: "the
+  # biggest issue is the floating little pom poms that are supposed to be part
+  # of the ruff... the ruff should be more pointy shaped with the pom poms on
+  # the end of the points."
+  #
+  # Each pom is now attached at at=1.0 of its OWN point's bone, so it sits on
+  # the tip BY CONSTRUCTION. The old floating was not a bad number — it was two
+  # independent numbers (pom radius, cloth rim) free to drift apart. There is
+  # only one number now.
+  #
+  # The base ring joins the points into a collar rather than eight loose spikes.
+  loft ruffc bone=neck at=0.0 dir=down len=0.055 frame=fwd material=grey
+    ring 0.00 w=0.26 d=0.22
+    ring 0.55 w=0.34 d=0.30
+    ring 1.00 w=0.30 d=0.26
+    cap start=none end=none
+
+  loft spike1 bones=pt1..pt1 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike2 bones=pt2..pt2 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike3 bones=pt3..pt3 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike4 bones=pt4..pt4 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike5 bones=pt5..pt5 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike6 bones=pt6..pt6 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike7 bones=pt7..pt7 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike8 bones=pt8..pt8 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  # POM-POMS — one per point, ON its tip.
+  attach pom1 bone=pt1 kind=sphere at=1.0 size=0.032 material=red
+  attach pom2 bone=pt2 kind=sphere at=1.0 size=0.032 material=red
+  attach pom3 bone=pt3 kind=sphere at=1.0 size=0.032 material=red
+  attach pom4 bone=pt4 kind=sphere at=1.0 size=0.032 material=red
+  attach pom5 bone=pt5 kind=sphere at=1.0 size=0.032 material=red
+  attach pom6 bone=pt6 kind=sphere at=1.0 size=0.032 material=red
+  attach pom7 bone=pt7 kind=sphere at=1.0 size=0.032 material=red
+  attach pom8 bone=pt8 kind=sphere at=1.0 size=0.032 material=red
+
+  # TUNIC BODICE — vertical blue/pink stripes flaring from under the head
+  # ball to the hip line. frame=fwd so d spans front-back exactly like the
+  # measured flesh depths. The top ring disappears INTO the head ball (the
+  # ball is wider than the bodice all the way down to y 0.55) — correct:
+  # the reference's head sits directly on the garment with no neck between.
+  #
+  # STRIPES RUN AROUND THE TUBE via material_arc (a constant arc over every
+  # ring is a stripe down the length). THE SAMPLING TRAP, diagnosed on
+  # attempt one and worth restating: material_arc samples each quad at its
+  # ENDING edge angle with INCLUSIVE bounds, and chunky lofts put quad
+  # boundaries every 45 degrees — bands authored on the grid (0-45, 90-135,
+  # ...) paint EVERY quad one colour and the stripes vanish silently. All
+  # four arcs below are offset off the grid by 22 degrees for exactly that
+  # reason. Keep them off it.
+  loft bodice bone=hips at=0.30 dir=up len=0.1425 frame=fwd material=pink material_arc=blue:22-67,blue:112-157,blue:202-245,blue:292-337
+    ring 0.00 w=0.174 d=0.218
+    ring 0.33 w=0.178 d=0.216
+    ring 0.65 w=0.146 d=0.188
+    ring 1.00 w=0.156 d=0.142
+    cap start=none end=none
+
+  # TUNIC SKIRT — the bell flare, from the hip line to mid-thigh. It MUST
+  # stop near mid-thigh: the hem clears the splayed thighs by ~25 mm at its
+  # own lowest ring, and any longer needs to out-flare the stance (the
+  # goblin kit's fauld lesson).
+  #
+  # Ring sizing measured at the hem's OWN height, per the header table —
+  # attempt one sized its hem off the crotch ring and the belly pushed
+  # 53 mm through it.
+  # Arcs are the BODICE's shifted +45 degrees: the skirt runs dir=down where
+  # the bodice runs up the chain, and the arc convention mirrors with the
+  # path — unshifted, the two met at the hip with blue facing pink and read
+  # as two different garments.
+  loft skirt bone=hips at=1.0 dir=down len=0.150 frame=fwd material=pink material_arc=blue:67-112,blue:157-202,blue:247-292,blue:337-382
+    ring 0.00 w=0.170 d=0.220
+    ring 0.50 w=0.235 d=0.280
+    ring 1.00 w=0.300 d=0.340
+    cap start=none end=none
+
+  mirror
+    # HAIR — two wide purple tufts sweeping out from under the cap band,
+    # sticking sideways past the cheeks almost like wings; second-biggest
+    # silhouette element after the head itself in the reference, and absent
+    # from attempt one entirely. Authored ONCE here, inside the mirror block:
+    # the first draft sat outside it and produced ONE wing (the render caught
+    # what the compile lint did not).
+    #
+    # Mounted just INSIDE the cheek surface (offset x 0.205 against a local
+    # half-width of 0.223 — buried 18 mm, attached), aimed dir=side and swept
+    # OUT-AND-UP. First version bent down=12/24/36 across its segments and
+    # the render read it as drooping dog-ears; the reference's tufts are
+    # WINGS — they leave the hairline travelling sideways and climb as they
+    # go, so every bend here is up= (WAM sweeps bend up=/down=/fwd=/back=
+    # per segment; there is no outward= because dir=side already IS out).
+    # The ROOT SEGMENT IS DELIBERATELY THIN (30 mm) and now LONGER (80 mm):
+    # a fat ring around an axis below the skin always has vertices deep
+    # inside the skull — the fit test rejected a 75 mm-rooted first draft at
+    # −71 mm — so the tuft sprouts from a narrow root at the hairline and
+    # only swells once clear of the ball. The long thin root also FIXES the
+    # "floating flaps" read of the up-swept version: with the swell starting
+    # 80 mm out, the first stretch of the wing overlaps the cheek visually
+    # and the tuft reads as GROWING from the head, not hovering beside it.
+    # `cap start=none` for the same reason as the cap cone above (sweeps
+    # default to a flat start cap: a disc straight through the mount point).
+    sweep tuft bone=skull at=0.66 offset=(0.202,-0.005,-0.018) dir=side yaw=-12 material=purple
+      seg len=0.040 r=0.055 up=4
+      seg len=0.055 r=0.078 down=24 back=4
+      seg len=0.060 r=0.070 down=34 back=3
+      seg len=0.060 r=0.050 down=30
+      seg len=0.055 r=0.024 down=16 tip
+      cap start=none
+
+    # THE RED NOSE SHELL — the colour half of the clown's one saturated note.
+    # The flesh bead underneath carries the silhouette (see clown.blob); this
+    # red ball carries the READ. First continuation version was w=0.104
+    # d=0.034 — a flat PANCAKE floating in front of the bead, and the render
+    # verdict was "no ball". A clown nose is a BALL stuck on the face, so the
+    # shell is near-spherical now (h set explicitly — an attach sphere's h
+    # DEFAULTS TO size=, which left the first ball version squashed 2:1
+    # vertically on the turntable; a clown nose is round in FRONT view too)
+    # and centred to straddle the bead: face surface at this height is z≈0.194 (semi-depth 0.212 at
+    # dy −0.045, bone z −0.0185), shell back pole z 0.170 buries 24 mm into
+    # the skull (inside the fit test's tuck bound), shell front pole z 0.262
+    # stands ~36 mm proud of the flesh bead's own front (0.226) — about 70%
+    # of the ball in front of the face, which is exactly how a foam clown
+    # nose sits.
+    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.216) size=0.052 w=0.108 h=0.100 d=0.096 material=nose
+
+    # STOCKING — thin blue leg, tight (+6-8 mm over the measured balls and
+    # shafts), ending just above the ankle where the shoe takes over.
+    loft stocking bones=thigh..shin material=blue
+      ring 0.08 w=0.098
+      ring 0.35 w=0.086
+      ring 0.55 w=0.092
+      ring 0.75 w=0.074
+      ring 0.93 w=0.072
+      cap start=none end=none
+
+    # SLEEVE — thin blue arm tube, shoulder to wrist. The shoulder ring
+    # wraps the shoulder ball (w 0.090 over flesh 0.080) so the sleeve
+    # reads as dressed from the joint, not glued on halfway.
+    loft sleeve bones=upperarm..forearm material=blue
+      ring 0.05 w=0.090
+      ring 0.30 w=0.064
+      ring 0.55 w=0.070
+      ring 0.80 w=0.058
+      ring 0.95 w=0.054
+      cap start=none end=none
+
+    # MITT — the white puff. A sphere on the hand bone, sized to swallow
+    # the flesh mitten (r 0.036) whole: the glove is one soft shape, no
+    # fingers, exactly like the reference. It rides at the skirt wall —
+    # cloth contact is unavoidable at chibi proportions and the reference
+    # shows the same brush.
+    attach mitt bone=hand kind=sphere at=0.60 offset=(0,0,0.005) size=0.044 material=white
+
+    # SHOE — big, bulbous, RED. Lofted along the foot ray CONTINUED (shin
+    # at=1.0, dir=fwd, longer than the foot bone itself): the foot's toe
+    # blob rides past its bone's tail, so a shoe ending at t=1.0 of the
+    # foot bone stops short of the toe it exists to exaggerate — the
+    # goblin kit's boot lesson verbatim. Oversized IS the joke: 0.15 forward
+    # of the ankle plus domes, against a 0.095 foot bone.
+    # DROPPED 21 mm and fattened. (31 mm overshot: fattening the rings extends
+    # the shoe downward too, so the two drops compound and it sank 10 mm
+    # THROUGH the floor.) Removing the gold sole took the shoe's
+    # lowest geometry with it and WAM's lint caught the result — "lowest
+    # geometry floats 0.031 above ground". The shoe now reaches the floor on
+    # its own, and since it is the only footwear left it carries the bulk the
+    # sole used to: these are meant to be BIG red clown shoes.
+    loft shoe bone=shin at=1.0 dir=fwd len=0.165 frame=up offset=(0,-0.021,0) material=red
+      ring 0.00 w=0.108 d=0.132
+      ring 0.30 w=0.138 d=0.140
+      ring 0.60 w=0.148 d=0.124
+      ring 0.90 w=0.116 d=0.094
+      ring 1.00 w=0.076 d=0.062
+      cap start=dome end=dome
+
+    # NO SOLE. There was a gold box lofted under the shoe here as a sole. In the
+    # render it did not read as a sole — it read as a SANDAL worn under the shoe,
+    # a separate gold slab with its own silhouette below the red. Owner's verdict
+    # was "remove the sandles". The shoe is one red mass now.
+
+    # NO TOE BALL. There was a small yellow ball on each toe. Fattening the
+    # shoe to reach the ground swallowed it — WAM's lint: "part 'toe.l' is
+    # entirely inside 'shoe.l' ... costs triangles and shows nothing". The
+    # brief is "just big red clown shoes", so it goes rather than being
+    # grown back out through the leather.
+  end
+
+textures
+  # Cloth stays matte and quiet — heavy noise would muddy the stripe edges
+  # the material_arc work exists to keep crisp. The striped materials take
+  # the least of anything.
+  texture royal base=#555be0
+    gradient axis=v from=-0.10 to=0.16
+    noise scale=0.14 amount=0.05
+    ao amount=0.14
+  texture blue base=#6d76f2
+    noise scale=0.16 amount=0.04
+    ao amount=0.08
+  texture pink base=#f2a2e6
+    noise scale=0.16 amount=0.04
+    ao amount=0.08
+  texture purple base=#a878e0
+    streaks along=v amount=0.08
+    noise scale=0.14 amount=0.05
+    ao amount=0.12
+  texture grey base=#c2bcb0
+    noise scale=0.14 amount=0.05
+    ao amount=0.16
+  texture red base=#f04a3e
+    gradient axis=v from=-0.08 to=0.14
+    noise scale=0.14 amount=0.05
+    ao amount=0.14
+  texture gold base=#e2b13f
+    gradient axis=v from=-0.10 to=0.22
+    ao amount=0.12
+  texture yellow base=#f6cf4d
+    ao amount=0.10
+  texture white base=#f6f1e6
+    ao amount=0.10
