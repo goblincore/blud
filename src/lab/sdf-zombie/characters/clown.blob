@@ -222,8 +222,10 @@ sheet
   eyeTilt    0
   # Thin, gently ARCHED brows — browAngle negative lifts the inner ends,
   # where positive (the zombie's scowl) drops them. Kept light: any heavier
-  # and the innocence goes.
-  browHeavy  0.30
+  # and the innocence goes. (0.30 washed out entirely on the pale skin —
+  # same physics as eyeGlow — and the reference's faint arcs still want to
+  # exist.)
+  browHeavy  0.42
   browAngle  -8
   mouthWidth 0.38
   # 0.697, not a rounder number: this puts the paint's centre ON the smile

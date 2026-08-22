@@ -270,18 +270,21 @@ parts
     # WINGS — they leave the hairline travelling sideways and climb as they
     # go, so every bend here is up= (WAM sweeps bend up=/down=/fwd=/back=
     # per segment; there is no outward= because dir=side already IS out).
-    # The ROOT SEGMENT IS DELIBERATELY THIN (32 mm): a fat ring around an
-    # axis below the skin always has vertices deep inside the skull — the
-    # fit test rejected a 75 mm-rooted first draft at −71 mm — so the tuft
-    # sprouts from a narrow root at the hairline and swells once clear of
-    # the ball. `cap start=none` for the same reason as the cap cone above
-    # (sweeps default to a flat start cap: a disc straight through the
-    # mount point).
+    # The ROOT SEGMENT IS DELIBERATELY THIN (30 mm) and now LONGER (80 mm):
+    # a fat ring around an axis below the skin always has vertices deep
+    # inside the skull — the fit test rejected a 75 mm-rooted first draft at
+    # −71 mm — so the tuft sprouts from a narrow root at the hairline and
+    # only swells once clear of the ball. The long thin root also FIXES the
+    # "floating flaps" read of the up-swept version: with the swell starting
+    # 80 mm out, the first stretch of the wing overlaps the cheek visually
+    # and the tuft reads as GROWING from the head, not hovering beside it.
+    # `cap start=none` for the same reason as the cap cone above (sweeps
+    # default to a flat start cap: a disc straight through the mount point).
     sweep tuft bone=skull at=0.52 offset=(0.205,-0.010,-0.020) dir=side yaw=-20 material=purple
-      seg len=0.055 r=0.032 up=14
-      seg len=0.060 r=0.062 up=26 back=8
-      seg len=0.055 r=0.048 up=18 back=6
-      seg len=0.045 r=0.020 down=8 tip
+      seg len=0.080 r=0.030 up=8
+      seg len=0.055 r=0.062 up=26 back=8
+      seg len=0.045 r=0.048 up=18 back=6
+      seg len=0.040 r=0.020 down=8 tip
       cap start=none
 
     # THE RED NOSE SHELL — the colour half of the clown's one saturated note.
