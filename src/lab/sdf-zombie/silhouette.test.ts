@@ -267,9 +267,14 @@ describe('maskFromTriangles', () => {
 
 describe('bandOwners', () => {
   // Same grammar as build-body.test.ts's provenance fixture, cut down to the
-  // two blobs under test: a fat one high on the spine that swallows the face,
-  // and a small one low on the pelvis. Nothing else reaches either extreme, so
+  // two blobs under test: a fat DISC on the skull that swallows the face, and
+  // a small blob low on the pelvis. Nothing else reaches either extreme, so
   // the top band can only be owned by the first and the bottom by the second.
+  //
+  // The disc is 0.6 in radius but 0.3 in `tall`, which makes its cluster
+  // SPHERE reach ~0.4 m above any flesh — a deliberately loose superset, so a
+  // band divided over the framing bounds instead of the subject box lands in
+  // empty air and owns nothing.
   const SRC = `model t
 skeleton
   root pelvis at 0.92
@@ -277,29 +282,66 @@ skeleton
   bone skull parent=spine dir=up len=0.16
 
 body
-  blob torso on spine at=0.95 r=0.34 wide=1.2 blend=0.02
+  blob torso on skull at=1.0 r=0.6 wide=1.0 tall=0.3 deep=0.4 blend=0.02
   blob torso on pelvis at=0.40 r=0.10 wide=1.0 blend=0.02
 `;
-  const bigLine = 8, smallLine = 9;
+  const discLine = 8, smallLine = 9;
   const doc = parseBlob(SRC);
   const body = buildBody(compileBlob(doc, compileFace(doc)));
+  /** Index of the prim whose top is the top of the silhouette. */
+  const topPrim = body.prims
+    .map((p, i) => [i, Math.max(p.a[1], p.b[1]) + p.radius * p.scale[1]] as const)
+    .reduce((a, b) => (b[1] > a[1] ? b : a))[0];
 
   it('names the primitive that forms each band of the outline', () => {
     expect(body.errors).toEqual([]);
     const owners = bandOwners(body, { view: 'front', bands: 4 });
     expect(owners.map(o => o.band)).toEqual([0, 1, 2, 3]);
-    expect(owners[0]!.line).toBe(bigLine);
-    expect(owners[0]!.bone).toBe('spine');
+    expect(owners[0]!.line).toBe(discLine);
+    expect(owners[0]!.bone).toBe('skull');
     expect(owners[0]!.limb).toBe('torso');
     expect(owners[3]!.line).toBe(smallLine);
     expect(owners[3]!.bone).toBe('pelvis');
-    expect(body.prims[owners[0]!.index]!.src).toBe(bigLine);
+    expect(body.prims[owners[0]!.index]!.src).toBe(discLine);
   });
 
-  it('puts its bands at the same heights compareSilhouette reports', () => {
+  it('takes its band heights from the SUBJECT, not the framing bounds', () => {
+    const m = maskFromBody(body, { heightPx: 192 });
+    const sb = subjectBounds(m)!;
+    // The fixture only tests anything if the framing really is loose: a
+    // quarter of the image must be empty air above the crown, which is where
+    // band 0 would land if the cluster spheres set the band heights.
+    expect(sb.y0 / m.h).toBeGreaterThan(0.15);
+
     const owners = bandOwners(body, { view: 'front', bands: 4 });
-    const m = maskFromBody(body, { heightPx: 128 });
     const rep = compareSilhouette(m, m, { bands: 4 });
     for (let i = 0; i < 4; i++) expect(owners[i]!.at).toBeCloseTo(rep.bands[i]!.at, 6);
+    // ...and the top band names the prim that actually forms the top of the
+    // mask, rather than reporting the empty air above it.
+    expect(owners[0]!.index).toBe(topPrim);
+  });
+
+  it('follows compareSilhouette into a height window', () => {
+    const m = maskFromBody(body, { heightPx: 192 });
+    const range: [number, number] = [0.25, 0.75];
+    const owners = bandOwners(body, { bands: 4, range });
+    const rep = compareSilhouette(m, m, { bands: 4, range });
+    for (let i = 0; i < 4; i++) expect(owners[i]!.at).toBeCloseTo(rep.bands[i]!.at, 6);
+    // A window is not the whole subject: these must NOT be the 0..1 bands.
+    expect(owners[0]!.at).toBeGreaterThan(0.25);
+  });
+
+  it('says "kit" when the outline there is clothing rather than flesh', () => {
+    // The goblin's shoes: the plate's widest point at the ankles is polygon,
+    // and there is no primitive to blame for it.
+    const doc2 = parseBlob(readFileSync('src/lab/sdf-zombie/characters/goblin.blob', 'utf8'));
+    const goblin = buildBody(compileBlob(doc2, compileFace(doc2)));
+    const k = gltfTriangles(
+      JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/goblin-kit.gltf'))));
+    const dressed = bandOwners(goblin, { bands: 6, kit: k });
+    expect(dressed.some(o => o.limb === 'kit')).toBe(true);
+    for (const o of dressed) if (o.limb === 'kit') { expect(o.index).toBe(-1); expect(o.line).toBeNull(); }
+    // Bare flesh can never be kit-owned, whatever the geometry does.
+    expect(bandOwners(goblin, { bands: 6 }).some(o => o.limb === 'kit')).toBe(false);
   });
 });

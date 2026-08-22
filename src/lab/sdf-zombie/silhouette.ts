@@ -304,22 +304,20 @@ interface Frame {
   w: number; h: number;
 }
 
+function emptyBox(): Box {
+  return { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
+}
+
 /** Bounds from the cluster spheres — a superset of the surface, which is what
  *  we want: the mask must not be cropped by its own framing. */
 function boxOfClusters(live: ClusterInfo[]): Box {
-  const box: Box = {
-    minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity,
-  };
+  const box = emptyBox();
   for (const c of live) {
     box.minX = Math.min(box.minX, c.center[0] - c.radius); box.maxX = Math.max(box.maxX, c.center[0] + c.radius);
     box.minY = Math.min(box.minY, c.center[1] - c.radius); box.maxY = Math.max(box.maxY, c.center[1] + c.radius);
     box.minZ = Math.min(box.minZ, c.center[2] - c.radius); box.maxZ = Math.max(box.maxZ, c.center[2] + c.radius);
   }
   return box;
-}
-
-function emptyBox(): Box {
-  return { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
 }
 
 /** Grow a box over a triangle soup's vertices. */
@@ -480,6 +478,39 @@ export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
   return bodyRaster(body, opts)?.mask ?? { w: 1, h: 1, bits: new Uint8Array(1) };
 }
 
+/**
+ * Raster height bandOwners renders at, in pixels.
+ *
+ * Bands are read off the SUBJECT's pixel extent, so this sets how precisely the
+ * crown and soles are located: at 192 rows a 1.7 m character resolves to ~9 mm
+ * a row, an order of magnitude finer than the bands themselves at any band
+ * count worth reading. Higher costs a full sphere-trace per pixel for accuracy
+ * no band boundary can use.
+ */
+const BAND_RASTER_PX = 192;
+
+/**
+ * Step of the inward walk across the image, in metres — 2 mm, well under a
+ * raster pixel (~9 mm on a human-scale body), so the walk resolves the edge
+ * finer than the mask that located the band in the first place.
+ */
+const U_STEP = 0.002;
+
+/**
+ * Step of the depth scan behind each column, in metres.
+ *
+ * THE CAVEAT: this is a fixed-step scan, not a march, so a feature THINNER
+ * than 5 mm along the view axis can be stepped straight over — a blade-thin
+ * ear seen front-on, a fin. When that happens the walk carries on inward and
+ * attributes the band to the next primitive it does hit, which is one prim too
+ * far IN. It never invents an owner; it can only under-report an edge.
+ */
+const D_STEP = 0.005;
+
+/** compareSilhouette's own default grid. Band rows are derived from it, so
+ *  matching the default is what makes the two agree without being told. */
+const BAND_GRID = 128;
+
 export interface BandOwner {
   band: number;
   /** 0 at the top of the subject, 1 at the bottom — compareSilhouette's convention. */
@@ -487,9 +518,21 @@ export interface BandOwner {
   /** 1-based `.blob` line, or null for a TS-authored prim (or an empty band). */
   line: number | null;
   bone: string;
+  /** The prim's limb, or 'kit' when the outline there is polygon, not field. */
   limb: string;
-  /** Index into body.prims, or -1 when the band holds nothing. */
+  /** Index into body.prims, or -1 when the band holds nothing (or holds kit). */
   index: number;
+}
+
+export interface BandOwnerOpts {
+  view?: 'front' | 'side';
+  bands?: number;
+  /** The character's polygon kit, exactly as passed to maskFromBody. */
+  kit?: Float32Array;
+  /** Height window, exactly as passed to compareSilhouette. */
+  range?: [number, number];
+  /** compareSilhouette's grid. Only matters together with a `range`. */
+  grid?: number;
 }
 
 /**
@@ -505,21 +548,48 @@ export interface BandOwner {
  * bounds, so this takes its band heights from `subjectBounds` of the rendered
  * mask (the actual y-extent of the silhouette) rather than from the cluster
  * spheres the raster is framed on, which are a loose superset.
+ *
+ * ALIGNMENT HOLDS IFF THE CALLER PASSES THE SAME `kit` AND `range` (and
+ * `grid`) it gave the mask and the comparison. Both inputs move the subject
+ * box: a kit adds volume the flesh does not have, so the crown and the soles
+ * move; a range picks a different set of rows to divide into bands. Pair a
+ * report from `compareSilhouette(ref, maskFromBody(body, { kit }), { range })`
+ * with `bandOwners(body, { kit, range })` and band i is the same height in
+ * both. Mismatch them and the owners quietly point at the wrong heights.
+ *
+ * A band whose outline is the KIT rather than the flesh — a shoe, a hat brim —
+ * reports `limb: 'kit'` with `index -1`, because there is no primitive to
+ * blame. That is a real answer, not a failure: it says the width you are
+ * looking at is the outfit's.
+ *
+ * COST: one sphere-trace raster, then per band an inward walk with a depth
+ * scan at every step, culled to the cluster spheres the column crosses. An
+ * EMPTY band is the worst case — it walks the whole half-width from both sides
+ * before concluding there is nothing there.
  */
-export function bandOwners(
-  body: BuiltBody, opts: { view?: 'front' | 'side'; bands?: number } = {},
-): BandOwner[] {
+export function bandOwners(body: BuiltBody, opts: BandOwnerOpts = {}): BandOwner[] {
   const view = opts.view ?? 'front';
   const bands = opts.bands ?? 16;
+  const kit = opts.kit;
   const empty = (band: number, at: number): BandOwner =>
     ({ band, at, line: null, bone: '', limb: '', index: -1 });
 
-  const r = bodyRaster(body, { view, heightPx: 192 });
+  // The band rows, derived exactly as compareSilhouette derives them: a window
+  // of a `grid`-row normalised subject, reported back in WHOLE-SUBJECT
+  // coordinates so a band means the same height whatever range was scored.
+  const g = opts.grid ?? BAND_GRID;
+  const [lo, hi] = opts.range ?? [0, 1];
+  const rowLo = Math.max(0, Math.min(g - 1, Math.floor(lo * g)));
+  const rowHi = Math.max(rowLo + 1, Math.min(g, Math.ceil(hi * g)));
+  const rowSpan = rowHi - rowLo;
+  const atOf = (i: number): number => (rowLo + ((i + 0.5) * rowSpan) / bands) / g;
+
+  const r = bodyRaster(body, { view, heightPx: BAND_RASTER_PX, kit });
   const sb = r ? subjectBounds(r.mask) : null;
-  if (!r || !sb)
-    return Array.from({ length: bands }, (_, i) => empty(i, (i + 0.5) / bands));
+  if (!r || !sb) return Array.from({ length: bands }, (_, i) => empty(i, atOf(i)));
 
   const f = r.frame;
+  const { bits } = r.mask;
   const rowH = f.spanY / f.h;
   // Pixel EDGES, so the extent matches what subjectBounds means: rows sb.y0
   // through sb.y1 inclusive are occupied.
@@ -530,24 +600,54 @@ export function bandOwners(
   // anchor, so its centreline is the middle of the frame.
   const centre = view === 'front' ? 0 : (uLo + uHi) / 2;
   const uOf = (p: Vec3): number => (view === 'front' ? p[0] : p[2]);
+  const pxU = f.spanU / f.w;
 
-  const U_STEP = 0.002, D_STEP = 0.005;
-  /** March inward from `from` toward `to`, returning the first point inside. */
+  /**
+   * March inward from `from` toward `to`, returning the first point inside.
+   *
+   * The depth scan is confined to the cluster spheres the column actually
+   * crosses — the same cheap reject the raster uses, and the reason a walk
+   * that starts in empty air costs almost nothing until it reaches flesh.
+   */
+  const live = body.clusters.filter((c) => c.alive);
   const edgeAt = (y: number, from: number, to: number): Vec3 | null => {
     const dir = to >= from ? 1 : -1;
     for (let k = 0; ; k++) {
       const u = from + dir * k * U_STEP;
       if (dir > 0 ? u > to : u < to) return null;
-      for (let d = f.dMin; d <= f.dMax; d += D_STEP) {
+      let near = Infinity, far = -Infinity;
+      for (const c of live) {
+        const cu = view === 'front' ? c.center[0] : c.center[2];
+        const cd = view === 'front' ? c.center[2] : c.center[0];
+        const du = u - cu, dy = y - c.center[1];
+        const off2 = du * du + dy * dy;
+        const r2 = c.radius * c.radius;
+        if (off2 >= r2) continue;
+        const half = Math.sqrt(r2 - off2);
+        near = Math.min(near, cd - half);
+        far = Math.max(far, cd + half);
+      }
+      if (near > far) continue;
+      const dEnd = Math.min(far, f.dMax);
+      for (let d = Math.max(near, f.dMin); d <= dEnd; d += D_STEP) {
         const p: Vec3 = view === 'front' ? [u, y, d] : [d, y, u];
         if (sdBody(p, body) < 0) return p;
       }
     }
   };
 
+  /** How far the MASK reaches from the centreline in one row — the outline as
+   *  rendered, kit included. */
+  const maskReach = (py: number): number => {
+    let best = -Infinity;
+    for (let x = 0; x < f.w; x++)
+      if (bits[py * f.w + x]) best = Math.max(best, Math.abs(f.u0 + (x + 0.5) * pxU - centre));
+    return best;
+  };
+
   const out: BandOwner[] = [];
   for (let i = 0; i < bands; i++) {
-    const at = (i + 0.5) / bands;
+    const at = atOf(i);
     const y = topY - at * (topY - botY);
     const l = edgeAt(y, uLo, centre), rt = edgeAt(y, uHi, centre);
     // Keep the side that reaches FURTHER out: that is the one the eye reads as
@@ -555,6 +655,21 @@ export function bandOwners(
     const pick = l && rt
       ? (Math.abs(uOf(l) - centre) >= Math.abs(uOf(rt) - centre) ? l : rt)
       : (l ?? rt);
+
+    // Kit ownership, and ONLY when a kit was passed: the field walk found
+    // nothing at all, or it found flesh well inside where the rendered outline
+    // actually is. The tolerance is a pixel and a half of the raster, which
+    // covers both the mask's `eps` surface threshold and the walk's own step.
+    if (kit && kit.length) {
+      const py = Math.max(0, Math.min(f.h - 1, Math.floor((f.maxY - y) / rowH)));
+      const reach = maskReach(py);
+      const fieldReach = pick ? Math.abs(uOf(pick) - centre) : -Infinity;
+      if (reach > fieldReach + 1.5 * pxU + U_STEP) {
+        out.push({ band: i, at, line: null, bone: '', limb: 'kit', index: -1 });
+        continue;
+      }
+    }
+
     if (!pick) { out.push(empty(i, at)); continue; }
     const index = nearestPrim(pick, body);
     const prim = index >= 0 ? body.prims[index] : undefined;
