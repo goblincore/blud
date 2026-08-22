@@ -494,7 +494,32 @@ body
   # rubbery sheen in the plates.
   # ============================================================
   blob leg on foot at=0.00 r=0.053 r2=0.046 wide=1.00 tall=1.00 blend=0.0060 offset=(0.045,-0.088,0.018) tip=(0.041,-0.005,0.113) mirror color=b9b9bc gloss=0.25
-  blob leg on foot at=0.00 r=0.062 wide=1.18 tall=1.00 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
+  #   2. the ball, a wider blob where the mesh is widest, centred at y 0.059.
+  #      wide 1.14 (mesh-iter 2026-08-22, was 1.18): at 1.18 the ball's
+  #      shoulder flared to 0.170 of half-width at y 0.104 and band 0.90 read
+  #      +0.026 vs the mesh — the mesh shoe widens GRADUALLY below the ankle
+  #      (0.244 -> 0.297 -> 0.334 of height across 3 bands), ours stepped out
+  #      in one. The equator bands (0.91-0.99) lose only 0.005 each and stay
+  #      inside tolerance; the ankle-side onset is the WALL prim's job now.
+  blob leg on foot at=0.00 r=0.062 wide=1.15 tall=0.85 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
+  #   2b. the WALL — the shoe upper's side, a flattened tapered capsule from
+  #       the ankle down-and-out to the ball. No sphere can be this: the mesh
+  #       outer edge runs 0.101@y0.147 -> 0.121@0.130 -> 0.132@0.122 ->
+  #       0.150@0.113 -> 0.161@0.104 per side (a steepening curve), while a
+  #       sphere is either fat high up (tall 1.0: band 0.88 +0.045) or absent
+  #       (tall 0.9: band 0.88 -0.039) with nothing in between — the onset
+  #       cliff always lands inside one band. A capsule's silhouette edge is
+  #       a straight line, which hugs that curve to <0.01 everywhere.
+  #       World axis A (0.076, 0.126, 0.055) -> B (0.124, 0.090, 0.082),
+  #       r 0.045 -> 0.048, as PLAIN world displacements: a scaled prim's
+  #       world shape is an ellipsoid centred on its raw world endpoint with
+  #       radii scale*r, so offset/tip need NO scale compensation (the first
+  #       attempt divided/multiplied them and put the axis at the knee / the
+  #       floor). tall 0.40 keeps the top cap under the collar (band 0.87
+  #       +0.001); deep 1.30 spans z -0.01..0.15 so the wall reads heel to
+  #       toe. The thin y (r_y 0.018) is fine: below y 0.10 the wall is
+  #       buried in the ball, only its side face shows.
+  blob leg on foot at=0.00 r=0.045 r2=0.048 wide=1.00 tall=0.40 deep=1.30 blend=0.0060 offset=(0.032,-0.015,0.056) tip=(0.048,-0.036,0.027) mirror color=b9b9bc gloss=0.25
   blob leg on foot at=0.00 r=0.045 wide=1.00 tall=0.80 deep=1.10 blend=0.0070 offset=(0.019,-0.016,0.012) mirror color=b9b9bc gloss=0.25
 
 # THE CRANIUM, measured off the reference mesh rather than guessed off a
