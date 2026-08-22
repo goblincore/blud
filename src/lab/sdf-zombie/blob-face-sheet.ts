@@ -283,18 +283,26 @@ export function generateFaceSheet(
       // where they overlap the paint simply gets darker — which is what the
       // reference looks like where the point meets the lash line.
       if (p.harlequin > 0) {
+        // `harlequin` is the triangle's HEIGHT as a fraction of sheet height.
+        // The DARKNESS is fixed, NOT scaled by it — a first version multiplied
+        // the two and the paint came out both tiny and faint: 21 pixels of
+        // 4096 moved, by at most 27/255. Size and strength are separate ideas.
         const h = p.harlequin;
-        const halfW = h * 0.55 * 0.5;
-        // dx is measured from the eye's own centre, so the points track
-        // eyeGap rather than sitting at a fixed x.
+        const halfW = h * 0.42;
         const dx = Math.abs(sx - p.eyeGap / 2);
         for (const up of [true, false]) {
-          // Base sits just off the eye; the tip is `h` away from it.
-          const base = up ? eyeY - p.eyeSize * 0.55 : eyeY + p.eyeSize * 0.55;
+          // A GAP between eye and point. At 0.35 the two merged into one
+          // black mass; the reference keeps clear skin between the lash line
+          // and the paint, and that separation is what makes it read as two
+          // shapes rather than a hole.
+          const base = up ? eyeY - p.eyeSize * 1.15 : eyeY + p.eyeSize * 1.15;
           const along = up ? base - y : y - base;
           if (along < 0 || along > h) continue;
+          // Width shrinks to a point at the tip. The edge falloff is a
+          // fraction of the local width rather than a fixed `soft`, or the
+          // narrow end blurs away entirely.
           const spread = halfW * (1 - along / h);
-          v -= 0.42 * p.harlequin * 8 * falloff(dx, spread, soft * 1.5);
+          v -= 0.42 * falloff(dx, spread, Math.max(spread * 0.5, soft));
         }
       }
 

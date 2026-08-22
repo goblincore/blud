@@ -298,9 +298,10 @@ sheet
   mouthOpen  0.0
   # HARLEQUIN GREASEPAINT — a dark triangle above and below each eye, the
   # reference makeup the owner asked for. 0.085 of sheet height puts the tips
-  # roughly a full eye-width away from the eye in each direction, which is the
-  # proportion in the reference photo (tall and narrow, not equilateral).
-  harlequin  0.085
+  # well clear of the eye in each direction — the reference's points are LONG,
+  # reaching most of the way to the brow above and the cheekbone below.
+  # 0.085 was tried first and moved 21 pixels of a 64x64 sheet: invisible.
+  harlequin  0.17
   nostril    0.15
   noseRidge  0.0
   noseWide   0.0
