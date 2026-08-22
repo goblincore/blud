@@ -66,6 +66,7 @@ const CHARACTERS: Record<string, string> = {
  */
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
+  mouse: '/assets/lab/mouse-kit.gltf',
 };
 
 function activeCharacterName(): string {

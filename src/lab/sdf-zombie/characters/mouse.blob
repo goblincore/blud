@@ -137,31 +137,56 @@ body
   blob head on skull at=0.44 r=0.128 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.183,0.170,0.004) both
 
   # ============================================================
-  # THE POUT — a small broad muzzle under the shades.
+  # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
+  # not a chain (the goblin nose lesson): `r2=` tapers it, `tip=` sweeps it
+  # forward off the vertical skull bone, `bend=` gives the gentle droop.
   # ============================================================
   #
-  # The reference's mouth is a dark band at y 0.658-0.700 spanning only
-  # +/-0.044 — a small pursed mouth on a big face, not the broad fat muzzle
-  # the old numbers here drew (they were sized for a skull whose cranium
-  # centred at 0.735; this one centres at 0.790, so at= was recomputed
-  # end to end).
+  # WHY IT EXISTS: two runs authored from the flat front reference alone and
+  # built a flat face. mouse-reference-1.png (pure profile) shows a muzzle
+  # roughly AS LONG AS THE CRANIUM IS DEEP. Measured off that image by
+  # threshold (755 px of body = 1.10 m): cranium back x=102, snout tip
+  # x=352, total head depth 250 px = 33% of body height -> 0.364 m. The
+  # cranium's semi-depth is headRadius 0.131 x headDepth 0.95 = 0.124, so
+  # the tip must land near z +0.25 from the cranium centre — over 0.13 m
+  # PROUD of the front face, against the goblin nose's 44 mm. Anything
+  # shorter reads as a bump however sharp it is.
   #
-  # REACH, the lesson the goblin paid for twice: the cranium's semi-depth is
-  # headRadius 0.131 x headDepth 0.95 = 0.124 m at its equator, and LESS at
-  # the pout's latitude — the ellipsoid shrinks as you drop. At the lips'
-  # height (0.11 below centre) it stands near z 0.100, so the lips reach
-  # z 0.148 — 48 mm proud, which is what makes them a muzzle instead of a
-  # smear. Two prims, creased with `chamfer` so the pair reads as an upper
-  # and lower lip rather than one sausage.
-  blob head on skull at=0.19 r=0.038 r2=0.026 wide=1.30 tall=0.52 blend=0.0018 chamfer offset=(0,-0.020,0.095) tip=(0,-0.008,0.053)
-  blob head on skull at=0.16 r=0.030 r2=0.022 wide=1.10 tall=0.48 blend=0.0015 chamfer offset=(0,-0.055,0.088) tip=(0,-0.012,0.040)
+  # AIM: the profile's muzzle leaves the face LOW, at cheek/under-eye level,
+  # and holds nearly HORIZONTAL with a gentle downward taper to a blunt
+  # rounded nose (not the goblin's hook). The base sits at y 0.73 (just
+  # under the 0.749 eye line the shades wear), 50 mm inside the cranium's
+  # 0.105 front face at that latitude; the tip ends at y 0.70, z 0.240, so
+  # with r2 the surface crests z ~0.25 and the head's front-to-back total
+  # is ~0.365 m — 33% of the standing height, the reference's own number
+  # (measured on the compiled field: front 0.248, back -0.116, depth 0.364;
+  # the nose tip lands 49 mm under the eye line, the reference's own drop).
+  # tip= is a displacement from the base (offset moves BOTH ends), so
+  # (0,-0.030,0.190) carries base (0,0.73,0.05) to tip (0,0.70,0.240).
+  # bend= pushes the Bezier control UP and OUT from the chord midpoint
+  # (0,0.715,0.138); the apex bulges half that, so the top line sweeps out
+  # nearly level before it dips — the reference's straight-out-then-gentle-
+  # droop, which a bare chord (already sloping down) cannot do.
+  #
+  # Section: r 0.042 at the root (x-semi 0.050 with wide=1.2 — under half
+  # the 0.262 face width, the reference's muzzle-to-cheek ratio) falling to
+  # a blunt 0.016 bulb at the nose. NO chamfer: the muzzle must MELT into
+  # the cranium, a crease here would read as a stuck-on trunk.
+  blob head on skull at=0.305 r=0.042 r2=0.016 wide=1.20 tall=0.90 blend=0.0035 offset=(0,0.000,0.050) tip=(0,-0.030,0.190) bend=(0,0.015,0.020)
+
+  # THE POUT — a small lip under the snout's far end, set well back from
+  # the nose tip (both new references agree: the mouth is NOT at the tip).
+  # Base at y 0.685 z 0.155, its top blending into the snout's underside
+  # (the curve there runs y ~0.71 with radius ~0.02), its front 26 mm
+  # behind the nose. `chamfer` keeps the crease between lip and muzzle so
+  # it reads as a mouth and not a sagging dewlap.
+  blob head on skull at=0.195 r=0.020 wide=1.35 tall=0.55 blend=0.0015 chamfer offset=(0,0.000,0.155) tip=(0,-0.010,0.040)
 
   # THE MOUTH SEAM — a groove, not a gap. Cuts a channel where this flat
   # primitive's zero-set crosses the assembled pout: 5 mm across, biting
-  # 4 mm in, running horizontally across the muzzle just under the lip
-  # midline. `tall=0.08` flattens the cutter vertically so the channel is a
-  # LINE. This is the reference's dark mouth band made geometric.
-  groove head on skull at=0.175 r=0.036 wide=1.30 tall=0.08 deep=1.00 depth=0.004 width=0.005 offset=(0,-0.042,0.102)
+  # 4 mm in, running horizontally across the lip's front. `tall=0.08`
+  # flattens the cutter vertically so the channel is a LINE.
+  groove head on skull at=0.185 r=0.030 wide=1.30 tall=0.08 deep=1.00 depth=0.004 width=0.005 offset=(0,0.000,0.165)
 
   # ARMS AND LEGS — ONE FORM, not beads. The house ball-joint stylisation is
   # the goblin's look and the owner rejected it here: the reference limbs are
@@ -204,8 +229,9 @@ body
 # and tapering fast to the chin: headHeight 1.41 makes the cranium an egg
 # sharp enough to dome like that, and headWidth 1.00 keeps the 0.262 width
 # the reference measures. No brow ridge (the brows are black kit slabs at the
-# hairline), no nose (nothing between the shades and the mouth in the
-# reference — the pout prims are the whole lower face).
+# hairline), no nose IN THE FACE PARAMS (the compiled face nose is set to
+# nothing — the muzzle is GEOMETRY, the bent snout prim in the body block,
+# with the pout under its far end).
 face
   headRadius 0.131
   headWidth  1.00
