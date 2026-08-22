@@ -328,3 +328,37 @@ describe('compilePalette', () => {
     expect(m.mottleColor).toEqual([0.2, 0.19, 0.06]);
   });
 });
+
+const PAINTED = `model painted
+  height 1.0
+skeleton
+  root pelvis at 0.5 len=0.1
+  bone skull parent=pelvis dir=up len=0.1
+  mirror
+    bone arm parent=pelvis side=0.1 dir=down len=0.1
+  end
+body
+  blob torso on pelvis at=0.5 r=0.1
+  blob head on skull at=0.5 r=0.08 color=ff8000 gloss=0.5
+  bar arm on arm from=0.0 to=1.0 r=0.03 color=101012 mirror
+`;
+
+describe('paint survives compile, mirror and resolve', () => {
+  it('lands on the built Primitive with the same linear rgb and gloss', () => {
+    const doc = parseBlob(PAINTED);
+    const built = buildBody(compileBlob(doc, DEFAULT_FACE), DEFAULT_BUILD_OPTS);
+    // The authored head blob: facePrims adds its own head prims, so find ours
+    // by its gloss rather than assuming an index.
+    const head = built.prims.find(p => p.gloss === 0.5)!;
+    expect(head).toBeDefined();
+    expect(head.color![0]).toBeCloseTo(1, 6);
+    expect(head.color![1]).toBeCloseTo(0.2158, 3);
+    // The mirrored bar comes out as TWO primitives, both painted — the
+    // mirror copies the def by spread, and `color` is just another field.
+    const arms = built.prims.filter(p => p.color && p.color[0] < 0.01 && p.gloss === undefined);
+    expect(arms.length).toBe(2);
+    // And the flesh torso carries nothing.
+    const torso = built.prims.find(p => p.limb === 'torso')!;
+    expect(torso.color).toBeUndefined();
+  });
+});

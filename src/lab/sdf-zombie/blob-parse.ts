@@ -141,6 +141,34 @@ function strArg(l: BlobLine, key: string): string | null {
   return hit ? hit.slice(key.length + 1) : null;
 }
 
+/**
+ * `color=rrggbb` -> linear RGB. BARE hex — `#` opens a comment in .blob, so
+ * `color=#ff8000` reaches the parser as `color=` with nothing after it, and
+ * that case gets its own message. Six digits only: a three-digit shorthand or
+ * a bare name is a typo here, because every colour in a .blob is measured off
+ * a reference and pasted, never typed from memory.
+ */
+function parseColorArg(l: BlobLine, raw: string | null): readonly [number, number, number] | null {
+  if (raw === null) return null;
+  if (raw === '' && l.raw.includes('color=#'))
+    throw new BlobError('color=: # starts a comment in .blob — write the six hex digits bare, color=rrggbb', l.line, l.indent + 1);
+  const m = /^([0-9a-fA-F]{6})$/.exec(raw);
+  if (!m) throw new BlobError(`color= needs six hex digits, got "${raw}"`, l.line, l.indent + 1);
+  const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const hex = m[1]!;
+  return [0, 2, 4].map((i) => toLinear(parseInt(hex.slice(i, i + 2), 16) / 255)) as [number, number, number];
+}
+
+/** `gloss=0..1`, and only beside a `color=` — on flesh it would do nothing
+ *  and silently doing nothing is how an author loses an hour. */
+function parseGlossArg(l: BlobLine, painted: boolean): number | null {
+  if (strArg(l, 'gloss') === null) return null;
+  const g = numArg(l, 'gloss');
+  if (g < 0 || g > 1) throw new BlobError(`gloss= is 0..1, got ${g}`, l.line, l.indent + 1);
+  if (!painted) throw new BlobError('gloss= only means something on a coloured primitive; add color=rrggbb', l.line, l.indent + 1);
+  return g;
+}
+
 const LIMBS = ['head', 'torso', 'arm', 'leg'] as const;
 type LimbName = (typeof LIMBS)[number];
 
@@ -358,6 +386,12 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     bend: parseVec3Arg(l, 'bend', strArg(l, 'bend')),
     grooveDepth: numArg(l, 'depth', 0),
     grooveWidth: numArg(l, 'width', 0),
+    // `color=rrggbb` paints this primitive: wherever it is the nearest prim
+    // to the surface the flesh colour is replaced outright. Hex is sRGB, the
+    // way a palette line is written and a reference plate is sampled; it is
+    // stored linear because that is what the shader mixes in.
+    color: parseColorArg(l, strArg(l, 'color')),
+    gloss: parseGlossArg(l, strArg(l, 'color') !== null),
     src: l,
   } satisfies BlobPart);
 }

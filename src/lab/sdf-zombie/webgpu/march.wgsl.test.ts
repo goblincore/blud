@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, ROW_PRIM_COLOR,
   SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
@@ -451,7 +451,7 @@ describe('data texture layout', () => {
     const rows = [
       ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
-      ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND,
+      ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -615,9 +615,9 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // String pins: the parity test below proves the CPU mirror, these prove
     // the WGSL actually contains the branch being mirrored.
     expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
-    // Was 11; the arc capsule added ROW_PRIM_BEND without displacing any
-    // existing row.
-    expect(DATA_ROWS).toBe(12);
+    // Was 11; the arc capsule added ROW_PRIM_BEND, and per-primitive colour
+    // added ROW_PRIM_COLOR, each without displacing any existing row.
+    expect(DATA_ROWS).toBe(13);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 
@@ -792,5 +792,33 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
     // Every calcNormal mapBody tap (4 of them) carries it.
     expect((calcNormal.match(/volumeWarp, volumeClip\)/g) ?? []).length).toBe(4);
+  });
+});
+
+describe('per-primitive colour', () => {
+  it('has a data row of its own, inside DATA_ROWS', () => {
+    expect(ROW_PRIM_COLOR).toBeLessThan(DATA_ROWS);
+  });
+
+  it('reads the row at the HIT primitive and gates on the w sentinel', () => {
+    expect(MARCH_BODY).toContain(`vec2<i32>(hitBest, ${ROW_PRIM_COLOR})`);
+    expect(MARCH_BODY).toContain('if (PC.w > 0.0)');
+  });
+
+  // The painted eyes live exactly where a pair of sunglasses goes; if the
+  // glow survived paint it would shine through the lenses.
+  it('zeroes the eye glow on a painted primitive', () => {
+    expect(MARCH_BODY).toContain('faceGlow = faceGlow * (1.0 - painted)');
+  });
+});
+
+describe('coneBend and the untapered sentinel', () => {
+  // sdPrim hands every prim without r2= a -1; coneCap has always branched on
+  // it, coneBend did not, and an untapered bent capsule rendered as one
+  // sphere at its start end (the mouse's sunglass lens, 2026-08-22).
+  it('treats r2 < 0 as "same radius at both ends", like coneCap', () => {
+    expect(CONE_BEND).toContain('let rb = select(r2, r1, r2 < 0.0);');
+    expect(CONE_BEND).not.toContain('(r1 + (r2 - r1) * t)');
+    expect(CONE_BEND).toContain('(r1 + (rb - r1) * t)');
   });
 });

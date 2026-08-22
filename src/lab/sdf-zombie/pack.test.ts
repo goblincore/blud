@@ -146,3 +146,32 @@ it('packs a carve as a negative blend constant', () => {
   expect(p.maxBlendK).toBeCloseTo(0.02, 6);
   expect(p.carveCount).toBe(1);
 });
+
+describe('primColor row', () => {
+  it('packs flesh as all zeros, so pre-colour bodies are bit-identical', () => {
+    const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const packed = packBody(built);
+    let sum = 0;
+    for (const v of packed.primColor) sum += Math.abs(v);
+    expect(sum).toBe(0);
+  });
+
+  // w = 1 + gloss, never 0 for a painted prim: 0 is the shader's "flesh"
+  // sentinel, and a black matte prim (rgb 0, gloss 0) would otherwise pack
+  // as indistinguishable from no paint at all.
+  it('writes linear rgb with w = 1 + gloss, so black matte is still painted', () => {
+    const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const painted = {
+      ...built,
+      prims: built.prims.map((p, i) =>
+        i === 0 ? { ...p, color: [0, 0, 0] as Vec3 } :
+        i === 1 ? { ...p, color: [1, 0.2, 0] as Vec3, gloss: 0.8 } : p),
+    };
+    const c = packBody(painted).primColor;
+    expect([...c.slice(0, 4)]).toEqual([0, 0, 0, 1]);
+    expect(c[PRIM_STRIDE + 0]).toBeCloseTo(1, 6);
+    expect(c[PRIM_STRIDE + 1]).toBeCloseTo(0.2, 6);
+    expect(c[PRIM_STRIDE + 3]).toBeCloseTo(1.8, 6);
+    expect(c[2 * PRIM_STRIDE + 3]).toBe(0);
+  });
+});

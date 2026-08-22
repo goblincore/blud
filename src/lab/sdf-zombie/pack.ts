@@ -29,6 +29,11 @@ export interface PackedBody {
    *  the endpoints plus the authored bend displacement. Zeros when unbent;
    *  only prims with primShape.y >= 2 are ever read from this row. */
   primBend: Float32Array;
+  /** xyz = linear albedo, w = 1 + gloss. w = 0 is the sentinel for "flesh":
+   *  a painted prim always has w >= 1, so the shader needs one compare and
+   *  an unpainted body packs as all zeros — bit-identical data rows for
+   *  every character authored before colour existed. */
+  primColor: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
@@ -60,6 +65,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
   const primQuat = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primShape = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primBend = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primColor = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
@@ -101,6 +107,9 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
     // existing "> 0.5 means chamfer" consumer keeps working.
     const bent = p.bend !== undefined ? 2 : 0;
     primBend.set(p.bend === undefined ? [0, 0, 0, 0] : [...bendCtrl(p.a, p.b, p.bend), 0], o);
+    primColor.set(p.color === undefined
+      ? [0, 0, 0, 0]
+      : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
       (p.blendProfile === 'chamfer' ? 1 : 0) + bent,
@@ -145,7 +154,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
   });
 
   return {
-    primA, primB, primScale, primQuat, primShape, primBend, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, primBend, primColor, restA, restB, clusterBounds, clusterRange,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,

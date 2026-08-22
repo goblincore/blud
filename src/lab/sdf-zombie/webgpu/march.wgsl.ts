@@ -66,7 +66,7 @@
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 12;
+export const DATA_ROWS = 13;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -79,6 +79,8 @@ export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;
 export const ROW_PRIM_SHAPE = 10;
 export const ROW_PRIM_BEND = 11;
+/** xyz linear albedo, w = 1 + gloss; w = 0 means "flesh". See pack.ts. */
+export const ROW_PRIM_COLOR = 12;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -233,6 +235,15 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
   let bb = a - 2.0 * c + b;
   if (dot(bb, bb) < 1e-12) { return coneCap(q, a, b, r1, r2, minScale); }
   if (dot(b - a, b - a) < 1e-12) { return coneCap(q, a, b, r1, r2, minScale); }
+  // UNTAPERED SENTINEL. sdPrim passes r2 = -1 for a prim with no r2=, and
+  // coneCap has always branched on it. This function did not: -1 went
+  // straight into r1 + (r2 - r1) * t, so an untapered BENT prim's radius ran
+  // to minus one metre along its curve and only the start end existed. It
+  // hid for as long as every bent prim happened to be tapered; the mouse's
+  // sunglass lens — a plain bent capsule — rendered as a single sphere at
+  // its inner end. The CPU mirror never saw it because sdPrimitive
+  // substitutes radiusB-or-radius before calling sdBentCone.
+  let rb = select(r2, r1, r2 < 0.0);
   let cand = sdBezierT(q, a, c, b);
   // dist(t) - r(t) at every root AND both ends, keeping the minimum. The
   // radius term moves the objective's minimiser off the geometric closest
@@ -248,7 +259,7 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
     if (f32(i) >= cand.w && i < 3) { continue; }
     let t = ts[i];
     let pt = a + e1 * t + bb * (t * t);
-    let v = length(q - pt) - (r1 + (r2 - r1) * t);
+    let v = length(q - pt) - (r1 + (rb - r1) * t);
     if (v < best) { best = v; bestT = t; }
   }
   for (var round = 0; round < 2; round = round + 1) {
@@ -256,7 +267,7 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
     for (var s = -1; s <= 1; s = s + 1) {
       let t = clamp(bestT + f32(s) * step, 0.0, 1.0);
       let pt = a + e1 * t + bb * (t * t);
-      let v = length(q - pt) - (r1 + (r2 - r1) * t);
+      let v = length(q - pt) - (r1 + (rb - r1) * t);
       if (v < best) { best = v; bestT = t; }
     }
   }
@@ -1263,6 +1274,25 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     }
   }
 
+  // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
+  // the hit (hitBest, the noise anchor); a painted one replaces the flesh
+  // albedo outright, mottle and face sheet included — a lens is not tinted
+  // skin. Char still wins below, because burnt is burnt. The eye glow is
+  // zeroed on paint for the same reason the sheet is: the painted eyes sit
+  // exactly where a pair of sunglasses goes, and they must not shine
+  // through the lenses.
+  var gloss = 0.0;
+  var painted = 0.0;
+  if (hitBest >= 0) {
+    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
+    if (PC.w > 0.0) {
+      albedo = PC.xyz;
+      gloss = clamp(PC.w - 1.0, 0.0, 1.0);
+      painted = 1.0;
+    }
+  }
+  faceGlow = faceGlow * (1.0 - painted);
+
   albedo = mix(albedo, charColor, cm);
 
   let L = normalize(lightDir);
@@ -1272,8 +1302,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   // Wounds are wetter than the surrounding skin; char is dead matte. Gore
   // rides the same boost: bloody chunk regions glisten like open wounds.
-  let wet = surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm);
-  let shine = pow(max(dot(n, H), 0.0), mix(128.0, 4.0, surfCfg.y));
+  // gloss pulls a painted surface toward a tight, fully wet highlight
+  // whatever the flesh preset says: a lens on a matte clay character still
+  // has to glint.
+  let wet = mix(surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm), 1.0, gloss);
+  let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound
   // itself. At full strength it maxes out on the grazing-heavy rim geometry,
@@ -1302,7 +1335,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   }
 
   let fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
-               + keyColor * (shine * surfCfg.x + fres) * wet
+               + keyColor * (shine * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
 
   // The eye REPLACES the flesh rather than adding to it.

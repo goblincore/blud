@@ -73,6 +73,10 @@ export interface BlobPart {
   /** `depth=`/`width=` — how deep and how wide a `groove` cuts. */
   grooveDepth: number;
   grooveWidth: number;
+  /** `color=rrggbb`, converted to LINEAR rgb. null = flesh. */
+  color: readonly [number, number, number] | null;
+  /** `gloss=0..1`. null = the flesh preset's own wetness. */
+  gloss: number | null;
   src: BlobLine;
 }
 
