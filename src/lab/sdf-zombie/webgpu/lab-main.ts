@@ -288,10 +288,20 @@ function buildZombieBody(face: FaceParams, opts: BodyOverride): BuildResult {
 // WebGPURenderer needs `await renderer.init()`, and the project's build target
 // predates top-level await.
 async function main() {
+  // BOOT TIMING. The lab has been slow to become interactive for a while and
+  // the cause was guessed at more than once, so it is measured here instead.
+  // Times are ms since navigation start, NOT since main() entry, because what
+  // matters is when the user sees something — and nothing paints at all until
+  // main() returns, which was itself the surprise. Read it from the console
+  // as `__sdfLab.boot`.
+  const bootMark = (): number => performance.now();
+  const boot: Record<string, number> = { mainStart: bootMark() };
+
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
 
   const handle = await createLabRenderer(mount);
+  boot.rendererReady = bootMark();
   const { scene, camera } = handle;
 
   // Ground plane and a reference cube, so the raymarched blobs have polygonal
@@ -443,6 +453,9 @@ async function main() {
   view.coneObject.layers.set(CONE_LAYER);
   scene.add(view.object);
   scene.add(view.coneObject);
+  // From here the scene CONTAINS the character. Everything after this is
+  // preparation for things that have not happened yet (gibs, goo, FPV).
+  boot.bodyInScene = bootMark();
 
   // The character's polygon kit, on the DEFAULT layer with the floor and the
   // reference cube — NOT SDF_LAYER. That is what puts it in the polygonal pass
@@ -478,6 +491,7 @@ async function main() {
   );
   warmView.object.layers.set(SDF_LAYER);
   const chunkMaterialWarmupStarted = performance.now();
+  boot.warmupStart = chunkMaterialWarmupStarted;
   handle.setLoopRunning(false);
   try {
     await sdfLayer.precompile(warmView.object, scene, camera);
@@ -485,6 +499,7 @@ async function main() {
     handle.setLoopRunning(true);
   }
   const chunkMaterialWarmupMs = performance.now() - chunkMaterialWarmupStarted;
+  boot.warmupEnd = bootMark();
   // Keep the compiled object itself as slot zero. compileAsync's cache is
   // keyed by object identity, so throwing this view away would retain a dead
   // RenderObject and make the first real chunk start from a fresh one.
@@ -2855,7 +2870,10 @@ async function main() {
 
   // Dev handle for inspecting lab state from the console, and for driving the
   // camera during automated visual checks. Lab-only; nothing in the game reads it.
+  boot.mainEnd = bootMark();
   (window as unknown as { __sdfLab: unknown }).__sdfLab = {
+    /** Boot timeline in ms since navigation start. See main()'s comment. */
+    boot,
     backend: handle.backend,
     /**
      * The renderer, scene and camera — enough to call
