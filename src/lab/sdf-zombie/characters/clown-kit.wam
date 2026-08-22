@@ -127,6 +127,10 @@ skeleton
   bone pt7 parent=neck head=(-0.140,0.548,-0.000) dir=(-1.000,-0.78,-0.000) len=0.115
   bone pt8 parent=neck head=(-0.099,0.548,0.099) dir=(-0.707,-0.78,0.707) len=0.115
 
+  # The cap's tip, pinned where the built sweep actually ends so the star
+  # has something to attach to. Re-measure if the cap's segments change.
+  bone captip parent=skull head=(-0.018,0.930,-0.408) dir=(0.0,-0.5,-1.0) len=0.02
+
 parts
   # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
   #
@@ -234,6 +238,25 @@ parts
   # read worse than no star. Placed ABOVE the tuft's sweep volume: an earlier
   # offset at cheek height compiled fine and was entirely inside the hair,
   # which WAM's own lint caught.
+  # STAR ON THE CAP'S TIP — the nightcap's bobble.
+  #
+  # WAM gained a `star` attach kind for this; there was no way to build one
+  # from the other kinds and every fake read as a lump.
+  #
+  # PLACED BY MEASUREMENT, not by arithmetic. A sweep's tip is not addressable
+  # from the source — you cannot write "the end of capcone" — so the position
+  # comes from marching the BUILT glTF: the most -z royal vertex sits at
+  # (-0.014, 0.957, -0.396), and the tip cluster centres on (-0.018, 0.909,
+  # -0.385). The star sits just past that so it caps the point rather than
+  # swallowing it. IF THE CAP'S SEGMENTS CHANGE, RE-MEASURE — nothing here
+  # tracks the sweep automatically.
+  #
+  # `attach` always needs a bone (at=(x,y,z) alone is "unknown bone None"), so
+  # the tip gets one: `captip`, pinned to the measured position. Hanging the
+  # star off skull's own t would not work — the cap's tip does not move
+  # linearly with the skull.
+  attach capstar bone=captip at=1.0 kind=star points=5 size=0.115 inner=0.42 d=0.030 pitch=-62 material=yellow
+
   attach badge bone=skull kind=sphere at=0.70 offset=(0.245,0.030,0.045) size=0.026 material=yellow
 
   # HAIR — two wide purple tufts sweeping out from under the cap band,
