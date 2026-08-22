@@ -210,13 +210,13 @@ face
 # spot inside a dark feature, so the glint is dropped, not faked.
 sheet
   eyeGap     0.40
-  # 0.082, down from 0.125. 0.125 was settled when the head rendered at the
+  # 0.092, down from 0.125. 0.125 was settled when the head rendered at the
   # DEFAULT_FACE size (the lab ignored clown.blob's own face block); on the
   # real 0.235x1.18 ball it projected two huge black hollows — the owner's
-  # "empty sockets". 0.082 on this big face reads as the reference's small
-  # wide-set dots. (0.070 washed toward note-small under the tonemap, so this
-  # keeps a solid dark core.)
-  eyeSize    0.082
+  # "empty sockets". 0.092 is the reference's medium wide-set dots on this big
+  # face — big enough to read, small enough not to swallow it. The upper-outer
+  # catchlight (eyeGlint) keeps them from reading hollow.
+  eyeSize    0.092
   # BLACK paint, not a glow — and much blacker than the goblin-era instinct
   # would suggest. The sheet is an albedo MULTIPLIER normalized by its own
   # mean, so the eye darkens by eyeGlow/mean; on this PALE skin the lit

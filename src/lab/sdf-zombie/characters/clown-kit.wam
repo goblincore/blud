@@ -71,7 +71,10 @@ palette
   blue    #6d76f2
   pink    #f2a2e6
   purple  #a878e0
-  grey    #d2cec6
+  # Silver-grey, not white: the ruff is the one piece wearing this, and the
+  # reference reads it as a metallic frill. Was #d2cec6 (both-notches-bright for
+  # the harsh key) which looked white; a touch darker keeps the silver read.
+  grey    #c2bcb0
   red     #f04a3e
   # The nose gets its OWN red, brighter and more saturated than the shoes'.
   # A clown nose is the most saturated thing on the character and it was
@@ -163,11 +166,11 @@ parts
   # between the two pieces. Mounted at t=0.86 (y 0.906) so the base emerges
   # from INSIDE the band it overlaps — the band's top rim is y 0.926.
   sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-14 yaw=12 material=royal
-    seg len=0.045 r=0.215 back=12
-    seg len=0.055 r=0.160 back=16
-    seg len=0.055 r=0.105 back=18 down=10
-    seg len=0.050 r=0.055 down=32
-    seg len=0.045 r=0.020 down=44 tip
+    seg len=0.038 r=0.235 back=14
+    seg len=0.050 r=0.190 back=18
+    seg len=0.050 r=0.130 back=20 down=10
+    seg len=0.045 r=0.070 down=30
+    seg len=0.042 r=0.026 down=44 tip
     cap start=none
 
   # BADGE — the little yellow spot where the reference wears its star, high
@@ -292,12 +295,12 @@ parts
     # and the tuft reads as GROWING from the head, not hovering beside it.
     # `cap start=none` for the same reason as the cap cone above (sweeps
     # default to a flat start cap: a disc straight through the mount point).
-    sweep tuft bone=skull at=0.64 offset=(0.205,-0.005,-0.020) dir=side yaw=-15 material=purple
-      seg len=0.045 r=0.050 up=12
-      seg len=0.055 r=0.078 down=10 back=5
-      seg len=0.055 r=0.068 down=32 back=4
-      seg len=0.050 r=0.050 down=36
-      seg len=0.048 r=0.024 down=22 tip
+    sweep tuft bone=skull at=0.66 offset=(0.202,-0.005,-0.018) dir=side yaw=-12 material=purple
+      seg len=0.040 r=0.055 up=4
+      seg len=0.055 r=0.078 down=24 back=4
+      seg len=0.060 r=0.070 down=34 back=3
+      seg len=0.060 r=0.050 down=30
+      seg len=0.055 r=0.024 down=16 tip
       cap start=none
 
     # THE RED NOSE SHELL — the colour half of the clown's one saturated note.
@@ -395,7 +398,7 @@ textures
     streaks along=v amount=0.08
     noise scale=0.14 amount=0.05
     ao amount=0.12
-  texture grey base=#d2cec6
+  texture grey base=#c2bcb0
     noise scale=0.14 amount=0.05
     ao amount=0.16
   texture red base=#f04a3e
