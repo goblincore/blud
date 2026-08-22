@@ -15,6 +15,19 @@
 # not run. Do not let the trap swallow it.
 set -euo pipefail
 
+# Argument check BEFORE the servers: a missing character name is a mistake we
+# can see for free, and booting a vite and a Chrome only to have the .ts exit 2
+# on usage wastes half a minute and leaves the user reading server chatter
+# instead of the usage line.
+#
+# Spelled out rather than `${1:?usage}` because that exits 1, and in this tool's
+# vocabulary 1 means "the renderer has a hole" — a caller that keys off the exit
+# code would read a typo as a rendering bug. A usage error did not run: that is 2.
+if [ $# -lt 1 ]; then
+  echo "usage: blob-render-check <character>" >&2
+  exit 2
+fi
+
 cd "$(dirname "$0")/.."
 
 # shellcheck source=scripts/lab-servers.sh

@@ -121,8 +121,12 @@
 //
 // zombie, clown and goblin also report 0 clusters on the restored build.
 //
-// A run takes ~10 s against an already-warm server (~7 s of that is waiting for
-// the rig to settle; the CPU march itself is under a second). Set BLOB_RC_DUMP
+// TIMING: ~10 s warm, measured — and that includes starting its own vite and
+// headless Chrome from nothing. About 7 s of every run is the fixed wait for the
+// rig to settle; the CPU march itself is under a second. A genuinely first run
+// on a fresh checkout is slower, and can approach a minute: vite's dependency
+// pre-bundle, tsx's compile and the first WebGPU pipeline build are each paid
+// once. If a run takes that long twice in a row, something is wrong. Set BLOB_RC_DUMP
 // to a path to keep the frame it judged — the first thing to look at when a
 // result surprises you.
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
@@ -566,11 +570,16 @@ async function main(): Promise<void> {
 
   clusters.sort((a, b) => b.n - a.n);
   let worst = 0;
+  // Count what we REPORT, not what we found: the single-sample specks below are
+  // skipped silently, so `clusters.length` printed "3 cluster(s)" under a single
+  // HOLE line and the summary contradicted the list it was summarising.
+  let reported = 0;
   for (const cl of clusters) {
     const wSamples = cl.x1 - cl.x0 + 1, hSamples = cl.y1 - cl.y0 + 1;
     const across = Math.max(wSamples, hSamples) * STEP;
     if (wSamples < 2 && hSamples < 2) continue; // a single stray sample is noise
     worst = Math.max(worst, across);
+    reported++;
     const dom = [...cl.owners.entries()].sort((a, b) => b[1] - a[1])[0];
     const prim = dom ? body.prims[dom[0]] : undefined;
     const line = prim?.src;
@@ -587,13 +596,13 @@ async function main(): Promise<void> {
   }
 
   if (worst >= FAIL_PX) {
-    console.log(`${clusters.length} cluster(s), worst ${worst} px across (threshold ${FAIL_PX})`);
+    console.log(`${reported} cluster(s), worst ${worst} px across (threshold ${FAIL_PX})`);
     console.error('FAIL: the GPU shows a hole the field does not have. STOP editing the '
       + '.blob — the fix is in src/lab/sdf-zombie/webgpu/ (see the triage table in the '
       + 'authoring skill).');
     process.exit(1);
   }
-  console.log(`${clusters.length} hole cluster(s), worst ${worst} px across `
+  console.log(`${reported} hole cluster(s), worst ${worst} px across `
     + `(threshold ${FAIL_PX})`);
   console.log('OK: renderer agrees with the field. If you still see a hole, it is in your .blob.');
   process.exit(0);

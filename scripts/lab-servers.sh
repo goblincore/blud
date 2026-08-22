@@ -97,9 +97,17 @@ lab__probe_webgpu() {
 const cdp = process.env.LAB_PROBE_CDP;
 const url = process.env.LAB_PROBE_URL;
 const die = (m) => { console.error(m); process.exit(1); };
-const tab = await (await fetch(
-  `http://localhost:${cdp}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
-)).json().catch(() => die('could not open a CDP target'));
+// One try/catch around the whole handshake: a `.catch(die)` on the tail of the
+// chain leaves a rejected fetch and a non-JSON body reporting differently, and
+// `die` returning undefined would hand the next line an undefined `tab`.
+let tab;
+try {
+  tab = await (await fetch(
+    `http://localhost:${cdp}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
+  )).json();
+} catch {
+  die('could not open a CDP target');
+}
 const ws = new WebSocket(tab.webSocketDebuggerUrl);
 await new Promise((ok, err) => { ws.onopen = ok; ws.onerror = () => err(new Error('ws')); });
 let seq = 0; const pending = new Map();
@@ -133,6 +141,8 @@ lab_servers_up() {
   # Job control so each background launch lands in its OWN process group, which
   # is what makes `kill -- -$pid` reach the real server and not just the `npx`
   # wrapper that would otherwise be reaped while vite kept holding the port.
+  # This is a sourced file, so `set -m` stays on in the calling script — that is
+  # deliberate: lab_servers_down needs those process groups to still exist.
   set -m
 
   if ! lab__is_listening "http://localhost:$LAB_VITE_PORT/"; then
