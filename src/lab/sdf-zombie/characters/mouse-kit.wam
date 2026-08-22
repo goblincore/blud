@@ -112,15 +112,15 @@ parts
       cap start=none end=none
 
     # ================================================================
-    # SHORTS — high-waisted and stubby, measured off the reference: waist
-    # at the tee's hem (y 0.528, hidden under it) and legs ending at
-    # 0.297. That is a LONG pair of shorts for such a small body — 0.23 m
-    # of blue on a 1.10 m character — and it is the reference's own
-    # proportion. Lofted on a FREE RAY down the thigh's axis (thigh head
-    # y 0.310 is BELOW the waist, so the ray starts up at the pelvis and
-    # runs 0.21 m to the hem), with `follow=` off — stubby shorts do not
-    # swing. Flesh at the hem (y 0.30): leg 0.067 wide/0.056 deep; the
-    # shorts clear it by ~4 cm because they are cut wide.
+    # SHORTS — high-waisted, measured off the reference: waist up at the
+    # tee's hem (hidden under it) and legs ending above the knee. 2026-08-22:
+    # hip rose to 0.353, so the ray (offset 0.198 = 0.218 m above the hip)
+    # starts the waist at ~0.571, under the tee's hem (0.509), and runs down
+    # to a hem ~0.343 — above the new knee. Lofted on a FREE RAY down the
+    # thigh's axis (thigh head 0.353 is BELOW the waist, so the ray starts
+    # up at the pelvis and runs down), `follow=` off — stubby shorts do not
+    # swing. The shorts clear the longer leg by ~4 cm because they are cut
+    # wide.
     # ================================================================
     loft shortsleg bone=thigh at=0.0 offset=(0,0.198,0.005) dir=down pitch=-8 tilt=5 len=0.210 material=shorts frame=fwd
       ring 0.00 w=0.150 d=0.174
