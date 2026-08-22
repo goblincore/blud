@@ -172,14 +172,14 @@ body
 # scowl dial), no parameterised nose at all (noseLength disabled — the bead
 # above IS the nose), and a vestigial jaw that only rounds off the bottom.
 face
-  # HEAD SIZE IS A KIT-WIDE CHANGE, not a dial. Owner review says the head is
-  # too narrow, and it is — but growing headRadius 0.235 -> 0.265 made SIX kit
-  # pieces fail the through-body check at once (cap band, stud, ruff, tunic,
-  # tufts, nose): every one of them is fitted to a 0.235 skull. Widening in x
-  # alone (headWidth below) does not fix the read either, because the CAP does
-  # not grow with it and the skull stays a sliver under a hat three times its
-  # width. Doing this properly means re-fitting the whole .wam against a bigger
-  # head, which is a task, not a tweak.
+  # HEAD SIZE. The skull now RENDERS at this radius: the WebGPU lab's
+  # integration bug ignored a .blob's own ``face`` block and built every head
+  # from DEFAULT_FACE (0.118x0.76), which is the real reason the owner kept
+  # seeing a too-narrow head — and a kit cap (built for this 0.235 ball)
+  # dwarfing it. That lab bug is fixed, so the head reads at its authored size.
+  # headWidth 1.18 keeps it a broad ball wider than the cap that used to
+  # swallow it. (A headRadius bump to 0.265 was tried and reverted once: it
+  # broke six kit pieces at once, since the whole .wam is fitted to THIS ball.)
   headRadius 0.235
   # WIDER. At 0.96 the skull was narrower than the cap and the hair tufts —
   # which mount off its flanks — hung in the air beside it with daylight

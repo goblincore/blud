@@ -31,6 +31,9 @@
 #   head     y0.55 w=0.218 (ball)    y0.57 w=0.272 d=0.236   y0.60 w=0.318
 #            y0.70 w=0.424           y0.80 w=0.440           y0.825 w=0.440 d=0.422
 #            y0.925 w=0.334 d=0.320
+#   (the head rows above are the PRE-1.18 skull. headWidth is now 1.18, so the
+#   ball runs ~23% wider in x at every height — the cap band, ruff and tufts
+#   below are re-fitted against that wider ball; re-measure before retuning.)
 #   thigh    hip ball w=0.092        shaft w=0.072           knee ball w=0.080
 #   shin     shaft w=0.060           ankle ball w=0.064
 #   arm      shoulder ball w=0.080   upper shaft w=0.052     elbow ball w=0.062
