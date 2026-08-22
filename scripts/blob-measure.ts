@@ -18,11 +18,23 @@
 //
 // REFERENCE RESOLUTION, in order: 1. --glb  2. the first .glb under
 // docs/dev-notes/refs/<name>-mesh/  3. --plate, else
-// docs/dev-notes/refs/<name>-reference.png. A MESH beats a plate because a
-// plate poses its arms and a .blob rasterises in its authored rest pose, and
-// that gap dominates the score (see the caveat in silhouette.ts). When both
-// exist both are reported, and the MESH score is the one to optimise; treat a
-// plate score as a before/after gradient for one character only.
+// docs/dev-notes/refs/<name>-reference.png. When both exist, both are reported.
+//
+// A MESH IS PREFERRED, BUT NOT BECAUSE IT SCORES BETTER. It is preferred
+// because it can be measured LOCALLY — a width at a named height, a head
+// profile, a real 3D extent — and because it carries no drawing distortion,
+// no foreshortening and no artist's licence. What it does NOT do is escape
+// pose: a mesh is sculpted in SOME pose just as a plate is drawn in one, and
+// the maus mesh holds its arms straight out while the .blob rests them at
+// ~47 degrees. Whenever the arm poses differ, the whole-figure score is
+// dominated by that difference and says almost nothing about the sculpt —
+// exactly the trap the plate sets (see the caveat in silhouette.ts).
+//
+// SO: score a `--range` window where the poses agree (`--range 0.75:1` is legs
+// and shoes, where nothing is posed) and act on THOSE bands. Read a
+// whole-figure IoU only as a before/after gradient for one character against
+// one reference, never as a target to optimise and never across characters.
+// This command says so out loud when it detects the mismatch.
 //
 // EXIT CODES. 0 whenever it ran, however bad the score — a bad score is
 // information. 2 for "did not run": no .blob, no reference, or build errors.
@@ -154,8 +166,21 @@ const ownerText = (o: BandOwner | undefined): string => {
 interface JsonWorst extends BandReport { band: number; owner: BandOwner | null }
 interface JsonRef {
   kind: 'mesh' | 'plate'; path: string; view: string;
-  iou: number; meanWidthError: number; worst: JsonWorst[];
+  iou: number; meanWidthError: number; poseMismatch: boolean; worst: JsonWorst[];
 }
+
+/**
+ * Is this score about the SCULPT, or about the pose?
+ *
+ * Two symptoms, either of which is enough. A whole-figure aspect ratio that
+ * disagrees by more than 15% means the two silhouettes occupy differently
+ * shaped boxes, which arms out versus arms down does and a proportion error
+ * inside a limb does not. A single band off by more than a quarter of the
+ * subject's height is the same thing seen locally: no sculpting mistake
+ * survives review at that magnitude, but a raised arm produces it instantly.
+ */
+const POSE_ASPECT_TOL = 0.15;
+const POSE_BAND_TOL = 0.25;
 const out: { character: string; errors: string[]; refs: JsonRef[] } =
   { character: name, errors: body.errors, refs: [] };
 
@@ -177,13 +202,20 @@ for (const src of sources) {
   const owners = bandOwners(body, {
     view, bands: rep.bands.length, ...(kit ? { kit } : {}), ...(range ? { range } : {}),
   });
+  // The aspects are WHOLE-figure whatever window was scored, so the aspect
+  // symptom only speaks for a whole-figure score; inside a `--range` the band
+  // symptom is the only one that is about the rows actually being compared.
+  const aspectOff = rep.refAspect > 0
+    ? Math.abs(rep.refAspect - rep.gotAspect) / rep.refAspect : 0;
+  const poseMismatch = (!range && aspectOff > POSE_ASPECT_TOL)
+    || rep.bands.some((b) => Math.abs(b.delta) > POSE_BAND_TOL);
   const worst = rep.worst.slice(0, 3).map((b) => {
     const i = rep.bands.indexOf(b);
     return { ...b, band: i, owner: owners[i] ?? null };
   });
   out.refs.push({
     kind: src.kind, path: src.path, view,
-    iou: rep.iou, meanWidthError: rep.meanWidthError, worst,
+    iou: rep.iou, meanWidthError: rep.meanWidthError, poseMismatch, worst,
   });
   if (json) continue;
 
@@ -191,12 +223,15 @@ for (const src of sources) {
   console.log(`\n=== ${src.kind}  ${src.path}   (${note})`);
   console.log(`IoU ${rep.iou.toFixed(3)}    mean width error ${rep.meanWidthError.toFixed(3)}`
     + `   over ${window}   ${rep.bands.length} bands`);
+  if (poseMismatch)
+    console.log(`POSE MISMATCH: reference aspect ${rep.refAspect.toFixed(3)} vs built `
+      + `${rep.gotAspect.toFixed(3)} — the whole-figure score is dominated by pose; `
+      + 'score a --range window where the poses agree.');
   console.log(`aspect (w/h)   reference ${rep.refAspect.toFixed(3)}   built ${rep.gotAspect.toFixed(3)}`);
-  if (src.kind === 'plate')
-    console.log('  (a plate poses its arms and a .blob does not — optimise the mesh score,'
-      + '\n   and read a plate score only as a before/after gradient)');
 
   console.log('\nworst bands — the lines to edit, in order:');
+  if (poseMismatch)
+    console.log('  (pose-dominated — these bands may be the pose, not the sculpt)');
   for (const b of worst)
     console.log(`  band ${String(b.band).padStart(2)}  at ${b.at.toFixed(2)}  `
       + `ours ${b.gotWidth.toFixed(3)}  ref ${b.refWidth.toFixed(3)}  `
