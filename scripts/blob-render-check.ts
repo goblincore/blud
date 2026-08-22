@@ -67,14 +67,15 @@
 // fails, STOP editing the .blob: the fix is in src/lab/sdf-zombie/webgpu/ —
 // see the triage table in the authoring skill.
 //
-// ENVIRONMENT. This script starts nothing. It needs vite on 5233 and Chrome on
-// 9223 — run `scripts/blob-shot.sh <name>` once in another shell (it starts
-// both and reuses them), or start them the same way it does:
-//   npx vite --port 5233 --strictPort
-//   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-//     --headless=new --remote-debugging-port=9223 --enable-unsafe-webgpu \
-//     --user-data-dir=/tmp/chrome-render-check --no-first-run \
-//     --window-size=1380,820 about:blank
+// ENVIRONMENT. `npm run blob:render-check -- <character>` needs nothing else:
+// the wrapper (scripts/blob-render-check.sh) starts a vite and a headless
+// WebGPU Chrome if they are not already listening and stops whatever it
+// started. Set LAB_VITE_PORT / LAB_CDP_PORT to run two captures at once.
+//
+// Running this .ts directly is fine too, but then the servers are YOUR problem
+// and it exits 2 without them. Note that `blob:shot` is not a way to provide
+// them — it stops its servers when it exits, which is what the wrapper exists
+// to fix.
 //
 // NO UNIT TEST. There isn't one and there shouldn't be a fake one: every
 // assertion this makes is about a real WebGPU frame, so a test without a
@@ -129,8 +130,11 @@ import { sdBody, nearestPrim } from '../src/lab/sdf-zombie/validate';
 import { decodePng } from '../src/lab/sdf-zombie/png-decode';
 import type { ClusterInfo, Primitive, Vec3 } from '../src/lab/sdf-zombie/types';
 
-const CDP = Number(process.env.BLOB_CDP ?? 9223);
-const VITE = Number(process.env.BLOB_VITE ?? 5233);
+// Ports come from scripts/lab-servers.sh, which is what starts the servers
+// these talk to; the defaults match its defaults so running the .ts directly
+// against a hand-started pair still works.
+const CDP = Number(process.env.LAB_CDP_PORT ?? 9223);
+const VITE = Number(process.env.LAB_VITE_PORT ?? 5233);
 const DIST = Number(process.env.BLOB_DIST ?? 2.4);
 /** Every 4th pixel in each axis. One sample therefore covers 16 px^2. */
 const STEP = 4;
