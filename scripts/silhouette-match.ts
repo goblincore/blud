@@ -3,6 +3,7 @@
 //   npx tsx scripts/silhouette-match.ts <character> [reference.png] [--side] [--range lo:hi]
 //   npx tsx scripts/silhouette-match.ts mouse
 //   npx tsx scripts/silhouette-match.ts mouse --range 0.75:1      # legs + shoes only
+//   npx tsx scripts/silhouette-match.ts mouse --bands 40           # finer profile
 //   npx tsx scripts/silhouette-match.ts clown docs/dev-notes/refs/clown-1-ref.png
 //
 // Reads src/lab/sdf-zombie/characters/<character>.blob, builds it with the
@@ -33,18 +34,22 @@ import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
 import { buildBody } from '../src/lab/sdf-zombie/build-body';
 import { decodePng } from '../src/lab/sdf-zombie/png-decode';
 import {
-  maskFromRgba, maskFromBody, compareSilhouette, renderMask,
+  maskFromRgba, maskFromBody, compareSilhouette, renderMask, gltfTriangles,
 } from '../src/lab/sdf-zombie/silhouette';
 
 const args = process.argv.slice(2);
 const side = args.includes('--side');
-const rest = args.filter((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--range'));
+const rest = args.filter((a, i) => !a.startsWith('--')
+  && !args[i - 1]?.startsWith('--range') && !args[i - 1]?.startsWith('--bands'));
 const name = rest[0];
 if (!name) {
   console.error('usage: npx tsx scripts/silhouette-match.ts <character> [reference.png] [--side]');
   process.exit(2);
 }
 const refPath = rest[1] ?? `docs/dev-notes/refs/${name}-reference.png`;
+const bandsArg = args.find((a) => a.startsWith('--bands'));
+const bandsVal = bandsArg?.includes('=') ? bandsArg.split('=')[1] : args[args.indexOf(bandsArg ?? '') + 1];
+const bands = bandsVal ? Number(bandsVal) : undefined;
 const rangeArg = args.find((a) => a.startsWith('--range'));
 const rangeVal = rangeArg?.includes('=') ? rangeArg.split('=')[1] : args[args.indexOf(rangeArg ?? '') + 1];
 const range: [number, number] | undefined = rangeVal && rangeVal.includes(':')
@@ -58,12 +63,22 @@ const doc = parseBlob(readFileSync(blobPath, 'utf8'));
 const body = buildBody(compileBlob(doc, compileFace(doc)));
 if (body.errors.length) console.error('build errors:', body.errors);
 
+// The kit is part of the silhouette. A plate shows a DRESSED character, so
+// comparing bare flesh against it blames the sculpt for the clothes' bulk.
+const kitPath = `public/assets/lab/${name}-kit.gltf`;
+const kit = existsSync(kitPath)
+  ? gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync(kitPath))))
+  : undefined;
+
 const started = Date.now();
-const got = maskFromBody(body, { view: side ? 'side' : 'front', heightPx: 256 });
+const got = maskFromBody(body, { view: side ? 'side' : 'front', heightPx: 256, kit });
 const png = decodePng(readFileSync(refPath));
 const ref = maskFromRgba(png.rgba, png.width, png.height);
 
 console.log(`${name}  vs  ${refPath}   (${side ? 'side' : 'front'} view, ${Date.now() - started} ms)`);
+console.log(kit
+  ? `kit ${kitPath} — ${kit.length / 9} triangles unioned into the silhouette`
+  : `no kit at ${kitPath}; scoring bare flesh against a plate that may be dressed`);
 console.log(`reference ${png.width}x${png.height}  blobs=${ref.components}  coverage=${(ref.coverage * 100).toFixed(1)}%  backdrop=rgb(${ref.background})`);
 if (ref.components > 1)
   console.log(`  note: ${ref.components} disconnected blobs found; kept the largest. Check the plate has no watermark or detached shadow.`);
@@ -74,7 +89,7 @@ const b = renderMask(got, 44).split('\n');
 for (let i = 0; i < Math.max(a.length, b.length); i++)
   console.log('  ' + (a[i] ?? ' '.repeat(44)) + '   ' + (b[i] ?? ''));
 
-const rep = compareSilhouette(ref.mask, got, range ? { range } : {});
+const rep = compareSilhouette(ref.mask, got, { ...(range ? { range } : {}), ...(bands ? { bands } : {}) });
 const window = range ? ` over height ${range[0]}-${range[1]}` : ' over the WHOLE figure';
 console.log(`\nIoU ${rep.iou.toFixed(3)}    mean width error ${rep.meanWidthError.toFixed(3)}${window}`);
 if (!range)

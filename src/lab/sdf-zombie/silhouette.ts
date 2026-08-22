@@ -163,6 +163,87 @@ export interface BodyMaskOpts {
   /** Surface threshold. Rays stop when the field drops below this. */
   eps?: number;
   maxSteps?: number;
+  /**
+   * The character's POLYGON kit, as flat triangle vertices from
+   * gltfTriangles(). Pass it whenever the character has one.
+   *
+   * WITHOUT THIS THE COMPARISON IS RIGGED. A reference plate shows a DRESSED
+   * character; a .blob is bare flesh. Measured on the mouse: the shoes are
+   * 0.132 of body height as flesh alone, 0.204 with the kit, against 0.345 on
+   * the plate. Both readings say "too narrow", but the flesh-only one blames
+   * the sculpt for bulk that was always the kit's job, and it does that
+   * everywhere the kit adds volume — shoes, tee, shorts — so a rebuild driven
+   * by it would thicken the body to compensate for clothes it cannot see.
+   */
+  kit?: Float32Array;
+}
+
+/**
+ * World-space triangles out of a compiled kit glTF.
+ *
+ * Positions are taken from the POSITION accessors verbatim, in BIND space, and
+ * that is correct here rather than a shortcut: the kit is authored in the same
+ * metre space as the .blob (the glTF's own `pelvis` node sits at the .blob's
+ * `root pelvis at` height) and the lab places it at the body root with no
+ * scale. At the rest pose every joint's world matrix cancels its inverse bind
+ * matrix, so skinning is the identity and bind space IS rest world space —
+ * which is the only pose a silhouette is ever taken in.
+ *
+ * Buffers must be embedded as data URIs, which is what scripts/build-wam-kit.sh
+ * emits; an external .bin would need a file read and this stays I/O-free so it
+ * can run in the browser too.
+ */
+export function gltfTriangles(gltf: {
+  buffers: Array<{ uri?: string }>;
+  bufferViews: Array<{ buffer: number; byteOffset?: number; byteStride?: number }>;
+  accessors: Array<{ bufferView: number; byteOffset?: number; componentType: number; count: number }>;
+  meshes: Array<{ primitives: Array<{ attributes: { POSITION: number }; indices?: number }> }>;
+}): Float32Array {
+  const bufs = gltf.buffers.map((b) => {
+    const uri = b.uri ?? '';
+    const comma = uri.indexOf(',');
+    if (!uri.startsWith('data:') || comma < 0)
+      throw new Error('kit glTF buffer is not an embedded data URI');
+    const bin = atob(uri.slice(comma + 1));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  });
+
+  const tris: number[] = [];
+  for (const mesh of gltf.meshes)
+    for (const prim of mesh.primitives) {
+      const pa = gltf.accessors[prim.attributes.POSITION]!;
+      const pv = gltf.bufferViews[pa.bufferView]!;
+      const pbuf = bufs[pv.buffer]!;
+      const pdv = new DataView(pbuf.buffer, pbuf.byteOffset + (pv.byteOffset ?? 0) + (pa.byteOffset ?? 0));
+      const pstride = pv.byteStride || 12;
+      const pos = (i: number): [number, number, number] => [
+        pdv.getFloat32(i * pstride, true),
+        pdv.getFloat32(i * pstride + 4, true),
+        pdv.getFloat32(i * pstride + 8, true),
+      ];
+
+      let index: (k: number) => number;
+      let count: number;
+      if (prim.indices === undefined) {
+        count = pa.count;
+        index = (k) => k;
+      } else {
+        const ia = gltf.accessors[prim.indices]!;
+        const iv = gltf.bufferViews[ia.bufferView]!;
+        const ibuf = bufs[iv.buffer]!;
+        const idv = new DataView(ibuf.buffer, ibuf.byteOffset + (iv.byteOffset ?? 0) + (ia.byteOffset ?? 0));
+        // 5121 UNSIGNED_BYTE, 5123 UNSIGNED_SHORT, 5125 UNSIGNED_INT.
+        const size = ia.componentType === 5125 ? 4 : ia.componentType === 5123 ? 2 : 1;
+        count = ia.count;
+        index = (k) => size === 4 ? idv.getUint32(k * 4, true)
+          : size === 2 ? idv.getUint16(k * 2, true) : idv.getUint8(k);
+      }
+      for (let k = 0; k + 2 < count; k += 3)
+        for (const v of [index(k), index(k + 1), index(k + 2)]) tris.push(...pos(v));
+    }
+  return new Float32Array(tris);
 }
 
 export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
@@ -183,6 +264,19 @@ export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
     minY = Math.min(minY, c.center[1] - c.radius); maxY = Math.max(maxY, c.center[1] + c.radius);
     minZ = Math.min(minZ, c.center[2] - c.radius); maxZ = Math.max(maxZ, c.center[2] + c.radius);
   }
+  // The kit joins the BOUNDS as well as the raster. A hat or a heel that
+  // reaches past the flesh has to widen the frame, or it would be cropped and
+  // the silhouette would be missing exactly the part that sticks out.
+  const kit = opts.kit;
+  if (kit && kit.length) {
+    for (let i = 0; i < kit.length; i += 3) {
+      const x = kit[i]!, y = kit[i + 1]!, z = kit[i + 2]!;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+  }
+
   const padY = (maxY - minY) * pad;
   minY -= padY; maxY += padY;
 
@@ -243,7 +337,53 @@ export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
       if (hit) bits[py * w + px] = 1;
     }
   }
+
+  // The kit is UNIONED on top, filled as flat triangles. A silhouette only
+  // asks "is anything here", so depth never has to be resolved between the
+  // polygons and the field — which is the whole reason this can ignore the
+  // depth-in-alpha compositing the real renderer needs.
+  if (kit && kit.length) {
+    const toPx = (i: number): [number, number] => [
+      ((view === 'front' ? kit[i]! : kit[i + 2]!) - u0) / spanU * w,
+      (maxY - kit[i + 1]!) / spanY * h,
+    ];
+    for (let i = 0; i + 8 < kit.length; i += 9)
+      fillTriangle(bits, w, h, toPx(i), toPx(i + 3), toPx(i + 6));
+  }
   return { w, h, bits };
+}
+
+/**
+ * Half-open scanline fill of one projected triangle.
+ *
+ * Coverage is by pixel CENTRE, and every triangle of a closed mesh is filled
+ * independently, so shared edges can leave a hairline of unset pixels where two
+ * triangles meet at a shallow angle. That is invisible at the resolutions this
+ * runs at — the mask is downsampled to a 128-square before anything is
+ * measured — and a conservative fill would instead fatten every silhouette by
+ * half a pixel, which is a bias rather than a speckle.
+ */
+function fillTriangle(
+  bits: Uint8Array, w: number, h: number,
+  a: [number, number], b: [number, number], c: [number, number],
+): void {
+  const minX = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0])));
+  const maxX = Math.min(w - 1, Math.ceil(Math.max(a[0], b[0], c[0])));
+  const minY = Math.max(0, Math.floor(Math.min(a[1], b[1], c[1])));
+  const maxY = Math.min(h - 1, Math.ceil(Math.max(a[1], b[1], c[1])));
+  if (minX > maxX || minY > maxY) return;
+  const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  if (area === 0) return; // degenerate, and glTF kits carry a few
+  for (let y = minY; y <= maxY; y++)
+    for (let x = minX; x <= maxX; x++) {
+      const px = x + 0.5, py = y + 0.5;
+      // Edge functions, normalised by the signed area so winding does not
+      // matter — a kit has triangles of both windings once it is mirrored.
+      const w0 = ((b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])) / area;
+      const w1 = ((c[0] - b[0]) * (py - b[1]) - (c[1] - b[1]) * (px - b[0])) / area;
+      const w2 = ((a[0] - c[0]) * (py - c[1]) - (a[1] - c[1]) * (px - c[0])) / area;
+      if (w0 >= 0 && w1 >= 0 && w2 >= 0) bits[y * w + x] = 1;
+    }
 }
 
 export function subjectBounds(mask: Mask): Bounds | null {

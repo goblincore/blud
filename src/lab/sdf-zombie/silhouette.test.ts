@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   maskFromRgba, maskFromBody, subjectBounds, normalise, compareSilhouette,
-  renderMask, type Mask,
+  renderMask, gltfTriangles, type Mask,
 } from './silhouette';
 import { decodePng } from './png-decode';
 import { parseBlob } from './blob-parse';
@@ -183,6 +183,45 @@ describe('maskFromBody', () => {
     expect(lines[0]!.length).toBe(20);
     expect(lines.length).toBeGreaterThan(4);
     expect(art).toContain('#');
+  });
+});
+
+describe('kit geometry', () => {
+  const kit = () => gltfTriangles(
+    JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/mouse-kit.gltf'))));
+
+  it('reads triangles out of the compiled kit glTF', () => {
+    const t = kit();
+    expect(t.length % 9).toBe(0);
+    expect(t.length / 9).toBeGreaterThan(100);
+    // Bind space is rest world space: the soles sit on y=0 and the kit stops
+    // below the ears. If skinning were needed these would be nowhere near.
+    let minY = Infinity, maxY = -Infinity;
+    for (let i = 1; i < t.length; i += 3) { minY = Math.min(minY, t[i]!); maxY = Math.max(maxY, t[i]!); }
+    expect(minY).toBeGreaterThan(-0.01);
+    expect(minY).toBeLessThan(0.01);
+    expect(maxY).toBeGreaterThan(0.5);
+  });
+
+  // The bug this guards: a plate shows a DRESSED character, so scoring bare
+  // flesh against it blames the sculpt for the clothes' bulk. Measured on the
+  // mouse, the shoe band goes 0.132 -> 0.204 of body height once the kit is
+  // in, against 0.345 on the plate.
+  it('widens the silhouette where the clothes are', () => {
+    const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8'));
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    const bare = maskFromBody(body, { heightPx: 128 });
+    const dressed = maskFromBody(body, { heightPx: 128, kit: kit() });
+    let a = 0, b = 0;
+    for (const v of bare.bits) a += v;
+    for (const v of dressed.bits) b += v;
+    expect(b / (dressed.w * dressed.h)).toBeGreaterThan(a / (bare.w * bare.h));
+  });
+
+  it('rejects a kit whose buffer is not embedded', () => {
+    expect(() => gltfTriangles({
+      buffers: [{ uri: 'kit.bin' }], bufferViews: [], accessors: [], meshes: [],
+    })).toThrow(/data URI/);
   });
 });
 
