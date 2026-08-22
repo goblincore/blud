@@ -5,9 +5,10 @@ Copy this into `~/.claude/dispatch/plans/YYYY-MM-DD-<slug>.md`, fill every
 template — a dispatched agent that improvises its own loop is how the last
 several characters drifted. Keep it verbatim.
 
-`model: zai/glm-5.1` needs the `zai/` prefix; a bare `glm-5.1` fails silently
-with an empty worktree. `base_branch` must already contain the reference files
-— a fresh worktree cannot see an untracked file in the primary checkout.
+`model:` needs the provider prefix (`zai/glm-5.1`, `openrouter/…`); a bare name
+fails silently with an empty worktree. `base_branch` must already contain the
+reference files — a fresh worktree cannot see an untracked file in the primary
+checkout.
 
 ```markdown
 ---
@@ -19,6 +20,7 @@ branch: dispatch/<slug>
 base_branch: <branch that contains the refs and the blob: commands>
 priority: 1
 max_runtime: 120m
+created: <YYYY-MM-DD>
 allowed_tools: Edit,Write,Bash,Read,Glob,Grep
 harness: pi
 ---
@@ -29,7 +31,7 @@ harness: pi
 
 ## REFERENCE
 
-- mesh: docs/dev-notes/refs/<name>-mesh/<file>.glb   (committed — verify with `git ls-files`)
+- mesh: docs/dev-notes/refs/<name>-mesh/<name>.glb   (committed — verify with `git ls-files`)
 - plates: docs/dev-notes/refs/<name>-*.png
 
 You can see images. `Read` these, and `Read` the frames you produce.
@@ -46,7 +48,7 @@ You can see images. `Read` these, and `Read` the frames you produce.
    report it and stop — the fix is not in the .blob.
 5. `npx vitest run src/lab/sdf-zombie/` green before you commit.
 
-## ALREADY ESTABLISHED — do not re-derive
+## WHAT IS ALREADY ESTABLISHED — do not re-derive
 
 <measured facts; see the skill's "Measure against the mesh" section>
 
