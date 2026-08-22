@@ -102,6 +102,21 @@ const LOOK: Record<string, {
   // different and much less goblin note. See the emissive field's docstring for
   // why real transparency is not a material flag here.
   glass: { metalness: 0.35, roughness: 0.04, envIntensity: 2.0 },
+
+  // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
+  // entries exist mostly for the ENV MAP — without one, a rough dielectric's
+  // shadow side falls to near-black under the lab's single key, and the
+  // royal-blue shorts rendered as black from every unlit angle (the tee
+  // survives on its saturated red; the blue has no such margin).
+  tee:    { metalness: 0.0, roughness: 0.80, envIntensity: 0.50 },
+  shorts: { metalness: 0.0, roughness: 0.80, envIntensity: 0.50 },
+  // The oversized shoes are smooth vinyl — a broad sheen, like the leather.
+  shoe:   { metalness: 0.0, roughness: 0.50, envIntensity: 0.65 },
+  white:  { metalness: 0.0, roughness: 0.45, envIntensity: 0.70 },
+  // Shades and brow slabs share one near-black material; the lens argument
+  // from `glass` above applies, dialed down — enough sheen to read as
+  // plastic, not enough to chrome over.
+  black:  { metalness: 0.25, roughness: 0.12, envIntensity: 1.60 },
 };
 
 export interface KitOverlay {

@@ -198,13 +198,27 @@ parts
   # MIRRORED — the first draft sat outside the mirror block and BOTH
   # brows landed on the character's left (x to +0.154), which the
   # viewer's part bounds caught immediately.
+  #
+  # THE z IS THE WHOLE BROW, and the first compiled kit got it wrong:
+  # offset z 0.010 left 66 of 72 vertices INSIDE the skull — the crown's
+  # front face at brow height is z 0.05-0.08, so a slab centred at 0.01
+  # is buried whole and the kit rendered browless (invisible while the
+  # kit itself was unbuilt — two silent failures stacked). z 0.066 puts
+  # the slab's back rim ~20 mm into the crown (a deliberate tuck — a rim
+  # that stops AT the smin surface gaps yellow at its edges) and its
+  # face ~5-10 mm proud. len 0.100 reached x 0.169, past the head's
+  # 0.099 half-width at that height — the wedges floated off the
+  # temples; 0.048 lands the outer tip at x 0.099, the reference's
+  # 0.104. The crown falls away fast under the tip, so the tip ring
+  # pinches to w 0.016: the wedge end lifting off the skull IS the
+  # angry-brow read, but a fat floating end reads as a horn.
   # ================================================================
   mirror
-    loft brow bone=skull at=0.436 offset=(0.052,0.120,0.010) dir=side tilt=-13 len=0.100 frame=fwd material=black
-      ring 0.00 w=0.046 d=0.030
-      ring 0.35 w=0.058 d=0.040
-      ring 0.70 w=0.052 d=0.044
-      ring 1.00 w=0.040 d=0.048
+    loft brow bone=skull at=0.436 offset=(0.052,0.120,0.066) dir=side tilt=-13 len=0.048 frame=fwd material=black
+      ring 0.00 w=0.034 d=0.030
+      ring 0.35 w=0.038 d=0.040
+      ring 0.70 w=0.032 d=0.044
+      ring 1.00 w=0.016 d=0.046
       cap start=none end=none
   end
 
