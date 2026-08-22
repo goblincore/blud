@@ -141,7 +141,12 @@ body
   # more. The anchor sits at skull t=0.44 (y 0.785); offset=(0.170, 0.170)
   # lands the centre at (0.170, 0.955) — 4 mm inside the measured 0.174, so
   # the weld has margin to spare.
-  blob head on skull at=0.44 r=0.128 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.183,0.170,0.004) both
+  # SPAN, measured the same way: the reference's widest point across the ears
+  # is 55.1% of body height and this was 65.4% — 19% too wide, which reads as
+  # the ears having eaten the head. offset.x 0.183 -> 0.150 and r 0.128 ->
+  # 0.120 lands it at ~55%. The reference's widest row also sits 16% down
+  # rather than 12%, so the pair drops 12 mm with it.
+  blob head on skull at=0.44 r=0.120 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.150,0.158,0.004) both
 
   # ============================================================
   # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
