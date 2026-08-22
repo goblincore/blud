@@ -25,6 +25,13 @@ export interface BoneDef {
 export interface PrimDef {
   /** Bone name this primitive rides. For mirrored prims, the unsuffixed base name. */
   bone: string;
+  /**
+   * 1-based line in the `.blob` source this primitive was written on. Absent
+   * for primitives built in TypeScript (zombie's `makeZombie()`, test
+   * fixtures). Exists so a measurement can say "line 143 (snout on skull)"
+   * instead of "band 7" — the only form an agent can act on.
+   */
+  src?: number;
   /** Normalised position along the bone, 0 = head, 1 = tail. */
   at: number;
   /** When set, the primitive is a capsule spanning `at` → `capTo` on the same bone. */
@@ -145,6 +152,13 @@ export interface BodyDef {
 export interface Primitive {
   a: Vec3;
   b: Vec3;
+  /**
+   * 1-based line in the `.blob` source this primitive was written on. Absent
+   * for primitives built in TypeScript (zombie's `makeZombie()`, test
+   * fixtures). Exists so a measurement can say "line 143 (snout on skull)"
+   * instead of "band 7" — the only form an agent can act on.
+   */
+  src?: number;
   radius: number;
   /** Radius at `b`. Absent means untapered — see PrimDef.radiusB. */
   radiusB?: number;

@@ -362,3 +362,30 @@ describe('paint survives compile, mirror and resolve', () => {
     expect(torso.color).toBeUndefined();
   });
 });
+
+describe('source-line provenance', () => {
+  it('every compiled PrimDef carries the 1-based .blob line it came from', () => {
+    const header = [
+      'model test',
+      '  height 1.0',
+      '',
+      'skeleton',
+      '  root pelvis at 0.5',
+      '',
+      'body',
+    ].join('\n');
+    const src = [
+      header,
+      '',
+      '# a comment line that must not shift the count',
+      '  blob torso on pelvis at=0.5 r=0.05',
+      '  blob torso on pelvis at=0.9 r=0.04',
+    ].join('\n');
+    const doc = parseBlob(src);
+    const def = compileBlob(doc, compileFace(doc));
+    // compileBlob appends facePrims (always emitted, see its doc comment)
+    // after the authored parts, and those carry no .blob line — slice to
+    // just the two parts this fixture actually wrote.
+    expect(def.prims.slice(0, 2).map(p => p.src)).toEqual([10, 11]);
+  });
+});

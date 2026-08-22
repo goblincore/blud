@@ -5,6 +5,8 @@ import { ZOMBIE, makeZombie } from './body';
 import { DEFAULT_FACE, facePrims } from './face';
 import { CLUSTER_ORDER } from './types';
 import { MAX_PRIMS } from './validate';
+import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
 
 describe('buildBody with the shipped zombie', () => {
   const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -67,5 +69,45 @@ describe('makeZombie', () => {
 
   it('stays inside the shader primitive cap', () => {
     expect(built.prims.length).toBeLessThanOrEqual(MAX_PRIMS);
+  });
+});
+
+describe('source-line provenance survives the build', () => {
+  // `skull` is required (facePrims, always emitted, reference it — see
+  // compileBlob's doc comment), and the pelvis-anchored second torso blob is
+  // required for `legL`/`legR` connectivity: the mirrored thigh bones have
+  // nothing else nearby to fuse to. Same shape as compileBlob's own fixture,
+  // minus the carve line this test doesn't need.
+  const SRC = `model t
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=0 len=0.34
+  bone skull parent=spine dir=up len=0.16
+  mirror
+    bone thigh parent=pelvis dir=down side=0.10 len=0.40
+  end
+
+body
+  blob torso on spine at=0.8 r=0.15 wide=1.28 deep=0.78 blend=0.014
+  bar  leg on thigh from=0.05 to=0.95 r=0.082 blend=0.0175 mirror
+  blob torso on pelvis at=0.40 r=0.16 wide=1.10 tall=0.9 deep=0.92 blend=0.03
+`;
+  const torsoLine = 11;
+  const legLine = 12;
+  const torso2Line = 13;
+
+  const doc = parseBlob(SRC);
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+
+  it('builds clean', () => {
+    expect(body.errors).toEqual([]);
+  });
+
+  it('every authored prim still carries its .blob line after mirror + resolve + clusters', () => {
+    // facePrims (always appended by compileBlob) carry no .blob line, so
+    // they show up as `undefined` here — filtered out, since this test is
+    // about what the AUTHORED parts carry, not the generated face.
+    const authored = body.prims.map(p => p.src).filter((n): n is number => n !== undefined);
+    expect(authored.sort((a, b) => a - b)).toEqual([torsoLine, legLine, legLine, torso2Line].sort((a, b) => a - b));
   });
 });

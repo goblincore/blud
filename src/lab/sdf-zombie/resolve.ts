@@ -69,6 +69,7 @@ export function placePrims(
     }
     return {
       a, b,
+      ...(p.src === undefined ? {} : { src: p.src }),
       radius: p.radius,
       ...(p.radiusB === undefined ? {} : { radiusB: p.radiusB }),
       scale: p.scale,

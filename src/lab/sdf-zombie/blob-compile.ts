@@ -258,6 +258,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
         p.src.line, p.src.indent + 1);
     return {
       bone: p.bone,
+      src: p.src.line,
       at: p.at,
       ...(p.to === null ? {} : { capTo: p.to }),
       radius: p.radius,
