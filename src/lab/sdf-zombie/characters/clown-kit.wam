@@ -76,7 +76,14 @@ palette
   # The hood's second half. A separate entry from `pink` even though the hue is
   # close: the LOOK table and every kit test key on material NAME, and sharing
   # `pink` with the tunic made hood assertions read tunic geometry.
-  hoodpink #efa0e2
+  # THE HOOD'S TWO TONES, matching the tunic's stripes exactly (#6d76f2 blue,
+  # #f2a2e6 pink) so the cap reads as part of the same outfit. They are
+  # SEPARATE ENTRIES from `blue`/`pink` despite the identical hex: the LOOK
+  # table and every kit test key on material NAME, and sharing a name made hood
+  # assertions silently read TUNIC geometry — which is how an earlier version
+  # of those tests appeared to pass.
+  hoodblue #6d76f2
+  hoodpink #f2a2e6
   purple  #a878e0
   # Silver-grey, not white: the ruff is the one piece wearing this, and the
   # reference reads it as a metallic frill. Was #d2cec6 (both-notches-bright for
@@ -206,15 +213,54 @@ parts
   # previous at=0.300 put the hem at y 0.716, ABOVE the head's widest row
   # (y 0.76, W 0.553). That is why the head bulged out under it. Starting at
   # t=0 and spanning len 0.330 runs y 0.629 -> 1.022, i.e. the whole ball.
-  loft caphood bone=skull at=0.000 dir=up len=0.330 frame=fwd material=purple material_arc=hoodpink:182-358
-    ring 0.00 w=0.462 d=0.360 fwd=-0.045
-    ring 0.15 w=0.542 d=0.424 fwd=-0.050
-    ring 0.30 w=0.574 d=0.450 fwd=-0.055
-    ring 0.45 w=0.570 d=0.446 fwd=-0.050
-    ring 0.60 w=0.524 d=0.410 fwd=-0.038
-    ring 0.75 w=0.432 d=0.336 fwd=-0.022
-    ring 0.88 w=0.316 d=0.248
-    ring 1.00 w=0.150 d=0.120
+  # SIZED FOR TWO EFFECTS THAT EAT MARGIN, both of which the first pass missed
+  # and which together made the head bulge THROUGH the hood:
+  #
+  #  1. A ring pushed back by `fwd` has its widest point at its OWN centre, so
+  #     at the head's widest (z=0, i.e. `fwd` away from the ring centre) the
+  #     ellipse has already narrowed to a*sqrt(1-(fwd/b)^2) — about 97%.
+  #  2. The loft is 8-SIDED (`style chunky`), so its flat facets sit at
+  #     cos(22.5) = 92.4% of the nominal radius, and the smooth head bulges
+  #     out between them.
+  #
+  # THE CROWN RINGS NEEDED MORE THAN THE 12% RULE. Measured against the built
+  # mesh: 42 of 163 hood vertices above y 0.86 sat INSIDE the head, up to 43 mm
+  # deep, and that is the bulge. Two reasons the flat 12% was not enough up
+  # here — the dome cap tessellates from the last ring rather than following
+  # the head, and the rings are closer together near the crown so each facet
+  # spans more of the sphere's curvature. Upper rings are ~15% larger again.
+  #
+  # THE TOP RINGS LEAN FORWARD, which looks contradictory next to the retreat
+  # below and is not. The skull bone carries pitch=-4, so the whole loft tips
+  # BACKWARD along its length: measured on the built mesh, the dome's apex sat
+  # at z -0.083..-0.023 instead of near 0, leaving the FRONT of the crown bare.
+  # That is what "it's not covering the top of the head" was. A small positive
+  # fwd on the last three rings puts the dome back over the head.
+  #
+  # `fwd=` RETREAT IS FOR THE FACE OPENING ONLY — rings 0.60 and up are
+  # CONCENTRIC. Pushing the upper rings back too shifts the whole crown
+  # backward and the head then pokes out through the front-top: at y 0.865 a
+  # -0.036 offset put the hood's front at 0.195 against a head front of 0.20.
+  # Retreat below the brow, concentric above it.
+  #
+  # WIDENING ALSO PUSHES THE FRONT FORWARD, which covers the chin — the kit
+  # test caught the hood's front edge at z 0.172 against the head's 0.164 at
+  # y 0.63. The `fwd=` offsets on the lower rings grew with the widths to keep
+  # the face opening where it was.
+  #
+  # 0.97 x 0.924 = 0.896, so a ring needs ~12% MORE half-width than the head
+  # it is covering, not the ~3% clearance the previous values had. Head rows,
+  # marched: y 0.63 W 0.44, y 0.69 W 0.52, y 0.75 W 0.55, y 0.81 W 0.548,
+  # y 0.87 W 0.497, y 0.93 W 0.398.
+  loft caphood bone=skull at=0.000 dir=up len=0.330 frame=fwd material=hoodblue material_arc=hoodpink:182-358
+    ring 0.00 w=0.512 d=0.404 fwd=-0.062
+    ring 0.15 w=0.606 d=0.478 fwd=-0.066
+    ring 0.30 w=0.642 d=0.506 fwd=-0.064
+    ring 0.45 w=0.638 d=0.502 fwd=-0.056
+    ring 0.60 w=0.646 d=0.520
+    ring 0.75 w=0.560 d=0.450 fwd=0.016
+    ring 0.88 w=0.430 d=0.348 fwd=0.030
+    ring 1.00 w=0.250 d=0.205 fwd=0.040
     cap start=none end=dome
 
   # THE HORNS — bigger, and one colour each to carry the bilateral split.
@@ -223,7 +269,7 @@ parts
   # shares one material, and the whole point here is that the two differ. The
   # bones are still authored once in the skeleton's mirror block; these name
   # the generated .l/.r copies.
-  loft hornL bones=horn1.l..horn4.l material=purple
+  loft hornL bones=horn1.l..horn4.l material=hoodblue
     ring 0.00 w=0.205 d=0.205
     ring 0.30 w=0.168 d=0.168
     ring 0.60 w=0.120 d=0.120
@@ -241,7 +287,9 @@ parts
   attach hornstarL bone=horn4.l at=1.0 kind=star points=5 size=0.135 inner=0.42 d=0.032 material=yellow
   attach hornstarR bone=horn4.r at=1.0 kind=star points=5 size=0.135 inner=0.42 d=0.032 material=yellow
 
-  attach badge bone=skull kind=sphere at=0.70 offset=(0.245,0.030,0.045) size=0.026 material=yellow
+  # NO BADGE. A yellow sphere used to sit on the old cap BAND, standing in for
+  # the reference's star. The band is gone, the horns carry real stars now, and
+  # on the hood it read as "a random yellow orb on the side of the head".
 
   # HAIR — two wide purple tufts sweeping out from under the cap band,
   # sticking sideways past the cheeks almost like wings. Second-biggest

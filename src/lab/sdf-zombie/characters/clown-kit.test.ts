@@ -92,7 +92,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // assertion failing. The list changes only by a deliberate palette edit.
   it('decodes the compiled kit', () => {
     expect([...groups.keys()].sort()).toEqual(
-      ['blue', 'grey', 'hoodpink', 'nose', 'pink', 'purple', 'red', 'white', 'yellow']);
+      ['blue', 'grey', 'hoodblue', 'hoodpink', 'nose', 'pink', 'red', 'white', 'yellow']);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
   });
 
@@ -117,7 +117,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
    * Still bounded, and well short of the failure it guards: a tuft punching
    * out through the FAR side of a skull whose half-width is ~0.28.
    */
-  const TUCK_MAX_BY_MATERIAL: Record<string, number> = { purple: 0.08, hoodpink: 0.08 };
+  const TUCK_MAX_BY_MATERIAL: Record<string, number> = { hoodblue: 0.08, hoodpink: 0.08 };
 
   it.each([...groups.keys()])('no %s vertex passes through the body', name => {
     const limit = TUCK_MAX_BY_MATERIAL[name] ?? TUCK_MAX;
@@ -149,8 +149,8 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // above a line) and it is the thing that would actually break if someone
   // widened a ring or reduced its `fwd=` offset.
   it('the face protrudes through the hood rather than being covered', () => {
-    const hood = [...groups.get('purple')!, ...groups.get('hoodpink')!];
-    for (const y of [0.64, 0.70, 0.76]) {
+    const hood = [...groups.get('hoodblue')!, ...groups.get('hoodpink')!];
+    for (const y of [0.63, 0.69, 0.75]) {
       // Head's front surface at this height.
       let lo = 0, hi = 0.6;
       for (let i = 0; i < 40; i++) {
@@ -158,7 +158,9 @@ describe('clown-kit.gltf fits clown.blob', () => {
         if (sdBody([0, y, mid], body) < 0) lo = mid; else hi = mid;
       }
       const headFront = lo;
-      const band = hood.filter(v => Math.abs(v[1] - y) < 0.03 && Math.abs(v[0]) < 0.12);
+      // +/-0.05 because the loft's rings land at discrete heights; a tighter
+      // band falls between two of them and finds nothing.
+      const band = hood.filter(v => Math.abs(v[1] - y) < 0.05 && Math.abs(v[0]) < 0.15);
       expect(band.length, `hood band at y=${y}`).toBeGreaterThan(0);
       const hoodFront = Math.max(...band.map(v => v[2]));
       expect(hoodFront, `hood front vs head front at y=${y}`).toBeLessThan(headFront);
@@ -169,7 +171,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // the head. A cap that retreats from the face can also retreat off the
   // crown entirely; the cone apex must clear the cranium's own top (y 1.002).
   it('cap crowns the head instead of floating behind it', () => {
-    const hood = [...groups.get('purple')!, ...groups.get('hoodpink')!];
+    const hood = [...groups.get('hoodblue')!, ...groups.get('hoodpink')!];
     expect(Math.max(...hood.map(v => v[1]))).toBeGreaterThan(1.005);
   });
 
@@ -194,7 +196,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // one the removal could silently break: that the hood still covers the head
   // sideways rather than perching on top of it.
   it('the hood reaches out over the head, not just across its crown', () => {
-    const hood = [...groups.get('purple')!, ...groups.get('hoodpink')!];
+    const hood = [...groups.get('hoodblue')!, ...groups.get('hoodpink')!];
     expect(Math.max(...hood.map(v => Math.abs(v[0])))).toBeGreaterThan(0.26);
   });
 
