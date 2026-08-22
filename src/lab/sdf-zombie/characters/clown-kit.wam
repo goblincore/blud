@@ -129,7 +129,22 @@ skeleton
 
   # The cap's tip, pinned where the built sweep actually ends so the star
   # has something to attach to. Re-measure if the cap's segments change.
-  bone captip parent=skull head=(-0.011,0.826,-0.392) dir=(0.0,-0.6,-1.0) len=0.02
+  bone captip parent=skull head=(0.001,1.070,-0.222) dir=(0,-0.5,-1.0) len=0.02
+
+  # NIGHTCAP SPINE — the cap lofts along this chain as ONE piece.
+  #
+  # cap1 and cap2 are COLLINEAR on purpose. WAM's loft lint states the rule:
+  # "path bends 20 while the ring radius 0.270 exceeds the bend reach 0.209 —
+  # the surface doubles back". The base ring has to be 0.28 wide to cover the
+  # head, so the base cannot bend AT ALL; the taper has to get the rings small
+  # before the curve starts. Fat and straight, then thin and curved.
+  #
+  # Aimed with explicit dir=(x,y,z) — the chain could not curve otherwise.
+  bone cap1 parent=skull head=(0,0.815,0.055) dir=(0,1,-0.12) len=0.115
+  bone cap2 parent=cap1 dir=(0,1,-0.12) len=0.105
+  bone cap3 parent=cap2 dir=(0,0.72,-0.69) len=0.115
+  bone cap4 parent=cap3 dir=(0,0.05,-1.00) len=0.108
+  bone cap5 parent=cap4 dir=(0,-0.78,-0.63) len=0.090
 
 parts
   # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
@@ -156,98 +171,37 @@ parts
   # high is what this grammar can do. Rings re-marched for the new heights:
   # the ball narrows fast up here, and keeping the old 0.450 bottom ring
   # would float the band 15 mm off the scalp.
-  # RE-MEASURED against the head as it ACTUALLY renders. The rows this was
-  # fitted to are stale: they were taken before the lab was fixed to honour a
-  # .blob's own `face` block, so the real skull is a different size now.
-  # Marched with sdBody bisects at each ring's own height:
+  # THE NIGHTCAP — ONE TAPERED SHAPE.
   #
-  #   y 0.85  W 0.522  D 0.381      y 0.93  W 0.398  D 0.285
-  #   y 0.89  W 0.485  D 0.353
+  # WHAT WAS HERE: two separate pieces, a `capband` ring around the head plus a
+  # `capcone` sweep sitting on it. Owner: "it seems like it is made of two
+  # distinct separate shapes? maybe just make it one like tapered shape? get
+  # rid of the whatever the shape around the head is". They were right — the
+  # hard seam where the ring met the cone is what read as clipping, and no
+  # amount of re-fitting the two to each other was going to remove a join that
+  # should not exist.
   #
-  # The DEPTH was the bug. The band was 34-41 mm deeper than the head all the
-  # way up, so it stood off the face — the owner's "it doesn't fully sit on the
-  # head, the front there is a gap". Widths were close; depths were not.
-  # Starts LOWER on the forehead (at 0.700 -> 0.660, y 0.851 -> ~0.815) and is
-  # correspondingly longer, so the cap comes down the front of the head rather
-  # than perching on top. Still clear of the eye line (~y 0.74-0.80), which is
-  # the constraint that made attempt one's cap swallow the face.
-  loft capband bone=skull at=0.660 dir=up len=0.112 frame=fwd material=royal
+  # WHY A LOFT AND NOT A SWEEP: a sweep segment takes only `r`, so it is
+  # circular in cross-section. The head is an ellipse (W 0.564 x D 0.418 at the
+  # brow), and a circular cap wide enough to cover it is 146 mm too deep. A
+  # loft takes w AND d per ring, so it can hug the head at the base and still
+  # taper to a point. The price is that a loft follows BONES, which is why the
+  # cap now has a five-bone spine — buildable only since dir=(x,y,z) landed.
+  #
+  # Rings measured against the head as it actually renders (marched with sdBody
+  # bisects): y 0.80 W 0.548 D 0.402, y 0.87 W 0.497 D 0.362, y 0.93 W 0.398
+  # D 0.285. The base ring clears the widest of those by ~16 mm.
+  loft capcone bones=cap1..cap5 frame=fwd material=royal
     ring 0.00 w=0.564 d=0.418
-    ring 0.35 w=0.542 d=0.398
-    ring 0.70 w=0.502 d=0.370
-    ring 1.00 w=0.424 d=0.308
-    cap start=none end=none
+    ring 0.14 w=0.462 d=0.352
+    ring 0.28 w=0.318 d=0.250
+    ring 0.42 w=0.242 d=0.196
+    ring 0.58 w=0.124 d=0.106
+    ring 0.74 w=0.072 d=0.064
+    ring 0.88 w=0.056 d=0.050
+    ring 1.00 w=0.028 d=0.026
+    cap start=none end=point
 
-  # CAP CONE — the floppy blue cone, slumping BACKWARD and to one side.
-  #
-  # THE OWNER'S EXPLICIT COMPLAINT ABOUT ATTEMPT ONE was that its cap
-  # swallowed the face. Two fixes carry the note: the BAND above starts at
-  # y 0.851 — clear of the eye line (~y 0.74-0.80), so the whole face stays
-  # out from under it — and the cone is a SWEEP rather than a loft, so its
-  # tip can DROOP. Segments accumulate world-referenced bends (`back=` tips
-  # the tangent toward -z, `down=` toward -y): three back-bends carry the
-  # cone up and over itself, two down-bends curl the last third past
-  # horizontal, which is what "the tip droops down behind" means in
-  # grammar this format actually has. yaw=12 drifts the whole cone to one
-  # side, like the reference's asymmetric slump.
-  #
-  # .blob has no arc capsule yet (bend= was still queued when this was
-  # authored — see docs/superpowers/specs/2026-08-21-blob-primitive-roadmap.md
-  # item 1); a bent sweep is the polygon twin of what that feature will give
-  # the flesh, and WAM reports its realized path in lint so the droop is
-  # checkable without a render.
-  #
-  # `cap start=none`: WAM sweeps DEFAULT to a flat start cap — a disc
-  # straight through the mount point — which here put a fan dead on the
-  # skull-bone axis, 70 mm inside the cranium. Same trap as the goblin
-  # kit's `cap flat` note, one syntax earlier.
-  # THE BASE MUST TUCK INSIDE THE BAND, not swallow it. At r 0.235 the cone's
-  # base ring was 24 mm WIDER than the band's top rim (half 0.211), so it
-  # flared out past the band — and since `cap start=none` leaves it open, you
-  # could see straight into the hollow tube. That is the "weird geometry
-  # clipping... like another part of the cap or something remnant". r 0.198
-  # sits inside the rim, so the band hides the opening. Mounted at t=0.86 (y 0.906) so the base emerges
-  # from INSIDE the band it overlaps — the band's top rim is y 0.926.
-  # A NIGHTCAP: rises off the band, then bends BACK and flops DOWN behind the
-  # head, tapering the whole way to a tip that carries a star.
-  #
-  # WHAT WAS WRONG: five segments carrying ~136 degrees of bend while the radius
-  # collapsed 0.235 -> 0.026, most of it in the last two. WAM's lint said so
-  # every build — "tube 'capcone' has 12/54 locally inward-facing triangles
-  # after winding correction — the path probably folds or self-intersects" — and
-  # the owner's read was "the shape is messed up, especially in the back". A
-  # tube cannot turn faster than its own radius without eating itself.
-  #
-  # WIDENING RE-BREAKS THIS. The cap was made 16% fatter on owner request and
-  # the fold warning came straight back — same rule, bigger r. Every bend here
-  # is now clamped to keep len/radians(bend) at least 15% above r, so the two
-  # can be retuned independently.
-  #
-  # THE RULE THAT FIXES IT: a tube of radius r swept through angle t over
-  # length L has a radius of curvature L/t, and it eats itself when that drops
-  # below r. So every segment here is checked against len/radians(bend) > r —
-  # the FAT early segments turn barely at all and the thin tip does the real
-  # bending, which is the opposite of what the original did.
-  sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-26 yaw=10 material=royal
-    seg len=0.048 r=0.230 back=8
-    seg len=0.060 r=0.216 back=13
-    seg len=0.065 r=0.200 back=16
-    seg len=0.065 r=0.162 back=11 down=8
-    seg len=0.062 r=0.125 back=8 down=14
-    seg len=0.058 r=0.081 down=20
-    seg len=0.056 r=0.046 down=22
-    seg len=0.052 r=0.023 down=18
-    seg len=0.046 r=0.010 down=12 tip
-    cap start=none
-
-  # BADGE — the little yellow spot where the reference wears its star, high
-  # on the cap band above the ear. WAM has no star generator (attach kinds
-  # are hoof/box/sphere/eye; lofts make tubes), so this is a round badge at
-  # the star's position — same concession attempt one made, kept because the
-  # colour note is what the silhouette wants and a bad polygon star would
-  # read worse than no star. Placed ABOVE the tuft's sweep volume: an earlier
-  # offset at cheek height compiled fine and was entirely inside the hair,
-  # which WAM's own lint caught.
   # STAR ON THE CAP'S TIP — the nightcap's bobble.
   #
   # WAM gained a `star` attach kind for this; there was no way to build one
