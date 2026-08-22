@@ -34,7 +34,11 @@ harness: pi
 - mesh: docs/dev-notes/refs/<name>-mesh/<name>.glb   (committed — verify with `git ls-files`)
 - plates: docs/dev-notes/refs/<name>-*.png
 
-You can see images. `Read` these, and `Read` the frames you produce.
+If your model has native vision (check `~/.pi/agent/models.json` — `input` must
+list `"image"`; glm-5.x and kimi-k3 do NOT), `Read` these and the frames you
+produce. If it does not, `Read` shows you nothing: use the vision sidecar
+`python3 scripts/vision-ask.py <image> "<question>"` on every reference and on
+frame-00/frame-02 after each `blob:shot`, and quote its answers.
 
 ## YOUR LOOP — do not improvise a different one
 
