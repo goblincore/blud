@@ -225,7 +225,7 @@ sheet
   # and the innocence goes.
   browHeavy  0.30
   browAngle  -8
-  mouthWidth 0.32
+  mouthWidth 0.38
   # 0.697, not a rounder number: this puts the paint's centre ON the smile
   # groove (world y 0.650) under the planar projection — uv.y =
   # (1-mouthRise-0.0315), raw.y = (uv.y-0.56)/0.58, world y = 0.767 +
@@ -243,11 +243,11 @@ sheet
   # if the two drift apart on render, trust the render and re-site
   # whichever is wrong (the goblin's shades lesson).
   mouthCurve -0.35
-  # 0.045, after two wash-outs (0.026, 0.034): the line is ~3 texels at the
-  # 64px atlas and its soft edge is nearly as wide — what survives to the
-  # screen is the core only, and the pale skin eats it. Thicker is the only
-  # dial the format gives.
-  mouthOpen  0.045
+  # 0.055, after three wash-outs (0.026, 0.034, 0.045): the line is ~3.5
+  # texels at the 64px atlas and its soft edge is nearly as wide — what
+  # survives to the screen is the core only, and the pale skin eats it.
+  # Thicker is the only dial the format gives.
+  mouthOpen  0.055
   nostril    0.15
   noseRidge  0.0
   noseWide   0.0
