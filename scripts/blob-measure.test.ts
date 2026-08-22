@@ -13,7 +13,6 @@
 // vitest `include` was widened to `scripts/**/*.test.ts` to collect this.
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -60,11 +59,21 @@ describe('blob-measure', () => {
     }
   }, 120_000);
 
-  // The maus mesh is a large untracked asset, so this only runs where it exists.
+  // The mouse mesh is committed under the <name>-mesh convention (see
+  // docs/dev-notes/refs/README.md), so these run unconditionally.
   const maus = resolve(repo,
-    'docs/dev-notes/refs/maus-biped/Meshy_AI_maus_biped_Character_output.glb');
+    'docs/dev-notes/refs/mouse-mesh/Meshy_AI_maus_biped_Character_output.glb');
 
-  it.skipIf(!existsSync(maus))(
+  it('resolves the mesh automatically over a plate-only run', () => {
+    const out = JSON.parse(run('mouse', '--json'));
+    const mesh = out.refs.find((r: { kind: string }) => r.kind === 'mesh');
+    // No --glb passed: blob-measure.ts must have found the mesh itself under
+    // docs/dev-notes/refs/mouse-mesh/ — the whole point of committing it.
+    expect(mesh).toBeDefined();
+    expect(mesh.poseMismatch).toBe(true);
+  }, 120_000);
+
+  it(
     'flags the maus mesh as pose-dominated over the whole figure', () => {
       const out = JSON.parse(run('mouse', '--json', '--glb', maus));
       const mesh = out.refs.find((r: { kind: string }) => r.kind === 'mesh');
@@ -75,7 +84,7 @@ describe('blob-measure', () => {
       expect(mesh.poseMismatch).toBe(true);
     }, 120_000);
 
-  it.skipIf(!existsSync(maus))(
+  it(
     'clears the flag in a window where the poses agree', () => {
       const out = JSON.parse(run('mouse', '--json', '--range', '0.75:1', '--glb', maus));
       const mesh = out.refs.find((r: { kind: string }) => r.kind === 'mesh');

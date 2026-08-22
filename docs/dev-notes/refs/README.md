@@ -27,3 +27,9 @@ Two things silently break this:
   added with `git add -f`.
 - **`base_branch` must contain the image.** The first mouse plan was based on a
   feature branch that predated the refs commit, so the path resolved to nothing.
+
+## Meshes
+
+A plate gives a silhouette; a mesh gives everything, and `blob:measure` prefers it — not because a mesh scores better (a mesh is sculpted in a pose exactly as a plate is drawn in one; see POSE MISMATCH in `scripts/blob-measure.ts`) but because it can be measured LOCALLY: width by height, head profile, paint regions by texel. Put reference meshes in `refs/<character>-mesh/` as `.glb` with embedded textures (the mouse's shades and shoes were located by texel colour). Commit with `git add -f`; dispatched agents run in fresh worktrees and cannot see untracked files.
+
+Size: a 25 MB mesh is fine once. Do not commit iterations — replace the file.

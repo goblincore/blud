@@ -2,7 +2,7 @@
 // picture.
 //
 //   npx tsx scripts/head-profile.ts mouse
-//   npx tsx scripts/head-profile.ts mouse --glb docs/dev-notes/refs/maus-biped/...glb
+//   npx tsx scripts/head-profile.ts mouse --glb docs/dev-notes/refs/mouse-mesh/...glb
 //
 // scripts/silhouette-match.ts scores the whole figure's outline against a flat
 // plate. This is the close-up companion: it marches the CENTRELINE of both the
@@ -24,7 +24,7 @@
 // profile fitted to 9 mm of the mesh had a hole behind the frontmost surface,
 // because "where does the ray first hit" cannot see anything further in. The
 // ASCII views cost nothing and would have shown it immediately.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { parseBlob } from '../src/lab/sdf-zombie/blob-parse';
 import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
 import { buildBody } from '../src/lab/sdf-zombie/build-body';
@@ -34,8 +34,18 @@ import { parseGlb, gltfTriangles } from '../src/lab/sdf-zombie/silhouette';
 const args = process.argv.slice(2);
 const name = args.find((a) => !a.startsWith('--')) ?? 'mouse';
 const glbArg = args.indexOf('--glb');
-const GLB = glbArg >= 0 ? args[glbArg + 1]! :
-  'docs/dev-notes/refs/maus-biped/Meshy_AI_maus_biped_Character_output.glb';
+// Same resolution as scripts/blob-measure.ts: the first .glb, sorted, under
+// docs/dev-notes/refs/<name>-mesh/ — not a hardcoded filename, so a mesh
+// export gets replaced without editing this script.
+function defaultGlb(name: string): string {
+  const meshDir = `docs/dev-notes/refs/${name}-mesh`;
+  const glb = existsSync(meshDir)
+    ? readdirSync(meshDir).filter((f) => f.endsWith('.glb')).sort()[0]
+    : undefined;
+  if (!glb) throw new Error(`no .glb under ${meshDir}/ (pass --glb explicitly)`);
+  return `${meshDir}/${glb}`;
+}
+const GLB = glbArg >= 0 ? args[glbArg + 1]! : defaultGlb(name);
 
 const blobPath = `src/lab/sdf-zombie/characters/${name}.blob`;
 const src = readFileSync(blobPath, 'utf8');
