@@ -40,6 +40,7 @@ import { makeZombie } from '../body';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import goblinBlobSrc from '../characters/goblin.blob?raw';
 import clownBlobSrc from '../characters/clown.blob?raw';
+import clownAltBlobSrc from '../characters/clown-alt.blob?raw';
 import mouseBlobSrc from '../characters/mouse.blob?raw';
 
 /**
@@ -54,6 +55,7 @@ const CHARACTERS: Record<string, string> = {
   zombie: zombieBlobSrc,
   goblin: goblinBlobSrc,
   clown: clownBlobSrc,
+  'clown-alt': clownAltBlobSrc,
   mouse: mouseBlobSrc,
 };
 
@@ -69,6 +71,7 @@ const CHARACTERS: Record<string, string> = {
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
   clown: '/assets/lab/clown-kit.gltf',
+  'clown-alt': '/assets/lab/clown-alt-kit.gltf',
   mouse: '/assets/lab/mouse-kit.gltf',
 };
 
@@ -326,8 +329,24 @@ async function main() {
   refCube.position.set(0.6, 0.2, 0.3);
   scene.add(refCube);
 
-  let override = loadOverride();
-  const face: FaceParams = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
+  let override = loadOverride(activeCharacterName());
+  // Seed the face from the character's OWN `face` block (compileFace parses the
+  // .blob), so a .blob-authored head renders at the size its author declared.
+  // Before this, every character built from `{ ...DEFAULT_FACE, ...override }`
+  // and the .blob's headRadius/headWidth were silently ignored at render time —
+  // the clown's 0.235 x 1.18 ball rendered as the 0.118 x 0.76 DEFAULT_FACE
+  // skull, which is why the kit cap (built for 0.235) dwarfed it. The panel
+  // override still wins (it is spread last), and DEFAULT_FACE fills any gap.
+  let face: FaceParams;
+  try {
+    face = {
+      ...DEFAULT_FACE,
+      ...compileFace(parseBlob(activeCharacterSrc())),
+      ...(override.faceParams ?? {}),
+    };
+  } catch {
+    face = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
+  }
   const body = buildZombieBody(face, override);
 
   const errorsEl = document.getElementById('errors');
@@ -2313,7 +2332,7 @@ async function main() {
 
   function rebuildBody() {
     override = { ...override, faceParams: face };
-    saveOverride(override);
+    saveOverride(activeCharacterName(), override);
     current = buildZombieBody(face, override);
     showErrors(current);
     view.update(current);
@@ -2860,14 +2879,14 @@ async function main() {
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
-    override = loadOverride();
+    override = loadOverride(activeCharacterName());
     rebuildBody();
   });
   addButton(actionBox, 'copy override JSON', () => {
     void navigator.clipboard.writeText(serializeOverride(override));
   });
   addButton(actionBox, 'reset overrides', () => {
-    clearOverride();
+    clearOverride(activeCharacterName());
     override = {};
     rebuildBody();
   });
@@ -2944,7 +2963,7 @@ async function main() {
      *  for a gibbed corpse is a body-shaped nothing. */
     respawn() {
       wounds = [];
-      override = loadOverride();
+      override = loadOverride(activeCharacterName());
       rebuildBody();
     },
     focusHead,

@@ -1,3 +1,6 @@
+# CLOWN-ALT KIT — frozen snapshot of clown-kit.wam at d36795f, paired with
+# clown-alt.blob. See that file's header for why it exists.
+#
 # Clown kit — the POLYGON half of the clown (cap, hair tufts, ruff, striped
 # tunic, stockings, sleeves, mitts, shoes), authored in WAM against clown.blob.
 #
@@ -51,7 +54,7 @@
 # clothes plus a nose shell, not a whole character, so spine1/chest have no
 # direct geometry, nothing reaches the ground plane except the shoe soles,
 # and skull-side pieces sit far from their own bone's neighbours by design.
-model clown-kit
+model clown-alt-kit
   height 1.00
   # chunky = 8-sided lofts, matching the goblin kit: faceted cloth against
   # smooth raymarched flesh. On a toy the facets also read as stitching.
@@ -73,17 +76,6 @@ palette
   royal   #555be0
   blue    #6d76f2
   pink    #f2a2e6
-  # The hood's second half. A separate entry from `pink` even though the hue is
-  # close: the LOOK table and every kit test key on material NAME, and sharing
-  # `pink` with the tunic made hood assertions read tunic geometry.
-  # THE HOOD'S TWO TONES, matching the tunic's stripes exactly (#6d76f2 blue,
-  # #f2a2e6 pink) so the cap reads as part of the same outfit. They are
-  # SEPARATE ENTRIES from `blue`/`pink` despite the identical hex: the LOOK
-  # table and every kit test key on material NAME, and sharing a name made hood
-  # assertions silently read TUNIC geometry — which is how an earlier version
-  # of those tests appeared to pass.
-  hoodblue #6d76f2
-  hoodpink #f2a2e6
   purple  #a878e0
   # Silver-grey, not white: the ruff is the one piece wearing this, and the
   # reference reads it as a metallic frill. Was #d2cec6 (both-notches-bright for
@@ -125,10 +117,10 @@ skeleton
     # Leaves the crown heading up-and-out, rolls over to horizontal, then falls
     # away and forward, which is the arc the reference hood makes. Aimed with
     # explicit vectors — none of this is reachable with the six axis words.
-    bone horn1 parent=skull head=(0.070,0.980,-0.010) dir=(0.55,0.78,-0.30) len=0.128
-    bone horn2 parent=horn1 dir=(0.84,0.42,-0.34) len=0.122
-    bone horn3 parent=horn2 dir=(0.95,-0.22,-0.22) len=0.116
-    bone horn4 parent=horn3 dir=(0.74,-0.66,-0.12) len=0.104
+    bone horn1 parent=skull head=(0.070,0.980,-0.010) dir=(0.55,0.78,-0.30) len=0.105
+    bone horn2 parent=horn1 dir=(0.84,0.42,-0.34) len=0.100
+    bone horn3 parent=horn2 dir=(0.95,-0.22,-0.22) len=0.095
+    bone horn4 parent=horn3 dir=(0.74,-0.66,-0.12) len=0.085
   end
 
   # RUFF POINTS — eight spikes fanning out from the neck, each aimed with an
@@ -190,106 +182,36 @@ parts
   # single-cone design — ring radius must stay under the bend reach — is
   # satisfied with room to spare instead of being fought at every ring.
   #
-  # THE HOODIE. Covers the crown, back and sides and falls to the ruff.
-  #
-  # Rings are pushed BACK (`fwd=` negative) rather than shrunk, which is what
-  # leaves the face clear: the head is a ball, so a ring centred behind its
-  # axis lets the FRONT of the ball poke through while the back and sides stay
-  # covered. That protrusion IS the hood's face opening — there is no way to
-  # cut a hole in a loft, and there does not need to be.
-  #
-  # Marched against the head as it actually renders (sdBody bisects):
-  #   y 0.60 W 0.389   y 0.68 W 0.514   y 0.76 W 0.553   y 0.93 W 0.398
-  # The ruff's points sit at y 0.548, which is where the hem stops.
-  #
-  # DUAL-TONE, SPLIT BILATERALLY. `material_arc` bands by angle around the
-  # loft's axis, so one 180-degree band paints one side. THE BOUNDARIES ARE
-  # DELIBERATELY OFF THE ROUND NUMBERS (182-358, not 180-360): material_arc
-  # samples each quad at its ENDING edge angle with inclusive bounds, so a band
-  # whose edges land on the 8-sided quad grid paints every quad one colour and
-  # the split vanishes. That trap already cost this kit its tunic stripes once.
-  # MEASURED MAPPING, because guessing it was wrong twice. On this skull a
-  # loft's `len` covers about 1.19 in y, and t=0 sits at y 0.629 — so the
-  # previous at=0.300 put the hem at y 0.716, ABOVE the head's widest row
-  # (y 0.76, W 0.553). That is why the head bulged out under it. Starting at
-  # t=0 and spanning len 0.330 runs y 0.629 -> 1.022, i.e. the whole ball.
-  # SIZED FOR TWO EFFECTS THAT EAT MARGIN, both of which the first pass missed
-  # and which together made the head bulge THROUGH the hood:
-  #
-  #  1. A ring pushed back by `fwd` has its widest point at its OWN centre, so
-  #     at the head's widest (z=0, i.e. `fwd` away from the ring centre) the
-  #     ellipse has already narrowed to a*sqrt(1-(fwd/b)^2) — about 97%.
-  #  2. The loft is 8-SIDED (`style chunky`), so its flat facets sit at
-  #     cos(22.5) = 92.4% of the nominal radius, and the smooth head bulges
-  #     out between them.
-  #
-  # THE CROWN RINGS NEEDED MORE THAN THE 12% RULE. Measured against the built
-  # mesh: 42 of 163 hood vertices above y 0.86 sat INSIDE the head, up to 43 mm
-  # deep, and that is the bulge. Two reasons the flat 12% was not enough up
-  # here — the dome cap tessellates from the last ring rather than following
-  # the head, and the rings are closer together near the crown so each facet
-  # spans more of the sphere's curvature. Upper rings are ~15% larger again.
-  #
-  # THE TOP RINGS LEAN FORWARD, which looks contradictory next to the retreat
-  # below and is not. The skull bone carries pitch=-4, so the whole loft tips
-  # BACKWARD along its length: measured on the built mesh, the dome's apex sat
-  # at z -0.083..-0.023 instead of near 0, leaving the FRONT of the crown bare.
-  # That is what "it's not covering the top of the head" was. A small positive
-  # fwd on the last three rings puts the dome back over the head.
-  #
-  # `fwd=` RETREAT IS FOR THE FACE OPENING ONLY — rings 0.60 and up are
-  # CONCENTRIC. Pushing the upper rings back too shifts the whole crown
-  # backward and the head then pokes out through the front-top: at y 0.865 a
-  # -0.036 offset put the hood's front at 0.195 against a head front of 0.20.
-  # Retreat below the brow, concentric above it.
-  #
-  # WIDENING ALSO PUSHES THE FRONT FORWARD, which covers the chin — the kit
-  # test caught the hood's front edge at z 0.172 against the head's 0.164 at
-  # y 0.63. The `fwd=` offsets on the lower rings grew with the widths to keep
-  # the face opening where it was.
-  #
-  # 0.97 x 0.924 = 0.896, so a ring needs ~12% MORE half-width than the head
-  # it is covering, not the ~3% clearance the previous values had. Head rows,
-  # marched: y 0.63 W 0.44, y 0.69 W 0.52, y 0.75 W 0.55, y 0.81 W 0.548,
-  # y 0.87 W 0.497, y 0.93 W 0.398.
-  loft caphood bone=skull at=0.000 dir=up len=0.330 frame=fwd material=hoodblue material_arc=hoodpink:182-358
-    ring 0.00 w=0.512 d=0.404 fwd=-0.062
-    ring 0.15 w=0.606 d=0.478 fwd=-0.066
-    ring 0.30 w=0.642 d=0.506 fwd=-0.064
-    ring 0.45 w=0.638 d=0.502 fwd=-0.056
-    ring 0.60 w=0.646 d=0.520
-    ring 0.75 w=0.560 d=0.450 fwd=0.016
-    ring 0.88 w=0.430 d=0.348 fwd=0.030
-    ring 1.00 w=0.250 d=0.205 fwd=0.040
+  # THE HOOD. Sits low on the brow (skull t 0.640) and domes over the crown.
+  # Rings hug the head as it actually renders, marched with sdBody bisects:
+  # y 0.80 W 0.548 D 0.402, y 0.87 W 0.497 D 0.362, y 0.93 W 0.398 D 0.285.
+  loft caphood bone=skull at=0.640 dir=up len=0.190 frame=fwd material=royal
+    ring 0.00 w=0.576 d=0.428
+    ring 0.30 w=0.552 d=0.408
+    ring 0.55 w=0.492 d=0.366
+    ring 0.75 w=0.408 d=0.308
+    ring 0.90 w=0.296 d=0.226
+    ring 1.00 w=0.150 d=0.118
     cap start=none end=dome
 
-  # THE HORNS — bigger, and one colour each to carry the bilateral split.
-  #
-  # Lofted EXPLICITLY per side rather than inside `mirror`: a mirrored part
-  # shares one material, and the whole point here is that the two differ. The
-  # bones are still authored once in the skeleton's mirror block; these name
-  # the generated .l/.r copies.
-  loft hornL bones=horn1.l..horn4.l material=hoodblue
-    ring 0.00 w=0.205 d=0.205
-    ring 0.30 w=0.168 d=0.168
-    ring 0.60 w=0.120 d=0.120
-    ring 0.85 w=0.070 d=0.070
-    ring 1.00 w=0.036 d=0.036
-    cap start=none end=point
-  loft hornR bones=horn1.r..horn4.r material=hoodpink
-    ring 0.00 w=0.205 d=0.205
-    ring 0.30 w=0.168 d=0.168
-    ring 0.60 w=0.120 d=0.120
-    ring 0.85 w=0.070 d=0.070
-    ring 1.00 w=0.036 d=0.036
-    cap start=none end=point
+  mirror
+    # THE HORNS. Thin from the base, which is what keeps every joint clear of
+    # the fold rule (ring radius < bend reach): the widest ring here is 0.075
+    # against reaches of ~0.09-0.10.
+    loft horn bones=horn1..horn4 material=royal
+      ring 0.00 w=0.150 d=0.150
+      ring 0.30 w=0.122 d=0.122
+      ring 0.60 w=0.088 d=0.088
+      ring 0.85 w=0.052 d=0.052
+      ring 1.00 w=0.028 d=0.028
+      cap start=none end=point
 
-  attach hornstarL bone=horn4.l at=1.0 kind=star points=5 size=0.135 inner=0.42 d=0.032 material=yellow
-  attach hornstarR bone=horn4.r at=1.0 kind=star points=5 size=0.135 inner=0.42 d=0.032 material=yellow
+    # A star on each fork's tip. Hung off horn4 at t=1.0, so it tracks the
+    # horn — no measuring the built mesh, which is what the single cone's tip
+    # needed and what made that star float twice.
+    attach hornstar bone=horn4 at=1.0 kind=star points=5 size=0.105 inner=0.42 d=0.028 material=yellow
 
-  # NO BADGE. A yellow sphere used to sit on the old cap BAND, standing in for
-  # the reference's star. The band is gone, the horns carry real stars now, and
-  # on the hood it read as "a random yellow orb on the side of the head".
+  attach badge bone=skull kind=sphere at=0.70 offset=(0.245,0.030,0.045) size=0.026 material=yellow
 
   # HAIR — two wide purple tufts sweeping out from under the cap band,
   # sticking sideways past the cheeks almost like wings. Second-biggest
@@ -407,10 +329,37 @@ parts
     cap start=none end=none
 
   mirror
-    # NO HAIR TUFTS. Two purple wings used to sweep out from under the cap
-    # band here. Owner: "we can get rid of the pink hair pods on either side of
-    # the head" — the hood now falls down the sides itself, so they had nothing
-    # left to do but crowd it.
+    # HAIR — two wide purple tufts sweeping out from under the cap band,
+    # sticking sideways past the cheeks almost like wings; second-biggest
+    # silhouette element after the head itself in the reference, and absent
+    # from attempt one entirely. Authored ONCE here, inside the mirror block:
+    # the first draft sat outside it and produced ONE wing (the render caught
+    # what the compile lint did not).
+    #
+    # Mounted just INSIDE the cheek surface (offset x 0.205 against a local
+    # half-width of 0.223 — buried 18 mm, attached), aimed dir=side and swept
+    # OUT-AND-UP. First version bent down=12/24/36 across its segments and
+    # the render read it as drooping dog-ears; the reference's tufts are
+    # WINGS — they leave the hairline travelling sideways and climb as they
+    # go, so every bend here is up= (WAM sweeps bend up=/down=/fwd=/back=
+    # per segment; there is no outward= because dir=side already IS out).
+    # The ROOT SEGMENT IS DELIBERATELY THIN (30 mm) and now LONGER (80 mm):
+    # a fat ring around an axis below the skin always has vertices deep
+    # inside the skull — the fit test rejected a 75 mm-rooted first draft at
+    # −71 mm — so the tuft sprouts from a narrow root at the hairline and
+    # only swells once clear of the ball. The long thin root also FIXES the
+    # "floating flaps" read of the up-swept version: with the swell starting
+    # 80 mm out, the first stretch of the wing overlaps the cheek visually
+    # and the tuft reads as GROWING from the head, not hovering beside it.
+    # `cap start=none` for the same reason as the cap cone above (sweeps
+    # default to a flat start cap: a disc straight through the mount point).
+    sweep tuft bone=skull at=0.66 offset=(0.202,-0.005,-0.018) dir=side yaw=-12 material=purple
+      seg len=0.040 r=0.055 up=4
+      seg len=0.055 r=0.078 down=24 back=4
+      seg len=0.060 r=0.070 down=34 back=3
+      seg len=0.060 r=0.050 down=30
+      seg len=0.055 r=0.024 down=16 tip
+      cap start=none
 
     # THE RED NOSE SHELL — the colour half of the clown's one saturated note.
     # The flesh bead underneath carries the silhouette (see clown.blob); this

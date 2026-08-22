@@ -1,3 +1,22 @@
+# CLOWN-ALT — a SNAPSHOT, kept on purpose.
+#
+# This is the clown exactly as it stood at commit d36795f, the moment before
+# the cap was extended into a hoodie and the purple hair tufts were removed.
+# The owner preferred this silhouette and asked for it kept as a fallback in
+# case the hoodie work does not land: "I actually like this state better than
+# the current state".
+#
+# So it is a FROZEN ALTERNATE, not a work in progress. It has:
+#   * the jester cap — a hood over the crown with two forked horns, a gold
+#     star on each tip
+#   * the purple hair tufts sweeping out under the cap
+#   * the pointed jester ruff with pom-poms on the points
+#   * white greasepaint, harlequin eye paint, geometric lips, the ball nose
+#
+# DO NOT retune this to track clown.blob. If both need the same fix, decide
+# which one is the character and let the other stay as it is — the whole point
+# of the snapshot is that it stops moving.
+
 # Clown — second attempt at the bestiary's clown (the first lives on
 # dispatch/ox-alpha-clown-character, authored against an older tree, and its
 # owner's verdict was "creepy and oddly likeable but doesn't look really like
@@ -19,7 +38,7 @@
 # Everything hard or striped or purple (cap, hair tufts, ruff, tunic,
 # stockings, mitts, shoes) lives in clown-kit.wam; the flesh here is the pale
 # ball, the round belly, thin limbs and THE SMILE GROOVE.
-model clown
+model clown-alt
   # Crown lands at y 1.002 — see the skull note below for the arithmetic.
   height 1.00
   # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.

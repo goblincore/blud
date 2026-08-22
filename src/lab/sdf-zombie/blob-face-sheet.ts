@@ -64,6 +64,18 @@ export interface FaceSheetParams {
    * below the threshold and the pupil becomes the feature). Default 0.
    */
   eyePupil: number;
+  /**
+   * Brightness of a specular catchlight in each eye, 0..1. 0 = none.
+   *
+   * A dark eye with no glint reads as an empty socket (the clown's original
+   * complaint). A small bright dot in the upper-outward corner turns it into a
+   * painted cartoon eye. Drawn ON TOP of the eye (so it survives eyeGlow) but
+   * kept below the shader's ~0.88 emissive threshold, so it reads as a glint,
+   * not a second lamp.
+   */
+  eyeGlint: number;
+  /** Catchlight radius as a fraction of eye radius. */
+  eyeGlintSize: number;
   /** Vertical eye position, 0 = top of sheet, 1 = bottom. */
   eyeRise: number;
   /** Outer-corner lift in degrees. Positive scowls, negative droops. */
@@ -80,6 +92,17 @@ export interface FaceSheetParams {
   mouthCurve: number;
   /** Mouth thickness. 0 removes it. */
   mouthOpen: number;
+  /**
+   * Harlequin points: a dark triangle above each eye and another below it,
+   * the classic jester/clown greasepaint. 0 removes them.
+   *
+   * The value is the triangle's HEIGHT as a fraction of sheet height; the
+   * width follows at 55% of that, which is the proportion the reference
+   * makeup uses (tall and narrow, not equilateral). The upper point aims UP
+   * from just above the eye and the lower point aims DOWN from just below it,
+   * so together they read as a diamond split by the eye.
+   */
+  harlequin: number;
   /** Nostril darkness, 0 removes them. */
   nostril: number;
   /**
@@ -115,12 +138,16 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyePupil: 0,
   eyeRise: 0.42,
   eyeTilt: 8,
+  eyeGlint: 0,
+  eyeGlintSize: 0.30,
   browHeavy: 0.55,
   browAngle: 14,
   mouthWidth: 0.40,
   mouthRise: 0.72,
   mouthCurve: -0.25,
   mouthOpen: 0.055,
+  // OFF by default: this is clown greasepaint, not a feature every face wants.
+  harlequin: 0,
   nostril: 0.35,
   noseRidge: 0.85,
   noseWide: 0.085,
@@ -208,6 +235,17 @@ export function generateFaceSheet(
         // a solid core no matter how small the eye is authored.
         const k = falloff(d, p.eyeSize, Math.min(soft * 2.5, p.eyeSize * 0.33));
         v = v * (1 - k) + p.eyeGlow * k;
+        // Catchlight: a small bright dot in the upper-outward corner, so the
+        // eye reads as a painted ball rather than an empty socket. Mixed in
+        // AFTER the eye so it survives a dim eyeGlow, and capped below the
+        // shader's emissive threshold so it is a glint, not a light source.
+        if (p.eyeGlint > 0) {
+          const gx = eyeDX + p.eyeSize * 0.32;
+          const gy = ey - p.eyeSize * 0.34;
+          const dg = Math.hypot(sx - gx, (y - gy) * 1.25);
+          const kg = falloff(dg, p.eyeSize * p.eyeGlintSize, p.eyeSize * 0.18);
+          v = v * (1 - kg) + Math.min(p.eyeGlint, 0.82) * kg;
+        }
       }
 
       // Nose: a lit ridge with shadowed flanks. Brightened, but deliberately
@@ -234,6 +272,38 @@ export function generateFaceSheet(
       if (p.nostril > 0) {
         const d = Math.hypot(sx - 0.055, (y - (eyeY + 0.165)) * 1.6);
         v -= p.nostril * 0.34 * falloff(d, 0.030, soft * 2);
+      }
+
+      // Harlequin points: two triangles per eye, one above and one below,
+      // aimed away from it. Drawn as a signed-distance-ish wedge rather than a
+      // polygon fill: `spread` is how wide the triangle is at this height, so
+      // a point is just "am I inside a width that shrinks with distance".
+      //
+      // The eye's own dark disc is drawn ABOVE this, and both subtract, so
+      // where they overlap the paint simply gets darker — which is what the
+      // reference looks like where the point meets the lash line.
+      if (p.harlequin > 0) {
+        // `harlequin` is the triangle's HEIGHT as a fraction of sheet height.
+        // The DARKNESS is fixed, NOT scaled by it — a first version multiplied
+        // the two and the paint came out both tiny and faint: 21 pixels of
+        // 4096 moved, by at most 27/255. Size and strength are separate ideas.
+        const h = p.harlequin;
+        const halfW = h * 0.42;
+        const dx = Math.abs(sx - p.eyeGap / 2);
+        for (const up of [true, false]) {
+          // A GAP between eye and point. At 0.35 the two merged into one
+          // black mass; the reference keeps clear skin between the lash line
+          // and the paint, and that separation is what makes it read as two
+          // shapes rather than a hole.
+          const base = up ? eyeY - p.eyeSize * 1.15 : eyeY + p.eyeSize * 1.15;
+          const along = up ? base - y : y - base;
+          if (along < 0 || along > h) continue;
+          // Width shrinks to a point at the tip. The edge falloff is a
+          // fraction of the local width rather than a fixed `soft`, or the
+          // narrow end blurs away entirely.
+          const spread = halfW * (1 - along / h);
+          v -= 0.42 * falloff(dx, spread, Math.max(spread * 0.5, soft));
+        }
       }
 
       // Mouth: a curved bar. mouthCurve bows it down at the centre for a frown.

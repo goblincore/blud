@@ -506,6 +506,17 @@ Key reference docs (open these before touching their area):
   mouse cloth materials: without an env map the royal-blue shorts rendered
   black from every unlit angle.
   [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · [primitive roadmap](docs/superpowers/specs/2026-08-21-blob-primitive-roadmap.md) · [chisel spike](docs/dev-notes/2026-08-21-chisel-primitive-sculpt/notes.md) · skill: `.claude/skills/authoring-sdf-characters/` · Obsidian: `Claude Notes/Blud/2026-08-21-blobforge-sharp-features-and-kits.md`
+- `P8.clown-skull` [x] **clown skull + kit re-fit (owner review rounds)** — root
+  cause was a WebGPU-lab integration bug: `webgpu/lab-main.ts` built every head
+  from `DEFAULT_FACE` and threw away the `.blob`'s own `face` block, so the
+  clown's 0.235x1.18 ball rendered as the 0.118x0.76 DEFAULT_FACE skull — a
+  narrow head under a kit cap built for the big ball. Fix seeds `face` from
+  `compileFace(parseBlob(src))`. Then re-fit the kit to the corrected head: cap
+  band widened ~23%, ruff collar (the MISSING piece — the bells floated with
+  nothing holding them) added as a flared loft with the beads/poms on its rim,
+  hair tufts mount at the hairline and drape down ~100deg, capcone is a rounder
+  beret, ruff silver-grey, eyes smaller + specular catchlight (eyeGlint).
+  [branch `dispatch/clown-skull`]
 
 ---
 

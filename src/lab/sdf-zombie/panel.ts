@@ -3,7 +3,29 @@ import type { BodyOverride } from './build-body';
 import type { FleshMaterial } from './material';
 import type { FaceParams } from './face';
 
-export const STORAGE_KEY = 'blud.sdf-lab.override.v1';
+/**
+ * Panel overrides are stored PER CHARACTER, with the character's name in the
+ * key. Every field of BodyOverride is character-specific and none of them
+ * survives being carried across: primRadius/primBlendK are keyed by
+ * built-array prim INDEX, which addresses an unrelated primitive on a
+ * different body, and faceParams simply IS the character's head.
+ *
+ * A single shared key therefore leaked whatever was tuned last onto the whole
+ * cast — and silently WON, because the panel's override is spread after the
+ * .blob's own `face` block (see webgpu/lab-main.ts). Tuning the clown's 0.235
+ * cranium left the goblin and the zombie wearing it, across reloads, with
+ * nothing on screen to explain the sudden big-head mode.
+ *
+ * v2, not a migration: the v1 entry is one global blob with no character
+ * attached, so there is no character to migrate it TO. It is dropped on sight
+ * so the poisoned value cannot come back on the next load.
+ */
+export const STORAGE_PREFIX = 'blud.sdf-lab.override.v2';
+const LEGACY_GLOBAL_KEY = 'blud.sdf-lab.override.v1';
+
+export function overrideKey(character: string): string {
+  return `${STORAGE_PREFIX}:${character}`;
+}
 
 /** Applies the debug-panel's collapsed state while keeping its external
  * toggle usable and screen-reader legible. The caller owns event wiring so
@@ -18,21 +40,22 @@ export function applyDebugPanelVisibility(
   toggle.setAttribute('aria-expanded', String(!hidden));
 }
 
-export function loadOverride(): BodyOverride {
+export function loadOverride(character: string): BodyOverride {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_GLOBAL_KEY);
+    const raw = localStorage.getItem(overrideKey(character));
     return raw ? (JSON.parse(raw) as BodyOverride) : {};
   } catch {
     return {}; // corrupt storage must never brick the lab
   }
 }
 
-export function saveOverride(o: BodyOverride): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(o)); } catch { /* quota — ignore */ }
+export function saveOverride(character: string, o: BodyOverride): void {
+  try { localStorage.setItem(overrideKey(character), JSON.stringify(o)); } catch { /* quota — ignore */ }
 }
 
-export function clearOverride(): void {
-  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+export function clearOverride(character: string): void {
+  try { localStorage.removeItem(overrideKey(character)); } catch { /* ignore */ }
 }
 
 /** Pretty JSON for pasting a tuned override into body.ts. */
