@@ -82,6 +82,11 @@ export function placePrims(
       // what lets rigging and translation move the prim without touching it.
       // Degenerate (collinear/zero) bends are dropped above.
       ...(bend === undefined ? {} : { bend }),
+      // Paint rides through untouched: it is a property of the primitive,
+      // not of where the rig put it.
+      ...(p.color === undefined ? {} : { color: p.color }),
+      ...(p.gloss === undefined ? {} : { gloss: p.gloss }),
+      ...(p.core ? { core: true } : {}),
     };
   });
 }

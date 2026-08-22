@@ -302,3 +302,68 @@ it into the `face` block yourself, or calling `emitBlob` programmatically.
 - The `face` block is `FaceParams` (`face.ts`), not primitives — it's the one
   part of a `.blob` file that isn't geometry, and it stays live-tunable in
   the lab panel.
+
+## Paint: `color=` on a primitive (added 2026-08-22)
+
+A `.blob` is no longer one colour. Any `blob`/`bar` line can carry
+`color=rrggbb` (BARE hex — `#` opens a comment, and the parser tells you so)
+and an optional `gloss=0..1`. Wherever that primitive is the nearest one to
+the surface, its colour REPLACES the flesh albedo — mottle and face sheet
+included — and gloss pulls it toward a tight wet highlight. A painted prim is
+exactly a painted region of a sculpt, which is what the reference meshes are.
+
+```
+blob head on skull at=0.00 r=0.028 ... color=101012 gloss=0.95   # a lens
+bar  leg  on thigh from=0.08 to=0.92 r=0.034 mirror core color=1d27a4   # shorts
+```
+
+Rules that fell out of the first painted character (the mouse):
+
+- **The paint boundary is a primitive boundary.** One prim is one colour, so
+  a hem or a collar has to sit where two prims meet. Split a bar in two if
+  the boundary falls mid-limb (the mouse's shin at the shorts' hem).
+- **Measure paint off the mesh's texture, not off a render.** Classify each
+  mesh vertex by its texel (see `scripts/head-profile.ts` and the
+  `decodePng` + `parseGlb` helpers in `silhouette.ts`) and you get every
+  region's extents per height and per z band, and its mean colour. The mouse's
+  shades, shoes, tee and shorts were all authored from that, and the lesson
+  was that the clothes had NO drape — the tee is the torso painted red.
+- **Mark the limb's structural mass with `core`.** The fuse probe
+  (`clusterCore`) takes the fattest primitive, which is wrong as soon as a
+  shoe or a sleeve is fatter than the bone it hangs off; a painted shoe once
+  became a leg's core and the probe to the pelvis ran through air. `core`
+  on the thigh bar / shoulder ball says which prim is the mass. Inferring it
+  from colour was tried and broke the moment a limb's own flesh was painted.
+- **Accessories are geometry, too.** Sunglasses are two bent capsules that
+  WRAP the cheek (a flat ellipsoid floats off a receding face), a thin bridge,
+  and two temple arms seated inside the skull and the ear. Shoes are three
+  prims on the foot bone. Nothing in the mouse is a polygon kit any more.
+- **Under plain `mirror`, a prim's own offset/tip/bend x reflects on the
+  `.r` copy** (since 2026-08-22 — it did not before, and the mouse's finger
+  bones exist because of that). Author outward of the `.l` bone and the `.r`
+  side follows.
+- **An untapered BENT prim renders now.** `coneBend` had no `r2 < 0` branch
+  until the lens: every earlier bent prim happened to be tapered. If a bent
+  part shows as a lone sphere at one end, that class of bug is where to look.
+
+Engine path, for when you need to touch it: `blob-parse` (`color`, `gloss`,
+`core` on `BlobPart`) -> `blob-compile` -> `PrimDef`/`Primitive` (`types.ts`)
+-> `resolve.ts` passes them through -> `pack.ts` writes `ROW_PRIM_COLOR`
+(xyz linear rgb, w = 1 + gloss; w = 0 means flesh) -> `march.wgsl.ts` reads
+it at `hitBest` and overrides `albedo`, zeroes the eye glow on paint, and
+feeds gloss into the specular term. `DATA_ROWS` is 13.
+
+## Measure against the mesh, frame-aligned
+
+When a character has a reference `.glb` (`docs/dev-notes/refs/maus-biped/`),
+`npx tsx scripts/head-profile.ts <name>` prints the head's front/back profile,
+the muzzle's plan view and ASCII front/side views against the mesh. It aligns
+frames on the TORSO's z-centre and prints the shift — the maus mesh's whole
+figure sits at z -0.067 in its own file, and comparing absolute z once leaned
+the neck back 40 degrees to "fix" a head that was already right. Author to
+the mesh SURFACE, not its rig joints: the rig's shoulder/collar heights were
+9 and 13 cm above where the skin is.
+
+`npx tsx scripts/silhouette-match.ts <name> [--range lo:hi]` scores the whole
+outline against a plate. Read the caveat in `silhouette.ts`: the number is a
+gradient for one character against one plate, never a grade across characters.

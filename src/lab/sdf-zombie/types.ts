@@ -109,6 +109,28 @@ export interface PrimDef {
    * `mirror`, which requires a mirrored bone and throws without one.
    */
   mirrorOffset?: boolean;
+  /**
+   * Linear-RGB albedo that REPLACES the flesh colour wherever this primitive
+   * is the nearest one to the surface — the "dominant" prim the fold already
+   * tracks for noise anchoring. Absent means flesh. This is what lets a
+   * .blob carry its own sunglasses, shoes and clothes: the reference mesh is
+   * one sculpt with painted regions, and a coloured primitive is exactly that.
+   * sRGB in the source (`color=rrggbb`), linear here.
+   */
+  color?: Vec3;
+  /**
+   * 0..1. Pushes the surface toward a tight wet highlight — lenses, patent
+   * shoes — independent of the flesh preset's wetness. Only read when
+   * `color` is set.
+   */
+  gloss?: number;
+  /**
+   * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
+   * (clusterCore). Without it the fattest prim in the cluster is taken,
+   * which is wrong as soon as a shoe or a sleeve is fatter than the bone it
+   * hangs off. One per cluster is the intent; a second one just ties.
+   */
+  core?: boolean;
 }
 
 export interface BodyDef {
@@ -168,6 +190,12 @@ export interface Primitive {
    * the scale-divide. Optional so fixtures compile — same pattern as `dead`.
    */
   orient?: Quat;
+  /** See PrimDef.color. Carried through mirror, resolve and the rig untouched. */
+  color?: Vec3;
+  /** See PrimDef.gloss. */
+  gloss?: number;
+  /** See PrimDef.core. */
+  core?: boolean;
 }
 
 export interface ClusterInfo {

@@ -101,7 +101,21 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     if (!mirroredBoneNames.has(p.bone))
       throw new Error(`mirrored prim references non-mirrored bone "${p.bone}"`);
     prims.push({ ...rest, bone: `${p.bone}.l`, limb: limbFor(limb, 'l') });
-    prims.push({ ...rest, bone: `${p.bone}.r`, limb: limbFor(limb, 'r') });
+    // The `.r` copy reflects its offset, tip and bend in x, exactly as the
+    // second copy of a `both` pair does above. It did not, for as long as no
+    // mirrored prim carried an x component: the mouse's finger bones exist
+    // because a finger fan authored as tipped bars on the hand bone put the
+    // right hand's index finger pointing INWARD across the chest, and the
+    // SDF shoes — three prims offset outward from each foot bone — put the
+    // right shoe on the centreline. A mirrored bone sits at -side; anything
+    // authored relative to it in x has to reflect with it.
+    const o = rest.offset, t = rest.tip, bn = rest.bend;
+    prims.push({
+      ...rest, bone: `${p.bone}.r`, limb: limbFor(limb, 'r'),
+      ...(o ? { offset: [-o[0], o[1], o[2]] as const } : {}),
+      ...(t ? { tip: [-t[0], t[1], t[2]] as const } : {}),
+      ...(bn ? { bend: [-bn[0], bn[1], bn[2]] as const } : {}),
+    });
   }
 
   return { name: def.name, root: def.root, bones, prims };

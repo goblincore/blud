@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/blob-checks.test.ts
 import { describe, expect, it, vi } from 'vitest';
 import { compileBlob } from './blob-compile';
+import { clusterCore } from './validate';
 import { clearOf, daylightOf, fusedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
@@ -326,5 +327,34 @@ describe('knee stance', () => {
     const b = buildBody(compileBlob(doc));
     expect(doc.stance).toBe('humanoid');
     expect(checkStance(b.bones, doc.stance)).toEqual([]);
+  });
+});
+
+describe('clusterCore and the `core` mark', () => {
+  // The fattest-prim heuristic is wrong as soon as a cluster carries
+  // something fatter than its bone — a shoe, a sleeve. The author says which
+  // prim is the limb's structural mass, and that wins.
+  it('prefers a core-marked prim over a fatter one', () => {
+    const b = zombie();
+    const leg = b.clusters.find(c => c.limb === 'legL')!;
+    const members = b.prims.slice(leg.start, leg.start + leg.count);
+    let thin = 0;
+    members.forEach((p, i) => { if (p.radius < members[thin]!.radius) thin = i; });
+    const prims = b.prims.slice();
+    prims[leg.start + thin] = { ...members[thin]!, core: true };
+    const want = [
+      (members[thin]!.a[0] + members[thin]!.b[0]) / 2,
+      (members[thin]!.a[1] + members[thin]!.b[1]) / 2,
+      (members[thin]!.a[2] + members[thin]!.b[2]) / 2,
+    ];
+    expect(clusterCore({ ...b, prims }, leg)).toEqual(want);
+  });
+
+  it('falls back to the fattest prim when nothing is marked', () => {
+    const b = zombie();
+    const leg = b.clusters.find(c => c.limb === 'legL')!;
+    const members = b.prims.slice(leg.start, leg.start + leg.count).filter(p => p.op !== 'sub');
+    const fat = members.reduce((m, p) => (p.radius * Math.min(...p.scale) > m.radius * Math.min(...m.scale) ? p : m));
+    expect(clusterCore(b, leg)).toEqual([(fat.a[0] + fat.b[0]) / 2, (fat.a[1] + fat.b[1]) / 2, (fat.a[2] + fat.b[2]) / 2]);
   });
 });

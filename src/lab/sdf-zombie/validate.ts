@@ -591,7 +591,18 @@ export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
     if (p.op === 'sub' || p.dead) continue;
-    const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    // AN EXPLICIT `core` MARK WINS. The fattest-prim heuristic below is right
+    // for a limb that is mostly one mass and wrong the moment a cluster
+    // carries something fatter than its bone: the mouse's shoe ball (0.062)
+    // out-ranked its thigh (0.038), the leg's core became the shoe, and the
+    // fuse probe to the pelvis ran through open air. A first fix ranked
+    // PAINTED prims below flesh — and broke the arms the moment the upper
+    // arm was painted as a sleeve, because then the hand was the fattest
+    // flesh and the probe started from a fingertip. Which prim is a limb's
+    // structural mass is an authoring fact, not something to infer from
+    // colour or size; the author says it with `core`.
+    const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2])
+      + (p.core ? 1e3 : 0);
     if (depth > bestDepth) { bestDepth = depth; best = p; }
   }
   return best === null ? null : lerp(best.a, best.b, 0.5);

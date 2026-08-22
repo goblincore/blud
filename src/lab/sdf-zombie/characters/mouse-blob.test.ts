@@ -188,9 +188,13 @@ describe('mouse.blob', () => {
     // face at cheek/under-eye level and holds near-horizontal, ~49 mm under
     // the eyes. With the head raised (2026-08-22), the eye line sits ~0.864
     // (snout tip 0.815 + 49 mm); a tip at forehead height is a trunk.
+    // 0.15, not the 0.2 this used to demand: the reference MESH's own tip
+    // is at z 0.186 (marched off maus-biped, scaled to 1.10), so 0.2 could
+    // only ever be passed by a snout LONGER than the reference — which is
+    // exactly what every earlier version of this character was.
     let tipY = 0;
     for (let y = 0.72; y <= 0.90; y += 0.005)
-      if (surfaceZ(b, y).front > tip - 0.002 && surfaceZ(b, y).front > 0.2) tipY = y;
+      if (surfaceZ(b, y).front > tip - 0.002 && surfaceZ(b, y).front > 0.15) tipY = y;
     expect(tipY).toBeLessThan(0.868);
     expect(tipY).toBeGreaterThan(0.74);
   });
@@ -248,5 +252,33 @@ describe('mouse.blob', () => {
     const hip = b.bones.get('thigh.l')!.head[1];
     expect(hip / doc.height!).toBeLessThan(0.33);
     expect(hip / doc.height!).toBeGreaterThan(0.24);
+  });
+});
+
+describe('the shoes, as painted SDF', () => {
+  // They replaced the kit lofts on 2026-08-22. The mesh has no visible foot:
+  // the leg enters a soft grey shoe at the ankle, and the shoes are the
+  // character's ground contact.
+  it('are two mirrored painted groups in the leg clusters, touching the ground', () => {
+    const b = built();
+    // Shoe grey, as opposed to the shorts' blue on the thighs and knees.
+    const grey = (p: typeof b.prims[number]) => !!p.color && p.color[0] > 0.3 && Math.abs(p.color[0] - p.color[2]) < 0.05;
+    const shoes = b.prims.filter(p => grey(p) && (p.limb === 'legL' || p.limb === 'legR'));
+    expect(shoes.length).toBe(6);                       // three prims a side
+    expect(shoes.filter(p => p.limb === 'legL').length).toBe(3);
+    // Left and right are reflections of each other in x.
+    const l = shoes.filter(p => p.limb === 'legL').map(p => p.a[0]).sort();
+    const r = shoes.filter(p => p.limb === 'legR').map(p => -p.a[0]).sort();
+    l.forEach((x, i) => expect(x).toBeCloseTo(r[i]!, 6));
+    // Both shoes are OUTBOARD of the body's centreline, not on it — the
+    // failure expandMirror's x-flip was added for.
+    for (const p of shoes) expect(Math.abs(p.a[0])).toBeGreaterThan(0.03);
+    // Lowest shoe flesh is on the floor: march down from the ball.
+    let lowest = 1;
+    for (let x = 0.02; x <= 0.25; x += 0.005)
+      for (let z = -0.1; z <= 0.25; z += 0.005)
+        for (let y = 0; y < 0.03; y += 0.002)
+          if (sdBody([x, y, z], b) < 0) lowest = Math.min(lowest, y);
+    expect(lowest).toBeLessThan(0.005);
   });
 });

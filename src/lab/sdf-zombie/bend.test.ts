@@ -191,9 +191,12 @@ describe('bend mirroring', () => {
     expect(Math.sign(minus.bend![0])).toBe(Math.sign(minus.tip![0]));
   });
 
-  // Under plain `mirror` nothing flips: the BONE mirrors in x, and the
-  // mid-relative displacement follows the endpoints it is defined against.
-  it('leaves bend untouched under plain mirror, like tip', () => {
+  // Under plain `mirror` the .r copy reflects its bend in x, exactly as the
+  // second copy of a `both` pair does. It did not until 2026-08-22 — the
+  // bone mirrored and the prim's own x components did not — which put the
+  // mouse's right SDF shoe on the centreline and is why its finger fan had
+  // to be bones. The .l copy keeps what the author wrote.
+  it('reflects bend x on the .r copy under plain mirror, like tip and offset', () => {
     const def = {
       name: 't', root: [0, 0, 0] as Vec3,
       bones: [{
@@ -202,12 +205,14 @@ describe('bend mirroring', () => {
       }],
       prims: [{
         bone: 'horn', at: 0, capTo: 1, radius: 0.03, scale: [1, 1, 1] as Vec3,
-        blendK: 0, limb: 'head' as const, bend: [0, 0.1, 0] as Vec3, mirror: true,
+        blendK: 0, limb: 'head' as const, bend: [0.05, 0.1, 0] as Vec3, mirror: true,
       }],
     };
     const out = expandMirror(def);
     expect(out.prims).toHaveLength(2);
-    for (const p of out.prims) expect(p.bend).toEqual([0, 0.1, 0]);
+    const l = out.prims.find(p => p.bone === 'horn.l')!, r = out.prims.find(p => p.bone === 'horn.r')!;
+    expect(l.bend).toEqual([0.05, 0.1, 0]);
+    expect(r.bend).toEqual([-0.05, 0.1, 0]);
   });
 });
 

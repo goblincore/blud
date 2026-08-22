@@ -331,3 +331,50 @@ describe('parseBlob — stance', () => {
     expect(() => doc('  stance quadruped\n')).toThrow(/humanoid or digitigrade/);
   });
 });
+
+const PAINTED = `model painted
+  height 1.0
+skeleton
+  root pelvis at 0.5 len=0.1
+  bone skull parent=pelvis dir=up len=0.1
+  mirror
+    bone arm parent=pelvis side=0.1 dir=down len=0.1
+  end
+body
+  blob torso on pelvis at=0.5 r=0.1
+  blob head on skull at=0.5 r=0.08 color=ff8000 gloss=0.5
+  bar arm on arm from=0.0 to=1.0 r=0.03 color=101012 mirror
+`;
+
+describe('color= and gloss=', () => {
+  it('parses rrggbb into LINEAR rgb', () => {
+    const head = parseBlob(PAINTED).parts.find(x => x.limb === 'head')!;
+    // 0xff -> 1.0; 0x80 = 128/255 = 0.502 sRGB -> 0.2158 linear; 0 -> 0.
+    expect(head.color![0]).toBeCloseTo(1, 6);
+    expect(head.color![1]).toBeCloseTo(0.2158, 3);
+    expect(head.color![2]).toBeCloseTo(0, 6);
+    expect(head.gloss).toBe(0.5);
+  });
+
+  it('leaves an unpainted primitive as flesh (null), not black', () => {
+    const torso = parseBlob(PAINTED).parts.find(x => x.limb === 'torso')!;
+    expect(torso.color).toBeNull();
+    expect(torso.gloss).toBeNull();
+  });
+
+  // Six digits only. A three-digit shorthand or a bare name is a typo here,
+  // because every colour in a .blob is measured and pasted, never typed from
+  // memory — and a silent fallback to flesh would hide the typo entirely.
+  it('rejects anything but six hex digits, naming the value', () => {
+    expect(() => parseBlob(PAINTED.replace('ff8000', 'f80'))).toThrow(/color= needs six hex digits, got "f80"/);
+    expect(() => parseBlob(PAINTED.replace('ff8000', 'orange'))).toThrow(BlobError);
+    // `#` opens a comment in .blob, so `color=#ff8000` is `color=` and a
+    // comment: the parser must say so rather than report an empty value.
+    expect(() => parseBlob(PAINTED.replace('color=ff8000', 'color=#ff8000'))).toThrow(/# starts a comment/);
+  });
+
+  it('keeps gloss in 0..1 and only on a painted primitive', () => {
+    expect(() => parseBlob(PAINTED.replace('gloss=0.5', 'gloss=1.5'))).toThrow(/gloss= is 0\.\.1/);
+    expect(() => parseBlob(PAINTED.replace('r=0.1\n', 'r=0.1 gloss=0.2\n'))).toThrow(/only means something on a coloured primitive/);
+  });
+});
