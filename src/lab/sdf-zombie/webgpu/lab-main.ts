@@ -324,7 +324,23 @@ async function main() {
   scene.add(refCube);
 
   let override = loadOverride();
-  const face: FaceParams = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
+  // Seed the face from the character's OWN `face` block (compileFace parses the
+  // .blob), so a .blob-authored head renders at the size its author declared.
+  // Before this, every character built from `{ ...DEFAULT_FACE, ...override }`
+  // and the .blob's headRadius/headWidth were silently ignored at render time —
+  // the clown's 0.235 x 1.18 ball rendered as the 0.118 x 0.76 DEFAULT_FACE
+  // skull, which is why the kit cap (built for 0.235) dwarfed it. The panel
+  // override still wins (it is spread last), and DEFAULT_FACE fills any gap.
+  let face: FaceParams;
+  try {
+    face = {
+      ...DEFAULT_FACE,
+      ...compileFace(parseBlob(activeCharacterSrc())),
+      ...(override.faceParams ?? {}),
+    };
+  } catch {
+    face = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
+  }
   const body = buildZombieBody(face, override);
 
   const errorsEl = document.getElementById('errors');
