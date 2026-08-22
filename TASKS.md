@@ -505,6 +505,16 @@ Key reference docs (open these before touching their area):
   were 92% buried in the skull (offset z 0.010 → 0.066). LOOK entries for the
   mouse cloth materials: without an env map the royal-blue shorts rendered
   black from every unlit angle.
+  **Mouse rebuilt against the MESH + painted outfit (2026-08-22, branch
+  `silhouette-match`, see docs/dev-notes/2026-08-22-painted-sdf-outfit.md):**
+  `.blob` prims can carry `color=rrggbb gloss=0..1` and a `core` mark; the
+  mouse's shades, shoes, tee, shorts and sleeves are painted SDF and its kit
+  is DELETED. Head and body re-proportioned to the mesh surface (frame-aligned;
+  shoulder 0.53, collar 0.60), ears dished, lenses wrap the cheek with temple
+  arms. Silhouette vs plate 0.660 -> 0.774. Engine fixes on the way: occluder
+  hull per-end radius (the "orb nose hole"), coneBend untapered branch,
+  expandMirror x-reflection, clusterCore `core`, setStepsOverride(0),
+  focusBody height. OPEN: hands enlarged but unreviewed; merge to main.
   **Mouse proportions run (2026-08-22, `dispatch/mouse-proportions`):** rebuilt
   the mouse to the maus-biped RIG joint heights (skeleton was a big head on
   stubby legs — head ~53% of the file). Lengthened legs (thigh/shin ~46%) and
