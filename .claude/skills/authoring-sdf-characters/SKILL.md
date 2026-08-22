@@ -61,7 +61,7 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
    you change them on purpose, with a comment saying why. Iterate on the
    `.blob` text, never on compiled output.
 
-### Running the turntable by hand
+### Frames: `blob:shot`, and driving the turntable by hand
 
 `npm run blob:shot -- <name>` is the supported way to get frames: it is
 HEADLESS by default (`BLOB_HEADED=1` for a real window), writes
@@ -101,9 +101,10 @@ own `characters/<name>-blob.test.ts`.
 
 **Start with `npm run blob:measure -- <name>`** — it is the whole-figure tool
 and the only one that names the `.blob` LINE owning each bad band. It resolves
-its reference itself: `--glb`, else the first `.glb` under
-`docs/dev-notes/refs/<name>-mesh/` (canonically `<name>.glb`), else `--plate`,
-else `<name>-reference.png`. Read its header comment in
+its reference itself: `--glb`, else `docs/dev-notes/refs/<name>-mesh/<name>.glb`,
+else the first `.glb` in that directory (with a stderr warning naming which —
+heed it; a texture-only or animation-merge export scores nonsense), else
+`--plate`, else `<name>-reference.png`. Read its header comment in
 `scripts/blob-measure.ts` before quoting its numbers at anyone — a whole-figure
 IoU is a before/after gradient for ONE character against ONE reference, never a
 target to optimise and never a grade across characters, and exit 2 means "did
