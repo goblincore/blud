@@ -57,14 +57,22 @@ model clown-kit
 # Values are one notch brighter than the hexes read off the reference: the
 # lab lights the kit with one narrow key and no LOOK-table env (this task may
 # not edit kit-overlay.ts), so flat standard materials render darker than the
-# same hex would in WAM's own viewer. First render came back mud.
+# same hex would in WAM's own viewer. First render came back mud — and the
+# SECOND pass bumped the hexes another notch after the stripes still
+# vanished (see the palette block's own note).
 palette
-  royal   #4146ad
-  blue    #5a63cc
-  pink    #dc97cd
-  purple  #9468bf
-  grey    #c6c2ba
-  red     #e04338
+  # Second pass on brightness: the FIRST values (one notch over the
+  # reference hexes) still rendered as mud under the lab's single narrow
+  # key — royal read as navy, the pink stripes as grey-mauve, and the stripe
+  # contrast itself nearly vanished. These are two notches over the
+  # reference now. If a LOOK-table env ever reaches this kit, revisit
+  # downward.
+  royal   #555be0
+  blue    #6d76f2
+  pink    #f2a2e6
+  purple  #a878e0
+  grey    #d2cec6
+  red     #f04a3e
   gold    #e2b13f
   yellow  #f6cf4d
   white   #f6f1e6
@@ -247,29 +255,39 @@ parts
     # what the compile lint did not).
     #
     # Mounted just INSIDE the cheek surface (offset x 0.205 against a local
-    # half-width of 0.223 — buried 18 mm, attached), aimed dir=side and walked
-    # outward-downward-forward by four segments. The ROOT SEGMENT IS
-    # DELIBERATELY THIN (32 mm): a fat ring around an axis below the skin
-    # always has vertices deep inside the skull — the fit test rejected a
-    # 75 mm-rooted first draft at −71 mm — so the tuft sprouts from a narrow
-    # root at the hairline and swells once clear of the ball. `cap start=none`
-    # for the same reason as the cap cone above (sweeps default to a flat
-    # start cap: a disc straight through the mount point).
+    # half-width of 0.223 — buried 18 mm, attached), aimed dir=side and swept
+    # OUT-AND-UP. First version bent down=12/24/36 across its segments and
+    # the render read it as drooping dog-ears; the reference's tufts are
+    # WINGS — they leave the hairline travelling sideways and climb as they
+    # go, so every bend here is up= (WAM sweeps bend up=/down=/fwd=/back=
+    # per segment; there is no outward= because dir=side already IS out).
+    # The ROOT SEGMENT IS DELIBERATELY THIN (32 mm): a fat ring around an
+    # axis below the skin always has vertices deep inside the skull — the
+    # fit test rejected a 75 mm-rooted first draft at −71 mm — so the tuft
+    # sprouts from a narrow root at the hairline and swells once clear of
+    # the ball. `cap start=none` for the same reason as the cap cone above
+    # (sweeps default to a flat start cap: a disc straight through the
+    # mount point).
     sweep tuft bone=skull at=0.52 offset=(0.205,-0.010,-0.020) dir=side yaw=-20 material=purple
-      seg len=0.055 r=0.032 back=12
-      seg len=0.060 r=0.062 back=18 down=12
-      seg len=0.055 r=0.048 down=24 back=8
-      seg len=0.045 r=0.020 down=36 tip
+      seg len=0.055 r=0.032 up=14
+      seg len=0.060 r=0.062 up=26 back=8
+      seg len=0.055 r=0.048 up=18 back=6
+      seg len=0.045 r=0.020 down=8 tip
       cap start=none
 
     # THE RED NOSE SHELL — the colour half of the clown's one saturated note.
     # The flesh bead underneath carries the silhouette (see clown.blob); this
-    # red button carries the READ. Slightly flattened forward of the bead's
-    # centre so it wraps the bead's front hemisphere like painted latex: its
-    # back pole stays ~41 mm inside the skull (inside the fit test's tuck
-    # bound) while its front stands ~21 mm proud of the flesh bead and ~55 mm
-    # proud of the face itself.
-    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.238) size=0.052 w=0.104 d=0.034 material=red
+    # red ball carries the READ. First continuation version was w=0.104
+    # d=0.034 — a flat PANCAKE floating in front of the bead, and the render
+    # verdict was "no ball". A clown nose is a BALL stuck on the face, so the
+    # shell is near-spherical now (d 96% of w) and centred to straddle the
+    # bead: face surface at this height is z≈0.194 (semi-depth 0.212 at
+    # dy −0.045, bone z −0.0185), shell back pole z 0.170 buries 24 mm into
+    # the skull (inside the fit test's tuck bound), shell front pole z 0.262
+    # stands ~36 mm proud of the flesh bead's own front (0.226) — about 70%
+    # of the ball in front of the face, which is exactly how a foam clown
+    # nose sits.
+    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.216) size=0.052 w=0.108 d=0.096 material=red
 
     # STOCKING — thin blue leg, tight (+6-8 mm over the measured balls and
     # shafts), ending just above the ankle where the shoe takes over.
@@ -338,24 +356,24 @@ textures
   # Cloth stays matte and quiet — heavy noise would muddy the stripe edges
   # the material_arc work exists to keep crisp. The striped materials take
   # the least of anything.
-  texture royal base=#4146ad
+  texture royal base=#555be0
     gradient axis=v from=-0.10 to=0.16
     noise scale=0.14 amount=0.05
     ao amount=0.14
-  texture blue base=#5a63cc
+  texture blue base=#6d76f2
     noise scale=0.16 amount=0.04
-    ao amount=0.12
-  texture pink base=#dc97cd
+    ao amount=0.08
+  texture pink base=#f2a2e6
     noise scale=0.16 amount=0.04
-    ao amount=0.12
-  texture purple base=#9468bf
+    ao amount=0.08
+  texture purple base=#a878e0
     streaks along=v amount=0.08
     noise scale=0.14 amount=0.05
     ao amount=0.12
-  texture grey base=#c6c2ba
+  texture grey base=#d2cec6
     noise scale=0.14 amount=0.05
     ao amount=0.16
-  texture red base=#e04338
+  texture red base=#f04a3e
     gradient axis=v from=-0.08 to=0.14
     noise scale=0.14 amount=0.05
     ao amount=0.14

@@ -182,7 +182,7 @@ face
   browHeavy  0.0004
   headBlend  0.0030
 
-# The clown's own face. BIG dark oval eyes — eyeSize 0.110 against the
+# The clown's own face. BIG dark oval eyes — eyeSize 0.150 against the
 # goblin's 0.070 — high on the ball, with a small open SMILE: mouthCurve is
 # positive here, where the zombie and goblin both wear negatives (frowns).
 # eyeGlow is LOW on purpose: the sheet mixes the eye toward this value and
@@ -193,10 +193,16 @@ face
 # spot inside a dark feature, so the glint is dropped, not faked.
 sheet
   eyeGap     0.40
-  eyeSize    0.110
+  # 0.150, up from 0.110: the rescue render's verdict was "eyes barely
+  # read" — too small, and shadowed by the cap band above. The reference
+  # draws big oval dots on a huge pale face; at this head size 0.150 is
+  # still proportionally SMALLER than the drawing, so err upward.
+  eyeSize    0.150
   # Near-black, for the reason above. Not zero: zero leaves the eye at base
-  # grey and it stops reading as a drawn eye at all.
-  eyeGlow    0.10
+  # grey and it stops reading as a drawn eye at all. 0.10 -> 0.16 with the
+  # size bump: under the cap's shade a pure 0.10 eye and its shadow merge
+  # into one dark visor band across the face (seen in the rescue render).
+  eyeGlow    0.16
   # NOTE: the drawer hardcodes its 1.25 squash (blob-face-sheet.ts draws
   # hypot(dx, dy * 1.25)); this key is accepted but inert today. Eyes will
   # run slightly WIDE of the reference's tall ovals until the drawer reads
