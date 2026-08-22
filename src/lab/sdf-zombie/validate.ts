@@ -379,6 +379,28 @@ export function sdBody(p: Vec3, body: Body): number {
   return d;
 }
 
+/**
+ * Index into `body.prims` of the ADDITIVE primitive closest to `p`, or -1 if
+ * the body has no live additive prims. This is the CPU mirror of the shader's
+ * `hitBest` (march.wgsl.ts) — the same arg-min the paint lookup uses — so a
+ * surface point can be attributed to the `.blob` line that authored it.
+ * Carves and grooves shape the surface but never own it, exactly as on the
+ * GPU.
+ */
+export function nearestPrim(p: Vec3, body: Body): number {
+  let best = -1, bestD = Infinity;
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const prim = body.prims[i]!;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.dead) continue;
+      const d = sdPrimitive(p, prim);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+  }
+  return best;
+}
+
 export function validateBody(body: Body, opts: ValidateOpts): string[] {
   const errs: string[] = [];
 

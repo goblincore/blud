@@ -1,10 +1,14 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
+import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY } from './webgpu/march.wgsl';
 import type { LimbId, Primitive, Vec3 } from './types';
+import { buildBody } from './build-body';
+import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
+import { add } from './vec';
 
 describe('shader caps', () => {
   it('bakes the same ceilings into the GLSL that the CPU side enforces', () => {
@@ -185,5 +189,78 @@ describe('validateBody with carves', () => {
       }],
     }, { silhouetteNoiseAmp: 0.012, stepMultiplier: 0.6 });
     expect(errs.filter(e => /bounding sphere/.test(e))).toEqual([]);
+  });
+});
+
+describe('nearestPrim', () => {
+  // Same fixture grammar as build-body.test.ts's "source-line provenance
+  // survives the build" — skull is required (facePrims always reference it),
+  // and the mirrored thigh bones need the pelvis-anchored second torso blob
+  // to fuse to. Two torso blobs at different `at` with distinct radii, plus
+  // a carve on the top one.
+  const SRC = `model t
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=0 len=0.34
+  bone skull parent=spine dir=up len=0.16
+  mirror
+    bone thigh parent=pelvis dir=down side=0.10 len=0.40
+  end
+
+body
+  blob torso on spine at=0.8 r=0.15 wide=1.28 deep=0.78 blend=0.014
+  carve on spine at=0.8 r=0.05 offset=0.12,0,0.06
+  bar  leg on thigh from=0.05 to=0.95 r=0.082 blend=0.0175 mirror
+  blob torso on pelvis at=0.40 r=0.16 wide=1.10 tall=0.9 deep=0.92 blend=0.03
+`;
+  const topLine = 11;
+  const carveLine = 12;
+  const bottomLine = 14;
+
+  const doc = parseBlob(SRC);
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+
+  const top = body.prims.findIndex(p => p.src === topLine);
+  const bottom = body.prims.findIndex(p => p.src === bottomLine);
+  const carveIdx = body.prims.findIndex(p => p.src === carveLine);
+
+  it('builds clean', () => {
+    expect(body.errors).toEqual([]);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(bottom).toBeGreaterThanOrEqual(0);
+    expect(carveIdx).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns the index of the additive prim with the smallest distance, ignoring carves and dead prims', () => {
+    const topPrim = body.prims[top]!;
+    const bottomPrim = body.prims[bottom]!;
+    const pTop = add(topPrim.a, [0, 0, topPrim.radius + 0.005]);
+    const pBottom = add(bottomPrim.a, [0, 0, bottomPrim.radius + 0.005]);
+    expect(nearestPrim(pTop, body)).toBe(top);
+    expect(nearestPrim(pBottom, body)).toBe(bottom);
+
+    const pOnCarve = body.prims[carveIdx]!.a;
+    const nearest = nearestPrim(pOnCarve, body);
+    expect(body.prims[nearest]!.op).not.toBe('sub');
+  });
+
+  it('skips a dead prim and falls through to the next-nearest live one', () => {
+    // A synthetic two-prim body, not the compiled fixture above — the fixture's
+    // face prims sit close enough to the top torso blob that killing it would
+    // surface a face prim instead of the bottom blob, muddying what this test
+    // is actually checking.
+    const near = prim('head', [0, 1.5, 0], 0.1);
+    const far = prim('torso', [0, 1.0, 0], 0.1);
+    const alive = assignClusters([near, far]);
+    const pNear = add(near.a, [0, 0, near.radius + 0.005]);
+    expect(nearestPrim(pNear, alive)).toBe(0);
+
+    const dead = assignClusters([{ ...near, dead: true }, far]);
+    expect(nearestPrim(pNear, dead)).toBe(1);
+  });
+
+  it('returns -1 when no cluster is alive', () => {
+    const noneAlive = { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) };
+    expect(nearestPrim([0, 0, 0], noneAlive)).toBe(-1);
   });
 });
