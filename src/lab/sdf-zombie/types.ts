@@ -152,12 +152,7 @@ export interface BodyDef {
 export interface Primitive {
   a: Vec3;
   b: Vec3;
-  /**
-   * 1-based line in the `.blob` source this primitive was written on. Absent
-   * for primitives built in TypeScript (zombie's `makeZombie()`, test
-   * fixtures). Exists so a measurement can say "line 143 (snout on skull)"
-   * instead of "band 7" — the only form an agent can act on.
-   */
+  /** Carried from PrimDef.src through mirror/placement — see there. */
   src?: number;
   radius: number;
   /** Radius at `b`. Absent means untapered — see PrimDef.radiusB. */

@@ -383,9 +383,9 @@ describe('source-line provenance', () => {
     ].join('\n');
     const doc = parseBlob(src);
     const def = compileBlob(doc, compileFace(doc));
-    // compileBlob appends facePrims (always emitted, see its doc comment)
-    // after the authored parts, and those carry no .blob line — slice to
-    // just the two parts this fixture actually wrote.
-    expect(def.prims.slice(0, 2).map(p => p.src)).toEqual([10, 11]);
+    // compileBlob appends facePrims (always emitted, see its doc comment),
+    // and those carry no .blob line — filter them out rather than depending
+    // on where they land in the array.
+    expect(def.prims.map(p => p.src).filter(s => s !== undefined)).toEqual([10, 11]);
   });
 });
