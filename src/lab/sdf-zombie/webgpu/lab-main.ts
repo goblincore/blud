@@ -40,6 +40,7 @@ import { makeZombie } from '../body';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import goblinBlobSrc from '../characters/goblin.blob?raw';
 import clownBlobSrc from '../characters/clown.blob?raw';
+import mouseBlobSrc from '../characters/mouse.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -53,6 +54,7 @@ const CHARACTERS: Record<string, string> = {
   zombie: zombieBlobSrc,
   goblin: goblinBlobSrc,
   clown: clownBlobSrc,
+  mouse: mouseBlobSrc,
 };
 
 /**
@@ -67,6 +69,7 @@ const CHARACTERS: Record<string, string> = {
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
   clown: '/assets/lab/clown-kit.gltf',
+  mouse: '/assets/lab/mouse-kit.gltf',
 };
 
 function activeCharacterName(): string {

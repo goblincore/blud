@@ -497,6 +497,14 @@ Key reference docs (open these before touching their area):
   NOT merged, fails 3 of its own tests (asserted a material list, then rebuilt
   the glTF without re-running; ruff 88 mm inside the body) despite exit 0 and a
   "gates green" report. Mouse dispatched 2026-08-21.
+  **Mouse snout run (2026-08-22, `dispatch/mouse-snout`):** the mouse now HAS
+  a muzzle — one bent tapered prim (`r2=`+`tip=`+`bend=`), field-measured head
+  depth 0.364 m = 33% of standing height, matching the side-profile reference
+  (two prior runs built flat faces off the front view alone). The kit was
+  written but never built/registered — now compiled, in `KITS`, and its brows
+  were 92% buried in the skull (offset z 0.010 → 0.066). LOOK entries for the
+  mouse cloth materials: without an env map the royal-blue shorts rendered
+  black from every unlit angle.
   [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · [primitive roadmap](docs/superpowers/specs/2026-08-21-blob-primitive-roadmap.md) · [chisel spike](docs/dev-notes/2026-08-21-chisel-primitive-sculpt/notes.md) · skill: `.claude/skills/authoring-sdf-characters/` · Obsidian: `Claude Notes/Blud/2026-08-21-blobforge-sharp-features-and-kits.md`
 - `P8.clown-skull` [x] **clown skull + kit re-fit (owner review rounds)** — root
   cause was a WebGPU-lab integration bug: `webgpu/lab-main.ts` built every head
