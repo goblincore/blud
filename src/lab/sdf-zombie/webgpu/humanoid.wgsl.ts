@@ -286,7 +286,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // Everted rim: the displaced flesh splays outward into a raised lip.
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
-    let rimLocal = 1.0 - smoothstep(amp * 0.35, amp * 0.7, dIn);
+    let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return d;

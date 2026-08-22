@@ -552,7 +552,16 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // Tighter reach than the first cut: 0.35/0.7 (was 0.5/1.2). At blast
     // amplitude the old reach exceeded the armpit gap and the rim still
     // bridged arm to torso from the shoulder side.
-    let rimLocal = 1.0 - smoothstep(amp * 0.35, amp * 0.7, dIn);
+    // THE RAMP IS A FULL amp WIDE (rim banding, 2026-08-22). It used to run
+    // 0.35*amp..0.7*amp — about a centimetre on a blast — so the gate's
+    // gradient reached ~4x a distance field's: a thin shell concentric with
+    // the old skin where the normal kinks, which at latex gloss drew as
+    // hard bands around the lip that breathed with the jiggle (owner
+    // screenshots). Starting the ramp INSIDE the flesh keeps the same outer
+    // reach (0.7*amp, the limit that stopped the lip welding arm to torso)
+    // while cutting the gradient to ~1.5; deeper than 0.3*amp inside the
+    // old skin is solid flesh either way.
+    let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return d;
