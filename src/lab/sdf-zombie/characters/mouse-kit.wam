@@ -63,28 +63,31 @@ palette
 
 skeleton
   # `hips` restores the .blob root bone's length — WAM's root is a bare point,
-  # so parenting spine1 straight to it drops the trunk 0.075 m (see
-  # goblin-kit.wam's note). 0.075/1.10 = 0.0682.
-  root pelvis at 0.2136
-  bone hips   parent=pelvis dir=up len=0.0682
-  bone spine1 parent=hips dir=up pitch=2 len=0.0864
-  bone chest  parent=spine1 dir=up pitch=2 len=0.0955
-  bone neck   parent=chest dir=up pitch=-5 len=0.0864
-  bone skull  parent=neck dir=up pitch=-3 len=0.3727
+  # so parenting spine1 straight to it drops the trunk (see goblin-kit.wam's
+  # note). Values are .blob metres / 1.10, pitch negated on `down` bones.
+  # 2026-08-22: rebuilt to the reference rig joint heights (hip 0.353,
+  # shoulder 0.622, neck-base 0.729, head-base 0.815).
+  root pelvis at 0.2382
+  bone hips   parent=pelvis dir=up len=0.0827
+  bone spine1 parent=hips dir=up pitch=2 len=0.0782
+  bone chest  parent=spine1 dir=up pitch=2 len=0.1664
+  bone spine2 parent=chest dir=up pitch=-2 len=0.0973
+  bone neck   parent=spine2 dir=up pitch=-5 len=0.0782
+  bone skull  parent=neck dir=up pitch=-3 len=0.0909
   mirror
     # clavicle side 0.032 len 0.038; upperarm pitch -2 (blob) -> +2 here
     bone clavicle parent=chest    side=0.0291 dir=side len=0.0345
-    bone upperarm parent=clavicle dir=down pitch=2  tilt=48 len=0.0864
-    bone forearm  parent=upperarm dir=down pitch=-2 tilt=38 len=0.0773
-    bone hand     parent=forearm  dir=down tilt=36 len=0.0455
+    bone upperarm parent=clavicle dir=down pitch=2  tilt=48 len=0.1045
+    bone forearm  parent=upperarm dir=down pitch=-2 tilt=38 len=0.0864
+    bone hand     parent=forearm  dir=down tilt=36 len=0.0500
     bone f_index  parent=hand dir=down tilt=26 pitch=-4 len=0.0455
     bone f_middle parent=hand dir=down tilt=10 pitch=-5 len=0.0500
     bone f_ring   parent=hand dir=down tilt=-6 pitch=-5 len=0.0473
     bone f_little parent=hand dir=down tilt=-20 pitch=-3 len=0.0409
-    # thigh pitch 8 (blob) -> -8; shin -9 -> +9
-    bone thigh    parent=hips side=0.0309 dir=down pitch=-8 tilt=5 len=0.0682
-    bone shin     parent=thigh dir=down pitch=9 tilt=-4 len=0.0682
-    bone foot     parent=shin dir=fwd len=0.0864
+    # thigh pitch 8 (blob) -> -8; shin -9 -> +9. Legs lengthened (0.110/0.105).
+    bone thigh    parent=hips side=0.0309 dir=down pitch=-8 tilt=5 len=0.1000
+    bone shin     parent=thigh dir=down pitch=9 tilt=-4 len=0.0955
+    bone foot     parent=shin dir=fwd len=0.0909
   end
 
 parts
@@ -127,63 +130,54 @@ parts
       cap start=none end=none
 
     # ================================================================
-    # SHOE — the second-biggest read after the ears. Measured off the
-    # reference: topline at y 0.185 (0.168 here), 0.096 wide at the ankle
-    # mouth, swelling to 0.168 wide at the ball (y 0.09), 0.34 long
-    # (z -0.046..+0.29 in the .blob's metres: the toe reaches +0.294 while
-    # the heel counter backs to -0.046), sole 0.019 thick on the ground.
-    # Pale grey body, WHITE toe cap, and a white welt stripe where the
-    # sole meets the upper.
-    # Lofted along a FREE RAY aimed `fwd` from a point ABOVE the ankle
-    # (the shin tail plus 0.045 up, so the ray clears the joint), and
-    # every ring's centre is pushed DOWN with `up=` to sit ON THE GROUND
-    # (centre = d/2) — the shoe is a wedge whose rings hang under the ray,
-    # not a tube around it. Without that the loft is a horizontal pipe at
-    # ankle height, which is exactly what the first attempt rendered as
-    # (part bounds y 0.066..0.259, a tube centred on the ankle).
+    # SHOE — the second-biggest read after the ears, and the 2026-08-22
+    # proportion rebuild's whole reason to touch this file. The OLD shoe sat
+    # its mouth ring at y~0 (a low floor wedge) while the ankle was at 0.141,
+    # so it rendered as a detached white blob near the floor — the owner's
+    # exact complaint. This one starts its ray AT the ankle (shin tail) and
+    # pushes each ring DOWN with `up=` so the ring's BASE sits on the ground
+    # (base = rayY + up - d/2). Ring 0 is a tall heel collar that wraps the
+    # ankle (top ~0.165 > ankle 0.141) and runs to the floor; the ball
+    # swells wide; the toe tapers to a lifted rounded front. Roughly the
+    # reference's numbers: ankle mouth ~0.096 wide, ball ~0.168 wide, ~0.34
+    # long, pale grey body, WHITE toe cap.
     # ================================================================
-    loft shoe bone=shin at=1.0 offset=(0,-0.045,0.030) dir=fwd len=0.309 frame=up material=shoe
-      # t along the ray (z 0.03..0.34); w = width, d = HEIGHT above ground,
-      # up = -0.045 + d/2 so the ring's BASE is at y 0.
-      ring 0.00 w=0.098 d=0.062 up=-0.086
-      ring 0.16 w=0.126 d=0.108 up=-0.063
-      ring 0.34 w=0.150 d=0.152 up=-0.041
-      ring 0.55 w=0.160 d=0.168 up=-0.033
-      ring 0.74 w=0.152 d=0.150 up=-0.042
-      ring 0.88 w=0.136 d=0.124 up=-0.055 material=white
-      ring 1.00 w=0.114 d=0.104 up=-0.065
+    loft shoe bone=shin at=1.0 offset=(0,0,0.010) dir=fwd len=0.280 frame=up material=shoe
+      ring 0.00 w=0.062 d=0.150 up=-0.053
+      ring 0.20 w=0.084 d=0.140 up=-0.058
+      ring 0.45 w=0.120 d=0.118 up=-0.066
+      ring 0.65 w=0.140 d=0.098 up=-0.075
+      ring 0.82 w=0.120 d=0.076 up=-0.083
+      ring 0.92 w=0.080 d=0.056 up=-0.088 material=white
+      ring 1.00 w=0.044 d=0.036 up=-0.092
       cap start=none end=none
 
-    # SOLE — a flat slab under the shoe, the one closed cap in the kit: it
-    # IS the ground contact (flesh sole floats at 0.138; the shoe bridges).
-    # Same hanging-ring trick as the shoe: ray above, rings pulled down
-    # onto the ground, d = the slab's own 0.021 thickness.
-    loft sole bone=shin at=1.0 offset=(0,-0.045,-0.020) dir=fwd len=0.355 frame=up material=white
-      ring 0.02 w=0.118 d=0.020 up=-0.107
-      ring 0.50 w=0.168 d=0.022 up=-0.106
-      ring 0.98 w=0.126 d=0.020 up=-0.107
+    # SOLE — a flat slab under the shoe, the ground contact (flesh sole
+    # floats at ankle height; the shoe bridges to 0). Same hanging-ring
+    # trick: ray at the ankle, rings pulled down so the slab's base sits on
+    # y 0, d = the slab's own ~0.021 thickness.
+    loft sole bone=shin at=1.0 offset=(0,0,0.005) dir=fwd len=0.290 frame=up material=white
+      ring 0.02 w=0.100 d=0.020 up=-0.118
+      ring 0.50 w=0.150 d=0.022 up=-0.117
+      ring 1.00 w=0.070 d=0.018 up=-0.120
       cap start=none end=none
   end
 
   # ================================================================
-  # TEE — the torso shell. CROPPED, not long: measured off the reference,
-  # the red band runs y 0.528..0.605 — collar at the neck base, hem at
-  # 0.528, exactly where the blue shorts begin. The first draft hung the
-  # hem at 0.243 (a long tee) and the shorts barely showed; the reference
-  # is a CROP TOP over high-waisted shorts, and getting that boundary at
-  # 0.528 is what makes the outfit read.
-  # Lofted along a FREE RAY down the neck bone's tail (y 0.605) for
-  # 0.070 m — the whole shirt lives between the collar and the hem, and
-  # no bone chain spans exactly that. Loose drape: measured torso flesh
-  # is w 0.128 d 0.116 at the collar falling to w 0.146 d 0.180 at the
-  # hem; the tee stays boxier, 0.160 x 0.170 at the collar flaring to
-  # 0.170 x 0.210 at the hem (2-3 cm of drape all round).
+  # TEE — the torso shell. CROPPED over high-waisted shorts (the reference
+  # boundary). 2026-08-22: the torso got much LONGER, so the old ray (off the
+  # neck tail, 0.070 long) floated a thin red band up at the neck. This one
+  # starts at the NECK BASE (0.729) and runs down 0.200 to a hem at ~0.509,
+  # just above where the blue shorts begin. Loose drape: measured torso flesh
+  # is half-width ~0.052 at the collar falling to ~0.065 at the waist (the
+  # arms in the 0.11/0.18 columns are sleeves, not the body); the tee stays
+  # boxier with 2-3 cm of drape all round.
   # ================================================================
-  loft tee bone=neck at=1.0 dir=down len=0.070 material=tee frame=fwd
-    ring 0.00 w=0.148 d=0.158
-    ring 0.30 w=0.158 d=0.180
-    ring 0.62 w=0.166 d=0.198
-    ring 1.00 w=0.170 d=0.210
+  loft tee bone=neck at=0.0 dir=down len=0.200 material=tee frame=fwd
+    ring 0.00 w=0.120 d=0.165
+    ring 0.30 w=0.140 d=0.180
+    ring 0.62 w=0.156 d=0.198
+    ring 1.00 w=0.170 d=0.212
     cap start=none end=none
 
   # ================================================================
@@ -214,7 +208,14 @@ parts
   # angry-brow read, but a fat floating end reads as a horn.
   # ================================================================
   mirror
-    loft brow bone=skull at=0.436 offset=(0.052,0.120,0.066) dir=side tilt=-13 len=0.048 frame=fwd material=black
+    # 2026-08-22: the skull bone got much shorter, so the old offset.y 0.120 (a
+    # hairline 0.13 above the t=0.436 anchor) pushed the brows to the CROWN
+    # (y~0.99) and offset.z 0.066 left the slab BEHIND the crown front so its
+    # back rim tucked ~37 mm into the skull (over the 30 mm tolerance). Lowered
+    # offset.y to 0.045 (slab centre ~0.908, the hairline) and moved offset.z
+    # to 0.100 so the slab straddles the front face (~0.11 there) and tucks
+    # only ~2 cm at the rim.
+    loft brow bone=skull at=0.436 offset=(0.052,0.045,0.100) dir=side tilt=-13 len=0.048 frame=fwd material=black
       ring 0.00 w=0.034 d=0.030
       ring 0.35 w=0.038 d=0.040
       ring 0.70 w=0.032 d=0.044
@@ -235,7 +236,10 @@ parts
   # BLACK with a yellow key-light sheen, which near-black + low roughness
   # reproduces without transparency.
   # ================================================================
-  loft shades bone=skull at=0.325 offset=(-0.098,0.006,0.108) dir=side len=0.196 frame=up material=black
+  # 2026-08-22: shifted the band to the raised eye line (offset.y 0.018 ->
+  # centre ~0.867, between the brows at 0.908 and the snout top ~0.85) and
+  # pushed it a touch prouder (z 0.120) so it reads as worn, not embedded.
+  loft shades bone=skull at=0.325 offset=(-0.098,0.018,0.120) dir=side len=0.196 frame=up material=black
     ring 0.00 w=0.014 d=0.026 tip
     ring 0.12 w=0.020 d=0.036
     ring 0.40 w=0.018 d=0.038
