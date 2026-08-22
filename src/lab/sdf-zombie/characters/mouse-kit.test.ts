@@ -79,9 +79,10 @@ describe('mouse-kit.gltf fits mouse.blob', () => {
   it('decodes the compiled kit', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test.
-    // No 'black': the shades and brows are painted SDF geometry in mouse.blob
-    // now, not kit lofts.
-    expect([...groups.keys()].sort()).toEqual(['shoe', 'shorts', 'tee', 'white']);
+    // No 'black', 'shoe' or 'white': the shades, brows and shoes are painted
+    // SDF geometry in mouse.blob now, not kit lofts. The kit is the tee and
+    // the shorts.
+    expect([...groups.keys()].sort()).toEqual(['shorts', 'tee']);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
   });
 
@@ -100,13 +101,10 @@ describe('mouse-kit.gltf fits mouse.blob', () => {
   //     crotch mass no matter how the tubes are sized (measured -0.046 at
   //     (-0.015, 0.290, 0.011) — between the legs, under the hem, invisible
   //     from any angle). Same forced-tuck class as the goblin's pauldron.
-  //   shoe 0.060 — the shoe fully encloses the foot and ankle flesh (that
-  //     is what a shoe IS); its deepest vertex is the topline rim against
-  //     the shin, not a clip.
   //   everything else 0.030 — cloth on skin.
   const TUCK: Record<string, number> = {
-    tee: 0.030, black: 0.030, white: 0.030,
-    shorts: 0.050, shoe: 0.060,
+    tee: 0.030,
+    shorts: 0.050,
   };
 
   it.each([...groups.keys()])('no %s vertex passes through the body', name => {
@@ -134,13 +132,5 @@ describe('mouse-kit.gltf fits mouse.blob', () => {
     expect(proud.length).toBeGreaterThan(0);
   });
 
-  // THE SHOES ARE THE GROUND CONTACT. The flesh sole floats at 0.138; the
-  // shoe bridges to the floor, so the sole material must touch y ~0 or the
-  // mouse levitates.
-  it('the soles touch the ground', () => {
-    const vs = groups.get('white')!;
-    const lowest = Math.min(...vs.map(v => v[1]));
-    expect(lowest).toBeLessThan(0.005);
-    expect(lowest).toBeGreaterThan(-0.030);
-  });
+  // Ground contact moved to mouse-blob.test.ts with the shoes.
 });

@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/mirror.test.ts
 import { describe, it, expect } from 'vitest';
 import { expandMirror } from './mirror';
-import type { BodyDef } from './types';
+import type { BodyDef, Vec3 } from './types';
 
 const def: BodyDef = {
   name: 'test',
@@ -129,5 +129,35 @@ describe('mirrorOffset', () => {
         limb: 'head', mirror: true, mirrorOffset: true,
       }],
     })).toThrow(/both mirror and mirrorOffset/);
+  });
+});
+
+describe('mirror reflects a prim\'s own x components onto the .r bone', () => {
+  // A mirrored bone sits at -side, so a prim authored OUTWARD of its .l bone
+  // has to be authored outward of its .r bone too. Without the flip the
+  // mouse's SDF shoes — offset +0.045 from each foot bone — put the right
+  // shoe at x ~0, and a finger fan authored as tipped bars pointed the right
+  // index finger inward across the chest.
+  it('negates offset, tip and bend x for the .r copy and leaves .l as authored', () => {
+    const def = {
+      name: 't', root: [0, 0, 0] as Vec3,
+      bones: [
+        { name: 'pelvis', parent: null, dir: [0, 1, 0] as Vec3, len: 0.1 },
+        { name: 'foot', parent: 'pelvis', dir: [0, 0, 1] as Vec3, len: 0.1, side: 0.05, mirror: true },
+      ],
+      prims: [{
+        bone: 'foot', at: 0, radius: 0.05, scale: [1, 1, 1] as Vec3, blendK: 0.01,
+        limb: 'leg' as const, mirror: true,
+        offset: [0.04, -0.08, 0.02] as Vec3, tip: [0.03, 0, 0.1] as Vec3, bend: [0.01, 0, 0.02] as Vec3,
+      }],
+    };
+    const out = expandMirror(def as never);
+    const l = out.prims.find(p => p.bone === 'foot.l')!, r = out.prims.find(p => p.bone === 'foot.r')!;
+    expect(l.offset).toEqual([0.04, -0.08, 0.02]);
+    expect(l.tip).toEqual([0.03, 0, 0.1]);
+    expect(l.bend).toEqual([0.01, 0, 0.02]);
+    expect(r.offset).toEqual([-0.04, -0.08, 0.02]);
+    expect(r.tip).toEqual([-0.03, 0, 0.1]);
+    expect(r.bend).toEqual([-0.01, 0, 0.02]);
   });
 });

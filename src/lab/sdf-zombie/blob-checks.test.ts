@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/blob-checks.test.ts
 import { describe, expect, it, vi } from 'vitest';
 import { compileBlob } from './blob-compile';
+import { clusterCore } from './validate';
 import { clearOf, daylightOf, fusedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
@@ -326,5 +327,36 @@ describe('knee stance', () => {
     const b = buildBody(compileBlob(doc));
     expect(doc.stance).toBe('humanoid');
     expect(checkStance(b.bones, doc.stance)).toEqual([]);
+  });
+});
+
+describe('clusterCore and painted primitives', () => {
+  // A painted prim is a surface feature, never a limb's structural mass. The
+  // mouse's SDF shoe ball out-ranked its thigh and the fuse probe ran from the
+  // shoe to the pelvis through air, reporting an attached leg as disconnected.
+  it('picks the fattest UNPAINTED prim as a cluster\'s core', () => {
+    const b = zombie();
+    const leg = b.clusters.find(c => c.limb === 'legL')!;
+    const before = clusterCore(b, leg)!;
+    // Replace the leg's THINNEST prim with a painted one far fatter than
+    // anything else in the leg, parked at the toe. (Replacing the fattest
+    // would move the core for a legitimate reason and prove nothing.)
+    const members = b.prims.slice(leg.start, leg.start + leg.count);
+    let thin = 0;
+    members.forEach((p, i) => { if (p.radius < members[thin]!.radius) thin = i; });
+    const fat: Primitive = {
+      ...members[thin]!, a: [0, 0, 0.5], b: [0, 0, 0.5], radius: 1.0, scale: [1, 1, 1],
+      color: [0.5, 0.5, 0.5],
+    };
+    const prims = b.prims.slice(); prims[leg.start + thin] = fat;
+    expect(clusterCore({ ...b, prims }, leg)).toEqual(before);
+  });
+
+  it('still returns a core for a cluster that is entirely painted', () => {
+    const b = zombie();
+    const leg = b.clusters.find(c => c.limb === 'legL')!;
+    const allPainted = { ...b, prims: b.prims.map((p, i) =>
+      i >= leg.start && i < leg.start + leg.count ? { ...p, color: [0, 0, 0] as Vec3 } : p) };
+    expect(clusterCore(allPainted, leg)).toEqual(clusterCore(b, leg));
   });
 });

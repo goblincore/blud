@@ -254,3 +254,29 @@ describe('mouse.blob', () => {
     expect(hip / doc.height!).toBeGreaterThan(0.24);
   });
 });
+
+describe('the shoes, as painted SDF', () => {
+  // They replaced the kit lofts on 2026-08-22. The mesh has no visible foot:
+  // the leg enters a soft grey shoe at the ankle, and the shoes are the
+  // character's ground contact.
+  it('are two mirrored painted groups in the leg clusters, touching the ground', () => {
+    const b = built();
+    const shoes = b.prims.filter(p => p.color && (p.limb === 'legL' || p.limb === 'legR'));
+    expect(shoes.length).toBe(6);                       // three prims a side
+    expect(shoes.filter(p => p.limb === 'legL').length).toBe(3);
+    // Left and right are reflections of each other in x.
+    const l = shoes.filter(p => p.limb === 'legL').map(p => p.a[0]).sort();
+    const r = shoes.filter(p => p.limb === 'legR').map(p => -p.a[0]).sort();
+    l.forEach((x, i) => expect(x).toBeCloseTo(r[i]!, 6));
+    // Both shoes are OUTBOARD of the body's centreline, not on it — the
+    // failure expandMirror's x-flip was added for.
+    for (const p of shoes) expect(Math.abs(p.a[0])).toBeGreaterThan(0.03);
+    // Lowest shoe flesh is on the floor: march down from the ball.
+    let lowest = 1;
+    for (let x = 0.02; x <= 0.25; x += 0.005)
+      for (let z = -0.1; z <= 0.25; z += 0.005)
+        for (let y = 0; y < 0.03; y += 0.002)
+          if (sdBody([x, y, z], b) < 0) lowest = Math.min(lowest, y);
+    expect(lowest).toBeLessThan(0.005);
+  });
+});

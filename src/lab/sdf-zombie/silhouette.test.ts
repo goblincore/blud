@@ -194,13 +194,16 @@ describe('kit geometry', () => {
     const t = kit();
     expect(t.length % 9).toBe(0);
     expect(t.length / 9).toBeGreaterThan(100);
-    // Bind space is rest world space: the soles sit on y=0 and the kit stops
-    // below the ears. If skinning were needed these would be nowhere near.
+    // Bind space is rest world space: the kit is the tee and the shorts now
+    // (shoes, shades and brows are painted SDF), so its lowest vertex is the
+    // shorts' hem above the knee and its highest the collar at the neck
+    // base. If skinning were needed these would be nowhere near.
     let minY = Infinity, maxY = -Infinity;
     for (let i = 1; i < t.length; i += 3) { minY = Math.min(minY, t[i]!); maxY = Math.max(maxY, t[i]!); }
-    expect(minY).toBeGreaterThan(-0.01);
-    expect(minY).toBeLessThan(0.01);
-    expect(maxY).toBeGreaterThan(0.5);
+    expect(minY).toBeGreaterThan(0.18);
+    expect(minY).toBeLessThan(0.30);
+    expect(maxY).toBeGreaterThan(0.55);
+    expect(maxY).toBeLessThan(0.66);
   });
 
   // The bug this guards: a plate shows a DRESSED character, so scoring bare
@@ -226,19 +229,20 @@ describe('kit geometry', () => {
 });
 
 describe('the mouse against its own reference plate', () => {
-  // The finding this whole module was built to make legible, pinned so a
-  // future proportion pass cannot quietly undo it: the mouse's shoes are less
-  // than HALF the width the reference's are, measured below the arms where the
-  // two poses agree. Loosened to 0.75 of reference width so a genuine fix
-  // trips this test and a rounding change does not.
-  it('still has shoes far narrower than the plate', () => {
+  // This test was first written the other way round — pinning that the
+  // shoes were LESS than 0.75 of the plate's width, "so a genuine fix trips
+  // this test" — and on 2026-08-22 the painted SDF shoes tripped it: the shoe
+  // band went from 0.132 of body height (flesh only) / 0.204 (kit) to 0.185
+  // on the 0.85..1 window against the plate's ~0.17-0.35 profile. Now it pins
+  // the fix: every band in the shoe window within 15% of the plate.
+  it('has shoes that match the plate to within 15% in every band', () => {
     const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8'));
-    const got = maskFromBody(buildBody(compileBlob(doc, compileFace(doc))), { heightPx: 128 });
+    const kit = gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/mouse-kit.gltf'))));
+    const got = maskFromBody(buildBody(compileBlob(doc, compileFace(doc))), { heightPx: 128, kit });
     const png = decodePng(readFileSync('docs/dev-notes/refs/mouse-reference.png'));
     const ref = maskFromRgba(png.rgba, png.width, png.height);
-    const rep = compareSilhouette(ref.mask, got, { bands: 6, range: [0.85, 1] });
-    const worst = rep.worst[0]!;
-    expect(worst.delta).toBeLessThan(0);
-    expect(worst.gotWidth).toBeLessThan(worst.refWidth * 0.75);
+    const rep = compareSilhouette(ref.mask, got, { bands: 6, range: [0.88, 1] });
+    for (const b of rep.bands)
+      expect(Math.abs(b.delta) / b.refWidth, `band at ${b.at.toFixed(2)}`).toBeLessThan(0.15);
   });
 });

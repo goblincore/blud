@@ -591,7 +591,16 @@ export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
     if (p.op === 'sub' || p.dead) continue;
-    const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    // PAINTED PRIMS RANK BELOW FLESH. A painted prim is a surface feature —
+    // a shoe, a lens, a sleeve — never the limb's structural mass, and the
+    // fuse probe needs the mass: the mouse's shoe ball (0.051 effective) out-
+    // ranked its thigh (0.038), the leg's "core" became the shoe, and the
+    // core-to-core line to the pelvis ran through open air, reporting a
+    // perfectly attached leg as disconnected. Same failure the head's occiput
+    // produced, arriving through colour instead of size. A cluster that is
+    // ENTIRELY painted still gets its fattest prim, so this only reorders.
+    const depth = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2])
+      - (p.color === undefined ? 0 : 1e3);
     if (depth > bestDepth) { bestDepth = depth; best = p; }
   }
   return best === null ? null : lerp(best.a, best.b, 0.5);

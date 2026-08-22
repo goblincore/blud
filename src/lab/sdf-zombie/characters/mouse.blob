@@ -93,13 +93,13 @@ skeleton
     bone thigh    parent=pelvis   dir=down tilt=5  pitch=8  side=0.042 len=0.110
     bone shin     parent=thigh    dir=down tilt=-4 pitch=-9         len=0.105
     bone foot     parent=shin     dir=fwd                            len=0.100
-    # FINGER BONES, not tipped prims. The obvious way to author a finger fan
-    # is four bars on the hand bone aimed by their own tip=(x,y,z) — but
-    # expandMirror does NOT flip a mirrored prim's tip (it flips the BONE's
-    # dir only), so every finger would keep its world-x tip on both sides and
-    # the right hand's index finger would point INWARD across the chest.
-    # Bones DO mirror correctly, so each finger gets a real bone fanned by
-    # tilt and its bar rides it straight. Splay: index out +26, little in
+    # FINGER BONES, not tipped prims. When these were written expandMirror
+    # did NOT flip a mirrored prim's tip (only the bone's dir), so a fan of
+    # tipped bars on the hand bone would have pointed the right index finger
+    # INWARD across the chest; bones mirrored correctly, so each finger got
+    # one. expandMirror reflects offset/tip/bend x on the .r copy now
+    # (2026-08-22, for the SDF shoes) — the bones stay because they are also
+    # what the rig articulates. Splay: index out +26, little in
     # -20, middle/ring between — the reference hands spread wide.
     bone f_index  parent=hand dir=down tilt=26 pitch=4 len=0.050
     bone f_middle parent=hand dir=down tilt=10 pitch=5 len=0.055
@@ -216,7 +216,16 @@ body
   # from y 0.92 to 0.96, i.e. centre (0.18, 0.95), radius 0.127. offset.y
   # 0.105 puts ours at 0.966 with the rim at 1.096 (mesh 1.095). deep 0.45:
   # measured 0.14 thick at the rim, not the coin we had.
-  blob head on skull at=0.44 r=0.130 wide=1.00 tall=1.00 deep=0.45 blend=0.0028 chamfer offset=(0.170,0.105,0.000) both
+  # "THE EARS ARE STILL TOO ROUND" (owner, 2026-08-22) — and the mesh says
+  # exactly how: its ear is an ELLIPSE 0.26 wide by 0.23 tall (x 0.047..0.307,
+  # y 0.87..1.10), centred at (0.177, 0.985), whose flat-ish bottom stops at
+  # the brow line. Ours was a 0.26 circle centred at 0.966, so its bottom
+  # hung to 0.836 and bulged out past the skull below where the real ear had
+  # already ended — that bulge is the "round" read. tall 0.88 and centre
+  # 0.985 put the rim at 0.871..1.099 against the mesh's 0.87..1.10; the
+  # width is unchanged and already matched. Still inside the test's
+  # roundness guard (1.14 of 1.25).
+  blob head on skull at=0.44 r=0.130 wide=1.00 tall=0.88 deep=0.45 blend=0.0028 chamfer offset=(0.170,0.124,0.000) both
 
   # ============================================================
   # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
@@ -300,15 +309,14 @@ body
   # than tucked underneath.
   # ============================================================
   # THE SUNGLASSES — geometry, painted. In the reference mesh they are not
-  # a separate object: a glossy black bump on the face, two lens domes and
-  # a bridge, with the brow band above. Measured off the mesh by its PAINT
+  # a separate object: a glossy black bump on the face: two lens lobes, a thin
+  # bridge, and two temple arms rising to the ears. Measured off the mesh by its PAINT
   # (black texels on the head, frame-aligned): the black region spans y
   # 0.86..0.92 and x +/-0.099 at the lenses, whose front reaches z 0.126..
   # 0.129 at x +/-0.03..0.07 against a skin front of ~0.115 there and 0.095
   # at x 0.09 — domes 14 mm proud in the middle and 24 mm at their outer
-  # edge — dipping to 0.120 at the bridge. The brows are a band at y
-  # 0.92..0.96, x +/-0.08..0.09, following the forehead as it recedes (z
-  # 0.096 at 0.92 -> 0.061 at 0.96).
+  # edge — dipping to a thin 0.116 bridge at x 0..0.02. Above the lenses the
+  # black is two temple arms (see below), not a brow.
   #
   # `color=101012` is the mesh's lens black; gloss 0.95 gives the wet glint
   # the reference has. blend 0.002: a lens sits ON skin with a crisp edge,
@@ -318,8 +326,11 @@ body
   # Lenses: BENT CAPSULES that wrap the cheek, not ellipsoids. A flat lens
   # floats: our face recedes to z 0.070 at x 0.10 (the mesh cheek is 0.095
   # there), so an ellipsoid spanning to x 0.100 left its outer tip 36 mm off
-  # the skin. This one runs from the bridge (0.004, 0.885, 0.096) out to
-  # (0.072, 0.885, 0.081) — the AXIS ends at 0.072 because the capsule's
+  # the skin. This one runs from (0.040, 0.885, 0.102) out to
+  # (0.072, 0.885, 0.081) — the INNER end at 0.040, not at the centreline,
+  # because the round cap adds r 0.028 and the mesh lens lobe starts at
+  # x 0.02 with a thin bridge across the last 2 cm; with the axis at 0.004
+  # the two caps met and the owner saw one black slab with no bridge — the AXIS ends at 0.072 because the capsule's
   # round cap adds r 0.028 beyond it, and the mesh lens stops at x 0.099 rim
   # included; a first cut ended the axis at 0.100 and the cap floated 20 mm
   # off the receding temple, 46 rays of daylight. Bent forward so the apex
@@ -327,17 +338,22 @@ body
   # ~0.128 mid-lens (mesh 0.129), ~0.121 at the bridge ends (0.120), and the
   # back is 5-18 mm inside the skin along its whole length. r 0.028 is the
   # lens band's half-height: y 0.857..0.913.
-  blob head on skull at=0.00 r=0.028 wide=1.00 tall=1.00 deep=0.55 blend=0.0020 offset=(0.004,0.068,0.104) tip=(0.068,0,-0.015) bend=(0,0,0.045) both color=101012 gloss=0.95
-  # Bridge: front 0.120, spanning x +/-0.019 into both lenses.
-  blob head on skull at=0.00 r=0.012 wide=1.60 tall=0.80 deep=0.70 blend=0.0020 offset=(0,0.068,0.110) color=101012 gloss=0.95
-  # Brow band: a SLAB, not a sausage — r 0.007 stretched to 22 mm tall —
-  # bent across the forehead from (-0.085, 0.935, 0.047) to (+0.085, ...)
-  # with its apex at z 0.094, so the middle stands ~5 mm proud of the skull
-  # (front ~0.100 there) and the ends are buried 14 mm INSIDE the receding
-  # temples (skin 0.061 at x 0.085) instead of grazing them, which is what
-  # the first cut did and it left two rays of daylight. Matte-ish: the
-  # reference brows do not glint.
-  blob head on skull at=0.00 r=0.007 wide=1.00 tall=1.60 blend=0.0020 offset=(-0.085,0.118,0.055) tip=(0.170,0,0) bend=(0,0,0.094) color=101012 gloss=0.35
+  blob head on skull at=0.00 r=0.028 wide=1.00 tall=1.00 deep=0.55 blend=0.0020 offset=(0.040,0.068,0.110) tip=(0.032,0,-0.021) bend=(0,0,0.028) both color=101012 gloss=0.95
+  # Bridge: THIN. The paint at x 0..0.02 is an 8 mm sliver at z 0.108..0.116,
+  # set back from the lobes (0.122..0.129) — a wire between two lenses, not
+  # a third lens. One bar, r 0.008, from x -0.018 to +0.018, overlapping
+  # both caps by 6 mm.
+  blob head on skull at=0.00 r=0.008 wide=1.00 tall=0.75 deep=0.80 blend=0.0020 offset=(-0.018,0.068,0.116) tip=(0.036,0,0) color=101012 gloss=0.95
+  # TEMPLE ARMS, not a brow. The black above the lenses summarised as
+  # "x -0.089..0.094 per row" and got authored as one band — the owner's
+  # unibrow. Split by side it is two columns: on the right, x 0.055..0.094
+  # at every row from y 0.92 up, with z falling from 0.085 (0.92) to
+  # 0.015..0.058 (0.97..0.98). An arm rising from the lens's outer corner
+  # (0.088, 0.905, 0.095) up and back to (0.064, 0.985, 0.030), where it is
+  # buried in the ear plate's inner rim — the arm goes to the ear, as arms
+  # do. r 0.010 for the 2-3 cm of paint width. Seated: 5 mm proud of the
+  # temple at its start, inside the skull at its end.
+  blob head on skull at=0.00 r=0.010 wide=1.00 tall=1.00 blend=0.0020 offset=(0.088,0.088,0.103) tip=(-0.024,0.080,-0.065) both color=101012 gloss=0.60
 
   # THE LOWER FACE — the mass the lips sit IN, not in front of. The mesh at
   # y 0.70 is one body 0.21 deep (z -0.095..0.119) and 0.061 half-wide; at
@@ -413,12 +429,30 @@ body
   # Feet: swallowed by the kit's oversized shoes (topline 0.185), so all that
   # must be true of the flesh is that it fits INSIDE the shoe and fills the
   # toe. The ankle nub is the only part that shows above the topline.
-  # The foot flesh lives entirely inside the kit's shoe and is never seen —
-  # except where it isn't inside: at r 0.024 the bar's top reached y 0.160,
-  # 7 mm through the shoe's instep (the shoe's ring there sits at 0.153 once
-  # the 8-sided facet loss is counted). Slimmer, and it stays hidden.
-  bar  leg on foot from=0.10 to=0.80 r=0.020 tall=0.70 blend=0.0028 mirror
-  blob leg on foot at=0.92 r=0.022 wide=1.15 tall=0.65 deep=0.95 blend=0.0030 mirror
+  # ============================================================
+  # THE SHOES — painted SDF, not kit. The mesh has no visible foot: the leg
+  # enters a soft grey shoe at the ankle. Measured off the mesh by its
+  # grey/white paint (right shoe, frame-aligned): heel 0.106 wide at
+  # z -0.03, ball 0.147 wide at z 0.08..0.16, toe cap ending at z 0.18 and
+  # lower than the body (ymax 0.09 against 0.10), 0.14 tall at the ankle
+  # collar (x 0.019..0.107 at y 0.14, wrapping a leg centred at x 0.049),
+  # and the long axis yawing only ~12 degrees outward — heel centre x 0.089
+  # at z -0.02, toe centre x 0.130 at z 0.18. The kit lofts had 25 degrees
+  # and a floating foot; the two-tube gap at the crotch and every
+  # flesh-through-fabric fight came from dressing a smooth sculpt in hard
+  # polygons. Three prims per side, mirrored by the leg limb:
+  #   1. heel-to-toe cone, r 0.053 -> 0.046, the body of the shoe;
+  #   2. the ball, a wider blob where the mesh is widest — tall 1.0 and
+  #      centred at y 0.059, because at y 0.12 the mesh shoe is still 0.136
+  #      wide and a flatter ball stopped 2 cm short (the silhouette's one
+  #      "too narrow" band at 0.87 of height);
+  #   3. the ankle collar, which is also what fuses the shoe to the shin.
+  # Colour is the mean of the mesh's shoe paint; a little gloss for the
+  # rubbery sheen in the plates.
+  # ============================================================
+  blob leg on foot at=0.00 r=0.053 r2=0.046 wide=1.00 tall=1.00 blend=0.0060 offset=(0.045,-0.088,0.018) tip=(0.041,-0.005,0.113) mirror color=b9b9bc gloss=0.25
+  blob leg on foot at=0.00 r=0.062 wide=1.18 tall=1.00 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
+  blob leg on foot at=0.00 r=0.045 wide=1.00 tall=0.80 deep=1.10 blend=0.0070 offset=(0.019,-0.016,0.012) mirror color=b9b9bc gloss=0.25
 
 # THE CRANIUM, measured off the reference mesh rather than guessed off a
 # plate. At its widest row (y 0.86) the mesh skull is 0.135 half-wide and
