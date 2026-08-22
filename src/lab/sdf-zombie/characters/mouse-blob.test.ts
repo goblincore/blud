@@ -264,8 +264,12 @@ describe('the shoes, as painted SDF', () => {
     // Shoe grey, as opposed to the shorts' blue on the thighs and knees.
     const grey = (p: typeof b.prims[number]) => !!p.color && p.color[0] > 0.3 && Math.abs(p.color[0] - p.color[2]) < 0.05;
     const shoes = b.prims.filter(p => grey(p) && (p.limb === 'legL' || p.limb === 'legR'));
-    expect(shoes.length).toBe(6);                       // three prims a side
-    expect(shoes.filter(p => p.limb === 'legL').length).toBe(3);
+    expect(shoes.length).toBe(8);                       // four prims a side:
+    // cone + ball + ankle collar + the WALL (2026-08-22) — a flattened
+    // tapered capsule bridging collar to ball, because the mesh shoe's
+    // side swells gradually from ankle to ball and no single sphere can
+    // produce that onset (band 0.88 swung +0.045/-0.039 with tall alone).
+    expect(shoes.filter(p => p.limb === 'legL').length).toBe(4);
     // Left and right are reflections of each other in x.
     const l = shoes.filter(p => p.limb === 'legL').map(p => p.a[0]).sort();
     const r = shoes.filter(p => p.limb === 'legR').map(p => -p.a[0]).sort();
