@@ -152,10 +152,21 @@ parts
   # high is what this grammar can do. Rings re-marched for the new heights:
   # the ball narrows fast up here, and keeping the old 0.450 bottom ring
   # would float the band 15 mm off the scalp.
+  # RE-MEASURED against the head as it ACTUALLY renders. The rows this was
+  # fitted to are stale: they were taken before the lab was fixed to honour a
+  # .blob's own `face` block, so the real skull is a different size now.
+  # Marched with sdBody bisects at each ring's own height:
+  #
+  #   y 0.85  W 0.522  D 0.381      y 0.93  W 0.398  D 0.285
+  #   y 0.89  W 0.485  D 0.353
+  #
+  # The DEPTH was the bug. The band was 34-41 mm deeper than the head all the
+  # way up, so it stood off the face — the owner's "it doesn't fully sit on the
+  # head, the front there is a gap". Widths were close; depths were not.
   loft capband bone=skull at=0.700 dir=up len=0.075 frame=fwd material=royal
-    ring 0.00 w=0.530 d=0.415
-    ring 0.50 w=0.484 d=0.378
-    ring 1.00 w=0.420 d=0.326
+    ring 0.00 w=0.540 d=0.398
+    ring 0.50 w=0.502 d=0.370
+    ring 1.00 w=0.422 d=0.306
     cap start=none end=none
 
   # CAP CONE — the floppy blue cone, slumping BACKWARD and to one side.
@@ -181,10 +192,12 @@ parts
   # straight through the mount point — which here put a fan dead on the
   # skull-bone axis, 70 mm inside the cranium. Same trap as the goblin
   # kit's `cap flat` note, one syntax earlier.
-  # The cone's base ring deliberately SWALLOWS the band's top rim (r 0.205
-  # against the band top's 0.170 half-width): an earlier draft sat the cone
-  # on the scalp above the band and the render showed a stripe of bare head
-  # between the two pieces. Mounted at t=0.86 (y 0.906) so the base emerges
+  # THE BASE MUST TUCK INSIDE THE BAND, not swallow it. At r 0.235 the cone's
+  # base ring was 24 mm WIDER than the band's top rim (half 0.211), so it
+  # flared out past the band — and since `cap start=none` leaves it open, you
+  # could see straight into the hollow tube. That is the "weird geometry
+  # clipping... like another part of the cap or something remnant". r 0.198
+  # sits inside the rim, so the band hides the opening. Mounted at t=0.86 (y 0.906) so the base emerges
   # from INSIDE the band it overlaps — the band's top rim is y 0.926.
   # A NIGHTCAP: rises off the band, then bends BACK and flops DOWN behind the
   # head, tapering the whole way to a tip that carries a star.
@@ -202,8 +215,8 @@ parts
   # the FAT early segments turn barely at all and the thin tip does the real
   # bending, which is the opposite of what the original did.
   sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-26 yaw=10 material=royal
-    seg len=0.048 r=0.235 back=8
-    seg len=0.060 r=0.205 back=13
+    seg len=0.048 r=0.198 back=8
+    seg len=0.060 r=0.186 back=13
     seg len=0.065 r=0.172 back=17
     seg len=0.065 r=0.140 back=11 down=8
     seg len=0.062 r=0.108 back=8 down=14
