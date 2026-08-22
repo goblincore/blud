@@ -137,19 +137,27 @@ body
   # height: x +-0.11, z -0.27..0.08 (0.47 deep, 0.28 wide: a FLATTENED tube),
   # curling down to the ground contact strip z -0.23..0.00 at y 0. wide 0.85
   # deep 1.45 makes it deep-not-wide and rests its bottom exactly on y 0.
-  blob torso on tail2 at=1.00 r=0.160 wide=0.95 deep=1.40 blend=0.022 offset=(0.03,-0.03,0.205)
+  blob torso on tail2 at=1.00 r=0.160 wide=0.95 deep=1.30 blend=0.022 offset=(0.03,0.00,0.19)
+  # Ground contact: the belly's own lowest strip — the mesh touches down on
+  # z -0.31..0.00 at y 0..0.06 (a strip 0.31 long), which the round belly
+  # blob above cannot be: one sphere is either too deep at the floor or too
+  # shallow at the equator. This flat blob IS the floor contact.
+  blob torso on tail2 at=1.00 r=0.090 wide=1.30 deep=1.70 blend=0.020 offset=(0.03,-0.14,0.18)
   # Front column: the lower torso's front mass, running z -0.07..0.16 of
   # height down the waist into the belly (the mesh keeps front z to +0.16
   # all the way to y 0.20 — the slug's chest rests forward of its tail).
-  blob torso on tail2 at=0.75 r=0.150 wide=1.00 tall=1.20 deep=1.15 blend=0.025 offset=(0,0.18,0.37)
-  # Rear tube: the descending sweep — mesh tube back face z -0.34 at y 0.22,
-  # -0.37 at 0.30, -0.42 at 0.43 m; the fat upper tail above is tail1's blob.
-  blob torso on tail2 at=0.35 r=0.130 wide=1.00 deep=1.05 blend=0.020 offset=(0.04,0.01,-0.015)
+  blob torso on tail2 at=0.75 r=0.150 wide=1.00 tall=1.40 deep=1.15 blend=0.025 offset=(0,0.11,0.37)
+  # Rear tube: a THIN tapered bar, not a sphere — the mesh's tube is 0.10
+  # deep (z -0.44..-0.34 at y 0.36 of height) with the hook column rising
+  # behind it and clear AIR between tube and body. A sphere here fills that
+  # air and was the side view's biggest IoU leak. The bar follows the mesh
+  # tube's own line: z -0.39 at y 0.30 m rising to -0.345 at 0.49 m.
+  blob torso on pelvis at=0.00 r=0.045 r2=0.055 wide=1.00 deep=1.10 blend=0.018 offset=(0.04,-0.11,-0.39) tip=(0,0.19,0.045)
   # Upper tail: the FAT mass where the tail meets the junction — mesh
   # y 0.40..0.46 of height (0.54..0.62 m) is one run z -0.61..-0.34, half
   # 0.13 centred z -0.47, TOPPING OUT at y 0.63 (nothing behind z -0.06
   # above that). Below it the tube goes THIN (-0.42..-0.30).
-  blob torso on tail1 at=0.90 r=0.110 wide=1.00 deep=1.00 blend=0.018 offset=(0.04,0.156,-0.211)
+  blob torso on tail1 at=0.90 r=0.090 wide=1.00 deep=1.00 blend=0.018 offset=(0.04,0.13,-0.205)
   # The rear HOOK: three blobs up tail4. Mesh hook verts x 0.04..0.13 of
   # height (offset to +x — tilt=6 on tail4 plus offset x), y 0.29..0.46 of
   # height (0.39..0.62 m — it starts at the fat tail's latitude, NOT at
