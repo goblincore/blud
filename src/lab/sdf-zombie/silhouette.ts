@@ -193,20 +193,57 @@ export interface BodyMaskOpts {
  * emits; an external .bin would need a file read and this stays I/O-free so it
  * can run in the browser too.
  */
+/**
+ * GLB container -> the glTF JSON and its binary chunk.
+ *
+ * A .glb is a 12-byte header then a run of [uint32 length][uint32 type][data]
+ * chunks; the first is always JSON and the second, when present, is the BIN
+ * buffer that `buffers[0]` refers to WITHOUT a uri. That uri-less buffer is
+ * the only real difference from the .gltf path, so `gltfTriangles` takes the
+ * chunk as an argument rather than growing a second implementation.
+ *
+ * This exists so a reference MESH can be measured directly — the maus-biped
+ * GLBs under docs/dev-notes/refs/ — instead of a character being matched by
+ * eye against a render of one.
+ */
+export function parseGlb(buf: Uint8Array): { json: unknown; bin?: Uint8Array } {
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  if (dv.getUint32(0, true) !== 0x46546c67) throw new Error('not a GLB (bad magic)');
+  const total = dv.getUint32(8, true);
+  let off = 12;
+  let json: unknown, bin: Uint8Array | undefined;
+  while (off + 8 <= Math.min(total, buf.length)) {
+    const len = dv.getUint32(off, true);
+    const type = dv.getUint32(off + 4, true);
+    const data = buf.subarray(off + 8, off + 8 + len);
+    if (type === 0x4e4f534a) json = JSON.parse(new TextDecoder().decode(data));
+    else if (type === 0x004e4942) bin = data;
+    off += 8 + len + ((4 - (len % 4)) % 4); // chunks are 4-byte aligned
+  }
+  if (!json) throw new Error('GLB has no JSON chunk');
+  return { json, bin };
+}
+
 export function gltfTriangles(gltf: {
   buffers: Array<{ uri?: string }>;
   bufferViews: Array<{ buffer: number; byteOffset?: number; byteStride?: number }>;
   accessors: Array<{ bufferView: number; byteOffset?: number; componentType: number; count: number }>;
   meshes: Array<{ primitives: Array<{ attributes: { POSITION: number }; indices?: number }> }>;
-}): Float32Array {
+}, bin?: Uint8Array): Float32Array {
   const bufs = gltf.buffers.map((b) => {
-    const uri = b.uri ?? '';
+    // A uri-less buffer is the GLB case: its bytes are the container's BIN
+    // chunk, which the caller passes in from parseGlb.
+    if (b.uri === undefined) {
+      if (!bin) throw new Error('glTF buffer has no uri and no GLB binary chunk was supplied');
+      return bin;
+    }
+    const uri = b.uri;
     const comma = uri.indexOf(',');
     if (!uri.startsWith('data:') || comma < 0)
       throw new Error('kit glTF buffer is not an embedded data URI');
-    const bin = atob(uri.slice(comma + 1));
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    const b64 = atob(uri.slice(comma + 1));
+    const out = new Uint8Array(b64.length);
+    for (let i = 0; i < b64.length; i++) out[i] = b64.charCodeAt(i);
     return out;
   });
 
@@ -384,6 +421,59 @@ function fillTriangle(
       const w2 = ((a[0] - c[0]) * (py - c[1]) - (a[1] - c[1]) * (px - c[0])) / area;
       if (w0 >= 0 && w1 >= 0 && w2 >= 0) bits[y * w + x] = 1;
     }
+}
+
+/**
+ * Background pixels ENCLOSED by the subject — i.e. holes you can see through.
+ *
+ * This is the check for "there is a window in the character's face". The mouse
+ * shipped one: a muzzle whose primitives did not quite reach each other left a
+ * gap, and head-on it read as a big round nose carved out of the snout as
+ * negative space. validateBody, fusedOf and clearOf all passed on it, because
+ * none of them looks at the body from a camera.
+ *
+ * A RAY-CROSSING COUNT DOES NOT WORK, and that was the first attempt. Counting
+ * sign changes along an axis and calling more than two a hole fires on two
+ * merely OVERLAPPING spheres: rays that clip both near their rims pass through
+ * flesh, the concave waist between them, then flesh again. That is ordinary
+ * non-convexity and every blended body is full of it. The distinction that
+ * matters is not "did the ray leave the flesh" but "is this background sealed
+ * off from the outside", which is a 2D question about the projection and is
+ * exactly what a flood fill from the border answers.
+ *
+ * WHAT IT DOES NOT CATCH, learned the hard way on the very bug it was written
+ * for: a gap that OPENS to the outside. The mouse's face showed a large
+ * background-coloured void under the shades, and this returned zero for it,
+ * because the void drained downward past the chin into the gap between head
+ * and shoulders — background, connected to the border, therefore not enclosed.
+ * (That one turned out not to be geometry at all; see the dev note.) Nor does
+ * it distinguish a real defect from an honest one: the triangle between a
+ * hanging arm, the torso and the hip IS enclosed background, which is why the
+ * goblin reports 282 px and is perfectly fine.
+ *
+ * So: a non-zero result is a QUESTION, and a zero result proves very little.
+ *
+ * Returns the number of enclosed background PIXELS, so a caller can tell a
+ * one-pixel rasterisation artifact from a hole in the face.
+ */
+export function enclosedHoles(mask: Mask): number {
+  const { w, h, bits } = mask;
+  const outside = new Uint8Array(w * h);
+  const stack: number[] = [];
+  const push = (p: number) => { if (!bits[p] && !outside[p]) { outside[p] = 1; stack.push(p); } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (stack.length) {
+    const p = stack.pop()!;
+    const x = p % w, y = (p / w) | 0;
+    if (x > 0) push(p - 1);
+    if (x < w - 1) push(p + 1);
+    if (y > 0) push(p - w);
+    if (y < h - 1) push(p + w);
+  }
+  let holes = 0;
+  for (let p = 0; p < w * h; p++) if (!bits[p] && !outside[p]) holes++;
+  return holes;
 }
 
 export function subjectBounds(mask: Mask): Bounds | null {
