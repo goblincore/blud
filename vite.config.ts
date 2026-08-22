@@ -8,7 +8,10 @@ export default defineConfig({
     // vitest's default glob also scans committed model-benchmark scratch dirs
     // (docs/dev-notes/model-benchmarks/**) and sibling .claude worktrees, which
     // carry their own failing tests + nested node_modules.
-    include: ['src/**/*.test.ts'],
+    // scripts/ is in for the CLI tests that shell out to a tool (blob-measure);
+    // they live beside their script because a test importing node builtins
+    // cannot sit under src/ without breaking the app typecheck.
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],
   },
   build: {
