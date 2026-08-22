@@ -329,7 +329,7 @@ async function main() {
   refCube.position.set(0.6, 0.2, 0.3);
   scene.add(refCube);
 
-  let override = loadOverride();
+  let override = loadOverride(activeCharacterName());
   // Seed the face from the character's OWN `face` block (compileFace parses the
   // .blob), so a .blob-authored head renders at the size its author declared.
   // Before this, every character built from `{ ...DEFAULT_FACE, ...override }`
@@ -2332,7 +2332,7 @@ async function main() {
 
   function rebuildBody() {
     override = { ...override, faceParams: face };
-    saveOverride(override);
+    saveOverride(activeCharacterName(), override);
     current = buildZombieBody(face, override);
     showErrors(current);
     view.update(current);
@@ -2879,14 +2879,14 @@ async function main() {
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
     wounds = [];
-    override = loadOverride();
+    override = loadOverride(activeCharacterName());
     rebuildBody();
   });
   addButton(actionBox, 'copy override JSON', () => {
     void navigator.clipboard.writeText(serializeOverride(override));
   });
   addButton(actionBox, 'reset overrides', () => {
-    clearOverride();
+    clearOverride(activeCharacterName());
     override = {};
     rebuildBody();
   });
@@ -2963,7 +2963,7 @@ async function main() {
      *  for a gibbed corpse is a body-shaped nothing. */
     respawn() {
       wounds = [];
-      override = loadOverride();
+      override = loadOverride(activeCharacterName());
       rebuildBody();
     },
     focusHead,

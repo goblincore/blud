@@ -91,7 +91,11 @@ function sizeComposer() {
 sizeComposer();
 window.addEventListener('resize', sizeComposer);
 
-let override = loadOverride();
+// This lab has no ?character= switch: it renders the zombie and nothing
+// else. Named anyway so its overrides land in the same per-character
+// namespace as the WebGPU lab's rather than in a key of their own.
+const LAB_CHARACTER = 'zombie';
+let override = loadOverride(LAB_CHARACTER);
 let face: FaceParams = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
 const body = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
 const errorsEl = document.getElementById('errors');
@@ -555,7 +559,7 @@ function reapply() {
 
 function rebuildBody() {
   override = { ...override, faceParams: face };
-  saveOverride(override);
+  saveOverride(LAB_CHARACTER, override);
   current = buildBody(makeZombie(face), DEFAULT_BUILD_OPTS, override);
   if (errorsEl) errorsEl.textContent = current.errors.join('\n');
   view.update(current);
@@ -714,14 +718,14 @@ for (const [key, label, min, max] of [
 const actionBox = addSection(panelEl, 'actions');
 addButton(actionBox, 'respawn', () => {
   wounds = [];
-  override = loadOverride();
+  override = loadOverride(LAB_CHARACTER);
   rebuildBody();
 });
 addButton(actionBox, 'copy override JSON', () => {
   void navigator.clipboard.writeText(serializeOverride(override));
 });
 addButton(actionBox, 'reset overrides', () => {
-  clearOverride();
+  clearOverride(LAB_CHARACTER);
   override = {};
   rebuildBody();
 });
