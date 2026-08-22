@@ -182,7 +182,7 @@ face
   browHeavy  0.0004
   headBlend  0.0030
 
-# The clown's own face. BIG dark oval eyes — eyeSize 0.150 against the
+# The clown's own face. BIG dark oval eyes — eyeSize 0.125 against the
 # goblin's 0.070 — high on the ball, with a small open SMILE: mouthCurve is
 # positive here, where the zombie and goblin both wear negatives (frowns).
 # eyeGlow is LOW on purpose: the sheet mixes the eye toward this value and
@@ -193,11 +193,12 @@ face
 # spot inside a dark feature, so the glint is dropped, not faked.
 sheet
   eyeGap     0.40
-  # 0.150, up from 0.110: the rescue render's verdict was "eyes barely
-  # read" — too small, and shadowed by the cap band above. The reference
-  # draws big oval dots on a huge pale face; at this head size 0.150 is
-  # still proportionally SMALLER than the drawing, so err upward.
-  eyeSize    0.150
+  # 0.125, settled after two misses: 0.110 vanished under the cap band's
+  # brim (rescue render), 0.150 read as one dark visor because the inner
+  # edges nearly met (eyeGap 0.40 leaves only 0.05 uv between them at that
+  # size). The reference's eyes are small-to-medium dots set WIDE on a huge
+  # face — 0.125 keeps them unmistakably dots.
+  eyeSize    0.125
   # Near-black, for the reason above. Not zero: zero leaves the eye at base
   # grey and it stops reading as a drawn eye at all. 0.10 -> 0.16 with the
   # size bump: under the cap's shade a pure 0.10 eye and its shadow merge

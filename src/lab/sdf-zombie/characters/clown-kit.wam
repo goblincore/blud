@@ -114,19 +114,27 @@ parts
   # tried to match the reference's diagonal cap edge — ray pitched forward,
   # rings sized along it — and floated a centimetre off the ball: an
   # elliptical ring hugs a sphere only in the sphere's own horizontal
-  # sections, so horizontal it is. The band is kept SHORT (55 mm) and low
-  # instead, which buys the same read without the float.
-  loft capband bone=skull at=0.575 dir=up len=0.075 frame=fwd material=royal
-    ring 0.00 w=0.450 d=0.432
-    ring 0.50 w=0.432 d=0.415
-    ring 1.00 w=0.398 d=0.382
+  # sections, so horizontal it is.
+  #
+  # SITS HIGH, off the brow: band bottom y 0.851, where the sheet's eye
+  # line lands at y ~0.74-0.80. First version's band bottom was y 0.809 —
+  # 14 mm over the eye line — and from the camera's slight downward pitch
+  # the brim ate the eyes whole (rescue render: "a dark visor band across
+  # the upper face"). The reference sits the cap well BACK off the brow;
+  # high is what this grammar can do. Rings re-marched for the new heights:
+  # the ball narrows fast up here, and keeping the old 0.450 bottom ring
+  # would float the band 15 mm off the scalp.
+  loft capband bone=skull at=0.700 dir=up len=0.075 frame=fwd material=royal
+    ring 0.00 w=0.430 d=0.412
+    ring 0.50 w=0.394 d=0.378
+    ring 1.00 w=0.340 d=0.326
     cap start=none end=none
 
   # CAP CONE — the floppy blue cone, slumping BACKWARD and to one side.
   #
   # THE OWNER'S EXPLICIT COMPLAINT ABOUT ATTEMPT ONE was that its cap
-  # swallowed the face. Two fixes carry the note: the BAND above stops at
-  # y 0.825 — well above the eye line (~y 0.79), so the whole face stays
+  # swallowed the face. Two fixes carry the note: the BAND above starts at
+  # y 0.851 — clear of the eye line (~y 0.74-0.80), so the whole face stays
   # out from under it — and the cone is a SWEEP rather than a loft, so its
   # tip can DROOP. Segments accumulate world-referenced bends (`back=` tips
   # the tangent toward -z, `down=` toward -y): three back-bends carry the
@@ -146,10 +154,11 @@ parts
   # skull-bone axis, 70 mm inside the cranium. Same trap as the goblin
   # kit's `cap flat` note, one syntax earlier.
   # The cone's base ring deliberately SWALLOWS the band's top rim (r 0.205
-  # against the band top's 0.199 half-width): an earlier draft sat the cone
+  # against the band top's 0.170 half-width): an earlier draft sat the cone
   # on the scalp above the band and the render showed a stripe of bare head
-  # between the two pieces.
-  sweep capcone bone=skull at=0.797 offset=(0,0.006,-0.008) dir=up pitch=-12 yaw=12 material=royal
+  # between the two pieces. Mounted at t=0.86 (y 0.906) so the base emerges
+  # from INSIDE the band it overlaps — the band's top rim is y 0.926.
+  sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-12 yaw=12 material=royal
     seg len=0.055 r=0.205 back=10
     seg len=0.060 r=0.130 back=14
     seg len=0.060 r=0.080 back=16 down=14
