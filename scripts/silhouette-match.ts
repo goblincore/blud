@@ -84,8 +84,11 @@ if (ref.components > 1)
   console.log(`  note: ${ref.components} disconnected blobs found; kept the largest. Check the plate has no watermark or detached shadow.`);
 
 console.log('\n  reference' + ' '.repeat(36) + 'built');
-const a = renderMask(ref.mask, 44).split('\n');
-const b = renderMask(got, 44).split('\n');
+// Same row count for both, or the two columns sit at different vertical
+// scales and the rows stop corresponding — see renderMask's note.
+const ROWS = 26;
+const a = renderMask(ref.mask, 44, ROWS).split('\n');
+const b = renderMask(got, 44, ROWS).split('\n');
 for (let i = 0; i < Math.max(a.length, b.length); i++)
   console.log('  ' + (a[i] ?? ' '.repeat(44)) + '   ' + (b[i] ?? ''));
 

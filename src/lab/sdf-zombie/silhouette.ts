@@ -580,9 +580,20 @@ function countComponents(mask: Mask): number {
   return keepLargestComponent(mask).components;
 }
 
-/** ASCII rendering, for putting a silhouette in a terminal or a dev note. */
-export function renderMask(mask: Mask, cols = 48): string {
-  const rows = Math.max(1, Math.round(cols * (mask.h / mask.w) * 0.5)); // chars are ~2:1
+/**
+ * ASCII rendering, for putting a silhouette in a terminal or a dev note.
+ *
+ * PASS `rows` WHEN PRINTING TWO OF THESE SIDE BY SIDE. Left to itself each
+ * mask picks a row count from its OWN aspect, so two figures printed next to
+ * each other end up at different vertical scales and their rows do not
+ * correspond — it still looks like a comparison, which is worse than not
+ * printing one. That is not hypothetical: it made the mouse's splayed shoes
+ * look absent from a figure whose shoe band measured 0.346 against the
+ * plate's 0.345.
+ */
+export function renderMask(mask: Mask, cols = 48, rowsOverride?: number): string {
+  // Terminal cells are about twice as tall as they are wide.
+  const rows = rowsOverride ?? Math.max(1, Math.round(cols * (mask.h / mask.w) * 0.5));
   const small = normalise(mask, cols, rows);
   const lines: string[] = [];
   for (let y = 0; y < rows; y++) {
