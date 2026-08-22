@@ -110,4 +110,13 @@ body
     const authored = body.prims.map(p => p.src).filter((n): n is number => n !== undefined);
     expect(authored.sort((a, b) => a - b)).toEqual([torsoLine, legLine, legLine, torso2Line].sort((a, b) => a - b));
   });
+
+  it('carries the CONCRETE bone name, so a mirrored prim names its own side', () => {
+    // `bone` rides the same route as `src` and is what turns a prim index into
+    // "the leg on thigh.l" — the half of the provenance a line number alone
+    // cannot give, since one mirrored line authors two prims.
+    const legs = body.prims.filter(p => p.src === legLine).map(p => p.bone);
+    expect(legs.sort()).toEqual(['thigh.l', 'thigh.r']);
+    expect(body.prims.find(p => p.src === torsoLine)!.bone).toBe('spine');
+  });
 });

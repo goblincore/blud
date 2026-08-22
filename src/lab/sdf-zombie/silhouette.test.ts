@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   maskFromRgba, maskFromBody, subjectBounds, normalise, compareSilhouette,
-  renderMask, gltfTriangles, type Mask,
+  renderMask, gltfTriangles, maskFromTriangles, bandOwners, type Mask,
 } from './silhouette';
 import { decodePng } from './png-decode';
 import { parseBlob } from './blob-parse';
@@ -243,5 +243,63 @@ describe('the mouse against its own reference plate', () => {
     const rep = compareSilhouette(ref.mask, got, { bands: 6, range: [0.88, 1] });
     for (const b of rep.bands)
       expect(Math.abs(b.delta) / b.refWidth, `band at ${b.at.toFixed(2)}`).toBeLessThan(0.15);
+  });
+});
+
+describe('maskFromTriangles', () => {
+  // A reference MESH has to become a mask on its own, without a body to hang
+  // it on — that is the whole point of splitting the raster out of
+  // maskFromBody, which can only union a kit onto flesh it already has.
+  it('rasterises a bare triangle soup at its own aspect', () => {
+    // A 0.2 x 0.4 quad, as two triangles, in the z = 0 plane.
+    const tris = new Float32Array([
+      0, 0, 0, 0.2, 0, 0, 0.2, 0.4, 0,
+      0, 0, 0, 0.2, 0.4, 0, 0, 0.4, 0,
+    ]);
+    const m = maskFromTriangles(tris, { view: 'front', heightPx: 64, pad: 0 });
+    expect(m.h).toBe(64);
+    let on = 0;
+    for (const v of m.bits) on += v;
+    expect(on / (m.w * m.h)).toBeGreaterThan(0.95);
+    expect(Math.abs(m.w / m.h - 0.5)).toBeLessThan(0.1);
+  });
+});
+
+describe('bandOwners', () => {
+  // Same grammar as build-body.test.ts's provenance fixture, cut down to the
+  // two blobs under test: a fat one high on the spine that swallows the face,
+  // and a small one low on the pelvis. Nothing else reaches either extreme, so
+  // the top band can only be owned by the first and the bottom by the second.
+  const SRC = `model t
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=0 len=0.34
+  bone skull parent=spine dir=up len=0.16
+
+body
+  blob torso on spine at=0.95 r=0.34 wide=1.2 blend=0.02
+  blob torso on pelvis at=0.40 r=0.10 wide=1.0 blend=0.02
+`;
+  const bigLine = 8, smallLine = 9;
+  const doc = parseBlob(SRC);
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+
+  it('names the primitive that forms each band of the outline', () => {
+    expect(body.errors).toEqual([]);
+    const owners = bandOwners(body, { view: 'front', bands: 4 });
+    expect(owners.map(o => o.band)).toEqual([0, 1, 2, 3]);
+    expect(owners[0]!.line).toBe(bigLine);
+    expect(owners[0]!.bone).toBe('spine');
+    expect(owners[0]!.limb).toBe('torso');
+    expect(owners[3]!.line).toBe(smallLine);
+    expect(owners[3]!.bone).toBe('pelvis');
+    expect(body.prims[owners[0]!.index]!.src).toBe(bigLine);
+  });
+
+  it('puts its bands at the same heights compareSilhouette reports', () => {
+    const owners = bandOwners(body, { view: 'front', bands: 4 });
+    const m = maskFromBody(body, { heightPx: 128 });
+    const rep = compareSilhouette(m, m, { bands: 4 });
+    for (let i = 0; i < 4; i++) expect(owners[i]!.at).toBeCloseTo(rep.bands[i]!.at, 6);
   });
 });

@@ -385,7 +385,8 @@ export function sdBody(p: Vec3, body: Body): number {
  * `hitBest` (march.wgsl.ts) — the same arg-min the paint lookup uses — so a
  * surface point can be attributed to the `.blob` line that authored it.
  * Carves and grooves shape the surface but never own it, exactly as on the
- * GPU.
+ * GPU. Evaluated without the shader's cluster-bounds cull, which only matters
+ * off-surface.
  */
 export function nearestPrim(p: Vec3, body: Body): number {
   let best = -1, bestD = Infinity;

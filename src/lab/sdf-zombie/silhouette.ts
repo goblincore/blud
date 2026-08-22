@@ -51,8 +51,8 @@
 //     shoes less than half the width they should be;
 //   * tracking ONE character against ONE plate across an edit, where pose is
 //     constant and the change in the numbers is real signal.
-import { sdBody } from './validate';
-import type { BuiltBody, Vec3 } from './types';
+import { nearestPrim, sdBody } from './validate';
+import type { BuiltBody, ClusterInfo, Vec3 } from './types';
 
 /** 1 = subject, 0 = background. Row 0 is the TOP of the image. */
 export interface Mask {
@@ -283,7 +283,137 @@ export function gltfTriangles(gltf: {
   return new Float32Array(tris);
 }
 
-export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
+/** The world-space box a raster is framed on. */
+interface Box {
+  minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
+}
+
+/**
+ * The screen frame one orthographic raster is taken in — everything needed to
+ * map a pixel back to a world point, which is what lets bandOwners ask the
+ * FIELD about a row it found in the MASK.
+ */
+interface Frame {
+  view: 'front' | 'side';
+  /** World u (x for front, z for side) at the left edge, and the span across. */
+  u0: number; spanU: number;
+  /** World y at the TOP edge, and the span downward. Row 0 is the top. */
+  maxY: number; spanY: number;
+  /** Depth range a ray marches over. */
+  dMin: number; dMax: number;
+  w: number; h: number;
+}
+
+/** Bounds from the cluster spheres — a superset of the surface, which is what
+ *  we want: the mask must not be cropped by its own framing. */
+function boxOfClusters(live: ClusterInfo[]): Box {
+  const box: Box = {
+    minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity,
+  };
+  for (const c of live) {
+    box.minX = Math.min(box.minX, c.center[0] - c.radius); box.maxX = Math.max(box.maxX, c.center[0] + c.radius);
+    box.minY = Math.min(box.minY, c.center[1] - c.radius); box.maxY = Math.max(box.maxY, c.center[1] + c.radius);
+    box.minZ = Math.min(box.minZ, c.center[2] - c.radius); box.maxZ = Math.max(box.maxZ, c.center[2] + c.radius);
+  }
+  return box;
+}
+
+function emptyBox(): Box {
+  return { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
+}
+
+/** Grow a box over a triangle soup's vertices. */
+function growByTriangles(box: Box, tris: Float32Array): void {
+  for (let i = 0; i + 2 < tris.length; i += 3) {
+    const x = tris[i]!, y = tris[i + 1]!, z = tris[i + 2]!;
+    if (x < box.minX) box.minX = x; if (x > box.maxX) box.maxX = x;
+    if (y < box.minY) box.minY = y; if (y > box.maxY) box.maxY = y;
+    if (z < box.minZ) box.minZ = z; if (z > box.maxZ) box.maxZ = z;
+  }
+}
+
+/**
+ * Box + view -> the screen frame.
+ *
+ * Screen axes. `u` runs left-to-right across the image, `d` is the view
+ * direction the ray travels along.
+ *   front: u = world x, depth = z. Screen x therefore INCREASES with world
+ *          x, i.e. the image is what you see standing BEHIND the character.
+ *          Characters are near-symmetric so this only matters for the
+ *          centroid-offset readout, and it is documented rather than flipped
+ *          so the mapping stays one obvious line.
+ *   side:  u = world z, depth = x.
+ *
+ * The horizontal pad is a fraction of HEIGHT, not width, so a wide character
+ * and a narrow one get the same margin in pixels.
+ */
+function frameOf(box: Box, view: 'front' | 'side', pad: number, heightPx: number): Frame {
+  const padY = (box.maxY - box.minY) * pad;
+  const minY = box.minY - padY, maxY = box.maxY + padY;
+
+  const uMin = view === 'front' ? box.minX : box.minZ;
+  const uMax = view === 'front' ? box.maxX : box.maxZ;
+  const padU = (maxY - minY) * pad;
+  const u0 = uMin - padU, u1 = uMax + padU;
+
+  const h = heightPx;
+  // A perfectly flat subject (a soup of coplanar triangles seen edge-on) would
+  // divide by zero and hand back a NaN width; the floor is far below anything
+  // a real body or kit spans, so no live framing changes.
+  const spanY = Math.max(maxY - minY, 1e-9);
+  const spanU = u1 - u0;
+  return {
+    view, u0, spanU, maxY, spanY,
+    dMin: view === 'front' ? box.minZ : box.minX,
+    dMax: view === 'front' ? box.maxZ : box.maxX,
+    w: Math.max(1, Math.round(h * (spanU / spanY))), h,
+  };
+}
+
+/**
+ * Fill a triangle soup into an existing bitmap, through a frame.
+ *
+ * A silhouette only asks "is anything here", so depth never has to be resolved
+ * between the polygons and whatever is already set — which is the whole reason
+ * this can ignore the depth-in-alpha compositing the real renderer needs.
+ */
+function rasterTriangles(bits: Uint8Array, tris: Float32Array, f: Frame): void {
+  const toPx = (i: number): [number, number] => [
+    ((f.view === 'front' ? tris[i]! : tris[i + 2]!) - f.u0) / f.spanU * f.w,
+    (f.maxY - tris[i + 1]!) / f.spanY * f.h,
+  ];
+  for (let i = 0; i + 8 < tris.length; i += 9)
+    fillTriangle(bits, f.w, f.h, toPx(i), toPx(i + 3), toPx(i + 6));
+}
+
+export interface TriMaskOpts {
+  view?: 'front' | 'side';
+  heightPx?: number;
+  pad?: number;
+}
+
+/**
+ * Orthographic silhouette of a triangle soup alone — the same raster
+ * `maskFromBody` unions a kit with, exposed so a reference MESH (a .glb
+ * through parseGlb + gltfTriangles) can be the thing a .blob is scored
+ * against. Same axes as maskFromBody.
+ */
+export function maskFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): Mask {
+  const view = opts.view ?? 'front';
+  const heightPx = opts.heightPx ?? 256;
+  const pad = opts.pad ?? 0.02;
+  if (tris.length < 9) return { w: 1, h: 1, bits: new Uint8Array(1) };
+  const box = emptyBox();
+  growByTriangles(box, tris);
+  const f = frameOf(box, view, pad, heightPx);
+  const bits = new Uint8Array(f.w * f.h);
+  rasterTriangles(bits, tris, f);
+  return { w: f.w, h: f.h, bits };
+}
+
+/** The mask AND the frame it was taken in. maskFromBody throws the frame away;
+ *  bandOwners needs it to turn a mask row back into a world height. */
+function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: Frame } | null {
   const view = opts.view ?? 'front';
   const heightPx = opts.heightPx ?? 256;
   const pad = opts.pad ?? 0.02;
@@ -291,51 +421,17 @@ export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
   const maxSteps = opts.maxSteps ?? 96;
 
   const live = body.clusters.filter((c) => c.alive);
-  if (!live.length) return { w: 1, h: 1, bits: new Uint8Array(1) };
+  if (!live.length) return null;
 
-  // Bounds from the cluster spheres — a superset of the surface, which is what
-  // we want: the mask must not be cropped by its own framing.
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (const c of live) {
-    minX = Math.min(minX, c.center[0] - c.radius); maxX = Math.max(maxX, c.center[0] + c.radius);
-    minY = Math.min(minY, c.center[1] - c.radius); maxY = Math.max(maxY, c.center[1] + c.radius);
-    minZ = Math.min(minZ, c.center[2] - c.radius); maxZ = Math.max(maxZ, c.center[2] + c.radius);
-  }
+  const box = boxOfClusters(live);
   // The kit joins the BOUNDS as well as the raster. A hat or a heel that
   // reaches past the flesh has to widen the frame, or it would be cropped and
   // the silhouette would be missing exactly the part that sticks out.
   const kit = opts.kit;
-  if (kit && kit.length) {
-    for (let i = 0; i < kit.length; i += 3) {
-      const x = kit[i]!, y = kit[i + 1]!, z = kit[i + 2]!;
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-    }
-  }
+  if (kit && kit.length) growByTriangles(box, kit);
 
-  const padY = (maxY - minY) * pad;
-  minY -= padY; maxY += padY;
-
-  // Screen axes. `u` runs left-to-right across the image, `d` is the view
-  // direction the ray travels along.
-  //   front: u = world x, depth = z. Screen x therefore INCREASES with world
-  //          x, i.e. the image is what you see standing BEHIND the character.
-  //          Characters are near-symmetric so this only matters for the
-  //          centroid-offset readout, and it is documented rather than flipped
-  //          so the mapping stays one obvious line.
-  //   side:  u = world z, depth = x.
-  const uMin = view === 'front' ? minX : minZ;
-  const uMax = view === 'front' ? maxX : maxZ;
-  const padU = (maxY - minY) * pad;
-  const u0 = uMin - padU, u1 = uMax + padU;
-  const dMin = view === 'front' ? minZ : minX;
-  const dMax = view === 'front' ? maxZ : maxX;
-
-  const h = heightPx;
-  const spanY = maxY - minY;
-  const spanU = u1 - u0;
-  const w = Math.max(1, Math.round(h * (spanU / spanY)));
+  const f = frameOf(box, view, pad, heightPx);
+  const { w, h, u0, spanU, maxY, spanY, dMin, dMax } = f;
   const bits = new Uint8Array(w * h);
 
   const step = spanY / h; // world units per pixel, used as the march floor
@@ -375,19 +471,97 @@ export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
     }
   }
 
-  // The kit is UNIONED on top, filled as flat triangles. A silhouette only
-  // asks "is anything here", so depth never has to be resolved between the
-  // polygons and the field — which is the whole reason this can ignore the
-  // depth-in-alpha compositing the real renderer needs.
-  if (kit && kit.length) {
-    const toPx = (i: number): [number, number] => [
-      ((view === 'front' ? kit[i]! : kit[i + 2]!) - u0) / spanU * w,
-      (maxY - kit[i + 1]!) / spanY * h,
-    ];
-    for (let i = 0; i + 8 < kit.length; i += 9)
-      fillTriangle(bits, w, h, toPx(i), toPx(i + 3), toPx(i + 6));
+  // The kit is UNIONED on top, filled as flat triangles.
+  if (kit && kit.length) rasterTriangles(bits, kit, f);
+  return { mask: { w, h, bits }, frame: f };
+}
+
+export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
+  return bodyRaster(body, opts)?.mask ?? { w: 1, h: 1, bits: new Uint8Array(1) };
+}
+
+export interface BandOwner {
+  band: number;
+  /** 0 at the top of the subject, 1 at the bottom — compareSilhouette's convention. */
+  at: number;
+  /** 1-based `.blob` line, or null for a TS-authored prim (or an empty band). */
+  line: number | null;
+  bone: string;
+  limb: string;
+  /** Index into body.prims, or -1 when the band holds nothing. */
+  index: number;
+}
+
+/**
+ * For each horizontal band of the body's silhouette, the primitive that forms
+ * the widest point of the outline — found by walking inward from the band's
+ * left and right extremes at its mid-height until the field goes negative,
+ * then asking nearestPrim. Pairs with compareSilhouette's band report so
+ * "band 7 is too wide" becomes "line 143 (snout on skull) is too wide".
+ *
+ * THE BANDS LINE UP WITH compareSilhouette's, and that is the entire point —
+ * a band index has to mean the same height in both or the pairing is a lie.
+ * compareSilhouette normalises to the SUBJECT bounding box, not to the framing
+ * bounds, so this takes its band heights from `subjectBounds` of the rendered
+ * mask (the actual y-extent of the silhouette) rather than from the cluster
+ * spheres the raster is framed on, which are a loose superset.
+ */
+export function bandOwners(
+  body: BuiltBody, opts: { view?: 'front' | 'side'; bands?: number } = {},
+): BandOwner[] {
+  const view = opts.view ?? 'front';
+  const bands = opts.bands ?? 16;
+  const empty = (band: number, at: number): BandOwner =>
+    ({ band, at, line: null, bone: '', limb: '', index: -1 });
+
+  const r = bodyRaster(body, { view, heightPx: 192 });
+  const sb = r ? subjectBounds(r.mask) : null;
+  if (!r || !sb)
+    return Array.from({ length: bands }, (_, i) => empty(i, (i + 0.5) / bands));
+
+  const f = r.frame;
+  const rowH = f.spanY / f.h;
+  // Pixel EDGES, so the extent matches what subjectBounds means: rows sb.y0
+  // through sb.y1 inclusive are occupied.
+  const topY = f.maxY - sb.y0 * rowH;
+  const botY = f.maxY - (sb.y1 + 1) * rowH;
+  const uLo = f.u0, uHi = f.u0 + f.spanU;
+  // Front view is symmetric about the world origin; a side view has no such
+  // anchor, so its centreline is the middle of the frame.
+  const centre = view === 'front' ? 0 : (uLo + uHi) / 2;
+  const uOf = (p: Vec3): number => (view === 'front' ? p[0] : p[2]);
+
+  const U_STEP = 0.002, D_STEP = 0.005;
+  /** March inward from `from` toward `to`, returning the first point inside. */
+  const edgeAt = (y: number, from: number, to: number): Vec3 | null => {
+    const dir = to >= from ? 1 : -1;
+    for (let k = 0; ; k++) {
+      const u = from + dir * k * U_STEP;
+      if (dir > 0 ? u > to : u < to) return null;
+      for (let d = f.dMin; d <= f.dMax; d += D_STEP) {
+        const p: Vec3 = view === 'front' ? [u, y, d] : [d, y, u];
+        if (sdBody(p, body) < 0) return p;
+      }
+    }
+  };
+
+  const out: BandOwner[] = [];
+  for (let i = 0; i < bands; i++) {
+    const at = (i + 0.5) / bands;
+    const y = topY - at * (topY - botY);
+    const l = edgeAt(y, uLo, centre), rt = edgeAt(y, uHi, centre);
+    // Keep the side that reaches FURTHER out: that is the one the eye reads as
+    // this band's width, and the one a band delta is complaining about.
+    const pick = l && rt
+      ? (Math.abs(uOf(l) - centre) >= Math.abs(uOf(rt) - centre) ? l : rt)
+      : (l ?? rt);
+    if (!pick) { out.push(empty(i, at)); continue; }
+    const index = nearestPrim(pick, body);
+    const prim = index >= 0 ? body.prims[index] : undefined;
+    if (!prim) { out.push(empty(i, at)); continue; }
+    out.push({ band: i, at, line: prim.src ?? null, bone: prim.bone ?? '', limb: prim.limb, index });
   }
-  return { w, h, bits };
+  return out;
 }
 
 /**

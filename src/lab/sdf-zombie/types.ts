@@ -152,6 +152,8 @@ export interface BodyDef {
 export interface Primitive {
   a: Vec3;
   b: Vec3;
+  /** Carried from PrimDef.bone through mirror/placement, so CONCRETE (`thigh.l`). */
+  bone?: string;
   /** Carried from PrimDef.src through mirror/placement — see there. */
   src?: number;
   radius: number;
