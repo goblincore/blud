@@ -116,9 +116,29 @@ const LOOK: Record<string, {
   pink:    { metalness: 0.06, roughness: 0.28, envIntensity: 1.0 },
   purple:  { metalness: 0.06, roughness: 0.24, envIntensity: 1.1 },
   yellow:  { metalness: 0.06, roughness: 0.24, envIntensity: 1.1 },
-  white:   { metalness: 0.04, roughness: 0.30, envIntensity: 0.9 },
   grey:    { metalness: 0.10, roughness: 0.28, envIntensity: 1.1 },
   gold:    { metalness: 0.70, roughness: 0.22, envIntensity: 1.3 },
+
+  // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
+  // entries exist mostly for the ENV MAP — without one, a rough dielectric's
+  // shadow side falls to near-black under the lab's single key, and the
+  // royal-blue shorts rendered as black from every unlit angle (the tee
+  // survives on its saturated red; the blue has no such margin).
+  tee:    { metalness: 0.0, roughness: 0.80, envIntensity: 0.50 },
+  shorts: { metalness: 0.0, roughness: 0.80, envIntensity: 0.50 },
+  // The oversized shoes are smooth vinyl — a broad sheen, like the leather.
+  shoe:   { metalness: 0.0, roughness: 0.50, envIntensity: 0.65 },
+  // Shades and brow slabs share one near-black material; the lens argument
+  // from `glass` above applies, dialed down — enough sheen to read as
+  // plastic, not enough to chrome over.
+  black:  { metalness: 0.25, roughness: 0.12, envIntensity: 1.60 },
+
+  // SHARED BY BOTH KITS, so it is listed once. The clown's pom-poms and mitts
+  // and the mouse's shoe highlight are both plain white cloth; this table is
+  // keyed by material NAME across every kit, not per character, so a name
+  // reused by two kits gets one look. Worth remembering before adding a
+  // generic name like "red" or "white" to a third kit.
+  white:  { metalness: 0.03, roughness: 0.38, envIntensity: 0.80 },
 };
 
 /**
