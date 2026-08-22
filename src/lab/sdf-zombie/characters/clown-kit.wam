@@ -113,15 +113,19 @@ skeleton
   # explicit dir=(x,y,z). The vector form was added to WAM for exactly this:
   # a radial fan is not expressible with the six axis words, and an earlier
   # attempt to aim them by pinning each tail did NOT reorient the bones —
-  # all eight came out pointing the same way. -0.32 in y droops the frill.
-  bone pt1 parent=neck head=(0.000,0.576,0.140) dir=(0.000,-0.32,1.000) len=0.115
-  bone pt2 parent=neck head=(0.099,0.576,0.099) dir=(0.707,-0.32,0.707) len=0.115
-  bone pt3 parent=neck head=(0.140,0.576,0.000) dir=(1.000,-0.32,0.000) len=0.115
-  bone pt4 parent=neck head=(0.099,0.576,-0.099) dir=(0.707,-0.32,-0.707) len=0.115
-  bone pt5 parent=neck head=(0.000,0.576,-0.140) dir=(0.000,-0.32,-1.000) len=0.115
-  bone pt6 parent=neck head=(-0.099,0.576,-0.099) dir=(-0.707,-0.32,-0.707) len=0.115
-  bone pt7 parent=neck head=(-0.140,0.576,-0.000) dir=(-1.000,-0.32,-0.000) len=0.115
-  bone pt8 parent=neck head=(-0.099,0.576,0.099) dir=(-0.707,-0.32,0.707) len=0.115
+  # all eight came out pointing the same way.
+  #
+  # DROOP: -0.78 in y, not -0.32. At -0.32 they stuck out as a stiff spiky
+  # collar; this is meant to be POINTY FABRIC, which hangs. The heads also drop
+  # from y 0.576 to 0.548 so the whole frill sits lower on the neck.
+  bone pt1 parent=neck head=(0.000,0.548,0.140) dir=(0.000,-0.78,1.000) len=0.115
+  bone pt2 parent=neck head=(0.099,0.548,0.099) dir=(0.707,-0.78,0.707) len=0.115
+  bone pt3 parent=neck head=(0.140,0.548,0.000) dir=(1.000,-0.78,0.000) len=0.115
+  bone pt4 parent=neck head=(0.099,0.548,-0.099) dir=(0.707,-0.78,-0.707) len=0.115
+  bone pt5 parent=neck head=(0.000,0.548,-0.140) dir=(0.000,-0.78,-1.000) len=0.115
+  bone pt6 parent=neck head=(-0.099,0.548,-0.099) dir=(-0.707,-0.78,-0.707) len=0.115
+  bone pt7 parent=neck head=(-0.140,0.548,-0.000) dir=(-1.000,-0.78,-0.000) len=0.115
+  bone pt8 parent=neck head=(-0.099,0.548,0.099) dir=(-0.707,-0.78,0.707) len=0.115
 
 parts
   # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
@@ -182,12 +186,31 @@ parts
   # on the scalp above the band and the render showed a stripe of bare head
   # between the two pieces. Mounted at t=0.86 (y 0.906) so the base emerges
   # from INSIDE the band it overlaps — the band's top rim is y 0.926.
-  sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-14 yaw=12 material=royal
-    seg len=0.038 r=0.235 back=14
-    seg len=0.050 r=0.190 back=18
-    seg len=0.050 r=0.130 back=20 down=10
-    seg len=0.045 r=0.070 down=30
-    seg len=0.042 r=0.026 down=44 tip
+  # A NIGHTCAP: rises off the band, then bends BACK and flops DOWN behind the
+  # head, tapering the whole way to a tip that carries a star.
+  #
+  # WHAT WAS WRONG: five segments carrying ~136 degrees of bend while the radius
+  # collapsed 0.235 -> 0.026, most of it in the last two. WAM's lint said so
+  # every build — "tube 'capcone' has 12/54 locally inward-facing triangles
+  # after winding correction — the path probably folds or self-intersects" — and
+  # the owner's read was "the shape is messed up, especially in the back". A
+  # tube cannot turn faster than its own radius without eating itself.
+  #
+  # THE RULE THAT FIXES IT: a tube of radius r swept through angle t over
+  # length L has a radius of curvature L/t, and it eats itself when that drops
+  # below r. So every segment here is checked against len/radians(bend) > r —
+  # the FAT early segments turn barely at all and the thin tip does the real
+  # bending, which is the opposite of what the original did.
+  sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-26 yaw=10 material=royal
+    seg len=0.048 r=0.235 back=8
+    seg len=0.060 r=0.205 back=13
+    seg len=0.065 r=0.172 back=17
+    seg len=0.065 r=0.140 back=11 down=8
+    seg len=0.062 r=0.108 back=8 down=14
+    seg len=0.058 r=0.070 down=20
+    seg len=0.056 r=0.040 down=22
+    seg len=0.052 r=0.020 down=18
+    seg len=0.046 r=0.009 down=12 tip
     cap start=none
 
   # BADGE — the little yellow spot where the reference wears its star, high
