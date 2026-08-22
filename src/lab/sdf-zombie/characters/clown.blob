@@ -210,12 +210,13 @@ face
 # spot inside a dark feature, so the glint is dropped, not faked.
 sheet
   eyeGap     0.40
-  # 0.125, settled after two misses: 0.110 vanished under the cap band's
-  # brim (rescue render), 0.150 read as one dark visor because the inner
-  # edges nearly met (eyeGap 0.40 leaves only 0.05 uv between them at that
-  # size). The reference's eyes are small-to-medium dots set WIDE on a huge
-  # face — 0.125 keeps them unmistakably dots.
-  eyeSize    0.125
+  # 0.082, down from 0.125. 0.125 was settled when the head rendered at the
+  # DEFAULT_FACE size (the lab ignored clown.blob's own face block); on the
+  # real 0.235x1.18 ball it projected two huge black hollows — the owner's
+  # "empty sockets". 0.082 on this big face reads as the reference's small
+  # wide-set dots. (0.070 washed toward note-small under the tonemap, so this
+  # keeps a solid dark core.)
+  eyeSize    0.082
   # BLACK paint, not a glow — and much blacker than the goblin-era instinct
   # would suggest. The sheet is an albedo MULTIPLIER normalized by its own
   # mean, so the eye darkens by eyeGlow/mean; on this PALE skin the lit
@@ -231,6 +232,11 @@ sheet
   # the parameter.
   eyeSquash  0.80
   eyePupil   0
+  # SPECULAR CATCHLIGHT: a small bright dot in each eye's upper-outer corner,
+  # so a dark eye reads as a painted ball with a glint, not an empty socket.
+  # 0.82 < the shader's ~0.88 emissive threshold, so it is a glint, not a lamp.
+  eyeGlint    0.82
+  eyeGlintSize 0.34
   eyeRise    0.42
   eyeTilt    0
   # Thin, gently ARCHED brows — browAngle negative lifts the inner ends,
@@ -267,7 +273,11 @@ sheet
   noseRidge  0.0
   noseWide   0.0
   noseLong   0.0
-  jawShade   0.28
+  # 0.12, down from 0.28: on a face this wide the old band read as a dark
+  # smear across the whole lower half of the ball. The reference's chin is
+  # clean white — a whisper of shade under the jaw is all that separates it
+  # from the neck.
+  jawShade   0.12
   # Toy-smooth: less than the old clown even, because blotching reads as
   # decay next to the zombie and this character is stage makeup.
   grain      0.05

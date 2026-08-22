@@ -54,6 +54,20 @@ describe('generateFaceSheet', () => {
     expect(bright / s.pixels.length).toBeLessThan(0.06);
   });
 
+  it('puts a bright catchlight in each eye when eyeGlint is on, and none when off', () => {
+    // The glint is drawn at eyeDX + 0.32*eyeSize in u, eyeRise - 0.34*eyeSize
+    // in v (upper-outer corner); the opposite (lower-inner) corner stays dark.
+    const e = DEFAULT_SHEET.eyeSize;
+    const u = 0.5 + DEFAULT_SHEET.eyeGap / 2;
+    const on = generateFaceSheet({ ...DEFAULT_SHEET, eyeGlow: 0.05, eyeGlint: 0.82, grain: 0 });
+    const glint = at(on, u + 0.32 * e, DEFAULT_SHEET.eyeRise - 0.34 * e);
+    const dark = at(on, u - 0.30 * e, DEFAULT_SHEET.eyeRise + 0.20 * e);
+    expect(glint).toBeGreaterThan(dark + 40);
+    // With glint off the same upper-outer corner stays as dark as the eye.
+    const off = generateFaceSheet({ ...DEFAULT_SHEET, eyeGlow: 0.05, eyeGlint: 0, grain: 0 });
+    expect(at(off, u + 0.32 * e, DEFAULT_SHEET.eyeRise - 0.34 * e)).toBeLessThan(60);
+  });
+
   it('puts the mouth darker than the chin below it', () => {
     const s = generateFaceSheet({ ...DEFAULT_SHEET, grain: 0 });
     const mouth = at(s, 0.5, DEFAULT_SHEET.mouthRise);

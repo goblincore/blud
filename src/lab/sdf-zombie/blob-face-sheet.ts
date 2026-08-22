@@ -64,6 +64,18 @@ export interface FaceSheetParams {
    * below the threshold and the pupil becomes the feature). Default 0.
    */
   eyePupil: number;
+  /**
+   * Brightness of a specular catchlight in each eye, 0..1. 0 = none.
+   *
+   * A dark eye with no glint reads as an empty socket (the clown's original
+   * complaint). A small bright dot in the upper-outward corner turns it into a
+   * painted cartoon eye. Drawn ON TOP of the eye (so it survives eyeGlow) but
+   * kept below the shader's ~0.88 emissive threshold, so it reads as a glint,
+   * not a second lamp.
+   */
+  eyeGlint: number;
+  /** Catchlight radius as a fraction of eye radius. */
+  eyeGlintSize: number;
   /** Vertical eye position, 0 = top of sheet, 1 = bottom. */
   eyeRise: number;
   /** Outer-corner lift in degrees. Positive scowls, negative droops. */
@@ -115,6 +127,8 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyePupil: 0,
   eyeRise: 0.42,
   eyeTilt: 8,
+  eyeGlint: 0,
+  eyeGlintSize: 0.30,
   browHeavy: 0.55,
   browAngle: 14,
   mouthWidth: 0.40,
@@ -208,6 +222,17 @@ export function generateFaceSheet(
         // a solid core no matter how small the eye is authored.
         const k = falloff(d, p.eyeSize, Math.min(soft * 2.5, p.eyeSize * 0.33));
         v = v * (1 - k) + p.eyeGlow * k;
+        // Catchlight: a small bright dot in the upper-outward corner, so the
+        // eye reads as a painted ball rather than an empty socket. Mixed in
+        // AFTER the eye so it survives a dim eyeGlow, and capped below the
+        // shader's emissive threshold so it is a glint, not a light source.
+        if (p.eyeGlint > 0) {
+          const gx = eyeDX + p.eyeSize * 0.32;
+          const gy = ey - p.eyeSize * 0.34;
+          const dg = Math.hypot(sx - gx, (y - gy) * 1.25);
+          const kg = falloff(dg, p.eyeSize * p.eyeGlintSize, p.eyeSize * 0.18);
+          v = v * (1 - kg) + Math.min(p.eyeGlint, 0.82) * kg;
+        }
       }
 
       // Nose: a lit ridge with shadowed flanks. Brightened, but deliberately
