@@ -258,9 +258,32 @@ parts
     ring 0.30 w=0.642 d=0.506 fwd=-0.064
     ring 0.45 w=0.638 d=0.502 fwd=-0.056
     ring 0.60 w=0.646 d=0.520
-    ring 0.75 w=0.560 d=0.450 fwd=0.016
-    ring 0.88 w=0.430 d=0.348 fwd=0.030
-    ring 1.00 w=0.250 d=0.205 fwd=0.040
+    # CROWN RINGS, re-measured against the ISOLATED caphood part (mesh.part_ranges,
+    # not material groups — `hoodblue` is shared with hornL, which poisoned every
+    # earlier reading). What they showed: these three rings sat up to 50 mm
+    # INSIDE the head, and the dome apex (y 0.996, z +0.037) ended BELOW the
+    # crown (y 1.001) and FORWARD of its top (z -0.02). Two causes:
+    #
+    #  * SIZE: ring t=0.88 was w=0.430 against a head half-width of 0.228 at
+    #    that height, and t=1.00 was w=0.250 against 0.199 — far under the
+    #    1/0.924 = 1.082 facet-sag floor even before margin.
+    #  * THE "LEAN FORWARD" WAS BACKWARDS. Measured properly, the earlier
+    #    positive fwd= offsets had pushed the ring centres to z +0.006/+0.021/
+    #    +0.034 while the head's own centre sits at z -0.013 — so the previous
+    #    session's fix shoved the crown FORWARD off the skull, and the dome
+    #    slid past the crown on the front side while the back-top stayed bare.
+    #    The skull's pitch=-4 lean was never the problem.
+    #
+    # New sizes: head rows marched at the rings' own heights —
+    #   y 0.86 ±x 0.254  +z 0.185  -z 0.212
+    #   y 0.90 ±x 0.228  +z 0.165  -z 0.191
+    #   y 0.94 ±x 0.199  +z 0.142  -z 0.169
+    # Half-extents / 0.924 (facet sag) plus ~8 mm margin, centres back on the
+    # head's axis (fwd ~ -0.006, i.e. CONCENTRIC again per the rule above).
+    # Verified: zero caphood samples inside the head above the face opening.
+    ring 0.75 w=0.575 d=0.470 fwd=0.000
+    ring 0.88 w=0.510 d=0.430 fwd=-0.005
+    ring 1.00 w=0.450 d=0.385 fwd=-0.007
     cap start=none end=dome
 
   # THE HORNS — bigger, and one colour each to carry the bilateral split.
