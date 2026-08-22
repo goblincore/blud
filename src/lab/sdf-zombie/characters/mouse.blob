@@ -459,13 +459,17 @@ body
   blob leg on thigh at=0.00 r=0.038 blend=0.0050 mirror color=1d27a4
   # `core`: the leg's structural mass for the fuse probe — the shoe ball
   # below is fatter than anything in the leg and would otherwise be taken.
-  bar  leg on thigh from=0.08 to=0.92 r=0.034 blend=0.0046 mirror core color=1d27a4
-  blob leg on shin  at=0.00 r=0.034 blend=0.0048 mirror color=1d27a4
+  # r 0.031 (mesh-iter 2026-08-22, was 0.034): axis x 0.050 + 0.034 reached
+  # 0.086-0.091 per side at y 0.22-0.28 and the mesh leg column never
+  # passes 0.084 — the silhouette's thigh bands read +0.022. 0.031 lands
+  # 0.081, the mesh's own mid-thigh reach.
+  bar  leg on thigh from=0.08 to=0.92 r=0.031 blend=0.0046 mirror core color=1d27a4
+  blob leg on shin  at=0.00 r=0.031 blend=0.0048 mirror color=1d27a4
   # Split at the shorts' hem (mesh: y 0.19, 0.05 m below the knee). A prim is
   # one colour, so the paint boundary is a prim boundary: the top half of the
   # shin is shorts, 2 mm fatter for the hem's lip (mesh 0.083 against a
   # 0.071 leg), the bottom half bare.
-  bar  leg on shin  from=0.08 to=0.50 r=0.034 blend=0.0044 mirror color=1d27a4
+  bar  leg on shin  from=0.08 to=0.50 r=0.031 blend=0.0044 mirror color=1d27a4
   bar  leg on shin  from=0.50 to=0.92 r=0.032 blend=0.0044 mirror
   blob leg on shin  at=1.00 r=0.032 blend=0.0046 mirror
 
