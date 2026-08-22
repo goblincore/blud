@@ -129,7 +129,7 @@ skeleton
 
   # The cap's tip, pinned where the built sweep actually ends so the star
   # has something to attach to. Re-measure if the cap's segments change.
-  bone captip parent=skull head=(-0.018,0.930,-0.408) dir=(0.0,-0.5,-1.0) len=0.02
+  bone captip parent=skull head=(-0.011,0.826,-0.392) dir=(0.0,-0.6,-1.0) len=0.02
 
 parts
   # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
@@ -167,10 +167,15 @@ parts
   # The DEPTH was the bug. The band was 34-41 mm deeper than the head all the
   # way up, so it stood off the face — the owner's "it doesn't fully sit on the
   # head, the front there is a gap". Widths were close; depths were not.
-  loft capband bone=skull at=0.700 dir=up len=0.075 frame=fwd material=royal
-    ring 0.00 w=0.540 d=0.398
-    ring 0.50 w=0.502 d=0.370
-    ring 1.00 w=0.422 d=0.306
+  # Starts LOWER on the forehead (at 0.700 -> 0.660, y 0.851 -> ~0.815) and is
+  # correspondingly longer, so the cap comes down the front of the head rather
+  # than perching on top. Still clear of the eye line (~y 0.74-0.80), which is
+  # the constraint that made attempt one's cap swallow the face.
+  loft capband bone=skull at=0.660 dir=up len=0.112 frame=fwd material=royal
+    ring 0.00 w=0.564 d=0.418
+    ring 0.35 w=0.542 d=0.398
+    ring 0.70 w=0.502 d=0.370
+    ring 1.00 w=0.424 d=0.308
     cap start=none end=none
 
   # CAP CONE — the floppy blue cone, slumping BACKWARD and to one side.
@@ -213,21 +218,26 @@ parts
   # the owner's read was "the shape is messed up, especially in the back". A
   # tube cannot turn faster than its own radius without eating itself.
   #
+  # WIDENING RE-BREAKS THIS. The cap was made 16% fatter on owner request and
+  # the fold warning came straight back — same rule, bigger r. Every bend here
+  # is now clamped to keep len/radians(bend) at least 15% above r, so the two
+  # can be retuned independently.
+  #
   # THE RULE THAT FIXES IT: a tube of radius r swept through angle t over
   # length L has a radius of curvature L/t, and it eats itself when that drops
   # below r. So every segment here is checked against len/radians(bend) > r —
   # the FAT early segments turn barely at all and the thin tip does the real
   # bending, which is the opposite of what the original did.
   sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-26 yaw=10 material=royal
-    seg len=0.048 r=0.198 back=8
-    seg len=0.060 r=0.186 back=13
-    seg len=0.065 r=0.172 back=17
-    seg len=0.065 r=0.140 back=11 down=8
-    seg len=0.062 r=0.108 back=8 down=14
-    seg len=0.058 r=0.070 down=20
-    seg len=0.056 r=0.040 down=22
-    seg len=0.052 r=0.020 down=18
-    seg len=0.046 r=0.009 down=12 tip
+    seg len=0.048 r=0.230 back=8
+    seg len=0.060 r=0.216 back=13
+    seg len=0.065 r=0.200 back=16
+    seg len=0.065 r=0.162 back=11 down=8
+    seg len=0.062 r=0.125 back=8 down=14
+    seg len=0.058 r=0.081 down=20
+    seg len=0.056 r=0.046 down=22
+    seg len=0.052 r=0.023 down=18
+    seg len=0.046 r=0.010 down=12 tip
     cap start=none
 
   # BADGE — the little yellow spot where the reference wears its star, high
