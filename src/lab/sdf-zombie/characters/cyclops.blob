@@ -100,9 +100,9 @@ skeleton
     # x 0.21..0.46 of height over y 0.40..0.58 — a PAW, not a knuckle — and
     # the claws fan from it out to x 0.467 (0.63 m), bottoming at y 0.40
     # (0.54 m), tips curling back to z ~0.31 of height.
-    bone c_out parent=hand dir=down pitch=-50 tilt=62  len=0.27
-    bone c_mid parent=hand dir=down pitch=-57 tilt=20  len=0.23
-    bone c_in  parent=hand dir=down pitch=-60 tilt=-28 len=0.21
+    bone c_out parent=hand dir=down pitch=-50 tilt=58  len=0.26
+    bone c_mid parent=hand dir=down pitch=-57 tilt=20  len=0.24
+    bone c_in  parent=hand dir=down pitch=-60 tilt=-28 len=0.22
   end
 
 body
