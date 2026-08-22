@@ -120,12 +120,18 @@ body
   # keeps the head cluster fused to the torso: the neck stalk rides the neck
   # bone ABOVE 0.729, so without flesh here there is a gap right where the
   # collar sits and the validation flags the head as disconnected.
-  blob torso on spine2 at=0.00 r=0.062 deep=1.00 blend=0.0045
-  blob torso on spine2 at=1.00 r=0.044 deep=0.88 blend=0.0040
+  # Between the shoulder and the neck base the plate is 0.093 m across — a
+  # NECK. This read 0.178 there, because these two were 0.124 wide before the
+  # tee's drape was even added. The reference mouse has no trapezius to speak
+  # of: the neck runs straight down and the shoulders start abruptly under it.
+  blob torso on spine2 at=0.00 r=0.052 deep=1.00 blend=0.0045
+  blob torso on spine2 at=1.00 r=0.036 deep=0.88 blend=0.0040
 
   # Neck column — a stick. Thin on purpose; the skull above it is five times
   # its width, which IS the reference's read.
-  bar head on neck from=0.00 to=1.00 r=0.026 deep=0.95 blend=0.0014
+  # 0.022, and it only survives because jawDrop went to 0.115 in the same
+  # pass — at the old jaw height anything under 0.026 disconnected the head.
+  bar head on neck from=0.00 to=1.00 r=0.022 deep=0.95 blend=0.0014
 
   # ============================================================
   # EARS — the character. Read this block before touching anything.
@@ -160,7 +166,33 @@ body
   # the ears having eaten the head. offset.x 0.183 -> 0.150 and r 0.128 ->
   # 0.120 lands it at ~55%. The reference's widest row also sits 16% down
   # rather than 12%, so the pair drops 12 mm with it.
-  blob head on skull at=0.44 r=0.120 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.150,0.111,0.004) both
+  # 2026-08-22, measured with scripts/silhouette-match.ts against the DRESSED
+  # figure: the ear band read 0.498 of body height against the plate's 0.551,
+  # so the discs had been trimmed one pass too far chasing an earlier
+  # over-wide reading. r 0.120 -> 0.130 and offset.x 0.150 -> 0.170 spends it
+  # back; both guards still hold with room (inner rim 0.040 against its 0.06
+  # ceiling, centre 0.170 against 0.21).
+  #
+  # They also sat one band too LOW. The plate's outline collapses from 0.525
+  # to 0.241 between 0.203 and 0.234 of height — the discs end and only the
+  # cranium is left — while ours was still 0.449 there because the discs hung
+  # down to y 0.825. offset.y 0.111 -> 0.128 clears that band.
+  # STILL ROUND, and the band below the ears is the price. The plate's outline
+  # falls off a cliff there — 0.525 at 0.203 to 0.241 at 0.234 — because its
+  # ears are flat-bottomed lobes that simply END. An ellipse cannot do that:
+  # squashing this to tall=0.84 nails the 0.234 band (-0.001) and immediately
+  # ruins 0.203 (-0.097), because the taper just moves up a band. Measured
+  # over the whole figure:
+  #
+  #   tall 1.00   IoU 0.705   mean width error 0.048   <- kept
+  #   tall 0.95   IoU 0.700   0.048
+  #   tall 0.90   IoU 0.689   0.050
+  #   tall 0.84   IoU 0.685   0.053
+  #
+  # So the round disc wins on aggregate and the cliff stays unmatched. The
+  # real fix is a flat-bottomed ear, which needs TWO prims per side (a wide
+  # lobe with a squarer lower rim), not a different scale on this one.
+  blob head on skull at=0.44 r=0.130 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.170,0.128,0.004) both
 
   # ============================================================
   # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
@@ -198,7 +230,18 @@ body
   # the 0.262 face width, the reference's muzzle-to-cheek ratio) falling to
   # a blunt 0.016 bulb at the nose. NO chamfer: the muzzle must MELT into
   # the cranium, a crease here would read as a stuck-on trunk.
-  blob head on skull at=0.305 r=0.042 r2=0.016 wide=1.20 tall=0.90 blend=0.0035 offset=(0,0.000,0.050) tip=(0,-0.030,0.190) bend=(0,0.015,0.020)
+  # 2026-08-22, owner review: "the snout is too narrow" and "there is a round
+  # nose but there isn't one in the reference". Both fall out of the same two
+  # numbers. The root was r 0.042 x wide 1.20 = 0.050 of x-semi, so the muzzle
+  # left the face thinner than the gap between the shades' lenses and read as
+  # a beak stuck on; and tapering that to r2 0.016 ended it in a bulb small
+  # and round enough to read as a BALL NOSE, which mouse-reference-2.png
+  # plainly has not got — the muzzle there simply stops, blunt, at about a
+  # third of its root width. So the root goes up and the tip goes up TOO:
+  # blunter reads as less nose-like, not more. Longer and dropping further
+  # with it, so the muzzle sweeps down the way the profile plate shows instead
+  # of sticking out level at eye height.
+  blob head on skull at=0.305 r=0.056 r2=0.026 wide=1.15 tall=0.88 blend=0.0042 offset=(0,0.000,0.046) tip=(0,-0.058,0.212) bend=(0,0.020,0.016)
 
   # THE POUT — a small lip under the snout's far end, set well back from
   # the nose tip (both new references agree: the mouth is NOT at the tip).
@@ -206,13 +249,20 @@ body
   # (the curve there runs y ~0.71 with radius ~0.02), its front 26 mm
   # behind the nose. `chamfer` keeps the crease between lip and muzzle so
   # it reads as a mouth and not a sagging dewlap.
-  blob head on skull at=0.195 r=0.020 wide=1.35 tall=0.55 blend=0.0015 chamfer offset=(0,0.000,0.155) tip=(0,-0.010,0.040)
+  # THE LIPS, and the owner's third note: "there are no big lips". At r 0.020
+  # x wide 1.35 this was 0.027 of x-semi — a bead. Both new plates show a wide
+  # protruding band under the muzzle, near as broad as the muzzle's own root
+  # and clearly proud of it, and it is most of what makes the face read as
+  # THIS character rather than as a generic mouse. r 0.032 x wide 2.10 puts it
+  # at 0.067, a shade wider than the snout root's 0.064, sitting proud rather
+  # than tucked underneath.
+  blob head on skull at=0.195 r=0.032 wide=2.10 tall=0.62 blend=0.0018 chamfer offset=(0,-0.004,0.150) tip=(0,-0.014,0.052)
 
   # THE MOUTH SEAM — a groove, not a gap. Cuts a channel where this flat
   # primitive's zero-set crosses the assembled pout: 5 mm across, biting
   # 4 mm in, running horizontally across the lip's front. `tall=0.08`
   # flattens the cutter vertically so the channel is a LINE.
-  groove head on skull at=0.185 r=0.030 wide=1.30 tall=0.08 deep=1.00 depth=0.004 width=0.005 offset=(0,0.000,0.165)
+  groove head on skull at=0.185 r=0.042 wide=1.95 tall=0.08 deep=1.00 depth=0.005 width=0.006 offset=(0,-0.006,0.162)
 
   # ARMS AND LEGS — ONE FORM, not beads. The house ball-joint stylisation is
   # the goblin's look and the owner rejected it here: the reference limbs are
@@ -261,12 +311,31 @@ body
 face
   headRadius 0.131
   headWidth  1.00
-  headHeight 1.00
+  # A TEARDROP, not a ball. Both new plates show one smooth form running from
+  # the crown down and forward into the muzzle, with NO jowl under the shades.
+  # The jaw ellipsoid was carrying mass the reference has not got: the
+  # silhouette matcher put this at 0.342 of body width just below the ears
+  # against the plate's 0.241, and on screen it read as a lumpy chin bulging
+  # past the snout's root.
+  #
+  # 1.05 and not higher, though — the cranium crown has to stay UNDER the ear
+  # discs (the test pins crown < 1.0 against disc tops above 1.05) or the
+  # character becomes a ball with ear stickers. There is about 10 mm of
+  # headroom and the plate spends it, so the teardrop comes from the JAW
+  # shrinking rather than the crown rising.
+  headHeight 1.05
   headDepth  0.95
-  jawWidth   0.68
-  jawHeight  0.98
-  jawDrop    0.075
-  jawJut     0.020
+  jawWidth   0.48
+  jawHeight  0.66
+  # AND THE JAW IS WHAT HOLDS THE HEAD ON. Narrowing it to 0.48/0.66 while
+  # leaving jawDrop at 0.075 disconnected the head cluster outright — the jaw
+  # ellipsoid, not the neck bar, is what bridges the cranium down to the
+  # torso, so shrinking it opened a gap the neck could not span. 0.115 puts
+  # the smaller jaw back within reach, and it is what the profile plate shows
+  # anyway: a long face running DOWN into the neck, not a chin perched on it.
+  # Narrow jaw and low jaw move together; neither works alone.
+  jawDrop    0.115
+  jawJut     0.010
   noseLength 0.0004
   noseWidth  0.30
   noseDrop   0.010
