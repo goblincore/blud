@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/damage.ts
 import type { Primitive, Vec3 } from './types';
-import { add, basisFromAxis, dot, len, qRotate, scale, sub } from './vec';
+import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub } from './vec';
 import { rotateYaw } from './gait';
+import { sdPrimitive } from './validate';
 
 /** Must match MAX_WOUNDS in the fragment shader. */
 export const MAX_WOUNDS = 16;
@@ -36,6 +37,14 @@ export interface Wound {
   radius: number;
   type: WoundType;
   ageSec: number;
+  /**
+   * The primitive's unit axis in the DE-YAWED body frame at stamp time — the
+   * anchor the local frame is transported from on every later map (see
+   * `frame`). Absent for oriented prims (their frame is the orient quat) and
+   * for wounds made before this field existed, which fall back to rebuilding
+   * the frame from the live axis.
+   */
+  axis0?: Vec3;
 }
 
 /**
@@ -63,7 +72,31 @@ export interface Wound {
  * that quaternion's basis outright: a crater on the nose rides the head's
  * own turn inside the clamp cone, not just the body's.
  */
-function frame(prim: Primitive, bodyYaw: number) {
+/**
+ * The de-yawed unit axis `frame` keys on; a sphere (a === b) gets +y so its
+ * frame is the one canonical basis every map agrees on.
+ */
+function bodyAxis(prim: Primitive, bodyYaw: number): Vec3 {
+  const axis = rotateYaw(sub(prim.b, prim.a), -bodyYaw);
+  return len(axis) === 0 ? [0, 1, 0] : normalize(axis);
+}
+
+/**
+ * WHY THE STAMP AXIS IS TRANSPORTED RATHER THAN THE BASIS REBUILT (the wound
+ * flicker, 2026-08-22): `basisFromAxis` chooses its reference axis by
+ * comparing |x|, |y|, |z| of the axis — a discontinuous choice. A thigh is
+ * exactly vertical at rest and a forearm six degrees off, and under the walk
+ * both sway a few degrees in x AND z, so |x| and |z| trade places every step.
+ * Each trade snapped the (u, v) basis 90 degrees around the limb and the
+ * crater with it: a live probe measured 14 snaps and 18.6 cm single-frame
+ * jumps in 2.6 s on a thigh-bound wound, and over half of all surface hits on
+ * the zombie bind to a forearm or thigh (nearest-endpoint binding puts the
+ * lower torso on the limbs). Given the stamp-time axis, the frame is instead
+ * the stamp basis carried by the shortest-arc rotation from that axis to the
+ * live one — continuous in the axis, exact under a rigid swing, and the
+ * identity at rest, so nothing authored before this changed.
+ */
+function frame(prim: Primitive, bodyYaw: number, axis0?: Vec3) {
   if (prim.orient) {
     const q = prim.orient;
     return {
@@ -72,8 +105,12 @@ function frame(prim: Primitive, bodyYaw: number) {
       w: qRotate(q, [0, 0, 1] as Vec3),
     };
   }
-  const axis = rotateYaw(sub(prim.b, prim.a), -bodyYaw);
-  const b = basisFromAxis(len(axis) === 0 ? [0, 1, 0] : axis);
+  const axis = bodyAxis(prim, bodyYaw);
+  let b = basisFromAxis(axis0 ?? axis);
+  if (axis0) {
+    const q = qFromTo(axis0, axis);
+    b = { u: qRotate(q, b.u), v: qRotate(q, b.v), w: qRotate(q, b.w) };
+  }
   if (bodyYaw === 0) return b;
   return { u: rotateYaw(b.u, bodyYaw), v: rotateYaw(b.v, bodyYaw), w: rotateYaw(b.w, bodyYaw) };
 }
@@ -93,21 +130,30 @@ export function worldHitToWound(
    *  woundWorldPos is later called with or the wound drifts by the delta. */
   bodyYaw = 0,
 ): Wound {
+  // The primitive whose SURFACE the hit is on — the arg-min of the per-prim
+  // field, the same rule the shader's hitBest paints by. It used to be the
+  // nearest ENDPOINT, which put over half of the zombie's surface hits (the
+  // whole lower torso, both flanks) on a forearm or thigh whose endpoint
+  // happened to be close: the crater then swung with the arm (6 cm per
+  // frame in a live probe) instead of staying on the belly it was shot into.
   let primIdx = -1;
   let best = Infinity;
   prims.forEach((p, i) => {
     // A carve is a hole. A crater riding the inside of an eye socket is
     // meaningless, and it would be carried by a primitive with no surface.
-    if (p.op === 'sub') return;
-    const d = Math.min(len(sub(hit, p.a)), len(sub(hit, p.b)));
+    if (p.op === 'sub' || p.op === 'groove' || p.dead) return;
+    const d = sdPrimitive(hit, p);
     if (d < best) { best = d; primIdx = i; }
   });
   if (primIdx < 0) primIdx = 0; // a body with no solid primitives cannot be hit
 
   const prim = prims[primIdx]!;
-  const { u, v, w } = frame(prim, bodyYaw);
+  const axis0 = prim.orient ? undefined : bodyAxis(prim, bodyYaw);
+  const { u, v, w } = frame(prim, bodyYaw, axis0);
   const rel = sub(hit, prim.a);
-  return { primIdx, local: [dot(rel, u), dot(rel, v), dot(rel, w)], radius, type, ageSec: 0 };
+  const wound: Wound = { primIdx, local: [dot(rel, u), dot(rel, v), dot(rel, w)], radius, type, ageSec: 0 };
+  if (axis0) wound.axis0 = axis0;
+  return wound;
 }
 
 /**
@@ -118,7 +164,7 @@ export function worldHitToWound(
  */
 export function woundWorldPos(prims: Primitive[], wound: Wound, bodyYaw = 0): Vec3 {
   const prim = prims[wound.primIdx]!;
-  const { u, v, w } = frame(prim, bodyYaw);
+  const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
   return add(prim.a, add(add(scale(u, wound.local[0]), scale(v, wound.local[1])), scale(w, wound.local[2])));
 }
 

@@ -114,6 +114,69 @@ describe('wounds ride the heading rotation (motion-polish regression)', () => {
   });
 });
 
+describe('a crater on a swaying near-vertical limb does not jump (flicker regression)', () => {
+  // The thigh is exactly vertical at rest and the forearm is 6 degrees off;
+  // under the walk both sway a few degrees in x AND z. The owner's recording
+  // (flickerzombie.mov, 2026-08-22) showed craters snapping between positions
+  // on the lower torso: a live probe measured 14 basis flips and 18.6 cm
+  // single-frame jumps in 2.6 s for a thigh-bound wound. The crater must move
+  // with the flesh it sits on — continuously.
+  const pivot: Vec3 = [0, 0.92, 0];
+  const YAW = Math.PI / 2;
+  const swayed = (t: number): Primitive => {
+    const ax = 0.03 * Math.sin(t), az = 0.03 * Math.cos(t * 1.3); // ~6 deg tilt, rotating
+    return capsule([0.1, 1.3, 0.02], [0.1 + ax, 0.9, 0.02 + az]);
+  };
+  it('moves the crater by no more than the flesh moved, every step of the sway', () => {
+    const hit: Vec3 = [0.16, 1.1, 0.08]; // on the outer-front surface
+    const w = worldHitToWound([swayed(0)], hit, 0.13, 'blast', 0);
+    let prev = woundWorldPos([swayed(0)], w, 0);
+    let worst = 0;
+    for (let i = 1; i <= 400; i++) {
+      const t = i * 0.02;
+      const pos = woundWorldPos([swayed(t)], w, 0);
+      // The far end moves at most 0.03 m per unit of t; per 0.02 step the
+      // flesh anywhere on the capsule moves under 1 mm.
+      worst = Math.max(worst, len(sub(pos, prev)));
+      prev = pos;
+    }
+    expect(worst).toBeLessThan(0.002);
+  });
+  it('still rides a rigid turn exactly while swaying (the de-yaw contract holds)', () => {
+    const hit: Vec3 = [0.16, 1.1, 0.08];
+    const w = worldHitToWound([swayed(0)], hit, 0.13, 'blast', 0);
+    const p = swayed(0.7);
+    const turned = [capsule(
+      rotAbout(p.a as Vec3, pivot, YAW) as [number, number, number],
+      rotAbout(p.b as Vec3, pivot, YAW) as [number, number, number],
+    )];
+    const expected = rotAbout(woundWorldPos([p], w, 0), pivot, YAW);
+    expect(len(sub(woundWorldPos(turned, w, YAW), expected))).toBeCloseTo(0, 8);
+  });
+});
+
+describe('binding picks the primitive whose SURFACE the hit is on', () => {
+  // The zombie's forearms hang beside its torso. Nearest-ENDPOINT binding
+  // put over half of all surface hits — the whole lower torso and both
+  // flanks — on a forearm or thigh, so a crater on the belly swung with the
+  // arm (live probe: 6 cm per frame) and flickered with the thigh basis. A
+  // hit on the torso's skin must ride the torso.
+  it('a flank hit next to a hanging forearm binds to the torso blob it sits on', () => {
+    const torso = sphere([0, 1.0, 0]);                         // r 0.14: skin at x 0.14
+    const forearm: Primitive = { ...capsule([0.20, 1.06, 0], [0.24, 0.70, 0]), radius: 0.05 };
+    const hit: Vec3 = [0.135, 1.03, 0.03];                     // on the torso skin
+    // Endpoint distances: forearm top 0.078 < torso centre 0.140 — the old rule
+    // picked the forearm. Surface distances: torso ≈ 0, forearm +0.03 outside.
+    expect(worldHitToWound([torso, forearm], hit, 0.13, 'blast').primIdx).toBe(0);
+  });
+  it('a hit on the forearm itself still binds to the forearm', () => {
+    const torso = sphere([0, 1.0, 0]);
+    const forearm: Primitive = { ...capsule([0.20, 1.06, 0], [0.24, 0.70, 0]), radius: 0.05 };
+    const hit: Vec3 = [0.27, 0.90, 0.0];                       // outer surface of the forearm
+    expect(worldHitToWound([torso, forearm], hit, 0.06, 'pellet').primIdx).toBe(1);
+  });
+});
+
 describe('WOUND_PROFILES — per-type "weapon calibre" knobs', () => {
   it('covers all three wound types', () => {
     expect(Object.keys(WOUND_PROFILES).sort()).toEqual(['blast', 'burn', 'pellet']);
