@@ -3180,7 +3180,20 @@ async function main() {
     get shellDisplace() { return shellSilhouette; },
     /** null = let LOD decide; true/false force the lever on every body. */
     setOverride(k: LodLever, v: boolean | null) { lodOverride[k] = v; },
-    setStepsOverride(v: number | null) { stepsOverride = v; },
+    /**
+     * Force the march step count on every body. null — or 0, matching the
+     * panel slider's own "march steps (0 = lod)" label — hands it back to LOD.
+     *
+     * The zero case is not cosmetic. `applyLod` writes `stepsOverride ??
+     * level.steps` straight into marchCfg.x, and the march loop's first line
+     * is `if (i >= steps) { break; }` — so a literal 0 exits before it ever
+     * samples the field, every ray misses, and `discard` blanks the ENTIRE
+     * raymarched body while the polygon kit keeps drawing. A floating pair of
+     * sunglasses and a shirt with nobody in them reads as a catastrophic
+     * modelling bug, and it cost an hour of chasing a hole in a character that
+     * did not have one.
+     */
+    setStepsOverride(v: number | null) { stepsOverride = v !== null && v > 0 ? v : null; },
     /** Sphere-trace step multiplier on every body. Default 0.6. */
     setStepMul(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.y = v; },
     /**
