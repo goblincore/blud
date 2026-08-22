@@ -12,6 +12,9 @@ Dev references only. Nothing here ships, and nothing here is redistributed —
 they are inputs to authoring the project's own original characters, in the same
 spirit as `docs/dev-notes/` generally.
 
+Dispatching a character task? Start from
+`docs/dev-notes/dispatch-character-task-template.md`.
+
 Name them `<character>-reference.png`, or `<character>-<n>-ref.png` when
 there are several angles, so the dispatch plan can point at the exact files.
 **Point at every angle you have** — the clown's cap and hair tufts only make
