@@ -107,6 +107,17 @@ skeleton
     bone thigh    parent=hips     side=0.044 dir=down pitch=-8 tilt=6  len=0.175
     bone shin     parent=thigh    dir=down pitch=10  tilt=-6 len=0.165
     bone foot     parent=shin     dir=fwd len=0.095
+    # JESTER HORN — one of the cap's two forks. Inside `mirror`, so the .r copy
+    # is generated: solve() flips the RESOLVED direction, so a dir=(x,y,z)
+    # reflects in x exactly like an axis word does.
+    #
+    # Leaves the crown heading up-and-out, rolls over to horizontal, then falls
+    # away and forward, which is the arc the reference hood makes. Aimed with
+    # explicit vectors — none of this is reachable with the six axis words.
+    bone horn1 parent=skull head=(0.070,0.980,-0.010) dir=(0.55,0.78,-0.30) len=0.105
+    bone horn2 parent=horn1 dir=(0.84,0.42,-0.34) len=0.100
+    bone horn3 parent=horn2 dir=(0.95,-0.22,-0.22) len=0.095
+    bone horn4 parent=horn3 dir=(0.74,-0.66,-0.12) len=0.085
   end
 
   # RUFF POINTS — eight spikes fanning out from the neck, each aimed with an
@@ -127,24 +138,7 @@ skeleton
   bone pt7 parent=neck head=(-0.140,0.548,-0.000) dir=(-1.000,-0.78,-0.000) len=0.115
   bone pt8 parent=neck head=(-0.099,0.548,0.099) dir=(-0.707,-0.78,0.707) len=0.115
 
-  # The cap's tip, pinned where the built sweep actually ends so the star
-  # has something to attach to. Re-measure if the cap's segments change.
-  bone captip parent=skull head=(0.001,1.070,-0.222) dir=(0,-0.5,-1.0) len=0.02
 
-  # NIGHTCAP SPINE — the cap lofts along this chain as ONE piece.
-  #
-  # cap1 and cap2 are COLLINEAR on purpose. WAM's loft lint states the rule:
-  # "path bends 20 while the ring radius 0.270 exceeds the bend reach 0.209 —
-  # the surface doubles back". The base ring has to be 0.28 wide to cover the
-  # head, so the base cannot bend AT ALL; the taper has to get the rings small
-  # before the curve starts. Fat and straight, then thin and curved.
-  #
-  # Aimed with explicit dir=(x,y,z) — the chain could not curve otherwise.
-  bone cap1 parent=skull head=(0,0.815,0.055) dir=(0,1,-0.12) len=0.115
-  bone cap2 parent=cap1 dir=(0,1,-0.12) len=0.105
-  bone cap3 parent=cap2 dir=(0,0.72,-0.69) len=0.115
-  bone cap4 parent=cap3 dir=(0,0.05,-1.00) len=0.108
-  bone cap5 parent=cap4 dir=(0,-0.78,-0.63) len=0.090
 
 parts
   # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
@@ -171,55 +165,48 @@ parts
   # high is what this grammar can do. Rings re-marched for the new heights:
   # the ball narrows fast up here, and keeping the old 0.450 bottom ring
   # would float the band 15 mm off the scalp.
-  # THE NIGHTCAP — ONE TAPERED SHAPE.
+  # JESTER CAP — a hood over the skull with TWO FORKED HORNS, a star on each.
   #
-  # WHAT WAS HERE: two separate pieces, a `capband` ring around the head plus a
-  # `capcone` sweep sitting on it. Owner: "it seems like it is made of two
-  # distinct separate shapes? maybe just make it one like tapered shape? get
-  # rid of the whatever the shape around the head is". They were right — the
-  # hard seam where the ring met the cone is what read as clipping, and no
-  # amount of re-fitting the two to each other was going to remove a join that
-  # should not exist.
+  # THIRD DESIGN. It was a ring plus a cone (two pieces with a seam that read
+  # as clipping), then one long drooping cone (clean, but still clipped the
+  # brow when pulled forward). The owner's call: "I think I want to redesign
+  # the nightcap to be more of classic jester cap with two forks with a star
+  # attached to the end".
   #
-  # WHY A LOFT AND NOT A SWEEP: a sweep segment takes only `r`, so it is
-  # circular in cross-section. The head is an ellipse (W 0.564 x D 0.418 at the
-  # brow), and a circular cap wide enough to cover it is 146 mm too deep. A
-  # loft takes w AND d per ring, so it can hug the head at the base and still
-  # taper to a point. The price is that a loft follows BONES, which is why the
-  # cap now has a five-bone spine — buildable only since dir=(x,y,z) landed.
+  # This is structurally easier than either, which is the real argument for it:
+  # the hood is a short almost-straight loft that only has to hug the skull,
+  # and each horn is thin from the start, so the fold rule that dominated the
+  # single-cone design — ring radius must stay under the bend reach — is
+  # satisfied with room to spare instead of being fought at every ring.
   #
-  # Rings measured against the head as it actually renders (marched with sdBody
-  # bisects): y 0.80 W 0.548 D 0.402, y 0.87 W 0.497 D 0.362, y 0.93 W 0.398
-  # D 0.285. The base ring clears the widest of those by ~16 mm.
-  loft capcone bones=cap1..cap5 frame=fwd material=royal
-    ring 0.00 w=0.564 d=0.418
-    ring 0.14 w=0.462 d=0.352
-    ring 0.28 w=0.318 d=0.250
-    ring 0.42 w=0.242 d=0.196
-    ring 0.58 w=0.124 d=0.106
-    ring 0.74 w=0.072 d=0.064
-    ring 0.88 w=0.056 d=0.050
-    ring 1.00 w=0.028 d=0.026
-    cap start=none end=point
+  # THE HOOD. Sits low on the brow (skull t 0.640) and domes over the crown.
+  # Rings hug the head as it actually renders, marched with sdBody bisects:
+  # y 0.80 W 0.548 D 0.402, y 0.87 W 0.497 D 0.362, y 0.93 W 0.398 D 0.285.
+  loft caphood bone=skull at=0.640 dir=up len=0.190 frame=fwd material=royal
+    ring 0.00 w=0.576 d=0.428
+    ring 0.30 w=0.552 d=0.408
+    ring 0.55 w=0.492 d=0.366
+    ring 0.75 w=0.408 d=0.308
+    ring 0.90 w=0.296 d=0.226
+    ring 1.00 w=0.150 d=0.118
+    cap start=none end=dome
 
-  # STAR ON THE CAP'S TIP — the nightcap's bobble.
-  #
-  # WAM gained a `star` attach kind for this; there was no way to build one
-  # from the other kinds and every fake read as a lump.
-  #
-  # PLACED BY MEASUREMENT, not by arithmetic. A sweep's tip is not addressable
-  # from the source — you cannot write "the end of capcone" — so the position
-  # comes from marching the BUILT glTF: the most -z royal vertex sits at
-  # (-0.014, 0.957, -0.396), and the tip cluster centres on (-0.018, 0.909,
-  # -0.385). The star sits just past that so it caps the point rather than
-  # swallowing it. IF THE CAP'S SEGMENTS CHANGE, RE-MEASURE — nothing here
-  # tracks the sweep automatically.
-  #
-  # `attach` always needs a bone (at=(x,y,z) alone is "unknown bone None"), so
-  # the tip gets one: `captip`, pinned to the measured position. Hanging the
-  # star off skull's own t would not work — the cap's tip does not move
-  # linearly with the skull.
-  attach capstar bone=captip at=1.0 kind=star points=5 size=0.115 inner=0.42 d=0.030 pitch=-62 material=yellow
+  mirror
+    # THE HORNS. Thin from the base, which is what keeps every joint clear of
+    # the fold rule (ring radius < bend reach): the widest ring here is 0.075
+    # against reaches of ~0.09-0.10.
+    loft horn bones=horn1..horn4 material=royal
+      ring 0.00 w=0.150 d=0.150
+      ring 0.30 w=0.122 d=0.122
+      ring 0.60 w=0.088 d=0.088
+      ring 0.85 w=0.052 d=0.052
+      ring 1.00 w=0.028 d=0.028
+      cap start=none end=point
+
+    # A star on each fork's tip. Hung off horn4 at t=1.0, so it tracks the
+    # horn — no measuring the built mesh, which is what the single cone's tip
+    # needed and what made that star float twice.
+    attach hornstar bone=horn4 at=1.0 kind=star points=5 size=0.105 inner=0.42 d=0.028 material=yellow
 
   attach badge bone=skull kind=sphere at=0.70 offset=(0.245,0.030,0.045) size=0.026 material=yellow
 
