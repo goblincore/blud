@@ -12,6 +12,9 @@ Dev references only. Nothing here ships, and nothing here is redistributed —
 they are inputs to authoring the project's own original characters, in the same
 spirit as `docs/dev-notes/` generally.
 
+Dispatching a character task? Start from
+`docs/dev-notes/dispatch-character-task-template.md`.
+
 Name them `<character>-reference.png`, or `<character>-<n>-ref.png` when
 there are several angles, so the dispatch plan can point at the exact files.
 **Point at every angle you have** — the clown's cap and hair tufts only make
@@ -24,3 +27,11 @@ Two things silently break this:
   added with `git add -f`.
 - **`base_branch` must contain the image.** The first mouse plan was based on a
   feature branch that predated the refs commit, so the path resolved to nothing.
+
+## Meshes
+
+A plate gives a silhouette; a mesh gives everything, and `blob:measure` prefers it — not because a mesh scores better (a mesh is sculpted in a pose exactly as a plate is drawn in one; see POSE MISMATCH in `scripts/blob-measure.ts`) but because it can be measured LOCALLY: width by height, head profile, paint regions by texel. Put reference meshes in `refs/<character>-mesh/` as `.glb` with embedded textures (the mouse's shades and shoes were located by texel colour). Commit with `git add -f`; dispatched agents run in fresh worktrees and cannot see untracked files.
+
+The canonical file is `refs/<character>-mesh/<character>.glb` — the one `blob:measure` and `head-profile.ts` both resolve first, and the one every head/body measurement is taken against. A Meshy export dumps more than that: a texture-only variant, a merged-animations variant, sometimes others. Keep only the canonical file in git — extra exports (texture-only, merged animations) stay out of git; the untracked originals live in the primary checkout for whoever generated them.
+
+Size: a 5 MB mesh is fine once. Do not commit iterations — replace the file.

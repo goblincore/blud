@@ -69,6 +69,10 @@ export function placePrims(
     }
     return {
       a, b,
+      // Unconditional where `src` is guarded: every expanded prim HAS a bone
+      // (it is what placed it), while `src` is absent for TS-authored prims.
+      bone: p.bone,
+      ...(p.src === undefined ? {} : { src: p.src }),
       radius: p.radius,
       ...(p.radiusB === undefined ? {} : { radiusB: p.radiusB }),
       scale: p.scale,

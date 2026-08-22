@@ -1,5 +1,9 @@
 // Score a .blob character's OUTLINE against a reference plate.
 //
+// Superseded by scripts/blob-measure.ts for day-to-day use; kept because its
+// --bands/--side plate comparisons are referenced in
+// docs/dev-notes/2026-08-22-silhouette-matching.md.
+//
 //   npx tsx scripts/silhouette-match.ts <character> [reference.png] [--side] [--range lo:hi]
 //   npx tsx scripts/silhouette-match.ts mouse
 //   npx tsx scripts/silhouette-match.ts mouse --range 0.75:1      # legs + shoes only
