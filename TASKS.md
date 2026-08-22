@@ -505,6 +505,16 @@ Key reference docs (open these before touching their area):
   were 92% buried in the skull (offset z 0.010 → 0.066). LOOK entries for the
   mouse cloth materials: without an env map the royal-blue shorts rendered
   black from every unlit angle.
+  **Mouse proportions run (2026-08-22, `dispatch/mouse-proportions`):** rebuilt
+  the mouse to the maus-biped RIG joint heights (skeleton was a big head on
+  stubby legs — head ~53% of the file). Lengthened legs (thigh/shin ~46%) and
+  torso (added `spine2`, chest 0.095→0.183), keeping height 1.10; legs/torso/
+  head now ≈32/34/34 (ref 32.1/34.2/33.7). Re-fit head prims to the shorter
+  skull; re-built the kit skeleton + re-authored tee/shorts/brows/shades; and
+  fixed the DETACHED shoes (the old shoe's mouth ring sat at y~0 while the
+  ankle was at 0.141) — the shoe ray now starts at the ankle and hangs rings
+  to the ground. Mouse blob+kit tests, full 1958-test suite, tsc, build all
+  green.
   [design](docs/superpowers/specs/2026-08-20-sdf-character-language-design.md) · [plan](docs/superpowers/plans/2026-08-20-sdf-character-language.md) · [primitive roadmap](docs/superpowers/specs/2026-08-21-blob-primitive-roadmap.md) · [chisel spike](docs/dev-notes/2026-08-21-chisel-primitive-sculpt/notes.md) · skill: `.claude/skills/authoring-sdf-characters/` · Obsidian: `Claude Notes/Blud/2026-08-21-blobforge-sharp-features-and-kits.md`
 - `P8.clown-skull` [x] **clown skull + kit re-fit (owner review rounds)** — root
   cause was a WebGPU-lab integration bug: `webgpu/lab-main.ts` built every head
