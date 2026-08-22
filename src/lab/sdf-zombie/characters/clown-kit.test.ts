@@ -69,7 +69,12 @@ function verticesByMaterial(): Map<string, Vec3[]> {
     const pos = readVec3(prim.attributes['POSITION']!);
     const name = gltf.materials[prim.material]!.name;
     const seen = new Set(readIndices(prim.indices));
-    out.set(name, [...(out.get(name) ?? []), ...seen].map(i => pos[i]!));
+    // WAM today emits one primitive per material, so the accumulate path
+    // never fires — but the first draft of this line spread the previous
+    // VERTICES in with the new INDICES and mapped the lot through pos[],
+    // which tsc flagged (Vec3 as an index). Keep the two kinds apart.
+    const added = [...seen].map(i => pos[i]!);
+    out.set(name, [...(out.get(name) ?? []), ...added]);
   }
   return out;
 }

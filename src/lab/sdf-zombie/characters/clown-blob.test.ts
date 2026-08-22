@@ -93,7 +93,7 @@ describe('clown.blob', () => {
         p.op !== 'groove',
     );
     expect(nose).toBeDefined();
-    const [sx, sy, sz] = cranium.scale.map(s => s * cranium.radius) as Vec3Like;
+    const [sx, sy, sz] = cranium.scale.map(s => s * cranium.radius) as [number, number, number];
     const dy = Math.abs(nose!.a[1] - cranium.a[1]);
     // Cranium surface z at the bead's own height — the ellipsoid shrinks as
     // you drop below its equator, which is exactly how a buried bead hides.
@@ -150,6 +150,3 @@ describe('clown.blob', () => {
   });
 });
 
-interface Vec3Like extends Array<number> {
-  length: 3;
-}
