@@ -155,6 +155,28 @@ describe('a crater on a swaying near-vertical limb does not jump (flicker regres
   });
 });
 
+describe('binding picks the primitive whose SURFACE the hit is on', () => {
+  // The zombie's forearms hang beside its torso. Nearest-ENDPOINT binding
+  // put over half of all surface hits — the whole lower torso and both
+  // flanks — on a forearm or thigh, so a crater on the belly swung with the
+  // arm (live probe: 6 cm per frame) and flickered with the thigh basis. A
+  // hit on the torso's skin must ride the torso.
+  it('a flank hit next to a hanging forearm binds to the torso blob it sits on', () => {
+    const torso = sphere([0, 1.0, 0]);                         // r 0.14: skin at x 0.14
+    const forearm: Primitive = { ...capsule([0.20, 1.06, 0], [0.24, 0.70, 0]), radius: 0.05 };
+    const hit: Vec3 = [0.135, 1.03, 0.03];                     // on the torso skin
+    // Endpoint distances: forearm top 0.078 < torso centre 0.140 — the old rule
+    // picked the forearm. Surface distances: torso ≈ 0, forearm +0.03 outside.
+    expect(worldHitToWound([torso, forearm], hit, 0.13, 'blast').primIdx).toBe(0);
+  });
+  it('a hit on the forearm itself still binds to the forearm', () => {
+    const torso = sphere([0, 1.0, 0]);
+    const forearm: Primitive = { ...capsule([0.20, 1.06, 0], [0.24, 0.70, 0]), radius: 0.05 };
+    const hit: Vec3 = [0.27, 0.90, 0.0];                       // outer surface of the forearm
+    expect(worldHitToWound([torso, forearm], hit, 0.06, 'pellet').primIdx).toBe(1);
+  });
+});
+
 describe('WOUND_PROFILES — per-type "weapon calibre" knobs', () => {
   it('covers all three wound types', () => {
     expect(Object.keys(WOUND_PROFILES).sort()).toEqual(['blast', 'burn', 'pellet']);

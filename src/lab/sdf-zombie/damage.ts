@@ -2,6 +2,7 @@
 import type { Primitive, Vec3 } from './types';
 import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub } from './vec';
 import { rotateYaw } from './gait';
+import { sdPrimitive } from './validate';
 
 /** Must match MAX_WOUNDS in the fragment shader. */
 export const MAX_WOUNDS = 16;
@@ -129,13 +130,19 @@ export function worldHitToWound(
    *  woundWorldPos is later called with or the wound drifts by the delta. */
   bodyYaw = 0,
 ): Wound {
+  // The primitive whose SURFACE the hit is on — the arg-min of the per-prim
+  // field, the same rule the shader's hitBest paints by. It used to be the
+  // nearest ENDPOINT, which put over half of the zombie's surface hits (the
+  // whole lower torso, both flanks) on a forearm or thigh whose endpoint
+  // happened to be close: the crater then swung with the arm (6 cm per
+  // frame in a live probe) instead of staying on the belly it was shot into.
   let primIdx = -1;
   let best = Infinity;
   prims.forEach((p, i) => {
     // A carve is a hole. A crater riding the inside of an eye socket is
     // meaningless, and it would be carried by a primitive with no surface.
-    if (p.op === 'sub') return;
-    const d = Math.min(len(sub(hit, p.a)), len(sub(hit, p.b)));
+    if (p.op === 'sub' || p.op === 'groove' || p.dead) return;
+    const d = sdPrimitive(hit, p);
     if (d < best) { best = d; primIdx = i; }
   });
   if (primIdx < 0) primIdx = 0; // a body with no solid primitives cannot be hit
