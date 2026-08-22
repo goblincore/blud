@@ -246,20 +246,26 @@ sheet
   seed       11
 
 # Pale cream skin, matte like painted vinyl (carried over from attempt one,
-# which the owner liked well enough to keep the skin unchanged).
+# which the owner liked well enough to keep the skin unchanged — then DARKENED
+# one notch in the third pass: at 0.87 the lit cheek sat in the tonemap's
+# compressed shoulder and EVERY face feature washed out on the lit side —
+# measured on the turntable: the right eye vanished outright. 0.74 keeps the
+# cream read but leaves headroom for the black eye dots and smile to print.
+# Spec and wetness came down with it for the same reason (sheen is brightness
+# the features then fight).
 #
 # Linear RGB, sRGB-encoded on output — these render lighter and pinker than
 # the raw numbers suggest. The mottle is ROSY at low amplitude: faint warmth
 # in the cheeks and knuckles, never dirt.
 palette
-  baseColor     0.87 0.78 0.64
+  baseColor     0.74 0.65 0.52
   deepColor     0.55 0.18 0.14
   charColor     0.10 0.08 0.07
-  specIntensity 0.45
-  specRoughness 0.50
-  fresnelBoost  0.40
+  specIntensity 0.30
+  specRoughness 0.55
+  fresnelBoost  0.25
   translucency  0.25
-  wetness       0.30
+  wetness       0.20
   mottleAmp     0.30
   mottleScale   1.6
   mottleColor   0.62 0.24 0.20
