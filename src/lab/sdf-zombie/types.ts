@@ -124,6 +124,13 @@ export interface PrimDef {
    * `color` is set.
    */
   gloss?: number;
+  /**
+   * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
+   * (clusterCore). Without it the fattest prim in the cluster is taken,
+   * which is wrong as soon as a shoe or a sleeve is fatter than the bone it
+   * hangs off. One per cluster is the intent; a second one just ties.
+   */
+  core?: boolean;
 }
 
 export interface BodyDef {
@@ -187,6 +194,8 @@ export interface Primitive {
   color?: Vec3;
   /** See PrimDef.gloss. */
   gloss?: number;
+  /** See PrimDef.core. */
+  core?: boolean;
 }
 
 export interface ClusterInfo {

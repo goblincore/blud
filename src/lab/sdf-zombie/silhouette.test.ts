@@ -187,31 +187,30 @@ describe('maskFromBody', () => {
 });
 
 describe('kit geometry', () => {
+  // The goblin's kit: the mouse has none any more (its outfit is painted SDF).
   const kit = () => gltfTriangles(
-    JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/mouse-kit.gltf'))));
+    JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/goblin-kit.gltf'))));
 
   it('reads triangles out of the compiled kit glTF', () => {
     const t = kit();
     expect(t.length % 9).toBe(0);
     expect(t.length / 9).toBeGreaterThan(100);
-    // Bind space is rest world space: the kit is the tee and the shorts now
-    // (shoes, shades and brows are painted SDF), so its lowest vertex is the
-    // shorts' hem above the knee and its highest the collar at the neck
-    // base. If skinning were needed these would be nowhere near.
+    // Bind space is rest world space: the goblin's kit sits on a standing
+    // 1.30 m body, so its vertices lie between the floor and the crown. If
+    // skinning were needed these would be nowhere near.
     let minY = Infinity, maxY = -Infinity;
     for (let i = 1; i < t.length; i += 3) { minY = Math.min(minY, t[i]!); maxY = Math.max(maxY, t[i]!); }
-    expect(minY).toBeGreaterThan(0.18);
-    expect(minY).toBeLessThan(0.30);
-    expect(maxY).toBeGreaterThan(0.55);
-    expect(maxY).toBeLessThan(0.66);
+    expect(minY).toBeGreaterThan(-0.02);
+    expect(maxY).toBeGreaterThan(0.5);
+    expect(maxY).toBeLessThan(1.35);
   });
 
   // The bug this guards: a plate shows a DRESSED character, so scoring bare
   // flesh against it blames the sculpt for the clothes' bulk. Measured on the
-  // mouse, the shoe band goes 0.132 -> 0.204 of body height once the kit is
-  // in, against 0.345 on the plate.
+  // mouse when it still had a kit, the shoe band went 0.132 -> 0.204 of body
+  // height once the kit was in, against 0.345 on the plate.
   it('widens the silhouette where the clothes are', () => {
-    const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8'));
+    const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/goblin.blob', 'utf8'));
     const body = buildBody(compileBlob(doc, compileFace(doc)));
     const bare = maskFromBody(body, { heightPx: 128 });
     const dressed = maskFromBody(body, { heightPx: 128, kit: kit() });
@@ -237,8 +236,8 @@ describe('the mouse against its own reference plate', () => {
   // the fix: every band in the shoe window within 15% of the plate.
   it('has shoes that match the plate to within 15% in every band', () => {
     const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8'));
-    const kit = gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/mouse-kit.gltf'))));
-    const got = maskFromBody(buildBody(compileBlob(doc, compileFace(doc))), { heightPx: 128, kit });
+    // No kit: the mouse's shoes are painted SDF, part of the field itself.
+    const got = maskFromBody(buildBody(compileBlob(doc, compileFace(doc))), { heightPx: 128 });
     const png = decodePng(readFileSync('docs/dev-notes/refs/mouse-reference.png'));
     const ref = maskFromRgba(png.rgba, png.width, png.height);
     const rep = compareSilhouette(ref.mask, got, { bands: 6, range: [0.88, 1] });

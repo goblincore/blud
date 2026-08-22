@@ -330,33 +330,31 @@ describe('knee stance', () => {
   });
 });
 
-describe('clusterCore and painted primitives', () => {
-  // A painted prim is a surface feature, never a limb's structural mass. The
-  // mouse's SDF shoe ball out-ranked its thigh and the fuse probe ran from the
-  // shoe to the pelvis through air, reporting an attached leg as disconnected.
-  it('picks the fattest UNPAINTED prim as a cluster\'s core', () => {
+describe('clusterCore and the `core` mark', () => {
+  // The fattest-prim heuristic is wrong as soon as a cluster carries
+  // something fatter than its bone — a shoe, a sleeve. The author says which
+  // prim is the limb's structural mass, and that wins.
+  it('prefers a core-marked prim over a fatter one', () => {
     const b = zombie();
     const leg = b.clusters.find(c => c.limb === 'legL')!;
-    const before = clusterCore(b, leg)!;
-    // Replace the leg's THINNEST prim with a painted one far fatter than
-    // anything else in the leg, parked at the toe. (Replacing the fattest
-    // would move the core for a legitimate reason and prove nothing.)
     const members = b.prims.slice(leg.start, leg.start + leg.count);
     let thin = 0;
     members.forEach((p, i) => { if (p.radius < members[thin]!.radius) thin = i; });
-    const fat: Primitive = {
-      ...members[thin]!, a: [0, 0, 0.5], b: [0, 0, 0.5], radius: 1.0, scale: [1, 1, 1],
-      color: [0.5, 0.5, 0.5],
-    };
-    const prims = b.prims.slice(); prims[leg.start + thin] = fat;
-    expect(clusterCore({ ...b, prims }, leg)).toEqual(before);
+    const prims = b.prims.slice();
+    prims[leg.start + thin] = { ...members[thin]!, core: true };
+    const want = [
+      (members[thin]!.a[0] + members[thin]!.b[0]) / 2,
+      (members[thin]!.a[1] + members[thin]!.b[1]) / 2,
+      (members[thin]!.a[2] + members[thin]!.b[2]) / 2,
+    ];
+    expect(clusterCore({ ...b, prims }, leg)).toEqual(want);
   });
 
-  it('still returns a core for a cluster that is entirely painted', () => {
+  it('falls back to the fattest prim when nothing is marked', () => {
     const b = zombie();
     const leg = b.clusters.find(c => c.limb === 'legL')!;
-    const allPainted = { ...b, prims: b.prims.map((p, i) =>
-      i >= leg.start && i < leg.start + leg.count ? { ...p, color: [0, 0, 0] as Vec3 } : p) };
-    expect(clusterCore(allPainted, leg)).toEqual(clusterCore(b, leg));
+    const members = b.prims.slice(leg.start, leg.start + leg.count).filter(p => p.op !== 'sub');
+    const fat = members.reduce((m, p) => (p.radius * Math.min(...p.scale) > m.radius * Math.min(...m.scale) ? p : m));
+    expect(clusterCore(b, leg)).toEqual([(fat.a[0] + fat.b[0]) / 2, (fat.a[1] + fat.b[1]) / 2, (fat.a[2] + fat.b[2]) / 2]);
   });
 });

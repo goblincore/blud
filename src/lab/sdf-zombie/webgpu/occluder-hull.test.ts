@@ -42,13 +42,29 @@ describe('buildHullInstances', () => {
   // clamped and discarded: a perfectly round see-through hole in the face,
   // hunted for most of a day as a modelling defect. Any character with a
   // tapered prim fat enough to clear MIN_HULL_RADIUS would have shown it.
+  // INSIDE-NESS IS TESTED ON THE SPHERE'S SURFACE, not at its centre. Carves
+  // apply as smax(d, -carve), which leaves the zero-set exact but makes every
+  // INTERIOR reading "minus the distance to the nearest carve": the mouse's
+  // ear dishes sit far from its snout-root sphere and the carved field at
+  // that centre read -0.055 through 85 mm of flesh. And sdPrimitive on a
+  // scaled ellipsoid is a conservative LOWER bound, so "clearance >= r" is
+  // over-strict the other way. What the march actually relies on is that
+  // every point OF the sphere is inside the carved body — so that is what is
+  // sampled, in 26 directions.
   it('emits spheres strictly inside EVERY authored character', () => {
+    const dirs: Vec3[] = [];
+    for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
+      if (!x && !y && !z) continue;
+      const l = Math.hypot(x, y, z); dirs.push([x / l, y / l, z / l]);
+    }
     for (const [name, src] of [['mouse', mouseSrc], ['clown', clownSrc], ['goblin', goblinSrc]] as const) {
       const doc = parseBlob(src);
       const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
       for (const s of buildHullInstances([b]))
-        expect(sdBody(s.centre, b), `${name}: sphere r ${s.radius.toFixed(3)} at ${s.centre}`)
-          .toBeLessThanOrEqual(-s.radius + 1e-4);
+        for (const d of dirs) {
+          const p: Vec3 = [s.centre[0] + d[0] * s.radius, s.centre[1] + d[1] * s.radius, s.centre[2] + d[2] * s.radius];
+          expect(sdBody(p, b), `${name}: sphere r ${s.radius.toFixed(3)} at ${s.centre}, dir ${d}`).toBeLessThanOrEqual(1e-4);
+        }
     }
   });
 

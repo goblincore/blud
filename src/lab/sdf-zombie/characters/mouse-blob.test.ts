@@ -261,7 +261,9 @@ describe('the shoes, as painted SDF', () => {
   // character's ground contact.
   it('are two mirrored painted groups in the leg clusters, touching the ground', () => {
     const b = built();
-    const shoes = b.prims.filter(p => p.color && (p.limb === 'legL' || p.limb === 'legR'));
+    // Shoe grey, as opposed to the shorts' blue on the thighs and knees.
+    const grey = (p: typeof b.prims[number]) => !!p.color && p.color[0] > 0.3 && Math.abs(p.color[0] - p.color[2]) < 0.05;
+    const shoes = b.prims.filter(p => grey(p) && (p.limb === 'legL' || p.limb === 'legR'));
     expect(shoes.length).toBe(6);                       // three prims a side
     expect(shoes.filter(p => p.limb === 'legL').length).toBe(3);
     // Left and right are reflections of each other in x.

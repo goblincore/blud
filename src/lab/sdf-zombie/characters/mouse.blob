@@ -20,9 +20,16 @@
 # over a stick neck. Below: a small torso in a loose red tee, blue shorts,
 # bare shins, and shoes as oversized as the ears (0.17 m wide, reaching to
 # y 0.187). Arms SPINDLY and held out at ~47 degrees, hands at hip height
-# with spread fingers. The tee, shorts, shoes, shades and brow slabs live
-# in mouse-kit.wam; the flesh here is yellow skin, the discs, the snout,
-# and the pout.
+# with spread fingers.
+#
+# THE OUTFIT IS PAINT (2026-08-22). The reference mesh is one sculpt with
+# painted regions, and so is this file: tee, shorts, shoes and sunglasses
+# are `color=` on primitives (see the per-primitive colour note in
+# types.ts). There is no kit. Measured off the mesh's own texture — every
+# vertex classified by its texel — the tee is the torso painted red with NO
+# drape (front 0.075, back -0.075, exactly the torso), the shorts are the
+# pelvis and thighs painted blue from y 0.19 to the hem at ~0.31, the shoes
+# are grey, and only the sleeves have volume of their own.
 #
 # THE EARS ARE THE WHOLE CHARACTER. Every other feature serves them. They are
 # ROUND PLATES — as wide as they are tall, like coins stood on the skull's
@@ -101,10 +108,10 @@ skeleton
     # (2026-08-22, for the SDF shoes) — the bones stay because they are also
     # what the rig articulates. Splay: index out +26, little in
     # -20, middle/ring between — the reference hands spread wide.
-    bone f_index  parent=hand dir=down tilt=26 pitch=4 len=0.050
-    bone f_middle parent=hand dir=down tilt=10 pitch=5 len=0.055
-    bone f_ring   parent=hand dir=down tilt=-6 pitch=5 len=0.052
-    bone f_little parent=hand dir=down tilt=-20 pitch=3 len=0.045
+    bone f_index  parent=hand dir=down tilt=26 pitch=4 len=0.056
+    bone f_middle parent=hand dir=down tilt=10 pitch=5 len=0.060
+    bone f_ring   parent=hand dir=down tilt=-6 pitch=5 len=0.056
+    bone f_little parent=hand dir=down tilt=-20 pitch=3 len=0.048
   end
 
 body
@@ -112,12 +119,12 @@ body
   # Deep in z like every character here, but the absolute widths are
   # toy-scale: the widest ring is 0.148 across, against the goblin's 0.192
   # and the ear discs' 0.508 pair span.
-  blob torso on pelvis at=0.00 r=0.058 deep=1.15 blend=0.0045
+  blob torso on pelvis at=0.00 r=0.058 deep=1.15 blend=0.0045 color=1d27a4
   # deep 1.15, not 1.30: the mesh torso's back at y 0.34 is -0.080, and at
   # 1.30 this blob reached -0.091 — 16 mm out through the back of the shorts
   # just below the tee hem, the one place nothing else covers it.
-  blob torso on pelvis at=0.95 r=0.070 deep=1.15 blend=0.0050
-  blob torso on spine1 at=0.60 r=0.066 deep=1.20 blend=0.0062
+  blob torso on pelvis at=0.95 r=0.070 deep=1.15 blend=0.0050 color=b1161f
+  blob torso on spine1 at=0.60 r=0.066 deep=1.20 blend=0.0062 color=b1161f
   # Mesh torso, 0.26..0.46: half-width 0.064..0.079, half-depth 0.075 both
   # ways — a near-cylinder, slightly deeper than wide. AND THAT 0.075 IS THE
   # SHIRT: the mesh is dressed, so the flesh under it has to sit a fabric's
@@ -126,14 +133,14 @@ body
   # cleared it by 4-7 mm — close enough that the half-res SDF depth and the
   # polygon depth disagreed along the shirt's centre facet, and a yellow
   # stripe ran down the front. deep 1.00 puts the chest at ~0.070.
-  blob torso on chest  at=0.30 r=0.065 deep=1.00 blend=0.0055
-  blob torso on chest  at=0.50 r=0.065 deep=1.00 blend=0.0055
+  blob torso on chest  at=0.30 r=0.065 deep=1.00 blend=0.0055 color=b1161f
+  blob torso on chest  at=0.50 r=0.065 deep=1.00 blend=0.0055 color=b1161f
   # Armpit filler — the wedge between the upper arm's inner edge and the
   # narrow upper chest. Without it the shoulder join reads a hair of air
   # right below the shoulder ball (measured +0.004-0.008 on the arm->torso
   # probe), which flags the arm as disconnected even though it LOOKS fused.
-  blob torso on chest  at=0.72 r=0.065 deep=1.00 blend=0.0055
-  blob torso on chest  at=1.00 r=0.065 deep=1.00 blend=0.0050
+  blob torso on chest  at=0.72 r=0.065 deep=1.00 blend=0.0055 color=b1161f
+  blob torso on chest  at=1.00 r=0.065 deep=1.00 blend=0.0050 color=b1161f
   # Upper chest / collarbone region, on the spine2 bone that runs from the
   # shoulder (chest tail 0.622) up to the neck base (0.729). This is what
   # keeps the head cluster fused to the torso: the neck stalk rides the neck
@@ -143,8 +150,8 @@ body
   # NECK. This read 0.178 there, because these two were 0.124 wide before the
   # tee's drape was even added. The reference mouse has no trapezius to speak
   # of: the neck runs straight down and the shoulders start abruptly under it.
-  blob torso on spine2 at=0.00 r=0.052 deep=1.00 blend=0.0045
-  blob torso on spine2 at=1.00 r=0.036 deep=0.88 blend=0.0040
+  blob torso on spine2 at=0.00 r=0.052 deep=1.00 blend=0.0045 color=b1161f
+  blob torso on spine2 at=1.00 r=0.036 deep=0.88 blend=0.0040 color=b1161f
 
   # Neck column. "A stick" was the right read and the wrong number: the mesh
   # neck is 0.043 half-width at y 0.66 and 0.061 at 0.62, spanning z
@@ -226,6 +233,17 @@ body
   # width is unchanged and already matched. Still inside the test's
   # roundness guard (1.14 of 1.25).
   blob head on skull at=0.44 r=0.130 wide=1.00 tall=0.88 deep=0.45 blend=0.0028 chamfer offset=(0.170,0.124,0.000) both
+  # THE DISH. The reference ears are cupped — a shallow concave front face
+  # inside a rim — and the owner was right that shading could fake it, but a
+  # soft carve gives the real thing and the marcher shades it itself. An
+  # ellipsoid 0.19 x 0.17 x 0.047, centred 0.076 in front of the plate
+  # (0.070 left the plate's occluder-hull sphere 0.7 mm proud: the smooth
+  # blend bites deeper at the centre than the rim reading shows)
+  # (whose front face sits at z 0.050), bites 4 mm into the face and leaves a
+  # ~3.5 cm rim all round; blend 0.004 rounds the lip instead of cutting a
+  # step. Smooth, not `hard`: a crease here would read as a second ear
+  # drawn inside the first.
+  carve on skull at=0.44 r=0.095 wide=1.00 tall=0.88 deep=0.25 blend=0.0040 offset=(0.170,0.124,0.076) both
 
   # ============================================================
   # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
@@ -349,11 +367,13 @@ body
   # unibrow. Split by side it is two columns: on the right, x 0.055..0.094
   # at every row from y 0.92 up, with z falling from 0.085 (0.92) to
   # 0.015..0.058 (0.97..0.98). An arm rising from the lens's outer corner
-  # (0.088, 0.905, 0.095) up and back to (0.064, 0.985, 0.030), where it is
+  # (0.088, 0.905, 0.084) up and back to (0.064, 0.985, 0.030) — the start
+  # 11 mm further back than first cut, which had it floating 6-10 mm off
+  # the temple for its first 3 cm, where it is
   # buried in the ear plate's inner rim — the arm goes to the ear, as arms
   # do. r 0.010 for the 2-3 cm of paint width. Seated: 5 mm proud of the
   # temple at its start, inside the skull at its end.
-  blob head on skull at=0.00 r=0.010 wide=1.00 tall=1.00 blend=0.0020 offset=(0.088,0.088,0.103) tip=(-0.024,0.080,-0.065) both color=101012 gloss=0.60
+  blob head on skull at=0.00 r=0.010 wide=1.00 tall=1.00 blend=0.0020 offset=(0.088,0.088,0.092) tip=(-0.024,0.080,-0.054) both color=101012 gloss=0.60
 
   # THE LOWER FACE — the mass the lips sit IN, not in front of. The mesh at
   # y 0.70 is one body 0.21 deep (z -0.095..0.119) and 0.061 half-wide; at
@@ -399,8 +419,18 @@ body
   # Spindly stays but NOT hair-thin: the reference's bare upper arm measures
   # 0.051 across and the forearm 0.044 — thicker than the 0.042/0.038 the
   # first pass used, which read as wire.
-  blob arm on clavicle at=1.00 r=0.040 blend=0.0040 mirror
-  bar  arm on upperarm from=0.02 to=0.98 r=0.026 blend=0.0046 mirror
+  # `core`: the shoulder ball is the arm's anchor against the torso; probing
+  # from the upper-arm bar's midpoint instead grazed 7 mm of armpit air.
+  blob arm on clavicle at=1.00 r=0.040 blend=0.0040 mirror core color=b1161f
+  bar  arm on upperarm from=0.02 to=0.98 r=0.026 blend=0.0046 mirror color=b1161f
+  # THE SLEEVE — the one part of the outfit with volume of its own. Every
+  # other garment on the mesh is paint on the sculpt: the tee is the torso's
+  # own 0.075 front and back, the shorts hug the legs. The sleeve is not: at
+  # y 0.46..0.58 the red runs out to x 0.20 and stands 0.12 tall on an arm
+  # 0.05 thick — a loose bell over the upper arm, ending at the elbow where
+  # the bare forearm starts. One tapered bar along the upper arm, r 0.050 at
+  # the shoulder to 0.042 at the mouth, over the 0.026 arm inside it.
+  bar  arm on upperarm from=0.00 to=0.72 r=0.050 r2=0.042 blend=0.0050 mirror color=b1161f
   blob arm on forearm  at=0.00 r=0.025 blend=0.0046 mirror
   bar  arm on forearm  from=0.06 to=0.94 r=0.022 blend=0.0042 mirror
   blob arm on forearm  at=1.00 r=0.022 blend=0.0042 mirror
@@ -410,20 +440,33 @@ body
   # tapered bars, 8 mm falling to 3 mm — cartoon fingers at 1.10 m, which is
   # the intent. The palm centres at hand t=0.35 so every finger base starts
   # INSIDE it and merges.
-  blob arm on hand at=0.35 r=0.032 deep=0.80 wide=1.20 blend=0.0032 mirror
-  bar  arm on f_index  from=0.00 to=0.92 r=0.008 r2=0.003 blend=0.0010 mirror
-  bar  arm on f_middle from=0.00 to=0.92 r=0.008 r2=0.003 blend=0.0010 mirror
-  bar  arm on f_ring   from=0.00 to=0.90 r=0.007 r2=0.003 blend=0.0010 mirror
-  bar  arm on f_little from=0.00 to=0.88 r=0.006 r2=0.002 blend=0.0010 mirror
+  # "THE TINY TINY HANDS" (owner, 2026-08-22). Measured off the mesh's
+  # T-posed arm: the palm is 0.06 thick, 0.09 across the finger spread and
+  # ~0.06 long, then four FAT fingers ~0.04 long and 0.02 thick — a mitt.
+  # Ours was 0.051 across the spread with fingers tapering 8 mm -> 3 mm:
+  # needles on a paddle. r 0.040 x (0.85, 1.0, 1.2) is 0.068 x 0.080 x
+  # 0.096, and the fingers below are 0.012 -> 0.009, barely tapered.
+  blob arm on hand at=0.35 r=0.040 wide=0.85 tall=1.00 deep=1.20 blend=0.0040 mirror
+  bar  arm on f_index  from=0.00 to=0.92 r=0.012 r2=0.009 blend=0.0018 mirror
+  bar  arm on f_middle from=0.00 to=0.92 r=0.012 r2=0.009 blend=0.0018 mirror
+  bar  arm on f_ring   from=0.00 to=0.90 r=0.011 r2=0.008 blend=0.0018 mirror
+  bar  arm on f_little from=0.00 to=0.88 r=0.010 r2=0.007 blend=0.0018 mirror
 
   # Mesh legs, y 0.16..0.24: each spans x 0.013..0.084, i.e. 0.071 across —
   # r 0.035, centred at x 0.048 — and they stay that width from shoe to
   # crotch. These were 0.020..0.026: wire. side 0.034 -> 0.042 on the thigh
   # bone moves the column out to match.
-  blob leg on thigh at=0.00 r=0.038 blend=0.0050 mirror
-  bar  leg on thigh from=0.08 to=0.92 r=0.034 blend=0.0046 mirror
-  blob leg on shin  at=0.00 r=0.034 blend=0.0048 mirror
-  bar  leg on shin  from=0.08 to=0.92 r=0.032 blend=0.0044 mirror
+  blob leg on thigh at=0.00 r=0.038 blend=0.0050 mirror color=1d27a4
+  # `core`: the leg's structural mass for the fuse probe — the shoe ball
+  # below is fatter than anything in the leg and would otherwise be taken.
+  bar  leg on thigh from=0.08 to=0.92 r=0.034 blend=0.0046 mirror core color=1d27a4
+  blob leg on shin  at=0.00 r=0.034 blend=0.0048 mirror color=1d27a4
+  # Split at the shorts' hem (mesh: y 0.19, 0.05 m below the knee). A prim is
+  # one colour, so the paint boundary is a prim boundary: the top half of the
+  # shin is shorts, 2 mm fatter for the hem's lip (mesh 0.083 against a
+  # 0.071 leg), the bottom half bare.
+  bar  leg on shin  from=0.08 to=0.50 r=0.034 blend=0.0044 mirror color=1d27a4
+  bar  leg on shin  from=0.50 to=0.92 r=0.032 blend=0.0044 mirror
   blob leg on shin  at=1.00 r=0.032 blend=0.0046 mirror
 
   # Feet: swallowed by the kit's oversized shoes (topline 0.185), so all that

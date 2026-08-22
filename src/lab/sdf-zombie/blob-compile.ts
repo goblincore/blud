@@ -277,6 +277,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       ...(p.bend ? { bend: p.bend as Vec3 } : {}),
       ...(p.color ? { color: p.color as Vec3 } : {}),
       ...(p.gloss === null ? {} : { gloss: p.gloss }),
+      ...(p.core ? { core: true } : {}),
     } satisfies PrimDef;
   });
 

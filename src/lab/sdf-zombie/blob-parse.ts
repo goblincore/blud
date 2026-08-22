@@ -392,6 +392,8 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     // stored linear because that is what the shader mixes in.
     color: parseColorArg(l, strArg(l, 'color')),
     gloss: parseGlossArg(l, strArg(l, 'color') !== null),
+    // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
+    core: l.words.includes('core'),
     src: l,
   } satisfies BlobPart);
 }

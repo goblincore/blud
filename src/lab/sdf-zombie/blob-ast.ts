@@ -77,6 +77,8 @@ export interface BlobPart {
   color: readonly [number, number, number] | null;
   /** `gloss=0..1`. null = the flesh preset's own wetness. */
   gloss: number | null;
+  /** The bare word `core`: this prim is the limb's structural mass. */
+  core: boolean;
   src: BlobLine;
 }
 
