@@ -459,13 +459,17 @@ body
   blob leg on thigh at=0.00 r=0.038 blend=0.0050 mirror color=1d27a4
   # `core`: the leg's structural mass for the fuse probe — the shoe ball
   # below is fatter than anything in the leg and would otherwise be taken.
-  bar  leg on thigh from=0.08 to=0.92 r=0.034 blend=0.0046 mirror core color=1d27a4
-  blob leg on shin  at=0.00 r=0.034 blend=0.0048 mirror color=1d27a4
+  # r 0.031 (mesh-iter 2026-08-22, was 0.034): axis x 0.050 + 0.034 reached
+  # 0.086-0.091 per side at y 0.22-0.28 and the mesh leg column never
+  # passes 0.084 — the silhouette's thigh bands read +0.022. 0.031 lands
+  # 0.081, the mesh's own mid-thigh reach.
+  bar  leg on thigh from=0.08 to=0.92 r=0.031 blend=0.0046 mirror core color=1d27a4
+  blob leg on shin  at=0.00 r=0.031 blend=0.0048 mirror color=1d27a4
   # Split at the shorts' hem (mesh: y 0.19, 0.05 m below the knee). A prim is
   # one colour, so the paint boundary is a prim boundary: the top half of the
   # shin is shorts, 2 mm fatter for the hem's lip (mesh 0.083 against a
   # 0.071 leg), the bottom half bare.
-  bar  leg on shin  from=0.08 to=0.50 r=0.034 blend=0.0044 mirror color=1d27a4
+  bar  leg on shin  from=0.08 to=0.50 r=0.031 blend=0.0044 mirror color=1d27a4
   bar  leg on shin  from=0.50 to=0.92 r=0.032 blend=0.0044 mirror
   blob leg on shin  at=1.00 r=0.032 blend=0.0046 mirror
 
@@ -483,18 +487,58 @@ body
   # at z -0.02, toe centre x 0.130 at z 0.18. The kit lofts had 25 degrees
   # and a floating foot; the two-tube gap at the crotch and every
   # flesh-through-fabric fight came from dressing a smooth sculpt in hard
-  # polygons. Three prims per side, mirrored by the leg limb:
+  # polygons. Four prims per side, mirrored by the leg limb:
   #   1. heel-to-toe cone, r 0.053 -> 0.046, the body of the shoe;
-  #   2. the ball, a wider blob where the mesh is widest — tall 1.0 and
-  #      centred at y 0.059, because at y 0.12 the mesh shoe is still 0.136
-  #      wide and a flatter ball stopped 2 cm short (the silhouette's one
-  #      "too narrow" band at 0.87 of height);
+  #   2. the ball, the widest part, centred at y 0.059 — wide 1.13,
+  #      tall 0.82 (mesh-iter 2026-08-22, was 1.18/1.00): at 1.18/1.00 the
+  #      ball's shoulder flared to 0.156-0.170 of half-width at y 0.104-0.113
+  #      while the mesh shoe widens GRADUALLY below the ankle (outer edge
+  #      0.121@y0.130 -> 0.132@0.122 -> 0.150@0.113 -> 0.161@0.104 per side),
+  #      so bands 0.88/0.90 read +0.045/+0.026. tall 0.82 tops the ball at
+  #      y 0.108, clear of band 0.88's window, and wide 1.13 keeps every
+  #      equator band (0.91-0.99) within 0.012. The ankle-side onset is the
+  #      WALL prim's job — no single sphere can do both (see 2b).
+  #   2b. the WALL — the shoe upper's side, a flattened tapered capsule from
+  #       the ankle down-and-out to the ball. A sphere's onset is a cliff:
+  #       tall 1.0 put band 0.88 at +0.045, tall 0.9 at -0.039, nothing in
+  #       between, because the flare zone always lands inside one band. A
+  #       capsule's silhouette edge is a straight line, which hugs the mesh's
+  #       steepening curve to <0.012 everywhere. World axis A (0.066, 0.126,
+  #       0.055) -> B (0.112, 0.090, 0.082), r 0.043 -> 0.044, as PLAIN world
+  #       displacements: a scaled prim's world shape is an ellipsoid centred
+  #       on its raw world endpoint with radii scale*r, so offset/tip take NO
+  #       scale compensation (compensating them put the axis at the knee /
+  #       the floor on the first two attempts). tall 0.40 keeps the top cap
+  #       under the collar (band 0.87 +0.009); deep 1.30 spans z 0.0..0.14 so
+  #       the wall reads heel to toe. The thin y (r_y 0.017) is fine: below
+  #       y 0.10 the wall is buried in the ball, only its side face shows.
   #   3. the ankle collar, which is also what fuses the shoe to the shin.
   # Colour is the mean of the mesh's shoe paint; a little gloss for the
   # rubbery sheen in the plates.
   # ============================================================
   blob leg on foot at=0.00 r=0.053 r2=0.046 wide=1.00 tall=1.00 blend=0.0060 offset=(0.045,-0.088,0.018) tip=(0.041,-0.005,0.113) mirror color=b9b9bc gloss=0.25
-  blob leg on foot at=0.00 r=0.062 wide=1.18 tall=1.00 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
+  blob leg on foot at=0.00 r=0.062 wide=1.13 tall=0.82 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
+  #   2b. the WALL — the shoe upper's side, a flattened tapered capsule from
+  #       the ankle down-and-out to the ball. No sphere can be this: the mesh
+  #       outer edge runs 0.101@y0.147 -> 0.121@0.130 -> 0.132@0.122 ->
+  #       0.150@0.113 -> 0.161@0.104 per side (a steepening curve), while a
+  #       sphere is either fat high up (tall 1.0: band 0.88 +0.045) or absent
+  #       (tall 0.9: band 0.88 -0.039) with nothing in between — the onset
+  #       cliff always lands inside one band. A capsule's silhouette edge is
+  #       a straight line, which hugs that curve to <0.01 everywhere.
+  #       World axis A (0.076, 0.126, 0.055) -> B (0.124, 0.090, 0.082),
+  #       r 0.045 -> 0.048, as PLAIN world displacements: a scaled prim's
+  #       world shape is an ellipsoid centred on its raw world endpoint with
+  #       radii scale*r, so offset/tip need NO scale compensation (the first
+  #       attempt divided/multiplied them and put the axis at the knee / the
+  #       floor). tall 0.40 keeps the top cap under the collar (band 0.87
+  #       +0.001); deep 1.30 spans z -0.01..0.15 so the wall reads heel to
+  #       toe. The thin y (r_y 0.018) is fine: below y 0.10 the wall is
+  #       buried in the ball, only its side face shows.
+  blob leg on foot at=0.00 r=0.043 r2=0.044 wide=1.00 tall=0.40 deep=1.30 blend=0.0060 offset=(0.022,-0.015,0.056) tip=(0.046,-0.036,0.027) mirror color=b9b9bc gloss=0.25
+  #   3. the ankle collar (unchanged): sphere at world (0.063, 0.125, 0.011),
+  #      r_eff (0.045, 0.036, 0.050) — wraps the ankle and owns the topline
+  #      band 0.87 (ours 0.196 vs mesh 0.196).
   blob leg on foot at=0.00 r=0.045 wide=1.00 tall=0.80 deep=1.10 blend=0.0070 offset=(0.019,-0.016,0.012) mirror color=b9b9bc gloss=0.25
 
 # THE CRANIUM, measured off the reference mesh rather than guessed off a
