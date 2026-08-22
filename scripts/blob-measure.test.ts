@@ -43,7 +43,10 @@ describe('blob-measure', () => {
     expect(out.character).toBe('mouse');
     expect(out.errors).toEqual([]);
     expect(out.refs.length).toBeGreaterThanOrEqual(1);
-    const ref = out.refs[0];
+    // The mouse mesh is committed now, so it resolves too and refs[0] is the
+    // mesh, not the plate this test is about — select the plate explicitly.
+    const ref = out.refs.find((r: { kind: string }) => r.kind === 'plate');
+    expect(ref).toBeDefined();
     // A FLOOR, not a target: it catches a decode/build/framing regression that
     // would collapse the score, and says nothing about how good the mouse is.
     // Read the worst bands for that.
@@ -61,8 +64,7 @@ describe('blob-measure', () => {
 
   // The mouse mesh is committed under the <name>-mesh convention (see
   // docs/dev-notes/refs/README.md), so these run unconditionally.
-  const maus = resolve(repo,
-    'docs/dev-notes/refs/mouse-mesh/Meshy_AI_maus_biped_Character_output.glb');
+  const maus = resolve(repo, 'docs/dev-notes/refs/mouse-mesh/mouse.glb');
 
   it('resolves the mesh automatically over a plate-only run', () => {
     const out = JSON.parse(run('mouse', '--json'));

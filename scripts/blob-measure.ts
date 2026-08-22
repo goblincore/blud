@@ -16,8 +16,9 @@
 // edit, worst first. That list is the point — the IoU is only there to tell
 // you whether the list is worth working through.
 //
-// REFERENCE RESOLUTION, in order: 1. --glb  2. the first .glb under
-// docs/dev-notes/refs/<name>-mesh/  3. --plate, else
+// REFERENCE RESOLUTION, in order: 1. --glb  2. the canonical
+// docs/dev-notes/refs/<name>-mesh/<name>.glb, falling back to the first .glb
+// sorted if that exact file is missing (and saying so)  3. --plate, else
 // docs/dev-notes/refs/<name>-reference.png. When both exist, both are reported.
 //
 // A MESH IS PREFERRED, BUT NOT BECAUSE IT SCORES BETTER. It is preferred
@@ -128,6 +129,24 @@ function parseFlags(argv: string[]): Flags {
 // --- references -------------------------------------------------------------
 interface RefSource { kind: 'mesh' | 'plate'; path: string }
 
+/**
+ * The canonical mesh for a character is `refs/<name>-mesh/<name>.glb` — the
+ * one every measurement (head-profile.ts included) is meant to be taken
+ * against. Fall back to the first .glb sorted only when that exact file is
+ * missing, and say which one was picked: silently landing on a texture-only
+ * or animation-merge export (extra files the README says stay untracked
+ * anyway) produces numbers nobody asked for.
+ */
+function resolveMeshPath(name: string, meshDir: string): string | undefined {
+  const canonical = `${meshDir}/${name}.glb`;
+  if (existsSync(canonical)) return canonical;
+  if (!existsSync(meshDir)) return undefined;
+  const glb = readdirSync(meshDir).filter((f) => f.endsWith('.glb')).sort()[0];
+  if (!glb) return undefined;
+  console.error(`no ${name}.glb under ${meshDir}/ — falling back to ${glb}`);
+  return `${meshDir}/${glb}`;
+}
+
 /** The references to score against, in the order documented at the top. */
 function resolveSources(name: string, flags: Flags): RefSource[] {
   const sources: RefSource[] = [];
@@ -135,9 +154,9 @@ function resolveSources(name: string, flags: Flags): RefSource[] {
   if (flags.glb) {
     if (!existsSync(flags.glb)) fail(`missing: ${flags.glb}`);
     sources.push({ kind: 'mesh', path: flags.glb });
-  } else if (existsSync(meshDir)) {
-    const glb = readdirSync(meshDir).filter((f) => f.endsWith('.glb')).sort()[0];
-    if (glb) sources.push({ kind: 'mesh', path: `${meshDir}/${glb}` });
+  } else {
+    const mesh = resolveMeshPath(name, meshDir);
+    if (mesh) sources.push({ kind: 'mesh', path: mesh });
   }
   if (flags.plate) {
     if (!existsSync(flags.plate)) fail(`missing: ${flags.plate}`);

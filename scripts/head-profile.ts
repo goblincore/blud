@@ -34,15 +34,19 @@ import { parseGlb, gltfTriangles } from '../src/lab/sdf-zombie/silhouette';
 const args = process.argv.slice(2);
 const name = args.find((a) => !a.startsWith('--')) ?? 'mouse';
 const glbArg = args.indexOf('--glb');
-// Same resolution as scripts/blob-measure.ts: the first .glb, sorted, under
-// docs/dev-notes/refs/<name>-mesh/ — not a hardcoded filename, so a mesh
-// export gets replaced without editing this script.
+// Same resolution as scripts/blob-measure.ts: the canonical
+// docs/dev-notes/refs/<name>-mesh/<name>.glb first — the file every head
+// measurement here is meant to be taken against — falling back to the first
+// .glb sorted (and saying so) only when that exact file is missing.
 function defaultGlb(name: string): string {
   const meshDir = `docs/dev-notes/refs/${name}-mesh`;
+  const canonical = `${meshDir}/${name}.glb`;
+  if (existsSync(canonical)) return canonical;
   const glb = existsSync(meshDir)
     ? readdirSync(meshDir).filter((f) => f.endsWith('.glb')).sort()[0]
     : undefined;
   if (!glb) throw new Error(`no .glb under ${meshDir}/ (pass --glb explicitly)`);
+  console.error(`no ${name}.glb under ${meshDir}/ — falling back to ${glb}`);
   return `${meshDir}/${glb}`;
 }
 const GLB = glbArg >= 0 ? args[glbArg + 1]! : defaultGlb(name);

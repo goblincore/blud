@@ -32,4 +32,6 @@ Two things silently break this:
 
 A plate gives a silhouette; a mesh gives everything, and `blob:measure` prefers it — not because a mesh scores better (a mesh is sculpted in a pose exactly as a plate is drawn in one; see POSE MISMATCH in `scripts/blob-measure.ts`) but because it can be measured LOCALLY: width by height, head profile, paint regions by texel. Put reference meshes in `refs/<character>-mesh/` as `.glb` with embedded textures (the mouse's shades and shoes were located by texel colour). Commit with `git add -f`; dispatched agents run in fresh worktrees and cannot see untracked files.
 
-Size: a 25 MB mesh is fine once. Do not commit iterations — replace the file.
+The canonical file is `refs/<character>-mesh/<character>.glb` — the one `blob:measure` and `head-profile.ts` both resolve first, and the one every head/body measurement is taken against. A Meshy export dumps more than that: a texture-only variant, a merged-animations variant, sometimes others. Keep only the canonical file in git — extra exports (texture-only, merged animations) stay out of git; the untracked originals live in the primary checkout for whoever generated them.
+
+Size: a 5 MB mesh is fine once. Do not commit iterations — replace the file.
