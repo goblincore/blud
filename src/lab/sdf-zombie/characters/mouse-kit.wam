@@ -258,13 +258,20 @@ parts
   # 2026-08-22: shifted the band to the raised eye line (offset.y 0.018 ->
   # centre ~0.867, between the brows at 0.908 and the snout top ~0.85) and
   # pushed it a touch prouder (z 0.120) so it reads as worn, not embedded.
-  loft shades bone=skull at=0.325 offset=(-0.098,0.018,0.120) dir=side len=0.196 frame=up material=black
-    ring 0.00 w=0.014 d=0.026 tip
-    ring 0.12 w=0.020 d=0.036
-    ring 0.40 w=0.018 d=0.038
-    ring 0.60 w=0.018 d=0.038
-    ring 0.88 w=0.020 d=0.036
-    ring 1.00 w=0.014 d=0.026 tip
+  # 2026-08-22, after the head rebuild: the lenses were 0.038 of `d` — 42 mm
+  # of height on a head whose cranium had just grown — and read on screen as a
+  # WIRE stretched across the face rather than as eyewear. mouse-reference-2
+  # shows deep wraparound lenses that own the middle of the face, so `d` goes
+  # to 0.058 and the span opens slightly with it. Refitting these was not
+  # optional: the shades are aimed off the skull bone, so every change to
+  # headHeight or jawDrop moves the face out from under them.
+  loft shades bone=skull at=0.325 offset=(-0.103,0.020,0.126) dir=side len=0.206 frame=up material=black
+    ring 0.00 w=0.014 d=0.032 tip
+    ring 0.12 w=0.021 d=0.052
+    ring 0.40 w=0.019 d=0.058
+    ring 0.60 w=0.019 d=0.058
+    ring 0.88 w=0.021 d=0.052
+    ring 1.00 w=0.014 d=0.032 tip
     cap start=point end=point
 
 textures

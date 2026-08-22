@@ -241,7 +241,13 @@ body
   # blunter reads as less nose-like, not more. Longer and dropping further
   # with it, so the muzzle sweeps down the way the profile plate shows instead
   # of sticking out level at eye height.
-  blob head on skull at=0.305 r=0.056 r2=0.026 wide=1.15 tall=0.88 blend=0.0042 offset=(0,0.000,0.046) tip=(0,-0.058,0.212) bend=(0,0.020,0.016)
+  # ROUND IN SECTION. wide 1.15 against tall 0.88 made the muzzle a horizontal
+  # BLADE — 31% wider than tall — and on screen it read as a flat yellow flap
+  # stuck to the side of the face rather than a snout. The front silhouette
+  # cannot see this at all (it only measures width), which is exactly the kind
+  # of error the matcher is blind to and the render is not. A muzzle is round
+  # in cross-section and tapers; the width belongs in `r`, not in a squash.
+  blob head on skull at=0.305 r=0.058 r2=0.027 wide=1.04 tall=1.00 blend=0.0042 offset=(0,0.000,0.046) tip=(0,-0.058,0.212) bend=(0,0.020,0.016)
 
   # THE POUT — a small lip under the snout's far end, set well back from
   # the nose tip (both new references agree: the mouth is NOT at the tip).
