@@ -50,7 +50,9 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
    stepped straight over and the band is attributed to the next primitive
    INWARD. It never invents an owner; it can name one too deep.
 4. **Every ~5 edits, look:** `npm run blob:shot -- <name>`, then `Read` the
-   frames. The measure cannot see a hole behind the front surface, a feature
+   frames — or, if your model has no native vision (glm-5.x and kimi-k3 on pi:
+   `Read` on a PNG shows you nothing), `python3 scripts/vision-ask.py <frame>
+   "<question>"` and quote the answer. The measure cannot see a hole behind the front surface, a feature
    smeared by `blend=`, or a colour. The pictures can.
 5. **See something the measure did not predict?** Run
    `npm run blob:render-check -- <name>` *before* editing the `.blob`. It starts
