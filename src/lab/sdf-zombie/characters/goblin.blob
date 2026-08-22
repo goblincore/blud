@@ -283,20 +283,38 @@ body
 # snout, and a heavier brow for the scowl. The pointed cranium taper and the
 # tusks in the WAM file have no analog at all.
 face
-  headRadius 0.126
-  headWidth  0.96
-  headHeight 1.02
-  headDepth  0.94
-  jawWidth   0.70
-  jawHeight  0.90
-  jawDrop    0.104
-  jawJut     0.072
-  noseLength 0.006
-  noseWidth  0.34
-  noseDrop   0.012
-  browHeavy  0.014
-  browRise   0.038
-  headBlend  0.0030
+  # THESE ARE DEFAULT_FACE's VALUES, ON PURPOSE.
+  #
+  # Until 2026-08-22 the lab discarded a .blob's own face block and built every
+  # character from DEFAULT_FACE — so this goblin has ALWAYS rendered as the
+  # gaunt default head, and every by-eye decision on it (the hooked nose's
+  # reach, the lips' height, the ears, the sunglasses' fit, the whole kit) was
+  # tuned against that head while this block sat unread.
+  #
+  # Wiring the block up correctly therefore CHANGED the goblin: the authored
+  # values are a wider, rounder, shallower-crowned skull (headWidth 0.96 vs
+  # 0.76, headHeight 1.02 vs 1.161), and under them the nose that reads as a
+  # sharp hook becomes a soft bump on a bloated face — it went from 57 mm proud
+  # of the cranium to 44 mm, on a head 26% wider.
+  #
+  # So the block is pinned to what this character has actually been reviewed
+  # and approved as. Re-shaping the goblin's skull is a real art decision and
+  # it drags the nose, lips and the entire kit fit with it; it should be done
+  # deliberately, not as a side effect of a bug fix.
+  headRadius 0.118
+  headWidth  0.76
+  headHeight 1.161
+  headDepth  0.894
+  jawWidth   0.748
+  jawHeight  0.861
+  jawDrop    0.076
+  jawJut     0.04
+  noseLength 0.007
+  noseWidth  0.379
+  noseDrop   0.009
+  browHeavy  0.008
+  browRise   0.045
+  headBlend  0.006
 
 # The goblin's own face, generated rather than inherited.
 #
