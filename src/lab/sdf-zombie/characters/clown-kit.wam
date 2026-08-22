@@ -109,6 +109,20 @@ skeleton
     bone foot     parent=shin     dir=fwd len=0.095
   end
 
+  # RUFF POINTS — eight spikes fanning out from the neck, each aimed with an
+  # explicit dir=(x,y,z). The vector form was added to WAM for exactly this:
+  # a radial fan is not expressible with the six axis words, and an earlier
+  # attempt to aim them by pinning each tail did NOT reorient the bones —
+  # all eight came out pointing the same way. -0.32 in y droops the frill.
+  bone pt1 parent=neck head=(0.000,0.576,0.140) dir=(0.000,-0.32,1.000) len=0.115
+  bone pt2 parent=neck head=(0.099,0.576,0.099) dir=(0.707,-0.32,0.707) len=0.115
+  bone pt3 parent=neck head=(0.140,0.576,0.000) dir=(1.000,-0.32,0.000) len=0.115
+  bone pt4 parent=neck head=(0.099,0.576,-0.099) dir=(0.707,-0.32,-0.707) len=0.115
+  bone pt5 parent=neck head=(0.000,0.576,-0.140) dir=(0.000,-0.32,-1.000) len=0.115
+  bone pt6 parent=neck head=(-0.099,0.576,-0.099) dir=(-0.707,-0.32,-0.707) len=0.115
+  bone pt7 parent=neck head=(-0.140,0.576,-0.000) dir=(-1.000,-0.32,-0.000) len=0.115
+  bone pt8 parent=neck head=(-0.099,0.576,0.099) dir=(-0.707,-0.32,0.707) len=0.115
+
 parts
   # CAP BAND — the close ring that hugs the crown, OPEN SHELL (cap none).
   #
@@ -192,66 +206,75 @@ parts
   # from attempt one entirely.
   #
 
-  # RUFF COLLAR — the grey scallop frill the beads and pom-poms sit ON.
+  # RUFF COLLAR — A POINTED JESTER FRILL, a pom-pom on every point.
   #
-  # The collar is the piece that was missing: only the bells were ever
-  # modelled, so they floated in a ring around the neck with nothing holding
-  # them. This is a flared loft — a bell of grey cloth from the neck-base
-  # (y 0.570, tucked into the body) flaring out to the frill edge (y 0.545,
-  # half-width 0.20) just under the chin. The beads ride its outer rim; the
-  # pom-poms sit a hair beyond it, at the same height, offset by 22.5 degrees
-  # so they break the grey scallop's silhouette the way the reference reads.
+  # WHAT WAS HERE: a smooth round bell with the pom-poms on a circle 25 mm
+  # WIDER than the cloth's rim, so all eight hung in the air. Owner: "the
+  # biggest issue is the floating little pom poms that are supposed to be part
+  # of the ruff... the ruff should be more pointy shaped with the pom poms on
+  # the end of the points."
   #
-  # Sized off the NEW head (headWidth 1.18): the head base at this height
-  # (y ~0.55-0.61) runs 0.15-0.21 half-wide, so a frill that peaks at 0.20
-  # half-width sits right on the head's underside and the beads just proud of
-  # it. The top ring tucks up toward the neck bar (r 0.042) so the whole
-  # collar hangs off the skull rather than floating in front of it.
+  # Each pom is now attached at at=1.0 of its OWN point's bone, so it sits on
+  # the tip BY CONSTRUCTION. The old floating was not a bad number — it was two
+  # independent numbers (pom radius, cloth rim) free to drift apart. There is
+  # only one number now.
+  #
+  # The base ring joins the points into a collar rather than eight loose spikes.
   loft ruffc bone=neck at=0.0 dir=down len=0.055 frame=fwd material=grey
-    ring 0.00 w=0.30 d=0.24
-    ring 0.55 w=0.49 d=0.40
-    ring 1.00 w=0.47 d=0.38
+    ring 0.00 w=0.26 d=0.22
+    ring 0.55 w=0.34 d=0.30
+    ring 1.00 w=0.30 d=0.26
     cap start=none end=none
-  # GREY SCALLOP BEADS — the little grey balls, on the collar's outer rim.
-  # Circle radius 0.20, at the frill height (y ~0.55). Each bead's inner pole
-  # tucks ~20 mm into the collar/head; its outer pole stands proud ~12 mm.
-  attach bead1 bone=neck kind=sphere at=0.5 offset=(0.200,0.020,0.000)         size=0.030 material=grey
-  attach bead2 bone=neck kind=sphere at=0.5 offset=(0.141,0.020,0.141)         size=0.030 material=grey
-  attach bead3 bone=neck kind=sphere at=0.5 offset=(0.000,0.020,0.200)         size=0.030 material=grey
-  attach bead4 bone=neck kind=sphere at=0.5 offset=(-0.141,0.020,0.141)        size=0.030 material=grey
-  attach bead5 bone=neck kind=sphere at=0.5 offset=(-0.200,0.020,0.000)        size=0.030 material=grey
-  attach bead6 bone=neck kind=sphere at=0.5 offset=(-0.141,0.020,-0.141)       size=0.030 material=grey
-  attach bead7 bone=neck kind=sphere at=0.5 offset=(0.000,0.020,-0.200)        size=0.030 material=grey
-  attach bead8 bone=neck kind=sphere at=0.5 offset=(0.141,0.020,-0.141)        size=0.030 material=grey
-  # POMPOMS — red, on the collar's RIM rather than beyond it.
-  #
-  # THE FLOATING BUG: these sat on a circle of radius 0.235 while the collar's
-  # widest ring was only 0.210 half-width, so every pom hung 25 mm past the
-  # cloth with nothing under it — the owner's "biggest issue". The rings above
-  # now flare to 0.245 half-width, which is the window that makes them ATTACHED
-  # AND still visible: the rim must cover each pom's CENTRE (radius 0.235) so
-  # it has cloth under it, without covering its OUTER face (0.235 + 0.024 =
-  # 0.259) or the red stops breaking the grey silhouette — which is what
-  # clown-kit.test.ts's radial-reach race pins. 0.245 sits between the two.
-  #
-  # The rim and the pom radius are two independent numbers that can drift apart
-  # again. If you move one, re-check the other: rim half-width (ring w / 2)
-  # must exceed the pom radius, or they float again.
-  #
-  # STILL ROUND, NOT POINTED. The ask is a pointed jester frill with a pom on
-  # each point. WAM cannot aim a radial fan: `dir=` takes only the six axis
-  # directions, and driving eight spike bones by `pin ... tail=` was tried and
-  # does NOT aim them — the built rim spanned 225-300 degrees instead of a full
-  # circle. A pointed ruff needs either an arbitrary-direction bone in WAM or a
-  # different construction (a scalloped loft profile).
-  attach pom1 bone=neck kind=sphere at=0.5 offset=(0.217,0.010,0.090)          size=0.024 material=red
-  attach pom2 bone=neck kind=sphere at=0.5 offset=(0.090,0.010,0.217)          size=0.024 material=red
-  attach pom3 bone=neck kind=sphere at=0.5 offset=(-0.090,0.010,0.217)         size=0.024 material=red
-  attach pom4 bone=neck kind=sphere at=0.5 offset=(-0.217,0.010,0.090)         size=0.024 material=red
-  attach pom5 bone=neck kind=sphere at=0.5 offset=(-0.217,0.010,-0.090)        size=0.024 material=red
-  attach pom6 bone=neck kind=sphere at=0.5 offset=(-0.090,0.010,-0.217)        size=0.024 material=red
-  attach pom7 bone=neck kind=sphere at=0.5 offset=(0.090,0.010,-0.217)         size=0.024 material=red
-  attach pom8 bone=neck kind=sphere at=0.5 offset=(0.217,0.010,-0.090)         size=0.024 material=red
+
+  loft spike1 bones=pt1..pt1 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike2 bones=pt2..pt2 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike3 bones=pt3..pt3 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike4 bones=pt4..pt4 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike5 bones=pt5..pt5 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike6 bones=pt6..pt6 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike7 bones=pt7..pt7 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  loft spike8 bones=pt8..pt8 material=grey
+    ring 0.00 w=0.095 d=0.095
+    ring 0.55 w=0.058 d=0.058
+    ring 1.00 w=0.024 d=0.024
+    cap start=none end=dome
+  # POM-POMS — one per point, ON its tip.
+  attach pom1 bone=pt1 kind=sphere at=1.0 size=0.032 material=red
+  attach pom2 bone=pt2 kind=sphere at=1.0 size=0.032 material=red
+  attach pom3 bone=pt3 kind=sphere at=1.0 size=0.032 material=red
+  attach pom4 bone=pt4 kind=sphere at=1.0 size=0.032 material=red
+  attach pom5 bone=pt5 kind=sphere at=1.0 size=0.032 material=red
+  attach pom6 bone=pt6 kind=sphere at=1.0 size=0.032 material=red
+  attach pom7 bone=pt7 kind=sphere at=1.0 size=0.032 material=red
+  attach pom8 bone=pt8 kind=sphere at=1.0 size=0.032 material=red
 
   # TUNIC BODICE — vertical blue/pink stripes flaring from under the head
   # ball to the hip line. frame=fwd so d spans front-back exactly like the
