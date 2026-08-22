@@ -131,13 +131,13 @@ body
   # segment centre sits ~50 mm inside the surface — fully embedded, like
   # every groove (the operator carves along the primitive's own zero-set
   # wherever it runs near the skin; the goblin's ships at the same embed).
-  # depth/width are the channel's 5 mm bite and 6 mm opening — a drawn
-  # line at this scale, not a wound. (Was 3.5/4.5 mm; the rescue-plus
-  # renders showed the smile lost to the pale skin's highlight compression,
-  # same lesson as the sheet's eyeGlow/mouthOpen bumps.)
-  groove head on skull at=0.45 r=0.040 wide=0.88 tall=0.060 deep=0.90 blend=0.0014 offset=(0,-0.117,0.120) depth=0.005 width=0.006
-  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(0.052,-0.108,0.118) tip=(0.026,0.018,0) depth=0.005 width=0.006
-  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(-0.052,-0.108,0.118) tip=(-0.026,0.018,0) depth=0.005 width=0.006
+  # depth/width are the channel's 6 mm bite and 7 mm opening — a drawn
+  # line at this scale, not a wound. (Was 3.5/4.5 mm, then 5/6; the renders
+  # kept losing the smile to the pale skin's highlight compression, same
+  # lesson as the sheet's eyeGlow/mouthOpen bumps.)
+  groove head on skull at=0.45 r=0.040 wide=0.88 tall=0.060 deep=0.90 blend=0.0014 offset=(0,-0.117,0.120) depth=0.006 width=0.007
+  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(0.052,-0.108,0.118) tip=(0.026,0.018,0) depth=0.006 width=0.007
+  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(-0.052,-0.108,0.118) tip=(-0.026,0.018,0) depth=0.006 width=0.007
 
   # ARMS AND LEGS — ball joints, deliberately, same stylisation as the
   # goblin: a fat nub at every joint kept readable by tight blends. On a
@@ -226,7 +226,12 @@ sheet
   browHeavy  0.30
   browAngle  -8
   mouthWidth 0.32
-  mouthRise  0.70
+  # 0.697, not a rounder number: this puts the paint's centre ON the smile
+  # groove (world y 0.650) under the planar projection — uv.y =
+  # (1-mouthRise-0.0315), raw.y = (uv.y-0.56)/0.58, world y = 0.767 +
+  # raw.y x 0.235. They shipped 12 mm apart (paint high) and read as two
+  # half-strength lines instead of one.
+  mouthRise  0.697
   # NEGATIVE — a smile, matching the grooves underneath (whose corner tips
   # sweep up). The sign is backwards from the drawer's own comment
   # ("mouthCurve bows it down at the centre for a frown"): measured on the
@@ -238,11 +243,11 @@ sheet
   # if the two drift apart on render, trust the render and re-site
   # whichever is wrong (the goblin's shades lesson).
   mouthCurve -0.35
-  # 0.034, up from 0.026: same wash-out physics as eyeGlow above. The line
-  # is 1.7 texels at the 64px atlas and its soft edge is wider than the
-  # line — what survives to the screen is the core only, and the pale skin
-  # eats it. Thicker is the only dial the format gives.
-  mouthOpen  0.034
+  # 0.045, after two wash-outs (0.026, 0.034): the line is ~3 texels at the
+  # 64px atlas and its soft edge is nearly as wide — what survives to the
+  # screen is the core only, and the pale skin eats it. Thicker is the only
+  # dial the format gives.
+  mouthOpen  0.045
   nostril    0.15
   noseRidge  0.0
   noseWide   0.0
