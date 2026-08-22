@@ -129,9 +129,9 @@ parts
   # the ball narrows fast up here, and keeping the old 0.450 bottom ring
   # would float the band 15 mm off the scalp.
   loft capband bone=skull at=0.700 dir=up len=0.075 frame=fwd material=royal
-    ring 0.00 w=0.430 d=0.412
-    ring 0.50 w=0.394 d=0.378
-    ring 1.00 w=0.340 d=0.326
+    ring 0.00 w=0.530 d=0.415
+    ring 0.50 w=0.484 d=0.378
+    ring 1.00 w=0.420 d=0.326
     cap start=none end=none
 
   # CAP CONE — the floppy blue cone, slumping BACKWARD and to one side.
@@ -162,12 +162,12 @@ parts
   # on the scalp above the band and the render showed a stripe of bare head
   # between the two pieces. Mounted at t=0.86 (y 0.906) so the base emerges
   # from INSIDE the band it overlaps — the band's top rim is y 0.926.
-  sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-12 yaw=12 material=royal
-    seg len=0.055 r=0.205 back=10
-    seg len=0.060 r=0.130 back=14
-    seg len=0.060 r=0.080 back=16 down=14
-    seg len=0.055 r=0.042 down=35
-    seg len=0.045 r=0.016 down=45 tip
+  sweep capcone bone=skull at=0.860 offset=(0,0.006,-0.008) dir=up pitch=-14 yaw=12 material=royal
+    seg len=0.045 r=0.215 back=12
+    seg len=0.055 r=0.160 back=16
+    seg len=0.055 r=0.105 back=18 down=10
+    seg len=0.050 r=0.055 down=32
+    seg len=0.045 r=0.020 down=44 tip
     cap start=none
 
   # BADGE — the little yellow spot where the reference wears its star, high
@@ -178,7 +178,7 @@ parts
   # read worse than no star. Placed ABOVE the tuft's sweep volume: an earlier
   # offset at cheek height compiled fine and was entirely inside the hair,
   # which WAM's own lint caught.
-  attach badge bone=skull kind=sphere at=0.70 offset=(0.185,0.030,0.085) size=0.026 material=yellow
+  attach badge bone=skull kind=sphere at=0.70 offset=(0.245,0.030,0.045) size=0.026 material=yellow
 
   # HAIR — two wide purple tufts sweeping out from under the cap band,
   # sticking sideways past the cheeks almost like wings. Second-biggest
@@ -186,39 +186,47 @@ parts
   # from attempt one entirely.
   #
 
-  # RUFF — grey scallop collar with red pom-poms, squashed under the head
-  # ball. THERE IS NO NECK to hang it on: the cranium is still 166 mm
-  # half-wide at the collar's height (y 0.615), so the beads ride the
-  # BALL's surface, not a neck's — circle radius 158 mm where the ball's
-  # cross-section is ~167 mm wide, bead radius 32 mm: each bead's inner
-  # pole buries ~44 mm and its outer pole stands proud ~25 mm. That bury
-  # is why the fit test's TUCK bound exists; keep every new collar piece
-  # inside it or the test is telling you the collar has fallen inside-out
-  # through the skull.
+  # RUFF COLLAR — the grey scallop frill the beads and pom-poms sit ON.
   #
-  # Not a torus: WAM has no torus generator, and the scallop IS the look.
-  attach bead1 bone=neck kind=sphere at=0.5 offset=(0.158,0.023,-0.006)         size=0.032 material=grey
-  attach bead2 bone=neck kind=sphere at=0.5 offset=(0.112,0.023,0.106)          size=0.032 material=grey
-  attach bead3 bone=neck kind=sphere at=0.5 offset=(0,0.023,0.152)              size=0.032 material=grey
-  attach bead4 bone=neck kind=sphere at=0.5 offset=(-0.112,0.023,0.106)         size=0.032 material=grey
-  attach bead5 bone=neck kind=sphere at=0.5 offset=(-0.158,0.023,-0.006)        size=0.032 material=grey
-  attach bead6 bone=neck kind=sphere at=0.5 offset=(-0.112,0.023,-0.118)        size=0.032 material=grey
-  attach bead7 bone=neck kind=sphere at=0.5 offset=(0,0.023,-0.164)             size=0.032 material=grey
-  attach bead8 bone=neck kind=sphere at=0.5 offset=(0.112,0.023,-0.118)         size=0.032 material=grey
-  # Pom-poms: smaller, redder, one notch further OUT (circle 178 mm, r 24 mm)
-  # and lower (y 0.605), at 22.5-degree offsets between the beads — they
-  # stick well past the grey scallops, which is the whole point of them.
-  # Circle 185 mm: an earlier 168 mm draft put the pom vertices BEHIND the
-  # beads' own reach and the kit test caught the race lost by half a
-  # millimetre.
-  attach pom1 bone=neck kind=sphere at=0.5 offset=(0.171,0.013,0.065)          size=0.024 material=red
-  attach pom2 bone=neck kind=sphere at=0.5 offset=(0.071,0.013,0.165)          size=0.024 material=red
-  attach pom3 bone=neck kind=sphere at=0.5 offset=(-0.071,0.013,0.165)         size=0.024 material=red
-  attach pom4 bone=neck kind=sphere at=0.5 offset=(-0.171,0.013,0.065)         size=0.024 material=red
-  attach pom5 bone=neck kind=sphere at=0.5 offset=(-0.171,0.013,-0.077)        size=0.024 material=red
-  attach pom6 bone=neck kind=sphere at=0.5 offset=(-0.071,0.013,-0.168)        size=0.024 material=red
-  attach pom7 bone=neck kind=sphere at=0.5 offset=(0.071,0.013,-0.168)         size=0.024 material=red
-  attach pom8 bone=neck kind=sphere at=0.5 offset=(0.171,0.013,-0.077)         size=0.024 material=red
+  # The collar is the piece that was missing: only the bells were ever
+  # modelled, so they floated in a ring around the neck with nothing holding
+  # them. This is a flared loft — a bell of grey cloth from the neck-base
+  # (y 0.570, tucked into the body) flaring out to the frill edge (y 0.545,
+  # half-width 0.20) just under the chin. The beads ride its outer rim; the
+  # pom-poms sit a hair beyond it, at the same height, offset by 22.5 degrees
+  # so they break the grey scallop's silhouette the way the reference reads.
+  #
+  # Sized off the NEW head (headWidth 1.18): the head base at this height
+  # (y ~0.55-0.61) runs 0.15-0.21 half-wide, so a frill that peaks at 0.20
+  # half-width sits right on the head's underside and the beads just proud of
+  # it. The top ring tucks up toward the neck bar (r 0.042) so the whole
+  # collar hangs off the skull rather than floating in front of it.
+  loft ruffc bone=neck at=0.0 dir=down len=0.055 frame=fwd material=grey
+    ring 0.00 w=0.30 d=0.24
+    ring 0.55 w=0.42 d=0.32
+    ring 1.00 w=0.36 d=0.28
+    cap start=none end=none
+  # GREY SCALLOP BEADS — the little grey balls, on the collar's outer rim.
+  # Circle radius 0.20, at the frill height (y ~0.55). Each bead's inner pole
+  # tucks ~20 mm into the collar/head; its outer pole stands proud ~12 mm.
+  attach bead1 bone=neck kind=sphere at=0.5 offset=(0.200,0.020,0.000)         size=0.030 material=grey
+  attach bead2 bone=neck kind=sphere at=0.5 offset=(0.141,0.020,0.141)         size=0.030 material=grey
+  attach bead3 bone=neck kind=sphere at=0.5 offset=(0.000,0.020,0.200)         size=0.030 material=grey
+  attach bead4 bone=neck kind=sphere at=0.5 offset=(-0.141,0.020,0.141)        size=0.030 material=grey
+  attach bead5 bone=neck kind=sphere at=0.5 offset=(-0.200,0.020,0.000)        size=0.030 material=grey
+  attach bead6 bone=neck kind=sphere at=0.5 offset=(-0.141,0.020,-0.141)       size=0.030 material=grey
+  attach bead7 bone=neck kind=sphere at=0.5 offset=(0.000,0.020,-0.200)        size=0.030 material=grey
+  attach bead8 bone=neck kind=sphere at=0.5 offset=(0.141,0.020,-0.141)        size=0.030 material=grey
+  # POMPOMS — red, one notch further OUT (circle 0.235) than the beads, at
+  # 22.5-degree offsets between them so they read as a separate trim row.
+  attach pom1 bone=neck kind=sphere at=0.5 offset=(0.217,0.010,0.090)          size=0.024 material=red
+  attach pom2 bone=neck kind=sphere at=0.5 offset=(0.090,0.010,0.217)          size=0.024 material=red
+  attach pom3 bone=neck kind=sphere at=0.5 offset=(-0.090,0.010,0.217)         size=0.024 material=red
+  attach pom4 bone=neck kind=sphere at=0.5 offset=(-0.217,0.010,0.090)         size=0.024 material=red
+  attach pom5 bone=neck kind=sphere at=0.5 offset=(-0.217,0.010,-0.090)        size=0.024 material=red
+  attach pom6 bone=neck kind=sphere at=0.5 offset=(-0.090,0.010,-0.217)        size=0.024 material=red
+  attach pom7 bone=neck kind=sphere at=0.5 offset=(0.090,0.010,-0.217)         size=0.024 material=red
+  attach pom8 bone=neck kind=sphere at=0.5 offset=(0.217,0.010,-0.090)         size=0.024 material=red
 
   # TUNIC BODICE — vertical blue/pink stripes flaring from under the head
   # ball to the hip line. frame=fwd so d spans front-back exactly like the
@@ -284,11 +292,12 @@ parts
     # and the tuft reads as GROWING from the head, not hovering beside it.
     # `cap start=none` for the same reason as the cap cone above (sweeps
     # default to a flat start cap: a disc straight through the mount point).
-    sweep tuft bone=skull at=0.52 offset=(0.205,-0.010,-0.020) dir=side yaw=-20 material=purple
-      seg len=0.080 r=0.030 up=8
-      seg len=0.055 r=0.062 up=26 back=8
-      seg len=0.045 r=0.048 up=18 back=6
-      seg len=0.040 r=0.020 down=8 tip
+    sweep tuft bone=skull at=0.64 offset=(0.205,-0.005,-0.020) dir=side yaw=-15 material=purple
+      seg len=0.045 r=0.050 up=12
+      seg len=0.055 r=0.078 down=10 back=5
+      seg len=0.055 r=0.068 down=32 back=4
+      seg len=0.050 r=0.050 down=36
+      seg len=0.048 r=0.024 down=22 tip
       cap start=none
 
     # THE RED NOSE SHELL — the colour half of the clown's one saturated note.
