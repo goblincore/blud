@@ -87,7 +87,7 @@ skeleton
     # elbow sits NO further out than the shoulder (mesh elbow x ~0.30 of
     # height, deltoid 0.30..0.34) and the forearm angles OUT going down to
     # the hand at x 0.37 of height — the claw fan owns the widest span.
-    bone clavicle parent=spine2 side=0.18 dir=side len=0.12
+    bone clavicle parent=spine2 side=0.18 dir=side len=0.16
     # Shoulder (0.30, 1.17, 0.04) to elbow (0.376, 0.888, 0.46): the mesh
     # arm column stays at x 0.30..0.33 of height from deltoid to elbow
     # (y 0.62..0.86) — only the mesh's RIGHT side has an extra spike out at
@@ -100,9 +100,9 @@ skeleton
     # x 0.21..0.46 of height over y 0.40..0.58 — a PAW, not a knuckle — and
     # the claws fan from it out to x 0.467 (0.63 m), bottoming at y 0.40
     # (0.54 m), tips curling back to z ~0.31 of height.
-    bone c_out parent=hand dir=down pitch=-53 tilt=50  len=0.23
-    bone c_mid parent=hand dir=down pitch=-57 tilt=31  len=0.195
-    bone c_in  parent=hand dir=down pitch=-60 tilt=-6  len=0.18
+    bone c_out parent=hand dir=down pitch=-50 tilt=62  len=0.27
+    bone c_mid parent=hand dir=down pitch=-57 tilt=20  len=0.23
+    bone c_in  parent=hand dir=down pitch=-60 tilt=-28 len=0.21
   end
 
 body
@@ -122,12 +122,15 @@ body
   # narrower spiked crown. Mesh hood at y 0.94..0.96 of height: x +-0.25,
   # z -0.11..0.29. Half (0.27, 0.105, 0.22) centred (0, 1.26, 0.11) — the
   # top of the flesh; the SPIKES below own the last 10 cm to the crown.
-  blob torso on skull at=1.00 r=0.100 wide=2.90 tall=0.90 deep=2.50 blend=0.012 offset=(0,0.047,0.045)
+  blob torso on skull at=1.00 r=0.100 wide=2.90 tall=0.90 deep=2.65 blend=0.012 offset=(0,0.047,0.035)
 
   # ---- WAIST AND TAIL ---------------------------------------------------
-  # Waist column under the slab: mesh y 0.36..0.62 of height, x +-0.11..0.14,
-  # z -0.07..0.16 — deep, not wide. deep 0.90 on r 0.17 gives z -0.08..0.22.
-  blob torso on spine1 at=0.00 r=0.170 wide=1.00 deep=0.90 blend=0.030 offset=(0,0.13,0.07)
+  # Waist column under the slab, as TWO stacked blobs because the mesh's
+  # column leans BACK as it rises: z -0.08..0.16 at y 0.70 m (0.52 of
+  # height) deepening to -0.14..0.17 at 0.81 and -0.195..0.155 at 0.89 —
+  # the mass tucks under the chest's overhang. x +-0.11..0.14 throughout.
+  blob torso on spine1 at=0.10 r=0.160 wide=1.00 deep=1.00 blend=0.030 offset=(0,0.05,0.05)
+  blob torso on spine1 at=0.45 r=0.150 wide=1.00 deep=0.95 blend=0.030 offset=(0,0.05,0.00)
   # Junction blob at the root: bridges waist to tail. The sculpt's own side
   # view has a GAP between body and tail here (z-runs -0.33..-0.25 and
   # -0.05..0.16 at y 0.36..0.38) — matched by keeping this blob's rear at
@@ -157,15 +160,15 @@ body
   # y 0.40..0.46 of height (0.54..0.62 m) is one run z -0.61..-0.34, half
   # 0.13 centred z -0.47, TOPPING OUT at y 0.63 (nothing behind z -0.06
   # above that). Below it the tube goes THIN (-0.42..-0.30).
-  blob torso on tail1 at=0.90 r=0.090 wide=1.00 deep=1.00 blend=0.018 offset=(0.04,0.13,-0.205)
+  blob torso on tail1 at=0.90 r=0.085 wide=1.00 tall=0.75 deep=1.40 blend=0.018 offset=(0.04,0.16,-0.22)
   # The rear HOOK: three blobs up tail4. Mesh hook verts x 0.04..0.13 of
   # height (offset to +x — tilt=6 on tail4 plus offset x), y 0.29..0.46 of
   # height (0.39..0.62 m — it starts at the fat tail's latitude, NOT at
   # the tube's), z to -0.46 (-0.62 m). Tight blends keep the segments
   # reading — the tail is SEGMENTED in the sculpt, not one smooth rope.
-  blob torso on tail4 at=0.70 r=0.085 wide=1.00 deep=1.00 blend=0.015 offset=(0.04,0.05,0.00)
+  blob torso on tail4 at=0.70 r=0.085 wide=1.00 deep=1.00 blend=0.015 offset=(0.04,0.05,-0.01)
   blob torso on tail4 at=0.85 r=0.080 wide=1.00 deep=1.00 blend=0.012 offset=(0.03,0.05,0.00)
-  blob torso on tail4 at=1.00 r=0.075 wide=1.00 deep=1.00 blend=0.010 offset=(0.03,0.05,0.00)
+  blob torso on tail4 at=1.00 r=0.075 wide=1.00 deep=1.00 blend=0.010 offset=(0.03,0.05,-0.006)
 
   # ---- THE EYE — the character ------------------------------------------
   # ONE big domed pale eye in the upper chest. Mesh: dome front z 0.41 of
@@ -185,21 +188,30 @@ body
   # The lip slab: the frontmost mass of the whole model. Mesh y 0.66..0.82
   # of height (0.89..1.11 m), x +-0.34 (0.46 m), front z 0.44..0.463
   # (0.62 m). Half (0.44, 0.115, 0.15) centred (0, 1.013, 0.483).
-  blob torso on spine2 at=0.35 r=0.115 wide=3.83 tall=1.00 deep=1.30 blend=0.018 offset=(0,0.06,0.45)
-  # The mouth gash: a HARD carve (crisp lip — smooth carves smear, the
-  # face.ts header records four failed rebuilds behind that) cutting a wide
-  # horizontal opening through the slab front: removes y 0.97..1.02, x +-0.28,
-  # z 0.46..0.64. carve is limb-locked to head (grammar gap, see header) but
-  # subtracts from the whole assembled field, so cutting the torso slab works.
-  carve on skull at=1.00 r=0.033 wide=8.50 tall=0.80 deep=2.80 hard offset=(0,-0.23,0.51)
-  # Fangs along the upper lip: five true points (r2=0.004) hanging into the
-  # gash. Mesh fang z 0.42..0.44 of height at the lip; unpainted — the only
-  # paint on this character is the eye. tip= aims each down and slightly back.
-  blob torso on skull at=1.00 r=0.018 r2=0.004 wide=1.20 blend=0.003 offset=(-0.24,-0.20,0.52) tip=(0,-0.075,-0.02)
-  blob torso on skull at=1.00 r=0.018 r2=0.004 wide=1.20 blend=0.003 offset=(-0.12,-0.20,0.53) tip=(0,-0.070,-0.02)
-  blob torso on skull at=1.00 r=0.018 r2=0.004 wide=1.20 blend=0.003 offset=(0.00,-0.20,0.54) tip=(0,-0.080,-0.02)
-  blob torso on skull at=1.00 r=0.018 r2=0.004 wide=1.20 blend=0.003 offset=(0.12,-0.20,0.53) tip=(0,-0.070,-0.02)
-  blob torso on skull at=1.00 r=0.018 r2=0.004 wide=1.20 blend=0.003 offset=(0.24,-0.20,0.52) tip=(0,-0.075,-0.02)
+  blob torso on spine2 at=0.35 r=0.115 wide=3.83 tall=1.00 deep=1.30 blend=0.018 offset=(0,0.06,0.457)
+  # The mouth line: a GROOVE, not a carve. The reference mesh's maw is a
+  # CLOSED sculpt — no hole anywhere in the mesh, the mouth is a wide lip
+  # seam — so the mouth is a channel cut along the slab's front face
+  # (cutter centred ON the surface z 0.619 at y 1.00), 5 cm deep, with the
+  # fangs below hanging off the upper lip. Two carve attempts were rejected
+  # first: one that ran past the chest cut a see-through slit, one that
+  # stopped inside left a knife-edge lip — BOTH failed blob:render-check
+  # with GPU holes the CPU field did not have (2026-08-22).
+  groove head on skull at=1.00 r=0.030 wide=9.00 tall=0.40 deep=1.20 depth=0.080 width=0.030 offset=(0,-0.24,0.577)
+  # The FANGS: five chunky spikes (r2=0.007, not needles) hanging from the
+  # slab's face ABOVE the groove, bases seated 2 cm inside the surface at
+  # z 0.60..0.62 and tips at y 0.90 — proud of the slab, which falls back
+  # to z 0.54 there. PAINTED pale bone: the mesh's own texture is uniformly
+  # dark olive everywhere — the eye included, whose pale paint is the
+  # brief's art direction, not texture reproduction — and on an all-dark
+  # body a maw only reads by its teeth. (A first pass at r 0.024/r2 0.004
+  # under a proud lip bar rendered as a dark mitten: thin teeth + the lip's
+  # shadow ate them.)
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(-0.24,-0.19,0.565) tip=(0,-0.14,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(-0.12,-0.19,0.575) tip=(0,-0.135,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.032 r2=0.007 wide=1.30 blend=0.004 offset=(0.00,-0.19,0.585) tip=(0,-0.145,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(0.12,-0.19,0.575) tip=(0,-0.135,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(0.24,-0.19,0.565) tip=(0,-0.14,-0.03) color=d8cdae gloss=0.6
 
   # ---- HOOD SPIKES ------------------------------------------------------
   # The spiked crown: mesh spike tips AT y 1.00 of height (1.35 m) clustered
@@ -228,13 +240,13 @@ body
   # The PAW: the mesh hand is a fat mitt, x 0.28..0.62 m over y 0.54..0.80
   # (0.21..0.46 of height at 0.40..0.58) with the front at z 0.59 — the
   # three claws hang off its bottom edge, they do not spread from a knuckle.
-  blob arm on hand at=0.50 r=0.095 wide=1.75 tall=1.30 deep=0.80 blend=0.016 offset=(0,0.05,-0.05) mirror core
+  blob arm on hand at=0.50 r=0.085 wide=1.85 tall=1.30 deep=0.80 blend=0.016 offset=(0,0.05,-0.05) mirror core
   # Three curved claws per hand: tapered to true points, bent back under
   # the paw (mesh claw tips curl to z 0.24..0.35 of height). bend z is
   # negative = hooking back toward the body as they descend.
-  bar  arm on c_out from=0.10 to=1.00 r=0.026 r2=0.006 blend=0.004 bend=(0.02,0,-0.05) mirror
-  bar  arm on c_mid from=0.10 to=1.00 r=0.028 r2=0.005 blend=0.004 bend=(0.01,0,-0.04) mirror
-  bar  arm on c_in  from=0.10 to=1.00 r=0.026 r2=0.005 blend=0.004 bend=(0,0,-0.03) mirror
+  bar  arm on c_out from=0.15 to=1.00 r=0.032 r2=0.008 blend=0.004 bend=(0.02,0,-0.05) mirror
+  bar  arm on c_mid from=0.15 to=1.00 r=0.030 r2=0.007 blend=0.004 bend=(0.01,0,-0.04) mirror
+  bar  arm on c_in  from=0.15 to=1.00 r=0.028 r2=0.007 blend=0.004 bend=(0,0,-0.03) mirror
 
 # Face block: the stub skull's face prims are all buried inside the chest —
 # headRadius 0.035 keeps the generated cranium+jaw a 3.5 cm knot at
