@@ -15,6 +15,7 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf } from '../blob-checks';
+import { sdBody } from '../validate';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -136,6 +137,59 @@ describe('mouse.blob', () => {
       expect(Math.abs(p.a[0])).toBeLessThan(0.21);
     }
     expect(b.errors).toEqual([]);
+  });
+
+  // =====================================================================
+  // THE SNOUT — the fix this character exists for. Two runs authored from
+  // the flat front reference alone and built a flat face; the side profile
+  // (mouse-reference-1.png) shows a muzzle AS LONG AS THE CRANIUM IS DEEP.
+  // Thresholded off that image: head front-to-back = 250 px of a 755 px
+  // body = 33% of standing height. These assertions march the compiled
+  // field (camera-free), so a future retune cannot quietly shrink the
+  // muzzle back into a bump — reach is the whole game (see the goblin
+  // nose's two rejections).
+  // =====================================================================
+  const surfaceZ = (b: ReturnType<typeof built>, y: number, x = 0) => {
+    let front = NaN, back = NaN;
+    for (let z = -0.4; z <= 0.6; z += 0.001)
+      if (sdBody([x, y, z], b) < 0) { if (Number.isNaN(back)) back = z; front = z; }
+    return { front, back };
+  };
+
+  it('has a muzzle, not a bump: head depth is a third of standing height', () => {
+    const b = built();
+    // The deepest line is the snout tip's own latitude, y ~0.70.
+    let depth = 0;
+    for (let y = 0.62; y <= 0.80; y += 0.01) {
+      const { front, back } = surfaceZ(b, y);
+      depth = Math.max(depth, front - back);
+    }
+    // Reference: 0.364 m on a 1.10 m body. The rejected flat-face passes
+    // measured ~0.25 (cranium + pout). 0.33 keeps the muzzle a major mass
+    // without pinning the exact centimetre.
+    expect(depth).toBeGreaterThan(0.33);
+    expect(depth / doc.height!).toBeGreaterThan(0.30);
+  });
+
+  it('the snout tip clears the cranium front by a real margin', () => {
+    const b = built();
+    // Cranium front at its equator (y 0.79, no muzzle there) vs the front at
+    // the tip latitude. The reference muzzle projects roughly the cranium's
+    // own depth; the goblin ships 44 mm proud and the flat-face passes that
+    // fell short both read as bumps. 80 mm is the floor, not the target.
+    const equator = surfaceZ(b, 0.79).front;
+    let tip = 0;
+    for (let y = 0.64; y <= 0.76; y += 0.005)
+      tip = Math.max(tip, surfaceZ(b, y).front);
+    expect(tip - equator).toBeGreaterThan(0.080);
+    // And the tip sits BELOW the eye line (0.749): the profile's muzzle
+    // leaves the face at cheek/under-eye level and holds near-horizontal,
+    // 49 mm under the eyes. A tip at forehead height is a trunk.
+    let tipY = 0;
+    for (let y = 0.60; y <= 0.90; y += 0.005)
+      if (surfaceZ(b, y).front > tip - 0.002 && surfaceZ(b, y).front > 0.2) tipY = y;
+    expect(tipY).toBeLessThan(0.749);
+    expect(tipY).toBeGreaterThan(0.60);
   });
 
   // THE ARMS MUST READ AS ARMS — the goblin's twice-bitten regression, and

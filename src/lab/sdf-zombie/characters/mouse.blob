@@ -1,21 +1,28 @@
 # Mouse — the third .blob character authored from scratch, and the second
-# built to be CUTE (after the clown). Authored against
-# docs/dev-notes/refs/mouse-reference.png, which is the brief; this file only
-# records the numbers that image implied.
+# built to be CUTE (after the clown). Authored against THREE references in
+# docs/dev-notes/refs/: mouse-reference.png (front), mouse-reference-1.png
+# (PURE SIDE PROFILE — the one that matters; two earlier runs worked from
+# the front view alone, which hides the snout completely, and both built a
+# flat face), and mouse-reference-2.png (three-quarter).
 #
-# SILHOUETTE INTENT, measured off the reference (945 px of character mapped to
-# 1.10 m, so 1 px = 1.164 mm — every number below came off that scale): a
-# lollipop. Two enormous ROUND ear discs (diameter 0.254 m each, i.e. nearly a
-# QUARTER of the standing height EACH) centred at (+/-0.174, 0.960) and
-# reaching y 1.099 — the ears, not the crown, are the tallest thing on the
-# body. Between them the crown pokes up to 0.972 as a narrow yellow dome; the
-# head then flares to its full 0.262 width at y 0.85 and tapers back to a
-# 0.10-wide chin at 0.645, over a stick neck. Below: a small torso in a loose
-# red tee, blue shorts, bare shins, and shoes as oversized as the ears
-# (0.17 m wide, reaching to y 0.187). Arms SPINDLY and held out at ~47
-# degrees, hands at hip height with spread fingers. The tee, shorts, shoes,
-# shades and brow slabs live in mouse-kit.wam; the flesh here is yellow skin,
-# the discs, and a small pout.
+# SILHOUETTE INTENT, measured off the references (945 px of front character
+# mapped to 1.10 m, so 1 px = 1.164 mm; the profile is 755 px = 1.10 m, so
+# 1 px = 1.457 mm): a lollipop WITH A SNOUT. In profile the head is 33% of
+# the standing height FRONT-TO-BACK (0.364 m — the muzzle is roughly as
+# long as the cranium is deep, and ends in a blunt rounded nose 49 mm below
+# the eye line, held near-horizontal with a gentle droop, a small pout
+# under its far end). From the front: two enormous ROUND ear discs
+# (diameter 0.254 m each, i.e. nearly a QUARTER of the standing height
+# EACH) centred at (+/-0.174, 0.960) and reaching y 1.099 — the ears, not
+# the crown, are the tallest thing on the body. Between them the crown
+# pokes up to 0.972 as a narrow yellow dome; the head then flares to its
+# full 0.262 width at y 0.85 and tapers back to a 0.10-wide chin at 0.645,
+# over a stick neck. Below: a small torso in a loose red tee, blue shorts,
+# bare shins, and shoes as oversized as the ears (0.17 m wide, reaching to
+# y 0.187). Arms SPINDLY and held out at ~47 degrees, hands at hip height
+# with spread fingers. The tee, shorts, shoes, shades and brow slabs live
+# in mouse-kit.wam; the flesh here is yellow skin, the discs, the snout,
+# and the pout.
 #
 # THE EARS ARE THE WHOLE CHARACTER. Every other feature serves them. They are
 # ROUND PLATES — as wide as they are tall, like coins stood on the skull's
