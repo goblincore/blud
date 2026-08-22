@@ -102,10 +102,16 @@ function buildMarchFn(mapBodySrc?: string) {
   const sources = mapBodySrc
     ? HELPERS.map(h => (/^fn\s+mapBody\s*\(/.test(h) ? mapBodySrc : h))
     : HELPERS;
+  // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
+  // wgslFn includes a dependency's code transitively, and HELPERS is already a
+  // strict declaration order, so a chain emits exactly the same WGSL as the
+  // full cross-product did — with O(n) dependency edges instead of O(n^2).
+  // At 26 helpers that is 25 edges rather than 325, and three's NodeBuilder
+  // walks those edges repeatedly (NodeBuilder.get was 37.6% of a boot profile).
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
-  return wgslFn(MARCH_BODY, nodes);
+  return wgslFn(MARCH_BODY, nodes.slice(-1));
 }
 
 /** The default march entry (plus its dependency-ordered helpers), shared by
@@ -115,9 +121,9 @@ export const marchBody = buildMarchFn();
 /** The coarse cone-march entry, sharing the same dependency-ordered helpers. */
 const coneMarch = (() => {
   const nodes = HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice())], [],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
-  return wgslFn(CONE_MARCH, nodes);
+  return wgslFn(CONE_MARCH, nodes.slice(-1));
 })();
 
 /**
