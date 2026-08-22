@@ -57,6 +57,21 @@ export interface PrimDef {
    * was nothing between "smeared" and "cut".
    */
   blendProfile?: 'round' | 'chamfer';
+  /**
+   * Displacement of the quadratic Bezier CONTROL point from the MIDPOINT of
+   * the primitive's two endpoints, in world axes — the same convention as
+   * `offset` and `tip`, so an author reasons about all three the same way.
+   * Absent means straight, and a straight primitive keeps the exact code path
+   * it has always had.
+   *
+   * Carried as a MID-RELATIVE displacement rather than a resolved control
+   * point on purpose: rigging, severing and root translation all move the
+   * endpoints and never need to touch this — the control point follows the
+   * midpoint it is defined against. And a pair of horns has to curve outward,
+   * not both lean the same way, so `mirrorOffset` negates `bend.x` exactly as
+   * it does `tip.x`.
+   */
+  bend?: Vec3;
   limb: LimbBase;
   mirror?: boolean;
   /**
@@ -117,6 +132,16 @@ export interface Primitive {
   blendProfile?: 'round' | 'chamfer';
   limb: LimbId;
   cluster: number;
+  /**
+   * Displacement of the quadratic Bezier CONTROL point from the MIDPOINT of
+   * the primitive's two endpoints, in world axes. Absent means straight — a
+   * plain capsule/round cone, bit-identical to every primitive authored
+   * before bends existed (the zombie pin demands it). See PrimDef.bend for
+   * why this is a displacement rather than a resolved point: it survives
+   * rigging and translation untouched because it is defined against the
+   * midpoint of endpoints that DO move.
+   */
+  bend?: Vec3;
   /**
    * Absent means 'add'. Optional rather than required so the many existing
    * test fixtures that build Primitive literals keep compiling.

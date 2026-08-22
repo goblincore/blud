@@ -147,6 +147,46 @@ Two rejections you will meet, both deliberate:
 - `chamfer` on a `carve` — carving folds through `smax`, which has no
   chamfered form here. Rejected rather than silently ignored.
 
+## Curved primitives: `bend=`
+
+Horns, tusks, tails, claws, curved fingers, ribs, hooked noses. Before this
+the only way to author a curve was a CHAIN of straight primitives placed by
+hand — and every link in the chain has its own round base, which reads as a
+lump. That failure cost this project three owner rejections on one character
+before `bend=` existed.
+
+- **`bend=(x,y,z)`** — displaces the quadratic Bezier CONTROL point from the
+  MIDPOINT of the primitive's two endpoints, in world axes. The same
+  convention as `offset=` and `tip=`, so you reason about all three the same
+  way: hold in your head where the chord's midpoint is, then push the control
+  point where the curve should bulge. Absent means straight, and a straight
+  primitive keeps the exact code path it has always had. Under `both`,
+  `bend.x` mirrors with `offset.x` and `tip.x`, so a pair of horns curves
+  outward rather than both leaning the same way.
+
+The radius still tapers ALONG THE CURVE (`r=` at the start end, `r2=` at the
+far end), so a curved horn that comes to a point is ONE primitive:
+
+```
+# a horn off a mirrored skull bone, sweeping back and out to a point
+bar head on skull from=0.55 to=0.95 r=0.030 r2=0.002 bend=(0.02,-0.05,0.06) blend=0.0018 chamfer mirror
+```
+
+How to aim it: the curve passes through the midpoint of your endpoints only
+when the bend is zero; it bulges HALFWAY toward the control point (the apex
+sits at half the displacement). So `bend=(0.06,0,0)` puts the belly 30 mm out
+from a 60 mm-displaced control point. If the shape needs a sharper turn than
+one quadratic gives, that is the format's honest limit — split into two bent
+prims at an INFLECTION, not at a lump.
+
+A collinear or zero bend is dropped at compile time and the primitive stays
+bit-identical to its straight twin — write `bend=(0,0,0)` freely, but do not
+depend on sub-tenth-millimetre bends surviving.
+
+Same rejection as the taper, for the same reason: `bend=` on a `blob` with no
+`tip=` has no midpoint to displace from. Use a `bar`, or give the blob a
+`tip=`.
+
 ## Colour is the biggest lever you have
 
 Before the `palette` block existed, every `.blob` character wore one global

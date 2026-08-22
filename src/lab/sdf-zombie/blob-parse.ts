@@ -352,6 +352,10 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     // `tip=` displaces the FAR end only, so a primitive can point somewhere
     // its bone does not — a nose out of a vertical skull, a tusk out of a jaw.
     tip: parseVec3Arg(l, 'tip', strArg(l, 'tip')),
+    // `bend=` displaces the Bezier CONTROL point from the ENDPOINT MIDPOINT,
+    // so a horn or a hook is ONE primitive instead of a chain of straight
+    // ones whose round bases read as lumps.
+    bend: parseVec3Arg(l, 'bend', strArg(l, 'bend')),
     grooveDepth: numArg(l, 'depth', 0),
     grooveWidth: numArg(l, 'width', 0),
     src: l,
