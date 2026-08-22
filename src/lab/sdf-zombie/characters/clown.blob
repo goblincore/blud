@@ -1,0 +1,312 @@
+# Clown — second attempt at the bestiary's clown (the first lives on
+# dispatch/ox-alpha-clown-character, authored against an older tree, and its
+# owner's verdict was "creepy and oddly likeable but doesn't look really like
+# the inspiration except maybe it has purple clothes"). What it got wrong is
+# written into the numbers below:
+#
+#   * THE HEAD IS THE CHARACTER. Roughly HALF the standing height, one big
+#     smooth pale ball. Attempt one gave the head 38% and it read as
+#     big-forehead-chibi, not clown. This one declares height 1.00 with a
+#     cranium of radius 0.235 — a 47% ball before the jaw rounds anything.
+#
+#   * THE NOSE MUST READ RED. All flesh still shares ONE material and the
+#     face sheet only DARKENS (blob-face-sheet.ts), so red is out of reach
+#     for .blob exactly the way attempt one found. The difference here: the
+#     kit carries a RED SHELL over this bead, so the silhouette is flesh
+#     (deformable, severable, raymarched) and the colour is polygon. See
+#     clown-kit.wam's `nose` piece.
+#
+# Everything hard or striped or purple (cap, hair tufts, ruff, tunic,
+# stockings, mitts, shoes) lives in clown-kit.wam; the flesh here is the pale
+# ball, the round belly, thin limbs and THE SMILE GROOVE.
+model clown
+  # Crown lands at y 1.002 — see the skull note below for the arithmetic.
+  height 1.00
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # CHIBI STACK, shorter than attempt one (crotch 0.44 -> 0.36), because the
+  # extra height budget went to the head: a 47% cranium plus a torso means
+  # something else gives, and the reference gives it in the legs — they are
+  # barely a quarter of the body under the tunic hem, and the huge shoes eat
+  # most of what shows.
+  root pelvis at 0.36 len=0.06
+
+  # Torso chain: hip line at 0.42, chest top at 0.57 — the whole trunk is
+  # 0.15 m under a 0.47 m head. That ratio IS the joke; do not rebalance it
+  # without re-shooting the references.
+  bone spine1 parent=pelvis dir=up pitch=2 len=0.075
+  bone chest  parent=spine1 dir=up pitch=2 len=0.075
+
+  # Short neck, tipped back slightly (-10). The goblin needed -17 to bring a
+  # jutting snout level; this face is a flat forward-facing ball. Almost all
+  # of the neck bar hides inside the cranium anyway — the ruff collar (kit)
+  # owns whatever shows.
+  bone neck   parent=chest  dir=up pitch=-10 len=0.045
+
+  # LONG skull bone relative to the head on purpose: facePrims centres the
+  # cranium at t=0.45 along it, so the bone lifts the centre (and the crown)
+  # without growing the head itself. Arithmetic, not taste: neck tail
+  # y 0.614 + 0.45 x 0.34 x cos4deg = centre 0.767, crown = 0.767 + 0.235
+  # (headHeight 1.0) = 1.002, which is the `height` above.
+  bone skull  parent=neck   dir=up pitch=-4  len=0.34
+
+  mirror
+    bone clavicle parent=chest    side=0.030 dir=side  len=0.032
+    # Arms: short and HELD OUT — tilt=32 splays the elbow past the belly the
+    # way the reference holds them, forearms angling FORWARD (pitch=20) so
+    # the white mitts sit in front of the tunic where they read. On a chibi
+    # whose belly is nearly as wide as its shoulders there is no room below
+    # the elbow unless the elbow itself is pushed out — same race as the
+    # goblin's, on a shorter track.
+    bone upperarm parent=clavicle dir=down pitch=-8 tilt=32 len=0.135
+    bone forearm  parent=upperarm dir=down pitch=20 tilt=-6 len=0.115
+    bone hand     parent=forearm  dir=down             len=0.058
+    # Legs: thigh FORWARD (+8), shin BACK (-10) — the signs the goblin
+    # settled on after the kangaroo-knee incident, and the same reason: in
+    # .blob a positive pitch always carries toward +z, so a humanoid knee
+    # wants thigh-forward/shin-back, the opposite of WAM's convention.
+    # Gentle angles because these legs are half the goblin's length; a
+    # stronger bow reads knock-kneed at this scale.
+    bone thigh    parent=pelvis   dir=down tilt=6  pitch=8   side=0.044 len=0.175
+    bone shin     parent=thigh    dir=down tilt=-6 pitch=-10            len=0.165
+    bone foot     parent=shin     dir=fwd                              len=0.095
+  end
+
+body
+  # Torso: a short barrel, widest LOW (the belly ring sits near the top of
+  # the pelvis bone). Deep in z like the goblin's — bulk taken where the arms
+  # are not — but gentler, because this reads as a toy's pot belly, not a
+  # wound. Every ring here is measured against by the kit's tunic; if one
+  # moves, the tunic rings must be re-marched against it (see the kit header).
+  blob torso on pelvis at=0.00 r=0.062 deep=1.15 blend=0.0045
+  blob torso on pelvis at=0.95 r=0.075 deep=1.30 blend=0.0050
+  blob torso on spine1 at=0.60 r=0.072 deep=1.25 blend=0.0050
+  blob torso on chest  at=0.50 r=0.068 deep=1.10 blend=0.0042
+  blob torso on chest  at=1.00 r=0.058 deep=0.95 blend=0.0040
+
+  # Neck column. Almost entirely swallowed by the cranium above and the ruff
+  # below; it exists to give the head cluster a flesh bridge into the chest
+  # cap (both meet at the chest-top joint, y 0.570).
+  bar head on neck from=0.00 to=1.00 r=0.042 deep=0.95 blend=0.0016
+
+  # THE NOSE — the whole character hangs on it reading.
+  #
+  # REACH, computed rather than eyeballed, because the host here is twice
+  # the goblin's cranium: semi-depth = headRadius 0.235 x headDepth 0.92 =
+  # 0.216 m at centre height, still 0.212 at the bead's own height (dropped
+  # 0.045 below the axis — the ellipsoid shrinks as sqrt(1-(dy/b)^2)). The
+  # bead's centre sits at z=0.178: buried 64 mm INSIDE the local surface
+  # (attached — a nose that only kisses the skin tears off in the gib
+  # pass), and its front reaches z=0.226, a good 32 mm PROUD of the face —
+  # a third of the bead's own diameter, which is the difference between a
+  # nose and a rash.
+  #
+  # Dropped 0.045 below the cranium axis: between the eye line (above
+  # centre on this huge ball) and the smile groove (below). Same t=0.45 as
+  # facePrims' own skull sphere so it tracks any future retune of HEAD_AT.
+  # NOTE the z: offset= is relative to the BONE POINT, which itself sits at
+  # z −0.0185 (the skull pitches back 4deg), so 0.196 here puts the bead
+  # centre at world z 0.178 — an early draft wrote the world number as the
+  # offset and lost 18 mm of reach silently.
+  #
+  # blend stays tight (0.002): a clown nose is a SEPARATE object stuck on —
+  # the one part of this face that must not melt into the skull. Colour
+  # note in the header: the RED lives on the kit's shell over this bead.
+  blob head on skull at=0.45 r=0.048 blend=0.0020 offset=(0,-0.045,0.196)
+
+  # THE SMILE — three grooves drawing one arc, corners UP.
+  #
+  # A single straight groove is a slash, not a smile; the arc needs the
+  # segments to change height across the mouth. Three is the fewest that
+  # read as a curve at this scale (two leaves a kink at the join that reads
+  # as a scar — tried, rejected on render). Each segment is FLAT in y
+  # (tall right down) so its channel runs horizontally, per the skill's
+  # groove rule; the corner segments carry tip=(x,y,0) so their far ends
+  # sweep UP-and-out, which is what turns three slashes into an arch.
+  #
+  # Reach arithmetic shared with the nose: at the mouth's height (0.117
+  # below the cranium axis) the ball's local semi-depth is 0.187, so each
+  # segment centre sits ~50 mm inside the surface — fully embedded, like
+  # every groove (the operator carves along the primitive's own zero-set
+  # wherever it runs near the skin; the goblin's ships at the same embed).
+  # depth/width are the channel's 6 mm bite and 7 mm opening — a drawn
+  # line at this scale, not a wound. (Was 3.5/4.5 mm, then 5/6; the renders
+  # kept losing the smile to the pale skin's highlight compression, same
+  # lesson as the sheet's eyeGlow/mouthOpen bumps.)
+  groove head on skull at=0.45 r=0.040 wide=0.88 tall=0.060 deep=0.90 blend=0.0014 offset=(0,-0.117,0.120) depth=0.006 width=0.007
+  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(0.052,-0.108,0.118) tip=(0.026,0.018,0) depth=0.006 width=0.007
+  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(-0.052,-0.108,0.118) tip=(-0.026,0.018,0) depth=0.006 width=0.007
+
+  # ARMS AND LEGS — ball joints, deliberately, same stylisation as the
+  # goblin: a fat nub at every joint kept readable by tight blends. On a
+  # toy the JOINTS are most of the limb's charm, so they run proportionally
+  # fatter than the goblin's relative to their shafts.
+  blob arm on clavicle at=1.00 r=0.040 blend=0.0014 mirror
+  bar  arm on upperarm from=0.02 to=0.96 r=0.026 blend=0.0018 mirror
+  blob arm on forearm  at=0.00 r=0.031 blend=0.0030 mirror
+  bar  arm on forearm  from=0.06 to=0.94 r=0.023 blend=0.0024 mirror
+  blob arm on forearm  at=1.00 r=0.025 blend=0.0026 mirror
+
+  # Mitten hands: one smooth blob, no fingers. A clown glove is a paddle;
+  # the kit's white puff wraps this and reads the glove.
+  blob arm on hand at=0.55 r=0.036 deep=0.95 blend=0.0034 mirror
+
+  blob leg on thigh at=0.00 r=0.046 blend=0.0038 mirror
+  bar  leg on thigh from=0.08 to=0.92 r=0.036 blend=0.0030 mirror
+  blob leg on shin  at=0.00 r=0.040 blend=0.0036 mirror
+  bar  leg on shin  from=0.08 to=0.92 r=0.030 blend=0.0028 mirror
+  blob leg on shin  at=1.00 r=0.032 blend=0.0030 mirror
+
+  # Feet: ankle nub, shaft forward, toe nub — mostly swallowed by the kit's
+  # oversized shoes, but the shoes are open shells at the topline, so what
+  # shows through has to be shaped like a foot.
+  bar  leg on foot from=0.10 to=0.80 r=0.028 tall=0.80 blend=0.0028 mirror
+  blob leg on foot at=0.90 r=0.032 wide=1.10 tall=0.70 deep=0.95 blend=0.0030 mirror
+
+# A round, young skull — same direction as attempt one on every dial that
+# matters, just BIGGER, because head size was the owner's first complaint.
+# Wide and deep rather than tall (a ball, not a skull), NO geometric brow
+# (the arched brows are painted on the sheet — a heavy geometric brow is the
+# scowl dial), no parameterised nose at all (noseLength disabled — the bead
+# above IS the nose), and a vestigial jaw that only rounds off the bottom.
+face
+  # HEAD SIZE IS A KIT-WIDE CHANGE, not a dial. Owner review says the head is
+  # too narrow, and it is — but growing headRadius 0.235 -> 0.265 made SIX kit
+  # pieces fail the through-body check at once (cap band, stud, ruff, tunic,
+  # tufts, nose): every one of them is fitted to a 0.235 skull. Widening in x
+  # alone (headWidth below) does not fix the read either, because the CAP does
+  # not grow with it and the skull stays a sliver under a hat three times its
+  # width. Doing this properly means re-fitting the whole .wam against a bigger
+  # head, which is a task, not a tweak.
+  headRadius 0.235
+  # WIDER. At 0.96 the skull was narrower than the cap and the hair tufts —
+  # which mount off its flanks — hung in the air beside it with daylight
+  # between. The owner: "the two purple things ... are floating off to the
+  # side because his head is too small and narrow". 1.18 closes that, and a
+  # clown head SHOULD be a broad ball.
+  headWidth  1.18
+  headHeight 1.00
+  headDepth  0.92
+  jawWidth   0.78
+  jawHeight  0.84
+  jawDrop    0.050
+  jawJut     0.010
+  noseLength 0.0004
+  browHeavy  0.0004
+  headBlend  0.0030
+
+# The clown's own face. BIG dark oval eyes — eyeSize 0.125 against the
+# goblin's 0.070 — high on the ball, with a small open SMILE: mouthCurve is
+# NEGATIVE here — sheet y runs downward, so a negative curve lifts the
+# corners; see the key's own comment for the measurement that settled it.
+# eyeGlow is LOW on purpose: the sheet mixes the eye toward this value and
+# the shader's emissive mask keys BRIGHT texels, so 1.0 would light two
+# lanterns; a toy clown wears painted dots. See the eyeGlow line's own
+# comment for why LOW had to become VERY LOW (0.05) on this pale skin.
+# WHAT THE FORMAT CANNOT DO: the white highlight inside each eye. Only the
+# eye region brightens, toward ONE flat value — there is no second bright
+# spot inside a dark feature, so the glint is dropped, not faked.
+sheet
+  eyeGap     0.40
+  # 0.125, settled after two misses: 0.110 vanished under the cap band's
+  # brim (rescue render), 0.150 read as one dark visor because the inner
+  # edges nearly met (eyeGap 0.40 leaves only 0.05 uv between them at that
+  # size). The reference's eyes are small-to-medium dots set WIDE on a huge
+  # face — 0.125 keeps them unmistakably dots.
+  eyeSize    0.125
+  # BLACK paint, not a glow — and much blacker than the goblin-era instinct
+  # would suggest. The sheet is an albedo MULTIPLIER normalized by its own
+  # mean, so the eye darkens by eyeGlow/mean; on this PALE skin the lit
+  # cheek sits in the tonemap's compressed shoulder and a 0.16 eye (0.36x)
+  # washes out completely, while on the shadow side it merges with the
+  # shade. 0.05 is 0.11x: still a visible dot against the blown-out cheek,
+  # invisible in shade — one eye reading from any angle beats two reading
+  # from none. Measured on the turntable, not theorized.
+  eyeGlow    0.05
+  # NOTE: the drawer hardcodes its 1.25 squash (blob-face-sheet.ts draws
+  # hypot(dx, dy * 1.25)); this key is accepted but inert today. Eyes will
+  # run slightly WIDE of the reference's tall ovals until the drawer reads
+  # the parameter.
+  eyeSquash  0.80
+  eyePupil   0
+  eyeRise    0.42
+  eyeTilt    0
+  # Thin, gently ARCHED brows — browAngle negative lifts the inner ends,
+  # where positive (the zombie's scowl) drops them. Kept light: any heavier
+  # and the innocence goes. (0.30 washed out entirely on the pale skin —
+  # same physics as eyeGlow — and the reference's faint arcs still want to
+  # exist.)
+  browHeavy  0.42
+  browAngle  -8
+  mouthWidth 0.38
+  # 0.697, not a rounder number: this puts the paint's centre ON the smile
+  # groove (world y 0.650) under the planar projection — uv.y =
+  # (1-mouthRise-0.0315), raw.y = (uv.y-0.56)/0.58, world y = 0.767 +
+  # raw.y x 0.235. They shipped 12 mm apart (paint high) and read as two
+  # half-strength lines instead of one.
+  mouthRise  0.697
+  # NEGATIVE — a smile, matching the grooves underneath (whose corner tips
+  # sweep up). The sign is backwards from the drawer's own comment
+  # ("mouthCurve bows it down at the centre for a frown"): measured on the
+  # dumped sheet, POSITIVE puts the centre HIGHER than the corners — an
+  # upside-down arc, a frown — because sheet y runs downward. The zombie
+  # and goblin wear negatives for their scowls for other reasons (lips and
+  # brows do their frowning); here the arc itself is the whole mouth, so
+  # the sign had to be right. The paint leads, the groove gives it shadow;
+  # if the two drift apart on render, trust the render and re-site
+  # whichever is wrong (the goblin's shades lesson).
+  mouthCurve -0.35
+  # 0.055, after three wash-outs (0.026, 0.034, 0.045): the line is ~3.5
+  # texels at the 64px atlas and its soft edge is nearly as wide — what
+  # survives to the screen is the core only, and the pale skin eats it.
+  # Thicker is the only dial the format gives.
+  mouthOpen  0.055
+  nostril    0.15
+  noseRidge  0.0
+  noseWide   0.0
+  noseLong   0.0
+  jawShade   0.28
+  # Toy-smooth: less than the old clown even, because blotching reads as
+  # decay next to the zombie and this character is stage makeup.
+  grain      0.05
+  seed       11
+
+# Pale cream skin, matte like painted vinyl (carried over from attempt one,
+# which the owner liked well enough to keep the skin unchanged — then DARKENED
+# one notch in the third pass: at 0.87 the lit cheek sat in the tonemap's
+# compressed shoulder and EVERY face feature washed out on the lit side —
+# measured on the turntable: the right eye vanished outright. 0.74 keeps the
+# cream read but leaves headroom for the black eye dots and smile to print.
+# Spec and wetness came down with it for the same reason (sheen is brightness
+# the features then fight).
+#
+# Linear RGB, sRGB-encoded on output — these render lighter and pinker than
+# the raw numbers suggest. The mottle is ROSY at low amplitude: faint warmth
+# in the cheeks and knuckles, never dirt.
+palette
+  # WHITE FACE PAINT, not skin. This was 0.74 0.65 0.52 — a beige that read as
+  # dirty flesh rather than greasepaint. Kept a touch off pure white so the
+  # tonemap shoulder has somewhere to go and the features do not sit on a
+  # blown-out disc.
+  baseColor     0.93 0.91 0.89
+  deepColor     0.55 0.18 0.14
+  charColor     0.10 0.08 0.07
+  # SHINY, like every hard surface on this character. Greasepaint on rubber is
+  # not matte — a tight bright highlight, not the goblin's broad clammy sheen.
+  specIntensity 0.85
+  specRoughness 0.22
+  fresnelBoost  0.40
+  translucency  0.18
+  wetness       0.45
+  # SMOOTH. The preset's surfaceNoiseAmp (0.06) perturbs the NORMAL, which on a
+  # pale face reads as roughness/grime — the owner's word was "rough". Both
+  # noise terms go to zero: this is painted rubber, not meat.
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  # And no blotching, for the same reason. It was 0.30, which mottled the
+  # white paint toward a dried-blood brown.
+  mottleAmp     0.0
+  mottleScale   1.6
+  mottleColor   0.62 0.24 0.20
