@@ -80,10 +80,20 @@ wait_for() {
 }
 
 if ! curl -sf "http://localhost:$VITE_PORT/" >/dev/null; then
+  echo "blob-shot: starting vite on $VITE_PORT"
   npx vite --port $VITE_PORT --strictPort >/tmp/blob-shot-vite.log 2>&1 &
   started_vite=$!
   wait_for "http://localhost:$VITE_PORT/" "vite dev server" /tmp/blob-shot-vite.log
 else
+  # Something answering on 5233 is not proof it is OUR dev server — any other
+  # project's vite would serve `/` happily and then 404 the lab, which surfaces
+  # 80s later as the turntable's confusing "lab never booted". Ask for the page
+  # we actually need before deciding this server is reusable.
+  if ! curl -sf "http://localhost:$VITE_PORT/sdf-lab-webgpu.html" >/dev/null; then
+    echo "blob-shot: port $VITE_PORT is busy but is not the Blud lab" >&2
+    echo "  (it does not serve /sdf-lab-webgpu.html — stop whatever owns that port and retry)" >&2
+    exit 1
+  fi
   echo "blob-shot: reusing the vite server already on port $VITE_PORT"
 fi
 
@@ -92,6 +102,9 @@ if ! curl -sf "http://localhost:$CDP_PORT/json/version" >/dev/null; then
   # would kill the script before Chrome ever launched — hence the explicit if.
   HEADLESS="--headless=new"
   if [ "${BLOB_HEADED:-}" = "1" ]; then HEADLESS=""; fi
+  echo "blob-shot: starting chrome ($([ -n "$HEADLESS" ] && echo headless || echo headed)) on debug port $CDP_PORT"
+  # $HEADLESS is deliberately unquoted: it must vanish entirely when empty, and
+  # quoting it would pass an empty string as a real (invalid) argv entry.
   "$CHROME" $HEADLESS --remote-debugging-port=$CDP_PORT --enable-unsafe-webgpu \
     --user-data-dir=/tmp/chrome-blob-shot --no-first-run --no-default-browser-check \
     --window-size=1380,820 about:blank >/tmp/blob-shot-chrome.log 2>&1 &
