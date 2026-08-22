@@ -43,92 +43,117 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { parseBlob } from '../src/lab/sdf-zombie/blob-parse';
 import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
 import { buildBody } from '../src/lab/sdf-zombie/build-body';
+import type { BuildResult } from '../src/lab/sdf-zombie/build-body';
 import { decodePng } from '../src/lab/sdf-zombie/png-decode';
 import {
   maskFromRgba, maskFromBody, maskFromTriangles, compareSilhouette, bandOwners,
   renderMask, parseGlb, gltfTriangles,
 } from '../src/lab/sdf-zombie/silhouette';
-import type { BandOwner, BandReport, Mask } from '../src/lab/sdf-zombie/silhouette';
+import type {
+  BandOwner, BandReport, Mask, SilhouetteReport,
+} from '../src/lab/sdf-zombie/silhouette';
 
-const args = process.argv.slice(2);
-const flagValue = (flag: string): string | undefined => {
-  const a = args.find((x) => x === flag || x.startsWith(`${flag}=`));
-  if (a === undefined) return undefined;
-  return a.includes('=') ? a.slice(a.indexOf('=') + 1) : args[args.indexOf(a) + 1];
-};
-const VALUE_FLAGS = ['--range', '--bands', '--plate', '--glb'];
-// Positional = not a flag, and not the value of a value-taking flag.
-const positional = args.filter((a, i) => !a.startsWith('--')
-  && !VALUE_FLAGS.some((f) => args[i - 1] === f));
-
-const json = args.includes('--json');
-const side = args.includes('--side');
-const view: 'front' | 'side' = side ? 'side' : 'front';
-const name = positional[0];
-if (!name) {
-  console.error('usage: npm run blob:measure -- <character> [--json] [--side] '
-    + '[--range lo:hi] [--bands n] [--plate ref.png] [--glb ref.glb]');
+/** Print the reason and exit 2 — "did not run", never a score. */
+function fail(msg: string): never {
+  console.error(msg);
   process.exit(2);
 }
 
-const bandsVal = flagValue('--bands');
-const bands = bandsVal ? Number(bandsVal) : undefined;
-const rangeVal = flagValue('--range');
-const range: [number, number] | undefined = rangeVal && rangeVal.includes(':')
-  ? [Number(rangeVal.split(':')[0]), Number(rangeVal.split(':')[1])] as [number, number]
-  : undefined;
+// --- flags ------------------------------------------------------------------
+interface Flags {
+  name: string;
+  view: 'front' | 'side';
+  json: boolean;
+  bands?: number;
+  range?: [number, number];
+  glb?: string;
+  plate?: string;
+}
 
-const blobPath = `src/lab/sdf-zombie/characters/${name}.blob`;
-if (!existsSync(blobPath)) { console.error(`missing: ${blobPath}`); process.exit(2); }
+const VALUE_FLAGS = ['--range', '--bands', '--plate', '--glb'];
+const USAGE = 'usage: npm run blob:measure -- <character> [--json] [--side] '
+  + '[--range lo:hi] [--bands n] [--plate ref.png] [--glb ref.glb]';
+
+/**
+ * argv -> Flags, REJECTING a window that cannot be measured.
+ *
+ * A NaN range is the dangerous input: `--range 0.75:` parses to [0.75, NaN],
+ * compareSilhouette clamps it into some window anyway, and the command happily
+ * prints a confident score for rows nobody asked about. An agent acting on that
+ * number edits the wrong lines. Every bad window exits 2 instead.
+ */
+function parseFlags(argv: string[]): Flags {
+  const value = (flag: string): string | undefined => {
+    const a = argv.find((x) => x === flag || x.startsWith(`${flag}=`));
+    if (a === undefined) return undefined;
+    return a.includes('=') ? a.slice(a.indexOf('=') + 1) : argv[argv.indexOf(a) + 1];
+  };
+  // Positional = not a flag, and not the value of a value-taking flag.
+  const positional = argv.filter((a, i) => !a.startsWith('--')
+    && !VALUE_FLAGS.some((f) => argv[i - 1] === f));
+  const name = positional[0];
+  if (!name) fail(USAGE);
+
+  const flags: Flags = {
+    name,
+    view: argv.includes('--side') ? 'side' : 'front',
+    json: argv.includes('--json'),
+  };
+
+  const bandsVal = value('--bands');
+  if (bandsVal !== undefined) {
+    const n = Number(bandsVal);
+    if (!Number.isInteger(n) || n < 1)
+      fail(`--bands must be a positive integer, got "${bandsVal}"`);
+    flags.bands = n;
+  }
+
+  const rangeVal = value('--range');
+  if (rangeVal !== undefined) {
+    const parts = rangeVal.split(':');
+    const lo = Number(parts[0]), hi = Number(parts[1]);
+    if (parts.length !== 2 || !Number.isFinite(lo) || !Number.isFinite(hi)
+      || lo < 0 || hi > 1 || lo >= hi)
+      fail(`--range must be lo:hi with 0 <= lo < hi <= 1, got "${rangeVal}"`);
+    flags.range = [lo, hi];
+  }
+
+  const glb = value('--glb');
+  if (glb !== undefined) flags.glb = glb;
+  const plate = value('--plate');
+  if (plate !== undefined) flags.plate = plate;
+  return flags;
+}
 
 // --- references -------------------------------------------------------------
 interface RefSource { kind: 'mesh' | 'plate'; path: string }
-const sources: RefSource[] = [];
-const glbFlag = flagValue('--glb');
-const meshDir = `docs/dev-notes/refs/${name}-mesh`;
-if (glbFlag) {
-  if (!existsSync(glbFlag)) { console.error(`missing: ${glbFlag}`); process.exit(2); }
-  sources.push({ kind: 'mesh', path: glbFlag });
-} else if (existsSync(meshDir)) {
-  const glb = readdirSync(meshDir).filter((f) => f.endsWith('.glb')).sort()[0];
-  if (glb) sources.push({ kind: 'mesh', path: `${meshDir}/${glb}` });
-}
-const plateFlag = flagValue('--plate');
-if (plateFlag) {
-  if (!existsSync(plateFlag)) { console.error(`missing: ${plateFlag}`); process.exit(2); }
-  sources.push({ kind: 'plate', path: plateFlag });
-} else {
-  const plate = `docs/dev-notes/refs/${name}-reference.png`;
-  if (existsSync(plate)) sources.push({ kind: 'plate', path: plate });
-}
-if (!sources.length) {
-  console.error(`no reference for ${name}: expected a .glb under ${meshDir}/ or a plate at `
-    + `docs/dev-notes/refs/${name}-reference.png (or pass --glb/--plate)`);
-  process.exit(2);
-}
 
-// --- build ------------------------------------------------------------------
-const doc = parseBlob(readFileSync(blobPath, 'utf8'));
-const body = buildBody(compileBlob(doc, compileFace(doc)));
-
-// The kit is part of the silhouette — a reference shows a DRESSED character,
-// so scoring bare flesh against it blames the sculpt for the clothes' bulk.
-// bandOwners gets the SAME kit, or its bands stop meaning the same heights.
-const kitPath = `public/assets/lab/${name}-kit.gltf`;
-const kit = existsSync(kitPath)
-  ? gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync(kitPath))))
-  : undefined;
-
-if (body.errors.length) {
-  if (json) console.log(JSON.stringify({ character: name, errors: body.errors, refs: [] }, null, 2));
-  console.error(`build errors in ${blobPath}:`);
-  for (const e of body.errors) console.error(`  ${e}`);
-  process.exit(2);
+/** The references to score against, in the order documented at the top. */
+function resolveSources(name: string, flags: Flags): RefSource[] {
+  const sources: RefSource[] = [];
+  const meshDir = `docs/dev-notes/refs/${name}-mesh`;
+  if (flags.glb) {
+    if (!existsSync(flags.glb)) fail(`missing: ${flags.glb}`);
+    sources.push({ kind: 'mesh', path: flags.glb });
+  } else if (existsSync(meshDir)) {
+    const glb = readdirSync(meshDir).filter((f) => f.endsWith('.glb')).sort()[0];
+    if (glb) sources.push({ kind: 'mesh', path: `${meshDir}/${glb}` });
+  }
+  if (flags.plate) {
+    if (!existsSync(flags.plate)) fail(`missing: ${flags.plate}`);
+    sources.push({ kind: 'plate', path: flags.plate });
+  } else {
+    const plate = `docs/dev-notes/refs/${name}-reference.png`;
+    if (existsSync(plate)) sources.push({ kind: 'plate', path: plate });
+  }
+  if (!sources.length)
+    fail(`no reference for ${name}: expected a .glb under ${meshDir}/ or a plate at `
+      + `docs/dev-notes/refs/${name}-reference.png (or pass --glb/--plate)`);
+  return sources;
 }
 
-const got = maskFromBody(body, { view, heightPx: 256, kit });
-
-const refMask = (src: RefSource): { mask: Mask; note: string } => {
+/** A reference's silhouette, plus the one-line provenance the text output shows. */
+function refMask(src: RefSource, view: 'front' | 'side'): { mask: Mask; note: string } {
   if (src.kind === 'mesh') {
     const { json: gltf, bin } = parseGlb(readFileSync(src.path));
     const tris = gltfTriangles(gltf as Parameters<typeof gltfTriangles>[0], bin);
@@ -144,25 +169,9 @@ const refMask = (src: RefSource): { mask: Mask; note: string } => {
     note: `${png.width}x${png.height}  blobs=${r.components}  `
       + `coverage=${(r.coverage * 100).toFixed(1)}%  backdrop=rgb(${r.background})`,
   };
-};
+}
 
-/**
- * How a band's owner reads in one line.
- *
- * A `.blob` primitive carries no NAME of its own — only the bone it rides and
- * the limb it belongs to — so the fullest thing that can honestly be printed
- * is `bone (limb)`. A band the KIT owns says so (there is no primitive to
- * blame for the width of a shoe), and an empty band says that too rather than
- * pointing at whatever prim happens to be nearest.
- */
-const ownerText = (o: BandOwner | undefined): string => {
-  if (!o) return '(no owner)';
-  if (o.limb === 'kit') return 'kit';
-  if (o.index < 0 && !o.bone) return '(empty)';
-  const where = o.line === null ? 'line   —' : `line ${String(o.line).padStart(4)}`;
-  return `${where}  ${o.bone || '?'} (${o.limb || '?'})`;
-};
-
+// --- scoring ----------------------------------------------------------------
 interface JsonWorst extends BandReport { band: number; owner: BandOwner | null }
 interface JsonRef {
   kind: 'mesh' | 'plate'; path: string; view: string;
@@ -181,61 +190,87 @@ interface JsonRef {
  */
 const POSE_ASPECT_TOL = 0.15;
 const POSE_BAND_TOL = 0.25;
-const out: { character: string; errors: string[]; refs: JsonRef[] } =
-  { character: name, errors: body.errors, refs: [] };
 
-if (!json) {
-  console.log(`${name}   built from ${blobPath}   (${view} view)`);
-  console.log(kit
-    ? `kit ${kitPath} — ${kit.length / 9} triangles unioned into the silhouette`
-    : `no kit at ${kitPath}; the outfit is paint or absent`);
-  console.log('build: ok, 0 errors');
+interface ScoreOpts {
+  view: 'front' | 'side';
+  got: Mask;
+  kit?: Float32Array;
+  bands?: number;
+  range?: [number, number];
 }
+interface Scored { record: JsonRef; rep: SilhouetteReport; owners: BandOwner[]; ref: Mask; note: string }
 
-for (const src of sources) {
-  const { mask: ref, note } = refMask(src);
-  const rep = compareSilhouette(ref, got, {
-    ...(range ? { range } : {}), ...(bands ? { bands } : {}),
+/** Everything measurable about one reference, and NOTHING printed — so the
+ *  text and the JSON are two renderings of one result rather than two paths
+ *  that can drift. */
+function scoreRef(body: BuildResult, src: RefSource, opts: ScoreOpts): Scored {
+  const { mask: ref, note } = refMask(src, opts.view);
+  const rep = compareSilhouette(ref, opts.got, {
+    ...(opts.range ? { range: opts.range } : {}), ...(opts.bands ? { bands: opts.bands } : {}),
   });
   // Same kit, same range, same band count — that is what makes band i mean the
   // same height in both, and the pairing below a fact rather than a guess.
   const owners = bandOwners(body, {
-    view, bands: rep.bands.length, ...(kit ? { kit } : {}), ...(range ? { range } : {}),
+    view: opts.view, bands: rep.bands.length,
+    ...(opts.kit ? { kit: opts.kit } : {}), ...(opts.range ? { range: opts.range } : {}),
   });
   // The aspects are WHOLE-figure whatever window was scored, so the aspect
   // symptom only speaks for a whole-figure score; inside a `--range` the band
   // symptom is the only one that is about the rows actually being compared.
   const aspectOff = rep.refAspect > 0
     ? Math.abs(rep.refAspect - rep.gotAspect) / rep.refAspect : 0;
-  const poseMismatch = (!range && aspectOff > POSE_ASPECT_TOL)
+  const poseMismatch = (!opts.range && aspectOff > POSE_ASPECT_TOL)
     || rep.bands.some((b) => Math.abs(b.delta) > POSE_BAND_TOL);
   const worst = rep.worst.slice(0, 3).map((b) => {
     const i = rep.bands.indexOf(b);
     return { ...b, band: i, owner: owners[i] ?? null };
   });
-  out.refs.push({
-    kind: src.kind, path: src.path, view,
-    iou: rep.iou, meanWidthError: rep.meanWidthError, poseMismatch, worst,
-  });
-  if (json) continue;
+  return {
+    record: {
+      kind: src.kind, path: src.path, view: opts.view,
+      iou: rep.iou, meanWidthError: rep.meanWidthError, poseMismatch, worst,
+    },
+    rep, owners, ref, note,
+  };
+}
 
+// --- text output ------------------------------------------------------------
+/**
+ * How a band's owner reads in one line.
+ *
+ * A `.blob` primitive carries no NAME of its own — only the bone it rides and
+ * the limb it belongs to — so the fullest thing that can honestly be printed
+ * is `bone (limb)`. A band the KIT owns says so (there is no primitive to
+ * blame for the width of a shoe), and an empty band says that too rather than
+ * pointing at whatever prim happens to be nearest.
+ */
+function ownerText(o: BandOwner | null | undefined): string {
+  if (!o) return '(no owner)';
+  if (o.limb === 'kit') return 'kit';
+  if (o.index < 0 && !o.bone) return '(empty)';
+  const where = o.line === null ? 'line   —' : `line ${String(o.line).padStart(4)}`;
+  return `${where}  ${o.bone || '?'} (${o.limb || '?'})`;
+}
+
+function printRef(scored: Scored, got: Mask, range?: [number, number]): void {
+  const { record, rep, ref, note } = scored;
   const window = range ? `height ${range[0]}-${range[1]}` : 'the WHOLE figure';
-  console.log(`\n=== ${src.kind}  ${src.path}   (${note})`);
+  console.log(`\n=== ${record.kind}  ${record.path}   (${note})`);
   console.log(`IoU ${rep.iou.toFixed(3)}    mean width error ${rep.meanWidthError.toFixed(3)}`
     + `   over ${window}   ${rep.bands.length} bands`);
-  if (poseMismatch)
+  if (record.poseMismatch)
     console.log(`POSE MISMATCH: reference aspect ${rep.refAspect.toFixed(3)} vs built `
       + `${rep.gotAspect.toFixed(3)} — the whole-figure score is dominated by pose; `
       + 'score a --range window where the poses agree.');
   console.log(`aspect (w/h)   reference ${rep.refAspect.toFixed(3)}   built ${rep.gotAspect.toFixed(3)}`);
 
   console.log('\nworst bands — the lines to edit, in order:');
-  if (poseMismatch)
+  if (record.poseMismatch)
     console.log('  (pose-dominated — these bands may be the pose, not the sculpt)');
-  for (const b of worst)
+  for (const b of record.worst)
     console.log(`  band ${String(b.band).padStart(2)}  at ${b.at.toFixed(2)}  `
       + `ours ${b.gotWidth.toFixed(3)}  ref ${b.refWidth.toFixed(3)}  `
-      + `delta ${b.delta >= 0 ? '+' : ''}${b.delta.toFixed(3)}   ${ownerText(b.owner ?? undefined)}`);
+      + `delta ${b.delta >= 0 ? '+' : ''}${b.delta.toFixed(3)}   ${ownerText(b.owner)}`);
 
   console.log('\n  reference' + ' '.repeat(36) + 'built');
   // One row count for both columns, or the two sit at different vertical
@@ -247,4 +282,55 @@ for (const src of sources) {
     console.log('  ' + (a[i] ?? ' '.repeat(44)) + '   ' + (b[i] ?? ''));
 }
 
-if (json) console.log(JSON.stringify(out, null, 2));
+// --- main -------------------------------------------------------------------
+function main(): void {
+  const flags = parseFlags(process.argv.slice(2));
+  const { name, view, json } = flags;
+
+  const blobPath = `src/lab/sdf-zombie/characters/${name}.blob`;
+  if (!existsSync(blobPath)) fail(`missing: ${blobPath}`);
+  const sources = resolveSources(name, flags);
+
+  const doc = parseBlob(readFileSync(blobPath, 'utf8'));
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+
+  // The kit is part of the silhouette — a reference shows a DRESSED character,
+  // so scoring bare flesh against it blames the sculpt for the clothes' bulk.
+  // bandOwners gets the SAME kit, or its bands stop meaning the same heights.
+  const kitPath = `public/assets/lab/${name}-kit.gltf`;
+  const kit = existsSync(kitPath)
+    ? gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync(kitPath))))
+    : undefined;
+
+  if (body.errors.length) {
+    if (json) console.log(JSON.stringify({ character: name, errors: body.errors, refs: [] }, null, 2));
+    console.error(`build errors in ${blobPath}:`);
+    for (const e of body.errors) console.error(`  ${e}`);
+    process.exit(2);
+  }
+
+  const got = maskFromBody(body, { view, heightPx: 256, kit });
+  const out: { character: string; errors: string[]; refs: JsonRef[] } =
+    { character: name, errors: body.errors, refs: [] };
+
+  if (!json) {
+    console.log(`${name}   built from ${blobPath}   (${view} view)`);
+    console.log(kit
+      ? `kit ${kitPath} — ${kit.length / 9} triangles unioned into the silhouette`
+      : `no kit at ${kitPath}; the outfit is paint or absent`);
+  }
+
+  for (const src of sources) {
+    const scored = scoreRef(body, src, {
+      view, got, ...(kit ? { kit } : {}),
+      ...(flags.bands ? { bands: flags.bands } : {}),
+      ...(flags.range ? { range: flags.range } : {}),
+    });
+    out.refs.push(scored.record);
+    if (!json) printRef(scored, got, flags.range);
+  }
+
+  if (json) console.log(JSON.stringify(out, null, 2));
+}
+
+main();

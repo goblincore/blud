@@ -18,9 +18,23 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// The installed binary, not `npx` — npx can go to the network on a cold cache,
+// which turns a unit test into a flaky one that fails for reasons unrelated to
+// the script.
+const tsx = resolve(repo, 'node_modules/.bin/tsx');
 const run = (...args: string[]): string =>
-  execFileSync('npx', ['tsx', 'scripts/blob-measure.ts', ...args],
+  execFileSync(tsx, ['scripts/blob-measure.ts', ...args],
     { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+/** Run and return the exit status, for the paths that must NOT score. */
+const statusOf = (...args: string[]): number | undefined => {
+  let status: number | undefined;
+  expect(() => {
+    try { run(...args); }
+    catch (e) { status = (e as { status?: number }).status; throw e; }
+  }).toThrow();
+  return status;
+};
 
 describe('blob-measure', () => {
   it('reports the mouse against its plate as parseable JSON', () => {
@@ -31,6 +45,9 @@ describe('blob-measure', () => {
     expect(out.errors).toEqual([]);
     expect(out.refs.length).toBeGreaterThanOrEqual(1);
     const ref = out.refs[0];
+    // A FLOOR, not a target: it catches a decode/build/framing regression that
+    // would collapse the score, and says nothing about how good the mouse is.
+    // Read the worst bands for that.
     expect(ref.iou).toBeGreaterThan(0.7);
     expect(ref.worst).toHaveLength(3);
     for (const w of ref.worst) {
@@ -66,11 +83,17 @@ describe('blob-measure', () => {
     }, 120_000);
 
   it('exits 2 rather than scoring zero when the character does not exist', () => {
-    let status: number | undefined;
-    expect(() => {
-      try { run('definitely-not-a-character', '--json'); }
-      catch (e) { status = (e as { status?: number }).status; throw e; }
-    }).toThrow();
-    expect(status).toBe(2);
+    expect(statusOf('definitely-not-a-character', '--json')).toBe(2);
+  }, 60_000);
+
+  // A window that cannot be measured must not produce a number: `--range 0.75:`
+  // is [0.75, NaN], and a score printed for that would send an agent at rows
+  // nobody asked about.
+  it('exits 2 on a malformed --range', () => {
+    expect(statusOf('mouse', '--range', '0.75:')).toBe(2);
+  }, 60_000);
+
+  it('exits 2 on a non-integer --bands', () => {
+    expect(statusOf('mouse', '--bands', 'abc')).toBe(2);
   }, 60_000);
 });
