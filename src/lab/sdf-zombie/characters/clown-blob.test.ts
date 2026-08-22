@@ -57,7 +57,11 @@ describe('clown.blob', () => {
   // THE HEAD IS THE CHARACTER. This is the number attempt one got wrong (38%
   // where the brief says roughly HALF), and it is exactly the kind of value a
   // well-meaning proportion pass quietly shrinks back toward "normal". The
-  // cranium ball must stay nearly half the standing height.
+  // cranium ball must stay nearly half the standing height — and (measured
+  // this pass, off the reference PNGs) it is a TALL OVAL, not a ball: ~0.30
+  // of standing height wide, with the hair wings carrying the silhouette's
+  // width. The first cut of this file made it 0.45 wide and the render read
+  // as one giant blob with wings glued on, so the width band is pinned too.
   it('keeps the head at roughly half the standing height', () => {
     const b = built();
     // The cranium is the biggest primitive in the head cluster — facePrims'
@@ -68,6 +72,11 @@ describe('clown.blob', () => {
       .reduce((best, p) => (p.radius > best.radius ? p : best));
     expect(doc.height).not.toBeNull();
     expect((2 * cranium.radius) / doc.height!).toBeGreaterThan(0.44);
+    // Tall oval: width between 0.27 and 0.36 of standing height (measured
+    // reference: 0.28-0.30; a little wider so the wings have a ball to hug).
+    const width = 2 * cranium.radius * cranium.scale[0];
+    expect(width / doc.height!).toBeGreaterThan(0.27);
+    expect(width / doc.height!).toBeLessThan(0.36);
   });
 
   // THE NOSE MUST READ. Attempt one's verdict was "no red nose reading"; the
@@ -104,22 +113,31 @@ describe('clown.blob', () => {
     expect(noseFront - surfaceZ).toBeGreaterThan(0.025);
   });
 
-  // THE SMILE IS A GROOVE. Three segments draw one arc (corners up); this
-  // checks the middle segment actually bites the assembled face rather than
-  // floating embedded in flesh cutting nothing. Going inward along the smile
-  // line, the field must lift back toward zero (the channel) BEFORE the skin
-  // goes fully negative — on unwounded skin both crossings coincide.
-  it('smile groove cuts a channel into the face', () => {
+  // THE SMILE IS A CARVED LINE. One thin hard-carved bent tube whose shell
+  // crosses the skin along the arc (centre (0, 0.578, 0.115), fitted to the
+  // chin's measured curvature — see clown.blob's comment for why this is a
+  // carve and not the groove the plan asked for: placePrims drops
+  // grooveDepth/grooveWidth, so grooves never cut anywhere in this engine).
+  // The test: a point that WAS on the skin on the smile line is now OUTSIDE
+  // the body (carved away), while points just above and below the line on
+  // the same skin are still skin. The rescued draft's version of this test
+  // scanned a vertical line for a bite and passed SPURIOUSLY off the nose
+  // bead's blend while its grooves cut nothing — no smile ever rendered.
+  it('smile carve cuts a line into the face', () => {
     const b = built();
-    const crossing = (limit: number) => {
-      for (let z = 0.24; z > 0.10; z -= 0.0005)
-        if (sdBody([0, 0.655, z], b) < limit) return z;
-      return NaN;
-    };
-    const bite = crossing(-0.0035);
-    const skin = crossing(-0.010);
-    expect(Number.isFinite(bite)).toBe(true);
-    expect(bite - skin).toBeGreaterThan(0.005);
+    // A point 3 mm UNDER the skin on the smile line's centre station was
+    // flesh before the carve and is AIR now — the tube's axis runs z 0.111
+    // there, r 4 mm, so the line bites ~8 mm of the 115 mm-deep face.
+    expect(sdBody([0, 0.578, 0.112], b)).toBeGreaterThan(0.002);
+    // Just above the line (y 0.60, its own skin z ~0.138): still skin.
+    expect(sdBody([0, 0.600, 0.137], b)).toBeLessThan(0.001);
+    // Just below the line (y 0.562, skin z ~0.09): still skin — the cut is a
+    // LINE, not a patch shaved off the whole chin.
+    expect(sdBody([0, 0.562, 0.088], b)).toBeLessThan(0.001);
+    // And the line runs to both quarter stations of the arc, not just the
+    // middle (the tube's axis sits at z ~0.098, x ±0.05, y 0.581).
+    expect(sdBody([0.05, 0.581, 0.098], b)).toBeGreaterThan(0.002);
+    expect(sdBody([-0.05, 0.581, 0.098], b)).toBeGreaterThan(0.002);
   });
 
   // THE ARMS MUST READ AS ARMS — the goblin's twice-bitten regression, on a

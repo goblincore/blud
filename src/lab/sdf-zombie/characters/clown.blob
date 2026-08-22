@@ -93,18 +93,21 @@ body
 
   # THE NOSE — the whole character hangs on it reading.
   #
-  # REACH, computed rather than eyeballed, because the host here is twice
-  # the goblin's cranium: semi-depth = headRadius 0.235 x headDepth 0.92 =
-  # 0.216 m at centre height, still 0.212 at the bead's own height (dropped
-  # 0.045 below the axis — the ellipsoid shrinks as sqrt(1-(dy/b)^2)). The
-  # bead's centre sits at z=0.178: buried 64 mm INSIDE the local surface
-  # (attached — a nose that only kisses the skin tears off in the gib
-  # pass), and its front reaches z=0.226, a good 32 mm PROUD of the face —
-  # a third of the bead's own diameter, which is the difference between a
-  # nose and a rash.
+  # REACH, computed rather than eyeballed. The bead sits 109 mm below the
+  # cranium axis — measured off the reference: nose centre y 0.658 on a ball
+  # spanning 0.532..1.002, i.e. the reference wears its whole face LOW, chin
+  # at the ruff — so the ellipsoid has curved away underneath it. Local
+  # semi-depth at dy 0.109 is headRadius 0.235 x headDepth 0.92 x
+  # sqrt(1-(0.109/0.235)^2) = 0.192. The bead's centre sits at z=0.178: only
+  # 14 mm inside the local surface — but the bead's BACK cap is 69 mm in, so
+  # it is attached through the gib pass while the neck stays narrow, because
+  # a clown nose is a SEPARATE ball stuck on — and its front reaches z=0.233,
+  # 41 mm PROUD of the face, half the bead's radius again, which is the
+  # difference between a nose and a rash. Measured Ø on the reference is
+  # ~0.11 of standing height, hence r 0.055 against the goblin-scale 0.048
+  # this file started with.
   #
-  # Dropped 0.045 below the cranium axis: between the eye line (above
-  # centre on this huge ball) and the smile groove (below). Same t=0.45 as
+  # Same t=0.45 as
   # facePrims' own skull sphere so it tracks any future retune of HEAD_AT.
   # NOTE the z: offset= is relative to the BONE POINT, which itself sits at
   # z −0.0185 (the skull pitches back 4deg), so 0.196 here puts the bead
@@ -114,28 +117,51 @@ body
   # blend stays tight (0.002): a clown nose is a SEPARATE object stuck on —
   # the one part of this face that must not melt into the skull. Colour
   # note in the header: the RED lives on the kit's shell over this bead.
-  blob head on skull at=0.45 r=0.048 blend=0.0020 offset=(0,-0.045,0.196)
+  blob head on skull at=0.45 r=0.055 blend=0.0020 offset=(0,-0.109,0.196)
 
-  # THE SMILE — three grooves drawing one arc, corners UP.
+  # THE SMILE — one thin hard-carved tube, a drawn arc. NOT a groove, and
+  # that needs saying: the plan asked for `groove` (and the skill recommends
+  # it), but grooves are currently DEAD in this engine — resolve.ts's
+  # placePrims rebuilds each placed primitive field-by-field and drops
+  # grooveDepth/grooveWidth, so sdBody and the packed shader both see zero
+  # and no groove has ever cut anything (the shipped goblin's mouth crease
+  # renders nothing; its mouth reads off the painted sheet alone). Reported
+  # rather than routed around silently; when placePrims carries the fields,
+  # this line can become `groove ... depth=0.004 width=0.0045` verbatim.
   #
-  # A single straight groove is a slash, not a smile; the arc needs the
-  # segments to change height across the mouth. Three is the fewest that
-  # read as a curve at this scale (two leaves a kink at the join that reads
-  # as a scar — tried, rejected on render). Each segment is FLAT in y
-  # (tall right down) so its channel runs horizontally, per the skill's
-  # groove rule; the corner segments carry tip=(x,y,0) so their far ends
-  # sweep UP-and-out, which is what turns three slashes into an arch.
+  # Geometry — three attempts, each failure worth recording:
   #
-  # Reach arithmetic shared with the nose: at the mouth's height (0.117
-  # below the cranium axis) the ball's local semi-depth is 0.187, so each
-  # segment centre sits ~50 mm inside the surface — fully embedded, like
-  # every groove (the operator carves along the primitive's own zero-set
-  # wherever it runs near the skin; the goblin's ships at the same embed).
-  # depth/width are the channel's 3.5 mm bite and 4.5 mm opening — a drawn
-  # line at this scale, not a wound.
-  groove head on skull at=0.45 r=0.040 wide=0.88 tall=0.060 deep=0.90 blend=0.0014 offset=(0,-0.117,0.120) depth=0.0035 width=0.0045
-  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(0.052,-0.108,0.118) tip=(0.026,0.018,0) depth=0.0035 width=0.0045
-  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(-0.052,-0.108,0.118) tip=(-0.026,0.018,0) depth=0.0035 width=0.0045
+  #   * The rescued draft used three LENTIL grooves (flat in y, like the
+  #     goblin's mouth crease) hung 50 mm INSIDE the ball — a groove/carve
+  #     cuts only where its own shell crosses the skin, so it carved
+  #     nothing. Its test passed anyway, spuriously: the scan crossed the
+  #     NOSE bead's blend, not a channel. No smile ever rendered.
+  #   * Re-centring lentils on the skin still cuts at POINTS, not along a
+  #     line: a lentil's zero-set is its rim plus its flat faces, and the
+  #     rim crosses a near-spherical chin at up to four points. The
+  #     goblin's lentil works because its muzzle is a near-CYLINDER whose
+  #     curvature happens to match the rim's ellipse; a chin is not.
+  #   * A straight tube chord sags inside the sphere; one quadratic over
+  #     the full width lifts off the skin at its ends. The sphere outruns
+  #     any single parabola.
+  #
+  # So: TWO mirrored half-arcs (one quadratic per half — a single parabola
+  # over the full width cannot track the chin: the skin drops 13 mm between
+  # x 0 and x 0.05 and no one k fits both ends), each a tube of r 4 mm
+  # whose bezier is fitted to the MEASURED skin (sdBody bisection at 0/20/39/
+  # 60/78 mm from the centre): axis from (0, 0.578, 0.109) at the middle to
+  # (0.078, 0.585, 0.0735) at the corner, bulging to z 0.105 over the
+  # quarter — i.e. the tube's outer edge rides the skin and its body sits
+  # ~4-10 mm under it, a 12 mm-deep drawn line at the middle fading toward
+  # the corners exactly as the reference's arc does. offset/tip/bend are
+  # relative to the skull's t=0.45 bone point (0, 0.7669, −0.0133) — measured
+  # off the compiled prim, not assumed; an early draft assumed −0.0107 and
+  # the whole arc sat 2.6 mm shy of its skin. `hard`
+  # for a crisp drawn edge; a smooth carve smears (face.ts's four-rebuild
+  # lesson). (Not one mirrored part: `mirror` requires a PAIRED bone and
+  # the skull is not one, so the left half is written out by hand.)
+  carve on skull at=0.45 r=0.004 offset=(0,-0.189,0.1243) tip=(0.078,0.007,-0.0375) bend=(0,-0.001,0.0254) hard
+  carve on skull at=0.45 r=0.004 offset=(0,-0.189,0.1243) tip=(-0.078,0.007,-0.0375) bend=(0,-0.001,0.0254) hard
 
   # ARMS AND LEGS — ball joints, deliberately, same stylisation as the
   # goblin: a fat nub at every joint kept readable by tight blends. On a
@@ -165,13 +191,18 @@ body
 
 # A round, young skull — same direction as attempt one on every dial that
 # matters, just BIGGER, because head size was the owner's first complaint.
-# Wide and deep rather than tall (a ball, not a skull), NO geometric brow
-# (the arched brows are painted on the sheet — a heavy geometric brow is the
-# scowl dial), no parameterised nose at all (noseLength disabled — the bead
-# above IS the nose), and a vestigial jaw that only rounds off the bottom.
+# A round, young skull — a TALL OVAL rather than a ball: measured off the
+# reference, the pale head is 0.47 of standing height TALL but only ~0.30
+# WIDE, and the width of the silhouette belongs to the hair wings (±0.25),
+# not to the cranium. The first cut of this file had headWidth 0.96 (a
+# near-round 0.45-wide ball) and the render read as one giant blob with
+# wings glued on. NO geometric brow (the arched brows are painted on the
+# sheet — a heavy geometric brow is the scowl dial), no parameterised nose
+# at all (noseLength disabled — the bead above IS the nose), and a
+# vestigial jaw that only rounds off the bottom.
 face
   headRadius 0.235
-  headWidth  0.96
+  headWidth  0.70
   headHeight 1.00
   headDepth  0.92
   jawWidth   0.78
@@ -182,64 +213,98 @@ face
   browHeavy  0.0004
   headBlend  0.0030
 
-# The clown's own face. BIG dark oval eyes — eyeSize 0.110 against the
-# goblin's 0.070 — high on the ball, with a small open SMILE: mouthCurve is
-# positive here, where the zombie and goblin both wear negatives (frowns).
+# The clown's own face. The projection is PLANAR over the head's axes
+# (march.wgsl: raw = (hs.x, hs.y), u/v = -1..1 across the ball's width and
+# height), so every value below is a fraction of the head's PROJECTED size —
+# narrowing headWidth to 0.70 shrank the sheet's metres-per-unit by 30%,
+# which is why eyeGap and eyeSize had to GROW to keep the same face on a
+# narrower head: measured on the reference, the eyes are 0.09 of standing
+# height wide and sit 0.20 apart, centred 0.02 BELOW the ball's equator —
+# eyeRise 0.545, not the 0.42 this file started with. At 0.42 the eyes
+# landed at y 0.805, jammed under the cap band (bottom edge 0.809), which
+# is exactly the "cap swallowed the face" read the owner rejected on
+# attempt one: no forehead, eyes fused into the band.
 # eyeGlow is LOW on purpose: the sheet mixes the eye toward this value and
 # the shader's emissive mask keys BRIGHT texels, so 1.0 would light two
-# lanterns; a toy clown wears painted dots, and 0.06 keeps them near-black.
-# WHAT THE FORMAT CANNOT DO: the white highlight inside each eye. Only the
-# eye region brightens, toward ONE flat value — there is no second bright
-# spot inside a dark feature, so the glint is dropped, not faked.
+# lanterns; 0.14 is a dark charcoal that still reads against a lit
+# forehead. WHAT THE FORMAT CANNOT DO: the white highlight inside each eye.
+# Only the eye region brightens, toward ONE flat value — there is no second
+# bright spot inside a dark feature, so the glint is dropped, not faked.
 sheet
-  eyeGap     0.40
-  eyeSize    0.110
-  # Near-black, for the reason above. Not zero: zero leaves the eye at base
-  # grey and it stops reading as a drawn eye at all.
-  eyeGlow    0.10
+  # The reference's eyes are enormous and reach almost to the head's sides:
+  # centres ±0.10 m (0.61 of the sheet's half-width), Ø ~0.09 m.
+  eyeGap     0.60
+  eyeSize    0.135
+  # Near-BLACK. The sheet is an albedo MULTIPLIER (tex/mean), so the eye's
+  # brightness is eyeGlow/0.44 of the flesh around it: 0.06 gives a 7:1
+  # contrast, which is what a drawn eye on whiteface wants. The first cut
+  # of this pass used 0.14 and the LIT eye faded to near-invisible against
+  # the cheek — measured on render, luminance 130-180 against a 250 face.
+  # Not zero: zero leaves the eye at base grey and it stops reading as a
+  # drawn eye at all.
+  eyeGlow    0.06
   # NOTE: the drawer hardcodes its 1.25 squash (blob-face-sheet.ts draws
   # hypot(dx, dy * 1.25)); this key is accepted but inert today. Eyes will
   # run slightly WIDE of the reference's tall ovals until the drawer reads
   # the parameter.
   eyeSquash  0.80
   eyePupil   0
-  eyeRise    0.42
+  # 0.545 puts the eye centres at y 0.746 — 21 mm BELOW the ball's equator,
+  # measured off the reference, leaving a bare forehead (y 0.81-0.95)
+  # between the cap band and the brows. This is the single number that
+  # fixes "the cap swallowed the face".
+  eyeRise    0.545
   eyeTilt    0
   # Thin, gently ARCHED brows — browAngle negative lifts the inner ends,
   # where positive (the zombie's scowl) drops them. Kept light: any heavier
   # and the innocence goes.
-  browHeavy  0.30
+  browHeavy  0.38
   browAngle  -8
   mouthWidth 0.32
-  mouthRise  0.70
+  # The painted smile sits LOW with the groove underneath (both measured to
+  # y ~0.57-0.58, just above the chin where the ruff begins): v 0.85 on this
+  # ball. The old 0.70 painted it mid-cheek while the groove cut at the
+  # chin — two mouths 80 mm apart, the exact drift the note below warns of.
+  mouthRise  0.85
   # POSITIVE — a smile, matching the grooves underneath. The paint leads,
   # the groove gives it shadow; if the two drift apart on render, trust the
   # render and re-site whichever is wrong (the goblin's shades lesson).
   mouthCurve 0.35
-  mouthOpen  0.026
+  # Barely open — the GROOVE is the smile's geometry; this is its paint.
+  mouthOpen  0.018
   nostril    0.15
   noseRidge  0.0
   noseWide   0.0
   noseLong   0.0
-  jawShade   0.28
+  # Lighter than the goblin's: the mouth paint now sits where this band
+  # lands (mouthRise + 0.135 = 0.985, the sheet's very bottom edge), and a
+  # full-strength jaw shade there smeared a dark beard under the smile.
+  jawShade   0.18
   # Toy-smooth: less than the old clown even, because blotching reads as
   # decay next to the zombie and this character is stage makeup.
   grain      0.05
   seed       11
 
-# Pale cream skin, matte like painted vinyl (carried over from attempt one,
-# which the owner liked well enough to keep the skin unchanged).
+# Pale PINK-cream skin, matte like painted vinyl. Retuned off the measured
+# reference this pass: the face paint there is #e8c2bf — linear (0.80, 0.55,
+# 0.53) — distinctly pinker than the pure cream this file started with
+# (which rendered (249,218,176) against the reference's (232,194,191)).
+# fresnelBoost lifted 0.40 -> 0.55: the head is a big sphere and its
+# shadowed flank was falling to near-black against the lab's dark
+# background, which read as a HOLE in the silhouette beside the cap — the
+# "front view still suggests a gap" note from the rescue. The wings now
+# flank that zone too, but the rim light is what actually keeps it.
 #
 # Linear RGB, sRGB-encoded on output — these render lighter and pinker than
 # the raw numbers suggest. The mottle is ROSY at low amplitude: faint warmth
 # in the cheeks and knuckles, never dirt.
 palette
-  baseColor     0.87 0.78 0.64
+  baseColor     0.88 0.73 0.60
   deepColor     0.55 0.18 0.14
   charColor     0.10 0.08 0.07
   specIntensity 0.45
   specRoughness 0.50
-  fresnelBoost  0.40
+  fresnelBoost  0.55
   translucency  0.25
   wetness       0.30
   mottleAmp     0.30
