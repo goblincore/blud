@@ -289,14 +289,16 @@ parts
     # red ball carries the READ. First continuation version was w=0.104
     # d=0.034 — a flat PANCAKE floating in front of the bead, and the render
     # verdict was "no ball". A clown nose is a BALL stuck on the face, so the
-    # shell is near-spherical now (d 96% of w) and centred to straddle the
-    # bead: face surface at this height is z≈0.194 (semi-depth 0.212 at
+    # shell is near-spherical now (h set explicitly — an attach sphere's h
+    # DEFAULTS TO size=, which left the first ball version squashed 2:1
+    # vertically on the turntable; a clown nose is round in FRONT view too)
+    # and centred to straddle the bead: face surface at this height is z≈0.194 (semi-depth 0.212 at
     # dy −0.045, bone z −0.0185), shell back pole z 0.170 buries 24 mm into
     # the skull (inside the fit test's tuck bound), shell front pole z 0.262
     # stands ~36 mm proud of the flesh bead's own front (0.226) — about 70%
     # of the ball in front of the face, which is exactly how a foam clown
     # nose sits.
-    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.216) size=0.052 w=0.108 d=0.096 material=red
+    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.216) size=0.052 w=0.108 h=0.100 d=0.096 material=red
 
     # STOCKING — thin blue leg, tight (+6-8 mm over the measured balls and
     # shafts), ending just above the ankle where the shoe takes over.

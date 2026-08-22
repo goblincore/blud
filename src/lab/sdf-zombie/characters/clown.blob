@@ -186,7 +186,8 @@ face
 
 # The clown's own face. BIG dark oval eyes — eyeSize 0.125 against the
 # goblin's 0.070 — high on the ball, with a small open SMILE: mouthCurve is
-# positive here, where the zombie and goblin both wear negatives (frowns).
+# NEGATIVE here — sheet y runs downward, so a negative curve lifts the
+# corners; see the key's own comment for the measurement that settled it.
 # eyeGlow is LOW on purpose: the sheet mixes the eye toward this value and
 # the shader's emissive mask keys BRIGHT texels, so 1.0 would light two
 # lanterns; a toy clown wears painted dots. See the eyeGlow line's own
@@ -226,10 +227,17 @@ sheet
   browAngle  -8
   mouthWidth 0.32
   mouthRise  0.70
-  # POSITIVE — a smile, matching the grooves underneath. The paint leads,
-  # the groove gives it shadow; if the two drift apart on render, trust the
-  # render and re-site whichever is wrong (the goblin's shades lesson).
-  mouthCurve 0.35
+  # NEGATIVE — a smile, matching the grooves underneath (whose corner tips
+  # sweep up). The sign is backwards from the drawer's own comment
+  # ("mouthCurve bows it down at the centre for a frown"): measured on the
+  # dumped sheet, POSITIVE puts the centre HIGHER than the corners — an
+  # upside-down arc, a frown — because sheet y runs downward. The zombie
+  # and goblin wear negatives for their scowls for other reasons (lips and
+  # brows do their frowning); here the arc itself is the whole mouth, so
+  # the sign had to be right. The paint leads, the groove gives it shadow;
+  # if the two drift apart on render, trust the render and re-site
+  # whichever is wrong (the goblin's shades lesson).
+  mouthCurve -0.35
   # 0.034, up from 0.026: same wash-out physics as eyeGlow above. The line
   # is 1.7 texels at the 64px atlas and its soft edge is wider than the
   # line — what survives to the screen is the core only, and the pale skin
