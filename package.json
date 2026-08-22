@@ -10,6 +10,7 @@
     "test": "vitest run",
     "blob:measure": "tsx scripts/blob-measure.ts",
     "blob:shot": "scripts/blob-shot.sh",
+    "blob:render-check": "tsx scripts/blob-render-check.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
