@@ -79,7 +79,9 @@ describe('mouse-kit.gltf fits mouse.blob', () => {
   it('decodes the compiled kit', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test.
-    expect([...groups.keys()].sort()).toEqual(['black', 'shoe', 'shorts', 'tee', 'white']);
+    // No 'black': the shades and brows are painted SDF geometry in mouse.blob
+    // now, not kit lofts.
+    expect([...groups.keys()].sort()).toEqual(['shoe', 'shorts', 'tee', 'white']);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
   });
 

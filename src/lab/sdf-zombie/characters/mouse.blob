@@ -298,6 +298,47 @@ body
   # THIS character rather than as a generic mouse. r 0.032 x wide 2.10 puts it
   # at 0.067, a shade wider than the snout root's 0.064, sitting proud rather
   # than tucked underneath.
+  # ============================================================
+  # THE SUNGLASSES — geometry, painted. In the reference mesh they are not
+  # a separate object: a glossy black bump on the face, two lens domes and
+  # a bridge, with the brow band above. Measured off the mesh by its PAINT
+  # (black texels on the head, frame-aligned): the black region spans y
+  # 0.86..0.92 and x +/-0.099 at the lenses, whose front reaches z 0.126..
+  # 0.129 at x +/-0.03..0.07 against a skin front of ~0.115 there and 0.095
+  # at x 0.09 — domes 14 mm proud in the middle and 24 mm at their outer
+  # edge — dipping to 0.120 at the bridge. The brows are a band at y
+  # 0.92..0.96, x +/-0.08..0.09, following the forehead as it recedes (z
+  # 0.096 at 0.92 -> 0.061 at 0.96).
+  #
+  # `color=101012` is the mesh's lens black; gloss 0.95 gives the wet glint
+  # the reference has. blend 0.002: a lens sits ON skin with a crisp edge,
+  # and the paint boundary is the nearest-primitive boundary, so a fillet
+  # here would smear yellow up the lens rim.
+  # ============================================================
+  # Lenses: BENT CAPSULES that wrap the cheek, not ellipsoids. A flat lens
+  # floats: our face recedes to z 0.070 at x 0.10 (the mesh cheek is 0.095
+  # there), so an ellipsoid spanning to x 0.100 left its outer tip 36 mm off
+  # the skin. This one runs from the bridge (0.004, 0.885, 0.096) out to
+  # (0.072, 0.885, 0.081) — the AXIS ends at 0.072 because the capsule's
+  # round cap adds r 0.028 beyond it, and the mesh lens stops at x 0.099 rim
+  # included; a first cut ended the axis at 0.100 and the cap floated 20 mm
+  # off the receding temple, 46 rays of daylight. Bent forward so the apex
+  # sits at z 0.113; deep 0.55 makes it 15 mm thick, so the front reaches
+  # ~0.128 mid-lens (mesh 0.129), ~0.121 at the bridge ends (0.120), and the
+  # back is 5-18 mm inside the skin along its whole length. r 0.028 is the
+  # lens band's half-height: y 0.857..0.913.
+  blob head on skull at=0.00 r=0.028 wide=1.00 tall=1.00 deep=0.55 blend=0.0020 offset=(0.004,0.068,0.104) tip=(0.068,0,-0.015) bend=(0,0,0.045) both color=101012 gloss=0.95
+  # Bridge: front 0.120, spanning x +/-0.019 into both lenses.
+  blob head on skull at=0.00 r=0.012 wide=1.60 tall=0.80 deep=0.70 blend=0.0020 offset=(0,0.068,0.110) color=101012 gloss=0.95
+  # Brow band: a SLAB, not a sausage — r 0.007 stretched to 22 mm tall —
+  # bent across the forehead from (-0.085, 0.935, 0.047) to (+0.085, ...)
+  # with its apex at z 0.094, so the middle stands ~5 mm proud of the skull
+  # (front ~0.100 there) and the ends are buried 14 mm INSIDE the receding
+  # temples (skin 0.061 at x 0.085) instead of grazing them, which is what
+  # the first cut did and it left two rays of daylight. Matte-ish: the
+  # reference brows do not glint.
+  blob head on skull at=0.00 r=0.007 wide=1.00 tall=1.60 blend=0.0020 offset=(-0.085,0.118,0.055) tip=(0.170,0,0) bend=(0,0,0.094) color=101012 gloss=0.35
+
   # THE LOWER FACE — the mass the lips sit IN, not in front of. The mesh at
   # y 0.70 is one body 0.21 deep (z -0.095..0.119) and 0.061 half-wide; at
   # 0.74 it is 0.158 half-deep and 0.091 wide. A jaw ellipsoid alone cannot

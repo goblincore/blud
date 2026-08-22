@@ -224,80 +224,10 @@ parts
     ring 1.00 w=0.186 d=0.188
     cap start=none end=none
 
-  # ================================================================
-  # BROWS — two BLACK slabs at the crown hairline. Measured off the
-  # reference: the black band runs y 0.877..0.925, splitting into two
-  # wedges that stay separate down to y 0.83, inner edges tapering from
-  # x 0.058 out to 0.104. They read as drawn-on angry brows pushed
-  # right up under the hairline — the character's whole expression.
-  # Aimed along a free ray running SIDEWAYS across the crown from just
-  # off the centreline, tilting -13 (the measured outer slope), with
-  # frame=fwd so `d` is the slab's height and `w` its fore-aft depth.
-  # MIRRORED — the first draft sat outside the mirror block and BOTH
-  # brows landed on the character's left (x to +0.154), which the
-  # viewer's part bounds caught immediately.
-  #
-  # THE z IS THE WHOLE BROW, and the first compiled kit got it wrong:
-  # offset z 0.010 left 66 of 72 vertices INSIDE the skull — the crown's
-  # front face at brow height is z 0.05-0.08, so a slab centred at 0.01
-  # is buried whole and the kit rendered browless (invisible while the
-  # kit itself was unbuilt — two silent failures stacked). z 0.066 puts
-  # the slab's back rim ~20 mm into the crown (a deliberate tuck — a rim
-  # that stops AT the smin surface gaps yellow at its edges) and its
-  # face ~5-10 mm proud. len 0.100 reached x 0.169, past the head's
-  # 0.099 half-width at that height — the wedges floated off the
-  # temples; 0.048 lands the outer tip at x 0.099, the reference's
-  # 0.104. The crown falls away fast under the tip, so the tip ring
-  # pinches to w 0.016: the wedge end lifting off the skull IS the
-  # angry-brow read, but a fat floating end reads as a horn.
-  # ================================================================
-  mirror
-    # 2026-08-22: the skull bone got much shorter, so the old offset.y 0.120 (a
-    # hairline 0.13 above the t=0.436 anchor) pushed the brows to the CROWN
-    # (y~0.99) and offset.z 0.066 left the slab BEHIND the crown front so its
-    # back rim tucked ~37 mm into the skull (over the 30 mm tolerance). Lowered
-    # offset.y to 0.045 (slab centre ~0.908, the hairline) and moved offset.z
-    # to 0.100 so the slab straddles the front face (~0.11 there) and tucks
-    # only ~2 cm at the rim.
-    loft brow bone=skull at=0.436 offset=(0.052,0.045,0.118) dir=side tilt=-13 len=0.048 frame=fwd material=black
-      ring 0.00 w=0.034 d=0.030
-      ring 0.35 w=0.038 d=0.040
-      ring 0.70 w=0.032 d=0.044
-      ring 1.00 w=0.016 d=0.046
-      cap start=none end=none
-  end
-
-  # ================================================================
-  # SHADES — one bar across both eyes, NOT a mirrored pair (a mirror block
-  # would leave a gap over the nose; real shades are a single sweep — see
-  # goblin-kit.wam). Measured: the lens band sits y 0.728..0.769 (the dark
-  # band between the brows above and the yellow muzzle below), spanning
-  # x -0.088..+0.088 and bulging 8 mm proud of the face at z 0.116.
-  # `frame=up` pins the ring axes: `d` = lens HEIGHT, `w` = fore-aft
-  # thickness. Solid near-black, not smoked: the goblin tried transparent
-  # lenses and the SDF composite ate them (see kit-overlay.ts LOOK.glass).
-  # The band's own dark-measured pixels are (50,48,2)..(59,57,0) — i.e.
-  # BLACK with a yellow key-light sheen, which near-black + low roughness
-  # reproduces without transparency.
-  # ================================================================
-  # 2026-08-22: shifted the band to the raised eye line (offset.y 0.018 ->
-  # centre ~0.867, between the brows at 0.908 and the snout top ~0.85) and
-  # pushed it a touch prouder (z 0.120) so it reads as worn, not embedded.
-  # 2026-08-22, after the head rebuild: the lenses were 0.038 of `d` — 42 mm
-  # of height on a head whose cranium had just grown — and read on screen as a
-  # WIRE stretched across the face rather than as eyewear. mouse-reference-2
-  # shows deep wraparound lenses that own the middle of the face, so `d` goes
-  # to 0.058 and the span opens slightly with it. Refitting these was not
-  # optional: the shades are aimed off the skull bone, so every change to
-  # headHeight or jawDrop moves the face out from under them.
-  loft shades bone=skull at=0.325 offset=(-0.103,0.020,0.126) dir=side len=0.206 frame=up material=black
-    ring 0.00 w=0.014 d=0.032 tip
-    ring 0.12 w=0.021 d=0.052
-    ring 0.40 w=0.019 d=0.058
-    ring 0.60 w=0.019 d=0.058
-    ring 0.88 w=0.021 d=0.052
-    ring 1.00 w=0.014 d=0.032 tip
-    cap start=point end=point
+  # SHADES AND BROWS: no longer here. They are painted SDF geometry in
+  # mouse.blob (color=101012 on blob primitives) — the reference mesh has
+  # them as a glossy bump on the face, not a separate object, and a loft
+  # bar across a curved face only ever read as wire.
 
 textures
   texture tee base=#b1161f
