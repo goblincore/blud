@@ -92,6 +92,17 @@ export interface FaceSheetParams {
   mouthCurve: number;
   /** Mouth thickness. 0 removes it. */
   mouthOpen: number;
+  /**
+   * Harlequin points: a dark triangle above each eye and another below it,
+   * the classic jester/clown greasepaint. 0 removes them.
+   *
+   * The value is the triangle's HEIGHT as a fraction of sheet height; the
+   * width follows at 55% of that, which is the proportion the reference
+   * makeup uses (tall and narrow, not equilateral). The upper point aims UP
+   * from just above the eye and the lower point aims DOWN from just below it,
+   * so together they read as a diamond split by the eye.
+   */
+  harlequin: number;
   /** Nostril darkness, 0 removes them. */
   nostril: number;
   /**
@@ -135,6 +146,8 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   mouthRise: 0.72,
   mouthCurve: -0.25,
   mouthOpen: 0.055,
+  // OFF by default: this is clown greasepaint, not a feature every face wants.
+  harlequin: 0,
   nostril: 0.35,
   noseRidge: 0.85,
   noseWide: 0.085,
@@ -259,6 +272,30 @@ export function generateFaceSheet(
       if (p.nostril > 0) {
         const d = Math.hypot(sx - 0.055, (y - (eyeY + 0.165)) * 1.6);
         v -= p.nostril * 0.34 * falloff(d, 0.030, soft * 2);
+      }
+
+      // Harlequin points: two triangles per eye, one above and one below,
+      // aimed away from it. Drawn as a signed-distance-ish wedge rather than a
+      // polygon fill: `spread` is how wide the triangle is at this height, so
+      // a point is just "am I inside a width that shrinks with distance".
+      //
+      // The eye's own dark disc is drawn ABOVE this, and both subtract, so
+      // where they overlap the paint simply gets darker — which is what the
+      // reference looks like where the point meets the lash line.
+      if (p.harlequin > 0) {
+        const h = p.harlequin;
+        const halfW = h * 0.55 * 0.5;
+        // dx is measured from the eye's own centre, so the points track
+        // eyeGap rather than sitting at a fixed x.
+        const dx = Math.abs(sx - p.eyeGap / 2);
+        for (const up of [true, false]) {
+          // Base sits just off the eye; the tip is `h` away from it.
+          const base = up ? eyeY - p.eyeSize * 0.55 : eyeY + p.eyeSize * 0.55;
+          const along = up ? base - y : y - base;
+          if (along < 0 || along > h) continue;
+          const spread = halfW * (1 - along / h);
+          v -= 0.42 * p.harlequin * 8 * falloff(dx, spread, soft * 1.5);
+        }
       }
 
       // Mouth: a curved bar. mouthCurve bows it down at the centre for a frown.

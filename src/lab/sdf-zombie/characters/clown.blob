@@ -75,6 +75,25 @@ skeleton
   end
 
 body
+  # LIPS — geometry, not paint, and the same construction as the goblin's:
+  # two chamfered tapered prims stacked, with a groove cutting the seam
+  # between them. `chamfer` keeps a crease where the default smooth-min would
+  # smear the lip line into the cheek.
+  #
+  # WHITE by construction: all flesh shares one palette, so these are the same
+  # greasepaint as the face. That is the point — the owner asked for the
+  # goblin's lips "white color of course to match face". They read as lips
+  # because they PROTRUDE and catch the key, not because they are tinted.
+  #
+  # Scaled off the goblin's, which sit on a 0.126 x 0.96 skull; this ball is
+  # 0.235 x 1.18, so radii and offsets go up ~1.5x and the pair sits at
+  # at=0.30 rather than 0.12 (this head's chin is far higher up the bone).
+  blob head on skull at=0.30 r=0.042 r2=0.032 wide=1.25 tall=0.44 blend=0.0026 chamfer offset=(0,0.010,0.108) tip=(0,-0.010,0.070)
+  blob head on skull at=0.30 r=0.036 r2=0.027 wide=1.12 tall=0.42 blend=0.0022 chamfer offset=(0,-0.042,0.098) tip=(0,-0.028,0.060)
+  # The seam between them. Flat in y (tall=0.09) so the channel runs ACROSS
+  # the face rather than boring into it.
+  groove head on skull at=0.30 r=0.044 wide=1.30 tall=0.09 deep=1.10 depth=0.005 width=0.006 offset=(0,-0.018,0.104)
+
   # Torso: a short barrel, widest LOW (the belly ring sits near the top of
   # the pelvis bone). Deep in z like the goblin's — bulk taken where the arms
   # are not — but gentler, because this reads as a toy's pot belly, not a
@@ -268,7 +287,20 @@ sheet
   # texels at the 64px atlas and its soft edge is nearly as wide — what
   # survives to the screen is the core only, and the pale skin eats it.
   # Thicker is the only dial the format gives.
-  mouthOpen  0.055
+  # ZERO — THE MOUTH IS GEOMETRY NOW, not paint.
+  #
+  # A painted mouth cannot break the silhouette, so off dead-front it vanishes
+  # and from the front it read as a flat dark BAND across the face — owner's
+  # word was a moustache. The goblin hit this exact wall and solved it with
+  # protruding lip primitives plus a groove for the seam; the clown now does
+  # the same, in white to match the greasepaint (see the LIPS block in `body`).
+  # 0 removes the sheet's mouth entirely, per mouthOpen's own docstring.
+  mouthOpen  0.0
+  # HARLEQUIN GREASEPAINT — a dark triangle above and below each eye, the
+  # reference makeup the owner asked for. 0.085 of sheet height puts the tips
+  # roughly a full eye-width away from the eye in each direction, which is the
+  # proportion in the reference photo (tall and narrow, not equilateral).
+  harlequin  0.085
   nostril    0.15
   noseRidge  0.0
   noseWide   0.0
