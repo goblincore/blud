@@ -1,0 +1,251 @@
+# Mouse kit — the POLYGON half of the mouse, authored in WAM.
+#
+# WHY TWO LANGUAGES FOR ONE CHARACTER. .blob builds flesh out of blended
+# signed-distance primitives, and smooth-min rounds every edge it touches, so
+# a tee's hem, a brow slab's crease or a shoe sole is either smeared or has
+# to be fought back with `hard` blends. WAM is a text→glTF mesh compiler,
+# which is the other half of that trade. Flesh in .blob, clothes in .wam —
+# same bargain as goblin-kit.wam, whose header says it in full.
+#
+# THE SKELETON BELOW MIRRORS characters/mouse.blob AND MUST TRACK IT. Two
+# conversions apply and neither is optional (see goblin-kit.wam for the full
+# versions):
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. Every
+#     number here is the .blob metre value / 1.10.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
+#     `down` bone BACKWARD; .blob's always carries toward +z. So `up` bones
+#     (spine1, chest, neck, skull) share their pitch verbatim, and every
+#     `down` bone (upperarm, forearm, thigh, shin) has it NEGATED.
+#     .blob's arms: upperarm pitch=-2, forearm pitch=2, hand pitchless.
+#     .blob's legs: thigh pitch=8, shin pitch=-9. `tilt` needs no flip.
+#
+# RING SIZES ARE MEASURED, NOT EYEBALLED — marched off the .blob field
+# (see the numbers scattered through this file), in metres there / 1.10 here.
+# Measured flesh, for reference:
+#   torso y0.30 w=0.146 d=0.180   y0.36 w=0.130 d=0.159   y0.42 w~0.130 d=0.109
+#   y0.48 w~0.128 d=0.116  y0.51 w=0.109 d=0.099  y0.54 w=0.080 d=0.080
+#   arm  0.051 dia at the forearm, 0.044 at the wrist
+#   leg  0.058..0.067 wide, 0.056 deep at the knee..ankle
+#   ankle joint centre y 0.162, flesh sole 0.138 — the shoe bridges to 0.
+#   head zmax 0.108 at y 0.735 (the eye line), xw 0.238 there
+#
+# BUILD:  scripts/build-wam-kit.sh mouse
+#   -> public/assets/lab/mouse-kit.gltf, which the lab loads (KITS in
+#      lab-main.ts). WAM lives outside this repo, so the compiled glTF is
+#      committed and that script records how to regenerate it.
+#
+# THREE OF WAM'S LINTS ALWAYS FIRE ON A KIT AND ARE CORRECT TO IGNORE (they
+# check a whole CHARACTER; this is only the clothes): `spine1`/`neck`/`skull`
+# carry no loft near them (that flesh lives in the .blob — the shades and
+# brows are aimed from the skull but tiny), and the lowest geometry on the
+# SHOES sits exactly ON the ground so "feet dipping below ground" will fire
+# at 0 depth. A warning about anything else is real.
+model mouse-kit
+  height 1.10
+  # chunky = 8-sided lofts. Same deliberate contrast as the goblin's plate:
+  # faceted toy clothes against smooth raymarched clay skin.
+  style chunky
+
+palette
+  # Measured off docs/dev-notes/refs/mouse-reference.png (sRGB, then converted
+  # to WAM's palette hex directly — WAM bakes textures in sRGB):
+  #   tee red: shadow #9B131D, lit #C71921 -> base between, #B1161F
+  #   shorts blue: #1D27A4
+  #   shoe grey: #B0B0B2 lit, #6E6E70 shade -> base #A9A9AC
+  #   shoe toe/soul highlight + the brow frame: near-white #F2F2F2
+  #   black: the shades' lenses and the brow slabs, #101012
+  tee    #b1161f
+  shorts #1d27a4
+  shoe   #a9a9ac
+  white  #f2f2f2
+  black  #101012
+
+skeleton
+  # `hips` restores the .blob root bone's length — WAM's root is a bare point,
+  # so parenting spine1 straight to it drops the trunk 0.075 m (see
+  # goblin-kit.wam's note). 0.075/1.10 = 0.0682.
+  root pelvis at 0.2136
+  bone hips   parent=pelvis dir=up len=0.0682
+  bone spine1 parent=hips dir=up pitch=2 len=0.0864
+  bone chest  parent=spine1 dir=up pitch=2 len=0.0955
+  bone neck   parent=chest dir=up pitch=-5 len=0.0864
+  bone skull  parent=neck dir=up pitch=-3 len=0.3727
+  mirror
+    # clavicle side 0.032 len 0.038; upperarm pitch -2 (blob) -> +2 here
+    bone clavicle parent=chest    side=0.0291 dir=side len=0.0345
+    bone upperarm parent=clavicle dir=down pitch=2  tilt=48 len=0.0864
+    bone forearm  parent=upperarm dir=down pitch=-2 tilt=38 len=0.0773
+    bone hand     parent=forearm  dir=down tilt=36 len=0.0455
+    bone f_index  parent=hand dir=down tilt=26 pitch=-4 len=0.0455
+    bone f_middle parent=hand dir=down tilt=10 pitch=-5 len=0.0500
+    bone f_ring   parent=hand dir=down tilt=-6 pitch=-5 len=0.0473
+    bone f_little parent=hand dir=down tilt=-20 pitch=-3 len=0.0409
+    # thigh pitch 8 (blob) -> -8; shin -9 -> +9
+    bone thigh    parent=hips side=0.0309 dir=down pitch=-8 tilt=5 len=0.0682
+    bone shin     parent=thigh dir=down pitch=9 tilt=-4 len=0.0682
+    bone foot     parent=shin dir=fwd len=0.0864
+  end
+
+parts
+  # EVERY PIECE IS AN OPEN SHELL — `cap ... none` almost throughout (the
+  # shoes' soles are the deliberate exception: they are the ground contact).
+  # A `cap flat` on a tube that wraps a limb puts a disc THROUGH the limb;
+  # see goblin-kit.wam for the belt cap that sat 61 mm inside the goblin.
+  mirror
+    # ================================================================
+    # SLEEVE — a loose short sleeve over the upper arm's top half.
+    # The reference tee's sleeve is a wide bell: the arm is 0.051 across
+    # and the sleeve mouth reads about double that. Flesh at the sleeve's
+    # hem (upperarm t~0.55, y~0.47) is 0.051 dia -> 0.0463 here; the hem
+    # flares to 0.105 while the top ring hugs the shoulder ball (0.060 dia
+    # -> 0.055 + margin). Lofted down the upperarm with the mouth at the
+    # BOTTOM (rings reversed: ring 0 at t=0.95 hem, ring 1 at t=0.40 top).
+    # ================================================================
+    loft sleeve bones=upperarm..upperarm material=tee
+      ring 0.42 w=0.062 d=0.058
+      ring 0.75 w=0.080 d=0.074
+      ring 0.95 w=0.104 d=0.094
+      cap start=none end=none
+
+    # ================================================================
+    # SHORTS — high-waisted and stubby, measured off the reference: waist
+    # at the tee's hem (y 0.528, hidden under it) and legs ending at
+    # 0.297. That is a LONG pair of shorts for such a small body — 0.23 m
+    # of blue on a 1.10 m character — and it is the reference's own
+    # proportion. Lofted on a FREE RAY down the thigh's axis (thigh head
+    # y 0.310 is BELOW the waist, so the ray starts up at the pelvis and
+    # runs 0.21 m to the hem), with `follow=` off — stubby shorts do not
+    # swing. Flesh at the hem (y 0.30): leg 0.067 wide/0.056 deep; the
+    # shorts clear it by ~4 cm because they are cut wide.
+    # ================================================================
+    loft shortsleg bone=thigh at=0.0 offset=(0,0.198,0.005) dir=down pitch=-8 tilt=5 len=0.210 material=shorts frame=fwd
+      ring 0.00 w=0.150 d=0.174
+      ring 0.30 w=0.152 d=0.170
+      ring 0.62 w=0.146 d=0.144
+      ring 1.00 w=0.138 d=0.126
+      cap start=none end=none
+
+    # ================================================================
+    # SHOE — the second-biggest read after the ears. Measured off the
+    # reference: topline at y 0.185 (0.168 here), 0.096 wide at the ankle
+    # mouth, swelling to 0.168 wide at the ball (y 0.09), 0.34 long
+    # (z -0.046..+0.29 in the .blob's metres: the toe reaches +0.294 while
+    # the heel counter backs to -0.046), sole 0.019 thick on the ground.
+    # Pale grey body, WHITE toe cap, and a white welt stripe where the
+    # sole meets the upper.
+    # Lofted along a FREE RAY aimed `fwd` from a point ABOVE the ankle
+    # (the shin tail plus 0.045 up, so the ray clears the joint), and
+    # every ring's centre is pushed DOWN with `up=` to sit ON THE GROUND
+    # (centre = d/2) — the shoe is a wedge whose rings hang under the ray,
+    # not a tube around it. Without that the loft is a horizontal pipe at
+    # ankle height, which is exactly what the first attempt rendered as
+    # (part bounds y 0.066..0.259, a tube centred on the ankle).
+    # ================================================================
+    loft shoe bone=shin at=1.0 offset=(0,-0.045,0.030) dir=fwd len=0.309 frame=up material=shoe
+      # t along the ray (z 0.03..0.34); w = width, d = HEIGHT above ground,
+      # up = -0.045 + d/2 so the ring's BASE is at y 0.
+      ring 0.00 w=0.098 d=0.062 up=-0.086
+      ring 0.16 w=0.126 d=0.108 up=-0.063
+      ring 0.34 w=0.150 d=0.152 up=-0.041
+      ring 0.55 w=0.160 d=0.168 up=-0.033
+      ring 0.74 w=0.152 d=0.150 up=-0.042
+      ring 0.88 w=0.136 d=0.124 up=-0.055 material=white
+      ring 1.00 w=0.114 d=0.104 up=-0.065
+      cap start=none end=none
+
+    # SOLE — a flat slab under the shoe, the one closed cap in the kit: it
+    # IS the ground contact (flesh sole floats at 0.138; the shoe bridges).
+    # Same hanging-ring trick as the shoe: ray above, rings pulled down
+    # onto the ground, d = the slab's own 0.021 thickness.
+    loft sole bone=shin at=1.0 offset=(0,-0.045,-0.020) dir=fwd len=0.355 frame=up material=white
+      ring 0.02 w=0.118 d=0.020 up=-0.107
+      ring 0.50 w=0.168 d=0.022 up=-0.106
+      ring 0.98 w=0.126 d=0.020 up=-0.107
+      cap start=none end=none
+  end
+
+  # ================================================================
+  # TEE — the torso shell. CROPPED, not long: measured off the reference,
+  # the red band runs y 0.528..0.605 — collar at the neck base, hem at
+  # 0.528, exactly where the blue shorts begin. The first draft hung the
+  # hem at 0.243 (a long tee) and the shorts barely showed; the reference
+  # is a CROP TOP over high-waisted shorts, and getting that boundary at
+  # 0.528 is what makes the outfit read.
+  # Lofted along a FREE RAY down the neck bone's tail (y 0.605) for
+  # 0.070 m — the whole shirt lives between the collar and the hem, and
+  # no bone chain spans exactly that. Loose drape: measured torso flesh
+  # is w 0.128 d 0.116 at the collar falling to w 0.146 d 0.180 at the
+  # hem; the tee stays boxier, 0.160 x 0.170 at the collar flaring to
+  # 0.170 x 0.210 at the hem (2-3 cm of drape all round).
+  # ================================================================
+  loft tee bone=neck at=1.0 dir=down len=0.070 material=tee frame=fwd
+    ring 0.00 w=0.148 d=0.158
+    ring 0.30 w=0.158 d=0.180
+    ring 0.62 w=0.166 d=0.198
+    ring 1.00 w=0.170 d=0.210
+    cap start=none end=none
+
+  # ================================================================
+  # BROWS — two BLACK slabs at the crown hairline. Measured off the
+  # reference: the black band runs y 0.877..0.925, splitting into two
+  # wedges that stay separate down to y 0.83, inner edges tapering from
+  # x 0.058 out to 0.104. They read as drawn-on angry brows pushed
+  # right up under the hairline — the character's whole expression.
+  # Aimed along a free ray running SIDEWAYS across the crown from just
+  # off the centreline, tilting -13 (the measured outer slope), with
+  # frame=fwd so `d` is the slab's height and `w` its fore-aft depth.
+  # MIRRORED — the first draft sat outside the mirror block and BOTH
+  # brows landed on the character's left (x to +0.154), which the
+  # viewer's part bounds caught immediately.
+  # ================================================================
+  mirror
+    loft brow bone=skull at=0.436 offset=(0.052,0.120,0.010) dir=side tilt=-13 len=0.100 frame=fwd material=black
+      ring 0.00 w=0.046 d=0.030
+      ring 0.35 w=0.058 d=0.040
+      ring 0.70 w=0.052 d=0.044
+      ring 1.00 w=0.040 d=0.048
+      cap start=none end=none
+  end
+
+  # ================================================================
+  # SHADES — one bar across both eyes, NOT a mirrored pair (a mirror block
+  # would leave a gap over the nose; real shades are a single sweep — see
+  # goblin-kit.wam). Measured: the lens band sits y 0.728..0.769 (the dark
+  # band between the brows above and the yellow muzzle below), spanning
+  # x -0.088..+0.088 and bulging 8 mm proud of the face at z 0.116.
+  # `frame=up` pins the ring axes: `d` = lens HEIGHT, `w` = fore-aft
+  # thickness. Solid near-black, not smoked: the goblin tried transparent
+  # lenses and the SDF composite ate them (see kit-overlay.ts LOOK.glass).
+  # The band's own dark-measured pixels are (50,48,2)..(59,57,0) — i.e.
+  # BLACK with a yellow key-light sheen, which near-black + low roughness
+  # reproduces without transparency.
+  # ================================================================
+  loft shades bone=skull at=0.325 offset=(-0.098,0.006,0.108) dir=side len=0.196 frame=up material=black
+    ring 0.00 w=0.014 d=0.026 tip
+    ring 0.12 w=0.020 d=0.036
+    ring 0.40 w=0.018 d=0.038
+    ring 0.60 w=0.018 d=0.038
+    ring 0.88 w=0.020 d=0.036
+    ring 1.00 w=0.014 d=0.026 tip
+    cap start=point end=point
+
+textures
+  texture tee base=#b1161f
+    # soft cotton fold shading, hand-painted not realistic
+    noise scale=0.16 amount=0.05
+    ao amount=0.14
+  texture shorts base=#1d27a4
+    noise scale=0.14 amount=0.04
+    ao amount=0.14
+  texture shoe base=#a9a9ac
+    gradient axis=v from=-0.05 to=0.12
+    noise scale=0.10 amount=0.03
+    ao amount=0.12
+  texture white base=#f2f2f2
+    gradient axis=v from=-0.02 to=0.08
+    ao amount=0.10
+  texture black base=#101012
+    # the lens shine is the whole read of a near-black lens; WAM's texture
+    # gradient fakes the key-light band the material itself cannot
+    gradient axis=v from=-0.02 to=0.06
