@@ -131,11 +131,13 @@ body
   # segment centre sits ~50 mm inside the surface — fully embedded, like
   # every groove (the operator carves along the primitive's own zero-set
   # wherever it runs near the skin; the goblin's ships at the same embed).
-  # depth/width are the channel's 3.5 mm bite and 4.5 mm opening — a drawn
-  # line at this scale, not a wound.
-  groove head on skull at=0.45 r=0.040 wide=0.88 tall=0.060 deep=0.90 blend=0.0014 offset=(0,-0.117,0.120) depth=0.0035 width=0.0045
-  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(0.052,-0.108,0.118) tip=(0.026,0.018,0) depth=0.0035 width=0.0045
-  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(-0.052,-0.108,0.118) tip=(-0.026,0.018,0) depth=0.0035 width=0.0045
+  # depth/width are the channel's 5 mm bite and 6 mm opening — a drawn
+  # line at this scale, not a wound. (Was 3.5/4.5 mm; the rescue-plus
+  # renders showed the smile lost to the pale skin's highlight compression,
+  # same lesson as the sheet's eyeGlow/mouthOpen bumps.)
+  groove head on skull at=0.45 r=0.040 wide=0.88 tall=0.060 deep=0.90 blend=0.0014 offset=(0,-0.117,0.120) depth=0.005 width=0.006
+  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(0.052,-0.108,0.118) tip=(0.026,0.018,0) depth=0.005 width=0.006
+  groove head on skull at=0.45 r=0.030 wide=0.55 tall=0.060 deep=0.85 blend=0.0014 offset=(-0.052,-0.108,0.118) tip=(-0.026,0.018,0) depth=0.005 width=0.006
 
   # ARMS AND LEGS — ball joints, deliberately, same stylisation as the
   # goblin: a fat nub at every joint kept readable by tight blends. On a
@@ -187,7 +189,8 @@ face
 # positive here, where the zombie and goblin both wear negatives (frowns).
 # eyeGlow is LOW on purpose: the sheet mixes the eye toward this value and
 # the shader's emissive mask keys BRIGHT texels, so 1.0 would light two
-# lanterns; a toy clown wears painted dots, and 0.06 keeps them near-black.
+# lanterns; a toy clown wears painted dots. See the eyeGlow line's own
+# comment for why LOW had to become VERY LOW (0.05) on this pale skin.
 # WHAT THE FORMAT CANNOT DO: the white highlight inside each eye. Only the
 # eye region brightens, toward ONE flat value — there is no second bright
 # spot inside a dark feature, so the glint is dropped, not faked.
@@ -199,11 +202,15 @@ sheet
   # size). The reference's eyes are small-to-medium dots set WIDE on a huge
   # face — 0.125 keeps them unmistakably dots.
   eyeSize    0.125
-  # Near-black, for the reason above. Not zero: zero leaves the eye at base
-  # grey and it stops reading as a drawn eye at all. 0.10 -> 0.16 with the
-  # size bump: under the cap's shade a pure 0.10 eye and its shadow merge
-  # into one dark visor band across the face (seen in the rescue render).
-  eyeGlow    0.16
+  # BLACK paint, not a glow — and much blacker than the goblin-era instinct
+  # would suggest. The sheet is an albedo MULTIPLIER normalized by its own
+  # mean, so the eye darkens by eyeGlow/mean; on this PALE skin the lit
+  # cheek sits in the tonemap's compressed shoulder and a 0.16 eye (0.36x)
+  # washes out completely, while on the shadow side it merges with the
+  # shade. 0.05 is 0.11x: still a visible dot against the blown-out cheek,
+  # invisible in shade — one eye reading from any angle beats two reading
+  # from none. Measured on the turntable, not theorized.
+  eyeGlow    0.05
   # NOTE: the drawer hardcodes its 1.25 squash (blob-face-sheet.ts draws
   # hypot(dx, dy * 1.25)); this key is accepted but inert today. Eyes will
   # run slightly WIDE of the reference's tall ovals until the drawer reads
@@ -223,7 +230,11 @@ sheet
   # the groove gives it shadow; if the two drift apart on render, trust the
   # render and re-site whichever is wrong (the goblin's shades lesson).
   mouthCurve 0.35
-  mouthOpen  0.026
+  # 0.034, up from 0.026: same wash-out physics as eyeGlow above. The line
+  # is 1.7 texels at the 64px atlas and its soft edge is wider than the
+  # line — what survives to the screen is the core only, and the pale skin
+  # eats it. Thicker is the only dial the format gives.
+  mouthOpen  0.034
   nostril    0.15
   noseRidge  0.0
   noseWide   0.0
