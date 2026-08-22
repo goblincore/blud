@@ -34,11 +34,33 @@ kill_group() {
   local pid="$1"
   [ -n "$pid" ] || return 0
   kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+  # `kill` only DELIVERS the signal — it does not wait for the process to go.
+  # Reap it here, otherwise this script can exit while its own Chrome is still
+  # mid-shutdown and still bound to the debug port.
+  wait "$pid" 2>/dev/null || true
 }
 
+# ...and being reaped is still not the same as the port being free: the socket
+# unbinds a beat later. Without this poll, two blob-shot runs chained back to
+# back would let the second one `curl` the first one's dying browser, print
+# "reusing", and then drive a browser that is on its way out.
+wait_port_closed() {
+  local url="$1" i
+  for i in $(seq 1 25); do            # 25 * 0.2s = 5s ceiling
+    curl -sf "$url" >/dev/null || return 0
+    sleep 0.2
+  done
+  echo "blob-shot: warning — $url still answering 5s after we stopped it" >&2
+  return 0
+}
+
+# Only ever wait on the ports WE opened. A server someone else owns is supposed
+# to still be answering when we leave.
 cleanup() {
   kill_group "$started_vite"
   kill_group "$started_chrome"
+  if [ -n "$started_vite" ]; then wait_port_closed "http://localhost:$VITE_PORT/"; fi
+  if [ -n "$started_chrome" ]; then wait_port_closed "http://localhost:$CDP_PORT/json/version"; fi
   return 0
 }
 trap cleanup EXIT
