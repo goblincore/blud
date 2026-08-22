@@ -28,34 +28,62 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
 
 ## The loop
 
-1. **Write** `src/lab/sdf-zombie/characters/<name>.blob`.
-2. **Compile and check:** `npx vitest run src/lab/sdf-zombie/` (no special
-   env needed — verified against the current suite, 64 files / 1203 tests).
-   For a fast inner loop, scope it to
-   `src/lab/sdf-zombie/blob-parse.test.ts src/lab/sdf-zombie/blob-compile.test.ts
-   src/lab/sdf-zombie/blob-checks.test.ts src/lab/sdf-zombie/characters/zombie-blob.test.ts`.
-3. **Look at it** with the turntable. It needs a running dev server and a
-   *headed* Chrome with a debug port open — it will not work against a
-   default `npx vite` alone:
-   ```
-   npx vite --port 5233 --strictPort &
-   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-     --remote-debugging-port=9223 --enable-unsafe-webgpu \
-     --user-data-dir=/tmp/chrome-blob-turntable &
-   BLOB_CHARACTER=<name> BLOB_DIST=1.35 node scripts/blob-turntable.mjs 5233 /tmp/<name>
-   ```
-   `BLOB_CHARACTER` is passed through as the lab's `?character=`; without it
-   you shoot the lab default and can spend a while judging the wrong body.
-   `BLOB_DIST` (and `BLOB_PITCH`) override the camera framing — the default
-   2.4 m frames the ~1.8 m zombie, and a 1.30 m goblin shot at that distance
-   is a small figure in a large empty room, which is exactly the wrong image
-   for judging whether two limbs read as separate.
-   Then open `/tmp/<name>/index.html` (or the individual `frame-NN.png`s) and
-   actually look. Read the script's own header comment — it documents a real
-   determinism limit (frames match in content, ~0.3-0.4% of pixels differ
-   byte-for-byte run to run; treat them as reproducible for review, not as a
-   byte-diffable golden image).
-4. **Iterate on the text**, never on compiled output.
+1. **Get the reference as geometry.** `docs/dev-notes/refs/<name>-mesh/*.glb`
+   if it exists; a plate (`<name>-reference.png`) if not. If you have neither,
+   stop and ask for one — two characters were authored from prose and both
+   drifted a long way (`docs/dev-notes/refs/README.md`).
+2. **Measure before you touch anything:** `npm run blob:measure -- <name>`.
+   Read the three worst bands. Each names a `.blob` line. That is your edit
+   list, in order. If it prints POSE MISMATCH, score a `--range` window where
+   the poses agree and treat whole-figure numbers as a before/after gradient
+   only.
+3. **Edit the line. Re-measure.** One band at a time. The score should move; if
+   it does not, the band is owned by a different line than you thought — the
+   tool told you which.
+4. **Every ~5 edits, look:** `npm run blob:shot -- <name>`, then `Read` the
+   frames. The measure cannot see a hole behind the front surface, a feature
+   smeared by `blend=`, or a colour. The pictures can.
+5. **See something the measure did not predict?** Run
+   `npm run blob:render-check -- <name>` *before* editing the `.blob`. If it
+   fails, the bug is in `webgpu/`, not in your file.
+6. Tests: `npx vitest run src/lab/sdf-zombie/`. The character's own
+   `*-blob.test.ts` pins measured properties; update the numbers it pins when
+   you change them on purpose, with a comment saying why.
+
+Iterate on the `.blob` text, never on compiled output.
+
+### Running the turntable by hand
+
+`npm run blob:shot` automates exactly the steps below (it starts a Vite server
+on 5233 and a Chrome on debug port 9223 only if they are not already
+listening, and stops only what it started). They remain true, and are what to
+fall back to when you need a different port, a headed window, or to watch the
+lab itself:
+
+```
+npx vite --port 5233 --strictPort &
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9223 --enable-unsafe-webgpu \
+  --user-data-dir=/tmp/chrome-blob-turntable &
+BLOB_CHARACTER=<name> BLOB_DIST=1.35 node scripts/blob-turntable.mjs 5233 /tmp/<name>
+```
+
+`BLOB_CHARACTER` is passed through as the lab's `?character=`; without it you
+shoot the lab default and can spend a while judging the wrong body. `BLOB_DIST`
+(and `BLOB_PITCH`) override the camera framing — the default 2.4 m frames the
+~1.8 m zombie, and a 1.30 m goblin shot at that distance is a small figure in a
+large empty room, which is exactly the wrong image for judging whether two
+limbs read as separate. Then open `/tmp/<name>/index.html` (or the individual
+`frame-NN.png`s) and actually look. Read the script's own header comment — it
+documents a real determinism limit (frames match in content, ~0.3-0.4% of
+pixels differ byte-for-byte run to run; treat them as reproducible for review,
+not as a byte-diffable golden image).
+
+For the full suite rather than the character's own tests, `npx vitest run
+src/lab/sdf-zombie/` needs no special env. For a fast inner loop, scope it to
+`src/lab/sdf-zombie/blob-parse.test.ts src/lab/sdf-zombie/blob-compile.test.ts
+src/lab/sdf-zombie/blob-checks.test.ts
+src/lab/sdf-zombie/characters/zombie-blob.test.ts`.
 
 ## Make the limbs READ, not just connect
 
@@ -242,6 +270,11 @@ face sliders in `panel.ts` are live-tunable on screen, but getting a tuned
 value back into `.blob` text still means reading it off the panel and typing
 it into the `face` block yourself, or calling `emitBlob` programmatically.
 
+**Every number has a source.** Either it was measured (say from what:
+`# mesh width at y 0.76 = 0.142`) or the comment says why not (`# eyeballed;
+the mesh has no ear dish, owner asked for one`). A number with neither is a
+guess, and guesses are what `blob:measure` exists to replace.
+
 ## Two constraints that bite silently
 
 - **Within one limb, primitive order is fold order.** The smooth-min used to
@@ -355,15 +388,65 @@ feeds gloss into the specular term. `DATA_ROWS` is 13.
 
 ## Measure against the mesh, frame-aligned
 
-When a character has a reference `.glb` (`docs/dev-notes/refs/maus-biped/`),
-`npx tsx scripts/head-profile.ts <name>` prints the head's front/back profile,
-the muzzle's plan view and ASCII front/side views against the mesh. It aligns
+**Start with `npm run blob:measure -- <name>`** — it is the whole-figure tool
+and the only one that names the `.blob` LINE owning each bad band. It resolves
+its reference itself: `--glb`, else the first `.glb` under
+`docs/dev-notes/refs/<name>-mesh/`, else `--plate`, else
+`docs/dev-notes/refs/<name>-reference.png`. Read its header comment in
+`scripts/blob-measure.ts` before quoting its numbers at anyone — in particular
+that a whole-figure IoU is a before/after gradient for ONE character against
+ONE reference, never a target to optimise and never a grade across characters,
+and that exit 2 means "did not run" (no `.blob`, no reference, build error) and
+must never be read as a score of zero. It prints POSE MISMATCH when the
+reference's pose dominates: the maus mesh holds its arms straight out while the
+`.blob` rests them at ~47 degrees, so score a `--range` window where the poses
+agree (`--range 0.75:1` is legs and shoes, where nothing is posed) and act on
+those bands.
+
+`npx tsx scripts/silhouette-match.ts <name> [--range lo:hi]` is the older
+whole-outline scorer that blob-measure supersedes — same raster, but it cannot
+tell you which line owns a band. Same caveat, recorded in `silhouette.ts`.
+
+For close-ups the head tool is still the right one: `npx tsx
+scripts/head-profile.ts <name>` prints the head's front/back profile, the
+muzzle's plan view and ASCII front/side views against the mesh. It aligns
 frames on the TORSO's z-centre and prints the shift — the maus mesh's whole
 figure sits at z -0.067 in its own file, and comparing absolute z once leaned
-the neck back 40 degrees to "fix" a head that was already right. Author to
-the mesh SURFACE, not its rig joints: the rig's shoulder/collar heights were
-9 and 13 cm above where the skin is.
+the neck back 40 degrees to "fix" a head that was already right. Author to the
+mesh SURFACE, not its rig joints: the rig's shoulder/collar heights were 9 and
+13 cm above where the skin is.
 
-`npx tsx scripts/silhouette-match.ts <name> [--range lo:hi]` scores the whole
-outline against a plate. Read the caveat in `silhouette.ts`: the number is a
-gradient for one character against one plate, never a grade across characters.
+Reference meshes live in `docs/dev-notes/refs/<name>-mesh/` (the maus is
+`docs/dev-notes/refs/maus-biped/`). Check with `git ls-files` whether the one
+you need is committed — a dispatched agent works in a fresh worktree, so an
+untracked mesh in the primary checkout does not exist for it.
+
+## Failure triage — what it looks like vs what it is
+
+Every row here cost at least an hour of editing the wrong file. Check the table
+before you change a number. Paths are relative to `src/lab/sdf-zombie/`.
+
+| what you see | what it usually is | where |
+| --- | --- | --- |
+| a perfectly ROUND see-through hole, CPU field solid there | occluder hull sized a tapered prim from its fat end, or another hull/pre-pass bug | `webgpu/occluder-hull.ts`; run `blob:render-check` |
+| a bent capsule renders as ONE sphere at its start | `coneBend` untapered branch | `webgpu/march.wgsl.ts` |
+| a `both`/mirrored part sits on the centreline | mirror did not reflect x | `mirror.ts` |
+| a limb's distal part "disconnects" after a paint or reorder | `clusterCore` picked the wrong prim; mark the structural one `core` | `validate.ts` `clusterCore` |
+| a small feature is smeared / missing | `blend=` wider than the feature | the `.blob` — shrink blend or use `chamfer` |
+| a stripe of flesh through a painted area, from one angle only | the camera, not the paint — `focusBody` was aiming down the collar | look from another yaw first (`webgpu/lab-main.ts`) |
+| the whole body blanks | a zero in a panel override (`setStepsOverride(0)` used to) | `webgpu/lab-main.ts` |
+| head reads right but sits 60 mm off in profile vs the mesh | the mesh is not at the same z — frame-align on the torso | `scripts/head-profile.ts` prints the shift |
+| the whole-figure score is stuck while the sculpt is right | the reference's POSE (arms out vs down) dominates IoU | `blob:measure --range` over a window where poses agree |
+
+The general rule the mouse paid for: **if a hole is round and the CPU field
+(`sdBody`) is solid there, suspect the renderer, not the `.blob`.**
+`npm run blob:render-check -- <name>` is that comparison automated — one
+front-on GPU frame against a CPU march of the same body through the same
+camera. Exit 1 names the cluster locations and the owning line of a hole the
+GPU shows and the field does not; exit 0 means the renderer agrees with the
+field, so the defect is yours to fix in the `.blob`; exit 2 means it could not
+run. It needs the blob-shot servers (Vite 5233, Chrome 9223) already running
+— `npm run blob:shot -- <name>` in another shell is the easy way to have them.
+
+The full account of these, and the day they cost, is
+`docs/dev-notes/2026-08-22-painted-sdf-outfit.md`.
