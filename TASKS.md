@@ -511,10 +511,26 @@ Key reference docs (open these before touching their area):
   mouse's shades, shoes, tee, shorts and sleeves are painted SDF and its kit
   is DELETED. Head and body re-proportioned to the mesh surface (frame-aligned;
   shoulder 0.53, collar 0.60), ears dished, lenses wrap the cheek with temple
-  arms. Silhouette vs plate 0.660 -> 0.774. Engine fixes on the way: occluder
-  hull per-end radius (the "orb nose hole"), coneBend untapered branch,
-  expandMirror x-reflection, clusterCore `core`, setStepsOverride(0),
-  focusBody height. OPEN: hands enlarged but unreviewed; merge to main.
+  arms. Silhouette vs plate 0.660 -> 0.774 (re-measured 2026-08-22 with
+  blob-measure: 0.804). Engine fixes on the way: occluder hull per-end
+  radius (the "orb nose hole"), coneBend untapered branch, expandMirror
+  x-reflection, clusterCore `core`, setStepsOverride(0), focusBody height.
+  OPEN: hands enlarged but unreviewed; merge to main.
+  **Agent toolbox baselines (2026-08-22, branch `agent-toolbox`, plan
+  docs/superpowers/plans/2026-08-22-sdf-agent-toolbox.md):**
+  | character | ref | IoU | mean width err | pose mismatch | worst band (line) | render-check |
+  |---|---|---|---|---|---|---|
+  | mouse | mesh (full) | 0.669 | 0.094 | yes | band 8, line 433, upperarm.r (armR), delta -0.356 | exit 0, OK |
+  | mouse | plate (full) | 0.804 | 0.053 | yes | band 11, line 450, f_index.r (armR), delta +0.346 | exit 0, OK |
+  | mouse | mesh, range 0.75:1 | 0.682 | 0.013 | no | band 8, line 497, foot.r (legR), delta +0.045 | exit 0, OK |
+  | mouse | plate, range 0.75:1 | 0.800 | 0.015 | no | band 7, line 498, foot.r (legR), delta -0.054 | exit 0, OK |
+  | goblin | none | no ref | no ref | no ref | no ref | exit 0, OK |
+  | zombie | none | no ref | no ref | no ref | no ref | exit 0, OK |
+  | clown | plate (clown-1-ref.png) | 0.561 | 0.155 | yes | band 1, line —, kit (kit), delta +0.348 | exit 0, OK |
+  | clown-alt | plate (clown-1-ref.png) | 0.605 | 0.152 | yes | band 13, line 197, shin.r (legR), delta -0.295 | exit 0, OK |
+  Whole-figure IoU is a before/after gradient per character, never a target
+  (reference poses differ from the rest pose). The Task 11 trial is judged
+  against these numbers.
   **Mouse proportions run (2026-08-22, `dispatch/mouse-proportions`):** rebuilt
   the mouse to the maus-biped RIG joint heights (skeleton was a big head on
   stubby legs — head ~53% of the file). Lengthened legs (thigh/shin ~46%) and
