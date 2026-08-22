@@ -531,6 +531,7 @@ Key reference docs (open these before touching their area):
   Whole-figure IoU is a before/after gradient per character, never a target
   (reference poses differ from the rest pose). The Task 11 trial is judged
   against these numbers.
+  **Task 11 trial queued (2026-08-22):** `~/.claude/dispatch/plans/2026-08-22-trial-mouse-shoes.md` — `zai/glm-5.1`, base `main`, ONE JOB: the mouse's shoe bands (0.88/0.90, line 497) within ±0.015 of the mesh in `--range 0.75:1`, IoU 0.682 -> >=0.70. Judge on three things: did it measure first, did the numbers move, did it look at frames. The hands were NOT chosen because whole-figure silhouette cannot see them (pose mismatch); they need a local measure like head-profile — open follow-up.
   **Mouse proportions run (2026-08-22, `dispatch/mouse-proportions`):** rebuilt
   the mouse to the maus-biped RIG joint heights (skeleton was a big head on
   stubby legs — head ~53% of the file). Lengthened legs (thigh/shin ~46%) and
