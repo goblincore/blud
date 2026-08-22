@@ -501,7 +501,7 @@ body
   #      (0.244 -> 0.297 -> 0.334 of height across 3 bands), ours stepped out
   #      in one. The equator bands (0.91-0.99) lose only 0.005 each and stay
   #      inside tolerance; the ankle-side onset is the WALL prim's job now.
-  blob leg on foot at=0.00 r=0.062 wide=1.15 tall=0.85 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
+  blob leg on foot at=0.00 r=0.062 wide=1.13 tall=0.82 deep=1.10 blend=0.0080 offset=(0.076,-0.082,0.100) mirror color=b9b9bc gloss=0.25
   #   2b. the WALL — the shoe upper's side, a flattened tapered capsule from
   #       the ankle down-and-out to the ball. No sphere can be this: the mesh
   #       outer edge runs 0.101@y0.147 -> 0.121@0.130 -> 0.132@0.122 ->
@@ -519,7 +519,7 @@ body
   #       +0.001); deep 1.30 spans z -0.01..0.15 so the wall reads heel to
   #       toe. The thin y (r_y 0.018) is fine: below y 0.10 the wall is
   #       buried in the ball, only its side face shows.
-  blob leg on foot at=0.00 r=0.045 r2=0.048 wide=1.00 tall=0.40 deep=1.30 blend=0.0060 offset=(0.032,-0.015,0.056) tip=(0.048,-0.036,0.027) mirror color=b9b9bc gloss=0.25
+  blob leg on foot at=0.00 r=0.043 r2=0.044 wide=1.00 tall=0.40 deep=1.30 blend=0.0060 offset=(0.022,-0.015,0.056) tip=(0.046,-0.036,0.027) mirror color=b9b9bc gloss=0.25
   blob leg on foot at=0.00 r=0.045 wide=1.00 tall=0.80 deep=1.10 blend=0.0070 offset=(0.019,-0.016,0.012) mirror color=b9b9bc gloss=0.25
 
 # THE CRANIUM, measured off the reference mesh rather than guessed off a
