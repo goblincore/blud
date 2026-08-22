@@ -40,6 +40,7 @@
 // a byte-diffable golden-image gate.
 //
 // Usage: node scripts/blob-turntable.mjs <vitePort> <outDir> [frames] [cdpPort]
+// Prefer scripts/blob-shot.sh, which starts and stops the server and browser for you.
 //
 // Which character gets shot comes from the BLOB_CHARACTER env var, which is
 // passed straight through as the lab's `?character=` query parameter (see the

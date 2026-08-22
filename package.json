@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "blob:measure": "tsx scripts/blob-measure.ts",
+    "blob:shot": "scripts/blob-shot.sh",
     "test:watch": "vitest"
   },
   "dependencies": {
