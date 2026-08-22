@@ -172,8 +172,21 @@ body
 # scowl dial), no parameterised nose at all (noseLength disabled — the bead
 # above IS the nose), and a vestigial jaw that only rounds off the bottom.
 face
+  # HEAD SIZE IS A KIT-WIDE CHANGE, not a dial. Owner review says the head is
+  # too narrow, and it is — but growing headRadius 0.235 -> 0.265 made SIX kit
+  # pieces fail the through-body check at once (cap band, stud, ruff, tunic,
+  # tufts, nose): every one of them is fitted to a 0.235 skull. Widening in x
+  # alone (headWidth below) does not fix the read either, because the CAP does
+  # not grow with it and the skull stays a sliver under a hat three times its
+  # width. Doing this properly means re-fitting the whole .wam against a bigger
+  # head, which is a task, not a tweak.
   headRadius 0.235
-  headWidth  0.96
+  # WIDER. At 0.96 the skull was narrower than the cap and the hair tufts —
+  # which mount off its flanks — hung in the air beside it with daylight
+  # between. The owner: "the two purple things ... are floating off to the
+  # side because his head is too small and narrow". 1.18 closes that, and a
+  # clown head SHOULD be a broad ball.
+  headWidth  1.18
   headHeight 1.00
   headDepth  0.92
   jawWidth   0.78
@@ -273,14 +286,27 @@ sheet
 # the raw numbers suggest. The mottle is ROSY at low amplitude: faint warmth
 # in the cheeks and knuckles, never dirt.
 palette
-  baseColor     0.74 0.65 0.52
+  # WHITE FACE PAINT, not skin. This was 0.74 0.65 0.52 — a beige that read as
+  # dirty flesh rather than greasepaint. Kept a touch off pure white so the
+  # tonemap shoulder has somewhere to go and the features do not sit on a
+  # blown-out disc.
+  baseColor     0.93 0.91 0.89
   deepColor     0.55 0.18 0.14
   charColor     0.10 0.08 0.07
-  specIntensity 0.30
-  specRoughness 0.55
-  fresnelBoost  0.25
-  translucency  0.25
-  wetness       0.20
-  mottleAmp     0.30
+  # SHINY, like every hard surface on this character. Greasepaint on rubber is
+  # not matte — a tight bright highlight, not the goblin's broad clammy sheen.
+  specIntensity 0.85
+  specRoughness 0.22
+  fresnelBoost  0.40
+  translucency  0.18
+  wetness       0.45
+  # SMOOTH. The preset's surfaceNoiseAmp (0.06) perturbs the NORMAL, which on a
+  # pale face reads as roughness/grime — the owner's word was "rough". Both
+  # noise terms go to zero: this is painted rubber, not meat.
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  # And no blotching, for the same reason. It was 0.30, which mottled the
+  # white paint toward a dried-blood brown.
+  mottleAmp     0.0
   mottleScale   1.6
   mottleColor   0.62 0.24 0.20

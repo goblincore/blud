@@ -102,7 +102,35 @@ const LOOK: Record<string, {
   // different and much less goblin note. See the emissive field's docstring for
   // why real transparency is not a material flag here.
   glass: { metalness: 0.35, roughness: 0.04, envIntensity: 2.0 },
+
+  // ---- clown ----
+  // "Everything in this game is either shiny or fleshy or some combination."
+  // These are all dielectric — cloth and painted rubber, not metal — so the
+  // sheen comes from LOW ROUGHNESS and a strong env, not from metalness.
+  // Pushing metalness on a coloured material eats its albedo and leaves a
+  // tinted mirror, which is how the goblin's first brass read.
+  nose:    { metalness: 0.10, roughness: 0.08, envIntensity: 2.2 },
+  red:     { metalness: 0.08, roughness: 0.14, envIntensity: 1.7 },
+  royal:   { metalness: 0.06, roughness: 0.26, envIntensity: 1.1 },
+  blue:    { metalness: 0.06, roughness: 0.26, envIntensity: 1.1 },
+  pink:    { metalness: 0.06, roughness: 0.28, envIntensity: 1.0 },
+  purple:  { metalness: 0.06, roughness: 0.24, envIntensity: 1.1 },
+  yellow:  { metalness: 0.06, roughness: 0.24, envIntensity: 1.1 },
+  white:   { metalness: 0.04, roughness: 0.30, envIntensity: 0.9 },
+  grey:    { metalness: 0.10, roughness: 0.28, envIntensity: 1.1 },
+  gold:    { metalness: 0.70, roughness: 0.22, envIntensity: 1.3 },
 };
+
+/**
+ * Anything not named above still gets an environment and a modest sheen.
+ *
+ * It used to get NOTHING — the apply below was gated on `if (look)`, so an
+ * unlisted material kept three's default `roughness: 1, metalness: 0` and no
+ * envMap, which is fully matte. Every material in the clown kit was unlisted,
+ * which is the whole reason that character read as flat poster paint. A kit
+ * should not have to enumerate itself to look like it belongs in the scene.
+ */
+const LOOK_DEFAULT = { metalness: 0.05, roughness: 0.35, envIntensity: 0.9 };
 
 export interface KitOverlay {
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
@@ -160,15 +188,17 @@ export async function loadKit(
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
       const std = mat as THREE.MeshStandardMaterial;
-      const look = LOOK[mat.name];
-      if (look && std.isMeshStandardMaterial) {
+      const look = LOOK[mat.name] ?? LOOK_DEFAULT;
+      if (std.isMeshStandardMaterial) {
         std.metalness = look.metalness;
         std.roughness = look.roughness;
         std.envMap = env;
         std.envMapIntensity = look.envIntensity;
-        if (look.emissive) {
-          std.emissive.setRGB(...look.emissive);
-          std.emissiveIntensity = look.emissiveIntensity ?? 1;
+        const em = (look as { emissive?: [number, number, number] }).emissive;
+        if (em) {
+          std.emissive.setRGB(...em);
+          std.emissiveIntensity =
+            (look as { emissiveIntensity?: number }).emissiveIntensity ?? 1;
         }
         std.needsUpdate = true;
       }

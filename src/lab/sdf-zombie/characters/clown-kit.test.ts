@@ -92,7 +92,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // assertion failing. The list changes only by a deliberate palette edit.
   it('decodes the compiled kit', () => {
     expect([...groups.keys()].sort()).toEqual(
-      ['blue', 'gold', 'grey', 'pink', 'purple', 'red', 'royal', 'white', 'yellow']);
+      ['blue', 'grey', 'nose', 'pink', 'purple', 'red', 'royal', 'white', 'yellow']);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
   });
 
@@ -104,7 +104,23 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // ended up 53 mm inside the belly.
   const TUCK_MAX = 0.045;
 
+  /**
+   * The hair tufts are ROOTED, not tucked, and get their own allowance.
+   *
+   * They mount off the skull's flanks and are meant to be buried at the root —
+   * the visible part is the sweep outside the head. The skull was then made
+   * 23% wider (headWidth 0.96 -> 1.18) because owner review said the tufts
+   * "are floating off to the side because his head is too small and narrow",
+   * and a wider skull pushes its own surface OUT past those roots. The extra
+   * depth is that fix working.
+   *
+   * Still bounded, and well short of the failure it guards: a tuft punching
+   * out through the FAR side of a skull whose half-width is ~0.28.
+   */
+  const TUCK_MAX_BY_MATERIAL: Record<string, number> = { purple: 0.08 };
+
   it.each([...groups.keys()])('no %s vertex passes through the body', name => {
+    const limit = TUCK_MAX_BY_MATERIAL[name] ?? TUCK_MAX;
     const vs = groups.get(name)!;
     let worst = Infinity, at: Vec3 = vs[0]!;
     for (const v of vs) {
@@ -112,7 +128,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
       if (d < worst) { worst = d; at = v; }
     }
     expect(worst, `${name} deepest vertex at (${at.map(n => n.toFixed(3)).join(', ')})`)
-      .toBeGreaterThan(-TUCK_MAX);
+      .toBeGreaterThan(-limit);
   });
 
   // THE OWNER'S EXPLICIT COMPLAINT ABOUT ATTEMPT ONE: "the cap swallowed the
@@ -165,10 +181,17 @@ describe('clown-kit.gltf fits clown.blob', () => {
     expect(frontZ).toBeGreaterThan(0.14);
   });
 
-  // Sole bottoms out ON the ground, not through it (ankle y 0.086 minus the
-  // slab's 62 mm drop minus half its depth ≈ 10 mm).
-  it('shoe soles sit on the ground', () => {
-    expect(Math.min(...groups.get('gold')!.map(v => v[1]))).toBeGreaterThan(0);
+  // THERE IS NO SOLE ANY MORE, and no `gold` geometry at all. This asserted a
+  // gold slab bottomed out on the ground; owner review read that slab as a
+  // SANDAL worn under the shoe ("remove the sandles") and it went, along with
+  // the gold toe balls that the fattened shoe then swallowed whole.
+  //
+  // The invariant it protected — the footwear reaches the floor and does not
+  // sink through it — still matters, so it moves onto the red shoe itself.
+  it('shoes reach the ground without sinking through it', () => {
+    const lowest = Math.min(...groups.get('red')!.map(v => v[1]));
+    expect(lowest).toBeGreaterThanOrEqual(0);
+    expect(lowest).toBeLessThan(0.02);
   });
 
   // The mitts are white puffs swallowing the flesh mitten whole; they ride

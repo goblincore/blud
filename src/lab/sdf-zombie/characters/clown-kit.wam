@@ -73,6 +73,10 @@ palette
   purple  #a878e0
   grey    #d2cec6
   red     #f04a3e
+  # The nose gets its OWN red, brighter and more saturated than the shoes'.
+  # A clown nose is the most saturated thing on the character and it was
+  # sharing the shoe red, which is deep enough to read maroon under the key.
+  nose    #ff2d1c
   gold    #e2b13f
   yellow  #f6cf4d
   white   #f6f1e6
@@ -301,7 +305,7 @@ parts
     # stands ~36 mm proud of the flesh bead's own front (0.226) — about 70%
     # of the ball in front of the face, which is exactly how a foam clown
     # nose sits.
-    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.216) size=0.052 w=0.108 h=0.100 d=0.096 material=red
+    attach nose bone=skull kind=sphere at=0.45 offset=(0,-0.045,0.216) size=0.052 w=0.108 h=0.100 d=0.096 material=nose
 
     # STOCKING — thin blue leg, tight (+6-8 mm over the measured balls and
     # shafts), ending just above the ankle where the shoe takes over.
@@ -337,33 +341,31 @@ parts
     # foot bone stops short of the toe it exists to exaggerate — the
     # goblin kit's boot lesson verbatim. Oversized IS the joke: 0.15 forward
     # of the ankle plus domes, against a 0.095 foot bone.
-    loft shoe bone=shin at=1.0 dir=fwd len=0.150 frame=up material=red
-      ring 0.00 w=0.100 d=0.115
-      ring 0.30 w=0.125 d=0.120
-      ring 0.60 w=0.135 d=0.105
-      ring 0.90 w=0.105 d=0.080
-      ring 1.00 w=0.070 d=0.055
+    # DROPPED 21 mm and fattened. (31 mm overshot: fattening the rings extends
+    # the shoe downward too, so the two drops compound and it sank 10 mm
+    # THROUGH the floor.) Removing the gold sole took the shoe's
+    # lowest geometry with it and WAM's lint caught the result — "lowest
+    # geometry floats 0.031 above ground". The shoe now reaches the floor on
+    # its own, and since it is the only footwear left it carries the bulk the
+    # sole used to: these are meant to be BIG red clown shoes.
+    loft shoe bone=shin at=1.0 dir=fwd len=0.165 frame=up offset=(0,-0.021,0) material=red
+      ring 0.00 w=0.108 d=0.132
+      ring 0.30 w=0.138 d=0.140
+      ring 0.60 w=0.148 d=0.124
+      ring 0.90 w=0.116 d=0.094
+      ring 1.00 w=0.076 d=0.062
       cap start=dome end=dome
 
-    # SOLE — the gold underside, a flat box slab hung 62 mm BELOW the ankle
-    # axis so it bottoms out at y ~0.010: on the ground, not through it.
-    # Sized slightly proud of the red body so a gold rim reads all around.
-    # NOTE it renders matte: shiny materials need an entry in
-    # kit-overlay.ts's LOOK table for env reflections, and this task's rules
-    # confine edits to characters/ — recorded as a known gap, not fixed by
-    # faking emissive.
-    loft sole bone=shin at=1.0 dir=fwd len=0.130 offset=(0,-0.062,0.05) frame=up shape=box material=gold
-      ring 0.00 w=0.118 d=0.030
-      ring 0.50 w=0.132 d=0.028
-      ring 1.00 w=0.100 d=0.024
-      cap start=none end=none
+    # NO SOLE. There was a gold box lofted under the shoe here as a sole. In the
+    # render it did not read as a sole — it read as a SANDAL worn under the shoe,
+    # a separate gold slab with its own silhouette below the red. Owner's verdict
+    # was "remove the sandles". The shoe is one red mass now.
 
-    # TOE BALL — the small yellow ball on the shoe's toe. Hosted on the FOOT
-    # bone at its tail (WAM lint flagged the shin-hosted version: its origin
-    # sat nearer the foot), placed by hand — NOT `on=shoe`: surface snapping
-    # sinks it by a third of its radius, and the fit test bounds how deep
-    # that may go.
-    attach toe bone=foot kind=sphere at=1.0 offset=(0,-0.030,0.062) size=0.034 material=yellow
+    # NO TOE BALL. There was a small yellow ball on each toe. Fattening the
+    # shoe to reach the ground swallowed it — WAM's lint: "part 'toe.l' is
+    # entirely inside 'shoe.l' ... costs triangles and shows nothing". The
+    # brief is "just big red clown shoes", so it goes rather than being
+    # grown back out through the leather.
   end
 
 textures

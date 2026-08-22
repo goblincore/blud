@@ -42,11 +42,22 @@ describe('clown.blob', () => {
     expect(r).toBeGreaterThan(g);
     expect(g).toBeGreaterThan(b);
     expect(r).toBeGreaterThan(0.7);
-    // Wounds stay red under the cream.
+    // Wounds stay red under the paint.
     expect(m.deepColor[0]).toBeGreaterThan(m.deepColor[2]);
-    // Stage makeup is even, but not flat: the rosy mottle is a per-character
-    // decision and off (0) in every stock preset.
-    expect(m.mottleAmp).toBeGreaterThan(0);
+    // This used to assert `mottleAmp > 0` on the reasoning that stage makeup
+    // is "even, but not flat". Owner review said the opposite: the mottle read
+    // as grime on a pale face ("the texture makes it look rough"), and the
+    // face is now WHITE GREASEPAINT — flat, smooth and shiny.
+    //
+    // The invariant that assertion actually protected is still worth having:
+    // that this character carries its OWN palette rather than silently falling
+    // back to a stock preset. Assert that against the things the block now
+    // sets deliberately AGAINST every preset — both noise terms at zero (no
+    // preset ships 0 for surfaceNoiseAmp) and a tight, bright specular.
+    expect(m.surfaceNoiseAmp).toBe(0);
+    expect(m.silhouetteNoiseAmp).toBe(0);
+    expect(m.specIntensity).toBeGreaterThan(0.7);
+    expect(m.specRoughness).toBeLessThan(0.3);
   });
 
   it('folds its knees the way it declared', () => {
