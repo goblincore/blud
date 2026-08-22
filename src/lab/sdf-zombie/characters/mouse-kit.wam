@@ -142,7 +142,26 @@ parts
     # reference's numbers: ankle mouth ~0.096 wide, ball ~0.168 wide, ~0.34
     # long, pale grey body, WHITE toe cap.
     # ================================================================
-    loft shoe bone=shin at=1.0 offset=(0,0,0.010) dir=fwd len=0.280 frame=up material=shoe
+    # THEY SPLAY. Without `yaw` these two lofts both ran straight down +z and
+    # FUSED INTO ONE POD: the ankles sit at x +/-0.031 while the ball ring is
+    # w 0.140 and the sole w 0.150 (WAM `w` is FULL width, so ~0.070-0.075 of
+    # half-width each), and each shoe therefore crossed the centreline by
+    # about 40 mm. Measured off the built glTF, vertices below y 0.18 spanned
+    # -0.112..+0.112 with NO trough at x=0, where two separate shoes show two
+    # humps.
+    #
+    # Widening the stance cannot fix that on its own — these shoes are simply
+    # broader than any believable gap between a mouse's ankles. Yawing them
+    # outward can, and it is what the plates show: the length that was all in
+    # +z now contributes to the x-span, and the two diverge instead of
+    # overlapping. Span goes +/-0.112 -> +/-0.213 and the silhouette's shoe
+    # band lands on the plate's 0.345 (0.354 at the widest).
+    #
+    # 25 degrees. The angle is flat between 23 and 27 — IoU 0.749/0.748, mean
+    # width error 0.029 either way — and falls off past that (20 and 31 both
+    # give 0.032), so this is the middle of a plateau rather than a peak
+    # someone should try to sharpen.
+    loft shoe bone=shin at=1.0 offset=(0,0,0.010) dir=fwd yaw=25 len=0.280 frame=up material=shoe
       ring 0.00 w=0.062 d=0.150 up=-0.053
       ring 0.20 w=0.084 d=0.140 up=-0.058
       ring 0.45 w=0.120 d=0.118 up=-0.066
@@ -156,7 +175,7 @@ parts
     # floats at ankle height; the shoe bridges to 0). Same hanging-ring
     # trick: ray at the ankle, rings pulled down so the slab's base sits on
     # y 0, d = the slab's own ~0.021 thickness.
-    loft sole bone=shin at=1.0 offset=(0,0,0.005) dir=fwd len=0.290 frame=up material=white
+    loft sole bone=shin at=1.0 offset=(0,0,0.005) dir=fwd yaw=25 len=0.290 frame=up material=white
       ring 0.02 w=0.100 d=0.020 up=-0.118
       ring 0.50 w=0.150 d=0.022 up=-0.117
       ring 1.00 w=0.070 d=0.018 up=-0.120
