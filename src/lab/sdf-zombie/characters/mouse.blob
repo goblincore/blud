@@ -39,51 +39,52 @@ model mouse
   stance humanoid
 
 skeleton
-  # LOLLIPOP STACK, measured off the reference: crotch at ~0.28 of height,
-  # tee hem 0.33, collar 0.605, chin 0.645, crown 0.972, ear discs to 1.099.
-  # The legs are HALF the goblin's proportion and the head carries the top of
-  # the file; the pelvis numbers look absurd next to the goblin's but the tee
-  # and shorts (kit) carry most of the visual torso anyway.
-  root pelvis at 0.235 len=0.075
+  # LOLLIPOP STACK, rebuilt against the reference RIG, not a screenshot.
+  # Joint heights as a fraction of standing height, taken from the maus-biped
+  # skeleton's inverseBindMatrices (see docs/dev-notes/2026-08-22-maus-rig-
+  # proportions.md): ankle 12.7%, hips 32.1%, shoulder 56.5%, neck 66.3%,
+  # head-base 74.1%, top 100%. The body splits into near-thirds: legs
+  # (toe->hips) 32.1%, torso (hips->neck) 34.2%, head (neck->top) 33.7%.
+  # The previous file was a big head on stubby legs (head ~53% of the file)
+  # — this stack LENGTHENS the legs and torso so the head's share falls out.
+  # height=1.10, so fraction*1.10 = metres: ankle 0.140, hip 0.353, shoulder
+  # 0.622, neck-base 0.729, head-base 0.815, top ~1.10.
+  root pelvis at 0.262 len=0.091     # pelvis tail = hip line (0.353)
 
-  bone spine1 parent=pelvis dir=up pitch=2 len=0.095
-  bone chest  parent=spine1 dir=up pitch=2 len=0.105
-  # LONG and THIN — the reference neck is a stick under a head four times its
-  # width. The skull bone starts high off it (see below) so the cranium's
-  # bottom taper, not the neck, draws the chin.
-  bone neck   parent=chest  dir=up pitch=-5 len=0.095
-  # Skull bone 0.410 long — LONGER than the head's own half-width, the clown's
-  # trick pushed further: facePrims centres the cranium at t=0.45 along the
-  # bone, so 0.605 + 0.45*0.410 = 0.790, and with semi-y 0.185 the crown
-  # lands at 0.975. The reference crown pokes to 0.972 BETWEEN the discs;
-  # every earlier pass crowned at 0.878, and the discs floated above a low
-  # skull looking like columns on a helmet. The chin comes from the cranium's
-  # own taper (bottom 0.605), so there is no separate jaw bone to place.
-  bone skull  parent=neck   dir=up pitch=-3 len=0.410
+  bone spine1 parent=pelvis dir=up pitch=2 len=0.086   # hips->chest
+  bone chest  parent=spine1 dir=up pitch=2 len=0.183   # -> shoulder (clavicle attach, 0.622)
+  # Upper-chest/trap region: chest tail (shoulder) up to the neck base. The
+  # reference has the shoulder joint at 56.5% but the neck base at 66.3%, so
+  # the clavicles do NOT attach at the same height the neck starts — this
+  # bone is the ~10% of torso between them.
+  bone spine2 parent=chest  dir=up pitch=-2 len=0.107  # -> neck base (0.729)
+  # Neck: a stick under a head five times its width. 7.8% of height.
+  bone neck   parent=spine2 dir=up pitch=-5 len=0.086   # -> head base (0.815)
+  # Skull bone carries the cranium+ears. It is short because head prims are
+  # placed by t-fraction AND offset: facePrims centres the cranium at t=0.45,
+  # so 0.815 + 0.45*0.10 = 0.860 centre. With headHeight ~1.0 the crown lands
+  # ~0.99 and the ears (offset_y) reach ~1.09, below the reference's 1.099.
+  bone skull  parent=neck   dir=up pitch=-3 len=0.100
 
   mirror
-    # Arms: SHORT and HELD OUT. Measured on the reference: shoulder joint
-    # inside the tee at (0.09, 0.52), fingertips at (0.26, 0.36) — a 47
-    # degree diagonal, upper arm + forearm + hand only 0.23 m in total. The
-    # first version of this file hung 0.32 m of arm almost straight down to
-    # y 0.19, which read as a coat rack rather than the reference's stubby
-    # spread-eagle pose. tilt is WORLD-axis on a down bone, so 48/38/36 is
-    # one nearly straight line (the reference arm does not bend at the
-    # elbow), and the splay doubles as the pose AND the torso clearance —
-    # see daylightOf in mouse-blob.test.ts.
+    # Arms: LONGER than before (the reference limbs are lanky) and HELD OUT.
+    # shoulder joint = clavicle tail = chest tail (0.622). tilt is WORLD-axis
+    # on a down bone, so 48/38/36 is one nearly straight line (the reference
+    # arm does not bend at the elbow); the splay doubles as the pose AND the
+    # torso clearance — see daylightOf in mouse-blob.test.ts.
     bone clavicle parent=chest    side=0.032 dir=side  len=0.038
-    bone upperarm parent=clavicle dir=down pitch=-2 tilt=48 len=0.095
-    bone forearm  parent=upperarm dir=down pitch=2  tilt=38 len=0.085
+    bone upperarm parent=clavicle dir=down pitch=-2 tilt=48 len=0.115
+    bone forearm  parent=upperarm dir=down pitch=2  tilt=38 len=0.095
     # The hand bone needs its OWN tilt: dir=down with no tilt points at the
     # FLOOR whatever the forearm did (world axes, not parent-relative — the
     # trap the old forearm comment records). 36 continues the arm line.
-    bone hand     parent=forearm  dir=down tilt=36 len=0.050
-    # Legs: SHORT and stubby. Hip line 0.31, knee hidden inside the shorts at
-    # ~0.24, ankle at 0.16 where the kit's shoe (topline 0.185) swallows the
-    # joint. Thigh forward / shin back per the kangaroo-knee rule.
-    bone thigh    parent=pelvis   dir=down tilt=5  pitch=8  side=0.034 len=0.075
-    bone shin     parent=thigh    dir=down tilt=-4 pitch=-9         len=0.075
-    bone foot     parent=shin     dir=fwd                            len=0.095
+    bone hand     parent=forearm  dir=down tilt=36 len=0.055
+    # Legs: LONG now. Hip line 0.353, knee ~0.244, ankle ~0.140 where the
+    # kit's shoe swallows the joint. Thigh forward / shin back per the
+    # kangaroo-knee rule, splayed by tilt so the longer shin clears the body.
+    bone thigh    parent=pelvis   dir=down tilt=5  pitch=8  side=0.034 len=0.110
+    bone shin     parent=thigh    dir=down tilt=-4 pitch=-9         len=0.105
+    bone foot     parent=shin     dir=fwd                            len=0.100
     # FINGER BONES, not tipped prims. The obvious way to author a finger fan
     # is four bars on the hand bone aimed by their own tip=(x,y,z) — but
     # expandMirror does NOT flip a mirrored prim's tip (it flips the BONE's
@@ -105,9 +106,22 @@ body
   # and the ear discs' 0.508 pair span.
   blob torso on pelvis at=0.00 r=0.058 deep=1.15 blend=0.0045
   blob torso on pelvis at=0.95 r=0.070 deep=1.30 blend=0.0050
-  blob torso on spine1 at=0.60 r=0.066 deep=1.20 blend=0.0050
-  blob torso on chest  at=0.50 r=0.060 deep=1.05 blend=0.0042
-  blob torso on chest  at=1.00 r=0.052 deep=0.95 blend=0.0040
+  blob torso on spine1 at=0.60 r=0.066 deep=1.20 blend=0.0062
+  blob torso on chest  at=0.30 r=0.063 deep=1.05 blend=0.0055
+  blob torso on chest  at=0.50 r=0.063 deep=1.05 blend=0.0055
+  # Armpit filler — the wedge between the upper arm's inner edge and the
+  # narrow upper chest. Without it the shoulder join reads a hair of air
+  # right below the shoulder ball (measured +0.004-0.008 on the arm->torso
+  # probe), which flags the arm as disconnected even though it LOOKS fused.
+  blob torso on chest  at=0.72 r=0.064 deep=1.00 blend=0.0055
+  blob torso on chest  at=1.00 r=0.063 deep=1.00 blend=0.0050
+  # Upper chest / collarbone region, on the spine2 bone that runs from the
+  # shoulder (chest tail 0.622) up to the neck base (0.729). This is what
+  # keeps the head cluster fused to the torso: the neck stalk rides the neck
+  # bone ABOVE 0.729, so without flesh here there is a gap right where the
+  # collar sits and the validation flags the head as disconnected.
+  blob torso on spine2 at=0.00 r=0.062 deep=1.00 blend=0.0045
+  blob torso on spine2 at=1.00 r=0.044 deep=0.88 blend=0.0040
 
   # Neck column — a stick. Thin on purpose; the skull above it is five times
   # its width, which IS the reference's read.
@@ -146,7 +160,7 @@ body
   # the ears having eaten the head. offset.x 0.183 -> 0.150 and r 0.128 ->
   # 0.120 lands it at ~55%. The reference's widest row also sits 16% down
   # rather than 12%, so the pair drops 12 mm with it.
-  blob head on skull at=0.44 r=0.120 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.150,0.158,0.004) both
+  blob head on skull at=0.44 r=0.120 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.150,0.111,0.004) both
 
   # ============================================================
   # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
@@ -207,7 +221,7 @@ body
   # Spindly stays but NOT hair-thin: the reference's bare upper arm measures
   # 0.051 across and the forearm 0.044 — thicker than the 0.042/0.038 the
   # first pass used, which read as wire.
-  blob arm on clavicle at=1.00 r=0.030 blend=0.0040 mirror
+  blob arm on clavicle at=1.00 r=0.040 blend=0.0040 mirror
   bar  arm on upperarm from=0.02 to=0.98 r=0.026 blend=0.0046 mirror
   blob arm on forearm  at=0.00 r=0.025 blend=0.0046 mirror
   bar  arm on forearm  from=0.06 to=0.94 r=0.022 blend=0.0042 mirror
@@ -247,7 +261,7 @@ body
 face
   headRadius 0.131
   headWidth  1.00
-  headHeight 1.28
+  headHeight 1.00
   headDepth  0.95
   jawWidth   0.68
   jawHeight  0.98

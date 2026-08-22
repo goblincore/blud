@@ -158,38 +158,41 @@ describe('mouse.blob', () => {
 
   it('has a muzzle, not a bump: head depth is a third of standing height', () => {
     const b = built();
-    // The deepest line is the snout tip's own latitude, y ~0.70.
+    // The deepest line is the snout tip's own latitude, y ~0.82 after the 2026-08-22
+    // proportion rebuild (the whole head moved up with the raised neck).
     let depth = 0;
-    for (let y = 0.62; y <= 0.80; y += 0.01) {
+    for (let y = 0.70; y <= 0.92; y += 0.01) {
       const { front, back } = surfaceZ(b, y);
       depth = Math.max(depth, front - back);
     }
     // Reference: 0.364 m on a 1.10 m body. The rejected flat-face passes
     // measured ~0.25 (cranium + pout). 0.33 keeps the muzzle a major mass
-    // without pinning the exact centimetre.
+    // without pinning the exact centimetre. Measured 0.374 (34%).
     expect(depth).toBeGreaterThan(0.33);
     expect(depth / doc.height!).toBeGreaterThan(0.30);
   });
 
   it('the snout tip clears the cranium front by a real margin', () => {
     const b = built();
-    // Cranium front at its equator (y 0.79, no muzzle there) vs the front at
-    // the tip latitude. The reference muzzle projects roughly the cranium's
-    // own depth; the goblin ships 44 mm proud and the flat-face passes that
-    // fell short both read as bumps. 80 mm is the floor, not the target.
-    const equator = surfaceZ(b, 0.79).front;
+    // Cranium front at its upper equator (y 0.895, above the muzzle) vs the
+    // front at the tip latitude. The reference muzzle projects roughly the
+    // cranium's own depth; the goblin ships 44 mm proud and the flat-face
+    // passes that fell short both read as bumps. 80 mm is the floor, not the
+    // target. Measured tip z 0.253 vs cranium front ~0.12.
+    const equator = surfaceZ(b, 0.895).front;
     let tip = 0;
-    for (let y = 0.64; y <= 0.76; y += 0.005)
+    for (let y = 0.75; y <= 0.88; y += 0.005)
       tip = Math.max(tip, surfaceZ(b, y).front);
     expect(tip - equator).toBeGreaterThan(0.080);
-    // And the tip sits BELOW the eye line (0.749): the profile's muzzle
-    // leaves the face at cheek/under-eye level and holds near-horizontal,
-    // 49 mm under the eyes. A tip at forehead height is a trunk.
+    // And the tip sits BELOW the eye line: the profile's muzzle leaves the
+    // face at cheek/under-eye level and holds near-horizontal, ~49 mm under
+    // the eyes. With the head raised (2026-08-22), the eye line sits ~0.864
+    // (snout tip 0.815 + 49 mm); a tip at forehead height is a trunk.
     let tipY = 0;
-    for (let y = 0.60; y <= 0.90; y += 0.005)
+    for (let y = 0.72; y <= 0.90; y += 0.005)
       if (surfaceZ(b, y).front > tip - 0.002 && surfaceZ(b, y).front > 0.2) tipY = y;
-    expect(tipY).toBeLessThan(0.749);
-    expect(tipY).toBeGreaterThan(0.60);
+    expect(tipY).toBeLessThan(0.868);
+    expect(tipY).toBeGreaterThan(0.74);
   });
 
   // THE ARMS MUST READ AS ARMS — the goblin's twice-bitten regression, and
