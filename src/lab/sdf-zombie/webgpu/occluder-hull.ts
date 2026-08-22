@@ -134,19 +134,33 @@ export function buildHullInstances(
       // severing) are flesh that no longer exists: a hull sphere at the old
       // joint clamps tMax in EMPTY space and every ray through it discards —
       // see-through holes wherever the phantom overlaps the body on screen.
-      if (p.op === 'sub' || p.dead) continue;
+      // A groove is a cutter too — it REMOVES a channel — and its field is
+      // not flesh any sphere may sit in. It only ever escaped by accident: a
+      // groove's `tall` is tiny, so min(scale) pushed its spheres under
+      // MIN_HULL_RADIUS. A fatter cutter would have punched a hole.
+      if (p.op === 'sub' || p.op === 'groove' || p.dead) continue;
       if (!live.has(p.cluster)) continue;
       // Minus the amp, not plus: the dent side is the one that can reach
       // past the hull (see the buildHullInstances doc). A sphere that cannot
       // afford the margin is dropped — a half-margin sphere is the dropout
       // bug in miniature.
-      const r = p.radius * Math.min(p.scale[0], p.scale[1], p.scale[2]) * shrink - shellAmp;
-      if (r < MIN_HULL_RADIUS) continue;
-      if (clearOfWounds(p.a, r)) out.push({ centre: p.a, radius: r });
+      const minScale = Math.min(p.scale[0], p.scale[1], p.scale[2]);
+      const rA = p.radius * minScale * shrink - shellAmp;
+      // PER END. A tapered primitive (`r2=`) is a round cone: radius `radius`
+      // at `a`, `radiusB` at `b`. Sizing the b-sphere from `radius` put a
+      // 0.046 sphere inside 0.036 of flesh at the mouse's snout tip — 10 mm
+      // proud of the surface — and every ray that reached that cap clamped
+      // and discarded. On screen: a perfectly ROUND see-through hole in the
+      // face, which read as a nose carved out as negative space and cost
+      // most of a day being hunted as a modelling defect. The mouse was just
+      // the first character whose tapered prim was fat enough to clear
+      // MIN_HULL_RADIUS; nothing about it was unusual.
+      const rB = (p.radiusB ?? p.radius) * minScale * shrink - shellAmp;
+      if (rA >= MIN_HULL_RADIUS && clearOfWounds(p.a, rA)) out.push({ centre: p.a, radius: rA });
       // A zero-length capsule is a sphere; one instance is enough.
       const dx = p.b[0] - p.a[0], dy = p.b[1] - p.a[1], dz = p.b[2] - p.a[2];
-      if (dx * dx + dy * dy + dz * dz > 1e-8 && clearOfWounds(p.b, r)) {
-        out.push({ centre: p.b, radius: r });
+      if (dx * dx + dy * dy + dz * dz > 1e-8 && rB >= MIN_HULL_RADIUS && clearOfWounds(p.b, rB)) {
+        out.push({ centre: p.b, radius: rB });
       }
     }
   }

@@ -14,6 +14,11 @@ import { makeZombie } from '../body';
 import { DEFAULT_FACE } from '../face';
 import { sdBody } from '../validate';
 import type { Vec3 } from '../types';
+import { parseBlob } from '../blob-parse';
+import { compileBlob, compileFace } from '../blob-compile';
+import mouseSrc from '../characters/mouse.blob?raw';
+import clownSrc from '../characters/clown.blob?raw';
+import goblinSrc from '../characters/goblin.blob?raw';
 
 const body = buildBody(makeZombie({ ...DEFAULT_FACE }), DEFAULT_BUILD_OPTS);
 
@@ -28,6 +33,56 @@ describe('buildHullInstances', () => {
     for (const s of inst) {
       expect(sdBody(s.centre, body), `sphere at ${s.centre}`).toBeLessThanOrEqual(-s.radius + 1e-4);
     }
+  });
+
+  // THE WHOLE CAST, not just the zombie. The zombie has no tapered primitive,
+  // so the inside-ness test above passed for months while the mouse's snout
+  // tip — a round cone, r 0.058 tapering to 0.036 — got a b-sphere sized
+  // from the fat end, 10 mm proud of the surface. Every ray reaching that cap
+  // clamped and discarded: a perfectly round see-through hole in the face,
+  // hunted for most of a day as a modelling defect. Any character with a
+  // tapered prim fat enough to clear MIN_HULL_RADIUS would have shown it.
+  it('emits spheres strictly inside EVERY authored character', () => {
+    for (const [name, src] of [['mouse', mouseSrc], ['clown', clownSrc], ['goblin', goblinSrc]] as const) {
+      const doc = parseBlob(src);
+      const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
+      for (const s of buildHullInstances([b]))
+        expect(sdBody(s.centre, b), `${name}: sphere r ${s.radius.toFixed(3)} at ${s.centre}`)
+          .toBeLessThanOrEqual(-s.radius + 1e-4);
+    }
+  });
+
+  it('sizes the far end of a tapered primitive from radiusB, not radius', () => {
+    // A lone round cone, fat at a and thin at b. The b-sphere must fit the
+    // thin end.
+    const cone = {
+      prims: [{
+        a: [0, 0, 0] as Vec3, b: [0, 0, 0.3] as Vec3,
+        radius: 0.10, radiusB: 0.04, scale: [1, 1, 1] as Vec3, blendK: 0,
+        limb: body.prims[0]!.limb, cluster: 0,
+      }],
+      clusters: [{ ...body.clusters[0]!, id: 0, start: 0, count: 1, alive: true }],
+      bones: body.bones,
+    };
+    const inst = buildHullInstances([cone]);
+    const atB = inst.find((s) => s.centre[2] > 0.2)!;
+    const atA = inst.find((s) => s.centre[2] < 0.1)!;
+    expect(atA.radius).toBeCloseTo(0.10 * HULL_SHRINK, 6);
+    expect(atB.radius).toBeCloseTo(0.04 * HULL_SHRINK, 6);
+    for (const s of inst) expect(sdBody(s.centre, cone)).toBeLessThanOrEqual(-s.radius + 1e-4);
+  });
+
+  it('skips groove primitives, which are cutters', () => {
+    const grooved = {
+      ...body,
+      prims: [...body.prims, {
+        a: [0, 1.5, 0.1] as Vec3, b: [0, 1.5, 0.2] as Vec3,
+        radius: 0.1, scale: [1, 1, 1] as Vec3, blendK: 0,
+        limb: body.prims[0]!.limb, cluster: body.prims[0]!.cluster,
+        op: 'groove' as const, grooveDepth: 0.01, grooveWidth: 0.01,
+      }],
+    };
+    expect(buildHullInstances([grooved]).length).toBe(buildHullInstances([body]).length);
   });
 
   it('skips carve primitives outright', () => {
