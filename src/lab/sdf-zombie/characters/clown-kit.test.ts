@@ -92,7 +92,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
   // assertion failing. The list changes only by a deliberate palette edit.
   it('decodes the compiled kit', () => {
     expect([...groups.keys()].sort()).toEqual(
-      ['blue', 'grey', 'nose', 'pink', 'purple', 'red', 'royal', 'white', 'yellow']);
+      ['blue', 'grey', 'hoodpink', 'nose', 'pink', 'purple', 'red', 'white', 'yellow']);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
   });
 
@@ -117,7 +117,7 @@ describe('clown-kit.gltf fits clown.blob', () => {
    * Still bounded, and well short of the failure it guards: a tuft punching
    * out through the FAR side of a skull whose half-width is ~0.28.
    */
-  const TUCK_MAX_BY_MATERIAL: Record<string, number> = { purple: 0.08 };
+  const TUCK_MAX_BY_MATERIAL: Record<string, number> = { purple: 0.08, hoodpink: 0.08 };
 
   it.each([...groups.keys()])('no %s vertex passes through the body', name => {
     const limit = TUCK_MAX_BY_MATERIAL[name] ?? TUCK_MAX;
@@ -132,22 +132,45 @@ describe('clown-kit.gltf fits clown.blob', () => {
   });
 
   // THE OWNER'S EXPLICIT COMPLAINT ABOUT ATTEMPT ONE: "the cap swallowed the
-  // face". Coverage is invisible to the containment test above, so it gets
-  // its own pin: the cap's front rim must stay ABOVE the eye line (~y 0.79,
-  // sheet eyeRise 0.42 over a cranium spanning y 0.532..1.002). 0.80 keeps a
-  // 10 mm margin; the band ships at y 0.825.
-  it('cap front rim stays above the eyes', () => {
-    const royal = groups.get('royal')!;
-    const frontRimY = Math.min(...royal.filter(v => v[2] > 0.10).map(v => v[1]));
-    expect(frontRimY).toBeGreaterThan(0.80);
+  // face". That still has to be pinned — but the RULE has changed, because
+  // the cap has.
+  //
+  // It used to be "no cap geometry in front of z=0.10 below y=0.80", which
+  // suited a cap that stopped at the brow. The cap is now a HOODIE that
+  // deliberately falls past the eye line down the back and sides, so that
+  // bound fails by construction and loosening it would give up the invariant
+  // entirely.
+  //
+  // What actually keeps the face clear is that the hood's rings are pushed
+  // BACK, so the head — a ball — protrudes through the front of them. So
+  // assert exactly that, at face heights: the hood's frontmost point must sit
+  // BEHIND the head's own front surface, marched with sdBody. That is a
+  // stronger statement than the old one (it holds at every height, not just
+  // above a line) and it is the thing that would actually break if someone
+  // widened a ring or reduced its `fwd=` offset.
+  it('the face protrudes through the hood rather than being covered', () => {
+    const hood = [...groups.get('purple')!, ...groups.get('hoodpink')!];
+    for (const y of [0.64, 0.70, 0.76]) {
+      // Head's front surface at this height.
+      let lo = 0, hi = 0.6;
+      for (let i = 0; i < 40; i++) {
+        const mid = (lo + hi) / 2;
+        if (sdBody([0, y, mid], body) < 0) lo = mid; else hi = mid;
+      }
+      const headFront = lo;
+      const band = hood.filter(v => Math.abs(v[1] - y) < 0.03 && Math.abs(v[0]) < 0.12);
+      expect(band.length, `hood band at y=${y}`).toBeGreaterThan(0);
+      const hoodFront = Math.max(...band.map(v => v[2]));
+      expect(hoodFront, `hood front vs head front at y=${y}`).toBeLessThan(headFront);
+    }
   });
 
   // ...and the other half of the same complaint: the cap must actually be ON
   // the head. A cap that retreats from the face can also retreat off the
   // crown entirely; the cone apex must clear the cranium's own top (y 1.002).
   it('cap crowns the head instead of floating behind it', () => {
-    const royal = groups.get('royal')!;
-    expect(Math.max(...royal.map(v => v[1]))).toBeGreaterThan(1.005);
+    const hood = [...groups.get('purple')!, ...groups.get('hoodpink')!];
+    expect(Math.max(...hood.map(v => v[1]))).toBeGreaterThan(1.005);
   });
 
   // THE POM-POMS MUST STICK OUT PAST THE COLLAR — the reference reads them
@@ -158,17 +181,21 @@ describe('clown-kit.gltf fits clown.blob', () => {
   it('pom-poms project past the grey collar beads', () => {
     const radial = (v: Vec3) => Math.hypot(v[0], v[2]);
     const greyReach = Math.max(...groups.get('grey')!.map(radial));
-    const poms = groups.get('red')!.filter(v => v[1] > 0.55 && v[1] < 0.68);
+    const poms = groups.get('red')!.filter(v => v[1] > 0.47 && v[1] < 0.62);
     expect(poms.length).toBeGreaterThan(0);
     expect(Math.max(...poms.map(radial))).toBeGreaterThan(greyReach + 0.005);
   });
 
-  // THE HAIR IS HALF THE SILHOUETTE. The tufts must break past the cheeks —
-  // the cranium's half-width is 0.2256, and tips parked inside that are
-  // bumps on the ball, not wings. Measured tip reach ~0.35.
-  it('hair tufts sweep out past the cheeks', () => {
-    const purple = groups.get('purple')!;
-    expect(Math.max(...purple.map(v => Math.abs(v[0])))).toBeGreaterThan(0.26);
+  // THE HAIR TUFTS ARE GONE — the owner had them removed once the hood fell
+  // down the sides itself ("we can get rid of the pink hair pods"). This
+  // asserted purple reached past +/-0.26 in x, which was the tufts' wing span.
+  //
+  // Purple is now the hood's LEFT half, so the invariant worth keeping is the
+  // one the removal could silently break: that the hood still covers the head
+  // sideways rather than perching on top of it.
+  it('the hood reaches out over the head, not just across its crown', () => {
+    const hood = [...groups.get('purple')!, ...groups.get('hoodpink')!];
+    expect(Math.max(...hood.map(v => Math.abs(v[0])))).toBeGreaterThan(0.26);
   });
 
   // THE SHOES ARE THE JOKE. Comically oversized against a 0.095 m foot bone:
