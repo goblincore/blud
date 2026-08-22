@@ -39,32 +39,40 @@ model mouse
   stance humanoid
 
 skeleton
-  # LOLLIPOP STACK, rebuilt against the reference RIG, not a screenshot.
-  # Joint heights as a fraction of standing height, taken from the maus-biped
-  # skeleton's inverseBindMatrices (see docs/dev-notes/2026-08-22-maus-rig-
-  # proportions.md): ankle 12.7%, hips 32.1%, shoulder 56.5%, neck 66.3%,
-  # head-base 74.1%, top 100%. The body splits into near-thirds: legs
-  # (toe->hips) 32.1%, torso (hips->neck) 34.2%, head (neck->top) 33.7%.
-  # The previous file was a big head on stubby legs (head ~53% of the file)
-  # — this stack LENGTHENS the legs and torso so the head's share falls out.
-  # height=1.10, so fraction*1.10 = metres: ankle 0.140, hip 0.353, shoulder
-  # 0.622, neck-base 0.729, head-base 0.815, top ~1.10.
+  # LOLLIPOP STACK, measured off the reference MESH SURFACE — not its rig.
+  # The previous stack took joint heights from the maus-biped skeleton's bind
+  # matrices (shoulder 56.5%, neck-base 66.3%) and they do not sit where the
+  # skin does: marched off the mesh (docs/dev-notes/refs/maus-biped, scaled
+  # 1.700 -> 1.10 and frame-aligned on the torso), the T-posed arms span
+  # y 0.48..0.58 so the shoulder is at ~0.53 (48%), the tee collar and the
+  # visible neck start at 0.60 (55%), the chin is at 0.66 and the cranium
+  # centre at 0.86. Built to the old numbers the shoulders sat 9 cm and the
+  # collar 13 cm too high — the whole torso was a head taller than the mesh's.
+  # Crotch 0.26, hip line 0.353, shoe top ~0.15 are unchanged.
   root pelvis at 0.262 len=0.091     # pelvis tail = hip line (0.353)
 
   bone spine1 parent=pelvis dir=up pitch=2 len=0.086   # hips->chest
-  bone chest  parent=spine1 dir=up pitch=2 len=0.183   # -> shoulder (clavicle attach, 0.622)
-  # Upper-chest/trap region: chest tail (shoulder) up to the neck base. The
-  # reference has the shoulder joint at 56.5% but the neck base at 66.3%, so
-  # the clavicles do NOT attach at the same height the neck starts — this
-  # bone is the ~10% of torso between them.
-  bone spine2 parent=chest  dir=up pitch=-2 len=0.107  # -> neck base (0.729)
-  # Neck: a stick under a head five times its width. 7.8% of height.
-  bone neck   parent=spine2 dir=up pitch=-5 len=0.086   # -> head base (0.815)
-  # Skull bone carries the cranium+ears. It is short because head prims are
-  # placed by t-fraction AND offset: facePrims centres the cranium at t=0.45,
-  # so 0.815 + 0.45*0.10 = 0.860 centre. With headHeight ~1.0 the crown lands
-  # ~0.99 and the ears (offset_y) reach ~1.09, below the reference's 1.099.
-  bone skull  parent=neck   dir=up pitch=-3 len=0.100
+  bone chest  parent=spine1 dir=up pitch=2 len=0.091   # -> shoulder (clavicle attach, 0.530)
+  # Shoulder up to the tee collar. The mesh has no trapezius: above the arm
+  # band (0.58) the silhouette is 0.066 half-wide at 0.60 and a 0.049 neck by
+  # 0.62.
+  bone spine2 parent=chest  dir=up pitch=-2 len=0.070  # -> collar / neck base (0.600)
+  # NEAR-VERTICAL, AND THAT WAS CHECKED THE HARD WAY. A first pass at the
+  # mesh read the cranium centre at z -0.068 and leaned this bone back 40
+  # degrees to put the skull there — which set the head 65 mm behind the
+  # torso, because the mesh's TORSO is at z -0.067 as well: its whole figure
+  # sits that far behind our frame's origin. Measured relative to the torso
+  # front, the mesh forehead is 45 mm proud and the snout tip 180 mm, and a
+  # vertical neck gives 42 and 178. Compare frames, not absolute z
+  # (scripts/head-profile.ts now aligns on the torso for exactly this reason).
+  # len 0.088 puts the bone head at y 0.817 and the cranium at 0.862; the mesh
+  # skull is centred at 0.86 with the ear rims at 1.095.
+  # Collar to head base. Long, because the skull bone's head has to stay at
+  # 0.817 for the cranium to centre at 0.862 — the visible neck is only the
+  # 0.60..0.67 of it below the lower face; the rest runs up inside the head.
+  bone neck   parent=spine2 dir=up pitch=-2 len=0.217  # tail (0, 0.817, -0.008)
+  # Vertical. The skull bone only positions prims.
+  bone skull  parent=neck   dir=up pitch=0  len=0.100
 
   mirror
     # Arms: LONGER than before (the reference limbs are lanky) and HELD OUT.
@@ -82,7 +90,7 @@ skeleton
     # Legs: LONG now. Hip line 0.353, knee ~0.244, ankle ~0.140 where the
     # kit's shoe swallows the joint. Thigh forward / shin back per the
     # kangaroo-knee rule, splayed by tilt so the longer shin clears the body.
-    bone thigh    parent=pelvis   dir=down tilt=5  pitch=8  side=0.034 len=0.110
+    bone thigh    parent=pelvis   dir=down tilt=5  pitch=8  side=0.042 len=0.110
     bone shin     parent=thigh    dir=down tilt=-4 pitch=-9         len=0.105
     bone foot     parent=shin     dir=fwd                            len=0.100
     # FINGER BONES, not tipped prims. The obvious way to author a finger fan
@@ -105,16 +113,27 @@ body
   # toy-scale: the widest ring is 0.148 across, against the goblin's 0.192
   # and the ear discs' 0.508 pair span.
   blob torso on pelvis at=0.00 r=0.058 deep=1.15 blend=0.0045
-  blob torso on pelvis at=0.95 r=0.070 deep=1.30 blend=0.0050
+  # deep 1.15, not 1.30: the mesh torso's back at y 0.34 is -0.080, and at
+  # 1.30 this blob reached -0.091 — 16 mm out through the back of the shorts
+  # just below the tee hem, the one place nothing else covers it.
+  blob torso on pelvis at=0.95 r=0.070 deep=1.15 blend=0.0050
   blob torso on spine1 at=0.60 r=0.066 deep=1.20 blend=0.0062
-  blob torso on chest  at=0.30 r=0.063 deep=1.05 blend=0.0055
-  blob torso on chest  at=0.50 r=0.063 deep=1.05 blend=0.0055
+  # Mesh torso, 0.26..0.46: half-width 0.064..0.079, half-depth 0.075 both
+  # ways — a near-cylinder, slightly deeper than wide. AND THAT 0.075 IS THE
+  # SHIRT: the mesh is dressed, so the flesh under it has to sit a fabric's
+  # thickness inside. At deep 1.15 these blended out to a 0.087 chest front,
+  # 12 mm past the mesh's dressed surface, and the tee cut to the mesh
+  # cleared it by 4-7 mm — close enough that the half-res SDF depth and the
+  # polygon depth disagreed along the shirt's centre facet, and a yellow
+  # stripe ran down the front. deep 1.00 puts the chest at ~0.070.
+  blob torso on chest  at=0.30 r=0.065 deep=1.00 blend=0.0055
+  blob torso on chest  at=0.50 r=0.065 deep=1.00 blend=0.0055
   # Armpit filler — the wedge between the upper arm's inner edge and the
   # narrow upper chest. Without it the shoulder join reads a hair of air
   # right below the shoulder ball (measured +0.004-0.008 on the arm->torso
   # probe), which flags the arm as disconnected even though it LOOKS fused.
-  blob torso on chest  at=0.72 r=0.064 deep=1.00 blend=0.0055
-  blob torso on chest  at=1.00 r=0.063 deep=1.00 blend=0.0050
+  blob torso on chest  at=0.72 r=0.065 deep=1.00 blend=0.0055
+  blob torso on chest  at=1.00 r=0.065 deep=1.00 blend=0.0050
   # Upper chest / collarbone region, on the spine2 bone that runs from the
   # shoulder (chest tail 0.622) up to the neck base (0.729). This is what
   # keeps the head cluster fused to the torso: the neck stalk rides the neck
@@ -127,11 +146,11 @@ body
   blob torso on spine2 at=0.00 r=0.052 deep=1.00 blend=0.0045
   blob torso on spine2 at=1.00 r=0.036 deep=0.88 blend=0.0040
 
-  # Neck column — a stick. Thin on purpose; the skull above it is five times
-  # its width, which IS the reference's read.
-  # 0.022, and it only survives because jawDrop went to 0.115 in the same
-  # pass — at the old jaw height anything under 0.026 disconnected the head.
-  bar head on neck from=0.00 to=1.00 r=0.022 deep=0.95 blend=0.0014
+  # Neck column. "A stick" was the right read and the wrong number: the mesh
+  # neck is 0.043 half-width at y 0.66 and 0.061 at 0.62, spanning z
+  # +0.016..-0.122 — twice what 0.022 gave. Frame-aligned (+0.067) that is
+  # 0.08 in front to -0.055 behind: deep 1.35 on r 0.046 covers it.
+  bar head on neck from=0.00 to=1.00 r=0.046 deep=1.35 blend=0.0040
 
   # ============================================================
   # EARS — the character. Read this block before touching anything.
@@ -192,7 +211,12 @@ body
   # So the round disc wins on aggregate and the cliff stays unmatched. The
   # real fix is a flat-bottomed ear, which needs TWO prims per side (a wide
   # lobe with a squarer lower rim), not a different scale on this one.
-  blob head on skull at=0.44 r=0.130 wide=1.00 tall=1.00 deep=0.30 blend=0.0028 chamfer offset=(0.170,0.128,0.004) both
+  # Re-seated off the mesh: the ear plates are centred in the cranium's own
+  # plane (frame-aligned z -0.007), and the pair's outer edge peaks at x 0.307
+  # from y 0.92 to 0.96, i.e. centre (0.18, 0.95), radius 0.127. offset.y
+  # 0.105 puts ours at 0.966 with the rim at 1.096 (mesh 1.095). deep 0.45:
+  # measured 0.14 thick at the rim, not the coin we had.
+  blob head on skull at=0.44 r=0.130 wide=1.00 tall=1.00 deep=0.45 blend=0.0028 chamfer offset=(0.170,0.105,0.000) both
 
   # ============================================================
   # THE SNOUT — the whole character after the ears. ONE bent tapered prim,
@@ -247,7 +271,19 @@ body
   # cannot see this at all (it only measures width), which is exactly the kind
   # of error the matcher is blind to and the render is not. A muzzle is round
   # in cross-section and tapers; the width belongs in `r`, not in a squash.
-  blob head on skull at=0.305 r=0.058 r2=0.027 wide=1.04 tall=1.00 blend=0.0042 offset=(0,0.000,0.046) tip=(0,-0.058,0.212) bend=(0,0.020,0.016)
+  # A STRAIGHT CONE, rooted inside the cranium, measured off the mesh.
+  # Centreline front profile to hit (y: z):
+  #     0.86: 0.051   0.82: 0.127   0.78: 0.184   0.76: 0.186   0.74: 0.177
+  # and the plan view at y 0.76, half-width by z:
+  #     z 0.02-0.05: 0.090   0.08-0.11: 0.075   0.14-0.17: 0.050   tip: 0.029
+  # Root (0, 0.781, -0.037) with r 0.085 is the whole muzzle base — its back
+  # is 85 mm inside the cranium, its x-reach 0.119 matches the skull's 0.116
+  # at that height, so it fairs in with no crease. Tip (0, 0.765, 0.155) with
+  # r2 0.030 puts the front at 0.185. No bend: the mesh top line is straight
+  # from the brow to a blunt end. No nose: the cone just stops, as the mesh
+  # does — every "round nose" this character ever had was a tip sphere
+  # smaller than the taper wanted.
+  blob head on skull at=0.00 r=0.085 r2=0.030 wide=1.40 tall=1.00 blend=0.0060 offset=(0,-0.026,0.029) tip=(0,-0.016,0.192)
 
   # THE POUT — a small lip under the snout's far end, set well back from
   # the nose tip (both new references agree: the mouth is NOT at the tip).
@@ -262,13 +298,42 @@ body
   # THIS character rather than as a generic mouse. r 0.032 x wide 2.10 puts it
   # at 0.067, a shade wider than the snout root's 0.064, sitting proud rather
   # than tucked underneath.
-  blob head on skull at=0.195 r=0.032 wide=2.10 tall=0.62 blend=0.0018 chamfer offset=(0,-0.004,0.150) tip=(0,-0.014,0.052)
+  # THE LOWER FACE — the mass the lips sit IN, not in front of. The mesh at
+  # y 0.70 is one body 0.21 deep (z -0.095..0.119) and 0.061 half-wide; at
+  # 0.74 it is 0.158 half-deep and 0.091 wide. A jaw ellipsoid alone cannot
+  # be that: it thins to 24 mm of depth at x +/-0.055, exactly where the lips
+  # still reach, and a 48 mm void sat behind every lip corner (28 rays on a
+  # 5 mm grid — the centreline saw none of it). This ellipsoid, centred at
+  # (0, 0.715, 0.012) with half-extents 0.075 / 0.045 / 0.095, reaches back
+  # to -0.083 (mesh -0.095) and forward to 0.107 at the mouth notch (mesh
+  # 0.116), spans y 0.67..0.76, and at the lip corners covers z -0.05..0.08 —
+  # the lips' back face at 0.054 is inside it at every x (tall 0.68 so it
+  # also reaches under the lips' lower corners, the last 8 slivers). The lips still read
+  # because their front, 0.121, stands 15 mm proud of this.
+  blob head on skull at=0.00 r=0.075 wide=1.00 tall=0.68 deep=1.27 blend=0.0060 offset=(0,-0.092,0.078)
+
+  # THE LIPS, from the mesh: a forward shelf under the snout at y 0.68-0.71,
+  # front z 0.112-0.119, half-width 0.061, with the mouth line the notch at
+  # y 0.72 where the front drops to 0.116 between them and the snout above.
+  # Centre (0, 0.695, 0.074), r 0.038 x wide 1.6 x tall 0.7 -> front 0.112,
+  # half-width 0.055 (the mesh is 0.061 at 0.70 and 0.039 at 0.68;
+  # wider lips put their lower corners outside the lower face), y 0.675..0.725. The BACK face at z 0.036 sits
+  # 7 mm inside the jaw ellipsoid's front (0.043 at that height, which is what
+  # jawJut is set for) — attached by overlap, not by blend. The old lips sat
+  # 14 mm above the snout's own axis and were simply swallowed.
+  # deep 1.25 is for the CORNERS: at x +/-0.055 the jaw ellipsoid has narrowed
+  # to the lips' own width, so with a round section the lips' outer ends only
+  # grazed it and a 5 mm sliver of air sat behind each corner (44 rays on a
+  # 5 mm grid). Deeper lips push the back face 9 mm further into the jaw at
+  # every x, and the front lands at 0.121 against the mesh's 0.119.
+  blob head on skull at=0.00 r=0.038 wide=1.45 tall=0.64 deep=1.25 blend=0.0030 chamfer offset=(0,-0.108,0.140)
 
   # THE MOUTH SEAM — a groove, not a gap. Cuts a channel where this flat
   # primitive's zero-set crosses the assembled pout: 5 mm across, biting
   # 4 mm in, running horizontally across the lip's front. `tall=0.08`
   # flattens the cutter vertically so the channel is a LINE.
-  groove head on skull at=0.185 r=0.042 wide=1.95 tall=0.08 deep=1.00 depth=0.005 width=0.006 offset=(0,-0.006,0.162)
+  # The mouth seam, on the crease where the lips meet the snout's underside.
+  groove head on skull at=0.00 r=0.040 wide=1.50 tall=0.08 deep=1.00 depth=0.005 width=0.006 offset=(0,-0.086,0.171)
 
   # ARMS AND LEGS — ONE FORM, not beads. The house ball-joint stylisation is
   # the goblin's look and the owner rejected it here: the reference limbs are
@@ -294,60 +359,60 @@ body
   bar  arm on f_ring   from=0.00 to=0.90 r=0.007 r2=0.003 blend=0.0010 mirror
   bar  arm on f_little from=0.00 to=0.88 r=0.006 r2=0.002 blend=0.0010 mirror
 
-  blob leg on thigh at=0.00 r=0.034 blend=0.0050 mirror
-  bar  leg on thigh from=0.08 to=0.92 r=0.026 blend=0.0046 mirror
-  blob leg on shin  at=0.00 r=0.026 blend=0.0048 mirror
-  bar  leg on shin  from=0.08 to=0.92 r=0.020 blend=0.0044 mirror
-  blob leg on shin  at=1.00 r=0.022 blend=0.0046 mirror
+  # Mesh legs, y 0.16..0.24: each spans x 0.013..0.084, i.e. 0.071 across —
+  # r 0.035, centred at x 0.048 — and they stay that width from shoe to
+  # crotch. These were 0.020..0.026: wire. side 0.034 -> 0.042 on the thigh
+  # bone moves the column out to match.
+  blob leg on thigh at=0.00 r=0.038 blend=0.0050 mirror
+  bar  leg on thigh from=0.08 to=0.92 r=0.034 blend=0.0046 mirror
+  blob leg on shin  at=0.00 r=0.034 blend=0.0048 mirror
+  bar  leg on shin  from=0.08 to=0.92 r=0.032 blend=0.0044 mirror
+  blob leg on shin  at=1.00 r=0.032 blend=0.0046 mirror
 
   # Feet: swallowed by the kit's oversized shoes (topline 0.185), so all that
   # must be true of the flesh is that it fits INSIDE the shoe and fills the
   # toe. The ankle nub is the only part that shows above the topline.
-  bar  leg on foot from=0.10 to=0.80 r=0.024 tall=0.80 blend=0.0028 mirror
-  blob leg on foot at=0.92 r=0.026 wide=1.15 tall=0.70 deep=0.95 blend=0.0030 mirror
+  # The foot flesh lives entirely inside the kit's shoe and is never seen —
+  # except where it isn't inside: at r 0.024 the bar's top reached y 0.160,
+  # 7 mm through the shoe's instep (the shoe's ring there sits at 0.153 once
+  # the 8-sided facet loss is counted). Slimmer, and it stays hidden.
+  bar  leg on foot from=0.10 to=0.80 r=0.020 tall=0.70 blend=0.0028 mirror
+  blob leg on foot at=0.92 r=0.022 wide=1.15 tall=0.65 deep=0.95 blend=0.0030 mirror
 
-# A tall young skull — egg, not ball. The reference head is 0.37 tall against
-# 0.26 wide, widest ABOVE its equator (at y 0.85, only 0.12 under the crown)
-# and tapering fast to the chin: headHeight 1.41 makes the cranium an egg
-# sharp enough to dome like that, and headWidth 1.00 keeps the 0.262 width
-# the reference measures. No brow ridge (the brows are black kit slabs at the
-# hairline), no nose IN THE FACE PARAMS (the compiled face nose is set to
-# nothing — the muzzle is GEOMETRY, the bent snout prim in the body block,
-# with the pout under its far end).
+# THE CRANIUM, measured off the reference mesh rather than guessed off a
+# plate. At its widest row (y 0.86) the mesh skull is 0.135 half-wide and
+# spans z -0.186..+0.051; the crown is at ~0.99 and the back of the skull
+# runs down to the neck at y 0.70 (z -0.095). That is an ellipsoid of half
+# extents 0.135 / ~0.145 / 0.118 centred at y 0.86, directly above the torso
+# (the mesh's z -0.068 is its frame, not a lean — see the neck bone).
+#
+# No nose in the face params (noseLength under facePrims' 0.0005 gate), no
+# brow ridge: the brows are black kit slabs.
 face
   headRadius 0.131
-  headWidth  1.00
-  # A TEARDROP, not a ball. Both new plates show one smooth form running from
-  # the crown down and forward into the muzzle, with NO jowl under the shades.
-  # The jaw ellipsoid was carrying mass the reference has not got: the
-  # silhouette matcher put this at 0.342 of body width just below the ears
-  # against the plate's 0.241, and on screen it read as a lumpy chin bulging
-  # past the snout's root.
-  #
-  # 1.05 and not higher, though — the cranium crown has to stay UNDER the ear
-  # discs (the test pins crown < 1.0 against disc tops above 1.05) or the
-  # character becomes a ball with ear stickers. There is about 10 mm of
-  # headroom and the plate spends it, so the teardrop comes from the JAW
-  # shrinking rather than the crown rising.
+  headWidth  1.03
+  # 1.05: crown = 0.862 + 0.131*1.05 = 0.998, and the test holds the crown
+  # under 1.0 so the ear discs own the standing height (mesh crown ~0.99).
   headHeight 1.05
-  headDepth  0.95
-  jawWidth   0.48
+  headDepth  0.93
+  # THE JAW IS THE LOWER FACE. The mesh lower face is a wedge: half-width
+  # 0.135 at 0.86, 0.091 at 0.74, 0.061 at 0.70, 0.039 at 0.68 — and it is
+  # what bridges the cranium down to the neck (narrowing it without dropping
+  # it has disconnected the head twice in this file's history). 0.88 x 0.66
+  # gives 0.090 x 0.067 half-extents centred at y 0.745: 0.090 wide where the
+  # mesh is 0.091, bottom at 0.678 where the mesh chin is.
+  jawWidth   0.88
   jawHeight  0.66
-  # AND THE JAW IS WHAT HOLDS THE HEAD ON. Narrowing it to 0.48/0.66 while
-  # leaving jawDrop at 0.075 disconnected the head cluster outright — the jaw
-  # ellipsoid, not the neck bar, is what bridges the cranium down to the
-  # torso, so shrinking it opened a gap the neck could not span. 0.115 puts
-  # the smaller jaw back within reach, and it is what the profile plate shows
-  # anyway: a long face running DOWN into the neck, not a chin perched on it.
-  # Narrow jaw and low jaw move together; neither works alone.
-  jawDrop    0.115
-  jawJut     0.010
+  jawDrop    0.108
+  # Forward 48 mm so the jaw's front at lip height (0.043) sits behind the
+  # lips' back face (0.036) — the overlap the lips are attached by.
+  jawJut     0.048
   noseLength 0.0004
   noseWidth  0.30
   noseDrop   0.010
   browHeavy  0.0004
   browRise   0.030
-  headBlend  0.0035
+  headBlend  0.0050
 
 # The mouse's own face sheet. The SHADES (kit) cover the eye line at y 0.749,
 # so the painted eyes are small and dark — nothing should peek around the

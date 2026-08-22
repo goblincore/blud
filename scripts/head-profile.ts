@@ -10,6 +10,15 @@
 // side by side, plus the muzzle's width by height, plus an ASCII front and
 // side view of the head.
 //
+// FRAMES ARE ALIGNED ON THE TORSO, NOT ASSUMED SHARED. The reference mesh's
+// whole figure sits at z -0.067 in its own file — its torso centre, not just
+// its head — and the first version of this tool compared absolute z. It read
+// the cranium as 65 mm too far forward, the neck was leaned back 40 degrees
+// to "fix" it, and the head ended up 65 mm behind the body. Relative to the
+// torso front the old head had been right all along. The mesh is now shifted
+// by (our torso z-centre - its torso z-centre) before any z is compared, and
+// the shift is printed so a surprising value is visible.
+//
 // WHY THE PICTURES ARE NOT OPTIONAL. Every wrong turn on the mouse's head came
 // from optimising a number that was true while the shape was wrong: a front
 // profile fitted to 9 mm of the mesh had a hole behind the frontmost surface,
@@ -48,18 +57,41 @@ function ours(y: number): { front: number; back: number; spans: number } {
 
 // Reference, scaled so its standing height matches ours.
 let refAt: ((y: number) => { front: number; back: number; halfW: number }) | null = null;
+let SHIFT_FOR_PLAN = 0;
 if (existsSync(GLB)) {
   const { json, bin } = parseGlb(readFileSync(GLB));
   const tri = gltfTriangles(json as never, bin);
   let lo = Infinity, hi = -Infinity;
   for (let i = 1; i < tri.length; i += 3) { lo = Math.min(lo, tri[i]!); hi = Math.max(hi, tri[i]!); }
   const S = (doc.height ?? 1.1) / (hi - lo);
+  // Torso z-centre of each, over y 0.30..0.46 on the centreline — below the
+  // arms and above the hips on every humanoid we have.
+  const torsoCentre = (sample: (y: number) => [number, number]): number => {
+    let acc = 0, n = 0;
+    for (let y = 0.30; y <= 0.46; y += 0.04) { const [f, b] = sample(y); if (Number.isFinite(f) && Number.isFinite(b)) { acc += (f + b) / 2; n++; } }
+    return n ? acc / n : 0;
+  };
+  const meshTorso = torsoCentre((y) => {
+    const yr = y / S; let f = -Infinity, b = Infinity;
+    for (let i = 0; i < tri.length; i += 3) {
+      if (Math.abs(tri[i + 1]! - yr) > 0.012 || Math.abs(tri[i]!) * S > 0.02) continue;
+      const z = tri[i + 2]! * S; f = Math.max(f, z); b = Math.min(b, z);
+    }
+    return [f, b];
+  });
+  const ourTorso = torsoCentre((y) => {
+    let f = -Infinity, b = Infinity;
+    for (let z = -0.4; z <= 0.4; z += 0.002) if (sdBody([0, y, z], body) < 0) { f = Math.max(f, z); b = Math.min(b, z); }
+    return [f, b];
+  });
+  const SHIFT = ourTorso - meshTorso;
+  SHIFT_FOR_PLAN = SHIFT;
   refAt = (y: number) => {
     const yr = y / S;
     let front = -Infinity, back = Infinity, halfW = 0;
     for (let i = 0; i < tri.length; i += 3) {
       if (Math.abs(tri[i + 1]! - yr) > 0.012) continue;
-      const z = tri[i + 2]! * S;
+      const z = tri[i + 2]! * S + SHIFT;
       if (z > 0.05) halfW = Math.max(halfW, Math.abs(tri[i]!) * S);
       if (Math.abs(tri[i]!) * S > 0.02) continue;
       front = Math.max(front, z); back = Math.min(back, z);
@@ -67,6 +99,7 @@ if (existsSync(GLB)) {
     return { front, back, halfW };
   };
   console.log(`reference ${GLB.split('/').pop()} scaled x${S.toFixed(4)} to ${(doc.height ?? 1.1).toFixed(2)} m`);
+  console.log(`frame: mesh torso centre z ${meshTorso.toFixed(3)}, ours ${ourTorso.toFixed(3)} -> mesh shifted ${SHIFT >= 0 ? '+' : ''}${SHIFT.toFixed(3)} before comparing z`);
 } else {
   console.log(`no reference mesh at ${GLB} — printing ours alone`);
 }
@@ -93,6 +126,39 @@ for (let y = 0.64; y <= 0.94; y += 0.02) {
     `${f(r?.halfW ?? NaN)}${f(hw)}   ${o.spans}${o.spans > 1 ? '  <-- GAP' : ''}`);
 }
 console.log(`\nworst front error ${worstFront.toFixed(3)} m      rows with a gap on the centreline: ${holes}`);
+
+// ---- the plan view of the muzzle -----------------------------------------
+// Half-width by z at the snout's own height. The front profile cannot see
+// whether a muzzle is a cone or a tube; this can.
+const PLAN_Y = 0.76;
+console.log(`\nmuzzle plan at y ${PLAN_Y.toFixed(2)} — half-width by z band`);
+console.log('  z band        mesh    ours');
+for (let z0 = 0.02; z0 < 0.20; z0 += 0.03) {
+  let hw = 0;
+  for (let x = 0; x <= 0.20; x += 0.002) {
+    let any = false;
+    for (let z = z0; z < z0 + 0.03; z += 0.003) if (sdBody([x, PLAN_Y, z], body) < 0) { any = true; break; }
+    if (any) hw = x;
+  }
+  let ref = NaN;
+  if (existsSync(GLB)) {
+    const { json, bin } = parseGlb(readFileSync(GLB));
+    const tri = gltfTriangles(json as never, bin);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 1; i < tri.length; i += 3) { lo = Math.min(lo, tri[i]!); hi = Math.max(hi, tri[i]!); }
+    const S = (doc.height ?? 1.1) / (hi - lo);
+    ref = 0;
+    for (let i = 0; i < tri.length; i += 3) {
+      if (Math.abs(tri[i + 1]! * S - PLAN_Y) > 0.015) continue;
+      // Same frame alignment as refAt. Recomputed here rather than hoisted
+      // so this block stays independent of the one above.
+      const z = tri[i + 2]! * S + (refAt ? (SHIFT_FOR_PLAN) : 0);
+      if (z < z0 || z >= z0 + 0.03) continue;
+      ref = Math.max(ref, Math.abs(tri[i]!) * S);
+    }
+  }
+  console.log(`  ${z0.toFixed(2)}..${(z0 + 0.03).toFixed(2)}   ${f(ref)} ${f(hw)}`);
+}
 
 // ---- the pictures -------------------------------------------------------
 function view(axis: 'front' | 'side', cols: number, rows: number, y0: number, y1: number): string[] {

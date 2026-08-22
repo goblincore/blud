@@ -2474,7 +2474,13 @@ async function main() {
   function focusBody() {
     const c = torsoCentre(lastPosed);
     autoSpin = false;
-    camTarget.set(c[0], 1.05, c[2]);
+    // Half the body's OWN height, not a constant. 1.05 was the zombie's
+    // torso and on the 1.10 m mouse it aimed the orbit above the head — so a
+    // nominally level shot looked ~28 degrees DOWN on the chest, straight
+    // through the open collar at the flesh inside the shirt. That strip of
+    // yellow was hunted as three different rendering bugs before the camera
+    // was suspected.
+    camTarget.set(c[0], boxHeight(view.object) * 0.5, c[2]);
     camYaw = 0.35;
     camPitch = 0.12;
     camDist = 2.4;

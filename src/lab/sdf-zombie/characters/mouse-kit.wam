@@ -70,10 +70,13 @@ skeleton
   root pelvis at 0.2382
   bone hips   parent=pelvis dir=up len=0.0827
   bone spine1 parent=hips dir=up pitch=2 len=0.0782
-  bone chest  parent=spine1 dir=up pitch=2 len=0.1664
-  bone spine2 parent=chest dir=up pitch=-2 len=0.0973
-  bone neck   parent=spine2 dir=up pitch=-5 len=0.0782
-  bone skull  parent=neck dir=up pitch=-3 len=0.0909
+  bone chest  parent=spine1 dir=up pitch=2 len=0.0827   # 0.091 m: shoulder at 0.530, off the mesh surface
+  bone spine2 parent=chest dir=up pitch=-2 len=0.0636   # 0.070 m: collar at 0.600
+  # Tracks the .blob: collar 0.600 up to the head base 0.817, 0.217 m /
+  # 1.10 = 0.1973. The shades and brows are aimed off `skull`, so if this does
+  # not track the .blob they float off the face by the distance the head moved.
+  bone neck   parent=spine2 dir=up pitch=-2 len=0.1973
+  bone skull  parent=neck dir=up pitch=0 len=0.0909
   mirror
     # clavicle side 0.032 len 0.038; upperarm pitch -2 (blob) -> +2 here
     bone clavicle parent=chest    side=0.0291 dir=side len=0.0345
@@ -85,7 +88,7 @@ skeleton
     bone f_ring   parent=hand dir=down tilt=-6 pitch=-5 len=0.0473
     bone f_little parent=hand dir=down tilt=-20 pitch=-3 len=0.0409
     # thigh pitch 8 (blob) -> -8; shin -9 -> +9. Legs lengthened (0.110/0.105).
-    bone thigh    parent=hips side=0.0309 dir=down pitch=-8 tilt=5 len=0.1000
+    bone thigh    parent=hips side=0.0382 dir=down pitch=-8 tilt=5 len=0.1000
     bone shin     parent=thigh dir=down pitch=9 tilt=-4 len=0.0955
     bone foot     parent=shin dir=fwd len=0.0909
   end
@@ -105,28 +108,34 @@ parts
     # -> 0.055 + margin). Lofted down the upperarm with the mouth at the
     # BOTTOM (rings reversed: ring 0 at t=0.95 hem, ring 1 at t=0.40 top).
     # ================================================================
+    # Starts at the SHOULDER, not 42% down the arm. The mesh sleeves leave
+    # the body at its top corners (0.20 half-wide at y 0.54-0.56), and with
+    # the tee only 0.083 half-wide at that height the shoulder balls (r 0.040
+    # at x 0.07) stood 8 mm proud of it — bare yellow shoulders either side
+    # of a red shirt. The top ring wraps the ball with 5 mm to spare.
     loft sleeve bones=upperarm..upperarm material=tee
-      ring 0.42 w=0.062 d=0.058
+      ring 0.05 w=0.104 d=0.100
+      ring 0.42 w=0.082 d=0.076
       ring 0.75 w=0.080 d=0.074
       ring 0.95 w=0.104 d=0.094
       cap start=none end=none
 
     # ================================================================
-    # SHORTS — high-waisted, measured off the reference: waist up at the
-    # tee's hem (hidden under it) and legs ending above the knee. 2026-08-22:
-    # hip rose to 0.353, so the ray (offset 0.198 = 0.218 m above the hip)
-    # starts the waist at ~0.571, under the tee's hem (0.509), and runs down
-    # to a hem ~0.343 — above the new knee. Lofted on a FREE RAY down the
-    # thigh's axis (thigh head 0.353 is BELOW the waist, so the ray starts
-    # up at the pelvis and runs down), `follow=` off — stubby shorts do not
-    # swing. The shorts clear the longer leg by ~4 cm because they are cut
-    # wide.
+    # SHORTS — two legs, each its own tube, cut to the mesh. The mesh shorts
+    # are 0.168 across at the waist (y 0.30..0.34, the legs merged into one
+    # block) and end at a hem about y 0.25, where the bare legs — 0.071 across
+    # each, centred at x 0.048 — take over. The previous rings were 0.165 m
+    # wide PER LEG: the two tubes overlapped into one slab twice the width of
+    # the body. Waist starts at 0.40, hidden under the tee's 0.347 hem; the
+    # rings narrow from a merged waist to a per-leg hem of 0.090 m (flesh
+    # 0.071 + drape) whose outer edge lands at x 0.093 against the mesh's
+    # 0.084..0.088. Lofted on a free ray down the thigh's axis, `follow=`
+    # off — stubby shorts do not swing.
     # ================================================================
-    loft shortsleg bone=thigh at=0.0 offset=(0,0.198,0.005) dir=down pitch=-8 tilt=5 len=0.210 material=shorts frame=fwd
-      ring 0.00 w=0.150 d=0.174
-      ring 0.30 w=0.152 d=0.170
-      ring 0.62 w=0.146 d=0.144
-      ring 1.00 w=0.138 d=0.126
+    loft shortsleg bone=thigh at=0.0 offset=(0,0.0427,0.005) dir=down pitch=-8 tilt=5 len=0.136 material=shorts frame=fwd
+      ring 0.00 w=0.118 d=0.166
+      ring 0.50 w=0.102 d=0.132
+      ring 1.00 w=0.088 d=0.101
       cap start=none end=none
 
     # ================================================================
@@ -162,8 +171,10 @@ parts
     # give 0.032), so this is the middle of a plateau rather than a peak
     # someone should try to sharpen.
     loft shoe bone=shin at=1.0 offset=(0,0,0.010) dir=fwd yaw=25 len=0.280 frame=up material=shoe
-      ring 0.00 w=0.062 d=0.150 up=-0.053
-      ring 0.20 w=0.084 d=0.140 up=-0.058
+      # Mouth cut for the re-proportioned shin (r 0.032 against the old
+      # 0.020): w 0.062 let the leg through the collar by 22 mm.
+      ring 0.00 w=0.086 d=0.150 up=-0.053
+      ring 0.20 w=0.098 d=0.152 up=-0.058
       ring 0.45 w=0.120 d=0.118 up=-0.066
       ring 0.65 w=0.140 d=0.098 up=-0.075
       ring 0.82 w=0.120 d=0.076 up=-0.083
@@ -184,19 +195,33 @@ parts
 
   # ================================================================
   # TEE — the torso shell. CROPPED over high-waisted shorts (the reference
-  # boundary). 2026-08-22: the torso got much LONGER, so the old ray (off the
-  # neck tail, 0.070 long) floated a thin red band up at the neck. This one
-  # starts at the NECK BASE (0.729) and runs down 0.200 to a hem at ~0.509,
-  # just above where the blue shorts begin. Loose drape: measured torso flesh
-  # is half-width ~0.052 at the collar falling to ~0.065 at the waist (the
-  # arms in the 0.11/0.18 columns are sleeves, not the body); the tee stays
-  # boxier with 2-3 cm of drape all round.
+  # boundary). Cut to the MESH, frame-aligned, with 1.5 cm of drape: the
+  # torso under it is 0.132 wide x 0.144 deep at the collar (y 0.60) and
+  # 0.158 x 0.155 at the hem (0.35). The previous tee's hem ring was 0.233 m
+  # deep — 8 cm more than the body it dressed — which is most of why the
+  # torso read as a barrel. Collar at the neck base (0.600), 0.230 down to a
+  # hem at 0.347, just above the shorts.
   # ================================================================
-  loft tee bone=neck at=0.0 dir=down len=0.200 material=tee frame=fwd
-    ring 0.00 w=0.120 d=0.165
-    ring 0.30 w=0.140 d=0.180
-    ring 0.62 w=0.156 d=0.198
-    ring 1.00 w=0.170 d=0.212
+  # FACET CORRECTION. `style chunky` lofts are 8-sided, and a facet's middle
+  # sits at cos(22.5) = 92.4% of the ring's nominal radius. The first cut of
+  # these rings put the chest facet at 0.081 against a flesh front of 0.087 —
+  # a 6 mm stripe of yellow down the middle of the shirt. Depths carry 12%
+  # and widths 8% over the mesh-plus-drape numbers in the comment above.
+  # THE COLLAR HUGS THE NECK. At w 0.149 the mouth was 0.082 half-wide around
+  # a 0.046 neck, and any camera above the shoulders looked straight down
+  # the inside of the shirt: the chest flesh showed as a yellow strip from
+  # the collar to mid-chest, narrowing with depth — hunted first as flesh
+  # poking through the fabric (it was 11-20 mm clear), then as a specular
+  # band, then as a UV seam. It was the opening. The mesh collar is 0.066
+  # half-wide at y 0.60 around a 0.049 neck; ring 0 now sits ~10 mm off ours
+  # after the facet loss (2 mm was inside the depth-composite fuzz) and flares
+  # to the body by ring 0.08.
+  loft tee bone=neck at=0.0 dir=down len=0.230 material=tee frame=fwd
+    ring 0.00 w=0.118 d=0.150
+    ring 0.08 w=0.152 d=0.168
+    ring 0.30 w=0.162 d=0.179
+    ring 0.62 w=0.173 d=0.186
+    ring 1.00 w=0.186 d=0.188
     cap start=none end=none
 
   # ================================================================
@@ -234,7 +259,7 @@ parts
     # offset.y to 0.045 (slab centre ~0.908, the hairline) and moved offset.z
     # to 0.100 so the slab straddles the front face (~0.11 there) and tucks
     # only ~2 cm at the rim.
-    loft brow bone=skull at=0.436 offset=(0.052,0.045,0.100) dir=side tilt=-13 len=0.048 frame=fwd material=black
+    loft brow bone=skull at=0.436 offset=(0.052,0.045,0.118) dir=side tilt=-13 len=0.048 frame=fwd material=black
       ring 0.00 w=0.034 d=0.030
       ring 0.35 w=0.038 d=0.040
       ring 0.70 w=0.032 d=0.044

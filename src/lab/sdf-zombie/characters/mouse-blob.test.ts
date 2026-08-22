@@ -188,9 +188,13 @@ describe('mouse.blob', () => {
     // face at cheek/under-eye level and holds near-horizontal, ~49 mm under
     // the eyes. With the head raised (2026-08-22), the eye line sits ~0.864
     // (snout tip 0.815 + 49 mm); a tip at forehead height is a trunk.
+    // 0.15, not the 0.2 this used to demand: the reference MESH's own tip
+    // is at z 0.186 (marched off maus-biped, scaled to 1.10), so 0.2 could
+    // only ever be passed by a snout LONGER than the reference — which is
+    // exactly what every earlier version of this character was.
     let tipY = 0;
     for (let y = 0.72; y <= 0.90; y += 0.005)
-      if (surfaceZ(b, y).front > tip - 0.002 && surfaceZ(b, y).front > 0.2) tipY = y;
+      if (surfaceZ(b, y).front > tip - 0.002 && surfaceZ(b, y).front > 0.15) tipY = y;
     expect(tipY).toBeLessThan(0.868);
     expect(tipY).toBeGreaterThan(0.74);
   });
