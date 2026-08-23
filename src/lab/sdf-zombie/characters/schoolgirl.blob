@@ -29,7 +29,7 @@
 # simple masses, toy-like proportions (6.9 heads tall: mildly stylised, NOT
 # chibi). No mottle, no surface noise, hair as a few large smooth masses.
 # The outfit is PAINT on the sculpt (color= on prims), exactly as in the
-# mesh's texture: skin dab18a, navy 01046d, white ececed, sock d9d8d9,
+# mesh's texture: skin ecd3ba, navy 01046d, white ececed, sock d9d8d9,
 # hair/shoes 201109, sole bdb9bc, accents 66537c.
 model schoolgirl
   height 1.70
@@ -96,14 +96,14 @@ body
   # front-to-back: the collar drapes flat over it).
   # ============================================================
   # Pelvis filler under the skirt (never seen; keeps the legs fused).
-  blob torso on pelvis  at=0.50 r=0.090 deep=0.95 blend=0.020 color=dab18a
+  blob torso on pelvis  at=0.50 r=0.090 deep=0.95 blend=0.020 color=ecd3ba
   # Pelvis-to-waist: one tapered bar, mostly hidden under the skirt; its top
   # is the bottom half of the skin midriff. r 0.072 -> 0.054: the waist's
   # 0.066 half-width minus the k/4 blend inflation.
-  bar  torso on spine1  from=0.20 to=1.00 r=0.072 r2=0.054 deep=0.88 blend=0.025 color=dab18a
+  bar  torso on spine1  from=0.20 to=1.00 r=0.072 r2=0.054 deep=0.88 blend=0.025 color=ecd3ba
   # The skin midriff band (the top is a CROP TOP; skin shows 1.054-1.105,
   # mesh paint bands 0.62-0.65). Same column as the waist bar, one blend up.
-  bar  torso on chest   from=0.00 to=0.16 r=0.054 r2=0.060 deep=0.85 blend=0.025 color=dab18a
+  bar  torso on chest   from=0.00 to=0.16 r=0.054 r2=0.060 deep=0.85 blend=0.025 color=ecd3ba
   # The WHITE TOP: one tapered bar from the midriff overlap to the bust.
   # The paint boundary with the midriff bar lands at ~1.09-1.11 where the
   # two fields cross — that line is the crop top's hem, and it is a colour
@@ -157,7 +157,7 @@ body
 
   # Neck: 0.041 half-wide x 0.054 half-deep (mesh 0.048/0.064 full) at the
   # narrowest 1.428. Skin.
-  bar head on neck from=0.18 to=0.78 r=0.041 deep=1.33 blend=0.0040 color=dab18a
+  bar head on neck from=0.18 to=0.78 r=0.041 deep=1.33 blend=0.0040 color=ecd3ba
 
   # ============================================================
   # THE HAIR — a swept dark bob with a peaked fringe. Smooth masses, no
@@ -169,7 +169,11 @@ body
   # peak tuft.
   # Crown shell: centre (0,1.612,-0.008), half (0.098, 0.082, 0.113) —
   # 0.195 wide at 1.61, matching the upper run.
-  blob head on skull at=0.45 offset=(0,0.037,-0.008) r=0.098 wide=1.00 tall=0.837 deep=1.15 blend=0.0060 color=201109 gloss=0.35
+  # deep 0.95 centred z -0.020 (was 1.15 at -0.008): the dome reached z+0.105
+  # and hung over the brow as a glossy helmet, shadowing the whole face. The
+  # mesh's hair hugs the skull with the hairline at the forehead top. Gloss
+  # down 0.35 -> 0.22 for the same reason: the helmet read was half specular.
+  blob head on skull at=0.45 offset=(0,0.037,-0.020) r=0.098 wide=1.00 tall=0.96 deep=0.95 blend=0.0060 color=201109 gloss=0.22
   # The side lobes: the swept flare. Centre (+/-0.074, 1.545, -0.010),
   # half (0.034, 0.045, 0.102) — outer edge 0.108 at 1.545 (0.215 wide,
   # mesh 0.219), bottom edge 1.50, deep in z like the shell.
@@ -177,17 +181,22 @@ body
   # z +0.09 and swallowed the cheeks — the mesh's cheeks are open skin with
   # the bob only FRAMING them from behind the ear line.
   blob head on skull at=0.45 offset=(0.074,-0.030,-0.030) r=0.034 wide=1.00 tall=1.32 deep=2.20 blend=0.0060 both color=201109 gloss=0.35
-  # The crown peak: the mesh's topmost point is a narrow fringe tip (w .016
-  # fraction at y 1.000), not a dome — one tapered bar to a point, tipped
-  # slightly forward.
-  bar  head on skull from=0.95 to=1.12 offset=(0,0.003,0.012) tip=(0,0.002,0.010) r=0.026 r2=0.007 blend=0.0040 chamfer color=201109 gloss=0.35
+  # (v3 of this head removed the crown-peak tuft bar: it read as a nub on a
+  # helmet. The mesh's crown is a low centre-parted mound — the dome above
+  # plus the decal's painted part carry it.)
   # The fringe: a top-of-forehead RIM, not a brow-covering sweep. The DECAL
   # paints the hairline and the widow's peak itself (the mesh's forehead is
   # OPEN to ~1.56, the peak is 2D art), so geometry that hangs to 1.537
   # covered the whole forehead and the decal then drew a second hairline on
   # the sliver left — a double-hair squeezed wedge (owner, 2026-08-23).
   # Raised ~2 cm and pulled back so the painted forehead shows.
-  blob head on skull at=0.45 offset=(0,0.034,0.034) r=0.052 wide=1.30 tall=0.42 deep=0.62 blend=0.0035 color=201109 gloss=0.35
+  # The geometry hairline: covers the skull top down to the TEMPLE LINE
+  # (1.57), front at the brow's own depth (z 0.097 — anything shallower is
+  # submerged in the cranium and the painted scalp reads as a bald brown
+  # band; a scarlet-fringe diagnostic drew rounds 5-7's fringe as a headband
+  # ABOVE the band). Only the decal peak's TIP dips below the hairline,
+  # which is exactly the mesh's own read.
+  blob head on skull at=0.45 offset=(0,0.002,0.048) r=0.052 wide=1.30 tall=1.55 deep=0.95 blend=0.0035 color=201109 gloss=0.22
   # The nape: the bob's underside at the back, closing the gap between the
   # lobes' bottom (1.50) and the hairline at the neck. Deep: the mesh side
   # profile at 1.44-1.48 is 0.175-0.207, so the back mass reaches z -0.112
@@ -196,7 +205,7 @@ body
   # THE CHIN: the mesh's chin tip sits at (1.45, z 0.095) — 0.10 forward,
   # a definite point on an otherwise small face. One small prim, blended
   # softly into the jaw so it reads as the jaw's tip, not a bead.
-  blob head on skull at=0.45 offset=(0,-0.118,0.078) r=0.022 wide=1.20 tall=0.55 deep=0.90 blend=0.0040 color=dab18a
+  blob head on skull at=0.45 offset=(0,-0.118,0.078) r=0.022 wide=1.20 tall=0.55 deep=0.90 blend=0.0040 color=ecd3ba
 
   # EARS — pointed, elf-ish, skin: the mesh's ear band (0.86-0.88 -> y
   # 1.462-1.496) is 0.146-0.170 wide total where the head under the hair is
@@ -204,7 +213,13 @@ body
   # per side at the hairline's bottom edge, pointing out and slightly back.
   # Bigger and further out than v2 (r 0.012 -> 0.016, x 0.044 -> 0.050):
   # the mesh's ears are a visible feature with earrings, not hidden points.
-  blob head on skull at=0.45 offset=(0.050,-0.097,-0.008) tip=(0.034,0.014,-0.012) r=0.016 r2=0.004 blend=0.0020 chamfer both color=dab18a
+  blob head on skull at=0.45 offset=(0.050,-0.097,-0.008) tip=(0.034,0.014,-0.012) r=0.016 r2=0.004 blend=0.0020 chamfer both color=ecd3ba
+
+  # FRONT SIDE LOCKS — the mesh's defining hair feature the bob was missing:
+  # two pointed locks hanging IN FRONT of the ears from the temple (1.60)
+  # to the jaw line (1.475), framing the face. Without them the face read as
+  # a mask under a helmet (owner, 2026-08-23).
+  blob head on skull at=0.45 offset=(0.058,0.000,0.052) tip=(0.004,-0.128,0.004) r=0.015 r2=0.004 blend=0.0030 chamfer both color=201109 gloss=0.22
 
   # ============================================================
   # THE FACE — a DECAL (see the sheet block): the mesh's own face, baked
@@ -224,11 +239,11 @@ body
   blob arm on clavicle at=1.00 r=0.048 blend=0.0045 mirror core color=ececed
   # Short sleeve, slightly puffed over the 0.026 arm inside it.
   bar  arm on upperarm from=0.00 to=0.45 r=0.034 r2=0.028 blend=0.0050 mirror color=ececed
-  bar  arm on upperarm from=0.45 to=0.98 r=0.026 r2=0.023 blend=0.0042 mirror color=dab18a
-  blob arm on forearm  at=0.00 r=0.023 blend=0.0042 mirror color=dab18a
-  bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.019 blend=0.0040 mirror color=dab18a
+  bar  arm on upperarm from=0.45 to=0.98 r=0.026 r2=0.023 blend=0.0042 mirror color=ecd3ba
+  blob arm on forearm  at=0.00 r=0.023 blend=0.0042 mirror color=ecd3ba
+  bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.019 blend=0.0040 mirror color=ecd3ba
   # Hand: a slim smooth mitt, no fingers — resting hands read as soft masses.
-  blob arm on hand at=0.45 offset=(0,0,0.03) r=0.028 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=dab18a
+  blob arm on hand at=0.45 offset=(0,0,0.03) r=0.028 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=ecd3ba
 
   # ============================================================
   # LEGS — the paint bands do the reading: skin thigh (0.455-0.28 of
@@ -236,13 +251,13 @@ body
   # its top (mesh 0.19-0.20, w .164-.172: 0.0735 half-radius at the cuff,
   # falling to 0.054 at the ankle), then dark shoes.
   # ============================================================
-  blob leg on thigh at=0.00 r=0.062 blend=0.0050 mirror core color=dab18a
+  blob leg on thigh at=0.00 r=0.062 blend=0.0050 mirror core color=ecd3ba
   # r 0.0655 -> 0.0535: the mesh column 0.269-0.293 at the thigh tapering
   # to the 0.245 knee band (2 x (0.069 + 0.0535), knees TOUCHING).
-  bar  leg on thigh from=0.06 to=0.94 r=0.0655 r2=0.0535 deep=0.85 blend=0.0046 mirror color=dab18a
-  blob leg on shin  at=0.00 r=0.052 deep=0.85 blend=0.0048 mirror color=dab18a
+  bar  leg on thigh from=0.06 to=0.94 r=0.0655 r2=0.0535 deep=0.85 blend=0.0046 mirror color=ecd3ba
+  blob leg on shin  at=0.00 r=0.052 deep=0.85 blend=0.0048 mirror color=ecd3ba
   # Calf: swells BELOW the knee (mesh 0.269 at 0.375-0.44) toward the cuff.
-  bar  leg on shin  from=0.10 to=0.38 r=0.060 r2=0.065 deep=0.80 blend=0.0044 mirror color=dab18a
+  bar  leg on shin  from=0.10 to=0.38 r=0.060 r2=0.065 deep=0.80 blend=0.0044 mirror color=ecd3ba
   # The sock: WHITE. The mesh's slouch bunches LOW: 0.292 total at the cuff
   # swelling to 0.304 by 0.147 as the fabric slouches toward the shoe.
   bar  leg on shin  from=0.38 to=0.97 r=0.077 r2=0.082 deep=0.78 blend=0.0050 mirror color=d9d8d9 gloss=0.10
@@ -323,15 +338,18 @@ sheet
   image       schoolgirl-face.png
   decal       1
   projScaleX  0.38
-  projScaleY  0.45
+  projScaleY  0.42
   projCentreX 0.5
-  projCentreY 0.89
+  projCentreY 0.78
 
-# Skin dab18a = sRGB (218,177,138) -> linear (0.699, 0.439, 0.254). Wounds
+# Skin ecd3ba = sRGB (236,211,186) -> linear (0.839, 0.651, 0.491) — PALE,
+# matched to the mesh render (owner screenshot 2026-08-23): the old dab18a
+# tan read orange against the decal's pale face and nothing like the mesh.
+# Wounds
 # stay red. Toy-clean: no mottle to speak of, no surface or silhouette
 # noise, moderate gloss (specRoughness 0.35 per the style brief).
 palette
-  baseColor     0.699 0.439 0.254
+  baseColor     0.839 0.651 0.491
   deepColor     0.50 0.08 0.08
   charColor     0.22 0.13 0.10
   specIntensity 0.45

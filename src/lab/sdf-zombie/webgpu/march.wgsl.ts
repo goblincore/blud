@@ -1289,6 +1289,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   // Emissive mask from the face sheet; added into the lit colour further down.
   var faceGlow = 0.0;
+  // Decal coverage at this pixel (facing * alpha, decal mode only): drives
+  // the FLAT-LIGHTING blend at fleshLit. A painted PSX face is authored
+  // pre-lit; shading it again buries the nose and lips under the fringe
+  // shadow and the jaw's diffuse falloff.
+  var faceFlat = 0.0;
 
   // Face texture, before wounds and char so damage still paints over it.
   if (faceCfg.x > 0.5) {
@@ -1345,6 +1350,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       // compensate for the missing output encode. Revisit both together at the
       // preset retune, not before.
       let tex = texel(faceTex, base);
+      faceFlat = facing * tex.a * decal;
       let W = vec3<f32>(0.2126, 0.7152, 0.0722);
       // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
       // reference mesh and pasted on as albedo where its alpha is set, the way
@@ -1465,9 +1471,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // floor, so it is the cavity depth for free: darken the floor, keep the lip.
   ao = ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm));
 
-  let fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
+  var fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
                + keyColor * (shine * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
+  // FLAT-LIT decal: where the baked face covers the surface, relight it with
+  // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
+  // own shading, and real shading on top drew hard shadow lines from the
+  // fringe and killed the mouth on the down-sloping jaw. 0.85 keeps a whisper
+  // of real light so the head still turns.
+  fleshLit = mix(fleshLit,
+                 albedo * (lightCfg.y + 0.52 * lightCfg.x) * keyColor,
+                 faceFlat * 0.85);
 
   // The eye REPLACES the flesh rather than adding to it.
   //

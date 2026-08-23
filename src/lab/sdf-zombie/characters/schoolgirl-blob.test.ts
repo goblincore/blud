@@ -40,7 +40,9 @@ describe('schoolgirl.blob', () => {
     const m = compilePalette(doc)!;
     const [r, g, b] = m.baseColor;
     expect(r).toBeGreaterThan(0.6);
-    expect(r).toBeGreaterThan(g + 0.2);
+    // 0.15, not 0.2: the pale mesh-matched skin (ecd3ba, 2026-08-23) is less
+    // saturated than the old dab18a tan — r-g is 0.188 and still clearly warm.
+    expect(r).toBeGreaterThan(g + 0.15);
     expect(g).toBeGreaterThan(b);
     expect(m.deepColor[0]).toBeGreaterThan(m.deepColor[1]);
   });
