@@ -170,7 +170,10 @@ describe('cyclops.blob', () => {
     const [r, g, bl] = m.baseColor;
     expect(r).toBeGreaterThan(g);
     expect(g).toBeGreaterThan(bl);
-    expect(r).toBeLessThan(0.15);
+    // Olive-brown, not pink and not white: r stays under 0.3 (the owner asked
+    // for "lighter and shinier" on first look, 2026-08-23 — base moved from
+    // the texture's AO-darkened mean 0.062 to its lit mid-tone 0.15).
+    expect(r).toBeLessThan(0.30);
     expect(m.deepColor[0]).toBeGreaterThan(m.deepColor[1]);
   });
 });

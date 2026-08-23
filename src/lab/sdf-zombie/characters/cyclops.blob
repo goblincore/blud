@@ -300,19 +300,22 @@ sheet
 # numbers read darker than they render. base is lifted a touch above the
 # texel mean because mottleAmp 0.30 pulls the mean toward mottleColor.
 palette
-  baseColor     0.062 0.040 0.013
-  # Wounds stay red — the house rule every character follows.
+  # Owner, first look in the lab (2026-08-23): "lighter and shinier". The
+  # mesh's texture is a dark olive-brown WITH baked AO, so matching its mean
+  # texel made the SDF read as a silhouette under the lab's hard key. Base is
+  # now well above the texture's lit mid-tone (#8a7448 -> linear; the lab key
+  # is hard and the flesh has no AO of its own), and the surface is
+  # wet-hide glossy rather than matte: a chitinous brute, not a mud slug.
+  baseColor     0.260 0.175 0.060
   deepColor     0.50  0.08  0.08
   charColor     0.05  0.04  0.01
-  specIntensity 0.40
-  specRoughness 0.55
-  fresnelBoost  0.30
+  specIntensity 0.85
+  specRoughness 0.14
+  fresnelBoost  0.60
   translucency  0.15
-  # Armoured hide: a faint normal-grain, no silhouette noise (the profile is
-  # a clean sculpt in the reference).
   surfaceNoiseAmp    0.12
   silhouetteNoiseAmp 0.0
-  wetness       0.12
+  wetness       0.35
   # Mottle darker-olive, differing in value only because the reference hide
   # is one flat tone — a hue-shifted mottle would read as dirt ON it.
   mottleAmp     0.30
