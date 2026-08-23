@@ -2982,7 +2982,15 @@ async function main() {
   addButton(actionBox, 'reset overrides', () => {
     clearOverride(activeCharacterName());
     override = {};
+    // Re-seed the face from the .blob BEFORE rebuilding: rebuildBody saves
+    // `face` back into the override, so resetting storage alone re-persisted
+    // whatever the sliders had done to the skull (owner, 2026-08-23: the
+    // schoolgirl's cranium stayed a skin dome above her hair after reset).
+    try { Object.assign(face, DEFAULT_FACE, compileFace(parseBlob(activeCharacterSrc()))); }
+    catch { Object.assign(face, DEFAULT_FACE); }
     rebuildBody();
+    rebuildFaceSliders();
+    if (!loadGeneratedFace()) loadFaceTexture('zombie-flat');
   });
 
   reapply();
