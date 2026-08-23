@@ -138,7 +138,7 @@ describe('cyclops.blob', () => {
     // Claws are the tapered prims on the c_* bones — the elbow spur is
     // tapered too and must not count.
     const claws = b.prims.filter(p => p.limb === arm && (p.radiusB ?? 0) > 0
-      && p.bone.startsWith('c_'));
+      && (p.bone ?? '').startsWith('c_'));
     expect(claws.length).toBe(3);
     let widest = 0;
     for (const c of claws) widest = Math.max(widest, Math.abs(c.b[0]));

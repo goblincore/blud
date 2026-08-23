@@ -832,6 +832,13 @@ export interface SilhouetteReport {
   /** Subject aspect (width/height) of each, before normalisation. */
   refAspect: number;
   gotAspect: number;
+  /**
+   * Mean row-to-row change of outline width inside the window, in fractions
+   * of subject height. A smooth taper slides a little every row; a stack of
+   * discs jumps. THE BANDS CANNOT SEE THIS — a disc stack matches a taper
+   * band for band (schoolgirl, 2026-08-23) — so it is reported beside them.
+   */
+  rowJerk: { ref: number; got: number };
 }
 
 /**
@@ -864,14 +871,35 @@ export function compareSilhouette(
   // of subject height in both — which is what makes the widths comparable.
   const rn = normalise(ref, g, g), gn = normalise(got, g, g);
 
-  let inter = 0, union = 0;
-  for (let y = rowLo; y < rowHi; y++)
+  // IoU IN HEIGHT UNITS ON A SHARED CENTRELINE. The normalised grids stretch
+  // each subject's WHOLE-figure width to g columns, so when the two figures
+  // differ in whole-figure aspect (a T-posed mesh is 0.92 wide, the same
+  // figure arms-down 0.26) the window rows are stretched by different factors
+  // and comparing them column for column is meaningless — the schoolgirl's
+  // legs scored 0.22 while agreeing to 0.008 in width. Each row is instead
+  // re-expressed as occupied columns in fractions of subject HEIGHT, centred
+  // on the subject's own centreline, on one common grid.
+  const W = 2 * g; // covers [-1, +1] height units across
+  const rowBits = (m: Mask, aspect: number, y: number): Uint8Array => {
+    const out = new Uint8Array(W);
     for (let x = 0; x < g; x++) {
-      const i = y * g + x;
-      const a = rn.bits[i]!, b = gn.bits[i]!;
-      if (a & b) inter++;
-      if (a | b) union++;
+      if (!m.bits[y * g + x]) continue;
+      const x0 = ((x / g) - 0.5) * aspect, x1 = (((x + 1) / g) - 0.5) * aspect;
+      const c0 = Math.max(0, Math.floor((x0 + 1) / 2 * W)), c1 = Math.min(W, Math.ceil((x1 + 1) / 2 * W));
+      for (let c = c0; c < c1; c++) out[c] = 1;
     }
+    return out;
+  };
+  let inter = 0, union = 0;
+  let jerkRef = 0, jerkGot = 0, prevRef = -1, prevGot = -1, jerkRows = 0;
+  for (let y = rowLo; y < rowHi; y++) {
+    const a = rowBits(rn, refAspect, y), b = rowBits(gn, gotAspect, y);
+    for (let c = 0; c < W; c++) { if (a[c]! & b[c]!) inter++; if (a[c]! | b[c]!) union++; }
+    const wr = (extent(rn, y, y + 1) / g) * refAspect, wg = (extent(gn, y, y + 1) / g) * gotAspect;
+    if (prevRef >= 0) { jerkRef += Math.abs(wr - prevRef); jerkGot += Math.abs(wg - prevGot); jerkRows++; }
+    prevRef = wr; prevGot = wg;
+  }
+  const rowJerk = { ref: jerkRows ? jerkRef / jerkRows : 0, got: jerkRows ? jerkGot / jerkRows : 0 };
 
   // Width is measured as the EXTENT (rightmost minus leftmost occupied), not
   // the count of set pixels. The two differ exactly where a band contains a
@@ -904,6 +932,7 @@ export function compareSilhouette(
     bands: out,
     refAspect,
     gotAspect,
+    rowJerk,
   };
 }
 

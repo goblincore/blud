@@ -90,6 +90,50 @@ describe('normalise', () => {
 describe('compareSilhouette', () => {
   const tall = mask(['..##..', '..##..', '..##..', '..##..']);
 
+  // THE SCHOOLGIRL LESSON (2026-08-23). A T-posed reference is 0.92 as wide as
+  // it is tall; the arms-down .blob is 0.26. Normalising each to its own
+  // whole-figure box before taking the window rows stretched the two by
+  // different factors, and the window IoU read 0.22 on legs whose widths
+  // agreed to 0.008. The window IoU must be computed in HEIGHT units on a
+  // shared centreline, so rows outside the window cannot touch it.
+  it('window IoU ignores the rows outside the window (T-pose arms vs arms down)', () => {
+    const tpose = mask([
+      '....##....',
+      '##########', // arms out
+      '....##....',
+      '....##....',
+      '....##....',
+      '....##....',
+    ]);
+    const down = mask([
+      '....##....',
+      '...####...', // arms by the sides
+      '....##....',
+      '....##....',
+      '....##....',
+      '....##....',
+    ]);
+    const r = compareSilhouette(tpose, down, { bands: 4, range: [0.5, 1], grid: 120 });
+    expect(r.iou).toBeGreaterThan(0.95);
+    expect(r.meanWidthError).toBeLessThan(0.02);
+  });
+
+  // A stack of discs matches a smooth taper band for band — the width of each
+  // band is right — so a per-band score cannot tell them apart. Row-to-row
+  // width change can: a disc stack jumps where a taper slides.
+  it('reports row jerk, which separates a disc stack from a smooth taper', () => {
+    const smooth = mask([
+      '....##....', '...####...', '...####...', '..######..',
+      '..######..', '.########.', '.########.', '##########',
+    ]);
+    const discs = mask([
+      '..######..', '..######..', '....##....', '....##....',
+      '##########', '##########', '...####...', '...####...',
+    ]);
+    const r = compareSilhouette(smooth, discs, { bands: 4, grid: 16 });
+    expect(r.rowJerk.got).toBeGreaterThan(r.rowJerk.ref * 2);
+  });
+
   it('scores an identical outline perfectly', () => {
     const r = compareSilhouette(tall, tall, { bands: 4 });
     expect(r.iou).toBeCloseTo(1, 6);

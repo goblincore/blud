@@ -158,10 +158,14 @@ function resolveSources(name: string, flags: Flags): RefSource[] {
     const mesh = resolveMeshPath(name, meshDir);
     if (mesh) sources.push({ kind: 'mesh', path: mesh });
   }
+  // A plate is a FRONT drawing. Scored as a side view it is nonsense (the
+  // mouse plate read 0.363 "side" IoU against a sculpt that matched its mesh
+  // at 0.856), so --side skips plates and says so — pass --glb for a profile.
   if (flags.plate) {
     if (!existsSync(flags.plate)) fail(`missing: ${flags.plate}`);
-    sources.push({ kind: 'plate', path: flags.plate });
-  } else {
+    if (flags.view === 'side') console.error(`--side ignores the plate ${flags.plate}: plates are front views`);
+    else sources.push({ kind: 'plate', path: flags.plate });
+  } else if (flags.view !== 'side') {
     const plate = `docs/dev-notes/refs/${name}-reference.png`;
     if (existsSync(plate)) sources.push({ kind: 'plate', path: plate });
   }
@@ -195,6 +199,10 @@ interface JsonWorst extends BandReport { band: number; owner: BandOwner | null }
 interface JsonRef {
   kind: 'mesh' | 'plate'; path: string; view: string;
   iou: number; meanWidthError: number; poseMismatch: boolean; worst: JsonWorst[];
+  /** Mean row-to-row outline width change (fraction of height): ours vs the
+   *  reference. `stacked` when ours jumps more than twice the reference's —
+   *  the bands cannot tell a stack of discs from a smooth taper; this can. */
+  rowJerk: { ref: number; got: number; stacked: boolean };
 }
 
 /**
@@ -248,6 +256,8 @@ function scoreRef(body: BuildResult, src: RefSource, opts: ScoreOpts): Scored {
     record: {
       kind: src.kind, path: src.path, view: opts.view,
       iou: rep.iou, meanWidthError: rep.meanWidthError, poseMismatch, worst,
+      rowJerk: { ref: rep.rowJerk.ref, got: rep.rowJerk.got,
+        stacked: rep.rowJerk.got > STACK_RATIO * rep.rowJerk.ref && rep.rowJerk.got - rep.rowJerk.ref > STACK_MIN },
     },
     rep, owners, ref, note,
   };
@@ -271,6 +281,18 @@ function ownerText(o: BandOwner | null | undefined): string {
   return `${where}  ${o.bone || '?'} (${o.limb || '?'})`;
 }
 
+/** Row jerk this much above the reference's reads as stacked discs IN THE
+ *  OUTLINE. Ratio AND an absolute floor, so a reference that is itself
+ *  perfectly smooth (jerk ~0) cannot flag a sculpt that is merely not
+ *  identical. HONEST LIMIT (schoolgirl, 2026-08-23): her torso was a collar
+ *  plate, two rings and a cylinder — and both front and side row jerk read
+ *  SMOOTH (0.006 vs the mesh's 0.008), because the rings were grooves INSIDE
+ *  the silhouette, not steps in it. No silhouette number sees interior
+ *  creases. Only the pictures do: ask vision-ask whether the torso is one
+ *  smooth mass or a stack of rings. */
+const STACK_RATIO = 2.0;
+const STACK_MIN = 0.004;
+
 function printRef(scored: Scored, got: Mask, range?: [number, number]): void {
   const { record, rep, ref, note } = scored;
   const window = range ? `height ${range[0]}-${range[1]}` : 'the WHOLE figure';
@@ -282,6 +304,12 @@ function printRef(scored: Scored, got: Mask, range?: [number, number]): void {
       + `${rep.gotAspect.toFixed(3)} — the whole-figure score is dominated by pose; `
       + 'score a --range window where the poses agree.');
   console.log(`aspect (w/h)   reference ${rep.refAspect.toFixed(3)}   built ${rep.gotAspect.toFixed(3)}`);
+  console.log(`row jerk       reference ${rep.rowJerk.ref.toFixed(4)}   built ${rep.rowJerk.got.toFixed(4)}`
+    + '   (outline jumps between rows; creases INSIDE the outline are invisible here — look)');
+  if (record.rowJerk.stacked)
+    console.log(`STACKED: the outline changes width between rows ${(rep.rowJerk.got / Math.max(rep.rowJerk.ref, 1e-6)).toFixed(1)}x `
+      + 'more than the reference — it reads as a stack of discs even though every band is the right width. '
+      + 'Blend the masses (bigger blend=, fewer rings, one tapered prim where there are three) before chasing bands.');
 
   console.log('\nworst bands — the lines to edit, in order:');
   if (record.poseMismatch)

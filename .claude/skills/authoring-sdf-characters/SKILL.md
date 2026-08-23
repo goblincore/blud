@@ -49,6 +49,11 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
    than that along the view axis — a lens, a blade-thin ear seen front-on — is
    stepped straight over and the band is attributed to the next primitive
    INWARD. It never invents an owner; it can name one too deep.
+   And read the **row jerk** line: the bands cannot tell a stack of discs
+   from a smooth taper — every band's width can be right while the outline
+   jumps at every ring (the schoolgirl's torso, 2026-08-23). Read it in
+   `--side` for the torso: a T-posed reference's arms pollute the front view
+   there. If it prints STACKED, blend the masses before chasing another band.
 4. **Every ~5 edits, look:** `npm run blob:shot -- <name>`, then `Read` the
    frames — or, if your model has no native vision (glm-5.x and kimi-k3 on pi:
    `Read` on a PNG shows you nothing), `python3 scripts/vision-ask.py <frame>
@@ -146,6 +151,7 @@ before you change a number. Paths are relative to `src/lab/sdf-zombie/`.
 | a stripe of flesh through a painted area, from one angle only | the camera, not the paint — `focusBody` was aiming down the collar | look from another yaw first (`webgpu/lab-main.ts`) |
 | the whole body blanks | a zero in a panel override (`setStepsOverride(0)` used to) | `webgpu/lab-main.ts` |
 | head reads right but sits 60 mm off in profile vs the mesh | the mesh is not at the same z — frame-align on the torso | `scripts/head-profile.ts` prints the shift |
+| every band within tolerance but it looks like stacked discs / rings | per-band width cannot see row-to-row jumps; the measure prints STACKED and the row jerk (read `--side` for the torso) | bigger `blend=`, fewer rings, one tapered prim (`r2=`) where there are three |
 | the whole-figure score is stuck while the sculpt is right | the reference's POSE (arms out vs down) dominates IoU | `blob:measure --range` over a window where poses agree |
 
 The general rule the mouse paid for: **if a hole is round and the CPU field
