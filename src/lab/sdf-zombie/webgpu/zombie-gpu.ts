@@ -29,7 +29,7 @@ import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR,
-  ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
+  ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META,
 } from './march.wgsl';
 
@@ -685,6 +685,11 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_COLOR, p.primColor, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
+    // Full width: a shorter list than last frame must zero the tail, which
+    // is the shader's end-of-list sentinel.
+    writeRow(ROW_GROUP_BOUNDS, p.groupBounds, MAX_PRIMS);
+    writeRow(ROW_GROUP_RANGE, p.groupRange, MAX_PRIMS);
+    writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     dataTex.needsUpdate = true;
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
     return p;
@@ -937,11 +942,15 @@ export function createChunkGpuView(
         p.op === 'sub' ? 1 : 0], o);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
+    // The chunk's one bound group IS its cluster (singleGroup above): same
+    // sphere, rewritten from the chunk's position every frame.
+    packed.groupBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
 
     writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
+    writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, 1);
 
     if (tornLocals.length > 0) {
       // Torn ends ride the same rotate-then-squash transform as the prims, so
@@ -990,7 +999,7 @@ export function createChunkGpuView(
         center: [0, 0, 0], radius: extent, alive: true,
       }],
       bones: new Map(),
-    });
+    }, undefined, { singleGroup: true });
 
     // Full-width copies intentionally zero any rows left by the previous
     // occupant of this slot.
@@ -1004,6 +1013,8 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, packed.primColor, MAX_PRIMS);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
+    writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);
+    writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
 
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
     u.marchCfg.value.x = 48; // chunks are small; fewer steps

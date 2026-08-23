@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/pack.ts
-import type { BuiltBody } from './types';
+import type { BuiltBody, Primitive } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
 
@@ -38,6 +38,38 @@ export interface PackedBody {
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = 1 when the cluster carries oriented prims
+  /**
+   * BOUND GROUPS: the fold's cull unit. A cluster is a limb, and a limb's one
+   * sphere is fat — the schoolgirl's leg sphere (0.57 m, centred at the
+   * thigh) swallows the skirt and the other leg, so a pixel near the hip
+   * folded 42 of her 56 prims per march step (zombie: 18 of 23). Groups are
+   * contiguous runs of a cluster's prims in FOLD ORDER, each with its own
+   * sphere no larger than GROUP_RADIUS_MAX, so the shader skips a far run
+   * with one texel read. Fold order is untouched: a skipped run is exactly
+   * the far-smin no-op the cluster cull already relies on (same margin).
+   * groupBounds: xyz centre, w radius. groupRange: x start, y count (0 =
+   * end of list, the shader's loop sentinel), z the group's DISTORTION
+   * FACTOR (below), w the same flag bitfield as clusterRange.w but computed
+   * over the group's OWN prims, so one chamfered nose no longer makes the
+   * whole head read the shape row. (No per-group alive flag: the shader only
+   * reaches a group through its cluster, whose alive flag it has checked.)
+   *
+   * DISTORTION: sdPrimitive is a scaled-space field — sd = scaledDist *
+   * minScale — so for an anisotropic prim the reported distance under-reports
+   * Euclidean distance by up to maxScale/minScale (the schoolgirl's sole
+   * plate: 22x). A cull that compares a Euclidean sphere distance straight
+   * against the field's running d skips groups still inside smin support and
+   * tears the surface — found as white shells and holes around wounds, where
+   * the lip reads d as a precise field. The shader multiplies the threshold
+   * by this factor: skip only when sphereDist > (d + margin) * distort.
+   */
+  groupBounds: Float32Array;
+  groupRange: Float32Array;
+  /** Per cluster: x = index of its first group, y = its group count, z =
+   *  the cluster's own distortion factor (see groupRange.z). The shader only
+   *  walks a cluster's own span, so far limbs stay a few texels. */
+  clusterGroups: Float32Array;
+  groupCount: number;
   primCount: number;
   clusterCount: number;
   /** Cull margin: a cluster can still pull the surface from up to this far away. */
@@ -58,7 +90,18 @@ export interface PackedBody {
  * Omitted, the posed prims double as the rest pose: the right answer for
  * never-rigged bodies (crowd statues, chunk views at spawn).
  */
-export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
+export interface PackOpts {
+  /**
+   * One bound group per CLUSTER, mirroring it exactly, instead of the
+   * finer per-run split. For bodies whose prims are re-transformed in place
+   * every frame without re-packing (gib chunks: rotate + squash + translate
+   * in zombie-gpu's apply()), where a baked group sphere would go stale
+   * while the cluster sphere is rewritten from the chunk's own position.
+   */
+  singleGroup?: boolean;
+}
+
+export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}): PackedBody {
   const primA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
@@ -153,8 +196,34 @@ export function packBody(body: BuiltBody, rest?: BuiltBody): PackedBody {
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
 
+  const groupBounds = new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
+  const groupRange = new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
+  const clusterGroups = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
+  let groupCount = 0;
+  body.clusters.forEach((c, ci) => {
+    const first = groupCount;
+    const own = body.prims.slice(c.start, c.start + c.count);
+    const cDistort = distortOf(own);
+    const groups = opts.singleGroup
+      ? [{ start: c.start, count: c.count, center: c.center, radius: c.radius, distort: cDistort }]
+      : boundGroups(body.prims, c.start, c.count);
+    for (const g of groups) {
+      const o = groupCount * CLUSTER_STRIDE;
+      groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
+      const gOwn = body.prims.slice(g.start, g.start + g.count);
+      const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+      const shaped = gOwn.some(p =>
+        p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
+        || p.bend !== undefined);
+      groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
+      groupCount++;
+    }
+    clusterGroups.set([first, groupCount - first, cDistort, 0], ci * CLUSTER_STRIDE);
+  });
+
   return {
     primA, primB, primScale, primQuat, primShape, primBend, primColor, restA, restB, clusterBounds, clusterRange,
+    groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
     maxBlendK,
@@ -175,4 +244,84 @@ export function markPrimDead(packed: PackedBody, primIdx: number): void {
 /** True unless the prim is a carve or dead — i.e. it folds into the surface. */
 export function primAlive(packed: PackedBody, primIdx: number): boolean {
   return packed.primScale[primIdx * PRIM_STRIDE + 3] === W_ADD;
+}
+
+/**
+ * Largest bounding-sphere radius a bound group may grow to before the next
+ * prim in fold order starts a new group. Body-scale metres. 0.16 is about a
+ * thigh's length: small enough that a hip pixel no longer folds the shin and
+ * foot, large enough that a limb is two or three groups, not nine.
+ */
+export const GROUP_RADIUS_MAX = 0.16;
+
+export interface BoundGroup { start: number; count: number; center: [number, number, number]; radius: number; distort: number }
+
+/** Worst-case field-vs-Euclid distance ratio over a run of prims. */
+function distortOf(prims: Primitive[]): number {
+  let f = 1;
+  for (const p of prims) {
+    if (p.op === 'sub' || p.op === 'groove') continue;
+    const mx = Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    const mn = Math.min(p.scale[0], p.scale[1], p.scale[2]);
+    f = Math.max(f, mx / Math.max(mn, 1e-4));
+  }
+  return f;
+}
+
+/** Bounding sphere of a run of prims — the same fit assignClusters uses. */
+function fitSphere(prims: Primitive[]): { center: [number, number, number]; radius: number } {
+  const solid = prims.filter(p => p.op !== 'sub');
+  const fitTo = solid.length > 0 ? solid : prims;
+  const sum: [number, number, number] = [0, 0, 0];
+  let pts = 0;
+  const pointsOf = (p: Primitive) =>
+    p.bend === undefined ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
+  for (const p of fitTo) for (const q of pointsOf(p)) { sum[0] += q[0]; sum[1] += q[1]; sum[2] += q[2]; pts++; }
+  const center: [number, number, number] = [sum[0] / pts, sum[1] / pts, sum[2] / pts];
+  let radius = 0;
+  for (const p of fitTo) {
+    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
+      // An oriented prim rotates about its MIDPOINT, so its endpoints move:
+      // bound by the rotation-invariant ball around the midpoint instead of
+      // the endpoints as authored (goblin: a 0.04 mm escape in the sweep).
+      const mid: [number, number, number] = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      const half = Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]) / 2;
+      const d = Math.hypot(mid[0] - center[0], mid[1] - center[1], mid[2] - center[2]);
+      radius = Math.max(radius, d + half + reach);
+      continue;
+    }
+    for (const q of pointsOf(p)) {
+      const d = Math.hypot(q[0] - center[0], q[1] - center[1], q[2] - center[2]);
+      radius = Math.max(radius, d + reach);
+    }
+  }
+  return { center, radius };
+}
+
+/**
+ * Splits one cluster's prims [start, start+count) into contiguous bound
+ * groups. Greedy in fold order: a prim joins the open group unless the
+ * group's sphere would then exceed GROUP_RADIUS_MAX (a group always takes at
+ * least one prim, so a single huge prim is its own group). Deterministic and
+ * cheap — the hero re-packs every frame.
+ */
+export function boundGroups(prims: Primitive[], start: number, count: number): BoundGroup[] {
+  const out: BoundGroup[] = [];
+  let gStart = start;
+  let fit: { center: [number, number, number]; radius: number } | null = null;
+  for (let i = start; i < start + count; i++) {
+    const run = prims.slice(gStart, i + 1);
+    const next = fitSphere(run);
+    if (fit !== null && next.radius > GROUP_RADIUS_MAX) {
+      out.push({ start: gStart, count: i - gStart, ...fit, distort: distortOf(prims.slice(gStart, i)) });
+      gStart = i;
+      fit = fitSphere(prims.slice(gStart, i + 1));
+    } else {
+      fit = next;
+    }
+  }
+  if (fit !== null)
+    out.push({ start: gStart, count: start + count - gStart, ...fit, distort: distortOf(prims.slice(gStart, start + count)) });
+  return out;
 }

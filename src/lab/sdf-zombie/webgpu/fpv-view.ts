@@ -46,6 +46,7 @@ import { createFallbackHandVolumeTexture, type HandVolume } from './hand-volume'
 import type { HandClipVolume } from './hand-volume-clip';
 import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE,
+  ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
 } from './march.wgsl';
 import { packBody } from '../pack';
 import { MAX_PRIMS } from '../validate';
@@ -310,6 +311,9 @@ export function createHandsGpuView(
     writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
+    writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, MAX_PRIMS);
+    writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);
+    writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
     dataTex.needsUpdate = true;
 

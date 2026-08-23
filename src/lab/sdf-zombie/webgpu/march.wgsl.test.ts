@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, ROW_PRIM_COLOR,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, ROW_PRIM_COLOR, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
@@ -401,6 +401,7 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // ...and the primitive fold lives only in the else arm.
     const elseArm = MAP_BODY.slice(MAP_BODY.indexOf('} else {', branch));
     expect(elseArm).toContain('for (var c = 0; c < 8; c = c + 1)');
+    expect(elseArm).toContain('for (var gi = 0; gi < 64; gi = gi + 1)');
   });
 
   it('threads the texture and six volume uniforms through EVERY mapBody call', () => {
@@ -459,6 +460,7 @@ describe('data texture layout', () => {
       ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT,
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
+      ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -624,7 +626,9 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
     // Was 11; the arc capsule added ROW_PRIM_BEND, and per-primitive colour
     // added ROW_PRIM_COLOR, each without displacing any existing row.
-    expect(DATA_ROWS).toBe(13);
+    // 16: bound groups (pack.ts boundGroups) added ROW_GROUP_BOUNDS/RANGE
+    // and the per-cluster span row ROW_CLUSTER_GROUPS.
+    expect(DATA_ROWS).toBe(16);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

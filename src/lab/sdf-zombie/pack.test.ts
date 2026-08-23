@@ -1,6 +1,9 @@
 // src/lab/sdf-zombie/pack.test.ts
 import { describe, it, expect } from 'vitest';
-import { packBody, PRIM_STRIDE, CLUSTER_STRIDE } from './pack';
+import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX } from './pack';
+import { parseBlob } from './blob-parse';
+import { compileBlob } from './blob-compile';
+import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
@@ -173,5 +176,65 @@ describe('primColor row', () => {
     expect(c[PRIM_STRIDE + 1]).toBeCloseTo(0.2, 6);
     expect(c[PRIM_STRIDE + 3]).toBeCloseTo(1.8, 6);
     expect(c[2 * PRIM_STRIDE + 3]).toBe(0);
+  });
+});
+
+describe('bound groups (the fold cull unit)', () => {
+  const body = () => buildBody(compileBlob(parseBlob(schoolgirlSrc)));
+
+  it('cover every prim of every cluster, contiguously, in fold order', () => {
+    const b = body();
+    const p = packBody(b);
+    // Walk clusters through clusterGroups: each span's groups must tile the
+    // cluster's [start, start+count) exactly — fold order is the correctness
+    // argument for culling by group at all.
+    b.clusters.forEach((c, ci) => {
+      const first = p.clusterGroups[ci * 4]!;
+      const n = p.clusterGroups[ci * 4 + 1]!;
+      let next = c.start;
+      for (let g = first; g < first + n; g++) {
+        expect(p.groupRange[g * 4]).toBe(next);
+        next += p.groupRange[g * 4 + 1]!;
+      }
+      expect(next).toBe(c.start + c.count);
+    });
+  });
+
+  it('keeps every group sphere at or under GROUP_RADIUS_MAX unless it is a single prim', () => {
+    const p = packBody(body());
+    for (let g = 0; g < p.groupCount; g++) {
+      if (p.groupRange[g * 4 + 1]! > 1)
+        expect(p.groupBounds[g * 4 + 3]).toBeLessThanOrEqual(GROUP_RADIUS_MAX + 1e-6);
+    }
+  });
+
+  it('contains each member prim inside its group sphere (cull soundness)', () => {
+    const b = body();
+    const p = packBody(b);
+    for (let g = 0; g < p.groupCount; g++) {
+      const start = p.groupRange[g * 4]!, n = p.groupRange[g * 4 + 1]!;
+      const cx = p.groupBounds[g * 4]!, cy = p.groupBounds[g * 4 + 1]!, cz = p.groupBounds[g * 4 + 2]!, r = p.groupBounds[g * 4 + 3]!;
+      for (let i = start; i < start + n; i++) {
+        const prim = b.prims[i]!;
+        if (prim.op === 'sub') continue; // carves are excluded from the fit, as in clusters
+        const reach = Math.max(prim.radius, prim.radiusB ?? prim.radius)
+          * Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+        for (const q of [prim.a, prim.b]) {
+          const d = Math.hypot(q[0] - cx, q[1] - cy, q[2] - cz);
+          expect(d + reach).toBeLessThanOrEqual(r + 1e-6);
+        }
+      }
+    }
+  });
+
+  it('singleGroup mirrors the clusters one-to-one (the chunk path)', () => {
+    const b = body();
+    const p = packBody(b, undefined, { singleGroup: true });
+    expect(p.groupCount).toBe(b.clusters.length);
+    b.clusters.forEach((c, ci) => {
+      expect(p.groupRange[ci * 4]).toBe(c.start);
+      expect(p.groupRange[ci * 4 + 1]).toBe(c.count);
+      expect(p.groupBounds[ci * 4 + 3]).toBeCloseTo(c.radius, 6);
+    });
   });
 });

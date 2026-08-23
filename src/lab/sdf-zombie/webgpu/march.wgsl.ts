@@ -66,7 +66,7 @@
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 13;
+export const DATA_ROWS = 16;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -81,6 +81,15 @@ export const ROW_PRIM_SHAPE = 10;
 export const ROW_PRIM_BEND = 11;
 /** xyz linear albedo, w = 1 + gloss; w = 0 means "flesh". See pack.ts. */
 export const ROW_PRIM_COLOR = 12;
+/** Bound groups (pack.ts boundGroups): the fold's cull unit, finer than a
+ *  cluster. BOUNDS xyz centre, w radius; RANGE x start, y count (0 = end of
+ *  list), z alive, w flag bitfield as ROW_CLUSTER_RANGE.w. */
+export const ROW_GROUP_BOUNDS = 13;
+export const ROW_GROUP_RANGE = 14;
+/** Group list capacity = one per prim at worst; the texture is MAX_PRIMS wide. */
+export const MAX_GROUPS = 128;
+/** Per-cluster span into the group list: x = first group, y = group count. */
+export const ROW_CLUSTER_GROUPS = 15;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -730,18 +739,43 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
+  // TWO-LEVEL CULL. The outer loop is the cluster (limb) sphere it has
+  // always been; a cluster that survives walks its own BOUND GROUPS
+  // (pack.ts boundGroups) — contiguous runs of two to four prims in fold
+  // order, each with a sphere small enough that a hip pixel no longer folds
+  // the shin (the schoolgirl folded 42 of 56 prims per step through the fat
+  // limb spheres alone). Measured against a FLAT group list: iterating all
+  // ~37 groups per step cost more in bound reads than the culled prims
+  // saved (zombie 2.6 -> 4.8 ms); nesting them under the surviving clusters
+  // keeps the far-limb cost at the old two texels.
   for (var c = 0; c < 8; c = c + 1) {
     if (c >= clusterCount) { break; }
-    let range = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
-    if (range.z < 0.5) { continue; }
-    let bounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
-    if (length(p - bounds.xyz) - bounds.w > d + counts.w * 4.0) { continue; }
+    let crange = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
+    if (crange.z < 0.5) { continue; }
+    let cbounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
+    let gspan = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS}), 0);
+    // The CLUSTER test is the factor-free one the renderer has always
+    // shipped. It is not strictly sound against anisotropic prims (see the
+    // group test below), but its spheres are so much fatter than the field
+    // error that no character has ever rendered it wrong — and making it
+    // honest (threshold * gspan.z) measured SLOWER than no groups at all,
+    // because a limb with one flat plate (schoolgirl sole: 22x) never
+    // culled again.
+    if (length(p - cbounds.xyz) - cbounds.w > d + counts.w * 4.0) { continue; }
+    let gFirst = i32(gspan.x);
+    let gCount = i32(gspan.y);
+  for (var gi = 0; gi < 64; gi = gi + 1) {
+    if (gi >= gCount) { break; }
+    let g = gFirst + gi;
+    let range = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE}), 0);
+    let bounds = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_BOUNDS}), 0);
+    if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * range.z) { continue; }
     let start = i32(range.x);
     let count = i32(range.y);
-    // range.w is a BITFIELD, not a bool: 1 = oriented cluster, 2 = some prim
-    // here is tapered or chamfered. Both are per-cluster hoists of a per-prim
+    // range.w is a BITFIELD, not a bool: 1 = oriented group, 2 = some prim
+    // here is tapered or chamfered. Both are per-group hoists of a per-prim
     // decision, for the reason sdPrimO's header measures — paying an extra
-    // textureLoad for EVERY prim cost +10-18% frame time. A cluster with no
+    // textureLoad for EVERY prim cost +10-18% frame time. A group with no
     // shaped prims never touches ROW_PRIM_SHAPE at all.
     let flags = i32(range.w + 0.5);
     let ori = (flags & 1) != 0;
@@ -776,6 +810,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       // would wrongly chamfer a plain-bent prim — bounded above now.
       if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
     }
+  }
   }
   }
   let carved = applyCarves(d, p, data, counts);
