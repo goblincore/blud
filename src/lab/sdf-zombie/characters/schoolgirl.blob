@@ -1,0 +1,279 @@
+# Schoolgirl — the fifth .blob character authored from scratch, and the first
+# HUMAN one built to a rigged mesh reference
+# (docs/dev-notes/refs/schoolgirl-mesh/schoolgirl.glb, committed 2026-08-23).
+# gltfTriangles reads the bind pose, which for this mesh is the clean
+# symmetric T-POSE: 1.70 m tall, feet at y=0, facing +z. The mesh holds its
+# arms straight out; this .blob rests them down (arms slightly out, ~13 deg,
+# to clear the skirt), so blob:measure prints POSE MISMATCH on the whole
+# figure and the arm bands are NOT chased — see the range note below.
+#
+# MEASURED LANDMARKS (from the mesh, 2026-08-22; y and extents as fractions
+# of height, x1.70 for metres). Widths are the full silhouette width, so a
+# prim's half-width is width/2:
+#   crown (fringe peak) 1.000  w .016 d .015
+#   skull widest (bob)  .94-.95  w .114 d .134
+#   ears (pointed)      .86-.88  w .100 d .123
+#   chin / jaw          .855   w .048 d .096
+#   neck narrowest      .84    w .048 d .064
+#   shoulder            .82    w .217 d .061
+#   chest / bust        .72-.74  w .156-.200 d .170
+#   waist / belt        .62-.64  w .132 d .106
+#   hip / skirt widest  .46-.47  w .239 d .183
+#   skirt hem, legs split .455  w .181 d .090
+#   knee                .28    w .148 d .059
+#   sock top (slouch)   .19-.20  w .164-.172  bulges at the top
+#   ankle / shoe top    .07    w .176 d .093
+#   sole                .00    w .172 d .170
+#
+# STYLE: Ichiro Tanida early-2000s Japanese CG — smooth rounded forms, clean
+# simple masses, toy-like proportions (6.9 heads tall: mildly stylised, NOT
+# chibi). No mottle, no surface noise, hair as a few large smooth masses.
+# The outfit is PAINT on the sculpt (color= on prims), exactly as in the
+# mesh's texture: skin dab18a, navy 01046d, white ececed, sock d9d8d9,
+# hair/shoes 201109, sole bdb9bc, accents 66537c.
+model schoolgirl
+  height 1.70
+  # Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # ROOT: head at the crotch = skirt hem line (0.455 -> 0.7735, where the
+  # legs split the silhouette), tail at the hip line 0.820. The mesh's hip
+  # sockets sit just under the skirt's widest band (0.46-0.47).
+  root pelvis at 0.773 len=0.047
+
+  # Spine: pelvis tail (0.820) up to the waist/belt (0.62 -> 1.054).
+  bone spine1 parent=pelvis dir=up pitch=1 len=0.234
+  # Belt to shoulder line (0.82 -> 1.394).
+  bone chest  parent=spine1 dir=up pitch=1 len=0.340
+  # Shoulder up through the neck; the visible neck is 1.428-1.50, the rest
+  # runs up inside the head (the house pattern — see mouse.blob).
+  bone neck   parent=chest  dir=up pitch=0 len=0.111
+  # Positions the face block: facePrims ride skull at=0.45, so this head
+  # (1.505) + 0.45*0.155 centres the cranium at 1.575 — midway between the
+  # chin (1.4535) and the crown (1.70), where the mesh's skin skull sits
+  # under the bob. Authors to the mesh SURFACE, not the rig joints.
+  bone skull  parent=neck   dir=up pitch=0 len=0.155
+
+  mirror
+    # ARMS REST DOWN, slightly out (~13 deg), because the skirt flares to
+    # 0.406 m wide at the hips and the hands have to clear it: at the wrist
+    # (y 0.85) the skirt's half-width is ~0.181 and the forearm's inner
+    # surface lands at ~0.197. The tilt chain 13/11/11 is one gentle line
+    # (the mesh is T-posed so the resting bend is ours to choose).
+    bone clavicle parent=chest    side=0.048 dir=side  len=0.045
+    bone upperarm parent=clavicle dir=down tilt=13 len=0.295
+    bone forearm  parent=upperarm dir=down tilt=11 len=0.260
+    bone hand     parent=forearm  dir=down tilt=11 len=0.085
+    # LEGS: hip sockets (0.063 out from the centreline, at the hip line
+    # 0.820) to the knee (0.28 -> 0.476), then straight down to the ankle
+    # (0.07 -> 0.119). shin tilt 0: knees over ankles, the humanoid stance
+    # check. Leg length hem->sole 0.455 of height, as measured.
+    bone thigh    parent=pelvis   dir=down tilt=1  side=0.063 len=0.344
+    bone shin     parent=thigh    dir=down tilt=0          len=0.357
+    # The foot bone only positions shoe prims; they are authored as plain
+    # world displacements off it (see mouse.blob's shoes).
+    bone foot     parent=shin     dir=fwd                  len=0.090
+  end
+
+body
+  # ============================================================
+  # TORSO — the white sailor top is the paint; the flesh under it is slim.
+  # Mesh width/depth halves: bust 0.170/0.144 at 1.224, 0.133 at 1.258,
+  # waist 0.112/0.090 at 1.054, shoulder 0.185/0.052 at 1.394 (the shoulder
+  # band is THIN front-to-back: 0.104 total, the collar draping flat).
+  # ============================================================
+  # Pelvis filler under the skirt (never seen; keeps the legs fused).
+  blob torso on pelvis  at=0.50 r=0.095 deep=0.95 blend=0.0050 color=dab18a
+  # The waist/belt: skin — the top is a CROP TOP, skin shows 1.054-1.105
+  # between the skirt belt and the top's hem (mesh paint bands 0.62-0.65).
+  blob torso on spine1  at=1.00 r=0.108 deep=0.83 blend=0.0050 color=dab18a
+  # Bust: widest chest ring, 0.152 vs mesh 0.170 at 1.224 — the sphere
+  # cannot be 0.170 wide AND 0.133 at 1.258; the bands will arbitrate.
+  blob torso on chest   at=0.49 r=0.152 deep=0.95 tall=0.85 blend=0.0060 color=ececed
+  # Upper chest, narrowing in depth toward the flat shoulder band.
+  blob torso on chest   at=0.75 r=0.145 deep=0.72 tall=0.75 blend=0.0060 color=ececed
+  # Shoulder line: 0.180 wide but only 0.052 half-deep (mesh 0.217/0.061) —
+  # the torso goes FLAT front-to-back here under the collar.
+  blob torso on chest   at=0.99 r=0.180 deep=0.30 tall=0.45 blend=0.0060 color=ececed
+
+  # ============================================================
+  # THE SKIRT — the one place to spend primitives. Measured profile is NOT
+  # a straight cone: half-width 0.112 at the belt (1.054), 0.203 at
+  # 0.78-0.80 (the widest part of the whole model), 0.154 at the hem band
+  # (0.7735). Depth does the same: 0.090 -> 0.156 -> 0.077 half. Two stacked
+  # cones carry that: belt->widest, then a short tuck to the hem. Navy.
+  # ============================================================
+  # Cone 1: belt (1.054, r 0.112 — just outside the 0.108 waist so the belt
+  # edge reads) flaring to the widest ring at 0.788. deep 0.77: 0.086 -> 0.156
+  # half-depth, matching the nearly-circular widest section.
+  blob torso on spine1  at=1.00 r=0.112 r2=0.203 tip=(0,-0.266,0) deep=0.77 blend=0.0080 color=01046d
+  # Cone 2: the hem tuck, 1.5 cm of prim from 0.789 down to the hem 0.7735,
+  # pulling back to 0.154 half-width / 0.095 half-depth (deep 0.62).
+  # Anchored on the pelvis bone because 0.789 is below spine1's head.
+  blob torso on pelvis  at=0.365 r=0.203 r2=0.154 tip=(0,-0.016,0) deep=0.62 blend=0.0080 color=01046d
+
+  # ============================================================
+  # SAILOR COLLAR + SCARF — navy, geometry not just paint, because from the
+  # front the collar is what says "seifuku". A back cape panel (seen from
+  # behind: the bob's counterweight), a thin yoke across the shoulder tops,
+  # and the scarf at the chest V.
+  # ============================================================
+  # Back cape: hangs 1.31-1.46, 0.156 half-wide (a little past the 0.145
+  # upper chest), 2-3 cm clear of the back at the shoulder where the torso
+  # goes flat (0.052 half-deep) and ON it lower down.
+  blob torso on chest   at=0.96 offset=(0,-0.007,-0.055) r=0.070 wide=2.20 tall=1.07 deep=0.42 blend=0.0040 color=01046d
+  # Shoulder yoke: the collar's top edge crossing the shoulders, front to
+  # back (mesh collar paint 0.75-0.85 -> 1.275-1.445).
+  blob torso on chest   at=1.00 offset=(0,0.021,-0.010) r=0.068 wide=2.30 tall=0.28 deep=1.15 blend=0.0040 color=01046d
+  # The scarf, at the chest front centre (y ~1.28, z flush with the 0.115
+  # chest front). This is the anchor the eye finds first from the front.
+  blob torso on chest   at=0.66 offset=(0,-0.010,0.096) r=0.030 wide=1.35 tall=1.05 deep=0.60 blend=0.0040 color=01046d
+
+  # Neck: 0.041 half-wide x 0.054 half-deep (mesh 0.048/0.064 full) at the
+  # narrowest 1.428. Skin.
+  bar head on neck from=0.18 to=0.78 r=0.041 deep=1.33 blend=0.0040 color=dab18a
+
+  # ============================================================
+  # THE HAIR — a swept dark bob with a peaked fringe. THREE smooth masses,
+  # no strands (Tanida: large clean forms). Hair paint 201109.
+  # ============================================================
+  # The bob shell: 0.194 wide x 0.227 deep at its equator 1.605 — the mesh's
+  # own widest band (0.94-0.95 -> 1.598-1.615, w .114 d .134 fractions) —
+  # spanning 1.518-1.692 in y, wrapping the 0.143-wide skin skull with the
+  # flare a bob has.
+  blob head on skull at=0.45 offset=(0,0.030,-0.008) r=0.097 wide=1.00 tall=0.90 deep=1.17 blend=0.0060 color=201109 gloss=0.35
+  # The crown peak: the mesh's topmost point is a NARROW fringe tip (w .016
+  # d .015 fractions at y 1.000), not a dome — one tapered bar to a point,
+  # tipped slightly forward.
+  bar  head on skull from=0.95 to=1.22 offset=(0,0.003,0.012) tip=(0,0.002,0.010) r=0.028 r2=0.006 blend=0.0040 chamfer color=201109 gloss=0.35
+  # The fringe: the front sweep over the brow, bottom edge at 1.522 so the
+  # eyes (1.533) sit in the open below it, front 0.100 — 1.5 cm proud of the
+  # brow where the swept fringe hangs over the face.
+  blob head on skull at=0.45 offset=(0,-0.010,0.048) r=0.055 wide=1.30 tall=0.78 deep=0.95 blend=0.0050 color=201109 gloss=0.35
+  # The nape: the bob's underside at the back, closing the gap between the
+  # shell's bottom (1.518) and the hairline at the neck (1.468).
+  blob head on skull at=0.45 offset=(0,-0.075,-0.052) r=0.052 wide=1.35 tall=0.62 deep=0.75 blend=0.0050 color=201109 gloss=0.35
+
+  # EARS — pointed, elf-ish, skin: the mesh's ear band (0.86-0.88) is
+  # 0.170 wide total where the head under the hair is ~0.10, so each ear
+  # reaches ~0.08 from the centreline. One tapered prim per side, pointing
+  # out and slightly back/up from under the bob's edge.
+  blob head on skull at=0.45 offset=(0.044,-0.080,-0.008) tip=(0.030,-0.066,-0.012) r=0.015 r2=0.004 blend=0.0025 chamfer both color=dab18a
+
+  # ============================================================
+  # THE FACE — a clean toy face, painted: two eye prims and a mouth prim in
+  # the accent purple 66537c (from the mesh texture), NOT the sheet's zombie
+  # eyes (eyeSize 0 below). Tanida faces are flat and simple; the eyes sit
+  # flush in the face surface, anime-wide (0.031 across on a 0.143 face).
+  # ============================================================
+  blob head on skull at=0.45 offset=(0.027,-0.042,0.062) r=0.015 wide=1.05 tall=1.10 deep=0.50 blend=0.0015 both color=66537c gloss=0.50
+  blob head on skull at=0.45 offset=(0,-0.085,0.062) r=0.0075 wide=1.90 tall=0.55 deep=0.45 blend=0.0015 color=66537c
+
+  # ============================================================
+  # ARMS — slim, smooth, rubber-hose simple (no ball joints: Tanida limbs
+  # melt). Sleeve WHITE to mid-upper-arm, skin below (mesh: "sleeves short,
+  # skin from mid-upper-arm"). The shoulder ball is the arm's core against
+  # the torso (house pattern from mouse.blob).
+  # ============================================================
+  blob arm on clavicle at=1.00 r=0.048 blend=0.0045 mirror core color=ececed
+  # Short sleeve, slightly puffed over the 0.026 arm inside it.
+  bar  arm on upperarm from=0.00 to=0.45 r=0.034 r2=0.028 blend=0.0050 mirror color=ececed
+  bar  arm on upperarm from=0.45 to=0.98 r=0.026 r2=0.023 blend=0.0042 mirror color=dab18a
+  blob arm on forearm  at=0.00 r=0.023 blend=0.0042 mirror color=dab18a
+  bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.019 blend=0.0040 mirror color=dab18a
+  # Hand: a slim smooth mitt, no fingers — resting hands read as soft masses.
+  blob arm on hand at=0.45 r=0.028 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=dab18a
+
+  # ============================================================
+  # LEGS — the paint bands do the reading: skin thigh (0.455-0.28 of
+  # height: hem to knee), bare knee, then the WHITE SLOUCH SOCK bulging at
+  # its top (mesh 0.19-0.20, w .164-.172: 0.0735 half-radius at the cuff,
+  # falling to 0.054 at the ankle), then dark shoes.
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.062 blend=0.0050 mirror core color=dab18a
+  # r 0.063 -> 0.057: the mesh leg column barely tapers hem to knee
+  # (thigh ~0.125 half-span per leg at the hem, 0.119 at the knee band).
+  bar  leg on thigh from=0.06 to=0.94 r=0.063 r2=0.057 blend=0.0046 mirror color=dab18a
+  blob leg on shin  at=0.00 r=0.057 blend=0.0048 mirror color=dab18a
+  # Bare knee-to-cuff: 0.476 down to 0.340 (mesh sock top 0.19-0.20).
+  bar  leg on shin  from=0.05 to=0.38 r=0.054 r2=0.050 blend=0.0044 mirror color=dab18a
+  # The sock: WHITE, bulging 0.0735 at the cuff down to 0.054 at the ankle.
+  bar  leg on shin  from=0.38 to=0.97 r=0.0735 r2=0.054 blend=0.0050 mirror color=d9d8d9 gloss=0.10
+  blob leg on shin  at=1.00 r=0.054 blend=0.0050 mirror color=d9d8d9 gloss=0.10
+
+  # ============================================================
+  # SHOES — dark near-black brown 201109, flat mary-jane toes, sole grey
+  # bdb9bc. Mesh sole band: 0.292 wide (shoe half-width 0.073 either side of
+  # centres at x +/-0.073), collar 0.299 at the ankle. Two prims a side,
+  # authored as world displacements off the foot bone (head = the ankle).
+  # ============================================================
+  # Body: heel (0.073, 0.030, -0.045) to toe (0.073, 0.031, 0.053), wide
+  # 2.35 -> 0.070/0.061 half-width, bottom on the floor.
+  blob leg on foot at=0.00 r=0.030 r2=0.026 wide=2.35 tall=1.05 deep=1.05 blend=0.0060 offset=(0.004,-0.089,-0.045) tip=(0,0.001,0.098) mirror color=201109 gloss=0.20
+  # Vamp/collar wrapping the ankle (0.073, 0.064, 0.012).
+  blob leg on foot at=0.00 r=0.048 wide=1.45 tall=0.55 deep=1.05 blend=0.0060 offset=(0.004,-0.055,0.012) mirror color=201109 gloss=0.20
+
+# ============================================================
+# FACE BLOCK — the skin skull under the hair. Cranium 0.071 half-wide x
+# 0.082 half-tall x 0.089 half-deep (mesh skin head ~0.143 wide under the
+# 0.194 bob), centre 1.575. The jaw carries the chin: 0.041 half-wide
+# (mesh chin 0.048 full-ish), bottom at 1.4535 via jawDrop 0.075. Features
+# deliberately SUBTLE — the eyes and mouth are painted prims above.
+# ============================================================
+face
+  headRadius 0.075
+  headWidth  0.95
+  headHeight 1.10
+  headDepth  1.19
+  jawWidth   0.70
+  jawHeight  0.80
+  jawDrop    0.075
+  jawJut     0.012
+  # A small button nose — 2 mm. Tanida faces have almost no nose mass; more
+  # would break the clean profile the head check wants (+-0.03 crown to chin).
+  noseLength 0.002
+  noseWidth  0.30
+  noseDrop   0.028
+  browHeavy  0.003
+  browRise   0.026
+  headBlend  0.0045
+
+# The sheet paints NOTHING but grain and a little jaw shade: the eyes and
+# mouth are geometry+paint above, and a painted pair underneath would double
+# them (the mouse's shades lesson, in reverse).
+sheet
+  eyeGap     0.42
+  eyeSize    0.0
+  eyePupil   0
+  browHeavy  0.0
+  browAngle  0
+  mouthWidth 0.0
+  mouthRise  0.68
+  mouthCurve 0.0
+  mouthOpen  0.0
+  nostril    0.0
+  noseRidge  0.0
+  noseWide   0.0
+  noseLong   0.0
+  jawShade   0.22
+  grain      0.05
+  seed       23
+
+# Skin dab18a = sRGB (218,177,138) -> linear (0.699, 0.439, 0.254). Wounds
+# stay red. Toy-clean: no mottle to speak of, no surface or silhouette
+# noise, moderate gloss (specRoughness 0.35 per the style brief).
+palette
+  baseColor     0.699 0.439 0.254
+  deepColor     0.50 0.08 0.08
+  charColor     0.22 0.13 0.10
+  specIntensity 0.45
+  specRoughness 0.35
+  fresnelBoost  0.30
+  translucency  0.22
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  wetness       0.12
+  mottleAmp     0.02
+  mottleScale   1.2
+  mottleColor   0.55 0.38 0.22
