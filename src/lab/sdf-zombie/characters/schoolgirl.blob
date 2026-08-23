@@ -138,6 +138,14 @@ body
   blob torso on pelvis  at=0.00 offset=(0.143,0,0) r=0.015 r2=0.008 tip=(-0.012,-0.165,0) blend=0.0040 chamfer both color=01046d
   blob torso on pelvis  at=0.00 offset=(0,0,0.062) r=0.015 r2=0.008 tip=(0,-0.165,-0.012) blend=0.0040 chamfer color=01046d
   blob torso on pelvis  at=0.00 offset=(0,0,-0.062) r=0.015 r2=0.008 tip=(0,-0.165,0.012) blend=0.0040 chamfer color=01046d
+  # SURFACE PLEAT RIDGES — the pleat fringe owns the silhouette below the
+  # hem; these put the pleat READ onto the skirt's own face: four thin
+  # chamfered bars lying ON the flare (sides mirrored, front and back),
+  # ~8-10 mm proud of the cone. They also close the -0.02 side-view bands
+  # at 0.83-0.90, where the mesh is deeper than the bare cone.
+  blob torso on spine1 at=0.556 offset=(0.148,0,0) r=0.013 r2=0.010 tip=(0.045,-0.150,0) blend=0.0040 chamfer both color=01046d gloss=0.25
+  blob torso on spine1 at=0.556 offset=(0,0,0.118) r=0.011 r2=0.009 tip=(0,-0.150,0.028) blend=0.0040 chamfer color=01046d gloss=0.25
+  blob torso on spine1 at=0.556 offset=(0,0,-0.118) r=0.011 r2=0.009 tip=(0,-0.150,-0.028) blend=0.0040 chamfer color=01046d gloss=0.25
 
   # ============================================================
   # SAILOR COLLAR + SCARF — navy, geometry not just paint, because from the
