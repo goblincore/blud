@@ -146,9 +146,12 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).not.toMatch(/clip\.w/);
   });
 
-  // wmRim is the WIDE (1.6x) wound mask: the fade must cover the everted lip,
-  // not just the coloured cavity (the lip clipped to a white band the day the
-  // colouring mask was pulled in to 1.25x, 2026-08-23).
+  // wmRim is the WIDE wound mask (full to 1.3x, gone by 2x): the fade must
+  // cover the everted lip AND the whole cavity wall, not just the coloured
+  // 1.25x core. Two regressions pin the shape: the lip clipped to a white
+  // band the day the colouring mask was pulled in to 1.25x, and a 0..1.6x
+  // ramp from the CENTRE left ~40% fresnel at the cavity wall, which clipped
+  // to flat white slabs sweeping with the camera (both 2026-08-23).
   it('fades fresnel out inside wounds instead of wet-boosting it (X1.17)', () => {
     // Fresnel is environment rim-light; inside a cavity the "environment" is
     // the wound itself. Left at full strength it hits its ceiling on the

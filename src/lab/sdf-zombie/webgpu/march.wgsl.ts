@@ -607,7 +607,14 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, data: texture_2
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let r = length(p - w.xyz);
     m.x = max(m.x, 1.0 - smoothstep(0.0, w.w * 1.25, r));
-    m.y = max(m.y, 1.0 - smoothstep(0.0, w.w * 1.6, r));
+    // FULL fade out to 1.3x, gone by 2x — not a 0..1.6x ramp. The ramp from
+    // the CENTRE left only ~60% fade at the cavity wall (r ~= w.w), and the
+    // surviving grazing fresnel clipped to flat white slabs hanging over the
+    // crater at oblique yaws (owner, 2026-08-23 — X1.17's mechanism escaping
+    // the mask; reproduced with the lip amp at zero, vanished with
+    // fresnelBoost at zero). The cavity and lip must sit entirely inside the
+    // flat region; healthy skin regains rim light past 2x.
+    m.y = max(m.y, 1.0 - smoothstep(w.w * 1.3, w.w * 2.0, r));
   }
   return m;
 }`
