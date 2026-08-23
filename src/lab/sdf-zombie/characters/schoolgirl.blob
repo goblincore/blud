@@ -71,7 +71,7 @@ skeleton
     # band stays inside the skirt's x outline from the front, so the legs
     # window holds 0.814. Hands stay behind the skirt's front face
     # (z 0.146): resting ON the skirt front, not through it.
-    bone clavicle parent=chest    side=0.048 dir=side  len=0.045
+    bone clavicle parent=chest    side=0.055 dir=side  len=0.045
     bone upperarm parent=clavicle dir=down tilt=8 pitch=2 len=0.295
     bone forearm  parent=upperarm dir=down tilt=4 pitch=18 len=0.260
     bone hand     parent=forearm  dir=down tilt=2 pitch=12 len=0.085
@@ -155,14 +155,71 @@ body
   groove torso on spine1 at=0.77 offset=(0.077,0,-0.065) tip=(0.037,-0.180,-0.031) r=0.012 depth=0.004 width=0.006 both
 
   # ============================================================
-  # SAILOR COLLAR (v2) — ONE thin flat prim lying ON the upper chest and
-  # back, not a plate around the neck and not v1's cape+yoke stack. Wide
-  # across the shoulders, thin vertically, shallow front-to-back; navy.
-  # The scarf stays: the small anchor the eye finds first from the front.
+  # SAILOR COLLAR (v3) — a real one, not v2's single flat navy DISC lying
+  # across the chest top (owner, 2026-08-23: "two white epaulette plates
+  # with a navy bar between them"). Four prim groups:
+  # (1) THE BACK FLAP, upper plate — flat, shoulder to shoulder (x half
+  #     0.105 ~= the mesh's 0.217 shoulder), lying on the trapezius back
+  #     (surface z -0.025 there) with its back edge at -0.052. Top capped
+  #     at 1.406 with blend 0.005: the neck bar's bottom ball reaches y
+  #     1.373, and a fatter/higher flap smin-dips the neck band (the v2
+  #     head-window lesson).
+  # (2) THE BACK FLAP, hanging shell — ONE BENT blob. The white top's
+  #     bust bar is a 0.100 ball whose BACK face falls from z -0.03 at
+  #     y 1.40 to z -0.12 at y 1.30 (the mesh's back is exactly as deep —
+  #     the mesh's own collar flap lives inside that silhouette; what was
+  #     missing is the PAINT). No flat plate can follow that curve: the
+  #     first flat flap (z half 0.017 at -0.045) was buried below y 1.34
+  #     and vision read the back as "a bar across the neckline". This
+  #     capsule bends back with bend=(0,0,-0.035) and hangs 6-11 mm proud
+  #     of the ball from y 1.35 down to its hem at y ~1.28 (mid
+  #     shoulder-blade), verified per-t against the cap's profile.
+  # (3) THE TWO POINTS (`both` mirrors one line): tapered ribbons running
+  #     PROUD of the chest from the shoulder tops (0.050, 1.403, 0.005)
+  #     down-inward to the knot (0.016, 1.30, 0.135). They start where a
+  #     real collar point disappears over the trapezius — an earlier draft
+  #     started them at the flap's top corners, but a capsule cannot WRAP
+  #     the bust ball: every route from the back sagged inside the cap and
+  #     the strips rendered as two flecks at the neckline (vision-ask,
+  #     2026-08-23). The z path is surface+0.01-0.02 the whole run
+  #     (checked per-0.02-of-y against the shoulder bar + bust cap union);
+  #     the first proud route rode surface+0.03 and the side bands at
+  #     y 1.31-1.33 measured +0.023 over the mesh's own kerchief. The
+  #     start sits 9.6 mm from the shoulder ball's surface — the clearOf
+  #     arm/torso margin lives there. tall 0.5 flattens the ribbons
+  #     vertically (world-axis squash), wide 1.3 keeps the ribbon width.
+  # (4) THE SCARF KNOT — raised to y ~1.29 (the lowest the V can honestly
+  #     reach past the bust ball) and proud of it: v2 had it at z 0.096,
+  #     buried INSIDE the bust cap whose front is z 0.14 there.
+  # Navy count is SIX torso prims (skirt, 2 flap, 2 points, knot) — the
+  # test pin is updated to match.
   # ============================================================
-  blob torso on chest   at=0.92 offset=(0,0.005,-0.010) r=0.070 wide=2.10 tall=0.22 deep=0.70 blend=0.010 color=01046d
-  # The scarf, at the chest front centre (y ~1.28), proud of the white top.
-  blob torso on chest   at=0.66 offset=(0,-0.010,0.096) r=0.030 wide=1.35 tall=1.05 deep=0.60 blend=0.0040 color=01046d
+  # The flap's TOP EDGE is a horizontal ribbon over the trapezius,
+  # TAPERED at both ends (one `both` line: centre out to +/-0.106).
+  # History: a blunt ribbon (r 0.070, y half 0.032, ends at x +/-0.14)
+  # put two fat ROUNDED bumps on the shoulder outline — vision read
+  # "two rounded shoulder masses with a bar between" (PLATES) made of the
+  # collar itself; lowering the flap top to y 1.386 instead left the
+  # white sleeve caps rim-lit above the navy with the top bar between
+  # them — the same PLATES pattern one shelf up (14/14 asks, both
+  # backends). So: cover the caps (they are lowered now — see ARMS —
+  # their tops at 1.40 sit under the ribbon's y <= 1.41, z -0.045 shell
+  # from the back) and taper the ends (r 0.040 -> r2 0.022) so the
+  # ribbon melts into the arm outline instead of bumping it.
+  blob torso on chest   at=0.94 offset=(0,0.0264,-0.0537) tip=(0.095,-0.002,0) r=0.040 r2=0.022 wide=0.50 tall=0.45 deep=0.30 blend=0.008 both color=01046d
+  blob torso on chest   at=0.81 offset=(0,0.0206,-0.0630) tip=(0,-0.075,-0.063) bend=(0,0,-0.035) r=0.070 wide=1.50 tall=0.50 deep=0.20 blend=0.008 color=01046d
+  # THE HEM SEAM: the mesh's flap ends in a clean HORIZONTAL seam at the
+  # lower shoulder blades (measured off a back-view bake of the GLB). The
+  # shell's own bottom cap arches up at the sides and the arch read as
+  # "mass sitting at the shoulders" to vision on the shadowed back frame.
+  # This horizontal capsule hangs the hem straight at y 1.26 across the
+  # full flap width; its bend bows it back to follow the bust ball (the
+  # ball's back runs z -0.077 at x +/-0.095 out to -0.124 at x 0, checked
+  # per-t), so the seam stays 1-3 cm proud instead of floating free.
+  blob torso on chest   at=0.72 offset=(-0.095,-0.0378,-0.0854) tip=(0.19,0,0) bend=(0,0,-0.094) r=0.040 wide=0.50 tall=0.35 deep=0.30 blend=0.008 color=01046d
+  blob torso on chest   at=0.94 offset=(0.053,0.0324,-0.0027) tip=(-0.023,-0.111,0.134) r=0.020 r2=0.014 wide=1.30 tall=0.50 blend=0.005 both color=01046d
+  # The scarf knot, ON the chest front centre (y ~1.29), proud of the bust.
+  blob torso on chest   at=0.72 offset=(0,-0.005,0.120) r=0.022 wide=1.10 tall=1.05 deep=0.60 blend=0.0040 color=01046d
 
   # Neck: 0.041 half-wide x 0.054 half-deep (mesh 0.048/0.064 full) at the
   # narrowest 1.428. Skin.
@@ -230,9 +287,18 @@ body
   # skin from mid-upper-arm"). The shoulder ball is the arm's core against
   # the torso (house pattern from mouse.blob).
   # ============================================================
-  blob arm on clavicle at=1.00 r=0.048 blend=0.0045 mirror core color=ececed
+  # Shoulder ball: the arm's core against the torso (house pattern from
+  # mouse.blob). v3: r 0.048 -> 0.032 and SUNK 18 mm below the joint.
+  # At r 0.048 its top reached y 1.44 — 5 cm ABOVE the 1.394 shoulder
+  # line, a white bump at each shoulder that read as an EPAULETTE PLATE
+  # from every back view (owner: "sleeves are short and soft, not
+  # balls"). Now its top sits at 1.403, inside the shoulder mass, and it
+  # still welds to the shoulder bar (centre 0.1058 from the bar axis <
+  # 0.075 + 0.032 + blends). The sleeve bar starts at from=0.10 for the
+  # same reason — its cap top was y 1.428.
+  blob arm on clavicle at=1.00 offset=(0,-0.018,0) r=0.032 tall=0.85 blend=0.0045 mirror core color=ececed
   # Short sleeve, slightly puffed over the 0.026 arm inside it.
-  bar  arm on upperarm from=0.00 to=0.45 r=0.034 r2=0.028 blend=0.0050 mirror color=ececed
+  bar  arm on upperarm from=0.10 to=0.45 r=0.032 r2=0.028 blend=0.0050 mirror color=ececed
   bar  arm on upperarm from=0.45 to=0.98 r=0.026 r2=0.023 blend=0.0042 mirror color=dab18a
   blob arm on forearm  at=0.00 r=0.023 blend=0.0042 mirror color=dab18a
   bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.019 blend=0.0040 mirror color=dab18a
