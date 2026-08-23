@@ -599,14 +599,29 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
 // y (1.6x) is the FRESNEL fade: rim light must stay off across the whole
 // lip, or its grazing-heavy crest clips to a flat white band (X1.17 again —
 // it came straight back the day the single mask was pulled in to 1.25x).
-export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> vec2<f32> {
+export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> vec2<f32> {
   var m = vec2<f32>(0.0, 0.0);
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
-    let r = length(p - w.xyz);
-    m.x = max(m.x, 1.0 - smoothstep(0.0, w.w * 1.25, r));
+    let toC = w.xyz - p;
+    let r = length(toC);
+    // FACING gate. The mask is a sphere around the wound centre, and a blast
+    // (r 0.13) stamped on the front of a ~0.2 m torso pokes its sphere out
+    // through the BACK: the intact far-side skin fell inside it and drew as
+    // wet white sheets when the camera came round (owner, 2026-08-23). What
+    // separates cavity from far side is the NORMAL: a cavity wall faces the
+    // wound centre (dot ~ +1), the far-side skin faces dead away (~ -1), and
+    // the everted lip's crest is only mildly averted (~ -0.2). Colouring
+    // gates on near zero. The FRESNEL fade is deliberately NOT gated: a
+    // first cut gated it off for strongly-averted surfaces to give far-side
+    // skin its rim light back, and the cavity rim seen from BEHIND (averted
+    // too) lit up as a white fresnel crescent — the fade must hold at every
+    // facing, and skin near a through-wound just goes without rim light.
+    let face = dot(nrm, toC / max(r, 1e-5));
+    let gCol = smoothstep(-0.25, 0.15, face);
+    m.x = max(m.x, (1.0 - smoothstep(0.0, w.w * 1.25, r)) * gCol);
     // FULL fade out to 1.3x, gone by 2x — not a 0..1.6x ramp. The ramp from
     // the CENTRE left only ~60% fade at the cavity wall (r ~= w.w), and the
     // surviving grazing fresnel clipped to flat white slabs hanging over the
@@ -761,14 +776,15 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     if (crange.z < 0.5) { continue; }
     let cbounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
     let gspan = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS}), 0);
-    // The CLUSTER test is the factor-free one the renderer has always
-    // shipped. It is not strictly sound against anisotropic prims (see the
-    // group test below), but its spheres are so much fatter than the field
-    // error that no character has ever rendered it wrong — and making it
-    // honest (threshold * gspan.z) measured SLOWER than no groups at all,
-    // because a limb with one flat plate (schoolgirl sole: 22x) never
-    // culled again.
-    if (length(p - cbounds.xyz) - cbounds.w > d + counts.w * 4.0) { continue; }
+    // The CLUSTER test carries the factor too. A factor-free test (as
+    // always shipped) was tried for speed and TORE THE FIELD inside wound
+    // cavities: there the running d is negative, the threshold collapses,
+    // and an anisotropic cluster culls while still inside smin support —
+    // drawn as thin black crack seams across the flesh around wounds
+    // (owner, 2026-08-23). The factor makes a plate-bearing cluster
+    // (schoolgirl sole: 22x) nearly uncullable, but its GROUPS still cull
+    // soundly below, so the cost is a few texel reads, not a full fold.
+    if (length(p - cbounds.xyz) - cbounds.w > (d + counts.w * 4.0) * gspan.z) { continue; }
     let gFirst = i32(gspan.x);
     let gCount = i32(gspan.y);
   for (var gi = 0; gi < 64; gi = gi + 1) {
@@ -1209,7 +1225,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * surfCfg2.y);
   }
 
-  let wmBoth = woundMask(p, data, woundCfg);
+  let wmBoth = woundMask(p, n, data, woundCfg);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let cm = charMask(p, data, woundCfg);
@@ -1405,7 +1421,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // whatever the flesh preset says: a lens on a matte clay character still
   // has to glint.
   let wet = mix(surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm), 1.0, gloss);
-  let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
+  // Gated by light facing: a Blinn-Phong H highlight fires even where the
+  // surface faces AWAY from the key (dot(n,L) < 0, dot(n,H) still positive at
+  // grazing). On matte skin it was too dim to see; the 1.6x wound wet boost
+  // lifted it into saturated white blobs ringing a crater seen from the dark
+  // side (owner, 2026-08-23). Soft ramp, not a step, so the terminator keeps
+  // its sheen.
+  let specGate = smoothstep(-0.08, 0.12, dot(n, L));
+  let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss)) * specGate;
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound
   // itself. At full strength it maxes out on the grazing-heavy rim geometry,
