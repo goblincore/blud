@@ -182,12 +182,12 @@ body
   # The fringe: the front sweep over the brow, bottom edge at 1.537 so the
   # eyes (1.533) sit just clear below it, front 0.100 — 1.5 cm proud of the
   # brow where the swept fringe hangs over the face.
-  blob head on skull at=0.45 offset=(0,-0.005,0.048) r=0.055 wide=1.30 tall=0.60 deep=0.95 blend=0.0050 color=201109 gloss=0.35
+  blob head on skull at=0.45 offset=(0,0.011,0.048) r=0.055 wide=1.30 tall=0.55 deep=0.95 blend=0.0035 color=201109 gloss=0.35
   # The nape: the bob's underside at the back, closing the gap between the
   # lobes' bottom (1.50) and the hairline at the neck. Deep: the mesh side
   # profile at 1.44-1.48 is 0.175-0.207, so the back mass reaches z -0.112
   # and down to y 1.455.
-  blob head on skull at=0.45 offset=(0,-0.075,-0.066) r=0.052 wide=1.35 tall=1.10 deep=1.00 blend=0.0050 color=201109 gloss=0.35
+  blob head on skull at=0.45 offset=(0,-0.075,-0.066) r=0.052 wide=0.80 tall=1.10 deep=1.00 blend=0.0050 color=201109 gloss=0.35
   # THE CHIN: the mesh's chin tip sits at (1.45, z 0.095) — 0.10 forward,
   # a definite point on an otherwise small face. One small prim, blended
   # softly into the jaw so it reads as the jaw's tip, not a bead.
@@ -197,7 +197,7 @@ body
   # 1.462-1.496) is 0.146-0.170 wide total where the head under the hair is
   # ~0.10, so each ear reaches ~0.076 from the centreline. One tapered prim
   # per side at the hairline's bottom edge, pointing out and slightly back.
-  blob head on skull at=0.45 offset=(0.044,-0.097,-0.008) tip=(0.032,0.014,-0.012) r=0.015 r2=0.004 blend=0.0025 chamfer both color=dab18a
+  blob head on skull at=0.45 offset=(0.044,-0.097,-0.008) tip=(0.032,0.014,-0.012) r=0.012 r2=0.003 blend=0.0020 chamfer both color=dab18a
 
   # ============================================================
   # THE FACE — a clean toy face, painted: two eye prims and a mouth prim in
@@ -205,8 +205,8 @@ body
   # eyes (eyeSize 0 below). Tanida faces are flat and simple; the eyes sit
   # flush in the face surface, anime-wide (0.031 across on a 0.143 face).
   # ============================================================
-  blob head on skull at=0.45 offset=(0.027,-0.042,0.062) r=0.015 wide=1.05 tall=1.10 deep=0.50 blend=0.0015 both color=66537c gloss=0.50
-  blob head on skull at=0.45 offset=(0,-0.085,0.094) r=0.0075 wide=1.90 tall=0.55 deep=0.45 blend=0.0015 color=66537c
+  blob head on skull at=0.45 offset=(0.030,-0.054,0.105) r=0.018 wide=1.00 tall=1.50 deep=0.50 blend=0.0015 both color=66537c gloss=0.85
+  blob head on skull at=0.45 offset=(0,-0.085,0.117) r=0.009 wide=1.90 tall=0.50 deep=0.40 blend=0.0015 color=66537c
 
   # ============================================================
   # ARMS — slim, smooth, rubber-hose simple (no ball joints: Tanida limbs
