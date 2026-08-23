@@ -165,6 +165,12 @@ describe('cyclops.blob', () => {
 
   // Dark olive-brown hide, measured off the mesh texture (#312815..#524122):
   // red over green over blue, all dark — and wounds stay red.
+  // The stub skull exists only because the face prims need a bone; its sheet
+  // must not project (it drew as a band of stripes across the maw).
+  it('declares its face sheet OFF', () => {
+    expect(compileSheet(doc)?.enabled).toBe(0);
+  });
+
   it('wears dark olive armour, not the lab default pink', () => {
     const m = compilePalette(doc)!;
     const [r, g, bl] = m.baseColor;

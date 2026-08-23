@@ -128,6 +128,15 @@ export interface FaceSheetParams {
   grain: number;
   /** Seed for the grain. Integer. */
   seed: number;
+  /**
+   * 1 projects the sheet, 0 does not. A character with no face to speak of
+   * still needs a `skull` bone (the face prims ride it), and the sheet then
+   * projects planar along z onto whatever flesh sits there: on the cyclops
+   * its rows drew as a horizontal band of stripes across the fangs and maw
+   * at one world height (owner screenshot, 2026-08-23). Such a character
+   * declares `enabled 0`.
+   */
+  enabled: number;
 }
 
 export const DEFAULT_SHEET: FaceSheetParams = {
@@ -155,6 +164,7 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   jawShade: 0.40,
   grain: 0.085,
   seed: 1,
+  enabled: 1,
 };
 
 /** Deterministic value noise. Not good noise — just stable, cheap and seeded. */

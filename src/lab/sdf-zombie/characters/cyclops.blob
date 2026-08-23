@@ -274,6 +274,9 @@ face
 # and a little jaw shading ride along, and they land on the buried face
 # prims anyway.
 sheet
+  # No face to project: the stub skull is buried in the upper torso and the
+  # sheet's rows drew as stripes across the fangs (2026-08-23).
+  enabled    0
   eyeGap     0.42
   eyeSize    0.0
   eyeRise    0.39

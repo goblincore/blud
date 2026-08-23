@@ -146,12 +146,15 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).not.toMatch(/clip\.w/);
   });
 
+  // wmRim is the WIDE (1.6x) wound mask: the fade must cover the everted lip,
+  // not just the coloured cavity (the lip clipped to a white band the day the
+  // colouring mask was pulled in to 1.25x, 2026-08-23).
   it('fades fresnel out inside wounds instead of wet-boosting it (X1.17)', () => {
     // Fresnel is environment rim-light; inside a cavity the "environment" is
     // the wound itself. Left at full strength it hits its ceiling on the
     // grazing-heavy rim geometry, gets the 1.6x wound-wetness boost on top,
     // and clips whole patches to white that sweep with the camera.
-    expect(MARCH_BODY).toMatch(/let fres = [^;]*\* \(1\.0 - wm\);/);
+    expect(MARCH_BODY).toMatch(/let fres = [^;]*\* \(1\.0 - wmRim\);/);
   });
 
   it('gates the everted rim on surface locality (no limb welding)', () => {

@@ -583,19 +583,25 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
 }`
 
 // 0 at the surface far from wounds, 1 deep inside one. Drives the wet interior.
-export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
-  var m = 0.0;
+// Two radii, because two things key on it. x (1.25x the radius) is the
+// COLOURING mask — wet red, the deep-colour mix, the wet boost, the cavity
+// shading — and stops at the lip's inner edge so the everted lip stays skin
+// (a red glossed lip read as a ball from the side, cyclops 2026-08-23).
+// y (1.6x) is the FRESNEL fade: rim light must stay off across the whole
+// lip, or its grazing-heavy crest clips to a flat white band (X1.17 again —
+// it came straight back the day the single mask was pulled in to 1.25x).
+export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> vec2<f32> {
+  var m = vec2<f32>(0.0, 0.0);
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
-    // 1.25x the radius, not 1.6x: the wet red must stop at the lip's INNER
-    // edge. At 1.6x it painted the whole everted lip red and the lip read as
-    // a glossy red ball from the side (cyclops, 2026-08-23).
-    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.25, length(p - w.xyz)));
+    let r = length(p - w.xyz);
+    m.x = max(m.x, 1.0 - smoothstep(0.0, w.w * 1.25, r));
+    m.y = max(m.y, 1.0 - smoothstep(0.0, w.w * 1.6, r));
   }
   return m;
-}`;
+}`
 
 // 0 unburned, 1 fully charred.
 export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
@@ -1161,7 +1167,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * surfCfg2.y);
   }
 
-  let wm = woundMask(p, data, woundCfg);
+  let wmBoth = woundMask(p, data, woundCfg);
+  let wm = wmBoth.x;      // colouring / wet / cavity shading
+  let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let cm = charMask(p, data, woundCfg);
   var albedo = mix(baseColor, deepColor, wm);
 
@@ -1349,7 +1357,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // the 1.6x wound wetness lands on top, and whole patches clip to white and
   // sweep across the cavity as the camera moves (X1.17). The wet glisten a
   // wound SHOULD have is the tight specular term, which keeps the boost.
-  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - wm);
+  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - wmRim);
 
   // Fake backlit scatter: sample the field a little way toward the light.
   // A whole extra mapBody, so it is skipped outright at zero translucency

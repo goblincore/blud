@@ -815,7 +815,15 @@ async function main() {
 
   let faceTexName: FaceTexName = 'zombie-flat';
   if (!loadGeneratedFace()) loadFaceTexture(faceTexName);
-  u.faceCfg.value.x = 1;      // face on
+  // A character's `sheet` block can switch the projection off (`enabled 0`):
+  // a headless character's stub skull would otherwise project the face rows
+  // as stripes across its body. Goes through faceEnabled so the panel toggle
+  // and applyLod agree with it.
+  try {
+    const sheetParams = compileSheet(parseBlob(activeCharacterSrc()));
+    if (sheetParams && sheetParams.enabled === 0) faceEnabled = false;
+  } catch { /* a broken sheet block is reported by the body compile path */ }
+  u.faceCfg.value.x = faceEnabled ? 1 : 0;      // face on (unless the sheet says no)
   u.faceCfg.value.y = 1.0;    // strength
   // Baked projection: uv = hs * scale + centre, hs normalised PER AXIS by the
   // skull's semi-axes so these numbers survive a reproportioned head.
