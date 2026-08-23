@@ -56,20 +56,21 @@ skeleton
   bone skull  parent=neck   dir=up pitch=0 len=0.155
 
   mirror
-    # ARMS REST DOWN, slightly out (~13 deg), because the skirt flares to
-    # 0.406 m wide at the hips and the hands have to clear it: at the wrist
-    # (y 0.85) the skirt's half-width is ~0.181 and the forearm's inner
-    # surface lands at ~0.197. The tilt chain 13/11/11 is one gentle line
-    # (the mesh is T-posed so the resting bend is ours to choose).
+    # ARMS REST DOWN, tucked to clear the flared skirt: the pose chain
+    # 12/-2/-2 (out at the shoulder, easing in below) keeps the hand inside
+    # the skirt's 0.2075 half-width envelope at the widest band, so resting
+    # arms do not widen the silhouette against a T-posed reference whose
+    # arms are straight out. Hands ride slightly forward (offset z on the
+    # hand prim) so they do not pass through the thighs.
     bone clavicle parent=chest    side=0.048 dir=side  len=0.045
-    bone upperarm parent=clavicle dir=down tilt=13 len=0.295
-    bone forearm  parent=upperarm dir=down tilt=11 len=0.260
-    bone hand     parent=forearm  dir=down tilt=11 len=0.085
-    # LEGS: hip sockets (0.063 out from the centreline, at the hip line
-    # 0.820) to the knee (0.28 -> 0.476), then straight down to the ankle
-    # (0.07 -> 0.119). shin tilt 0: knees over ankles, the humanoid stance
-    # check. Leg length hem->sole 0.455 of height, as measured.
-    bone thigh    parent=pelvis   dir=down tilt=1  side=0.063 len=0.344
+    bone upperarm parent=clavicle dir=down tilt=12 pitch=2 len=0.295
+    bone forearm  parent=upperarm dir=down tilt=-2 pitch=2 len=0.260
+    bone hand     parent=forearm  dir=down tilt=-2 pitch=2 len=0.085
+    # LEGS: the mesh stance is knees TOGETHER (its knee band is 0.245 wide
+    # = 2 x (0.069 centre + 0.0535 radius), inner edges touching) with the
+    # calves and socks spreading below — a shy, toes-out schoolgirl stand.
+    # Straight vertical columns at x +/-0.069 carry the whole leg.
+    bone thigh    parent=pelvis   dir=down tilt=0  side=0.069 len=0.344
     bone shin     parent=thigh    dir=down tilt=0          len=0.357
     # The foot bone only positions shoe prims; they are authored as plain
     # world displacements off it (see mouse.blob's shoes).
@@ -85,17 +86,22 @@ body
   # ============================================================
   # Pelvis filler under the skirt (never seen; keeps the legs fused).
   blob torso on pelvis  at=0.50 r=0.095 deep=0.95 blend=0.0050 color=dab18a
-  # The waist/belt: skin — the top is a CROP TOP, skin shows 1.054-1.105
-  # between the skirt belt and the top's hem (mesh paint bands 0.62-0.65).
-  blob torso on spine1  at=1.00 r=0.108 deep=0.83 blend=0.0050 color=dab18a
-  # Bust: widest chest ring, 0.152 vs mesh 0.170 at 1.224 — the sphere
-  # cannot be 0.170 wide AND 0.133 at 1.258; the bands will arbitrate.
-  blob torso on chest   at=0.49 r=0.152 deep=0.95 tall=0.85 blend=0.0060 color=ececed
-  # Upper chest, narrowing in depth toward the flat shoulder band.
-  blob torso on chest   at=0.75 r=0.145 deep=0.72 tall=0.75 blend=0.0060 color=ececed
-  # Shoulder line: 0.180 wide but only 0.052 half-deep (mesh 0.217/0.061) —
-  # the torso goes FLAT front-to-back here under the collar.
-  blob torso on chest   at=0.99 r=0.180 deep=0.30 tall=0.45 blend=0.0060 color=ececed
+  # The waist: skin — the top is a CROP TOP, skin shows 1.054-1.105 between
+  # the skirt belt and the top's hem (mesh paint bands 0.62-0.65). r 0.116
+  # clears the skirt's 0.118 belt lip above y 1.048 so the belt edge reads.
+  blob torso on spine1  at=1.00 r=0.116 deep=0.83 blend=0.0050 color=dab18a
+  # Mid chest (white): the mesh narrows to 0.231-0.268 across 1.09-1.20 —
+  # a slim column, not the 0.34 bust. centre 1.162 (chest at=0.318).
+  blob torso on chest   at=0.318 r=0.126 deep=0.85 tall=0.85 blend=0.0055 color=ececed
+  # THE BUST RING: a narrow band, 0.342 wide at 1.241 falling to 0.231 by
+  # 1.128 — the mesh's own profile. Flat (tall 0.36) so it does not swell
+  # the chest above and below it.
+  blob torso on chest   at=0.541 r=0.168 deep=0.82 tall=0.36 blend=0.0055 color=ececed
+  # Upper chest, deep enough for the 0.257 side profile at 1.316.
+  blob torso on chest   at=0.85 r=0.150 deep=0.72 tall=0.55 blend=0.0055 color=ececed
+  # Shoulder line: a PANCAKE — 0.369 wide at 1.394 but gone by 1.43 (the
+  # mesh's 1.429 band is neck-only, 0.073). tall 0.18 spans just 1.36-1.42.
+  blob torso on chest   at=0.99 r=0.180 deep=0.30 tall=0.18 blend=0.0055 color=ececed
 
   # ============================================================
   # THE SKIRT — the one place to spend primitives. Measured profile is NOT
@@ -104,14 +110,34 @@ body
   # (0.7735). Depth does the same: 0.090 -> 0.156 -> 0.077 half. Two stacked
   # cones carry that: belt->widest, then a short tuck to the hem. Navy.
   # ============================================================
-  # Cone 1: belt (1.054, r 0.112 — just outside the 0.108 waist so the belt
-  # edge reads) flaring to the widest ring at 0.788. deep 0.77: 0.086 -> 0.156
-  # half-depth, matching the nearly-circular widest section.
-  blob torso on spine1  at=1.00 r=0.112 r2=0.203 tip=(0,-0.266,0) deep=0.77 blend=0.0080 color=01046d
-  # Cone 2: the hem tuck, 1.5 cm of prim from 0.789 down to the hem 0.7735,
-  # pulling back to 0.154 half-width / 0.095 half-depth (deep 0.62).
-  # Anchored on the pelvis bone because 0.789 is below spine1's head.
-  blob torso on pelvis  at=0.365 r=0.203 r2=0.154 tip=(0,-0.016,0) deep=0.62 blend=0.0080 color=01046d
+  # Cone 1: the flare above the hem ring. Measured LINEAR: the mesh runs
+  # 0.245 wide at 1.053 down to ~0.31 at 0.94 (half 0.1225 -> 0.155).
+  # IT ENDS HIGH AND THIN ON PURPOSE: a round cone's end cap is a SPHERE
+  # of the end radius, and the first pass ended at r 0.2075 by the hem — a
+  # ball 0.40 wide AND 0.23 deep bulging 20 cm below the hem, where the
+  # mesh has a cliff to 0.318 x 0.148 in both views. Ending at r 0.150 by
+  # y 0.94 keeps the cap buried under the hem rings in x and z both; the
+  # rings below carry the flare. deep 0.88 = the mesh's 0.264 side depth
+  # at 0.94.
+  blob torso on spine1  at=0.974 r=0.118 r2=0.150 tip=(0,-0.108,0) deep=0.88 blend=0.0050 color=01046d
+  # THE HEM RING: a wide FLAT ellipsoid at the hem latitude (centre
+  # (0,0.795), half 0.2075 x 0.045 x 0.156) — an ellipsoid cuts to zero at
+  # its own latitude, so it makes the cliff 0.415 -> 0.318 between 0.79 and
+  # 0.75 that no cone-with-a-cap can. 0.2075 = the mesh's widest ring
+  # (0.415 wide, 0.313 deep).
+    blob torso on pelvis  at=0.468 r=0.197 wide=1.00 tall=0.217 deep=0.75 blend=0.0050 color=01046d
+  # A second ring one pleat up (0,0.852, half 0.19 x 0.043 x 0.139): the
+  # mesh's 0.366-0.391 bands at 0.83-0.86, which the thin-ended cone alone
+  # undershoots. Same cap-free ellipsoid trick as the hem ring.
+  blob torso on pelvis  at=0.68 r=0.180 wide=1.00 tall=0.226 deep=0.82 blend=0.0050 color=01046d
+  # THE PLEAT FRINGE: the mesh's silhouette holds a FLAT 0.318 from 0.75
+  # down to 0.63 — pleat tips hanging past the tucked hem, tapering in to
+  # 0.284 by their ends (the mesh's 0.292 band at 0.637). Four thin tapered
+  # bars (side pair mirrored, front and back on the centreline); the
+  # front/back pair also carries the 0.148-0.152 side-view depth.
+  blob torso on pelvis  at=0.00 offset=(0.143,0,0) r=0.015 r2=0.008 tip=(-0.012,-0.165,0) blend=0.0040 chamfer both color=01046d
+  blob torso on pelvis  at=0.00 offset=(0,0,0.062) r=0.015 r2=0.008 tip=(0,-0.165,-0.012) blend=0.0040 chamfer color=01046d
+  blob torso on pelvis  at=0.00 offset=(0,0,-0.062) r=0.015 r2=0.008 tip=(0,-0.165,0.012) blend=0.0040 chamfer color=01046d
 
   # ============================================================
   # SAILOR COLLAR + SCARF — navy, geometry not just paint, because from the
@@ -119,13 +145,13 @@ body
   # behind: the bob's counterweight), a thin yoke across the shoulder tops,
   # and the scarf at the chest V.
   # ============================================================
-  # Back cape: hangs 1.31-1.46, 0.156 half-wide (a little past the 0.145
-  # upper chest), 2-3 cm clear of the back at the shoulder where the torso
-  # goes flat (0.052 half-deep) and ON it lower down.
-  blob torso on chest   at=0.96 offset=(0,-0.007,-0.055) r=0.070 wide=2.20 tall=1.07 deep=0.42 blend=0.0040 color=01046d
+  # Back cape: hangs 1.31-1.44, 0.154 half-wide, 1.3 cm proud of the
+  # upper chest's back (which is at z -0.10 by 1.375) — offset z -0.086.
+  blob torso on chest   at=0.94 offset=(0,-0.019,-0.086) r=0.070 wide=2.20 tall=0.93 deep=0.42 blend=0.0040 color=01046d
   # Shoulder yoke: the collar's top edge crossing the shoulders, front to
-  # back (mesh collar paint 0.75-0.85 -> 1.275-1.445).
-  blob torso on chest   at=1.00 offset=(0,0.021,-0.010) r=0.068 wide=2.30 tall=0.28 deep=1.15 blend=0.0040 color=01046d
+  # back (mesh collar paint 0.75-0.85 -> 1.275-1.445). Thin: the mesh's
+  # 1.429 band is neck-only, so nothing navy may rise past 1.41.
+  blob torso on chest   at=1.00 offset=(0,0.012,-0.010) r=0.068 wide=2.30 tall=0.24 deep=0.80 blend=0.0040 color=01046d
   # The scarf, at the chest front centre (y ~1.28, z flush with the 0.115
   # chest front). This is the anchor the eye finds first from the front.
   blob torso on chest   at=0.66 offset=(0,-0.010,0.096) r=0.030 wide=1.35 tall=1.05 deep=0.60 blend=0.0040 color=01046d
@@ -135,31 +161,39 @@ body
   bar head on neck from=0.18 to=0.78 r=0.041 deep=1.33 blend=0.0040 color=dab18a
 
   # ============================================================
-  # THE HAIR — a swept dark bob with a peaked fringe. THREE smooth masses,
-  # no strands (Tanida: large clean forms). Hair paint 201109.
-  # ============================================================
-  # The bob shell: 0.194 wide x 0.227 deep at its equator 1.605 — the mesh's
-  # own widest band (0.94-0.95 -> 1.598-1.615, w .114 d .134 fractions) —
-  # spanning 1.518-1.692 in y, wrapping the 0.143-wide skin skull with the
-  # flare a bob has.
-  blob head on skull at=0.45 offset=(0,0.030,-0.008) r=0.097 wide=1.00 tall=0.90 deep=1.17 blend=0.0060 color=201109 gloss=0.35
-  # The crown peak: the mesh's topmost point is a NARROW fringe tip (w .016
-  # d .015 fractions at y 1.000), not a dome — one tapered bar to a point,
-  # tipped slightly forward.
+  # THE HAIR — a swept dark bob with a peaked fringe. Smooth masses, no
+  # strands (Tanida: large clean forms). Measured profile (front): the bob
+  # runs 0.146 wide at 1.658, 0.17 at 1.642, 0.195-0.219 through 1.56-1.61,
+  # 0.196 still at 1.51, then cuts to the ear band 0.146 at 1.476 — a BELL,
+  # widest below the crown. One ellipsoid cannot do that, so: a crown shell
+  # (the dome) + two side lobes (the flare) + the fringe + the nape + the
+  # peak tuft.
+  # Crown shell: centre (0,1.612,-0.008), half (0.098, 0.082, 0.113) —
+  # 0.195 wide at 1.61, matching the upper run.
+  blob head on skull at=0.45 offset=(0,0.037,-0.008) r=0.098 wide=1.00 tall=0.837 deep=1.15 blend=0.0060 color=201109 gloss=0.35
+  # The side lobes: the swept flare. Centre (+/-0.074, 1.545, -0.010),
+  # half (0.034, 0.045, 0.102) — outer edge 0.108 at 1.545 (0.215 wide,
+  # mesh 0.219), bottom edge 1.50, deep in z like the shell.
+  blob head on skull at=0.45 offset=(0.074,-0.030,-0.010) r=0.034 wide=1.00 tall=1.32 deep=3.00 blend=0.0060 both color=201109 gloss=0.35
+  # The crown peak: the mesh's topmost point is a narrow fringe tip (w .016
+  # fraction at y 1.000), not a dome — one tapered bar to a point, tipped
+  # slightly forward.
   bar  head on skull from=0.95 to=1.22 offset=(0,0.003,0.012) tip=(0,0.002,0.010) r=0.028 r2=0.006 blend=0.0040 chamfer color=201109 gloss=0.35
-  # The fringe: the front sweep over the brow, bottom edge at 1.522 so the
-  # eyes (1.533) sit in the open below it, front 0.100 — 1.5 cm proud of the
+  # The fringe: the front sweep over the brow, bottom edge at 1.537 so the
+  # eyes (1.533) sit just clear below it, front 0.100 — 1.5 cm proud of the
   # brow where the swept fringe hangs over the face.
-  blob head on skull at=0.45 offset=(0,-0.010,0.048) r=0.055 wide=1.30 tall=0.78 deep=0.95 blend=0.0050 color=201109 gloss=0.35
+  blob head on skull at=0.45 offset=(0,-0.005,0.048) r=0.055 wide=1.30 tall=0.60 deep=0.95 blend=0.0050 color=201109 gloss=0.35
   # The nape: the bob's underside at the back, closing the gap between the
-  # shell's bottom (1.518) and the hairline at the neck (1.468).
-  blob head on skull at=0.45 offset=(0,-0.075,-0.052) r=0.052 wide=1.35 tall=0.62 deep=0.75 blend=0.0050 color=201109 gloss=0.35
+  # lobes' bottom (1.50) and the hairline at the neck. Deep: the mesh side
+  # profile at 1.44-1.48 is 0.175-0.207, so the back mass reaches z -0.112
+  # and down to y 1.455.
+  blob head on skull at=0.45 offset=(0,-0.075,-0.060) r=0.052 wide=1.35 tall=0.87 deep=1.00 blend=0.0050 color=201109 gloss=0.35
 
-  # EARS — pointed, elf-ish, skin: the mesh's ear band (0.86-0.88) is
-  # 0.170 wide total where the head under the hair is ~0.10, so each ear
-  # reaches ~0.08 from the centreline. One tapered prim per side, pointing
-  # out and slightly back/up from under the bob's edge.
-  blob head on skull at=0.45 offset=(0.044,-0.080,-0.008) tip=(0.030,-0.066,-0.012) r=0.015 r2=0.004 blend=0.0025 chamfer both color=dab18a
+  # EARS — pointed, elf-ish, skin: the mesh's ear band (0.86-0.88 -> y
+  # 1.462-1.496) is 0.146-0.170 wide total where the head under the hair is
+  # ~0.10, so each ear reaches ~0.076 from the centreline. One tapered prim
+  # per side at the hairline's bottom edge, pointing out and slightly back.
+  blob head on skull at=0.45 offset=(0.044,-0.097,-0.008) tip=(0.032,0.014,-0.012) r=0.015 r2=0.004 blend=0.0025 chamfer both color=dab18a
 
   # ============================================================
   # THE FACE — a clean toy face, painted: two eye prims and a mouth prim in
@@ -168,7 +202,7 @@ body
   # flush in the face surface, anime-wide (0.031 across on a 0.143 face).
   # ============================================================
   blob head on skull at=0.45 offset=(0.027,-0.042,0.062) r=0.015 wide=1.05 tall=1.10 deep=0.50 blend=0.0015 both color=66537c gloss=0.50
-  blob head on skull at=0.45 offset=(0,-0.085,0.062) r=0.0075 wide=1.90 tall=0.55 deep=0.45 blend=0.0015 color=66537c
+  blob head on skull at=0.45 offset=(0,-0.085,0.088) r=0.0075 wide=1.90 tall=0.55 deep=0.45 blend=0.0015 color=66537c
 
   # ============================================================
   # ARMS — slim, smooth, rubber-hose simple (no ball joints: Tanida limbs
@@ -183,7 +217,7 @@ body
   blob arm on forearm  at=0.00 r=0.023 blend=0.0042 mirror color=dab18a
   bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.019 blend=0.0040 mirror color=dab18a
   # Hand: a slim smooth mitt, no fingers — resting hands read as soft masses.
-  blob arm on hand at=0.45 r=0.028 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=dab18a
+  blob arm on hand at=0.45 offset=(0,0,0.03) r=0.028 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=dab18a
 
   # ============================================================
   # LEGS — the paint bands do the reading: skin thigh (0.455-0.28 of
@@ -192,15 +226,16 @@ body
   # falling to 0.054 at the ankle), then dark shoes.
   # ============================================================
   blob leg on thigh at=0.00 r=0.062 blend=0.0050 mirror core color=dab18a
-  # r 0.063 -> 0.057: the mesh leg column barely tapers hem to knee
-  # (thigh ~0.125 half-span per leg at the hem, 0.119 at the knee band).
-  bar  leg on thigh from=0.06 to=0.94 r=0.063 r2=0.057 blend=0.0046 mirror color=dab18a
-  blob leg on shin  at=0.00 r=0.057 blend=0.0048 mirror color=dab18a
-  # Bare knee-to-cuff: 0.476 down to 0.340 (mesh sock top 0.19-0.20).
-  bar  leg on shin  from=0.05 to=0.38 r=0.054 r2=0.050 blend=0.0044 mirror color=dab18a
-  # The sock: WHITE, bulging 0.0735 at the cuff down to 0.054 at the ankle.
-  bar  leg on shin  from=0.38 to=0.97 r=0.0735 r2=0.054 blend=0.0050 mirror color=d9d8d9 gloss=0.10
-  blob leg on shin  at=1.00 r=0.054 blend=0.0050 mirror color=d9d8d9 gloss=0.10
+  # r 0.0655 -> 0.0535: the mesh column 0.269-0.293 at the thigh tapering
+  # to the 0.245 knee band (2 x (0.069 + 0.0535), knees TOUCHING).
+  bar  leg on thigh from=0.06 to=0.94 r=0.0655 r2=0.0535 deep=0.85 blend=0.0046 mirror color=dab18a
+  blob leg on shin  at=0.00 r=0.052 deep=0.85 blend=0.0048 mirror color=dab18a
+  # Calf: swells BELOW the knee (mesh 0.269 at 0.375-0.44) toward the cuff.
+  bar  leg on shin  from=0.10 to=0.38 r=0.060 r2=0.065 deep=0.80 blend=0.0044 mirror color=dab18a
+  # The sock: WHITE. The mesh's slouch bunches LOW: 0.292 total at the cuff
+  # swelling to 0.304 by 0.147 as the fabric slouches toward the shoe.
+  bar  leg on shin  from=0.38 to=0.97 r=0.077 r2=0.082 deep=0.78 blend=0.0050 mirror color=d9d8d9 gloss=0.10
+  blob leg on shin  at=1.00 r=0.085 deep=0.78 blend=0.0050 mirror color=d9d8d9 gloss=0.10
 
   # ============================================================
   # SHOES — dark near-black brown 201109, flat mary-jane toes, sole grey
@@ -208,11 +243,19 @@ body
   # centres at x +/-0.073), collar 0.299 at the ankle. Two prims a side,
   # authored as world displacements off the foot bone (head = the ankle).
   # ============================================================
-  # Body: heel (0.073, 0.030, -0.045) to toe (0.073, 0.031, 0.053), wide
-  # 2.35 -> 0.070/0.061 half-width, bottom on the floor.
-  blob leg on foot at=0.00 r=0.030 r2=0.026 wide=2.35 tall=1.05 deep=1.05 blend=0.0060 offset=(0.004,-0.089,-0.045) tip=(0,0.001,0.098) mirror color=201109 gloss=0.20
-  # Vamp/collar wrapping the ankle (0.073, 0.064, 0.012).
-  blob leg on foot at=0.00 r=0.048 wide=1.45 tall=0.55 deep=1.05 blend=0.0060 offset=(0.004,-0.055,0.012) mirror color=201109 gloss=0.20
+  # Body: heel (0.073, 0.030, -0.045) to toe, yawed OUT ~8 deg (the mesh's
+  # toes-out stance shows in its sole footprint being nearly SQUARE —
+  # 0.292 wide x 0.289 deep) — toe at (0.091, 0.031, 0.058), wide 2.4 ->
+  # 0.072/0.062 half-width, z -0.077..0.085 (mesh side depth 0.152-0.170).
+  blob leg on foot at=0.00 r=0.030 r2=0.026 wide=2.40 tall=1.05 deep=1.05 blend=0.0060 offset=(0.004,-0.089,-0.045) tip=(0.018,0.001,0.103) mirror color=201109 gloss=0.20
+  # Vamp/collar wrapping the ankle: the mesh's 0.114-0.147 bands run
+  # 0.304-0.318 wide — 0.090 half-width at x 0.073 (wide 1.88).
+  blob leg on foot at=0.00 r=0.048 wide=1.88 tall=0.95 deep=1.55 blend=0.0060 offset=(0.004,-0.040,0.012) mirror color=201109 gloss=0.20
+  # THE SOLE: a flat wide plate at the floor — the mesh's footprint is
+  # nearly SQUARE (0.292 wide x 0.289 deep; its side bands 0.258-0.289 at
+  # the sole against 0.16 above), the toes-out stance written in the tread.
+  # Grey bdb9bc, straight (the splay lives here, not in the upper).
+  blob leg on foot at=0.00 r=0.032 wide=2.30 tall=0.18 deep=4.00 blend=0.0040 offset=(0.004,-0.111,0.005) mirror color=bdb9bc gloss=0.15
 
 # ============================================================
 # FACE BLOCK — the skin skull under the hair. Cranium 0.071 half-wide x
@@ -229,7 +272,9 @@ face
   jawWidth   0.70
   jawHeight  0.80
   jawDrop    0.075
-  jawJut     0.012
+  # The chin juts forward: the mesh's 1.443-1.459 bands are 0.073-0.097
+  # wide but 0.175-0.182 DEEP — a narrow, forward profile.
+  jawJut     0.030
   # A small button nose — 2 mm. Tanida faces have almost no nose mass; more
   # would break the clean profile the head check wants (+-0.03 crown to chin).
   noseLength 0.002
