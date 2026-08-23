@@ -1947,7 +1947,11 @@ async function main() {
   // suspends the controller for its run, and the capture scripts
   // (blob-turntable, blob-render-check) switch it off through setAdaptive.
   let adaptiveEnabled = true;
-  let adaptiveBudgetMs = 1000 / 60;
+  // 30 fps, not 60 (owner, 2026-08-23): at 60 the controller had to push a
+  // retina window down to 0.2-0.35 scale when zoomed in, which is too soft;
+  // 30 is the accepted target until the renderer itself is faster (see the
+  // perf investigation in TASKS.md). setAdaptiveBudget overrides it live.
+  let adaptiveBudgetMs = 1000 / 30;
   let adaptiveState = initialAdaptiveState(performance.now());
   /**
    * Shorter than the 120-frame display window on purpose. The controller has
