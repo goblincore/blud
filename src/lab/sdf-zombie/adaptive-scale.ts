@@ -78,16 +78,21 @@ const TARGET_HEADROOM = 0.9;
 const DROP_COOLDOWN_MS = 250;
 
 /** How long to sit at a stable rung before probing upward the first time. */
-export const BASE_PROBE_MS = 1500;
+// 3 s, not 1.5 (2026-08-23): orbiting the zoomed cyclops, every probe up
+// from 0.55 to 0.7 failed, and each failure is a burst of 35-50 ms frames —
+// the owner's "spikes while rotating". Probing half as often halves the
+// bursts; the early abort in the lab's tickAdaptive shortens each one.
+export const BASE_PROBE_MS = 3000;
 
 /**
  * Ceiling on the backoff. A failed probe costs roughly one evaluation window
  * of degraded frame time, so this sets how much of a permanently-too-expensive
  * scene is spent stuttering: about 6% at 8 s. Lower it and a stuck scene
  * stutters more; raise it and a scene that becomes cheap takes longer to
- * notice.
+ * notice. 20 s (was 8): a scene pinned at budget while the camera orbits
+ * it otherwise stutters every few seconds for as long as the orbit lasts.
  */
-export const MAX_PROBE_MS = 8_000;
+export const MAX_PROBE_MS = 20_000;
 
 export interface AdaptiveState {
   /** Index into SCALE_LADDER. */

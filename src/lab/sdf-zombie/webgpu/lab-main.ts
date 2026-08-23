@@ -1956,8 +1956,23 @@ async function main() {
    */
   const ADAPTIVE_WINDOW = 30;
 
+  /**
+   * A probe that is failing shows it within a few frames — every frame over
+   * budget — and each such frame is a visible stutter, so a failing probe
+   * gets its verdict after PROBE_ABORT_FRAMES rather than the full window
+   * (orbiting the zoomed cyclops: bursts of 8 spikes per failed probe, 2026-08-23).
+   */
+  const PROBE_ABORT_FRAMES = 8;
   function tickAdaptive(nowMs: number): void {
-    if (!adaptiveEnabled || frames.length < ADAPTIVE_WINDOW) return;
+    if (!adaptiveEnabled) return;
+    // Two ways a probe shows it is failing: the median over budget, or —
+    // the usual one at vsync — the median still reads 16.7 while every few
+    // frames a missed vsync reads 33+. Two such frames inside the first
+    // PROBE_ABORT_FRAMES is not noise.
+    const failingProbe = adaptiveState.probing && frames.length >= PROBE_ABORT_FRAMES
+      && (median(frames) > adaptiveBudgetMs * 1.1
+        || frames.filter(f => f > adaptiveBudgetMs * 1.8).length >= 2);
+    if (frames.length < ADAPTIVE_WINDOW && !failingProbe) return;
     const recent = frames.slice(-ADAPTIVE_WINDOW);
     const sorted = [...recent].sort((a, b) => a - b);
     const next = stepAdaptive(adaptiveState, {
