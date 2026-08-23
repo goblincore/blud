@@ -108,11 +108,11 @@ body
   # The paint boundary with the midriff bar lands at ~1.09-1.11 where the
   # two fields cross — that line is the crop top's hem, and it is a colour
   # change on a smooth surface, not a ledge.
-  bar  torso on chest   from=0.10 to=0.72 r=0.058 r2=0.076 deep=0.82 blend=0.025 color=ececed
+  bar  torso on chest   from=0.10 to=0.62 r=0.060 r2=0.100 deep=1.32 blend=0.025 color=ececed
   # Chest-to-shoulders: the bust 0.170 full-wide at 1.24 up to the shoulder
   # line 0.217 wide but only 0.061 DEEP at 1.394 — deep 0.50 keeps the
   # shoulder band thin front-to-back instead of a sausage.
-  bar  torso on chest   from=0.66 to=0.92 r=0.074 r2=0.075 deep=0.50 blend=0.018 color=ececed
+  bar  torso on chest   from=0.58 to=0.85 r=0.074 r2=0.075 deep=0.50 blend=0.012 color=ececed
 
   # ============================================================
   # THE SKIRT (v2) — ONE flared cone, belt to hem. v1 carried the mesh's
@@ -129,7 +129,7 @@ body
   # so it does not paint the skin midriff navy. wide 1.10 / deep 0.78:
   # the mesh skirt is wider than deep (0.406 x 0.311 at the widest ring).
   # ============================================================
-  blob torso on spine1  at=0.94 r=0.095 r2=0.195 tip=(0,-0.250,0) wide=1.05 tall=0.50 deep=0.80 blend=0.030 color=01046d
+  blob torso on spine1  at=0.94 r=0.095 r2=0.185 tip=(0,-0.250,0) wide=1.05 tall=0.42 deep=0.80 blend=0.018 color=01046d
   # PLEATS — four shallow grooves riding the cone's slope (front pair and
   # back pair, mirrored), NOT bars standing proud of it. Each groove's axis
   # follows the surface from (y 1.00) to (y 0.82) at the cone's own flare,
@@ -143,7 +143,7 @@ body
   # across the shoulders, thin vertically, shallow front-to-back; navy.
   # The scarf stays: the small anchor the eye finds first from the front.
   # ============================================================
-  blob torso on chest   at=0.92 offset=(0,0.005,-0.010) r=0.070 wide=2.10 tall=0.26 deep=0.70 blend=0.010 color=01046d
+  blob torso on chest   at=0.92 offset=(0,0.005,-0.010) r=0.070 wide=2.10 tall=0.22 deep=0.70 blend=0.010 color=01046d
   # The scarf, at the chest front centre (y ~1.28), proud of the white top.
   blob torso on chest   at=0.66 offset=(0,-0.010,0.096) r=0.030 wide=1.35 tall=1.05 deep=0.60 blend=0.0040 color=01046d
 
