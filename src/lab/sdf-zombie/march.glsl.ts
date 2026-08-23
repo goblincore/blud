@@ -210,7 +210,7 @@ float woundMask(vec3 p) {
   for (int i = 0; i < MAX_WOUNDS; i++) {
     if (i >= uWoundCount) break;
     vec4 w = uWound[i];
-    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
+    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.25, length(p - w.xyz)));
   }
   return m;
 }

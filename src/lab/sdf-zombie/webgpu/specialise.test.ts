@@ -56,7 +56,7 @@ describe('specialiseMapBody', () => {
     expect(src).toContain('d = sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);');
     // The primitive fold must live in the else arm, after the branch.
     expect(src.indexOf('} else {')).toBeGreaterThan(src.indexOf('if (volumePose0.w > 0.5) {'));
-    expect(src.indexOf('d = applyWounds')).toBeGreaterThan(src.indexOf('} else {'));
+    expect(src.indexOf('let dw = applyWounds')).toBeGreaterThan(src.indexOf('} else {'));
   });
 
   it('folds every additive primitive exactly once, in array order', () => {
@@ -103,7 +103,7 @@ describe('specialiseMapBody', () => {
     expect(src).toContain('var bestIdx = -1;');
     expect(src).toContain('if (sd < best) { best = sd; bestIdx = ');
     expect(src).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
-    expect(src).toContain('return vec4<f32>(d + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), 0.0, 0.0);');
+    expect(src).toContain('return vec4<f32>(d + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), dw.y, 0.0);');
     // And the return packing matches the generic signature (x field, y argmin).
     expect(src).toContain('-> vec4<f32> {');
   });

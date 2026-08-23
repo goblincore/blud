@@ -295,7 +295,7 @@ describe('ported features reach the entry point', () => {
     // could tunnel — 0.6 under-relaxation pays for the noise instead. And the
     // overshoot retraction assumes the un-displaced field (it rewinds by the
     // omega excess), so it must be suppressed whenever d carries the shell.
-    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
+    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative || nearWound)');
     expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
   });
 

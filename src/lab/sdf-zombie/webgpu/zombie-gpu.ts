@@ -185,7 +185,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * inside the ±2 ms thermal noise; the gate is simply conservative. Drive
      * it live from the panel or __sdfLab.setShellDisplace.
      */
-    woundCfg2: uniform(new THREE.Vector4(0.42, 1.4, 0, 0)),
+    // rimWidth 0.25, not 0.42 (cyclops 2026-08-23): at 0.42 a blast's lip was
+    // an 11 cm wide, 3 cm tall torus — painted wet-red and glossed, it read as
+    // a red BALL from the side (owner screenshots; with splay 0 the same wound
+    // was a clean dish). 0.25 is a lip, not a donut.
+    woundCfg2: uniform(new THREE.Vector4(0.25, 1.4, 0, 0)),
     baseColor: uniform(new THREE.Color(0xc46a72)),
     deepColor: uniform(new THREE.Color(0x8c1420)),
     charColor: uniform(new THREE.Color(0x1a1214)),

@@ -300,7 +300,10 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, data: texture_2
     if (i >= count) { break; }
     let idx = start + i;
     let w = textureLoad(data, vec2<i32>(idx, ${ROW_WOUND}), 0);
-    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
+    // 1.25x the radius, not 1.6x: the wet red must stop at the lip's INNER
+    // edge. At 1.6x it painted the whole everted lip red and the lip read as
+    // a glossy red ball from the side (cyclops, 2026-08-23).
+    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.25, length(p - w.xyz)));
   }
   return m;
 }`;

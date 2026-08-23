@@ -138,14 +138,17 @@ export function specialiseMapBody(body: BuildResult): string {
   });
 
   lines.push('  }');
-  lines.push('  d = applyWounds(d, p, data, woundCfg, woundCfg2);');
+  // applyWounds returns (field, nearWound); the flag rides mapBody.z so the
+  // shared march steps plain near wounds on specialised bodies too.
+  lines.push('  let dw = applyWounds(d, p, data, woundCfg, woundCfg2);');
+  lines.push('  d = dw.x;');
   // Same guard as the generic version: the silhouette fbm is the single most
   // expensive term in the shader and must stay branched out at zero amplitude.
-  lines.push('  if (noiseAmp <= 0.0) { return vec4<f32>(d, f32(bestIdx), 0.0, 0.0); }');
+  lines.push('  if (noiseAmp <= 0.0) { return vec4<f32>(d, f32(bestIdx), dw.y, 0.0); }');
   // Same rest-space noise anchor as the generic version — the fbm samples
   // the dominant prim's REST frame, with noiseLocal as the fallback.
   lines.push('  let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
-  lines.push('  return vec4<f32>(d + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), 0.0, 0.0);');
+  lines.push('  return vec4<f32>(d + fbm(anchor * 3.0) * noiseAmp, f32(bestIdx), dw.y, 0.0);');
   lines.push('}');
   return lines.join('\n');
 }
