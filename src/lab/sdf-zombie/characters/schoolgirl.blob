@@ -262,11 +262,20 @@ body
   # Vamp/collar wrapping the ankle: the mesh's 0.114-0.147 bands run
   # 0.304-0.318 wide — 0.090 half-width at x 0.073 (wide 1.88).
   blob leg on foot at=0.00 r=0.048 wide=1.88 tall=0.95 deep=1.55 blend=0.0060 offset=(0.004,-0.040,0.012) mirror color=201109 gloss=0.20
-  # THE SOLE: a flat wide plate at the floor — the mesh's footprint is
-  # nearly SQUARE (0.292 wide x 0.289 deep; its side bands 0.258-0.289 at
-  # the sole against 0.16 above), the toes-out stance written in the tread.
-  # Grey bdb9bc, straight (the splay lives here, not in the upper).
-  blob leg on foot at=0.00 r=0.032 wide=2.30 tall=0.18 deep=4.00 blend=0.0040 offset=(0.004,-0.111,0.005) mirror color=bdb9bc gloss=0.15
+  # THE SOLE (v3): a thin capsule tracing the shoe's OWN yawed footprint,
+  # inset under the upper. v2's plate (wide 2.30 x deep 4.00 = 0.15 x 0.26
+  # at floor level, four times the shoe's depth, light bdb9bc) read as a
+  # white OVAL she stood on (owner, 2026-08-23) — but the mesh's sole is a
+  # thin grey EDGE, not a platform: its side bands run 0.258-0.289 at the
+  # sole because of the toes-out splay, and the shoe body above is only
+  # 0.152-0.170 deep. So: same heel->toe run and 8-deg yaw as the upper
+  # (offset/tip copied from the shoe body line above), radii a hair inside
+  # it (wide 2.10 vs 2.40, deep 0.95 vs 1.05) so no rim shows past the shoe
+  # from the front or the side, and darkened bdb9bc -> 655c5e toward the
+  # shoe's 201109. The bottom stays at y~0: axis at -0.110 with half-height
+  # 0.18*r puts the tread where v2's plate bottom was (the 1.70 m height
+  # pin marches y 0.002 for flesh).
+  blob leg on foot at=0.00 r=0.030 r2=0.026 wide=2.10 tall=0.18 deep=0.95 blend=0.0040 offset=(0.004,-0.111,-0.045) tip=(0.018,0.001,0.103) mirror color=655c5e gloss=0.15
 
 # ============================================================
 # FACE BLOCK — the skin skull under the hair. Cranium 0.071 half-wide x
