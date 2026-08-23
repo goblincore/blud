@@ -109,9 +109,12 @@ body
   # two fields cross — that line is the crop top's hem, and it is a colour
   # change on a smooth surface, not a ledge.
   bar  torso on chest   from=0.10 to=0.62 r=0.060 r2=0.100 deep=1.32 blend=0.025 color=ececed
-  # Chest-to-shoulders: the bust 0.170 full-wide at 1.24 up to the shoulder
-  # line 0.217 wide but only 0.061 DEEP at 1.394 — deep 0.50 keeps the
-  # shoulder band thin front-to-back instead of a sausage.
+  # Chest-to-shoulders: the bust up to the shoulder line 0.217 wide but only
+  # 0.061 DEEP at 1.394 — deep 0.50 keeps the shoulder band thin
+  # front-to-back. It ends LOW (to=0.85, cap top ~1.42) with a tight blend:
+  # anything fatter/higher here smin-bridges to the clavicle balls and webs
+  # the neck-only band at y 1.445 shut (mesh: 0.073 wide there) — that web
+  # alone cost the head window 0.03 IoU until the bar was cut back.
   bar  torso on chest   from=0.58 to=0.85 r=0.074 r2=0.075 deep=0.50 blend=0.012 color=ececed
 
   # ============================================================
@@ -123,11 +126,16 @@ body
   # one cone carries it and the hem is allowed to round under smoothly —
   # the cliff (0.406 -> 0.308 across 2 cm) is a hard-edge read no smooth
   # mass can do, traded away on purpose for the one-piece silhouette.
-  # tall 0.35 squashes BOTH end caps along the axis: the bottom cap rounds
-  # under in ~0.35*r2 (6 cm) instead of a full r2 ball below the hem (the
-  # v1 fat-cap lesson), and the top cap only bulges 3.4 cm above the belt,
-  # so it does not paint the skin midriff navy. wide 1.10 / deep 0.78:
-  # the mesh skirt is wider than deep (0.406 x 0.311 at the widest ring).
+  # tall 0.42 squashes BOTH end caps along the axis: the bottom cap rounds
+  # under in ~0.42*r2 (8 cm) instead of a full r2 ball below the hem (the
+  # v1 fat-cap lesson), and the top cap only bulges 4 cm above the belt,
+  # so it does not paint the skin midriff navy. NOTE the cap SHEARS: its
+  # x/z reach stays near-full down the whole squash, so the bulge's width
+  # is r2*wide (0.194 half) wherever it hangs — that is what holds the
+  # 0.32+ width at y 0.73 where the mesh's pleat fringe runs, and why r2
+  # 0.18 measures worse than 0.185 (the widest ring at 0.79 loses more
+  # than the hem band gains). wide 1.05 / deep 0.80: the mesh skirt is
+  # wider than deep (0.406 x 0.311 at the widest ring).
   # ============================================================
   blob torso on spine1  at=0.94 r=0.095 r2=0.185 tip=(0,-0.250,0) wide=1.05 tall=0.42 deep=0.80 blend=0.018 color=01046d
   # PLEATS — four shallow grooves riding the cone's slope (front pair and
