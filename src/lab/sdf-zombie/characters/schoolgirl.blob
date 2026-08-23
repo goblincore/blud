@@ -56,16 +56,25 @@ skeleton
   bone skull  parent=neck   dir=up pitch=0 len=0.155
 
   mirror
-    # ARMS REST DOWN, tucked to clear the flared skirt: the pose chain
-    # 12/-2/-2 (out at the shoulder, easing in below) keeps the hand inside
-    # the skirt's 0.2075 half-width envelope at the widest band, so resting
-    # arms do not widen the silhouette against a T-posed reference whose
-    # arms are straight out. Hands ride slightly forward (offset z on the
-    # hand prim) so they do not pass through the thighs.
+    # ARMS REST DOWN, eased IN at the shoulder and swung FORWARD below the
+    # elbow so the hands hang clear of the flared skirt. v2's chain
+    # 12/-2/-2 (out at the shoulder, easing in below) dropped the hand to
+    # (0.144, 0.81, 0.06) — inside the skirt cone, whose sheared end cap
+    # holds x 0.19 / z 0.15 at hand height: clearOf(arm, torso) measured
+    # -0.011 and the owner saw the lower arms clip INTO the skirt
+    # (2026-08-23). The outward route failed the floor: swinging the
+    # forearm OUT to clear the cap put arm mass outside the skirt's front
+    # outline at the hem band and cost the legs window 0.03 IoU (0.824 ->
+    # 0.792, floor 0.80). This chain (tilt 8/4/2, pitch 2/18/12) takes the
+    # brief's other escape instead: hands a little IN FRONT of the hem —
+    # hand centre (0.153, 0.82, 0.14), in front of z 0.09, while every arm
+    # band stays inside the skirt's x outline from the front, so the legs
+    # window holds 0.814. Hands stay behind the skirt's front face
+    # (z 0.146): resting ON the skirt front, not through it.
     bone clavicle parent=chest    side=0.048 dir=side  len=0.045
-    bone upperarm parent=clavicle dir=down tilt=12 pitch=2 len=0.295
-    bone forearm  parent=upperarm dir=down tilt=-2 pitch=2 len=0.260
-    bone hand     parent=forearm  dir=down tilt=-2 pitch=2 len=0.085
+    bone upperarm parent=clavicle dir=down tilt=8 pitch=2 len=0.295
+    bone forearm  parent=upperarm dir=down tilt=4 pitch=18 len=0.260
+    bone hand     parent=forearm  dir=down tilt=2 pitch=12 len=0.085
     # LEGS: the mesh stance is knees TOGETHER (its knee band is 0.245 wide
     # = 2 x (0.069 centre + 0.0535 radius), inner edges touching) with the
     # calves and socks spreading below — a shy, toes-out schoolgirl stand.
@@ -227,7 +236,9 @@ body
   bar  arm on upperarm from=0.45 to=0.98 r=0.026 r2=0.023 blend=0.0042 mirror color=dab18a
   blob arm on forearm  at=0.00 r=0.023 blend=0.0042 mirror color=dab18a
   bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.019 blend=0.0040 mirror color=dab18a
-  # Hand: a slim smooth mitt, no fingers — resting hands read as soft masses.
+  # Hand: a slim smooth mitt, no fingers — resting hands read as soft
+  # masses. The bone's pitch=12 already carries the mitt in front of the
+  # hem; offset z 0.03 keeps it just behind the skirt's front face.
   blob arm on hand at=0.45 offset=(0,0,0.03) r=0.028 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=dab18a
 
   # ============================================================
