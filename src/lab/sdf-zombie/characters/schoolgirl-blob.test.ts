@@ -70,9 +70,11 @@ describe('schoolgirl.blob', () => {
 
   it('skirts the torso in navy paint', () => {
     const navy = painted('torso').filter(p => p.color![2] > p.color![0] * 2 && p.color![2] < 0.3);
-    // cone + hem ring + second ring + 4 pleat bars (+ collar/scarf are navy
-    // too, so just demand a real wardrobe of navy prims).
-    expect(navy.length).toBeGreaterThanOrEqual(7);
+    // v2 (2026-08-23): the smooth rebuild carries navy on exactly THREE
+    // prims — the one-cone skirt, the one-plate sailor collar, the scarf.
+    // v1 needed 7+ (cone, two hem rings, four pleat bars); the pleats are
+    // grooves now, and grooves carry no paint.
+    expect(navy.length).toBe(3);
   });
 
   it('socks are white paint and fatter than the knee — the slouch', () => {
@@ -136,12 +138,17 @@ describe('schoolgirl.blob', () => {
     expect(bottom).toBeLessThan(0.005);
   });
 
-  // THE HEM CLIFF (the hardest-won shape in this file): the skirt flares to
-  // its widest ring at y 0.79 then cuts to 0.318 wide by 0.735 — a round
-  // cone's end cap CANNOT do that (it ends in a sphere of the end radius),
-  // which is why the hem is a flat ellipsoid ring plus a pleat fringe. If a
-  // future edit turns the ring back into a fat-ended cone, this fails.
-  it('has the skirt hem cliff: widest at 0.79, tucked at 0.735, pleats below', () => {
+  // THE SMOOTH SKIRT (v2, 2026-08-23 — replaces the hem-cliff pin). v1
+  // matched the mesh's hem cliff (0.406 -> 0.308 across 2 cm) with two flat
+  // ellipsoid RINGS plus six pleat-fragment bars: every band width right,
+  // and the owner read it as "a cylinder with a flat disc at the hem". v2
+  // is ONE flared cone whose squashed end cap rounds under smoothly — the
+  // cliff is a hard-edge read no smooth mass can do, traded away on
+  // purpose. What this pin guards instead: the flare reaches the hem
+  // latitude, the width falls MONOTONICALLY below it (no second ring, no
+  // disc, no flat run), and the torso carries its whole mass in at most 8
+  // additive prims (v1 needed 20 for the same silhouette).
+  it('has a single flared skirt: widest at 0.79, rounding smoothly under', () => {
     const b = built();
     const width = (y: number) => {
       let lo = NaN, hi = NaN;
@@ -149,11 +156,16 @@ describe('schoolgirl.blob', () => {
         if (sdBody([x, y, 0], b) < 0) { if (Number.isNaN(lo)) lo = x; hi = x; }
       return hi - lo;
     };
-    expect(width(0.79)).toBeGreaterThan(0.38);   // mesh 0.415
-    expect(width(0.735)).toBeLessThan(0.34);     // mesh 0.318
-    expect(width(0.72)).toBeGreaterThan(0.29);   // mesh 0.318 — the pleat fringe holds it
-    // The pleats themselves: navy tips hanging below the hem at the sides.
-    expect(sdBody([0.142, 0.70, 0], b)).toBeLessThan(0);
+    expect(width(0.79)).toBeGreaterThan(0.36);       // the flare (mesh 0.406)
+    expect(width(0.75)).toBeLessThan(width(0.79));   // falling…
+    expect(width(0.72)).toBeLessThan(width(0.75));   // …monotonically…
+    expect(width(0.70)).toBeLessThan(width(0.72));   // …to the bare legs
+    // The smooth-construction budget: 8 additive torso prims, 12 with the
+    // four pleat grooves. If this grows, someone is re-stacking discs.
+    const t = limb(b, 'torso');
+    const prims = b.prims.slice(t.start, t.start + t.count);
+    expect(prims.filter(p => p.op === 'add').length).toBeLessThanOrEqual(8);
+    expect(prims.length).toBeLessThanOrEqual(12);
   });
 
   // KNEES TOGETHER (the mesh's stance — 0.245 at the knee, inner edges
