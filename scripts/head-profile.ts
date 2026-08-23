@@ -33,6 +33,15 @@ import { parseGlb, gltfTriangles } from '../src/lab/sdf-zombie/silhouette';
 
 const args = process.argv.slice(2);
 const name = args.find((a) => !a.startsWith('--')) ?? 'mouse';
+// The profile window, in METRES. The fixed 0.64..0.94 default is the MOUSE's
+// head (a 1.10 m body, chin at 0.71); any character whose head is elsewhere
+// MUST pass --window or the table scores the wrong limb — the schoolgirl
+// (1.70 m, chin 1.45) scored calves against a skirt fringe until this flag
+// existed.
+const winArg = args.indexOf('--window');
+const Y0 = winArg >= 0 && args[winArg + 1] ? Number(args[winArg + 1]!.split(':')[0]) : 0.64;
+const Y1 = winArg >= 0 && args[winArg + 1] ? Number(args[winArg + 1]!.split(':')[1]) : 0.94;
+if (!(Y0 > 0 && Y1 > Y0)) throw new Error(`--window must be lo:hi metres, got ${Y0}:${Y1}`);
 const glbArg = args.indexOf('--glb');
 // Same resolution as scripts/blob-measure.ts: the canonical
 // docs/dev-notes/refs/<name>-mesh/<name>.glb first — the file every head
@@ -122,7 +131,7 @@ const f = (v: number) => (Number.isFinite(v) ? v.toFixed(3) : '   —').padStart
 console.log('\n            FRONT z              BACK z            MUZZLE half-width');
 console.log('  y      mesh   ours  delta    mesh   ours     mesh   ours    spans');
 let worstFront = 0, holes = 0;
-for (let y = 0.64; y <= 0.94; y += 0.02) {
+for (let y = Y0; y <= Y1; y += 0.02) {
   const o = ours(y);
   const r = refAt?.(y);
   // Muzzle width: widest x at this height that still has flesh in front of z 0.05.
@@ -144,7 +153,7 @@ console.log(`\nworst front error ${worstFront.toFixed(3)} m      rows with a gap
 // ---- the plan view of the muzzle -----------------------------------------
 // Half-width by z at the snout's own height. The front profile cannot see
 // whether a muzzle is a cone or a tube; this can.
-const PLAN_Y = 0.76;
+const PLAN_Y = Y0 + 0.71 * (Y1 - Y0);
 console.log(`\nmuzzle plan at y ${PLAN_Y.toFixed(2)} — half-width by z band`);
 console.log('  z band        mesh    ours');
 for (let z0 = 0.02; z0 < 0.20; z0 += 0.03) {
@@ -193,7 +202,7 @@ function view(axis: 'front' | 'side', cols: number, rows: number, y0: number, y1
   }
   return out;
 }
-const A = view('front', 46, 26, 0.60, 1.02);
-const B = view('side', 46, 26, 0.60, 1.02);
+const A = view('front', 46, 26, Y0 - 0.04 * (Y1 - Y0), Y1 + 0.08 * (Y1 - Y0));
+const B = view('side', 46, 26, Y0 - 0.04 * (Y1 - Y0), Y1 + 0.08 * (Y1 - Y0));
 console.log('\n  front' + ' '.repeat(43) + 'side (nose to the RIGHT)');
 for (let i = 0; i < A.length; i++) console.log('  ' + A[i] + '   ' + B[i]);
