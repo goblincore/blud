@@ -561,7 +561,14 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // reach (0.7*amp, the limit that stopped the lip welding arm to torso)
     // while cutting the gradient to ~1.5; deeper than 0.3*amp inside the
     // old skin is solid flesh either way.
-    let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
+    // OUTER REACH 0.35*amp, NOT 0.7 (floating rims, cyclops 2026-08-23). The
+    // lip may only exist within 0.35*amp of the ORIGINAL skin: at 0.7 a blast
+    // on the cyclops's hand put 36% of its rim material in empty space
+    // (shells bridging the gaps between claws), drawn as a glossy ball from
+    // one angle and a ring from another as the marcher caught or missed the
+    // shell; at 0.35 it is 12%, at 0.2 4%. 0.35 keeps a visible lip. The
+    // ramp still spans a full amp (-0.65..0.35) so its gradient is unchanged.
+    let rimLocal = 1.0 - smoothstep(-amp * 0.65, amp * 0.35, dIn);
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return d;

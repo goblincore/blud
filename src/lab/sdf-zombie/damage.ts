@@ -45,6 +45,13 @@ export interface Wound {
    * the frame from the live axis.
    */
   axis0?: Vec3;
+  /**
+   * Multiplier on this wound's everted-rim amplitude, 0..1, from how much
+   * flesh there was behind the hit (see `rimScaleFor`). Absent means 1 — the
+   * full lip — which is right for every torso hit and for callers that have
+   * no field to probe (explosions on chunks).
+   */
+  rimScale?: number;
 }
 
 /**
@@ -116,9 +123,58 @@ function frame(prim: Primitive, bodyYaw: number, axis0?: Vec3) {
 }
 
 /**
+ * How tall the shader's everted lip is for a wound of `radius`, in metres, at
+ * the stock woundCfg splay of 0.55 — the height the flesh behind a hit is
+ * compared against. Mirrors `amp = depth * woundCfg.z * wMeta.z` in
+ * march.wgsl.ts's applyWounds (the live splay uniform may be tuned, which is
+ * fine: this only needs the same order of magnitude).
+ */
+const STOCK_RIM_SPLAY = 0.55;
+
+/**
+ * THE LIP IS PEELED MATERIAL, NOT CONJURED (cyclops, 2026-08-23). The rim
+ * in applyWounds is a Gaussian shell gated by distance to the ORIGINAL skin,
+ * so on a feature thinner than the lip — a claw, a finger — it adds flesh in
+ * empty space: a CPU cross-section of a blast on the cyclops's hand put 36%
+ * of the rim's cells outside the original flesh, which drew as a glossy ball
+ * from one angle and a dark ring from another as the marcher caught or
+ * missed the floating shell. Probe the flesh behind the hit (march from the
+ * hit toward the owning primitive's axis until the field goes positive) and
+ * scale the lip to it: 1 when there is at least twice the lip's height of
+ * flesh, down to 0 for nothing.
+ */
+export function rimScaleFor(
+  field: (p: Vec3) => number, hit: Vec3, prim: Primitive, radius: number, type: WoundType,
+): number {
+  // Inward direction: toward the nearest point on the primitive's axis.
+  const ab = sub(prim.b, prim.a);
+  const L2 = dot(ab, ab);
+  const t = L2 === 0 ? 0 : Math.max(0, Math.min(1, dot(sub(hit, prim.a), ab) / L2));
+  const axisPt = add(prim.a, scale(ab, t));
+  const inward = sub(axisPt, hit);
+  const n = len(inward);
+  if (n < 1e-6) return 1;
+  const dir = scale(inward, 1 / n);
+  // March inward; the flesh ends where the field turns positive again.
+  const STEP = 0.004, MAX = 0.6;
+  let thick = 0;
+  for (let d = STEP; d <= MAX; d += STEP) {
+    const p = add(hit, scale(dir, d));
+    if (field(p) > 0) break;
+    thick = d;
+  }
+  const lip = radius * STOCK_RIM_SPLAY * WOUND_PROFILES[type].rimSplayScale;
+  return Math.max(0, Math.min(1, thick / (2 * lip)));
+}
+
+/**
  * Converts a world-space hit into a wound bound to the nearest primitive, stored
  * in that primitive's LOCAL frame. This is what makes a crater stay on the
  * shoulder while the shoulder swings and stretches.
+ *
+ * `field` (the body's signed distance, e.g. `p => sdBody(p, body)`) lets the
+ * wound scale its everted rim to the flesh actually behind the hit — see
+ * `rimScaleFor`. Omit it and the rim is the full lip.
  */
 export function worldHitToWound(
   prims: Primitive[],
@@ -129,6 +185,7 @@ export function worldHitToWound(
    *  statue loop) — the frame the hit is expressed in. Must match the yaw
    *  woundWorldPos is later called with or the wound drifts by the delta. */
   bodyYaw = 0,
+  field?: (p: Vec3) => number,
 ): Wound {
   // The primitive whose SURFACE the hit is on — the arg-min of the per-prim
   // field, the same rule the shader's hitBest paints by. It used to be the
@@ -153,6 +210,7 @@ export function worldHitToWound(
   const rel = sub(hit, prim.a);
   const wound: Wound = { primIdx, local: [dot(rel, u), dot(rel, v), dot(rel, w)], radius, type, ageSec: 0 };
   if (axis0) wound.axis0 = axis0;
+  if (field) wound.rimScale = rimScaleFor(field, hit, prim, radius, type);
   return wound;
 }
 

@@ -253,7 +253,7 @@ function refreshWounds() {
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
-    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
     wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
   );
 }
@@ -352,7 +352,7 @@ handle.setRenderCallback((dt) => {
     wounds.map(w => w.radius),
     wounds.map(w => TYPE_ID[w.type]),
     wounds.map(w => w.ageSec),
-    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+    wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
     wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
   );
 
@@ -392,7 +392,8 @@ canvas.addEventListener('pointerup', (ev: PointerEvent) => {
   if (!hit) return;
 
   const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
-  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES[type].radius, type), MAX_WOUNDS);
+  wounds = pushWound(wounds, worldHitToWound(current.prims, hit, WOUND_PROFILES[type].radius, type, 0,
+    p => sdBody(p, current)), MAX_WOUNDS);
   // A hit shoves the nearest joint along the shot direction — the rest-pose
   // pull springs it back, so the limb visibly recoils and lags.
   const push = type === 'blast' ? 0.10 : 0.04;

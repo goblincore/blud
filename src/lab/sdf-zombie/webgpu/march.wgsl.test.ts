@@ -165,10 +165,11 @@ describe('ported features reach the entry point', () => {
     expect(applyWounds).toContain('wMeta.w');
     // Tighter locality than the first cut (0.5/1.2): at blast amplitude the
     // old reach exceeded the armpit gap and the rim still welded arm to torso.
-    // The ramp starts INSIDE the flesh (-0.3*amp) so it is a full amp wide —
+    // Outer reach 0.35*amp (floating rims on the cyclops, 2026-08-23); the ramp
+    // starts INSIDE the flesh (-0.65*amp) so it is still a full amp wide —
     // a 0.35..0.7 ramp had ~4x a distance field's gradient and drew as bands
     // around the lip (rim banding, 2026-08-22). Outer reach 0.7*amp unchanged.
-    expect(applyWounds).toMatch(/smoothstep\(-amp \* 0\.3, amp \* 0\.7, dIn\)/);
+    expect(applyWounds).toMatch(/smoothstep\(-amp \* 0\.65, amp \* 0\.35, dIn\)/);
   });
 
   it('shades chunks through the gore mask (gobs-and-goo §2)', () => {

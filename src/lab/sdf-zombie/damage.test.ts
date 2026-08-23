@@ -177,6 +177,36 @@ describe('binding picks the primitive whose SURFACE the hit is on', () => {
   });
 });
 
+describe('the everted rim is scaled by the flesh behind the hit (no floating rings)', () => {
+  // The cyclops (2026-08-23): a blast on a claw drew a glossy ball from one
+  // angle and a dark ring from another. The rim is a Gaussian shell gated by
+  // distance to the ORIGINAL skin, so on a feature thinner than the lip it
+  // adds material in empty space — 36% of the rim's cells sat outside the
+  // flesh in a CPU cross-section. A lip is peeled material: scale it by how
+  // much flesh there was to peel.
+  const field = (prims: Primitive[]) => (p: Vec3) => Math.min(...prims.map(q => {
+    // capsule distance, enough for these fixtures
+    const ab = sub(q.b, q.a), ap = sub(p, q.a);
+    const t = Math.max(0, Math.min(1, len(ab) === 0 ? 0 : (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (len(ab) * len(ab))));
+    return len(sub(p, add(q.a, [ab[0] * t, ab[1] * t, ab[2] * t]))) - q.radius;
+  }));
+  it('a blast on a fat torso blob keeps its full lip', () => {
+    const torso = sphere([0, 1.0, 0]); // r 0.14, 0.28 m of flesh behind the hit
+    const w = worldHitToWound([torso], [0.14, 1.0, 0], 0.13, 'blast', 0, field([torso]));
+    expect(w.rimScale).toBeCloseTo(1, 6);
+  });
+  it('a blast on a claw-thin capsule gets a lip scaled to its thickness', () => {
+    const claw: Primitive = { ...capsule([0.3, 0.5, 0], [0.3, 0.3, 0]), radius: 0.02 }; // 4 cm across
+    const w = worldHitToWound([claw], [0.32, 0.4, 0], 0.13, 'blast', 0, field([claw]));
+    expect(w.rimScale).toBeLessThan(0.7);
+    expect(w.rimScale).toBeGreaterThan(0.05);
+  });
+  it('without a field the scale is absent and treated as 1', () => {
+    const torso = sphere([0, 1.0, 0]);
+    expect(worldHitToWound([torso], [0.14, 1.0, 0], 0.13, 'blast').rimScale).toBeUndefined();
+  });
+});
+
 describe('WOUND_PROFILES — per-type "weapon calibre" knobs', () => {
   it('covers all three wound types', () => {
     expect(Object.keys(WOUND_PROFILES).sort()).toEqual(['blast', 'burn', 'pellet']);

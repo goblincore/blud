@@ -198,7 +198,7 @@ float applyWounds(float d, vec3 p) {
     // Tighter reach than the first cut: 0.35/0.7 (was 0.5/1.2). At blast
     // amplitude the old reach exceeded the armpit gap and the rim still
     // bridged arm to torso from the shoulder side.
-    float rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
+    float rimLocal = 1.0 - smoothstep(-amp * 0.65, amp * 0.35, dIn);
     d -= exp(-x * x) * amp * rimLocal;
   }
   return d;

@@ -340,7 +340,8 @@ export function resolveExplosion(
     const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map(h =>
       worldHitToWound(
         body.prims, h.point,
-        WOUND_PROFILES.blast.radius * h.falloff, 'blast',
+        WOUND_PROFILES.blast.radius * h.falloff, 'blast', 0,
+        p => sdBody(p, body),
       ));
     const meterCredit = wounds.reduce(
       (m, w) => m + w.radius * COLLAPSE_TUNING.meterRadiusWeight, 0);

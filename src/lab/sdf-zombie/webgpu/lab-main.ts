@@ -976,7 +976,9 @@ async function main() {
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
-      wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
+      // Per-wound lip: the profile's splay scaled by the flesh behind the hit
+      // (Wound.rimScale), so a blast on a claw does not grow a floating ring.
+      wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
       wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
     );
   }
@@ -1156,7 +1158,8 @@ async function main() {
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
     // The wound frame is the body's CURRENT yaw — the same transform the
     // heading rotation puts the prims through, so the crater rides the turn.
-    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, lastBodyYaw);
+    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, lastBodyYaw,
+      p => sdBody(p, lastPosed));
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and, for torso blasts,
@@ -2960,7 +2963,8 @@ async function main() {
         const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1], lastPosed);
         if (!hit) continue;
         const w = worldHitToWound(
-          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', lastBodyYaw);
+          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', lastBodyYaw,
+          p => sdBody(p, lastPosed));
         wounds = pushWound(wounds, w, MAX_WOUNDS);
         pendingWounds.push(w); // stamped blasts feed the damage meter too
       }
