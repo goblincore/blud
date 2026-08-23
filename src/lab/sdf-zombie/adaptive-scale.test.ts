@@ -30,6 +30,15 @@ function run(
   return { state, rungs };
 }
 
+describe('the ladder', () => {
+  it('reaches down to a fifth of the drawing buffer, for retina windows', () => {
+    // 0.35 on a 3072x3408 buffer is still ~1.3 M rays — at budget; 0.2 is 0.4 M.
+    expect(SCALE_LADDER[0]).toBeLessThanOrEqual(0.2);
+    expect(SCALE_LADDER[SCALE_LADDER.length - 1]).toBe(1.0);
+    for (let i = 1; i < SCALE_LADDER.length; i++) expect(SCALE_LADDER[i]).toBeGreaterThan(SCALE_LADDER[i - 1]!);
+  });
+});
+
 describe('scaleForRung', () => {
   it('clamps out-of-range indices instead of returning undefined', () => {
     expect(scaleForRung(-5)).toBe(SCALE_LADDER[0]);

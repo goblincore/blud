@@ -47,7 +47,12 @@
  *
  * Ascending, so a higher index is higher quality.
  */
-export const SCALE_LADDER = [0.35, 0.45, 0.55, 0.7, 0.85, 1.0] as const;
+// The floor is 0.2, not 0.35 (2026-08-23): the cost is rays, and rays are
+// scale² × the drawing buffer, which on a retina display is 4× the CSS
+// pixels. On the owner's 1536×1704 window 0.35 is still ~1.3 M rays — the
+// load that sat exactly at budget in a small pane at 0.7 — so the ladder
+// bottomed out while still dropping frames. 0.2 there is ~0.4 M rays.
+export const SCALE_LADDER = [0.2, 0.27, 0.35, 0.45, 0.55, 0.7, 0.85, 1.0] as const;
 
 /** Frames must exceed this multiple of the budget before the scale drops. */
 const OVER_FACTOR = 1.1;
