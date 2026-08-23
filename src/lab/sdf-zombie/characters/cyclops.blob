@@ -1,0 +1,320 @@
+# Cyclops — a squat armoured brute with ONE big domed eye set in the upper
+# chest, a wide fanged maw directly below it, two long arms ending in three
+# curved claws each, a spiked trapezius hood, and NO LEGS: a thick segmented
+# slug tail that curls backward then hooks up, resting on its belly.
+#
+# Authored 2026-08-22 against the reference MESH
+# docs/dev-notes/refs/cyclops-mesh/cyclops.glb (committed; static, unposed,
+# faces +z, rests at y=0, height 1.0 in its own units — every fraction below
+# is of that 1.0 and is scaled by the declared height 1.35 m). Probed with a
+# vertex-band script (front x-runs and side z-runs per y band) plus a texel
+# probe of the mesh's texture: the paint is one flat dark olive-brown
+# (#312815..#524122 with baked AO) with NO paint regions except the eye —
+# measured pale texels mean sRGB (168,160,138), the brief's e8dcc0 is the
+# lit value. Fangs, spikes, claws and plates are all the flesh colour; only
+# the eyeball and its pupil are painted.
+#
+# GRAMMAR LIMITATIONS this file is shaped around (probed on a probe body
+# 2026-08-22, not assumed):
+#   - `leg` and `arm` limbs REQUIRE mirroring, and a leg is the wrong word
+#     for a tail anyway: the tail is a CHAIN OF BONES under the root
+#     (tail1..tail4) with its blobs on limb `torso`, so it joins the torso
+#     cluster and never needs a mirror.
+#   - a `skull` bone is MANDATORY (the face prims and the maw carve ride
+#     it): neck+skull are stubs buried inside the upper torso, and the face
+#     block's radii are kept tiny so its prims stay inside the chest flesh.
+#   - `carve` is hardcoded to limb `head`: the maw's mouth gash is a carve
+#     `on skull` and lands in the head cluster — harmless here, because
+#     carves subtract from the WHOLE assembled field, not per-cluster
+#     (validate.ts sdBody: additive fold first, then every carve).
+#   - no `stance` line: checkStance only knows humanoid/digitigrade, and
+#     this body has no legs at all. Omitted means "not checked".
+#
+# KEY MEASUREMENTS off the mesh (fractions of height; x1.35 for metres):
+#   crown spike tips      y 1.00, spike row x -0.09..0.13 (raked back)
+#   hood crest            y 0.93..0.99, x +-0.24, z -0.13..0.29
+#   eye dome front        y 0.80..0.92, z to 0.46, x -0.157..0.064 (offset
+#                         slightly -x in the sculpt; centred here)
+#   maw slab              y 0.66..0.82, x +-0.34, front z 0.44..0.463 —
+#                         the FRONTMOST point of the whole model
+#   deltoid               y 0.80..0.86, x +-0.30..0.34
+#   elbow                 y 0.60..0.66, x to +0.45 (right) — arms clear of
+#                         the body, 4 silhouette runs by y 0.62
+#   hand + claw fan       y 0.40..0.56, x 0.28..0.47 (widest 0.93 overall),
+#                         claw tips bottom at y 0.37..0.40 at z 0.24..0.35
+#                         (NOTE: the brief says "reaching the ground" but
+#                         the mesh bottoms at y 0.37 — mesh is authoritative)
+#   waist column          y 0.36..0.62, x +-0.11..0.14, z -0.07..0.16
+#   tail sweep            z to -0.46 behind, y 0.28..0.46 hooking UP,
+#                         hook offset to +x 0.04..0.13 in the sculpt
+#   belly tube            y 0.00..0.32, x +-0.14, z -0.36..+0.11, ground
+#                         contact strip z -0.23..0.00 at y 0
+model cyclops
+  height 1.35
+
+skeleton
+  # The root sits at the torso->tail junction (mesh y 0.36..0.40 of height =
+  # 0.49..0.54 m): everything above is spine, everything below is tail.
+  # Children attach at the root bone's TAIL (resolveBones), so at 0.41 +
+  # len 0.14 puts the junction at y 0.55 where the tail chain starts.
+  root pelvis at 0.41 len=0.14
+
+  # Spine: pelvis-tail (0.55) up to the skull stub. pitch tips forward (+z) —
+  # the chest carries its mass forward over the arms, mesh chest centre z 0.10.
+  bone spine1 parent=pelvis  dir=up pitch=3 len=0.30   # 0.55 -> 0.85
+  bone spine2 parent=spine1  dir=up pitch=5 len=0.32   # 0.85 -> 1.168
+  # MANDATORY skull stub, buried inside the chest (mesh has no head: the
+  # crown of the trapezius hood IS the top, nothing above it). The face
+  # block below keeps headRadius tiny so its prims stay in the flesh; the
+  # real eye and maw are torso blobs/carves, not the face system.
+  bone neck  parent=spine2  dir=up len=0.02            # 1.168 -> 1.188
+  bone skull parent=neck   dir=up len=0.04             # 1.188 -> 1.228
+
+  # THE TAIL — a bone chain under the root, NOT a leg limb (leg requires
+  # mirroring and a tail is not bilateral). tail1 sweeps back-down out of
+  # the junction, tail2/3 carry the belly tube down to the ground, tail4 is
+  # the rear hook rising to y 0.55 m (mesh hook: y 0.29..0.46 of height,
+  # z -0.46 behind). tilt=6 on tail4 leans the hook toward +x, where the
+  # sculpt puts it (hook verts x 0.04..0.13).
+  bone tail1 parent=pelvis dir=down pitch=-60 len=0.30  # -> (0, 0.40, -0.26)
+  bone tail2 parent=tail1  dir=down pitch=-20 len=0.22  # -> (0, 0.19, -0.34)
+  bone tail3 parent=tail2  dir=down pitch=-75 len=0.14  # -> (0, 0.18, -0.47)
+  bone tail4 parent=tail3  dir=up pitch=-12 tilt=6 len=0.36 # -> (0.04, 0.51, -0.55)
+
+  mirror
+    # Arms: LONG, hanging forward of the chest (mesh arm z 0.33..0.44 — the
+    # creature braces on its knuckle-claws in FRONT of its own belly). The
+    # elbow sits NO further out than the shoulder (mesh elbow x ~0.30 of
+    # height, deltoid 0.30..0.34) and the forearm angles OUT going down to
+    # the hand at x 0.37 of height — the claw fan owns the widest span.
+    bone clavicle parent=spine2 side=0.18 dir=side len=0.16
+    # Shoulder (0.30, 1.17, 0.04) to elbow (0.376, 0.888, 0.46): the mesh
+    # arm column stays at x 0.30..0.33 of height from deltoid to elbow
+    # (y 0.62..0.86) — only the mesh's RIGHT side has an extra spike out at
+    # x 0.42, asymmetric in the sculpt and left unmirrored deliberately.
+    bone upperarm parent=clavicle dir=down pitch=55 tilt=15 len=0.51
+    # Elbow to hand: down and OUT — the hand sits at (0.465, 0.68, 0.57).
+    bone forearm  parent=upperarm dir=down pitch=24 tilt=23 len=0.255
+    bone hand     parent=forearm  dir=down pitch=15 len=0.06
+    # Three claw bones fanning off the paw. The mesh's hand mass spans
+    # x 0.21..0.46 of height over y 0.40..0.58 — a PAW, not a knuckle — and
+    # the claws fan from it out to x 0.467 (0.63 m), bottoming at y 0.40
+    # (0.54 m), tips curling back to z ~0.31 of height.
+    bone c_out parent=hand dir=down pitch=-50 tilt=58  len=0.26
+    bone c_mid parent=hand dir=down pitch=-57 tilt=20  len=0.24
+    bone c_in  parent=hand dir=down pitch=-60 tilt=-28 len=0.22
+  end
+
+body
+  # ---- TORSO MASSES -----------------------------------------------------
+  # The chest slab: the whole upper body. Mesh at its widest (y 0.76 of
+  # height = 1.03 m) is x +-0.33 (0.44 m) and z -0.20..0.46 (0.62 m front).
+  # One ellipsoid half (0.444, 0.24, 0.396) centred (0, 1.049, 0.097).
+  blob torso on spine2 at=0.79 r=0.240 wide=1.90 tall=0.79 deep=1.60 blend=0.030 offset=(0,0,0.062) core
+  # The chest's squared-off bottom flange: the mesh jumps from body half
+  # 0.20 m at y 0.86 to 0.43 m at y 0.89 — the slab ends in a lip above the
+  # waist, it does not taper. The flange also owns the chest's z at its
+  # bottom (mesh body z -0.19..0.17 at y 0.84 — the slab above leans
+  # FORWARD, the lip does not), which is what keeps the side-view ARM GAP
+  # open at y 0.62..0.66 of height.
+  blob torso on spine2 at=0.10 r=0.150 wide=2.60 tall=0.50 deep=1.30 blend=0.025 offset=(0,0.02,0.00)
+  # Trapezius hood: the crest over the eye, rising from the shoulders to a
+  # narrower spiked crown. Mesh hood at y 0.94..0.96 of height: x +-0.25,
+  # z -0.11..0.29. Half (0.27, 0.105, 0.22) centred (0, 1.26, 0.11) — the
+  # top of the flesh; the SPIKES below own the last 10 cm to the crown.
+  blob torso on skull at=1.00 r=0.100 wide=2.90 tall=0.90 deep=2.65 blend=0.012 offset=(0,0.047,0.035)
+
+  # ---- WAIST AND TAIL ---------------------------------------------------
+  # Waist column under the slab, as TWO stacked blobs because the mesh's
+  # column leans BACK as it rises: z -0.08..0.16 at y 0.70 m (0.52 of
+  # height) deepening to -0.14..0.17 at 0.81 and -0.195..0.155 at 0.89 —
+  # the mass tucks under the chest's overhang. x +-0.11..0.14 throughout.
+  blob torso on spine1 at=0.10 r=0.160 wide=1.00 deep=1.00 blend=0.030 offset=(0,0.05,0.05)
+  blob torso on spine1 at=0.45 r=0.150 wide=1.00 deep=0.95 blend=0.030 offset=(0,0.05,0.00)
+  # Junction blob at the root: bridges waist to tail. The sculpt's own side
+  # view has a GAP between body and tail here (z-runs -0.33..-0.25 and
+  # -0.05..0.16 at y 0.36..0.38) — matched by keeping this blob's rear at
+  # z -0.22 while tail1's mass starts at -0.30.
+  blob torso on pelvis at=0.00 r=0.160 wide=1.00 deep=1.05 blend=0.030 offset=(0.03,0.14,-0.05)
+  # The belly tube — the slug the creature rests on. Mesh at y 0.14 of
+  # height: x +-0.11, z -0.27..0.08 (0.47 deep, 0.28 wide: a FLATTENED tube),
+  # curling down to the ground contact strip z -0.23..0.00 at y 0. wide 0.85
+  # deep 1.45 makes it deep-not-wide and rests its bottom exactly on y 0.
+  blob torso on tail2 at=1.00 r=0.160 wide=0.95 deep=1.30 blend=0.022 offset=(0.03,0.00,0.19)
+  # Ground contact: the belly's own lowest strip — the mesh touches down on
+  # z -0.31..0.00 at y 0..0.06 (a strip 0.31 long), which the round belly
+  # blob above cannot be: one sphere is either too deep at the floor or too
+  # shallow at the equator. This flat blob IS the floor contact.
+  blob torso on tail2 at=1.00 r=0.090 wide=1.30 deep=1.70 blend=0.020 offset=(0.03,-0.14,0.18)
+  # Front column: the lower torso's front mass, running z -0.07..0.16 of
+  # height down the waist into the belly (the mesh keeps front z to +0.16
+  # all the way to y 0.20 — the slug's chest rests forward of its tail).
+  blob torso on tail2 at=0.75 r=0.150 wide=1.00 tall=1.40 deep=1.15 blend=0.025 offset=(0,0.11,0.37)
+  # Rear tube: a THIN tapered bar, not a sphere — the mesh's tube is 0.10
+  # deep (z -0.44..-0.34 at y 0.36 of height) with the hook column rising
+  # behind it and clear AIR between tube and body. A sphere here fills that
+  # air and was the side view's biggest IoU leak. The bar follows the mesh
+  # tube's own line: z -0.39 at y 0.30 m rising to -0.345 at 0.49 m.
+  blob torso on pelvis at=0.00 r=0.045 r2=0.055 wide=1.00 deep=1.10 blend=0.018 offset=(0.04,-0.11,-0.39) tip=(0,0.19,0.045)
+  # Upper tail: the FAT mass where the tail meets the junction — mesh
+  # y 0.40..0.46 of height (0.54..0.62 m) is one run z -0.61..-0.34, half
+  # 0.13 centred z -0.47, TOPPING OUT at y 0.63 (nothing behind z -0.06
+  # above that). Below it the tube goes THIN (-0.42..-0.30).
+  blob torso on tail1 at=0.90 r=0.085 wide=1.00 tall=0.75 deep=1.40 blend=0.018 offset=(0.04,0.16,-0.22)
+  # The rear HOOK: three blobs up tail4. Mesh hook verts x 0.04..0.13 of
+  # height (offset to +x — tilt=6 on tail4 plus offset x), y 0.29..0.46 of
+  # height (0.39..0.62 m — it starts at the fat tail's latitude, NOT at
+  # the tube's), z to -0.46 (-0.62 m). Tight blends keep the segments
+  # reading — the tail is SEGMENTED in the sculpt, not one smooth rope.
+  blob torso on tail4 at=0.70 r=0.085 wide=1.00 deep=1.00 blend=0.015 offset=(0.04,0.05,-0.01)
+  blob torso on tail4 at=0.85 r=0.080 wide=1.00 deep=1.00 blend=0.012 offset=(0.03,0.05,0.00)
+  blob torso on tail4 at=1.00 r=0.075 wide=1.00 deep=1.00 blend=0.010 offset=(0.03,0.05,-0.006)
+
+  # ---- THE EYE — the character ------------------------------------------
+  # ONE big domed pale eye in the upper chest. Mesh: dome front z 0.41 of
+  # height (0.554 m) held flat over y 0.84..0.90 (1.13..1.21 m), pale texels
+  # x -0.16..0.06 (centred here), dome top at y 0.92. So half (0.147, 0.085,
+  # 0.155) centred (0, 1.157, 0.422) — tall 0.55 keeps the top under the
+  # hood lip (mesh front retreats to z 0.33 by y 0.93 — a taller sphere
+  # would poke through the hood front).
+  # Painted pale with high gloss per the brief: color=e8dcc0 gloss=0.9.
+  blob torso on spine2 at=0.95 r=0.155 wide=0.95 tall=0.55 deep=1.00 blend=0.008 offset=(0,0.005,0.38) color=e8dcc0 gloss=0.9
+  # The pupil: a dark lens just proud of the eyeball's front (centre z 0.585
+  # + r 0.038 = 0.623 vs the eye's 0.577) so the nearest-prim paint rule
+  # makes it read as a disc on the dome, never buried.
+  blob torso on spine2 at=0.95 r=0.038 wide=0.90 tall=1.00 deep=1.00 blend=0.004 offset=(0,0.01,0.50) color=14100b gloss=0.9
+
+  # ---- THE MAW ----------------------------------------------------------
+  # The lip slab: the frontmost mass of the whole model. Mesh y 0.66..0.82
+  # of height (0.89..1.11 m), x +-0.34 (0.46 m), front z 0.44..0.463
+  # (0.62 m). Half (0.44, 0.115, 0.15) centred (0, 1.013, 0.483).
+  blob torso on spine2 at=0.35 r=0.115 wide=3.83 tall=1.00 deep=1.30 blend=0.018 offset=(0,0.06,0.457)
+  # The mouth line: a GROOVE, not a carve. The reference mesh's maw is a
+  # CLOSED sculpt — no hole anywhere in the mesh, the mouth is a wide lip
+  # seam — so the mouth is a channel cut along the slab's front face
+  # (cutter centred ON the surface z 0.619 at y 1.00), 5 cm deep, with the
+  # fangs below hanging off the upper lip. Two carve attempts were rejected
+  # first: one that ran past the chest cut a see-through slit, one that
+  # stopped inside left a knife-edge lip — BOTH failed blob:render-check
+  # with GPU holes the CPU field did not have (2026-08-22).
+  groove head on skull at=1.00 r=0.030 wide=9.00 tall=0.40 deep=1.20 depth=0.080 width=0.030 offset=(0,-0.24,0.577)
+  # The FANGS: five chunky spikes (r2=0.007, not needles) hanging from the
+  # slab's face ABOVE the groove, bases seated 2 cm inside the surface at
+  # z 0.60..0.62 and tips at y 0.90 — proud of the slab, which falls back
+  # to z 0.54 there. PAINTED pale bone: the mesh's own texture is uniformly
+  # dark olive everywhere — the eye included, whose pale paint is the
+  # brief's art direction, not texture reproduction — and on an all-dark
+  # body a maw only reads by its teeth. (A first pass at r 0.024/r2 0.004
+  # under a proud lip bar rendered as a dark mitten: thin teeth + the lip's
+  # shadow ate them.)
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(-0.24,-0.19,0.565) tip=(0,-0.14,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(-0.12,-0.19,0.575) tip=(0,-0.135,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.032 r2=0.007 wide=1.30 blend=0.004 offset=(0.00,-0.19,0.585) tip=(0,-0.145,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(0.12,-0.19,0.575) tip=(0,-0.135,-0.03) color=d8cdae gloss=0.6
+  blob torso on skull at=1.00 r=0.030 r2=0.007 wide=1.30 blend=0.004 offset=(0.24,-0.19,0.565) tip=(0,-0.14,-0.03) color=d8cdae gloss=0.6
+
+  # ---- HOOD SPIKES ------------------------------------------------------
+  # The spiked crown: mesh spike tips AT y 1.00 of height (1.35 m) clustered
+  # x -0.09..0.13, raked BACK (crest z 0.115 at y 0.98 falling to z 0.04 at
+  # the tips). Five points off the skull stub, bases buried in the hood.
+  blob torso on skull at=1.00 r=0.022 r2=0.004 wide=1.40 blend=0.004 offset=(-0.12,0.057,0.118) tip=(-0.018,0.065,-0.14)
+  blob torso on skull at=1.00 r=0.022 r2=0.004 wide=1.40 blend=0.004 offset=(-0.06,0.057,0.128) tip=(-0.009,0.065,-0.14)
+  blob torso on skull at=1.00 r=0.024 r2=0.004 wide=1.40 blend=0.004 offset=(0.01,0.057,0.138) tip=(0.002,0.065,-0.14)
+  blob torso on skull at=1.020 r=0.022 r2=0.004 wide=1.40 blend=0.004 offset=(0.08,0.057,0.128) tip=(0.012,0.065,-0.14)
+  blob torso on skull at=1.00 r=0.022 r2=0.004 wide=1.40 blend=0.004 offset=(0.15,0.057,0.118) tip=(0.023,0.065,-0.14)
+
+  # ---- ARMS -------------------------------------------------------------
+  # Deltoid ball: the anchor. `core` — it is the arm's structural mass for
+  # the fuse probe (the claws below are pointier, never fatter).
+  blob arm on clavicle at=1.00 r=0.100 blend=0.012 mirror core
+  # Upper arm: a tapered bar, thicker at the shoulder.
+  bar  arm on upperarm from=0.05 to=0.95 r=0.075 r2=0.055 blend=0.014 mirror
+  # Elbow: a ball at the joint, plus the outer SPUR the mesh wears at
+  # x 0.42..0.45 of height, y 0.62..0.66 — a short tapered point out and
+  # back off the elbow (the mesh's is right-side-only sculpt noise; a
+  # brute wears one on each elbow).
+  blob arm on upperarm at=1.00 r=0.055 blend=0.012 mirror
+  blob arm on upperarm at=1.00 r=0.040 r2=0.006 wide=1.60 blend=0.006 tip=(0.165,-0.01,0.02) mirror
+  # Forearm: thick column down-in to the hand.
+  bar  arm on forearm from=0.00 to=0.95 r=0.058 r2=0.048 blend=0.012 mirror
+  # The PAW: the mesh hand is a fat mitt, x 0.28..0.62 m over y 0.54..0.80
+  # (0.21..0.46 of height at 0.40..0.58) with the front at z 0.59 — the
+  # three claws hang off its bottom edge, they do not spread from a knuckle.
+  blob arm on hand at=0.50 r=0.085 wide=1.85 tall=1.30 deep=0.80 blend=0.016 offset=(0,0.05,-0.05) mirror core
+  # Three curved claws per hand: tapered to true points, bent back under
+  # the paw (mesh claw tips curl to z 0.24..0.35 of height). bend z is
+  # negative = hooking back toward the body as they descend.
+  bar  arm on c_out from=0.15 to=1.00 r=0.032 r2=0.008 blend=0.004 bend=(0.02,0,-0.05) mirror
+  bar  arm on c_mid from=0.15 to=1.00 r=0.030 r2=0.007 blend=0.004 bend=(0.01,0,-0.04) mirror
+  bar  arm on c_in  from=0.15 to=1.00 r=0.028 r2=0.007 blend=0.004 bend=(0,0,-0.03) mirror
+
+# Face block: the stub skull's face prims are all buried inside the chest —
+# headRadius 0.035 keeps the generated cranium+jaw a 3.5 cm knot at
+# (0, 1.206, 0.042), deep inside the chest slab. The real face is the eye
+# blob and the maw carve above. browHeavy/noseLength sit under their
+# 0.0005 gates so neither prim is generated at all.
+face
+  headRadius 0.035
+  headWidth  1.00
+  headHeight 1.00
+  headDepth  1.00
+  jawWidth   0.80
+  jawHeight  0.70
+  jawDrop    0.020
+  jawJut     0.000
+  noseLength 0.0004
+  noseWidth  0.30
+  noseDrop   0.010
+  browHeavy  0.0004
+  browRise   0.030
+  headBlend  0.004
+
+# The sheet paints nothing on this body: the eye is PAINT ON A PRIM and the
+# mouth is a carve — a painted eye/mouth here would double both. Only grain
+# and a little jaw shading ride along, and they land on the buried face
+# prims anyway.
+sheet
+  eyeGap     0.42
+  eyeSize    0.0
+  eyeRise    0.39
+  eyeTilt    0
+  eyeSquash  1.20
+  eyePupil   0
+  browHeavy  0.0
+  browAngle  0
+  mouthWidth 0.0
+  mouthRise  0.70
+  mouthCurve 0.0
+  mouthOpen  0.0
+  nostril    0.0
+  noseRidge  0.0
+  noseWide   0.0
+  noseLong   0.0
+  jawShade   0.25
+  grain      0.05
+  seed       47
+
+# Dark olive-brown armour hide, measured off the mesh's texture: the painted
+# range is #312815..#524122 (baked AO included), mid-tone #42351c. Linear
+# RGB — the sRGB encode on the WebGPU path lifts the low channels, so these
+# numbers read darker than they render. base is lifted a touch above the
+# texel mean because mottleAmp 0.30 pulls the mean toward mottleColor.
+palette
+  baseColor     0.062 0.040 0.013
+  # Wounds stay red — the house rule every character follows.
+  deepColor     0.50  0.08  0.08
+  charColor     0.05  0.04  0.01
+  specIntensity 0.40
+  specRoughness 0.55
+  fresnelBoost  0.30
+  translucency  0.15
+  # Armoured hide: a faint normal-grain, no silhouette noise (the profile is
+  # a clean sculpt in the reference).
+  surfaceNoiseAmp    0.12
+  silhouetteNoiseAmp 0.0
+  wetness       0.12
+  # Mottle darker-olive, differing in value only because the reference hide
+  # is one flat tone — a hue-shifted mottle would read as dirt ON it.
+  mottleAmp     0.30
+  mottleScale   1.8
+  mottleColor   0.028 0.020 0.008
