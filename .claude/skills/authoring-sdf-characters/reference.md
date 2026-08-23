@@ -181,3 +181,62 @@ Rules that fell out of the first painted character (the mouse):
 - **An untapered BENT prim renders now.** `coneBend` had no `r2 < 0` branch
   until the lens: every earlier bent prim happened to be tapered. If a bent
   part shows as a lone sphere at one end, that class of bug is where to look.
+
+## Face decal: `sheet image` + `decal 1` (added 2026-08-23)
+
+Agents cannot paint a face. Three dispatches proved it: prims for eyes and a
+mouth read as a navy visor band; the generated greyscale sheet reads as a
+zombie. The mesh already HAS a face, so paste that on instead — flat, lit
+once, the way a PSX face was painted onto a head.
+
+```
+npm run blob:face-bake -- schoolgirl          # -> public/assets/lab/faces/schoolgirl-face.png
+```
+
+renders the reference mesh's head (every triangle in the top `--head-frac`
+0.165 of its height) orthographically from the front, with its own texture,
+into a 512 square with alpha off the head, and prints the head box it used
+(`head 0.216 wide x 0.280 tall`). Then in the `.blob`:
+
+```
+sheet
+  image       schoolgirl-face.png   # under public/assets/lab/faces/
+  decal       1                     # paste as albedo; no glow, no relief
+  projScaleX  0.35                  # uv = hs * scale + centre, uv.y from the BOTTOM
+  projScaleY  0.54
+  projCentreX 0.5
+  projCentreY 1.00
+```
+
+`hs` is head space: the offset from the FATTEST head prim's centre, divided
+by its semi-axes. On a character with hair that prim is the crown shell,
+not the skin cranium — so the proportional numbers (`scale = semi-axis /
+head-box side`) put the eyes in the right place sideways and land the
+mouth under the chin vertically. Aim the two features instead: pick the
+world heights you want the image's eye row and mouth row at, convert to
+hs, and solve the two equations. The schoolgirl's sheet comment shows the
+arithmetic. Then LOOK, with a close-up:
+
+```
+BLOB_DIST=0.45 BLOB_PITCH=0 BLOB_TARGET_Y=1.55 npm run blob:shot -- schoolgirl /tmp/sg-head 4
+```
+
+and A/B a setting without editing anything by poking the uniform first:
+
+```
+BLOB_PROBE="(window.__sdfLab.uniforms.faceProj.value.set(0.35,0.54,0.5,1.1), 1)" npm run blob:shot -- schoolgirl /tmp/sg-try 1
+```
+
+Rules:
+
+- **Delete the painted eye/mouth prims.** A painted prim replaces albedo
+  AFTER the sheet, so it sits on top of the decal's eyes.
+- **Hair prims stay painted** — the decal only lands on unpainted skin, and
+  the image's own hair (hairline, fringe) fills the gap under the fringe.
+- The decal is clamped to the head by `|hs|` with 1.5x the reach of the
+  multiplier sheet (hair-crown normalisation pushed the mouth past the
+  old cutoff). Its alpha and the facing fade bound it otherwise.
+- `decal 1` without `image` is a compile error; the other sheet numbers
+  (`eyeGap`..`seed`) are ignored in decal mode.
+- Meshes face +z by glTF convention; `--front -z` if the bake shows the
+  back of the head.

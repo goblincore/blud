@@ -199,13 +199,13 @@ body
   blob head on skull at=0.45 offset=(0.044,-0.097,-0.008) tip=(0.032,0.014,-0.012) r=0.012 r2=0.003 blend=0.0020 chamfer both color=dab18a
 
   # ============================================================
-  # THE FACE — a clean toy face, painted: two eye prims and a mouth prim in
-  # the accent purple 66537c (from the mesh texture), NOT the sheet's zombie
-  # eyes (eyeSize 0 below). Tanida faces are flat and simple; the eyes sit
-  # flush in the face surface, anime-wide (0.031 across on a 0.143 face).
+  # THE FACE — a DECAL (see the sheet block): the mesh's own face, baked
+  # flat off schoolgirl.glb and pasted onto the skin cranium the way a PSX
+  # face is painted on. v2 had two eye prims and a mouth prim in the accent
+  # purple here; they read as a navy visor band (owner, 2026-08-23), and a
+  # painted prim replaces albedo AFTER the sheet, so they would sit on top
+  # of the decal's eyes. Gone. The skin is left bare for the sheet.
   # ============================================================
-  blob head on skull at=0.45 offset=(0.030,-0.054,0.105) r=0.018 wide=1.00 tall=1.50 deep=0.50 blend=0.0015 both color=66537c gloss=0.85
-  blob head on skull at=0.45 offset=(0,-0.085,0.117) r=0.009 wide=1.90 tall=0.50 deep=0.40 blend=0.0015 color=66537c
 
   # ============================================================
   # ARMS — slim, smooth, rubber-hose simple (no ball joints: Tanida limbs
@@ -291,26 +291,28 @@ face
   browRise   0.026
   headBlend  0.0045
 
-# The sheet paints NOTHING but grain and a little jaw shade: the eyes and
-# mouth are geometry+paint above, and a painted pair underneath would double
-# them (the mouse's shades lesson, in reverse).
+# The sheet is a DECAL: `npm run blob:face-bake -- schoolgirl` renders the
+# mesh head orthographically from the front into a 512 square, head box
+# 0.216 wide x 0.280 tall centred at y 1.56 (the script prints these). The
+# projection maps skull space (hs = offset / the fattest head prim's
+# semi-axes — here the crown shell, centre y 1.612, half 0.098 x 0.082) to
+# image uv: uv = hs * scale + centre, uv.y from the BOTTOM of the image.
+# scaleX = 0.098/0.280 = 0.35 keeps the mesh's proportions sideways. The
+# vertical is NOT the literal 0.29/0.69 that proportion gives: the SDF face
+# only spans the fringe (1.537) to where the jaw turns under (~1.47), so
+# the image's eyes (uv.y 0.40) and mouth (0.17) are aimed at 1.52 and 1.485
+# — hs -1.12 and -1.55 — which needs scaleY 0.54, centreY 1.00. Literal
+# 0.29/0.69 put the eyes against the fringe and the mouth under the chin,
+# and 0.42/0.90 still lost the mouth under the jaw (shots 2026-08-23).
+# The agents' painted faces never read (v1 and v2 both); the mesh's own
+# face, flat, does — old PSX faces were painted on too.
 sheet
-  eyeGap     0.42
-  eyeSize    0.0
-  eyePupil   0
-  browHeavy  0.0
-  browAngle  0
-  mouthWidth 0.0
-  mouthRise  0.68
-  mouthCurve 0.0
-  mouthOpen  0.0
-  nostril    0.0
-  noseRidge  0.0
-  noseWide   0.0
-  noseLong   0.0
-  jawShade   0.22
-  grain      0.05
-  seed       23
+  image       schoolgirl-face.png
+  decal       1
+  projScaleX  0.35
+  projScaleY  0.54
+  projCentreX 0.5
+  projCentreY 1.00
 
 # Skin dab18a = sRGB (218,177,138) -> linear (0.699, 0.439, 0.254). Wounds
 # stay red. Toy-clean: no mottle to speak of, no surface or silhouette

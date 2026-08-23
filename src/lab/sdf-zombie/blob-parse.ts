@@ -424,6 +424,18 @@ function parseNamedNumberLine(
   // not vanish from `doc.face` and `doc.faceTrivia` with no trace.
   if (head === undefined)
     throw new BlobError(`${what} line has no parameter name`, l.line, l.indent + 1);
+  // The one string-valued sheet parameter: `image <file>`. A decal sheet is a
+  // baked PNG, not a set of numbers, and a filename is not worth a block of
+  // its own.
+  if (what === 'sheet' && head === 'image') {
+    const file = rest[0];
+    if (file === undefined || rest.length !== 1)
+      throw new BlobError('sheet image expects exactly one filename', l.line, wordCol(l, 1));
+    s.doc.sheet ??= {};
+    s.doc.sheetImage = file;
+    s.doc.sheetTrivia.push(l);
+    return;
+  }
   const v = Number(rest[0]);
   if (!Number.isFinite(v))
     throw new BlobError(`${what} parameter "${head}" is not a number`, l.line, wordCol(l, 1));
@@ -482,7 +494,7 @@ export function parseBlob(src: string): BlobDoc {
   const s: ParseState = {
     doc: {
       name: '', height: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
-      bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetTrivia: [],
+      bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
       palette: null, paletteTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),

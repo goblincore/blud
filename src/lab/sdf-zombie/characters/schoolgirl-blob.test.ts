@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import src from './schoolgirl.blob?raw';
 import { parseBlob } from '../blob-parse';
-import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
+import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { checkStance, clearOf } from '../blob-checks';
 import { sdBody } from '../validate';
@@ -108,14 +108,18 @@ describe('schoolgirl.blob', () => {
     expect(lowest).toBeLessThan(0.014); // sole sits at the floor, not floating
   });
 
-  it('paints eyes and a mouth in the accent purple', () => {
+  it('wears the baked mesh face as a decal, with no painted eye/mouth prims', () => {
+    // The purple eye and mouth prims of v1/v2 read as a navy visor band, and
+    // a painted prim sits on TOP of the sheet, so they would cover the decal.
     const head = painted('head');
     const accent = head.filter(p => {
       const [r, g, b] = p.color!;
       return b > r && r > g && b < 0.35;
     });
-    // two eyes (mirrored = 2 prims) + the mouth.
-    expect(accent.length).toBe(3);
+    expect(accent.length).toBe(0);
+    const sheet = compileSheet(parseBlob(src))!;
+    expect(sheet.decal).toBe(1);
+    expect(compileSheetImage(parseBlob(src))).toBe('schoolgirl-face.png');
   });
 
   // =====================================================================

@@ -51,6 +51,10 @@ frame-00/frame-02 after each `blob:shot`, and quote its answers.
    `npm run blob:render-check -- <name>` BEFORE editing further. If it fails,
    report it and stop — the fix is not in the .blob.
 5. `npx vitest run src/lab/sdf-zombie/` green before you commit.
+6. The FACE is not yours to paint. If the character has a mesh, it wears a
+   decal baked from it (`npm run blob:face-bake -- <name>`, then `sheet` /
+   `image` / `decal 1` — skill reference.md, "Face decal"). Do not add eye
+   or mouth prims; do not tune the generated-sheet numbers.
 
 ## WHAT IS ALREADY ESTABLISHED — do not re-derive
 

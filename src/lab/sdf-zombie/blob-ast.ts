@@ -125,6 +125,13 @@ export interface BlobDoc {
    * character did before generated faces existed.
    */
   sheet: Record<string, number> | null;
+  /**
+   * A `sheet` block's `image <file>` line, or null. The one non-numeric sheet
+   * parameter: the file (under `public/assets/lab/faces/`) a DECAL sheet is
+   * loaded from instead of being generated. Baked from a reference mesh by
+   * `npm run blob:face-bake`.
+   */
+  sheetImage: string | null;
   sheetTrivia: BlobLine[];
   /**
    * A `palette` block's parameters, or null when the character did not declare

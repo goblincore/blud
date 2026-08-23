@@ -204,7 +204,7 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     /** The colour the albedo mottle mixes toward. Inert while surfCfg2.z is 0,
      *  which is every stock preset — see FleshMaterial.mottleAmp. */
     mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
-    /** x enabled, y strength, z forward (+1/-1), w relief */
+    /** x enabled (1 multiplier sheet, 2 decal sheet), y strength, z forward (+1/-1), w relief */
     faceCfg: uniform(new THREE.Vector4(0, 0.85, 1, 1.4)),
     /** x projMode (0 planar, 1 spherical), y mean, z glowThreshold, w glowStrength */
     // 0.88, not the 0.72 this used to be. Measured off the sheet: at 0.72 the

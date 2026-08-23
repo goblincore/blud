@@ -47,7 +47,7 @@
 // CHARACTERS registry in lab-main.ts). Unset means the lab's own default. It
 // is an env var rather than a positional argument so the four positions above
 // — which the authoring skill documents verbatim — keep their meaning.
-// BLOB_DIST and BLOB_PITCH override the camera framing the same way.
+// BLOB_DIST, BLOB_PITCH and BLOB_TARGET_Y override the camera framing the same way.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
@@ -146,6 +146,11 @@ if (!booted) {
 const backend = await evaluate('window.__sdfLab.backend');
 console.log('backend:', backend);
 await sleep(1500); // let the first frames settle after boot
+// BLOB_PROBE=<js expression> prints its JSON value after boot — for checking
+// that a .blob value actually landed in a uniform, without opening the lab.
+if (process.env.BLOB_PROBE) {
+  console.log('probe:', JSON.stringify(await evaluate(process.env.BLOB_PROBE)));
+}
 
 // Hide the debug panel so it does not occlude the body.
 await evaluate(`(() => {
@@ -249,12 +254,14 @@ function pngStats(png) {
 // exactly the wrong image for judging whether two limbs read as separate.
 const PITCH = Number(process.env.BLOB_PITCH ?? 0.12);
 const DIST = Number(process.env.BLOB_DIST ?? 2.4);
+// BLOB_TARGET_Y orbits at a given height (e.g. the head's, for a face close-up).
+const TARGET_Y = process.env.BLOB_TARGET_Y === undefined ? 'undefined' : Number(process.env.BLOB_TARGET_Y);
 const MIN_STD = 5; // "a rendered scene, not a flat surface" (verify-clip-smoke.mjs precedent)
 const frameStats = [];
 
 for (let i = 0; i < FRAMES; i++) {
   const yaw = (i / FRAMES) * Math.PI * 2;
-  await evaluate(`(() => { window.__sdfLab.setCam(${yaw}, ${PITCH}, ${DIST}); return true; })()`);
+  await evaluate(`(() => { window.__sdfLab.setCam(${yaw}, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
   await sleep(500); // let the marcher settle before grabbing the frame
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   const buf = Buffer.from(shot.result.data, 'base64');

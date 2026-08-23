@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseBlob } from './blob-parse';
 import { BlobError } from './blob-ast';
-import { compileBlob, compileFace, compilePalette, dirVector } from './blob-compile';
+import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage, dirVector } from './blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { DEFAULT_FACE } from './face';
 import { FLESH_PRESETS } from './material';
@@ -387,5 +387,31 @@ describe('source-line provenance', () => {
     // and those carry no .blob line — filter them out rather than depending
     // on where they land in the array.
     expect(def.prims.map(p => p.src).filter(s => s !== undefined)).toEqual([10, 11]);
+  });
+});
+
+describe('sheet decal', () => {
+  const BODY = `
+skeleton
+  root pelvis at 1.0
+  bone skull parent=pelvis dir=up len=0.1
+body
+  blob head on skull at=0.5 r=0.1
+`;
+  it('parses image + decal and keeps the projection defaults', () => {
+    const doc = parseBlob(BODY + 'sheet\n  image x-face.png\n  decal 1\n  projScaleY 0.29\n');
+    const s = compileSheet(doc)!;
+    expect(s.decal).toBe(1);
+    expect(s.projScaleY).toBe(0.29);
+    expect(s.projScaleX).toBe(0.45);
+    expect(compileSheetImage(doc)).toBe('x-face.png');
+    // the image line is sheet trivia, so a re-emit keeps it
+    expect(doc.sheetTrivia.some(l => l.words[0] === 'image')).toBe(true);
+  });
+  it('rejects decal 1 without an image', () => {
+    expect(() => compileSheet(parseBlob(BODY + 'sheet\n  decal 1\n'))).toThrow(/image/);
+  });
+  it('rejects an image line with the wrong arity', () => {
+    expect(() => parseBlob(BODY + 'sheet\n  image a.png b.png\n')).toThrow(/filename/);
   });
 });

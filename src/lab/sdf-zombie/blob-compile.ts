@@ -139,7 +139,18 @@ export function compileSheet(doc: BlobDoc): FaceSheetParams | null {
       `unknown sheet parameter "${key}" — expected one of ${[...valid].join(', ')}`,
       at ? at.line : 0, at ? at.indent + 1 : 1);
   }
-  return { ...DEFAULT_SHEET, ...doc.sheet } as FaceSheetParams;
+  const out = { ...DEFAULT_SHEET, ...doc.sheet } as FaceSheetParams;
+  if (out.decal > 0.5 && doc.sheetImage === null) {
+    const at = doc.sheetTrivia.find(l => l.words[0] === 'decal');
+    throw new BlobError('sheet "decal 1" needs an "image <file>" line to paste',
+      at ? at.line : 0, at ? at.indent + 1 : 1);
+  }
+  return out;
+}
+
+/** The decal image a `sheet` block names, or null. See BlobDoc.sheetImage. */
+export function compileSheetImage(doc: BlobDoc): string | null {
+  return doc.sheetImage;
 }
 
 /**

@@ -137,6 +137,21 @@ export interface FaceSheetParams {
    * declares `enabled 0`.
    */
   enabled: number;
+  /**
+   * 1 = the sheet is a DECAL: an sRGB colour image pasted onto the head as
+   * albedo where its alpha is set, with the emissive threshold and the relief
+   * bump switched off. 0 = the default MULTIPLIER mode above (greyscale
+   * pattern divided by its mean, bright pixels glow). A colour photo through
+   * the multiplier path glows wherever it is bright and double-shades
+   * everywhere else, so a decal needs its own branch. Pairs with `image`.
+   */
+  decal: number;
+  /** Projection scale, x and y: uv = hs * scale + centre (see faceProj). */
+  projScaleX: number;
+  projScaleY: number;
+  /** Projection centre, the sheet uv that lands on the head's origin. */
+  projCentreX: number;
+  projCentreY: number;
 }
 
 export const DEFAULT_SHEET: FaceSheetParams = {
@@ -165,6 +180,13 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   grain: 0.085,
   seed: 1,
   enabled: 1,
+  decal: 0,
+  // The lab's long-standing planar projection, so an unspecified sheet lands
+  // exactly where the shared zombie sheet always has.
+  projScaleX: 0.45,
+  projScaleY: 0.58,
+  projCentreX: 0.5,
+  projCentreY: 0.56,
 };
 
 /** Deterministic value noise. Not good noise — just stable, cheap and seeded. */

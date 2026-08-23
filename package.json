@@ -11,7 +11,8 @@
     "blob:measure": "tsx scripts/blob-measure.ts",
     "blob:shot": "scripts/blob-shot.sh",
     "blob:render-check": "scripts/blob-render-check.sh",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "blob:face-bake": "python3 scripts/blob-face-bake.py"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

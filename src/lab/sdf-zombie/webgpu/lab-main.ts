@@ -93,7 +93,7 @@ function activeCharacterSrc(): string {
 import { parseBlob } from '../blob-parse';
 import { generateFaceSheet } from '../blob-face-sheet';
 import { checkStance } from '../blob-checks';
-import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
+import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
 import { BlobError } from '../blob-ast';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
@@ -701,7 +701,7 @@ async function main() {
     vu.surfCfg2.value.y = on('surfaceNoise') ? flesh.surfaceNoiseAmp : 0;
     vu.surfCfg.value.w = on('scatter') ? flesh.translucency : 0;
     vu.lodCfg.value.x = on('ao') ? 1 : 0;
-    vu.faceCfg.value.x = on('face') && faceEnabled ? 1 : 0;
+    vu.faceCfg.value.x = on('face') && faceEnabled ? faceMode : 0;
     // Body swap, only on the frame the decision CHANGES: it re-packs and
     // re-uploads the data texture, which is far too much to do every frame at
     // a steady level. The hero is exempt — it is rig-driven and re-uploaded
@@ -724,8 +724,16 @@ async function main() {
    * the sheet has to reach all of them, and only one of them may dispose it.
    */
   let faceSheet: { tex: THREE.Texture; atlas: THREE.Vector4; mean: number } | null = null;
+  /**
+   * What faceCfg.x is set to when the face is on: 1 = multiplier sheet,
+   * 2 = decal (a baked colour image pasted on as albedo). Owned here rather
+   * than poked into the uniform because applyLod rewrites faceCfg.x every
+   * frame from this.
+   */
+  let faceMode: 1 | 2 = 1;
 
   function loadFaceTexture(name: FaceTexName) {
+    faceMode = 1;
     const def = FACE_TEXTURES[name];
     const tex = new THREE.TextureLoader().load(def.url);
     tex.magFilter = THREE.NearestFilter;   // chunky texels, not a blurry smear
@@ -769,6 +777,25 @@ async function main() {
       return false; // a broken sheet block is reported by the body compile path
     }
     if (params === null) return false;
+    u.faceProj.value.set(params.projScaleX, params.projScaleY, params.projCentreX, params.projCentreY);
+
+    // DECAL: a baked colour image (npm run blob:face-bake), pasted on as
+    // albedo. The mean is irrelevant to the decal branch but set to 1 so the
+    // multiplier path, if the panel flips to it, does not blow the level out.
+    const image = compileSheetImage(parseBlob(activeCharacterSrc()));
+    if (params.decal > 0.5 && image !== null) {
+      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`);
+      tex.magFilter = THREE.NearestFilter;   // PSX: texels, not a blur
+      tex.minFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false;
+      tex.flipY = true;                      // as the PNG registry path
+      faceSheet?.tex.dispose();
+      faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
+      faceMode = 2;
+      for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
+      return true;
+    }
+    faceMode = 1;
 
     const gen = generateFaceSheet(params, 64);
     // Expanded to RGBA even though the source is greyscale.
@@ -813,6 +840,11 @@ async function main() {
     return true;
   }
 
+  // Baked projection: uv = hs * scale + centre, hs normalised PER AXIS by the
+  // skull's semi-axes so these numbers survive a reproportioned head. A
+  // character's sheet block overrides these (projScaleX.. in DEFAULT_SHEET
+  // carry the same values) inside loadGeneratedFace, so this goes FIRST.
+  u.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
   let faceTexName: FaceTexName = 'zombie-flat';
   if (!loadGeneratedFace()) loadFaceTexture(faceTexName);
   // A character's `sheet` block can switch the projection off (`enabled 0`):
@@ -823,11 +855,8 @@ async function main() {
     const sheetParams = compileSheet(parseBlob(activeCharacterSrc()));
     if (sheetParams && sheetParams.enabled === 0) faceEnabled = false;
   } catch { /* a broken sheet block is reported by the body compile path */ }
-  u.faceCfg.value.x = faceEnabled ? 1 : 0;      // face on (unless the sheet says no)
+  u.faceCfg.value.x = faceEnabled ? faceMode : 0;   // face on (unless the sheet says no)
   u.faceCfg.value.y = 1.0;    // strength
-  // Baked projection: uv = hs * scale + centre, hs normalised PER AXIS by the
-  // skull's semi-axes so these numbers survive a reproportioned head.
-  u.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
 
   /**
    * The skull's centre and its three SEMI-AXES: the fattest additive primitive
@@ -3314,11 +3343,14 @@ async function main() {
     get lodLevels() {
       return [view, ...crowd].map(v => lastLevel.get(v.object) ?? -1);
     },
-    setCam(yaw: number, pitch: number, dist: number) {
+    setCam(yaw: number, pitch: number, dist: number, targetY?: number) {
       autoSpin = false;
       camYaw = yaw;
       camPitch = pitch;
       camDist = dist;
+      // Optional orbit height, so a turntable can frame the HEAD (face decal
+      // fitting) without the whole figure. Omitted = leave the target alone.
+      if (targetY !== undefined) camTarget.y = targetY;
     },
   };
 }

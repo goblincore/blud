@@ -258,6 +258,11 @@ guess, and guesses are what `blob:measure` exists to replace.
 - The `face` block is `FaceParams` (`face.ts`), not primitives — it's the one
   part of a `.blob` file that isn't geometry, and it stays live-tunable in
   the lab panel.
+- **Do not paint a face with prims or the generated sheet when a reference
+  mesh exists.** Bake it: `npm run blob:face-bake -- <name>` and wear it
+  with `sheet` / `image <name>-face.png` / `decal 1` (reference.md, "Face
+  decal"). Three dispatches of painted faces read as a visor band or a
+  zombie; the mesh's own face pasted flat reads as the character.
 
 ## Syntax lives in `reference.md`
 

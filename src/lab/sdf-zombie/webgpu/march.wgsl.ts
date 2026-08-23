@@ -1272,7 +1272,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // Confine it to the HEAD. Generous, because the surface now sits at
     // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
     // against wrapping onto the neck.
-    facing = facing * (1.0 - smoothstep(1.30, 1.70, length(hs)));
+    // A DECAL (faceCfg.x == 2) gets half again the reach: hs is normalised by
+    // the FATTEST head prim, which on a character with hair is the crown
+    // shell, centred well above the face -- the schoolgirl's mouth sat at
+    // |hs| 1.55 and faded out at every projection setting. The decal's own
+    // alpha and the facing fade bound it instead.
+    let decal = select(0.0, 1.0, faceCfg.x > 1.5);
+    let reach = 1.0 + 0.5 * decal;
+    facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       let base = uv * faceAtlas.xy + faceAtlas.zw;
       // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
@@ -1281,21 +1288,27 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       // preset retune, not before.
       let tex = texel(faceTex, base);
       let W = vec3<f32>(0.2126, 0.7152, 0.0722);
-      faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a;
+      // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
+      // reference mesh and pasted on as albedo where its alpha is set, the way
+      // a PSX face was painted onto a head. No glow -- a photo is bright in
+      // many places that are not eyes -- and no relief, because its luminance
+      // edges (hairline, lips) are colour changes, not height.
+      faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a * (1.0 - decal);
 
-      // Used as a MULTIPLIER, not a replacement: the sheet carries baked
-      // lighting, so pasting it in as albedo and lighting it again double-shades.
-      // Dividing by its measured mean keeps the pattern and throws away level.
+      // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
+      // baked lighting, so pasting it in as albedo and lighting it again
+      // double-shades. Dividing by its measured mean keeps the pattern and
+      // throws away level.
       let detail = tex.rgb / max(faceCfg2.y, 1e-3);
       // Skip the multiply where it glows: an eye is not tinted flesh, and the
       // emissive term below supplies its colour outright.
-      albedo = mix(albedo, albedo * detail,
+      albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
                    facing * tex.a * faceCfg.y * (1.0 - faceGlow));
 
       // Relief. Central differences on luminance give the height gradient; the
       // projection is planar along z, so its tangent basis is just x and y and
       // the bump drops straight into world space with no TBN to build.
-      if (faceCfg.w > 0.0) {
+      if (faceCfg.w > 0.0 && decal < 0.5) {
         let e = faceAtlas.xy * 0.012;
         let hL = dot(texel(faceTex, base - vec2<f32>(e.x, 0.0)).rgb, W);
         let hR = dot(texel(faceTex, base + vec2<f32>(e.x, 0.0)).rgb, W);
