@@ -2472,12 +2472,29 @@ async function main() {
 
   // Head SHAPE, as distinct from the face sheet below. The sheet is shared by
   // every zombie; the skull is the only thing that can differ between them.
-  addSelect(faceBox, 'head shape', Object.keys(FACE_PRESETS), 'gaunt', (v) => {
-    Object.assign(face, FACE_PRESETS[v]!);
+  // Both selects start on '(character)' -- the .blob's own face block and
+  // sheet -- and offer it as a way BACK. Before this the shape select showed
+  // 'gaunt' while the character wore its own head, and choosing any preset
+  // was persisted into the per-character override: the owner lost the
+  // schoolgirl's head (and, with the texture select, her decal) by browsing
+  // the dropdowns, with no control that put either back short of 'reset
+  // overrides' (2026-08-23).
+  const CHARACTER_OPT = '(character)';
+  addSelect(faceBox, 'head shape', [CHARACTER_OPT, ...Object.keys(FACE_PRESETS)], CHARACTER_OPT, (v) => {
+    if (v === CHARACTER_OPT) {
+      try { Object.assign(face, DEFAULT_FACE, compileFace(parseBlob(activeCharacterSrc()))); }
+      catch { Object.assign(face, DEFAULT_FACE); }
+    } else {
+      Object.assign(face, FACE_PRESETS[v]!);
+    }
     rebuildBody();
     rebuildFaceSliders();
   });
-  addSelect(faceBox, 'texture', Object.keys(FACE_TEXTURES), faceTexName, (v) => {
+  addSelect(faceBox, 'texture', [CHARACTER_OPT, ...Object.keys(FACE_TEXTURES)], CHARACTER_OPT, (v) => {
+    if (v === CHARACTER_OPT) {
+      if (!loadGeneratedFace()) loadFaceTexture('zombie-flat');
+      return;
+    }
     faceTexName = v as FaceTexName;
     loadFaceTexture(faceTexName);
   });
