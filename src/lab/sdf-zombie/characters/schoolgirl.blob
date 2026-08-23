@@ -191,7 +191,7 @@ body
   # THE CHIN: the mesh's chin tip sits at (1.45, z 0.095) — 0.10 forward,
   # a definite point on an otherwise small face. One small prim, blended
   # softly into the jaw so it reads as the jaw's tip, not a bead.
-  blob head on skull at=0.45 offset=(0,-0.125,0.075) r=0.022 wide=1.20 tall=0.90 deep=0.90 blend=0.0040 color=dab18a
+  blob head on skull at=0.45 offset=(0,-0.118,0.078) r=0.022 wide=1.20 tall=0.55 deep=0.90 blend=0.0040 color=dab18a
 
   # EARS — pointed, elf-ish, skin: the mesh's ear band (0.86-0.88 -> y
   # 1.462-1.496) is 0.146-0.170 wide total where the head under the hair is
