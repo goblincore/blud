@@ -129,7 +129,7 @@ body
   # so it does not paint the skin midriff navy. wide 1.10 / deep 0.78:
   # the mesh skirt is wider than deep (0.406 x 0.311 at the widest ring).
   # ============================================================
-  blob torso on spine1  at=0.94 r=0.098 r2=0.170 tip=(0,-0.250,0) wide=1.10 tall=0.35 deep=0.78 blend=0.030 color=01046d
+  blob torso on spine1  at=0.94 r=0.095 r2=0.195 tip=(0,-0.250,0) wide=1.05 tall=0.50 deep=0.80 blend=0.030 color=01046d
   # PLEATS — four shallow grooves riding the cone's slope (front pair and
   # back pair, mirrored), NOT bars standing proud of it. Each groove's axis
   # follows the surface from (y 1.00) to (y 0.82) at the cone's own flare,
