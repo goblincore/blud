@@ -51,6 +51,17 @@ export const SCALE_LADDER = [0.35, 0.45, 0.55, 0.7, 0.85, 1.0] as const;
 
 /** Frames must exceed this multiple of the budget before the scale drops. */
 const OVER_FACTOR = 1.1;
+/**
+ * The p95 must exceed this multiple of the budget before the scale drops ONE
+ * rung on spikes alone. The median is blind to a scene sitting exactly at
+ * budget: wall clock reads 16.7 there whether the GPU has 8 ms of headroom or
+ * none, while every fifth frame misses vsync and reads 33 ms — which the
+ * owner feels as the frame rate tanking (the zoomed-in cyclops, 2026-08-23:
+ * median 16.7, p95 55). A missed vsync IS measurable, and 1.8x the budget is
+ * a whole extra frame at 60 Hz with margin for noise. One rung, not a solve:
+ * the median gives nothing to solve from.
+ */
+const SPIKE_FACTOR = 1.8;
 
 /**
  * Aim below the budget rather than at it, so a drop does not land exactly on
@@ -93,6 +104,8 @@ export interface AdaptiveInput {
   nowMs: number;
   /** Median wall-clock frame time over a recent window. */
   medianFrameMs: number;
+  /** p95 wall-clock frame time over the same window; optional, see SPIKE_FACTOR. */
+  p95FrameMs?: number;
   /** Frame budget in ms — 16.7 for 60 fps. */
   budgetMs: number;
 }
@@ -114,8 +127,9 @@ export function stepAdaptive(state: AdaptiveState, input: AdaptiveInput): Adapti
   const { nowMs, medianFrameMs, budgetMs } = input;
   const sinceChange = nowMs - state.lastChangeMs;
   const overBudget = medianFrameMs > budgetMs * OVER_FACTOR;
+  const spiking = !overBudget && (input.p95FrameMs ?? 0) > budgetMs * SPIKE_FACTOR;
 
-  if (overBudget) {
+  if (overBudget || spiking) {
     if (state.rung === 0 || sinceChange < DROP_COOLDOWN_MS) {
       // Already at the floor, or still inside the cooldown. Either way the
       // rung does not move — but a failed probe is recorded the moment it is
@@ -130,7 +144,9 @@ export function stepAdaptive(state: AdaptiveState, input: AdaptiveInput): Adapti
     // scale whose predicted cost lands on the target.
     const current = scaleForRung(state.rung);
     const wanted = current * Math.sqrt((budgetMs * TARGET_HEADROOM) / medianFrameMs);
-    let next = highestRungAtOrBelow(wanted);
+    // Spikes alone: the median says nothing about how far over we are, so
+    // take one rung rather than a solve.
+    let next = spiking ? state.rung - 1 : highestRungAtOrBelow(wanted);
     // Always make progress, even if the prediction says the current rung is
     // fine — it demonstrably is not, or we would not be over budget.
     if (next >= state.rung) next = state.rung - 1;

@@ -163,6 +163,9 @@ await evaluate(`(() => {
 await evaluate(`(() => {
   window.__sdfLab.setMotionEnabled(false);
   window.__sdfLab.setWander(false);
+  // Dynamic resolution would change the SDF pixel count between frames and
+  // runs; frames are judged by eye, so pin it.
+  if (window.__sdfLab.setAdaptive) window.__sdfLab.setAdaptive(false);
   window.__sdfLab.focusBody();
   return true;
 })()`);

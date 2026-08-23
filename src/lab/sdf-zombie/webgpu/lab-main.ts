@@ -1939,11 +1939,14 @@ async function main() {
       .filter((b): b is NonNullable<typeof b> => b !== undefined);
   }
 
-  // Dynamic resolution. Off by default so every benchmark on this branch stays
-  // reproducible — a controller that moves the pixel count mid-run would make
-  // the numbers meaningless, which is the exact failure this session spent its
-  // first half undoing.
-  let adaptiveEnabled = false;
+  // Dynamic resolution. ON by default since 2026-08-23: zooming in on the
+  // cyclops sat the raymarch exactly at budget — median 16.7, every fifth
+  // frame a missed vsync — and the owner felt it as the frame rate tanking.
+  // This is the lever built for that (cost is fill-bound; see
+  // adaptive-scale.ts). Benchmarks stay reproducible because benchGpu
+  // suspends the controller for its run, and the capture scripts
+  // (blob-turntable, blob-render-check) switch it off through setAdaptive.
+  let adaptiveEnabled = true;
   let adaptiveBudgetMs = 1000 / 60;
   let adaptiveState = initialAdaptiveState(performance.now());
   /**
@@ -1955,9 +1958,14 @@ async function main() {
 
   function tickAdaptive(nowMs: number): void {
     if (!adaptiveEnabled || frames.length < ADAPTIVE_WINDOW) return;
+    const recent = frames.slice(-ADAPTIVE_WINDOW);
+    const sorted = [...recent].sort((a, b) => a - b);
     const next = stepAdaptive(adaptiveState, {
       nowMs,
-      medianFrameMs: median(frames.slice(-ADAPTIVE_WINDOW)),
+      medianFrameMs: median(recent),
+      // Missed vsyncs read as whole extra frames — the one spike signal wall
+      // clock can see. See SPIKE_FACTOR.
+      p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
       budgetMs: adaptiveBudgetMs,
     });
     if (next.rung !== adaptiveState.rung) {
@@ -2528,7 +2536,7 @@ async function main() {
   // Dynamic resolution. Drives the slider above from the measured frame time
   // rather than by hand — the answer to "why does zooming IN get slower when
   // there is LESS on screen", which is that cost is per covered pixel.
-  const adaptBtn = addButton(lodBox, 'adaptive res: off', () => {
+  const adaptBtn = addButton(lodBox, 'adaptive res: on', () => {
     adaptiveEnabled = !adaptiveEnabled;
     adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
     adaptBtn.textContent = `adaptive res: ${adaptiveEnabled ? 'on' : 'off'}`;

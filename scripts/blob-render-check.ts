@@ -284,6 +284,8 @@ async function shoot(name: string): Promise<Shot> {
       if (el) el.style.display = 'none';
     }
     window.__sdfLab.setMotionEnabled(false);
+    // Pin the SDF resolution: the CPU mask is compared against these pixels.
+    if (window.__sdfLab.setAdaptive) window.__sdfLab.setAdaptive(false);
     window.__sdfLab.setWander(false);
     // Silhouette noise and shell displacement move the GPU surface off the
     // authored field by design (marchCfg.z / lodCfg) — millimetres of mottle

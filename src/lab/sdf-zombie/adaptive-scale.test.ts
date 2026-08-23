@@ -90,6 +90,41 @@ describe('dropping', () => {
   });
 });
 
+describe('spikes at vsync (the zoomed-in cyclops, 2026-08-23)', () => {
+  // Close up, the raymarch sat EXACTLY at budget: wall-clock median 16.7 —
+  // indistinguishable from a comfortable frame — while every fifth frame
+  // missed vsync and read 33-55 ms. The owner felt that as the frame rate
+  // tanking; the median-only rule saw nothing. A missed vsync IS measurable
+  // (it reads a whole extra frame), so the window's p95 is the signal.
+  it('drops one rung when the median is at budget but the p95 shows missed frames', () => {
+    const s = initialAdaptiveState(0);
+    const next = stepAdaptive(s, { nowMs: 1000, medianFrameMs: 16.7, p95FrameMs: 40, budgetMs: BUDGET });
+    expect(next.rung).toBe(TOP - 1);
+  });
+  it('ignores a p95 that is merely a little above budget', () => {
+    const s = initialAdaptiveState(0);
+    const next = stepAdaptive(s, { nowMs: 1000, medianFrameMs: 16.7, p95FrameMs: 20, budgetMs: BUDGET });
+    expect(next.rung).toBe(TOP);
+  });
+  it('a spike-driven drop still respects the cooldown and the floor', () => {
+    let s = initialAdaptiveState(0, 0);
+    s = stepAdaptive(s, { nowMs: 1000, medianFrameMs: 16.7, p95FrameMs: 40, budgetMs: BUDGET });
+    expect(s.rung).toBe(0);
+    s = initialAdaptiveState(0);
+    s = stepAdaptive(s, { nowMs: 100, medianFrameMs: 16.7, p95FrameMs: 40, budgetMs: BUDGET }); // inside cooldown
+    expect(s.rung).toBe(TOP);
+  });
+  it('treats a spiky window after an upward probe as a failed probe', () => {
+    let s = initialAdaptiveState(0, TOP - 2);
+    s = stepAdaptive(s, { nowMs: BASE_PROBE_MS + 1, medianFrameMs: 10, budgetMs: BUDGET });
+    expect(s.probing).toBe(true);
+    const before = s.probeIntervalMs;
+    s = stepAdaptive(s, { nowMs: BASE_PROBE_MS + 400, medianFrameMs: 16.7, p95FrameMs: 40, budgetMs: BUDGET });
+    expect(s.rung).toBe(TOP - 2);
+    expect(s.probeIntervalMs).toBeGreaterThan(before);
+  });
+});
+
 describe('probing upward', () => {
   it('does not probe before the interval has elapsed', () => {
     const s: AdaptiveState = { ...initialAdaptiveState(0), rung: 2 };
