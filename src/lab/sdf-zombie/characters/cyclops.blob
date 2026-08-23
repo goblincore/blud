@@ -313,7 +313,12 @@ palette
   specRoughness 0.14
   fresnelBoost  0.60
   translucency  0.15
-  surfaceNoiseAmp    0.12
+  # 0.04, not the 0.12 it shipped with: on this glossy, high-fresnel hide
+  # that much normal noise caught the key light as grey-white sparkle that
+  # shifted with every camera move — read by the owner as "parts showing
+  # through" inside the wet craters (2026-08-23). Bisected live: face paint,
+  # prim paint, mottle and roughness all left it; noise 0 removed it.
+  surfaceNoiseAmp    0.04
   silhouetteNoiseAmp 0.0
   wetness       0.35
   # Mottle darker-olive, differing in value only because the reference hide
