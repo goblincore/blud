@@ -79,89 +79,72 @@ skeleton
 
 body
   # ============================================================
-  # TORSO — the white sailor top is the paint; the flesh under it is slim.
-  # Mesh width/depth halves: bust 0.170/0.144 at 1.224, 0.133 at 1.258,
-  # waist 0.112/0.090 at 1.054, shoulder 0.185/0.052 at 1.394 (the shoulder
-  # band is THIN front-to-back: 0.104 total, the collar draping flat).
+  # TORSO (v2, 2026-08-23 — the SMOOTH rebuild). v1 matched every band
+  # width and still read as a STACK OF HORIZONTAL DISCS (owner: "straight
+  # horrifying") because it was authored as six flat rings. This version is
+  # the Tanida construction from the brief: a few large tapered masses on
+  # the spine bones, the outfit carried by PAINT (color=) alone — paint
+  # changes colour, not shape, so the white top and the skin midriff are
+  # the SAME smooth column. NOTE on blend: this lab's smin is kk=4k with a
+  # max dip of k (validate.ts), so the brief's "start at 0.05" reaches 20 cm
+  # past a prim's own surface — at k 0.045-0.05 the shoulder bar's blend
+  # window touched the CROWN (dip 6 mm, broke the 1.70 m height pin) and
+  # filled the under-chin hollow. 0.025 (kk 0.10) hides the seams without
+  # webbing the neck; the bars overlap 30-50% lengthwise so the surfaces
+  # already continue each other. Radii pre-shrunk ~0.01 against inflation. Mesh width/depth halves: bust 0.170/0.144 at
+  # 1.224, waist 0.066/0.053 at 1.054, shoulder 0.108/0.030 at 1.394 (thin
+  # front-to-back: the collar drapes flat over it).
   # ============================================================
   # Pelvis filler under the skirt (never seen; keeps the legs fused).
-  blob torso on pelvis  at=0.50 r=0.095 deep=0.95 blend=0.0050 color=dab18a
-  # The waist: skin — the top is a CROP TOP, skin shows 1.054-1.105 between
-  # the skirt belt and the top's hem (mesh paint bands 0.62-0.65). r 0.116
-  # clears the skirt's 0.118 belt lip above y 1.048 so the belt edge reads.
-  blob torso on spine1  at=1.00 r=0.116 deep=0.83 blend=0.0050 color=dab18a
-  # Mid chest (white): the mesh narrows to 0.231-0.268 across 1.09-1.20 —
-  # a slim column, not the 0.34 bust. centre 1.162 (chest at=0.318).
-  blob torso on chest   at=0.318 r=0.126 deep=0.85 tall=0.85 blend=0.0055 color=ececed
-  # THE BUST RING: a narrow band, 0.342 wide at 1.241 falling to 0.231 by
-  # 1.128 — the mesh's own profile. Flat (tall 0.36) so it does not swell
-  # the chest above and below it.
-  blob torso on chest   at=0.541 r=0.168 deep=0.82 tall=0.36 blend=0.0055 color=ececed
-  # Upper chest, deep enough for the 0.257 side profile at 1.316.
-  blob torso on chest   at=0.85 r=0.150 deep=0.72 tall=0.42 blend=0.0055 color=ececed
-  # Shoulder line: a PANCAKE — 0.369 wide at 1.394 but gone by 1.43 (the
-  # mesh's 1.429 band is neck-only, 0.073). tall 0.18 spans just 1.36-1.42.
-  blob torso on chest   at=0.99 r=0.180 deep=0.30 tall=0.18 blend=0.0055 color=ececed
+  blob torso on pelvis  at=0.50 r=0.090 deep=0.95 blend=0.020 color=dab18a
+  # Pelvis-to-waist: one tapered bar, mostly hidden under the skirt; its top
+  # is the bottom half of the skin midriff. r 0.072 -> 0.054: the waist's
+  # 0.066 half-width minus the k/4 blend inflation.
+  bar  torso on spine1  from=0.20 to=1.00 r=0.072 r2=0.054 deep=0.88 blend=0.025 color=dab18a
+  # The skin midriff band (the top is a CROP TOP; skin shows 1.054-1.105,
+  # mesh paint bands 0.62-0.65). Same column as the waist bar, one blend up.
+  bar  torso on chest   from=0.00 to=0.16 r=0.054 r2=0.060 deep=0.85 blend=0.025 color=dab18a
+  # The WHITE TOP: one tapered bar from the midriff overlap to the bust.
+  # The paint boundary with the midriff bar lands at ~1.09-1.11 where the
+  # two fields cross — that line is the crop top's hem, and it is a colour
+  # change on a smooth surface, not a ledge.
+  bar  torso on chest   from=0.10 to=0.72 r=0.058 r2=0.076 deep=0.82 blend=0.025 color=ececed
+  # Chest-to-shoulders: the bust 0.170 full-wide at 1.24 up to the shoulder
+  # line 0.217 wide but only 0.061 DEEP at 1.394 — deep 0.50 keeps the
+  # shoulder band thin front-to-back instead of a sausage.
+  bar  torso on chest   from=0.66 to=0.92 r=0.074 r2=0.075 deep=0.50 blend=0.018 color=ececed
 
   # ============================================================
-  # THE SKIRT — the one place to spend primitives. Measured profile is NOT
-  # a straight cone: half-width 0.112 at the belt (1.054), 0.203 at
-  # 0.78-0.80 (the widest part of the whole model), 0.154 at the hem band
-  # (0.7735). Depth does the same: 0.090 -> 0.156 -> 0.077 half. Two stacked
-  # cones carry that: belt->widest, then a short tuck to the hem. Navy.
+  # THE SKIRT (v2) — ONE flared cone, belt to hem. v1 carried the mesh's
+  # hem cliff with two flat ellipsoid RINGS plus six pleat-fragment bars
+  # stuck on the thighs; every band measured right and it still read as a
+  # CYLINDER WITH A DISC AT THE HEM. The flare is the skirt's whole
+  # character (belt half 0.112 at 1.054 -> widest 0.203 at 0.78-0.80), so
+  # one cone carries it and the hem is allowed to round under smoothly —
+  # the cliff (0.406 -> 0.308 across 2 cm) is a hard-edge read no smooth
+  # mass can do, traded away on purpose for the one-piece silhouette.
+  # tall 0.35 squashes BOTH end caps along the axis: the bottom cap rounds
+  # under in ~0.35*r2 (6 cm) instead of a full r2 ball below the hem (the
+  # v1 fat-cap lesson), and the top cap only bulges 3.4 cm above the belt,
+  # so it does not paint the skin midriff navy. wide 1.10 / deep 0.78:
+  # the mesh skirt is wider than deep (0.406 x 0.311 at the widest ring).
   # ============================================================
-  # Cone 1: the flare above the hem ring. Measured LINEAR: the mesh runs
-  # 0.245 wide at 1.053 down to ~0.31 at 0.94 (half 0.1225 -> 0.155).
-  # IT ENDS HIGH AND THIN ON PURPOSE: a round cone's end cap is a SPHERE
-  # of the end radius, and the first pass ended at r 0.2075 by the hem — a
-  # ball 0.40 wide AND 0.23 deep bulging 20 cm below the hem, where the
-  # mesh has a cliff to 0.318 x 0.148 in both views. Ending at r 0.150 by
-  # y 0.94 keeps the cap buried under the hem rings in x and z both; the
-  # rings below carry the flare. deep 0.88 = the mesh's 0.264 side depth
-  # at 0.94.
-  blob torso on spine1  at=0.974 r=0.118 r2=0.150 tip=(0,-0.108,0) deep=0.88 blend=0.0050 color=01046d
-  # THE HEM RING: a wide FLAT ellipsoid at the hem latitude (centre
-  # (0,0.795), half 0.2075 x 0.045 x 0.156) — an ellipsoid cuts to zero at
-  # its own latitude, so it makes the cliff 0.415 -> 0.318 between 0.79 and
-  # 0.75 that no cone-with-a-cap can. 0.2075 = the mesh's widest ring
-  # (0.415 wide, 0.313 deep).
-    blob torso on pelvis  at=0.468 r=0.197 wide=1.00 tall=0.217 deep=0.75 blend=0.0050 color=01046d
-  # A second ring one pleat up (0,0.852, half 0.19 x 0.043 x 0.139): the
-  # mesh's 0.366-0.391 bands at 0.83-0.86, which the thin-ended cone alone
-  # undershoots. Same cap-free ellipsoid trick as the hem ring.
-  blob torso on pelvis  at=0.68 r=0.180 wide=1.00 tall=0.226 deep=0.82 blend=0.0050 color=01046d
-  # THE PLEAT FRINGE: the mesh's silhouette holds a FLAT 0.318 from 0.75
-  # down to 0.63 — pleat tips hanging past the tucked hem, tapering in to
-  # 0.284 by their ends (the mesh's 0.292 band at 0.637). Four thin tapered
-  # bars (side pair mirrored, front and back on the centreline); the
-  # front/back pair also carries the 0.148-0.152 side-view depth.
-  blob torso on pelvis  at=0.00 offset=(0.143,0,0) r=0.015 r2=0.008 tip=(-0.012,-0.165,0) blend=0.0040 chamfer both color=01046d
-  blob torso on pelvis  at=0.00 offset=(0,0,0.062) r=0.015 r2=0.008 tip=(0,-0.165,-0.012) blend=0.0040 chamfer color=01046d
-  blob torso on pelvis  at=0.00 offset=(0,0,-0.062) r=0.015 r2=0.008 tip=(0,-0.165,0.012) blend=0.0040 chamfer color=01046d
-  # SURFACE PLEAT RIDGES — the pleat fringe owns the silhouette below the
-  # hem; these put the pleat READ onto the skirt's own face: four thin
-  # chamfered bars lying ON the flare (sides mirrored, front and back),
-  # ~8-10 mm proud of the cone. They also close the -0.02 side-view bands
-  # at 0.83-0.90, where the mesh is deeper than the bare cone.
-  blob torso on spine1 at=0.556 offset=(0.148,0,0) r=0.013 r2=0.010 tip=(0.045,-0.150,0) blend=0.0040 chamfer both color=01046d gloss=0.25
-  blob torso on spine1 at=0.556 offset=(0,0,0.118) r=0.011 r2=0.009 tip=(0,-0.150,0.028) blend=0.0040 chamfer color=01046d gloss=0.25
-  blob torso on spine1 at=0.556 offset=(0,0,-0.118) r=0.011 r2=0.009 tip=(0,-0.150,-0.028) blend=0.0040 chamfer color=01046d gloss=0.25
+  blob torso on spine1  at=0.94 r=0.098 r2=0.170 tip=(0,-0.250,0) wide=1.10 tall=0.35 deep=0.78 blend=0.030 color=01046d
+  # PLEATS — four shallow grooves riding the cone's slope (front pair and
+  # back pair, mirrored), NOT bars standing proud of it. Each groove's axis
+  # follows the surface from (y 1.00) to (y 0.82) at the cone's own flare,
+  # cutting a 4 mm channel: a pleat LINE, not geometry.
+  groove torso on spine1 at=0.77 offset=(0.077,0,0.065) tip=(0.037,-0.180,0.031) r=0.012 depth=0.004 width=0.006 both
+  groove torso on spine1 at=0.77 offset=(0.077,0,-0.065) tip=(0.037,-0.180,-0.031) r=0.012 depth=0.004 width=0.006 both
 
   # ============================================================
-  # SAILOR COLLAR + SCARF — navy, geometry not just paint, because from the
-  # front the collar is what says "seifuku". A back cape panel (seen from
-  # behind: the bob's counterweight), a thin yoke across the shoulder tops,
-  # and the scarf at the chest V.
+  # SAILOR COLLAR (v2) — ONE thin flat prim lying ON the upper chest and
+  # back, not a plate around the neck and not v1's cape+yoke stack. Wide
+  # across the shoulders, thin vertically, shallow front-to-back; navy.
+  # The scarf stays: the small anchor the eye finds first from the front.
   # ============================================================
-  # Back cape: hangs 1.31-1.44, 0.154 half-wide, 1.3 cm proud of the
-  # upper chest's back (which is at z -0.10 by 1.375) — offset z -0.086.
-  blob torso on chest   at=0.94 offset=(0,-0.019,-0.086) r=0.070 wide=2.20 tall=0.93 deep=0.42 blend=0.0040 color=01046d
-  # Shoulder yoke: the collar's top edge crossing the shoulders, front to
-  # back (mesh collar paint 0.75-0.85 -> 1.275-1.445). Thin: the mesh's
-  # 1.429 band is neck-only, so nothing navy may rise past 1.41.
-  blob torso on chest   at=1.00 offset=(0,0.012,-0.010) r=0.068 wide=2.30 tall=0.24 deep=0.80 blend=0.0040 color=01046d
-  # The scarf, at the chest front centre (y ~1.28, z flush with the 0.115
-  # chest front). This is the anchor the eye finds first from the front.
+  blob torso on chest   at=0.92 offset=(0,0.005,-0.010) r=0.070 wide=2.10 tall=0.26 deep=0.70 blend=0.010 color=01046d
+  # The scarf, at the chest front centre (y ~1.28), proud of the white top.
   blob torso on chest   at=0.66 offset=(0,-0.010,0.096) r=0.030 wide=1.35 tall=1.05 deep=0.60 blend=0.0040 color=01046d
 
   # Neck: 0.041 half-wide x 0.054 half-deep (mesh 0.048/0.064 full) at the
