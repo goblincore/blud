@@ -34,14 +34,26 @@ owner judges "way too low resolution".
   cost. Halving scale halves the frame (0.7 → 0.5 → 0.35: 22.7 / 12.3 / 8.4 ms
   in a 767×777 pane at the close camera). Prior record: 18.6 ms + 0.237 ms per
   1k pixels; ten bodies 47 ms from across the room, 137 ms inside the crowd.
-- **No single shading feature is the cost.** At the close camera, toggling
-  surface noise, mottle, AO, translucency, relaxed tracing, the occluder hull
-  each moved the frame < 0.5 ms; halving the step budget (96 → 48) only 2.5 ms.
+- **No single SHADING feature is the cost.** At the close camera, toggling
+  surface noise, mottle, AO, translucency, the occluder hull each moved the
+  frame < 0.5 ms; halving the step budget (96 → 48) only 2.5 ms.
   So the cost is the marcher's body: every step evaluates all primitives of
   the clusters the ray touches (~20 on the cyclops torso), each from a data
   texture (`textureLoad` per primitive per step), and the hit pixel then pays
   ~6 more full field evaluations (tetrahedron normal ×4, AO probe,
   translucency probe).
+- **CORRECTION (2026-08-24 night): relaxed tracing is NOT a non-lever, and it
+  is the largest single item on this board.** The "< 0.5 ms" reading above was
+  the CLOSE camera, where a handful of bodies fill the screen and step count is
+  not what binds. On the crowd the X1.10 sweep measured 10 bodies at
+  **relax 1.0 → 14.89 ms vs 1.4 → 9.31 ms — 1.60×** (1.6 → 9.81, 1.8 → 10.17;
+  1.4 is the optimum). Relax has since been **pinned to 1.0** because ω > 1 ×
+  carved wound fields produced the wound-halo "distorted lens" (see the
+  post-mortem), so the renderer is currently paying that 1.60× in full.
+  Winning it back — see "Retract-guard reconvergence" below — is worth more
+  than stages 2's two levers combined, and it must land BEFORE any stage that
+  rewrites the march loop, or every delta those stages measure is taken at an
+  ω that later changes underneath them.
 - Quality LOD (steps/noise/AO/face/wounds levers, distance-based) had a
   measured ceiling of −24% and is at "near" = full quality when zoomed.
 - The hero body never uses the specialised (compile-time constants) shader;
@@ -49,8 +61,13 @@ owner judges "way too low resolution".
   with a full march; bodies overdraw each other, sorted only by depth.
 - Wall-clock frame time is vsync-pinned; GPU timestamps are unreliable with
   multi-pass frames (see `adaptive-scale.ts` header). There is **no headroom
-  signal** today. The adaptive controller (now on by default, 30 fps budget,
-  spike rule, early probe abort, floor 0.2) is a bandage.
+  signal** today. The adaptive controller (30 fps budget, spike rule, early
+  probe abort, floor 0.2) is a bandage — and as of 2026-08-24 night it
+  **defaults OFF**: its close-up rung drops read as blur-halos and confounded
+  the wound-halo hunt. Treat raw frame time at a FIXED scale as the number the
+  owner sees; stage 4's coverage-headroom work is improving a controller that
+  is currently disabled, so it is only worth doing once stages 2-3 have made
+  re-enabling it plausible.
 - Measurement hygiene learned the hard way: check host load first
   (`fileproviderd` at 115 % and stale dispatch vite servers polluted a round);
   the first `benchGpu` of a run carries warm-up spikes — run the baseline last.
@@ -71,8 +88,28 @@ owner judges "way too low resolution".
   running dispatch agents both moved medians by 2×. Protocol: stash-A/B in
   one session, 5× `benchGpu` per side, take the min, same page load.
 
-## The six levers (stages above choose among these)
+## The seven levers (stages below choose among these)
 
+0. **Retract-guard reconvergence — recover relax 1.4 (added 2026-08-24
+   night; the largest measured item here, 1.60× on crowds).** Relax is pinned
+   to 1.0 because the two ω > 1-only paths in `march.wgsl.ts` step rays
+   BACKWARD near carved wounds and fail to reconverge. Both back-steps are
+   unbounded and both are wrong on their own terms:
+   - The overshoot retraction (`stepLen = stepLen - omega * stepLen`) undoes
+     `d·(ω−1)`, but the excess it means to undo is `d·(ω−1)/ω`. At ω = 1.4
+     that is a **40 % over-retraction** (0.56·d taken back instead of 0.40·d).
+   - The deep-crossing guard (`stepLen = d`, d < 0) steps back by a
+     SCALED-SPACE distance. Per the cull-soundness rule, `sd` under-reports
+     Euclid by up to the group's distortion factor (22× on the schoolgirl
+     sole plate), so |d| is not enough to get back out of the solid, and
+     nothing bounds a retry.
+   The fix shape: bound every back-step to the interval actually travelled,
+   correct the excess to `stepLen·(ω−1)/ω`, scale the deep-crossing step by
+   the packed distortion factor, and guarantee the ray finishes CONSERVATIVE
+   (ω = 1) from the retracted point rather than re-entering the relaxed path.
+   Gate: the 8-yaw wounded turntable identical to relax 1.0, then a re-run of
+   the X1.10 relax sweep WITH wounds in the scene (the original sweep predates
+   wounds and is invalid for wounded bodies).
 1. **Instrumentation first.** A debug view rendering *march steps per pixel*
    and *primitives evaluated per pixel* as heatmaps, and a per-variant GPU
    microbench that is trustworthy (fix or bypass the multi-pass timestamp
@@ -105,7 +142,15 @@ merged march — per-body draws cannot reach it.
    fixed body sets A (4 close) and B (12 mixed), adaptive off, p50/p95/p99
    to the page and to `window.__bench` for headless capture. Heatmap debug
    views: march steps per pixel, prims evaluated per pixel. Nothing after
-   this stage is judged without these numbers.
+   this stage is judged without these numbers. **Its recorded baselines are
+   taken at relax 1.0** and are the honest description of what ships today.
+1.5. **Retract-guard reconvergence** (lever 0; inserted 2026-08-24 night).
+   Runs immediately after the bench exists and BEFORE any stage that rewrites
+   the march loop, because stages 2 and 3 both do, and their deltas are only
+   meaningful at the ω the renderer will actually ship. If it lands, every
+   later baseline is re-taken at 1.4 and the bar for stages 2-4 drops by the
+   1.60×; if it does not, relax stays 1.0 and the stage-1 baselines stand
+   unchanged. Either way the chain continues — this stage cannot block it.
 2. **Cheaper hit shading** (~6 post-hit field evaluations → ~3–4 by sharing
    probes between normal/AO/translucency), plus the one-day
    specialise-the-crowd measurement — keep or drop by bench delta.

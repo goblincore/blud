@@ -1080,14 +1080,29 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // woundCfg2.y carries the relaxation factor so it stays tunable — the win is
   // theory until it is measured, and it cannot be measured against a constant.
   // At or below 1.0 the relaxed path is off and marchCfg.y is back in charge.
-  // NORMAL WARPING (Hubert-Brierre et al. 2025) is why this is no longer
-  // conditional on the noise amplitude. The silhouette fbm has been taken OUT
-  // of the marched field — see the mapBody call below, which passes 0.0 — and
-  // survives only in calcNormal, where it perturbs the shading normal at the
-  // hit point. The field the tracer sees is therefore an exact CSG of
-  // ellipsoid capsules under a conservative smooth-min for EVERY body, not
-  // just the distant ones LOD had already stripped, so over-relaxation is
-  // always safe and marchCfg.y no longer has to be held under 1.
+  // NORMAL WARPING (Hubert-Brierre et al. 2025) took the silhouette fbm OUT
+  // of the marched field — see the mapBody call below, which passes 0.0 — so
+  // it survives only in calcNormal, where it perturbs the shading normal at
+  // the hit point. That made the field an exact CSG of ellipsoid capsules
+  // under a conservative smooth-min for EVERY body, not just the distant ones
+  // LOD had already stripped.
+  //
+  // ==> THAT ARGUMENT NO LONGER HOLDS. It was written before wounds existed.
+  // applyWounds does NOT return a distance bound (the smax fillet overstates,
+  // the lip understates), so the field the tracer sees near a crater is not
+  // conservative and over-relaxation is NOT always safe. Relax pinned to 1.0
+  // on 2026-08-24 after ω = 1.4 × carved wounds produced the wound-halo
+  // "distorted lens": both ω > 1-only paths below step rays BACKWARD at
+  // grazing wound angles and fail to reconverge, so whole screen-space
+  // circles shade the body from an offset depth. Post-mortem in Obsidian,
+  // Claude Notes/Blud/2026-08-24-wound-halo-postmortem.md.
+  //
+  // DO NOT raise the default above 1.0 until the two retractions below are
+  // bounded and provably reconverge — see the "retract-guard reconvergence"
+  // lever in docs/superpowers/specs/2026-08-23-raymarcher-performance-design.md.
+  // It is worth 1.60× on crowds (X1.10: 10 bodies, 1.0 → 14.89 ms vs
+  // 1.4 → 9.31 ms), so it is worth doing properly — but that sweep PREDATES
+  // wounds and must be re-run with craters in the scene before 1.4 returns.
   //
   // SHELL DISPLACEMENT (gobs-and-goo task 4) is the owner-approved middle
   // path that brings the bumpy outline BACK: the relaxed march runs the
@@ -1152,6 +1167,16 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       // which is only the real excess when stepLen was d times omega, and a
       // shell step was already under-relaxed at 0.6 so there is nothing to
       // take back.
+      //
+      // KNOWN WRONG, dead at the shipping default (relax 1.0) — do not "tidy"
+      // this without the gates in the perf spec's retract-reconvergence lever.
+      // The last step was d*omega; the excess over a conservative step is
+      // d*(omega-1) == stepLen*(omega-1)/omega. This takes back
+      // stepLen*(omega-1) instead — at omega 1.4, 0.56*d rather than 0.40*d,
+      // a 40% OVER-retraction. It errs conservative (it lands short of the
+      // safe point) so it cannot tunnel, but it burns steps and, combined
+      // with the unbounded guard below, is half of why wounded rays fail to
+      // reconverge. Correct form: stepLen = -stepLen * (omega - 1.0) / omega.
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
@@ -1174,6 +1199,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
         // the wall is strictly more correct than shading a point inside it.
         // Only shell-displaced samples keep the old contract (their retraction
         // assumes the smooth field).
+        //
+        // KNOWN UNSOUND, dead at the shipping default (relax 1.0). d here is a
+        // SCALED-space distance: per the cull-soundness rule sdPrimitive
+        // under-reports Euclid by the group's distortion factor (22x on the
+        // schoolgirl sole plate), so stepping back by |d| is not guaranteed to
+        // leave the solid, and nothing here bounds a retry or caps the
+        // back-step to the interval actually travelled. This is the other half
+        // of the wounded-ray non-reconvergence. Fixing it needs the packed
+        // distortion factor threaded to this site — see the perf spec.
         if (d < -hitEps && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;

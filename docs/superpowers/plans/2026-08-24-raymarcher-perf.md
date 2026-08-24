@@ -15,6 +15,16 @@
 - Wound shading semantics are frozen: the facing-gated colouring mask, the radial fresnel fade, the light-gated specular, near-wound 0.6·d stepping, and the flat-lit face decal must render identically. The 8-yaw wounded turntable is the gate.
 - Bench numbers quoted in any report come from the bench page (Task 1), never from the lab, and never while another dispatch or the owner's lab tab is active. State host conditions in the report.
 - `npx vitest run src/lab/sdf-zombie/` green before every commit.
+- **Every baseline in this plan is taken at the SHIPPING defaults, which since
+  2026-08-24 night are `relax` (woundCfg2.y) = **1.0** and adaptive resolution
+  **OFF**.** Any number you find quoted in the spec, in `TASKS.md`, or in an
+  older dev-note that predates that night was measured at relax 1.4 with
+  adaptive on and does **not** describe what ships — re-measure, never
+  extrapolate. Task 2.5 is the task that may move `relax` back; if it does, it
+  re-records Task 1's baselines and says so, and every task after it compares
+  against the new numbers.
+- **Do not raise `relax` above 1.0 as a "quick win" from any task other than
+  2.5.** It is the wound-halo mechanism. Task 2.5 owns it, gates included.
 
 ---
 
@@ -146,6 +156,133 @@ LAB_VITE_PORT=5271 LAB_CDP_PORT=9271 npm run bench:sdf -- A 0.7 15
 
 ---
 
+### Task 2.5: Retract-guard reconvergence — win back relax 1.4
+
+> **Inserted 2026-08-24 night, and it runs BEFORE Tasks 3 and 5.** Both of
+> those rewrite the march loop; their deltas are only meaningful at the ω the
+> renderer will actually ship. This task is worth **1.60× on crowds** (X1.10:
+> 10 bodies, relax 1.0 → 14.89 ms vs 1.4 → 9.31 ms) — more than Tasks 3 and 4
+> combined — and it is the reason relax is pinned to 1.0 today.
+> **Read the post-mortem first:** Obsidian
+> `Claude Notes/Blud/2026-08-24-wound-halo-postmortem.md`, and the corrected
+> lever 0 in the spec.
+
+**Files:**
+- Create: `src/lab/sdf-zombie/webgpu/relaxed-trace.ts`, `relaxed-trace.test.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (the two ω > 1 retractions)
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` (source pins)
+
+**Why the current code fails to reconverge** (both faults are documented in
+place at the retraction sites — read them):
+
+1. Overshoot retraction: `stepLen = stepLen - omega * stepLen` undoes
+   `d·(ω−1)`, but the excess over a conservative step is `d·(ω−1)/ω`. At
+   ω = 1.4 it takes back 0.56·d instead of 0.40·d — a 40 % over-retraction.
+   It errs safe (lands short) so it cannot tunnel, but it burns steps.
+2. Deep-crossing guard: `stepLen = d` (d < 0) steps back by a **scaled-space**
+   distance. Per the cull-soundness rule `sdPrimitive` under-reports Euclid by
+   the group's distortion factor (22× on the schoolgirl sole plate), so |d| is
+   not guaranteed to leave the solid — and nothing bounds the back-step to the
+   interval actually travelled or caps a retry. Rays terminate at offset depths
+   and screen-space circles shade the body from a displaced view.
+
+**The specified fix — retract to the last known-outside sample, never by a
+computed distance.** Both faults dissolve if the retraction stops guessing how
+far back to go and instead returns to a position already *proven* outside:
+
+- Carry `var tSafe` = the `t` of the most recent sample with `d > hitEps`, and
+  `var dSafe` = that sample's `d`. Update them every non-crossing iteration.
+- On EITHER retraction path: `t = tSafe; omega = 1.0;` and continue. The
+  interval is then replayed with conservative sphere tracing from a point whose
+  unbounding radius was measured, which is the reconvergence guarantee — the
+  march from `tSafe` at ω = 1 is the textbook algorithm and cannot skip the
+  surface. No back-step can exceed the distance actually travelled, because
+  `tSafe ≤ t` by construction.
+- Latch it: once a ray has retracted, `omega` stays 1.0 for the rest of that
+  ray (already true — keep it, and add a `retracted` bool so a second crossing
+  cannot re-enter the relaxed path even if `omega` is somehow restored later).
+- Keep the existing exemptions unchanged: shell-displaced (`conservative`) and
+  `nearWound` samples were never over-relaxed, so they still skip the overshoot
+  test and still step at 0.6.
+
+- [ ] **Step 1: Failing test first — a CPU mirror of the tracer.**
+
+The standing warning is that this toolchain compiles no WGSL anywhere, so three
+render bugs survived eight green dispatch tasks. The retraction algebra is pure
+math, so mirror the loop in TypeScript and property-test it. `relaxed-trace.ts`
+exports the loop over an injected `field: (t: number) => number` — the same
+control flow as the shader, no rendering.
+
+```ts
+// src/lab/sdf-zombie/webgpu/relaxed-trace.test.ts — the behaviours that matter:
+// 1. On an EXACT distance field (a sphere), relax 1.4 and relax 1.0 agree on
+//    the hit t to within hitEps. (Relaxation must not move the surface.)
+// 2. On an OVERSTATING field (multiply d by 1.6 in a band — the smax fillet's
+//    failure mode near a wound), relax 1.4 still lands within hitEps of the
+//    true root, and NEVER reports a hit at a t deeper than the true root by
+//    more than hitEps. This is the halo, expressed as an assertion.
+// 3. Reconvergence: for 10k rays over randomised overstating fields, every ray
+//    that retracts still terminates in <= the step budget. No discards.
+// 4. Monotonicity: t never decreases below the tSafe of the retraction, and
+//    the total distance retracted over a ray is <= the distance travelled.
+// 5. Latch: after a retraction, omega stays 1.0 for the remainder of the ray.
+```
+
+Assert the CURRENT algebra fails 2 and 3 before changing the shader — port the
+existing retraction first, watch it fail, then fix. If the current algebra
+happens to pass on your synthetic field, your field is not adversarial enough:
+strengthen it until it reproduces (the real trigger is a grazing approach onto
+a carved crater wall where the fillet overstates).
+
+- [ ] **Step 2: Run it, confirm the failures** — `npx vitest run src/lab/sdf-zombie/webgpu/relaxed-trace.test.ts`.
+
+- [ ] **Step 3: Implement the fix in `relaxed-trace.ts`** until all five pass.
+
+- [ ] **Step 4: Port the same change into `march.wgsl.ts`**, line-for-line
+  against the TS mirror. Both retraction sites become `t = tSafe; omega = 1.0;`.
+  Delete the two "KNOWN WRONG / KNOWN UNSOUND" comment blocks and replace them
+  with a short note pointing at `relaxed-trace.ts` as the tested reference.
+  Note the WGSL `t = tSafe` replaces a `stepLen` assignment — the loop adds
+  `stepLen` to `t` at the bottom, so set `stepLen = 0.0` on those paths or
+  restructure so the retraction assigns `t` directly and `continue`s. Do not
+  leave a path where `t` is assigned AND `stepLen` is then added.
+
+- [ ] **Step 5: Source pins** in `march.wgsl.test.ts` in the file's existing
+  `toContain` style: the retraction sites reference `tSafe`, and no live path
+  contains `stepLen = stepLen - omega * stepLen`.
+
+- [ ] **Step 6: The visual gate — this is the one that matters.** Relax stays
+  at the 1.0 DEFAULT for this gate; drive ω via the probe so the comparison is
+  one code path.
+  ```
+  LAB_VITE_PORT=5271 LAB_CDP_PORT=9271 BLOB_DIST=1.2 BLOB_PITCH=0.1 \
+    BLOB_PROBE="(window.__sdfLab.stampWounds(6), 1)" npm run blob:shot -- zombie /tmp/retract-w10 8
+  ```
+  Then the same command with the probe additionally setting relax to 1.4, into
+  `/tmp/retract-w14`. **The 8 frames must be indistinguishable.** Any halo,
+  white slab, grazing patch, or silhouette that flips between the two sets =
+  FAIL, and relax stays 1.0 — report that outcome honestly rather than shipping
+  a smaller halo. Repeat for `schoolgirl` and `cyclops` (different distortion
+  factors; the schoolgirl carries the 22× sole plate).
+
+- [ ] **Step 7: Re-run the relax sweep WITH WOUNDS, on the bench page.** The
+  X1.10 sweep (1.0 / 1.4 / 1.6 / 1.8 → 14.89 / 9.31 / 9.81 / 10.17 ms) predates
+  wounds and is invalid for wounded bodies — the near-wound 0.6 stepping did not
+  exist then. Bench scenes A and B, ω ∈ {1.0, 1.2, 1.4, 1.6}, wounds stamped,
+  min-of-5 protocol, host conditions stated. The new optimum may not be 1.4.
+
+- [ ] **Step 8: Decision rule.** Gate (6) passes on all three characters AND
+  (7) shows ≥ 15 % on scene B → flip the `woundCfg2.y` default to the swept
+  optimum and **re-record the Task 1 baselines at that ω**; every later task
+  compares against the new numbers. Gate (6) fails → leave the default at 1.0,
+  keep the fix (it is strictly more correct and dead code at 1.0), and record
+  in the spec what still breaks so the next attempt does not restart from zero.
+
+- [ ] **Step 9: Commit.** State the gate outcome and the sweep table in the
+  commit message.
+
+---
+
 ### Task 3: Cheaper hit shading — share the post-hit field probes
 
 **Files:**
@@ -206,7 +343,16 @@ The big one. Sub-staged; each sub-stage lands green before the next. Read `pack.
 - Modify: `src/lab/sdf-zombie/webgpu/lab-main.ts` (`applyLod` — today's stepped levels), `src/lab/sdf-zombie/adaptive-scale.ts` (+ its test), `bench-main.ts`
 
 - [ ] **Step 1: Ramps, not steps.** Replace the discrete LOD levels' on/off quality switches with distance-driven scalar ramps: for body distance `d` in metres, `q = smoothstep(farFull, nearFull, d)` per lever, applied to the AMPLITUDES (surface noise, mottle, silhouette noise, scatter) and step budget (96 → 48 linearly). Face decal and wounds stay on at all distances (they are identity features). No lever may snap: the bench page's slow-approach capture (camera dollying from 8 m to 1 m over 10 s) is the gate — record it, eyeball for pops.
-- [ ] **Step 2: Coverage predictor.** In `adaptive-scale.ts`, add `predictCoverage(bodies): number` = Σ projected cluster-sphere areas (px²) × current scale², clamped to the framebuffer area. Feed it to the controller: an upward probe is only attempted when `predictCoverage` is below the coverage at which the last downward move happened (hysteresis stored per rung). TDD in `adaptive-scale.test.ts` following its existing test style: a synthetic sequence where coverage stays high must produce zero probe attempts; coverage dropping by 2× must re-enable probing.
+- [ ] **Step 2: Coverage predictor.** NOTE (2026-08-24 night): adaptive
+  resolution now **defaults OFF** — its close-up rung drops read as blur-halos
+  during the wound-halo hunt, and the owner's judgement is that resolution
+  which melts exactly where the player is looking is not the answer. So this
+  step is improving a controller that is currently disabled. Treat it as
+  conditional: do it only if Tasks 2.5/3/5 have brought fixed-scale-0.7 frame
+  times close enough to 33 ms that re-enabling adaptive as a spike guard is
+  plausible. If they have not, **skip this step and say so** — the ramps in
+  step 1 are the part that pays either way. If you do proceed: in
+  `adaptive-scale.ts`, add `predictCoverage(bodies): number` = Σ projected cluster-sphere areas (px²) × current scale², clamped to the framebuffer area. Feed it to the controller: an upward probe is only attempted when `predictCoverage` is below the coverage at which the last downward move happened (hysteresis stored per rung). TDD in `adaptive-scale.test.ts` following its existing test style: a synthetic sequence where coverage stays high must produce zero probe attempts; coverage dropping by 2× must re-enable probing.
 - [ ] **Step 3: Gates.** Bench B with LOD active at scale 0.7 — this is where the 33 ms target must finally hold if Task 5 left a gap; the approach capture shows no pops; adaptive probe-spike bursts (the "one 3-frame burst per failed probe" residual in TASKS.md) reduced — record p99 over a 30 s mixed orbit before/after.
 - [ ] **Step 4: Commit.**
 

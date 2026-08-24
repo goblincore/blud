@@ -2616,7 +2616,7 @@ async function main() {
   // Dynamic resolution. Drives the slider above from the measured frame time
   // rather than by hand — the answer to "why does zooming IN get slower when
   // there is LESS on screen", which is that cost is per covered pixel.
-  const adaptBtn = addButton(lodBox, 'adaptive res: on', () => {
+  const adaptBtn = addButton(lodBox, `adaptive res: ${adaptiveEnabled ? 'on' : 'off'}`, () => {
     adaptiveEnabled = !adaptiveEnabled;
     adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
     adaptBtn.textContent = `adaptive res: ${adaptiveEnabled ? 'on' : 'off'}`;
