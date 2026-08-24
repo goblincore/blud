@@ -189,6 +189,19 @@ Key reference docs (open these before touching their area):
   girth (`tornEndRadius`, `extent.ts`), not extent×0.55; both renderer paths + tests.
 - `X1.17` [x] Wound white-out + shimmer fixed — fresnel now fades with the wound
   mask instead of riding the 1.6× wet boost (both shaders); occluder ruled out by A/B.
+- `X1.wound-shadow` [x] **Wound soft shadow** — the crater-concavity cue the
+  halo fix chain identified as missing ("cast shadow vs darker floor"; the
+  shadow won). iq-style sphere-traced penumbra (`WOUND_SHADOW` in
+  `march.wgsl.ts`): 14 steps, k=12, t0=0.02, tMax 0.4 m, fired ONLY when the
+  accepted hit sample sits in mapBody's nearWound zone (cost scales with
+  crater screen area). Applied to key diffuse+specular only — fill/scatter
+  untouched or craters go pitch black. New `woundShadowCfg` vec2 uniform (x
+  strength, y softness; NO spare channel existed — woundCfg2.w is the hitEps
+  override). Panel toggle + strength slider; `__sdfLab.setWoundShadow` for
+  A/B shots; `scripts/bench-wound-shadow.mjs` is the interleaved bench
+  (far −0.26 ms = noise; wounded close-up +0.88 ms, under the ~1 ms gate).
+  A/B verified with gamma-lifted 12-frame orbits: lit-side craters read
+  concave, dark side unchanged. WebGPU only; GLSL twin stays frozen.
 - `X1.18` [ ] **Wound fluid: gushing/gooey particle gore** (feature, planned
   with user). Wounds should emit fluid — `blood-sim.ts` (X1.19) was built to
   host wound-anchored emitters; seed from `woundWorldPos`.
