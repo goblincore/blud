@@ -305,6 +305,25 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
   });
 
+  it('retracts an unflagged deep crossing instead of hitting inside the solid (wound-halo r2)', () => {
+    // A perpendicular approach onto near-flat skin makes radius + prevRadius
+    // EQUAL stepLen exactly, so the strict < overshoot test cannot see the
+    // crossing and the hit registers up to (omega-1)/omega of the last step
+    // INSIDE the body. Behind the wound grid that landing zone sits in the
+    // carve spheres' smax/smin blend, whose gradient contaminates the shading
+    // normal — the torso's far side lit up as a red/pale band at wound height
+    // (owner, 2026-08-24; instrumented: band hits at z -0.17 vs skin -0.266,
+    // normals sideways/up, wm ~ 0 — the shading terms were amplifier, not
+    // cause). Relaxed, non-shell, non-wound-zone samples that land deeper
+    // than hitEps inside must retract onto the surface instead; only the
+    // shell band keeps the old contract (its retraction assumes the smooth
+    // field). The crossing sample usually sits inside the near-wound zone —
+    // the landing is BEHIND the wound spheres — so nearWound is not a stop
+    // signal; retracting to the wall is strictly more correct than shading a
+    // point inside it.
+    expect(MARCH_BODY).toContain('if (d < -hitEps && omega > 1.0 && !conservative) {');
+  });
+
   it('extends the occluder bound by the shell amp (X1.21.2 dark dropout)', () => {
     // The hull is sized against the SMOOTH field, but a shell DENT retreats
     // up to ~0.9 amp below it — past the hull's (1 - shrink) clearance on
@@ -452,7 +471,10 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // pitch (trilinear of an SDF is not exact); the primitive path keeps its
     // 1.2 mm literal because max(0.0012, 0) is 0.0012.
     expect(MARCH_BODY).toContain('let hitEps = max(0.0012, woundCfg2.w);');
-    expect(MARCH_BODY).toContain('if (d < hitEps) { hit = true; break; }');
+    // wound-halo r2 split the accept into the deep-crossing retract guard and
+    // the literal hit test; the epsilon literal still gates both.
+    expect(MARCH_BODY).toContain('hit = true;\n          break;');
+    expect(MARCH_BODY).toContain('if (d < -hitEps && omega > 1.0');
     expect(MARCH_BODY).not.toContain('if (d < 0.0012)');
   });
 });

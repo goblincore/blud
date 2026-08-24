@@ -1183,8 +1183,35 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
-      if (d < hitEps) { hit = true; break; }
-      stepLen = d * select(omega, 0.6, conservative || nearWound);
+      if (d < hitEps) {
+        // wound-halo r2: an over-relaxed step can cross the skin with
+        // radius + prevRadius == stepLen EXACTLY — a perpendicular approach
+        // onto near-flat skin makes the sum an equality, not a strict <, so
+        // the overshoot test above cannot see it — and the hit then registers
+        // up to (omega-1)/omega of the last step INSIDE the solid. Behind the
+        // wound grid that landing zone sits in the carve spheres' smax/smin
+        // blend, whose gradient contaminates the shading normal: the torso's
+        // far side lit up as a red/pale band at wound height (owner,
+        // 2026-08-24; instrumented — band hits at z -0.17 vs skin -0.266,
+        // normals sideways/up, wm ~ 0). Retract onto the surface and finish
+        // the ray at omega 1; the hit is accepted once d is within hitEps.
+        // The crossing sample usually sits inside the near-wound zone (the
+        // landing is BEHIND the wound spheres even when the crossing is in
+        // front of them), so nearWound is NOT a stop signal here — 0.6
+        // stepping of the overstated fillet can cross too, and retracting to
+        // the wall is strictly more correct than shading a point inside it.
+        // Only shell-displaced samples keep the old contract (their retraction
+        // assumes the smooth field).
+        if (d < -hitEps && omega > 1.0 && !conservative) {
+          stepLen = d;
+          omega = 1.0;
+        } else {
+          hit = true;
+          break;
+        }
+      } else {
+        stepLen = d * select(omega, 0.6, conservative || nearWound);
+      }
     }
     prevRadius = radius;
     t = t + stepLen;
@@ -1499,6 +1526,19 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let glow = faceGlowColor * faceGlow * faceCfg2.w
            * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
   var lit = fleshLit * (1.0 - faceGlow) + glow;
+  // DEBUG wound-halo-r2 (temporary): live-gated diagnostic views. mottleColor
+  // is inert while surfCfg2.z (mottleAmp) is 0 — the zombie preset — so pure
+  // blue = mask view (R=wm, G=wmRim, B=AO), pure green = geometry view
+  // (R=depth bands frac(t*20), G=frac(t*5), B=diffuse/2). Any other value:
+  // normal render.
+  if (mottleColor.b > 0.9 && mottleColor.r < 0.1) {
+    lit = vec3<f32>(wm, wmRim, ao);
+  } else if (mottleColor.g > 0.9 && mottleColor.r < 0.1) {
+    // hit-point z (body spans ~-0.28..+0.15 -> R 0.14..0.66) + normal yz
+    lit = vec3<f32>((p.z + 0.4) * 1.2, n.z * 0.5 + 0.5, n.y * 0.5 + 0.5);
+  } else if (mottleColor.r > 0.9 && mottleColor.g < 0.1 && mottleColor.b < 0.1) {
+    lit = vec3<f32>(n.x * 0.5 + 0.5, n.y * 0.5 + 0.5, n.z * 0.5 + 0.5);
+  }
 
   // Legacy display look (lodCfg.y). Every flesh preset was hand-tuned in the
   // WebGL lab, which displayed the lit LINEAR value raw — no output sRGB
