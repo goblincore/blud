@@ -103,7 +103,7 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
+  MAX_WOUNDS, pushWound, woundCarveWorldPos, worldHitToWound, WOUND_PROFILES,
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
@@ -1009,7 +1009,10 @@ async function main() {
 
   function uploadWounds(prims: BuildResult['prims'], yaw = lastBodyYaw) {
     view.setWounds(
-      wounds.map(w => woundWorldPos(prims, w, yaw)),
+      // The CARVE centres, not the surface anchors: the shader subtracts its
+      // spheres from these, and the centres are thickness-capped at stamp
+      // time (damage.ts) so a blast on a thin torso never opens the far side.
+      wounds.map(w => woundCarveWorldPos(prims, w, yaw)),
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
@@ -1029,7 +1032,9 @@ async function main() {
    * the jiggle exactly as the rendered craters do.
    */
   function woundSpheres(prims: BuildResult['prims']) {
-    return wounds.map(w => ({ centre: woundWorldPos(prims, w, lastBodyYaw), radius: w.radius }));
+    // Same carve centres the shader subtracts — the exclusion zone must
+    // cover exactly what is removed, or hull spheres reappear in craters.
+    return wounds.map(w => ({ centre: woundCarveWorldPos(prims, w, lastBodyYaw), radius: w.radius }));
   }
 
   // -------------------------------------------------------------------------
@@ -3058,6 +3063,25 @@ async function main() {
         pendingWounds.push(w); // stamped blasts feed the damage meter too
       }
       refreshWounds();
+    },
+    /**
+     * Stamps ONE blast by raycasting from `origin` along `dir` — the dev
+     * twin of the click path for automated visual checks on spots the
+     * torso grid cannot reach (forearms, head, legs).
+     */
+    stampWoundAt(origin: [number, number, number], dir: [number, number, number]) {
+      const o = { x: origin[0], y: origin[1], z: origin[2] };
+      const d0 = { x: dir[0], y: dir[1], z: dir[2] };
+      const l = Math.hypot(d0.x, d0.y, d0.z) || 1;
+      const d = { x: d0.x / l, y: d0.y / l, z: d0.z / l };
+      const hit = raycastBody([o.x, o.y, o.z], [d.x, d.y, d.z], lastPosed);
+      if (!hit) return null;
+      const w = worldHitToWound(
+        lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', lastBodyYaw,
+        p => sdBody(p, lastPosed));
+      wounds = pushWound(wounds, w, MAX_WOUNDS);
+      refreshWounds();
+      return hit;
     },
     setCrowdCount,
     gibEverything,

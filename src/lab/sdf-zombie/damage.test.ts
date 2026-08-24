@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/damage.test.ts
 import { describe, it, expect } from 'vitest';
-import { worldHitToWound, woundWorldPos, pushWound, MAX_WOUNDS, WOUND_PROFILES } from './damage';
+import { worldHitToWound, woundWorldPos, woundCarveWorldPos, pushWound, MAX_WOUNDS, WOUND_PROFILES } from './damage';
 import { rotateYaw } from './gait';
 import type { Primitive, Vec3 } from './types';
 import { add, len, qFromAxisAngle, qMul, qRotate, sub } from './vec';
@@ -204,6 +204,69 @@ describe('the everted rim is scaled by the flesh behind the hit (no floating rin
   it('without a field the scale is absent and treated as 1', () => {
     const torso = sphere([0, 1.0, 0]);
     expect(worldHitToWound([torso], [0.14, 1.0, 0], 0.13, 'blast').rimScale).toBeUndefined();
+  });
+});
+
+describe('the carve centre is thickness-capped (no far-side punch-through)', () => {
+  // Owner-verified artifact (2026-08-24): applyWounds carves r - depth at the
+  // SURFACE hit with depth = the full wound radius, so on a torso ~0.2 m thick
+  // the 0.13 m blast sphere reaches through and opens the far side — a white
+  // slab from the rear and a crescent that sweeps with the camera. The GPU
+  // carve centre must be shifted outward at stamp time so the penetration
+  // stays under ~45% of the measured flesh thickness; the surface anchor
+  // (gameplay/particles/meter) stays where it is.
+  const capsuleField = (prims: Primitive[]) => (p: Vec3) => Math.min(...prims.map(q => {
+    const ab = sub(q.b, q.a), ap = sub(p, q.a);
+    const t = Math.max(0, Math.min(1, len(ab) === 0 ? 0 : (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (len(ab) * len(ab))));
+    return len(sub(p, add(q.a, [ab[0] * t, ab[1] * t, ab[2] * t]))) - q.radius;
+  }));
+
+  it('thin flesh: the blast carve is pushed out so it penetrates <= 45% of the thickness', () => {
+    // A 6 cm limb vs the 13 cm blast: unshifted it would open the far side.
+    const thin: Primitive = { ...capsule([0, 1, 0], [0, 1.4, 0]), radius: 0.03 };
+    const hit: Vec3 = [0.03, 1.2, 0];
+    const w = worldHitToWound([thin], hit, 0.13, 'blast', 0, capsuleField([thin]));
+    const carve = woundCarveWorldPos([thin], w);
+    const shift = len(sub(carve, hit));
+    expect(shift).toBeGreaterThan(0.05); // genuinely pushed outward
+    const penetration = 0.13 - shift;    // how deep the carve reaches below the skin
+    expect(penetration).toBeLessThanOrEqual(0.45 * 0.06 + 1e-6);
+    // The surface anchor is untouched — blood emitters seed from it.
+    expect(len(sub(woundWorldPos([thin], w), hit))).toBeCloseTo(0, 8);
+  });
+
+  it('thick flesh: radius fits inside 45% of the thickness — no shift at all', () => {
+    const torso: Primitive = { ...sphere([0, 1.0, 0]), radius: 0.16 }; // 0.32 m of flesh; 45% = 0.144 > 0.13
+    const hit: Vec3 = [0.16, 1.0, 0];
+    const w = worldHitToWound([torso], hit, 0.13, 'blast', 0, capsuleField([torso]));
+    expect(w.carveLocal).toBeUndefined();
+    const carve = woundCarveWorldPos([torso], w);
+    expect(len(sub(carve, woundWorldPos([torso], w)))).toBeCloseTo(0, 8);
+  });
+
+  it('without a field there is no carve offset — old wounds and chunk torn-ends are unchanged', () => {
+    const prims = [capsule([0, 1, 0], [0, 1.4, 0])];
+    const w = worldHitToWound(prims, [0.09, 1.2, 0], 0.13, 'blast');
+    expect(w.carveLocal).toBeUndefined();
+    const a = woundCarveWorldPos(prims, w);
+    const b = woundWorldPos(prims, w);
+    expect(len(sub(a, b))).toBeCloseTo(0, 8);
+  });
+
+  it('the shifted carve centre rides the body yaw exactly like the anchor does', () => {
+    const pivot: Vec3 = [0, 0.92, 0];
+    const YAW = Math.PI / 2;
+    const thin: Primitive = { ...capsule([0, 1, 0], [0, 1.4, 0]), radius: 0.03 };
+    const hit: Vec3 = [0.03, 1.2, 0];
+    const w = worldHitToWound([thin], hit, 0.13, 'blast', 0, capsuleField([thin]));
+    const turned: Primitive = {
+      ...thin,
+      a: rotAbout(thin.a, pivot, YAW) as [number, number, number],
+      b: rotAbout(thin.b, pivot, YAW) as [number, number, number],
+    };
+    const carve0 = woundCarveWorldPos([thin], w, 0);
+    const expected = rotAbout(carve0, pivot, YAW);
+    expect(len(sub(woundCarveWorldPos([turned], w, YAW), expected))).toBeCloseTo(0, 8);
   });
 });
 
