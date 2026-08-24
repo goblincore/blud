@@ -278,7 +278,7 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * surfCfg/lodCfg is already consumed (woundCfg2.w overrides hitEps in
      * volume mode — NOT spare), so nothing here could be reused safely.
      */
-    woundShadowCfg: uniform(new THREE.Vector2(1.0, 12.0)),
+    woundShadowCfg: uniform(new THREE.Vector2(0.0, 12.0)),
   };
 }
 

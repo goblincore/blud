@@ -2677,7 +2677,15 @@ async function main() {
   // Same hero+crowd fan-out as setShellDisplace: crowd views own their
   // uniform set, and chunk views copy woundShadowCfg from the hero template
   // at spawn.
-  let woundShadowOn = true;
+  // OFF by default (owner A/B, 2026-08-24 evening): at full strength the
+  // shadow march paints hard black rings hugging the craters — near the lip
+  // the wound field is not a clean distance bound, so iq's k*h/t penumbra
+  // gets corrupted h values and crushes whole neighbourhoods; it also cost
+  // ~50 ms at a close view (the nearWound gate covers most of the body once
+  // several wounds overlap). The toggle and slider stay for tuning; a rework
+  // should march the SMOOTH pre-wound field and feather by the wound mask
+  // instead of the binary zone gate.
+  let woundShadowOn = false;
   let woundShadowStrength = 1.0;
   const wsBtn = addButton(dmgBox, 'wound shadow: on', () => {
     woundShadowOn = !woundShadowOn;
