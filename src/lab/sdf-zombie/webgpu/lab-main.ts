@@ -164,6 +164,7 @@ import {
   addButton, addSection, addSelect, addSlider, applyDebugPanelVisibility, clearOverride,
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
 } from '../panel';
+import { createEnclosure, type WallKey } from './enclosure';
 
 // ---------------------------------------------------------------------------
 // Face texture sheets. Same three sources as the WebGL lab, same crop rects.
@@ -332,6 +333,12 @@ async function main() {
   );
   refCube.position.set(0.6, 0.2, 0.3);
   scene.add(refCube);
+
+  // Bounce spike enclosure (lighting P1). Same category of object as the
+  // reference cube above — something to look at, not a room format. Hidden
+  // until the panel switches it on.
+  const enclosure = createEnclosure();
+  scene.add(enclosure.group);
 
   let override = loadOverride(activeCharacterName());
   // Seed the face from the character's OWN `face` block (compileFace parses the
@@ -538,6 +545,7 @@ async function main() {
     spareChunkView?.dispose();
     spareChunkView = null;
     chunkMaterial.dispose();
+    enclosure.dispose();
   }, { once: true });
 
   // The metaball blood layer (gobs-and-goo task 5). It shares the march's
@@ -2437,6 +2445,80 @@ async function main() {
     light = v as LightPresetName;
     reapply();
   });
+
+  // ── Environment bounce (lighting P1) ────────────────────────────────
+  // The spike's whole user interface. The question it exists to answer is
+  // narrow: does the shadow side taking the wall's colour make the figure
+  // feel IN the room without softening the hard-key look? So the A/B has to
+  // be one click, on the same frame, with nothing else moving.
+  const bounceBox = addSection(panelEl, 'environment bounce');
+
+  // addButton returns the element and the handler closes over it — the house
+  // idiom, see texBtn at lab-main.ts:2516.
+  const boxBtn = addButton(bounceBox, 'enclosure: off', () => {
+    const on = !enclosure.group.visible;
+    enclosure.setVisible(on);
+    boxBtn.textContent = `enclosure: ${on ? 'on' : 'off'}`;
+  });
+
+  // SliderSpec is { label, min, max, step, get(), set(v) } — a getter, not a
+  // starting value, so the slider re-reads the uniform rather than caching it.
+  addSlider(bounceBox, {
+    label: 'probeWeight', min: 0, max: 1, step: 0.01,
+    get: () => u.bounceCfg.value.x,
+    set: (v) => { u.bounceCfg.value.x = v; },
+  });
+
+  addSlider(bounceBox, {
+    label: 'ambientGain', min: 0, max: 4, step: 0.05,
+    get: () => u.bounceCfg.value.y,
+    set: (v) => { u.bounceCfg.value.y = v; },
+  });
+
+  const ceilBtn = addButton(bounceBox, 'ceiling: on', () => {
+    const on = u.bounceCfg.value.z < 0.5;
+    u.bounceCfg.value.z = on ? 1 : 0;
+    enclosure.setCeiling(on);
+    ceilBtn.textContent = `ceiling: ${on ? 'on' : 'off'}`;
+  });
+
+  // One-click A/B. Parks probeWeight at 1 or 0 and remembers where the
+  // slider was, so the comparison is repeatable rather than re-dialled by
+  // hand each time — a slider nudged to 0.97 is not the same comparison.
+  let parkedWeight = 1;
+  const abBtn = addButton(bounceBox, 'A/B: flat', () => {
+    if (u.bounceCfg.value.x > 0) {
+      parkedWeight = u.bounceCfg.value.x;
+      u.bounceCfg.value.x = 0;
+      abBtn.textContent = 'A/B: flat';
+    } else {
+      u.bounceCfg.value.x = parkedWeight;
+      abBtn.textContent = 'A/B: bounce';
+    }
+  });
+
+  // Per-wall colour pickers. Each writes BOTH the mesh and the uniform, so
+  // what the eye sees on the wall and what the shader bounces off it cannot
+  // disagree — a mismatch there would invalidate the whole judgement.
+  const WALL_UNIFORMS: Record<WallKey, typeof u.wallNegX> = {
+    negX: u.wallNegX, posX: u.wallPosX, negY: u.wallNegY,
+    posY: u.wallPosY, negZ: u.wallNegZ, posZ: u.wallPosZ,
+  };
+  for (const key of Object.keys(WALL_UNIFORMS) as WallKey[]) {
+    const input = document.createElement('input');
+    input.type = 'color';
+    const c = enclosure.walls[key];
+    input.value = '#' + new THREE.Color(c[0], c[1], c[2]).getHexString();
+    input.addEventListener('input', () => {
+      const col = new THREE.Color(input.value);
+      enclosure.setWall(key, [col.r, col.g, col.b]);
+      WALL_UNIFORMS[key].value.setRGB(col.r, col.g, col.b);
+    });
+    const row = document.createElement('label');
+    row.textContent = key;
+    row.appendChild(input);
+    bounceBox.appendChild(row);
+  }
 
   const matBox = addSection(panelEl, 'material');
   function rebuildMaterialSliders() {

@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/material.test.ts
 import { describe, it, expect } from 'vitest';
-import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial } from './material';
+import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPresetName } from './material';
 
 describe('flesh presets', () => {
   const names = ['henenlotter-latex', 'wet-meat', 'clay'] as const;
@@ -50,5 +50,15 @@ describe('flesh presets', () => {
       .toBeGreaterThan(LIGHT_PRESETS['game-ambient'].keyIntensity);
     expect(LIGHT_PRESETS['practical-hard-key'].fillIntensity)
       .toBeLessThan(LIGHT_PRESETS['game-ambient'].fillIntensity);
+  });
+
+  it('gives every light preset the two bounce knobs, defaulted OFF', () => {
+    // probeWeight 0 is the parity guarantee: ambientAt collapses to
+    // lightCfg.y * keyColor, so the shipped look cannot move until a
+    // slider does. Every owner-blessed visual depends on this.
+    for (const n of Object.keys(LIGHT_PRESETS) as LightPresetName[]) {
+      expect(LIGHT_PRESETS[n].probeWeight).toBe(0);
+      expect(LIGHT_PRESETS[n].ambientGain).toBe(1);
+    }
   });
 });

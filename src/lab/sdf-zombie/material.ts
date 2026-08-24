@@ -95,6 +95,26 @@ export interface LightPreset {
   keyIntensity: number;
   fillIntensity: number;
   keyColor: Vec3;
+  /**
+   * How far the flat fill is replaced by chromatic bounce, 0..1.
+   *
+   * 0 = today's behaviour exactly — `ambientAt` returns
+   * `fillIntensity * keyColor` and the shading expression collapses to what
+   * it was before bounce existed. This is the default for every preset, so
+   * the spike ships dark: nothing moves until the lab slider moves it.
+   */
+  probeWeight: number;
+  /**
+   * Overall level of the bounce term once `probeWeight` has mixed it in.
+   *
+   * 1 is the house rule from the spec — bounce carries COLOUR, NOT
+   * BRIGHTNESS, so the shadow side keeps the level `fillIntensity` gave it
+   * and only changes hue. Raising this above 1 deliberately breaks that rule
+   * and is how the owner tests whether the look actually wants genuine
+   * radiosity lift instead. Keep it as an explicit knob: the negative result
+   * ("chromatic alone doesn't sell it") is a real outcome of this spike.
+   */
+  ambientGain: number;
 }
 
 export type LightPresetName = 'practical-hard-key' | 'game-ambient';
@@ -106,6 +126,8 @@ export const LIGHT_PRESETS: Record<LightPresetName, LightPreset> = {
     keyIntensity: 2.4,
     fillIntensity: 0.06,
     keyColor: [1.0, 0.96, 0.92],
+    probeWeight: 0,
+    ambientGain: 1,
   },
   // Mirrors the real game's sun + ambient, to check the material survives it.
   'game-ambient': {
@@ -113,5 +135,7 @@ export const LIGHT_PRESETS: Record<LightPresetName, LightPreset> = {
     keyIntensity: 1.1,
     fillIntensity: 0.34,
     keyColor: [1.0, 0.925, 0.804],
+    probeWeight: 0,
+    ambientGain: 1,
   },
 };
