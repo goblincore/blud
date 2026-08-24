@@ -21,7 +21,7 @@ export const WOUND_PROFILES: Record<WoundType, WoundProfile> = {
   // Pellet: small clean punch. Splay 0.35, not 0.8: at 0.8 the lip was 2.4 cm
   // tall on a 5.5 cm crater — a volcano that read as a convex red bump beside
   // a blast's dish (cyclops, 2026-08-23). A puncture has a thin lip.
-  pellet: { radius: 0.055, rimSplayScale: 0.35, rimOffsetScale: 1.0 },
+  pellet: { radius: 0.055, rimSplayScale: 0.8, rimOffsetScale: 1.0 },
   // Blast: big crater but a TAMED lip — the default splay welded the arm to
   // the torso at the shoulder (playtest 2026-08-16 screenshot 1).
   blast: { radius: 0.13, rimSplayScale: 0.45, rimOffsetScale: 0.85 },

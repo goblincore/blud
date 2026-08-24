@@ -584,7 +584,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // ramp spans a full amp (-0.65..0.35): a 0.35..0.7 ramp had ~4x a distance
     // field's gradient and drew as hard bands around the lip (rim banding,
     // 2026-08-22).
-    let rimLocal = 1.0 - smoothstep(-amp * 0.65, amp * 0.35, dIn);
+    let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
     bump = bump + exp(-x * x) * amp * rimLocal;
   }
   if (n <= 0) { return vec2<f32>(dIn, 0.0); }
