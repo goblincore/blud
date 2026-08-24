@@ -1,17 +1,32 @@
-# Raymarcher performance — design (draft for the next session)
+# Raymarcher performance — design
 
-Status: brainstorm paused mid-way on 2026-08-23 (context limit). Decisions so
-far are recorded; the open questions at the end are where the next session
-resumes, then `superpowers:writing-plans`.
+Status: DECIDED 2026-08-24. All four open questions answered by the owner and
+the approach locked ("Approach 1 extended", below). Implementation plan:
+`docs/superpowers/plans/2026-08-24-raymarcher-perf.md`; execution queued as
+dispatch tasks `~/.claude/dispatch/plans/2026-08-24-perf-task-{1..4}.md`
+(owner triggers task-1 in dispatch-ui, the rest chain).
 
 ## Goal
 
 Render SDF characters fast enough for the game: **30 fps at the owner's full
-window** (1536×1704 CSS px, retina → 3072×3408 buffer) with **2–4 enemies at
-close/mid range** ("A", the arena fight) as the hard requirement, and **8–15
-at mixed range** ("B") degrading to quality LOD, not to mush. Today the
-adaptive controller holds 30 fps only by dropping the SDF pass to 0.2–0.45
-scale when zoomed in, which the owner judges "way too low resolution".
+window** (1536×1704 CSS px, retina → 3072×3408 buffer) at **SDF scale ≥ 0.7**,
+for BOTH **2–4 enemies at close/mid range** ("A", the arena fight) and
+**8–15 at mixed range** ("B"). Today the adaptive controller holds 30 fps
+only by dropping the SDF pass to 0.2–0.45 scale when zoomed in, which the
+owner judges "way too low resolution".
+
+## Decisions (owner, 2026-08-24)
+
+1. **Quality floor: scale ≥ 0.7** when zoomed. The 30 fps target is measured
+   against this floor; the controller may still ride 0.7–1.0.
+2. **30 fps everywhere** — B (8–15 bodies) holds the same 33 ms p95 as A.
+   This is what rules out per-body proxy draws as the destination: N near
+   bodies re-march their overdrawn pixels N times.
+3. **Smooth LOD fades only.** Quality levers ramp with distance; nothing
+   snaps. (No PSX pop, despite the aesthetic — owner call.)
+4. **Dedicated bench page** is the measurement surface: fixed camera path,
+   fixed body sets, adaptive off, single-pass timing. The lab stays the
+   playground; numbers quoted in reports come from the bench page only.
 
 ## What is measured (do not re-measure these)
 
@@ -39,8 +54,24 @@ scale when zoomed in, which the owner judges "way too low resolution".
 - Measurement hygiene learned the hard way: check host load first
   (`fileproviderd` at 115 % and stale dispatch vite servers polluted a round);
   the first `benchGpu` of a run carries warm-up spikes — run the baseline last.
+- **(2026-08-23 pm) Two-level bound-group cull is on main** (`dfac7b2`):
+  pack.ts `boundGroups` splits each limb cluster into contiguous fold-order
+  runs with ≤ 0.16 m spheres; the shader walks a surviving cluster's own
+  span. Schoolgirl ~35 % faster (stash-A/B, 5× benchGpu min per side).
+- **A FLAT group list was SLOWER than no groups at all** (zombie 2.6 → 4.8
+  ms): per-step bound texel reads dominate. Hierarchy is the win; any tile
+  scheme must respect the same economics (few reads before the prim work).
+- **Cull soundness rule:** `sdPrimitive` is a scaled-space field —
+  `sd ≥ euclidDist × minScale/maxScale` (schoolgirl sole plate: 22×). Every
+  Euclid-sphere-vs-running-`d` cull must multiply its threshold by the
+  packed per-group distortion factor, or the field tears (black crack seams
+  inside wound cavities, where `d` goes negative). Applies verbatim to any
+  per-tile test.
+- **Bench pollution is real on this host:** the owner's live lab tab and
+  running dispatch agents both moved medians by 2×. Protocol: stash-A/B in
+  one session, 5× `benchGpu` per side, take the min, same page load.
 
-## Candidate levers (to be chosen in the next session)
+## The six levers (stages above choose among these)
 
 1. **Instrumentation first.** A debug view rendering *march steps per pixel*
    and *primitives evaluated per pixel* as heatmaps, and a per-variant GPU
@@ -64,30 +95,39 @@ scale when zoomed in, which the owner judges "way too low resolution".
    fixed GPU timestamps or a coverage predictor (projected cluster-sphere area
    × scale²) so the controller probes only when the prediction has room.
 
-## Approaches to decide between (next session, one question at a time)
+## Approach: "Approach 1 extended" (LOCKED)
 
-- **Approach 1 — instrument, then tile-cull (2) + cheaper shading (3).**
-  Biggest expected win for A; B improves too. Most engineering.
-- **Approach 2 — instrument, then specialise (4) + cheaper shading (3),
-  keep per-body draws.** Smaller, safer; may not reach 30 fps at full window
-  for A without resolution drop.
-- **Approach 3 — one merged march (5) from the start.** Biggest structural
-  change; best for B; risk of a long tail before anything ships.
-  Recommendation going in: Approach 1, with 4 as a first-day cheap test.
+Four stages, each shipping value and de-risking the next. Decision 2 (30 fps
+for crowds too) is what extends the original Approach 1 to include the
+merged march — per-body draws cannot reach it.
 
-## Open questions for the owner
+1. **Bench page + instrumentation.** `sdf-bench.html`: fixed 15 s orbit,
+   fixed body sets A (4 close) and B (12 mixed), adaptive off, p50/p95/p99
+   to the page and to `window.__bench` for headless capture. Heatmap debug
+   views: march steps per pixel, prims evaluated per pixel. Nothing after
+   this stage is judged without these numbers.
+2. **Cheaper hit shading** (~6 post-hit field evaluations → ~3–4 by sharing
+   probes between normal/AO/translucency), plus the one-day
+   specialise-the-crowd measurement — keep or drop by bench delta.
+3. **Per-tile primitive lists + one merged march for all bodies.** A tile
+   pre-pass bins every body's bound groups (distortion factor included);
+   one full-screen pass marches each pixel against its tile's list.
+   Removes both the prims-in-reach cost and N-body overdraw; also the
+   multi-character architecture (cost scales with screen overlap, not cast
+   size). Hero-only first, then multi-body, per-body draws retired behind a
+   flag until parity.
+4. **Smooth LOD ramps + headroom signal.** Distance-faded quality levers
+   (decision 3: no pops) and a coverage predictor (projected cluster-sphere
+   area × scale²) so `adaptive-scale.ts` probes only with predicted room.
 
-1. Acceptable minimum SDF scale when zoomed (0.5? 0.7?) — the quality floor
-   the target is measured against.
-2. Does B (8–15 enemies) need to hold 30 fps, or is 20 acceptable there?
-3. Is a visible LOD pop (e.g. far bodies without noise/wounds) acceptable?
-4. Is the lab (`sdf-lab-webgpu.html`) the benchmark surface, or should the
-   measurement harness be its own page with a fixed camera path?
+## Success criteria
 
-## Success criteria (draft)
-
-- A: 2–4 bodies, close camera, full window, SDF scale ≥ (answer to Q1):
-  p95 ≤ 33 ms over a 15 s orbit, measured with the new instrumentation.
-- B: 12 bodies, mixed range: p95 ≤ 33 ms (or Q2's answer) with quality LOD.
-- No regression in `blob:render-check`, the lab tests, or the wound fixes of
-  2026-08-23 (flicker, rim, cavity shading, near-wound stepping).
+- **A**: 4 bodies, close camera, full window, scale ≥ 0.7: p95 ≤ 33 ms over
+  the bench page's 15 s orbit.
+- **B**: 12 bodies, mixed range, scale ≥ 0.7: p95 ≤ 33 ms with smooth LOD
+  active.
+- No regression in `blob:render-check` (all six characters), the lab suite,
+  or the 2026-08-23 wound work: flicker transport, rim reach, cavity
+  shading, near-wound stepping, the facing-gated wound mask, the light-gated
+  specular, and the flat-lit face decal.
+- No visible LOD pop in a slow approach capture (stage 4 gate).
