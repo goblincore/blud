@@ -108,6 +108,10 @@ export function specialiseMapBody(body: BuildResult): string {
     for (const i of additive) {
       // One sd evaluation feeds BOTH the smin fold and the argmin tracker —
       // the generic version's exact structure, with the index as a literal.
+      // The debug prim counter rides along (task 2 parity): a specialised
+      // crowd body must count the same work the generic fold counts, or a
+      // heatmap taken with ?specialise=1 would lie.
+      lines.push(`      if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }`);
       lines.push(`      sd = sdPrim(p, ${i}, data);`);
       lines.push(`      if (sd < best) { best = sd; bestIdx = ${i}; }`);
       lines.push(`      d = smin(d, sd, ${f(body.prims[i]!.blendK)});`);

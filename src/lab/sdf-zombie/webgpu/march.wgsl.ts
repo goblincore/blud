@@ -689,7 +689,24 @@ fn sampleHandVolume(pWorld: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: 
   let d0 = sampleHandVolumeFrame(q, i32(volumeClip.x), volumeTex, volumeClip);
   let d1 = sampleHandVolumeFrame(q, i32(volumeClip.y), volumeTex, volumeClip);
   return mix(d0, d1, clamp(volumeClip.z, 0.0, 1.0)) + outside;
-}`;
+}
+
+// PERF INSTRUMENTATION COUNTERS (raymarcher-perf task 2). Private-scope
+// globals, so mapBody's signature — and every caller threading values
+// outward through it — stays untouched; counting per march STEP at the
+// call site would fork the fold, which the plan forbids. Declared at the
+// tail of the LAST helper before MAP_BODY because WGSL requires declaration
+// before use; MARCH_BODY and CALC_NORMAL see them transitively through the
+// includes chain. Fragment invocations each start with zeroed private
+// globals, so there is no cross-pixel bleed; the march entry re-zeroes
+// them under the debug guard anyway. gDebugMode mirrors debugCfg.x for
+// mapBody, which takes no debugCfg parameter by design.
+var<private> gDebugMode: f32 = 0.0;
+var<private> gDebugPrims: f32 = 0.0;
+var<private> gDebugSteps: f32 = 0.0;
+// NOTE: these live at the tail of SAMPLE_VOLUME's source rather than in
+// their own HELPERS entry because three's wgslFn parser is ^-anchored on
+// "fn" — a var-declaration source would fail its parse contract.`;
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
 // still bends the surface from 4x the authored blendK away. Using the unscaled
@@ -771,6 +788,11 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
       // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
       if (S.w > 0.5) { continue; }
+      // PERF DEBUG (task 2): counted ONLY while instrumenting — a branch on
+      // a private global that the driver sets uniformly per draw, so the
+      // shipping path (off) pays a predicated add at most and the fold
+      // itself is untouched.
+      if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }
       let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
       // One sd evaluation feeds BOTH the smin fold and the argmin tracker —
       // a second call would double the texture fetches this loop lives on.
@@ -1024,10 +1046,16 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
   woundShadowCfg: vec2<f32>,
+  debugCfg: vec2<f32>,
   startT: f32,
   occT: f32
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
+  // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
+  // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
+  // shipping path pays exactly one uniform branch; gDebugMode hands the
+  // flag to mapBody's fold without forking its signature.
+  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; }
   // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a
   // conservative INNER hull of the scene — geometry guaranteed to lie inside
   // the real surface, rasterised depth-only before this pass.
@@ -1130,6 +1158,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var hitNearWound = false;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
+    if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
     // 0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm
     // still reaches the normal only via calcNormal — but inside a thin shell
     // of the surface the same fbm is added to the REAL stepped distance just
@@ -1241,6 +1270,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     }
   }
   if (!hit) { discard; }
+  // Snapshot the counters BEFORE the post-hit probes: calcNormal folds
+  // four more mapBody calls and the wound shadow up to fourteen, and the
+  // heatmap is about RAY cost, not shading cost.
+  let debugSteps = gDebugSteps;
+  let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
   var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
@@ -1548,6 +1582,22 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     let lo = c / 12.92;
     let hi = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
     lit = select(hi, lo, c <= vec3<f32>(0.04045));
+  }
+
+  // PERF INSTRUMENTATION output (task 2): replace the shaded colour with
+  // the counter heatmap — a two-stop blue -> yellow -> red ramp, no
+  // texture. Steps normalise by the budget (marchCfg.x, 96); prims by 2000
+  // (56 prims x ~35 steps as the red end). After the gamma block so the
+  // ramp colours emit raw; depth (t) still goes out, so the composite's
+  // depth path runs identically to a shaded frame.
+  if (debugCfg.x > 0.5) {
+    let heatNorm = select(debugSteps / max(marchCfg.x, 1.0), debugPrims / 2000.0, debugCfg.x > 1.5);
+    let rampA = vec3<f32>(0.05, 0.15, 0.75);
+    let rampB = vec3<f32>(0.95, 0.85, 0.15);
+    let rampC = vec3<f32>(0.85, 0.05, 0.10);
+    var heatCol = mix(rampA, rampB, clamp(heatNorm * 2.0, 0.0, 1.0));
+    heatCol = mix(heatCol, rampC, clamp((heatNorm - 0.5) * 2.0, 0.0, 1.0));
+    return vec4<f32>(heatCol, t);
   }
 
   return vec4<f32>(lit, t);

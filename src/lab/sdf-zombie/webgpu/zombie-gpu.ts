@@ -465,6 +465,7 @@ export function createMarchMaterial(
     faceGlowColor: u.faceGlowColor,
     lodCfg: u.lodCfg,
     woundShadowCfg: u.woundShadowCfg,
+    debugCfg: u.debugCfg,
     startT: cone
       ? coneFetch({
           coneTex: texture(cone.texture),

@@ -24,6 +24,7 @@ import {
   ROW_PRIM_BEND, WOUND_MASK, WOUND_SHADOW,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+import { specialiseMapBody } from './specialise';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
 import { packBody } from '../pack';
 import { add, cross, scale as vscale, sub, qFromAxisAngle, qNormalize } from '../vec';
@@ -937,3 +938,76 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     expect(MARCH_BODY).toContain('albedo * (lightCfg.y + diff * wShadow * lightCfg.x) * keyColor * ao');
   });
 });
+
+describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
+  // steps/pixel and prims/pixel counters behind a uniform-guarded debug
+  // branch. The gate the plan names: debugCfg.x == 0 must cost nothing —
+  // every counter write is guarded, and the guards are pinned here so a
+  // future edit cannot unguard one silently.
+  it('declares the private counters before mapBody, at SAMPLE_VOLUME tail', () => {
+    // WGSL requires declaration before use; SAMPLE_VOLUME is the helper
+    // immediately before MAP_BODY, and the private vars ride its tail
+    // because a var-declaration source would break three's ^-anchored
+    // "fn" parse contract as its own HELPERS entry.
+    expect(HELPERS.indexOf(SAMPLE_VOLUME)).toBeLessThan(HELPERS.indexOf(MAP_BODY));
+    expect(SAMPLE_VOLUME).toContain('var<private> gDebugMode: f32 = 0.0;');
+    expect(SAMPLE_VOLUME).toContain('var<private> gDebugPrims: f32 = 0.0;');
+    expect(SAMPLE_VOLUME).toContain('var<private> gDebugSteps: f32 = 0.0;');
+  });
+
+  it('guards every counter write — debugCfg.x == 0 pays a branch only', () => {
+    // mapBody's fold: guarded on the private mode flag (mapBody takes no
+    // debugCfg parameter by design — threading one would fork the
+    // signature specialise.ts mirrors).
+    expect(MAP_BODY).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
+    // The march entry: init + per-step count guarded on the uniform itself.
+    expect(MARCH_BODY).toContain(
+      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; }');
+    expect(MARCH_BODY).toContain(
+      'if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }');
+    // No UNGUARDED write anywhere: strip the guarded forms, and no
+    // assignment to a counter may remain.
+    const guarded = /(if \(gDebugMode > 0\.5\)|if \(debugCfg\.x > 0\.5\)) \{[^}]*gDebug(Prims|Steps|Mode)[^}]*\}/g;
+    const stripped = MARCH_BODY.replace(guarded, '')
+      + MAP_BODY.replace(guarded, '');
+    expect(stripped).not.toMatch(/gDebug(Prims|Steps|Mode)\s*=/);
+  });
+
+  it('snapshots the counters before the post-hit probes fold more prims', () => {
+    // calcNormal adds four mapBody calls after the loop and the wound
+    // shadow up to fourteen more; the heatmap is about RAY cost, so the
+    // read must precede calcNormal.
+    const capture = MARCH_BODY.indexOf('let debugPrims = gDebugPrims;');
+    expect(capture).toBeGreaterThan(-1);
+    expect(capture).toBeGreaterThan(MARCH_BODY.indexOf('if (!hit) { discard; }'));
+    expect(capture).toBeLessThan(MARCH_BODY.indexOf('calcNormal('));
+  });
+
+  it('emits the ramp only inside the debug branch, after the gamma block', () => {
+    const branch = MARCH_BODY.indexOf('if (debugCfg.x > 0.5) {\n    let heatNorm');
+    expect(branch).toBeGreaterThan(-1);
+    expect(branch).toBeGreaterThan(MARCH_BODY.indexOf('lodCfg.y > 0.5'));
+    // steps ramp: 0..marchCfg.x. prims ramp: 0..2000.
+    expect(MARCH_BODY).toContain('select(debugSteps / max(marchCfg.x, 1.0), debugPrims / 2000.0, debugCfg.x > 1.5)');
+  });
+
+  it('counts prims in the specialised fold too (heatmap parity)', () => {
+    // A specialised crowd body must count the same work the generic fold
+    // counts, or a heatmap taken against a specialised crowd lies.
+    expect(specialiseMapBody(oneClusterBody())).toContain(
+      'if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
+  });
+});
+
+/** Minimal body for the specialise-parity pin: one limb, one prim. */
+function oneClusterBody(): import("../build-body").BuildResult {
+  const prim: Primitive = {
+    a: [0, 0, 0], b: [0, 1, 0], radius: 0.1,
+    scale: [1, 1, 1], blendK: 0.05, limb: 'torso', op: 'add',
+  } as unknown as Primitive;
+  return {
+    prims: [prim],
+    clusters: [{ limb: 'torso', start: 0, count: 1, center: [0, 0.5, 0], radius: 0.7, alive: true }] as never,
+    bones: [], root: 'torso', errors: [],
+  } as unknown as import("../build-body").BuildResult;
+}
