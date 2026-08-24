@@ -22,6 +22,17 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
+**Merged 2026-08-25:** perf task-1/2 (`8f4fdcd`) — `sdf-bench.html`, scenes A/B,
+scripted orbit, headless driver (`npm run bench:sdf`), WGSL steps/prims heatmaps
+(`debugCfg.x` 1/2), quiet-host baselines in
+`docs/dev-notes/2026-08-24-sdf-bench/baselines.json` (A 42.8/111.7, B 18.4/47.0).
+And the shell-march spike (`b1bd70d`) — standalone `/sdf-shell-spike.html`, 7
+added files, **zero modifications to any existing character or shader**; imports
+the field helpers from `march.wgsl.ts` so it cannot drift. Verdict: look survives
+at the geometry level, ~14x fewer `mapBody` evals, ~1.8x frame single-body;
+hands go mitten-y and the face dies at +3 cm hull inflation. Merged main:
+tsc clean, 78 files / 1517 tests green.
+
 **Next session — pick up (prioritized):**
 0. **`L1` — environment lighting: bounce-light spike (NEW, spec written
    2026-08-24, not yet planned).** Brainstormed with the owner; spec at
@@ -35,9 +46,24 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
    colours, `ambientAt(p, n)` as the seam, two new `LightPreset` knobs
    (`probeWeight`, `ambientGain`). **Hard constraint: zero extra `mapBody`
    evals** — analytic only, same precedent as the Selfie Girl `mapD` pattern.
-   Owner wants the spike BEFORE the rest of the perf plan; let perf task-1
-   (bench page, running) finish first so there is a before/after. Next step:
-   owner reviews the spec, then `superpowers:writing-plans`.
+   **PLANNED 2026-08-25 (`c127beb`)** — plan at
+   `docs/superpowers/plans/2026-08-25-environment-lighting-p1-bounce-spike.md`,
+   8 TDD tasks. Perf task-1 is merged so the before/after baseline now exists.
+   Design rests on one invariant: **at `probeWeight 0`, `ambientAt` returns
+   exactly `fillIntensity * keyColor`**, making the substitution algebraically
+   identical to the pre-bounce expression — every preset ships at 0, so nothing
+   moves until a slider does, and task 6 step 8 gates it as pixel-identical.
+   "Colour not brightness" = renormalise the bounce to unit luminance; hue
+   changes, level does not. `ambientGain > 1` breaks that rule on purpose and is
+   the control for "does this want real radiosity lift". Zero-`mapBody` enforced
+   by a source test on the `AMBIENT_AT` string, not by discipline. One deliberate
+   spec departure, stated in the plan: **six walls, one per box face**, not ~4
+   lights — same cost, no TSL uniform arrays (unused mechanism, bad risk inside a
+   spike), and it turns open question 2 (ceiling?) into a runtime toggle.
+   Dispatch queued at `~/.claude/dispatch/plans/2026-08-25-lighting-p1-bounce-spike.md`
+   on **dsh / deepseek-v4-flash-vision-exp** (owner pick), status `queued`
+   (INERT) — flip to `pending` to fire. Rebase note: perf task-2 rewrites the
+   same shading block; whichever lands second rebases, and this is the small one.
    Decomposition: P1 spike -> P2 room/map editor -> P3 baked volumes -> P4
    dynamic flash+injection; **P5 (translucent material) depends only on P1** and
    is the least-blocked follow-up since it needs no world.
