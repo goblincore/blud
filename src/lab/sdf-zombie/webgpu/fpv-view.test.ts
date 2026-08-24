@@ -116,7 +116,9 @@ describe('HandsGpuView field switching (X1.26 task B4)', () => {
     expect(view.volumeTexture).not.toBe(vol.texture); // fallback re-bound
     expect(view.uniforms.marchCfg.value.x).toBe(96);
     expect(view.uniforms.marchCfg.value.y).toBeCloseTo(0.6, 6);
-    expect(view.uniforms.woundCfg2.value.y).toBeCloseTo(1.4, 6);
+    // relax defaults 1.0 since 2026-08-24 (the omega>1 paths lensed near
+    // wounds — see zombie-gpu.ts woundCfg2); prims restore mirrors it.
+    expect(view.uniforms.woundCfg2.value.y).toBeCloseTo(1.0, 6);
     expect(view.uniforms.woundCfg2.value.w).toBe(0);
     // And the fold comes back.
     view.update(PRIMS, []);
