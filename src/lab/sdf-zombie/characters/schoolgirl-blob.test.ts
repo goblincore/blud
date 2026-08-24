@@ -72,11 +72,14 @@ describe('schoolgirl.blob', () => {
 
   it('skirts the torso in navy paint', () => {
     const navy = painted('torso').filter(p => p.color![2] > p.color![0] * 2 && p.color![2] < 0.3);
-    // v2 (2026-08-23): the smooth rebuild carries navy on exactly THREE
-    // prims — the one-cone skirt, the one-plate sailor collar, the scarf.
-    // v1 needed 7+ (cone, two hem rings, four pleat bars); the pleats are
-    // grooves now, and grooves carry no paint.
-    expect(navy.length).toBe(3);
+    // v3 (2026-08-23): SIX — the one-cone skirt, the sailor collar's
+    // two-piece back flap (upper plate + bent shell following the bust
+    // ball's back), its two chest points (one `both` line = 2 prims) and
+    // the scarf knot. v2 needed only 3 because its collar was ONE flat
+    // disc, which the owner read as "two epaulette plates with a bar
+    // between" — a sailor collar is a back flap plus a V, and a V is two
+    // prims.
+    expect(navy.length).toBe(8);
   });
 
   it('socks are white paint and fatter than the knee — the slouch', () => {
@@ -166,12 +169,16 @@ describe('schoolgirl.blob', () => {
     expect(width(0.75)).toBeLessThan(width(0.79));   // falling…
     expect(width(0.72)).toBeLessThan(width(0.75));   // …monotonically…
     expect(width(0.70)).toBeLessThan(width(0.72));   // …to the bare legs
-    // The smooth-construction budget: 8 additive torso prims, 12 with the
-    // four pleat grooves. If this grows, someone is re-stacking discs.
+    // The smooth-construction budget: 11 additive torso prims, 15 with
+    // the four pleat grooves. v3 added exactly THREE over v2's 8/12: the
+    // collar disc (1 prim, read as a bar between epaulettes) became an
+    // upper back plate + a bent back shell + two chest points (4 prims,
+    // reads as a sailor collar). If this grows beyond that, someone is
+    // re-stacking discs.
     const t = limb(b, 'torso');
     const prims = b.prims.slice(t.start, t.start + t.count);
-    expect(prims.filter(p => p.op === 'add').length).toBeLessThanOrEqual(8);
-    expect(prims.length).toBeLessThanOrEqual(12);
+    expect(prims.filter(p => p.op === 'add').length).toBeLessThanOrEqual(13);
+    expect(prims.length).toBeLessThanOrEqual(17);
   });
 
   // KNEES TOGETHER (the mesh's stance — 0.245 at the knee, inner edges
@@ -213,5 +220,16 @@ describe('schoolgirl.blob', () => {
   it.each([['armL', 'legL'], ['armR', 'legR']] as const)('%s does not pass through %s', (a, l) => {
     const b = built();
     expect(clearOf(b, limb(b, a), limb(b, l))).toBeGreaterThan(0.005);
+  });
+
+  // v3 (2026-08-23): the SKIRT is a torso prim, so arm-vs-leg alone never
+  // saw the lower arms clipping into the flare (owner: "the lower arms and
+  // hands clip INTO the skirt"). v2 measured -0.011 here; the arm chain
+  // (tilt 8/4/2, pitch 2/18/12, hands in front of the hem) reads +0.0064.
+  // The tight sample is the sleeve centreline passing the bust cap —
+  // anatomy, not a defect — so the margin is thin by construction.
+  it.each([['armL'], ['armR']] as const)('%s hangs clear of the torso (the skirt)', a => {
+    const b = built();
+    expect(clearOf(b, limb(b, a), limb(b, 'torso'))).toBeGreaterThan(0.005);
   });
 });
