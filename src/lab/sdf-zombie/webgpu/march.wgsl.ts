@@ -534,61 +534,37 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
 //             MARCH_BODY, not here; see the woundCfg2 note at the entry point.
 // Returns (field, nearWound). nearWound is 1 within twice a wound's radius —
 // crater, lip and a margin — where the field is NOT a distance bound (the
-// smax fillet overstates distance, the smin saddle and the lip understate
-// it), so the relaxed march must step plain there or its overshoot test
-// misfires and the crater floor comes out in depth bands (the dark streaks
-// across the cyclops's craters, 2026-08-23: gone at relax 1.0, back at 1.4).
+// smax fillet overstates distance, the lip understates it), so the relaxed
+// march must step plain there or its overshoot test misfires and the crater
+// floor comes out in depth bands (the dark streaks across the cyclops's
+// craters, 2026-08-23: gone at relax 1.0, back at 1.4).
+//
+// SEQUENTIAL per-wound smax + bump, the 2026-08-22 form — deliberately
+// (owner bisect parity, 2026-08-24). The 2026-08-23 smin-union-then-one-smax
+// rework smoothed overlapping craters into one cavity, but the owner-judged
+// reference build carves sequentially, and after every other 2026-08-23
+// change was walked back this was the last geometric delta standing. If the
+// overlap ridge returns as a complaint, re-derive the union against THIS
+// baseline with the owner judging, one change at a time.
 export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec2<f32> {
-  let n = i32(woundCfg.x);
+  var d = dIn;
   var near = 0.0;
-  // ONE cavity, not n cuts (overlapping craters, cyclops 2026-08-23). Each
-  // wound used to be subtracted in turn — smax(d, -(r - depth)) per wound —
-  // which fillets every crater against the FLESH but never against the
-  // other craters, so where two blasts overlap their spheres meet in a sharp
-  // ridge that draws as a dark streak across the floor. The carves are now
-  // unioned with a smooth min first (a saddle between neighbours) and taken
-  // out of the flesh once. The lips stay per wound and are summed.
-  var carve = 1e9;
-  var bump = 0.0;
+  let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     let isBurn = wMeta.x > 1.5;
-    // A burn only opens up as it cooks; a pellet/blast subtracts immediately.
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
     let r = length(p - w.xyz);
-    // Saddle width between neighbouring craters: a quarter of this wound's
-    // radius, so two blasts blend over ~3 cm and a pellet pair over ~1.5 cm.
-    carve = smin(carve, r - depth, depth * 0.25);
+    d = smax(d, -(r - depth), woundCfg.y);
     if (r < depth * 2.0) { near = 1.0; }
-
-    // Everted rim. A plain smooth subtraction leaves a clean dish; real flesh
-    // (and the T-1000 taking a shotgun round) PEELS — the displaced material
-    // splays outward into a raised lip around the mouth.
-    //
-    // Modelled as a Gaussian ring just outside the crater. Subtracting from d
-    // means "more material here", so this adds a bulge rather than a dent.
-    // Burns evert far less: they char and contract instead of tearing open.
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
-    // Surface locality: a bulge of amplitude amp can only displace flesh that
-    // was already within ~amp of the pre-wound surface. Ungated, the shell
-    // adds material in EMPTY space and welds separate limbs together.
-    // OUTER REACH 0.35*amp, NOT 0.7 (floating rims, cyclops 2026-08-23). The
-    // lip may only exist within 0.35*amp of the ORIGINAL skin: at 0.7 a blast
-    // on the cyclops's hand put 36% of its rim material in empty space
-    // (shells bridging the gaps between claws), drawn as a glossy ball from
-    // one angle and a ring from another as the marcher caught or missed the
-    // shell; at 0.35 it is 12%, at 0.2 4%. 0.35 keeps a visible lip. The
-    // ramp spans a full amp (-0.65..0.35): a 0.35..0.7 ramp had ~4x a distance
-    // field's gradient and drew as hard bands around the lip (rim banding,
-    // 2026-08-22).
     let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
-    bump = bump + exp(-x * x) * amp * rimLocal;
+    d = d - exp(-x * x) * amp * rimLocal;
   }
-  if (n <= 0) { return vec2<f32>(dIn, 0.0); }
-  return vec2<f32>(smax(dIn, -carve, woundCfg.y) - bump, near);
+  return vec2<f32>(d, near);
 }`
 
 // 0 at the surface far from wounds, 1 deep inside one. ONE mask, shared by
@@ -1450,14 +1426,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // whatever the flesh preset says: a lens on a matte clay character still
   // has to glint.
   let wet = mix(surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm), 1.0, gloss);
-  // Gated by light facing: a Blinn-Phong H highlight fires even where the
-  // surface faces AWAY from the key (dot(n,L) < 0, dot(n,H) still positive at
-  // grazing). On matte skin it was too dim to see; the 1.6x wound wet boost
-  // lifted it into saturated white blobs ringing a crater seen from the dark
-  // side (owner, 2026-08-23). Soft ramp, not a step, so the terminator keeps
-  // its sheen.
-  let specGate = smoothstep(-0.08, 0.12, dot(n, L));
-  let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss)) * specGate;
+  let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound
   // itself. At full strength it maxes out on the grazing-heavy rim geometry,

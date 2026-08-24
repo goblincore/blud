@@ -103,7 +103,7 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundCarveWorldPos, worldHitToWound, WOUND_PROFILES,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
@@ -1012,7 +1012,7 @@ async function main() {
       // The CARVE centres, not the surface anchors: the shader subtracts its
       // spheres from these, and the centres are thickness-capped at stamp
       // time (damage.ts) so a blast on a thin torso never opens the far side.
-      wounds.map(w => woundCarveWorldPos(prims, w, yaw)),
+      wounds.map(w => woundWorldPos(prims, w, yaw)),
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
@@ -1034,7 +1034,7 @@ async function main() {
   function woundSpheres(prims: BuildResult['prims']) {
     // Same carve centres the shader subtracts — the exclusion zone must
     // cover exactly what is removed, or hull spheres reappear in craters.
-    return wounds.map(w => ({ centre: woundCarveWorldPos(prims, w, lastBodyYaw), radius: w.radius }));
+    return wounds.map(w => ({ centre: woundWorldPos(prims, w, lastBodyYaw), radius: w.radius }));
   }
 
   // -------------------------------------------------------------------------
