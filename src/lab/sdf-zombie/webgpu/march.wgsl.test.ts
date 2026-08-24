@@ -870,7 +870,22 @@ describe('wound halo — fresnel fade is membership, not a radial sphere', () =>
     // the shading transition coincides with the crater mouth crease and
     // healthy skin keeps rim light right up to it.
     expect(WOUND_MASK).toContain('carve = smin(carve, r - depth, depth * 0.25);');
-    expect(WOUND_MASK).toContain('m.y = max(smoothstep(0.012, -0.012, carve), smoothstep(0.15, 0.6, lip));');
+    // The fade also covers the smax fillet collar around the mouth, sized by
+    // the live blendK — unfaded fillet surfaces clipped to white sheets.
+    expect(WOUND_MASK).toContain('let collar = woundCfg.y * 2.5 + 0.01;');
+    expect(WOUND_MASK).toContain("m.y = max(smoothstep(collar, -0.012, carve), smoothstep(0.15, 0.6, lip));");
     expect(WOUND_MASK).not.toContain('w.w * 1.3');
+  });
+
+  it('gates the key light and occludes spec inside the wound zone', () => {
+    // With every view-dependent term off the halo STILL showed: cavity walls
+    // on the shadow side lit by full key diffuse (nothing shadows this
+    // renderer), and broad Blinn sheets on the lit side (spec never saw ao).
+    // keyGate = the smooth body's own light-facing at the hit, from the
+    // owning primitive's axis; spec additionally attenuated by the cavity ao.
+    // Both scoped to the wound zone; a real shadow ray supersedes both.
+    expect(MARCH_BODY).toContain('keyGate = mix(1.0, smoothstep(-0.05, 0.35, facing), wmRim);');
+    expect(MARCH_BODY).toContain('let shineOcc = shine * keyGate * mix(1.0, ao, clamp(wm + wmRim, 0.0, 1.0));');
+    expect(MARCH_BODY).toContain('diff * keyGate * lightCfg.x');
   });
 });
