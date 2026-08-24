@@ -189,7 +189,19 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // an 11 cm wide, 3 cm tall torus — painted wet-red and glossed, it read as
     // a red BALL from the side (owner screenshots; with splay 0 the same wound
     // was a clean dish). 0.25 is a lip, not a donut.
-    woundCfg2: uniform(new THREE.Vector4(0.42, 1.4, 0, 0)),
+    // y (relax) = 1.0, NOT the swept 1.4 optimum (owner isolation,
+    // 2026-08-24 night): with wounds carved, the omega>1 paths — the
+    // overshoot retraction and especially the deep-crossing retract guard —
+    // fire at grazing wound angles, step rays BACKWARD, and do not reliably
+    // reconverge: rays terminate at offset depths and whole screen-space
+    // circles render the body from a displaced view (the 'distorted lens'
+    // halo/clipping chased all day; killing relax live fixed it instantly,
+    // occluder/adaptive/shading all exonerated by direct A/B). The ~1.6x
+    // crowd speedup of 1.4 comes back when the retract guard learns to
+    // reconverge (bound the back-step, then finish conservative) — do NOT
+    // raise this default before that rework; the X1.10 sweep predates wounds
+    // in the scene.
+    woundCfg2: uniform(new THREE.Vector4(0.42, 1.0, 0, 0)),
     baseColor: uniform(new THREE.Color(0xc46a72)),
     deepColor: uniform(new THREE.Color(0x8c1420)),
     charColor: uniform(new THREE.Color(0x1a1214)),
