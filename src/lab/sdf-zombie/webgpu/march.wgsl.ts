@@ -591,69 +591,32 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   return vec2<f32>(smax(dIn, -carve, woundCfg.y) - bump, near);
 }`
 
-// 0 at the surface far from wounds, 1 deep inside one. Drives the wet interior.
-// Two radii, because two things key on it. x (1.25x the radius) is the
-// COLOURING mask — wet red, the deep-colour mix, the wet boost, the cavity
-// shading — and stops at the lip's inner edge so the everted lip stays skin
-// (a red glossed lip read as a ball from the side, cyclops 2026-08-23).
-// y (1.6x) is the FRESNEL fade: rim light must stay off across the whole
-// lip, or its grazing-heavy crest clips to a flat white band (X1.17 again —
-// it came straight back the day the single mask was pulled in to 1.25x).
+// 0 at the surface far from wounds, 1 deep inside one. ONE mask, shared by
+// every wound shading term — the owner-decided shape of this function
+// (bisect A/B, 2026-08-24). The 2026-08-23 crater pass split it three ways
+// (colouring pulled in to 1.25x + a facing gate, the fresnel fade widened to
+// its own 1.3x/2x mask, an AO darkening at a third radius) and THAT was the
+// halo the owner chased for two days: each split mask has an edge somewhere
+// on healthy skin, and wherever two edges disagree there is an annulus that
+// is faded-but-not-coloured (grey ring) or coloured-but-not-faded (white
+// crescent), sweeping with the camera because fresnel is view-dependent.
+// The unified 1.6x mask has a footprint too — but its fade edge coincides
+// with its colour gradient, so it reads as "flesh going wounded", a material
+// change, not a ring. A membership-based fade (carve-field derived) was
+// built and looked clean in stills, but the owner judged the restored
+// unified mask decisively better in motion against every variant.
+// The far-side white sheets the 2026-08-23 gates were chasing turned out to
+// be the tracer overshoot bug (fixed at the retract guard above): with rays
+// no longer landing inside the body, the ungated mask is safe again.
 export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec2<f32> {
-  var m = vec2<f32>(0.0, 0.0);
-  var carve = 1e9;
-  var lip = 0.0;
+  var m = 0.0;
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
-    let toC = w.xyz - p;
-    let r = length(toC);
-    // FACING gate. The mask is a sphere around the wound centre, and a blast
-    // (r 0.13) stamped on the front of a ~0.2 m torso pokes its sphere out
-    // through the BACK: the intact far-side skin fell inside it and drew as
-    // wet white sheets when the camera came round (owner, 2026-08-23). What
-    // separates cavity from far side is the NORMAL: a cavity wall faces the
-    // wound centre (dot ~ +1), the far-side skin faces dead away (~ -1), and
-    // the everted lip's crest is only mildly averted (~ -0.2). Colouring
-    // gates on near zero. The FRESNEL fade is deliberately NOT gated: a
-    // first cut gated it off for strongly-averted surfaces to give far-side
-    // skin its rim light back, and the cavity rim seen from BEHIND (averted
-    // too) lit up as a white fresnel crescent — the fade must hold at every
-    // facing, and skin near a through-wound just goes without rim light.
-    let face = dot(nrm, toC / max(r, 1e-5));
-    let gCol = smoothstep(-0.25, 0.15, face);
-    m.x = max(m.x, (1.0 - smoothstep(0.0, w.w * 1.25, r)) * gCol);
-    // FRESNEL FADE IS MEMBERSHIP, NOT RADIUS (wound-halo, 2026-08-24). Every
-    // radial fade — 1.3x/2x, 1.6x before it — paints a SPHERE footprint on
-    // healthy skin (a 0.13 blast fades a 0.4 m ball), and the footprint's
-    // ramp annulus is exactly where grazing fresnel half-returns: a crescent
-    // that sweeps with the camera. The mask edge itself was the halo. So the
-    // fade is now derived from the SAME fields applyWounds carves with:
-    // inside-the-cavity (the smin-unioned carve going negative) and
-    // on-the-lip (the Gaussian ring, scaled by the wound's live splay), and
-    // the shading transition lands exactly on the crater mouth crease where
-    // a material change is geometrically natural. Healthy skin keeps full
-    // rim light right up to the mouth — no ring, nothing to sweep.
-    let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
-    let isBurn = wMeta.x > 1.5;
-    let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
-    carve = smin(carve, r - depth, depth * 0.25);
-    let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
-    lip = max(lip, exp(-x * x) * select(1.0, 0.25, isBurn) * min(wMeta.z * 4.0, 1.0));
+    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
   }
-  if (n > 0) {
-    // The fade covers the cavity PLUS the smax fillet collar around its
-    // mouth: smax(d, -carve, k)'s blend engages while |carve| < ~2k, and
-    // those concave fillet surfaces are exactly as grazing-prone as the
-    // cavity wall — left unfaded they clip to white sheets hugging the
-    // mouth (owner, 2026-08-24, spec-off/fresnel-on isolation). Keying the
-    // collar to the live blendK keeps it a tight offset surface of the
-    // cavity, not a sphere: blend at minimum means collar at minimum.
-    let collar = woundCfg.y * 2.5 + 0.01;
-    m.y = max(smoothstep(collar, -0.012, carve), smoothstep(0.15, 0.6, lip));
-  }
-  return m;
+  return vec2<f32>(m, m);
 }`
 
 // 0 unburned, 1 fully charred.
@@ -1510,51 +1473,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   if (lodCfg.x > 0.5) {
     ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x / 0.06, 0.35, 1.0);
   }
-  // CAVITY OCCLUSION (the dome craters, cyclops 2026-08-23). The 6 cm probe
-  // above cannot see a 13 cm crater: from its wall, 6 cm along the normal is
-  // still air, so ao reads 1 and the whole dish is lit like open skin. With
-  // no occlusion cue a glossy concave dish flips to a convex ball the moment
-  // the far wall catches the key — the owner saw a crater from the front and
-  // a red sphere from the side, same wound, and a CPU height map proved the
-  // geometry was sunk 170 mm the whole time. wm is 0 at the rim and 1 at the
-  // floor, so it is the cavity depth for free: darken the floor, keep the lip.
-  ao = ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm));
-
-  // BODY-SHADOW GATE for wound interiors (owner isolation, 2026-08-24): with
-  // spec, fresnel, blend and rim all at zero the halo REMAINED — a matte
-  // render of the cavity walls, lit by full key diffuse on the body's dark
-  // side, because nothing shadows this renderer. A crater's wall bends its
-  // normal back toward the key, so a hole punched into the shadow side glows
-  // brighter than the skin around it and sweeps as the camera reveals the
-  // interior. The smooth body's own facing at this spot — outward from the
-  // owning primitive's axis — says whether the LOCATION sits on the lit or
-  // the shadow side regardless of the wound's distorted normals, so the key
-  // (diffuse and highlight) is gated by it inside the wound zone only:
-  // lit-side craters keep their light, shadow-side interiors go as dark as
-  // the skin they puncture. A shadow ray would subsume this; this is the
-  // free analytic core of it.
-  var keyGate = 1.0;
-  if (wmRim > 0.001 && hitBest >= 0) {
-    let pa = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_A}), 0).xyz;
-    let pb = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_B}), 0).xyz;
-    let ab = pb - pa;
-    let tt = clamp(dot(p - pa, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
-    let outw = p - (pa + ab * tt);
-    let facing = dot(outw / max(length(outw), 1e-5), L);
-    keyGate = mix(1.0, smoothstep(-0.05, 0.35, facing), wmRim);
-  }
-
-  // Specular is occluded like diffuse inside a cavity (component isolation,
-  // 2026-08-24): with fresnel faded and the key gated, the remaining white
-  // sheets across wound bands were the Blinn highlight — broad aligned
-  // patches on the spherical carve walls, wet-boosted 1.6x, never occluded
-  // because spec skipped ao. Attenuating by the cavity ao inside the wound
-  // zone keeps the tight wet glint near the mouth and kills the sheet; the
-  // shadow ray, when it lands, supersedes this the same way it supersedes
-  // keyGate.
-  let shineOcc = shine * keyGate * mix(1.0, ao, clamp(wm + wmRim, 0.0, 1.0));
-  var fleshLit = albedo * (lightCfg.y + diff * keyGate * lightCfg.x) * keyColor * ao
-               + keyColor * (shineOcc * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
+  // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
+  // attempts to mask wound-adjacent brightness, and each carried its own
+  // radial or gated edge onto the skin around the crater; the owner judged
+  // the plain 2026-08-22 lighting decisively better in motion. The real
+  // fixes for what they chased are structural and stay: the tracer retract
+  // (rays no longer land inside the body and shade garbage) and the wound
+  // soft-shadow ray (physical occlusion for cavity interiors and the
+  // concavity cue, X1.28).
+  var fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
+               + keyColor * (shine * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its

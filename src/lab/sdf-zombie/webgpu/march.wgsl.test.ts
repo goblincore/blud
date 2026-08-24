@@ -859,33 +859,27 @@ describe('coneBend and the untapered sentinel', () => {
   });
 });
 
-describe('wound halo — fresnel fade is membership, not a radial sphere', () => {
-  it('derives the fade from the carve field and the lip ring', () => {
-    // Every radial fade (1.6x, then 1.3x/2x) painted a SPHERE footprint on
-    // healthy skin whose ramp annulus half-restored grazing fresnel — the
-    // white crescent that swept around craters as the camera moved (owner,
-    // 2026-08-24; kill-test isolated: crescents vanish with fresnelBoost 0,
-    // survive spec 0). The fade now keys on being INSIDE the cavity (the
-    // same smin-unioned carve applyWounds subtracts) or ON the lip ring, so
-    // the shading transition coincides with the crater mouth crease and
-    // healthy skin keeps rim light right up to it.
-    expect(WOUND_MASK).toContain('carve = smin(carve, r - depth, depth * 0.25);');
-    // The fade also covers the smax fillet collar around the mouth, sized by
-    // the live blendK — unfaded fillet surfaces clipped to white sheets.
-    expect(WOUND_MASK).toContain('let collar = woundCfg.y * 2.5 + 0.01;');
-    expect(WOUND_MASK).toContain("m.y = max(smoothstep(collar, -0.012, carve), smoothstep(0.15, 0.6, lip));");
-    expect(WOUND_MASK).not.toContain('w.w * 1.3');
+describe('wound halo — ONE unified wound mask, no split shading overlays', () => {
+  it('keeps the single 1.6x mask both channels agree on', () => {
+    // Owner bisect verdict (2026-08-24): the halo was never the radial mask
+    // itself — it was the MISMATCH between split mask edges. The 2026-08-23
+    // crater pass split colouring (1.25x + facing gate), fresnel fade
+    // (1.3x/2x, later carve-membership) and an AO darkening onto different
+    // footprints, and every disagreement annulus drew as a grey ring or a
+    // white crescent sweeping with the camera. The unified 1.6x mask's fade
+    // edge coincides with its colour gradient, so it reads as wounded flesh,
+    // not a ring. The far-side sheets those gates chased were the tracer
+    // overshoot bug, fixed for real at the retract guard.
+    expect(WOUND_MASK).toContain('m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));');
+    expect(WOUND_MASK).toContain('return vec2<f32>(m, m);');
+    expect(WOUND_MASK).not.toContain('smoothstep(-0.25, 0.15, face)');
+    expect(WOUND_MASK).not.toContain('collar');
   });
 
-  it('gates the key light and occludes spec inside the wound zone', () => {
-    // With every view-dependent term off the halo STILL showed: cavity walls
-    // on the shadow side lit by full key diffuse (nothing shadows this
-    // renderer), and broad Blinn sheets on the lit side (spec never saw ao).
-    // keyGate = the smooth body's own light-facing at the hit, from the
-    // owning primitive's axis; spec additionally attenuated by the cavity ao.
-    // Both scoped to the wound zone; a real shadow ray supersedes both.
-    expect(MARCH_BODY).toContain('keyGate = mix(1.0, smoothstep(-0.05, 0.35, facing), wmRim);');
-    expect(MARCH_BODY).toContain('let shineOcc = shine * keyGate * mix(1.0, ao, clamp(wm + wmRim, 0.0, 1.0));');
-    expect(MARCH_BODY).toContain('diff * keyGate * lightCfg.x');
+  it('keeps the lighting free of wound-keyed gates and darkenings', () => {
+    expect(MARCH_BODY).not.toContain('keyGate');
+    expect(MARCH_BODY).not.toContain('shineOcc');
+    expect(MARCH_BODY).not.toContain('ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm))');
+    expect(MARCH_BODY).toContain('albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao');
   });
 });
