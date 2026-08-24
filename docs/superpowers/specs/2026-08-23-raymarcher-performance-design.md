@@ -88,7 +88,7 @@ owner judges "way too low resolution".
   running dispatch agents both moved medians by 2×. Protocol: stash-A/B in
   one session, 5× `benchGpu` per side, take the min, same page load.
 
-## The seven levers (stages below choose among these)
+## The nine levers (stages below choose among these)
 
 0. **Retract-guard reconvergence — recover relax 1.4 (added 2026-08-24
    night; the largest measured item here, 1.60× on crowds).** Relax is pinned
@@ -131,6 +131,23 @@ owner judges "way too low resolution".
 6. **Headroom signal for the controller**: once 1 gives real numbers, either
    fixed GPU timestamps or a coverage predictor (projected cluster-sphere area
    × scale²) so the controller probes only when the prediction has room.
+7. **Temporal depth reprojection** (added 2026-08-24 night, owner-approved).
+   Keep last frame's per-pixel hit depth; reproject it through the frame's
+   camera delta and start this frame's ray at `t_prev − margin` instead of at
+   the proxy near plane. Most frames the camera barely moves, so rays begin
+   centimetres from the surface — this attacks the *step count* factor
+   directly and helps worst exactly where distortion forces tiny steps (the
+   schoolgirl sole plate). Needs a miss/disocclusion fallback (full march when
+   the reprojected depth is invalid or the margin test fails) and must stay
+   conservative: a reprojected start may only ever be *nearer* than the true
+   surface, never past it. Queued as dispatch task-5 after stage 4.
+8. **Low-res conservative prepass** (added 2026-08-24 night, owner-approved).
+   March at ¼ resolution first, recording per-tile a *conservative* (min over
+   the tile, minus one step) entry depth; full-res rays start from their
+   tile's depth. Same step-count attack as 7 but with no temporal state and
+   no disocclusion edge cases — the two compose (prepass seeds the pixels
+   reprojection can't). Classic 2–4× on step-bound scenes. Also queued in
+   task-5; whichever of 7/8 wins the bench can ship alone.
 
 ## Approach: "Approach 1 extended" (LOCKED)
 
@@ -164,6 +181,18 @@ merged march — per-body draws cannot reach it.
 4. **Smooth LOD ramps + headroom signal.** Distance-faded quality levers
    (decision 3: no pops) and a coverage predictor (projected cluster-sphere
    area × scale²) so `adaptive-scale.ts` probes only with predicted room.
+5. **Ray-start seeding: low-res conservative prepass + temporal depth
+   reprojection** (levers 8 and 7; appended 2026-08-24 night as dispatch
+   task-5, depends on task-4). Prepass first (stateless, no disocclusion
+   cases), reprojection second, each gated by its own bench delta on the
+   step-count heatmap; ship whichever wins, or both if they compose.
+
+A separate exploration outside this chain: a **hybrid shell-marching spike**
+(rasterize an inflated hull mesh of the character, march only a thin shell
+from the rasterized entry depth — 4–8 steps instead of 60–100). Prototype on
+the zombie, standalone page, own branch; if the look survives, it obsoletes
+much of the step-count work above for hero bodies. Dispatched 2026-08-24 as
+a harness test (`dsh` + deepseek-v4-flash-vision-exp).
 
 ## Success criteria
 
