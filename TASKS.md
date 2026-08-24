@@ -23,6 +23,24 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
 **Next session — pick up (prioritized):**
+0. **`L1` — environment lighting: bounce-light spike (NEW, spec written
+   2026-08-24, not yet planned).** Brainstormed with the owner; spec at
+   `docs/superpowers/specs/2026-08-24-environment-lighting-design.md`.
+   Direction: 1995-radiosity world with ReBoot specular, characters unchanged
+   (they are latex, not clay), translucent character as a later one-off.
+   Bounce **carries colour, not brightness** — the shadow side stays as dark as
+   `practical-hard-key` makes it but takes nearby surface colour, so the tuned
+   hard-key blowout survives. P1 is a LAB feature, not a level feature: a
+   toggleable Cornell-box enclosure, ~4 analytic bounce lights derived from wall
+   colours, `ambientAt(p, n)` as the seam, two new `LightPreset` knobs
+   (`probeWeight`, `ambientGain`). **Hard constraint: zero extra `mapBody`
+   evals** — analytic only, same precedent as the Selfie Girl `mapD` pattern.
+   Owner wants the spike BEFORE the rest of the perf plan; let perf task-1
+   (bench page, running) finish first so there is a before/after. Next step:
+   owner reviews the spec, then `superpowers:writing-plans`.
+   Decomposition: P1 spike -> P2 room/map editor -> P3 baked volumes -> P4
+   dynamic flash+injection; **P5 (translucent material) depends only on P1** and
+   is the least-blocked follow-up since it needs no world.
 0. **`X1.hand-followups` — FPV full distal-arm rerun. PAUSED mid-chain on a
    rate limit (2026-08-20).** Tasks 0-4 were dispatched as
    `2026-08-20-fpv-distal-arm-task-{0..4}`; **tasks 0 and 1 are real and
