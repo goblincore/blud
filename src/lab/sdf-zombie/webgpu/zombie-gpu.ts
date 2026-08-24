@@ -270,6 +270,15 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      */
     // y = legacyGamma, default ON: presets read as tuned (see march.wgsl.ts).
     lodCfg: uniform(new THREE.Vector4(1, 1, 0, 0)),
+    /**
+     * Wound soft shadow (iq rsmshadows, gated on the wound zone — see
+     * WOUND_SHADOW in march.wgsl.ts). x strength 0..1 (0 = the shadow march
+     * never fires), y softness k (~8 hard edge, ~16 very soft). A NEW vec2
+     * rather than a packed spare: every channel of woundCfg/woundCfg2/
+     * surfCfg/lodCfg is already consumed (woundCfg2.w overrides hitEps in
+     * volume mode — NOT spare), so nothing here could be reused safely.
+     */
+    woundShadowCfg: uniform(new THREE.Vector2(1.0, 12.0)),
   };
 }
 
@@ -435,6 +444,7 @@ export function createMarchMaterial(
     headQuat: u.headQuat,
     faceGlowColor: u.faceGlowColor,
     lodCfg: u.lodCfg,
+    woundShadowCfg: u.woundShadowCfg,
     startT: cone
       ? coneFetch({
           coneTex: texture(cone.texture),
@@ -917,6 +927,7 @@ export function createChunkGpuView(
     u.marchCfg.value.copy(template.marchCfg.value);
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);
+    u.woundShadowCfg.value.copy(template.woundShadowCfg.value);
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
     u.faceCfg3.value.copy(template.faceCfg3.value);

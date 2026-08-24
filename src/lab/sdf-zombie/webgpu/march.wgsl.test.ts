@@ -21,7 +21,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, WOUND_MASK,
+  ROW_PRIM_BEND, WOUND_MASK, WOUND_SHADOW,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
@@ -346,6 +346,53 @@ describe('ported features reach the entry point', () => {
   });
 });
 
+describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
+  // A crater reads as a BALL from many angles because its concave dish casts
+  // no shadow — the missing cue is occlusion from the crater's own wall
+  // (owner decision "cast shadow vs darker floor", 2026-08-24). iq's
+  // sphere-traced soft shadow, fired ONLY near wounds.
+  it('declares WOUND_SHADOW after MAP_BODY, which it calls', () => {
+    expect(HELPERS.indexOf(WOUND_SHADOW)).toBeGreaterThan(HELPERS.indexOf(MAP_BODY));
+    expect(WOUND_SHADOW).toContain('fn woundShadow(');
+    expect(WOUND_SHADOW).toContain('mapBody(p + L * t');
+  });
+  it('fires only in the wound zone, and skips outright at strength 0', () => {
+    // The gate is mapBody's nearWound zone (z component), captured from the
+    // ACCEPTED hit sample in the march loop — NOT a radial distance-to-centre
+    // mask (that shape of fade was itself the sweeping halo; see the pin on
+    // woundMask m.y). Cost then scales with crater screen area, not screensize.
+    expect(MARCH_BODY).toContain('var hitNearWound = false;');
+    expect(MARCH_BODY).toContain('hitNearWound = nearWound;');
+    expect(MARCH_BODY).toContain(
+      'if (woundShadowCfg.x > 0.0 && hitNearWound) {');
+  });
+  it('keeps the secondary-ray budget: 14 steps, clamped steps, tMax 0.4', () => {
+    // Fill-bound renderer: 12-16 steps max, start t=0.02 (the field right at
+    // the everted lip is not a clean distance bound), cap tMax ~0.4 m — this
+    // is LOCAL crater self-shadowing, not global occlusion. Early-out once
+    // fully shadowed.
+    expect(WOUND_SHADOW).toContain('var t = 0.02;');
+    expect(WOUND_SHADOW).toContain('for (var i = 0; i < 14; i = i + 1) {');
+    expect(WOUND_SHADOW).toContain('res = min(res, k * h / t);');
+    expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
+    expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
+    // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).
+    expect(WOUND_SHADOW).toContain('counts, 0.0, woundCfg, woundCfg2');
+  });
+  it('darkens ONLY the key diffuse + specular; fill/ambient/scatter stay lit', () => {
+    // Multiply the whole lit sum and craters go pitch black — the fill and
+    // the fake scatter are what keep the cavity readable from the dark side.
+    expect(MARCH_BODY).toContain(
+      'albedo * (lightCfg.y + diff * wShadow * lightCfg.x) * keyColor * ao');
+    expect(MARCH_BODY).toContain('shine * wShadow * mix(surfCfg.x, 1.5, gloss)');
+    // The fill term must NOT carry the shadow...
+    expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
+    // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
+    expect(MARCH_BODY).toContain(
+      'woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x');
+  });
+});
+
 describe('baked hand volume branch (X1.26 task B2)', () => {
   it('exports SAMPLE_VOLUME starting with fn, per the wgslFn parse contract', () => {
     // X1.27: the template now declares TWO helpers — the slab-local frame
@@ -501,7 +548,12 @@ describe('data texture layout', () => {
     // The loop bound is a WGSL literal — a uniform cannot size a loop — so it
     // is the one constant that can drift from damage.ts silently.
     for (const src of HELPERS) {
-      if (!/wound/i.test(declaredName(src) ?? '')) continue;
+      const name = declaredName(src);
+      if (!name || !/wound/i.test(name)) continue;
+      // Only helpers that ITERATE the wound grid carry the bound. Others
+      // with "wound" in the name but no wound-count loop (woundShadow's
+      // 14-step penumbra march) are pinned by their own tests instead.
+      if (!src.includes('i32(woundCfg.x)')) continue;
       expect(src).toContain(`i < ${MAX_WOUNDS}`);
     }
   });

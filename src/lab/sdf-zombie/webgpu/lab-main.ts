@@ -2670,6 +2670,35 @@ async function main() {
     shellBtn.textContent = `shell silhouette: ${on ? 'on' : 'off'}`;
   }
 
+  // WOUND SOFT SHADOW (march.wgsl.ts WOUND_SHADOW): iq-style sphere-traced
+  // soft shadow fired only inside the wound zones — the cast shadow that
+  // makes a crater read concave instead of ball-ish (owner decision
+  // "cast shadow vs darker floor", 2026-08-24). Default ON at full strength.
+  // Same hero+crowd fan-out as setShellDisplace: crowd views own their
+  // uniform set, and chunk views copy woundShadowCfg from the hero template
+  // at spawn.
+  let woundShadowOn = true;
+  let woundShadowStrength = 1.0;
+  const wsBtn = addButton(dmgBox, 'wound shadow: on', () => {
+    woundShadowOn = !woundShadowOn;
+    applyWoundShadow();
+  });
+  addSlider(dmgBox, {
+    label: 'wound shadow strength', min: 0, max: 1, step: 0.05,
+    get: () => woundShadowStrength,
+    set: (v) => { woundShadowStrength = v; woundShadowOn = v > 0; applyWoundShadow(); },
+  });
+  function applyWoundShadow() {
+    for (const x of [view, ...crowd]) {
+      x.uniforms.woundShadowCfg.value.x = woundShadowOn ? woundShadowStrength : 0;
+    }
+    wsBtn.textContent = `wound shadow: ${woundShadowOn && woundShadowStrength > 0 ? 'on' : 'off'}`;
+  }
+  function setWoundShadow(on: boolean) {
+    woundShadowOn = on;
+    applyWoundShadow();
+  }
+
   // Metaball blood (gobs-and-goo task 5 + the X1.21.1 blur). The three
   // knobs that shape the surface: where the density field becomes goo, how
   // wide the soft band between bare and full-blood is (as a multiple of the
@@ -3303,6 +3332,9 @@ async function main() {
     },
     /** Shell-displacement silhouettes on every live body view. */
     setShellDisplace,
+    /** Wound-zone soft shadow A/B for automated visual checks. */
+    setWoundShadow,
+    setWoundShadowStrength: (v: number) => { woundShadowStrength = v; woundShadowOn = v > 0; applyWoundShadow(); },
     setLegacyGamma,
     get shellDisplace() { return shellSilhouette; },
     /** null = let LOD decide; true/false force the lever on every body. */

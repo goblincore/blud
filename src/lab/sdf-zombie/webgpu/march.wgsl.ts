@@ -1032,6 +1032,8 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //              rides the rotating skull. Identity (0,0,0,1) on statues/chunks.
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
 //   lodCfg     x aoEnabled, y legacyGamma, w goreStrength (0 body, 1 chunk views)
+//   woundShadowCfg  x strength (0 = off — the whole march is skipped),
+//                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
 //
 // LOD NOTE: most quality levers are guarded by their own amplitude reaching
 // zero (silhouette noise, surface noise, translucency, face, wounds), so the
@@ -1074,6 +1076,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   headQuat: vec4<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
+  woundShadowCfg: vec2<f32>,
   startT: f32,
   occT: f32
 ) -> vec4<f32> {
@@ -1156,6 +1159,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // Dominant prim at the last field sample (mapBody.y) — the hit pixel's
   // noise anchor reuses it instead of re-running the fold (task 6).
   var hitBest = -1;
+  // Whether the ACCEPTED hit sample sat in a wound's near zone (mapBody.z).
+  // Re-derived every iteration so it always describes the sample the loop
+  // actually lands on — retractions and shell steps included. This is the
+  // wound-shadow gate: firing iq's soft shadow march only for pixels inside
+  // twice a wound's radius keeps its cost proportional to crater screen
+  // area instead of screen size.
+  var hitNearWound = false;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     // 0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm
@@ -1185,6 +1195,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // still banded: the smax fillet overstates distance, so even an exact
     // sphere step lands past the crater wall.
     let nearWound = dres.z > 0.5;
+    hitNearWound = nearWound;
     let radius = abs(d);
     let overshot = !conservative && !nearWound && omega > 1.0 && (radius + prevRadius) < stepLen;
     if (overshot) {
@@ -1512,8 +1523,23 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // floor, so it is the cavity depth for free: darken the floor, keep the lip.
   ao = ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm));
 
-  var fleshLit = albedo * (lightCfg.y + diff * lightCfg.x) * keyColor * ao
-               + keyColor * (shine * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  // WOUND SOFT SHADOW — the cast shadow the crater was missing. The AO above
+  // darkens the floor UNIFORMLY; what makes the dish read concave from the
+  // lit side is the wall nearest the key shadowing the floor under it, with
+  // a soft edge that sweeps as the camera moves (owner A/B call,
+  // "cast shadow vs darker floor" — both, they answer different questions).
+  // Gated on hitNearWound: outside the wound zones shadow stays exactly 1.0
+  // and the whole thing costs nothing. Strength mixes toward 1 so the slider
+  // scales the effect, never inverts it. Applied to the KEY diffuse and key
+  // specular ONLY — fill, ambient and scatter stay untouched or craters go
+  // pitch black.
+  var wShadow = 1.0;
+  if (woundShadowCfg.x > 0.0 && hitNearWound) {
+    wShadow = mix(1.0, woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x);
+  }
+
+  var fleshLit = albedo * (lightCfg.y + diff * wShadow * lightCfg.x) * keyColor * ao
+               + keyColor * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
@@ -1563,6 +1589,58 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
  * because WGSL requires declaration before use and three emits includes in the
  * order given.
  */
+// WOUND SOFT SHADOW (iq's sphere-traced soft shadow,
+// <https://iquilezles.org/articles/rsmshadows/>). A crater viewed at many
+// angles still reads ambiguously as a BALL because its concave dish casts no
+// shadow — the missing cue is occlusion from the crater's own wall (owner
+// decision 2026-08-24: "cast shadow vs darker floor"; the shadow won).
+//
+//   res = min(res, k * h / t)   marched from the surface toward the light
+//
+// FIRED ONLY NEAR WOUNDS — the caller gates on mapBody's nearWound zone, so
+// the cost scales with crater screen area, not screen size. Everywhere else
+// the caller keeps shadow = 1 and pays nothing.
+//
+// Quality budget, chosen for a fill-bound renderer:
+//   - 14 steps max (12-16 band), marching mapBody at noiseAmp 0 — same field
+//     the tracer sees, no fbm cost.
+//   - t starts at 0.02: self-intersection clearance. Right at the everted lip
+//     the field is NOT a clean distance bound (see applyWounds' nearWound
+//     comment — the smax fillet overstates distance), and an h sampled at t=0
+//     would immediately clamp res to 0 everywhere.
+//   - tMax 0.4 m: this is LOCAL crater self-shadowing, not global occlusion.
+//   - Early-out once res < 0.02: fully shadowed, more samples cannot un-darken.
+//   - Step clamp(h, 0.01, 0.06): the floor keeps tiny-h walls from stalling;
+//     the ceiling keeps wall detail (which the softness k needs) from being
+//     stepped over.
+// Softness k ≈ 8-16 arrives as a parameter so the panel can tune it live.
+export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
+  p: vec3<f32>,
+  L: vec3<f32>,
+  k: f32,
+  data: texture_2d<f32>,
+  counts: vec4<f32>,
+  woundCfg: vec4<f32>,
+  woundCfg2: vec4<f32>,
+  volumeTex: texture_3d<f32>,
+  volumePose0: vec4<f32>,
+  volumePose1: vec4<f32>,
+  volumeMin: vec3<f32>,
+  volumeInvExtent: vec3<f32>,
+  volumeWarp: vec4<f32>,
+  volumeClip: vec4<f32>
+) -> f32 {
+  var res = 1.0;
+  var t = 0.02;
+  for (var i = 0; i < 14; i = i + 1) {
+    let h = mapBody(p + L * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x;
+    res = min(res, k * h / t);
+    if (res < 0.02 || t > 0.4) { break; }
+    t = t + clamp(h, 0.01, 0.06);
+  }
+  return clamp(res, 0.0, 1.0);
+}`;
+
 export const HELPERS = [
   // ORDER IS LOAD-BEARING: WGSL requires declaration before use, and wgslFn
   // concatenates this list as-is. CONE_CAP must precede both sdPrim and
@@ -1575,6 +1653,6 @@ export const HELPERS = [
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
-  MAP_BODY, CALC_NORMAL, TEXEL, FLICKER,
+  MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER,
 ];
 
