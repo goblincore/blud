@@ -1526,19 +1526,6 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let glow = faceGlowColor * faceGlow * faceCfg2.w
            * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
   var lit = fleshLit * (1.0 - faceGlow) + glow;
-  // DEBUG wound-halo-r2 (temporary): live-gated diagnostic views. mottleColor
-  // is inert while surfCfg2.z (mottleAmp) is 0 — the zombie preset — so pure
-  // blue = mask view (R=wm, G=wmRim, B=AO), pure green = geometry view
-  // (R=depth bands frac(t*20), G=frac(t*5), B=diffuse/2). Any other value:
-  // normal render.
-  if (mottleColor.b > 0.9 && mottleColor.r < 0.1) {
-    lit = vec3<f32>(wm, wmRim, ao);
-  } else if (mottleColor.g > 0.9 && mottleColor.r < 0.1) {
-    // hit-point z (body spans ~-0.28..+0.15 -> R 0.14..0.66) + normal yz
-    lit = vec3<f32>((p.z + 0.4) * 1.2, n.z * 0.5 + 0.5, n.y * 0.5 + 0.5);
-  } else if (mottleColor.r > 0.9 && mottleColor.g < 0.1 && mottleColor.b < 0.1) {
-    lit = vec3<f32>(n.x * 0.5 + 0.5, n.y * 0.5 + 0.5, n.z * 0.5 + 0.5);
-  }
 
   // Legacy display look (lodCfg.y). Every flesh preset was hand-tuned in the
   // WebGL lab, which displayed the lit LINEAR value raw — no output sRGB
