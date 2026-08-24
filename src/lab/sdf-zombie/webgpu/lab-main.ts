@@ -1980,7 +1980,17 @@ async function main() {
   // adaptive-scale.ts). Benchmarks stay reproducible because benchGpu
   // suspends the controller for its run, and the capture scripts
   // (blob-turntable, blob-render-check) switch it off through setAdaptive.
-  let adaptiveEnabled = true;
+  // OFF BY DEFAULT again (owner, 2026-08-24 — the halo bisect's actual
+  // boundary). Adaptive-on-by-default landed 2026-08-23 (5510057), and the
+  // rung drops it makes when the camera closes on a wounded body are the
+  // 'halo': a 0.45-0.2x flesh buffer bilinearly upscaled puts soft shimmering
+  // fringes around every high-contrast crater edge — whitish over fresnel,
+  // dark without it, worst close up, sweeping with the camera. Every build
+  // the owner judged halo-free ran a FIXED 0.7; every build judged haloed ran
+  // adaptive. The fps protection stays one keypress away (panel toggle); the
+  // real fix is the raymarcher performance work (see the 2026-08-23 perf
+  // spec), not resolution that melts exactly where the player is looking.
+  let adaptiveEnabled = false;
   // 30 fps, not 60 (owner, 2026-08-23): at 60 the controller had to push a
   // retina window down to 0.2-0.35 scale when zoomed in, which is too soft;
   // 30 is the accepted target until the renderer itself is faster (see the
