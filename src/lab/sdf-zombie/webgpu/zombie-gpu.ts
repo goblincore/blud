@@ -291,6 +291,14 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * volume mode — NOT spare), so nothing here could be reused safely.
      */
     woundShadowCfg: uniform(new THREE.Vector2(0.0, 12.0)),
+    /**
+     * Debug instrumentation (perf-plan task 2): x = 0 off / 1 steps
+     * heatmap / 2 prims heatmap. INERT until the march consumes it — the
+     * bench page (bench-main.ts) sets it per body under ?debug=steps|prims,
+     * and MARCH_BODY reads it only inside `if (debugCfg.x > 0.5)` guards so
+     * the shipping path (x 0) pays nothing. y/w are spare.
+     */
+    debugCfg: uniform(new THREE.Vector2(0, 0)),
   };
 }
 

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — SDF bench</title>
+<style>
+  body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #summary {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.78); padding: 8px 10px; border: 1px solid #444;
+    font-size: 12px; line-height: 1.5; white-space: pre-wrap; max-width: 60vw;
+  }
+  #summary:empty { display: none; }
+  #errors { color: #ff6464; font-size: 11px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <pre id="summary"></pre>
+  <div id="errors"></div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/bench-main.ts"></script>
+</body>
+</html>
