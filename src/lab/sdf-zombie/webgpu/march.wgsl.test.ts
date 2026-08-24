@@ -21,7 +21,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND,
+  ROW_PRIM_BEND, WOUND_MASK,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
@@ -856,5 +856,21 @@ describe('coneBend and the untapered sentinel', () => {
     expect(CONE_BEND).toContain('let rb = select(r2, r1, r2 < 0.0);');
     expect(CONE_BEND).not.toContain('(r1 + (r2 - r1) * t)');
     expect(CONE_BEND).toContain('(r1 + (rb - r1) * t)');
+  });
+});
+
+describe('wound halo — fresnel fade is membership, not a radial sphere', () => {
+  it('derives the fade from the carve field and the lip ring', () => {
+    // Every radial fade (1.6x, then 1.3x/2x) painted a SPHERE footprint on
+    // healthy skin whose ramp annulus half-restored grazing fresnel — the
+    // white crescent that swept around craters as the camera moved (owner,
+    // 2026-08-24; kill-test isolated: crescents vanish with fresnelBoost 0,
+    // survive spec 0). The fade now keys on being INSIDE the cavity (the
+    // same smin-unioned carve applyWounds subtracts) or ON the lip ring, so
+    // the shading transition coincides with the crater mouth crease and
+    // healthy skin keeps rim light right up to it.
+    expect(WOUND_MASK).toContain('carve = smin(carve, r - depth, depth * 0.25);');
+    expect(WOUND_MASK).toContain('m.y = max(smoothstep(0.012, -0.012, carve), smoothstep(0.15, 0.6, lip));');
+    expect(WOUND_MASK).not.toContain('w.w * 1.3');
   });
 });

@@ -599,8 +599,10 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
 // y (1.6x) is the FRESNEL fade: rim light must stay off across the whole
 // lip, or its grazing-heavy crest clips to a flat white band (X1.17 again —
 // it came straight back the day the single mask was pulled in to 1.25x).
-export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> vec2<f32> {
+export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec2<f32> {
   var m = vec2<f32>(0.0, 0.0);
+  var carve = 1e9;
+  var lip = 0.0;
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
@@ -622,14 +624,26 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     let face = dot(nrm, toC / max(r, 1e-5));
     let gCol = smoothstep(-0.25, 0.15, face);
     m.x = max(m.x, (1.0 - smoothstep(0.0, w.w * 1.25, r)) * gCol);
-    // FULL fade out to 1.3x, gone by 2x — not a 0..1.6x ramp. The ramp from
-    // the CENTRE left only ~60% fade at the cavity wall (r ~= w.w), and the
-    // surviving grazing fresnel clipped to flat white slabs hanging over the
-    // crater at oblique yaws (owner, 2026-08-23 — X1.17's mechanism escaping
-    // the mask; reproduced with the lip amp at zero, vanished with
-    // fresnelBoost at zero). The cavity and lip must sit entirely inside the
-    // flat region; healthy skin regains rim light past 2x.
-    m.y = max(m.y, 1.0 - smoothstep(w.w * 1.3, w.w * 2.0, r));
+    // FRESNEL FADE IS MEMBERSHIP, NOT RADIUS (wound-halo, 2026-08-24). Every
+    // radial fade — 1.3x/2x, 1.6x before it — paints a SPHERE footprint on
+    // healthy skin (a 0.13 blast fades a 0.4 m ball), and the footprint's
+    // ramp annulus is exactly where grazing fresnel half-returns: a crescent
+    // that sweeps with the camera. The mask edge itself was the halo. So the
+    // fade is now derived from the SAME fields applyWounds carves with:
+    // inside-the-cavity (the smin-unioned carve going negative) and
+    // on-the-lip (the Gaussian ring, scaled by the wound's live splay), and
+    // the shading transition lands exactly on the crater mouth crease where
+    // a material change is geometrically natural. Healthy skin keeps full
+    // rim light right up to the mouth — no ring, nothing to sweep.
+    let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
+    let isBurn = wMeta.x > 1.5;
+    let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
+    carve = smin(carve, r - depth, depth * 0.25);
+    let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
+    lip = max(lip, exp(-x * x) * select(1.0, 0.25, isBurn) * min(wMeta.z * 4.0, 1.0));
+  }
+  if (n > 0) {
+    m.y = max(smoothstep(0.012, -0.012, carve), smoothstep(0.15, 0.6, lip));
   }
   return m;
 }`
@@ -1252,7 +1266,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * surfCfg2.y);
   }
 
-  let wmBoth = woundMask(p, n, data, woundCfg);
+  let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let cm = charMask(p, data, woundCfg);
