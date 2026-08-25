@@ -227,3 +227,122 @@ Not stated. The evidence I can offer before the eye weighs in:
   because the code is wrong — it will be because six analytic walls are not
   enough to read as GI, which is precisely the "needs real radiosity lift" /
   P3-sooner outcome the spec names as a real result.
+
+---
+
+## Verdict — measured on the owner's machine, 2026-08-25
+
+The dispatch could not render (its sandbox cannot boot Chrome — see
+`claude:infra` memory). These numbers come from a WebGPU headless Chrome on the
+host, driving the real lab at `dispatch/lighting-p1-bounce`. Captures are in
+`docs/dev-notes/2026-08-25-bounce-spike/`.
+
+Method: capture the framebuffer with bounce off, then on, nothing else moved
+(motion and wander frozen, camera pinned inside the box), and diff per pixel. No
+colour heuristics — the pixels that change *are* the affected ones. A first
+attempt that segmented flesh by hue was measuring the red **wall**, not the
+character, and is discarded.
+
+### The headline: at the shipping preset, it does nothing
+
+`practical-hard-key`, default Cornell box, `probeWeight` 0 → 1 at `ambientGain 1`:
+
+| metric | value |
+|---|---|
+| pixels changed at all | 4.21% |
+| mean absolute change over those | **2.05 / 255** |
+| mean RGB shift where it moved >2 | (−1.1, −0.1, **+2.6**) |
+
+Under 1% brightness, and the shift is faintly **blue in a red room**. The owner's
+read on seeing it live — *"I don't see anything in terms of lighting, flat vs
+bounce"* — is correct and is now quantified.
+
+### Why — two compounding causes, both structural
+
+**1. The ambient term is ~2% of the picture.** `practical-hard-key` is
+`keyIntensity 2.4` against `fillIntensity 0.06`. "Colour, not brightness"
+preserves that term's *level* and changes only its hue, so it is changing the hue
+of something that contributes almost nothing. The effect scales exactly linearly
+with fill, which confirms it:
+
+| fillIntensity | mean |delta| / 255 |
+|---|---|
+| 0.06 *(ships)* | 1.89 |
+| 0.15 | 3.63 |
+| 0.34 *(`game-ambient`)* | 8.01 |
+| 0.60 | 13.05 |
+| 1.00 | 19.91 |
+
+**2. A Cornell box averages to grey.** Five of six walls are white or neutral, so
+the accumulation is near-neutral *before* renormalisation and there is little hue
+left to transfer. Isolating the wall proves the mechanism is fine — at fill 0.34,
+bounce off → on:
+
+| enclosure | mean RGB shift | reading |
+|---|---|---|
+| Cornell (1 red, 1 green, 4 white) | (+2.1, +0.6, −4.6) | barely red; mostly *loses the key's warmth* |
+| one red wall, rest near-black | **(+35.0, −14.4, −13.8)** | strongly red — the mechanism works |
+| all six walls red | (+27.1, −21.5, −21.2) | strongly red |
+
+See `C1-redwall-only-fill0.34-FLAT.png` vs `C2-...-BOUNCE.png`: pale neutral pink
+becomes saturated red. **The implementation is correct.** What fails is the
+premise that a physically-plausible room carries enough hue to matter at 2% level.
+
+The blue-shift direction also falls out of this: flat ambient is tinted by
+`keyColor` (1.0, 0.96, 0.92 — warm), and a mostly-white room renormalises to
+something *more neutral than that*. So switching to bounce removes warmth rather
+than adding colour. It is doing exactly what it was specified to do.
+
+### So: is this the spec's negative result?
+
+**Partly — and the distinction matters.** The spec anticipated "chromatic ambient
+doesn't sell it → the direction needs genuine radiosity lift". That is not quite
+what happened. Chromatic ambient sells it *fine* when there is hue to carry and
+level to carry it on. What does not survive contact is the conjunction of:
+
+- the house rule (bounce may not change level), **and**
+- a preset whose ambient level is 0.06, **and**
+- rooms that are mostly neutral-coloured.
+
+Any one of those relaxed and the effect appears. That points at a **missing knob
+rather than a failed direction**, and the cheapest candidate preserves the house
+rule completely:
+
+- **Chroma gain** — push the renormalised tint *away from neutral* before use.
+  Luminance stays fixed, so "colour, not brightness" still holds exactly, but a
+  mostly-white room can still deliver visible hue. This is the one to try first;
+  it is a two-line change to `ambientAt` and its CPU mirror.
+- **Sharper falloff** — `REF_DIST` 1.6 m over a 4 m box lets distant walls dilute
+  the near one. A tighter falloff would let proximity dominate. Also cheap, also
+  rule-preserving.
+- **Raise fill for interiors** — works, but spends the hard-key blowout, which is
+  the thing the rule exists to protect.
+- **`ambientGain` > 1** — works (11.52/255 at 2.5) and is already built, but it
+  is explicitly the rule-breaking control.
+
+Recommendation: try chroma gain and a tighter `REF_DIST` before concluding
+anything about P3. The spike has done its job — it converted "would fake GI feel
+good?" into a specific, measured, and cheap next question.
+
+### Two bugs found by eye and fixed on the branch
+
+1. **Floor z-fighting.** The enclosure's `negY` plane sits at y=0, exactly
+   coplanar with the lab's 20×20 ground plane — stair-stepped tearing across the
+   floor and the contact shadow. Fixed: the lab floor hides while the enclosure
+   is up. A room has one floor, and an epsilon offset would still tear at grazing
+   angles.
+2. **Walls read as flat cardboard.** They were `MeshBasicMaterial` — literally
+   unlit — on the plan's reasoning that lit walls would put two lighting models in
+   one frame. Wrong on contact with the eye: a Cornell box's whole character is
+   the gradient down a shaded wall. Now `MeshStandardMaterial`, picking up the
+   lab's existing `DirectionalLight`. This does not touch the bounce maths, which
+   reads wall albedo from uniforms and never the rendered pixels.
+
+### Still not verified
+
+- **Pixel-identity of the parity path.** The algebra is exact and unit-tested to
+  12 decimals, and the shader early-outs; but `keyColor` was reordered in the
+  march expression, so IEEE bit-identity is not guaranteed (it is almost certainly
+  identical after the 8-bit sRGB encode). Not captured against `main`.
+- **Frame cost** against `sdf-bench` scenes A/B.
+- **`clay` still reads as clay** with bounce at full.

@@ -2458,6 +2458,13 @@ async function main() {
   const boxBtn = addButton(bounceBox, 'enclosure: off', () => {
     const on = !enclosure.group.visible;
     enclosure.setVisible(on);
+    // The enclosure brings its own floor at y=0, exactly coplanar with the
+    // lab's 20x20 ground plane — two surfaces at the same depth, which
+    // z-fights into stair-stepped garbage across the whole floor and around
+    // the character's contact shadow. Hide the lab floor while the box is up
+    // rather than nudging one of them: a room has one floor, and an epsilon
+    // offset would still tear at grazing angles.
+    floor.visible = !on;
     boxBtn.textContent = `enclosure: ${on ? 'on' : 'off'}`;
   });
 

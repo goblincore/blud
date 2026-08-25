@@ -109,8 +109,20 @@ export function createEnclosure(): Enclosure {
     }
     const c = walls[key];
     mesh.geometry = geo;
-    mesh.material = new THREE.MeshBasicMaterial({
+    // SHADED, not flat. These started as MeshBasicMaterial on the reasoning
+    // that unlit walls keep two lighting models out of one frame — which was
+    // wrong on contact with the eye: unlit planes read as flat cardboard, and
+    // a Cornell box's whole character is the soft gradient down a shaded wall.
+    // MeshStandardMaterial picks up the lab's existing DirectionalLight, so
+    // the room looks like a room.
+    //
+    // This does NOT touch the bounce maths. `ambientAt` reads wall ALBEDO
+    // from uniforms, never the rendered pixels, so how the wall is displayed
+    // and what it bounces stay independent — which is what lets the display
+    // change freely without moving the thing under judgement.
+    mesh.material = new THREE.MeshStandardMaterial({
       color: new THREE.Color(c[0], c[1], c[2]),
+      roughness: 1,
       side: THREE.DoubleSide,
     });
     mesh.name = `wall-${key}`;
@@ -125,7 +137,7 @@ export function createEnclosure(): Enclosure {
       walls[key] = [...color] as Vec3;
       const m = meshes.get(key);
       if (m) {
-        (m.material as THREE.MeshBasicMaterial).color.setRGB(color[0], color[1], color[2]);
+        (m.material as THREE.MeshStandardMaterial).color.setRGB(color[0], color[1], color[2]);
       }
     },
     setCeiling(on) {
