@@ -1,0 +1,240 @@
+// src/lab/sdf-zombie/webgpu/game-level.test.ts
+//
+// Hand-worked gates for the ring layout and the capsule resolver. The ring
+// topology tests are the point of the whole level: if the ring smears (a
+// diagonal shortcut, a mouth on the wrong wall) the 1/2/3/4 count ramp is
+// unreadable, and these are the tests that catch it.
+
+import { describe, expect, it } from 'vitest';
+import {
+  ROOMS, TUNNELS, FURNITURE, levelColliders, levelSurfaces,
+  enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
+  OUTER, BAND_HALF,
+} from './game-level';
+import { PLAYER, resolveCapsule, stepPlayer, eyeOf, type PlayerState } from './game-player';
+
+function makePlayer(x: number, z: number, yaw: number): PlayerState {
+  return { pos: [x, 0, z], vel: [0, 0, 0], yaw, pitch: 0, grounded: true };
+}
+
+/** Walk the player with fixed intent for `steps` frames; returns the path end. */
+function walk(s: PlayerState, input: { x: number; z: number; jump: boolean }, steps: number) {
+  const colliders = levelColliders();
+  for (let i = 0; i < steps; i++) stepPlayer(s, input, 1 / 60, colliders);
+  return s;
+}
+
+describe('ring layout', () => {
+  it('is a ring: each tunnel joins adjacent rooms, in order 1-2-3-4-1', () => {
+    expect(TUNNELS.map(t => [t.a, t.b])).toEqual([[1, 2], [2, 3], [3, 4], [4, 1]]);
+  });
+
+  it('has no diagonal shortcut: the centre block is solid', () => {
+    // A capsule standing at the origin must be pushed OUT.
+    const pos: [number, number, number] = [0, 0, 0];
+    expect(resolveCapsule(pos, levelColliders())).toBe(true);
+    const r = Math.hypot(pos[0], pos[2]);
+    expect(r).toBeGreaterThan(BAND_HALF - 1e-6);
+  });
+
+  it('rooms are quadrants around a solid cross, not arbitrary boxes', () => {
+    for (const r of ROOMS) {
+      expect(r.maxX - r.minX).toBeCloseTo(8);
+      expect(r.maxZ - r.minZ).toBeCloseTo(8);
+      expect(Math.abs((r.minX + r.maxX) / 2)).toBeCloseTo(4.8);
+      expect(Math.abs((r.minZ + r.maxZ) / 2)).toBeCloseTo(4.8);
+    }
+  });
+
+  it('zombie counts escalate 1/2/3/4 around the ring, ten total', () => {
+    expect(ROOMS.map(r => r.zombies)).toEqual([1, 2, 3, 4]);
+    expect(ROOMS.reduce((n, r) => n + r.zombies, 0)).toBe(10);
+  });
+
+  it('adjacent rooms have distinctly different wall colours', () => {
+    const ring = [1, 2, 3, 4, 1];
+    for (let i = 0; i < 4; i++) {
+      const a = ROOMS.find(r => r.id === ring[i])!.wallColor;
+      const b = ROOMS.find(r => r.id === ring[i + 1])!.wallColor;
+      const dist = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      expect(dist).toBeGreaterThan(0.2);
+    }
+  });
+
+  it('enclosureOf returns box+walls for every room and tunnel', () => {
+    for (const r of ROOMS) {
+      const e = enclosureOf(r.name)!;
+      expect(e).not.toBeNull();
+      expect(e.box.min[1]).toBe(0);
+      expect(e.box.max[1]).toBeCloseTo(r.height);
+    }
+    for (const t of TUNNELS) {
+      const e = enclosureOf(t.name)!;
+      expect(e.box.max[1]).toBeCloseTo(t.height);
+    }
+    expect(enclosureOf('void')).toBeNull();
+  });
+
+  it('enclosureKeyAt maps room centres and tunnel midpoints correctly', () => {
+    expect(enclosureKeyAt(-4.8, -4.8)).toBe('room1');
+    expect(enclosureKeyAt(4.8, -4.8)).toBe('room2');
+    expect(enclosureKeyAt(4.8, 4.8)).toBe('room3');
+    expect(enclosureKeyAt(-4.8, 4.8)).toBe('room4');
+    expect(enclosureKeyAt(0, -4.8)).toBe('tunnel-1-2');
+    expect(enclosureKeyAt(4.8, 0)).toBe('tunnel-2-3');
+    expect(enclosureKeyAt(0, 4.8)).toBe('tunnel-3-4');
+    expect(enclosureKeyAt(-4.8, 0)).toBe('tunnel-4-1');
+    expect(enclosureKeyAt(0, 0)).toBe('void'); // solid centre block
+    expect(enclosureKeyAt(OUTER + 5, 0)).toBe('void'); // outside the level
+  });
+
+  it('spawn points are inside their room and clear of furniture', () => {
+    for (const r of ROOMS) {
+      const spots = spawnPoints(r);
+      expect(spots.length).toBe(r.zombies);
+      for (const p of spots) {
+        expect(p[0]).toBeGreaterThan(r.minX);
+        expect(p[0]).toBeLessThan(r.maxX);
+        expect(p[2]).toBeGreaterThan(r.minZ);
+        expect(p[2]).toBeLessThan(r.maxZ);
+        for (const f of FURNITURE) {
+          const inside = p[0] > f.minX - 0.5 && p[0] < f.maxX + 0.5
+            && p[2] > f.minZ - 0.5 && p[2] < f.maxZ + 0.5;
+          expect(inside).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('wander bounds stay inside the room interior', () => {
+    for (const r of ROOMS) {
+      const b = wanderBounds(r);
+      expect(b.minX).toBeGreaterThan(r.minX);
+      expect(b.maxX).toBeLessThan(r.maxX);
+      expect(b.minZ).toBeGreaterThan(r.minZ);
+      expect(b.maxZ).toBeLessThan(r.maxZ);
+    }
+  });
+
+  it('surfaces cover every room and tunnel without throwing', () => {
+    const { planes, boxes } = levelSurfaces();
+    // 6 per room (floor, ceiling, 4 walls — mouths add segments) + 3 per tunnel.
+    expect(planes.length).toBeGreaterThanOrEqual(6 * 4 + 3 * 4);
+    // 4 lintels + 16 arch steps + furniture.
+    expect(boxes.length).toBeGreaterThanOrEqual(4 + 16 + FURNITURE.length);
+    for (const p of planes) {
+      expect(p.max[1]).toBeGreaterThanOrEqual(p.min[1]);
+    }
+  });
+});
+
+describe('capsule-vs-AABB', () => {
+  const wall = { min: [0, 0, -1] as [number, number, number], max: [1, 3, 1] as [number, number, number] };
+
+  it('pushes a sideways overlap out along the separating vector', () => {
+    // Capsule at x=-0.2 beside a wall face at x=0: gap 0.2 < radius.
+    const pos: [number, number, number] = [-0.2, 0, 0];
+    expect(resolveCapsule(pos, [wall])).toBe(true);
+    expect(pos[0]).toBeCloseTo(-PLAYER.radius, 5);
+    expect(pos[1]).toBeCloseTo(0, 5);
+  });
+
+  it('leaves a clear capsule untouched', () => {
+    const pos: [number, number, number] = [-1, 0, 0];
+    expect(resolveCapsule(pos, [wall])).toBe(false);
+    expect(pos[0]).toBeCloseTo(-1);
+  });
+
+  it('supports standing on top of a crate', () => {
+    const crate = { min: [-1, 0, -1] as [number, number, number], max: [1, 1, 1] as [number, number, number] };
+    // Feet 0.1 into the crate top: the capsule bottom sphere dips below y=1.
+    const pos: [number, number, number] = [0, 0.9, 0];
+    expect(resolveCapsule(pos, [crate])).toBe(true);
+    expect(pos[1]).toBeCloseTo(1.0, 5);
+  });
+
+  it('ejects a capsule spawned inside a box along the min-penetration axis', () => {
+    const pos: [number, number, number] = [0.8, 0.5, 0]; // closest face: +x
+    expect(resolveCapsule(pos, [wall])).toBe(true);
+    expect(pos[0]).toBeGreaterThan(1);
+  });
+
+  it('falls to the floor and stops when idling', () => {
+    const s = makePlayer(-4.8, -4.8, 0);
+    s.pos[1] = 1;
+    walk(s, { x: 0, z: 0, jump: false }, 120);
+    expect(s.pos[1]).toBe(0);
+    expect(s.grounded).toBe(true);
+    expect(Math.hypot(s.vel[0], s.vel[2])).toBeLessThan(1e-3);
+  });
+});
+
+describe('walking the ring', () => {
+  const fwd = { x: 0, z: 1, jump: false };
+
+  it('crosses tunnel 1-2 east from room 1 into room 2', () => {
+    const s = makePlayer(-2, -4.8, Math.PI / 2); // forward = +x
+    walk(s, fwd, 60 * 4);
+    expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe('room2');
+  });
+
+  it('crosses tunnel 4-1 south from room 1 into room 4', () => {
+    const s = makePlayer(-4.8, -2, Math.PI); // forward = +z
+    walk(s, fwd, 60 * 4);
+    expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe('room4');
+  });
+
+  it('blocks the diagonal: room 1 to room 3 through the centre is solid', () => {
+    // Face the far diagonal corner and walk for ten seconds.
+    const s = makePlayer(-4.8, -4.8, Math.atan2(9.6, 9.6)); // toward (+,+)
+    walk(s, fwd, 60 * 10);
+    expect(enclosureKeyAt(s.pos[0], s.pos[2])).not.toBe('room3');
+    expect(Math.abs(s.pos[0])).toBeGreaterThan(BAND_HALF + PLAYER.radius - 1e-3);
+  });
+
+  it('closes the full ring 1->2->3->4->1 on foot', () => {
+    // Waypoints: room centres and tunnel midpoints, ring order.
+    const waypoints: [number, number][] = [
+      [0, -4.8], [4.8, -4.8],   // tunnel 1-2, room 2
+      [4.8, 0], [4.8, 4.8],     // tunnel 2-3, room 3
+      [0, 4.8], [-4.8, 4.8],    // tunnel 3-4, room 4
+      [-4.8, 0], [-4.8, -4.8],  // tunnel 4-1, room 1
+    ];
+    const s = makePlayer(-4.8, -4.8, 0);
+    const visited: string[] = [];
+    const colliders = levelColliders();
+    for (const [wx, wz] of waypoints) {
+      for (let i = 0; i < 60 * 12; i++) {
+        const yaw = Math.atan2(wx - s.pos[0], -(wz - s.pos[2]));
+        s.yaw = yaw;
+        stepPlayer(s, fwd, 1 / 60, colliders);
+        if (Math.hypot(wx - s.pos[0], wz - s.pos[2]) < 0.3) break;
+      }
+      expect(Math.hypot(wx - s.pos[0], wz - s.pos[2])).toBeLessThan(0.4);
+      visited.push(enclosureKeyAt(s.pos[0], s.pos[2]));
+    }
+    expect(visited).toEqual([
+      'tunnel-1-2', 'room2', 'tunnel-2-3', 'room3',
+      'tunnel-3-4', 'room4', 'tunnel-4-1', 'room1',
+    ]);
+  });
+
+  it('never leaves the level or clips a wall while walking the ring', () => {
+    const s = makePlayer(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
+    const colliders = levelColliders();
+    // Random-ish but deterministic walk: yaw sweeps, forward held.
+    for (let i = 0; i < 60 * 30; i++) {
+      s.yaw += Math.sin(i * 0.013) * 0.05 + 0.01;
+      stepPlayer(s, { x: 0, z: 1, jump: i % 300 === 0 }, 1 / 60, colliders);
+      expect(Math.abs(s.pos[0])).toBeLessThan(OUTER);
+      expect(Math.abs(s.pos[2])).toBeLessThan(OUTER);
+      expect(s.pos[1]).toBeGreaterThanOrEqual(0);
+      expect(enclosureKeyAt(s.pos[0], s.pos[2])).not.toBe('void');
+    }
+  });
+
+  it('eye height rides the capsule', () => {
+    const s = makePlayer(0, 0, 0);
+    expect(eyeOf(s)[1]).toBeCloseTo(PLAYER.eye);
+  });
+});
