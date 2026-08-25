@@ -20,6 +20,20 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SDF GAME LEVEL — worktree `2026-08-25-sdf-game-level`, branch `dispatch/sdf-game-level`,
+gates green (2026-08-25, `35c3719`).** New sibling entry `sdf-game.html` +
+`webgpu/game-main.ts` (bench-main pattern, NOT lab-main — lab untouched):
+four-room ring (quadrants, 1.6m tunnels through the dividing bands, stepped
+arch mouths, solid centre block = no diagonal), 1/2/3/4 wandering SDF zombies
+(per-actor wrapper `game-actor.ts` drives stepMotion->stepRig->applyRig->view.update
+with empty damage signals), FPS player with capsule-vs-AABB (`game-player.ts`,
+pure, hand-worked tests), per-room environment bounce (probeWeight default
+0.75 — analytic ambientAt means it is FREE; the brief's probe-cost warning
+was stale), HUD (frame ms / bodies on screen / probeWeight / enclosure), and
+the `__sdfGame` hook the grapeshot dispatch builds on (setPose/teleport/step/
+freeze/zombie(id)->{view,posed,boundRig}/viewModelAnchor). Indicative frame ms
+at scale 0.7: room1 16.7 -> room4 33.6 (4 zombies at the 30fps line already).
+
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
 **COMPUTE TILE BINNING — MERGED (2026-08-25, `90e1ca9`).** Tile binning moved
