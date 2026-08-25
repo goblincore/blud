@@ -22,6 +22,8 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
+**SHELL PRIM + SCHOOLGIRL COLLAR (in-progress, `dispatch/shell-cloth-prim` — uncommitted):** added a `shell` prim to the `.blob` language (thin sheet off a closed field, `abs(d)-thickness`, clipped against a plane with a rounded rim — iq's cloth construction). Rebuilt the sailor collar from shells (was 7 blob masses, now a 3-prim cloth cape+V+knot; owner's "epaulette plates"/"blob mass" read addressed — the collar now drapes over the shoulders with a V), made the skirt a thin shell cone with a rounded hem (was a solid cone), and deleted the shoe sole. Schoolgirl 62→57 prims. tsc 0, 1559 lab tests, render-check schoolgirl/zombie/cyclops/mouse all green. **Blocks:** commits (worktree `.git` is in the main repo; sandbox denies write + no approval channel).
+
 **Merged 2026-08-25:** perf task-1/2 (`8f4fdcd`) — `sdf-bench.html`, scenes A/B,
 scripted orbit, headless driver (`npm run bench:sdf`), WGSL steps/prims heatmaps
 (`debugCfg.x` 1/2), quiet-host baselines in

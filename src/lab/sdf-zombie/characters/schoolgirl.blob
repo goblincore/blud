@@ -127,14 +127,15 @@ body
   bar  torso on chest   from=0.58 to=0.85 r=0.074 r2=0.075 deep=0.50 blend=0.012 color=ececed
 
   # ============================================================
-  # THE SKIRT (v2) — ONE flared cone, belt to hem. v1 carried the mesh's
-  # hem cliff with two flat ellipsoid RINGS plus six pleat-fragment bars
-  # stuck on the thighs; every band measured right and it still read as a
-  # CYLINDER WITH A DISC AT THE HEM. The flare is the skirt's whole
-  # character (belt half 0.112 at 1.054 -> widest 0.203 at 0.78-0.80), so
-  # one cone carries it and the hem is allowed to round under smoothly —
-  # the cliff (0.406 -> 0.308 across 2 cm) is a hard-edge read no smooth
-  # mass can do, traded away on purpose for the one-piece silhouette.
+  # THE SKIRT (v4) — the SAME flared cone, now a thin SHELL with a clipped,
+  # rounded hem. v1 carried the mesh's hem cliff with two flat ellipsoid RINGS
+  # plus six pleat-fragment bars stuck on the thighs; every band measured right
+  # and it still read as a CYLINDER WITH A DISC AT THE HEM. v2 was one solid
+  # flared cone (belt half 0.112 at 1.054 -> widest 0.203 at 0.78-0.80) whose
+  # squashed bottom cap rounded under smoothly. v4 keeps the cone but thins it
+  # to cloth (abs(dBase)-0.006) and clips it at the hem (keep y > 0.72) with a
+  # rounded rim (0.007) — so the hem edge reads as a folded cloth hem rather
+  # than either a disc or a smooth mass. The flare numbers below are unchanged.
   # tall 0.42 squashes BOTH end caps along the axis: the bottom cap rounds
   # under in ~0.42*r2 (8 cm) instead of a full r2 ball below the hem (the
   # v1 fat-cap lesson), and the top cap only bulges 4 cm above the belt,
@@ -146,7 +147,7 @@ body
   # than the hem band gains). wide 1.05 / deep 0.80: the mesh skirt is
   # wider than deep (0.406 x 0.311 at the widest ring).
   # ============================================================
-  blob torso on spine1  at=0.94 r=0.095 r2=0.185 tip=(0,-0.250,0) wide=1.05 tall=0.42 deep=0.80 blend=0.018 color=01046d
+  shell torso on spine1  at=0.94 r=0.095 r2=0.185 tip=(0,-0.250,0) wide=1.05 tall=0.42 deep=0.80 thick=0.006 clip=(0,-1,0) clipd=-0.72 rim=0.007 blend=0.018 color=01046d
   # PLEATS — four shallow grooves riding the cone's slope (front pair and
   # back pair, mirrored), NOT bars standing proud of it. Each groove's axis
   # follows the surface from (y 1.00) to (y 0.82) at the cone's own flare,
@@ -155,71 +156,33 @@ body
   groove torso on spine1 at=0.77 offset=(0.077,0,-0.065) tip=(0.037,-0.180,-0.031) r=0.012 depth=0.004 width=0.006 both
 
   # ============================================================
-  # SAILOR COLLAR (v3) — a real one, not v2's single flat navy DISC lying
-  # across the chest top (owner, 2026-08-23: "two white epaulette plates
-  # with a navy bar between them"). Four prim groups:
-  # (1) THE BACK FLAP, upper plate — flat, shoulder to shoulder (x half
-  #     0.105 ~= the mesh's 0.217 shoulder), lying on the trapezius back
-  #     (surface z -0.025 there) with its back edge at -0.052. Top capped
-  #     at 1.406 with blend 0.005: the neck bar's bottom ball reaches y
-  #     1.373, and a fatter/higher flap smin-dips the neck band (the v2
-  #     head-window lesson).
-  # (2) THE BACK FLAP, hanging shell — ONE BENT blob. The white top's
-  #     bust bar is a 0.100 ball whose BACK face falls from z -0.03 at
-  #     y 1.40 to z -0.12 at y 1.30 (the mesh's back is exactly as deep —
-  #     the mesh's own collar flap lives inside that silhouette; what was
-  #     missing is the PAINT). No flat plate can follow that curve: the
-  #     first flat flap (z half 0.017 at -0.045) was buried below y 1.34
-  #     and vision read the back as "a bar across the neckline". This
-  #     capsule bends back with bend=(0,0,-0.035) and hangs 6-11 mm proud
-  #     of the ball from y 1.35 down to its hem at y ~1.28 (mid
-  #     shoulder-blade), verified per-t against the cap's profile.
-  # (3) THE TWO POINTS (`both` mirrors one line): tapered ribbons running
-  #     PROUD of the chest from the shoulder tops (0.050, 1.403, 0.005)
-  #     down-inward to the knot (0.016, 1.30, 0.135). They start where a
-  #     real collar point disappears over the trapezius — an earlier draft
-  #     started them at the flap's top corners, but a capsule cannot WRAP
-  #     the bust ball: every route from the back sagged inside the cap and
-  #     the strips rendered as two flecks at the neckline (vision-ask,
-  #     2026-08-23). The z path is surface+0.01-0.02 the whole run
-  #     (checked per-0.02-of-y against the shoulder bar + bust cap union);
-  #     the first proud route rode surface+0.03 and the side bands at
-  #     y 1.31-1.33 measured +0.023 over the mesh's own kerchief. The
-  #     start sits 9.6 mm from the shoulder ball's surface — the clearOf
-  #     arm/torso margin lives there. tall 0.5 flattens the ribbons
-  #     vertically (world-axis squash), wide 1.3 keeps the ribbon width.
-  # (4) THE SCARF KNOT — raised to y ~1.29 (the lowest the V can honestly
-  #     reach past the bust ball) and proud of it: v2 had it at z 0.096,
-  #     buried INSIDE the bust cap whose front is z 0.14 there.
-  # Navy count is SIX torso prims (skirt, 2 flap, 2 points, knot) — the
-  # test pin is updated to match.
+  # SAILOR COLLAR (v4) — CLOTH, not mass. v2 was one flat navy DISC (owner,
+  # 2026-08-23: "two white epaulette plates with a navy bar between"); v3 was a
+  # flat upper plate + a BENT blob that still read as blob masses (and this
+  # owner has now told us twice that collar reads wrong). A sailor collar is a
+  # thin sheet lying on the chest and back and following the shoulder curve —
+  # that is exactly the shell primitive, abs(base)-thickness off a closed base
+  # with a clipped, rounded rim. The v3 blob masses are gone.
+  #
+  # (1) THE CAPE — the shoulders + back, one thin shell off a torso-shaped base
+  #     ellipsoid. The clip plane (keep z < 0.038) opens the FRONT so the white
+  #     top and the V show through; the rounded rim is the folded edge over the
+  #     shoulders, and the flap's bottom is the base's own drape at the lower
+  #     shoulder blades. This is the piece that fixes the "plates on the
+  #     shoulders" read: the navy now lies ON the shoulder tops instead of
+  #     leaving the sleeve caps rim-lit above it.
+  # (2) THE FRONT POINTS (`both` mirrors one line) — two thin bands riding the
+  #     bust from the cape's front edge down-inward to the knot. The shell
+  #     rides the chest surface (the v3 capsule could not WRAP the bust ball,
+  #     which is why its points fell to two flecks; a thin shell can).
+  # (3) THE SCARF KNOT at the throat, proud of the bust (v2 had it buried
+  #     inside the bust cap).
+  # Navy count ends as THREE torso prims + the skirt (was SIX + the skirt).
   # ============================================================
-  # The flap's TOP EDGE is a horizontal ribbon over the trapezius,
-  # TAPERED at both ends (one `both` line: centre out to +/-0.106).
-  # History: a blunt ribbon (r 0.070, y half 0.032, ends at x +/-0.14)
-  # put two fat ROUNDED bumps on the shoulder outline — vision read
-  # "two rounded shoulder masses with a bar between" (PLATES) made of the
-  # collar itself; lowering the flap top to y 1.386 instead left the
-  # white sleeve caps rim-lit above the navy with the top bar between
-  # them — the same PLATES pattern one shelf up (14/14 asks, both
-  # backends). So: cover the caps (they are lowered now — see ARMS —
-  # their tops at 1.40 sit under the ribbon's y <= 1.41, z -0.045 shell
-  # from the back) and taper the ends (r 0.040 -> r2 0.022) so the
-  # ribbon melts into the arm outline instead of bumping it.
-  blob torso on chest   at=0.94 offset=(0,0.0264,-0.0537) tip=(0.095,-0.002,0) r=0.040 r2=0.022 wide=0.50 tall=0.45 deep=0.30 blend=0.008 both color=01046d
-  blob torso on chest   at=0.81 offset=(0,0.0206,-0.0630) tip=(0,-0.075,-0.063) bend=(0,0,-0.035) r=0.070 wide=1.50 tall=0.50 deep=0.20 blend=0.008 color=01046d
-  # THE HEM SEAM: the mesh's flap ends in a clean HORIZONTAL seam at the
-  # lower shoulder blades (measured off a back-view bake of the GLB). The
-  # shell's own bottom cap arches up at the sides and the arch read as
-  # "mass sitting at the shoulders" to vision on the shadowed back frame.
-  # This horizontal capsule hangs the hem straight at y 1.26 across the
-  # full flap width; its bend bows it back to follow the bust ball (the
-  # ball's back runs z -0.077 at x +/-0.095 out to -0.124 at x 0, checked
-  # per-t), so the seam stays 1-3 cm proud instead of floating free.
-  blob torso on chest   at=0.72 offset=(-0.095,-0.0378,-0.0854) tip=(0.19,0,0) bend=(0,0,-0.094) r=0.040 wide=0.50 tall=0.35 deep=0.30 blend=0.008 color=01046d
-  blob torso on chest   at=0.94 offset=(0.053,0.0324,-0.0027) tip=(-0.023,-0.111,0.134) r=0.020 r2=0.014 wide=1.30 tall=0.50 blend=0.005 both color=01046d
+  shell torso on chest at=0.80 offset=(0,0.030,-0.018) r=0.086 wide=0.98 tall=0.92 deep=1.05 thick=0.006 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=01046d
+  shell torso on chest at=0.92 offset=(0.042,0.020,0.030) tip=(-0.026,-0.118,0.106) r=0.022 r2=0.010 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.15 rim=0.004 blend=0.005 both color=01046d
   # The scarf knot, ON the chest front centre (y ~1.29), proud of the bust.
-  blob torso on chest   at=0.72 offset=(0,-0.005,0.120) r=0.022 wide=1.10 tall=1.05 deep=0.60 blend=0.0040 color=01046d
+  blob torso on chest   at=0.72 offset=(0,-0.008,0.116) r=0.026 wide=1.30 tall=0.95 deep=0.65 blend=0.0040 color=01046d
 
   # Neck: 0.041 half-wide x 0.054 half-deep (mesh 0.048/0.064 full) at the
   # narrowest 1.428. Skin.
@@ -354,20 +317,12 @@ body
   # Vamp/collar wrapping the ankle: the mesh's 0.114-0.147 bands run
   # 0.304-0.318 wide — 0.090 half-width at x 0.073 (wide 1.88).
   blob leg on foot at=0.00 r=0.048 wide=1.88 tall=0.95 deep=1.55 blend=0.0060 offset=(0.004,-0.040,0.012) mirror color=201109 gloss=0.20
-  # THE SOLE (v3): a thin capsule tracing the shoe's OWN yawed footprint,
-  # inset under the upper. v2's plate (wide 2.30 x deep 4.00 = 0.15 x 0.26
-  # at floor level, four times the shoe's depth, light bdb9bc) read as a
-  # white OVAL she stood on (owner, 2026-08-23) — but the mesh's sole is a
-  # thin grey EDGE, not a platform: its side bands run 0.258-0.289 at the
-  # sole because of the toes-out splay, and the shoe body above is only
-  # 0.152-0.170 deep. So: same heel->toe run and 8-deg yaw as the upper
-  # (offset/tip copied from the shoe body line above), radii a hair inside
-  # it (wide 2.10 vs 2.40, deep 0.95 vs 1.05) so no rim shows past the shoe
-  # from the front or the side, and darkened bdb9bc -> 655c5e toward the
-  # shoe's 201109. The bottom stays at y~0: axis at -0.110 with half-height
-  # 0.18*r puts the tread where v2's plate bottom was (the 1.70 m height
-  # pin marches y 0.002 for flesh).
-  blob leg on foot at=0.00 r=0.030 r2=0.026 wide=2.10 tall=0.18 deep=0.95 blend=0.0040 offset=(0.004,-0.111,-0.045) tip=(0.018,0.001,0.103) mirror color=655c5e gloss=0.15
+  # THE SOLE IS GONE (2026-08-25). v2's plate read as a white oval she stood
+  # on; v3's thin grey capsule traced the shoe's yawed footprint and was
+  # mesh-derived detail with no gameplay value. The shoe body above carries the
+  # floor contact (its tread drops to y~0; the height pin marches that), so no
+  # sole was needed and the owner wants it gone. The shoes stay near-black
+  # 201109.
 
 # ============================================================
 # FACE BLOCK — the skin skull under the hair. Cranium 0.071 half-wide x

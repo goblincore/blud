@@ -54,8 +54,12 @@ export function assignClusters(
       const ends = p.bend === undefined
         ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
       const rMax = Math.max(p.radius, p.radiusB ?? p.radius);
+      // A shell rides `thickness` PROUD of its base capsule's surface, so its
+      // outermost extent is rMax*maxScale + thickness — the extra term, or the
+      // cluster sphere the shader culls with under-covers the sheet.
+      const reach = rMax * maxScale + (p.shell ? p.shell.thickness : 0);
       for (const end of ends)
-        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale);
+        radius = Math.max(radius, len(sub(end, center)) + reach);
     }
 
     clusters.push({

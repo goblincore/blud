@@ -42,7 +42,7 @@ export interface BlobBone {
   src: BlobLine;
 }
 
-export type BlobPartKind = 'blob' | 'bar' | 'carve' | 'groove';
+export type BlobPartKind = 'blob' | 'bar' | 'carve' | 'groove' | 'shell';
 
 export interface BlobPart {
   kind: BlobPartKind;
@@ -73,6 +73,18 @@ export interface BlobPart {
   /** `depth=`/`width=` — how deep and how wide a `groove` cuts. */
   grooveDepth: number;
   grooveWidth: number;
+  /**
+   * `shell` — a thin sheet taken off a closed primitive's field
+   * (`abs(d) - thickness`), clipped against a half-space plane with a rounded
+   * rim. `thickness` is the HALF-thickness (the sheet spans +/-thickness about
+   * the base surface). The clip plane is `dot(p, clipNormal) - clipOffset`,
+   * keeping the side where the value is negative; `rim` is the rounding radius
+   * where the sheet meets the plane (0 = a razor edge). Null = not a shell.
+   */
+  thickness: number;
+  clipNormal: readonly [number, number, number] | null;
+  clipOffset: number;
+  rim: number;
   /** `color=rrggbb`, converted to LINEAR rgb. null = flesh. */
   color: readonly [number, number, number] | null;
   /** `gloss=0..1`. null = the flesh preset's own wetness. */

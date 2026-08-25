@@ -34,6 +34,11 @@ export interface PackedBody {
    *  an unpainted body packs as all zeros — bit-identical data rows for
    *  every character authored before colour existed. */
   primColor: Float32Array;
+  /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0/1).
+   *  Only read by prims folded as a shell (profile bit 2). */
+  primShell: Float32Array;
+  /** xyz = the clip plane's unit normal (w spare). See primShell. */
+  primClip: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
@@ -109,6 +114,8 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   const primShape = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primBend = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primColor = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primShell = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primClip = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
@@ -149,13 +156,30 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // bent is genuinely curved. The bent values sit ABOVE chamfer so every
     // existing "> 0.5 means chamfer" consumer keeps working.
     const bent = p.bend !== undefined ? 2 : 0;
+    // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
+    // a SHELL adds bit 2 (value 4) so straight=4, bent=6. The shader folds any
+    // prof >= 4 as a shell and reads the shell rows; the low bits still mean
+    // chamfer/bend for the non-shell range and are ignored on a shell.
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0);
     primBend.set(p.bend === undefined ? [0, 0, 0, 0] : [...bendCtrl(p.a, p.b, p.bend), 0], o);
     primColor.set(p.color === undefined
       ? [0, 0, 0, 0]
       : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
+    // Shell fold (2026-08-25): the row-array pair for a shell-clipped sheet.
+    // Sets ROW_PRIM_SHELL (thickness, rim, clip offset, hasClip) and
+    // ROW_PRIM_CLIP (clip normal). Rows are zero for every non-shell prim, and
+    // the shader only reads them when the prim's profile marks it a shell, so
+    // an additive prim pays nothing for the extra rows.
+    const sh = p.shell;
+    primShell.set(sh
+      ? [sh.thickness, sh.rim, sh.clipOffset, 1]
+      : [0, 0, 0, 0], o);
+    primClip.set(sh
+      ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], 0]
+      : [0, 0, 0, 0], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
-      (p.blendProfile === 'chamfer' ? 1 : 0) + bent,
+      prof,
       p.grooveDepth ?? 0, p.grooveWidth ?? 0,
     ], o);
     // Rest endpoints (motion-polish task 6). A missing rest prim packs as
@@ -191,7 +215,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-      || p.bend !== undefined);
+      || p.bend !== undefined || p.shell !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -222,7 +246,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   });
 
   return {
-    primA, primB, primScale, primQuat, primShape, primBend, primColor, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, restA, restB, clusterBounds, clusterRange,
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
@@ -280,7 +304,8 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
   const center: [number, number, number] = [sum[0] / pts, sum[1] / pts, sum[2] / pts];
   let radius = 0;
   for (const p of fitTo) {
-    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(p.scale[0], p.scale[1], p.scale[2])
+      + (p.shell ? p.shell.thickness : 0);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:
       // bound by the rotation-invariant ball around the midpoint instead of

@@ -252,6 +252,13 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       throw new BlobError(
         'chamfer is not supported on a carve — carving folds through smax, '
         + 'which has no chamfered form here', p.src.line, p.src.indent + 1);
+    // A shell's cut edge is rounded by `rim`, never by the fold profile; the
+    // shell field folds with the round smooth-min regardless, so a `chamfer`
+    // flag on a shell is silently meaningless and should fail loudly.
+    if (p.chamfer && p.kind === 'shell')
+      throw new BlobError(
+        'chamfer is not supported on a shell — a shell folds round; round its cut '
+        + 'edge with rim=', p.src.line, p.src.indent + 1);
     // A taper needs two ENDS to run between. A `blob` is a sphere (a === b
     // unless `tip=` displaces it), so `r2=` on one with no `tip=` is silently
     // meaningless — the round cone collapses to its larger sphere.
@@ -290,6 +297,16 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       ...(p.color ? { color: p.color as Vec3 } : {}),
       ...(p.gloss === null ? {} : { gloss: p.gloss }),
       ...(p.core ? { core: true } : {}),
+      ...(p.kind === 'shell'
+        ? {
+            shell: {
+              thickness: p.thickness,
+              clipNormal: p.clipNormal as Vec3,
+              clipOffset: p.clipOffset,
+              rim: p.rim,
+            },
+          }
+        : {}),
     } satisfies PrimDef;
   });
 

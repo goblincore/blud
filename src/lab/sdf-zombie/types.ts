@@ -3,6 +3,22 @@ import type { Quat } from './vec';
 
 export type Vec3 = readonly [number, number, number];
 
+/**
+ * A `shell` — a thin sheet taken off a closed primitive's field
+ * (`abs(d) - thickness`), clipped against a half-space plane with a rounded
+ * rim. `thickness` is the HALF-thickness (the sheet spans +/-thickness about
+ * the base surface). The clip keeps the side where `dot(p, clipNormal) -
+ * clipOffset` is negative; `rim` rounds the edge where the sheet meets the
+ * plane (0 = a razor edge). Cloth, not mass: a shell's `radius` is the BASE
+ * capsule's radius; the sheet rides `thickness` off that surface.
+ */
+export interface ShellParams {
+  thickness: number;
+  clipNormal: Vec3;
+  clipOffset: number;
+  rim: number;
+}
+
 /** Fixed fold order. Index into this array IS the cluster id. Never reorder. */
 export const CLUSTER_ORDER = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'] as const;
 export type LimbId = (typeof CLUSTER_ORDER)[number];
@@ -138,6 +154,13 @@ export interface PrimDef {
    * hangs off. One per cluster is the intent; a second one just ties.
    */
   core?: boolean;
+  /**
+   * When set, this primitive is a thin clipped SHELL (cloth, not mass): the
+   * closed base capsule's field is thinned to `abs(d) - thickness`, clipped
+   * against `clipNormal`/`clipOffset`, with the cut edge rounded by `rim`.
+   * Additive, and folds exactly as any other prim; see ShellParams.
+   */
+  shell?: ShellParams;
 }
 
 export interface BodyDef {
@@ -207,6 +230,8 @@ export interface Primitive {
   gloss?: number;
   /** See PrimDef.core. */
   core?: boolean;
+  /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */
+  shell?: ShellParams;
 }
 
 export interface ClusterInfo {
