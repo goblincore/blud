@@ -511,8 +511,10 @@ async function main() {
   // longer feeds the render path.
   let heroTilesEnabled = false;
   const tileBinners = new Map<string, TileBinner>();
-  function binnerForSdfSize(): TileBinner {
-    const t = sdfLayer.targetSize;
+  function binnerForSdfSize(
+    w = sdfLayer.targetSize.width, h = sdfLayer.targetSize.height,
+  ): TileBinner {
+    const t = { width: w, height: h };
     const key = `${t.width}x${t.height}`;
     let b = tileBinners.get(key);
     if (!b) { b = new TileBinner(t.width, t.height); tileBinners.set(key, b); }
@@ -3352,6 +3354,14 @@ async function main() {
      */
     async tileAB() {
       if (!view.tiles) return { error: 'tiles not created' };
+      // The frame loop re-bins the SAME buffers every frame when tile fold is
+      // on, and readback() awaits — so a live refreshHeroTiles() would land
+      // between this bin and this readback and we would diff the frame loop's
+      // lists, not ours. Suspend it for the duration; measured: with tiles on,
+      // 18k phantom "mismatches" that vanish at rest.
+      const tilesWere = heroTilesEnabled;
+      heroTilesEnabled = false;
+      try {
       camera.updateMatrixWorld();
       camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
       const groups = view.getTileGroups();
@@ -3359,8 +3369,13 @@ async function main() {
       const t = sdfLayer.targetSize;
       const grid = { widthPx: t.width, heightPx: t.height };
       view.tiles.bin(groups, camera, blendK, grid);
+      // BOTH SIDES BEFORE THE AWAIT. readback() yields, the adaptive
+      // controller can resize sdfLayer during that yield, and the CPU
+      // reference would then be built for a DIFFERENT grid than the one we
+      // just binned — which threw "tile (24,0) outside 24x24" outright. Bin
+      // the reference here, from the snapshot, while nothing can move.
+      const cpu = binnerForSdfSize(grid.widthPx, grid.heightPx).bin(groups, camera, blendK);
       const gpu = await heroTileBinding.readback();
-      const cpu = binnerForSdfSize().bin(groups, camera, blendK);
       // Per-group range diff against a JS reimplementation of the CPU
       // projection (f64) — localises classification flips to the exact group
       // and the exact branch (cover-all vs reject vs bounds).
@@ -3470,6 +3485,7 @@ async function main() {
         clampedTiles: cpu.clampedTiles,
         samples,
       };
+      } finally { heroTilesEnabled = tilesWere; }
     },
     /**
      * The metaball blood layer — threshold/edge/blur setters for console
