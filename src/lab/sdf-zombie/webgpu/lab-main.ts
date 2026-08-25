@@ -108,6 +108,7 @@ import {
 } from '../damage';
 import { sdBody } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
+import { TileBinner } from './tile-cull';
 import { makeGobs } from '../gobs';
 import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../blood-sim';
 import { createBloodView } from './blood-view-gpu';
@@ -481,7 +482,14 @@ async function main() {
     : { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
-  const view = createZombieGpuView(body, { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
+  // PERF TASK 5 step 3: the hero body opts into the per-tile fold lists.
+  // Created ALWAYS (two small textures), gated by tileCfg.x = 0 so the
+  // shipping path marches the cluster walk exactly as before; the panel
+  // button / __sdfLab.setTiles flips it.
+  const view = createZombieGpuView(body, {
+    cone: sdfLayer.cone, occluder: sdfLayer.occluder,
+    tiles: { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height },
+  });
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
   // camera layer mask apart rather than an object list to keep in sync.
@@ -489,6 +497,33 @@ async function main() {
   view.coneObject.layers.set(CONE_LAYER);
   scene.add(view.object);
   scene.add(view.coneObject);
+
+  // Tile-fold plumbing (perf task 5 step 3): one binner per SDF-pass size
+  // (resize swaps sizes, so key the cache by dimensions), refreshed every
+  // frame AFTER the camera lands — binning with last frame's camera could
+  // cull geometry this frame's rays actually hit.
+  let heroTilesEnabled = false;
+  const tileBinners = new Map<string, TileBinner>();
+  function binnerForSdfSize(): TileBinner {
+    const t = sdfLayer.targetSize;
+    const key = `${t.width}x${t.height}`;
+    let b = tileBinners.get(key);
+    if (!b) { b = new TileBinner(t.width, t.height); tileBinners.set(key, b); }
+    return b;
+  }
+  function refreshHeroTiles() {
+    if (!heroTilesEnabled || !view.tiles) return;
+    camera.updateMatrixWorld();
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    view.tiles.upload(binnerForSdfSize().bin(view.getTileGroups(), camera));
+  }
+  const tilesBtn = addButton(statusBox, 'tile fold: off', () => setHeroTiles(!heroTilesEnabled));
+  function setHeroTiles(on: boolean) {
+    heroTilesEnabled = on;
+    view.tiles?.setEnabled(on);
+    tilesBtn.textContent = `tile fold: ${on ? 'on' : 'off'}`;
+  }
+
   // From here the scene CONTAINS the character. Everything after this is
   // preparation for things that have not happened yet (gibs, goo, FPV).
   boot.bodyInScene = bootMark();
@@ -2395,6 +2430,7 @@ async function main() {
       );
       camera.lookAt(camTarget);
     }
+    refreshHeroTiles();
 
     // Held props. CLIP mode (F2 step 3): the GLB is posed purely by
     // ownership — hand root while held, the NEW flight on the marker frame,
@@ -3260,6 +3296,14 @@ async function main() {
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
     sdfLayer,
+    /**
+     * PERF TASK 5 step 3: the hero body's per-tile fold lists. setTiles(true)
+     * makes the hero's draw march its pixel's tile entry list instead of the
+     * cluster walk; false restores it exactly. The binner refreshes per frame
+     * from the live camera, so this composes with motion, FPV and orbit.
+     */
+    setTiles(on = true) { setHeroTiles(on); return on; },
+    get tilesEnabled() { return heroTilesEnabled; },
     /**
      * The metaball blood layer — threshold/edge/blur setters for console
      * tuning, mirroring the panel's goo section (which reaches only the

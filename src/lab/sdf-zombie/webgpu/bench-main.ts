@@ -47,6 +47,7 @@ import { generateFaceSheet } from '../blob-face-sheet';
 import { checkStance } from '../blob-checks';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial } from '../material';
 import { BenchStats } from './bench-stats';
+import { TileBinner } from './tile-cull';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
@@ -259,6 +260,11 @@ async function main() {
   const seconds = Math.max(1, Number(params.get('seconds') ?? 15) || 15);
   const debugParam = (params.get('debug') ?? '').toLowerCase();
   const debugMode = debugParam === 'steps' ? 1 : debugParam === 'prims' ? 2 : 0;
+  // PERF TASK 5 step 3: per-tile fold lists for ONE body (the plan's
+  // hero-only parity stage). ?tiles=1 bins and uploads body 0's bound
+  // groups every frame; its draw then folds that list instead of walking
+  // clusters. Bodies 1..N keep proxy draws with the cluster walk.
+  const tilesEnabled = params.get('tiles') === '1';
 
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
@@ -361,7 +367,10 @@ async function main() {
       // marches world space and object.position would move only the proxy.
       const placed = translateBody(body, [b.x, 0, b.z]);
       const v = createZombieGpuView(placed,
-        { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
+        { cone: sdfLayer.cone, occluder: sdfLayer.occluder,
+          ...(views.length === 0 && tilesEnabled
+            ? { tiles: { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height } }
+            : {}) });
       v.applyMaterial(setup.flesh, LIGHT_PRESETS['practical-hard-key']);
       v.setFaceTexture(setup.faceTex, setup.faceAtlas, setup.faceMean);
       v.uniforms.faceCfg.value.x = setup.faceMode;
@@ -395,6 +404,7 @@ async function main() {
   let yaw = 0;
   let active: BenchScene = sceneA();
   const camTarget = new THREE.Vector3(0, 1.05, 0);
+  let tileBinner: TileBinner | null = null;
 
   function reportError(msg: string) {
     const el = document.getElementById('errors');
@@ -445,6 +455,12 @@ async function main() {
     frameCount = 0;
     finished = false;
     yaw = 0;
+    // Tile binner tracks the SDF pass size; respawn may follow a scale change.
+    if (tilesEnabled && views[0]?.tiles) {
+      views[0].tiles.setEnabled(true);
+      const t = sdfLayer.targetSize;
+      tileBinner = new TileBinner(t.width, t.height);
+    }
     t0 = lastStamp = performance.now();
     // Debug mode renders the static yaw-0 heatmap frame only — no orbit,
     // no timed run, __bench never completes.
@@ -477,6 +493,13 @@ async function main() {
       camTarget.z + Math.cos(yaw) * cp * dist,
     );
     camera.lookAt(camTarget);
+    // Bin AFTER the camera lands — last frame's matrices could cull geometry
+    // this frame's rays hit (same rule as the lab's refreshHeroTiles).
+    if (tileBinner && views[0]?.tiles) {
+      camera.updateMatrixWorld();
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      views[0].tiles.upload(tileBinner.bin(views[0].getTileGroups(), camera));
+    }
   });
 
   // Driver surface: the headless poller reads __sdfBench.ready (debug
