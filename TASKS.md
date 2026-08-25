@@ -34,7 +34,31 @@ hands go mitten-y and the face dies at +3 cm hull inflation. Merged main:
 tsc clean, 78 files / 1517 tests green.
 
 **Next session — pick up (prioritized):**
-0. **`L1` — environment lighting: bounce-light spike (NEW, spec written
+0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
+   chromatic bounce; `ambientAt(p, n)` is the seam every later implementation
+   swaps into (P3 volumes, the SDF-cone endgame). Zero extra `mapBody` evals,
+   enforced by a source test. **Ships ON in the lab** with `practical-hard-key`
+   at `ambientGain 4` (owner-tuned by eye). **The spec's "colour not brightness"
+   rule was overruled by the owner's eye and that is the headline finding:** at
+   gain 1 the preset's 0.06 fill makes bounce ~2% of the picture and it is
+   invisible (4.21% of pixels, mean 2.05/255); the blowout the rule protected is
+   carried by the KEY, so lifting the shadow side alone does not spend it. Room
+   hue strength only sets INTENSITY — a lone saturated wall is vivid, a Cornell
+   box (4/6 white) is subtle but visible at `game-ambient`. Parity verified, not
+   assumed: at `probeWeight 0` the branch differed from main by 0.369% of pixels
+   vs a 0.372% main-vs-main noise floor. Bounce is **gated on a room existing**
+   (presets keep `probeWeight 0`; only the lab turns it on, with its enclosure)
+   so nothing is lit by a phantom Cornell box. Findings +
+   captures: `docs/dev-notes/2026-08-25-bounce-spike-findings.md`,
+   `docs/dev-notes/2026-08-25-bounce-spike/`; paste-ins:
+   `docs/dev-notes/2026-08-25-bounce-lab-pasteins.md`.
+   **Open:** `game-ambient` still at gain 1, untuned; chroma gain (push the
+   renormalised tint off neutral — more hue at the SAME level) never tried and is
+   the cheap way to make neutral rooms carry colour; frame cost vs `sdf-bench`
+   and the `clay`-still-reads-as-clay check never measured. **P5 (translucent
+   material) depends only on P1, needs no world, and is the least-blocked next
+   thing.**
+0. ~~**`L1` — environment lighting: bounce-light spike (spec written
    2026-08-24, not yet planned).** Brainstormed with the owner; spec at
    `docs/superpowers/specs/2026-08-24-environment-lighting-design.md`.
    Direction: 1995-radiosity world with ReBoot specular, characters unchanged
@@ -66,7 +90,7 @@ tsc clean, 78 files / 1517 tests green.
    same shading block; whichever lands second rebases, and this is the small one.
    Decomposition: P1 spike -> P2 room/map editor -> P3 baked volumes -> P4
    dynamic flash+injection; **P5 (translucent material) depends only on P1** and
-   is the least-blocked follow-up since it needs no world.
+   is the least-blocked follow-up since it needs no world.~~ (P1 done — see above)
 0. **`X1.hand-followups` — FPV full distal-arm rerun. PAUSED mid-chain on a
    rate limit (2026-08-20).** Tasks 0-4 were dispatched as
    `2026-08-20-fpv-distal-arm-task-{0..4}`; **tasks 0 and 1 are real and
