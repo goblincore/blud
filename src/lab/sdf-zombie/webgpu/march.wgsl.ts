@@ -851,13 +851,41 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
+//
+// PERF (raymarcher perf task 3, 2026-08-25): this now returns the UNNORMALISED
+// tetrahedron gradient as well. The AO and scatter probes used to re-evaluate
+// the whole field at p + n*0.06 and p + L*0.06 (a mapBody each — the hit pixel
+// paid 6 post-hit evals); both are first-order extrapolations of THIS
+// gradient, so the caller folds them out of it and pays 4 total. grad is the
+// e-weighted difference sum: for a LINEAR field it is the exact gradient (the
+// tetrahedron stencil is exact to first order), and |grad| -> 1 for a true
+// distance field — near the surface it is 1 to a few percent, which is all the
+// precision an 0.06 m probe estimate wants.
+//
+// What that buys, honestly: the probes move from a real field read to a
+// first-order extrapolation. On CONVEX or flat ground they agree; on CONCAVE
+// ground the extrapolation linearises away curvature the real probe would
+// have seen (limb creases, crater bottoms) — the shared-AO caveat. And near
+// smin/smax blend bands grad is NOT unit length, so the extrapolated value
+// carries blend-band error the probe never did. The AO/scatter gates own that
+// judgement; see the AO site in the march entry.
 export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
-  return normalize(
+  let grad =
     e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
     e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
     e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x);
+    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x;
+  // n and |grad| via three returns (WGSL functions return one value; a
+  // second helper would be one more node in the boot-cost chain — see the
+  // HELPERS note at the top of this file).
+  let gLen = length(grad);
+  if (gLen < 1e-6) {
+    // Degenerate stencil (all four taps equal — can only happen on a flat
+    // field at a symmetric point): any unit vector keeps AO/scatter finite.
+    return vec3<f32>(0.0, 1.0, 0.0);
+  }
+  return vec3<f32>(grad.x / gLen, grad.y / gLen, grad.z / gLen);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -1170,6 +1198,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // twice a wound's radius keeps its cost proportional to crater screen
   // area instead of screen size.
   var hitNearWound = false;
+  // The field value the ray ACCEPTED as a hit, carried out of the loop for
+  // the AO/scatter first-order estimates (perf task 3). This is the d the hit
+  // test below just passed, AFTER the shell-displacement add — and after a
+  // retraction-replay it is an omega-1 conservative sample, whose step-0.6
+  // approach means |d| sits within a few hitEps of zero, tighter than the
+  // original relaxed landing would have been. EXACTLY the value the old
+  // AO probe read back at p via a whole extra mapBody — the probe measured
+  // d at p + n*0.06, whose linear model is precisely this d plus 0.06*dot(grad, n).
+  var dHit = 0.0;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
@@ -1256,6 +1293,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
           omega = 1.0;
         } else {
           hit = true;
+          dHit = d;
           break;
         }
       } else {
@@ -1291,7 +1329,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
+  // nGeo: the GEOMETRIC normal straight off the tetrahedron, kept separate
+  // from n because the micro-detail perturbation must NOT reach the AO and
+  // scatter extrapolations — they are linear models of the FIELD, and the
+  // fbm bump is exactly the part of n that is not (perf task 3).
+  let nr = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
+  let nGeo = vec3<f32>(nr.x, nr.y, nr.z);
+  var n = nGeo;
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -1517,12 +1561,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // wound SHOULD have is the tight specular term, which keeps the boost.
   let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * surfCfg.z * (1.0 - wmRim);
 
-  // Fake backlit scatter: sample the field a little way toward the light.
-  // A whole extra mapBody, so it is skipped outright at zero translucency
-  // rather than multiplied away afterwards.
+  // Fake backlit scatter: estimate the field a little way toward the light.
+  // PERF (task 3): this was a whole extra mapBody at p + L*0.06; it is now a
+  // first-order extrapolation of the tetrahedron gradient the normal already
+  // computed — d(q) approx d + dot(grad, L) * 0.06 with grad = nGeo * |grad|.
+  // For a true distance field |grad| = 1 and the estimate is the exact linear
+  // term; near smin/smax blend bands |grad| drifts and the estimate carries
+  // that error. Gate: the wounded turntable (scatter rides the rim of every
+  // crater lip) and the render-checks; see the twin note at the AO site.
+  // Still skipped outright at zero translucency rather than multiplied away.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x * -8.0, 0.0, 1.0);
+    let thin = clamp((dHit + dot(nGeo, L) * 0.06) * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -1531,9 +1581,25 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // is correctly separated — so this is a LOD lever, not a free win: it is the
   // one guarded by an explicit flag rather than by its own amplitude, because
   // there is no "AO strength" to turn down.
+  //
+  // PERF (task 3): the field read at p + n*0.06 (a whole mapBody) is now a
+  // first-order extrapolation off the tetrahedron gradient the normal already
+  // paid for: d at 0.06 along n approx dHit + dot(grad, nGeo) * 0.06, and on a
+  // true distance field dot(grad, n) = |grad| approx 1. THE HONEST CAVEAT, and
+  // the reason the gate below matters: this linearises away concavity, which
+  // is exactly what a crease IS — inside an armpit the true field 6 cm in has
+  // already turned back toward the other limb and reads far smaller than the
+  // linear model predicts, so creases come out LIGHTER than before. There is
+  // NO separate cavity-occlusion term to catch craters (an owner bisect
+  // rejected all three wound-keyed darkenings — each drew its own radial edge
+  // onto the skin; march.wgsl.test.ts pins the term OUT), so this AO is the
+  // ONLY thing shading a crater floor: its floor goes lighter by roughly the
+  // same linear-vs-concave miss. Judged by the unwounded crease close-up and
+  // the wounded 8-yaw gate; if creases flatten, the fallback is to restore the
+  // real probe and keep only the scatter cut (6 -> 5 evals).
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x / 0.06, 0.35, 1.0);
+    ao = clamp((dHit + dot(nGeo, n) * 0.06) / 0.06, 0.35, 1.0);
   }
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
