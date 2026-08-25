@@ -297,12 +297,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * ambient — no field sampling, by design and by test.
      *
      * bounceCfg: x probeWeight (0 = flat fill exactly as before, the
-     * shipped default), y ambientGain, z ceilingEnabled, w spare.
+     * shipped default), y ambientGain, z ceilingEnabled, w chromaGain.
      *
      * Defaults describe the lab's Cornell box but contribute NOTHING until
      * probeWeight moves, so this whole block is inert on arrival.
      */
-    bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 0)),
+    bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 1)),
     boxMin: uniform(new THREE.Vector3(-2, 0, -2)),
     boxMax: uniform(new THREE.Vector3(2, 3.2, 2)),
     wallNegX: uniform(new THREE.Color(0.63, 0.06, 0.05)),
@@ -890,6 +890,7 @@ export function createZombieGpuView(
       // lighting mood.
       u.bounceCfg.value.x = light.probeWeight;
       u.bounceCfg.value.y = light.ambientGain;
+      u.bounceCfg.value.w = light.chromaGain;
     },
     dispose() {
       mesh.geometry.dispose();

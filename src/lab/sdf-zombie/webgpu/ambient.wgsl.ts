@@ -38,7 +38,7 @@ export const AMBIENT_AT = /* wgsl */ `fn ambientAt(
   fill: f32,
   keyColor: vec3<f32>
 ) -> vec3<f32> {
-  // bounceCfg: x probeWeight, y ambientGain, z ceilingEnabled, w spare.
+  // bounceCfg: x probeWeight, y ambientGain, z ceilingEnabled, w chromaGain.
   let flat = fill * keyColor;
 
   // EXACT early out, not an optimisation. At probeWeight 0 the caller's
@@ -76,13 +76,24 @@ export const AMBIENT_AT = /* wgsl */ `fn ambientAt(
   let lum = dot(acc, vec3<f32>(0.2126, 0.7152, 0.0722));
   let tint = select(keyColor, acc / max(lum, 1e-5), lum > 1e-5);
 
+  // CHROMA (bounceCfg.w). Extrapolate the unit-luminance tint away from
+  // neutral so a mostly-white room still delivers hue. Both ends have
+  // luminance 1 and luminance is linear, so this is level-preserving at any
+  // gain — unlike ambientGain it does NOT break "colour, not brightness", it
+  // is that rule taken literally. Clamp then renormalise: past neutral the
+  // weak channels go negative, and a bare clamp would quietly ADD level.
+  var hue = vec3<f32>(1.0, 1.0, 1.0) + (tint - vec3<f32>(1.0, 1.0, 1.0)) * bounceCfg.w;
+  hue = max(hue, vec3<f32>(0.0, 0.0, 0.0));
+  let hueLum = dot(hue, vec3<f32>(0.2126, 0.7152, 0.0722));
+  hue = select(tint, hue / hueLum, hueLum > 1e-5);
+
   let w = clamp(bounceCfg.x, 0.0, 1.0);
   // The level that survives is the LUMINANCE of the flat term ('fill *
   // keyColor'), so probeWeight shifts hue only and the brightness stays put.
   // ambientGain > 1 deliberately breaks the house rule — it is the control
   // for testing whether the look actually wants genuine radiosity lift.
   let g = fill * dot(keyColor, vec3<f32>(0.2126, 0.7152, 0.0722)) * bounceCfg.y;
-  return mix(flat, tint * g, w);
+  return mix(flat, hue * g, w);
 }`;
 
 /**

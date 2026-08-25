@@ -52,6 +52,17 @@ describe('AMBIENT_AT — shape contract', () => {
     expect(WALL_CONTRIBUTION).toContain(`${AMBIENT_REF_DIST}`);
   });
 
+  it('applies chromaGain from bounceCfg.w, level-preservingly', () => {
+    // The knob that makes a mostly-white room carry hue. It must extrapolate
+    // from white (both ends unit-luminance, so the level cannot move) and it
+    // must renormalise after the clamp — a bare clamp silently ADDS level.
+    expect(AMBIENT_AT).toContain('bounceCfg.w');
+    expect(AMBIENT_AT).toContain('hue = max(hue, vec3<f32>(0.0, 0.0, 0.0));');
+    expect(AMBIENT_AT).toContain('hue / hueLum');
+    // and it is the CHROMA-adjusted colour that ships, not the raw tint
+    expect(AMBIENT_AT).toContain('return mix(flat, hue * g, w);');
+  });
+
   it('honours the ceiling flag', () => {
     expect(AMBIENT_AT).toContain('bounceCfg.z');
   });

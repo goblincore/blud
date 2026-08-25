@@ -61,6 +61,27 @@ export interface AmbientOptions {
   probeWeight: number;
   /** Level multiplier once mixed. 1 honours "colour, not brightness". */
   ambientGain: number;
+  /**
+   * Saturation of the bounce tint. 1 = the room's hue exactly as accumulated.
+   *
+   * WHY THIS EXISTS. A plausible room is mostly neutral — a Cornell box is
+   * four white walls out of six — so the accumulation renormalises to nearly
+   * grey and almost no colour reaches the figure. Measured 2026-08-25: the
+   * default box moved the character by (+2.1, +0.6, -4.6), which the owner
+   * could not see, while a single saturated red wall moved it +35.0 red.
+   * Rather than demand strongly-coloured level art everywhere, push the tint
+   * away from neutral here.
+   *
+   * It is exactly luminance-preserving. `tint` has unit luminance by
+   * construction, white has unit luminance, and luminance is linear — so
+   * mixing (or extrapolating) between them cannot change the level at ANY
+   * gain. That is the point: unlike `ambientGain`, this knob does NOT break
+   * the "colour, not brightness" rule. It is that rule taken literally — more
+   * hue at the same darkness.
+   *
+   * 0 washes hue out entirely (grey ambient, same level).
+   */
+  chromaGain: number;
   /** Whether the +Y wall exists. An open-topped arena sets this false. */
   ceiling: boolean;
   /** The preset's `fillIntensity` — the level bounce must preserve. */
@@ -165,6 +186,23 @@ export function ambientAt(
     ? [acc[0] / lum, acc[1] / lum, acc[2] / lum]
     : [opts.keyColor[0], opts.keyColor[1], opts.keyColor[2]];
 
+  // CHROMA. Extrapolate the unit-luminance tint away from neutral. Both ends
+  // have luminance 1 and luminance is linear, so this is level-preserving at
+  // any gain — see chromaGain's docstring.
+  const cg = opts.chromaGain;
+  let hue: Mut3 = [
+    1 + (tint[0] - 1) * cg,
+    1 + (tint[1] - 1) * cg,
+    1 + (tint[2] - 1) * cg,
+  ];
+  // Past neutral the weak channels go negative. Clamp, then renormalise, or
+  // the clamp quietly ADDS level (a clamped colour is brighter than intended).
+  if (hue[0] < 0 || hue[1] < 0 || hue[2] < 0) {
+    hue = [Math.max(hue[0], 0), Math.max(hue[1], 0), Math.max(hue[2], 0)];
+    const hl = luminance(hue);
+    if (hl > 1e-5) hue = [hue[0] / hl, hue[1] / hl, hue[2] / hl];
+  }
+
   const w = Math.min(Math.max(opts.probeWeight, 0), 1);
   // COLOUR, NOT BRIGHTNESS, taken literally: the level that survives is the
   // LUMINANCE of the flat term it replaces (`fill * keyColor`), so switching
@@ -173,8 +211,8 @@ export function ambientAt(
   // ambientGain is the deliberate escape hatch that lets bounce add lift.
   const g = opts.fill * luminance(opts.keyColor) * opts.ambientGain;
   return [
-    flat[0] * (1 - w) + tint[0] * g * w,
-    flat[1] * (1 - w) + tint[1] * g * w,
-    flat[2] * (1 - w) + tint[2] * g * w,
+    flat[0] * (1 - w) + hue[0] * g * w,
+    flat[1] * (1 - w) + hue[1] * g * w,
+    flat[2] * (1 - w) + hue[2] * g * w,
   ];
 }

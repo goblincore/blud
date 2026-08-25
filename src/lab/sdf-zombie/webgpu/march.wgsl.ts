@@ -1005,7 +1005,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
 //   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
-//              y ambientGain, z ceilingEnabled, w spare
+//              y ambientGain, z ceilingEnabled, w chromaGain
 //   boxMin/boxMax  the enclosure bounds ambientAt derives wall planes from
 //   wallNegX..wallPosZ  the six wall albedos, linear RGB
 //

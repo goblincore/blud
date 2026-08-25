@@ -115,6 +115,16 @@ export interface LightPreset {
    * ("chromatic alone doesn't sell it") is a real outcome of this spike.
    */
   ambientGain: number;
+  /**
+   * Saturation of the bounce tint, 1 = the room's hue as accumulated.
+   *
+   * Distinct from `ambientGain` and safer: this is exactly luminance-
+   * preserving (see `ambient.ts`), so it adds colour WITHOUT lifting the
+   * shadow side. It exists because a plausible room is mostly neutral — a
+   * Cornell box is four white walls of six — and renormalising its
+   * accumulation lands near grey.
+   */
+  chromaGain: number;
 }
 
 export type LightPresetName = 'practical-hard-key' | 'game-ambient';
@@ -147,6 +157,7 @@ export const LIGHT_PRESETS: Record<LightPresetName, LightPreset> = {
     // and only while its enclosure is up — see the enclosure toggle's comment
     // on why bounce must be gated on a room actually existing.
     ambientGain: 4,
+    chromaGain: 1,
   },
   // Mirrors the real game's sun + ambient, to check the material survives it.
   'game-ambient': {
@@ -156,5 +167,6 @@ export const LIGHT_PRESETS: Record<LightPresetName, LightPreset> = {
     keyColor: [1.0, 0.925, 0.804],
     probeWeight: 0,
     ambientGain: 1,
+    chromaGain: 1,
   },
 };

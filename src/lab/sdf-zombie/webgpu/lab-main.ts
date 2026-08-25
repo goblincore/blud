@@ -2484,6 +2484,7 @@ async function main() {
     if (enclosure.group.visible) {
       u.bounceCfg.value.x = LIGHT_PRESETS[light].probeWeight || 1;
       u.bounceCfg.value.y = LIGHT_PRESETS[light].ambientGain;
+      u.bounceCfg.value.w = LIGHT_PRESETS[light].chromaGain;
       syncBounceWidgets();
     }
   });
@@ -2516,6 +2517,7 @@ async function main() {
     // knows a room exists, so the lab is what turns bounce on.
     u.bounceCfg.value.x = on ? LIGHT_PRESETS[light].probeWeight || 1 : 0;
     u.bounceCfg.value.y = LIGHT_PRESETS[light].ambientGain;
+    u.bounceCfg.value.w = LIGHT_PRESETS[light].chromaGain;
     syncBounceWidgets();
     boxBtn.textContent = `enclosure: ${on ? 'on' : 'off'}`;
   });
@@ -2530,6 +2532,12 @@ async function main() {
     label: 'probeWeight', min: 0, max: 1, step: 0.01,
     get: () => u.bounceCfg.value.x,
     set: (v) => { u.bounceCfg.value.x = v; },
+  });
+
+  const chromaSlider = addSlider(bounceBox, {
+    label: 'chromaGain', min: 0, max: 6, step: 0.05,
+    get: () => u.bounceCfg.value.w,
+    set: (v) => { u.bounceCfg.value.w = v; },
   });
 
   const gainSlider = addSlider(bounceBox, {
@@ -2551,6 +2559,7 @@ async function main() {
   function syncBounceWidgets() {
     for (const [el, v] of [
       [probeSlider, u.bounceCfg.value.x], [gainSlider, u.bounceCfg.value.y],
+      [chromaSlider, u.bounceCfg.value.w],
     ] as const) {
       el.value = String(v);
       el.dispatchEvent(new Event('input'));
