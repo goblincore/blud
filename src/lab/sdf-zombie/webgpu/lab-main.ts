@@ -995,6 +995,29 @@ async function main() {
   }
 
   let wounds: Wound[] = [];
+  /**
+   * Freezes everything that animates on its own, so two captures of the same
+   * pose are pixel-comparable.
+   *
+   * WHY THIS EXISTS. Judging a shader change (relax, wounds, shading) by
+   * A/B capture is defeated by the cosmetics a wounded, severed body spawns:
+   * chunk physics, the blood sim, and the goo density layer keep stepping
+   * BETWEEN two shots even inside one page load, and time-driven shader terms
+   * (eye-glow flicker) advance with the wall clock. Measured 2026-08-25 with
+   * scripts/relax-sweep.mjs: on a severed + wounded body the noise floor of
+   * two IDENTICAL runs reached 0.814 max lost-tile with 10 of 36 poses over
+   * 0.30 — larger than the effect under test — while the same sweep on a clean
+   * body floored at 0.014 with none over 0.30. The cosmetics were the entire
+   * difference, and three attempts at the relax question stalled on it because
+   * none of this is reachable from the console (the goo pass is a post sink
+   * behind a closure).
+   *
+   * Freezing rather than hiding is deliberate: the body must still composite
+   * against the same scene it normally does, so only the TIME EVOLUTION stops.
+   * Nothing is removed from the frame.
+   */
+  let cosmeticsFrozen = false;
+
   const chunks: { id: number; state: Chunk; view: ChunkGpuView }[] = [];
   // Blood: the deterministic droplet/splat sim, plus its instanced renderer.
   const bloodSim = createBloodSim();
@@ -2202,20 +2225,28 @@ async function main() {
     // Gib physics: step every chunk, then re-pack its world-space field.
     // dt clamped like the rig's: a hidden tab pausing rAF must not integrate
     // the whole gap in one ballistic step and teleport every chunk.
-    for (const c of chunks) {
-      c.state = stepChunk(c.state, Math.min(dt, 1 / 30));
-      c.view.update(c.state);
+    if (!cosmeticsFrozen) {
+      for (const c of chunks) {
+        c.state = stepChunk(c.state, Math.min(dt, 1 / 30));
+        c.view.update(c.state);
+      }
     }
 
     // Blood: every flying chunk trails droplets, the sim settles them into
     // splats, and the instanced view re-poses from sim state. Same dt clamp —
     // a hidden tab must not integrate the whole gap in one ballistic step.
     const bdt = Math.min(dt, 1 / 30);
-    emitTrails(
-      bloodSim,
-      chunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
-      bdt, Math.random);
-    stepBlood(bloodSim, bdt, Math.random);
+    if (!cosmeticsFrozen) {
+      emitTrails(
+        bloodSim,
+        chunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+        bdt, Math.random);
+      stepBlood(bloodSim, bdt, Math.random);
+    }
+    // sync still runs while frozen: the sim STATE is static, so this just
+    // re-poses the instances from unchanged data (and re-billboards if the
+    // camera moved). Skipping it would leave the view stale against its own
+    // state the moment anything else touched it.
     bloodView.sync(bloodSim, camera);
     // The goo density quads pose from the same sim state, in the callback
     // (before the drawFn) — same contract as bloodView.sync.
@@ -2329,7 +2360,9 @@ async function main() {
     // prims without reordering; severing flips flags, never order).
     view.update(posed, current);
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
-    view.setTime(performance.now() / 1000);
+    // Frozen: pin the shader clock so the eye-glow flicker (and anything else
+    // keyed to it) stops advancing between two captures.
+    if (!cosmeticsFrozen) view.setTime(performance.now() / 1000);
     // Re-derive the skull's sphere from the POSED primitives so the face
     // projection tracks the head through the jiggle — and hand it the rigid
     // head rotation so the PAINTED face rotates with the skull masses
@@ -3205,6 +3238,24 @@ async function main() {
       get lastGibWorstFrameMs() { return lastGibWorstFrameMs; },
     },
     get bodyCount() { return crowd.length + 1; },
+    /**
+     * Stop everything that animates on its own, so two captures of one pose
+     * are pixel-comparable. See `cosmeticsFrozen`'s declaration for the
+     * measurements that made this necessary.
+     *
+     * Freezes chunk physics, the blood sim (and with it the goo density
+     * layer, which poses from the same state) and the shader clock. It does
+     * NOT freeze the rig — call `setMotionEnabled(false)` / `setWander(false)`
+     * for that, and do it BEFORE stamping wounds so their placement is
+     * deterministic too.
+     *
+     * The capture recipe that actually works:
+     *   setMotionEnabled(false); setWander(false);  // pose
+     *   stampWounds(n); / sever keys                // damage
+     *   freezeCosmetics();                          // then silence the debris
+     */
+    freezeCosmetics(on = true) { cosmeticsFrozen = on; return cosmeticsFrozen; },
+    get cosmeticsFrozen() { return cosmeticsFrozen; },
     /** The march uniforms — lets any of them be tuned live from the console. */
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */

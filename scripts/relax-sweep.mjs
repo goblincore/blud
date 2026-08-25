@@ -28,43 +28,40 @@
 // "max tile fill(X vs 1.0) indistinguishable from floor".
 //
 // ---------------------------------------------------------------------------
-// STATUS 2026-08-25: THIS IS NOT YET A WORKING GATE. Read before trusting it.
+// STATUS 2026-08-25: WORKING GATE, and it returns a verdict.
 //
-// The metric idea is right and the plumbing works, but as configured the noise
-// floor EXCEEDS the signal. Measured on dispatch/relax-thin-r2 (= task 1b's
-// retract fix), zombie, 24 yaws x 3 pitches, severed + 8 wounds:
+// It was not one at first. The metric was right but the noise floor EXCEEDED
+// the signal: two runs at IDENTICAL relax differed more than 1.0 differed from
+// 1.4, because the blood sim, goo layer and gib chunks that wounding/severing
+// spawn keep stepping BETWEEN the A and B captures inside one page load.
+// Hiding them (this harness's first workaround) was not enough — they step
+// underneath — and raising SETTLE_MS made it worse.
 //
-//                        floor (1.0 vs 1.0)   signal (1.0 vs 1.4)
-//   max lost tile median        0.010                0.034
-//   max lost tile mean          0.148                0.096
-//   max lost tile p90           0.422                0.295
-//   poses > 0.30                17 / 72              7 / 72
+// Fixed by `__sdfLab.freezeCosmetics()` (lab-main), which stops the time
+// evolution at source. Once frozen the debris is static geometry, so the gib
+// chunks are UNHIDDEN again: hiding them removed the severed arm, i.e. exactly
+// the thin geometry the relax question is about, from the measurement.
 //
-// Two runs at IDENTICAL relax differ MORE than 1.0 differs from 1.4. Raising
-// SETTLE_MS to 1800 made it worse (floor max 0.814), so it is not a settling
-// problem.
+// zombie, 24 yaws x 3 pitches = 72 poses, severed (3,4,5,6) + 8 wounds,
+// on dispatch/relax-thin-r2 (= task 1b's retract-to-tSafe fix):
 //
-// ROOT CAUSE, isolated by rerunning the floor on a clean body:
+//                        floor (1.0 v 1.0)   signal (1.0 v 1.4)
+//   max lost tile median       0.0000              0.0139
+//   max lost tile mean         0.0028              0.0566
+//   max lost tile max          0.0278              0.5503
+//   poses > 0.10                  0 / 72             12 / 72
+//   poses > 0.30                  0 / 72              5 / 72
+//   poses > 0.50                  0 / 72              1 / 72
 //
-//   floor, severed + 8 wounds : median 0.007  max 0.814  10/36 poses > 0.30
-//   floor, no wounds no sever : median 0.007  max 0.014   0/36 poses > 0.30
+// VERDICT: relax 1.4 demonstrably skips thin geometry EVEN WITH the round-2
+// retract fix. Signal max is ~20x the floor, and twelve poses show coherent
+// lost-mask regions the floor never produces once. This is the objective
+// confirmation of what the owner saw by eye — circular bites out of arms and
+// stumps — and it is why woundCfg2.y stays 1.0.
 //
-// The noise is entirely the BLOOD, GOO and GIB CHUNKS that wounding/severing
-// spawn. They keep animating between the A and B captures even inside one page
-// load (the blood sim steps unconditionally; the goo surface pass is a post
-// sink not reachable from the console — this harness's author hit exactly that
-// and worked around it by hiding InstancedMeshes, which is not sufficient).
-// So the instrument is blind on precisely the geometry it exists to test.
-//
-// WHAT TO FIX FIRST — do this before another sweep, not after:
-// a `__sdfLab.freezeCosmetics()` in lab-main that stops the blood sim, drops
-// the goo layer out of the post chain, and freezes chunk physics. With the
-// cosmetics frozen the clean-body numbers above say the floor goes to ~0.01,
-// which would make this a real gate with a decisive margin. Sweeping harder
-// without it just buys more noise.
-//
-// Until then the best evidence on relax 1.4 remains the owner's own eye:
-// circular holes bitten out of thin geometry (arms, stumps).
+// Before this instrument, three attempts failed to measure it. Run the floor
+// (RELAX_A == RELAX_B) alongside every signal run; it is what makes the
+// numbers mean anything.
 // ---------------------------------------------------------------------------
 //
 // Usage:
@@ -295,6 +292,36 @@ await sleep(Number(process.env.SETTLE ?? 2.5) * 1000); // let remaining sim stat
 if (WOUNDS > 0) {
   const stamped = await evaluate(`(() => { window.__sdfLab.stampWounds(${WOUNDS}); return window.__sdfLab.wounds.length; })()`);
   console.log(`stamped ${WOUNDS} wounds -> ${stamped} total`);
+}
+
+// ---------- Silence the debris for real ----------
+// The hiding above was this harness's original workaround and it was not
+// enough: chunk physics and the blood sim keep STEPPING underneath, and the
+// goo pass poses from that live state, so the floor reached 0.814 max
+// lost-tile (10 of 36 poses over 0.30) while a clean body floored at 0.014.
+// freezeCosmetics() stops the time evolution at source.
+//
+// And once frozen, the debris is static geometry — so UNHIDE the gib chunks.
+// Hiding them removed the severed arm, i.e. precisely the thin geometry the
+// relax question is about, from the thing being measured. Blood instances and
+// the goo layer stay suppressed: they are floor decoration, not the subject.
+const froze = await evaluate(`(() => {
+  const L = window.__sdfLab;
+  if (typeof L.freezeCosmetics !== 'function') return { frozen: false, shown: 0 };
+  L.freezeCosmetics();
+  let shown = 0;
+  for (const o of L.scene.children) {
+    if (!window.__bootChildIds.has(o.id) && !o.visible && !o.isInstancedMesh) {
+      o.visible = true; shown++;
+    }
+  }
+  return { frozen: true, shown };
+})()`);
+if (!froze.frozen) {
+  console.warn('WARNING: __sdfLab.freezeCosmetics() missing on this build — '
+    + 'the floor will swamp the signal on severed/wounded bodies. See the header.');
+} else {
+  console.log(`cosmetics frozen; ${froze.shown} chunk object(s) re-shown for measurement`);
 }
 
 // ---------- Sweep ----------
