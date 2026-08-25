@@ -85,7 +85,10 @@ await send('Emulation.setDeviceMetricsOverride', {
 });
 
 const qs = `scene=${encodeURIComponent(SCENE)}&scale=${SCALE}&seconds=${SECONDS}`
-  + (DEBUG ? `&debug=${DEBUG}` : '');
+  + (DEBUG ? `&debug=${DEBUG}` : '')
+  // BENCH_QS appends arbitrary page flags (e.g. BENCH_QS=tiles=1) so an A/B
+  // of a page-level feature needs no code edit between legs.
+  + (process.env.BENCH_QS ? `&${process.env.BENCH_QS}` : '');
 const url = `http://localhost:${VITE}/sdf-bench.html?${qs}`;
 console.log(`bench ${url}`);
 await send('Page.navigate', { url });

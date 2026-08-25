@@ -184,7 +184,14 @@ export class TileBinner {
         const ndcX = clipX / clipW;
         const ndcY = clipY / clipW;
         const cx = (ndcX * 0.5 + 0.5) * W;
-        const cy = (ndcY * 0.5 + 0.5) * H;
+        // Y IS FLIPPED HERE ON PURPOSE. NDC +Y is UP, but the shader indexes
+        // the tile grid by three's `screenUV`, which is
+        // `screenCoordinate / screenSize` where screenCoordinate is WGSL's
+        // @builtin(position) — origin TOP-left, y increasing DOWNWARD. Without
+        // this flip, screen-top bins into row tilesY-1 on the CPU and reads
+        // from row 0 in the shader: the lists are mirrored vertically, almost
+        // every ray finds an empty tile, and the body vanishes entirely.
+        const cy = (0.5 - ndcY * 0.5) * H;
         // Screen extent AT NEAREST DEPTH — the largest projection the sphere
         // can produce, so the AABB cannot undershoot the silhouette.
         const rpix = (g.radius / nearDist) * focalY * (H / 2);
