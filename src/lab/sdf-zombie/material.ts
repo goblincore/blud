@@ -127,7 +127,26 @@ export const LIGHT_PRESETS: Record<LightPresetName, LightPreset> = {
     fillIntensity: 0.06,
     keyColor: [1.0, 0.96, 0.92],
     probeWeight: 0,
-    ambientGain: 1,
+    // OWNER-TUNED 2026-08-25: 4, judged by eye in a red-walled box.
+    //
+    // This preset's fill is 0.06, so at gain 1 the chromatic ambient is ~2% of
+    // the picture and the effect is invisible — measured, not guessed (4.21% of
+    // pixels moving by a mean of 2.05/255). Gain 4 puts the ambient near 0.24,
+    // in the same range as `game-ambient`'s 0.34, which is where it starts to
+    // read. The owner's verdict at that setting: the shadow side takes the
+    // room's colour and the hard-key blowout survives.
+    //
+    // Note this DELIBERATELY breaks the spec's "colour, not brightness" house
+    // rule — gain > 1 adds level, which is what that knob exists to allow. The
+    // rule was written to protect the 2.4-vs-0.06 blowout; it turns out the
+    // blowout is carried by the KEY, and lifting the shadow side alone does not
+    // spend it. Recorded here rather than in the spec because it is a tuned
+    // number, not a principle.
+    //
+    // Inert until something sets probeWeight above 0. Only the lab does that,
+    // and only while its enclosure is up — see the enclosure toggle's comment
+    // on why bounce must be gated on a room actually existing.
+    ambientGain: 4,
   },
   // Mirrors the real game's sun + ambient, to check the material survives it.
   'game-ambient': {

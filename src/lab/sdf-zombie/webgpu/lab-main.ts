@@ -2444,6 +2444,15 @@ async function main() {
   addSelect(presetBox, 'light', Object.keys(LIGHT_PRESETS), light, (v) => {
     light = v as LightPresetName;
     reapply();
+    // reapply() runs applyMaterial, which writes probeWeight/ambientGain from
+    // the new preset — and every preset ships probeWeight 0, so switching the
+    // light would silently switch bounce OFF while the box is still standing.
+    // Re-assert the room gate after it.
+    if (enclosure.group.visible) {
+      u.bounceCfg.value.x = LIGHT_PRESETS[light].probeWeight || 1;
+      u.bounceCfg.value.y = LIGHT_PRESETS[light].ambientGain;
+      syncBounceWidgets();
+    }
   });
 
   // ── Environment bounce (lighting P1) ────────────────────────────────
@@ -2465,22 +2474,55 @@ async function main() {
     // rather than nudging one of them: a room has one floor, and an epsilon
     // offset would still tear at grazing angles.
     floor.visible = !on;
+    // BOUNCE IS GATED ON THERE BEING A ROOM. The wall colours and box bounds
+    // live in uniforms whether or not the meshes are drawn, so without this
+    // gate "enclosure off + bounce on" lights the character from an INVISIBLE
+    // Cornell box — and the same phantom room would follow the FPV hands, the
+    // gibs, and eventually the game, none of which have walls. Presets keep
+    // probeWeight 0 for exactly this reason; the lab is the only place that
+    // knows a room exists, so the lab is what turns bounce on.
+    u.bounceCfg.value.x = on ? LIGHT_PRESETS[light].probeWeight || 1 : 0;
+    u.bounceCfg.value.y = LIGHT_PRESETS[light].ambientGain;
+    syncBounceWidgets();
     boxBtn.textContent = `enclosure: ${on ? 'on' : 'off'}`;
   });
 
   // SliderSpec is { label, min, max, step, get(), set(v) } — a getter, not a
   // starting value, so the slider re-reads the uniform rather than caching it.
-  addSlider(bounceBox, {
+  // Captured so the enclosure gate can push its value back into the widget.
+  // addSlider renders its label once and on input; the gate writes the uniform
+  // directly, so without this the panel reads "probeWeight 0.000" while bounce
+  // is visibly on — a lie the next person would burn time on.
+  const probeSlider = addSlider(bounceBox, {
     label: 'probeWeight', min: 0, max: 1, step: 0.01,
     get: () => u.bounceCfg.value.x,
     set: (v) => { u.bounceCfg.value.x = v; },
   });
 
-  addSlider(bounceBox, {
+  const gainSlider = addSlider(bounceBox, {
     label: 'ambientGain', min: 0, max: 4, step: 0.05,
     get: () => u.bounceCfg.value.y,
     set: (v) => { u.bounceCfg.value.y = v; },
   });
+
+  /**
+   * Push the live bounce uniforms back into their two sliders.
+   *
+   * Declared as a hoisted `function` on purpose: the light-preset handler above
+   * calls it, and that handler is written before this point in the file.
+   *
+   * Dispatching 'input' is what re-renders the label — addSlider only formats
+   * it on construction and on user input, so setting `.value` alone would move
+   * the thumb and leave the number stale.
+   */
+  function syncBounceWidgets() {
+    for (const [el, v] of [
+      [probeSlider, u.bounceCfg.value.x], [gainSlider, u.bounceCfg.value.y],
+    ] as const) {
+      el.value = String(v);
+      el.dispatchEvent(new Event('input'));
+    }
+  }
 
   const ceilBtn = addButton(bounceBox, 'ceiling: on', () => {
     const on = u.bounceCfg.value.z < 0.5;
