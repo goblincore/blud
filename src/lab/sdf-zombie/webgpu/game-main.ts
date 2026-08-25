@@ -41,8 +41,13 @@ import {
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
 
-/** Low but clearly visible — the owner's slide runs 0..1 from here. */
-const DEFAULT_PROBE_WEIGHT = 0.5;
+/** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
+ *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
+ *  0.5 -> (+12,+5,+2) on 743 px; 0.75 -> (+14,+7,+2) on 1735 px; 1.0 ->
+ *  (+18,+10,+5) on 1848 px. Free at any weight: ambientAt is ANALYTIC — zero
+ *  mapBody calls, pinned by the ambient tests — so the brief's probe-cost
+ *  warning does not apply to the shipped P1 implementation. */
+const DEFAULT_PROBE_WEIGHT = 0.75;
 /** Fixed SDF scale (the shipping rung). No adaptive controller here. */
 const SDF_SCALE = 0.7;
 
@@ -295,13 +300,63 @@ async function main() {
   // -----------------------------------------------------------------------
   let wanderFrozen = false;
   let frameCount = 0;
+  /** Headless driver autopilot: walk toward (x, z) until within 0.25 m. */
+  let autopilot: { x: number; z: number } | null = null;
+  /** Stuck recovery: a wanderer frozen/standing on the path blocks the line
+   *  head-on (the capsule push exactly opposes the intent, no slide). If we
+   *  stop making progress, strafe around the obstacle for a beat. */
+  let stuckT = 0;
+  let strafeT = 0;
+  let strafeDir = 1;
+  let lastWalkPos: [number, number] | null = null;
 
   function tick(dt: number) {
-    const input: MoveInput = {
+    let input: MoveInput = {
       x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
       z: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
       jump: keys.has('Space'),
     };
+    if (autopilot) {
+      const dx = autopilot.x - player.pos[0];
+      const dz = autopilot.z - player.pos[2];
+      if (Math.hypot(dx, dz) < 0.25) {
+        autopilot = null;
+        input = { x: 0, z: 0, jump: false };
+      } else if (strafeT > 0) {
+        strafeT -= dt;
+        input = { x: strafeDir, z: 0.2, jump: false };
+      } else {
+        player.yaw = Math.atan2(dx, -dz);
+        input = { x: 0, z: 1, jump: false };
+      }
+      if (lastWalkPos
+        && Math.hypot(player.pos[0] - lastWalkPos[0], player.pos[2] - lastWalkPos[1]) < 0.02) {
+        stuckT += dt;
+        if (stuckT > 0.5) {
+          // Strafe AWAY from whatever is ahead: nearest zombie within 1.2 m
+          // in front picks the side; walls just get the fallback flip.
+          const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+          let bestLat: number | null = null;
+          let bestFwd = Infinity;
+          for (const a of actors) {
+            const ox = a.pose().pos[0] - player.pos[0];
+            const oz = a.pose().pos[2] - player.pos[2];
+            const fwdDist = ox * sy - oz * cy;
+            const lat = ox * cy + oz * sy;
+            if (fwdDist > 0 && fwdDist < 1.2 && Math.abs(lat) < 0.9 && fwdDist < bestFwd) {
+              bestFwd = fwdDist;
+              bestLat = lat;
+            }
+          }
+          strafeDir = bestLat !== null ? (bestLat > 0 ? -1 : 1) : -strafeDir;
+          strafeT = 0.8;
+          stuckT = 0;
+        }
+      } else {
+        stuckT = 0;
+      }
+      lastWalkPos = [player.pos[0], player.pos[2]];
+    }
     // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
     const zombieBoxes = actors.map(a => {
       const p = a.pose().pos;
@@ -333,10 +388,13 @@ async function main() {
   }
 
   handle.setRenderCallback((dt) => {
-    const t0 = performance.now();
+    // Wall-clock frame delta (seconds -> ms), EMA'd — what the owner feels.
+    // During __sdfGame.step() the dt is the supplied fixed step, not a
+    // measurement; the readout only means something with the loop running.
+    if (dt < 0.25) {
+      frameEma = frameEma === 0 ? dt * 1000 : frameEma * 0.95 + dt * 1000 * 0.05;
+    }
     tick(Math.min(dt, 1 / 20));
-    frameEma = frameEma === 0 ? performance.now() - t0
-      : frameEma * 0.95 + (performance.now() - t0) * 0.05;
     if (frameCount++ % 10 === 0) updateHud();
   });
   updateHud();
@@ -391,14 +449,23 @@ async function main() {
       const a = actors.find(a => a.id === id);
       return a ? { view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room } : undefined;
     },
+    /** Walk the player toward (x, z) through the real collision path until
+     *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
+    walkTo: (x: number, z: number) => { autopilot = { x, z }; },
+    walkCancel: () => { autopilot = null; },
+    get walking() { return autopilot !== null; },
     frameMs: () => frameEma,
     bodiesOnScreen,
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },
     /** Where a view-model hangs (child of the camera). */
     viewModelAnchor,
-    rooms: ROOMS.map(r => ({ id: r.id, name: r.name, zombies: r.zombies })),
+    rooms: ROOMS.map(r => ({
+      id: r.id, name: r.name, zombies: r.zombies,
+      bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
+    })),
     tunnels: TUNNELS.map(t => t.name),
+    furniture: FURNITURE,
   };
 }
 
