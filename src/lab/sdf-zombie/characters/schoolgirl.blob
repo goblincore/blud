@@ -180,7 +180,7 @@ body
   # Navy count ends as THREE torso prims + the skirt (was SIX + the skirt).
   # ============================================================
   shell torso on chest at=0.80 offset=(0,0.030,-0.018) r=0.086 wide=0.98 tall=0.92 deep=1.05 thick=0.006 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=01046d
-  shell torso on chest at=0.92 offset=(0.042,0.020,0.030) tip=(-0.026,-0.118,0.106) r=0.022 r2=0.010 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.15 rim=0.004 blend=0.005 both color=01046d
+  shell torso on chest at=0.92 offset=(0.052,0.020,0.030) tip=(0.004,-0.118,0.106) r=0.016 r2=0.007 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.15 rim=0.004 blend=0.005 both color=01046d
   # The scarf knot, ON the chest front centre (y ~1.29), proud of the bust.
   blob torso on chest   at=0.72 offset=(0,-0.008,0.116) r=0.026 wide=1.30 tall=0.95 deep=0.65 blend=0.0040 color=01046d
 
