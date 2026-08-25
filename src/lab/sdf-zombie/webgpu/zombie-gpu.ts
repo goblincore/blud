@@ -292,6 +292,26 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      */
     woundShadowCfg: uniform(new THREE.Vector2(0.0, 12.0)),
     /**
+     * ENVIRONMENT BOUNCE (lighting P1). The enclosure's bounds and its six
+     * wall colours, from which `ambientAt` derives an analytic chromatic
+     * ambient — no field sampling, by design and by test.
+     *
+     * bounceCfg: x probeWeight (0 = flat fill exactly as before, the
+     * shipped default), y ambientGain, z ceilingEnabled, w spare.
+     *
+     * Defaults describe the lab's Cornell box but contribute NOTHING until
+     * probeWeight moves, so this whole block is inert on arrival.
+     */
+    bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 0)),
+    boxMin: uniform(new THREE.Vector3(-2, 0, -2)),
+    boxMax: uniform(new THREE.Vector3(2, 3.2, 2)),
+    wallNegX: uniform(new THREE.Color(0.63, 0.06, 0.05)),
+    wallPosX: uniform(new THREE.Color(0.15, 0.48, 0.09)),
+    wallNegY: uniform(new THREE.Color(0.73, 0.71, 0.68)),
+    wallPosY: uniform(new THREE.Color(0.73, 0.72, 0.70)),
+    wallNegZ: uniform(new THREE.Color(0.73, 0.71, 0.68)),
+    wallPosZ: uniform(new THREE.Color(0.73, 0.71, 0.68)),
+    /**
      * Debug instrumentation (perf-plan task 2): x = 0 off / 1 steps
      * heatmap / 2 prims heatmap. INERT until the march consumes it — the
      * bench page (bench-main.ts) sets it per body under ?debug=steps|prims,
@@ -465,6 +485,15 @@ export function createMarchMaterial(
     faceGlowColor: u.faceGlowColor,
     lodCfg: u.lodCfg,
     woundShadowCfg: u.woundShadowCfg,
+    bounceCfg: u.bounceCfg,
+    boxMin: u.boxMin,
+    boxMax: u.boxMax,
+    wallNegX: u.wallNegX,
+    wallPosX: u.wallPosX,
+    wallNegY: u.wallNegY,
+    wallPosY: u.wallPosY,
+    wallNegZ: u.wallNegZ,
+    wallPosZ: u.wallPosZ,
     debugCfg: u.debugCfg,
     startT: cone
       ? coneFetch({
@@ -855,6 +884,12 @@ export function createZombieGpuView(
       u.lightDir.value.set(...light.keyDir);
       u.keyColor.value.setRGB(...light.keyColor);
       u.lightCfg.value.set(light.keyIntensity, light.fillIntensity);
+      // probeWeight/ambientGain ride the preset so a horror beat can dial
+      // bounce to zero without touching the enclosure. z (ceiling) and w
+      // stay where the panel left them — they describe the room, not the
+      // lighting mood.
+      u.bounceCfg.value.x = light.probeWeight;
+      u.bounceCfg.value.y = light.ambientGain;
     },
     dispose() {
       mesh.geometry.dispose();
@@ -942,6 +977,17 @@ export function createChunkGpuView(
     u.lightDir.value.copy(template.lightDir.value);
     u.keyColor.value.copy(template.keyColor.value);
     u.lightCfg.value.copy(template.lightCfg.value);
+    // Chunks must light like the body they came off. Miss this and gibs
+    // carry the old flat fill while the torso takes the room's colour.
+    u.bounceCfg.value.copy(template.bounceCfg.value);
+    u.boxMin.value.copy(template.boxMin.value);
+    u.boxMax.value.copy(template.boxMax.value);
+    u.wallNegX.value.copy(template.wallNegX.value);
+    u.wallPosX.value.copy(template.wallPosX.value);
+    u.wallNegY.value.copy(template.wallNegY.value);
+    u.wallPosY.value.copy(template.wallPosY.value);
+    u.wallNegZ.value.copy(template.wallNegZ.value);
+    u.wallPosZ.value.copy(template.wallPosZ.value);
     u.surfCfg.value.copy(template.surfCfg.value);
     u.surfCfg2.value.copy(template.surfCfg2.value);
     u.mottleColor.value.copy(template.mottleColor.value);

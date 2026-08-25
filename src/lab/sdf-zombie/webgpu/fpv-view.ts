@@ -212,6 +212,17 @@ export function createHandsGpuView(
   u.lightDir.value.copy(template.lightDir.value);
   u.keyColor.value.copy(template.keyColor.value);
   u.lightCfg.value.copy(template.lightCfg.value);
+  // Chunks must light like the body they came off. Miss this and gibs
+  // carry the old flat fill while the torso takes the room's colour.
+  u.bounceCfg.value.copy(template.bounceCfg.value);
+  u.boxMin.value.copy(template.boxMin.value);
+  u.boxMax.value.copy(template.boxMax.value);
+  u.wallNegX.value.copy(template.wallNegX.value);
+  u.wallPosX.value.copy(template.wallPosX.value);
+  u.wallNegY.value.copy(template.wallNegY.value);
+  u.wallPosY.value.copy(template.wallPosY.value);
+  u.wallNegZ.value.copy(template.wallNegZ.value);
+  u.wallPosZ.value.copy(template.wallPosZ.value);
   u.surfCfg.value.copy(template.surfCfg.value);
   u.surfCfg2.value.copy(template.surfCfg2.value);
   u.mottleColor.value.copy(template.mottleColor.value);

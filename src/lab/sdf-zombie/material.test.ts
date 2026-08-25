@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/material.test.ts
 import { describe, it, expect } from 'vitest';
-import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial } from './material';
+import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPresetName } from './material';
 
 describe('flesh presets', () => {
   const names = ['henenlotter-latex', 'wet-meat', 'clay'] as const;
@@ -50,5 +50,29 @@ describe('flesh presets', () => {
       .toBeGreaterThan(LIGHT_PRESETS['game-ambient'].keyIntensity);
     expect(LIGHT_PRESETS['practical-hard-key'].fillIntensity)
       .toBeLessThan(LIGHT_PRESETS['game-ambient'].fillIntensity);
+  });
+
+  it('gives every light preset the two bounce knobs, defaulted OFF', () => {
+    // probeWeight 0 is the parity guarantee: ambientAt collapses to
+    // lightCfg.y * keyColor, so the shipped look cannot move until a
+    // slider does. Every owner-blessed visual depends on this.
+    for (const n of Object.keys(LIGHT_PRESETS) as LightPresetName[]) {
+      expect(LIGHT_PRESETS[n].probeWeight).toBe(0);
+      // ambientGain is a TUNED number, not an invariant — it is inert while
+      // probeWeight is 0, so it cannot move the shipped look on its own. Only
+      // require it to be sane. (It used to be pinned at 1, which pinned a
+      // tuning value as though it were a contract.)
+      expect(LIGHT_PRESETS[n].ambientGain).toBeGreaterThan(0);
+      expect(Number.isFinite(LIGHT_PRESETS[n].ambientGain)).toBe(true);
+    }
+  });
+
+  it('keeps practical-hard-key at the owner-tuned ambientGain of 4', () => {
+    // Judged by eye in a red-walled box, 2026-08-25. At gain 1 this preset's
+    // 0.06 fill makes chromatic ambient ~2% of the picture and the effect is
+    // invisible; 4 lands it near game-ambient's 0.34 where it reads, without
+    // spending the hard-key blowout (which the KEY carries, not the fill).
+    // Pinned so a later sweep cannot quietly undo an owner verdict.
+    expect(LIGHT_PRESETS['practical-hard-key'].ambientGain).toBe(4);
   });
 });

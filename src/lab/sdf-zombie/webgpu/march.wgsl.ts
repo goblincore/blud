@@ -1,3 +1,4 @@
+import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -1003,6 +1004,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   lodCfg     x aoEnabled, y legacyGamma, w goreStrength (0 body, 1 chunk views)
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
+//   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
+//              y ambientGain, z ceilingEnabled, w spare
+//   boxMin/boxMax  the enclosure bounds ambientAt derives wall planes from
+//   wallNegX..wallPosZ  the six wall albedos, linear RGB
 //
 // LOD NOTE: most quality levers are guarded by their own amplitude reaching
 // zero (silhouette noise, surface noise, translucency, face, wounds), so the
@@ -1046,6 +1051,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
   woundShadowCfg: vec2<f32>,
+  bounceCfg: vec4<f32>,
+  boxMin: vec3<f32>,
+  boxMax: vec3<f32>,
+  wallNegX: vec3<f32>,
+  wallPosX: vec3<f32>,
+  wallNegY: vec3<f32>,
+  wallPosY: vec3<f32>,
+  wallNegZ: vec3<f32>,
+  wallPosZ: vec3<f32>,
   debugCfg: vec2<f32>,
   startT: f32,
   occT: f32
@@ -1541,7 +1555,19 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     wShadow = mix(1.0, woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x);
   }
 
-  var fleshLit = albedo * (lightCfg.y + diff * wShadow * lightCfg.x) * keyColor * ao
+  // ENVIRONMENT BOUNCE (lighting P1). Replaces the flat scalar fill with a
+  // chromatic ambient derived analytically from the enclosure's six walls.
+  //
+  // At bounceCfg.x == 0 this returns exactly lightCfg.y * keyColor, which
+  // makes the two expressions below algebraically identical to what they
+  // were before bounce existed — the parity guarantee the spike rests on,
+  // and the reason every preset ships with probeWeight 0.
+  //
+  // ZERO extra mapBody evaluations: ambientAt is dot products and distance
+  // falloff, gated by a test that greps its source for field calls. The
+  // post-hit eval budget is unchanged.
+  let amb = ambientAt(p, n, boxMin, boxMax, wallNegX, wallPosX, wallNegY, wallPosY, wallNegZ, wallPosZ, bounceCfg, lightCfg.y, keyColor);
+  var fleshLit = albedo * (amb + diff * wShadow * lightCfg.x * keyColor) * ao
                + keyColor * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
@@ -1550,7 +1576,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // fringe and killed the mouth on the down-sloping jaw. 0.85 keeps a whisper
   // of real light so the head still turns.
   fleshLit = mix(fleshLit,
-                 albedo * (lightCfg.y + 0.52 * lightCfg.x) * keyColor,
+                 albedo * (amb + 0.52 * lightCfg.x * keyColor),
                  faceFlat * 0.85);
 
   // The eye REPLACES the flesh rather than adding to it.
@@ -1673,5 +1699,6 @@ export const HELPERS = [
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
   MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER,
+  WALL_CONTRIBUTION, AMBIENT_AT,
 ];
 
