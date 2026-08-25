@@ -15,6 +15,7 @@
 // turntables line up yaw-for-yaw.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
+import { execFileSync } from 'node:child_process';
 
 const VITE = Number(process.argv[2] ?? 5325);
 const OUT = process.argv[3] ?? '/tmp/shell-turntable';
@@ -28,6 +29,29 @@ const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 const tab = await (
   await fetch(`http://localhost:${CDP}/json/new?about:blank`, { method: 'PUT' })
 ).json();
+// ---------------------------------------------------------------------------
+// TAB CLEANUP. `/json/new` above spawns a renderer process (~250 MB) that
+// OUTLIVES this script unless it is closed again. Nothing here used to close
+// it, so every invocation leaked one — and these scripts are run in loops. A
+// 2026-08-25 session accumulated ~35 stale tabs across sweeps and benches,
+// drove host load to 27, and silently corrupted every timing number taken in
+// that window: the runs still "succeeded", they were just measuring a machine
+// fighting itself. That is the dangerous failure mode — not a crash, a quiet
+// bias.
+//
+// `process.on('exit')` fires on EVERY exit path (success, fail(), an uncaught
+// throw), which is why the cleanup lives here rather than at the end of the
+// happy path. Exit handlers must be synchronous, so this shells out to curl
+// instead of using fetch — a dev-only script may be inelegant; it may not
+// leak. Failure is ignored: if the browser is already gone there is nothing
+// to close.
+const __closeTabUrl = `http://localhost:${CDP}/json/close/${tab.id}`;
+process.on('exit', () => {
+  try {
+    execFileSync('curl', ['-s', '-m', '2', __closeTabUrl], { stdio: 'ignore' });
+  } catch { /* browser already gone, or curl missing — nothing to clean */ }
+});
+
 const ws = new WebSocket(tab.webSocketDebuggerUrl);
 await new Promise((ok, err) => { ws.onopen = ok; ws.onerror = err; });
 
