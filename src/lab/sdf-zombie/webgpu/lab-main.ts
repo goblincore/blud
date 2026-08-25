@@ -3344,6 +3344,134 @@ async function main() {
     },
     get tilesEnabled() { return heroTilesEnabled; },
     /**
+     * UNIT A/B (compute port): bins the CURRENT camera/groups/grid on the GPU
+     * and on the CPU reference binner, reads the GPU buffers back, and diffs
+     * per tile — counts AND every entry field, order-sensitive (both emit
+     * ascending-group order, so exact equality is the expected outcome).
+     * Returns per-tile mismatch tallies plus a bounded sample of diffs.
+     */
+    async tileAB() {
+      if (!view.tiles) return { error: 'tiles not created' };
+      camera.updateMatrixWorld();
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      const groups = view.getTileGroups();
+      const blendK = view.uniforms.counts.value.w;
+      const t = sdfLayer.targetSize;
+      const grid = { widthPx: t.width, heightPx: t.height };
+      view.tiles.bin(groups, camera, blendK, grid);
+      const gpu = await heroTileBinding.readback();
+      const cpu = binnerForSdfSize().bin(groups, camera, blendK);
+      // Per-group range diff against a JS reimplementation of the CPU
+      // projection (f64) — localises classification flips to the exact group
+      // and the exact branch (cover-all vs reject vs bounds).
+      const vmE = camera.matrixWorldInverse.elements;
+      const pe = camera.projectionMatrix.elements;
+      const W = grid.widthPx, H = grid.heightPx;
+      const focalY = pe[5]!;
+      const blendReach = blendK * 4.0;
+      const v = camera.position.clone();
+      const jsRanges: number[][] = [];
+      for (const g of groups) {
+        v.set(g.center[0], g.center[1], g.center[2]).applyMatrix4(camera.matrixWorldInverse);
+        const rBlend = g.radius + blendReach;
+        const nearDist = -v.z - rBlend;
+        const clipW = pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
+        let tx0 = 0, tx1 = -1, ty0 = 0, ty1 = -1;
+        if (nearDist <= 0 || clipW <= 0) {
+          tx1 = cpu.tilesX - 1; ty1 = cpu.tilesY - 1;
+        } else {
+          const clipX = pe[0]! * v.x + pe[4]! * v.y + pe[8]! * v.z;
+          const clipY = pe[1]! * v.x + pe[5]! * v.y + pe[9]! * v.z;
+          const ndcX = clipX / clipW, ndcY = clipY / clipW;
+          const cx = (ndcX * 0.5 + 0.5) * W;
+          const cy = (0.5 - ndcY * 0.5) * H;
+          const rpix = (rBlend / nearDist) * focalY * (H / 2);
+          if (!(cx + rpix <= 0 || cx - rpix >= W || cy + rpix <= 0 || cy - rpix >= H)) {
+            tx0 = Math.max(0, Math.floor((cx - rpix) / 16));
+            tx1 = Math.min(cpu.tilesX - 1, Math.floor((cx + rpix - 1e-6) / 16));
+            ty0 = Math.max(0, Math.floor((cy - rpix) / 16));
+            ty1 = Math.min(cpu.tilesY - 1, Math.floor((cy + rpix - 1e-6) / 16));
+          }
+        }
+        jsRanges.push([tx0, tx1, ty0, ty1, nearDist, clipW]);
+      }
+      const rangeSamples: unknown[] = [];
+      for (let gi = 0; gi < groups.length; gi++) {
+        const gr = [gpu.ranges[gi * 4]!, gpu.ranges[gi * 4 + 1]!, gpu.ranges[gi * 4 + 2]!, gpu.ranges[gi * 4 + 3]!];
+        const jr = jsRanges[gi]!;
+        if (gr[0] !== jr[0] || gr[1] !== jr[1] || gr[2] !== jr[2] || gr[3] !== jr[3]) {
+          if (rangeSamples.length < 6) {
+            rangeSamples.push({
+              gi, gpu: gr, js: jr.slice(0, 4),
+              nearDist: jr[4], clipW: jr[5],
+              centre: groups[gi]!.center, radius: groups[gi]!.radius,
+            });
+          }
+        }
+      }
+      let tilesCompared = 0;
+      let countMismatches = 0;
+      let entryMismatches = 0;
+      let extraEntries = 0;
+      const samples: unknown[] = [];
+      for (let ty = 0; ty < gpu.tilesY; ty++) {
+        for (let tx = 0; tx < gpu.tilesX; tx++) {
+          tilesCompared++;
+          const gn = cpu.countAt(tx, ty);
+          const h = (ty * gpu.tilesX + tx) * 2;
+          const gBase = gpu.headers[h]!;
+          const gN = gpu.headers[h + 1]!;
+          if (gN < gn) {
+            // GPU list SHORTER than the CPU's — entries were lost. This is
+            // the hole class and the only hard failure direction.
+            countMismatches++;
+            if (samples.length < 8) {
+              samples.push({ tile: [tx, ty], cpuCount: gn, gpuCount: gN });
+            }
+            continue;
+          }
+          // SUBSEQUENCE match: both lists are ascending-group order, but the
+          // GPU's f32 projection carries a sub-tile safety pad, so its list
+          // may hold extra boundary groups the CPU's f64 edges excluded.
+          // Every CPU entry must appear, in order, inside the GPU list;
+          // unmatched GPU entries are counted as (benign) extras.
+          let gi = 0;
+          let gj = 0;
+          while (gi < gn && gj < gN) {
+            const o = (gBase + gj) * 12;
+            const ce = cpu.entryAt(tx, ty, gi);
+            const same =
+              ce!.center[0] === gpu.entries[o] && ce!.center[1] === gpu.entries[o + 1] &&
+              ce!.center[2] === gpu.entries[o + 2] && ce!.radius === gpu.entries[o + 3] &&
+              ce!.start === gpu.entries[o + 4] && ce!.count === gpu.entries[o + 5] &&
+              ce!.distort === gpu.entries[o + 6] && ce!.flags === gpu.entries[o + 7] &&
+              ce!.bodyIndex === gpu.entries[o + 8];
+            if (same) { gi++; gj++; }
+            else { gj++; extraEntries++; }
+          }
+          if (gi < gn) {
+            // CPU entries with no GPU counterpart — the hole class.
+            countMismatches++;
+            entryMismatches += gn - gi;
+            if (samples.length < 8) {
+              samples.push({ tile: [tx, ty], missingFrom: gi, cpuCount: gn, gpuCount: gN });
+            }
+          } else {
+            extraEntries += gN - gj;
+          }
+        }
+      }
+      return {
+        tilesCompared, countMismatches, entryMismatches, extraEntries,
+        totalEntries: { cpu: cpu.totalEntries, gpu: gpu.totalEntries },
+        grid: { tilesX: gpu.tilesX, tilesY: gpu.tilesY },
+        groups: groups.length,
+        rangeMismatches: rangeSamples.length > 0 ? rangeSamples : undefined,
+        clampedTiles: cpu.clampedTiles,
+        samples,
+      };
+    },
+    /**
      * The metaball blood layer — threshold/edge/blur setters for console
      * tuning, mirroring the panel's goo section (which reaches only the
      * same three).

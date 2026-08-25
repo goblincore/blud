@@ -110,14 +110,24 @@ describe('kernel sources', () => {
     expect(K_TILE_RANGE).toContain('(0.5 - ndcY * 0.5) * dims.y');
   });
 
-  it('mirrors the CPU binner’s behind-camera cover-everything rule', () => {
-    expect(K_TILE_RANGE).toContain('nearDist <= 0.0 || clip.w <= 0.0');
+  it('mirrors the CPU binner’s behind-camera cover-everything rule, widened', () => {
+    // The 1e-6 guard (not 0) keeps eye-plane-grazing spheres out of the
+    // projection branch, where f32-vs-f64 rounding could drop a boundary tile.
+    expect(K_TILE_RANGE).toContain('nearDist <= 1e-6 || clip.w <= 0.0');
     expect(K_TILE_RANGE).toContain('i32(cfg.z) - 1');
     expect(K_TILE_RANGE).toContain('i32(cfg.w) - 1');
   });
 
+  it('pads the AABB edges sub-tile — GPU lists must SUPERSET the CPU’s', () => {
+    // f32-vs-f64 boundary rounding flips floors at tile edges; the pad makes
+    // the GPU conservative in the only safe direction. Missing entries are
+    // holes; extras are fold work the per-step sphere cull eats.
+    expect(K_TILE_RANGE).toContain('let pad = rpix * 1e-5 + 0.01;');
+    expect(K_TILE_RANGE).toContain('cx - rpix - pad');
+  });
+
   it('rejects off-screen spheres instead of clamping them inward', () => {
-    expect(K_TILE_RANGE).toContain('cx - rpix >= dims.x');
+    expect(K_TILE_RANGE).toContain('cx - rpix - pad >= dims.x');
   });
 
   it('kTileWrite walks groups ascending — bit-parity with the CPU order', () => {

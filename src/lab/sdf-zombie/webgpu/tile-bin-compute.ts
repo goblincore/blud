@@ -121,9 +121,12 @@ const PROJECTION_BLOCK = /* wgsl */ `
   var tx1 = -1;
   var ty0 = 0;
   var ty1 = -1;
-  // Behind-camera / eye-plane-crossing spheres cover EVERY tile, exactly as
-  // the CPU binner does — the cull may never omit a touching group.
-  if (nearDist <= 0.0 || clip.w <= 0.0) {
+  // Behind-camera / eye-plane-crossing spheres cover EVERY tile. The guard is
+  // 1e-6, not 0: a sphere grazing the eye plane must never fall through to
+  // the projection branch with a near-zero nearDist, where f32 rounding
+  // differs from the CPU reference's f64 and could exclude a boundary tile.
+  // Over-covering is the safe direction; omitting is the hole class.
+  if (nearDist <= 1e-6 || clip.w <= 0.0) {
     tx1 = i32(cfg.z) - 1;
     ty1 = i32(cfg.w) - 1;
   } else {
@@ -135,20 +138,41 @@ const PROJECTION_BLOCK = /* wgsl */ `
     let cy = (0.5 - ndcY * 0.5) * dims.y;
     // Screen extent at NEAREST depth — the largest projection possible.
     let rpix = (rBlend / nearDist) * dims.z * (dims.y * 0.5);
+    // SUB-TILE SAFETY PAD. The CPU reference computes these edges in f64;
+    // here they are f32, and at huge rpix (close cameras) a few ulps are
+    // hundredths of a pixel — enough to flip a floor() at a tile boundary
+    // and drop a group the CPU kept. The pad is relative to rpix (so it
+    // scales with the edge's ulp) plus a constant for cx/cy's own error, and
+    // stays far below one tile: it can only add tiles the edge genuinely
+    // grazes. The GPU list is thereby a strict SUPERSET of the CPU's —
+    // extras are wasted fold work the per-step sphere cull eats; misses
+    // would be holes.
+    let pad = rpix * 1e-5 + 0.01;
     // REJECT off-screen rather than clamp inward: edge-clamping would pin
-    // far-off geometry onto the border columns.
-    if (!(cx + rpix <= 0.0 || cx - rpix >= dims.x || cy + rpix <= 0.0 || cy - rpix >= dims.y)) {
-      tx0 = max(0, i32(floor((cx - rpix) / ${TILE_SIZE_PX}.0)));
-      tx1 = min(i32(cfg.z) - 1, i32(floor((cx + rpix - 1e-6) / ${TILE_SIZE_PX}.0)));
-      ty0 = max(0, i32(floor((cy - rpix) / ${TILE_SIZE_PX}.0)));
-      ty1 = min(i32(cfg.w) - 1, i32(floor((cy + rpix - 1e-6) / ${TILE_SIZE_PX}.0)));
+    // far-off geometry onto the border columns. The pad rides the test, so
+    // the rejection is weaker than the CPU's — again the safe direction.
+    if (!(cx + rpix + pad <= 0.0 || cx - rpix - pad >= dims.x || cy + rpix + pad <= 0.0 || cy - rpix - pad >= dims.y)) {
+      tx0 = max(0, i32(floor((cx - rpix - pad) / ${TILE_SIZE_PX}.0)));
+      tx1 = min(i32(cfg.z) - 1, i32(floor((cx + rpix + pad - 1e-6) / ${TILE_SIZE_PX}.0)));
+      ty0 = max(0, i32(floor((cy - rpix - pad) / ${TILE_SIZE_PX}.0)));
+      ty1 = min(i32(cfg.w) - 1, i32(floor((cy + rpix + pad - 1e-6) / ${TILE_SIZE_PX}.0)));
     }
   }
 `;
 
+// ---------------------------------------------------------------------------
+// NOTE ON ACCESS MODES. Every storage param in these COMPUTE kernels is
+// declared read_write even where the kernel only reads. three declares the
+// underlying var<storage> with the node's access mode — READ_WRITE by
+// default — and WGSL forbids passing a &var<storage, read_write> to a
+// ptr<..., read> parameter (measured: pipeline creation fails validation).
+// The FRAGMENT side is the opposite: getNodeAccess forces READ_ONLY outside
+// compute, so the march's params must stay read.
+// ---------------------------------------------------------------------------
+
 /** Thread i projects group i. Dispatched at MAX_TILE_GROUPS threads. */
 export const K_TILE_RANGE = /* wgsl */ `fn kTileRange(
-  groups: ptr<storage, array<vec4<f32>>, read>,
+  groups: ptr<storage, array<vec4<f32>>, read_write>,
   outRanges: ptr<storage, array<vec4<i32>>, read_write>,
   viewM: mat4x4<f32>,
   projM: mat4x4<f32>,
@@ -168,7 +192,7 @@ ${PROJECTION_BLOCK}
 /** Thread t counts how many group ranges cover tile t. Dispatched at the
  *  WORST-CASE tile count; threads past the active total return early. */
 export const K_TILE_COUNTS = /* wgsl */ `fn kTileCounts(
-  ranges: ptr<storage, array<vec4<i32>>, read>,
+  ranges: ptr<storage, array<vec4<i32>>, read_write>,
   outCounts: ptr<storage, array<u32>, read_write>,
   cfg: vec4<f32>,
   dims: vec4<f32>,
@@ -190,7 +214,7 @@ export const K_TILE_COUNTS = /* wgsl */ `fn kTileCounts(
  *  zero for the next frame? No — counts are rewritten by kTileCounts every
  *  frame before this runs, so no clearing pass exists at all. */
 export const K_TILE_SCAN = /* wgsl */ `fn kTileScan(
-  counts: ptr<storage, array<u32>, read>,
+  counts: ptr<storage, array<u32>, read_write>,
   outHeaders: ptr<storage, array<vec2<u32>>, read_write>,
   outMeta: ptr<storage, array<vec4<f32>>, read_write>,
   dims: vec4<f32>
@@ -211,9 +235,9 @@ export const K_TILE_SCAN = /* wgsl */ `fn kTileScan(
 /** Thread t writes tile t's entries, walking groups in ASCENDING index order
  *  — the CPU binner's order, which is what makes the lists bit-identical. */
 export const K_TILE_WRITE = /* wgsl */ `fn kTileWrite(
-  groups: ptr<storage, array<vec4<f32>>, read>,
-  ranges: ptr<storage, array<vec4<i32>>, read>,
-  headers: ptr<storage, array<vec2<u32>>, read>,
+  groups: ptr<storage, array<vec4<f32>>, read_write>,
+  ranges: ptr<storage, array<vec4<i32>>, read_write>,
+  headers: ptr<storage, array<vec2<u32>>, read_write>,
   outEntries: ptr<storage, array<vec4<f32>>, read_write>,
   cfg: vec4<f32>,
   dims: vec4<f32>,
@@ -257,11 +281,13 @@ export interface ComputeTileBinding {
     groups: TileGroupInput[], camera: THREE.PerspectiveCamera, maxBlendK: number,
     grid: { widthPx: number; heightPx: number },
   ): void;
-  /** Readback of headers/meta/entries for tests and debug tooling. */
+  /** Readback of headers/meta/entries/ranges for tests and debug tooling. */
   readback(): Promise<{
     /** Per-tile (base, count) pairs, length tilesX*tilesY*2 (ACTIVE grid). */
     headers: Uint32Array;
     entries: Float32Array;
+    /** Per-group (tx0,tx1,ty0,ty1) as kTileRange stored them. */
+    ranges: Int32Array;
     totalEntries: number;
     tilesX: number;
     tilesY: number;
@@ -384,11 +410,13 @@ export function createComputeTileBinding(
       const headersAll = new Uint32Array(await renderer.getArrayBufferAsync(headersAttr));
       const meta = new Float32Array(await renderer.getArrayBufferAsync(metaAttr));
       const entriesAll = new Float32Array(await renderer.getArrayBufferAsync(entriesAttr));
+      const rangesAll = new Int32Array(await renderer.getArrayBufferAsync(rangesAttr));
       const headersOut = new Uint32Array(activeTilesX * activeTilesY * 2);
       headersOut.set(headersAll.subarray(0, headersOut.length));
       return {
         headers: headersOut,
         entries: entriesAll,
+        ranges: rangesAll,
         totalEntries: Math.round(meta[0]!),
         tilesX: activeTilesX,
         tilesY: activeTilesY,
