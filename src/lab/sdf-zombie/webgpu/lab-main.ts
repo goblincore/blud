@@ -520,6 +520,11 @@ async function main() {
     view.tiles.upload(binnerForSdfSize().bin(
       view.getTileGroups(), camera, view.uniforms.counts.value.w));
   }
+  addSlider(statusBox, {
+    label: 'AA eps (0=off)', min: 0, max: 2, step: 0.05,
+    get: () => view.uniforms.aaCfg.value.y,
+    set: (v) => { for (const x of [view, ...crowd]) x.uniforms.aaCfg.value.y = v; },
+  });
   const tilesBtn = addButton(statusBox, 'tile fold: off', () => setHeroTiles(!heroTilesEnabled));
   function setHeroTiles(on: boolean) {
     heroTilesEnabled = on;
@@ -2398,6 +2403,14 @@ async function main() {
     // prims without reordering; severing flips flags, never order).
     view.update(posed, current);
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
+    // AA epsilon footprint. Recomputed per frame because the adaptive
+    // resolution ladder changes the SDF pass height, and the one-pixel
+    // footprint is derived from it — so AA quality stays consistent across
+    // rungs instead of degrading with the blur.
+    {
+      const k = sdfLayer.pixelConeK;
+      for (const v of [view, ...crowd]) v.uniforms.aaCfg.value.x = k;
+    }
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
     // keyed to it) stops advancing between two captures.
     if (!cosmeticsFrozen) view.setTime(performance.now() / 1000);
@@ -3306,6 +3319,12 @@ async function main() {
      * from the live camera, so this composes with motion, FPV and orbit.
      */
     setTiles(on = true) { setHeroTiles(on); return on; },
+    /** Antialiasing epsilon strength: 0 = off (ship default), 1 = end the
+     *  march at exactly one pixel footprint. See march.wgsl.ts's hitEps. */
+    setAaEps(v: number) {
+      for (const x of [view, ...crowd]) x.uniforms.aaCfg.value.y = v;
+      return v;
+    },
     get tilesEnabled() { return heroTilesEnabled; },
     /**
      * The metaball blood layer — threshold/edge/blur setters for console

@@ -332,6 +332,17 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * and MARCH_BODY reads it only inside `if (debugCfg.x > 0.5)` guards so
      * the shipping path (x 0) pays nothing. y/w are spare.
      */
+    /**
+     * Antialiasing epsilon (2026-08-25). x = the ray's footprint RADIUS PER
+     * UNIT DISTANCE for one pixel — tan(fovY/2) / sdfPassHeight, the same
+     * quantity coneMarch uses at tile granularity. y = strength, 0 = OFF.
+     *
+     * Ships off: it prefilters geometry below Nyquist (real AA, and fewer
+     * steps with it) but mapBody under-reports Euclid distance by the group
+     * distortion factor, so a large epsilon can stop rays short in
+     * high-distortion regions. See the hitEps block in march.wgsl.ts.
+     */
+    aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
     /**
      * PER-TILE PRIMITIVE LISTS (perf task 5). x enabled, y tiles-per-row,
@@ -547,6 +558,7 @@ export function createMarchMaterial(
     wallPosY: u.wallPosY,
     wallNegZ: u.wallNegZ,
     wallPosZ: u.wallPosZ,
+    aaCfg: u.aaCfg,
     debugCfg: u.debugCfg,
     tileHead: texture(tiles?.header ?? fallbackTileTextures().header),
     tileEnt: texture(tiles?.entries ?? fallbackTileTextures().entries),

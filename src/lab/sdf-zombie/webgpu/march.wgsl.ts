@@ -1057,6 +1057,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //              rides the rotating skull. Identity (0,0,0,1) on statues/chunks.
 //   faceAtlas  xy = uv scale, zw = uv offset — crops the head out of the sheet
 //   lodCfg     x aoEnabled, y legacyGamma, w goreStrength (0 body, 1 chunk views)
+//   aaCfg      x pixelConeK — the ray's footprint RADIUS PER UNIT DISTANCE
+//              for ONE pixel (tan(fovY/2) / viewportHeight), the same
+//              quantity coneMarch uses at tile granularity; y strength
+//              (0 = off, the shipping default)
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
 //   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
@@ -1121,6 +1125,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   wallPosY: vec3<f32>,
   wallNegZ: vec3<f32>,
   wallPosZ: vec3<f32>,
+  aaCfg: vec2<f32>,
   debugCfg: vec2<f32>,
   tileHead: texture_2d<f32>,
   tileEnt: texture_2d<f32>,
@@ -1190,7 +1195,42 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // mode raises the threshold through the SPARE woundCfg2.w channel to at
   // least half the largest voxel pitch (set by the hands view). max() keeps
   // the primitive path bit-identical at the default 0.
-  let hitEps = max(0.0012, woundCfg2.w);
+  // HIT EPSILON, and the ANTIALIASING lever on top of it.
+  //
+  // hitEpsBase is the floor: the original 1.2 mm primitive literal, raised
+  // by woundCfg2.w in volume mode (see below).
+  //
+  // aaCfg.y > 0 additionally ends the march once the field is within the RAY'S
+  // OWN PIXEL FOOTPRINT, t * aaCfg.x. That prefilters geometry below Nyquist
+  // — detail finer than a pixel is smoothed rather than aliased — which is the
+  // principled fix for geometric aliasing, versus FXAA guessing edges after
+  // the fact. It is also FASTER, because a larger epsilon converges in fewer
+  // steps, and the saving grows with distance: biggest exactly where crowds
+  // are. Corner rounding is sub-pixel by construction, so invisible; that IS
+  // the antialiasing.
+  //
+  // THREE THINGS TO KNOW BEFORE RAISING THE STRENGTH:
+  //  1. mapBody UNDER-REPORTS Euclid distance by the group distortion factor
+  //     (up to 22x — the schoolgirl's sole plate). So d < eps can fire when
+  //     the TRUE distance is many times eps, stopping the ray short and
+  //     reading blobby/detached, non-uniformly, in high-distortion regions.
+  //     The fold cull multiplies its thresholds by the packed factor for this
+  //     reason; this epsilon does not, which is why it ships OFF.
+  //  2. Craters fill in at range as eps approaches wound depth. Arguably
+  //     correct LOD, but it is the distance at which a player judges whether
+  //     a shot landed — hence the floor, which never shrinks below 1.2 mm.
+  //  3. It does nothing for SHADING aliasing, and henenlotter-latex is the
+  //     worst case (specIntensity 0.95 / specRoughness 0.12, plus
+  //     surfaceNoiseAmp perturbing normals). Geometric prefiltering will not
+  //     stop specular scintillation; that wants roughness widening with the
+  //     same footprint, separately.
+  //
+  // Bonus: the footprint tracks the adaptive-resolution ladder for free, since
+  // aaCfg.x is derived from the SDF pass height — so AA quality stays
+  // consistent at scale 1.0 and at 0.45, where today the low rungs give more
+  // aliasing AND more blur at once.
+  let hitEpsBase = max(0.0012, woundCfg2.w);
+  let aaK = aaCfg.x * aaCfg.y;
   // NOISE ANCHOR (motion-polish task 6): every fbm below samples the
   // DOMINANT prim's REST frame via restPoint — the noise is baked into the
   // model. noiseShift (faceCfg3.zw + lodCfg.z, the task-3 root-shift anchor)
@@ -1314,6 +1354,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
+      let hitEps = max(hitEpsBase, t * aaK);
       if (d < hitEps) {
         // wound-halo r2: an over-relaxed step can cross the skin with
         // radius + prevRadius == stepLen EXACTLY — a perpendicular approach
@@ -1342,7 +1383,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
         // back-step to the interval actually travelled. This is the other half
         // of the wounded-ray non-reconvergence. Fixing it needs the packed
         // distortion factor threaded to this site — see the perf spec.
-        if (d < -hitEps && omega > 1.0 && !conservative) {
+        if (d < -max(hitEpsBase, t * aaK) && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;
         } else {

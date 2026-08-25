@@ -326,7 +326,11 @@ describe('ported features reach the entry point', () => {
     // the landing is BEHIND the wound spheres — so nearWound is not a stop
     // signal; retracting to the wall is strictly more correct than shading a
     // point inside it.
-    expect(MARCH_BODY).toContain('if (d < -hitEps && omega > 1.0 && !conservative) {');
+    // The epsilon is now per-step (it can grow with the ray's pixel footprint
+    // when AA is on), so the guard tests against the same expression the hit
+    // does rather than a loop-invariant.
+    expect(MARCH_BODY).toContain(
+      'if (d < -max(hitEpsBase, t * aaK) && omega > 1.0 && !conservative) {');
   });
 
   it('extends the occluder bound by the shell amp (X1.21.2 dark dropout)', () => {
@@ -522,11 +526,16 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // Volume mode needs a hit epsilon of at least half the largest voxel
     // pitch (trilinear of an SDF is not exact); the primitive path keeps its
     // 1.2 mm literal because max(0.0012, 0) is 0.0012.
-    expect(MARCH_BODY).toContain('let hitEps = max(0.0012, woundCfg2.w);');
+    expect(MARCH_BODY).toContain('let hitEpsBase = max(0.0012, woundCfg2.w);');
+    // AA epsilon rides ON TOP of that floor and must collapse to it exactly at
+    // the shipping default (aaCfg.y = 0 => aaK = 0 => max(base, 0) = base), so
+    // the primitive path stays bit-identical until someone moves the slider.
+    expect(MARCH_BODY).toContain('let aaK = aaCfg.x * aaCfg.y;');
+    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK);');
     // wound-halo r2 split the accept into the deep-crossing retract guard and
     // the literal hit test; the epsilon literal still gates both.
     expect(MARCH_BODY).toContain('hit = true;\n          break;');
-    expect(MARCH_BODY).toContain('if (d < -hitEps && omega > 1.0');
+    expect(MARCH_BODY).toContain('if (d < -max(hitEpsBase, t * aaK) && omega > 1.0');
     expect(MARCH_BODY).not.toContain('if (d < 0.0012)');
   });
 });

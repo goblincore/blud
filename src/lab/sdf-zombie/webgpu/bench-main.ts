@@ -265,6 +265,10 @@ async function main() {
   // groups every frame; its draw then folds that list instead of walking
   // clusters. Bodies 1..N keep proxy draws with the cluster walk.
   const tilesEnabled = params.get('tiles') === '1';
+  // ?aa=<strength> drives the march's footprint-proportional hit epsilon
+  // (0 = off, the ship default). x is stamped per frame from the SDF pass
+  // height below, so it tracks the adaptive ladder like the lab's does.
+  const aaStrength = Number(params.get('aa') ?? 0) || 0;
 
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
@@ -494,6 +498,15 @@ async function main() {
     );
     camera.lookAt(camTarget);
     // Bin AFTER the camera lands — last frame's matrices could cull geometry
+    // AA epsilon footprint, per frame — the SDF pass height moves with the
+    // adaptive ladder, so the one-pixel footprint has to follow it.
+    if (aaStrength > 0) {
+      const k = sdfLayer.pixelConeK;
+      for (const v of views) {
+        v.uniforms.aaCfg.value.x = k;
+        v.uniforms.aaCfg.value.y = aaStrength;
+      }
+    }
     // this frame's rays hit (same rule as the lab's refreshHeroTiles).
     if (tileBinner && views[0]?.tiles) {
       camera.updateMatrixWorld();

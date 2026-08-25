@@ -176,6 +176,9 @@ export interface SdfLayer {
   readonly flipY: boolean;
   /** Actual SDF target size, for the panel to display. */
   readonly targetSize: { width: number; height: number };
+  /** One-pixel footprint radius per unit distance (tan(fovY/2) / passHeight),
+   *  for the march's AA epsilon. Follows the adaptive resolution ladder. */
+  readonly pixelConeK: number;
   dispose(): void;
 }
 
@@ -299,7 +302,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   quadCam.position.z = 1;
 
-  /** Cone footprint radius per unit distance for a tile of `px` pixels. */
+  /** Cone footprint radius per unit distance for a tile of `px` pixels.
+   *  `coneKFor(1)` is the ONE-PIXEL footprint the march's AA epsilon wants —
+   *  it tracks the adaptive-resolution ladder for free, because coneHeight is
+   *  the SDF pass height, not the window's. */
   function coneKFor(px: number): number {
     return (px * Math.tan((coneFov * Math.PI) / 360)) / Math.max(1, coneHeight);
   }
@@ -449,6 +455,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },
     get targetSize() { return { width: target.width, height: target.height }; },
+    /** One-pixel footprint radius per unit distance, for the march's AA
+     *  epsilon. Derived from the SDF pass height, so it follows the adaptive
+     *  resolution ladder automatically. */
+    get pixelConeK() { return coneKFor(1); },
     dispose() {
       target.dispose();
       coneCoarse.dispose();
