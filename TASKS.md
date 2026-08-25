@@ -22,7 +22,49 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 **NotBlood-core port landed + playtested (2026-06-15, `fde5200`)** — explosion-outcomes (launched-alive / flung-corpse / re-gib / head-pop) AND the tables-codegen + death/gib pipeline are merged to main and parity-confirmed. `scripts/gen_notblood_tables.py` generates raw Build-unit tables; `tuning.ts` is a curated overlay; pure `resolveDeathOutcome()` ports `actKillDude`. Codegen already caught a real off-by-one (burning-cultist HP). See `R7`.
 
-**SHELL PRIM + SCHOOLGIRL COLLAR (in-progress, `dispatch/shell-cloth-prim` — uncommitted):** added a `shell` prim to the `.blob` language (thin sheet off a closed field, `abs(d)-thickness`, clipped against a plane with a rounded rim — iq's cloth construction). Rebuilt the sailor collar from shells (was 7 blob masses, now a 3-prim cloth cape+V+knot; owner's "epaulette plates"/"blob mass" read addressed — the collar now drapes over the shoulders with a V), made the skirt a thin shell cone with a rounded hem (was a solid cone), and deleted the shoe sole. Schoolgirl 62→57 prims. tsc 0, 1559 lab tests, render-check schoolgirl/zombie/cyclops/mouse all green. **Blocks:** commits (worktree `.git` is in the main repo; sandbox denies write + no approval channel).
+**COMPUTE TILE BINNING — MERGED (2026-08-25, `90e1ca9`).** Tile binning moved
+from the CPU into a WebGPU compute pass writing storage buffers allocated once
+at the worst case, with the ACTIVE grid travelling in a uniform. This kills the
+scale-lock defect: tiles used to be correct ONLY at the SDF scale their
+`DataTexture`s were allocated at (1.0 measured **-37%** of flesh pixels with 99
+console errors; only 0.7 was clean), which is why tile fold had to default off
+while adaptive resolution moves the rung at runtime. Verified independently, not
+taken on the agent's word: CPU/GPU tile lists **bit-exact** at scale
+1.0/0.85/0.7/0.5 and distance 3.0/1.0/0.6/0.3, and **zero missing entries over
+26 poses with adaptive ON** and the rung moving across 0.55/0.70/0.85. tsc 0,
+1585 lab tests, all four characters render clean. Owner verified the look with
+adaptive + tile fold both on.
+
+- **Perf delta is nil** — p50 45 ms (on) vs 44 ms (off), scene A, inside the
+  drift. Honest result, and an informative one: the per-step group-sphere cull
+  already handles the single-body case, so we are bound by *pixels x steps*,
+  not primitives. Tile fold therefore still ships **OFF**; flipping it needs a
+  scene where prim counts actually bite.
+- **The dispatch's own A/B gate was broken and its diagnosis was wrong.** It
+  reported up to 18k phantom mismatches and concluded "the compute uniform
+  upload lags". It does not — `uniform()` defaults to `objectGroup`
+  (`updateType: OBJECT`, so `updateGroup()` always returns true) and
+  `finishCompute` submits immediately. The gate was measuring itself: it re-bins
+  the same storage buffers the frame loop re-bins every frame, and it built the
+  CPU reference *after* the readback await, by which time the adaptive
+  controller had resized the layer. Fixed in `a04caf0` — **preserve both
+  invariants if you touch `tileAB()`**.
+
+**QUEUED (2026-08-25, ox-alpha, serial):** `2026-08-25-crowd-alive` then
+`2026-08-25-tile-all-bodies`. Crowd bodies are static fill *by design*
+(`lab-main.ts:21`), so the per-body cost that scales to 15 characters — rig
+solve, wound repack, data-texture upload — is currently **not measured at all**.
+crowd-alive gives every body its own actor record, animation and wounds, while
+keeping `freezeCosmetics()`/`setMotionEnabled(false)` freezing *every* body and
+the crowd clock deterministic (the frozen noise floor 0.814 -> 0.0278 is the
+only reason the relax question ever closed). tile-all-bodies then profiles 15
+live bodies and **stops if the frame is CPU-bound**, extending tile lists across
+bodies only if fragment work dominates. NOTE: each body already draws a *tight
+proxy box* (`zombie-gpu.ts:964`), not a full-screen quad — "15 bodies = 15
+full-screen marches" is false; the real costs are misses inside the box,
+overlap, and per-body CPU work.
+
+**SHELL PRIM + SCHOOLGIRL COLLAR (merged 2026-08-25, `07addaa`):** added a `shell` prim to the `.blob` language (thin sheet off a closed field, `abs(d)-thickness`, clipped against a plane with a rounded rim — iq's cloth construction). Rebuilt the sailor collar from shells (was 7 blob masses, now a 3-prim cloth cape+V+knot; owner's "epaulette plates"/"blob mass" read addressed — the collar now drapes over the shoulders with a V), made the skirt a thin shell cone with a rounded hem (was a solid cone), and deleted the shoe sole. Schoolgirl 62→57 prims. tsc 0, 1559 lab tests, render-check schoolgirl/zombie/cyclops/mouse all green. Collar reworked to a V/sailor read after owner review. (The dispatch could not commit — sandbox denied writes to the main repo's `.git` — so the work was auto-committed on the branch and merged from there.)
 
 **Merged 2026-08-25:** perf task-1/2 (`8f4fdcd`) — `sdf-bench.html`, scenes A/B,
 scripted orbit, headless driver (`npm run bench:sdf`), WGSL steps/prims heatmaps
