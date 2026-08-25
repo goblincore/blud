@@ -522,9 +522,8 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // 1.2 mm literal because max(0.0012, 0) is 0.0012.
     expect(MARCH_BODY).toContain('let hitEps = max(0.0012, woundCfg2.w);');
     // wound-halo r2 split the accept into the deep-crossing retract guard and
-    // the literal hit test; the epsilon literal still gates both. (perf task
-    // 3: the accept now also latches dHit for the AO/scatter extrapolation.)
-    expect(MARCH_BODY).toContain('hit = true;\n          dHit = d;\n          break;');
+    // the literal hit test; the epsilon literal still gates both.
+    expect(MARCH_BODY).toContain('hit = true;\n          break;');
     expect(MARCH_BODY).toContain('if (d < -hitEps && omega > 1.0');
     expect(MARCH_BODY).not.toContain('if (d < 0.0012)');
   });
@@ -947,45 +946,6 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     // The key path keeps keyColor; the ambient path must NOT be tinted by
     // the lamp any more. That tint is exactly what ambientAt now decides.
     expect(MARCH_BODY).not.toContain('(lightCfg.y + diff');
-  });
-});
-
-describe('cheaper hit shading (raymarcher-perf task 3)', () => {
-  // The hit pixel paid 6 post-hit field evals (tetrahedron x4 + AO probe +
-  // scatter probe); task 3 folds the AO and scatter probes into the
-  // tetrahedron gradient the normal already computes. 6 -> 4.
-  it('the AO probe extrapolates off the tetrahedron, not a second field read', () => {
-    expect(MARCH_BODY).toContain('ao = clamp((dHit + dot(nGeo, n) * 0.06) / 0.06, 0.35, 1.0);');
-    expect(MARCH_BODY).not.toContain('mapBody(p + n * 0.06');
-  });
-
-  it('the scatter probe extrapolates off the tetrahedron the same way', () => {
-    expect(MARCH_BODY).toContain('let thin = clamp((dHit + dot(nGeo, L) * 0.06) * -8.0, 0.0, 1.0);');
-    expect(MARCH_BODY).not.toContain('mapBody(p + L * 0.06');
-  });
-
-  it('calcNormal reports the unnormalised tetrahedron gradient via magnitude', () => {
-    const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
-    expect(calcNormal).toContain('let grad =');
-    expect(calcNormal).toContain('let gLen = length(grad);');
-    expect(calcNormal).not.toContain('return normalize(');
-    expect((calcNormal.match(/mapBody\(/g) ?? []).length).toBe(4);
-  });
-
-  it('dHit is the accepted hit sample, hoisted out of the loop', () => {
-    expect(MARCH_BODY).toContain('var dHit = 0.0;');
-    expect(MARCH_BODY).toContain('dHit = d;');
-  });
-
-  it('AO/scatter extrapolate off the GEOMETRIC normal, before the fbm detail lands in n', () => {
-    // micro-detail and the face bump live in n; the linear model is a model
-    // of the FIELD, and the fbm bump is the one part of n that is not.
-    const normalCall = MARCH_BODY.indexOf('let nr = calcNormal(');
-    const aoSite = MARCH_BODY.indexOf('ao = clamp((dHit');
-    const scatterSite = MARCH_BODY.indexOf('let thin = clamp((dHit');
-    expect(normalCall).toBeGreaterThanOrEqual(0);
-    expect(aoSite).toBeGreaterThan(normalCall);
-    expect(scatterSite).toBeGreaterThan(normalCall);
   });
 });
 
