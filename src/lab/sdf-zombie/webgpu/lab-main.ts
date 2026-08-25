@@ -18,9 +18,11 @@
 //      snap as a TSL PostProcessing pipeline is its own follow-up, and it
 //      should not gate parity.
 //   2. An N-BODY SPAWNER ([ and ]) and a frame-time readout, carried over from
-//      the spike. Extra bodies are static crowd fill — the rig, wounds,
-//      severing and gibs all drive body zero. That is what makes the count
-//      honest for a cost measurement: crowd cost, not feature cost.
+//      the spike. Since the crowd-alive task every body is a live actor: own
+//      motion record, own rig solve, own pose, all through actor.ts's
+//      stepActorMotion. Body zero remains the one shots, severing and gibs
+//      address; the crowd idles/walks in small seeded wander boxes with a
+//      fixed per-frame dt so poses are deterministic for A/B measurement.
 
 // From 'three/webgpu', never 'three'. Two copies of three means the node
 // system cannot see the lights and every standard material renders black.
@@ -124,11 +126,12 @@ import {
   type MotionJoints, type MotionSignals,
 } from '../motion';
 import {
+  CROWD_DT, crowdSeed, crowdRng, emptyActorSignals,
   makeActorMotion, stepActorMotion,
-  type ActorSignals,
+  type ActorMotion, type ActorSignals,
 } from '../actor';
 import { GAIT_TUNING, type ArmStyle } from '../gait';
-import { makeRng, type WanderBounds } from '../wander';
+import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
@@ -1176,6 +1179,34 @@ async function main() {
   /** One source of truth for the default: defaultUniforms' woundCfg2.z. */
   let shellSilhouette = u.woundCfg2.value.z > 0;
 
+  /**
+   * One live crowd body: the per-actor state that used to have no home
+   * because every piece of actor state was a body-zero singleton. The motion
+   * record is the SAME type body zero owns; the pose step is the SAME
+   * stepActorMotion the hero runs, with empty signals, a per-index seed and a
+   * fixed dt (see CROWD_DT) so two runs at one body count match pose-for-pose.
+   */
+  interface CrowdActor {
+    index: number;
+    /** Rest-space field at the spawn offset — severs never touch it today. */
+    current: BuildResult;
+    /** Latest posed field. With motion frozen this is `current` itself,
+     *  which is exactly what the static crowd has always rendered. */
+    lastPosed: BuildResult;
+    motion: ActorMotion;
+    view: ReturnType<typeof createZombieGpuView>;
+    spawn: Vec3;
+    /** Wander box centred on the spawn — neighbours stay neighbours. */
+    bounds: WanderBounds;
+    rng: Rng;
+  }
+  const crowdActors: CrowdActor[] = [];
+  /** Shared inert signal bundle — crowd actors take no shots or severs. */
+  const CROWD_SIGNALS = emptyActorSignals();
+  /** Wander half-extent around a crowd body's spawn, in world units. Grid
+   *  spacing is 0.62 x / 0.85 z; ±0.28 keeps neighbours out of each other. */
+  const CROWD_WANDER_R = 0.28;
+
   function setCrowdCount(n: number) {
     while (crowd.length > n) {
       const v = crowd.pop();
@@ -1183,6 +1214,7 @@ async function main() {
       scene.remove(v.object);
       scene.remove(v.coneObject);
       v.dispose();
+      crowdActors.pop();
     }
     while (crowd.length < n) {
       const i = crowd.length + 1; // body zero is the interactive one
@@ -1209,8 +1241,9 @@ async function main() {
         v.uniforms.faceCfg.value.copy(u.faceCfg.value);
         v.uniforms.faceCfg2.value.copy(u.faceCfg2.value);
         v.uniforms.faceProj.value.copy(u.faceProj.value);
-        // Static, so the skull's sphere is set once rather than re-derived from
-        // a posed body every frame.
+        // Spawn-time skull sphere from the placed field; while the crowd is
+        // animated this is re-derived per frame from the POSED prims, same as
+        // body zero's.
         const skull = headShape(placed);
         if (skull) v.setHeadShape(skull.centre, skull.axes);
       }
@@ -1219,6 +1252,20 @@ async function main() {
       scene.add(v.object);
       scene.add(v.coneObject);
       crowd.push(v);
+      const spawn: Vec3 = [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread];
+      crowdActors.push({
+        index: i,
+        current: placed,
+        lastPosed: placed,
+        motion: makeActorMotion(placed, { seed: crowdSeed(i, MOTION_SEED), start: spawn }),
+        view: v,
+        spawn,
+        bounds: {
+          minX: spawn[0] - CROWD_WANDER_R, maxX: spawn[0] + CROWD_WANDER_R,
+          minZ: spawn[2] - CROWD_WANDER_R, maxZ: spawn[2] + CROWD_WANDER_R,
+        },
+        rng: crowdRng(i, MOTION_SEED),
+      });
     }
     countEl.textContent = `bodies: ${crowd.length + 1}`;
   }
@@ -2072,11 +2119,13 @@ async function main() {
     return s[Math.floor(s.length * 0.5)]!;
   }
 
-  /** Every crowd body's current field, as fed to the occluder hull. */
+  /** Every crowd body's CURRENT POSED field, as fed to the occluder hull.
+   *  Was the rest field back when the crowd never moved; posed keeps the
+   *  hull's exclusion zones tracking the animated bodies exactly as it does
+   *  for body zero. With motion off this equals the rest field — unchanged
+   *  behaviour. */
   function crowdBodies() {
-    return crowd
-      .map(v => bodySource.get(v.object)?.detailed)
-      .filter((b): b is NonNullable<typeof b> => b !== undefined);
+    return crowdActors.map(a => a.lastPosed);
   }
 
   // Dynamic resolution. ON by default since 2026-08-23: zooming in on the
@@ -2432,6 +2481,40 @@ async function main() {
     if (skull) view.setHeadShape(skull.centre, skull.axes);
     view.setHeadRotation(headQuatOf(heroMotion.bound, heroMotion.lastBodyYaw) ?? [0, 0, 0, 1]);
     uploadWounds(posed.prims);
+
+    // — Crowd step: every body rigs and poses per frame, through the SAME
+    //    stepActorMotion pipeline as body zero. Differences are policy, not
+    //    machinery: empty signals (no shots/severs reach a crowd body), a
+    //    per-index seed (phase offset — no marching band), wander bounds
+    //    centred on each spawn, and a FIXED dt so poses are a pure function
+    //    of frame count. motionEnabled gates EVERY actor — that is what makes
+    //    setMotionEnabled(false) a real freeze for captures.
+    if (motionEnabled) {
+      for (const a of crowdActors) {
+        if (!a.motion.motionJoints) continue;
+        stepActorMotion(a.motion, {
+          current: a.current,
+          dt: CROWD_DT,
+          wander: wanderOn,
+          armStyle, headingFollow, gazeFollow,
+          bounds: a.bounds,
+          rng: a.rng,
+          signals: CROWD_SIGNALS,
+        });
+        const cPosed = applyRig(a.current, a.motion.bound, a.motion.lastBodyYaw);
+        a.lastPosed = cPosed;
+        // Per-body repack + data-texture upload + skull re-derivation — the
+        // per-body work the static crowd never paid, which is exactly what
+        // this task exists to measure.
+        a.view.update(cPosed, a.current);
+        const rs = a.motion.lastRootShift;
+        a.view.setRootShift(rs[0], rs[2], a.motion.lastBodyYaw);
+        const cSkull = headShape(cPosed);
+        if (cSkull) a.view.setHeadShape(cSkull.centre, cSkull.axes);
+        a.view.setHeadRotation(
+          headQuatOf(a.motion.bound, a.motion.lastBodyYaw) ?? [0, 0, 0, 1]);
+      }
+    }
 
     if (ff.mode === 'fpv') {
       // First-person camera: eye from the controller, aim from yaw/pitch,
@@ -3361,6 +3444,19 @@ async function main() {
       camTarget.z = 0;
       view.update(current);
       refreshWounds();
+      // Crowd actors: same canonicalization as the hero — fresh seeded motion
+      // record, pose back to the spawn field, root shift and head rotation
+      // zeroed. The frozen crowd frame is then also a pure function of seed,
+      // which is what makes two boots' captures comparable.
+      for (const a of crowdActors) {
+        a.motion = makeActorMotion(a.current, { seed: crowdSeed(a.index, MOTION_SEED), start: a.spawn });
+        a.lastPosed = a.current;
+        a.view.update(a.current, a.current);
+        a.view.setRootShift(0, 0);
+        const s = headShape(a.current);
+        if (s) a.view.setHeadShape(s.centre, s.axes);
+        a.view.setHeadRotation([0, 0, 0, 1]);
+      }
       for (let i = 0; i < frames; i++) handle.step(1 / 60);
       await handle.resolveGpu();
       return frames;
