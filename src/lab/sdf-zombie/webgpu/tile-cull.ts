@@ -334,7 +334,23 @@ export function createTileTextures(tilesX: number, tilesY: number) {
   header.minFilter = THREE.NearestFilter;
   header.generateMipmaps = false;
 
-  const entryRows = 8;
+  // SIZED FOR THE WORST CASE, ON PURPOSE — this texture must never need to
+  // grow. A three DataTexture cannot be resized in place: swapping image.data
+  // and image.height does NOT reallocate the GPU texture, which was created at
+  // the original dimensions, so a "grown" buffer silently mismatches and the
+  // upload is worse than the truncation it was meant to fix (measured: -70% of
+  // the body at 0.6 m versus -20% when it merely truncated).
+  //
+  // The true bound is every tile holding a full entry list: tiles x
+  // TILE_MAX_ENTRIES x TILE_STRIDE. That is what a close camera actually
+  // approaches, because each bound-group sphere then covers most of the screen
+  // and lands in nearly every tile. At 672x378 that is 42x24x64x3 = 193,536
+  // texels, ~3 MB of RGBA-float — cheap next to being unable to walk up to a
+  // character.
+  const worstCaseTexels = Math.min(
+    tilesX * tilesY * TILE_MAX_ENTRIES * TILE_STRIDE, ENTRY_MAX_TEXELS,
+  );
+  const entryRows = Math.max(8, Math.ceil(worstCaseTexels / ENTRY_ROW_TEXELS));
   const entryTexels = new Float32Array(entryRows * ENTRY_ROW_TEXELS * 4);
   const entries = new THREE.DataTexture(
     entryTexels, ENTRY_ROW_TEXELS, entryRows, THREE.RGBAFormat, THREE.FloatType,
@@ -345,18 +361,55 @@ export function createTileTextures(tilesX: number, tilesY: number) {
   header.needsUpdate = true;
   entries.needsUpdate = true;
 
+  // Mutable views: `resize`/`growEntries` REPLACE these arrays, and callers
+  // hold the store, not the array. Returning them as plain values captured the
+  // originals, so after a resize the uploader wrote into a detached buffer
+  // while the texture read the new one.
+  let headerView = headerTexels;
+  let entryView = entryTexels;
+  let entryRowsNow = entryRows;
+
   function resize(nextTilesX: number, nextTilesY: number) {
-    header.image.data = new Float32Array(nextTilesX * nextTilesY * 4);
+    headerView = new Float32Array(nextTilesX * nextTilesY * 4);
+    header.image.data = headerView;
     header.image.width = nextTilesX;
     header.image.height = nextTilesY;
     header.needsUpdate = true;
   }
 
+  /**
+   * Grow the entry texture to hold `texels` entries.
+   *
+   * WHY THIS EXISTS. `entryRows` was fixed at 8 (8192 texels) and the uploader
+   * TRUNCATED anything past it with a console.warn. Up close that is not an
+   * edge case: every bound-group sphere covers most of the screen, so all of a
+   * body's groups get appended to nearly every tile — measured 21,834 texels
+   * needed against the 8192 cap at 0.4 m, i.e. 62% of the stream discarded.
+   * The tiles whose entries fell off the end read empty lists and their pixels
+   * vanish, which is the interleaved banding the owner reported when the
+   * camera approaches the model. Growing is the fix; truncation never was.
+   */
+  /**
+   * Assert the stream fits. It cannot grow — see the allocation note above —
+   * so this exists to make an overflow LOUD rather than a silent band of
+   * missing pixels. If it ever fires, raise the allocation, do not truncate.
+   */
+  function growEntries(texels: number) {
+    if (texels <= entryRowsNow * ENTRY_ROW_TEXELS) return;
+    console.error(
+      `[tile-cull] entry stream needs ${texels} texels but the texture holds `
+      + `${entryRowsNow * ENTRY_ROW_TEXELS}. Tiles past the cap will render as `
+      + `HOLES. Raise the allocation in createTileTextures.`,
+    );
+  }
+
   return {
     header, entries,
-    headerTexels, entryTexels,
-    entryCapacityTexels: entryTexels.length / 4,
+    get headerTexels() { return headerView; },
+    get entryTexels() { return entryView; },
+    get entryCapacityTexels() { return entryView.length / 4; },
     resize,
+    growEntries,
     dispose() { header.dispose(); entries.dispose(); },
   };
 }

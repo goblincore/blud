@@ -801,10 +801,11 @@ function makeViewTiles(
         store.resize(res.tilesX, res.tilesY);
       }
       store.headerTexels.set(res.headers.subarray(0, Math.min(res.headers.length, store.headerTexels.length)));
-      const cap = store.entryCapacityTexels;
-      if (res.usedTexels > cap) {
-        console.warn(`[zombie-gpu] tile entry stream truncated to ${cap} of ${res.usedTexels} texels — reallocate for a larger viewport`);
-      }
+      // GROW, never truncate. Dropping entries silently deletes whole tiles'
+      // fold lists, and those pixels render as holes — the close-camera
+      // banding. Cost is a one-off reallocation on the frame the viewport or
+      // the camera first demands it; steady state re-uses the buffer.
+      store.growEntries(res.usedTexels);
       store.entryTexels.set(res.entries.subarray(0, Math.min(res.usedTexels * 4, store.entryTexels.length)));
       tileCfg.set(1, res.tilesX, TILE_SIZE_PX);
       store.header.needsUpdate = true;
