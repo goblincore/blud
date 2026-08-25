@@ -2131,6 +2131,22 @@ async function main() {
 
     tickAdaptive(now);
 
+    // AA EPSILON FOOTPRINT — immediately after tickAdaptive, because that is
+    // what moves the SDF pass size and the one-pixel footprint is derived
+    // from it. Placed here rather than beside the pose update: that block sits
+    // inside the motion branch and does not run every frame, which left
+    // aaCfg.x stuck at its placeholder.
+    //
+    // Computed from the live camera and pass height rather than
+    // sdfLayer.pixelConeK: the layer handle reachable here reported a stale
+    // size, and a silently-wrong footprint is exactly the kind of thing that
+    // would be blamed on the shader later.
+    {
+      const hPx = Math.max(1, sdfLayer.targetSize.height);
+      const k = Math.tan((camera.fov * Math.PI) / 360) / hPx;
+      for (const v of [view, ...crowd]) v.uniforms.aaCfg.value.x = k;
+    }
+
     // — FPV step (X1.23): controller + flight + detonation + hands, FIRST so
     //    a detonation's wounds/severs/impulses flow through the motion, rig
     //    and pose code below exactly like any other hit this frame. The
@@ -2403,14 +2419,6 @@ async function main() {
     // prims without reordering; severing flips flags, never order).
     view.update(posed, current);
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
-    // AA epsilon footprint. Recomputed per frame because the adaptive
-    // resolution ladder changes the SDF pass height, and the one-pixel
-    // footprint is derived from it — so AA quality stays consistent across
-    // rungs instead of degrading with the blur.
-    {
-      const k = sdfLayer.pixelConeK;
-      for (const v of [view, ...crowd]) v.uniforms.aaCfg.value.x = k;
-    }
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
     // keyed to it) stops advancing between two captures.
     if (!cosmeticsFrozen) view.setTime(performance.now() / 1000);
