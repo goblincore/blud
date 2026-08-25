@@ -48,6 +48,7 @@ import { checkStance } from '../blob-checks';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial } from '../material';
 import { BenchStats } from './bench-stats';
 import { TileBinner } from './tile-cull';
+import { createComputeTileBinding, type ComputeTileBinding } from './tile-bin-compute';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
@@ -372,9 +373,7 @@ async function main() {
       const placed = translateBody(body, [b.x, 0, b.z]);
       const v = createZombieGpuView(placed,
         { cone: sdfLayer.cone, occluder: sdfLayer.occluder,
-          ...(views.length === 0 && tilesEnabled
-            ? { tiles: { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height } }
-            : {}) });
+          ...(views.length === 0 && tilesEnabled ? { tiles: heroTileBinding } : {}) });
       v.applyMaterial(setup.flesh, LIGHT_PRESETS['practical-hard-key']);
       v.setFaceTexture(setup.faceTex, setup.faceAtlas, setup.faceMean);
       v.uniforms.faceCfg.value.x = setup.faceMode;
@@ -408,7 +407,15 @@ async function main() {
   let yaw = 0;
   let active: BenchScene = sceneA();
   const camTarget = new THREE.Vector3(0, 1.05, 0);
+  // CPU reference binner — kept ONLY for the unit A/B gate; the render path
+  // bins on the GPU.
   let tileBinner: TileBinner | null = null;
+  // Allocated ONCE at the worst-case grid (content size at scale 1.0), so a
+  // scale change never reallocates anything.
+  const heroTileBinding: ComputeTileBinding = createComputeTileBinding(
+    handle.renderer,
+    Math.ceil(postAa.contentSize.width), Math.ceil(postAa.contentSize.height),
+  );
 
   function reportError(msg: string) {
     const el = document.getElementById('errors');
@@ -508,11 +515,12 @@ async function main() {
       }
     }
     // this frame's rays hit (same rule as the lab's refreshHeroTiles).
-    if (tileBinner && views[0]?.tiles) {
+    if (views[0]?.tiles) {
       camera.updateMatrixWorld();
       camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-      views[0].tiles.upload(tileBinner.bin(
-        views[0].getTileGroups(), camera, views[0].uniforms.counts.value.w));
+      views[0].tiles.bin(
+        views[0].getTileGroups(), camera, views[0].uniforms.counts.value.w,
+        { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height });
     }
   });
 

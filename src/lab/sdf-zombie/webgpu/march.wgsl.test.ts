@@ -549,7 +549,22 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     // One read loop, bounded by the same cap the CPU binner clamps to.
     expect(MARCH_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
     expect(MAP_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
-    expect(MARCH_BODY).toContain('if (e >= n) { break; }');
+    expect(MARCH_BODY).toContain('if (e >= i32(n)) { break; }');
+  });
+
+  it('reads tile lists from STORAGE BUFFERS with the grid carried in tileCfg', () => {
+    // The compute port's whole point: no resource-dimension inference (the
+    // defect that broke every scale except the one allocated at), no texture
+    // bindings for the lists.
+    expect(MARCH_BODY).toContain('tileHdr: ptr<storage, array<vec2<u32>>, read>');
+    expect(MARCH_BODY).toContain('tileEnt: ptr<storage, array<vec4<f32>>, read>');
+    expect(MARCH_BODY).not.toContain('tileHead: texture_2d<f32>');
+    expect(MARCH_BODY).not.toContain('textureDimensions(tileHead');
+    // Grid dims come from tileCfg (y tilesX, w tilesY), clamped in-shader.
+    expect(MARCH_BODY).toContain('let gx = max(1, i32(tileCfg.y));');
+    expect(MARCH_BODY).toContain('let gy = max(1, i32(tileCfg.w));');
+    // Entry addressing is LINEAR over vec4 records, three per entry.
+    expect(MARCH_BODY).toContain('let lin = (head.x + u32(e)) * 3u;');
   });
 
   it('mapBody branches on gTileActive: tile list vs cluster walk, both through foldGroup', () => {

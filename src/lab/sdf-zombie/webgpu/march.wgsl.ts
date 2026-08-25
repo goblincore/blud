@@ -1,5 +1,5 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
-import { ENTRY_ROW_TEXELS, TILE_STRIDE, TILE_MAX_ENTRIES } from './tile-cull';
+import { TILE_MAX_ENTRIES } from './tile-cull';
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -1064,12 +1064,17 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
 //   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
-//   tileHead/tileEnt/tileCfg/screenUV  per-tile fold lists (perf task 5):
-//                one texel-per-tile header (x stream base, y count); a linear
-//                entry stream of TILE_STRIDE texels per entry (bound sphere;
-//                the ROW_GROUP_RANGE pack; meta with bodyIndex in x); cfg x
-//                enabled / y tilesPerRow / z tile px. ALWAYS bound (a 1x1
-//                zero fallback when off); screenUV picks this pixel's tile.
+//   tileHdr/tileEnt/tileCfg/screenUV  per-tile fold lists (perf task 5,
+//                now compute-binned): tileHdr is a storage array of per-tile
+//                (base, count) pairs; tileEnt the linear entry stream of
+//                TILE_STRIDE vec4s per entry (bound sphere; the
+//                ROW_GROUP_RANGE pack; meta with bodyIndex in x). cfg x
+//                enabled / y tilesPerRow / z tile px / w tile rows. ALWAYS
+//                bound (a one-element zero fallback when off); screenUV picks
+//                this pixel's tile. THE GRID COMES FROM CFG, never from a
+//                resource dimension — storage buffers are allocated once at
+//                the worst-case size and cannot be resized, so adaptive
+//                resolution changes rungs by moving these numbers alone.
 //              y ambientGain, z ceilingEnabled, w spare
 //   boxMin/boxMax  the enclosure bounds ambientAt derives wall planes from
 //   wallNegX..wallPosZ  the six wall albedos, linear RGB
@@ -1127,9 +1132,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   wallPosZ: vec3<f32>,
   aaCfg: vec2<f32>,
   debugCfg: vec2<f32>,
-  tileHead: texture_2d<f32>,
-  tileEnt: texture_2d<f32>,
-  tileCfg: vec3<f32>,
+  tileHdr: ptr<storage, array<vec2<u32>>, read>,
+  tileEnt: ptr<storage, array<vec4<f32>>, read>,
+  tileCfg: vec4<f32>,
   screenUV: vec2<f32>,
   startT: f32,
   occT: f32
@@ -1149,21 +1154,23 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // relative to any correctly-binned tile list.
   gTileActive = select(0.0, 1.0, tileCfg.x > 0.5);
   if (tileCfg.x > 0.5) {
-    let hdims = vec2<i32>(textureDimensions(tileHead, 0));
-    let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(hdims))), vec2<i32>(0, 0), hdims - vec2<i32>(1, 1));
-    let head = textureLoad(tileHead, tid, 0);
-    let n = min(i32(head.y), ${TILE_MAX_ENTRIES});
+    // The grid travels IN THE UNIFORM — deliberately not textureDimensions(),
+    // whose inference-from-resource-size is exactly what broke when adaptive
+    // resolution moved rungs under the old DataTexture path.
+    let gx = max(1, i32(tileCfg.y));
+    let gy = max(1, i32(tileCfg.w));
+    let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));
+    let head = (*tileHdr)[tid.y * gx + tid.x];
+    let n = min(head.y, ${TILE_MAX_ENTRIES}u);
     gTileN = f32(n);
-    let ew = ${ENTRY_ROW_TEXELS};
+    // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
+    // layout the CPU binner packs; kTileWrite emits it verbatim.
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
-      if (e >= n) { break; }
-      let lin = (i32(head.x) + e) * ${TILE_STRIDE};
-      let b = textureLoad(tileEnt, vec2<i32>(lin % ew, lin / ew), 0);
-      let r = textureLoad(tileEnt, vec2<i32>((lin + 1) % ew, (lin + 1) / ew), 0);
-      let m = textureLoad(tileEnt, vec2<i32>((lin + 2) % ew, (lin + 2) / ew), 0);
-      gTileBounds[e] = b;
-      gTileGrp[e] = r;
-      gTileBand[e] = m.x * ${DATA_ROWS}.0;
+      if (e >= i32(n)) { break; }
+      let lin = (head.x + u32(e)) * 3u;
+      gTileBounds[e] = (*tileEnt)[lin];
+      gTileGrp[e] = (*tileEnt)[lin + 1u];
+      gTileBand[e] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
     }
   }
   // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a

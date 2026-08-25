@@ -109,6 +109,7 @@ import {
 import { sdBody } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
 import { TileBinner } from './tile-cull';
+import { createComputeTileBinding } from './tile-bin-compute';
 import { makeGobs } from '../gobs';
 import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../blood-sim';
 import { createBloodView } from './blood-view-gpu';
@@ -482,13 +483,19 @@ async function main() {
     : { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
-  // PERF TASK 5 step 3: the hero body opts into the per-tile fold lists.
-  // Created ALWAYS (two small textures), gated by tileCfg.x = 0 so the
-  // shipping path marches the cluster walk exactly as before; the panel
-  // button / __sdfLab.setTiles flips it.
+  // PERF TASK 5 step 3, compute port: the hero body opts into the per-tile
+  // fold lists. The GPU binding is allocated ONCE at the WORST-CASE grid
+  // (content size at scale 1.0 — NOT today's scaled size); adaptive
+  // resolution then moves rungs by changing uniforms alone. Gated by
+  // tileCfg.x = 0 so the shipping path marches the cluster walk exactly as
+  // before; the panel button / __sdfLab.setTiles flips it.
+  const heroTileBinding = createComputeTileBinding(
+    handle.renderer,
+    Math.ceil(postAa.contentSize.width), Math.ceil(postAa.contentSize.height),
+  );
   const view = createZombieGpuView(body, {
     cone: sdfLayer.cone, occluder: sdfLayer.occluder,
-    tiles: { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height },
+    tiles: heroTileBinding,
   });
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
@@ -498,10 +505,10 @@ async function main() {
   scene.add(view.object);
   scene.add(view.coneObject);
 
-  // Tile-fold plumbing (perf task 5 step 3): one binner per SDF-pass size
-  // (resize swaps sizes, so key the cache by dimensions), refreshed every
-  // frame AFTER the camera lands — binning with last frame's camera could
-  // cull geometry this frame's rays actually hit.
+  // Tile-fold plumbing (compute port): the CPU TileBinner stays as the
+  // REFERENCE implementation — one per SDF-pass size, used by the unit A/B
+  // gate (__sdfLab.tileAB) that diffs the compute lists against it. It no
+  // longer feeds the render path.
   let heroTilesEnabled = false;
   const tileBinners = new Map<string, TileBinner>();
   function binnerForSdfSize(): TileBinner {
@@ -515,10 +522,12 @@ async function main() {
     if (!heroTilesEnabled || !view.tiles) return;
     camera.updateMatrixWorld();
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    // counts.w is maxBlendK — the binner inflates group spheres by 4x it,
+    // counts.w is maxBlendK — binning inflates group spheres by 4x it,
     // matching the per-step fold cull and the proxy-box pad in fit().
-    view.tiles.upload(binnerForSdfSize().bin(
-      view.getTileGroups(), camera, view.uniforms.counts.value.w));
+    view.tiles.bin(
+      view.getTileGroups(), camera, view.uniforms.counts.value.w,
+      { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height },
+    );
   }
   addSlider(statusBox, {
     label: 'AA eps (0=off)', min: 0, max: 2, step: 0.05,
