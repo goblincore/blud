@@ -52,6 +52,30 @@ the lab, not just relax.** Branches `dispatch/perf-task-1b` and
 `dispatch/relax-thin-r2` stay UNMERGED — 1b's retract fix is sound but dead
 code at relax 1.0, and neither ships 1.4. Perf tasks 2-5 remain `queued`.
 
+**PERF IDEA QUEUED — footprint-proportional hit epsilon (2026-08-25).** Best
+effort-to-value item on the board and not yet started. The fine march ends on
+`hitEps = max(0.0012, woundCfg2.w)` — 1.2 mm in WORLD space, constant with
+depth — so distant bodies resolve geometry far finer than a pixel and alias,
+while `coneMarch` already computes the right quantity one function away
+(`coneK` = "footprint radius per unit distance: tilePixels * tan(fovY/2)",
+`r = t * coneK`) and the fine march throws it away. Ending within the ray's
+projected PIXEL footprint prefilters geometry below Nyquist: real antialiasing
+instead of FXAA guessing after the fact (may let `post-aa`'s FXAA go), AND
+fewer steps to converge, with the saving growing with distance — i.e. largest
+where crowds are. Corner-rounding cost is sub-pixel by construction, so
+invisible. THREE HAZARDS: (1) `sdPrimitive` under-reports Euclid by the group
+distortion factor (up to 22x, schoolgirl sole plate), so `d < eps` fires when
+true distance is 22x eps -> blobby detached surface in high-distortion regions;
+the epsilon needs the same distortion correction the fold cull already applies.
+(2) craters fill in at range as eps approaches wound depth — wants a deliberate
+floor. (3) it does NOTHING for shading aliasing, and `henenlotter-latex`
+(spec 0.95 / roughness 0.12 + surfaceNoiseAmp) is the worst case — needs
+roughness widening with footprint (Toksvig/LEAN) separately. Bonus: it tracks
+the adaptive-resolution ladder automatically, so AA stays consistent at every
+rung. Full analysis + the other three signal-reconstruction options (sparse
+conservative grid, temporal reprojection, checkerboard) in Obsidian
+`Claude Notes/Blud/2026-08-24-sdf-render-optimization-options.md`.
+
 **Next session — pick up (prioritized):**
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
    chromatic bounce; `ambientAt(p, n)` is the seam every later implementation

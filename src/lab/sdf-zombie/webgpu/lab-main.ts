@@ -108,6 +108,8 @@ import {
 } from '../damage';
 import { sdBody } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
+import { TileBinner } from './tile-cull';
+import { createComputeTileBinding } from './tile-bin-compute';
 import { makeGobs } from '../gobs';
 import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../blood-sim';
 import { createBloodView } from './blood-view-gpu';
@@ -481,7 +483,20 @@ async function main() {
     : { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
-  const view = createZombieGpuView(body, { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
+  // PERF TASK 5 step 3, compute port: the hero body opts into the per-tile
+  // fold lists. The GPU binding is allocated ONCE at the WORST-CASE grid
+  // (content size at scale 1.0 — NOT today's scaled size); adaptive
+  // resolution then moves rungs by changing uniforms alone. Gated by
+  // tileCfg.x = 0 so the shipping path marches the cluster walk exactly as
+  // before; the panel button / __sdfLab.setTiles flips it.
+  const heroTileBinding = createComputeTileBinding(
+    handle.renderer,
+    Math.ceil(postAa.contentSize.width), Math.ceil(postAa.contentSize.height),
+  );
+  const view = createZombieGpuView(body, {
+    cone: sdfLayer.cone, occluder: sdfLayer.occluder,
+    tiles: heroTileBinding,
+  });
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
   // camera layer mask apart rather than an object list to keep in sync.
@@ -489,6 +504,45 @@ async function main() {
   view.coneObject.layers.set(CONE_LAYER);
   scene.add(view.object);
   scene.add(view.coneObject);
+
+  // Tile-fold plumbing (compute port): the CPU TileBinner stays as the
+  // REFERENCE implementation — one per SDF-pass size, used by the unit A/B
+  // gate (__sdfLab.tileAB) that diffs the compute lists against it. It no
+  // longer feeds the render path.
+  let heroTilesEnabled = false;
+  const tileBinners = new Map<string, TileBinner>();
+  function binnerForSdfSize(
+    w = sdfLayer.targetSize.width, h = sdfLayer.targetSize.height,
+  ): TileBinner {
+    const t = { width: w, height: h };
+    const key = `${t.width}x${t.height}`;
+    let b = tileBinners.get(key);
+    if (!b) { b = new TileBinner(t.width, t.height); tileBinners.set(key, b); }
+    return b;
+  }
+  function refreshHeroTiles() {
+    if (!heroTilesEnabled || !view.tiles) return;
+    camera.updateMatrixWorld();
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    // counts.w is maxBlendK — binning inflates group spheres by 4x it,
+    // matching the per-step fold cull and the proxy-box pad in fit().
+    view.tiles.bin(
+      view.getTileGroups(), camera, view.uniforms.counts.value.w,
+      { widthPx: sdfLayer.targetSize.width, heightPx: sdfLayer.targetSize.height },
+    );
+  }
+  addSlider(statusBox, {
+    label: 'AA eps (0=off)', min: 0, max: 2, step: 0.05,
+    get: () => view.uniforms.aaCfg.value.y,
+    set: (v) => { for (const x of [view, ...crowd]) x.uniforms.aaCfg.value.y = v; },
+  });
+  const tilesBtn = addButton(statusBox, 'tile fold: off', () => setHeroTiles(!heroTilesEnabled));
+  function setHeroTiles(on: boolean) {
+    heroTilesEnabled = on;
+    view.tiles?.setEnabled(on);
+    tilesBtn.textContent = `tile fold: ${on ? 'on' : 'off'}`;
+  }
+
   // From here the scene CONTAINS the character. Everything after this is
   // preparation for things that have not happened yet (gibs, goo, FPV).
   boot.bodyInScene = bootMark();
@@ -2088,6 +2142,22 @@ async function main() {
 
     tickAdaptive(now);
 
+    // AA EPSILON FOOTPRINT — immediately after tickAdaptive, because that is
+    // what moves the SDF pass size and the one-pixel footprint is derived
+    // from it. Placed here rather than beside the pose update: that block sits
+    // inside the motion branch and does not run every frame, which left
+    // aaCfg.x stuck at its placeholder.
+    //
+    // Computed from the live camera and pass height rather than
+    // sdfLayer.pixelConeK: the layer handle reachable here reported a stale
+    // size, and a silently-wrong footprint is exactly the kind of thing that
+    // would be blamed on the shader later.
+    {
+      const hPx = Math.max(1, sdfLayer.targetSize.height);
+      const k = Math.tan((camera.fov * Math.PI) / 360) / hPx;
+      for (const v of [view, ...crowd]) v.uniforms.aaCfg.value.x = k;
+    }
+
     // — FPV step (X1.23): controller + flight + detonation + hands, FIRST so
     //    a detonation's wounds/severs/impulses flow through the motion, rig
     //    and pose code below exactly like any other hit this frame. The
@@ -2395,6 +2465,7 @@ async function main() {
       );
       camera.lookAt(camTarget);
     }
+    refreshHeroTiles();
 
     // Held props. CLIP mode (F2 step 3): the GLB is posed purely by
     // ownership — hand root while held, the NEW flight on the marker frame,
@@ -3269,6 +3340,162 @@ async function main() {
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
     sdfLayer,
+    /**
+     * PERF TASK 5 step 3: the hero body's per-tile fold lists. setTiles(true)
+     * makes the hero's draw march its pixel's tile entry list instead of the
+     * cluster walk; false restores it exactly. The binner refreshes per frame
+     * from the live camera, so this composes with motion, FPV and orbit.
+     */
+    setTiles(on = true) { setHeroTiles(on); return on; },
+    /** Antialiasing epsilon strength: 0 = off (ship default), 1 = end the
+     *  march at exactly one pixel footprint. See march.wgsl.ts's hitEps. */
+    setAaEps(v: number) {
+      for (const x of [view, ...crowd]) x.uniforms.aaCfg.value.y = v;
+      return v;
+    },
+    get tilesEnabled() { return heroTilesEnabled; },
+    /**
+     * UNIT A/B (compute port): bins the CURRENT camera/groups/grid on the GPU
+     * and on the CPU reference binner, reads the GPU buffers back, and diffs
+     * per tile — counts AND every entry field, order-sensitive (both emit
+     * ascending-group order, so exact equality is the expected outcome).
+     * Returns per-tile mismatch tallies plus a bounded sample of diffs.
+     */
+    async tileAB() {
+      if (!view.tiles) return { error: 'tiles not created' };
+      // The frame loop re-bins the SAME buffers every frame when tile fold is
+      // on, and readback() awaits — so a live refreshHeroTiles() would land
+      // between this bin and this readback and we would diff the frame loop's
+      // lists, not ours. Suspend it for the duration; measured: with tiles on,
+      // 18k phantom "mismatches" that vanish at rest.
+      const tilesWere = heroTilesEnabled;
+      heroTilesEnabled = false;
+      try {
+      camera.updateMatrixWorld();
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      const groups = view.getTileGroups();
+      const blendK = view.uniforms.counts.value.w;
+      const t = sdfLayer.targetSize;
+      const grid = { widthPx: t.width, heightPx: t.height };
+      view.tiles.bin(groups, camera, blendK, grid);
+      // BOTH SIDES BEFORE THE AWAIT. readback() yields, the adaptive
+      // controller can resize sdfLayer during that yield, and the CPU
+      // reference would then be built for a DIFFERENT grid than the one we
+      // just binned — which threw "tile (24,0) outside 24x24" outright. Bin
+      // the reference here, from the snapshot, while nothing can move.
+      const cpu = binnerForSdfSize(grid.widthPx, grid.heightPx).bin(groups, camera, blendK);
+      const gpu = await heroTileBinding.readback();
+      // Per-group range diff against a JS reimplementation of the CPU
+      // projection (f64) — localises classification flips to the exact group
+      // and the exact branch (cover-all vs reject vs bounds).
+      const vmE = camera.matrixWorldInverse.elements;
+      const pe = camera.projectionMatrix.elements;
+      const W = grid.widthPx, H = grid.heightPx;
+      const focalY = pe[5]!;
+      const blendReach = blendK * 4.0;
+      const v = camera.position.clone();
+      const jsRanges: number[][] = [];
+      for (const g of groups) {
+        v.set(g.center[0], g.center[1], g.center[2]).applyMatrix4(camera.matrixWorldInverse);
+        const rBlend = g.radius + blendReach;
+        const nearDist = -v.z - rBlend;
+        const clipW = pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
+        let tx0 = 0, tx1 = -1, ty0 = 0, ty1 = -1;
+        if (nearDist <= 0 || clipW <= 0) {
+          tx1 = cpu.tilesX - 1; ty1 = cpu.tilesY - 1;
+        } else {
+          const clipX = pe[0]! * v.x + pe[4]! * v.y + pe[8]! * v.z;
+          const clipY = pe[1]! * v.x + pe[5]! * v.y + pe[9]! * v.z;
+          const ndcX = clipX / clipW, ndcY = clipY / clipW;
+          const cx = (ndcX * 0.5 + 0.5) * W;
+          const cy = (0.5 - ndcY * 0.5) * H;
+          const rpix = (rBlend / nearDist) * focalY * (H / 2);
+          if (!(cx + rpix <= 0 || cx - rpix >= W || cy + rpix <= 0 || cy - rpix >= H)) {
+            tx0 = Math.max(0, Math.floor((cx - rpix) / 16));
+            tx1 = Math.min(cpu.tilesX - 1, Math.floor((cx + rpix - 1e-6) / 16));
+            ty0 = Math.max(0, Math.floor((cy - rpix) / 16));
+            ty1 = Math.min(cpu.tilesY - 1, Math.floor((cy + rpix - 1e-6) / 16));
+          }
+        }
+        jsRanges.push([tx0, tx1, ty0, ty1, nearDist, clipW]);
+      }
+      const rangeSamples: unknown[] = [];
+      for (let gi = 0; gi < groups.length; gi++) {
+        const gr = [gpu.ranges[gi * 4]!, gpu.ranges[gi * 4 + 1]!, gpu.ranges[gi * 4 + 2]!, gpu.ranges[gi * 4 + 3]!];
+        const jr = jsRanges[gi]!;
+        if (gr[0] !== jr[0] || gr[1] !== jr[1] || gr[2] !== jr[2] || gr[3] !== jr[3]) {
+          if (rangeSamples.length < 6) {
+            rangeSamples.push({
+              gi, gpu: gr, js: jr.slice(0, 4),
+              nearDist: jr[4], clipW: jr[5],
+              centre: groups[gi]!.center, radius: groups[gi]!.radius,
+            });
+          }
+        }
+      }
+      let tilesCompared = 0;
+      let countMismatches = 0;
+      let entryMismatches = 0;
+      let extraEntries = 0;
+      const samples: unknown[] = [];
+      for (let ty = 0; ty < gpu.tilesY; ty++) {
+        for (let tx = 0; tx < gpu.tilesX; tx++) {
+          tilesCompared++;
+          const gn = cpu.countAt(tx, ty);
+          const h = (ty * gpu.tilesX + tx) * 2;
+          const gBase = gpu.headers[h]!;
+          const gN = gpu.headers[h + 1]!;
+          if (gN < gn) {
+            // GPU list SHORTER than the CPU's — entries were lost. This is
+            // the hole class and the only hard failure direction.
+            countMismatches++;
+            if (samples.length < 8) {
+              samples.push({ tile: [tx, ty], cpuCount: gn, gpuCount: gN });
+            }
+            continue;
+          }
+          // SUBSEQUENCE match: both lists are ascending-group order, but the
+          // GPU's f32 projection carries a sub-tile safety pad, so its list
+          // may hold extra boundary groups the CPU's f64 edges excluded.
+          // Every CPU entry must appear, in order, inside the GPU list;
+          // unmatched GPU entries are counted as (benign) extras.
+          let gi = 0;
+          let gj = 0;
+          while (gi < gn && gj < gN) {
+            const o = (gBase + gj) * 12;
+            const ce = cpu.entryAt(tx, ty, gi);
+            const same =
+              ce!.center[0] === gpu.entries[o] && ce!.center[1] === gpu.entries[o + 1] &&
+              ce!.center[2] === gpu.entries[o + 2] && ce!.radius === gpu.entries[o + 3] &&
+              ce!.start === gpu.entries[o + 4] && ce!.count === gpu.entries[o + 5] &&
+              ce!.distort === gpu.entries[o + 6] && ce!.flags === gpu.entries[o + 7] &&
+              ce!.bodyIndex === gpu.entries[o + 8];
+            if (same) { gi++; gj++; }
+            else { gj++; extraEntries++; }
+          }
+          if (gi < gn) {
+            // CPU entries with no GPU counterpart — the hole class.
+            countMismatches++;
+            entryMismatches += gn - gi;
+            if (samples.length < 8) {
+              samples.push({ tile: [tx, ty], missingFrom: gi, cpuCount: gn, gpuCount: gN });
+            }
+          } else {
+            extraEntries += gN - gj;
+          }
+        }
+      }
+      return {
+        tilesCompared, countMismatches, entryMismatches, extraEntries,
+        totalEntries: { cpu: cpu.totalEntries, gpu: gpu.totalEntries },
+        grid: { tilesX: gpu.tilesX, tilesY: gpu.tilesY },
+        groups: groups.length,
+        rangeMismatches: rangeSamples.length > 0 ? rangeSamples : undefined,
+        clampedTiles: cpu.clampedTiles,
+        samples,
+      };
+      } finally { heroTilesEnabled = tilesWere; }
+    },
     /**
      * The metaball blood layer — threshold/edge/blur setters for console
      * tuning, mirroring the panel's goo section (which reaches only the

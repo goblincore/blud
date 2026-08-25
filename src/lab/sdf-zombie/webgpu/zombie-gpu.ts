@@ -13,6 +13,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add, screenUV,
+  storage,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE } from '../pack';
@@ -25,6 +26,11 @@ import { sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { specialiseMapBody } from './specialise';
 import { createFallbackHandVolumeTexture } from './hand-volume';
+import {
+  TILE_SIZE_PX,
+} from './tile-cull';
+import type { TileGroupInput } from './tile-cull';
+import type { ComputeTileBinding } from './tile-bin-compute';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
@@ -79,6 +85,15 @@ export interface ZombieGpuView {
    */
   setFaceTexture(tex: THREE.Texture, atlas: THREE.Vector4, mean: number): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
+  /**
+   * PER-TILE LISTS (perf task 5). Present only when the view was created
+   * with opts.tiles. The caller bins the view's posed bound groups per frame
+   * (tile-cull.ts TileBinner) and uploads the result here.
+   */
+  tiles?: ViewTileBinding;
+  /** This view's posed bound groups, as the binner consumes them. Reads the
+   *  LAST uploaded pack — call after update(). */
+  getTileGroups(): import('./tile-cull').TileGroupInput[];
   dispose(): void;
 }
 
@@ -318,8 +333,63 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * and MARCH_BODY reads it only inside `if (debugCfg.x > 0.5)` guards so
      * the shipping path (x 0) pays nothing. y/w are spare.
      */
+    /**
+     * Antialiasing epsilon (2026-08-25). x = the ray's footprint RADIUS PER
+     * UNIT DISTANCE for one pixel — tan(fovY/2) / sdfPassHeight, the same
+     * quantity coneMarch uses at tile granularity. y = strength, 0 = OFF.
+     *
+     * Ships off: it prefilters geometry below Nyquist (real AA, and fewer
+     * steps with it) but mapBody under-reports Euclid distance by the group
+     * distortion factor, so a large epsilon can stop rays short in
+     * high-distortion regions. See the hitEps block in march.wgsl.ts.
+     */
+    aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
+    /**
+ * PER-TILE PRIMITIVE LISTS (perf task 5, now compute-binned). x enabled,
+ * y tiles-per-row, z tile px size, w tile rows. INERT at x=0: MARCH_BODY
+ * reads it once per pixel and the cluster walk applies exactly as before.
+ * A view opts in by passing a ComputeTileBinding as `tiles` to
+ * createZombieGpuView and binning per frame; every other view keeps this at 0
+ * and binds the shared one-element fallback buffers (never read while x stays
+ * 0). THE GRID IS CARRIED HERE, never inferred from resource dimensions —
+ * that inference is what broke under adaptive resolution on the old
+ * DataTexture path.
+ */
+    tileCfg: uniform(new THREE.Vector4(0, 0, TILE_SIZE_PX, 0)),
   };
+}
+
+/**
+ * Shared fallback bindings for views that do not opt into tiles. Zero-filled:
+ * even if a stray enable ever flipped, the header count reads 0 and the fold
+ * folds nothing — never garbage. Storage buffers, not textures: the march
+ * reads them through ptr<storage> params now, so the fallback must be one
+ * too (WebGPU will not bind a texture to a storage signature).
+ */
+let fallbackTileNodes: { header: unknown; entries: unknown } | null = null;
+function fallbackTileBindings() {
+  if (!fallbackTileNodes) {
+    const h = new THREE.StorageBufferAttribute(1, 2);
+    const e = new THREE.StorageBufferAttribute(3, 4);
+    fallbackTileNodes = {
+      header: storage(h, 'uvec2', 1).toReadOnly(),
+      entries: storage(e, 'vec4', 3).toReadOnly(),
+    };
+  }
+  return fallbackTileNodes;
+}
+
+/** A tiled view's binning surface: delegates to the owner's GPU binding and
+ *  flips this view's tileCfg gate. */
+export interface ViewTileBinding {
+  /** Bin this frame's posed groups (see ComputeTileBinding.bin). */
+  bin(
+    groups: TileGroupInput[], camera: THREE.PerspectiveCamera, maxBlendK: number,
+    grid: { widthPx: number; heightPx: number },
+  ): void;
+  setEnabled(on: boolean): void;
+  dispose(): void;
 }
 
 /**
@@ -442,6 +512,7 @@ export function createMarchMaterial(
   u: MarchUniforms,
   march = marchBody,
   cone?: ConeSource, occluder?: OccluderSource,
+  tiles?: { header: unknown; entries: unknown },
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -494,7 +565,12 @@ export function createMarchMaterial(
     wallPosY: u.wallPosY,
     wallNegZ: u.wallNegZ,
     wallPosZ: u.wallPosZ,
+    aaCfg: u.aaCfg,
     debugCfg: u.debugCfg,
+    tileHdr: (tiles?.header ?? fallbackTileBindings().header) as never,
+    tileEnt: (tiles?.entries ?? fallbackTileBindings().entries) as never,
+    tileCfg: u.tileCfg,
+    screenUV: screenUV,
     startT: cone
       ? coneFetch({
           coneTex: texture(cone.texture),
@@ -720,6 +796,40 @@ export interface GpuViewOpts {
    * and disposes it — this view will not).
    */
   volumeTex?: THREE.Texture;
+  /**
+   * Opt this view into the per-tile fold path (perf task 5). The binding is
+   * created by the CALLER (createComputeTileBinding — it needs the renderer)
+   * and sized at the caller's worst-case SDF-pass grid; this view binds its
+   * storage buffers into the march material and exposes the bin/setEnabled
+   * facade through .tiles.
+   */
+  tiles?: ComputeTileBinding;
+}
+
+/** Wires an externally-owned GPU binding into a view: the material gets the
+ *  binding's read-only storage nodes; bin() delegates; setEnabled flips this
+ *  view's tileCfg gate. The binding itself is disposed by its creator. */
+function wireViewTiles(
+  binding: ComputeTileBinding, tileCfg: THREE.Vector4,
+): ViewTileBinding {
+  return {
+    bin(groups, camera, maxBlendK, grid) {
+      binding.bin(groups, camera, maxBlendK, grid);
+      // Stamp the ACTIVE grid for the shader on every bin — adaptive
+      // resolution moves it under our feet. x is the enable gate and keeps
+      // whatever setEnabled last set.
+      tileCfg.set(
+        tileCfg.x,
+        Math.ceil(Math.max(1, grid.widthPx) / TILE_SIZE_PX),
+        TILE_SIZE_PX,
+        Math.ceil(Math.max(1, grid.heightPx) / TILE_SIZE_PX),
+      );
+    },
+    setEnabled(on) {
+      tileCfg.x = on ? 1 : 0;
+    },
+    dispose() { /* owned by the caller */ },
+  };
 }
 
 export function createZombieGpuView(
@@ -732,8 +842,25 @@ export function createZombieGpuView(
   const ownsVolume = !opts.volumeTex;
   const volumeTex = opts.volumeTex ?? createFallbackHandVolumeTexture();
 
+  // Posed bound groups of the LAST upload (perf task 5): the binner's input.
+  let lastGroups: import('./tile-cull').TileGroupInput[] = [];
+
   function upload(next: BuildResult, rest?: BuildResult) {
     const p = packBody(next, rest);
+    lastGroups = [];
+    for (let g = 0; g < p.groupCount; g++) {
+      const o = g * 4;
+      const gb = p.groupBounds;
+      const gr = p.groupRange;
+      lastGroups.push({
+        bodyIndex: 0,
+        start: gr[o]!, count: gr[o + 1]!,
+        center: [gb[o]!, gb[o + 1]!, gb[o + 2]!],
+        radius: gb[o + 3]!,
+        distort: gr[o + 2]!,
+        flags: gr[o + 3]!,
+      });
+    }
     writeRow(ROW_PRIM_A, p.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, p.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, p.primScale, MAX_PRIMS);
@@ -757,11 +884,18 @@ export function createZombieGpuView(
     return p;
   }
 
+  let viewTiles: ViewTileBinding | undefined;
+  let tileNodes: { header: unknown; entries: unknown } | undefined;
+  if (opts.tiles) {
+    viewTiles = wireViewTiles(opts.tiles, u.tileCfg.value);
+    tileNodes = { header: opts.tiles.headerNode, entries: opts.tiles.entryNode };
+  }
+
   const packed = upload(body);
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
-    opts.cone, opts.occluder);
+    opts.cone, opts.occluder, tileNodes);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -844,6 +978,8 @@ export function createZombieGpuView(
     coneObject: coneMesh,
     uniforms: u,
     volumeTexture: volumeTex,
+    tiles: viewTiles,
+    getTileGroups() { return lastGroups; },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -900,6 +1036,7 @@ export function createZombieGpuView(
       coneMaterial.dispose();
       dataTex.dispose();
       if (ownsVolume) volumeTex.dispose();
+      // viewTiles' underlying binding is owned by its creator, not the view.
     },
   };
 }
