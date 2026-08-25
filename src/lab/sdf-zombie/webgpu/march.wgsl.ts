@@ -1060,6 +1060,12 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
 //   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
+//   tileHead/tileEnt/tileCfg/screenUV  per-tile fold lists (perf task 5):
+//                one texel-per-tile header (x stream base, y count); a linear
+//                entry stream of TILE_STRIDE texels per entry (bound sphere;
+//                the ROW_GROUP_RANGE pack; meta with bodyIndex in x); cfg x
+//                enabled / y tilesPerRow / z tile px. ALWAYS bound (a 1x1
+//                zero fallback when off); screenUV picks this pixel's tile.
 //              y ambientGain, z ceilingEnabled, w spare
 //   boxMin/boxMax  the enclosure bounds ambientAt derives wall planes from
 //   wallNegX..wallPosZ  the six wall albedos, linear RGB
@@ -1116,13 +1122,6 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   wallNegZ: vec3<f32>,
   wallPosZ: vec3<f32>,
   debugCfg: vec2<f32>,
-  // TILE LIST (perf task 5): the per-tile entry lists this pixel marches
-  // against. tileHead is one texel per tile (x = stream base, y = count);
-  // tileEnt is the linear entry stream, TILE_STRIDE texels per entry —
-  // bounds, then the ROW_GROUP_RANGE-shaped pack, then meta (bodyIndex in
-  // x). tileCfg: x enabled, y tilesPerRow, z tile px size. Both textures
-  // are ALWAYS bound (a 1x1 zero fallback when tiles are off); the enable
-  // gate keeps the fetch cost off the shipping path.
   tileHead: texture_2d<f32>,
   tileEnt: texture_2d<f32>,
   tileCfg: vec3<f32>,
