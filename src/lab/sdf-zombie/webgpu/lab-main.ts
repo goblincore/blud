@@ -3336,6 +3336,45 @@ async function main() {
      */
     freezeCosmetics(on = true) { cosmeticsFrozen = on; return cosmeticsFrozen; },
     get cosmeticsFrozen() { return cosmeticsFrozen; },
+    /**
+     * Suspend/resume the render loop itself. The last presented frame stays
+     * on the canvas, so a capture taken while suspended is EXACTLY the frame
+     * that was rendered — nothing (statue-mode rig stepping included) can
+     * advance between the freeze and the shot. The statue rig keeps
+     * integrating with real dt even with motion off and cosmetics frozen,
+     * which is a micro-jitter no amount of settling removes; pausing the loop
+     * is the only capture primitive that is bit-stable.
+     */
+    pauseLoop(on = true) { handle.setLoopRunning(!on); return !on; },
+    /**
+     * Canonical frozen frame for automated captures: suspend the loop, reset
+     * the hero to its authored rest pose at the origin (fresh bind, fresh
+     * clocks — the respawn path without the body rebuild), then advance a
+     * FIXED number of FIXED-dt frames so every verlet transient settles
+     * identically on every page load.
+     *
+     * WHY NOT settle-and-shoot. The statue-mode rig integrates REAL rAF dt
+     * forever, so its micro-equilibrium depends on the boot's timing history:
+     * two page loads never agree bit-for-bit (measured 2026-08-25: three
+     * consecutive settled captures, three different framebuffer hashes). With
+     * the reset + fixed-dt walk-in, the frozen frame is a pure function of
+     * (code, seed, frame count), which is what lets a pre/post-refactor diff
+     * or a re-boot repeatability gate mean anything.
+     *
+     * Leaves the loop SUSPENDED — nothing can move between this and the
+     * shot; pauseLoop(false) resumes.
+     */
+    async holdStill(frames = 120) {
+      handle.setLoopRunning(false);
+      resetMotion();
+      camTarget.x = 0;
+      camTarget.z = 0;
+      view.update(current);
+      refreshWounds();
+      for (let i = 0; i < frames; i++) handle.step(1 / 60);
+      await handle.resolveGpu();
+      return frames;
+    },
     /** The march uniforms — lets any of them be tuned live from the console. */
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
