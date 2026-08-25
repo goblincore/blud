@@ -329,7 +329,7 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
 function parseBodyLine(l: BlobLine, s: ParseState): void {
   const [head, ...rest] = l.words;
   const kind = head as BlobPartKind;
-  if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve' && kind !== 'groove')
+  if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve' && kind !== 'groove' && kind !== 'shell')
     throw new BlobError(`unrecognized "${head}" in body block`, l.line, l.indent + 1);
 
   // `carve on skull ...` has no limb word; `blob torso on spine ...` does.
@@ -352,7 +352,7 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
   if (isBar && strArg(l, 'to') === null)
     throw new BlobError('bar needs "to="', l.line, l.indent + 1);
 
-  s.doc.parts.push({
+  const part: BlobPart = {
     kind,
     limb,
     bone,
@@ -386,6 +386,15 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     bend: parseVec3Arg(l, 'bend', strArg(l, 'bend')),
     grooveDepth: numArg(l, 'depth', 0),
     grooveWidth: numArg(l, 'width', 0),
+    // `shell` — a thin clipped sheet. A shell is a BLOB-like base (at=, with
+    // optional tip/bend for a curved strip) whose field is thinned, then
+    // clipped against a plane with a rounded rim. It needs thick=, clip=,
+    // clipd= and rim=; the required-arg contract is judged here (and again in
+    // blob-compile.ts) so a shell missing one fails loudly with the line.
+    thickness: numArg(l, 'thick', 0),
+    clipNormal: parseVec3Arg(l, 'clip', strArg(l, 'clip')),
+    clipOffset: numArg(l, 'clipd', 0),
+    rim: numArg(l, 'rim', 0),
     // `color=rrggbb` paints this primitive: wherever it is the nearest prim
     // to the surface the flesh colour is replaced outright. Hex is sRGB, the
     // way a palette line is written and a reference plate is sampled; it is
@@ -395,7 +404,20 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
     src: l,
-  } satisfies BlobPart);
+  } satisfies BlobPart;
+
+  if (kind === 'shell') {
+    if (part.thickness <= 0)
+      throw new BlobError('shell needs thick= above zero', l.line, l.indent + 1);
+    if (part.clipNormal === null)
+      throw new BlobError('shell needs clip=(nx,ny,nz)', l.line, l.indent + 1);
+    if (strArg(l, 'clipd') === null)
+      throw new BlobError('shell needs clipd=<offset>', l.line, l.indent + 1);
+    if (strArg(l, 'rim') === null)
+      throw new BlobError('shell needs rim=<rounding radius>', l.line, l.indent + 1);
+  }
+
+  s.doc.parts.push(part);
 }
 
 /**

@@ -88,12 +88,19 @@ export function expandMirror(def: BodyDef): ExpandedBody {
       // exists for, arriving through the curve instead of the endpoint.
       const bn = rest.bend;
       const flipB = bn === undefined ? undefined : ([-bn[0], bn[1], bn[2]] as const);
+      // A bilateral SHELL's clip plane flips with it. The cloth edge normals to
+      // the mirror axis, so a clip that cuts one collar point's hem cuts its
+      // twin's hem only if the plane's x component reflects.
+      const cn = rest.shell?.clipNormal;
+      const flipC = cn === undefined
+        ? undefined
+        : { ...rest.shell!, clipNormal: [-cn[0], cn[1], cn[2]] as const };
       // Only the SECOND copy reflects — the first keeps what the author wrote,
       // exactly as `offset` and `tip` do above. Applying the flip to both
       // copies negates the authored side too, so a horn pair curves the same
       // way AND neither one curves the way the .blob asked for.
       prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side });
-      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), limb: side });
+      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), ...(flipC ? { shell: flipC } : {}), limb: side });
       continue;
     }
 
@@ -110,11 +117,13 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     // right shoe on the centreline. A mirrored bone sits at -side; anything
     // authored relative to it in x has to reflect with it.
     const o = rest.offset, t = rest.tip, bn = rest.bend;
+    const cn = rest.shell?.clipNormal;
     prims.push({
       ...rest, bone: `${p.bone}.r`, limb: limbFor(limb, 'r'),
       ...(o ? { offset: [-o[0], o[1], o[2]] as const } : {}),
       ...(t ? { tip: [-t[0], t[1], t[2]] as const } : {}),
       ...(bn ? { bend: [-bn[0], bn[1], bn[2]] as const } : {}),
+      ...(cn ? { shell: { ...rest.shell!, clipNormal: [-cn[0], cn[1], cn[2]] as const } } : {}),
     });
   }
 

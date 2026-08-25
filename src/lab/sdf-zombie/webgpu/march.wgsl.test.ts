@@ -21,7 +21,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, WOUND_MASK, WOUND_SHADOW,
+  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { specialiseMapBody } from './specialise';
@@ -536,6 +536,7 @@ describe('data texture layout', () => {
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
+      ROW_PRIM_SHELL, ROW_PRIM_CLIP,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -655,7 +656,9 @@ describe('arc capsule — bent primitives', () => {
   it('loads ROW_PRIM_BEND only for prims whose profile encodes bend', () => {
     for (const src of [MAP_BODY, APPLY_CARVES]) {
       expect(src).toContain(`cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;`);
-      const gateAt = src.indexOf('if (prof > 1.5) {');
+      // Bit 1 (value 2) of prof means bend, tested before the load so an
+      // unbent — or straight-shell (prof 4) — prim never pays for the row.
+      const gateAt = src.indexOf('if ((i32(prof) & 2) != 0) {');
       expect(gateAt).toBeGreaterThan(-1);
       expect(gateAt).toBeLessThan(src.indexOf('cpos = textureLoad'));
     }
@@ -699,16 +702,42 @@ describe('arc capsule — bent primitives', () => {
   });
 });
 
+describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
+  it('sdShell is in HELPERS and implements abs(dBase)-thick with the rounded-rim clip', () => {
+    expect(HELPERS).toContain(SD_SHELL);
+    expect(SD_SHELL).toContain('let d = abs(dBase) - thick;');
+    // The rim: distance to the sheet/plane intersection curve + rounding.
+    expect(SD_SHELL).toContain('rim - length(vec2(d, dPlane))');
+  });
+
+  it('mapBody reads the shell rows and wraps the field when profile marks a shell', () => {
+    const fold = HELPERS.find(h => declaredName(h) === 'mapBody')!;
+    // A shell is profile bit 2 (value >= 4); the fold must read both shell rows
+    // and pass them to sdShell, and a straight shell (prof 4) must NOT take the
+    // bend row (bit test, equivalent to prof > 1.5 on the 0-3 range).
+    expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL}), 0)`);
+    expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP}), 0)`);
+    expect(fold).toContain('if (prof >= 4.0) {');
+    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);');
+    const profGate = fold.indexOf('if (prof >= 4.0) {');
+    const bendGate = fold.indexOf('if ((i32(prof) & 2) != 0) {');
+    // The shell wrap must come AFTER the base field is computed (sdPrim) and
+    // the bend ctrl loaded; ordering is load-bearing for the fold.
+    expect(profGate).toBeGreaterThan(fold.indexOf('var sd = sdPrim(p, idx, data, r2, prof, cpos);'));
+    expect(bendGate).toBeGreaterThan(-1);
+  });
+});
+
 describe('per-prim orientation (motion-polish task 3)', () => {
   it('sdPrimO reads the quat row and guards identity prims with a cheap branch', () => {
     // String pins: the parity test below proves the CPU mirror, these prove
     // the WGSL actually contains the branch being mirrored.
     expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
-    // Was 11; the arc capsule added ROW_PRIM_BEND, and per-primitive colour
-    // added ROW_PRIM_COLOR, each without displacing any existing row.
-    // 16: bound groups (pack.ts boundGroups) added ROW_GROUP_BOUNDS/RANGE
-    // and the per-cluster span row ROW_CLUSTER_GROUPS.
-    expect(DATA_ROWS).toBe(16);
+    // Was 11; the arc capsule added ROW_PRIM_BEND, per-primitive colour added
+    // ROW_PRIM_COLOR, bound groups added ROW_GROUP_BOUNDS/RANGE and
+    // ROW_CLUSTER_GROUPS, and the shell fold added ROW_PRIM_SHELL/ROW_PRIM_CLIP
+    // — each without displacing any existing row.
+    expect(DATA_ROWS).toBe(18);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

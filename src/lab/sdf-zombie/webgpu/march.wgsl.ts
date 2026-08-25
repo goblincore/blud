@@ -43,6 +43,13 @@ import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 //                       2 round+BENT, 3 chamfer+BENT), zw spare
 //   row 11 primBend     xyz = quadratic Bezier control point (world space),
 //                       w spare
+//   row 12 primColor    xyz = linear albedo, w = 1 + gloss (w=0: flesh)
+//   row 13 groupBnds    xyz = group sphere centre, w = radius
+//   row 14 groupRange   x = start, y = count, z = distort, w = flag bitfield
+//   row 15 clusterGps   x = first group, y = group count
+//   row 16 primShell    x = half-thickness, y = rim, z = clip offset,
+//                       w = hasClip (shell-fold prims only)
+//   row 17 primClip     xyz = clip plane normal (shell-fold prims only)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -67,7 +74,7 @@ import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 16;
+export const DATA_ROWS = 18;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -91,6 +98,12 @@ export const ROW_GROUP_RANGE = 14;
 export const MAX_GROUPS = 128;
 /** Per-cluster span into the group list: x = first group, y = group count. */
 export const ROW_CLUSTER_GROUPS = 15;
+/** `shell` construction (2048-08-25): x = half-thickness, y = rim radius,
+ *  z = clip offset, w = hasClip (0/1). Read only by prims with a shell fold
+ *  (profile bit 2 set — see ROW_PRIM_SHAPE's `prof`). */
+export const ROW_PRIM_SHELL = 16;
+/** `shell` clip plane: xyz = unit normal, w spare. See ROW_PRIM_SHELL. */
+export const ROW_PRIM_CLIP = 17;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -290,11 +303,14 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
-  // Bent above tapered above plain: prof encodes profile + bend (0 round,
-  // 1 chamfer, 2 round+bent, 3 chamfer+bent), so > 1.5 means the Bezier
-  // path and every straight prim keeps the exact expression it has always
-  // run — bit-identical, which is what the zombie pin demands.
-  if (prof > 1.5) {
+  // Bent above tapered above plain: prof's bit 1 (value 2) means the Bezier
+  // path (0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent; 4/6 add shell on
+  // top, whose bend flag is the same bit), so the bit test keeps every
+  // straight prim — including a straight SHELL (prof 4) — on the exact
+  // expression it has always run, while a bent prim takes the curve. Bit 1
+  // is the mask (i32(prof) & 2) != 0, equivalent to prof > 1.5 on the 0-3
+  // range, and correct for shells on 4/6.
+  if ((i32(prof) & 2) != 0) {
     return coneBend(p * inv, A.xyz * inv, B.xyz * inv, cpos * inv, A.w, r2, minScale);
   }
   return coneCap(p * inv, A.xyz * inv, B.xyz * inv, A.w, r2, minScale);
@@ -347,8 +363,23 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   a = a * inv;
   b = b * inv;
   let minScale = min(S.x, min(S.y, S.z));
-  if (prof > 1.5) { return coneBend(qq, a, b, c * inv, A.w, r2, minScale); }
+  if ((i32(prof) & 2) != 0) { return coneBend(qq, a, b, c * inv, A.w, r2, minScale); }
   return coneCap(qq, a, b, A.w, r2, minScale);
+}`;
+
+// Thin clipped sheet with a rounded rim — mirrors sdShellWrap in validate.ts.
+// `dBase` is the closed primitive's capsule field (coneCap/coneBend result);
+// the sheet is `abs(dBase) - thickness` (half-thickness), clipped against the
+// half-space `dot(p, clipN) < clipO` with a rounded edge of radius `rim`.
+// A hard `max(sheet, plane)` is the razor edge; `length(vec2(sheet, plane))
+// - rim` is the distance to the sheet/plane intersection CURVE, so
+// `max(max(sheet, plane), rim - length(...))` rounds that edge — a cloth hem
+// instead of a cut. `rim` 0 degenerates to the hard clip.
+export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>) -> f32 {
+  let d = abs(dBase) - thick;
+  if (hasClip < 0.5) { return d; }
+  let dPlane = dot(p, clipN) - clipO;
+  return max(max(d, dPlane), rim - length(vec2(d, dPlane)));
 }`;
 
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
@@ -515,9 +546,10 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
         r2 = T.x;
         prof = T.y;
         gr = T.zw;
-        // Only genuinely-bent prims pay for the bend row; the +2 encoding
-        // keeps every "> 0.5 means chamfer" consumer working unchanged.
-        if (prof > 1.5) {
+        // Only genuinely-bent prims pay for the bend row; bit 1 (value 2)
+        // encodes bend so a straight SHELL (prof 4) skips it. Keeps every
+        // "> 0.5 means chamfer" consumer working unchanged.
+        if ((i32(prof) & 2) != 0) {
           cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
         }
       }
@@ -804,17 +836,28 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
         let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
         r2 = T.x;
         prof = T.y;
-        // Only genuinely-bent prims pay for the bend row; the +2 encoding
-        // keeps every "> 0.5 means chamfer" consumer working unchanged.
-        if (prof > 1.5) {
+        // Only genuinely-bent prims pay for the bend row; bit 1 (value 2)
+        // encodes bend so a straight SHELL (prof 4) skips it. Keeps every
+        // "> 0.5 means chamfer" consumer working unchanged.
+        if ((i32(prof) & 2) != 0) {
           cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
         }
       }
       var sd = sdPrim(p, idx, data, r2, prof, cpos);
       if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos); }
+      // A SHELL (profile bit 2, value >= 4) thins the closed base field to a
+      // sheet and clips it: abs(dBase) - thick, then a rounded-rim clip against
+      // the shell plane. Only shell prims read the two extra rows, and only in
+      // a shaped group, so additive prims pay nothing.
+      if (prof >= 4.0) {
+        let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL}), 0);
+        let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP}), 0);
+        sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);
+      }
       if (sd < best) { best = sd; bestIdx = idx; }
       // Chamfer is profile bit 0; bend is +2, so the old "prof > 0.5" test
-      // would wrongly chamfer a plain-bent prim — bounded above now.
+      // would wrongly chamfer a plain-bent prim — bounded above now. A shell
+      // (prof >= 4) always folds round regardless of the profile's low bits.
       if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
     }
   }
@@ -1695,6 +1738,7 @@ export const HELPERS = [
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
   SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_PRIM, SD_PRIM_ORIENTED,
+  SD_SHELL,
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,

@@ -93,13 +93,55 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
   // Bent before tapered: a curved horn of CONSTANT radius is legitimate, so
   // the bend branch cannot sit below the untapered shortcut.
+  let base: number;
   if (cv !== undefined) {
     const c: Vec3 = [cv[0] * inv[0], cv[1] * inv[1], cv[2] * inv[2]];
-    return sdBentCone(q, a, b, c, prim.radius, prim.radiusB ?? prim.radius) * minScale;
+    base = sdBentCone(q, a, b, c, prim.radius, prim.radiusB ?? prim.radius) * minScale;
+  } else if (prim.radiusB === undefined || prim.radiusB === prim.radius) {
+    base = (len(sub(q, closest)) - prim.radius) * minScale;
+  } else {
+    base = sdRoundCone(q, a, b, prim.radius, prim.radiusB) * minScale;
   }
-  if (prim.radiusB === undefined || prim.radiusB === prim.radius)
-    return (len(sub(q, closest)) - prim.radius) * minScale;
-  return sdRoundCone(q, a, b, prim.radius, prim.radiusB) * minScale;
+  // A SHELL thins the closed base capsule to a sheet and clips it against a
+  // plane with a rounded rim — the exact construction sdShellWrap below. Only
+  // when the prim carries `shell` params; every other prim keeps the bare
+  // capsule field bit-identical, which is what the zombie pin demands.
+  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim);
+  return base;
+}
+
+/**
+ * Distance field of a thin clipped shell taken off a closed primitive's SDF
+ * `dBase`, with a rounded rim. Mirrors the `sdShell` branch of mapBody in
+ * march.wgsl.ts exactly — edit both in the same commit or click-to-shoot
+ * drifts from what is drawn.
+ *
+ * `thickness` is the HALF-thickness. The sheet is `abs(dBase) - thickness`:
+ * it occupies the `thickness`-wide band either side of the base surface. The
+ * clip keeps the half-space where `dot(p, clipNormal) - clipOffset` is
+ * NEGATIVE; `max(sheet, plane)` is the hard edge, and `rim` rounds the edge
+ * by taking the distance to the clip/sheet intersection curve via
+ * `length(vec2(sheet, plane))`.
+ *
+ * CONSERVATIVENESS. `dBase` itself is the established scaled-space capsule
+ * field (it under-reports by minScale for anisotropic prims), so `abs(dBase)
+ * - thickness` under-reports the true sheet distance — never over-reports,
+ * which is what a raymarcher needs. `dPlane` is an EXACT world-space plane
+ * distance. Near the rim the dominant term becomes
+ * `rim - length(vec2(sheet, plane))`, whose gradient magnitude is <= 1 where
+ * the two surfaces are near perpendicular (a well-cut cloth edge); at a
+ * grazing cut it can exceed 1 and over-report by up to the rim radius. rims
+ * are a few mm and the folded sheet dominates elsewhere, so the field stays
+ * within the careful margin — the author's job is to cut the sheet close to
+ * perpendicular, which is how cloth is actually cut.
+ */
+export function sdShellWrap(
+  dBase: number, p: Vec3, thickness: number,
+  clipNormal: Vec3, clipOffset: number, rim: number,
+): number {
+  const d = Math.abs(dBase) - thickness;
+  const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
+  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane));
 }
 
 /**
@@ -445,8 +487,9 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
         ? [prim.a, prim.b]
         : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
       const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius);
+      const reach = rMax * maxScale + (prim.shell ? prim.shell.thickness : 0);
       for (const end of ends)
-        if (len(sub(end, c.center)) + rMax * maxScale > c.radius + 1e-6)
+        if (len(sub(end, c.center)) + reach > c.radius + 1e-6)
           errs.push(`primitive in cluster "${c.limb}" escapes its bounding sphere`);
     }
 
@@ -614,6 +657,11 @@ export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
     if (p.op === 'sub' || p.dead) continue;
+    // A SHELL is a thin film riding a base's surface — its axis midpoint is
+    // EMPTY, not the cluster's structural mass, so it must never win the core
+    // selection (a collar base ellipsoid is often the fattest prim in the
+    // cluster and would otherwise drag the fuse probe out of the flesh).
+    if (p.shell) continue;
     // AN EXPLICIT `core` MARK WINS. The fattest-prim heuristic below is right
     // for a limb that is mostly one mass and wrong the moment a cluster
     // carries something fatter than its bone: the mouse's shoe ball (0.062)

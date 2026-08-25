@@ -72,14 +72,13 @@ describe('schoolgirl.blob', () => {
 
   it('skirts the torso in navy paint', () => {
     const navy = painted('torso').filter(p => p.color![2] > p.color![0] * 2 && p.color![2] < 0.3);
-    // v3 (2026-08-23): SIX — the one-cone skirt, the sailor collar's
-    // two-piece back flap (upper plate + bent shell following the bust
-    // ball's back), its two chest points (one `both` line = 2 prims) and
-    // the scarf knot. v2 needed only 3 because its collar was ONE flat
-    // disc, which the owner read as "two epaulette plates with a bar
-    // between" — a sailor collar is a back flap plus a V, and a V is two
-    // prims.
-    expect(navy.length).toBe(8);
+    // v4 (2026-08-25): FIVE — the one-cone skirt, the SHELL cape (shoulders +
+    // back flap; one prim replaces v3's flat plate + bent blob + hem seam), the
+    // two SHELL chest points (one `both` line = 2 prims) and the scarf knot.
+    // v3 needed 8 because its collar was three blob masses approximating a
+    // piece of cloth; the shell prim makes the collar the thin surface it is,
+    // so it folds from fewer, flatter prims.
+    expect(navy.length).toBe(5);
   });
 
   it('socks are white paint and fatter than the knee — the slouch', () => {
@@ -102,8 +101,8 @@ describe('schoolgirl.blob', () => {
       const [r, g, bl] = p.color!;
       return r < 0.1 && g < 0.08;
     });
-    expect(shoes.length).toBeGreaterThanOrEqual(2); // upper + sole plate
-    // The sole plate is the pair's ground contact: march down for flesh.
+    expect(shoes.length).toBeGreaterThanOrEqual(2); // upper + vamp (the sole is gone)
+    // The shoe body is the pair's ground contact: march down for flesh.
     const b = built();
     let lowest = 1;
     for (let x = 0.02; x <= 0.25; x += 0.005)
