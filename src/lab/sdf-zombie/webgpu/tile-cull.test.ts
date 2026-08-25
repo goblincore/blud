@@ -36,6 +36,7 @@ function group(overrides: Partial<TileGroupInput> = {}): TileGroupInput {
     center: [0, 0, -4],
     radius: 0.1,
     distort: 1,
+    flags: 0,
     ...overrides,
   };
 }
@@ -81,9 +82,9 @@ describe('TileBinner', () => {
     }
   });
 
-  it('carries the distortion factor packBody stored on every per-tile entry', () => {
+  it('carries the distortion factor and flag bits packBody stored on every per-tile entry', () => {
     const r = binner().bin(
-      [group({ bodyIndex: 3, start: 17, count: 5, distort: 22 })], straightCamera(),
+      [group({ bodyIndex: 3, start: 17, count: 5, distort: 22, flags: 3 })], straightCamera(),
     );
     // Centre tile (2,2) holds the entry; read it back through the packed view.
     const e = r.entryAt(2, 2, 0)!;
@@ -91,6 +92,10 @@ describe('TileBinner', () => {
     expect(e.start).toBe(17);
     expect(e.count).toBe(5);
     expect(e.distort).toBeCloseTo(22, 5);
+    expect(e.flags).toBe(3);
+    // The bound sphere rides the entry too — the shader's per-step cull
+    // needs it (tiles cut the list; spheres still cut per-step work).
+    expect(e.radius).toBeCloseTo(group().radius, 5);
   });
 
   it('clamps at the 64-entry cap and flags, never wrapping or throwing', () => {

@@ -26,6 +26,11 @@ import { chunkExtent, tornEndRadius } from '../extent';
 import { specialiseMapBody } from './specialise';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
+  TILE_SIZE_PX,
+  createTileTextures,
+} from './tile-cull';
+import type { TileBinResult } from './tile-cull';
+import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR,
@@ -79,6 +84,15 @@ export interface ZombieGpuView {
    */
   setFaceTexture(tex: THREE.Texture, atlas: THREE.Vector4, mean: number): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
+  /**
+   * PER-TILE LISTS (perf task 5). Present only when the view was created
+   * with opts.tiles. The caller bins the view's posed bound groups per frame
+   * (tile-cull.ts TileBinner) and uploads the result here.
+   */
+  tiles?: ViewTileBinding;
+  /** This view's posed bound groups, as the binner consumes them. Reads the
+   *  LAST uploaded pack — call after update(). */
+  getTileGroups(): import('./tile-cull').TileGroupInput[];
   dispose(): void;
 }
 
@@ -319,7 +333,45 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * the shipping path (x 0) pays nothing. y/w are spare.
      */
     debugCfg: uniform(new THREE.Vector2(0, 0)),
+    /**
+     * PER-TILE PRIMITIVE LISTS (perf task 5). x enabled, y tiles-per-row,
+     * z tile px size. INERT at x=0: MARCH_BODY reads it once per pixel and
+     * the cluster walk applies exactly as before. A view opts in by passing
+     * `tiles` to createZombieGpuView and uploading a bin result per frame;
+     * every other view keeps this at 0 and binds the shared 1x1 fallback
+     * pair (never fetched while x stays 0).
+     */
+    tileCfg: uniform(new THREE.Vector3(0, 0, TILE_SIZE_PX)),
   };
+}
+
+/**
+ * Shared fallback bindings for views that do not opt into tiles. Zero-filled:
+ * even if a stray enable ever flipped, the header count reads 0 and the fold
+ * folds nothing — never garbage.
+ */
+let fallbackTileHeader: THREE.DataTexture | null = null;
+let fallbackTileEntries: THREE.DataTexture | null = null;
+function fallbackTileTextures() {
+  if (!fallbackTileHeader) {
+    const h = new Float32Array(4);
+    const e = new Float32Array(4);
+    fallbackTileHeader = new THREE.DataTexture(h, 1, 1, THREE.RGBAFormat, THREE.FloatType);
+    fallbackTileEntries = new THREE.DataTexture(e, 1, 1, THREE.RGBAFormat, THREE.FloatType);
+    fallbackTileHeader.needsUpdate = true;
+    fallbackTileEntries.needsUpdate = true;
+  }
+  return { header: fallbackTileHeader!, entries: fallbackTileEntries! };
+}
+
+/** The two tile-list textures a tiled view binds, plus its upload surface. */
+export interface ViewTileBinding {
+  /** Feed one frame's bin result. Clamps the entry stream to the allocated
+   *  capacity — the binner's cap is per tile, so overflow here means the
+   *  textures were sized for a smaller viewport. */
+  upload(res: TileBinResult): void;
+  setEnabled(on: boolean): void;
+  dispose(): void;
 }
 
 /**
@@ -442,6 +494,7 @@ export function createMarchMaterial(
   u: MarchUniforms,
   march = marchBody,
   cone?: ConeSource, occluder?: OccluderSource,
+  tiles?: { header: THREE.Texture; entries: THREE.Texture },
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -495,6 +548,10 @@ export function createMarchMaterial(
     wallNegZ: u.wallNegZ,
     wallPosZ: u.wallPosZ,
     debugCfg: u.debugCfg,
+    tileHead: texture(tiles?.header ?? fallbackTileTextures().header),
+    tileEnt: texture(tiles?.entries ?? fallbackTileTextures().entries),
+    tileCfg: u.tileCfg,
+    screenUV: screenUV,
     startT: cone
       ? coneFetch({
           coneTex: texture(cone.texture),
@@ -720,6 +777,45 @@ export interface GpuViewOpts {
    * and disposes it — this view will not).
    */
   volumeTex?: THREE.Texture;
+  /**
+   * Opt this view into the per-tile fold path (perf task 5). Sizes are the
+   * SDF-pass pixel dimensions the binner will bin against; the view allocates
+   * its header/entry textures once at that grid.
+   */
+  tiles?: { widthPx: number; heightPx: number };
+}
+
+/** Shared implementation of ViewTileBinding over createTileTextures storage.
+ *  `tileCfg` is the view's live uniform — setEnabled flips its x channel and
+ *  every upload stamps y (tiles-per-row) from the bin result's grid. */
+function makeViewTiles(
+  widthPx: number, heightPx: number, tileCfg: THREE.Vector3,
+): { binding: ViewTileBinding; header: THREE.Texture; entries: THREE.Texture } {
+  const tilesX = Math.ceil(Math.max(1, widthPx) / TILE_SIZE_PX);
+  const tilesY = Math.ceil(Math.max(1, heightPx) / TILE_SIZE_PX);
+  const store = createTileTextures(tilesX, tilesY);
+  const binding: ViewTileBinding = {
+    upload(res) {
+      if (res.tilesX !== store.header.image.width || res.tilesY !== store.header.image.height) {
+        // The layer resized since allocation; grow the header grid to match.
+        store.resize(res.tilesX, res.tilesY);
+      }
+      store.headerTexels.set(res.headers.subarray(0, Math.min(res.headers.length, store.headerTexels.length)));
+      const cap = store.entryCapacityTexels;
+      if (res.usedTexels > cap) {
+        console.warn(`[zombie-gpu] tile entry stream truncated to ${cap} of ${res.usedTexels} texels — reallocate for a larger viewport`);
+      }
+      store.entryTexels.set(res.entries.subarray(0, Math.min(res.usedTexels * 4, store.entryTexels.length)));
+      tileCfg.set(1, res.tilesX, TILE_SIZE_PX);
+      store.header.needsUpdate = true;
+      store.entries.needsUpdate = true;
+    },
+    setEnabled(on) {
+      tileCfg.x = on ? 1 : 0;
+    },
+    dispose() { store.dispose(); },
+  };
+  return { binding, header: store.header, entries: store.entries };
 }
 
 export function createZombieGpuView(
@@ -732,8 +828,25 @@ export function createZombieGpuView(
   const ownsVolume = !opts.volumeTex;
   const volumeTex = opts.volumeTex ?? createFallbackHandVolumeTexture();
 
+  // Posed bound groups of the LAST upload (perf task 5): the binner's input.
+  let lastGroups: import('./tile-cull').TileGroupInput[] = [];
+
   function upload(next: BuildResult, rest?: BuildResult) {
     const p = packBody(next, rest);
+    lastGroups = [];
+    for (let g = 0; g < p.groupCount; g++) {
+      const o = g * 4;
+      const gb = p.groupBounds;
+      const gr = p.groupRange;
+      lastGroups.push({
+        bodyIndex: 0,
+        start: gr[o]!, count: gr[o + 1]!,
+        center: [gb[o]!, gb[o + 1]!, gb[o + 2]!],
+        radius: gb[o + 3]!,
+        distort: gr[o + 2]!,
+        flags: gr[o + 3]!,
+      });
+    }
     writeRow(ROW_PRIM_A, p.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, p.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, p.primScale, MAX_PRIMS);
@@ -755,11 +868,19 @@ export function createZombieGpuView(
     return p;
   }
 
+  let viewTiles: ViewTileBinding | undefined;
+  let tileTextures: { header: THREE.Texture; entries: THREE.Texture } | undefined;
+  if (opts.tiles) {
+    const made = makeViewTiles(opts.tiles.widthPx, opts.tiles.heightPx, u.tileCfg.value);
+    viewTiles = made.binding;
+    tileTextures = { header: made.header, entries: made.entries };
+  }
+
   const packed = upload(body);
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
-    opts.cone, opts.occluder);
+    opts.cone, opts.occluder, tileTextures);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -842,6 +963,8 @@ export function createZombieGpuView(
     coneObject: coneMesh,
     uniforms: u,
     volumeTexture: volumeTex,
+    tiles: viewTiles,
+    getTileGroups() { return lastGroups; },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -897,6 +1020,7 @@ export function createZombieGpuView(
       coneMaterial.dispose();
       dataTex.dispose();
       if (ownsVolume) volumeTex.dispose();
+      viewTiles?.dispose();
     },
   };
 }

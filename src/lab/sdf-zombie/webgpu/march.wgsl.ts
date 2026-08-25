@@ -1,4 +1,5 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
+import { ENTRY_ROW_TEXELS, TILE_STRIDE, TILE_MAX_ENTRIES } from './tile-cull';
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -284,10 +285,10 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
   return best * minScale;
 }`;
 
-export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>) -> f32 {
-  let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
-  let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
-  let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
+export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>, band: i32) -> f32 {
+  let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A} + band), 0);
+  let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B} + band), 0);
+  let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE} + band), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
   // Bent above tapered above plain: prof encodes profile + bend (0 round,
@@ -313,17 +314,17 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
 // 2026-08-17, benchGpu 240 frames, hiddenSteps 0). Only a turned head cluster
 // sets the flag; a rest head's quat is the exact identity, so statues and
 // every limb pay nothing.
-export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>) -> f32 {
-  let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A}), 0);
-  let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B}), 0);
-  let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE}), 0);
+export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>, band: i32) -> f32 {
+  let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A} + band), 0);
+  let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B} + band), 0);
+  let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE} + band), 0);
   var qq = p;
   var a = A.xyz;
   var b = B.xyz;
   // The control point rides the same conjugate as the endpoints — the curve
   // is defined in the prim's frame exactly as they are.
   var c = cpos;
-  let O = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0);
+  let O = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT} + band), 0);
   if (abs(1.0 - O.w) > 1e-6) {
     let mid = (A.xyz + B.xyz) * 0.5;
     // Conjugate of O: vector part negated, w unchanged. Rodrigues-in-quat
@@ -521,7 +522,7 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
           cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
         }
       }
-      let sd = select(sdPrim(p, idx, data, r2, prof, cpos), sdPrimO(p, idx, data, r2, prof, cpos), ori);
+      let sd = select(sdPrim(p, idx, data, r2, prof, cpos, 0), sdPrimO(p, idx, data, r2, prof, cpos, 0), ori);
       if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }
     }
   }
@@ -724,10 +725,87 @@ var<private> gDebugSteps: f32 = 0.0;
 // The march reuses y to anchor the shell displacement and the hit-pixel
 // noise without re-running the fold; the noise term below uses it to sample
 // the fbm in the dominant prim's REST frame so the texture rides every limb.
+// THE SHARED GROUP FOLD (perf task 5 step 2). The per-group work — sphere
+// cull with the distortion factor, then the prim loop — exists ONCE here and
+// BOTH fold paths call it: the cluster walk (below) and the tile-list path.
+// Extracting it is what keeps them from drifting: a cull fix or an smin
+// change lands in one place.
+//
+// bounds = group bound sphere (xyz centre, w radius); grp = the
+// ROW_GROUP_RANGE texel (x start, y count, z DISTORTION factor, w flag
+// bitfield). band selects the body's row block in a SHARED multi-body data
+// texture (merged pass, task 5 step 4): row = ROW + band. Single-body views
+// bind a one-band texture and pass 0 — every emitted load is then identical
+// to the pre-band shader.
+//
+// The argmin tracker rides private globals (gFoldBest/gFoldBestIdx) rather
+// than pointer params: three's wgslFn parser has no contract for ptr<function>,
+// and mapBody re-initialises both before any fold, so there is no cross-call
+// state. gDebugPrims counting moved in here too, so both paths (and only real
+// folds) feed the prims heatmap.
+export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32, bounds: vec4<f32>, grp: vec4<f32>) -> f32 {
+  var d = dIn;
+  // Per-step group-sphere cull, WITH the distortion factor — unchanged from
+  // the cluster walk (see pack.ts: sd under-reports Euclid by up to this
+  // factor; a factor-free test tore black cracks inside wound cavities).
+  // Tiles cut the LIST; spheres still cut PER-STEP work.
+  if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * grp.z) { return d; }
+  let start = i32(grp.x);
+  let count = i32(grp.y);
+  let flags = i32(grp.w + 0.5);
+  let ori = (flags & 1) != 0;
+  let shaped = (flags & 2) != 0;
+  for (var i = 0; i < 64; i = i + 1) {
+    if (i >= count) { break; }
+    let idx = start + i;
+    if (idx >= i32(counts.x)) { break; }
+    let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
+    // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
+    if (S.w > 0.5) { continue; }
+    if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }
+    let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0).w;
+    var r2 = -1.0;
+    var prof = 0.0;
+    var cpos = vec3<f32>(0.0, 0.0, 0.0);
+    if (shaped) {
+      let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
+      r2 = T.x;
+      prof = T.y;
+      if (prof > 1.5) {
+        cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;
+      }
+    }
+    var sd = sdPrim(p, idx, data, r2, prof, cpos, band);
+    if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }
+    if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }
+    if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
+  }
+  return d;
+}
+// Tile-list state + fold-argmin state, declared at the TAIL of this source
+// because three's wgslFn parser is ^-anchored on "fn" — a var-decl source of
+// their own would fail the parse contract. MARCH_BODY fills the tile arrays
+// ONCE per pixel (before stepping); every later mapBody call in the same
+// fragment — march steps, calcNormal, AO/scatter probes, wound shadow — reads
+// them through the same gTileActive gate, so shading sees exactly the field
+// the march walked. Fragment invocations start zeroed; the cone pre-pass runs
+// in its own invocations where gTileActive stays 0 and the cluster walk
+// applies.
+var<private> gFoldBest: f32 = 1e9;
+var<private> gFoldBestIdx: f32 = -1.0;
+var<private> gTileActive: f32 = 0.0;
+var<private> gTileN: f32 = 0.0;
+var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
+var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
+var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;`;
+
 export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
-  var best = 1e9;
-  var bestIdx = -1;
+  // Argmin tracking now lives in private globals shared with foldGroup
+  // (above); reset per call — calcNormal calls mapBody four times and each
+  // must track its own dominant prim.
+  gFoldBest = 1e9;
+  gFoldBestIdx = -1.0;
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -740,6 +818,19 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
+  if (gTileActive > 0.5) {
+    // TILE-LIST PATH (perf task 5 step 2). MARCH_BODY preloaded this pixel's
+    // tile entries into gTile* ONCE, before any stepping; every march step
+    // folds exactly that list through the SAME foldGroup the cluster walk
+    // uses, so the two paths cannot drift. No per-step bound texel reads
+    // before the prim work — that is the whole economics argument (the
+    // flat-list lesson: per-step reads dominate; this list costs one read
+    // per pixel).
+    for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
+      if (f32(e) >= gTileN) { break; }
+      d = foldGroup(d, p, data, counts, i32(gTileBand[e]), gTileBounds[e], gTileGrp[e]);
+    }
+  } else {
   // TWO-LEVEL CULL. The outer loop is the cluster (limb) sphere it has
   // always been; a cluster that survives walks its own BOUND GROUPS
   // (pack.ts boundGroups) — contiguous runs of two to four prims in fold
@@ -771,55 +862,19 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     let g = gFirst + gi;
     let range = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE}), 0);
     let bounds = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_BOUNDS}), 0);
-    if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * range.z) { continue; }
-    let start = i32(range.x);
-    let count = i32(range.y);
     // range.w is a BITFIELD, not a bool: 1 = oriented group, 2 = some prim
     // here is tapered or chamfered. Both are per-group hoists of a per-prim
     // decision, for the reason sdPrimO's header measures — paying an extra
     // textureLoad for EVERY prim cost +10-18% frame time. A group with no
-    // shaped prims never touches ROW_PRIM_SHAPE at all.
-    let flags = i32(range.w + 0.5);
-    let ori = (flags & 1) != 0;
-    let shaped = (flags & 2) != 0;
-    for (var i = 0; i < 64; i = i + 1) {
-      if (i >= count) { break; }
-      let idx = start + i;
-      if (idx >= primCount) { break; }
-      let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
-      // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
-      if (S.w > 0.5) { continue; }
-      // PERF DEBUG (task 2): counted ONLY while instrumenting — a branch on
-      // a private global that the driver sets uniformly per draw, so the
-      // shipping path (off) pays a predicated add at most and the fold
-      // itself is untouched.
-      if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }
-      let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
-      // One sd evaluation feeds BOTH the smin fold and the argmin tracker —
-      // a second call would double the texture fetches this loop lives on.
-      var r2 = -1.0;
-      var prof = 0.0;
-      var cpos = vec3<f32>(0.0, 0.0, 0.0);
-      if (shaped) {
-        let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
-        r2 = T.x;
-        prof = T.y;
-        // Only genuinely-bent prims pay for the bend row; the +2 encoding
-        // keeps every "> 0.5 means chamfer" consumer working unchanged.
-        if (prof > 1.5) {
-          cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
-        }
-      }
-      var sd = sdPrim(p, idx, data, r2, prof, cpos);
-      if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos); }
-      if (sd < best) { best = sd; bestIdx = idx; }
-      // Chamfer is profile bit 0; bend is +2, so the old "prof > 0.5" test
-      // would wrongly chamfer a plain-bent prim — bounded above now.
-      if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
-    }
+    // shaped prims never touches ROW_PRIM_SHAPE at all. The prim loop,
+    // sphere cull and argmin tracking all live in foldGroup (above), shared
+    // with the tile-list path.
+    d = foldGroup(d, p, data, counts, 0, bounds, range);
   }
   }
   }
+  }
+  let bestIdx = i32(gFoldBestIdx);
   let carved = applyCarves(d, p, data, counts);
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2);
   let dmg = dmgRes.x;
@@ -1061,6 +1116,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   wallNegZ: vec3<f32>,
   wallPosZ: vec3<f32>,
   debugCfg: vec2<f32>,
+  // TILE LIST (perf task 5): the per-tile entry lists this pixel marches
+  // against. tileHead is one texel per tile (x = stream base, y = count);
+  // tileEnt is the linear entry stream, TILE_STRIDE texels per entry —
+  // bounds, then the ROW_GROUP_RANGE-shaped pack, then meta (bodyIndex in
+  // x). tileCfg: x enabled, y tilesPerRow, z tile px size. Both textures
+  // are ALWAYS bound (a 1x1 zero fallback when tiles are off); the enable
+  // gate keeps the fetch cost off the shipping path.
+  tileHead: texture_2d<f32>,
+  tileEnt: texture_2d<f32>,
+  tileCfg: vec3<f32>,
+  screenUV: vec2<f32>,
   startT: f32,
   occT: f32
 ) -> vec4<f32> {
@@ -1070,6 +1136,32 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // shipping path pays exactly one uniform branch; gDebugMode hands the
   // flag to mapBody's fold without forking its signature.
   if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; }
+  // TILE-LIST PRELOAD (perf task 5 step 2). Read ONCE per pixel, here at the
+  // march entry — never per step. The entry's groups then ride every mapBody
+  // call in this fragment through gTileActive (march steps AND the post-hit
+  // normal/AO/scatter probes, so shading sees exactly the field the ray
+  // walked). The cone pre-pass is a separate invocation chain and keeps
+  // gTileActive 0 — it marches the full cluster field, which is CONSERVATIVE
+  // relative to any correctly-binned tile list.
+  gTileActive = select(0.0, 1.0, tileCfg.x > 0.5);
+  if (tileCfg.x > 0.5) {
+    let hdims = vec2<i32>(textureDimensions(tileHead, 0));
+    let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(hdims))), vec2<i32>(0, 0), hdims - vec2<i32>(1, 1));
+    let head = textureLoad(tileHead, tid, 0);
+    let n = min(i32(head.y), ${TILE_MAX_ENTRIES});
+    gTileN = f32(n);
+    let ew = ${ENTRY_ROW_TEXELS};
+    for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
+      if (e >= n) { break; }
+      let lin = (i32(head.x) + e) * ${TILE_STRIDE};
+      let b = textureLoad(tileEnt, vec2<i32>(lin % ew, lin / ew), 0);
+      let r = textureLoad(tileEnt, vec2<i32>((lin + 1) % ew, (lin + 1) / ew), 0);
+      let m = textureLoad(tileEnt, vec2<i32>((lin + 2) % ew, (lin + 2) / ew), 0);
+      gTileBounds[e] = b;
+      gTileGrp[e] = r;
+      gTileBand[e] = m.x * ${DATA_ROWS}.0;
+    }
+  }
   // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a
   // conservative INNER hull of the scene — geometry guaranteed to lie inside
   // the real surface, rasterised depth-only before this pass.
@@ -1698,7 +1790,7 @@ export const HELPERS = [
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
-  MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER,
+  FOLD_GROUP, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER,
   WALL_CONTRIBUTION, AMBIENT_AT,
 ];
 

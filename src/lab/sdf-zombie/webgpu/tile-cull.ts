@@ -34,6 +34,18 @@ export const TILE_SIZE_PX = 16;
 export const TILE_MAX_ENTRIES = 64;
 
 /**
+ * Texels per packed entry in the stream: bound sphere, then the
+ * ROW_GROUP_RANGE-shaped pack (start, count, distort, flags), then meta
+ * (bodyIndex in x). The middle texel is byte-for-byte the layout
+ * ROW_GROUP_RANGE already uses, so the shader's foldGroup consumes both
+ * sources identically. THREE texels, not the two a minimal packing could
+ * live with, because the per-step group-sphere cull must keep its sphere
+ * AND its distortion factor AND the oriented/shaped flag bits — dropping
+ * any of them either regresses the cull or tears thin geometry.
+ */
+export const TILE_STRIDE = 3;
+
+/**
  * Packed texture geometry. The header texture is one texel per TILE
  * (tilesX x tilesY): x = first entry index in the stream, y = entry count,
  * zw spare. The entry stream is a fixed-width texture of
@@ -60,6 +72,10 @@ export interface TileGroupInput {
   radius: number;
   /** The group's distortion factor (groupRange.z). */
   distort: number;
+  /** ROW_GROUP_RANGE.w bitfield verbatim: 1 = oriented prims, 2 = some prim
+   *  tapered/chamfered/bent. Dropped here, the tile path would fold a turned
+   *  head world-axis and skip every shape row — silent wrong geometry. */
+  flags: number;
 }
 
 export interface TileBinResult {
@@ -212,8 +228,8 @@ export class TileBinner {
       this.cursors[t] = 0;
       running += n;
     }
-    this.ensureCapacity(running);
-    this.used = running;
+    this.ensureCapacity(running * TILE_STRIDE);
+    this.used = running * TILE_STRIDE;
 
     // Pass B: fill slots.
     for (let gi = 0; gi < nRanges; gi++) {
@@ -226,11 +242,20 @@ export class TileBinner {
           if (n >= TILE_MAX_ENTRIES) continue;
           const slot = this.headers[t * 4]! + n;
           this.cursors[t] = n + 1;
-          const e = slot * 4;
-          this.entries[e] = g.bodyIndex;
-          this.entries[e + 1] = g.start;
-          this.entries[e + 2] = g.count;
-          this.entries[e + 3] = g.distort;
+          const e = slot * TILE_STRIDE * 4;
+          // Texel A: the group's bound sphere for the per-step cull.
+          this.entries[e] = g.center[0];
+          this.entries[e + 1] = g.center[1];
+          this.entries[e + 2] = g.center[2];
+          this.entries[e + 3] = g.radius;
+          // Texel B: exactly the ROW_GROUP_RANGE layout (start, count,
+          // distort, flag bitfield) — the shader folds it like any group.
+          this.entries[e + 4] = g.start;
+          this.entries[e + 5] = g.count;
+          this.entries[e + 6] = g.distort;
+          this.entries[e + 7] = g.flags;
+          // Texel C: meta, bodyIndex in x (merged pass row band).
+          this.entries[e + 8] = g.bodyIndex;
         }
       }
     }
@@ -261,14 +286,15 @@ export class TileBinner {
         const base = this.headers[h]!;
         const n = this.headers[h + 1]!;
         if (i < 0 || i >= n) throw new Error(`entry ${i} out of range (tile has ${n})`);
-        const o = (base + i) * 4;
+        const o = (base + i) * TILE_STRIDE * 4;
         return {
-          bodyIndex: this.entries[o]!,
-          start: this.entries[o + 1]!,
-          count: this.entries[o + 2]!,
-          distort: this.entries[o + 3]!,
-          center: [0, 0, 0],
-          radius: 0,
+          bodyIndex: this.entries[o + 8]!,
+          start: this.entries[o + 4]!,
+          count: this.entries[o + 5]!,
+          distort: this.entries[o + 6]!,
+          flags: this.entries[o + 7]!,
+          center: [this.entries[o]!, this.entries[o + 1]!, this.entries[o + 2]!],
+          radius: this.entries[o + 3]!,
         };
       },
     };

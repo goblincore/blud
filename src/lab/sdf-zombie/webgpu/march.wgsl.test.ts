@@ -16,6 +16,7 @@
 // the field maths still means what it meant before the port.
 
 import { describe, it, expect } from 'vitest';
+import { TILE_MAX_ENTRIES } from './tile-cull';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, ROW_PRIM_COLOR, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
@@ -211,7 +212,7 @@ describe('ported features reach the entry point', () => {
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
     // ONE sd evaluation feeds both branches, the same invariant mapBody's fold
     // keeps — evaluating the field twice is how the two paths drift apart.
-    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2, prof, cpos), sdPrimO(p, idx, data, r2, prof, cpos), ori);');
+    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2, prof, cpos, 0), sdPrimO(p, idx, data, r2, prof, cpos, 0), ori);');
     expect(applyCarves).toContain('if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }');
     // Depth and width ride primShape.zw, spare since the taper claimed xy.
     expect(applyCarves).toContain('gr = T.zw;');
@@ -257,10 +258,11 @@ describe('ported features reach the entry point', () => {
     // encoding: ONE sd evaluation still feeds both. `r2` is -1 for every
     // untapered prim (plain-capsule branch inside coneCap); `cpos` is zero
     // unless prof > 1.5, which is the Bezier branch inside sdPrim.
-    expect(mapBody).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos);');
-    expect(mapBody).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos); }');
-    expect(mapBody).toContain('if (sd < best) { best = sd; bestIdx = idx; }');
-    expect(mapBody).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+    const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
+    expect(foldGroup).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos, band);');
+    expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }');
+    expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }');
+    expect(foldGroup).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
     expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
@@ -529,6 +531,37 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
   });
 });
 
+describe('tile-list fold path (raymarcher-perf task 5)', () => {
+  it('preloads the tile list ONCE per pixel at the march entry, under an enable guard', () => {
+    const pre = MARCH_BODY.indexOf('gTileActive = select(0.0, 1.0, tileCfg.x > 0.5);');
+    expect(pre).toBeGreaterThan(-1);
+    // The preload must precede the march loop and its mapBody call.
+    expect(pre).toBeLessThan(MARCH_BODY.indexOf('let dres = mapBody('));
+    // One read loop, bounded by the same cap the CPU binner clamps to.
+    expect(MARCH_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
+    expect(MAP_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
+    expect(MARCH_BODY).toContain('if (e >= n) { break; }');
+  });
+
+  it('mapBody branches on gTileActive: tile list vs cluster walk, both through foldGroup', () => {
+    expect(MAP_BODY).toContain('if (gTileActive > 0.5) {');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, i32(gTileBand[e]), gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, 0, bounds, range);');
+  });
+
+  it('keeps the per-step sphere cull WITH the distortion factor inside foldGroup', () => {
+    const foldGroup = HELPERS.find(h => /^fn foldGroup\(/.test(h))!;
+    expect(foldGroup).toContain(
+      'if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * grp.z) { return d; }');
+  });
+
+  it('band-offsets every prim-row load so one shared texture serves all bodies', () => {
+    const foldGroup = HELPERS.find(h => /^fn foldGroup\(/.test(h))!;
+    expect(foldGroup).toContain(`vec2<i32>(idx, ${ROW_PRIM_SCALE} + band)`);
+    expect(foldGroup).toContain(`vec2<i32>(idx, ${ROW_PRIM_B} + band)`);
+  });
+});
+
 describe('data texture layout', () => {
   it('gives every row a distinct index inside DATA_ROWS', () => {
     const rows = [
@@ -653,19 +686,20 @@ describe('arc capsule — bent primitives', () => {
   // an untapered body from paying for the shape row, which measured +10-18%
   // frame time when it was missing.
   it('loads ROW_PRIM_BEND only for prims whose profile encodes bend', () => {
-    for (const src of [MAP_BODY, APPLY_CARVES]) {
-      expect(src).toContain(`cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;`);
-      const gateAt = src.indexOf('if (prof > 1.5) {');
-      expect(gateAt).toBeGreaterThan(-1);
-      expect(gateAt).toBeLessThan(src.indexOf('cpos = textureLoad'));
-    }
+    const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
+    expect(APPLY_CARVES).toContain(`cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;`);
+    expect(foldGroup).toContain(
+      `cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;`);
+    const gateAt = foldGroup.indexOf('if (prof > 1.5) {');
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(gateAt).toBeLessThan(foldGroup.indexOf('cpos = textureLoad'));
   });
 
   // Bend rides profile bit 1 (+2), so the old "prof > 0.5" chamfer test would
   // wrongly chamfer a plain-bent round prim — the fold must bound it above.
   it('bounds the chamfer test below the bend encoding in the fold', () => {
-    const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
-    expect(mapBody).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+    const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
+    expect(foldGroup).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
   });
 
   // One NaN takes the entire body: the degenerate guard must sit before the
@@ -703,7 +737,7 @@ describe('per-prim orientation (motion-polish task 3)', () => {
   it('sdPrimO reads the quat row and guards identity prims with a cheap branch', () => {
     // String pins: the parity test below proves the CPU mirror, these prove
     // the WGSL actually contains the branch being mirrored.
-    expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT}), 0)`);
+    expect(SD_PRIM_ORIENTED).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_QUAT} + band), 0)`);
     // Was 11; the arc capsule added ROW_PRIM_BEND, and per-primitive colour
     // added ROW_PRIM_COLOR, each without displacing any existing row.
     // 16: bound groups (pack.ts boundGroups) added ROW_GROUP_BOUNDS/RANGE
@@ -724,12 +758,15 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // reason, so range.w is now a BITFIELD (1 oriented, 2 shaped) rather than
     // the bool it started as. A cluster with no tapered or chamfered prim
     // never reads the shape row at all.
-    expect(MAP_BODY).toContain('let flags = i32(range.w + 0.5);');
-    expect(MAP_BODY).toContain('let ori = (flags & 1) != 0;');
-    expect(MAP_BODY).toContain('let shaped = (flags & 2) != 0;');
-    expect(MAP_BODY).toContain('if (shaped) {');
-    expect(MAP_BODY).toContain('sdPrimO(p, idx, data, r2, prof, cpos)');
-    expect(MAP_BODY).toContain('sdPrim(p, idx, data, r2, prof, cpos)');
+    const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
+    expect(foldGroup).toContain('let flags = i32(grp.w + 0.5);');
+    expect(foldGroup).toContain('let ori = (flags & 1) != 0;');
+    expect(foldGroup).toContain('let shaped = (flags & 2) != 0;');
+    expect(foldGroup).toContain('if (shaped) {');
+    // BOTH fold paths call foldGroup with the group texels, so neither can
+    // drift from the other's sphere-cull or flag semantics.
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, i32(gTileBand[e]), gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, 0, bounds, range);');
     // The carve pass reads the same bitfield, so a tapered carve is a taper in
     // BOTH fields. This one backs click-to-shoot; a divergence here lands
     // shots where nothing is drawn.
@@ -969,7 +1006,8 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     // mapBody's fold: guarded on the private mode flag (mapBody takes no
     // debugCfg parameter by design — threading one would fork the
     // signature specialise.ts mirrors).
-    expect(MAP_BODY).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
+    const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
+    expect(foldGroup).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
     // The march entry: init + per-step count guarded on the uniform itself.
     expect(MARCH_BODY).toContain(
       'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; }');
@@ -978,8 +1016,10 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     // No UNGUARDED write anywhere: strip the guarded forms, and no
     // assignment to a counter may remain.
     const guarded = /(if \(gDebugMode > 0\.5\)|if \(debugCfg\.x > 0\.5\)) \{[^}]*gDebug(Prims|Steps|Mode)[^}]*\}/g;
+    const foldScan = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
     const stripped = MARCH_BODY.replace(guarded, '')
-      + MAP_BODY.replace(guarded, '');
+      + MAP_BODY.replace(guarded, '')
+      + foldScan.replace(guarded, '');
     expect(stripped).not.toMatch(/gDebug(Prims|Steps|Mode)\s*=/);
   });
 

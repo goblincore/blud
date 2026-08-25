@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
-import { APPLY_CARVES, MAP_BODY } from './webgpu/march.wgsl';
+import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
 import type { LimbId, Primitive, Vec3 } from './types';
 import { buildBody } from './build-body';
 import { parseBlob } from './blob-parse';
@@ -26,7 +26,11 @@ describe('shader caps', () => {
   // they NARROW it, validateBody starts passing bodies the shader truncates in
   // silence. Assert the literal both cluster folds actually use.
   it('keeps MAX_CLUSTER_PRIMS equal to the WGSL cluster-fold literal', () => {
-    expect(MAP_BODY).toContain(`for (var i = 0; i < ${MAX_CLUSTER_PRIMS}; i = i + 1)`);
+    // The prim fold lives in foldGroup (perf task 5), shared by BOTH fold
+    // paths — cluster walk and tile list — plus APPLY_CARVES. All three stay
+    // in step with the CPU-side cap.
+    const foldGroup = HELPERS.find(h => /^fn foldGroup\(/.test(h))!;
+    expect(foldGroup).toContain(`for (var i = 0; i < ${MAX_CLUSTER_PRIMS}; i = i + 1)`);
     expect(APPLY_CARVES).toContain(`for (var i = 0; i < ${MAX_CLUSTER_PRIMS}; i = i + 1)`);
   });
 
