@@ -138,7 +138,24 @@ export class TileBinner {
    *
    * `camera` must have matrixWorldInverse and projectionMatrix current.
    */
-  bin(groups: TileGroupInput[], camera: THREE.PerspectiveCamera): TileBinResult {
+  /**
+   * @param maxBlendK the body's largest smooth-min blend constant
+   *   (`counts.w`). Group spheres are inflated by `maxBlendK * 4` before
+   *   projection — see `blendReach` below.
+   */
+  bin(
+    groups: TileGroupInput[], camera: THREE.PerspectiveCamera, maxBlendK = 0,
+  ): TileBinResult {
+    // BLEND REACH. A group influences the field well beyond its bound sphere,
+    // because smooth-min pulls the surface toward neighbours: the per-step
+    // fold cull in march.wgsl.ts allows for exactly this, testing against
+    // `d + counts.w * 4.0`. Binning without the same allowance drops groups
+    // that still bend the surface inside a tile, so the folded field differs
+    // either side of a tile boundary and the shading steps — the faint
+    // horizontal banding the owner saw on the cyclops' lower body once the
+    // missing-pixel bug was fixed. Mirror the shader's constant; if one
+    // changes, change both.
+    const blendReach = maxBlendK * 4.0;
     this.headers.fill(0);
     this.cursors.fill(0);
     this.used = 0;
@@ -173,7 +190,8 @@ export class TileBinner {
       // down -z, so the nearest depth is -(v.z) - r; if that is <= 0 the
       // sphere crosses or sits behind the camera plane — project nothing,
       // cover EVERY tile. Same for a centre behind the eye plane (clip.w<=0).
-      const nearDist = -v.z - g.radius;
+      const rBlend = g.radius + blendReach;
+      const nearDist = -v.z - rBlend;
       const clipW =
         pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
       if (nearDist <= 0 || clipW <= 0) {
@@ -194,7 +212,7 @@ export class TileBinner {
         const cy = (0.5 - ndcY * 0.5) * H;
         // Screen extent AT NEAREST DEPTH — the largest projection the sphere
         // can produce, so the AABB cannot undershoot the silhouette.
-        const rpix = (g.radius / nearDist) * focalY * (H / 2);
+        const rpix = (rBlend / nearDist) * focalY * (H / 2);
         // REJECT, don't clamp in: a sphere fully off-screen bins into zero
         // tiles. Clamping negative/overflowing coordinates into range would
         // pin far-off geometry onto the edge columns.

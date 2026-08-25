@@ -498,7 +498,8 @@ async function main() {
     if (tileBinner && views[0]?.tiles) {
       camera.updateMatrixWorld();
       camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-      views[0].tiles.upload(tileBinner.bin(views[0].getTileGroups(), camera));
+      views[0].tiles.upload(tileBinner.bin(
+        views[0].getTileGroups(), camera, views[0].uniforms.counts.value.w));
     }
   });
 

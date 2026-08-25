@@ -515,7 +515,10 @@ async function main() {
     if (!heroTilesEnabled || !view.tiles) return;
     camera.updateMatrixWorld();
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    view.tiles.upload(binnerForSdfSize().bin(view.getTileGroups(), camera));
+    // counts.w is maxBlendK — the binner inflates group spheres by 4x it,
+    // matching the per-step fold cull and the proxy-box pad in fit().
+    view.tiles.upload(binnerForSdfSize().bin(
+      view.getTileGroups(), camera, view.uniforms.counts.value.w));
   }
   const tilesBtn = addButton(statusBox, 'tile fold: off', () => setHeroTiles(!heroTilesEnabled));
   function setHeroTiles(on: boolean) {
