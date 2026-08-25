@@ -33,6 +33,23 @@ at the geometry level, ~14x fewer `mapBody` evals, ~1.8x frame single-body;
 hands go mitten-y and the face dies at +3 cm hull inflation. Merged main:
 tsc clean, 78 files / 1517 tests green.
 
+**RELAX QUESTION CLOSED (2026-08-25, `e196e66`).** `relax` (`woundCfg2.y`)
+**stays 1.0**, now with evidence rather than an owner impression. The blocker
+all along was that the lab could not be MEASURED: blood, goo and gib chunks
+keep animating between two A/B captures inside one page load, so the noise
+floor exceeded the signal and three attempts (1b, ox-alpha r3, my own sweep)
+each mistook noise for a result. Fixed by `__sdfLab.freezeCosmetics()` — stops
+chunk physics, the blood sim, the goo layer and the shader clock. Gate floor
+went 0.814 -> 0.0278 max lost-tile (poses>0.30: 10/36 -> 0/72), and the signal
+then read unambiguously: **1.0 vs 1.4 = max 0.5503, 12/72 poses >0.10, 5 >0.30,
+against a floor with ZERO >0.10.** So relax 1.4 skips thin geometry even with
+task 1b's retract-to-tSafe fix. Instrument: `scripts/relax-sweep.mjs` (metric =
+body-mask LOST PIXELS per tile, immune to goo; always run the floor with
+RELAX_A==RELAX_B alongside). **`freezeCosmetics()` applies to ANY shader A/B in
+the lab, not just relax.** Branches `dispatch/perf-task-1b` and
+`dispatch/relax-thin-r2` stay UNMERGED — 1b's retract fix is sound but dead
+code at relax 1.0, and neither ships 1.4. Perf tasks 2-5 remain `queued`.
+
 **Next session — pick up (prioritized):**
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
    chromatic bounce; `ambientAt(p, n)` is the seam every later implementation
