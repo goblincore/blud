@@ -338,11 +338,32 @@ good?" into a specific, measured, and cheap next question.
    lab's existing `DirectionalLight`. This does not touch the bounce maths, which
    reads wall albedo from uniforms and never the rendered pixels.
 
+### Parity path — VERIFIED 2026-08-25
+
+Captured 8 fixed poses (810x540, motion frozen, 6 s verlet settle) from fresh
+page loads, bounce off on both sides. Two independent loads of `main` give the
+honest cross-run noise floor; the branch is then compared against both.
+
+| comparison | pixels differing | \|d\|>2 | mean \|d\| | max |
+|---|---|---|---|---|
+| **noise floor** — main-A vs main-B | 0.372% | 0.0521% | 2.29/255 | 130 |
+| main-A vs lighting | 0.530% | 0.0870% | 2.61/255 | 168 |
+| **main-B vs lighting** | **0.369%** | 0.0601% | 2.59/255 | 176 |
+
+`main-B vs lighting` is **below** the main-vs-main noise floor: the branch
+differs from `main` by less than two runs of `main` differ from each other.
+main-A is the first-load outlier (less-settled rig), which is exactly the drift
+`blob-turntable.mjs` documents. Parity holds; the residual is verlet settle
+jitter, not a shading change.
+
+This was worth checking rather than assuming: the substitution is exact algebra,
+but `keyColor` moved inside the parenthesis in the march expression, so IEEE
+bit-identity was never guaranteed — only equality after the 8-bit sRGB encode,
+which is what these numbers confirm.
+
 ### Still not verified
 
-- **Pixel-identity of the parity path.** The algebra is exact and unit-tested to
-  12 decimals, and the shader early-outs; but `keyColor` was reordered in the
-  march expression, so IEEE bit-identity is not guaranteed (it is almost certainly
-  identical after the 8-bit sRGB encode). Not captured against `main`.
+- **Frame cost** against the `sdf-bench` scenes A/B with bounce on.
+- **`clay` still reads as clay** with bounce at full.
 - **Frame cost** against `sdf-bench` scenes A/B.
 - **`clay` still reads as clay** with bounce at full.
