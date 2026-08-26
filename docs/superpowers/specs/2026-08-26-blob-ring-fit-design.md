@@ -61,7 +61,7 @@ Two further departures from the source, both because our situation is better:
 ## Scope
 
 **In:** prims riding `pelvis`, `spine1`, `chest`, `spine2`, `neck`, `clavicle`,
-`upperarm`, `forearm`, `hand`, `thigh`, `shin`, `foot` and their mirrors.
+`upperarm`, `forearm`, `thigh`, `shin`, `foot` and their mirrors.
 Suggests `r`, `r2`, `deep`, `offset` for prims **that already exist**.
 
 Scope is decided by the **bone**, not the limb tag. `bar head on neck` is in
@@ -85,6 +85,12 @@ existing prim, which is a taper, not a new prim.
   a solver minimising ring error will pick the lumpy answer.
 - **Coverage-gap detection.** Deferred. "Blend fills that gap" is legitimate, so
   the tolerance would produce false alarms before it produced findings.
+- **`hand` and the finger bones.** The reference rig ends each arm at a single
+  `LeftHand`/`RightHand` joint, so every vertex of the palm and all four fingers
+  carries one weight. Our `.blob` models `hand` plus `f_index`/`f_middle`/
+  `f_ring`/`f_little` separately. There is no sane per-bone attribution across
+  that mismatch, and a fit would confidently average a hand and four fingers into
+  one radius. Excluded until a reference with finger joints exists.
 - **Unskinned references.** `cyclops.glb` is an unrigged Tripo sculpt with no
   `JOINTS_0`. It exits 2 with "no skin — unsupported". A nearest-our-own-bone
   fallback was considered and rejected for v1: it is circular, so a misplaced bone
@@ -128,14 +134,34 @@ yielding a confident number off forty points.
 
 An explicit table, written down rather than inferred from names:
 
-```
-Hips -> pelvis      Spine -> spine1      Spine01 -> chest     Spine02 -> spine2
-neck -> neck        LeftShoulder -> clavicle.l    LeftArm -> upperarm.l
-LeftForeArm -> forearm.l    LeftHand -> hand.l
-LeftUpLeg -> thigh.l   LeftLeg -> shin.l   LeftFoot -> foot.l
-(and the Right/`.r` mirror of each)
-Head, head_end, headfront, LeftToeBase -> unmapped, skipped
-```
+Each of our bones names the reference joint at its **head**, the one at its
+**tail**, and the joints whose vertices it **claims**.
+
+| our bone | head joint | tail joint | claims |
+|---|---|---|---|
+| `pelvis` | `Hips` | `Spine02` | `Hips` |
+| `spine1` | `Spine02` | `Spine01` | `Spine02` |
+| `chest` | `Spine01` | `Spine` | `Spine01` |
+| `spine2` | `Spine` | `neck` | `Spine` |
+| `neck` | `neck` | `Head` | `neck` |
+| `clavicle.l` | `LeftShoulder` | `LeftArm` | `LeftShoulder` |
+| `upperarm.l` | `LeftArm` | `LeftForeArm` | `LeftArm` |
+| `forearm.l` | `LeftForeArm` | `LeftHand` | `LeftForeArm` |
+| `thigh.l` | `LeftUpLeg` | `LeftLeg` | `LeftUpLeg` |
+| `shin.l` | `LeftLeg` | `LeftFoot` | `LeftLeg` |
+| `foot.l` | `LeftFoot` | `LeftToeBase` | `LeftFoot`, `LeftToeBase` |
+
+`.r` mirrors each arm/leg row with the `Right*` joints. `LeftHand`, `RightHand`,
+`Head`, `head_end` and `headfront` are deliberately unmapped and their vertices
+are dropped (see Scope).
+
+**The spine names are counter-intuitive and were verified against the file, not
+assumed.** The reference chain runs `Hips -> Spine02 -> Spine01 -> Spine ->
+{LeftShoulder, RightShoulder, neck}`, so `Spine02` is the **lowest** spine joint
+and `Spine` is the **highest** — the reverse of what the numbering suggests. An
+earlier draft of this spec had the mapping inverted. This is precisely the silent
+mis-assignment the explicit table exists to prevent; do not re-derive it from
+names.
 
 `mouse.glb` and `schoolgirl.glb` carry the identical 24-joint rig, so one table
 covers both. A reference with a different rig produces "no mapping for joint X"
@@ -145,6 +171,12 @@ per unmapped joint, never a silent mis-assignment.
 
 **One global uniform scale**, then a **per-bone rigid transform** (rotation and
 translation only).
+
+Reference joint positions come from composing the node hierarchy's TRS from the
+scene root; mesh vertices are transformed by the mesh node's own world matrix, so
+both land in one space. (`mouse.glb` puts everything under a single `Armature`
+node carrying a uniform 0.01 scale.) A non-uniform scale anywhere in that chain
+is asserted against rather than silently mishandled.
 
 The scale comes from the median of per-bone length ratios across all mapped bones;
 the spread is printed. The references are in centimetre-ish units — `Hips` sits at
