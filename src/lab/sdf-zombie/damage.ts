@@ -55,6 +55,28 @@ export interface Wound {
    */
   rimScale?: number;
   /**
+   * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
+   * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses
+   * for this wound; the VISUAL carve always uses `radius`. Absent means
+   * `radius` governs both — the blast path keeps that (a falloff-scaled
+   * blast wound's own radius IS its severing power), and every wound
+   * stamped before this field existed behaves exactly as before.
+   *
+   * Why it exists: the grapeshot fires ~10 cm pellet balls whose honest
+   * crater is the stock 5.5 cm pellet profile, but one-directional pellet
+   * volleys only ever carve the NEAR side of a joint's cross-section disc,
+   * so 5.5 cm carve spheres can never cover it and nothing ever severs
+   * (measured sweep: 0.055/0.07/0.085 never sever; 0.10 severs a shoulder
+   * in ~8 pellets). Inflating the crater to 0.10 fixed severing but the
+   * crater was then wider than a forearm and carved the whole cross-section
+   * laterally — the see-through-hole report, 2026-08-26. A linear damage
+   * accumulator CANNOT replace the geometry here: it would need one
+   * threshold that both a single 13 cm blast (severs in 1) and eight 5.5 cm
+   * pellets cross, and 0.13 < 8×0.055 makes that impossible. The union test
+   * stays; what changes is that it reads ITS OWN calibre, not the crater's.
+   */
+  severRadius?: number;
+  /**
    * The THICKNESS-CAPPED CARVE CENTRE in the same prim-local frame as `local`
    * (so it is transported by the same `frame()` and rides yaw/jiggle exactly
    * like the anchor). The GPU carve subtracts its sphere from here, shifted

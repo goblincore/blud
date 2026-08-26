@@ -5,7 +5,7 @@
 // and the rest→posed rigid fit that places severed pieces.
 
 import { describe, expect, it } from 'vitest';
-import { woundWorldPos } from '../damage';
+import { WOUND_PROFILES, woundWorldPos } from '../damage';
 import {
   GRAPESHOT, applyRigidYaw, expired, fitRestToPose, mulberry32,
   spawnPellets, spreadDirections, stepProjectiles, traceProjectile,
@@ -164,6 +164,10 @@ describe('woundFromPellet', () => {
     expect(w.primIdx).toBe(0);
     expect(w.type).toBe('pellet');
     expect(w.radius).toBeCloseTo(GRAPESHOT.woundRadius, 6);
+    // The decoupling: the crater is the stock pellet calibre; severing
+    // reads its own (larger) radius.
+    expect(w.radius).toBeCloseTo(WOUND_PROFILES.pellet.radius, 6);
+    expect(w.severRadius).toBeCloseTo(GRAPESHOT.severRadius, 6);
     // Roundtrip through the prim frame lands back on the hit.
     const back = woundWorldPos([prim], w, 0);
     expect(Math.hypot(back[0] - hit[0], back[1] - hit[1], back[2] - hit[2]))

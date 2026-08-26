@@ -26,14 +26,26 @@ export const GRAPESHOT = {
   /** Pellet visual/collision radius, metres. A 10 cm ball reads as an object
    *  crossing the room at game scale; smaller read as a hitscan flash. */
   radius: 0.05,
-  /** Wound (crater) radius stamped per impact, metres. MEASURED, not a
-   *  guess: connectivity's sever test needs the carve union to cover a joint
-   *  cross-section disc, and pellets arriving from ONE direction only ever
-   *  carve the near side — at the pellet profile's 0.055 no number of
-   *  point-blank pellets ever severs (0.07/0.085 also fail; 0.10 severs in
-   *  ~8, 0.13 in 1). The owner's "large type projectiles" is a 10 cm ball;
-   *  its crater matching the ball is the honest calibre. */
-  woundRadius: 0.10,
+  /** Wound (crater) radius stamped per impact, metres — the VISUAL carve.
+   *  The stock pellet profile's 0.055: a crater that reads as a crater on a
+   *  limb whose radius is 0.055–0.082. It was swept UP to 0.10 by the
+   *  grapeshot dispatch because the carve sphere was ALSO the sever test's
+   *  sphere, and one-directional volleys never cover a joint's section disc
+   *  with anything smaller — but a 0.10 sphere is wider than a forearm, so
+   *  the thickness cap (depth-only) still let it remove the whole
+   *  cross-section laterally: the owner's see-through-hole report
+   *  (2026-08-26). Severing now reads `severRadius` instead — the crater is
+   *  tuned by eye, not by whether it severs. */
+  woundRadius: 0.055,
+  /** The radius connectivity's carve-union test (cutLimbs/cutChains) uses
+   *  for grapeshot pellet wounds, via Wound.severRadius. MEASURED, not a
+   *  guess: pellets arriving from ONE direction only ever carve the near
+   *  side of a joint's cross-section disc, so at the visual 0.055 (also
+   *  0.07/0.085) no number of point-blank pellets ever severs; 0.10 severs
+   *  a shoulder in ~8, 0.13 in 1. Keeping the proven 0.10 preserves the
+   *  sever feel exactly while the crater shrinks back to the stock pellet
+   *  calibre. */
+  severRadius: 0.10,
   /** Pellets despawn after this long (or on any impact). */
   lifeSec: 2.0,
   /** Minimum time between trigger pulls, seconds — two barrels is a
@@ -196,7 +208,10 @@ export function woundFromPellet(
   bodyYaw: number,
   field: (p: Vec3) => number,
 ): Wound {
-  return worldHitToWound(prims, hit, GRAPESHOT.woundRadius, 'pellet', bodyYaw, field);
+  const w = worldHitToWound(prims, hit, GRAPESHOT.woundRadius, 'pellet', bodyYaw, field);
+  // Severing reads its own calibre, not the crater's — see GRAPESHOT above.
+  w.severRadius = GRAPESHOT.severRadius;
+  return w;
 }
 
 // ---------------------------------------------------------------------------
