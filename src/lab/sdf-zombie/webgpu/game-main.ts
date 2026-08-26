@@ -98,9 +98,16 @@ async function main() {
     const w = axis === 1 ? p.max[0] - p.min[0] : p.max[axis === 0 ? 2 : 0] - p.min[axis === 0 ? 2 : 0];
     const h = axis === 1 ? p.max[2] - p.min[2] : p.max[1] - p.min[1];
     const geo = new THREE.PlaneGeometry(w, h);
+    // Ceilings face AWAY from every light in the stack (sun points down, the
+    // hemisphere's ground term is weak), so with pure reflected light they
+    // render near-black and the owner reads "void above" — the missing-wall
+    // failure pointing up. A small emissive term in their own colour keeps
+    // them legible as the room's top surface without flattening the mood.
+    const isCeiling = axis === 1 && p.facing < 0;
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
       color: new THREE.Color(p.color[0], p.color[1], p.color[2]),
       roughness: 1,
+      ...(isCeiling ? { emissive: new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.45) } : {}),
     }));
     const mid: Vec3 = [
       (p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2,
@@ -123,6 +130,16 @@ async function main() {
     levelGroup.add(mesh);
   }
   scene.add(levelGroup);
+
+  // CEILING FILL. The sun points down; ceilings (and north-south walls in
+  // shadow) have normals pointing away from it, so with only the dim warm
+  // ambient they rendered BLACK — read by the owner as "the same failure
+  // pointing up" as the missing walls. A hemisphere light pays normal-
+  // dependent fill: downward-facing geometry takes the ground colour. This
+  // touches ONLY these MeshStandardMaterials — the SDF bodies carry their own
+  // lighting uniforms (enclosure bounce), so probe/bounce tuning is untouched.
+  const hemi = new THREE.HemisphereLight(0xa39c93, 0x8f8880, 0.8);
+  scene.add(hemi);
 
   // -----------------------------------------------------------------------
   // The draw chain, exactly as the bench stands it up.
