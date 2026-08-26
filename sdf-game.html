@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — SDF game (grey-box ring)</title>
+<style>
+  body { margin: 0; background: #1a1116; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; cursor: crosshair; }
+  #hud {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.66); padding: 6px 9px; border: 1px solid #444;
+    font-size: 12px; pointer-events: none;
+  }
+  #cross {
+    position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; z-index: 10;
+    margin: -2px 0 0 -2px; border-radius: 50%; background: rgba(255,255,255,0.8);
+    pointer-events: none;
+  }
+  #errors { position: fixed; bottom: 8px; left: 8px; z-index: 10; color: #ff6464; font-size: 11px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hud"></div>
+  <div id="cross"></div>
+  <div id="errors"></div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/game-main.ts"></script>
+</body>
+</html>
