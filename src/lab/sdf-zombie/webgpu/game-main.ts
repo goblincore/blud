@@ -47,9 +47,11 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { sdBody } from '../validate';
 import {
-  GRAPESHOT, expired, mulberry32, spawnPellets,
-  stepProjectiles, traceProjectile, type Projectile,
+  GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
+  stepProjectiles, traceProjectile, woundFromSlug, type Projectile,
 } from './game-weapon';
+import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
+import { woundWorldPos, woundCarveWorldPos } from '../damage';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -398,6 +400,7 @@ async function main() {
       if (probeWeight > 0) { parked = probeWeight; pushProbeWeight(0); }
       else pushProbeWeight(parked);
     }
+    if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   let parked = DEFAULT_PROBE_WEIGHT;
@@ -503,6 +506,25 @@ async function main() {
     const cp = Math.cos(player.pitch);
     return [Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp];
   }
+  /** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
+   *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
+   *  to the camera ray — so at ANY range impacts landed that whole offset off
+   *  the crosshair. Standard FPS remedy: every projectile converges on the
+   *  point where the camera ray meets AIM_CONVERGE_M. Close shots still group;
+   *  the parallel-ray offset is gone by construction. */
+  const AIM_CONVERGE_M = 8;
+  function convergedDir(origin: Vec3): Vec3 {
+    const eye = eyeOf(player);
+    const a = aimDir();
+    const target: Vec3 = [
+      eye[0] + a[0] * AIM_CONVERGE_M,
+      eye[1] + a[1] * AIM_CONVERGE_M,
+      eye[2] + a[2] * AIM_CONVERGE_M,
+    ];
+    const d: Vec3 = [target[0] - origin[0], target[1] - origin[1], target[2] - origin[2]];
+    const l = Math.hypot(d[0], d[1], d[2]) || 1;
+    return [d[0] / l, d[1] / l, d[2] / l];
+  }
 
   // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool that
   // grows on demand inside the tick's sync step.
@@ -515,11 +537,26 @@ async function main() {
   let cooldown = 0;
   let recoilPitch = 0;
 
+  /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
+   *  barely-visible 5.5 cm craters gave no signal about placement or look.
+   *  Reachable three ways: ?slug URL param at boot, KeyE in-page toggle, or
+   *  __sdfGame.fireSlug(). The HUD shows which mode is live. */
+  let slugMode = new URLSearchParams(location.search).has('slug');
+
   function fire(barrels: 1 | 2): boolean {
     if (!gunReady || cooldown > 0) return false;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
-    pellets.push(...spawnPellets(muzzleWorld(), aimDir(), barrels, nextSeed));
+    if (slugMode) {
+      // One lump down one known ray instead of a pellet volley.
+      pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
+      nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
+      return true;
+    }
+    const muz = muzzleWorld();
+    const dir = convergedDir(muz);
+    // spawnPellets spreads around `dir`; convergence just re-centres the cone.
+    pellets.push(...spawnPellets(muz, dir, barrels, nextSeed));
     nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
     return true;
   }
@@ -610,6 +647,7 @@ async function main() {
     hudEl.textContent =
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
+      (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -743,7 +781,8 @@ async function main() {
           }
           if (hitActor && hitPoint) {
             const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
-            hitActor.hit(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
+            if (p.kind === 'slug') hitActor.hitSlug(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
+            else hitActor.hit(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
             dead = true;
           }
         }
@@ -763,6 +802,9 @@ async function main() {
         if (k < pellets.length) {
           v.visible = true;
           v.position.set(pellets[k]!.pos[0], pellets[k]!.pos[1], pellets[k]!.pos[2]);
+          // Slug balls are drawn at their own (larger) calibre.
+          const s = pellets[k]!.radius / GRAPESHOT.radius;
+          v.scale.setScalar(s);
         } else {
           v.visible = false;
         }
@@ -854,7 +896,23 @@ async function main() {
       return a ? {
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
         woundCount: () => a.wounds().length,
+        woundList: () => [...a.wounds()],
       } : undefined;
+    },
+    /** Where every wound of a body sits IN WORLD SPACE right now — the
+     *  surface anchor and the GPU carve centre (both at the yaw-0 contract).
+     *  The placement gate diffs these against the fired ray's impact point. */
+    debugWounds: (id: number) => {
+      const a = actors.find(a => a.id === id);
+      if (!a) return undefined;
+      const prims = a.posed().prims;
+      return a.wounds().map(w => ({
+        surface: woundWorldPos(prims, w, 0),
+        carve: woundCarveWorldPos(prims, w, 0),
+        radius: w.radius,
+        type: w.type,
+        primIdx: w.primIdx,
+      }));
     },
     /** Walk the player toward (x, z) through the real collision path until
      *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
@@ -870,6 +928,10 @@ async function main() {
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
+    // SLUG MODE surface + HUD-truthful flag.
+    get slugMode() { return slugMode; },
+    setSlugMode(on: boolean) { slugMode = on; updateHud(); },
+    fireSlug: () => { const keep = slugMode; slugMode = true; try { return fire(1); } finally { slugMode = keep; } },
     projectiles: () => pellets.map(p => ({
       pos: [...p.pos] as Vec3,
       vel: [...p.vel] as Vec3,
@@ -906,6 +968,23 @@ async function main() {
         content: { ...content },
         letterboxed: cap.mode === 'fixed',
       };
+    },
+    /** Diagnostic detonation: one blast stamped through resolveExplosion
+     *  (the SAME worldHitToWound path dynamite uses) with falloff-scaled
+     *  blast calibre — wounds only, no shove/sever/gib, so captures are not
+     *  displaced by their own impact. Returns what it did. */
+    explode: (x: number, y: number, z: number) => {
+      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed() }));
+      const fx = resolveExplosion([x, y, z], bodies);
+      let totalWounds = 0;
+      for (const pb of fx.perBody) {
+        if (pb.wounds.length === 0) continue;
+        const a = actors.find(q => String(q.id) === pb.bodyId);
+        if (!a) continue;
+        a.stampBlast(pb.wounds);
+        totalWounds += pb.wounds.length;
+      }
+      return { radiusM: fx.radiusM, bodiesHit: fx.perBody.length, totalWounds };
     },
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },

@@ -11,7 +11,7 @@
 // smoke are deliberately not here.
 
 import type { Vec3 } from '../types';
-import { worldHitToWound, WOUND_PROFILES, type Wound } from '../damage';
+import { worldHitToWound, type Wound } from '../damage';
 
 export const GRAPESHOT = {
   /** Pellets per barrel. The brief says ~8 and "err chunky". */
@@ -118,7 +118,40 @@ export interface Projectile {
   pos: Vec3;
   vel: Vec3;
   ageSec: number;
+  /** Visual ball radius, m — drawn by the mesh pool at this scale. The
+   *  collision trace keeps its own fixed epsilon; only the DRAWN ball and
+   *  the wound this projectile stamps differ between pellet and slug. */
+  radius: number;
+  /** Which crater this projectile stamps on impact. */
+  kind: 'pellet' | 'slug';
 }
+
+/**
+ * SLUG MODE (2026-08-26): one large projectile leaving one large,
+ * unmistakable crater. Built as a diagnostic first — eight barely-visible
+ * 5.5 cm craters gave the owner no signal at all — and kept as a weapon
+ * variant: a hand-laid zip gun firing a waxed lump of lead.
+ *
+ * The crater is deliberately ~3x the pellet calibre and uses the BLAST
+ * profile ('blast' rim splay is the tamed lip that reads as a dish, which
+ * is also exactly the lab reference look for a big crater). Severing stays
+ * governed by Wound.severRadius per the damage.ts contract; a slug carries
+ * full-power blast sever calibre so aimed joint shots do what the blast
+ * sphere measurably does at 0.13 (sever in ~1).
+ */
+export const SLUG = {
+  /** Visual/collision ball radius, m — a fat thumb-sized lump. */
+  radius: 0.055,
+  /** Muzzle speed, m/s — heavier feel than the pellet volley. */
+  speed: 30,
+  /** Same nod to gravity as the pellets. */
+  gravity: -6,
+  /** Crater radius stamped on impact, m (~the lab's blast craters). */
+  woundRadius: 0.16,
+  /** Connectivity carve-union calibre via Wound.severRadius: the measured
+   *  "severs a shoulder in ~1" value. A deliberate hand-cannon. */
+  severRadius: 0.13,
+} as const;
 
 /**
  * One volley from the muzzle at `origin` along `aimDir`.
@@ -136,7 +169,40 @@ export function spawnPellets(
     pos: [...origin] as Vec3,
     vel: [d[0] * GRAPESHOT.speed, d[1] * GRAPESHOT.speed, d[2] * GRAPESHOT.speed],
     ageSec: 0,
+    radius: GRAPESHOT.radius,
+    kind: 'pellet' as const,
   }));
+}
+
+/**
+ * One slug from the muzzle along `dir`. No spread — the whole point is a
+ * single known ray the owner (and the placement gate) can trust.
+ */
+export function spawnSlug(origin: Vec3, dir: Vec3): Projectile {
+  return {
+    pos: [...origin] as Vec3,
+    vel: [dir[0] * SLUG.speed, dir[1] * SLUG.speed, dir[2] * SLUG.speed],
+    ageSec: 0,
+    radius: SLUG.radius,
+    kind: 'slug',
+  };
+}
+
+/**
+ * Slug hit → wound: one BIG crater riding the struck prim. Reuses the blast
+ * profile's rim character (tamed lip) at slug size — 'pellet' would put a
+ * volcano lip this size reads wrong beside, and there is no third shader
+ * character worth adding for a diagnostic. The surface anchor drives
+ * gameplay/debug readback; the carve centre rides carveLocal as ever.
+ */
+export function woundFromSlug(
+  prims: import('../types').Primitive[],
+  hit: Vec3,
+  field: (p: Vec3) => number,
+): Wound {
+  const w = worldHitToWound(prims, hit, SLUG.woundRadius, 'blast', 0, field);
+  w.severRadius = SLUG.severRadius;
+  return w;
 }
 
 /** Integrate one frame: ballistic arc + ageing. Mutates in place.

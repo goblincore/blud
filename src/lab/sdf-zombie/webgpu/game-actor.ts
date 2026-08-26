@@ -30,7 +30,7 @@ import { cutLimbs, cutChains } from '../connectivity';
 import { sdBody } from '../validate';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import {
-  applyRigidYaw, fitRestToPose, woundFromPellet,
+  applyRigidYaw, fitRestToPose, woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import {
   makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
@@ -94,6 +94,20 @@ export interface ZombieActor {
    * done here, not left to the next step().
    */
   hit(hitWorld: Vec3, dirWorld: Vec3): void;
+  /**
+   * A SLUG (one big projectile) lands at `hitWorld`: same choreography as
+   * hit() but stamps the slug calibre crater. Separate method on purpose —
+   * nothing about the pellet path may drift while it is under diagnosis.
+   */
+  hitSlug(hitWorld: Vec3, dirWorld: Vec3): void;
+  /**
+   * Diagnostic blast: push a resolver-provided bundle of blast wounds
+   * (resolveExplosion ran against this actor's POSED body) with no shove,
+   * no flinch and no severing — geometry only, so a captured crater is not
+   * moved by its own impact. Routes through the same wound ring + carve
+   * upload the pellet path uses.
+   */
+  stampBlast(wounds: readonly Wound[]): void;
 }
 
 export function createZombieActor(opts: {
@@ -312,9 +326,35 @@ export function createZombieActor(opts: {
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3): void {
-    const field = posed;
     // Yaw 0 — see refreshWounds: posed prims are already world space.
-    const wound = woundFromPellet(field.prims, hitWorld, 0, p => sdBody(p, field));
+    const field = posed;
+    applyProjectileHit(woundFromPellet(field.prims, hitWorld, 0, p => sdBody(p, field)), hitWorld, dirWorld);
+  }
+
+  function hitSlug(hitWorld: Vec3, dirWorld: Vec3): void {
+    const field = posed;
+    applyProjectileHit(woundFromSlug(field.prims, hitWorld, p => sdBody(p, field)), hitWorld, dirWorld);
+  }
+
+  function stampBlast(blastWounds: readonly Wound[]): void {
+    for (const w of blastWounds) {
+      // Yaw 0 — resolveExplosion stamped these in posed-prims-at-yaw-0 space,
+      // the same single frame every other stamper here uses.
+      wounds = pushWound(wounds, w, MAX_WOUNDS);
+      pendingWounds.push(w);
+    }
+    if (blastWounds.length === 0) return;
+    posed = applyRig(current, bound, bodyYaw);
+    view.update(posed, current);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    refreshWounds();
+  }
+
+  /** Shared post-impact choreography: stamp wound, flinch signal, recoil
+   *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
+   *  the actor's CURRENT posed body at call time. */
+  function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): void {
+    const field = posed;
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
     pendingShot = {
@@ -349,5 +389,7 @@ export function createZombieActor(opts: {
     step,
     wounds: () => wounds,
     hit,
+    hitSlug,
+    stampBlast,
   };
 }

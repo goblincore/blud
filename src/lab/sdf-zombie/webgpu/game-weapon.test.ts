@@ -7,9 +7,9 @@
 import { describe, expect, it } from 'vitest';
 import { WOUND_PROFILES, woundWorldPos } from '../damage';
 import {
-  GRAPESHOT, applyRigidYaw, expired, fitRestToPose, mulberry32,
-  spawnPellets, spreadDirections, stepProjectiles, traceProjectile,
-  woundFromPellet,
+  GRAPESHOT, SLUG, applyRigidYaw, expired, fitRestToPose, mulberry32,
+  spawnPellets, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
+  woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import type { Vec3 } from '../types';
 import type { Primitive } from '../types';
@@ -91,7 +91,7 @@ describe('spawnPellets', () => {
 
 describe('stepProjectiles', () => {
   it('integrates position and applies gravity to vy', () => {
-    const ps = [{ pos: [0, 1, 0] as Vec3, vel: [10, 0, 0] as Vec3, ageSec: 0 }];
+    const ps = [{ pos: [0, 1, 0] as Vec3, vel: [10, 0, 0] as Vec3, ageSec: 0, radius: GRAPESHOT.radius, kind: 'pellet' as const }];
     stepProjectiles(ps, 0.1);
     expect(ps[0]!.pos[0]).toBeCloseTo(1.0, 6);
     // Semi-implicit Euler: v += g·dt THEN move, so Δy over the first step
@@ -171,6 +171,49 @@ describe('woundFromPellet', () => {
     // Roundtrip through the prim frame lands back on the hit.
     const back = woundWorldPos([prim], w, 0);
     expect(Math.hypot(back[0] - hit[0], back[1] - hit[1], back[2] - hit[2]))
+      .toBeLessThan(1e-6);
+  });
+});
+
+describe('spawnSlug', () => {
+  it('fires ONE projectile straight down the given ray', () => {
+    const p = spawnSlug([1, 2, 3], [0, 0, -1]);
+    expect(p.kind).toBe('slug');
+    expect(p.radius).toBeCloseTo(SLUG.radius, 6);
+    expect(p.pos).toEqual([1, 2, 3]);
+    expect(p.vel).toEqual([0, 0, -SLUG.speed]);
+  });
+
+  it('stamps ONE crater of slug calibre riding the struck prim', () => {
+    // ANGLED capsule on purpose — an axis-aligned prim would make a
+    // degenerate fixture (the project's dominant failure mode): frame
+    // discontinuities and yaw-threading errors cannot show up on it.
+    const prim: Primitive = {
+      a: [0.3, 0.5, 0.2], b: [-0.4, 1.5, -0.25], radius: 0.2, scale: [1, 1, 1],
+      blendK: 0.05, limb: 'torso', cluster: 0,
+    };
+    // A real field for THIS prim: distance to the segment's swept capsule.
+    const ab: Vec3 = [prim.b[0] - prim.a[0], prim.b[1] - prim.a[1], prim.b[2] - prim.a[2]];
+    const field = (p: Vec3) => {
+      const ap: Vec3 = [p[0] - prim.a[0], p[1] - prim.a[1], p[2] - prim.a[2]];
+      const t = Math.max(0, Math.min(1,
+        (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0]**2 + ab[1]**2 + ab[2]**2)));
+      const cx = prim.a[0] + ab[0] * t - p[0];
+      const cy = prim.a[1] + ab[1] * t - p[1];
+      const cz = prim.a[2] + ab[2] * t - p[2];
+      return Math.hypot(cx, cy, cz) - prim.radius;
+    };
+    // March a ray onto the surface to find an honest hit point.
+    const hit = traceProjectile([-1, 0.9, 1], [1.5, 0.9, -1.2], field);
+    expect(hit).not.toBeNull();
+    const w = woundFromSlug([prim], hit!, field);
+    expect(w.type).toBe('blast');            // blast profile: the tamed lip
+    expect(w.radius).toBeCloseTo(SLUG.woundRadius, 6);
+    expect(w.severRadius).toBeCloseTo(SLUG.severRadius, 6);
+    // THE PLACEMENT GATE (pure form): the surface anchor roundtrips onto the
+    // hit through the prim-local frame — within tracing precision.
+    const back = woundWorldPos([prim], w, 0);
+    expect(Math.hypot(back[0] - hit![0], back[1] - hit![1], back[2] - hit![2]))
       .toBeLessThan(1e-6);
   });
 });
