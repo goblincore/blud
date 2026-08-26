@@ -36,6 +36,61 @@ export interface Aabb {
   max: Vec3;
 }
 
+/** A coloured accent light. Pure data: the renderer turns each entry into a
+ *  THREE.PointLight (the MESH side sees it directly), and
+ *  `litWallAlbedo` folds them into the bounce albedos so the SDF bodies see
+ *  them too — the two halves of the page cannot otherwise agree.
+ *
+ *  `power` feeds PointLight.intensity directly. The ALBEDO tint uses the
+ *  same colour with a plain inverse-square-style falloff and no power term:
+ *  ambientAt renormalises its accumulation to unit LUMINANCE, so only the
+ *  HUE of the effective wall colour matters to the bounce — a simple
+ *  "paint times what falls on it" is all the agreement that is needed.
+ *  No radiosity solver.
+ */
+export interface AccentLight {
+  pos: Vec3;
+  color: Vec3;
+  power: number;
+}
+
+/** Distance at which an accent's albedo contribution has fallen to half. */
+export const ACCENT_ALBEDO_REF_DIST = 2.2;
+
+/**
+ * A wall's EFFECTIVE LIT COLOUR: paint times the accent light falling on it.
+ * This is what gets handed to the bounce (`ambientAt`) as the wall albedo —
+ * NOT the raw paint. A white wall washed by a red accent must reach the
+ * character shading reddish, or the walls and the zombies disagree about
+ * what room they are in and the whole feature stays invisible.
+ */
+export function litWallAlbedo(paint: Vec3, point: Vec3, accents: AccentLight[]): Vec3 {
+  const add: [number, number, number] = [0, 0, 0];
+  for (const a of accents) {
+    const dx = a.pos[0] - point[0];
+    const dy = a.pos[1] - point[1];
+    const dz = a.pos[2] - point[2];
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const t = d / ACCENT_ALBEDO_REF_DIST;
+    const f = 1 / (1 + t * t);
+    add[0] += a.color[0] * f;
+    add[1] += a.color[1] * f;
+    add[2] += a.color[2] * f;
+  }
+  return [paint[0] * (1 + add[0]), paint[1] * (1 + add[1]), paint[2] * (1 + add[2])];
+}
+
+/** Representative sample point for one of the six walls of a box: its centre. */
+function wallCentre(box: Box, axis: 0 | 1 | 2, side: -1 | 1): Vec3 {
+  const c: [number, number, number] = [
+    (box.min[0] + box.max[0]) / 2,
+    (box.min[1] + box.max[1]) / 2,
+    (box.min[2] + box.max[2]) / 2,
+  ];
+  c[axis] = side < 0 ? box.min[axis] : box.max[axis];
+  return c;
+}
+
 export interface RoomDef {
   /** 1..4 around the ring: NW, NE, SE, SW. */
   id: number;
@@ -43,10 +98,13 @@ export interface RoomDef {
   /** Interior ground rect. */
   minX: number; maxX: number; minZ: number; maxZ: number;
   height: number;
-  /** Wall albedo (display matches). Adjacent rooms are deliberately distinct. */
+  /** Paint (display matches). Gallery-white; the ACCENTS tell rooms apart. */
   wallColor: Vec3;
   floorColor: Vec3;
   ceilColor: Vec3;
+  /** Coloured accent lights (one or two per room). Mesh-side PointLights
+   *  AND bounce-albedo inputs — see AccentLight/litWallAlbedo. */
+  accents: AccentLight[];
   zombies: number;
 }
 
@@ -64,21 +122,44 @@ export interface TunnelDef {
 
 const R = ROOM_HALF, B = BAND_HALF, O = OUTER, T = TUNNEL_OFF, W = TUNNEL_HALF_W;
 
+// WHITE-WALL GALLERY. Owner: "rooms should be more light like white wall
+// gallery and then some color lights here and there". Walls near-white so
+// geometry reads and zombies read against them; floor a step darker so the
+// room keeps a horizon; ceiling brightest (it faces the rig's fill).
+const GALLERY_WALL: Vec3 = [0.88, 0.87, 0.85];
+const GALLERY_FLOOR: Vec3 = [0.45, 0.44, 0.42];
+const GALLERY_CEIL: Vec3 = [0.93, 0.92, 0.90];
+
 export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
-    wallColor: [0.60, 0.22, 0.18], floorColor: [0.40, 0.39, 0.38], ceilColor: [0.30, 0.29, 0.28], zombies: 1 },
+    wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
+    // RED wash on the west wall, over the low furniture.
+    accents: [{ pos: [-7.5, 2.5, -2.8], color: [1.0, 0.10, 0.06], power: 14 }],
+    zombies: 1 },
   { id: 2, name: 'room2', minX: B, maxX: O, minZ: -O, maxZ: -B, height: WALL_H,
-    wallColor: [0.30, 0.48, 0.28], floorColor: [0.40, 0.39, 0.38], ceilColor: [0.30, 0.29, 0.28], zombies: 2 },
+    wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
+    // TEAL wash on the east wall by the tall crate.
+    accents: [{ pos: [7.6, 2.6, -6.3], color: [0.05, 0.85, 0.60], power: 14 }],
+    zombies: 2 },
   { id: 3, name: 'room3', minX: B, maxX: O, minZ: B, maxZ: O, height: WALL_H,
-    wallColor: [0.28, 0.34, 0.52], floorColor: [0.40, 0.39, 0.38], ceilColor: [0.30, 0.29, 0.28], zombies: 3 },
+    wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
+    // AMBER pool near the (3,3) spawn — the accent-pair capture stands a
+    // zombie beside it. VIOLET in the far corner for depth.
+    accents: [
+      { pos: [2.0, 2.4, 2.2], color: [1.0, 0.55, 0.12], power: 14 },
+      { pos: [7.8, 2.6, 7.8], color: [0.30, 0.20, 1.00], power: 12 },
+    ],
+    zombies: 3 },
   { id: 4, name: 'room4', minX: -O, maxX: -B, minZ: B, maxZ: O, height: WALL_H,
-    wallColor: [0.52, 0.46, 0.18], floorColor: [0.40, 0.39, 0.38], ceilColor: [0.30, 0.29, 0.28], zombies: 4 },
+    wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
+    // MAGENTA wash along the north wall.
+    accents: [{ pos: [-3.5, 2.6, 7.9], color: [0.95, 0.15, 0.75], power: 14 }],
+    zombies: 4 },
 ];
 
-// Tunnels. Corridor rects: 1.6 long (the band) x 1.6 wide. Ring order only —
-// 1<->2 north, 2<->3 east, 3<->4 south, 4<->1 west. Dimmer than either room
-// so the passage reads as its own enclosure.
-const TUNNEL_COLOR: Vec3 = [0.22, 0.21, 0.20];
+// Dimmer than either room's white so the passage still reads as a throat
+// between galleries — but no longer a cave: grey, not black.
+const TUNNEL_COLOR: Vec3 = [0.52, 0.51, 0.49];
 export const TUNNELS: TunnelDef[] = [
   { name: 'tunnel-1-2', a: 1, b: 2, minX: -B, maxX: B, minZ: -T - W, maxZ: -T + W,
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },
@@ -184,16 +265,24 @@ export function enclosureKeyAt(x: number, z: number): string {
   return 'void';
 }
 
-/** The bounce uniforms for one enclosure: box bounds + six wall albedos. */
+/** The bounce uniforms for one enclosure: box bounds + six wall albedos.
+ *
+ *  For rooms these are EFFECTIVE LIT colours (paint x nearby accents via
+ *  litWallAlbedo) sampled at each wall's centre — the rule that keeps the
+ *  SDF characters agreeing with the lit walls they stand among. Tunnels
+ *  carry no accents, so their albedos are the bare paint. */
 export function enclosureOf(key: string): { box: Box; walls: EnclosureWalls } | null {
   const room = ROOMS.find(r => r.name === key);
   if (room) {
+    const box: Box = { min: [room.minX, 0, room.minZ], max: [room.maxX, room.height, room.maxZ] };
+    const lit = (axis: 0 | 1 | 2, side: -1 | 1, paint: Vec3): Vec3 =>
+      litWallAlbedo(paint, wallCentre(box, axis, side), room.accents);
     return {
-      box: { min: [room.minX, 0, room.minZ], max: [room.maxX, room.height, room.maxZ] },
+      box,
       walls: {
-        negX: room.wallColor, posX: room.wallColor,
-        negY: room.floorColor, posY: room.ceilColor,
-        negZ: room.wallColor, posZ: room.wallColor,
+        negX: lit(0, -1, room.wallColor), posX: lit(0, 1, room.wallColor),
+        negY: lit(1, -1, room.floorColor), posY: lit(1, 1, room.ceilColor),
+        negZ: lit(2, -1, room.wallColor), posZ: lit(2, 1, room.wallColor),
       },
     };
   }
