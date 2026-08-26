@@ -18,9 +18,11 @@
 //      snap as a TSL PostProcessing pipeline is its own follow-up, and it
 //      should not gate parity.
 //   2. An N-BODY SPAWNER ([ and ]) and a frame-time readout, carried over from
-//      the spike. Extra bodies are static crowd fill — the rig, wounds,
-//      severing and gibs all drive body zero. That is what makes the count
-//      honest for a cost measurement: crowd cost, not feature cost.
+//      the spike. Since the crowd-alive task every body is a live actor: own
+//      motion record, own rig solve, own pose, all through actor.ts's
+//      stepActorMotion. Body zero remains the one shots, severing and gibs
+//      address; the crowd idles/walks in small seeded wander boxes with a
+//      fixed per-frame dt so poses are deterministic for A/B measurement.
 
 // From 'three/webgpu', never 'three'. Two copies of three means the node
 // system cannot see the lights and every standard material renders black.
@@ -123,8 +125,13 @@ import {
   planSubSteps, STANDING_RIG, stepMotion,
   type MotionJoints, type MotionSignals,
 } from '../motion';
+import {
+  CROWD_DT, crowdSeed, crowdRng, emptyActorSignals,
+  makeActorMotion, stepActorMotion,
+  type ActorMotion, type ActorSignals,
+} from '../actor';
 import { GAIT_TUNING, type ArmStyle } from '../gait';
-import { makeRng, type WanderBounds } from '../wander';
+import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { add } from '../vec';
 import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
@@ -953,19 +960,20 @@ async function main() {
   // -------------------------------------------------------------------------
   /** The live body — replaced on sever and on any override edit. */
   let current = body;
-  let bound = bindRig(current);
-  /** The hero's latest POSED body (world space) — what's on screen, and what
-   *  shots raycast against. Authored rest-space raycasting stopped being
-   *  valid the moment the body could wander or fall. */
-  let lastPosed = current;
-
   // Motion (X1.22): the orchestrator drives the hero's rest-pose targets;
   // the crowd stays static — it is a perf fixture, body zero is the actor.
   const WANDER_BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
   const MOTION_SEED = 1337; // fixed: reproducible shambling for A/B checks
+  /** Body zero's per-body motion state — the ActorMotion record that used to
+   *  be five module-level singletons (`bound`, `motionJoints`, `motionState`,
+   *  `lastRootShift`, `lastBodyYaw`). Crowd actors own their own records of
+   *  the same shape; see actor.ts and the crowd spawner below. */
+  const heroMotion = makeActorMotion(current, { seed: MOTION_SEED });
   const motionRng = makeRng(MOTION_SEED);
-  let motionJoints: MotionJoints | null = makeMotionJoints(current, bound.rig.restPose);
-  let motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
+  /** The hero's latest POSED body (world space) — what's on screen, and what
+   *  shots raycast against. Authored rest-space raycasting stopped being
+   *  valid the moment the body could wander or fall. */
+  let lastPosed = current;
   let motionEnabled = true;
   let wanderOn = true;
   let armStyle: ArmStyle = GAIT_TUNING.armStyle;
@@ -974,23 +982,32 @@ async function main() {
    *  wander target (the creepy variant the owner wants kept reachable). */
   let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
-  let lastRootShift: Vec3 = [0, 0, 0];
-  /** The body's applied yaw — feeds applyRig's rigid-head clamp cone. */
-  let lastBodyYaw = 0;
   // bindRig pins the lowest joint as a static anchor; walking releases it —
   // the rest pull + plants carry the body instead (and collapse wants the
   // pin gone anyway, so it lives in one place).
   function unpinnedRigPoints() {
-    return bound.rig.points.map(p => ({ ...p, pinned: false }));
+    return heroMotion.bound.rig.points.map(p => ({ ...p, pinned: false }));
   }
-  if (motionJoints) {
-    bound = { ...bound, rig: { ...bound.rig, points: unpinnedRigPoints() } };
+  if (heroMotion.motionJoints) {
+    heroMotion.bound = { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, points: unpinnedRigPoints() } };
   }
   // Per-frame signal accumulators: events (shots/severs) land between frames,
   // the motion step consumes and clears them inside the frame callback.
   let pendingShot: MotionSignals['shot'] = null;
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
+  /** The signal bundle stepActorMotion sees each frame — rebuilt from the
+   *  accumulators above at the top of every frame; severed/freshWounds alias
+   *  the live arrays so the in-place drain reaches them. */
+  const heroSignals: ActorSignals = {
+    shot: null,
+    wounded: { armL: false, armR: false, legL: false, legR: false },
+    severed: pendingSevered,
+    missing: { legL: false, legR: false, armL: false, armR: false },
+    headAlive: true,
+    forcedCollapse: false,
+    freshWounds: pendingWounds,
+  };
 
   /**
    * Re-binds the prims after a body edit. While motion is on, the rig POINTS
@@ -999,12 +1016,12 @@ async function main() {
    * limb would teleport the walking body back to the origin.
    */
   function rebind() {
-    const keep = motionEnabled && motionJoints ? bound.rig.points : null;
-    bound = bindRig(current);
-    if (keep && keep.length === bound.rig.points.length) {
-      bound = {
-        ...bound,
-        rig: { ...bound.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+    const keep = motionEnabled && heroMotion.motionJoints ? heroMotion.bound.rig.points : null;
+    heroMotion.bound = bindRig(current);
+    if (keep && keep.length === heroMotion.bound.rig.points.length) {
+      heroMotion.bound = {
+        ...heroMotion.bound,
+        rig: { ...heroMotion.bound.rig, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
   }
@@ -1013,14 +1030,14 @@ async function main() {
    *  (rebuild/respawn/gib) spawn a new shambler rather than springing an old
    *  pose across the arena. */
   function resetMotion() {
-    bound = bindRig(current);
-    motionJoints = makeMotionJoints(current, bound.rig.restPose);
-    if (motionJoints) {
-      bound = { ...bound, rig: { ...bound.rig, points: unpinnedRigPoints() } };
+    heroMotion.bound = bindRig(current);
+    heroMotion.motionJoints = makeMotionJoints(current, heroMotion.bound.rig.restPose);
+    if (heroMotion.motionJoints) {
+      heroMotion.bound = { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, points: unpinnedRigPoints() } };
     }
-    motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
-    lastRootShift = [0, 0, 0];
-    lastBodyYaw = 0;
+    heroMotion.motionState = makeMotionState(MOTION_SEED, [0, 0, 0]);
+    heroMotion.lastRootShift = [0, 0, 0];
+    heroMotion.lastBodyYaw = 0;
     pendingShot = null;
     pendingWounds.length = 0;
     pendingSevered.length = 0;
@@ -1092,7 +1109,7 @@ async function main() {
     return null;
   }
 
-  function uploadWounds(prims: BuildResult['prims'], yaw = lastBodyYaw) {
+  function uploadWounds(prims: BuildResult['prims'], yaw = heroMotion.lastBodyYaw) {
     view.setWounds(
       // The CARVE centres, not the surface anchors: the shader subtracts its
       // spheres from these, and the centres are thickness-capped at stamp
@@ -1119,7 +1136,7 @@ async function main() {
   function woundSpheres(prims: BuildResult['prims']) {
     // Same carve centres the shader subtracts — the exclusion zone must
     // cover exactly what is removed, or hull spheres reappear in craters.
-    return wounds.map(w => ({ centre: woundWorldPos(prims, w, lastBodyYaw), radius: w.radius }));
+    return wounds.map(w => ({ centre: woundWorldPos(prims, w, heroMotion.lastBodyYaw), radius: w.radius }));
   }
 
   // -------------------------------------------------------------------------
@@ -1143,6 +1160,8 @@ async function main() {
    * in any perf claim; quoting only one of them would be picking a winner.
    */
   let crowdSpread = 1;
+  /** Seed base for the per-index crowd face draws — see setCrowdCount. */
+  const CROWD_FACE_SEED = 20260825;
   /**
    * Whether crowd bodies get a shader specialised to their structure.
    * Applied at spawn, so changing it re-spawns the crowd.
@@ -1160,6 +1179,34 @@ async function main() {
   /** One source of truth for the default: defaultUniforms' woundCfg2.z. */
   let shellSilhouette = u.woundCfg2.value.z > 0;
 
+  /**
+   * One live crowd body: the per-actor state that used to have no home
+   * because every piece of actor state was a body-zero singleton. The motion
+   * record is the SAME type body zero owns; the pose step is the SAME
+   * stepActorMotion the hero runs, with empty signals, a per-index seed and a
+   * fixed dt (see CROWD_DT) so two runs at one body count match pose-for-pose.
+   */
+  interface CrowdActor {
+    index: number;
+    /** Rest-space field at the spawn offset — severs never touch it today. */
+    current: BuildResult;
+    /** Latest posed field. With motion frozen this is `current` itself,
+     *  which is exactly what the static crowd has always rendered. */
+    lastPosed: BuildResult;
+    motion: ActorMotion;
+    view: ReturnType<typeof createZombieGpuView>;
+    spawn: Vec3;
+    /** Wander box centred on the spawn — neighbours stay neighbours. */
+    bounds: WanderBounds;
+    rng: Rng;
+  }
+  const crowdActors: CrowdActor[] = [];
+  /** Shared inert signal bundle — crowd actors take no shots or severs. */
+  const CROWD_SIGNALS = emptyActorSignals();
+  /** Wander half-extent around a crowd body's spawn, in world units. Grid
+   *  spacing is 0.62 x / 0.85 z; ±0.28 keeps neighbours out of each other. */
+  const CROWD_WANDER_R = 0.28;
+
   function setCrowdCount(n: number) {
     while (crowd.length > n) {
       const v = crowd.pop();
@@ -1167,16 +1214,21 @@ async function main() {
       scene.remove(v.object);
       scene.remove(v.coneObject);
       v.dispose();
+      crowdActors.pop();
     }
     while (crowd.length < n) {
       const i = crowd.length + 1; // body zero is the interactive one
       const col = i % 5;
       const row = Math.floor(i / 5);
-      // Each crowd body gets its OWN head, built from a random preset, so a
-      // crowd is not fifteen copies of one skull. Silhouette is the only thing
-      // that can vary — every zombie shares one face sheet — so it is the only
-      // place variety can come from. Built once at spawn, not per frame.
-      const crowdFace = pickFace(Math.random());
+      // Each crowd body gets its OWN head, built from a SEEDED preset draw,
+      // so a crowd is not fifteen copies of one skull. Silhouette is the only
+      // thing that can vary — every zombie shares one face sheet — so it is
+      // the only place variety can come from. Built once at spawn, not per
+      // frame. Seeded by body INDEX (was Math.random()): a random crowd made
+      // every page load render differently, which quietly broke every frozen
+      // capture A/B across loads — including the pixel-identity gate this
+      // dispatch runs. Same index ⇒ same face, on every load, forever.
+      const crowdFace = pickFace(makeRng(CROWD_FACE_SEED + i * 7919)());
       const crowdBody = buildZombieBody(crowdFace, override);
       const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
@@ -1189,8 +1241,9 @@ async function main() {
         v.uniforms.faceCfg.value.copy(u.faceCfg.value);
         v.uniforms.faceCfg2.value.copy(u.faceCfg2.value);
         v.uniforms.faceProj.value.copy(u.faceProj.value);
-        // Static, so the skull's sphere is set once rather than re-derived from
-        // a posed body every frame.
+        // Spawn-time skull sphere from the placed field; while the crowd is
+        // animated this is re-derived per frame from the POSED prims, same as
+        // body zero's.
         const skull = headShape(placed);
         if (skull) v.setHeadShape(skull.centre, skull.axes);
       }
@@ -1199,6 +1252,20 @@ async function main() {
       scene.add(v.object);
       scene.add(v.coneObject);
       crowd.push(v);
+      const spawn: Vec3 = [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread];
+      crowdActors.push({
+        index: i,
+        current: placed,
+        lastPosed: placed,
+        motion: makeActorMotion(placed, { seed: crowdSeed(i, MOTION_SEED), start: spawn }),
+        view: v,
+        spawn,
+        bounds: {
+          minX: spawn[0] - CROWD_WANDER_R, maxX: spawn[0] + CROWD_WANDER_R,
+          minZ: spawn[2] - CROWD_WANDER_R, maxZ: spawn[2] + CROWD_WANDER_R,
+        },
+        rng: crowdRng(i, MOTION_SEED),
+      });
     }
     countEl.textContent = `bodies: ${crowd.length + 1}`;
   }
@@ -1285,7 +1352,7 @@ async function main() {
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
     // The wound frame is the body's CURRENT yaw — the same transform the
     // heading rotation puts the prims through, so the crater rides the turn.
-    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, lastBodyYaw,
+    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
       p => sdBody(p, lastPosed));
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
@@ -1302,7 +1369,7 @@ async function main() {
     // in the motion-polish pass (0.04/0.10 was sub-perceptual at god-cam
     // distance); the sustained decay lives in motion.ts's recoil state.
     const push = type === 'blast' ? 0.16 : type === 'pellet' ? 0.06 : 0.04;
-    bound = impulseAt(bound, hit, [d.x * push, d.y * push, d.z * push]);
+    heroMotion.bound = impulseAt(heroMotion.bound, hit, [d.x * push, d.y * push, d.z * push]);
     refreshWounds();
 
     // Wound-driven detachment: a carve that disconnects a limb severs it for
@@ -1391,8 +1458,8 @@ async function main() {
     // With the hero wandering (or lying somewhere), spawn the piece where the
     // body actually is — chunk.pos is the recentring origin for the piece's
     // prims AND its physics seed, so both must shift together.
-    origin = add(origin, lastRootShift);
-    if (tornAt) tornAt = tornAt.map(t => add(t, lastRootShift));
+    origin = add(origin, heroMotion.lastRootShift);
+    if (tornAt) tornAt = tornAt.map(t => add(t, heroMotion.lastRootShift));
     const v: Vec3 = vel ?? [
       (Math.random() - 0.5) * 4.5,
       2.5 + Math.random() * 2.5,
@@ -1754,11 +1821,12 @@ async function main() {
     // DIRECT meter credit (fpv-mode's contract): freshWounds would weight by
     // PROFILE radius and collapse the zombie from an edge-of-radius graze.
     creditMeter(credit) {
-      motionState = {
-        ...motionState,
+      if (!heroMotion.motionState) return;
+      heroMotion.motionState = {
+        ...heroMotion.motionState,
         collapse: {
-          ...motionState.collapse,
-          meter: Math.min(1, motionState.collapse.meter + credit),
+          ...heroMotion.motionState.collapse,
+          meter: Math.min(1, heroMotion.motionState.collapse.meter + credit),
         },
       };
     },
@@ -1767,7 +1835,7 @@ async function main() {
       // prev-pos turns it into the launch velocity, and the rest-pose pull
       // (or the collapse ramp) decides how much of it sticks.
       const k = 1 / 30;
-      bound = impulseAt(bound, at, [vel[0] * k, vel[1] * k, vel[2] * k]);
+      heroMotion.bound = impulseAt(heroMotion.bound, at, [vel[0] * k, vel[1] * k, vel[2] * k]);
     },
     severFullLimbs(limbs) {
       for (const limb of limbs) {
@@ -2051,11 +2119,13 @@ async function main() {
     return s[Math.floor(s.length * 0.5)]!;
   }
 
-  /** Every crowd body's current field, as fed to the occluder hull. */
+  /** Every crowd body's CURRENT POSED field, as fed to the occluder hull.
+   *  Was the rest field back when the crowd never moved; posed keeps the
+   *  hull's exclusion zones tracking the animated bodies exactly as it does
+   *  for body zero. With motion off this equals the rest field — unchanged
+   *  behaviour. */
   function crowdBodies() {
-    return crowd
-      .map(v => bodySource.get(v.object)?.detailed)
-      .filter((b): b is NonNullable<typeof b> => b !== undefined);
+    return crowdActors.map(a => a.lastPosed);
   }
 
   // Dynamic resolution. ON by default since 2026-08-23: zooming in on the
@@ -2331,64 +2401,29 @@ async function main() {
     // keeps rendering through the same posed-prims path (still shootable,
     // severable, gibbable — it is just horizontal now).
     const rdt = Math.min(dt, 1 / 30);
-    if (motionEnabled && motionJoints) {
+    if (motionEnabled && heroMotion.motionJoints) {
       // Sub-stepped integration (X1.22.1): consume the frame's real elapsed
       // time in ≤1/30-sized steps instead of the old flat 33 ms clamp, so a
       // stalled or hidden frame cannot stretch the fall into a death spiral.
-      // See planSubSteps for the catch-up bound.
-      let f: ReturnType<typeof stepMotion>['frame'] | null = null;
-      let first = true;
-      for (const sdt of planSubSteps(dt)) {
-        const step = stepMotion(
-          motionState, motionJoints,
-          { enabled: true, wander: wanderOn, armStyle, headingFollow, gazeFollow },
-          {
-            dt: sdt,
-            shot: pendingShot,
-            wounded: woundedLimbs(),
-            severed: pendingSevered,
-            missing: missingLimbs(),
-            headAlive: current.clusters.find(c => c.limb === 'head')?.alive ?? false,
-            forcedCollapse,
-            freshWounds: pendingWounds,
-          },
-          bound.rig.points, WANDER_BOUNDS, motionRng,
-        );
-        motionState = step.state;
-        f = step.frame;
-        // Signals drain after the FIRST sub-step: they describe events that
-        // landed before this frame, not per-sub-step re-triggers.
-        if (first) {
-          first = false;
-          pendingShot = null;
-          pendingWounds.length = 0;
-          pendingSevered.length = 0;
-          forcedCollapse = false;
-        }
-        lastRootShift = f.rootShift;
-        lastBodyYaw = f.bodyYaw;
-        // Noise anchor (motion-polish): the march's fbm rides the body's root
-        // translation so the skin texture does not swim while walking.
-        view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
-
-        let points = stepRig(
-          { ...bound.rig, restPose: f.restPose }, sdt,
-          {
-            gravity: f.gravity,
-            damping: 0.06,
-            iterations: 4,
-            restStiffness: STANDING_RIG.restStiffness * f.restPull,
-          },
-        ).points;
-        if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
-        if (f.collapsed) {
-          points = applyFloorContact(points, motionJoints.groundY - MOTION_TUNING.floorPad);
-        }
-        bound = {
-          ...bound,
-          rig: { points, constraints: bound.rig.constraints, restPose: f.restPose },
-        };
-      }
+      // The pipeline itself now lives in actor.ts's stepActorMotion — the
+      // SAME function every crowd actor runs — so the per-body pose path
+      // cannot drift between body zero and the crowd.
+      heroSignals.shot = pendingShot;
+      heroSignals.wounded = woundedLimbs();
+      heroSignals.missing = missingLimbs();
+      heroSignals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
+      heroSignals.forcedCollapse = forcedCollapse;
+      // severed/freshWounds ARE pendingSevered/pendingWounds (same array
+      // references): drained in place after the first sub-step.
+      heroSignals.severed = pendingSevered;
+      const f = stepActorMotion(heroMotion, {
+        current, dt,
+        wander: wanderOn, armStyle, headingFollow, gazeFollow,
+        bounds: WANDER_BOUNDS, rng: motionRng, signals: heroSignals,
+      });
+      // shot/forcedCollapse are values — read the drained state back.
+      pendingShot = heroSignals.shot;
+      forcedCollapse = heroSignals.forcedCollapse;
       if (f) {
         if (motionReadEl) {
           motionReadEl.textContent =
@@ -2403,6 +2438,10 @@ async function main() {
           camTarget.x += (f.rootShift[0] - camTarget.x) * k;
           camTarget.z += (f.rootShift[2] - camTarget.z) * k;
         }
+        // Noise anchor (motion-polish): the march's fbm rides the body's root
+        // translation so the skin texture does not swim while walking. (Was
+        // written per sub-step; only the last write survives to a render.)
+        view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
       }
     } else {
       // Statue mode — the pre-motion behaviour, verbatim. Pending signals
@@ -2411,9 +2450,9 @@ async function main() {
       pendingWounds.length = 0;
       pendingSevered.length = 0;
       forcedCollapse = false;
-      bound = {
-        ...bound,
-        rig: stepRig(bound.rig, rdt, {
+      heroMotion.bound = {
+        ...heroMotion.bound,
+        rig: stepRig(heroMotion.bound.rig, rdt, {
           gravity: [0, -2.2, 0],
           damping: 0.06,
           iterations: 4,
@@ -2422,7 +2461,7 @@ async function main() {
       };
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
     }
-    const posed = applyRig(current, bound, lastBodyYaw);
+    const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked
@@ -2440,8 +2479,42 @@ async function main() {
     // nose mass out the ear).
     const skull = headShape(posed);
     if (skull) view.setHeadShape(skull.centre, skull.axes);
-    view.setHeadRotation(headQuatOf(bound, lastBodyYaw) ?? [0, 0, 0, 1]);
+    view.setHeadRotation(headQuatOf(heroMotion.bound, heroMotion.lastBodyYaw) ?? [0, 0, 0, 1]);
     uploadWounds(posed.prims);
+
+    // — Crowd step: every body rigs and poses per frame, through the SAME
+    //    stepActorMotion pipeline as body zero. Differences are policy, not
+    //    machinery: empty signals (no shots/severs reach a crowd body), a
+    //    per-index seed (phase offset — no marching band), wander bounds
+    //    centred on each spawn, and a FIXED dt so poses are a pure function
+    //    of frame count. motionEnabled gates EVERY actor — that is what makes
+    //    setMotionEnabled(false) a real freeze for captures.
+    if (motionEnabled) {
+      for (const a of crowdActors) {
+        if (!a.motion.motionJoints) continue;
+        stepActorMotion(a.motion, {
+          current: a.current,
+          dt: CROWD_DT,
+          wander: wanderOn,
+          armStyle, headingFollow, gazeFollow,
+          bounds: a.bounds,
+          rng: a.rng,
+          signals: CROWD_SIGNALS,
+        });
+        const cPosed = applyRig(a.current, a.motion.bound, a.motion.lastBodyYaw);
+        a.lastPosed = cPosed;
+        // Per-body repack + data-texture upload + skull re-derivation — the
+        // per-body work the static crowd never paid, which is exactly what
+        // this task exists to measure.
+        a.view.update(cPosed, a.current);
+        const rs = a.motion.lastRootShift;
+        a.view.setRootShift(rs[0], rs[2], a.motion.lastBodyYaw);
+        const cSkull = headShape(cPosed);
+        if (cSkull) a.view.setHeadShape(cSkull.centre, cSkull.axes);
+        a.view.setHeadRotation(
+          headQuatOf(a.motion.bound, a.motion.lastBodyYaw) ?? [0, 0, 0, 1]);
+      }
+    }
 
     if (ff.mode === 'fpv') {
       // First-person camera: eye from the controller, aim from yaw/pitch,
@@ -3226,19 +3299,19 @@ async function main() {
     motionEnabled = on;
     if (on) {
       resetMotion();
-    } else if (motionJoints) {
+    } else if (heroMotion.motionJoints) {
       // Statue at wherever the body ended up, in its authored pose — not
       // frozen mid-stride, and not snapped back to the origin either.
-      bound = {
-        ...bound,
+      heroMotion.bound = {
+        ...heroMotion.bound,
         rig: {
-          ...bound.rig,
-          restPose: motionJoints.base.map(
-            v => [v[0] + lastRootShift[0], v[1], v[2] + lastRootShift[2]] as Vec3),
+          ...heroMotion.bound.rig,
+          restPose: heroMotion.motionJoints.base.map(
+            v => [v[0] + heroMotion.lastRootShift[0], v[1], v[2] + heroMotion.lastRootShift[2]] as Vec3),
         },
       };
-      camTarget.x = lastRootShift[0];
-      camTarget.z = lastRootShift[2];
+      camTarget.x = heroMotion.lastRootShift[0];
+      camTarget.z = heroMotion.lastRootShift[2];
     }
     motionBtn.textContent = `motion: ${on ? 'on' : 'off'}`;
   }
@@ -3336,6 +3409,58 @@ async function main() {
      */
     freezeCosmetics(on = true) { cosmeticsFrozen = on; return cosmeticsFrozen; },
     get cosmeticsFrozen() { return cosmeticsFrozen; },
+    /**
+     * Suspend/resume the render loop itself. The last presented frame stays
+     * on the canvas, so a capture taken while suspended is EXACTLY the frame
+     * that was rendered — nothing (statue-mode rig stepping included) can
+     * advance between the freeze and the shot. The statue rig keeps
+     * integrating with real dt even with motion off and cosmetics frozen,
+     * which is a micro-jitter no amount of settling removes; pausing the loop
+     * is the only capture primitive that is bit-stable.
+     */
+    pauseLoop(on = true) { handle.setLoopRunning(!on); return !on; },
+    /**
+     * Canonical frozen frame for automated captures: suspend the loop, reset
+     * the hero to its authored rest pose at the origin (fresh bind, fresh
+     * clocks — the respawn path without the body rebuild), then advance a
+     * FIXED number of FIXED-dt frames so every verlet transient settles
+     * identically on every page load.
+     *
+     * WHY NOT settle-and-shoot. The statue-mode rig integrates REAL rAF dt
+     * forever, so its micro-equilibrium depends on the boot's timing history:
+     * two page loads never agree bit-for-bit (measured 2026-08-25: three
+     * consecutive settled captures, three different framebuffer hashes). With
+     * the reset + fixed-dt walk-in, the frozen frame is a pure function of
+     * (code, seed, frame count), which is what lets a pre/post-refactor diff
+     * or a re-boot repeatability gate mean anything.
+     *
+     * Leaves the loop SUSPENDED — nothing can move between this and the
+     * shot; pauseLoop(false) resumes.
+     */
+    async holdStill(frames = 120) {
+      handle.setLoopRunning(false);
+      resetMotion();
+      camTarget.x = 0;
+      camTarget.z = 0;
+      view.update(current);
+      refreshWounds();
+      // Crowd actors: same canonicalization as the hero — fresh seeded motion
+      // record, pose back to the spawn field, root shift and head rotation
+      // zeroed. The frozen crowd frame is then also a pure function of seed,
+      // which is what makes two boots' captures comparable.
+      for (const a of crowdActors) {
+        a.motion = makeActorMotion(a.current, { seed: crowdSeed(a.index, MOTION_SEED), start: a.spawn });
+        a.lastPosed = a.current;
+        a.view.update(a.current, a.current);
+        a.view.setRootShift(0, 0);
+        const s = headShape(a.current);
+        if (s) a.view.setHeadShape(s.centre, s.axes);
+        a.view.setHeadRotation([0, 0, 0, 1]);
+      }
+      for (let i = 0; i < frames; i++) handle.step(1 / 60);
+      await handle.resolveGpu();
+      return frames;
+    },
     /** The march uniforms — lets any of them be tuned live from the console. */
     uniforms: u,
     /** The SDF layer — occluder/cone toggles for A/B experiments. */
@@ -3522,7 +3647,7 @@ async function main() {
         const hit = raycastBody([c[0] + ox, c[1] + oy, c[2] + 3], [0, 0, -1], lastPosed);
         if (!hit) continue;
         const w = worldHitToWound(
-          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', lastBodyYaw,
+          lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', heroMotion.lastBodyYaw,
           p => sdBody(p, lastPosed));
         wounds = pushWound(wounds, w, MAX_WOUNDS);
         pendingWounds.push(w); // stamped blasts feed the damage meter too
@@ -3542,7 +3667,7 @@ async function main() {
       const hit = raycastBody([o.x, o.y, o.z], [d.x, d.y, d.z], lastPosed);
       if (!hit) return null;
       const w = worldHitToWound(
-        lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', lastBodyYaw,
+        lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', heroMotion.lastBodyYaw,
         p => sdBody(p, lastPosed));
       wounds = pushWound(wounds, w, MAX_WOUNDS);
       refreshWounds();
@@ -3612,25 +3737,26 @@ async function main() {
     heroPosed: () => lastPosed,
     /** X1.22 rig motion — the whole pipeline's state peek. */
     get motion() {
+      const ms = heroMotion.motionState!; // the stock body always has motion wiring
       return {
         enabled: motionEnabled,
         wander: wanderOn,
-        phase: motionState.collapse.phase,
-        meter: motionState.collapse.meter,
-        hop: motionState.collapse.phase === 'standing'
+        phase: ms.collapse.phase,
+        meter: ms.collapse.meter,
+        hop: ms.collapse.phase === 'standing'
           && (missingLimbs().legL !== missingLimbs().legR),
-        stagger: motionState.stagger.kind,
-        clutch: motionState.clutch.arm,
-        heading: motionState.wander.heading,
-        bodyYaw: motionState.bodyYaw,
+        stagger: ms.stagger.kind,
+        clutch: ms.clutch.arm,
+        heading: ms.wander.heading,
+        bodyYaw: ms.bodyYaw,
         armStyle,
         headingFollow,
         gazeFollow,
-        recoil: motionState.recoil.joint,
-        pos: motionState.wander.pos as unknown as number[],
-        speed: motionState.wander.speed,
-        blend: motionState.blend,
-        rootShift: lastRootShift as unknown as number[],
+        recoil: ms.recoil.joint,
+        pos: ms.wander.pos as unknown as number[],
+        speed: ms.wander.speed,
+        blend: ms.blend,
+        rootShift: heroMotion.lastRootShift as unknown as number[],
       };
     },
     /** Locomotion toggle — gait/stagger/IK stay live regardless. */
@@ -3829,7 +3955,7 @@ async function main() {
       // in the same tick would otherwise measure an EMPTY hull and read as a
       // free win.
       if (on) {
-        const posed = applyRig(current, bound, lastBodyYaw);
+        const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
         occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
       }
     },
