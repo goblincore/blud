@@ -122,7 +122,7 @@ export function computeRenderSize(
   } else {
     renderW = Math.min(winW, maxW);
     renderH = Math.round(renderW / winAspect);
-    if (renderH > maxH) { renderH = maxH; renderW = Math.round(renderH / winAspect); }
+    if (renderH > maxH) { renderH = maxH; renderW = Math.round(renderH * winAspect); }
   }
   return { width: renderW, height: renderH };
 }
@@ -150,6 +150,7 @@ export function canvasCssSize(
 /** `cap` opts this page out of the legacy 960x540 fit-aspect look (see
  *  RenderCap). Omitted = unchanged lab behaviour. */
 export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Promise<LabRendererHandle> {
+  if (cap) setRenderCap(cap);
   // trackTimestamp turns on the WebGPU timestamp-query pool. It is the whole
   // reason the perf work can be honest: wall-clock frame time pins to vsync
   // whenever there is headroom, so it cannot distinguish "twice as fast" from

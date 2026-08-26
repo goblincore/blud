@@ -20,10 +20,15 @@ describe('computeRenderSize — fit (legacy behaviour)', () => {
     setRenderCap(FIT_LEGACY);
     // 1920x1080 -> 16:9 capped at 960 wide.
     expect(computeRenderSize(1920, 1080)).toEqual({ width: 960, height: 540 });
+    // Aspect must SURVIVE clamping: 1280x800 is 16:10, height hits the 540
+    // cap first, width follows at window aspect -> 540*1.6 = 864. (This once
+    // divided by the aspect instead and produced a portrait 338x540 buffer.)
+    expect(computeRenderSize(1280, 800)).toEqual({ width: 864, height: 540 });
     // Ultra-wide: height clamps first, width follows aspect then clamps.
     const r = computeRenderSize(3440, 1440);
     expect(r.height).toBeLessThanOrEqual(540);
     expect(r.width).toBeLessThanOrEqual(960);
+    expect(r.width / r.height).toBeCloseTo(3440 / 1440, 2);
   });
 
   it('a small window renders 1:1 (no upscaling)', () => {
