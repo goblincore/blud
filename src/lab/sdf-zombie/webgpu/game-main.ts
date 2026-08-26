@@ -21,7 +21,12 @@
 // ambientGain 4 / chromaGain 1 are owner-tuned; left alone.
 
 import * as THREE from 'three/webgpu';
-import { createLabRenderer } from './lab-renderer';
+import {
+  createLabRenderer, type RenderCap,
+} from './lab-renderer';
+import {
+  initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
+} from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -48,8 +53,28 @@ import { createZombieActor, type ZombieActor } from './game-actor';
  *  mapBody calls, pinned by the ambient tests — so the brief's probe-cost
  *  warning does not apply to the shipped P1 implementation. */
 const DEFAULT_PROBE_WEIGHT = 0.75;
-/** Fixed SDF scale (the shipping rung). No adaptive controller here. */
-const SDF_SCALE = 0.7;
+
+/**
+ * RESOLUTION RUNGS — the owner picks with ?res=. All 4:3 except the legacy
+ * '960' (the old fit-aspect 960x540 cap, kept so before/after numbers are
+ * comparable). Default 800x600 per the owner's "capped at 800x600".
+ *
+ * SDF_SCALE is the SDF pass's fraction OF THE CAPPED BUFFER. Default 1.0:
+ * one clean pixel grid — the march renders 1:1 with what gets presented and
+ * upscaled once, instead of today's double resample (SDF at 0.7 of a
+ * different-sized buffer). Cost table lives in the dispatch report.
+ */
+const RES_RUNGS = {
+  '960': { mode: 'fit', maxW: 960, maxH: 540 },
+  '800': { mode: 'fixed', width: 800, height: 600 },
+  '640': { mode: 'fixed', width: 640, height: 480 },
+} as const satisfies Record<string, RenderCap>;
+type ResRung = keyof typeof RES_RUNGS;
+const DEFAULT_RES: ResRung = '800';
+function resRungFromUrl(): ResRung {
+  const v = new URLSearchParams(location.search).get('res');
+  return v && v in RES_RUNGS ? (v as ResRung) : DEFAULT_RES;
+}
 
 // The zombie's shared flat face sheet (zombie.blob has no `sheet` block) —
 // the same registry entry bench-main duplicates from lab-main.
@@ -82,7 +107,8 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
 async function main() {
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
-  const handle = await createLabRenderer(mount);
+  const resKey = resRungFromUrl();
+  const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
 
   // -----------------------------------------------------------------------
@@ -147,14 +173,62 @@ async function main() {
   const postAa = createPostAa(handle.renderer);
   const sdfLayer = createSdfLayer(handle.renderer);
   postAa.addSink(sdfLayer);
+  /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
+   *  Runtime-adjustable for the cost table + adaptive ladder. */
+  let sdfScale = 1.0;
   function sizeSdfLayer() {
     const s = postAa.contentSize;
     sdfLayer.setSize(s.width, s.height);
     sdfLayer.setConeGeometry(camera.fov, sdfLayer.targetSize.height);
   }
-  sdfLayer.setScale(SDF_SCALE);
+  sdfLayer.setScale(sdfScale);
   sizeSdfLayer();
   window.addEventListener('resize', sizeSdfLayer);
+  function applySdfScale(v: number) {
+    sdfScale = Math.min(1, Math.max(0.2, v));
+    sdfLayer.setScale(sdfScale);
+    sizeSdfLayer();
+  }
+
+  // -----------------------------------------------------------------------
+  // ADAPTIVE RESOLUTION — same pure controller the lab uses (X1.13), wired
+  // into the render callback. DEFAULT OFF: the chosen rung is what ships;
+  // this is the frame-rate safety net the owner can switch on.
+  // -----------------------------------------------------------------------
+  let adaptiveEnabled = false;
+  let adaptiveBudgetMs = 1000 / 30;
+  let adaptiveState = initialAdaptiveState(performance.now());
+  const ADAPTIVE_WINDOW = 30;
+  const PROBE_ABORT_FRAMES = 8;
+  const adaptiveFrames: number[] = [];
+  function tickAdaptive(nowMs: number): void {
+    if (!adaptiveEnabled) return;
+    const failingProbe = adaptiveState.probing && adaptiveFrames.length >= PROBE_ABORT_FRAMES
+      && (median(adaptiveFrames) > adaptiveBudgetMs * 1.1
+        || adaptiveFrames.filter((f) => f > adaptiveBudgetMs * 1.8).length >= 2);
+    if (adaptiveFrames.length < ADAPTIVE_WINDOW && !failingProbe) return;
+    const recent = adaptiveFrames.slice(-ADAPTIVE_WINDOW);
+    const sorted = [...recent].sort((a, b) => a - b);
+    const next = stepAdaptive(adaptiveState, {
+      nowMs,
+      medianFrameMs: median(recent),
+      p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
+      budgetMs: adaptiveBudgetMs,
+    });
+    if (next.rung !== adaptiveState.rung) {
+      applySdfScale(scaleForRung(next.rung));
+      // Frames rendered at the OLD scale must not feed the next decision.
+      adaptiveFrames.length = 0;
+    }
+    adaptiveState = next;
+  }
+  function median(xs: number[]): number {
+    if (xs.length === 0) return 0;
+    const s = [...xs].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    const hi = s[m]!;
+    return s.length % 2 ? hi : (s[m - 1]! + hi) / 2;
+  }
   handle.setDrawFn(() => postAa.render(() => sdfLayer.render(scene, camera)));
 
   const occluderHull = createOccluderHull();
@@ -409,7 +483,12 @@ async function main() {
     // During __sdfGame.step() the dt is the supplied fixed step, not a
     // measurement; the readout only means something with the loop running.
     if (dt < 0.25) {
-      frameEma = frameEma === 0 ? dt * 1000 : frameEma * 0.95 + dt * 1000 * 0.05;
+      const ms = dt * 1000;
+      frameEma = frameEma === 0 ? ms : frameEma * 0.95 + ms * 0.05;
+      if (adaptiveEnabled) {
+        adaptiveFrames.push(ms);
+        tickAdaptive(performance.now());
+      }
     }
     tick(Math.min(dt, 1 / 20));
     if (frameCount++ % 10 === 0) updateHud();
@@ -473,6 +552,37 @@ async function main() {
     get walking() { return autopilot !== null; },
     frameMs: () => frameEma,
     bodiesOnScreen,
+    /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
+    setSdfScale: (v: number) => applySdfScale(v),
+    get sdfScale() { return sdfScale; },
+    get sdfTarget() { return sdfLayer.targetSize; },
+    /** Adaptive resolution ladder — default OFF so the chosen rung ships. */
+    setAdaptive(on: boolean, budgetMs?: number) {
+      adaptiveEnabled = on;
+      if (budgetMs !== undefined) adaptiveBudgetMs = budgetMs;
+      adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+      adaptiveFrames.length = 0;
+    },
+    get adaptive() {
+      return {
+        enabled: adaptiveEnabled,
+        budgetMs: adaptiveBudgetMs,
+        rung: adaptiveState.rung,
+        scale: scaleForRung(adaptiveState.rung),
+        ladder: [...SCALE_LADDER],
+      };
+    },
+    /** The active render cap + how it was chosen (?res=). */
+    get resolution() {
+      const cap = RES_RUNGS[resKey];
+      const content = postAa.contentSize;
+      return {
+        rung: resKey,
+        cap: { ...cap },
+        content: { ...content },
+        letterboxed: cap.mode === 'fixed',
+      };
+    },
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },
     /** Where a view-model hangs (child of the camera). */

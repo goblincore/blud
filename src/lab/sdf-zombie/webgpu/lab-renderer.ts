@@ -64,36 +64,92 @@ export interface LabRendererHandle {
   setLoopRunning(on: boolean): void;
 }
 
-/** Matches src/engine/renderer.ts, so the lab looks the same on both paths. */
+/** Matches src/engine/renderer.ts, so the lab looks the same on both paths
+ *  (these are the 'fit' cap). */
 const MAX_RENDER_W = 960;
 const MAX_RENDER_H = 540;
 
 /**
- * The capped internal render size for a window of winW x winH. Exported for
- * post-aa.ts: its content targets (and, via lab-main, the SDF layer) follow
- * THIS size even when the sharp-upscale toggle grows the canvas backing to
- * the full window, so the chunky low-res grid is what gets upscaled either
- * way — by CSS when sharp is off, by the blit pass when it is on.
+ * The render buffer cap.
+ *
+ * 'fit'   — the lab's original behaviour: keep the WINDOW's aspect, clamp
+ *           into maxW x maxH.
+ * 'fixed' — a FIXED buffer of an art-directed aspect (the game page's 4:3
+ *           retro rungs: 800x600 / 640x480). The internal buffer is EXACTLY
+ *           this size whatever the window looks like; the canvas CSS-scales
+ *           to the largest matching rectangle and the rest of the window is
+ *           letterbox/pillarbox. One clean pixel grid, upscaled once.
+ */
+export type RenderCap =
+  | { mode: 'fit'; maxW: number; maxH: number }
+  | { mode: 'fixed'; width: number; height: number };
+
+/** Module state because post-aa's refit() calls computeRenderSize without
+ * knowing which page it serves, and there is one renderer per page.
+ * createLabRenderer(mount, cap) sets it; default is the legacy lab look. */
+let activeCap: RenderCap = { mode: 'fit', maxW: MAX_RENDER_W, maxH: MAX_RENDER_H };
+
+export function setRenderCap(cap: RenderCap): void {
+  activeCap = cap;
+}
+
+export function getRenderCap(): RenderCap {
+  return activeCap;
+}
+
+/**
+ * The internal render size for a window of winW x winH under the active cap.
+ * Exported for post-aa.ts: its content targets (and, via lab-main, the SDF
+ * layer) follow THIS size even when the sharp-upscale toggle grows the canvas
+ * backing to the full window, so the chunky low-res grid is what gets upscaled
+ * either way — by CSS when sharp is off, by the blit pass when it is on.
  */
 export function computeRenderSize(
   winW: number, winH: number,
 ): { width: number; height: number } {
+  if (activeCap.mode === 'fixed') {
+    return { width: activeCap.width, height: activeCap.height };
+  }
+  const maxW = activeCap.maxW;
+  const maxH = activeCap.maxH;
   const winAspect = winW / winH;
   let renderW: number;
   let renderH: number;
-  if (winAspect > MAX_RENDER_W / MAX_RENDER_H) {
-    renderH = Math.min(winH, MAX_RENDER_H);
+  if (winAspect > maxW / maxH) {
+    renderH = Math.min(winH, maxH);
     renderW = Math.round(renderH * winAspect);
-    if (renderW > MAX_RENDER_W) { renderW = MAX_RENDER_W; renderH = Math.round(renderW / winAspect); }
+    if (renderW > maxW) { renderW = maxW; renderH = Math.round(renderW / winAspect); }
   } else {
-    renderW = Math.min(winW, MAX_RENDER_W);
+    renderW = Math.min(winW, maxW);
     renderH = Math.round(renderW / winAspect);
-    if (renderH > MAX_RENDER_H) { renderH = MAX_RENDER_H; renderW = Math.round(renderH * winAspect); }
+    if (renderH > maxH) { renderH = maxH; renderW = Math.round(renderH / winAspect); }
   }
   return { width: renderW, height: renderH };
 }
 
-export async function createLabRenderer(mount: HTMLElement): Promise<LabRendererHandle> {
+/**
+ * The CSS size/position for the canvas under the active cap: the whole
+ * window for 'fit' (the lab's stretch-to-fill behaviour), or the largest
+ * rectangle of the buffer's aspect centred in the window for 'fixed' —
+ * the letterbox/pillarbox bars. Exported because post-aa's refit() mirrors
+ * this sizing on its own resize path.
+ */
+export function canvasCssSize(
+  winW: number, winH: number,
+): { width: number; height: number; left: number; top: number } {
+  const content = computeRenderSize(winW, winH);
+  const aspect = content.width / content.height;
+  const winAspect = winW / winH;
+  let w: number;
+  let h: number;
+  if (winAspect > aspect) { h = winH; w = Math.round(h * aspect); }
+  else { w = winW; h = Math.round(w / aspect); }
+  return { width: w, height: h, left: Math.round((winW - w) / 2), top: Math.round((winH - h) / 2) };
+}
+
+/** `cap` opts this page out of the legacy 960x540 fit-aspect look (see
+ *  RenderCap). Omitted = unchanged lab behaviour. */
+export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Promise<LabRendererHandle> {
   // trackTimestamp turns on the WebGPU timestamp-query pool. It is the whole
   // reason the perf work can be honest: wall-clock frame time pins to vsync
   // whenever there is headroom, so it cannot distinguish "twice as fast" from
@@ -138,15 +194,20 @@ export async function createLabRenderer(mount: HTMLElement): Promise<LabRenderer
   function resize() {
     const winW = window.innerWidth;
     const winH = window.innerHeight;
-    const winAspect = winW / winH;
     const { width: renderW, height: renderH } = computeRenderSize(winW, winH);
     renderer.setSize(renderW, renderH, false);
-    camera.aspect = winAspect;
+    // Aspect follows the BUFFER, not the window: identical under 'fit' (the
+    // buffer matches the window aspect), correct under 'fixed' (4:3 stays 4:3).
+    camera.aspect = renderW / renderH;
     camera.updateProjectionMatrix();
 
     const el = renderer.domElement;
-    el.style.width = winW + 'px';
-    el.style.height = winH + 'px';
+    const css = canvasCssSize(winW, winH);
+    el.style.position = 'absolute';
+    el.style.left = css.left + 'px';
+    el.style.top = css.top + 'px';
+    el.style.width = css.width + 'px';
+    el.style.height = css.height + 'px';
     el.style.imageRendering = 'pixelated';
   }
   resize();
