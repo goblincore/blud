@@ -20,6 +20,20 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SDF GAME PAGE FIXES — worktree `2026-08-25-game-page-fixes`, branch
+`dispatch/game-page-fixes` (2026-08-25, three commits on the level work).**
+Owner-reported breakage, root-caused: (1) dollhouse walls — wallPlanes wrote
+the span into the wrong component for axis-2 planes, all 16 N/S room walls
+were zero-width lines (orientation was never wrong); (2) displaced/decapitated
+zombies — translateBody moved prims but not bones, so translated+rigged bodies
+bound an origin-space rig to room-space flesh and rendered at ~2x spawn with
+heads (rigid-head path) elsewhere; the old wander gate measured clamped intent,
+not rendered bodies. Fixes + world-space gates in game-level.test.ts /
+game-actor.test.ts; ceiling got hemisphere fill + emissive (was unlit, not
+missing). No per-zombie scale variety exists — the "3x zombie" was the
+exploded proxy box. crowd-alive must spawn actors from a bones-carrying
+translateBody.
+
 **SDF GAME LEVEL — worktree `2026-08-25-sdf-game-level`, branch `dispatch/sdf-game-level`,
 gates green (2026-08-25, `35c3719`).** New sibling entry `sdf-game.html` +
 `webgpu/game-main.ts` (bench-main pattern, NOT lab-main — lab untouched):
