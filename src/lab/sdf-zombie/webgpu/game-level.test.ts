@@ -51,13 +51,30 @@ describe('ring layout', () => {
     expect(ROOMS.reduce((n, r) => n + r.zombies, 0)).toBe(10);
   });
 
-  it('adjacent rooms have distinctly different wall colours', () => {
+  it('adjacent rooms have distinctly different ACCENT hues', () => {
+    // The white-gallery pivot: walls no longer tell rooms apart, accents do.
     const ring = [1, 2, 3, 4, 1];
     for (let i = 0; i < 4; i++) {
-      const a = ROOMS.find(r => r.id === ring[i])!.wallColor;
-      const b = ROOMS.find(r => r.id === ring[i + 1])!.wallColor;
+      const a = ROOMS.find(r => r.id === ring[i])!.accents[0]!.color;
+      const b = ROOMS.find(r => r.id === ring[i + 1])!.accents[0]!.color;
       const dist = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
       expect(dist).toBeGreaterThan(0.2);
+    }
+  });
+
+  it('every room has one or two accents, placed INSIDE the room and high', () => {
+    for (const r of ROOMS) {
+      expect(r.accents.length).toBeGreaterThanOrEqual(1);
+      expect(r.accents.length).toBeLessThanOrEqual(2);
+      for (const a of r.accents) {
+        expect(a.pos[0]).toBeGreaterThan(r.minX);
+        expect(a.pos[0]).toBeLessThan(r.maxX);
+        expect(a.pos[2]).toBeGreaterThan(r.minZ);
+        expect(a.pos[2]).toBeLessThan(r.maxZ);
+        expect(a.pos[1]).toBeGreaterThan(1.5);   // above head height-ish
+        expect(a.pos[1]).toBeLessThan(r.height); // under the ceiling
+        expect(a.power).toBeGreaterThan(0);
+      }
     }
   });
 

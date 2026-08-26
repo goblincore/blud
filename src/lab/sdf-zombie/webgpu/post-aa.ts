@@ -62,7 +62,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
-import { computeRenderSize } from './lab-renderer';
+import { computeRenderSize, canvasCssSize } from './lab-renderer';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -432,15 +432,25 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     if (sharpOn) {
       // The blit upscales in-shader, so the canvas backing is the window and
       // the CSS stretch becomes 1:1 — 'pixelated' would fight the filter.
+      // NOTE: under a 'fixed' (4:3) cap the blit stretches to the whole
+      // window and so breaks the letterbox aspect — sharp mode is a lab
+      // toggle; the game page does not use it.
       renderer.setSize(winW, winH, false);
       el.style.imageRendering = 'auto';
     } else {
-      // Mirrors lab-renderer's resize(): capped backing, CSS nearest stretch.
+      // Mirrors lab-renderer's resize(): capped backing, CSS nearest stretch,
+      // letterboxed under a 'fixed' cap.
       renderer.setSize(content.width, content.height, false);
       el.style.imageRendering = 'pixelated';
     }
-    el.style.width = winW + 'px';
-    el.style.height = winH + 'px';
+    const css = canvasCssSize(winW, winH);
+    const cssW = sharpOn ? winW : css.width;
+    const cssH = sharpOn ? winH : css.height;
+    el.style.position = 'absolute';
+    el.style.left = (sharpOn ? 0 : css.left) + 'px';
+    el.style.top = (sharpOn ? 0 : css.top) + 'px';
+    el.style.width = cssW + 'px';
+    el.style.height = cssH + 'px';
     sceneTarget.setSize(content.width, content.height);
     fxaaTarget.setSize(content.width, content.height);
     histA.setSize(content.width, content.height);
