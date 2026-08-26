@@ -126,6 +126,73 @@ describe('ring layout', () => {
       expect(p.max[1]).toBeGreaterThanOrEqual(p.min[1]);
     }
   });
+
+  it('every display plane has positive extent on BOTH span axes', () => {
+    // THE WALL GATE. wallPlanes once wrote the span into the wrong component
+    // for axis-2 walls: every N/S plane collapsed to a zero-width line at
+    // the room corner, the rooms rendered open front-and-back, and the level
+    // read as a dollhouse cutaway. Orientation was never the suspect — the
+    // rectangles were degenerate. This asserts the geometry is real.
+    const { planes } = levelSurfaces();
+    for (const p of planes) {
+      for (const a of [0, 1, 2]) {
+        if (a === p.axis) continue;
+        expect(p.max[a]! - p.min[a]!)
+          .toBeGreaterThan(0.05);
+      }
+      expect(p.min[p.axis]).toBeCloseTo(p.max[p.axis]!, 6);
+    }
+  });
+
+  it('from inside a room, a ray toward each wall hits that wall close by', () => {
+    // The owner-facing consequence of a missing wall: standing in the room,
+    // looking at a wall, you must SEE the wall — not the rest of the level.
+    // Pure-data ray vs rectangle (no three.js), eye height 1.6.
+    const { planes } = levelSurfaces();
+    const hit = (o: readonly number[], d: readonly number[]): number | null => {
+      let best: number | null = null;
+      for (const p of planes) {
+        const n = p.axis === 0 ? [p.facing, 0, 0] : p.axis === 1 ? [0, p.facing, 0] : [0, 0, p.facing];
+        const dn = n[0]! * d[0]! + n[1]! * d[1]! + n[2]! * d[2]!;
+        if (dn >= -1e-9) continue; // backface or parallel: culled, invisible
+        const oc = [o[0]! - (p.min[0]! + p.max[0]!) / 2, o[1]! - (p.min[1]! + p.max[1]!) / 2, o[2]! - (p.min[2]! + p.max[2]!) / 2];
+        const t = -(n[0]! * oc[0]! + n[1]! * oc[1]! + n[2]! * oc[2]!) / dn;
+        if (t <= 0.01) continue;
+        const hx = o[0]! + d[0]! * t, hy = o[1]! + d[1]! * t, hz = o[2]! + d[2]! * t;
+        const eps = 1e-6;
+        if (hx < p.min[0]! - eps || hx > p.max[0]! + eps) continue;
+        if (hy < p.min[1]! - eps || hy > p.max[1]! + eps) continue;
+        if (hz < p.min[2]! - eps || hz > p.max[2]! + eps) continue;
+        if (best === null || t < best) best = t;
+      }
+      return best;
+    };
+    for (const r of ROOMS) {
+      const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
+      // A side with a tunnel mouth lets the centre ray escape to the FAR
+      // room's wall (~13.6 m) — legitimate. A mouth-less side must be walled
+      // close by. Detect mouths by probing just outside each wall midpoint.
+      const outside = (dx: number, dz: number): string =>
+        enclosureKeyAt(cx + dx * ((r.maxX - r.minX) / 2 + 0.5),
+          cz + dz * ((r.maxZ - r.minZ) / 2 + 0.5));
+      const cases: [string, number[], boolean][] = [
+        ['west wall', [1, 0, 0], outside(1, 0).startsWith('tunnel')],
+        ['east wall', [-1, 0, 0], outside(-1, 0).startsWith('tunnel')],
+        ['north wall', [0, 0, 1], outside(0, 1).startsWith('tunnel')],
+        ['south wall', [0, 0, -1], outside(0, -1).startsWith('tunnel')],
+        ['ceiling', [0, 1, 0], false],
+      ];
+      for (const [name, d, hasMouth] of cases) {
+        const t = hit([cx, 1.6, cz], d);
+        expect(t, `${r.name} ${name} invisible from inside`).not.toBeNull();
+        if (!hasMouth) {
+          // Room half-size to the wall (4 m); ceiling 3.0 - 1.6 = 1.4 m.
+          expect(t!, `${r.name} ${name} too far`).toBeLessThan(5);
+        }
+        expect(t!, `${r.name} ${name} unbounded void`).toBeLessThan(15);
+      }
+    }
+  });
 });
 
 describe('capsule-vs-AABB', () => {

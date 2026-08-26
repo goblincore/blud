@@ -295,14 +295,20 @@ function wallPlanes(
 ): PlaneSpec[] {
   const out: PlaneSpec[] = [];
   const fixed: [number, number] = [at, at];
+  // Which component carries the wall's SPAN. Axis 0 (E/W walls) spans z;
+  // axis 2 (N/S walls) spans x. Writing the span into this slot is what
+  // gives the rectangle its width — get it wrong and every plane on that
+  // axis collapses to a zero-width line at the room corner: invisible from
+  // inside its own room, so the level reads as a dollhouse cutaway.
+  const spanAxis = axis === 0 ? 2 : 0;
   const mk = (lo: number, hi: number, y0: number, y1: number) => {
     if (hi - lo < 1e-3 || y1 - y0 < 1e-3) return;
     const min: [number, number, number] = [0, y0, 0];
     const max: [number, number, number] = [0, y1, 0];
     min[axis] = fixed[0];
     max[axis] = fixed[1];
-    min[axis === 0 ? 2 : 0] = axis === 0 ? lo : fixed[0];
-    max[axis === 0 ? 2 : 0] = axis === 0 ? hi : fixed[1];
+    min[spanAxis] = lo;
+    max[spanAxis] = hi;
     out.push(plane(min, max, axis, facing, color));
   };
   let cursor = span[0];
