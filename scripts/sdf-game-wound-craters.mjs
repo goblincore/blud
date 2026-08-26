@@ -150,7 +150,7 @@ console.log(`target zombie ${z0.id} at (${z0.pos[0].toFixed(2)}, ${z0.pos[2].toF
     return bestE ? { x: bestE[0], y: bestE[1], z: bestE[2], limb: cl.limb } : null;
   })()`;
   let severed = false;
-  for (let v = 1; v <= 4 && !severed; v++) {
+  for (let v = 1; v <= 8 && !severed; v++) {
     const sh = await evaluate(shoulderExpr);
     if (!sh) { severed = true; break; }
     const dx = sh.x - z0.pos[0], dz = sh.z - z0.pos[2];
@@ -159,7 +159,15 @@ console.log(`target zombie ${z0.id} at (${z0.pos[0].toFixed(2)}, ${z0.pos[2].toF
     const sz = sh.z - (dz / l) * 1.0;
     const yaw = Math.atan2(sh.x - sx, -(sh.z - sz));
     const pitch = Math.atan2(sh.y - EYE, 1.0);
-    await evaluate(`__sdfGame.setPose(${sx}, ${sz}, ${yaw}, ${pitch})`);
+    // MUZZLE COMPENSATION: pellets spawn at eye + right*0.2 - up*0.12 and
+    // fly PARALLEL to the aim direction, so at any range they land ~20 cm
+    // right and ~12 cm low of the crosshair. Aim the camera ray at the
+    // shoulder MINUS that offset so the pellet stream threads the joint.
+    const rx = Math.cos(yaw), rz = Math.sin(yaw);
+    const ax = sh.x - rx * 0.2, ay = sh.y + 0.12, az = sh.z - rz * 0.2;
+    const yaw2 = Math.atan2(ax - sx, -(az - sz));
+    const pitch2 = Math.atan2(ay - EYE, Math.hypot(ax - sx, az - sz));
+    await evaluate(`__sdfGame.setPose(${sx}, ${sz}, ${yaw2}, ${pitch2})`);
     await sleep(300);
     await evaluate('__sdfGame.fire(2)');
     await sleep(1600);
@@ -196,3 +204,4 @@ if (DO_GUNS) {
 }
 
 console.log(`done — shots in ${OUT}`);
+process.exit(0);

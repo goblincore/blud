@@ -415,6 +415,13 @@ async function main() {
   // which rides the camera every frame.
   const viewModelAnchor = new THREE.Group();
   viewModelAnchor.name = 'view-model-anchor';
+  // Ride height of the whole view-model (gun + orb hands move together).
+  // Owner playtest 2026-08-26: the gun sat high enough to crowd the frame.
+  // Captured current / −5 cm / −10 cm from the same spot and compared: −5 cm
+  // frees the centre of the frame while the breech and hammers — the detail
+  // that chose this model — stay fully in frame; −10 cm starts to sink the
+  // grip out of the bottom edge. −5 cm is the shipped height.
+  viewModelAnchor.position.y = -0.05;
   camera.add(viewModelAnchor);
   scene.add(camera);
 
