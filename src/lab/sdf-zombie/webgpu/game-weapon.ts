@@ -26,6 +26,14 @@ export const GRAPESHOT = {
   /** Pellet visual/collision radius, metres. A 10 cm ball reads as an object
    *  crossing the room at game scale; smaller read as a hitscan flash. */
   radius: 0.05,
+  /** Wound (crater) radius stamped per impact, metres. MEASURED, not a
+   *  guess: connectivity's sever test needs the carve union to cover a joint
+   *  cross-section disc, and pellets arriving from ONE direction only ever
+   *  carve the near side — at the pellet profile's 0.055 no number of
+   *  point-blank pellets ever severs (0.07/0.085 also fail; 0.10 severs in
+   *  ~8, 0.13 in 1). The owner's "large type projectiles" is a 10 cm ball;
+   *  its crater matching the ball is the honest calibre. */
+  woundRadius: 0.10,
   /** Pellets despawn after this long (or on any impact). */
   lifeSec: 2.0,
   /** Minimum time between trigger pulls, seconds — two barrels is a
@@ -188,7 +196,7 @@ export function woundFromPellet(
   bodyYaw: number,
   field: (p: Vec3) => number,
 ): Wound {
-  return worldHitToWound(prims, hit, WOUND_PROFILES.pellet.radius, 'pellet', bodyYaw, field);
+  return worldHitToWound(prims, hit, GRAPESHOT.woundRadius, 'pellet', bodyYaw, field);
 }
 
 // ---------------------------------------------------------------------------

@@ -455,22 +455,26 @@ async function main() {
     gunGroup = new THREE.Group();
     gunGroup.name = 'grapeshot-k3';
     gunGroup.add(gltf.scene);
-    // Muzzles point -Y in gun space; rotate so they aim down camera -Z
-    // (forward), then seat it right-of-centre, low, close — a held zip gun.
-    gunGroup.rotation.x = Math.PI / 2;
+    // AXIS NOTE: the model script's "muzzles down -Y" is BLENDER space;
+    // Blender's Z-up -> glTF Y-up conversion (x,z,-y) lands them at +Z in
+    // GLB space, up stays +Y. rotation.y = PI aims +Z down the camera's -Z
+    // (forward) with the hammers still on top. (rotation.x = PI/2 pointed
+    // the gun at the sky — first live capture caught it.)
+    gunGroup.rotation.y = Math.PI;
     gunGroup.position.set(0.17, -0.2, -0.32);
     viewModelAnchor.add(gunGroup);
 
     // HANDS ARE GREEN ORBS — deliberate, per the owner: the player is the
     // goblin and its hands were never detailed. One on the grip, one braced
-    // under the fore-end.
+    // under the fore-end. Anchored in VIEW space (not gun space) so the
+    // axis convention of the GLB cannot move them.
     const orbGeo = new THREE.SphereGeometry(0.055, 20, 14);
     const orbMat = new THREE.MeshStandardMaterial({ color: 0x5a8f3c, roughness: 0.85 });
     const gripHand = new THREE.Mesh(orbGeo, orbMat);
-    gripHand.position.set(0.0, -0.06, -0.055); // gun-local: behind the grip
+    gripHand.position.set(0.17, -0.26, -0.30);
     const foreHand = new THREE.Mesh(orbGeo, orbMat);
-    foreHand.position.set(0.0, -0.34, 0.02); // gun-local: under the barrels
-    gunGroup.add(gripHand, foreHand);
+    foreHand.position.set(0.17, -0.24, -0.62);
+    viewModelAnchor.add(gripHand, foreHand);
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
@@ -493,25 +497,12 @@ async function main() {
     return [Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp];
   }
 
-  // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool.
+  // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool that
+  // grows on demand inside the tick's sync step.
   const pellets: Projectile[] = [];
   const pelletGeo = new THREE.SphereGeometry(GRAPESHOT.radius, 10, 8);
   const pelletMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
-  interface PelletView { mesh: THREE.Mesh; used: boolean }
-  const pelletViews: PelletView[] = [];
-  function pelletView(): THREE.Mesh {
-    let v = pelletViews.find(p => !p.used);
-    if (!v) {
-      const mesh = new THREE.Mesh(pelletGeo, pelletMat);
-      mesh.frustumCulled = false;
-      scene.add(mesh);
-      v = { mesh, used: false };
-      pelletViews.push(v);
-    }
-    v.used = true;
-    v.mesh.visible = true;
-    return v.mesh;
-  }
+  const pelletViews: THREE.Mesh[] = [];
 
   let nextSeed = 0x5df1;
   let cooldown = 0;
@@ -751,14 +742,22 @@ async function main() {
         }
         if (dead) pellets.splice(i, 1);
       }
-      // Sync the mesh pool to the sim list (order-stable enough per frame).
+      // Sync the mesh pool to the sim list — growing it on demand (the
+      // pool is ONLY grown here; fire() must not touch meshes because it
+      // runs from an evaluate() with no frame in between).
+      while (pelletViews.length < pellets.length) {
+        const mesh = new THREE.Mesh(pelletGeo, pelletMat);
+        mesh.frustumCulled = false;
+        scene.add(mesh);
+        pelletViews.push(mesh);
+      }
       for (let k = 0; k < pelletViews.length; k++) {
         const v = pelletViews[k]!;
         if (k < pellets.length) {
-          v.mesh.visible = true;
-          v.mesh.position.set(pellets[k]!.pos[0], pellets[k]!.pos[1], pellets[k]!.pos[2]);
+          v.visible = true;
+          v.position.set(pellets[k]!.pos[0], pellets[k]!.pos[1], pellets[k]!.pos[2]);
         } else {
-          v.mesh.visible = false;
+          v.visible = false;
         }
       }
       // Chunks: ballistic step + world-space field repack, lab contract.

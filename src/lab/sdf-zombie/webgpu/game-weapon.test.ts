@@ -163,7 +163,7 @@ describe('woundFromPellet', () => {
     const w = woundFromPellet([prim], hit, 0, field);
     expect(w.primIdx).toBe(0);
     expect(w.type).toBe('pellet');
-    expect(w.radius).toBeCloseTo(0.055, 6);
+    expect(w.radius).toBeCloseTo(GRAPESHOT.woundRadius, 6);
     // Roundtrip through the prim frame lands back on the hit.
     const back = woundWorldPos([prim], w, 0);
     expect(Math.hypot(back[0] - hit[0], back[1] - hit[1], back[2] - hit[2]))
