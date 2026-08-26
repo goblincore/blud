@@ -158,14 +158,53 @@ async function main() {
   scene.add(levelGroup);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
-  // shadow) have normals pointing away from it, so with only the dim warm
-  // ambient they rendered BLACK — read by the owner as "the same failure
-  // pointing up" as the missing walls. A hemisphere light pays normal-
-  // dependent fill: downward-facing geometry takes the ground colour. This
-  // touches ONLY these MeshStandardMaterials — the SDF bodies carry their own
-  // lighting uniforms (enclosure bounce), so probe/bounce tuning is untouched.
+  // shadow) have normals pointing away from it, so with only a dim ambient
+  // they rendered BLACK — read by the owner as "the same failure pointing
+  // up" as the missing walls. A hemisphere light pays normal-dependent fill.
+  // This touches ONLY these MeshStandardMaterials — the SDF bodies carry
+  // their own lighting uniforms (enclosure bounce), so probe/bounce tuning
+  // is untouched.
   const hemi = new THREE.HemisphereLight(0xa39c93, 0x8f8880, 0.8);
   scene.add(hemi);
+
+  // -----------------------------------------------------------------------
+  // THE GALLERY RIG (mesh side only). The lab factory ships a warm-sun +
+  // dim-purple-ambient default that made the rooms read dark; the owner
+  // wants a bright white-wall gallery. We give THIS PAGE its own rig by
+  // recolouring/releveling the factory's two lights rather than editing
+  // the shared factory (the lab's look must not move).
+  // -----------------------------------------------------------------------
+  for (const child of [...scene.children]) {
+    if (child instanceof THREE.DirectionalLight) {
+      child.color.setHex(0xfff8ef); // neutral-warm key, not orange sunset
+      child.intensity = 0.9;
+    }
+    if (child instanceof THREE.AmbientLight) {
+      child.color.setHex(0xffffff); // bright WHITE fill, was 0x4a3a40 @ 0.6
+      child.intensity = 0.95;
+    }
+  }
+  hemi.color.setHex(0xf5f3f0);   // sky term: near-white
+  hemi.groundColor.setHex(0x8f8c86); // floor bounce: mid grey
+  hemi.intensity = 0.75;
+
+  // COLOURED ACCENTS as real mesh-side lights, straight from the level data
+  // — the same entries litWallAlbedo folded into the bounce albedos, which
+  // is what keeps walls and zombies agreeing about the light. Five point
+  // lights total (one per room + room3's second): few, on purpose — every
+  // real-time light here spends frame time on WALLS, not on what the owner
+  // is watching.
+  const accentGroup = new THREE.Group();
+  accentGroup.name = 'accent-lights';
+  for (const r of ROOMS) {
+    for (const a of r.accents) {
+      const pl = new THREE.PointLight(
+        new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
+      pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+      accentGroup.add(pl);
+    }
+  }
+  scene.add(accentGroup);
 
   // -----------------------------------------------------------------------
   // The draw chain, exactly as the bench stands it up.
@@ -593,6 +632,8 @@ async function main() {
     })),
     tunnels: TUNNELS.map(t => t.name),
     furniture: FURNITURE,
+    /** Accent lights per room — capture/measurement seam (pair-shot framing). */
+    accents: ROOMS.flatMap(r => r.accents.map(a => ({ room: r.id, ...a }))),
   };
 }
 
