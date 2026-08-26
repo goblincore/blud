@@ -18,6 +18,10 @@ import { translateBody } from '../translate';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import { createZombieActor } from './game-actor';
 import { ROOMS, FURNITURE, wanderBounds, spawnPoints } from './game-level';
+import { sdBody } from '../validate';
+import { woundWorldPos } from '../damage';
+import { mulberry32 } from './game-weapon';
+import type { Vec3 } from '../types';
 
 const stubView = () => ({
   setRootShift: () => {},
@@ -140,5 +144,121 @@ describe('wandering zombies stay where the actor thinks they are', () => {
       }
     }
     expect(id - 1).toBe(10);
+  });
+});
+
+describe('pellet hits flow through the existing damage pipeline', () => {
+  /** A real translated zombie + actor, exactly like the page spawns it. */
+  function makeActor(id: number) {
+    const doc = parseBlob(zombieBlobSrc);
+    const face = compileFace(doc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const built = buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS, {});
+    const placed = translateBody(built, start);
+    const severs: { limb: string; origin: Vec3; primCount: number }[] = [];
+    const actor = createZombieActor({
+      id, room: room.id, body: placed, view: stubView() as never,
+      start, seed: 1337 + (id + 1) * 101,
+      bounds: wanderBounds(room), furniture: [],
+      onSever: (piece) => severs.push({
+        limb: piece.limb, origin: piece.origin, primCount: piece.prims.length,
+      }),
+    });
+    for (let f = 0; f < 60; f++) actor.step(1 / 60); // settle into a walk
+    return { actor, severs };
+  }
+
+  /** Raycast the posed field from `origin` along `dir` — lab-main's march. */
+  function raycast(actor: ReturnType<typeof makeActor>['actor'], origin: Vec3, dir: Vec3): Vec3 | null {
+    let t = 0;
+    for (let i = 0; i < 128 && t < 20; i++) {
+      const p: Vec3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
+      if (sdBody(p, actor.posed()) < 0.002) return p;
+      t += Math.max(sdBody(p, actor.posed()), 0.002);
+    }
+    return null;
+  }
+
+  it('a wound lands where the pellet hit and rides the posed body', () => {
+    const { actor } = makeActor(1);
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    const hit = raycast(actor, [torso[0], torso[1], torso[2] + 4], [0, 0, -1]);
+    expect(hit).not.toBeNull();
+    const yaw = actor.pose().yaw;
+    const before = actor.posed(); // the pose the wound was STAMPED on
+    actor.hit(hit!, [0, 0, -1]);
+    expect(actor.wounds().length).toBe(1);
+    // Exact gate on the STAMP pose: the wound anchors at the impact point.
+    // (After the impulse shove the pose moves ~5 cm and the anchor rides it
+    // — that is the wound staying ON the flesh, working as designed.)
+    const w = actor.wounds()[0]!;
+    // Yaw 0 — the actor stamps on posed (world-space) prims; see game-actor's
+    // refreshWounds note. Passing the walk yaw here would double-rotate.
+    const back = woundWorldPos(before.prims, w, 0);
+    expect(Math.hypot(back[0] - hit![0], back[1] - hit![1], back[2] - hit![2]))
+      .toBeLessThan(1e-6);
+    // And it RIDES the body: after a second of walking, the anchor moves with
+    // the flesh rather than staying at the stamp point.
+    for (let f = 0; f < 60; f++) actor.step(1 / 60);
+    const after = woundWorldPos(actor.posed().prims, w, actor.pose().yaw);
+    const torsoNow = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    expect(Math.hypot(after[0] - torsoNow[0], after[2] - torsoNow[2]))
+      .toBeLessThan(0.8); // torso-local offset, not a world-fixed hole
+  });
+
+  it('a pellet storm on one shoulder takes the arm off and reports a world-placed piece', () => {
+    const { actor, severs } = makeActor(2);
+    // Find which side the arm hangs on from the posed clusters, then pour
+    // pellets into that shoulder joint region until it goes.
+    // Aim at the SHOULDER JOINT — the arm's highest endpoint, where the
+    // attachment neck cutLimbs samples actually runs — and scatter the way
+    // the spread cone does. Measured on the rest body (scratch probe): a
+    // tight ±3 cm cluster never severs (one carve sphere covers one side of
+    // the section disc); the CONE'S NATURAL SPREAD is what cuts — ±9 cm
+    // severs within 14 pellets.
+    const armL = actor.posed().clusters.find(c => c.limb === 'armL')!;
+    let shoulder: Vec3 = [0, 0, 0];
+    let bestY = -Infinity;
+    for (let i = armL.start; i < armL.start + armL.count; i++) {
+      const p = actor.posed().prims[i]!;
+      if (p.op === 'sub' || p.dead) continue;
+      for (const e of [p.a, p.b]) {
+        if (e[1] > bestY) { bestY = e[1]; shoulder = [...e] as Vec3; }
+      }
+    }
+    const rng = mulberry32(20260826);
+    let fired = 0;
+    while (
+      actor.posed().clusters.find(c => c.limb === 'armL')!.alive && fired < 40
+    ) {
+      // Re-aim every shot: the body wanders while we pour.
+      const cl = actor.posed().clusters.find(c => c.limb === 'armL')!;
+      let top: Vec3 = shoulder;
+      let y = -Infinity;
+      for (let i = cl.start; i < cl.start + cl.count; i++) {
+        const p = actor.posed().prims[i]!;
+        if (p.op === 'sub' || p.dead) continue;
+        for (const e of [p.a, p.b]) if (e[1] > y) { y = e[1]; top = [...e] as Vec3; }
+      }
+      shoulder = top;
+      const j: Vec3 = [
+        shoulder[0] + (rng() - 0.5) * 2 * 0.09,
+        shoulder[1] + (rng() - 0.5) * 2 * 0.09,
+        shoulder[2] + (rng() - 0.5) * 2 * 0.09,
+      ];
+      actor.hit(j, [0, -0.1, -1]);
+      fired++;
+    }
+    const gone = !actor.posed().clusters.find(c => c.limb === 'armL')!.alive;
+    expect(gone, `arm still attached after ${fired} point-blank pellets`).toBe(true);
+    expect(severs.some(s => s.limb === 'armL')).toBe(true);
+    const piece = severs.find(s => s.limb === 'armL')!;
+    // The piece is placed where the RENDERED arm hung — near the body's own
+    // extent, not back at the spawn/origin-space rest pose.
+    const b = posedBounds(actor.posed().prims);
+    expect(piece.origin[0]).toBeGreaterThan(b.lo[0]! - 0.6);
+    expect(piece.origin[0]).toBeLessThan(b.hi[0]! + 0.6);
+    expect(piece.primCount).toBeGreaterThan(0);
   });
 });
