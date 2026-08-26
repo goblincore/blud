@@ -231,7 +231,7 @@ read off the **angular shape** of the residual — the first few Fourier terms:
 | Term | Meaning | Suggests |
 |---|---|---|
 | mean (a₀) | uniformly proud or sunk | `r` |
-| cos 2θ / sin 2θ | proud in x, sunk in z | `deep` |
+| cos 2θ / sin 2θ | proud on one cross-section axis, sunk on the other | the solved scale axis (see below) |
 | cos θ / sin θ | proud on one side only | `offset=` |
 | linear trend in t | one end fatter than the other | `r2=` / taper |
 
@@ -239,13 +239,24 @@ Every suggestion is printed with the term that produced it, so the report says
 *why*, not only *what*. A term below the noise floor prints `—` rather than a
 spurious third decimal.
 
-**`wide` is held fixed at its authored value.** A ring gives two perpendicular
-semi-axes; `r`, `wide` and `deep` are three numbers, so the system is
-underdetermined. Solving `r` and `deep` against a fixed `wide` makes it
-determinate and matches how body prims are actually written — the torso prims in
-`mouse.blob` carry `r=` and `deep=` with `wide` left implicit at 1.0. `tall`
-scales along the bone and is not observable from a single ring; it is not
-suggested.
+**One scale axis is held fixed; which one depends on the bone's direction.** A
+ring gives two perpendicular semi-axes, but `r`, `wide`, `tall` and `deep` are
+four numbers, so the system is underdetermined. `sdPrimitive` applies `scale` in
+**world axes**, so the rule is mechanical: drop the world axis most aligned with
+the bone (it runs along the prim and does not shape the cross-section at all),
+then of the two remaining axes hold the first and solve the second alongside `r`.
+
+| bone runs along | dropped | held | solved |
+|---|---|---|---|
+| y — torso, spine, upper/lower limbs | `tall` | `wide` | `deep` |
+| x — `clavicle` (`dir=side`) | `wide` | `tall` | `deep` |
+| z — `foot` (`dir=fwd`) | `deep` | `wide` | `tall` |
+
+The report names the axis it solved, so a `deep` suggestion on a clavicle is
+never confused with one on the torso. The common vertical-bone case reduces to
+holding `wide` and solving `deep`, which matches how body prims are actually
+written — `mouse.blob`'s torso carries `r=` and `deep=` with `wide` implicit at
+1.0.
 
 `bar` prims (`from=`/`to=`) bin across their span rather than at a single `at=`.
 
