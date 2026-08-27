@@ -238,7 +238,7 @@ read off the **angular shape** of the residual — the first few Fourier terms:
 | Term | Meaning | Suggests |
 |---|---|---|
 | mean (a₀) | uniformly proud or sunk | `r` |
-| cos 2θ / sin 2θ | proud on one cross-section axis, sunk on the other | the solved scale axis (see below) |
+| cos 2θ / sin 2θ | proud on one cross-section axis, sunk on the other | reported as evidence; `scale` itself is solved by least squares (below) |
 | cos θ / sin θ | proud on one side only | `offset=` |
 | linear trend in t | one end fatter than the other | `r2=` / taper |
 
@@ -246,24 +246,49 @@ Every suggestion is printed with the term that produced it, so the report says
 *why*, not only *what*. A term below the noise floor prints `—` rather than a
 spurious third decimal.
 
-**One scale axis is held fixed; which one depends on the bone's direction.** A
-ring gives two perpendicular semi-axes, but `r`, `wide`, `tall` and `deep` are
-four numbers, so the system is underdetermined. `sdPrimitive` applies `scale` in
-**world axes**, so the rule is mechanical: drop the world axis most aligned with
-the bone (it runs along the prim and does not shape the cross-section at all),
-then of the two remaining axes hold the first and solve the second alongside `r`.
+**Scale is solved by least squares, not by attributing a Fourier term to an
+axis.** An earlier draft of this spec picked one world axis to hold and one to
+solve, chosen by which axis the bone ran along. **That rule is unsound and was
+removed** — it assumed the ring basis tracks world axes closely enough that the
+`cos 2θ` term maps onto a single `scale` component, which is only true for
+near-axis-aligned bones. Measured on `mouse.blob`:
 
-| bone runs along | dropped | held | solved |
+| bone | direction | dropped axis | margin |
 |---|---|---|---|
-| y — torso, spine, upper/lower limbs | `tall` | `wide` | `deep` |
-| x — `clavicle` (`dir=side`) | `wide` | `tall` | `deep` |
-| z — `foot` (`dir=fwd`) | `deep` | `wide` | `tall` |
+| `upperarm` | `(0.74, −0.67, −0.03)` | `wide` | **0.074** |
+| `forearm` | `(0.62, −0.79, 0.03)` | `tall` | 0.172 |
 
-The report names the axis it solved, so a `deep` suggestion on a clavicle is
-never confused with one on the torso. The common vertical-bone case reduces to
-holding `wide` and solving `deep`, which matches how body prims are actually
-written — `mouse.blob`'s torso carries `r=` and `deep=` with `wide` implicit at
-1.0.
+Two bones in the same chain get different held axes, and `upperarm`'s margin is
+so thin that changing its authored `tilt=48` to `44` would flip the tool's
+suggestion from `tall=` to `wide=`. Worse, for those diagonal bones `e1` sits
+~42° off a world axis — a near-even mix of `wide` and `tall` — so attributing
+the residual to either alone is about half right and the rest leaks.
+
+The correct formulation needs no axis choice. For a direction `w` perpendicular
+to the bone, the primitive's surface sits at radius
+
+```
+ρ(w) = r / sqrt( Σ_k (w_k / s_k)² )
+```
+
+whose partials are analytic:
+
+```
+∂ρ/∂r    = ρ / r
+∂ρ/∂s_k  = ρ³ · w_k² / (r² · s_k³)
+```
+
+So fit `(Δr, Δwide, Δtall, Δdeep)` per primitive by **ridge least squares**
+against those partials, using each sample's own world direction `w`. A diagonal
+bone puts weight in both the `wide` and `tall` columns and the fit distributes
+it correctly; the component running along the bone has `w_k ≈ 0`, so its column
+is naturally rank-deficient and the ridge term absorbs it rather than producing
+a wild value. `tall` on a vertical bone is therefore not suggested because the
+data cannot see it, not because a rule excluded it.
+
+The ring basis survives, but only to bin θ and to express an offset — both of
+which are correct for *any* orthonormal frame spanning the perpendicular plane,
+so its roll no longer carries meaning and `heldAxis`/`solvedAxis` are gone.
 
 `bar` prims (`from=`/`to=`) bin across their span rather than at a single `at=`.
 
