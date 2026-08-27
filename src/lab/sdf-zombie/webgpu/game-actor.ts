@@ -22,7 +22,7 @@ import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-
 import { stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveWorldPos,
+  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
 import { severLimb, severDistal } from '../sever';
@@ -166,9 +166,11 @@ export function createZombieActor(opts: {
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
 
-  /** Carve-centre upload — same contract as lab-main's uploadWounds.
-   *  Skipped entirely while there are no wounds (the common case), and
-   *  tolerant of stub views without the method.
+  /** Carve upload: the SURFACE ANCHOR (the shader's sphere centre — the
+   *  lab's deep-bowl look) plus the per-wound depth-slab cap (inward normal
+   *  + max depth), which clips the sphere's reach so a crater on thin flesh
+   *  floors before it perforates. Skipped entirely while there are no wounds
+   *  (the common case), and tolerant of stub views without the method.
    *  YAW 0, ALWAYS: the game page stamps wounds on APPLYRIG OUTPUT, whose
    *  prim axes are already world space. frame() would rotate the basis a
    *  SECOND time by bodyYaw, and connectivity.ts resolves carve spheres at
@@ -180,12 +182,16 @@ export function createZombieActor(opts: {
   function refreshWounds() {
     if (wounds.length === 0 || typeof opts.view.setWounds !== 'function') return;
     opts.view.setWounds(
-      wounds.map(w => woundCarveWorldPos(posed.prims, w, 0)),
+      wounds.map(w => woundWorldPos(posed.prims, w, 0)),
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
       wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
       wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+      wounds.map(w => {
+        const n = woundCarveNormal(posed.prims, w, 0);
+        return n ? { n, depth: w.carveDepth ?? 0 } : null;
+      }),
     );
   }
 

@@ -75,7 +75,7 @@ import { TILE_MAX_ENTRIES } from './tile-cull';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 18;
+export const DATA_ROWS = 19;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -83,6 +83,13 @@ export const ROW_CLUSTER_BOUNDS = 3;
 export const ROW_CLUSTER_RANGE = 4;
 export const ROW_WOUND = 5;
 export const ROW_WOUND_META = 6;
+/** Wound carve depth-slab (2026-08-27): xyz = INWARD unit normal at the
+ *  stamp (prim-local frame rotated out by the uploader), w = max carve depth
+ *  below the anchor plane, metres. w <= 0 = uncapped — APPLY_WOUNDS then
+ *  carves the plain sphere, bit-identical to the pre-slab field (the max()
+ *  with `-1e5` selects the sphere term exactly), which is what keeps the
+ *  LAB (which uploads no caps) pixel-stable across this change. */
+export const ROW_WOUND_CAP = 18;
 export const ROW_PRIM_QUAT = 7;
 export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;
@@ -588,10 +595,19 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
+    // Depth slab (2026-08-27): the sphere stays centred on the uploaded
+    // anchor — the lab's deep bowl — and is clipped by a plane through the
+    // anchor facing inward, at most wCap.w deep. max() of two SDF bounds is
+    // exact for the convex intersection. With wCap.w <= 0 (uncapped: the
+    // lab uploads no caps, old wounds, chunk torn-ends) the -1e5 term loses
+    // the max for any real distance, so the carve is BIT-IDENTICAL to the
+    // pre-slab sphere — that is what keeps the lab reference stable.
+    let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
+    let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
     let r = length(p - w.xyz);
-    d = smax(d, -(r - depth), woundCfg.y);
+    d = smax(d, max(-(r - depth), dot(p - w.xyz, wCap.xyz) - capEff), woundCfg.y);
     if (r < depth * 2.0) { near = 1.0; }
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);

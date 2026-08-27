@@ -36,7 +36,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-  ROW_WOUND, ROW_WOUND_META,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP,
 } from './march.wgsl';
 
 export interface ZombieGpuView {
@@ -58,9 +58,12 @@ export interface ZombieGpuView {
   update(body: BuildResult, rest?: BuildResult): void;
   /** Uploads wounds already transformed to world space by the caller.
    *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES);
-   *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s. */
+   *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s.
+   *  caps are the per-wound depth-slab (inward normal + max depth); omitted
+   *  = uncapped spheres (the lab — its look is pinned; old wounds). */
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
-    splayScales?: number[], offsetScales?: number[]): void;
+    splayScales?: number[], offsetScales?: number[],
+    caps?: readonly ({ n: Vec3; depth: number } | null)[]): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** The rigid head rotation (rig-bind headQuatOf); identity resets it. */
@@ -744,6 +747,8 @@ export interface WriteWoundsLayout {
   woundRow?: number;
   /** Row index for the wound meta texels (was ROW_WOUND_META). */
   metaRow?: number;
+  /** Row index for the depth-slab cap texels (was ROW_WOUND_CAP). */
+  capRow?: number;
   /** Data-texture column stride (was MAX_PRIMS). */
   stride?: number;
 }
@@ -753,6 +758,11 @@ export function writeWounds(
   worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
   splayScales?: number[], offsetScales?: number[],
   layout: WriteWoundsLayout = {},
+  /** Depth-slab caps (ROW_WOUND_CAP: inward normal + depth). Omitted or
+   *  null per wound = uncapped sphere — the row is left at whatever it held
+   *  (zeroed at allocation; applyWounds treats w <= 0 as uncapped), so the
+   *  LAB (which never passes caps) renders bit-identically to pre-slab. */
+  caps?: readonly ({ n: Vec3; depth: number } | null)[],
 ): number {
   const stride = layout.stride ?? MAX_PRIMS;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -760,6 +770,7 @@ export function writeWounds(
   const n = Math.min(worldPositions.length, layout.maxWounds ?? MAX_WOUNDS);
   const wBase = woundRow * stride * 4;
   const mBase = metaRow * stride * 4;
+  const capBase = (layout.capRow ?? ROW_WOUND_CAP) * stride * 4;
   for (let i = 0; i < n; i++) {
     const p = worldPositions[i]!;
     texels[wBase + i * 4] = p[0];
@@ -770,6 +781,13 @@ export function writeWounds(
     texels[mBase + i * 4 + 1] = ages[i]!;
     texels[mBase + i * 4 + 2] = splayScales?.[i] ?? 1;
     texels[mBase + i * 4 + 3] = offsetScales?.[i] ?? 1;
+    const cap = caps?.[i];
+    if (cap) {
+      texels[capBase + i * 4] = cap.n[0];
+      texels[capBase + i * 4 + 1] = cap.n[1];
+      texels[capBase + i * 4 + 2] = cap.n[2];
+      texels[capBase + i * 4 + 3] = cap.depth;
+    }
   }
   return n;
 }
@@ -991,8 +1009,8 @@ export function createZombieGpuView(
       coneMesh.position.copy(mesh.position);
       coneMesh.scale.copy(mesh.scale);
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales) {
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales);
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps) {
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps);
       dataTex.needsUpdate = true;
     },
     setHeadShape(centre, axes) {

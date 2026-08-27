@@ -147,6 +147,32 @@ describe('traceProjectile', () => {
     expect(hit).not.toBeNull();
     expect(hit![2]).toBeCloseTo(-0.4, 6);
   });
+
+  it('bisects to the TRUE surface, not the hitEps shell', () => {
+    // The pale-wound root cause (2026-08-27): a hit returned on the eps
+    // shell sits up to hitEps OUTSIDE the skin, and the wound stamper's
+    // flesh probe measured zero thickness from there — the carve cap then
+    // ate the whole radius and every crater went tangent/invisible. The
+    // returned point must be ON the flesh (field <= 0) whenever the ray
+    // actually penetrates.
+    const hit = traceProjectile([0, 0, 2], [0, 0, -2], sphereAt([0, 0, 0]));
+    expect(hit).not.toBeNull();
+    expect(sphereAt([0, 0, 0])(hit!)).toBeLessThanOrEqual(0);
+    // ...and within a millimetre of it (6 halvings of a 0.05 m substep).
+    expect(Math.abs(sphereAt([0, 0, 0])(hit!))).toBeLessThan(0.002);
+  });
+
+  it('keeps the eps-shell point for a graze that never penetrates', () => {
+    // A field whose minimum along the segment is positive-but-under-eps:
+    // detection must still fire (the pellet registers) and the bisect must
+    // leave hi at the detection point rather than inventing a crossing.
+    const strictGraze = (p: Vec3) => Math.abs(p[2] - 0.1) + 0.005; // min +0.005 < eps
+    const hit = traceProjectile([0, 0, 2], [0, 0, -2], strictGraze);
+    expect(hit).not.toBeNull();
+    // field at the returned point is within eps but positive (no crossing):
+    expect(strictGraze(hit!)).toBeGreaterThan(0);
+    expect(strictGraze(hit!)).toBeLessThanOrEqual(GRAPESHOT.hitEps);
+  });
 });
 
 describe('woundFromPellet', () => {

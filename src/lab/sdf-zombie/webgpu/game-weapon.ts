@@ -247,13 +247,20 @@ export function traceProjectile(
     const t = i * stepLen;
     const p: Vec3 = [from[0] + dir[0] * t, from[1] + dir[1] * t, from[2] + dir[2] * t];
     if (field(p) <= GRAPESHOT.hitEps) {
-      // Bisect [tPrev, t] down to millimetre precision.
+      // Bisect [tPrev, t] down to millimetre precision — on the TRUE surface
+      // (field <= 0), not the hitEps shell. The wound stamper probes flesh
+      // thickness inward from this point, and a point returned on the eps
+      // shell sits up to hitEps OUTSIDE the skin: probeFlesh's first sample
+      // (4 mm) was still in the air, measured zero flesh, and the carve-cap
+      // shift ate the whole radius — every pellet/slug crater was a tangent,
+      // invisible smudge (the owner's pale-wound report, 2026-08-27). A graze
+      // that never reaches 0 keeps hi at t — the eps-shell point, as before.
       let lo = tPrev;
       let hi = t;
-      for (let k = 0; k < 5; k++) {
+      for (let k = 0; k < 6; k++) {
         const mid = (lo + hi) / 2;
         const m: Vec3 = [from[0] + dir[0] * mid, from[1] + dir[1] * mid, from[2] + dir[2] * mid];
-        if (field(m) <= GRAPESHOT.hitEps) hi = mid; else lo = mid;
+        if (field(m) <= 0) hi = mid; else lo = mid;
       }
       return [from[0] + dir[0] * hi, from[1] + dir[1] * hi, from[2] + dir[2] * hi];
     }

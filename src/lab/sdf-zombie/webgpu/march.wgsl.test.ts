@@ -23,6 +23,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
+  ROW_WOUND_CAP,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { specialiseMapBody } from './specialise';
@@ -180,6 +181,22 @@ describe('ported features reach the entry point', () => {
     // rims on thin features that motivated the flip are handled by the
     // per-wound rimScale (flesh-behind-the-hit) instead.
     expect(applyWounds).toMatch(/smoothstep\(-amp \* 0\.3, amp \* 0\.7, dIn\)/);
+  });
+
+  it('caps the carve with a depth slab that vanishes when no cap is uploaded', () => {
+    // The pale-wound fix (2026-08-27): the sphere stays ON the anchor (the
+    // lab's deep-bowl look, whose cavity reads red) and a plane through the
+    // anchor clips its REACH — depth without the far-side punch-through.
+    const applyWounds = HELPERS.find(h => declaredName(h) === 'applyWounds')!;
+    // The slab rides the max() with the sphere term (exact for the convex
+    // intersection), reading ROW_WOUND_CAP.
+    expect(applyWounds).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0)`);
+    expect(applyWounds).toContain('max(-(r - depth), dot(p - w.xyz, wCap.xyz) - capEff)');
+    // Uncapped wounds (w <= 0) must take a capEff no real distance can
+    // cross, so the slab term loses the max EXACTLY and the field is
+    // bit-identical to the pre-slab sphere — that is what keeps the lab
+    // (which uploads no caps) pixel-stable across this change.
+    expect(applyWounds).toContain('select(1.0e5, wCap.w, wCap.w > 0.0)');
   });
 
   it('shades chunks through the gore mask (gobs-and-goo §2)', () => {
@@ -593,7 +610,7 @@ describe('data texture layout', () => {
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-      ROW_PRIM_SHELL, ROW_PRIM_CLIP,
+      ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -802,8 +819,9 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // Was 11; the arc capsule added ROW_PRIM_BEND, per-primitive colour added
     // ROW_PRIM_COLOR, bound groups added ROW_GROUP_BOUNDS/RANGE and
     // ROW_CLUSTER_GROUPS, and the shell fold added ROW_PRIM_SHELL/ROW_PRIM_CLIP
-    // — each without displacing any existing row.
-    expect(DATA_ROWS).toBe(18);
+    // — each without displacing any existing row. The wound depth slab added
+    // ROW_WOUND_CAP (2026-08-27, pale-wound fix).
+    expect(DATA_ROWS).toBe(19);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

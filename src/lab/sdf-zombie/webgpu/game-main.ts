@@ -51,7 +51,7 @@ import {
   stepProjectiles, traceProjectile, woundFromSlug, type Projectile,
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
-import { woundWorldPos, woundCarveWorldPos } from '../damage';
+import { woundWorldPos, woundCarveNormal } from '../damage';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -902,15 +902,18 @@ async function main() {
       } : undefined;
     },
     /** Where every wound of a body sits IN WORLD SPACE right now — the
-     *  surface anchor and the GPU carve centre (both at the yaw-0 contract).
-     *  The placement gate diffs these against the fired ray's impact point. */
+     *  surface anchor (= the GPU carve sphere's centre) plus the depth-slab
+     *  cap, all at the yaw-0 contract. The placement gate diffs the surface
+     *  against the fired ray's impact point; carveDepth is the punch-through
+     *  guard (0.45 × measured local flesh). */
     debugWounds: (id: number) => {
       const a = actors.find(a => a.id === id);
       if (!a) return undefined;
       const prims = a.posed().prims;
       return a.wounds().map(w => ({
         surface: woundWorldPos(prims, w, 0),
-        carve: woundCarveWorldPos(prims, w, 0),
+        carveNormal: woundCarveNormal(prims, w, 0),
+        carveDepth: w.carveDepth,
         radius: w.radius,
         type: w.type,
         primIdx: w.primIdx,

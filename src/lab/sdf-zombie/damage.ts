@@ -77,17 +77,23 @@ export interface Wound {
    */
   severRadius?: number;
   /**
-   * The THICKNESS-CAPPED CARVE CENTRE in the same prim-local frame as `local`
-   * (so it is transported by the same `frame()` and rides yaw/jiggle exactly
-   * like the anchor). The GPU carve subtracts its sphere from here, shifted
-   * outward along the surface→outside direction just far enough that the
-   * carve penetrates at most ~45% of the flesh measured behind the hit —
-   * otherwise the sphere reaches through thin torsos/limbs and opens the far
-   * side (the wound-halo artifact, 2026-08-24). Absent when no field was
-   * passed at stamp time or no shift was needed: consumers then fall back to
-   * `local` (old wounds, chunk torn-ends, explosions on chunks).
+   * The INWARD unit normal at the stamp, in the same prim-local frame as
+   * `local` (so it is transported by the same `frame()` and rides yaw/jiggle
+   * exactly like the anchor). Together with `carveDepth` it orients the GPU
+   * carve's depth slab: a plane through the anchor, facing inward, that
+   * clips the carve sphere so it penetrates at most ~45% of the flesh
+   * measured behind the hit — depth WITHOUT the far-side punch-through.
+   * The sphere itself stays centred ON the anchor (the lab's deep-bowl
+   * look); only its reach is clipped. Absent when no field was passed at
+   * stamp time: consumers then carve the plain, uncapped sphere (old
+   * wounds, chunk torn-ends, explosions on chunks).
    */
-  carveLocal?: Vec3;
+  carveN?: Vec3;
+  /**
+   * Max carve depth below the anchor plane, metres —
+   * WOUND_CARVE_DEPTH_FRAC × (flesh measured behind the hit).
+   */
+  carveDepth?: number;
 }
 
 /**
@@ -176,6 +182,9 @@ const STOCK_RIM_SPLAY = 0.55;
 export const WOUND_CARVE_DEPTH_FRAC = 0.45;
 
 const PROBE_STEP = 0.004, PROBE_MAX = 0.6;
+/** How far past an outside-skin hit the seek may march to find the surface.
+ *  Projectile traces bisect a hitEps shell (1 cm out); 4 cm is generous. */
+const PROBE_SEEK_MAX = 0.04;
 
 /**
  * Probes the flesh behind a surface hit: marches from the hit toward the
@@ -183,6 +192,13 @@ const PROBE_STEP = 0.004, PROBE_MAX = 0.6;
  * returns how far that went (the thickness behind the hit) together with the
  * unit INWARD direction used (null when the hit sits on the axis itself —
  * nothing sensible to measure along).
+ *
+ * If the hit itself sits OUTSIDE the skin (every first sample outside), the
+ * march seeks inward to the surface first and measures from there — a point
+ * returned on a trace's hitEps shell otherwise measures zero flesh and the
+ * thickness cap degenerated to a tangent, invisible carve sphere
+ * (2026-08-27). The seek changes nothing for hits that already measure
+ * flesh: their loop is byte-identical to the original.
  */
 function probeFlesh(
   field: (p: Vec3) => number, hit: Vec3, prim: Primitive,
@@ -195,12 +211,26 @@ function probeFlesh(
   const n = len(inward);
   if (n < 1e-6) return { thick: 0, inward: null };
   const dir = scale(inward, 1 / n);
-  let thick = 0;
-  for (let d = PROBE_STEP; d <= PROBE_MAX; d += PROBE_STEP) {
-    const p = add(hit, scale(dir, d));
-    if (field(p) > 0) break;
-    thick = d;
+  const measure = (from: number): number => {
+    let thick = 0;
+    for (let d = from; d <= PROBE_MAX; d += PROBE_STEP) {
+      const p = add(hit, scale(dir, d));
+      if (field(p) > 0) break;
+      thick = d;
+    }
+    return thick;
+  };
+  let thick = measure(PROBE_STEP);
+  if (thick > 0) return { thick, inward: dir };
+  // DEGENERATE: every sample so far was outside the flesh. Seek the surface.
+  let seek = 0;
+  let entered = false;
+  for (let d = PROBE_STEP; d <= PROBE_SEEK_MAX; d += PROBE_STEP) {
+    seek = d;
+    if (field(add(hit, scale(dir, d))) <= 0) { entered = true; break; }
   }
+  if (!entered) return { thick: 0, inward: dir };
+  thick = measure(seek + PROBE_STEP) - seek;
   return { thick, inward: dir };
 }
 
@@ -271,20 +301,22 @@ export function worldHitToWound(
   if (axis0) wound.axis0 = axis0;
   if (field) {
     wound.rimScale = rimScaleFor(field, hit, prim, radius, type);
-    // Thickness-capped carve centre: shift the GPU carve sphere outward
-    // along the surface→outside direction (the negation of the probe's
-    // inward direction) so it penetrates at most 45% of the flesh behind
-    // the hit. Without this the sphere reaches through thin torsos/limbs
-    // and opens the far side (the wound-halo artifact). The surface anchor
-    // above stays put — gameplay, particles and the meter key off it.
+    // DEPTH-SLAB CAP (2026-08-27): the GPU carve sphere stays centred ON the
+    // surface anchor — the lab's deep-bowl look, whose cavity reads RED —
+    // and is clipped by a slab through the anchor along the measured inward
+    // normal, at most WOUND_CARVE_DEPTH_FRAC of the flesh behind the hit.
+    // The previous cap SHIFTED the sphere centre outward instead, which
+    // guarantees the visible dish only ever grazes the sphere's outer shell:
+    // with a probe measured from a hitEps-shell hit (1 cm outside the skin)
+    // the shift ate the whole radius and the carve was tangent — invisible,
+    // which is the owner's pale-wound report. Depth, not position, is the
+    // thing that must be capped; see march.wgsl.ts APPLY_WOUNDS for the
+    // GPU side (max of the sphere and the slab SDFs, exact for the convex
+    // intersection).
     const { thick, inward } = probeFlesh(field, hit, prim);
     if (inward) {
-      const shift = Math.max(0, radius - WOUND_CARVE_DEPTH_FRAC * thick);
-      if (shift > 1e-9) {
-        const centre = sub(hit, scale(inward, shift)); // outward = -inward
-        const relC = sub(centre, prim.a);
-        wound.carveLocal = [dot(relC, u), dot(relC, v), dot(relC, w)];
-      }
+      wound.carveDepth = WOUND_CARVE_DEPTH_FRAC * thick;
+      wound.carveN = [dot(inward, u), dot(inward, v), dot(inward, w)];
     }
   }
   return wound;
@@ -303,19 +335,18 @@ export function woundWorldPos(prims: Primitive[], wound: Wound, bodyYaw = 0): Ve
 }
 
 /**
- * Where the GPU carve sphere for this wound sits — the thickness-capped
- * centre when one was computed at stamp time (`carveLocal`), otherwise the
- * surface anchor. This is what the renderer uploads as the wound position
- * and what the occluder-hull exclusion uses: both must subtract exactly what
- * `applyWounds` carves. Gameplay (blood emitters, meter) keeps using
- * `woundWorldPos`.
+ * The GPU carve's INWARD slab normal in world space — the orientation of the
+ * depth cap stored at stamp time (`carveN`), rotated out of the prim-local
+ * frame by the same transform `woundWorldPos` uses. Null when the wound
+ * carries no slab (no field at stamp time): the renderer then carves the
+ * plain, uncapped sphere — the lab's historical behaviour, unchanged.
  */
-export function woundCarveWorldPos(prims: Primitive[], wound: Wound, bodyYaw = 0): Vec3 {
-  if (!wound.carveLocal) return woundWorldPos(prims, wound, bodyYaw);
+export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0): Vec3 | null {
+  if (!wound.carveN) return null;
   const prim = prims[wound.primIdx]!;
   const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
-  const c = wound.carveLocal;
-  return add(prim.a, add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2])));
+  const c = wound.carveN;
+  return add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2]));
 }
 
 /** Ring buffer append — oldest is evicted at capacity. */
