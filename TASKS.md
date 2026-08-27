@@ -764,6 +764,12 @@ Key reference docs (open these before touching their area):
   beret, ruff silver-grey, eyes smaller + specular catchlight (eyeGlint).
   [branch `dispatch/clown-skull`]
 
+- `P9` [x] **Ring-fit (`blob:rings`)** — fits existing `.blob` prims to a skinned
+  reference mesh via `sdBody` residuals; pose-independent, suggests rather than
+  applies, reports each prim as one coupled edit with its semi-axes. Spec
+  `docs/superpowers/specs/2026-08-26-blob-ring-fit-design.md`, plan
+  `docs/superpowers/plans/2026-08-26-blob-ring-fit.md`.
+
 ---
 
 ## Process notes
