@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { binResiduals, projectToSurface, sampleBodySurface } from './ring-fit';
+import { binResiduals, fitPrims, projectToSurface, sampleBodySurface } from './ring-fit';
 import { ringBasis } from './ref-align';
 import { sdBody } from './validate';
 import type { Primitive, ClusterInfo, ResolvedBone } from './types';
@@ -182,5 +182,138 @@ describe('binResiduals', () => {
       expect(bin.samples.length).toBe(0);
       expect(bin.crossBone).toBeGreaterThan(0);
     }
+  });
+});
+
+/** One capsule on a 45-degree bone — the case the old axis rule mishandled. */
+function diagonalCapsule(): {
+  prims: Primitive[]; clusters: ClusterInfo[]; bones: Map<string, ResolvedBone>;
+} {
+  const k = Math.SQRT1_2;
+  const prims: Primitive[] = [{
+    a: [0, 0, 0], b: [k, k, 0], radius: 0.1, scale: [1, 1, 1],
+    blendK: 0.01, limb: 'armL', cluster: 0, bone: 'upperarm.l', src: 20,
+  }];
+  const clusters: ClusterInfo[] = [
+    { id: 0, limb: 'armL', start: 0, count: 1, center: [k / 2, k / 2, 0], radius: 1, alive: true },
+  ];
+  const bones = new Map<string, ResolvedBone>([['upperarm.l', { head: [0, 0, 0], tail: [k, k, 0] }]]);
+  return { prims, clusters, bones };
+}
+
+/** The synthetic reference: a point set sampled off a body we declare to be truth. */
+const sample = sampleBodySurface;
+
+/** Fit a perturbed body against a reference sampled from the unperturbed one. */
+function roundTrip(perturb: (b: ReturnType<typeof twoCapsules>) => void) {
+  const truth = twoCapsules();
+  const reference = sample(truth, 600);
+  const ours = twoCapsules();
+  perturb(ours);
+  return fitPrims(binResiduals(reference, ours, ours.bones), ours);
+}
+
+describe('fitPrims — ground truth round trip', () => {
+  it('NEGATIVE CONTROL: suggests nothing when the body already matches', () => {
+    for (const one of roundTrip(() => {})) {
+      expect(one.r).toBeUndefined();
+      expect(one.scales).toBeUndefined();
+      expect(one.offset).toBeUndefined();
+    }
+  });
+
+  it('recovers a known radius error', () => {
+    const p0 = roundTrip((b) => { b.prims[0]!.radius = 0.092; }).find((x) => x.prim === 0)!;
+    expect(p0.r).toBeDefined();
+    expect(p0.r!.from).toBeCloseTo(0.092, 6);
+    expect(p0.r!.to).toBeGreaterThan(0.0975);
+    expect(p0.r!.to).toBeLessThan(0.1025);
+  });
+
+  it('recovers a known anisotropy error on a vertical bone', () => {
+    const p0 = roundTrip((b) => { b.prims[0]!.scale = [1, 1, 1.25]; }).find((x) => x.prim === 0)!;
+    const deep = p0.scales?.find((s) => s.axis === 'deep');
+    expect(deep).toBeDefined();
+    expect(deep!.to).toBeGreaterThan(0.94);
+    expect(deep!.to).toBeLessThan(1.06);
+  });
+
+  it('does NOT suggest a component the data cannot see', () => {
+    // `tall` runs along a vertical bone, so every sample has w_1 ~ 0 and its
+    // column is rank-deficient. Suggesting it would be reading noise.
+    const p0 = roundTrip((b) => { b.prims[0]!.scale = [1, 1, 1.25]; }).find((x) => x.prim === 0)!;
+    expect(p0.scales?.some((s) => s.axis === 'tall')).toBeFalsy();
+  });
+
+  it('REGRESSION: recovers anisotropy on a DIAGONAL bone', () => {
+    // The removed held/solved rule got this wrong: a 45-degree bone's basis is
+    // a near-even mix of wide and tall, so attributing cos2t to one axis is
+    // about half right. This test is the reason that rule was replaced.
+    const truth = diagonalCapsule();
+    const reference = sample(truth, 600);
+    const ours = diagonalCapsule();
+    ours.prims[0]!.scale = [1, 1, 1.3];
+    const p0 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 0)!;
+    const deep = p0.scales?.find((s) => s.axis === 'deep');
+    expect(deep).toBeDefined();
+    expect(deep!.to).toBeGreaterThan(0.92);
+    expect(deep!.to).toBeLessThan(1.08);
+  });
+
+  /**
+   * ADDED, and the reason: the REGRESSION test above does NOT discriminate.
+   *
+   * The removed rule dropped the world axis most aligned with the bone, HELD
+   * the first survivor and SOLVED the second — so for a bone along (k, k, 0) it
+   * dropped x, held `tall` and solved `deep`, and its e2 came out exactly world
+   * z. The perturbation above is on `deep`. The old rule would therefore have
+   * attributed the whole cos-2-theta term to `deep` and got the right answer by
+   * luck; that test passes under both rules and proves nothing on its own.
+   *
+   * Move the SAME error to `wide` and the two rules separate cleanly. The old
+   * rule could only ever name one axis — `deep` — so it would have reported a
+   * large `deep` change to explain an error `deep` had no part in. The fit
+   * leaves `deep` alone and puts the change in the wide/tall pair, which for
+   * this bone are EXACTLY degenerate (`w_0^2 == w_1^2` in every sample, so the
+   * two columns are proportional). Which of the pair it names is arbitrary and
+   * is not asserted; that the surface it describes is right, and that `deep` is
+   * untouched, are the claims.
+   */
+  it('REGRESSION: does not blame the axis the old rule always blamed', () => {
+    const truth = diagonalCapsule();
+    const reference = sample(truth, 600);
+    const ours = diagonalCapsule();
+    ours.prims[0]!.scale = [1.3, 1, 1];
+    const p0 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 0)!;
+    const deep = p0.scales?.find((s) => s.axis === 'deep');
+    expect(deep === undefined || Math.abs(deep.to - 1) < 0.02).toBe(true);
+    expect(p0.scales?.some((s) => s.axis === 'wide' || s.axis === 'tall')).toBe(true);
+  });
+
+  it('recovers a known lateral offset', () => {
+    const p0 = roundTrip((b) => {
+      b.prims[0]!.a = [0.006, 0.0, 0];
+      b.prims[0]!.b = [0.006, 0.5, 0];
+    }).find((x) => x.prim === 0)!;
+    expect(p0.offset).toBeDefined();
+    expect(p0.offset!.delta[0]).toBeLessThan(-0.004);
+    expect(p0.offset!.delta[0]).toBeGreaterThan(-0.008);
+    expect(Math.abs(p0.offset!.delta[2])).toBeLessThan(0.002);
+  });
+
+  it('IS PROVEN TO FAIL under a perturbation it should catch', () => {
+    // If this ever passes, the fitter has stopped measuring anything.
+    const p0 = roundTrip((b) => { b.prims[0]!.radius = 0.060; }).find((x) => x.prim === 0)!;
+    expect(p0.r).toBeDefined();
+    expect(Math.abs(p0.r!.to - 0.060)).toBeGreaterThan(0.02);
+  });
+
+  it('skips primitives it cannot model, and says which', () => {
+    const reference = sample(twoCapsules(), 300);
+    const ours = twoCapsules();
+    ours.prims[1]!.bend = [0, 0, 0.02];
+    const p1 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 1)!;
+    expect(p1.skipped).toMatch(/bend/i);
+    expect(p1.r).toBeUndefined();
   });
 });

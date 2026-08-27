@@ -70,15 +70,6 @@ function byBoneNames(skin: RefSkin): Set<string> {
 }
 
 describe('ringBasis', () => {
-  it('picks held/solved axes from the bone direction', () => {
-    expect(ringBasis([0,0,0], [0,1,0]).heldAxis).toBe(0);    // y-bone: hold wide
-    expect(ringBasis([0,0,0], [0,1,0]).solvedAxis).toBe(2);  //         solve deep
-    expect(ringBasis([0,0,0], [1,0,0]).heldAxis).toBe(1);    // x-bone: hold tall
-    expect(ringBasis([0,0,0], [1,0,0]).solvedAxis).toBe(2);  //         solve deep
-    expect(ringBasis([0,0,0], [0,0,1]).heldAxis).toBe(0);    // z-bone: hold wide
-    expect(ringBasis([0,0,0], [0,0,1]).solvedAxis).toBe(1);  //         solve tall
-  });
-
   it('names the axes for the report', () => {
     expect(SCALE_AXIS_NAMES).toEqual(['wide', 'tall', 'deep']);
   });

@@ -96,17 +96,24 @@ export const SCALE_AXIS_NAMES = ['wide', 'tall', 'deep'] as const;
 
 export interface RingBasis {
   origin: Vec3;
-  /** Cross-section axis whose scale component is HELD at its authored value. */
+  /**
+   * First cross-section axis; theta is measured from here.
+   *
+   * ITS ROLL CARRIES NO MEANING. An earlier draft named e1/e2 "held" and
+   * "solved" and attributed the residual's cos-2-theta term to whichever
+   * world axis seeded e1. That was unsound — on mouse.blob, upperarm and
+   * forearm (neighbours in one chain) seed from DIFFERENT world axes, and
+   * both sit ~42 degrees off any of them, so the attribution was about half
+   * right. The fit now solves all three scale components at once from each
+   * sample's own world direction, so any orthonormal frame spanning the
+   * perpendicular plane does equally well here.
+   */
   e1: Vec3;
-  /** Cross-section axis whose scale component is SOLVED alongside r. */
+  /** Second cross-section axis, `u x e1`. */
   e2: Vec3;
   /** Along the bone, head -> tail. */
   u: Vec3;
   length: number;
-  /** Index into Primitive.scale for e1. */
-  heldAxis: 0 | 1 | 2;
-  /** Index into Primitive.scale for e2. */
-  solvedAxis: 0 | 1 | 2;
 }
 
 const WORLD: Vec3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -115,26 +122,24 @@ const WORLD: Vec3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
  * Orthonormal frame for measuring a ring around a bone.
  *
  * NOT vec.ts's basisFromAxis: that seeds from the world axis LEAST aligned
- * with the bone, so its roll turns as the bone turns. Primitive.scale is
- * applied in WORLD axes, so the cross-section axes must track world axes or
- * the cos-2-theta term cannot be attributed to a scale component.
+ * with the bone, so its roll turns as the bone turns. Seeding from a world
+ * axis instead keeps the frame STABLE under small authoring changes, which is
+ * what makes a theta histogram comparable between two versions of a body. The
+ * roll itself is not meaningful — see RingBasis.e1.
  */
 export function ringBasis(head: Vec3, tail: Vec3): RingBasis {
   const d = sub(tail, head);
   const length = len(d);
   const u = length === 0 ? ([0, 1, 0] as Vec3) : normalize(d);
 
-  // Drop the world axis most aligned with the bone; hold the first survivor,
-  // solve the second.
+  // Seed from the lowest-indexed world axis that is NOT the one the bone runs
+  // most closely along, so the projection never degenerates.
   let drop: 0 | 1 | 2 = 0;
   for (const i of [1, 2] as const) if (Math.abs(u[i]) > Math.abs(u[drop])) drop = i;
-  const rest = ([0, 1, 2] as const).filter((i) => i !== drop) as [0 | 1 | 2, 0 | 1 | 2];
-  const [heldAxis, solvedAxis] = rest;
-
-  const seed = WORLD[heldAxis]!;
+  const seed = WORLD[drop === 0 ? 1 : 0]!;
   const e1 = normalize(sub(seed, vscale(u, dot(seed, u))));
   const e2 = cross(u, e1);
-  return { origin: head, e1, e2, u, length, heldAxis, solvedAxis };
+  return { origin: head, e1, e2, u, length };
 }
 
 export interface Local { x1: number; x2: number; along: number }
