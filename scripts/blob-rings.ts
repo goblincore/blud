@@ -99,6 +99,19 @@ if (asJson) {
 const mm = (v: number) => `${(v * 1000).toFixed(1)}mm`;
 const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
 
+/** Greedy word wrap, `indent` spaces on the first line and two more after it. */
+function wrap(text: string, indent: number, width: number): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    if (line === '') { line = word; continue; }
+    if (line.length + 1 + word.length > width) { out.push(line); line = word; continue; }
+    line += ` ${word}`;
+  }
+  if (line !== '') out.push(line);
+  return out.map((l, i) => ' '.repeat(i === 0 ? indent : indent + 2) + l);
+}
+
 /**
  * Our bone length against the reference's, as a percentage, per bone.
  *
@@ -195,19 +208,26 @@ for (const s of suggestions) {
     const semi = `semi-axis ${mm(rFrom * sc.from)} -> ${mm(rTo * sc.to)}`;
     console.log(`       ${sc.axis.padEnd(6)} ${sc.from.toFixed(3)} -> ${sc.to.toFixed(3)}   ${semi.padEnd(30)} ${sc.why}`);
   }
-  if (s.offset) console.log(`       offset delta (${s.offset.delta.map((v) => v.toFixed(4)).join(', ')})   ${s.offset.why}`);
+  if (s.offset) {
+    // `why` can carry a whole paragraph now (a mirrored line's x is dropped
+    // with its reason attached), so it wraps rather than running off the edge.
+    const head = `       offset delta (${s.offset.delta.map((v) => v.toFixed(4)).join(', ')})`;
+    const [first, ...rest] = wrap(`${head.trim()}   ${s.offset.why}`, 7, 78);
+    console.log(first!);
+    for (const line of rest) console.log(line);
+  }
   const lp = s.bone === undefined ? undefined : lengthPct.get(s.bone);
   if (lp !== undefined && Math.abs(lp) > LENGTH_DOMINATES_PCT) {
     console.log(`     BONE LENGTH IS OFF BY ${lp.toFixed(1)}% — fix that first. A \`len=\` mismatch this large`);
     console.log(`       puts reference surface where this primitive simply is not, and the numbers`);
     console.log(`       above are the fit spending that on radius and offset instead.`);
   }
-  if (s.taperRefused) {
-    console.log(`     TAPER REFUSED: ${s.taperRefused}`);
-    console.log(`       A line is only a measurement inside its own support. If this primitive`);
-    console.log(`       really does taper, the fit cannot see it from here — get samples onto`);
-    console.log(`       both ends first (bone length, blend, or a neighbouring prim's bulge).`);
-  }
+  // THE WHOLE REASON COMES FROM `taperRefused` NOW, not from a paragraph
+  // printed here. There are two different refusals — the samples did not reach
+  // both ends, and the residual is not a line between them — and they call for
+  // different actions, so the advice has to travel with the finding rather than
+  // being a fixed footer that fits only the first of them.
+  if (s.taperRefused) for (const line of wrap(`TAPER REFUSED: ${s.taperRefused}`, 5, 78)) console.log(line);
   if (s.degenerate) {
     const [p, q] = s.degenerate.axes;
     console.log(`     NOT SEPARABLE on this bone: ${p} and ${q} sit ${s.degenerate.angleDeg.toFixed(1)} deg apart,`);

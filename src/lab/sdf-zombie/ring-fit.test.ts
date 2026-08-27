@@ -708,6 +708,88 @@ function rampBin(tMin: number, tMax: number, n = 200): Map<number, PrimBin> {
 }
 
 /**
+ * A residual that RISES then FALLS across the primitive, covered end to end.
+ *
+ * This is the schoolgirl's thigh bar (schoolgirl.blob:297), measured. Binning
+ * its 2197 retained reference points by t gave, in millimetres:
+ *
+ *   t    0.26   0.34   0.45   0.55   0.65   0.75   0.85   0.95
+ *   d   -7.87  +6.45 +14.75 +11.97  +9.99  +7.59  +4.11  +0.40
+ *
+ * A least-squares LINE through that has a POSITIVE slope — set entirely by the
+ * negative clump at the proximal end — and reports +7.9mm of residual at t=1
+ * where the data in that end's own bin says +0.4mm. Divided by minScale that
+ * became `r2 0.0535 -> 0.0639`, a knee band 10mm per side WIDER than the
+ * reference mesh being fitted to. The shape below keeps that structure (a
+ * steep rise to a mid-span peak, a slow fall to zero) without pretending to be
+ * the measurement itself.
+ */
+function humpBin(n = 400): Map<number, PrimBin> {
+  const body = oneCapsule();
+  const basis = ringBasis(body.prims[0]!.a, body.prims[0]!.b);
+  const samples: PrimSample[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = 0.2 + (0.8 * i) / (n - 1);
+    const theta = 2 * Math.PI * ((i * 0.6180339887498949) % 1);
+    const d = t <= 0.4 ? -0.008 + 0.024 * ((t - 0.2) / 0.2) : 0.016 * ((1 - t) / 0.6);
+    samples.push({ t, theta, d });
+  }
+  return new Map([[0, { prim: 0, basis, samples, blendDominated: 0, crossBone: 0, outOfRange: 0 }]]);
+}
+
+/** The ramp with a gentle bow on it — still a line to within a fraction of its own swing. */
+function bowedRampBin(amp: number, n = 400): Map<number, PrimBin> {
+  const bins = rampBin(0, 1, n);
+  for (const s of bins.get(0)!.samples) s.d += amp * Math.sin(Math.PI * s.t);
+  return bins;
+}
+
+/**
+ * A LINE IS ONLY A MEASUREMENT IF THE DATA IS A LINE.
+ *
+ * TAPER_T_MIN/TAPER_T_MAX bound EXTRAPOLATION — they check the samples reach
+ * both ends. They say nothing about whether a line describes what is between
+ * those ends, and on the schoolgirl's thigh it does not: the residual humps,
+ * the fitted slope's sign comes from a biased clump at one end, and the
+ * endpoint the report prints contradicts the data sitting at that endpoint.
+ */
+describe('fitPrims — taper lack of fit', () => {
+  it('refuses a taper whose residual is a HUMP rather than a line, and says why', () => {
+    const s = fitPrims(humpBin(), oneCapsule())[0]!;
+    expect(s.r2).toBeUndefined();
+    expect(s.taperRefused).toBeDefined();
+    // Not the coverage message — this one is covered end to end.
+    expect(s.taperRefused).not.toMatch(/extrapolate/);
+    expect(s.taperRefused).toMatch(/not a (straight )?line|departs/i);
+    // The uniform fit still runs and must not be dressed up as a taper.
+    expect(s.r).toBeDefined();
+    expect(s.r!.why).toMatch(/least squares/);
+  });
+
+  it('names the departure and the taper it was measured against', () => {
+    const s = fitPrims(humpBin(), oneCapsule())[0]!;
+    // Both numbers in millimetres, so a reader can see the misfit dwarf the
+    // finding rather than being told to trust a verdict.
+    expect(s.taperRefused).toMatch(/[\d.]+mm/);
+  });
+
+  it('POSITIVE CONTROL: a gently bowed ramp is still a taper', () => {
+    // 2mm of bow against a 40mm swing — real surfaces are never exactly
+    // straight, and the gate must not become a blanket ban on tapers.
+    const s = fitPrims(bowedRampBin(0.002), oneCapsule())[0]!;
+    expect(s.taperRefused).toBeUndefined();
+    expect(s.r2).toBeDefined();
+  });
+
+  it('POSITIVE CONTROL: the exactly-linear ramp is untouched', () => {
+    const s = fitPrims(rampBin(0, 1), oneCapsule())[0]!;
+    expect(s.taperRefused).toBeUndefined();
+    expect(s.r!.to).toBeCloseTo(0.08, 3);
+    expect(s.r2!.to).toBeCloseTo(0.12, 3);
+  });
+});
+
+/**
  * A LINEAR FIT IS ONLY VALID INSIDE ITS OWN SUPPORT.
  *
  * `fitPrims` reports the taper by evaluating the fitted line at t=0 and t=1.

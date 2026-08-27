@@ -335,6 +335,48 @@ export const MIN_SAMPLES = 40;
  */
 export const TAPER_T_MIN = 0.25;
 export const TAPER_T_MAX = 0.75;
+/**
+ * How far the taper line may depart from its own data, as a multiple of the
+ * taper it claims, before it is refused.
+ *
+ * COVERAGE IS NOT SHAPE, AND TAPER_T_MIN/MAX ONLY CHECK COVERAGE. They ask
+ * whether the samples reach both ends; they say nothing about whether a LINE
+ * describes what lies between them, and a line fitted to something that is not
+ * one puts its worst error exactly where the report reads it — at the
+ * endpoints.
+ *
+ * Measured on schoolgirl.blob:297, the thigh bar, against its reference mesh.
+ * Binned by t the residual HUMPS — -7.9mm at t=0.26, peaking at +14.8mm by
+ * t=0.45, then falling monotonically to +0.4mm at t=0.95 — and the least-
+ * squares line through it comes out with a POSITIVE slope, its sign set
+ * entirely by that leading negative clump. The line then reports +7.9mm at
+ * t=1 where the data in that end's own bin says +0.4mm, which became
+ * `r2 0.0535 -> 0.0639`: a knee band 10mm per side WIDER than the reference
+ * mesh it was fitted to, and a break of the character's own hand-measured pin.
+ *
+ * 1.0 is the threshold and it states itself: if the line misses its own data
+ * by more than the whole change it is claiming, the change is not what the
+ * data says. Measured across schoolgirl and mouse, every healthy taper sits at
+ * 0.05-0.62 of its swing and the pathological ones at 1.1-2.6, so the line
+ * falls in a real gap rather than between neighbours. It is still a judgement:
+ * a taper refused here is not proven absent, only unsupported by a straight
+ * line, and the uniform `r` fallback takes over.
+ */
+export const TAPER_LOF_RATIO = 1;
+/**
+ * The taper line is tested against groups of EQUAL SAMPLE COUNT, not equal
+ * width in `t`. Real coverage is lumpy — the thigh above has nothing at all
+ * below t=0.2 — and fixed-width bins would compare a group mean backed by 300
+ * points against one backed by 4, so the sparse bin's noise would look like
+ * curvature. Equal counts make every group mean equally well determined.
+ *
+ * At least 3 groups are needed to see a bend at all, and each wants enough
+ * samples that its mean is a measurement rather than a sample: with
+ * MIN_SAMPLES at 40, the smallest fitted primitive gets 3 groups of ~13, and
+ * anything past 160 samples gets the full 8.
+ */
+const LOF_GROUPS_MAX = 8;
+const LOF_GROUP_MIN_SAMPLES = 20;
 /** A scale column carrying less than this share of the largest column is unreadable. */
 const MIN_COLUMN_SHARE = 0.05;
 /**
@@ -455,6 +497,38 @@ function solve(M: number[][], y: number[]): number[] | undefined {
     }
   }
   return a.map((row, i) => row[n]! / row[i]!);
+}
+
+/**
+ * Worst departure of the fitted taper line from its own binned data, and where.
+ *
+ * Binning first is the whole point: the raw residual scatter is dominated by
+ * the RING (theta), not by t — on the schoolgirl's thigh the back of the leg
+ * sits +28mm and the front -11mm — so a lack-of-fit test on raw samples would
+ * drown. Averaging within a t-group cancels the theta term and leaves the
+ * profile along the axis, which is the thing the line claims to describe.
+ *
+ * Returns undefined when there are too few samples to resolve a shape; the
+ * caller then lets the taper through, because "cannot tell" is not "wrong".
+ */
+function taperLackOfFit(
+  samples: PrimSample[], a0: number, m: number, tbar: number,
+): { dep: number; at: number } | undefined {
+  const groups = Math.min(LOF_GROUPS_MAX, Math.floor(samples.length / LOF_GROUP_MIN_SAMPLES));
+  if (groups < 3) return undefined;
+  const sorted = [...samples].sort((p, q) => p.t - q.t);
+  let dep = 0, at = 0;
+  for (let k = 0; k < groups; k++) {
+    const lo = Math.floor((k * sorted.length) / groups);
+    const hi = Math.floor(((k + 1) * sorted.length) / groups);
+    if (hi <= lo) continue;
+    let sd = 0, st = 0;
+    for (let i = lo; i < hi; i++) { sd += sorted[i]!.d; st += sorted[i]!.t; }
+    const mt = st / (hi - lo);
+    const e = Math.abs(sd / (hi - lo) - (a0 + m * (mt - tbar)));
+    if (e > dep) { dep = e; at = mt; }
+  }
+  return { dep, at };
 }
 
 function median(xs: number[]): number {
@@ -676,11 +750,26 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     // extrapolation and is independent of `MIN_SAMPLES`, which counts.
     const covered = tMin <= TAPER_T_MIN && tMax >= TAPER_T_MAX;
     const slope = Math.abs(m) > floor && bin.basis.length > 1e-9;
-    const tapered = slope && covered;
+    // Only worth asking once there IS a line to test, and only meaningful
+    // against the line's own claimed swing — see TAPER_LOF_RATIO.
+    const lof = slope ? taperLackOfFit(bin.samples, a0, m, tbar) : undefined;
+    const straight = lof === undefined || lof.dep <= TAPER_LOF_RATIO * Math.abs(m);
+    const tapered = slope && covered && straight;
     if (slope && !covered) {
       sug.taperRefused = `residual varies along the axis (${mm(m / minScale)} per length), but the `
         + `samples only cover t ${tMin.toFixed(3)}-${tMax.toFixed(3)}; reporting the line at t=0 and `
-        + `t=1 would extrapolate outside the data. Uniform fit below instead.`;
+        + `t=1 would extrapolate outside the data. Uniform fit below instead. A line is only a `
+        + `measurement inside its own support: if this primitive really does taper, the fit cannot `
+        + `see it from here — get samples onto both ends first (bone length, blend, or a `
+        + `neighbouring prim's bulge).`;
+    } else if (slope && !straight) {
+      sug.taperRefused = `residual varies along the axis (${mm(m / minScale)} per length) and the `
+        + `samples cover it end to end, but it is NOT A LINE: binned by t, the fitted line departs `
+        + `from its own data by ${mm(lof!.dep / minScale)} at t=${lof!.at.toFixed(2)} — more than `
+        + `the ${mm(Math.abs(m) / minScale)} taper it claims. Its endpoints would report a shape `
+        + `the reference does not have. Uniform fit below instead. Look for what bends the profile `
+        + `before believing a taper here: a biased clump of retained points at one end, a `
+        + `neighbouring primitive's blend, or fabric over flesh.`;
     }
     if (tapered) {
       const r2Now = prim.radiusB ?? prim.radius;
