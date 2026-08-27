@@ -4,6 +4,16 @@ import type { BodyDef, BoneDef, LimbBase, LimbId, PrimDef } from './types';
 /** A prim after mirror expansion: bone name is concrete, limb is a concrete cluster. */
 export interface ExpandedPrim extends Omit<PrimDef, 'limb' | 'mirror' | 'mirrorOffset'> {
   limb: LimbId;
+  /**
+   * Set on BOTH copies a mirrored line produced, under either mirror mode.
+   *
+   * The `mirror`/`mirrorOffset` inputs are consumed here, so this is the only
+   * place that still knows a pair came from one authored number — and a
+   * downstream consumer that writes a measurement BACK to that number needs to
+   * know, because the x components below are negated on the second copy. See
+   * Primitive.mirrored.
+   */
+  mirrored?: boolean;
 }
 
 export interface ExpandedBody {
@@ -99,15 +109,15 @@ export function expandMirror(def: BodyDef): ExpandedBody {
       // exactly as `offset` and `tip` do above. Applying the flip to both
       // copies negates the authored side too, so a horn pair curves the same
       // way AND neither one curves the way the .blob asked for.
-      prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side });
-      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), ...(flipC ? { shell: flipC } : {}), limb: side });
+      prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side, mirrored: true });
+      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), ...(flipC ? { shell: flipC } : {}), limb: side, mirrored: true });
       continue;
     }
 
     if (!mirror) { prims.push({ ...rest, limb: limbFor(limb, null) }); continue; }
     if (!mirroredBoneNames.has(p.bone))
       throw new Error(`mirrored prim references non-mirrored bone "${p.bone}"`);
-    prims.push({ ...rest, bone: `${p.bone}.l`, limb: limbFor(limb, 'l') });
+    prims.push({ ...rest, bone: `${p.bone}.l`, limb: limbFor(limb, 'l'), mirrored: true });
     // The `.r` copy reflects its offset, tip and bend in x, exactly as the
     // second copy of a `both` pair does above. It did not, for as long as no
     // mirrored prim carried an x component: the mouse's finger bones exist
@@ -119,7 +129,7 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     const o = rest.offset, t = rest.tip, bn = rest.bend;
     const cn = rest.shell?.clipNormal;
     prims.push({
-      ...rest, bone: `${p.bone}.r`, limb: limbFor(limb, 'r'),
+      ...rest, bone: `${p.bone}.r`, limb: limbFor(limb, 'r'), mirrored: true,
       ...(o ? { offset: [-o[0], o[1], o[2]] as const } : {}),
       ...(t ? { tip: [-t[0], t[1], t[2]] as const } : {}),
       ...(bn ? { bend: [-bn[0], bn[1], bn[2]] as const } : {}),

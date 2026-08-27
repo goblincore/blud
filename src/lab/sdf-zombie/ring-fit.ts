@@ -710,9 +710,39 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     }
 
     if (Math.hypot(a1, b1) > floor) {
+      const delta = add(vscale(bin.basis.e1, a1 / minScale), vscale(bin.basis.e2, b1 / minScale));
+      // THE X COMPONENT OF A MIRRORED LINE'S OFFSET IS NOT A TRANSLATION, and
+      // it is dropped HERE rather than in `mergeMirrored` on purpose. The
+      // constraint belongs to the SOURCE LINE — one authored number applied
+      // through a reflection — not to the accident of both placed copies
+      // having been measurable. `mergeMirrored` only ever sees a pair when
+      // both sides cleared MIN_SAMPLES and neither was skipped; a mirrored
+      // primitive whose other side fell short arrives there alone, in a group
+      // of one, and would pass its x straight through. A TS-authored body has
+      // no `src` at all, so the pair could not even be recognised.
+      //
+      // WHY IT IS WRONG. `expandMirror` negates offset.x on the second copy,
+      // so writing dx back to the line moves the two sides in OPPOSITE world
+      // directions. The cos-theta term was measured on ONE side (see
+      // `mergeMirrored`: averaging the two cancels it, so one side is kept),
+      // and "this leg sits 15mm off-centre in +x" then becomes "both legs move
+      // 15mm toward each other" — a WIDTH change, not a translation. Measured
+      // on schoolgirl.blob:297, that component alone dropped the legs'
+      // silhouette IoU from 0.786 to 0.752 while y and z were harmless.
+      //
+      // y and z pass through the mirror unchanged, so they stay measured. The
+      // suppression is said out loud in `why` rather than applied silently: a
+      // reader handed a different vector than the tool measured should be told
+      // which constraint changed it.
+      const suppressX = prim.mirrored === true;
       sug.offset = {
-        delta: add(vscale(bin.basis.e1, a1 / minScale), vscale(bin.basis.e2, b1 / minScale)),
-        why: `cos1θ ${mm(Math.hypot(a1, b1) / minScale)} off-centre`,
+        delta: suppressX ? [0, delta[1], delta[2]] : delta,
+        why: `cos1θ ${mm(Math.hypot(a1, b1) / minScale)} off-centre`
+          + (suppressX
+            ? `; x DROPPED (measured ${mm(Math.abs(delta[0]))}) — this line is mirrored, and the `
+              + `mirror negates offset.x, so writing it back moves the two sides in opposite `
+              + `world directions: a width change, not a translation. y/z mirror cleanly.`
+            : ''),
       };
     }
 

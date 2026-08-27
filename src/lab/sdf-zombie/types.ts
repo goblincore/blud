@@ -179,6 +179,19 @@ export interface Primitive {
   bone?: string;
   /** Carried from PrimDef.src through mirror/placement — see there. */
   src?: number;
+  /**
+   * This primitive is one of the TWO copies `expandMirror` made from a single
+   * authored line — either a `mirror` pair on a bilateral bone or a
+   * `mirrorOffset` pair on one bone. Set by `expandMirror`, carried by
+   * `placePrims`; absent means the line placed exactly one primitive.
+   *
+   * IT IS A CONSTRAINT ON WHAT MAY BE WRITTEN BACK, not a decoration. The two
+   * copies share one source number and the mirror NEGATES its x, so anything
+   * measured on one copy and fed back to the line is applied ANTI-symmetrically
+   * in x. See `fitPrims`, which drops the x component of its offset suggestion
+   * for exactly this reason.
+   */
+  mirrored?: boolean;
   radius: number;
   /** Radius at `b`. Absent means untapered — see PrimDef.radiusB. */
   radiusB?: number;

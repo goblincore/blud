@@ -413,6 +413,42 @@ describe('fitPrims — ground truth round trip', () => {
     expect(Math.abs(p0.offset!.delta[2])).toBeLessThan(0.002);
   });
 
+  /**
+   * A MIRRORED LINE'S offset.x IS NOT A TRANSLATION.
+   *
+   * One `.blob` line with `mirror` expands to two placed primitives, and the
+   * mirror NEGATES offset.x. The cos-theta term is measured on one side only
+   * (`mergeMirrored` keeps one side rather than averaging, because averaging
+   * cancels it), so feeding its x back through the source line moves the two
+   * sides in OPPOSITE world directions: "this leg sits 15mm off-centre in +x"
+   * is applied as "both legs move 15mm toward each other" — a width change.
+   * Measured on schoolgirl.blob:297, that one component alone took the legs'
+   * silhouette IoU from 0.786 down to 0.752 while y and z were harmless.
+   */
+  it('CONTROL: an unmirrored primitive keeps all three offset components', () => {
+    const p0 = roundTrip((b) => {
+      b.prims[0]!.a = [0.006, 0.0, 0.006];
+      b.prims[0]!.b = [0.006, 0.5, 0.006];
+    }).find((x) => x.prim === 0)!;
+    expect(p0.offset).toBeDefined();
+    expect(p0.offset!.delta[0]).toBeLessThan(-0.004);
+    expect(p0.offset!.delta[2]).toBeLessThan(-0.004);
+  });
+
+  it('suppresses offset.x on a mirrored primitive and keeps y/z, saying why', () => {
+    const p0 = roundTrip((b) => {
+      b.prims[0]!.a = [0.006, 0.0, 0.006];
+      b.prims[0]!.b = [0.006, 0.5, 0.006];
+      b.prims[0]!.mirrored = true;
+    }).find((x) => x.prim === 0)!;
+    expect(p0.offset).toBeDefined();
+    expect(p0.offset!.delta[0]).toBe(0);
+    // y and z reflect cleanly through the mirror, so they are still measured.
+    expect(p0.offset!.delta[2]).toBeLessThan(-0.004);
+    expect(p0.offset!.why).toMatch(/mirror/i);
+    expect(p0.offset!.why).toMatch(/\bx\b/);
+  });
+
   it('IS PROVEN TO FAIL under a perturbation it should catch', () => {
     // If this ever passes, the fitter has stopped measuring anything.
     const p0 = roundTrip((b) => { b.prims[0]!.radius = 0.060; }).find((x) => x.prim === 0)!;
