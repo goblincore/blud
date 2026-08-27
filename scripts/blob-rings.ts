@@ -32,7 +32,7 @@ import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
 import { buildBody } from '../src/lab/sdf-zombie/build-body';
 import { readRefSkin } from '../src/lab/sdf-zombie/ref-skin';
 import { groupByBone, refBones, ringBasis, globalScale, refToBody } from '../src/lab/sdf-zombie/ref-align';
-import { binResiduals, fitPrims, mergeMirrored } from '../src/lab/sdf-zombie/ring-fit';
+import { binResiduals, fitPrims, mergeMirrored, TAPER_T_MIN, TAPER_T_MAX } from '../src/lab/sdf-zombie/ring-fit';
 import type { Vec3 } from '../src/lab/sdf-zombie/types';
 
 function fail(msg: string): never { console.error(msg); process.exit(2); }
@@ -146,12 +146,23 @@ console.log();
 let rank = 0;
 for (const s of suggestions) {
   if (s.skipped !== undefined) continue;
-  if (!s.r && !s.r2 && !s.scales && !s.offset) continue;
+  // `taperRefused` counts as content: a suppressed finding that looks like an
+  // absent one is its own error, so a primitive whose only result is "there is
+  // a slope here I refuse to extrapolate" still gets a block.
+  if (!s.r && !s.r2 && !s.scales && !s.offset && !s.taperRefused) continue;
   rank++;
   console.log(`  ${rank}. ${name}.blob:${s.src ?? '?'}   ${s.bone ?? '?'}`);
   const flags = [`n=${s.n}`, `blend-dominated ${pct(s.blendDominated)}`];
   if (s.crossBone) flags.push(`cross-bone dropped ${s.crossBone}`);
   if (s.mirrorDisagreement) flags.push(`L/R disagree ${mm(s.mirrorDisagreement)}`);
+  // PRINTED ONLY WHEN COVERAGE IS PARTIAL. A primitive measured end to end is
+  // the ordinary case and needs no annotation; one measured over 13% of its
+  // own length is a materially weaker claim and the reader cannot tell from
+  // `n` alone, because count and coverage are different axes — mouse's
+  // `thigh.r` carried 46 samples spanning t 0.000-0.008.
+  if (s.tRange && (s.tRange.min > TAPER_T_MIN || s.tRange.max < TAPER_T_MAX)) {
+    flags.push(`t ${s.tRange.min.toFixed(2)}-${s.tRange.max.toFixed(2)} only`);
+  }
   console.log(`     mean ${mm(s.meanAbs)}    ${flags.join('   ')}`);
   console.log('     apply together:');
 
@@ -183,6 +194,12 @@ for (const s of suggestions) {
     console.log(`     BONE LENGTH IS OFF BY ${lp.toFixed(1)}% — fix that first. A \`len=\` mismatch this large`);
     console.log(`       puts reference surface where this primitive simply is not, and the numbers`);
     console.log(`       above are the fit spending that on radius and offset instead.`);
+  }
+  if (s.taperRefused) {
+    console.log(`     TAPER REFUSED: ${s.taperRefused}`);
+    console.log(`       A line is only a measurement inside its own support. If this primitive`);
+    console.log(`       really does taper, the fit cannot see it from here — get samples onto`);
+    console.log(`       both ends first (bone length, blend, or a neighbouring prim's bulge).`);
   }
   if (s.degenerate) {
     const [p, q] = s.degenerate.axes;

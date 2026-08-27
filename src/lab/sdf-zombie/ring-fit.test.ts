@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync, existsSync } from 'node:fs';
 import { binResiduals, fitPrims, mergeMirrored, projectToSurface, sampleBodySurface,
-  type Suggestion } from './ring-fit';
+  type Suggestion, type PrimBin, type PrimSample } from './ring-fit';
 import { ringBasis, ringBasis as rb, groupByBone, refBones, globalScale, refToBody } from './ref-align';
 import { sdBody } from './validate';
 import { parseBlob } from './blob-parse';
@@ -579,5 +579,102 @@ describe.skipIf(!existsSync(MOUSE_GLB))('integration: mouse against its referenc
       expect(s.bone).not.toMatch(/^skull/);   // head is out of scope
       expect(s.bone).not.toMatch(/^(hand|f_)/); // hands are out of scope
     }
+  });
+});
+
+/**
+ * A bin whose residual is a pure linear ramp in `t`, sampled only over
+ * [tMin, tMax] of the primitive.
+ *
+ * Built by hand rather than through `binResiduals` because the whole point is
+ * to control the SUPPORT of the fit independently of the geometry. Getting a
+ * real sampler to cover only 13% of a capsule needs a contrived reference
+ * mesh; stating the coverage directly is the same claim without the props.
+ *
+ * The ramp is chosen so extrapolation is unmistakable: `d` runs -20mm to
+ * +20mm across the whole primitive, so a fit over a sliver near t=0 that is
+ * evaluated at t=0 and t=1 reports a 40mm spread it never saw.
+ */
+function rampBin(tMin: number, tMax: number, n = 200): Map<number, PrimBin> {
+  const body = oneCapsule();
+  const basis = ringBasis(body.prims[0]!.a, body.prims[0]!.b);
+  const samples: PrimSample[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = tMin + ((tMax - tMin) * i) / (n - 1);
+    // Golden-ratio theta so the ring is evenly covered and theta does not
+    // correlate with t (which would leak the ramp into the cos-theta offset).
+    const theta = 2 * Math.PI * ((i * 0.6180339887498949) % 1);
+    samples.push({ t, theta, d: -0.02 + 0.04 * t });
+  }
+  return new Map([[0, { prim: 0, basis, samples, blendDominated: 0, crossBone: 0 }]]);
+}
+
+/**
+ * A LINEAR FIT IS ONLY VALID INSIDE ITS OWN SUPPORT.
+ *
+ * `fitPrims` reports the taper by evaluating the fitted line at t=0 and t=1.
+ * Nothing checked that the samples reached t=0 or t=1. Measured on the real
+ * mouse: `thigh.r` (src 459) was fitted over t 0.000-0.008 — 46 samples, above
+ * MIN_SAMPLES — and then extrapolated 125x beyond its own data, which is how
+ * the report came to suggest `r 0.0220 -> 0.0576` on a 1m character.
+ *
+ * SAMPLE COUNT IS NOT COVERAGE. `thigh.r` had 46 samples against a threshold
+ * of 40, so MIN_SAMPLES was never going to catch this; a thousand samples
+ * crammed into one sliver are still a sliver. Coverage needs its own gate.
+ */
+describe('fitPrims — taper support', () => {
+  it('refuses a taper fitted over a sliver of the primitive, and says why', () => {
+    const body = oneCapsule();
+    const s = fitPrims(rampBin(0, 0.134), body)[0]!;
+    expect(s.r2).toBeUndefined();
+    expect(s.taperRefused).toBeDefined();
+    expect(s.taperRefused).toMatch(/0\.00.*0\.13/);
+    // The uniform fit still runs — it is well-conditioned whatever t covers —
+    // and must not be dressed up as a taper.
+    expect(s.r?.why ?? '').not.toMatch(/taper/i);
+  });
+
+  it('reports the sampled t-range so a reader can see the support', () => {
+    const s = fitPrims(rampBin(0, 0.134), oneCapsule())[0]!;
+    expect(s.tRange).toBeDefined();
+    expect(s.tRange!.min).toBeCloseTo(0, 3);
+    expect(s.tRange!.max).toBeCloseTo(0.134, 3);
+  });
+
+  it('falls back to the uniform fit, which is well-conditioned at any coverage', () => {
+    // NOT merely "r is in a plausible window" — the taper's own t=0 endpoint
+    // lands in that window too, so such a test would pass under the bug. The
+    // claim is that the number came from the uniform least squares over all
+    // the samples, and says so.
+    const s = fitPrims(rampBin(0, 0.134), oneCapsule())[0]!;
+    expect(s.r).toBeDefined();
+    expect(s.r!.why).toMatch(/least squares/);
+    // Over t 0..0.134 the mean residual is about -17mm, so `r` drops by
+    // roughly that from 0.1.
+    expect(s.r!.to).toBeGreaterThan(0.078);
+    expect(s.r!.to).toBeLessThan(0.090);
+  });
+
+  it('POSITIVE CONTROL: a primitive covered end to end still tapers', () => {
+    const s = fitPrims(rampBin(0, 1), oneCapsule())[0]!;
+    expect(s.taperRefused).toBeUndefined();
+    expect(s.r2).toBeDefined();
+    expect(s.r!.to).toBeCloseTo(0.08, 3);
+    expect(s.r2!.to).toBeCloseTo(0.12, 3);
+  });
+
+  it('POSITIVE CONTROL: coverage just inside the gate still tapers', () => {
+    // 0.25/0.75 are the bounds themselves — the gate must admit them, or the
+    // constants do not mean what they say.
+    const s = fitPrims(rampBin(0.25, 0.75), oneCapsule())[0]!;
+    expect(s.taperRefused).toBeUndefined();
+    expect(s.r2).toBeDefined();
+  });
+
+  it('refuses when only ONE end is reached', () => {
+    // Half a primitive is still an extrapolation over the other half.
+    const s = fitPrims(rampBin(0, 0.53), oneCapsule())[0]!;
+    expect(s.r2).toBeUndefined();
+    expect(s.taperRefused).toBeDefined();
   });
 });

@@ -278,6 +278,27 @@ export function binResiduals(
 
 /** Below this many samples a primitive's numbers are noise; it is reported, not fitted. */
 export const MIN_SAMPLES = 40;
+/**
+ * How far into a primitive the samples must reach from each end before its
+ * TAPER may be fitted. `t` runs 0 at `a` to 1 at `b`.
+ *
+ * THESE BOUND EXTRAPOLATION, NOT SAMPLE COUNT, AND THE TWO ARE DIFFERENT AXES.
+ * The taper is reported by evaluating a least-squares line at t=0 and t=1, and
+ * a line is only a measurement inside its own support. `MIN_SAMPLES` cannot
+ * stand in for this: measured on the real mouse, `thigh.r` (src 459) carried
+ * 46 samples — comfortably above the threshold of 40 — spanning t 0.000 to
+ * 0.008, and the fit was then evaluated 125x beyond the data it saw. That is
+ * how the report came to suggest `r 0.0220 -> 0.0576` on a 1m character. A
+ * thousand samples crammed into one sliver are still one sliver.
+ *
+ * 0.25/0.75 is a judgement, not a derivation: it admits a fit that misses a
+ * quarter of each end (the caps, where the perpendicular ring shrinks and
+ * seeds thin out) while refusing one that has to invent half the primitive.
+ * Below the gate the uniform `r` branch takes over — it averages over whatever
+ * was seen and is well-conditioned at any coverage.
+ */
+export const TAPER_T_MIN = 0.25;
+export const TAPER_T_MAX = 0.75;
 /** A scale column carrying less than this share of the largest column is unreadable. */
 const MIN_COLUMN_SHARE = 0.05;
 /**
@@ -335,6 +356,20 @@ export interface Suggestion {
    */
   degenerate?: { axes: [(typeof SCALE_AXIS_NAMES)[number], (typeof SCALE_AXIS_NAMES)[number]]; angleDeg: number };
   offset?: { delta: Vec3; why: string };
+  /**
+   * Span of `t` the samples actually covered, 0 at the primitive's `a` and 1
+   * at its `b`. Reported on every fitted primitive, because a block measured
+   * over 13% of its own length is a different kind of claim from one measured
+   * end to end, and the reader cannot tell them apart from `n` alone.
+   */
+  tRange?: { min: number; max: number };
+  /**
+   * Set when a taper WAS present in the residuals but was refused because the
+   * samples did not reach both ends of the primitive. The uniform `r` below is
+   * the fallback. Said out loud rather than silently swapped, because a
+   * suppressed finding that looks like an absent one is its own error.
+   */
+  taperRefused?: string;
   /** Set when the primitive was deliberately not fitted. Nothing else is populated. */
   skipped?: string;
   mirrorDisagreement?: number;
@@ -475,8 +510,11 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
 
     let a1 = 0, b1 = 0, tbar = 0;
+    let tMin = Infinity, tMax = -Infinity;
     for (const s of bin.samples) {
       a1 += s.d * Math.cos(s.theta); b1 += s.d * Math.sin(s.theta); tbar += s.t;
+      if (s.t < tMin) tMin = s.t;
+      if (s.t > tMax) tMax = s.t;
     }
     a1 = 2 * a1 / n; b1 = 2 * b1 / n; tbar /= n;
 
@@ -484,7 +522,11 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     for (const s of bin.samples) { const dt = s.t - tbar; sxy += dt * s.d; sxx += dt * dt; }
     const m = sxx < 1e-12 ? 0 : sxy / sxx;
 
-    const sug: Suggestion = { ...base, meanAbs: d.reduce((s, x) => s + Math.abs(x), 0) / n };
+    const sug: Suggestion = {
+      ...base,
+      meanAbs: d.reduce((s, x) => s + Math.abs(x), 0) / n,
+      tRange: { min: tMin, max: tMax },
+    };
 
     // ---- Least squares over (dr, dwide, dtall, ddeep). See the header: the
     // rows differentiate the FIELD, and `w` is each sample's own world
@@ -579,7 +621,17 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     }
     const dr = prim.radius * gamma;
 
-    const tapered = Math.abs(m) > floor && bin.basis.length > 1e-9;
+    // The taper is REPORTED at t=0 and t=1, so it may only be fitted when the
+    // samples reach both ends. See TAPER_T_MIN/TAPER_T_MAX: this is a bound on
+    // extrapolation and is independent of `MIN_SAMPLES`, which counts.
+    const covered = tMin <= TAPER_T_MIN && tMax >= TAPER_T_MAX;
+    const slope = Math.abs(m) > floor && bin.basis.length > 1e-9;
+    const tapered = slope && covered;
+    if (slope && !covered) {
+      sug.taperRefused = `residual varies along the axis (${mm(m / minScale)} per length), but the `
+        + `samples only cover t ${tMin.toFixed(3)}-${tMax.toFixed(3)}; reporting the line at t=0 and `
+        + `t=1 would extrapolate outside the data. Uniform fit below instead.`;
+    }
     if (tapered) {
       const r2Now = prim.radiusB ?? prim.radius;
       sug.r = { from: prim.radius, to: prim.radius + (a0 + m * (0 - tbar)) / minScale,
@@ -663,6 +715,14 @@ export function mergeMirrored(suggestions: Suggestion[]): Suggestion[] {
       blendDominated: group.reduce((s, g) => s + g.blendDominated, 0) / group.length,
       crossBone: group.reduce((s, g) => s + g.crossBone, 0),
       mirrorDisagreement: Math.abs((a.r?.to ?? 0) - (b.r?.to ?? 0)),
+      // COVERAGE MERGES AS THE INTERSECTION, NOT THE UNION. The merged numbers
+      // are an average of the two sides, so they are only as well-supported as
+      // the WORSE-covered side; taking the union would let a well-sampled left
+      // leg vouch for a right leg measured over a sliver.
+      tRange: a.tRange && b.tRange
+        ? { min: Math.max(a.tRange.min, b.tRange.min), max: Math.min(a.tRange.max, b.tRange.max) }
+        : a.tRange ?? b.tRange,
+      taperRefused: a.taperRefused ?? b.taperRefused,
     };
     if (a.r || b.r) merged.r = { from: a.r?.from ?? b.r!.from, to: avg(a.r?.to, b.r?.to)!, why: a.r?.why ?? b.r!.why };
     if (a.r2 || b.r2) merged.r2 = { from: a.r2?.from ?? b.r2!.from, to: avg(a.r2?.to, b.r2?.to)!, why: a.r2?.why ?? b.r2!.why };
