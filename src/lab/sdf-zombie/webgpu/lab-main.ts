@@ -46,6 +46,7 @@ import clownAltBlobSrc from '../characters/clown-alt.blob?raw';
 import mouseBlobSrc from '../characters/mouse.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
+import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -63,6 +64,7 @@ const CHARACTERS: Record<string, string> = {
   mouse: mouseBlobSrc,
   cyclops: cyclopsBlobSrc,
   schoolgirl: schoolgirlBlobSrc,
+  bonewalker: bonewalkerBlobSrc,
 };
 
 /**
