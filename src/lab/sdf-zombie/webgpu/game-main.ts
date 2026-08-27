@@ -657,6 +657,8 @@ async function main() {
   // -----------------------------------------------------------------------
   let wanderFrozen = false;
   let frameCount = 0;
+  /** The __sdfGame.placeMarker debug sphere. */
+  let marker: THREE.Mesh | null = null;
   /** Headless driver autopilot: walk toward (x, z) until within 0.25 m. */
   let autopilot: { x: number; z: number } | null = null;
   /** Stuck recovery: a wanderer frozen/standing on the path blocks the line
@@ -932,6 +934,50 @@ async function main() {
     get slugMode() { return slugMode; },
     setSlugMode(on: boolean) { slugMode = on; updateHud(); },
     fireSlug: () => { const keep = slugMode; slugMode = true; try { return fire(1); } finally { slugMode = keep; } },
+    /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
+     *  computed by exactly the code fire() uses (muzzleWorld + converged
+     *  dir) against each actor's CURRENT posed field. No state mutated.
+     *  Diff against debugWounds() after firing to assert the crater landed
+     *  where the ray struck. */
+    predictSlugHit: () => {
+      const origin = muzzleWorld();
+      const dir = convergedDir(origin);
+      let bestD = Infinity;
+      let hitActorId = -1;
+      let hitPoint: Vec3 | null = null;
+      const end: Vec3 = [
+        origin[0] + dir[0] * 60, origin[1] + dir[1] * 60, origin[2] + dir[2] * 60,
+      ];
+      for (const a of actors) {
+        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        if (!c) continue;
+        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
+        const posedA = a.posed();
+        const hp = traceProjectile(origin, end, q => sdBody(q, posedA));
+        if (!hp) continue;
+        const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
+        if (d < bestD) {
+          bestD = d; hitActorId = a.id;
+          hitPoint = hp;
+        }
+      }
+      return { origin, dir, actorId: hitActorId, hit: hitPoint };
+    },
+    /** A visible sphere in WORLD space, drawn through the normal geometry
+     *  pass — so captures can mark predicted impacts vs actual craters.
+     *  One marker at a time; pass null coords to remove. */
+    placeMarker(x: number | null, y = 0, z = 0, colorHex = 0xff00ff) {
+      if (!marker) {
+        const geo = new THREE.SphereGeometry(0.03, 12, 8);
+        marker = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colorHex }));
+        marker.frustumCulled = false;
+        scene.add(marker);
+      }
+      (marker.material as THREE.MeshBasicMaterial).color.setHex(colorHex);
+      if (x === null) { marker.visible = false; return; }
+      marker.visible = true;
+      marker.position.set(x, y, z);
+    },
     projectiles: () => pellets.map(p => ({
       pos: [...p.pos] as Vec3,
       vel: [...p.vel] as Vec3,
