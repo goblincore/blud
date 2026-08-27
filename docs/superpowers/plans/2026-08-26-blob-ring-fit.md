@@ -1184,6 +1184,12 @@ This is the load-bearing task. Its test is a **round-trip against ground truth**
 - Modify: `src/lab/sdf-zombie/ref-align.ts` (remove `heldAxis`/`solvedAxis` from `RingBasis`)
 - Test: `src/lab/sdf-zombie/ring-fit.test.ts` (append), `src/lab/sdf-zombie/ref-align.test.ts` (drop the held/solved assertions)
 
+**What Task 5's probe found, which this task must handle.** Probed against `mouse.blob` (67 primitives, 7670 sampled surface points), the `crossBone` rule drops **36% of all points** — legitimate at the shoulder, pelvis and neck seams where a torso primitive's flesh genuinely covers a limb bone, but with three consequences here:
+
+- **Empty bins.** Any primitive whose bone is absent from `BONE_MAP` (`hand`, the fingers, `skull`) has *every* point dropped as `crossBone`, so its bin exists with zero samples.
+- **Missing bins.** 9 of 67 primitives are never the nearest primitive anywhere on the surface — fully buried under the blend — so they get no bin at all. Iterating `bins` would drop them from the report in silence; iterate `body.prims` instead and declare them unmeasurable.
+- **Thin bins.** Primitives 26 and 37 survive with 3 and 5 samples. A four-parameter least-squares over 3 points is rank-deficient nonsense, which is what `MIN_SAMPLES` is for.
+
 **Read this before writing code.** An earlier draft solved `scale` by attributing the residual's `cos 2θ` term to one world axis, chosen by which axis the bone ran along. **That rule was unsound and is being removed.** Measured on `mouse.blob`, `upperarm` points `(0.74, −0.67, −0.03)` and `forearm` points `(0.62, −0.79, 0.03)` — two bones in the same chain that pick *different* axes, with `upperarm`'s margin only 0.074, so a 3° authoring change would flip the answer. For both, the basis vector sits ~42° off a world axis, a near-even mix of `wide` and `tall`, so attributing the residual to either alone is about half right.
 
 The replacement needs no axis choice. For a unit direction `w` perpendicular to the bone, the primitive's surface sits at radius
@@ -1405,17 +1411,32 @@ function solve(M: number[][], y: number[]): number[] | undefined {
 export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
   const out: Suggestion[] = [];
 
-  for (const [index, bin] of bins) {
+  // Iterate the BODY, not the bins. A primitive that is never the nearest one
+  // anywhere on the surface gets no bin at all — measured on mouse.blob, 9 of
+  // 67 — and iterating bins would drop it from the report silently. An
+  // unmeasurable primitive must SAY it is unmeasurable.
+  for (let index = 0; index < body.prims.length; index++) {
     const prim = body.prims[index]!;
+    const bin = bins.get(index);
     const base = {
       prim: index, src: prim.src, bone: prim.bone,
-      n: bin.samples.length, blendDominated: bin.blendDominated, crossBone: bin.crossBone,
+      n: bin?.samples.length ?? 0,
+      blendDominated: bin?.blendDominated ?? 0,
+      crossBone: bin?.crossBone ?? 0,
     };
 
     const skipped = skipReason(prim);
     if (skipped !== undefined) { out.push({ ...base, meanAbs: 0, skipped }); continue; }
+    if (bin === undefined) {
+      out.push({ ...base, meanAbs: 0,
+        skipped: 'no samples — never the nearest primitive anywhere on the surface (fully buried under the blend)' });
+      continue;
+    }
     if (bin.samples.length < MIN_SAMPLES) {
-      out.push({ ...base, meanAbs: 0, skipped: `only ${bin.samples.length} samples (need ${MIN_SAMPLES})` });
+      const why = bin.crossBone > 0
+        ? `only ${bin.samples.length} samples (need ${MIN_SAMPLES}); ${bin.crossBone} more went to another bone`
+        : `only ${bin.samples.length} samples (need ${MIN_SAMPLES})`;
+      out.push({ ...base, meanAbs: 0, skipped: why });
       continue;
     }
 
