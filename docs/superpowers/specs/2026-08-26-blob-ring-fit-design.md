@@ -264,27 +264,55 @@ suggestion from `tall=` to `wide=`. Worse, for those diagonal bones `e1` sits
 ~42° off a world axis — a near-even mix of `wide` and `tall` — so attributing
 the residual to either alone is about half right and the rest leaks.
 
-The correct formulation needs no axis choice. For a direction `w` perpendicular
-to the bone, the primitive's surface sits at radius
+The correct formulation needs no axis choice, but two corrections to the naive
+version are load-bearing and were found in implementation.
+
+**Differentiate the FIELD, not the surface radius.** The target is `sdBody`, and
+`sdPrimitive` measures in the primitive's *scaled* space then rescales by
+`minScale`:
 
 ```
-ρ(w) = r / sqrt( Σ_k (w_k / s_k)² )
+d = minScale · (ρ·sqrt(Q) − r),     Q = Σ_k (w_k / s_k)²,  ρ = r / sqrt(Q)
 ```
 
-whose partials are analytic:
+so `d` relates to a surface-radius change by the varying factor
+`minScale·sqrt(Q)` — which is precisely where the anisotropy signal lives.
+Differentiating `d` gives the rows actually used:
 
 ```
-∂ρ/∂r    = ρ / r
-∂ρ/∂s_k  = ρ³ · w_k² / (r² · s_k³)
+−∂d/∂r    = minScale
+−∂d/∂s_k  = minScale · ρ · w_k² / (s_k³ · sqrt(Q))
 ```
 
-So fit `(Δr, Δwide, Δtall, Δdeep)` per primitive by **ridge least squares**
-against those partials, using each sample's own world direction `w`. A diagonal
-bone puts weight in both the `wide` and `tall` columns and the fit distributes
-it correctly; the component running along the bone has `w_k ≈ 0`, so its column
-is naturally rank-deficient and the ridge term absorbs it rather than producing
-a wild value. `tall` on a vertical bone is therefore not suggested because the
-data cannot see it, not because a rule excluded it.
+with `ρ` read back out of the measurement as `(d/minScale + r)/sqrt(Q)` rather
+than assumed. Using surface-radius rows instead recovers a seeded `deep 1.25`
+error as 1.18 where the field rows reach 1.03.
+
+**The ring cannot separate `r` from a uniform scale.** It only ever determines
+the world semi-axes `A_k = r·s_k`, so `(r, s)` and `(c·r, s/c)` are the *same
+surface* — a genuine gauge freedom, separate from the along-bone rank deficiency
+the ridge term handles. Minimum-norm ridge therefore spreads one wrong `deep=`
+across `r`, `wide` and `deep` alike: three edits with the same net surface and no
+way for a reader to tell which was wrong. Fix by re-gauging into the invariant
+relatives `rel_k = ΔA_k/A_k`, splitting `rel_k = γ + σ_k`, and choosing
+`γ = median({0} ∪ {rel_k})` — the minimiser of `|γ| + Σ|σ_k|`, i.e. the
+representative that touches the fewest authored numbers. This changes no
+prediction, only which of the equivalent answers is reported: a radius-only
+error comes back purely as `r`, an anisotropy-only error purely as that scale
+component.
+
+Solve `(AᵀA + λI)x = Aᵀb` with `λ = 1e-4 · max(diag AᵀA)`. A diagonal
+bone puts weight in several columns and the fit distributes it; the component
+running along the bone has `w_k ≈ 0`, so its column is naturally rank-deficient
+and the ridge absorbs it. `tall` on a vertical bone is therefore not suggested
+because the data cannot see it, not because a rule excluded it. Report a
+component only when its column norm is at least 5% of the largest.
+
+**The noise floor needs an absolute term.** `stdev/4` on a body that already
+matches is a quarter of ~1e-10, so nanometre "corrections" pass it. The floor is
+`max(stdev/4, 1e-6)`, where `1e-6` is the tolerance at which
+`sampleBodySurface` accepts a point at all — a suggestion finer than the
+instrument is not a measurement.
 
 The ring basis survives, but only to bin θ and to express an offset — both of
 which are correct for *any* orthonormal frame spanning the perpendicular plane,
