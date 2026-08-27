@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/damage.test.ts
 import { describe, it, expect } from 'vitest';
-import { worldHitToWound, woundWorldPos, woundCarveWorldPos, pushWound, MAX_WOUNDS, WOUND_PROFILES } from './damage';
+import { worldHitToWound, woundWorldPos, woundCarveNormal, pushWound, MAX_WOUNDS, WOUND_PROFILES, WOUND_CARVE_DEPTH_FRAC } from './damage';
 import { rotateYaw } from './gait';
 import type { Primitive, Vec3 } from './types';
 import { add, len, qFromAxisAngle, qMul, qRotate, sub } from './vec';
@@ -207,53 +207,72 @@ describe('the everted rim is scaled by the flesh behind the hit (no floating rin
   });
 });
 
-describe('the carve centre is thickness-capped (no far-side punch-through)', () => {
+describe('the carve depth is slab-capped (no far-side punch-through)', () => {
   // Owner-verified artifact (2026-08-24): applyWounds carves r - depth at the
-  // SURFACE hit with depth = the full wound radius, so on a torso ~0.2 m thick
-  // the 0.13 m blast sphere reaches through and opens the far side — a white
-  // slab from the rear and a crescent that sweeps with the camera. The GPU
-  // carve centre must be shifted outward at stamp time so the penetration
-  // stays under ~45% of the measured flesh thickness; the surface anchor
-  // (gameplay/particles/meter) stays where it is.
+  // SURFACE hit with depth = the full wound radius, so on thin flesh the
+  // sphere reaches through and opens the far side. The 2026-08-24 fix SHIFTED
+  // the sphere centre outward — which (with hit points later found to sit on
+  // the trace's hitEps shell, 1 cm outside the skin, probing zero flesh)
+  // degenerated to a tangent sphere: the owner's pale/invisible-wound report
+  // (2026-08-27). The slab cap instead keeps the sphere ON the anchor (the
+  // lab's deep-bowl look) and clips its REACH to 45% of the measured flesh
+  // along the inward normal; march.wgsl APPLY_WOUNDS applies the max().
   const capsuleField = (prims: Primitive[]) => (p: Vec3) => Math.min(...prims.map(q => {
     const ab = sub(q.b, q.a), ap = sub(p, q.a);
     const t = Math.max(0, Math.min(1, len(ab) === 0 ? 0 : (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (len(ab) * len(ab))));
     return len(sub(p, add(q.a, [ab[0] * t, ab[1] * t, ab[2] * t]))) - q.radius;
   }));
 
-  it('thin flesh: the blast carve is pushed out so it penetrates <= 45% of the thickness', () => {
-    // A 6 cm limb vs the 13 cm blast: unshifted it would open the far side.
+  it('thin flesh: the slab caps penetration at 45% of the thickness, sphere still on the anchor', () => {
+    // A 6 cm limb vs the 13 cm blast: uncapped it would open the far side.
     const thin: Primitive = { ...capsule([0, 1, 0], [0, 1.4, 0]), radius: 0.03 };
     const hit: Vec3 = [0.03, 1.2, 0];
     const w = worldHitToWound([thin], hit, 0.13, 'blast', 0, capsuleField([thin]));
-    const carve = woundCarveWorldPos([thin], w);
-    const shift = len(sub(carve, hit));
-    expect(shift).toBeGreaterThan(0.05); // genuinely pushed outward
-    const penetration = 0.13 - shift;    // how deep the carve reaches below the skin
-    expect(penetration).toBeLessThanOrEqual(0.45 * 0.06 + 1e-6);
-    // The surface anchor is untouched — blood emitters seed from it.
+    // The probe quantises to its 4 mm step: the chord is 0.06, the last
+    // inside sample lands at 0.056.
+    expect(w.carveDepth).toBeCloseTo(WOUND_CARVE_DEPTH_FRAC * 0.056, 6);
+    expect(w.carveDepth).toBeLessThan(0.13); // the slab genuinely binds
+    // The normal points INWARD (toward the axis): the hit is on the +x face,
+    // so inward is -x.
+    const n = woundCarveNormal([thin], w, 0)!;
+    expect(n[0]).toBeLessThan(-0.99);
+    // The carve sphere centre IS the anchor — the lab's deep bowl.
     expect(len(sub(woundWorldPos([thin], w), hit))).toBeCloseTo(0, 8);
   });
 
-  it('thick flesh: radius fits inside 45% of the thickness — no shift at all', () => {
+  it('thick flesh: the slab never binds — carveDepth exceeds the radius', () => {
     const torso: Primitive = { ...sphere([0, 1.0, 0]), radius: 0.16 }; // 0.32 m of flesh; 45% = 0.144 > 0.13
     const hit: Vec3 = [0.16, 1.0, 0];
     const w = worldHitToWound([torso], hit, 0.13, 'blast', 0, capsuleField([torso]));
-    expect(w.carveLocal).toBeUndefined();
-    const carve = woundCarveWorldPos([torso], w);
-    expect(len(sub(carve, woundWorldPos([torso], w)))).toBeCloseTo(0, 8);
+    expect(w.carveDepth).toBeDefined();
+    expect(w.carveDepth!).toBeGreaterThan(0.13);
   });
 
-  it('without a field there is no carve offset — old wounds and chunk torn-ends are unchanged', () => {
+  it('a hit on the hitEps shell (outside the skin) still measures the flesh behind it', () => {
+    // THE pale-wound root cause: traceProjectile used to return points on
+    // its 1 cm hitEps shell; probeFlesh's first 4 mm sample was still in the
+    // air, thick read 0, and the old centre-shift ate the whole radius. The
+    // seek must measure the real limb from the surface.
+    const thin: Primitive = { ...capsule([0, 1, 0], [0, 1.4, 0]), radius: 0.03 };
+    const outside: Vec3 = [0.03 + 0.01, 1.2, 0]; // 1 cm off the skin, trace-shell style
+    const w = worldHitToWound([thin], outside, 0.13, 'blast', 0, capsuleField([thin]));
+    // Same depth the on-skin hit measures (quantised identically) — the seek
+    // snapped to the surface, not to the air.
+    expect(w.carveDepth).toBeCloseTo(WOUND_CARVE_DEPTH_FRAC * 0.056, 6);
+    // The anchor stays where the trace said the hit was (placement gates
+    // key off it); only the measured depth snaps to the flesh.
+    expect(len(sub(woundWorldPos([thin], w), outside))).toBeCloseTo(0, 8);
+  });
+
+  it('without a field there is no slab — old wounds and chunk torn-ends carve uncapped', () => {
     const prims = [capsule([0, 1, 0], [0, 1.4, 0])];
     const w = worldHitToWound(prims, [0.09, 1.2, 0], 0.13, 'blast');
-    expect(w.carveLocal).toBeUndefined();
-    const a = woundCarveWorldPos(prims, w);
-    const b = woundWorldPos(prims, w);
-    expect(len(sub(a, b))).toBeCloseTo(0, 8);
+    expect(w.carveN).toBeUndefined();
+    expect(w.carveDepth).toBeUndefined();
+    expect(woundCarveNormal(prims, w)).toBeNull();
   });
 
-  it('the shifted carve centre rides the body yaw exactly like the anchor does', () => {
+  it('the slab normal rides the body yaw exactly like the anchor does', () => {
     const pivot: Vec3 = [0, 0.92, 0];
     const YAW = Math.PI / 2;
     const thin: Primitive = { ...capsule([0, 1, 0], [0, 1.4, 0]), radius: 0.03 };
@@ -264,9 +283,12 @@ describe('the carve centre is thickness-capped (no far-side punch-through)', () 
       a: rotAbout(thin.a, pivot, YAW) as [number, number, number],
       b: rotAbout(thin.b, pivot, YAW) as [number, number, number],
     };
-    const carve0 = woundCarveWorldPos([thin], w, 0);
-    const expected = rotAbout(carve0, pivot, YAW);
-    expect(len(sub(woundCarveWorldPos([turned], w, YAW), expected))).toBeCloseTo(0, 8);
+    const n0 = woundCarveNormal([thin], w, 0)!;
+    const tip0 = rotAbout([hit[0] + n0[0], hit[1], hit[2]], pivot, YAW);
+    const base0 = rotAbout(hit, pivot, YAW);
+    const expected: Vec3 = [tip0[0] - base0[0], tip0[1] - base0[1], tip0[2] - base0[2]];
+    const nT = woundCarveNormal([turned], w, YAW)!;
+    expect(len(sub(nT, expected))).toBeCloseTo(0, 8);
   });
 });
 

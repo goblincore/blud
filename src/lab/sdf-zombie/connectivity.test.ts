@@ -62,6 +62,20 @@ describe('cutLimbs', () => {
     expect(Math.hypot(back[0] - root[0], back[1] - root[1], back[2] - root[2]))
       .toBeLessThan(0.05);
   });
+
+  it('severRadius, not the crater radius, governs the cut (the decoupling)',
+    () => {
+      const root = armRoot();
+      // The grapeshot regime: a small VISUAL crater (0.055 — the "nick" test
+      // above proves that alone never cuts) carrying a large sever calibre.
+      const visualOnly = woundAt(root, 0.055);
+      expect(cutLimbs(body, [visualOnly], torso.center)).not.toContain('armL');
+      const decoupled: Wound = { ...woundAt(root, 0.055), severRadius: 0.16 };
+      expect(cutLimbs(body, [decoupled], torso.center)).toContain('armL');
+      // And the falloff-scaled blast path is untouched: no severRadius
+      // means the wound's own radius still governs, as it always did.
+      expect(cutLimbs(body, [woundAt(root, 0.16)], torso.center)).toContain('armL');
+    });
 });
 
 // --- cutChains: mid-limb severing ------------------------------------------

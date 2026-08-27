@@ -32,7 +32,10 @@ export const JOINT_EPS = 0.06;
 /** Ring sample count around a cross-section disc in the union-coverage test. */
 export const DISC_RING_SAMPLES = 8;
 
-/** A carve sphere in world space — blast/pellet wounds only (burns never cut). */
+/** A carve sphere in world space — blast/pellet wounds only (burns never cut).
+ *  The radius is the wound's SEVER calibre (`severRadius`), which defaults
+ *  to its crater radius but may exceed it — severing is a damage decision
+ *  decoupled from the visual carve (see Wound.severRadius in damage.ts). */
 interface CarveSphere {
   centre: Vec3;
   radius: number;
@@ -43,7 +46,7 @@ function carveSpheres(prims: Primitive[], wounds: Wound[]): CarveSphere[] {
   const out: CarveSphere[] = [];
   for (const w of wounds) {
     if (w.type === 'burn') continue;
-    out.push({ centre: woundWorldPos(prims, w), radius: w.radius });
+    out.push({ centre: woundWorldPos(prims, w), radius: w.severRadius ?? w.radius });
   }
   return out;
 }
