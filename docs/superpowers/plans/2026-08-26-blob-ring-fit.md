@@ -1714,6 +1714,28 @@ git commit -m "feat(ring-fit): merge mirrored primitives and report left/right d
 - Modify: `package.json` (add the `blob:rings` script)
 - Test: `src/lab/sdf-zombie/ring-fit.test.ts` (append the integration test)
 
+**A primitive's suggestions are ONE coupled edit, and the report must say so.**
+Only the world semi-axes `A_k = r·s_k` are measured; `r` and a uniform scale are
+the same edit, so `fitPrims` reports one representative of a family. Measured on
+a 45° fixture, a single `wide=1.3` error comes back as four numbers — `r
+0.1→0.0939`, `wide→1.226`, `tall→0.909`, `deep→1.057` — of which `deep`'s
+semi-axis is already right to 0.7%; its 5.7% ratio change exists *only* to offset
+the change in `r`. Applying that one edit alone would make the character worse.
+
+So the report must:
+
+1. Print a primitive's `r` and scale suggestions as a single **apply-together**
+   block, never as an à-la-carte menu.
+2. Print each scale line's **semi-axis** (`r·s_k`, in metres, before → after)
+   beside the ratio. The ratio is what you type into the `.blob`; the semi-axis
+   is what was actually measured, and it is what tells a reader that `deep`
+   barely moved.
+3. Detect a **degenerate pair** — two scale columns whose least-squares columns
+   are proportional, which happens whenever the bone's direction makes
+   `w_j² ≡ w_k²` — and say the pair is not independently measurable on this bone
+   rather than printing two numbers as though they were. `upperarm` is the live
+   case: its `wide` and `tall` columns sit 7° apart on the real mouse rig.
+
 The loading pattern is already established in `scripts/blob-measure.ts:337-342`:
 
 ```ts
