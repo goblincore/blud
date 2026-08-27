@@ -143,8 +143,9 @@ for (let i = 0; i < 40; i++) {
 if (!woundsNow || woundsNow.length <= w0.length) fail('no new wound after fireSlug');
 const newest = woundsNow[woundsNow.length - 1];
 const dSurf = dist3(newest.surface, pred.hit);
-const dCarve = dist3(newest.carve, pred.hit);
-console.log(`PLACEMENT GATE: |surface − impact| = ${(dSurf * 100).toFixed(2)} cm, |carve − impact| = ${(dCarve * 100).toFixed(2)} cm (radius ${(newest.radius * 100).toFixed(1)} cm, type ${newest.type})`);
+// The carve sphere now sits ON the surface anchor; its depth cap rides
+// carveDepth (2026-08-27 slab redesign). Placement is judged on the surface.
+console.log(`PLACEMENT GATE: |surface − impact| = ${(dSurf * 100).toFixed(2)} cm (radius ${(newest.radius * 100).toFixed(1)} cm, carveDepth ${(newest.carveDepth ?? 0).toFixed(3)} m, type ${newest.type})`);
 const GATE = dSurf <= TOL_M;
 if (!GATE) fail(`placement gate FAILED: crater surface anchor ${dSurf * 100} cm off the impact point (> ${TOL_M * 100} cm)`);
 

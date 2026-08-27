@@ -20,6 +20,26 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**WOUND RED-INTERIOR — FIXED (worktree `2026-08-27-wound-red-interior`, branch
+`dispatch/wound-red-interior`, 2026-08-27).** Owner's "wounds read pale, not
+red like the lab" was TWO stacked defects: (1) `traceProjectile` bisected to
+its 1 cm `hitEps` shell — hits sat outside the skin, `probeFlesh` measured
+zero flesh on EVERY projectile wound, and the thickness cap shifted the carve
+sphere by the FULL radius → tangent, invisible craters with `rimScale 0` (the
+blast path's `traceSurface` at eps 0.002 was always on-skin and unaffected);
+(2) the cap worked by shifting the sphere CENTRE, which caps depth only by
+guaranteeing the visible dish grazes the sphere's outer shell. Fixed by
+bisecting to the true surface and capping DEPTH instead: carve sphere centred
+ON the anchor (the lab's deep bowl) clipped by an inward slab at 45% of local
+flesh (`Wound.carveN/carveDepth`, shader `max()` of the two SDF bounds,
+`ROW_WOUND_CAP` = data row 18). Uncapped (lab, old wounds) takes a −1e5 slab
+term that loses the max bit-exactly — lab pixel-verified at the same-code
+noise floor (holdStill + fixed stamp + fixed cam, main-repo vite as pre-fix).
+Game gates: slug torso reads RED like the lab; forearm slug severs to a
+capped stump (no hole); staged pellet pocks red; occluder hull exclusion
+added (real craters exposed hull spheres as pale discs). Evidence + staging
+recipes: docs/dev-notes/2026-08-27-wound-red-interior/.
+
 **SDF GAME PAGE FIXES — worktree `2026-08-25-game-page-fixes`, branch
 `dispatch/game-page-fixes` (2026-08-25, three commits on the level work).**
 Owner-reported breakage, root-caused: (1) dollhouse walls — wallPlanes wrote

@@ -962,20 +962,36 @@ async function main() {
       let bestD = Infinity;
       let hitActorId = -1;
       let hitPoint: Vec3 | null = null;
-      const end: Vec3 = [
-        origin[0] + dir[0] * 60, origin[1] + dir[1] * 60, origin[2] + dir[2] * 60,
-      ];
+      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
+      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
+      // which the placement gate duly failed (2026-08-27).
+      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
+      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
+      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
+      const dt = 1 / 120;
       for (const a of actors) {
         const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
         if (!c) continue;
         if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
         const posedA = a.posed();
-        const hp = traceProjectile(origin, end, q => sdBody(q, posedA));
-        if (!hp) continue;
-        const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
-        if (d < bestD) {
-          bestD = d; hitActorId = a.id;
-          hitPoint = hp;
+        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
+        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
+        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
+        for (let i = 0; i < 240; i++) {
+          const next: Vec3 = [
+            pos[0] + vel[0] * dt,
+            pos[1] + vel[1] * dt,
+            pos[2] + vel[2] * dt,
+          ];
+          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
+          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
+          if (hp) {
+            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
+            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
+            break;
+          }
+          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
+          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
         }
       }
       return { origin, dir, actorId: hitActorId, hit: hitPoint };
