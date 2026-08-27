@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { binResiduals, fitPrims, projectToSurface, sampleBodySurface } from './ring-fit';
+import { binResiduals, fitPrims, mergeMirrored, projectToSurface, sampleBodySurface,
+  type Suggestion } from './ring-fit';
 import { ringBasis } from './ref-align';
 import { sdBody } from './validate';
 import type { Primitive, ClusterInfo, ResolvedBone } from './types';
@@ -407,4 +408,51 @@ describe('sampleBodySurface ring plane', () => {
       }
     });
   }
+});
+
+
+const base = (over: Partial<Suggestion>): Suggestion => ({
+  prim: 0, src: 7, bone: 'thigh.l', n: 500, meanAbs: 0.004,
+  blendDominated: 0, crossBone: 0, ...over,
+});
+
+describe('mergeMirrored', () => {
+  it('averages two suggestions that share a .blob line', () => {
+    const merged = mergeMirrored([
+      base({ prim: 0, bone: 'thigh.l', r: { from: 0.05, to: 0.060, why: 'uniform' } }),
+      base({ prim: 1, bone: 'thigh.r', r: { from: 0.05, to: 0.070, why: 'uniform' } }),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.r!.to).toBeCloseTo(0.065, 9);
+  });
+
+  it('reports the left/right disagreement in metres', () => {
+    const merged = mergeMirrored([
+      base({ prim: 0, bone: 'thigh.l', r: { from: 0.05, to: 0.060, why: 'uniform' } }),
+      base({ prim: 1, bone: 'thigh.r', r: { from: 0.05, to: 0.070, why: 'uniform' } }),
+    ]);
+    expect(merged[0]!.mirrorDisagreement).toBeCloseTo(0.010, 9);
+  });
+
+  it('reports no disagreement for a symmetric body', () => {
+    const merged = mergeMirrored([
+      base({ prim: 0, bone: 'thigh.l', r: { from: 0.05, to: 0.06, why: 'uniform' } }),
+      base({ prim: 1, bone: 'thigh.r', r: { from: 0.05, to: 0.06, why: 'uniform' } }),
+    ]);
+    expect(merged[0]!.mirrorDisagreement).toBe(0);
+  });
+
+  it('leaves an unmirrored primitive alone', () => {
+    const merged = mergeMirrored([base({ prim: 0, src: 3, bone: 'chest' })]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.mirrorDisagreement).toBeUndefined();
+  });
+
+  it('does not merge two primitives that merely have no src', () => {
+    const merged = mergeMirrored([
+      base({ prim: 0, src: undefined, bone: 'a' }),
+      base({ prim: 1, src: undefined, bone: 'b' }),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
 });

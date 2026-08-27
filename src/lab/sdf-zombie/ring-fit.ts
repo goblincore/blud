@@ -572,3 +572,67 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
 
   return out.sort((x2, y2) => y2.meanAbs - x2.meanAbs);
 }
+
+/**
+ * Fold the two placed primitives of a mirrored .blob line back into one
+ * suggestion, because the source carries ONE number.
+ *
+ * The averaged value is only half the output: `mirrorDisagreement` is how far
+ * apart the two sides wanted to be. A large one means the reference is
+ * genuinely asymmetric or the alignment is wrong, and both are worth knowing
+ * before trusting the average.
+ *
+ * A primitive with no `src` is never merged — an absent line number is not a
+ * shared line number.
+ *
+ * OFFSET IS NOT AVERAGED, AND THIS IS NOT AN OVERSIGHT TO TIDY UP. The
+ * left/right frame relationship depends on the bone's direction: measured on
+ * the real mouse rig, for bones whose most-aligned world axis is y, `e1`
+ * ANTI-mirrors while `e2` mirrors, and for bones aligned to x it is exactly
+ * reversed. So the two sides carry opposite-signed cos-theta offset residuals
+ * by construction, and averaging them CANCELS the term instead of reinforcing
+ * it — the tool would report a centred prim however far off-centre both sides
+ * actually were. Keep one side's number and label it as such.
+ */
+export function mergeMirrored(suggestions: Suggestion[]): Suggestion[] {
+  const bySrc = new Map<number, Suggestion[]>();
+  const loose: Suggestion[] = [];
+  for (const s of suggestions) {
+    if (s.src === undefined) { loose.push(s); continue; }
+    let list = bySrc.get(s.src);
+    if (list === undefined) { list = []; bySrc.set(s.src, list); }
+    list.push(s);
+  }
+
+  const out: Suggestion[] = [...loose];
+  for (const group of bySrc.values()) {
+    if (group.length === 1) { out.push(group[0]!); continue; }
+    const [a, b] = group as [Suggestion, Suggestion];
+    const avg = (x?: number, y?: number) => (x !== undefined && y !== undefined ? (x + y) / 2 : x ?? y);
+    const merged: Suggestion = {
+      ...a,
+      n: group.reduce((s, g) => s + g.n, 0),
+      meanAbs: group.reduce((s, g) => s + g.meanAbs, 0) / group.length,
+      blendDominated: group.reduce((s, g) => s + g.blendDominated, 0) / group.length,
+      crossBone: group.reduce((s, g) => s + g.crossBone, 0),
+      mirrorDisagreement: Math.abs((a.r?.to ?? 0) - (b.r?.to ?? 0)),
+    };
+    if (a.r || b.r) merged.r = { from: a.r?.from ?? b.r!.from, to: avg(a.r?.to, b.r?.to)!, why: a.r?.why ?? b.r!.why };
+    if (a.r2 || b.r2) merged.r2 = { from: a.r2?.from ?? b.r2!.from, to: avg(a.r2?.to, b.r2?.to)!, why: a.r2?.why ?? b.r2!.why };
+    // `scales` is a list keyed by axis; merge per axis, keeping only axes both
+    // sides could read. An axis one side could see and the other could not is
+    // evidence the two sides are not measuring the same thing — drop it.
+    if (a.scales && b.scales) {
+      const merged2 = a.scales
+        .map((sa) => {
+          const sb = b.scales!.find((z) => z.axis === sa.axis);
+          return sb === undefined ? undefined : { ...sa, to: (sa.to + sb.to) / 2 };
+        })
+        .filter((z): z is NonNullable<typeof z> => z !== undefined);
+      if (merged2.length) merged.scales = merged2;
+    }
+    merged.offset = a.offset ? { ...a.offset, why: `${a.offset.why} (left side; mirrored line)` } : undefined;
+    out.push(merged);
+  }
+  return out.sort((x, y) => y.meanAbs - x.meanAbs);
+}
