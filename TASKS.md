@@ -20,6 +20,26 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**WOUND HULL HOLES — FIXED (worktree `2026-08-27-wound-hull-holes`, 2026-08-27).**
+The owner's "parts of the zombie become invisible / transparent holes when one
+walks in front of another" was NOT the hull exclusions (`dcd61ca`): the
+empty-exclusion experiment renders the identical vanishing body, and
+exclusions visibly fix the pale-disc artifact they were added for — path
+stays. Real cause: `b33af36`'s depth slab used `max(-(r−depth), dot−capEff)`;
+the dot term is positive BEYOND the cap, so every wound carved the entire
+half-space behind its cap plane out to infinity. One wound looks perfect from
+the front (placement gate passed); mixed-direction wounds hollowed whole
+torsos and the march hit nothing. Lab never showed it — the lab uploads no
+caps. Fixed as `min(-(r−depth), capEff − dot)` (bounded convex intersection);
+uncapped path bit-identical (lab parity 0.002–0.003% vs 0.02% floor).
+tsc 0, vitest 1662 (2 new behavioural slab tests that fail on the broken
+form), slug placement gate 2.69 cm, multi-angle + overlap + red-bowl gates in
+docs/dev-notes/2026-08-27-wound-hull-holes/. Occluder perf A/B re-taken: this
+machine cannot resolve it (within-config noise > every delta) — re-gate on a
+quiet machine before any removal call. New game seams:
+`__sdfGame.setOccluder/setHullExclusions/refreshHull/hullDebug`,
+`stampWoundAt(..., bodyId)`; march debug mode 3 = occT heat.
+
 **WOUND RED-INTERIOR — FIXED (worktree `2026-08-27-wound-red-interior`, branch
 `dispatch/wound-red-interior`, 2026-08-27).** Owner's "wounds read pale, not
 red like the lab" was TWO stacked defects: (1) `traceProjectile` bisected to
