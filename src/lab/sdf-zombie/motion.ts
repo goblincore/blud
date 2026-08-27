@@ -328,8 +328,11 @@ export interface MotionConfig {
 export interface MotionSignals {
   dt: number;
   /** The shot that landed, if any: profile + WORLD-space ray direction +
-   *  WORLD-space wound position + whether it struck the torso (clutch gate). */
-  shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean } | null;
+   *  WORLD-space wound position + whether it struck the torso (clutch gate).
+   *  gain is an optional stagger/recoil amplitude multiplier (default 1 =
+   *  the lab's tuned amplitudes — the lab wiring never sets it, so its
+   *  reactions are bit-identical to a build without the knob). */
+  shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean; gain?: number } | null;
   /** Present-but-hurt limbs (carries ≥1 live wound) — the gait limp skew. */
   wounded: { armL: boolean; armR: boolean; legL: boolean; legR: boolean };
   /** Limbs severed since the last frame (meter + hop skew bookkeeping). */
@@ -446,7 +449,7 @@ export function stepMotion(
   // damped turn the two disagree, and the reaction must follow the BODY.
   const stagger = stepStagger(state.stagger, {
     hit: sig.shot && !collapsed
-      ? { type: sig.shot.type, dir: rotateYaw(sig.shot.dirWorld, -state.bodyYaw) }
+      ? { type: sig.shot.type, dir: rotateYaw(sig.shot.dirWorld, -state.bodyYaw), gain: sig.shot.gain }
       : null,
   }, dt);
 
@@ -721,7 +724,7 @@ export function stepMotion(
     recoil = {
       joint: best,
       dirWorld: normalize(sig.shot.dirWorld),
-      amp: MOTION_TUNING.recoil[sig.shot.type],
+      amp: MOTION_TUNING.recoil[sig.shot.type] * Math.max(sig.shot.gain ?? 1, 0),
       age: 0,
     };
   }

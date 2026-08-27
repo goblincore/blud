@@ -56,9 +56,33 @@ const CALM: Omit<MotionSignals, 'dt'> = {
 /** Wound-type ids the shader expects — same mapping as lab-main's TYPE_ID. */
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
-/** Hit shove along the shot direction, scaled up from the lab's 0.04/0.16
- *  pair because a pellet is small but arrives eight at a time. */
-const PELLET_IMPULSE = 0.05;
+/** Hit shove along the shot direction, PER WOUND PROFILE — the defect this
+ *  file shipped with was one constant (0.05) for everything, so a slug
+ *  stamped a blast-profile wound and then shoved like a single pellet. The
+ *  baseline is the lab's own scale (lab-main.ts: blast 0.16, pellet 0.06,
+ *  burn 0.04); the slug path rides 'blast' because woundFromSlug stamps the
+ *  blast calibre. Raised slightly above the lab for first-person range —
+ *  the lab's numbers were tuned for a god-cam further out (see the lab's
+ *  "scaled up in the motion-polish pass" note). */
+const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.04 };
+
+/** Stagger amplitude multiplier sent with a SLUG's motion signal — the slug
+ *  is a hand-cannon round and should lurch harder than the lab's tuned
+ *  blast response (stagger.ts StaggerHit.gain; default 1 = lab amplitudes).
+ *  Pellets send no gain: eight arrive together and re-flinch the body. */
+const SLUG_GAIN = 1.3;
+
+/** Heavy-hit walk stop: after a blast-profile hit the zombie HALTS for this
+ *  long (the lurch plays on a stopped walker — a stagger that never
+ *  interrupts locomotion reads weightless), then resumes its wander. */
+const BLAST_HOLD_SEC = 0.55;
+
+/** Heavy-hit root knockback: initial ground-plane speed (m/s) along the
+ *  shot's horizontal direction — the body's ROOT actually travels back
+ *  (a real stumble, not just a joint offsets), decaying at BLAST_KNOCK_DECAY
+ *  per second. ∫ v0·e^(−kt) ≈ v0/k metres of total travel. */
+const BLAST_KNOCK_MPS = 1.2;
+const BLAST_KNOCK_DECAY = 7;
 
 /** A detached piece, placed in WORLD space where the rendered limb hung.
  *  game-main turns this into a ballistic chunk + SDF view. */
