@@ -1,0 +1,303 @@
+# Bonewalker — the sixth .blob character authored from scratch, and the first
+# authored WITH `blob:rings` as the primary instrument (trial of the tool).
+# Reference: docs/dev-notes/refs/bonewalker-mesh/bonewalker.glb — a Meshy
+# "Rusted Bonewalker": a horned, skeletal undead biped, 1.700 m in its own
+# bind T-pose, authored here at 1.30 m (scale 0.7647). 67% of its vertices
+# reach a measurable bone (mouse 40%, schoolgirl 79%).
+#
+# WHAT IT IS (seen in Blender renders of the mesh, 2026-08-27): a grinning
+# skull with two thick horns sweeping out-then-up from the temples, pale
+# eyes, a wide mouth with blocky teeth; exposed segmented vertebrae down the
+# whole back; ribcage and pelvis bones showing through rusted red-brown
+# meat; bony shoulder shrugs; thin arms with long pale claw fingers; short
+# paw feet with pale claws, splayed wide. Skin = dark rusted red-brown
+# (texture mode sRGB 84,40,26), bone = pale dust (brightest texels sRGB
+# 175,140,119). The mesh material also carries its own texture as an
+# EMISSIVE map, which is why Blender renders read brighter than the raw
+# albedo.
+#
+# MEASURED SKELETON — every len= below is the reference rig's own
+# joint-to-joint distance x 0.7647 (the .l bones; .r differs by <3%):
+#   pelvis 0.092 (7.1%)  spine1 0.092  chest 0.092  spine2 0.050 (3.9%)
+#   neck 0.068 (5.2%)  clavicle 0.111 (8.6%)  upperarm 0.257 (19.8%)
+#   forearm 0.213 (16.4%)  thigh 0.289 (22.3%)  shin 0.329 (25.3%)
+#   foot 0.126 (9.7%).  Legs (thigh+shin) are 47.6% of standing height and
+# the forearms are long — a lanky skeletal build. DO NOT correct these
+# toward human proportions; blob:rings flags any drift over ~10%.
+#
+# THE RIG-vs-SURFACE OFFSET (why this skeleton is shaped the way it is):
+# the Meshy rig puts its Hips joint at 58.1% of height (0.755 m scaled) —
+# high in the pelvis — while the hip sockets sit at 53% and the SURFACE
+# crotch at 49.7% (0.646 m). Chaining straight measured-length legs
+# (0.289+0.329) from the rig's own Hips would leave the feet 11 cm off the
+# floor, so the pelvis root sits at the surface crotch 0.646 and the whole
+# spine chain rides ~0.108 below the rig's joints. Consequences:
+#   - the clavicle parents to NECK (tail 1.040 = the mesh's shoulder
+#     surface line, T-pose arm axis 1.052), not to chest (tail 0.922 —
+#     13 cm below the shoulder line);
+#   - the skull bone is deliberately LONG (0.362): the face block rides
+#     skull at=0.45 (fixed in face.ts), so 1.040 + 0.45*0.362 = 1.203 puts
+#     the cranium centre midway between the measured chin (1.106) and
+#     crown (1.300). The skull bone is unmapped (ref-align.ts) — no fit
+#     sees its length; the head prims and face block are what it positions.
+#
+# The reference stands T-posed with legs in a slight crouch (knee +0.077
+# forward of the hip, ankle swung back); this file rests the arms down at a
+# natural angle and keeps a mild knee bend — blob:rings is pose-independent
+# per bone, so the T-pose arms do not pollute the fit; blob:measure WILL
+# print POSE MISMATCH on the whole figure (score leg windows instead).
+model bonewalker
+  height 1.30
+  # Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # ROOT: head at the surface crotch (0.646 = 49.7% of the mesh), tail at
+  # the hip line 0.738 — straight measured legs land the ankle at 0.129,
+  # matching the mesh's 0.117-0.131 foot band.
+  root pelvis at 0.646 len=0.092
+  # Spine chain: measured lengths, slight forward pitch (the rig rises
+  # z -0.026 -> -0.000 over the spine — a small forward lean; +z is front).
+  bone spine1 parent=pelvis dir=up pitch=2 len=0.092   # tail 0.830 = the mesh's waist pinch (0.825)
+  bone chest  parent=spine1 dir=up pitch=2 len=0.092   # ribcage
+  bone spine2 parent=chest  dir=up pitch=1 len=0.050
+  bone neck   parent=spine2 dir=up pitch=0 len=0.068   # tail 1.040 = shoulder/neck-base line
+  # LONG ON PURPOSE — see the header: carries the face block up to cranium
+  # centre 1.203 (chin 1.106, crown 1.300).
+  bone skull  parent=neck   dir=up pitch=0 len=0.362
+
+  mirror
+    # Clavicle on the NECK (not chest) so the shoulder ball sits at the
+    # mesh's shoulder line: head (0.030, 1.040), tail x 0.141 — the rig's
+    # own Arm joint is at x 0.140 scaled.
+    bone clavicle parent=neck    side=0.030 dir=side len=0.111
+    # Arms rest DOWN (the mesh T-poses) — lanky measured lengths left as
+    # measured. Wrist ends at y ~0.57, claws to ~0.47: past the crotch,
+    # which is what 19.8%+16.4% arms on a 1.30 m frame give.
+    bone upperarm parent=clavicle dir=down tilt=8 pitch=4  len=0.257
+    bone forearm  parent=upperarm dir=down tilt=4 pitch=12 len=0.213
+    bone hand     parent=forearm  dir=down tilt=2 pitch=10 len=0.095
+    # Legs: measured lengths; mild crouch from the mesh stance (knee
+    # forward, ankle back) and a wide splay (mesh ankles x +/-0.17-0.23).
+    bone thigh    parent=pelvis dir=down tilt=10 pitch=10 side=0.085 len=0.289
+    bone shin     parent=thigh  dir=down tilt=-2 pitch=-10          len=0.329
+    # The foot bone only positions paw prims (house pattern — mouse.blob).
+    bone foot     parent=shin   dir=fwd                              len=0.126
+  end
+
+body
+  # ============================================================
+  # TORSO — a meat-starved frame: hip wings (pelvis halfW ~0.090-0.119),
+  # a genuine wasp waist (33-40mm half-width at y 0.825, measured on the
+  # Hips/Spine02 vertex clouds), then a ribcage DEEPER than wide (halfD
+  # 0.121 vs halfW 0.109 at y 0.950). The pale-bone mottle + the painted
+  # spine ridge carry the "rusted meat over bone" read.
+  # ============================================================
+  # Pelvis/hip bowl: y 0.646-0.75, halfW ~0.10-0.115 (the iliac flare),
+  # halfD ~0.075-0.090.
+  # Pelvis/hip bowl: y 0.646-0.75. blob:rings block 2 asked r 0.080->0.054
+  # / wide 1.40->1.19 (semi-axis 64mm) and the applied result STARVED the
+  # hips on screen — the mesh's own width profile is 75-90mm halfW at
+  # y 0.65-0.675 (119mm at the iliac flare), and the fit's t 0-0.59 support
+  # cannot see the wings (they are the off-ends it dropped). Split the
+  # difference at the measured profile: halfW 0.090.
+  blob torso on pelvis  at=0.45 r=0.060 wide=1.28 tall=1.15 deep=1.00 blend=0.011 offset=(0,0,-0.0028)
+  # HIP WINGS: the fit reads the bowl MASS (~55-65mm rho; it asked three
+  # rounds for ~52mm semi-axis) but the mesh's iliac crests are BLADES
+  # spiking to 90-119mm halfW — a radial blob cannot express a blade, so
+  # the wings get their own two prims. World-measured, not fit-measured.
+  blob torso on pelvis  at=0.62 offset=(0.078,0.012,-0.010) r=0.030 wide=0.75 tall=0.90 deep=1.10 blend=0.008 both
+  # Waist -> ribcage (spine1 0.738-0.830). blob:rings block 3 (mean 31.8mm,
+  # 43% blend-dominated): the waist is a PINCH between the pelvis cap and
+  # the ribcage cap, not a column — r 0.0243/r2 0.0191 with the smin of the
+  # neighbours is what the field measures. deep 0.92: slightly shallower
+  # than wide front-to-back.
+  bar  torso on spine1  from=0.02 to=1.00 r=0.0243 r2=0.0191 deep=0.92 offset=(0,0,-0.0086) blend=0.010
+  # Ribcage (chest 0.830-0.922). blob:rings block 4 round 2 asked r ~0.09
+  # forward of centre (offset z +0.0215 — the mesh front z +0.110 at y 0.95
+  # vs back -0.08 under the spine ridge). from=0.60: a capsule's bottom cap
+  # is a half-radius hemisphere, so a bar starting at the bone head filled
+  # the waist pinch at 0.825 (the pin caught it: 80mm where the mesh is
+  # 33-40). The bar owns the flare 0.885-0.950; the girdle blob carries the
+  # max band (mesh 106-109mm halfW at 0.925-0.95).
+  bar  torso on chest   from=0.60 to=1.30 r=0.085 r2=0.070 deep=1.13 offset=(0,0,0.0215) blend=0.012
+  # Upper chest / shoulder girdle base (spine2 0.922-0.972 + the trap
+  # region the clavicle cloud carries): caps the ribcage at its widest
+  # (y ~0.95-1.00) and shrugs up toward the neck base. wide 1.75 keeps its
+  # surface at x ~0.080 at the shoulder-ball height (1.04) so the balls
+  # fuse — the fuse probe needs real contact, not near-miss (goblin lesson).
+  blob torso on spine2  at=0.40 r=0.060 wide=1.95 tall=1.30 deep=1.10 blend=0.010
+  # TRAPS: the mesh shrugs — bony traps rise from the neck base to the
+  # shoulder balls (clavicle cloud rho peaks 0.090-0.108 near the neck).
+  # Also what welds the raised shoulder balls (offset up+back per blob:rings
+  # block 6) to the torso — the fuse probe needs real contact.
+  blob torso on spine2  at=0.70 offset=(0.055,0.045,-0.012) r=0.042 wide=1.10 tall=0.95 deep=0.95 blend=0.008 both
+
+  # Bony neck: short and thin (mesh ~0.030-0.040 half-width at y 1.04-1.08);
+  # runs up into the jaw and down into the shoulder mass to fuse head->torso.
+  bar head on neck from=-0.4 to=1.6 r=0.032 deep=1.44 offset=(0,0,-0.0171) blend=0.005
+
+  # ============================================================
+  # EXPOSED SPINE — the character's signature. The mesh runs segmented
+  # vertebrae down the whole back (backmost surface z -0.080 sacrum to
+  # -0.121 mid-back, vs the torso's own back plane ~0.025-0.04 shallower).
+  # One painted bone bar per spine bone, offset to sit clearly PROUD of the
+  # back surface (v1's -0.058/-0.062 vanished inside the torso's own back
+  # plane — the render showed no ridge from behind; the mesh's ridge is the
+  # BACKMOST feature, z -0.080 sacrum to -0.121 mid-back). Plus groove cuts
+  # for the segmentation. BONE paint — the paint boundary is the prim
+  # boundary.
+  # ============================================================
+  bar torso on pelvis  from=0.35 to=1.00 offset=(0,0,-0.075) r=0.024 r2=0.027 blend=0.006 color=dbc0a0
+  bar torso on spine1  from=0.05 to=0.95 offset=(0,0,-0.080) r=0.026 r2=0.029 blend=0.006 color=dbc0a0
+  bar torso on chest   from=0.10 to=1.60 offset=(0,0,-0.085) r=0.028 r2=0.031 blend=0.006 color=dbc0a0
+  # The ridge continues up the upper back to the neck base — the mesh's
+  # thoracic vertebrae run to y ~1.04 (its upper-spine ridge verts are
+  # claimed by the clavicle cloud there). Without this segment the back
+  # plane at 0.95-1.04 is 45mm shallower than the mesh's.
+  bar torso on spine2  from=-0.2 to=1.20 offset=(0,0,-0.072) r=0.026 r2=0.024 blend=0.006 color=dbc0a0
+  # Segmentation grooves across the lumbar and thoracic ridge.
+  groove torso on spine1 at=0.50 offset=(0,0,-0.070) r=0.030 wide=1.6 tall=0.10 depth=0.004 width=0.005
+  groove torso on chest  at=0.45 offset=(0,0,-0.075) r=0.032 wide=1.6 tall=0.10 depth=0.004 width=0.005
+
+  # ============================================================
+  # HEAD — the cranium + jaw ride the face block (centre 1.203, crown
+  # 1.300, chin 1.106 — all measured off the Head-vertex cloud). The
+  # horns are the measured 0.286-wide feature at y 1.215-1.26; the mouth
+  # and eyes come from the baked face decal (sheet block below).
+  # ============================================================
+  # HORNS: bases at the skull's top-sides (x +/-0.048, y ~1.21), sweeping
+  # out to x +/-0.103 + r 0.024 = 0.127 (mesh 0.143) and up to y ~1.29,
+  # curling forward. Bend x pushes the belly outward; `both` mirrors the
+  # sweep so the pair curls symmetrically.
+  bar head on skull from=0.27 to=0.33 offset=(0.048,0.062,-0.005) tip=(0.070,0.075,0.014) bend=(0.050,0.012,0.0) r=0.024 r2=0.007 blend=0.004 chamfer both color=dbc0a0
+  # Small pointed ears under the horn bases (the head cloud is 56-63mm
+  # half-wide at y 1.17-1.20 vs the 52mm cranium — only ~10mm of ear
+  # protrudes; v1's 0.014+0.020tip rendered as bat wings). PAINTED flesh:
+  # unpainted, they sit within the face decal's reach and picked up the
+  # bake's horn-cream pixels.
+  blob head on skull at=0.30 offset=(0.056,0.022,0.002) tip=(0.010,0.010,-0.004) r=0.009 r2=0.003 blend=0.003 chamfer both color=693b2b
+
+  # ============================================================
+  # ARMS — skeletal thin (measured shaft rho 0.023-0.030 vs schoolgirl's
+  # 0.026 thigh-thin arms on a smaller frame). Shoulder ball is the arm's
+  # core (house pattern). The hand is a bony mitt + four pale claw
+  # fingers (the rig ends at one Hand joint — no finger attribution is
+  # possible; claws authored by eye off the renders).
+  # ============================================================
+  blob arm on clavicle at=0.80 r=0.046 blend=0.007 mirror core offset=(0,0.0206,-0.0233)
+  # Upperarm: blob:rings block 9 — fatter at the shoulder (0.0346), thinner
+  # at the elbow (0.0181); the mesh deltoid carries real mass.
+  bar  arm on upperarm from=0.03 to=0.97 r=0.0383 r2=0.0162 wide=1.098 offset=(0,0,-0.0035) blend=0.005 mirror
+  blob arm on forearm  at=0.00 r=0.029 blend=0.005 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.0333 r2=0.0212 deep=1.114 offset=(0,0,0.0086) blend=0.005 mirror
+  # Bony palm, slightly deep (the mesh hand is 0.111 long for ~0.09 width).
+  blob arm on hand     at=0.30 r=0.026 wide=0.90 tall=1.15 deep=1.30 blend=0.004 mirror
+  # Four claw fingers fanning off the palm, pale bone, tapering to points.
+  # Splay via distinct x offsets; each tip curls slightly forward (+z) and
+  # inward — a relaxed raking hand. ~0.012 apart at 0.008 radius.
+  bar arm on hand from=0.45 to=1.40 offset=(0.016,0,-0.004) tip=(0.010,0,0.028) r=0.009 r2=0.003 blend=0.0025 mirror color=dbc0a0
+  bar arm on hand from=0.50 to=1.45 offset=(0.005,0,-0.002) tip=(0.003,0,0.030) r=0.009 r2=0.003 blend=0.0025 mirror color=dbc0a0
+  bar arm on hand from=0.50 to=1.40 offset=(-0.006,0,-0.001) tip=(-0.004,0,0.029) r=0.008 r2=0.003 blend=0.0025 mirror color=dbc0a0
+  bar arm on hand from=0.45 to=1.30 offset=(-0.016,0,0.002) tip=(-0.011,0,0.025) r=0.008 r2=0.002 blend=0.0025 mirror color=dbc0a0
+
+  # ============================================================
+  # LEGS — thin thighs (rho 0.032-0.054), knees that KNOB (the mesh shows
+  # bony knee balls), calves that bulge BACK (shin cloud rho 0.058-0.065
+  # mid-shin, the bulge in +z/-z), ankles tapering to 0.034. Paw feet
+  # with pale claws, splayed outward like the mesh (toes to x +/-0.286).
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.055 blend=0.007 mirror core
+  # Thigh: blob:rings block 10 — slimmer and narrower side-to-side than v1
+  # (r 0.0399, wide 0.836), knee-end 0.0383; sits 12mm forward of the bone
+  # (the mesh thigh mass hangs forward of the femur line). Taper REFUSED
+  # (the profile bends: hip ball -> shaft -> knee), so no r2 story — the
+  # knee blob and the profile carry it.
+  bar  leg on thigh from=0.08 to=0.96 r=0.0458 r2=0.0367 wide=0.836 deep=0.999 offset=(0,0,0.0122) blend=0.006 mirror
+  # Knee knob.
+  blob leg on shin  at=0.00 r=0.042 deep=0.95 blend=0.006 mirror
+  # Calf: blob:rings block 5 — narrower side-to-side (wide 0.77), the bulge
+  # is front-to-back (r2 0.0645 deep).
+  bar  leg on shin  from=0.10 to=0.55 r=0.0383 r2=0.0645 wide=0.77 deep=1.10 offset=(0,0,-0.0099) blend=0.006 mirror
+  # Calf -> ankle taper: block 7 — narrow (0.777) and slightly deep (1.053),
+  # 7.5mm back; round 3 thinned the ankle end to r2 0.0403.
+  bar  leg on shin  from=0.55 to=0.97 r=0.0246 r2=0.0403 wide=0.777 deep=1.053 offset=(0,0,-0.0075) blend=0.006 mirror
+  # PAW: a short deep mass under the ankle (ankle 0.129, sole 0.00),
+  # yawed slightly out (mesh feet splay; toes reach x +/-0.286).
+  blob leg on foot  at=0.10 offset=(0.018,-0.062,0.020) r=0.048 wide=1.10 tall=1.30 deep=1.40 blend=0.006 mirror
+  # Three toe claws per paw, pale bone, splayed in x, reaching forward-down.
+  blob leg on foot  at=0.0 offset=(0.052,-0.070,0.095) tip=(0.016,-0.045,0.050) r=0.017 r2=0.004 blend=0.003 mirror color=dbc0a0
+  blob leg on foot  at=0.0 offset=(0.014,-0.075,0.105) tip=(0.004,-0.048,0.055) r=0.018 r2=0.004 blend=0.003 mirror color=dbc0a0
+  blob leg on foot  at=0.0 offset=(-0.026,-0.070,0.095) tip=(-0.010,-0.045,0.048) r=0.016 r2=0.004 blend=0.003 mirror color=dbc0a0
+
+# ============================================================
+# FACE — cranium measured off the Head cloud: halfW 0.052-0.063, back
+# z -0.054, face front +0.118 (the teeth row); chin 1.106, crown 1.300,
+# centre 1.203. The mouth/eyes are the BAKED DECAL (sheet block) — the
+# skill is emphatic that agents cannot paint faces from prims.
+# ============================================================
+face
+  # Cranium: r 0.066 with these scales gives half (0.061, 0.094, 0.099) —
+  # deep, because the mesh face front (+0.118) is far forward of the
+  # skull's back (-0.054) and the teeth row IS the front surface.
+  headRadius 0.066
+  headWidth  0.92
+  headHeight 1.42
+  headDepth  1.50
+  jawWidth   0.82
+  jawHeight  0.72
+  jawDrop    0.085
+  # The chin/jaw juts: the mesh jaw front (z +0.106 at y 1.095) is as far
+  # forward as the face — an undershot skull jaw.
+  jawJut     0.055
+  # Brow ridge is prominent on the mesh (bony shelf over the eyes).
+  noseLength 0.006
+  noseWidth  0.50
+  noseDrop   0.030
+  browHeavy  0.011
+  browRise   0.030
+  headBlend  0.005
+
+# Face decal: `npm run blob:face-bake -- bonewalker` baked the mesh's own
+# head (top 16.5%: horned skull, head box 0.475 wide x 0.280 tall — the
+# horns make the box wide). Projection aimed at TWO features in head space
+# of the fattest head prim (the face block's cranium, centre (0,1.203),
+# semi-axes 0.061x0.094x0.099): the image's eye row (uv.y 0.64) at hs.y
+# +0.208, and the image's bony CHIN row (uv.y 0.32) at hs.y -0.85 — that
+# pair puts the teeth between them (uv.y 0.40 at hs.y -0.59, y 1.148) and
+# keeps the jaw's bottom (hs.y -1.03) on the image's chin-shadow rows
+# instead of the naked dark band the first aim (eyes+teeth) left there.
+# scaleY 0.302, centreY 0.577. scaleX 0.125 maps the image's eye gap
+# (uv.x 0.42/0.58) onto hs.x +/-0.63 = x +/-0.038 (wide-set eyes); the
+# horn imagery lives at uv.x < 0.2 / > 0.8, past the cranium and the decal
+# clamp, so it never smears onto the skull.
+sheet
+  image       bonewalker-face.png
+  decal       1
+  projScaleX  0.125
+  projScaleY  0.302
+  projCentreX 0.5
+  projCentreY 0.577
+
+# Palette measured off the embedded texture (2026-08-27): dominant mode
+# sRGB (84,40,26) dark rusted red-brown -> linear (0.089,0.021,0.011),
+# lifted ~1.7x because the lab key is strong and the mottle averages the
+# mean toward the bone dust. Bone mottle = the brightest texel band
+# sRGB (175,140,119) -> linear (0.44,0.26,0.19), brightened toward the
+# painted-prim bone dbc0a0 (linear 0.68,0.53,0.37) so meat and bone read
+# as one family. Mottle differs in HUE (grey-gold over red), not just
+# value — the "bone showing through meat" look is the whole character.
+palette
+  baseColor     0.155 0.050 0.028
+  deepColor     0.28 0.05 0.05
+  charColor     0.20 0.08 0.05
+  specIntensity 0.50
+  specRoughness 0.42
+  fresnelBoost  0.35
+  translucency  0.18
+  surfaceNoiseAmp    0.25
+  silhouetteNoiseAmp 0.0
+  wetness       0.15
+  mottleAmp     0.38
+  mottleScale   1.6
+  mottleColor   0.46 0.38 0.31
