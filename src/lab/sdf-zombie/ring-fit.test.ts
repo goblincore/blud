@@ -190,6 +190,68 @@ describe('binResiduals', () => {
       expect(bin.crossBone).toBeGreaterThan(0);
     }
   });
+
+  /**
+   * A REFERENCE POINT PAST A PRIMITIVE'S END IS NOT A MEASUREMENT OF THAT END.
+   *
+   * `t` used to be clamped into [0, 1], so every point lying off the ends piled
+   * up at exactly t=0 or t=1. Measured on the real mouse that was 88.3% of
+   * `pelvis` src 126's points at t=0 and 49.2% of `upperarm.l` src 433's at
+   * t=1 — fabricated end coverage that walked straight through the
+   * TAPER_T_MIN/MAX gate, carrying the largest residuals in the bin.
+   */
+  it('drops reference points lying beyond a primitive\'s ends, and counts them', () => {
+    const body = oneCapsule();
+    const bones = new Map<string, ResolvedBone>([['spine1', { head: [0, 0, 0], tail: [0, 1, 0] }]]);
+    const inRange: Vec3[] = [], beyond: Vec3[] = [];
+    for (let i = 0; i < 60; i++) {
+      const th = (i / 60) * 2 * Math.PI;
+      const c = Math.cos(th), s2 = Math.sin(th);
+      // Strictly interior: t runs 0.2 .. 0.8, never touching an endpoint.
+      inRange.push([0.1 * c, 0.2 + 0.6 * (i / 59), 0.1 * s2]);
+      // On the caps, off both ends.
+      beyond.push([0.05 * c, -0.08, 0.05 * s2]);
+      beyond.push([0.05 * c, 1.08, 0.05 * s2]);
+    }
+    const bin = binResiduals(new Map([['spine1', [...inRange, ...beyond]]]), body, bones).get(0)!;
+    expect(bin.outOfRange).toBe(beyond.length);
+    expect(bin.samples.length).toBe(inRange.length);
+    // ...and what survives carries its TRUE position, not a pinned endpoint.
+    expect(bin.samples.some((s2) => s2.t === 0 || s2.t === 1)).toBe(false);
+    for (const s2 of bin.samples) {
+      expect(s2.t).toBeGreaterThan(0);
+      expect(s2.t).toBeLessThan(1);
+    }
+  });
+
+  it('does not let a point beyond the end move the fit', () => {
+    const body = oneCapsule();
+    const bones = new Map<string, ResolvedBone>([['spine1', { head: [0, 0, 0], tail: [0, 1, 0] }]]);
+    // A reference 20mm fatter than us, sampled end to end: the honest answer
+    // is a uniform r 0.100 -> 0.120 with no taper at all.
+    const inRange: Vec3[] = [];
+    for (let i = 0; i < 200; i++) {
+      const th = i * 2.399963229728653;
+      inRange.push([0.12 * Math.cos(th), i / 199, 0.12 * Math.sin(th)]);
+    }
+    // Junk far off the +y end, at three times the radius. Clamped to t=1 these
+    // carried the bin's largest residuals and drove the taper slope.
+    const beyond: Vec3[] = [];
+    for (let i = 0; i < 80; i++) {
+      const th = i * 2.399963229728653;
+      beyond.push([0.3 * Math.cos(th), 1.4, 0.3 * Math.sin(th)]);
+    }
+    const fit = (pts: Vec3[]) =>
+      fitPrims(binResiduals(new Map([['spine1', pts]]), body, bones), body)[0]!;
+    const clean = fit(inRange);
+    const withJunk = fit([...inRange, ...beyond]);
+    expect(clean.r).toBeDefined();
+    expect(withJunk.n).toBe(clean.n);
+    expect(withJunk.outOfRange).toBe(beyond.length);
+    expect(withJunk.r!.to).toBeCloseTo(clean.r!.to, 9);
+    expect(withJunk.r2?.to ?? 0).toBeCloseTo(clean.r2?.to ?? 0, 9);
+    expect(withJunk.meanAbs).toBeCloseTo(clean.meanAbs, 9);
+  });
 });
 
 /** One capsule on a 45-degree bone — the case the old axis rule mishandled. */
@@ -448,7 +510,7 @@ describe('sampleBodySurface ring plane', () => {
 
 const base = (over: Partial<Suggestion>): Suggestion => ({
   prim: 0, src: 7, bone: 'thigh.l', n: 500, meanAbs: 0.004,
-  blendDominated: 0, crossBone: 0, ...over,
+  blendDominated: 0, crossBone: 0, outOfRange: 0, ...over,
 });
 
 describe('mergeMirrored', () => {
@@ -606,7 +668,7 @@ function rampBin(tMin: number, tMax: number, n = 200): Map<number, PrimBin> {
     const theta = 2 * Math.PI * ((i * 0.6180339887498949) % 1);
     samples.push({ t, theta, d: -0.02 + 0.04 * t });
   }
-  return new Map([[0, { prim: 0, basis, samples, blendDominated: 0, crossBone: 0 }]]);
+  return new Map([[0, { prim: 0, basis, samples, blendDominated: 0, crossBone: 0, outOfRange: 0 }]]);
 }
 
 /**

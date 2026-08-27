@@ -210,6 +210,12 @@ export interface PrimBin {
   blendDominated: number;
   /** Reference points that landed on a prim belonging to a DIFFERENT bone. */
   crossBone: number;
+  /**
+   * Reference points whose foot on the primitive's axis fell OUTSIDE its own
+   * span, and which were therefore dropped. A bin whose `outOfRange` dwarfs
+   * its sample count was measured mostly off the ends of the thing it names.
+   */
+  outOfRange: number;
 }
 
 /**
@@ -224,6 +230,32 @@ export interface PrimBin {
  * because the rule is lossy: a bin whose crossBone rivals its sample count is
  * measuring a seam, not a limb, and whatever is fitted from it should be
  * treated as such.
+ *
+ * A POINT BEYOND THE PRIMITIVE'S ENDS IS DROPPED TOO, into `outOfRange`, and
+ * this used to be a `Math.max(0, Math.min(1, ...))` clamp. Clamping was wrong
+ * twice over. It FABRICATED end coverage — measured on the real mouse, 88.3%
+ * of `pelvis` src 126's points and 68.6% of src 122's sat at exactly t=0, and
+ * 49.2% of `upperarm.l` src 433's at exactly t=1 — which walked straight
+ * through the TAPER_T_MIN/TAPER_T_MAX gate that exists to stop the taper line
+ * being extrapolated outside its support. And it corrupted the least-squares
+ * rows as well as the taper: a point past a cap is displaced from the axis
+ * mostly ALONG it, but `toLocal` hands the ring frame only its perpendicular
+ * part, so `theta` is near-arbitrary and the residual — the largest in the bin,
+ * because the field off the end is nothing like the primitive's own surface —
+ * is charged to a radial direction the point does not have.
+ *
+ * THE CUT IS HARD AT [0, 1], WITH NO TOLERANCE BAND, and that is a measured
+ * choice rather than a tidy one. A genuine surface point on an end cap sits an
+ * axial excess `e` past the end at true perpendicular radius
+ * `sqrt(rho^2 - e^2)`, while the fit's field model (see `fitPrims`) reads its
+ * radius as the full `rho`. Retaining it therefore mis-locates it by
+ * `rho - sqrt(rho^2 - e^2)`, and for that to stay under `RESOLUTION` (1e-6 m,
+ * the instrument's own floor) on the mouse's thinnest measured prims —
+ * `rho` ~ 40mm — needs `e` < 0.28mm, i.e. under 0.3% of a 100mm primitive's
+ * length. A band that narrow retains nothing; a band wide enough to retain
+ * anything mis-locates its points by more than the instrument can resolve.
+ * Half a millimetre of honestly-lost cap is cheaper than a millimetre of
+ * invented radius.
  */
 export function binResiduals(
   pointsByBone: Map<string, Vec3[]>,
@@ -254,23 +286,27 @@ export function binResiduals(
             : ringBasis(prim.a, add(prim.a, sub(bone.tail, bone.head)));
           basisOf.set(first, basis);
         }
-        bin = { prim: first, basis, samples: [], blendDominated: 0, crossBone: 0 };
+        bin = { prim: first, basis, samples: [], blendDominated: 0, crossBone: 0, outOfRange: 0 };
         bins.set(first, bin);
       }
 
       if (prim.bone !== undefined && prim.bone !== boneName) { bin.crossBone++; continue; }
 
       const l = toLocal(p, bin.basis);
-      const t = bin.basis.length > 1e-9
-        ? Math.max(0, Math.min(1, l.along / bin.basis.length))
-        : 0.5;
+      // A point prim has no span to be outside of, so every point sits at its
+      // notional middle; only a prim with a real axis can have ends to miss.
+      const t = bin.basis.length > 1e-9 ? l.along / bin.basis.length : 0.5;
+      if (t < 0 || t > 1) { bin.outOfRange++; continue; }
       bin.samples.push({ t, theta: Math.atan2(l.x2, l.x1), d: sdBody(p, body) });
       if (secondD - firstD < prim.blendK) bin.blendDominated++;
     }
   }
 
   for (const bin of bins.values()) {
-    const n = bin.samples.length + bin.crossBone;
+    // Denominator is every point OFFERED to the bin, matching how `crossBone`
+    // already counts: the share is of points that reached this primitive, not
+    // of the subset that survived every rule.
+    const n = bin.samples.length + bin.crossBone + bin.outOfRange;
     bin.blendDominated = n === 0 ? 0 : bin.blendDominated / n;
   }
   return bins;
@@ -343,6 +379,12 @@ export interface Suggestion {
   meanAbs: number;
   blendDominated: number;
   crossBone: number;
+  /**
+   * Reference points dropped because they fell off this primitive's own ends.
+   * Carried into the report beside `crossBone`: a primitive whose points were
+   * mostly beyond its span was not measured, however many of them there were.
+   */
+  outOfRange: number;
   r?: Change<number>;
   r2?: Change<number>;
   /** Only components the data could actually see. */
@@ -480,6 +522,7 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
       n: bin?.samples.length ?? 0,
       blendDominated: bin?.blendDominated ?? 0,
       crossBone: bin?.crossBone ?? 0,
+      outOfRange: bin?.outOfRange ?? 0,
     };
 
     const skipped = skipReason(prim);
@@ -490,9 +533,16 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
       continue;
     }
     if (bin.samples.length < MIN_SAMPLES) {
-      const why = bin.crossBone > 0
-        ? `only ${bin.samples.length} samples (need ${MIN_SAMPLES}); ${bin.crossBone} more went to another bone`
-        : `only ${bin.samples.length} samples (need ${MIN_SAMPLES})`;
+      // Say WHERE the missing points went. "Too few samples" reads as a thin
+      // reference mesh; "most of its points lay off its own ends" is a
+      // different fact about a different problem, and the reader acts on it
+      // differently (a `len=` or placement edit, not a denser scan).
+      const lost: string[] = [];
+      if (bin.crossBone > 0) lost.push(`${bin.crossBone} more went to another bone`);
+      if (bin.outOfRange > 0) lost.push(`${bin.outOfRange} more lay beyond its own ends`);
+      const why = lost.length === 0
+        ? `only ${bin.samples.length} samples (need ${MIN_SAMPLES})`
+        : `only ${bin.samples.length} samples (need ${MIN_SAMPLES}); ${lost.join(', ')}`;
       out.push({ ...base, meanAbs: 0, skipped: why });
       continue;
     }
@@ -714,6 +764,7 @@ export function mergeMirrored(suggestions: Suggestion[]): Suggestion[] {
       meanAbs: group.reduce((s, g) => s + g.meanAbs, 0) / group.length,
       blendDominated: group.reduce((s, g) => s + g.blendDominated, 0) / group.length,
       crossBone: group.reduce((s, g) => s + g.crossBone, 0),
+      outOfRange: group.reduce((s, g) => s + g.outOfRange, 0),
       mirrorDisagreement: Math.abs((a.r?.to ?? 0) - (b.r?.to ?? 0)),
       // COVERAGE MERGES AS THE INTERSECTION, NOT THE UNION. The merged numbers
       // are an average of the two sides, so they are only as well-supported as

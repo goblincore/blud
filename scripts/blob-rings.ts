@@ -154,6 +154,13 @@ for (const s of suggestions) {
   console.log(`  ${rank}. ${name}.blob:${s.src ?? '?'}   ${s.bone ?? '?'}`);
   const flags = [`n=${s.n}`, `blend-dominated ${pct(s.blendDominated)}`];
   if (s.crossBone) flags.push(`cross-bone dropped ${s.crossBone}`);
+  // OFF-ENDS IS A DIFFERENT FAILURE FROM CROSS-BONE and must be visible next
+  // to `n`. These points are reference surface lying past this primitive's own
+  // span — usually because the bone is the wrong LENGTH — and they used to be
+  // clamped onto t=0/t=1, where they fabricated the end coverage the taper
+  // gate checks for. They are dropped now, so a block whose off-ends count
+  // dwarfs its `n` is a primitive the reference barely overlaps.
+  if (s.outOfRange) flags.push(`off-ends dropped ${s.outOfRange}`);
   if (s.mirrorDisagreement) flags.push(`L/R disagree ${mm(s.mirrorDisagreement)}`);
   // PRINTED ONLY WHEN COVERAGE IS PARTIAL. A primitive measured end to end is
   // the ordinary case and needs no annotation; one measured over 13% of its
