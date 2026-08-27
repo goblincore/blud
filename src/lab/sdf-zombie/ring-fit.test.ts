@@ -273,11 +273,24 @@ describe('fitPrims — ground truth round trip', () => {
    * Move the SAME error to `wide` and the two rules separate cleanly. The old
    * rule could only ever name one axis — `deep` — so it would have reported a
    * large `deep` change to explain an error `deep` had no part in. The fit
-   * leaves `deep` alone and puts the change in the wide/tall pair, which for
-   * this bone are EXACTLY degenerate (`w_0^2 == w_1^2` in every sample, so the
-   * two columns are proportional). Which of the pair it names is arbitrary and
-   * is not asserted; that the surface it describes is right, and that `deep` is
-   * untouched, are the claims.
+   * puts the change in the wide/tall pair, which for this bone are EXACTLY
+   * degenerate (`w_0^2 == w_1^2` in every sample, so the two columns are
+   * proportional). Which of the pair it names is arbitrary and is not asserted;
+   * that the surface it describes is right, and that `deep` is untouched, are
+   * the claims.
+   *
+   * `deep` IS ASSERTED THROUGH ITS WORLD SEMI-AXIS `A = r * s_deep`, NOT
+   * THROUGH `s_deep`. This was `Math.abs(deep.to - 1) < 0.02` and that was the
+   * wrong quantity: only the semi-axes are measurable at all (see fitPrims'
+   * header on the exact rank deficiency), and `regauge` deliberately moves
+   * magnitude between `r` and the scales, so the fit is free to change
+   * `s_deep` without changing the surface — which is exactly what it does here,
+   * reporting r 0.1 -> 0.0939 with s_deep 1.0569. Reconstructing the removed
+   * held/solved rule and running it on these same bins: it drops x, holds
+   * `tall`, solves `deep`, and lands deep's semi-axis at 0.086362 — 13.64% off
+   * truth, against 0.74% for the fit. The window is unchanged at 2%; it is the
+   * quantity that was wrong, and the reformulation still separates the two
+   * rules by a factor of 18.
    */
   it('REGRESSION: does not blame the axis the old rule always blamed', () => {
     const truth = diagonalCapsule();
@@ -286,7 +299,8 @@ describe('fitPrims — ground truth round trip', () => {
     ours.prims[0]!.scale = [1.3, 1, 1];
     const p0 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 0)!;
     const deep = p0.scales?.find((s) => s.axis === 'deep');
-    expect(deep === undefined || Math.abs(deep.to - 1) < 0.02).toBe(true);
+    const rTo = p0.r?.to ?? ours.prims[0]!.radius;
+    expect(Math.abs((rTo * (deep?.to ?? 1)) / 0.1 - 1)).toBeLessThan(0.02);
     expect(p0.scales?.some((s) => s.axis === 'wide' || s.axis === 'tall')).toBe(true);
   });
 
@@ -316,4 +330,81 @@ describe('fitPrims — ground truth round trip', () => {
     expect(p1.skipped).toMatch(/bend/i);
     expect(p1.r).toBeUndefined();
   });
+});
+
+/**
+ * One capsule of length 1 along a chosen WORLD axis, so the seeding plane can
+ * be checked against a bone that does not run along y.
+ */
+function axisCapsule(
+  dir: 0 | 1 | 2,
+  scale: [number, number, number] = [1, 1, 1],
+): { prims: Primitive[]; clusters: ClusterInfo[] } {
+  const b: [number, number, number] = [0, 0, 0];
+  b[dir] = 1;
+  const center: [number, number, number] = [0, 0, 0];
+  center[dir] = 0.5;
+  const prims: Primitive[] = [{
+    a: [0, 0, 0], b, radius: 0.1, scale,
+    blendK: 0.01, limb: 'torso', cluster: 0, bone: 'spine1', src: 42,
+  }];
+  const clusters: ClusterInfo[] = [
+    { id: 0, limb: 'torso', start: 0, count: 1, center, radius: 1, alive: true },
+  ];
+  return { prims, clusters };
+}
+
+/**
+ * Reach of a sample set along world component `k`, as the 10th largest |value|.
+ *
+ * NOT the plain maximum, and the difference is the whole test. Seed i = 0 of
+ * the golden spiral has theta exactly 0, which for an x-aligned bone puts it
+ * exactly ON the medial axis; `gradient`'s central difference cancels there,
+ * it takes its `[0, 1, 0]` fallback, and that ONE point walks out to |y| = r
+ * all by itself. Measured on the broken sampler: the top ten |y| of 400
+ * samples were `0.100000` followed by nine exact zeros. A max-based assertion
+ * is satisfied by that single accident and proves nothing about the ring.
+ */
+function reach(pts: readonly (readonly number[])[], k: number): number {
+  return pts.map((p) => Math.abs(p[k]!)).sort((a, b) => b - a)[9] ?? 0;
+}
+
+/**
+ * REGRESSION: the ring must be seeded in the plane perpendicular to the
+ * PRIMITIVE'S OWN AXIS, not the world xz-plane.
+ *
+ * The original seed was `[cos(theta)*sx, 0, sin(theta)*sz]` — hardcoded to
+ * world xz with y pinned to zero. That is only perpendicular for a bone
+ * running along world y. For a bone along world z the seed's z component
+ * pushes ALONG the bone and its y component is identically zero, so the
+ * "ring" collapses to a line segment swept down the axis: every sample came
+ * back with |y| = 0.0000 exactly, and `scale [1,1,1]` and `[1,2,1]` produced
+ * IDENTICAL output. A `tall=` error on such a bone was not merely mismeasured,
+ * it was invisible. The x-aligned bone is the same collapse with one stray
+ * point on it — see `reach`.
+ *
+ * This is not hypothetical: `foot` is authored `dir=fwd` (world z) and
+ * `clavicle` is `dir=side` (world x). Both are in scope for the fit, and
+ * neither could ever have been validated before this test.
+ */
+describe('sampleBodySurface ring plane', () => {
+  for (const [dir, name] of [[2, 'z'], [0, 'x']] as const) {
+    it(`sees a tall= error on a ${name}-aligned bone`, () => {
+      const round = sampleBodySurface(axisCapsule(dir, [1, 1, 1]), 400).get('spine1')!;
+      const tall = sampleBodySurface(axisCapsule(dir, [1, 2, 1]), 400).get('spine1')!;
+      // The isotropic capsule reaches its own radius in y...
+      expect(reach(round, 1)).toBeGreaterThan(0.095);
+      // ...and doubling `tall` reaches twice as far. Both are 0 before the fix.
+      expect(reach(tall, 1) / reach(round, 1)).toBeGreaterThan(1.7);
+    });
+
+    it(`spans the full circle around a ${name}-aligned bone`, () => {
+      const pts = sampleBodySurface(axisCapsule(dir), 400).get('spine1')!;
+      // Both components perpendicular to the bone must reach the radius, and
+      // reach it with a real population of points rather than one stray.
+      for (const k of [0, 1, 2].filter((c) => c !== dir)) {
+        expect(reach(pts, k)).toBeGreaterThan(0.095);
+      }
+    });
+  }
 });

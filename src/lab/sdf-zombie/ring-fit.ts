@@ -125,6 +125,13 @@ export function sampleBodySurface(body: Body, perPrim = 200): Map<string, Vec3[]
     if (list === undefined) { list = []; out.set(bone, list); }
     const axis = sub(prim.b, prim.a);
     const axisLen = len(axis);
+    // The ring is built in the plane genuinely PERPENDICULAR to this
+    // primitive's own axis. `ringBasis` returns an orthonormal {e1, e2, u} for
+    // exactly that, and for a degenerate prim (a == b) it falls back to a
+    // FIXED frame (u = +y, e1 = +x) — arbitrary, but a point prim has no axis
+    // to be perpendicular to, and a stable choice keeps the sample set
+    // reproducible.
+    const basis = ringBasis(prim.a, prim.b);
     const steps = stepsForPrim(prim);
     let kept = 0;
     for (let i = 0; i < perPrim; i++) {
@@ -134,8 +141,22 @@ export function sampleBodySurface(body: Body, perPrim = 200): Map<string, Vec3[]
       const theta = i * 2.399963229728653; // golden angle, in radians
       const along = add(prim.a, vscale(axis, axisLen === 0 ? 0 : t));
       const r = prim.radius + ((prim.radiusB ?? prim.radius) - prim.radius) * t;
-      // Push out along a world-axis ring, scaled by the prim's own anisotropy.
-      const seed: Vec3 = [Math.cos(theta) * prim.scale[0], 0, Math.sin(theta) * prim.scale[2]];
+      // Push out along the perpendicular ring, then apply the prim's
+      // anisotropy PER WORLD COMPONENT so the seed still reaches further along
+      // a stretched axis — which is what the `r * 1.4` overshoot below relies
+      // on to clear the surface.
+      //
+      // NOT the world xz-plane with y pinned to zero, which is what this was.
+      // That is perpendicular only for a bone running along world y; for a
+      // bone along world z it swept a line segment DOWN the axis and every
+      // sample came back with |y| = 0 exactly, so a `tall=` error on `foot`
+      // (dir=fwd) or `clavicle` (dir=side) was not mismeasured but invisible.
+      const ct = Math.cos(theta), st = Math.sin(theta);
+      const seed: Vec3 = [
+        (basis.e1[0] * ct + basis.e2[0] * st) * prim.scale[0],
+        (basis.e1[1] * ct + basis.e2[1] * st) * prim.scale[1],
+        (basis.e1[2] * ct + basis.e2[2] * st) * prim.scale[2],
+      ];
       const p = add(along, vscale(seed, r * 1.4));
       const q = projectToSurface(p, body, steps);
       if (Math.abs(sdBody(q, body)) < 1e-6) { list.push(q); kept++; }
