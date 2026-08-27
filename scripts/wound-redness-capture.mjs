@@ -131,16 +131,21 @@ async function bootGame(slug) {
   console.log('game booted: webgpu, gun ready, frozen for aim');
 }
 
-/** Fire, let the flinch play OUT (frozen rigs pin the lunge forever —
- *  wanderFrozen gates a.step entirely), then freeze to pin a settled pose. */
-async function fireAndSettle(fireExpr) {
+/**
+ * Deterministic fire-and-capture: hand-step frames with the rAF loop stopped
+ * (step() pins everything between calls, so a screenshot IS the frame).
+ *   snap:    fire -> step(snapFrames) — crater faces the shooter, the flinch
+ *            has barely begun (the impulse needs frames to deform the pose).
+ *   settle:  step(SETTLE_FRAMES) = 6 s — stagger plays out and re-settles.
+ * Real-time waits cannot do this: the wander carries the body a metre in the
+ * seconds the flinch needs, and freezing early pins the lunge forever.
+ */
+async function fireAndSnap(fireExpr, snapFrames = 4) {
   await evaluate('__sdfGame.freeze(false)');
-  await sleep(150);
   await evaluate(fireExpr);
-  await sleep(3500);
-  await evaluate('__sdfGame.freeze(true)');
-  await sleep(600);
+  await evaluate(`__sdfGame.step(${snapFrames})`);
 }
+const SETTLE_FRAMES = 360;
 
 /** The zombie's CURRENT chest anchor (posed torso centre) + ground pos. */
 const chestExpr = `(id => {
@@ -155,8 +160,8 @@ async function dumpWounds(id, tag) {
   writeFileSync(`${OUT}/wounds-${tag}.json`, JSON.stringify(w, null, 2));
   if (Array.isArray(w)) {
     for (const [i, ww] of w.entries()) {
-      const off = Math.hypot(ww.carve[0] - ww.surface[0], ww.carve[1] - ww.surface[1], ww.carve[2] - ww.surface[2]);
-      console.log(`    wound[${i}] ${ww.type} r=${ww.radius.toFixed(3)} prim=${ww.primIdx} |carve-surface|=${off.toFixed(4)} m`);
+      const cd = ww.carveDepth ?? 0;
+      console.log(`    wound[${i}] ${ww.type} r=${ww.radius.toFixed(3)} prim=${ww.primIdx} carveDepth=${cd.toFixed(4)} m (slab ${cd > 0 && cd < ww.radius ? 'BINDS' : 'inactive'})`);
     }
   }
   return w;
@@ -170,21 +175,44 @@ if (PHASE === 'slug' || PHASE === 'all-game') {
   console.log(`slug-torso: target zombie ${z0.id} at (${z0.pos[0].toFixed(2)}, ${z0.pos[2].toFixed(2)})`);
   const ch = await evaluate(`${chestExpr}(${z0.id})`);
   const ty = ch.centre ? ch.centre[1] : 1.1;
-  await setPose(around(z0.pos[0], z0.pos[2], 0, 2.4, ty));
+  await setPose(around(z0.pos[0], z0.pos[2], 0, 1.6, ty));
   await shot('slug-torso-0-aim', false);
 
-  await fireAndSettle('__sdfGame.fireSlug()');
-  // The shove moved the body — re-read and re-frame.
+  // FROZEN-while-firing snap: the slug flies, the wound stamps, and the rig
+  // never integrates the impulse — the crater faces the camera on an upright
+  // body (an unfrozen body flinches within 4 frames).
+  await evaluate('__sdfGame.freeze(true)');
+  await sleep(150);
+  await evaluate('__sdfGame.fireSlug()');
+  await sleep(400);
+  await shot('slug-torso-1-early', false);
+  // Then let the stagger play out for the settled framing.
+  await evaluate('__sdfGame.freeze(false)');
+  await evaluate(`__sdfGame.step(${SETTLE_FRAMES})`);
+  // Frame along the wound's OUTWARD normal (surface minus the inward slab
+  // normal) — re-reading debugWounds AFTER the settle.
   const zs2 = await evaluate('__sdfGame.zombies()');
   const z2 = zs2.find(z => z.id === z0.id);
-  const ch2 = await evaluate(`${chestExpr}(${z0.id})`);
-  const ty2 = ch2.centre ? ch2.centre[1] : 1.1;
-  console.log(`  body moved to (${z2.pos[0].toFixed(2)}, ${z2.pos[2].toFixed(2)})`);
-  await setPose(around(z2.pos[0], z2.pos[2], 0, 1.3, ty2));
-  await sleep(600);
+  const dw = await evaluate(`__sdfGame.debugWounds(${z0.id})`);
+  const w0 = (dw && dw[0]) ? dw[0] : null;
+  const wPos = w0 ? w0.surface : [z2.pos[0], 1.1, z2.pos[2]];
+  const wN = (w0 && w0.carveNormal) ? w0.carveNormal : [0, 0, 1];
+  const frameWound = async (dist) => {
+    const cx = wPos[0] - wN[0] * dist, cy = wPos[1] - wN[1] * dist, cz = wPos[2] - wN[2] * dist;
+    const yaw = Math.atan2(wPos[0] - cx, -(wPos[2] - cz));
+    const pitch = Math.atan2(wPos[1] - EYE, Math.hypot(wPos[0] - cx, wPos[2] - cz));
+    await evaluate(`__sdfGame.setPose(${cx}, ${cz}, ${yaw}, ${pitch})`);
+    await evaluate('__sdfGame.step(1)');
+    await sleep(200);
+  };
+  console.log(`  body settled at (${z2.pos[0].toFixed(2)}, ${z2.pos[2].toFixed(2)}); wound at (${wPos.map(v => v.toFixed(2)).join(', ')}) normal (${wN.map(v => v.toFixed(2)).join(', ')})`);
+  await evaluate(`__sdfGame.placeMarker(${wPos[0]}, ${wPos[1]}, ${wPos[2]}, 0xff00ff)`);
+  await frameWound(1.3);
+  await shot('slug-torso-1-close-marked', false);
+  await evaluate('__sdfGame.placeMarker(null)');
+  await evaluate('__sdfGame.step(1)');
   await shot('slug-torso-1-close');
-  await setPose(around(z2.pos[0], z2.pos[2], 0, 0.9, ty2));
-  await sleep(600);
+  await frameWound(0.9);
   await shot('slug-torso-2-point-blank');
   await dumpWounds(z0.id, 'slug-torso');
 }
@@ -227,18 +255,20 @@ if (PHASE === 'forearm' || PHASE === 'all-game') {
     await evaluate(`__sdfGame.setPose(${sx}, ${sz}, ${yaw}, ${pitch})`);
     await sleep(300);
   };
-  await aim(1.8);
+  await aim(1.4);
   await shot('forearm-0-aim', false);
-  await fireAndSettle('__sdfGame.fireSlug()');
+  await fireAndSnap('__sdfGame.fireSlug()');
+  await shot('forearm-1-front-snap', false);
+  await evaluate(`__sdfGame.step(${SETTLE_FRAMES})`);
   await aim(0.9);
-  await sleep(300);
+  await evaluate('__sdfGame.step(1)');
   await shot('forearm-1-front-close');
   // Perforation check: view the SAME limb from the OPPOSITE side.
   await aim(0.9, Math.PI);
-  await sleep(300);
+  await evaluate('__sdfGame.step(1)');
   await shot('forearm-2-back-close');
   await aim(1.4, Math.PI * 0.5);
-  await sleep(300);
+  await evaluate('__sdfGame.step(1)');
   await shot('forearm-3-side');
   await dumpWounds(z0.id, 'forearm');
 }
@@ -249,20 +279,46 @@ if (PHASE === 'buckshot' || PHASE === 'all-game') {
   const z0 = zs[0];
   const ch = await evaluate(`${chestExpr}(${z0.id})`);
   const ty = ch.centre ? ch.centre[1] : 1.1;
-  await setPose(around(z0.pos[0], z0.pos[2], 0, 2.6, ty));
-  await fireAndSettle('__sdfGame.fire(1)');
-  await fireAndSettle('__sdfGame.fire(1)');
-  await fireAndSettle('__sdfGame.fire(1)');
-  const zs2 = await evaluate('__sdfGame.zombies()');
-  const z2 = zs2.find(z => z.id === z0.id);
-  const ch2 = await evaluate(`${chestExpr}(${z0.id})`);
-  const ty2 = ch2.centre ? ch2.centre[1] : 1.1;
-  await setPose(around(z2.pos[0], z2.pos[2], 0, 1.3, ty2));
-  await sleep(300);
+  // FROZEN-while-firing: wanderFrozen gates actor.step but NOT the weapon
+  // sim, so pellets fly, wounds stamp, and the rig never integrates the
+  // impulse — the body holds its pose for the close-ups (a live body at
+  // close range severs/collapses; the pieces wear red craters but the gate
+  // wants a pocked STANDING torso).
+  await evaluate('__sdfGame.freeze(true)');
+  // Stand as far as ROOM 1 allows (a 6 m stand-in lands inside the far wall;
+  // a camera inside geometry sees nothing but the wall's backface).
+  // STAGED pocks via __sdfGame.stampWoundAt (the lab's stampWoundAt twin):
+  // a full volley kills + death-gibs — the pocked standing torso only exists
+  // through this seam. Five chest points, pellet calibre, real stamp path.
+  const chE = await evaluate(`${chestExpr}(${z0.id})`);
+  const c0 = chE.centre;
+  const stamps = [[0, 0.05], [0.08, 0.0], [-0.08, 0.02], [0.04, -0.07], [-0.04, 0.1]];
+  for (const [ox, oy] of stamps) {
+    await evaluate(`__sdfGame.stampWoundAt(${c0[0]} + ${ox}, ${c0[1]} + ${oy}, ${c0[2] + 2}, 0, 0, -1)`);
+    await sleep(150);
+  }
+  const dbw = await evaluate(`__sdfGame.debugWounds(${z0.id})`);
+  const w1 = (dbw && dbw[0]) ? dbw[0] : null;
+  const wp = w1 ? w1.surface : [z0.pos[0], c0[1], z0.pos[2]];
+  const wn = (w1 && w1.carveNormal) ? w1.carveNormal : [0, 0, 1];
+  const frameW = async (dist) => {
+    const cx = wp[0] - wn[0] * dist, cy = wp[1] - wn[1] * dist, cz = wp[2] - wn[2] * dist;
+    const yaw = Math.atan2(wp[0] - cx, -(wp[2] - cz));
+    const pitch = Math.atan2(wp[1] - EYE, Math.hypot(wp[0] - cx, wp[2] - cz));
+    await evaluate(`__sdfGame.setPose(${cx}, ${cz}, ${yaw}, ${pitch})`);
+    await evaluate('__sdfGame.step(1)');
+    await sleep(200);
+  };
+  await frameW(1.4);
   await shot('buckshot-1-close');
-  await setPose(around(z2.pos[0], z2.pos[2], 0, 0.9, ty2));
-  await sleep(300);
+  await frameW(0.95);
   await shot('buckshot-2-point-blank');
+  // Plus ONE real volley for the weapon's own look (kills + death-gibs —
+  // the pieces wear the same red craters).
+  await evaluate('__sdfGame.freeze(true)');
+  await evaluate('__sdfGame.fire(1)');
+  await sleep(600);
+  await shot('buckshot-3-volley', false);
   await dumpWounds(z0.id, 'buckshot');
 }
 
@@ -273,21 +329,36 @@ if (PHASE === 'blast' || PHASE === 'all-game') {
   const ch = await evaluate(`${chestExpr}(${z0.id})`);
   if (!ch.centre) fail('no torso centre');
   const [cx, cy, cz] = ch.centre;
-  // Detonate ~35 cm in front of the chest (z+ toward the default camera side):
-  // falloff-scaled calibre, same as a dynamite stick landing at the feet-chest.
-  // Front = toward the player's spawn side; use +z (the around() angle-0 side).
-  await evaluate(`__sdfGame.explode(${cx}, ${cy}, ${cz + 0.35})`);
-  // explode() is instant and does NO shove (wounds only) — no settle needed.
-  await sleep(400);
-  const zs2 = await evaluate('__sdfGame.zombies()');
-  const z2 = zs2.find(z => z.id === z0.id);
-  const ch2 = await evaluate(`${chestExpr}(${z0.id})`);
-  const ty2 = ch2.centre ? ch2.centre[1] : 1.1;
-  await setPose(around(z2.pos[0], z2.pos[2], 0, 1.3, ty2));
-  await sleep(300);
+  // Blast-class craters staged via stampWoundAt('slug') — the SLUG profile
+  // is the blast rim family at 0.16. A real resolveExplosion stamps ~16
+  // wounds whose summed damage crosses the gib threshold at ANY range (the
+  // weapon works); the per-crater look is what this gate needs.
+  // Walk 2 s of frames first: freezing mid-shamble pins whatever hunched
+  // phase the gait was in; a different phase is usually more upright.
+  await evaluate('__sdfGame.freeze(false)');
+  await evaluate('__sdfGame.step(120)');
+  await evaluate('__sdfGame.freeze(true)');
+  const stamps = [[0, 0.04], [0.09, -0.03], [-0.09, -0.02]];
+  for (const [ox, oy] of stamps) {
+    await evaluate(`__sdfGame.stampWoundAt(${cx} + ${ox}, ${cy} + ${oy}, ${cz} + 2, 0, 0, -1, 'slug')`);
+    await sleep(150);
+  }
+  // Frame on the first crater's anchor + normal, everything frozen.
+  const dbw = await evaluate(`__sdfGame.debugWounds(${z0.id})`);
+  const wb = (dbw && dbw[0]) ? dbw[0] : null;
+  const wp = wb ? wb.surface : [cx, cy, cz];
+  const wn = (wb && wb.carveNormal) ? wb.carveNormal : [0, 0, 1];
+  const frameW = async (dist) => {
+    const qx = wp[0] - wn[0] * dist, qy = wp[1] - wn[1] * dist, qz = wp[2] - wn[2] * dist;
+    const yaw = Math.atan2(wp[0] - qx, -(wp[2] - qz));
+    const pitch = Math.atan2(wp[1] - EYE, Math.hypot(wp[0] - qx, wp[2] - qz));
+    await evaluate(`__sdfGame.setPose(${qx}, ${qz}, ${yaw}, ${pitch})`);
+    await evaluate('__sdfGame.step(1)');
+    await sleep(200);
+  };
+  await frameW(1.3);
   await shot('blast-1-close');
-  await setPose(around(z2.pos[0], z2.pos[2], 0, 0.9, ty2));
-  await sleep(300);
+  await frameW(0.9);
   await shot('blast-2-point-blank');
   await dumpWounds(z0.id, 'blast');
 }

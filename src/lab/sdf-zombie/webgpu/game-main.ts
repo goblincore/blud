@@ -48,7 +48,7 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { sdBody } from '../validate';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
-  stepProjectiles, traceProjectile, woundFromSlug, type Projectile,
+  stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { woundWorldPos, woundCarveNormal } from '../damage';
@@ -732,7 +732,21 @@ async function main() {
         const skull = headShape(a.posed());
         if (skull) a.view.setHeadShape(skull.centre, skull.axes);
       }
-      occluderHull.update(actors.map(a => a.posed()));
+      // Wound exclusion, same contract as the lab's woundSpheres: hull
+      // endpoint spheres must not sit inside carve zones, or they render as
+      // pale discs inside craters. The carve sphere is centred ON the anchor
+      // (depth-slab-clipped in the shader), so the full-radius sphere here is
+      // a superset — it can only over-exclude (a slightly looser hull), never
+      // expose. The game never passed this before 2026-08-27 because its
+      // craters were tangent (the pale-wound defect) and never reached the
+      // hull; real craters exposed it within one capture.
+      occluderHull.update(
+        actors.map(a => a.posed()),
+        actors.flatMap(a => {
+          const prims = a.posed().prims;
+          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+        }),
+      );
     }
 
     // ---------------------------------------------------------------
@@ -1017,6 +1031,31 @@ async function main() {
         content: { ...content },
         letterboxed: cap.mode === 'fixed',
       };
+    },
+    /** Dev twin of the lab's stampWoundAt (2026-08-27): ONE wound by ray
+     *  through the same worldHitToWound path the pellet uses, pushed via
+     *  stampBlast — no damage, no shove, no sever. A full grapeshot volley
+     *  kills and death-gibs (the weapon works), so a pocked STANDING torso
+     *  only exists through this seam. */
+    stampWoundAt: (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
+      kind: 'pellet' | 'slug' = 'pellet') => {
+      const a = actors[0];
+      if (!a) return null;
+      const posed = a.posed();
+      const hit = traceProjectile(
+        [ox, oy, oz],
+        [ox + dx * 8, oy + dy * 8, oz + dz * 8],
+        q => sdBody(q, posed),
+      );
+      if (!hit) return null;
+      // 'slug' carries the BLAST profile at 0.16 (see SLUG) — the blast-class
+      // crater look without resolveExplosion's 16-wound kill-gib.
+      const field = (q: Vec3) => sdBody(q, posed);
+      const w = kind === 'slug'
+        ? woundFromSlug(posed.prims, hit, field)
+        : woundFromPellet(posed.prims, hit, 0, field);
+      a.stampBlast([w]);
+      return hit;
     },
     /** Diagnostic detonation: one blast stamped through resolveExplosion
      *  (the SAME worldHitToWound path dynamite uses) with falloff-scaled
