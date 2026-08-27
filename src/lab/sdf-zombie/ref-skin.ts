@@ -105,14 +105,19 @@ function apply(m: Mat4, p: Vec3): Vec3 {
   ];
 }
 
-const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+// MAT4 is here because the inverse bind matrices need it. Reading an accessor
+// whose type is missing from this table used to yield `undefined` through a
+// non-null assertion and fill the array with NaN — silently, all the way into
+// the fitted numbers. Unknown types now throw instead.
+const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
 const BYTES: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
 
 /** Read an accessor into a flat number array, honouring byteStride. */
 function readAccessor(gltf: any, bin: Uint8Array, index: number): number[] {
   const acc = gltf.accessors[index];
   const view = gltf.bufferViews[acc.bufferView];
-  const n = COMPONENTS[acc.type]!;
+  const n = COMPONENTS[acc.type];
+  if (n === undefined) throw new Error(`unsupported accessor type ${acc.type}`);
   const width = BYTES[acc.componentType]!;
   const stride: number = view.byteStride ?? n * width;
   const base = (view.byteOffset ?? 0) + (acc.byteOffset ?? 0);
@@ -166,8 +171,39 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
   // The mesh node carrying this skin.
   const meshNodeIndex: number = gltf.nodes.findIndex((n: any) => n.skin === 0 && n.mesh !== undefined);
   if (meshNodeIndex < 0) throw new Error('no mesh node references skin 0');
-  const meshWorld = world.get(meshNodeIndex) ?? IDENTITY;
   const prim = gltf.meshes[gltf.nodes[meshNodeIndex].mesh].primitives[0];
+
+  /**
+   * Skinning matrix per joint: `globalTransform(joint) * inverseBindMatrix`.
+   *
+   * NOT the mesh node's world matrix, which is what this was and which is
+   * WRONG BY THE SPEC — glTF defines a skinned vertex's world position as
+   * `sum_j w_j * globalTransform(joint_j) * IBM_j * POSITION`, with the mesh
+   * node's own transform explicitly cancelled out ("the transform of the node
+   * the mesh is attached to is ignored"). Applying it as well double-counts
+   * every ancestor scale.
+   *
+   * On mouse.glb that was not a rounding error. Blender exports the rig under
+   * an `Armature` node scaled 0.01 with the bones authored at 100x, so every
+   * IBM carries a column scale of exactly 100 to cancel it. Both the joints
+   * AND the mesh node hang off that Armature, so multiplying POSITION by the
+   * mesh node's world matrix shrank the whole reference surface by 100: a
+   * 1.7m character came back 17mm tall, sitting in a heap at the origin while
+   * `jointWorld` correctly spanned 1.5m. Every residual downstream was then
+   * measured from a point cloud nowhere near the body, and `fitPrims` fitted
+   * exactly nothing.
+   *
+   * A skin with no `inverseBindMatrices` means identity IBMs, per the spec —
+   * so a simple rig under a scaled root still gets that root's scale, which
+   * is what the two-joint fixture pins.
+   */
+  const ibm: number[] | undefined = skin.inverseBindMatrices === undefined
+    ? undefined
+    : readAccessor(gltf, bin, skin.inverseBindMatrices);
+  const skinMatrix: Mat4[] = skin.joints.map((j: number, k: number) => {
+    const g = world.get(j) ?? IDENTITY;
+    return ibm === undefined ? g : mul(g, ibm.slice(k * 16, k * 16 + 16));
+  });
 
   const pos = readAccessor(gltf, bin, prim.attributes.POSITION);
   const jt = readAccessor(gltf, bin, prim.attributes.JOINTS_0);
@@ -185,10 +221,20 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
     // `<=`, not `<`: an exact 0.5/0.5 split is a tie, not a majority, and the
     // tie-break would be whichever weight the exporter happened to write first.
     if (bestW <= MIN_DOMINANT_WEIGHT) { dropped++; continue; }
-    verts.push({
-      joint: jointNames[bestJ] ?? `joint${bestJ}`,
-      position: apply(meshWorld, [pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!]),
-    });
+    // The full weighted blend, not just the dominant joint's matrix. At an
+    // exact bind pose the two agree (every `globalTransform * IBM` is the
+    // identity there), but a reference exported mid-pose has them disagreeing
+    // by up to half a vertex's motion across a joint, and the blended one is
+    // the surface that actually exists.
+    const raw: Vec3 = [pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!];
+    let px = 0, py = 0, pz = 0;
+    for (let c = 0; c < 4; c++) {
+      const w = wt[i * 4 + c]!;
+      if (w === 0) continue;
+      const q = apply(skinMatrix[jt[i * 4 + c]!] ?? IDENTITY, raw);
+      px += w * q[0]; py += w * q[1]; pz += w * q[2];
+    }
+    verts.push({ joint: jointNames[bestJ] ?? `joint${bestJ}`, position: [px, py, pz] });
   }
   return { verts, jointWorld, total, dropped };
 }

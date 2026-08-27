@@ -281,6 +281,23 @@ export const MIN_SAMPLES = 40;
 /** A scale column carrying less than this share of the largest column is unreadable. */
 const MIN_COLUMN_SHARE = 0.05;
 /**
+ * Below this angle between two scale columns, their split is not a measurement.
+ *
+ * The ring only ever constrains the combination of a near-parallel pair: the
+ * standard error on the SPLIT between two coefficients whose columns sit at
+ * angle `phi` is inflated by `1 / sin(phi)` relative to the error on their sum.
+ * At 90 degrees — a bone along a world axis, `wide` against `deep` — there is
+ * no inflation and both are honestly measured. At 15 degrees it is already
+ * 3.9x, and on the real mouse rig `upperarm` sits near 7 degrees, an 8.2x
+ * inflation on a quantity the reader is being invited to type into a `.blob`.
+ *
+ * 15 degrees is the line, and it is a judgement rather than a derivation: it
+ * is where the split's error passes the fit's own honest residual and the
+ * number stops carrying more signal than noise. The pair is still reported —
+ * their sum IS measured — but as one coupled fact about the bone.
+ */
+const DEGENERATE_ANGLE_DEG = 15;
+/**
  * The instrument's own resolution, in metres.
  *
  * `sampleBodySurface` accepts a point once `|sdBody| < 1e-6`, so a residual of
@@ -309,6 +326,14 @@ export interface Suggestion {
   r2?: Change<number>;
   /** Only components the data could actually see. */
   scales?: Array<{ axis: (typeof SCALE_AXIS_NAMES)[number] } & Change<number>>;
+  /**
+   * Two scale axes whose least-squares columns are nearly parallel on this
+   * bone, with the angle between them. Their COMBINED effect is measured; the
+   * split between them is not, and whatever split appears in `scales` came
+   * from the ridge rather than from the reference. Report it as one number
+   * about the pair, never as two independent suggestions.
+   */
+  degenerate?: { axes: [(typeof SCALE_AXIS_NAMES)[number], (typeof SCALE_AXIS_NAMES)[number]]; angleDeg: number };
   offset?: { delta: Vec3; why: string };
   /** Set when the primitive was deliberately not fitted. Nothing else is populated. */
   skipped?: string;
@@ -503,6 +528,28 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
         for (let q2 = 0; q2 < 4; q2++) AtA[p]![q2]! += row[p]! * row[q2]!;
       }
     });
+    // ---- Degeneracy, read off the RAW normal matrix before the ridge touches
+    // it. AtA[p][q] is the dot product of columns p and q, so the angle between
+    // them falls straight out of the Gram matrix — no extra pass over the rows.
+    // This must happen before `lambda` is added to the diagonal, or the ridge
+    // inflates the norms and rotates every pair apart.
+    const readable = ([0, 1, 2] as const)
+      .filter((k) => colNorm[k + 1]! >= MIN_COLUMN_SHARE * Math.max(colNorm[1]!, colNorm[2]!, colNorm[3]!));
+    let worstPair: Suggestion['degenerate'];
+    for (let i = 0; i < readable.length; i++) {
+      for (let j = i + 1; j < readable.length; j++) {
+        const p1 = readable[i]! + 1, q1 = readable[j]! + 1;
+        const denom = Math.sqrt(AtA[p1]![p1]! * AtA[q1]![q1]!);
+        if (denom < 1e-30) continue;
+        const cos = Math.min(1, Math.abs(AtA[p1]![q1]!) / denom);
+        const angleDeg = (Math.acos(cos) * 180) / Math.PI;
+        if (angleDeg >= DEGENERATE_ANGLE_DEG) continue;
+        if (worstPair !== undefined && worstPair.angleDeg <= angleDeg) continue;
+        worstPair = { axes: [SCALE_AXIS_NAMES[readable[i]!]!, SCALE_AXIS_NAMES[readable[j]!]!], angleDeg };
+      }
+    }
+    if (worstPair !== undefined) sug.degenerate = worstPair;
+
     // Ridge, sized off the system itself: enough to keep the rank-deficient
     // columns from exploding, small enough not to bias the rest. It selects the
     // minimum-norm representative of the null space, which `regauge` then

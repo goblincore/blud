@@ -1,9 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync, existsSync } from 'node:fs';
 import { binResiduals, fitPrims, mergeMirrored, projectToSurface, sampleBodySurface,
   type Suggestion } from './ring-fit';
-import { ringBasis } from './ref-align';
+import { ringBasis, ringBasis as rb, groupByBone, refBones, globalScale, refToBody } from './ref-align';
 import { sdBody } from './validate';
-import type { Primitive, ClusterInfo, ResolvedBone } from './types';
+import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
+import { buildBody } from './build-body';
+import { readRefSkin } from './ref-skin';
+import type { Primitive, ClusterInfo, ResolvedBone, Vec3 } from './types';
 
 /**
  * One upright capsule, radius 0.1, from y=0 to y=1.
@@ -305,6 +311,35 @@ describe('fitPrims — ground truth round trip', () => {
     expect(p0.scales?.some((s) => s.axis === 'wide' || s.axis === 'tall')).toBe(true);
   });
 
+  /**
+   * A DEGENERATE PAIR MUST BE NAMED, NOT PRINTED AS TWO NUMBERS.
+   *
+   * The ring around a bone along (1,1,0)/sqrt(2) has `w_0^2 == w_1^2` in every
+   * sample, so the `wide` and `tall` least-squares columns are proportional and
+   * only their COMBINATION is measured. The solver still returns a split, and
+   * that split is arbitrary — the ridge picks it, not the data. A report that
+   * prints both as though each were measured invites an author to apply one of
+   * them, which changes the surface by an amount nobody measured.
+   *
+   * The vertical bone is the control: `wide` and `deep` there sit 90 degrees
+   * apart and must NOT be flagged, or the warning means nothing.
+   */
+  it('names a wide/tall pair on a 45-degree bone as jointly unmeasurable', () => {
+    const truth = diagonalCapsule();
+    const reference = sample(truth, 600);
+    const ours = diagonalCapsule();
+    ours.prims[0]!.scale = [1.3, 1, 1];
+    const p0 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 0)!;
+    expect(p0.degenerate).toBeDefined();
+    expect([...p0.degenerate!.axes].sort()).toEqual(['tall', 'wide']);
+    expect(p0.degenerate!.angleDeg).toBeLessThan(1);
+  });
+
+  it('CONTROL: does not flag the well-separated axes of a vertical bone', () => {
+    const p0 = roundTrip((b) => { b.prims[0]!.scale = [1, 1, 1.25]; }).find((x) => x.prim === 0)!;
+    expect(p0.degenerate).toBeUndefined();
+  });
+
   it('recovers a known lateral offset', () => {
     const p0 = roundTrip((b) => {
       b.prims[0]!.a = [0.006, 0.0, 0];
@@ -454,5 +489,95 @@ describe('mergeMirrored', () => {
       base({ prim: 1, src: undefined, bone: 'b' }),
     ]);
     expect(merged).toHaveLength(2);
+  });
+});
+
+const MOUSE_GLB = 'docs/dev-notes/refs/mouse-mesh/mouse.glb';
+
+describe.skipIf(!existsSync(MOUSE_GLB))('integration: mouse against its reference mesh', () => {
+  function run() {
+    const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8'));
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    const skin = readRefSkin(new Uint8Array(readFileSync(MOUSE_GLB)));
+    const ref = refBones(skin.jointWorld);
+    const g = globalScale(ref, body.bones);
+    const { byBone } = groupByBone(skin);
+    const inBody = new Map<string, Vec3[]>();
+    for (const [bone, pts] of byBone) {
+      const r = ref.get(bone), o = body.bones.get(bone);
+      if (!r || !o) continue;
+      const rBasis = rb(r.head, r.tail), oBasis = rb(o.head, o.tail);
+      inBody.set(bone, pts.map((p) => refToBody(p, rBasis, oBasis, g.scale)));
+    }
+    return { body, g, suggestions: mergeMirrored(fitPrims(binResiduals(inBody, body, body.bones), body)) };
+  }
+
+  /**
+   * THE 0.01 IN THE PLAN WAS THE WRONG NUMBER, and the band around it was
+   * unreachable by construction rather than by a bug. mouse.glb is a Blender
+   * export whose `Armature` root node carries scale 0.01 with the bones
+   * authored at 100x; `readRefSkin` resolves `jointWorld` through that root
+   * (pinned by ref-skin.test.ts, "root scale applied"), so the 0.01 is already
+   * INSIDE every reference length. `globalScale` then forms ourLen/refLen — a
+   * ratio of two lengths that both carry it — so it cancels and can never
+   * appear in the result. The reference character stands 1.700m and our mouse
+   * is a little over three quarters of that.
+   *
+   * The band below still has teeth, but be exact about what it guards:
+   * `globalScale` reads `jointWorld` alone, never the vertices, so it is the
+   * reference SKELETON and our body it holds to the same units. Stop resolving
+   * the Armature's 0.01 and reference bones become 100x longer, landing this
+   * at 0.0077 — outside the band. The vertex-side unit error is a different
+   * failure and is pinned by the next test.
+   */
+  it('measures one global scale from real bones, in the same units as our body', () => {
+    const { g } = run();
+    expect(g.n).toBeGreaterThan(10);
+    expect(g.scale).toBeGreaterThan(0.5);
+    expect(g.scale).toBeLessThan(1.5);
+  });
+
+  /**
+   * The regression guard for the actual bug. glTF cancels a skinned mesh
+   * node's own transform against the joint matrices; applying it as well
+   * shrank every reference vertex by the Armature's 0.01 while the joints kept
+   * their true size, so the point cloud sat in a 17mm heap at the origin and
+   * `fitPrims` returned nothing at all. Skin and skeleton must span the same
+   * space.
+   */
+  it('puts the reference SKIN in the same space as the reference SKELETON', () => {
+    const skin = readRefSkin(new Uint8Array(readFileSync(MOUSE_GLB)));
+    const vy = skin.verts.map((v) => v.position[1]);
+    const jy = [...skin.jointWorld.values()].map((p) => p[1]);
+    const vertHeight = Math.max(...vy) - Math.min(...vy);
+    const jointHeight = Math.max(...jy) - Math.min(...jy);
+    // The skin wraps the skeleton, so it is a little taller — never 100x.
+    expect(vertHeight).toBeGreaterThan(jointHeight);
+    expect(vertHeight).toBeLessThan(jointHeight * 1.5);
+  });
+
+  it('produces suggestions that name real .blob lines', () => {
+    const { suggestions } = run();
+    const fitted = suggestions.filter((s) => s.skipped === undefined);
+    expect(fitted.length).toBeGreaterThan(5);
+    const lines = readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8').split('\n');
+    for (const s of fitted.slice(0, 3)) {
+      expect(s.src).toBeGreaterThan(0);
+      // The named line must actually be a primitive declaration.
+      expect(lines[s.src! - 1]).toMatch(/^\s*(blob|bar)\s/);
+    }
+  });
+
+  it('PINS THE BONES OF THE THREE WORST PRIMITIVES, NOT THEIR NUMBERS', () => {
+    // Numbers must be free to move as mouse.blob improves — pinning them would
+    // make every genuine improvement read as a regression. The bones are the
+    // stable claim: this is a smoke test that attribution is sane, not a score.
+    const { suggestions } = run();
+    const worst = suggestions.filter((s) => s.skipped === undefined).slice(0, 3);
+    for (const s of worst) {
+      expect(s.bone).toBeDefined();
+      expect(s.bone).not.toMatch(/^skull/);   // head is out of scope
+      expect(s.bone).not.toMatch(/^(hand|f_)/); // hands are out of scope
+    }
   });
 });
