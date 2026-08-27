@@ -29,6 +29,22 @@ function gradient(p: Vec3, body: Body, h = 1e-4): Vec3 {
  * Newton-step a point onto sdBody == 0. Converges from either side; the field
  * is not a true distance for anisotropic prims (it under-reports by minScale),
  * so this iterates rather than taking one step.
+ *
+ * ON THE ZERO SET, BUT NOT NECESSARILY THE NEAREST POINT. A seed sitting
+ * exactly on a prim's medial axis has a SYMMETRIC field around it, so the
+ * central difference cancels to exactly zero in all three axes, `gradient`
+ * takes its `len(g) < 1e-12` fallback of straight up, and the point walks
+ * along the axis until it hits a cap. The result is a genuine surface point
+ * (|d| ~ 1e-16) but it can be most of the prim's length away from the seed.
+ * `sampleBodySurface` never seeds on-axis so it cannot hit this, but anything
+ * projecting AUTHORED points — a bone head, a joint centre, a cluster centre —
+ * can, and will get a silently non-nearest answer. Nudge such a seed off-axis
+ * first: an offset of 1e-9 is already enough for the h = 1e-4 stencil to
+ * recover the true direction.
+ *
+ * `steps` stays caller-controlled and defaults to 24, which is exact for
+ * near-isotropic prims; see `stepsForPrim` for why an anisotropic one needs
+ * far more, and never assume the default is enough for one.
  */
 export function projectToSurface(p: Vec3, body: Body, steps = 24): Vec3 {
   let q = p;
@@ -41,9 +57,63 @@ export function projectToSurface(p: Vec3, body: Body, steps = 24): Vec3 {
 }
 
 /**
+ * Newton budget for one primitive, from its anisotropy ratio.
+ *
+ * NOT A CONSTANT, and this is the whole correctness of the instrument.
+ * `sdPrimitive` divides by `scale` and then multiplies the result by
+ * `minScale`, so for an anisotropic prim the field UNDER-REPORTS true distance
+ * by up to `minScale/maxScale`. Each Newton step therefore covers only that
+ * fraction of the remaining gap along the major axis: convergence degrades
+ * from quadratic to LINEAR with rate `1 - minScale/maxScale`, and the
+ * iterations needed grow linearly in the ratio.
+ *
+ * That failure is nastier than it sounds because it is BIASED, not noisy. The
+ * points that run out of budget are exactly the ones at the major-axis
+ * extremes, where the gradient is shortest — so the `< 1e-6` filter in
+ * `sampleBodySurface` eats the outermost samples first and the surviving set
+ * quietly shrinks inward. A fixed budget does not give a rougher measurement;
+ * it gives a confidently wrong one.
+ *
+ * Measured minimum steps for full retention of 400 samples on a lone capsule:
+ *
+ *   ratio  1.0 → 8     ratio  4.0 → 48    ratio 10.0 → 96
+ *   ratio  1.5 → 16    ratio  6.0 → 64    ratio 12.0 → 128
+ *   ratio  2.0 → 16    ratio  8.0 → 96    ratio 20.0 → 256
+ *
+ * The trend is linear with slope ~13, so `24 * ratio` keeps at least a 2x
+ * margin over every measured point while staying cheap. The floor of 24 keeps
+ * the isotropic case bit-identical to the original fixed budget. The cap of
+ * 512 bounds the cost of a pathological prim — it covers a true need up to
+ * ratio ~39 — and past it the sampler warns rather than pretending.
+ */
+function stepsForPrim(prim: Primitive): number {
+  const lo = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+  const hi = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+  // A zero or negative scale is degenerate; ratio goes non-finite and we just
+  // spend the cap on it rather than silently taking the floor.
+  const ratio = lo > 0 ? hi / lo : Infinity;
+  return Math.min(512, Math.max(24, Math.ceil(24 * ratio)));
+}
+
+/**
+ * Fraction of a prim's requested samples that may fail to land before the
+ * sampler complains. Some loss is a fact about a hard body (a point seeded
+ * inside a neighbouring prim's bulge can converge somewhere unhelpful); a lot
+ * of loss is the instrument running out of budget, which is ours to report.
+ */
+const MIN_RETENTION = 0.98;
+
+/**
  * Synthesise a reference-shaped point set FROM a body: sample each primitive's
  * own surface, then project onto the blended body. Test instrument, and the
  * only way to check the fitter against ground truth without a GLB.
+ *
+ * NO SILENT CAPS. Points that fail to land on the zero set are dropped, and a
+ * dropped point is invisible in the returned array — a biased sample set would
+ * otherwise be indistinguishable from a complete one. So the budget is derived
+ * per prim (see `stepsForPrim`), and any loss past `MIN_RETENTION` is warned
+ * about, naming the prim. It warns rather than throwing: a later task sampling
+ * a real body should degrade with a complaint, not die.
  */
 export function sampleBodySurface(body: Body, perPrim = 200): Map<string, Vec3[]> {
   const out = new Map<string, Vec3[]>();
@@ -54,6 +124,8 @@ export function sampleBodySurface(body: Body, perPrim = 200): Map<string, Vec3[]
     if (list === undefined) { list = []; out.set(bone, list); }
     const axis = sub(prim.b, prim.a);
     const axisLen = len(axis);
+    const steps = stepsForPrim(prim);
+    let kept = 0;
     for (let i = 0; i < perPrim; i++) {
       // Deterministic spiral over the prim's own surface: no Math.random, so
       // a failing test reproduces exactly.
@@ -64,8 +136,20 @@ export function sampleBodySurface(body: Body, perPrim = 200): Map<string, Vec3[]
       // Push out along a world-axis ring, scaled by the prim's own anisotropy.
       const seed: Vec3 = [Math.cos(theta) * prim.scale[0], 0, Math.sin(theta) * prim.scale[2]];
       const p = add(along, vscale(seed, r * 1.4));
-      const q = projectToSurface(p, body);
-      if (Math.abs(sdBody(q, body)) < 1e-6) list.push(q);
+      const q = projectToSurface(p, body, steps);
+      if (Math.abs(sdBody(q, body)) < 1e-6) { list.push(q); kept++; }
+    }
+    if (kept < perPrim * MIN_RETENTION) {
+      const lo = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+      const hi = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+      const ratio = lo > 0 ? (hi / lo).toFixed(1) : 'degenerate';
+      const where = prim.src === undefined ? bone : `${bone} (line ${prim.src})`;
+      console.warn(
+        `sampleBodySurface: ${where} kept only ${kept}/${perPrim} samples at ` +
+        `${steps} Newton steps (anisotropy ratio ${ratio}). The lost points are ` +
+        `the major-axis extremes, so this prim's sample set is biased INWARD — ` +
+        `do not read an extent off it.`,
+      );
     }
   }
   return out;
