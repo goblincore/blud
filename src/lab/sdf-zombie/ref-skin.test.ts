@@ -82,7 +82,16 @@ describe('readRefSkin', () => {
   });
 
   it('exposes the dominant-weight threshold it used', () => {
-    expect(MIN_DOMINANT_WEIGHT).toBe(0.6);
+    // Calibrated against both real references; see the constant's own comment.
+    expect(MIN_DOMINANT_WEIGHT).toBe(0.5);
+  });
+
+  it('requires a STRICT majority — an exact 0.5/0.5 tie is still dropped', () => {
+    // The fixture's third vertex is split 0.5/0.5. A `<` comparison against a
+    // 0.5 threshold would keep it and break the tie arbitrarily.
+    const skin = readRefSkin(twoJointGlb());
+    expect(skin.dropped).toBe(1);
+    expect(skin.verts.map((v) => v.joint)).not.toContain(undefined);
   });
 
   it('refuses a non-uniform node scale rather than shearing the measurement', () => {

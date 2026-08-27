@@ -62,6 +62,13 @@ Two further departures from the source, both because our situation is better:
 
 **In:** prims riding `pelvis`, `spine1`, `chest`, `spine2`, `neck`, `clavicle`,
 `upperarm`, `forearm`, `thigh`, `shin`, `foot` and their mirrors.
+
+**How much of a reference this actually covers, measured 2026-08-27:** 79% of
+`schoolgirl.glb`'s vertices, but only **40%** of `mouse.glb`'s — the mouse is a
+head-dominated character (its ears alone are a quarter of its standing height
+each) and 55% of its mesh is head and hands, both out of scope. Ring-fit is
+therefore a far sharper instrument on the schoolgirl than on the mouse, and a
+mouse run should not be read as covering the character.
 Suggests `r`, `r2`, `deep`, `offset` for prims **that already exist**.
 
 Scope is decided by the **bone**, not the limb tag. `bar head on neck` is in
@@ -337,8 +344,22 @@ Also:
 
 None blocking. Two things to revisit after first use:
 
-1. `MIN_DOMINANT_WEIGHT` starts at 0.60 — an assumption, not a measurement. The
-   coverage line is what will tell us whether it is right.
+1. ~~`MIN_DOMINANT_WEIGHT` starts at 0.60 — an assumption, not a measurement.~~
+   **CLOSED 2026-08-27: measured, and moved to 0.50.** Share of vertices kept,
+   swept against both real references:
+
+   | threshold | 0.90 | 0.80 | 0.70 | 0.60 | 0.50 | 0.40 |
+   |---|---|---|---|---|---|---|
+   | mouse | 60% | 68% | 77% | 86% | 95% | 99% |
+   | schoolgirl | 41% | 54% | 65% | 80% | 95% | 99% |
+
+   0.50 is the knee — it recovers 15 points on the schoolgirl where 0.40 buys
+   only 4 more — and it is the one value on the curve with a meaning behind it:
+   a **strict majority**. Above it a joint owns the vertex outright; at or below
+   it the vertex is genuinely shared and "dominant" is a plurality. The
+   comparison is therefore `<=`, so an exact 0.5/0.5 tie still drops rather than
+   being broken by whichever weight the exporter wrote first. Dropped share fell
+   14%→5% (mouse) and 20%→5% (schoolgirl).
 2. The noise floor for suppressing a Fourier term starts at **one quarter of the
    per-prim residual standard deviation**, so it scales with the character rather
    than being a fixed millimetre count. That ratio is the guess. Per the source

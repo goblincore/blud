@@ -1864,8 +1864,20 @@ git commit -m "docs(ring-fit): document blob:rings in the authoring skill and TA
 The spec leaves two numbers as guesses. Once `mouse` has been through a pass,
 write down what they actually wanted to be, in a comment at each definition:
 
-1. `MIN_DOMINANT_WEIGHT` (`ref-skin.ts`, starts at 0.60) — judge it from the
-   coverage line: a large `dropped` count means the threshold is too strict.
+1. ~~`MIN_DOMINANT_WEIGHT` (`ref-skin.ts`, starts at 0.60)~~ — **DONE
+   2026-08-27.** Swept against both references, moved to **0.50** with a strict
+   majority (`<=`) comparison. Dropped share fell 14%→5% (mouse), 20%→5%
+   (schoolgirl). Table in the constant's own comment.
 2. The noise floor ratio (`ring-fit.ts`, starts at `stdev / 4`) — derive it from
    the observed residual spread. A tolerance the same size as the error it is
-   meant to tolerate measures nothing.
+   meant to tolerate measures nothing. **Still open.**
+
+3. **Done during Task 4:** `sampleBodySurface`'s Newton budget is no longer the
+   fixed 24 of the plan text. It is derived per primitive as
+   `min(512, max(24, ceil(24 * ratio)))` where `ratio = max(scale)/min(scale)`,
+   because `sdPrimitive` multiplies by `minScale` and Newton therefore degrades
+   from quadratic to linear convergence at rate `minScale/maxScale`. At the
+   plan's fixed 24 a ratio-4 prim silently kept only 218/400 samples, losing the
+   major-axis extremes first and biasing the set INWARD — invisible to the
+   plan's own ratio-2 fixture. Loss past 98% retention now warns, naming the
+   prim. See `stepsForPrim`'s calibration table.

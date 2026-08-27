@@ -14,8 +14,25 @@
 import type { Vec3 } from './types';
 import { parseGlb } from './silhouette';
 
-/** Below this top weight a vertex sits in a joint blend and is dropped. */
-export const MIN_DOMINANT_WEIGHT = 0.6;
+/**
+ * A joint must hold a STRICT MAJORITY of a vertex to claim it. At or below
+ * this, the vertex is genuinely shared across a joint blend and "dominant"
+ * would mean a plurality, not a majority — so it is dropped and counted.
+ *
+ * CALIBRATED, not guessed (2026-08-27). Share of vertices kept, swept against
+ * both real references:
+ *
+ *   threshold   0.90  0.80  0.70  0.60  0.50  0.40
+ *   mouse        60%   68%   77%   86%   95%   99%
+ *   schoolgirl   41%   54%   65%   80%   95%   99%
+ *
+ * The spec shipped with 0.60 as an explicit guess. 0.50 is where the knee is
+ * — it recovers 15 points on the schoolgirl, where 0.40 buys only 4 more —
+ * and it is the only value on the curve with a meaning rather than a number
+ * behind it. Re-derive from the coverage line if a future reference is
+ * weighted very differently.
+ */
+export const MIN_DOMINANT_WEIGHT = 0.5;
 
 export interface RefVertex {
   /** Name of the joint node carrying this vertex's largest weight. */
@@ -29,7 +46,7 @@ export interface RefSkin {
   jointWorld: Map<string, Vec3>;
   /** Vertices seen, including dropped ones. */
   total: number;
-  /** Vertices dropped for a top weight below MIN_DOMINANT_WEIGHT. */
+  /** Vertices dropped for a top weight at or below MIN_DOMINANT_WEIGHT. */
   dropped: number;
 }
 
@@ -165,7 +182,9 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
       const w = wt[i * 4 + c]!;
       if (w > bestW) { bestW = w; bestJ = jt[i * 4 + c]!; }
     }
-    if (bestW < MIN_DOMINANT_WEIGHT) { dropped++; continue; }
+    // `<=`, not `<`: an exact 0.5/0.5 split is a tie, not a majority, and the
+    // tie-break would be whichever weight the exporter happened to write first.
+    if (bestW <= MIN_DOMINANT_WEIGHT) { dropped++; continue; }
     verts.push({
       joint: jointNames[bestJ] ?? `joint${bestJ}`,
       position: apply(meshWorld, [pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!]),
