@@ -9,7 +9,8 @@
 // systematically over-fattens — which is visible being corrected by hand all
 // through mouse.blob's comments. sdBody IS the blended field, so its value at
 // a reference point is the error with blending already folded in.
-import type { ClusterInfo, Primitive, Vec3 } from './types';
+import type { ClusterInfo, Primitive, ResolvedBone, Vec3 } from './types';
+import { ringBasis, toLocal, type RingBasis } from './ref-align';
 import { sdBody, sdPrimitive } from './validate';
 import { add, len, normalize, scale as vscale, sub } from './vec';
 
@@ -169,4 +170,87 @@ export function twoNearestPrims(p: Vec3, body: Body): { first: number; firstD: n
     }
   }
   return { first, firstD, secondD };
+}
+
+export interface PrimSample {
+  /** Position along the primitive's own axis, 0 at `a` and 1 at `b`. */
+  t: number;
+  /** Angle in the ring basis: 0 along e1, +pi/2 along e2. */
+  theta: number;
+  /** sdBody at the reference point. Negative == our surface is PROUD of it. */
+  d: number;
+}
+
+export interface PrimBin {
+  prim: number;
+  basis: RingBasis;
+  samples: PrimSample[];
+  /** Share of samples with a second primitive within blendK. Their numbers are soft. */
+  blendDominated: number;
+  /** Reference points that landed on a prim belonging to a DIFFERENT bone. */
+  crossBone: number;
+}
+
+/**
+ * Attribute every reference point to a primitive and record its residual in
+ * that primitive's ring frame.
+ *
+ * A point whose nearest primitive rides a different bone than the one that
+ * claimed it is counted in `crossBone` and DROPPED. That happens legitimately
+ * where a torso prim's flesh covers the shoulder, and silently averaging it
+ * into the shoulder's radius is exactly the mis-attribution this tool exists
+ * to remove. `crossBone` is reported per bin rather than swallowed precisely
+ * because the rule is lossy: a bin whose crossBone rivals its sample count is
+ * measuring a seam, not a limb, and whatever is fitted from it should be
+ * treated as such.
+ */
+export function binResiduals(
+  pointsByBone: Map<string, Vec3[]>,
+  body: Body,
+  bones: Map<string, ResolvedBone>,
+): Map<number, PrimBin> {
+  const bins = new Map<number, PrimBin>();
+  const basisOf = new Map<number, RingBasis>();
+
+  for (const [boneName, points] of pointsByBone) {
+    const bone = bones.get(boneName);
+    if (!bone) continue;
+    for (const p of points) {
+      const { first, firstD, secondD } = twoNearestPrims(p, body);
+      if (first < 0) continue;
+      const prim = body.prims[first]!;
+
+      let bin = bins.get(first);
+      if (bin === undefined) {
+        // The ring frame follows the PRIMITIVE's own axis where it has one, so
+        // a prim offset off its bone still measures around itself. A point
+        // prim (a == b) falls back to the bone's direction.
+        let basis = basisOf.get(first);
+        if (basis === undefined) {
+          const axisLen = len(sub(prim.b, prim.a));
+          basis = axisLen > 1e-9
+            ? ringBasis(prim.a, prim.b)
+            : ringBasis(prim.a, add(prim.a, sub(bone.tail, bone.head)));
+          basisOf.set(first, basis);
+        }
+        bin = { prim: first, basis, samples: [], blendDominated: 0, crossBone: 0 };
+        bins.set(first, bin);
+      }
+
+      if (prim.bone !== undefined && prim.bone !== boneName) { bin.crossBone++; continue; }
+
+      const l = toLocal(p, bin.basis);
+      const t = bin.basis.length > 1e-9
+        ? Math.max(0, Math.min(1, l.along / bin.basis.length))
+        : 0.5;
+      bin.samples.push({ t, theta: Math.atan2(l.x2, l.x1), d: sdBody(p, body) });
+      if (secondD - firstD < prim.blendK) bin.blendDominated++;
+    }
+  }
+
+  for (const bin of bins.values()) {
+    const n = bin.samples.length + bin.crossBone;
+    bin.blendDominated = n === 0 ? 0 : bin.blendDominated / n;
+  }
+  return bins;
 }

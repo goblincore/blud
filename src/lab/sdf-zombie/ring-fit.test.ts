@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { projectToSurface, sampleBodySurface } from './ring-fit';
+import { binResiduals, projectToSurface, sampleBodySurface } from './ring-fit';
+import { ringBasis } from './ref-align';
 import { sdBody } from './validate';
-import type { Primitive, ClusterInfo } from './types';
+import type { Primitive, ClusterInfo, ResolvedBone } from './types';
 
 /**
  * One upright capsule, radius 0.1, from y=0 to y=1.
@@ -102,6 +103,84 @@ describe('sampleBodySurface anisotropy', () => {
       expect(msg).toContain('200');
     } finally {
       warn.mockRestore();
+    }
+  });
+});
+
+/** Two blended capsules stacked on one bone — exercises the blend seam. */
+function twoCapsules(radius0 = 0.1): {
+  prims: Primitive[]; clusters: ClusterInfo[]; bones: Map<string, ResolvedBone>;
+} {
+  const prims: Primitive[] = [
+    { a: [0, 0.0, 0], b: [0, 0.5, 0], radius: radius0, scale: [1, 1, 1],
+      blendK: 0.03, limb: 'torso', cluster: 0, bone: 'spine1', src: 10 },
+    { a: [0, 0.5, 0], b: [0, 1.0, 0], radius: 0.09, scale: [1, 1, 1],
+      blendK: 0.03, limb: 'torso', cluster: 0, bone: 'spine1', src: 11 },
+  ];
+  const clusters: ClusterInfo[] = [
+    { id: 0, limb: 'torso', start: 0, count: 2, center: [0, 0.5, 0], radius: 1, alive: true },
+  ];
+  const bones = new Map<string, ResolvedBone>([['spine1', { head: [0, 0, 0], tail: [0, 1, 0] }]]);
+  return { prims, clusters, bones };
+}
+
+describe('binResiduals', () => {
+  it('reports near-zero residual when the body IS the reference', () => {
+    const body = twoCapsules();
+    const bins = binResiduals(sampleBodySurface(body, 300), body, body.bones);
+    expect(bins.size).toBe(2);
+    for (const bin of bins.values()) {
+      const meanAbs = bin.samples.reduce((s, x) => s + Math.abs(x.d), 0) / bin.samples.length;
+      expect(meanAbs).toBeLessThan(1e-4);
+    }
+  });
+
+  it('reports a proud body as negative residual', () => {
+    const ref = sampleBodySurface(twoCapsules(0.10), 300);  // reference at r=0.10
+    const fat = twoCapsules(0.12);                          // ours is 20mm fatter
+    const bins = binResiduals(ref, fat, fat.bones);
+    const bin = bins.get(0)!;
+    const mean = bin.samples.reduce((s, x) => s + x.d, 0) / bin.samples.length;
+    expect(mean).toBeLessThan(-0.005);                      // negative == proud
+  });
+
+  it('flags the blend seam', () => {
+    const body = twoCapsules();
+    const bins = binResiduals(sampleBodySurface(body, 400), body, body.bones);
+    // Both prims sit within blendK of each other at y=0.5, so neither should
+    // report a zero blend-dominated fraction.
+    expect(bins.get(0)!.blendDominated).toBeGreaterThan(0);
+    expect(bins.get(0)!.blendDominated).toBeLessThan(1);
+  });
+
+  it('bins theta in the basis that ringBasis defines', () => {
+    const body = twoCapsules();
+    // The frame theta is measured in is the one ringBasis returns for the
+    // prim's OWN axis — not some ad-hoc basis, and not the bone's length.
+    const b = ringBasis(body.prims[0]!.a, body.prims[0]!.b);
+    const bin = binResiduals(sampleBodySurface(body, 200), body, body.bones).get(0)!;
+    for (const k of ['e1', 'e2', 'u'] as const) {
+      for (let i = 0; i < 3; i++) expect(bin.basis[k][i]).toBeCloseTo(b[k]![i]!, 12);
+    }
+    const thetas = bin.samples.map((s) => s.theta);
+    expect(Math.min(...thetas)).toBeLessThan(-2);
+    expect(Math.max(...thetas)).toBeGreaterThan(2);
+    // ...and it spans the WHOLE circle, not just the two extremes: every
+    // quadrant of that basis is populated.
+    const quads = new Set(thetas.map((t) => `${Math.sign(Math.cos(t))},${Math.sign(Math.sin(t))}`));
+    expect(quads.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('drops a point whose nearest prim rides a different bone', () => {
+    const body = twoCapsules();
+    // Same geometry, but every reference point is offered under a bone name
+    // that neither prim belongs to.
+    const pts = sampleBodySurface(body, 200).get('spine1')!;
+    const bones = new Map<string, ResolvedBone>([['neck', { head: [0, 0, 0], tail: [0, 1, 0] }]]);
+    const bins = binResiduals(new Map([['neck', pts]]), body, bones);
+    for (const bin of bins.values()) {
+      expect(bin.samples.length).toBe(0);
+      expect(bin.crossBone).toBeGreaterThan(0);
     }
   });
 });
