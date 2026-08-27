@@ -188,15 +188,65 @@ describe('ported features reach the entry point', () => {
     // lab's deep-bowl look, whose cavity reads red) and a plane through the
     // anchor clips its REACH — depth without the far-side punch-through.
     const applyWounds = HELPERS.find(h => declaredName(h) === 'applyWounds')!;
-    // The slab rides the max() with the sphere term (exact for the convex
-    // intersection), reading ROW_WOUND_CAP.
+    // The carve region is {inside sphere} ∩ {shallower than the cap}; its
+    // inside-positive SDF is min(depth - r, capEff - dot). The hull-holes
+    // regression (2026-08-27, same day) shipped `max(-(r - depth), dot -
+    // capEff)`: the dot term is positive BEYOND the cap, so the max() carved
+    // the entire half-space behind the cap plane — mixed-direction wounds
+    // hollowed whole bodies (the owner's invisible-zombie report). Do not
+    // revert to that form.
     expect(applyWounds).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0)`);
-    expect(applyWounds).toContain('max(-(r - depth), dot(p - w.xyz, wCap.xyz) - capEff)');
+    expect(applyWounds).toContain('min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz))');
     // Uncapped wounds (w <= 0) must take a capEff no real distance can
-    // cross, so the slab term loses the max EXACTLY and the field is
+    // cross, so the slab term loses the min EXACTLY and the field is
     // bit-identical to the pre-slab sphere — that is what keeps the lab
     // (which uploads no caps) pixel-stable across this change.
     expect(applyWounds).toContain('select(1.0e5, wCap.w, wCap.w > 0.0)');
+  });
+
+  // Line-for-line TS transcription of the fixed carve term (the inside-positive
+  // SDF of {inside sphere} ∩ {shallower than cap}), so the semantics of the
+  // pinned string are proven, not just its spelling. The REGRESSION this
+  // guards: any form that stays positive beyond the cap plane hollows the
+  // whole body behind every wound — one wound looks perfect from the front,
+  // mixed-direction wounds make the body invisible (exactly the 2026-08-27
+  // hull-holes report; a string pin alone passed on the broken shader).
+  function carveTerm(p: Vec3, anchor: Vec3, inward: Vec3, radius: number, cap: number): number {
+    const r = Math.hypot(p[0] - anchor[0], p[1] - anchor[1], p[2] - anchor[2]);
+    const dotSlab = (p[0] - anchor[0]) * inward[0] + (p[1] - anchor[1]) * inward[1] + (p[2] - anchor[2]) * inward[2];
+    const capEff = cap > 0 ? cap : 1.0e5;
+    return Math.min(radius - r, capEff - dotSlab);
+  }
+  const ORIGIN: Vec3 = [0, 0, 0];
+  const INWARD_X: Vec3 = [1, 0, 0];
+
+  it('carve slab: bounded bowl, not a half-space (the invisible-zombie regression)', () => {
+    const R = 0.16, CAP = 0.45 * 0.3; // a slug on ~30 cm of flesh
+    // 1. Inside the sphere, shallower than the cap: carve (positive).
+    expect(carveTerm([0.05, 0, 0], ORIGIN, INWARD_X, R, CAP)).toBeGreaterThan(0);
+    // 2. Inside the sphere BUT deeper than the cap: FLESH REMAINS (negative).
+    //    The broken max(..., dot - capEff) form returned a positive value
+    //    here — and kept it positive clear across the body.
+    expect(carveTerm([R - 0.01, 0, 0], ORIGIN, INWARD_X, R, CAP)).toBeLessThan(0);
+    // 3. Deep inside the body, far past the sphere: still flesh. The broken
+    //    form carved this entire half-space out to infinity.
+    expect(carveTerm([0.9, 0, 0], ORIGIN, INWARD_X, R, CAP)).toBeLessThan(0);
+    // 4. Outside the sphere on the air side (r > sphere): no carve.
+    expect(carveTerm([-0.2, 0, 0], ORIGIN, INWARD_X, R, CAP)).toBeLessThan(0);
+    // 5. The bowl's FLOOR is the slab, not the sphere's far wall: a point
+    //    just inside the cap carves, just past it does not (both still
+    //    inside the sphere).
+    expect(carveTerm([CAP - 0.01, 0, 0], ORIGIN, INWARD_X, R, CAP)).toBeGreaterThan(0);
+    expect(carveTerm([CAP + 0.02, 0, 0], ORIGIN, INWARD_X, R, CAP)).toBeLessThan(0);
+  });
+
+  it('carve slab: uncapped wounds reduce to the plain sphere bit-exactly', () => {
+    // The lab uploads no caps; capEff must lose the min EXACTLY so the lab's
+    // field is bit-identical to the pre-slab reference (pixel-parity gate).
+    for (const p of [[0.05, 0, 0], [0.3, 0.1, -0.2], [-0.5, 2, 7]] as Vec3[]) {
+      const r = Math.hypot(p[0], p[1], p[2]);
+      expect(carveTerm(p as Vec3, ORIGIN, INWARD_X, 0.16, 0)).toBe(0.16 - r);
+    }
   });
 
   it('shades chunks through the gore mask (gobs-and-goo §2)', () => {
@@ -1113,9 +1163,13 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
   });
 
   it('emits the ramp only inside the debug branch, after the gamma block', () => {
-    const branch = MARCH_BODY.indexOf('if (debugCfg.x > 0.5) {\n    let heatNorm');
+    // MODE 3 (occT heat, hull-holes diagnosis 2026-08-27) shares the branch
+    // and returns before heatNorm; the pin still proves heatNorm lives in
+    // that same branch, after the gamma block.
+    const branch = MARCH_BODY.indexOf('if (debugCfg.x > 0.5) {\n    // MODE 3');
     expect(branch).toBeGreaterThan(-1);
     expect(branch).toBeGreaterThan(MARCH_BODY.indexOf('lodCfg.y > 0.5'));
+    expect(MARCH_BODY.indexOf('let heatNorm', branch)).toBeGreaterThan(branch);
     // steps ramp: 0..marchCfg.x. prims ramp: 0..2000.
     expect(MARCH_BODY).toContain('select(debugSteps / max(marchCfg.x, 1.0), debugPrims / 2000.0, debugCfg.x > 1.5)');
   });

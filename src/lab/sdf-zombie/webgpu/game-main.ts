@@ -287,6 +287,11 @@ async function main() {
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
   sdfLayer.setOccluderEnabled(true);
+  // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
+  // ON/ON; the driver flips these between captures. Mirrors the lab's
+  // __sdfLab.setOccluder.
+  let hullExclusionsEnabled = true;
+  let occluderDesired = true;
 
   // -----------------------------------------------------------------------
   // Zombies. One compiled .blob, ten bodies; seeds/headings vary, the
@@ -742,10 +747,12 @@ async function main() {
       // hull; real craters exposed it within one capture.
       occluderHull.update(
         actors.map(a => a.posed()),
-        actors.flatMap(a => {
-          const prims = a.posed().prims;
-          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
-        }),
+        hullExclusionsEnabled
+          ? actors.flatMap(a => {
+            const prims = a.posed().prims;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+          })
+          : [],
       );
     }
 
@@ -996,6 +1003,37 @@ async function main() {
       }
       return { origin, dir, actorId: hitActorId, hit: hitPoint };
     },
+    /** Hull-holes A/B seams (2026-08-27). setOccluder turns the occluder
+     *  pre-pass (and its tMax clamp) on/off; setHullExclusions passes an
+     *  empty wound list to the hull builder instead of the live one. Both
+     *  default to shipped behaviour. */
+    setOccluder: (on: boolean) => {
+      occluderDesired = on;
+      sdfLayer.setOccluderEnabled(on);
+    },
+    get occluder() { return sdfLayer.occluderEnabled && occluderDesired; },
+    setHullExclusions: (on: boolean) => { hullExclusionsEnabled = on; },
+    get hullExclusions() { return hullExclusionsEnabled; },
+    /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
+     *  so frozen captures would otherwise shoot through a stale hull). No
+     *  simulation steps, so a stamped body stays exactly where it was put. */
+    refreshHull: () => {
+      occluderHull.update(
+        actors.map(a => a.posed()),
+        hullExclusionsEnabled
+          ? actors.flatMap(a => {
+            const prims = a.posed().prims;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+          })
+          : [],
+      );
+    },
+    hullDebug: () => ({
+      occluder: sdfLayer.occluderEnabled,
+      exclusions: hullExclusionsEnabled,
+      instances: occluderHull.instanceCount,
+      woundsPerBody: actors.map(a => a.wounds().length),
+    }),
     /** A visible sphere in WORLD space, drawn through the normal geometry
      *  pass — so captures can mark predicted impacts vs actual craters.
      *  One marker at a time; pass null coords to remove. */
@@ -1054,8 +1092,8 @@ async function main() {
      *  kills and death-gibs (the weapon works), so a pocked STANDING torso
      *  only exists through this seam. */
     stampWoundAt: (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
-      kind: 'pellet' | 'slug' = 'pellet') => {
-      const a = actors[0];
+      kind: 'pellet' | 'slug' = 'pellet', bodyId?: number) => {
+      const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId);
       if (!a) return null;
       const posed = a.posed();
       const hit = traceProjectile(
