@@ -578,6 +578,15 @@ git commit -m "feat(ring-fit): explicit reference-joint to bone table with verif
 - Modify: `src/lab/sdf-zombie/ref-align.ts` (append)
 - Test: `src/lab/sdf-zombie/ref-align.test.ts` (append)
 
+> **SUPERSEDED IN PART — read before implementing.** Task 3 shipped, and the
+> `heldAxis`/`solvedAxis` fields described below turned out to be **unsound for
+> diagonal bones** and are removed by Task 6. Measured on `mouse.blob`,
+> `upperarm` and `forearm` — neighbours in one chain — pick *different* axes, and
+> `upperarm`'s margin is only 0.074, so a 3° authoring change flips the answer.
+> Build the rest of this task as written; treat the held/solved table and the two
+> fields as history. `ringBasis` keeps `origin`/`e1`/`e2`/`u`/`length`, which are
+> all still needed.
+
 **Background you need:** `sdPrimitive` applies `scale` (`[wide, tall, deep]`) in **world axes**. So the ring basis cannot use an arbitrary roll — its two vectors must line up with world axes or the `cos 2θ` term will not tell you which scale component to change. The rule: drop the world axis most aligned with the bone (that one runs *along* the prim and does not shape the cross-section), hold the first of the two remaining, solve the second.
 
 | bone runs along | dropped | held | solved |
@@ -1050,8 +1059,6 @@ describe('binResiduals', () => {
 
   it('bins theta in the basis that ringBasis defines', () => {
     const body = twoCapsules();
-    const b = ringBasis([0, 0, 0], [0, 1, 0]);
-    expect(b.heldAxis).toBe(0);
     const bins = binResiduals(sample(body, 200), body, body.bones);
     const thetas = bins.get(0)!.samples.map((s) => s.theta);
     expect(Math.min(...thetas)).toBeLessThan(-2);
@@ -1168,26 +1175,48 @@ git commit -m "feat(ring-fit): bin reference residuals per primitive in its ring
 
 ---
 
-### Task 6: `ring-fit.ts` — Fourier decomposition into suggestions
+### Task 6: `ring-fit.ts` — least-squares fit into suggestions
 
 This is the load-bearing task. Its test is a **round-trip against ground truth**, and it must be **proven to fail** under a deliberate perturbation before it is trusted.
 
 **Files:**
 - Modify: `src/lab/sdf-zombie/ring-fit.ts` (append)
-- Test: `src/lab/sdf-zombie/ring-fit.test.ts` (append)
+- Modify: `src/lab/sdf-zombie/ref-align.ts` (remove `heldAxis`/`solvedAxis` from `RingBasis`)
+- Test: `src/lab/sdf-zombie/ring-fit.test.ts` (append), `src/lab/sdf-zombie/ref-align.test.ts` (drop the held/solved assertions)
 
-The arithmetic, derived once so the implementation does not have to re-derive it. With `d < 0` meaning our surface is proud:
+**Read this before writing code.** An earlier draft solved `scale` by attributing the residual's `cos 2θ` term to one world axis, chosen by which axis the bone ran along. **That rule was unsound and is being removed.** Measured on `mouse.blob`, `upperarm` points `(0.74, −0.67, −0.03)` and `forearm` points `(0.62, −0.79, 0.03)` — two bones in the same chain that pick *different* axes, with `upperarm`'s margin only 0.074, so a 3° authoring change would flip the answer. For both, the basis vector sits ~42° off a world axis, a near-even mix of `wide` and `tall`, so attributing the residual to either alone is about half right.
 
-- `a0 = mean(d)`, `a1 = 2·mean(d·cos θ)`, `b1 = 2·mean(d·sin θ)`, `a2 = 2·mean(d·cos 2θ)`, `b2 = 2·mean(d·sin 2θ)`
-- `m` = least-squares slope of `d` against `(t − t̄)`
-- Semi-axis change along e1 (held) is `a0 + a2`; along e2 (solved) is `a0 − a2`
-- `r_new = r + (a0 + a2) / scale[heldAxis]`
-- `solved_new = (r·scale[solvedAxis] + (a0 − a2)) / r_new`
-- Offset correction is `a1·e1 + b1·e2` (a prim displaced `+δ` along e1 makes reference points there read `d ≈ −δ cos θ`, so `a1 = −δ`)
-- Taper, only when `|m|` clears the noise floor: `r_new = r + (a0 + m·(0 − t̄)) / scale[heldAxis]`, `r2_new = (radiusB ?? r) + (a0 + m·(1 − t̄)) / scale[heldAxis]`
-- Noise floor is `stdev(d) / 4`. **This ratio is a guess** — the spec says to re-derive it from the observed spread after the first real pass and record what it moved to.
+The replacement needs no axis choice. For a unit direction `w` perpendicular to the bone, the primitive's surface sits at radius
 
-- [ ] **Step 1: Write the failing test**
+```
+ρ(w) = r / sqrt( Σ_k (w_k / s_k)² )
+```
+
+with analytic partials
+
+```
+∂ρ/∂r    = ρ / r
+∂ρ/∂s_k  = ρ³ · w_k² / (r² · s_k³)
+```
+
+Each sample contributes one row `[∂ρ/∂r, ∂ρ/∂s_0, ∂ρ/∂s_1, ∂ρ/∂s_2]` with target `d`, and `w` is recovered from the stored angle as `w = e1·cos θ + e2·sin θ`. Solve `(AᵀA + λI)x = Aᵀb` — a 4×4 system, Gaussian elimination is fine.
+
+Why this is correct where the old rule was not: a diagonal bone puts weight in *both* the `wide` and `tall` columns, and the fit distributes it. The component running along the bone has `w_k ≈ 0` for every sample, so its column is near-zero — naturally rank-deficient, absorbed by the ridge term instead of producing a wild value. A scale component is therefore left unsuggested when **the data cannot see it**, which is a fact about the measurement rather than a rule someone wrote down. Report a component only when its column norm is at least 5% of the largest column's; below that the fit is reading noise.
+
+Keep the Fourier terms for the parts they are still right about — they do not depend on axis attribution:
+
+- `a0 = mean(d)` — reported as the headline residual
+- `a1 = 2·mean(d·cos θ)`, `b1 = 2·mean(d·sin θ)` → offset correction `a1·e1 + b1·e2`. (A prim displaced `+δ` along `e1` makes reference points there read `d ≈ −δ cos θ`, so `a1 = −δ`.)
+- least-squares slope `m` of `d` against `(t − t̄)` → taper, only when `|m|` clears the noise floor: `r_new = r + (a0 + m·(0 − t̄))`, `r2_new = (radiusB ?? r) + (a0 + m·(1 − t̄))`
+- noise floor is `stdev(d) / 4`. **This ratio is a guess** — re-derive it from the observed spread after the first real pass and record what it moved to.
+
+- [ ] **Step 1: Remove the dead axis fields**
+
+In `ref-align.ts`, delete `heldAxis` and `solvedAxis` from the `RingBasis` interface and from `ringBasis`'s return. Keep everything else: the basis is still needed to bin θ and to express an offset, and both are correct for **any** orthonormal frame spanning the perpendicular plane — its roll simply no longer carries meaning. Keep `SCALE_AXIS_NAMES`; the report still needs to name components. Delete the assertions in `ref-align.test.ts` that pin `heldAxis`/`solvedAxis`, and the `SCALE_AXIS_NAMES` orthonormality test stays.
+
+Run `npx vitest run src/lab/sdf-zombie/ref-align.test.ts` — expect PASS with those assertions gone.
+
+- [ ] **Step 2: Write the failing test**
 
 Append to `src/lab/sdf-zombie/ring-fit.test.ts`:
 
@@ -1205,41 +1234,56 @@ function roundTrip(perturb: (b: ReturnType<typeof twoCapsules>) => void) {
 
 describe('fitPrims — ground truth round trip', () => {
   it('NEGATIVE CONTROL: suggests nothing when the body already matches', () => {
-    const s = roundTrip(() => {});
-    for (const one of s) {
+    for (const one of roundTrip(() => {})) {
       expect(one.r).toBeUndefined();
-      expect(one.solvedScale).toBeUndefined();
+      expect(one.scales).toBeUndefined();
       expect(one.offset).toBeUndefined();
     }
   });
 
   it('recovers a known radius error', () => {
-    // Ours is 8mm too thin on prim 0; the fit must put it back to 0.100.
-    const s = roundTrip((b) => { b.prims[0]!.radius = 0.092; });
-    const p0 = s.find((x) => x.prim === 0)!;
+    const p0 = roundTrip((b) => { b.prims[0]!.radius = 0.092; }).find((x) => x.prim === 0)!;
     expect(p0.r).toBeDefined();
     expect(p0.r!.from).toBeCloseTo(0.092, 6);
     expect(p0.r!.to).toBeGreaterThan(0.0975);
     expect(p0.r!.to).toBeLessThan(0.1025);
   });
 
-  it('recovers a known anisotropy error', () => {
-    // Ours is 25% too deep in z. Solved axis for a y-bone is `deep`.
-    const s = roundTrip((b) => { b.prims[0]!.scale = [1, 1, 1.25]; });
-    const p0 = s.find((x) => x.prim === 0)!;
-    expect(p0.solvedScale).toBeDefined();
-    expect(p0.solvedScale!.axis).toBe('deep');
-    expect(p0.solvedScale!.to).toBeGreaterThan(0.94);
-    expect(p0.solvedScale!.to).toBeLessThan(1.06);
+  it('recovers a known anisotropy error on a vertical bone', () => {
+    const p0 = roundTrip((b) => { b.prims[0]!.scale = [1, 1, 1.25]; }).find((x) => x.prim === 0)!;
+    const deep = p0.scales?.find((s) => s.axis === 'deep');
+    expect(deep).toBeDefined();
+    expect(deep!.to).toBeGreaterThan(0.94);
+    expect(deep!.to).toBeLessThan(1.06);
+  });
+
+  it('does NOT suggest a component the data cannot see', () => {
+    // `tall` runs along a vertical bone, so every sample has w_1 ~ 0 and its
+    // column is rank-deficient. Suggesting it would be reading noise.
+    const p0 = roundTrip((b) => { b.prims[0]!.scale = [1, 1, 1.25]; }).find((x) => x.prim === 0)!;
+    expect(p0.scales?.some((s) => s.axis === 'tall')).toBeFalsy();
+  });
+
+  it('REGRESSION: recovers anisotropy on a DIAGONAL bone', () => {
+    // The removed held/solved rule got this wrong: a 45-degree bone's basis is
+    // a near-even mix of wide and tall, so attributing cos2t to one axis is
+    // about half right. This test is the reason that rule was replaced.
+    const truth = diagonalCapsule();
+    const reference = sample(truth, 600);
+    const ours = diagonalCapsule();
+    ours.prims[0]!.scale = [1, 1, 1.3];
+    const p0 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 0)!;
+    const deep = p0.scales?.find((s) => s.axis === 'deep');
+    expect(deep).toBeDefined();
+    expect(deep!.to).toBeGreaterThan(0.92);
+    expect(deep!.to).toBeLessThan(1.08);
   });
 
   it('recovers a known lateral offset', () => {
-    // Shift prim 0 by +6mm in x; the fix must point back by about -6mm.
-    const s = roundTrip((b) => {
+    const p0 = roundTrip((b) => {
       b.prims[0]!.a = [0.006, 0.0, 0];
       b.prims[0]!.b = [0.006, 0.5, 0];
-    });
-    const p0 = s.find((x) => x.prim === 0)!;
+    }).find((x) => x.prim === 0)!;
     expect(p0.offset).toBeDefined();
     expect(p0.offset!.delta[0]).toBeLessThan(-0.004);
     expect(p0.offset!.delta[0]).toBeGreaterThan(-0.008);
@@ -1248,31 +1292,46 @@ describe('fitPrims — ground truth round trip', () => {
 
   it('IS PROVEN TO FAIL under a perturbation it should catch', () => {
     // If this ever passes, the fitter has stopped measuring anything.
-    const s = roundTrip((b) => { b.prims[0]!.radius = 0.060; });
-    const p0 = s.find((x) => x.prim === 0)!;
+    const p0 = roundTrip((b) => { b.prims[0]!.radius = 0.060; }).find((x) => x.prim === 0)!;
     expect(p0.r).toBeDefined();
     expect(Math.abs(p0.r!.to - 0.060)).toBeGreaterThan(0.02);
   });
 
   it('skips primitives it cannot model, and says which', () => {
-    const truth = twoCapsules();
-    const reference = sample(truth, 300);
+    const reference = sample(twoCapsules(), 300);
     const ours = twoCapsules();
     ours.prims[1]!.bend = [0, 0, 0.02];
-    const s = fitPrims(binResiduals(reference, ours, ours.bones), ours);
-    const p1 = s.find((x) => x.prim === 1)!;
+    const p1 = fitPrims(binResiduals(reference, ours, ours.bones), ours).find((x) => x.prim === 1)!;
     expect(p1.skipped).toMatch(/bend/i);
     expect(p1.r).toBeUndefined();
   });
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+Add this fixture beside `twoCapsules`, matching its full-`ClusterInfo` style:
+
+```ts
+/** One capsule on a 45-degree bone — the case the old axis rule mishandled. */
+function diagonalCapsule() {
+  const k = Math.SQRT1_2;
+  const prims: Primitive[] = [{
+    a: [0, 0, 0], b: [k, k, 0], radius: 0.1, scale: [1, 1, 1],
+    blendK: 0.01, limb: 'armL', cluster: 0, bone: 'upperarm.l', src: 20,
+  }];
+  const clusters: ClusterInfo[] = [
+    { id: 0, limb: 'armL', start: 0, count: 1, center: [k / 2, k / 2, 0], radius: 1, alive: true },
+  ];
+  const bones = new Map<string, ResolvedBone>([['upperarm.l', { head: [0, 0, 0], tail: [k, k, 0] }]]);
+  return { prims, clusters, bones };
+}
+```
+
+- [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `npx vitest run src/lab/sdf-zombie/ring-fit.test.ts -t "ground truth"`
 Expected: FAIL — `fitPrims is not exported`.
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 4: Write the implementation**
 
 Append to `src/lab/sdf-zombie/ring-fit.ts`:
 
@@ -1281,6 +1340,8 @@ import { SCALE_AXIS_NAMES } from './ref-align';
 
 /** Below this many samples a primitive's numbers are noise; it is reported, not fitted. */
 export const MIN_SAMPLES = 40;
+/** A scale column carrying less than this share of the largest column is unreadable. */
+const MIN_COLUMN_SHARE = 0.05;
 
 export interface Change<T> { from: T; to: T; why: string }
 
@@ -1296,10 +1357,12 @@ export interface Suggestion {
   crossBone: number;
   r?: Change<number>;
   r2?: Change<number>;
-  solvedScale?: { axis: (typeof SCALE_AXIS_NAMES)[number] } & Change<number>;
+  /** Only components the data could actually see. */
+  scales?: Array<{ axis: (typeof SCALE_AXIS_NAMES)[number] } & Change<number>>;
   offset?: { delta: Vec3; why: string };
   /** Set when the primitive was deliberately not fitted. Nothing else is populated. */
   skipped?: string;
+  mirrorDisagreement?: number;
 }
 
 function mm(v: number): string { return `${(v * 1000).toFixed(1)}mm`; }
@@ -1307,10 +1370,9 @@ function mm(v: number): string { return `${(v * 1000).toFixed(1)}mm`; }
 /**
  * Why a primitive cannot be fitted, or undefined when it can.
  *
- * bend/shell/orient all move or reshape the surface in ways the ring
- * decomposition does not model. Reporting them as skipped is honest; fitting
- * them anyway would produce a confident wrong number, which is worse than no
- * number at all.
+ * bend/shell/orient all move or reshape the surface in ways this fit does not
+ * model. Reporting them as skipped is honest; fitting them anyway would give a
+ * confident wrong number, which is worse than no number at all.
  */
 function skipReason(prim: Primitive): string | undefined {
   if (prim.dead) return 'dead (severed)';
@@ -1320,6 +1382,24 @@ function skipReason(prim: Primitive): string | undefined {
   if (prim.bend) return 'bend — the medial curve is not the chord';
   if (prim.orient && Math.abs(1 - prim.orient[3]) > 1e-6) return 'orient — scale frame is rotated';
   return undefined;
+}
+
+/** Solve `M x = y` for a small dense system by Gaussian elimination with partial pivoting. */
+function solve(M: number[][], y: number[]): number[] | undefined {
+  const n = y.length;
+  const a = M.map((row, i) => [...row, y[i]!]);
+  for (let c = 0; c < n; c++) {
+    let piv = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(a[r]![c]!) > Math.abs(a[piv]![c]!)) piv = r;
+    if (Math.abs(a[piv]![c]!) < 1e-18) return undefined;
+    [a[c], a[piv]] = [a[piv]!, a[c]!];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = a[r]![c]! / a[c]![c]!;
+      for (let k = c; k <= n; k++) a[r]![k]! -= f * a[c]![k]!;
+    }
+  }
+  return a.map((row, i) => row[n]! / row[i]!);
 }
 
 export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
@@ -1343,49 +1423,89 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     const d = bin.samples.map((s) => s.d);
     const a0 = d.reduce((s, x) => s + x, 0) / n;
     const sd = Math.sqrt(d.reduce((s, x) => s + (x - a0) ** 2, 0) / n);
-    // The noise floor scales with the character rather than being a fixed
-    // millimetre count. The 1/4 is a GUESS — re-derive it from the observed
-    // spread once a real character has been through a pass (see the spec).
+    // Scales with the character rather than being a fixed millimetre count.
+    // The 1/4 is a GUESS — re-derive from the observed spread (see the spec).
     const floor = sd / 4;
 
-    let a1 = 0, b1 = 0, a2 = 0, b2 = 0, tbar = 0;
+    let a1 = 0, b1 = 0, tbar = 0;
     for (const s of bin.samples) {
-      a1 += s.d * Math.cos(s.theta);  b1 += s.d * Math.sin(s.theta);
-      a2 += s.d * Math.cos(2 * s.theta); b2 += s.d * Math.sin(2 * s.theta);
-      tbar += s.t;
+      a1 += s.d * Math.cos(s.theta); b1 += s.d * Math.sin(s.theta); tbar += s.t;
     }
-    a1 = 2 * a1 / n; b1 = 2 * b1 / n; a2 = 2 * a2 / n; b2 = 2 * b2 / n; tbar /= n;
+    a1 = 2 * a1 / n; b1 = 2 * b1 / n; tbar /= n;
 
     let sxy = 0, sxx = 0;
     for (const s of bin.samples) { const dt = s.t - tbar; sxy += dt * s.d; sxx += dt * dt; }
     const m = sxx < 1e-12 ? 0 : sxy / sxx;
 
-    const held = prim.scale[bin.basis.heldAxis];
-    const solvedNow = prim.scale[bin.basis.solvedAxis];
     const sug: Suggestion = { ...base, meanAbs: d.reduce((s, x) => s + Math.abs(x), 0) / n };
 
-    const tapered = Math.abs(m) > floor && bin.basis.length > 1e-9;
-    let rNew: number;
-    if (tapered) {
-      rNew = prim.radius + (a0 + m * (0 - tbar)) / held;
-      const r2Now = prim.radiusB ?? prim.radius;
-      sug.r2 = { from: r2Now, to: r2Now + (a0 + m * (1 - tbar)) / held,
-                 why: `taper: ${mm(m)} of residual across the primitive` };
-    } else {
-      rNew = prim.radius + (a0 + a2) / held;
-    }
-    if (Math.abs(rNew - prim.radius) > floor / held) {
-      sug.r = { from: prim.radius, to: rNew,
-                why: tapered ? 'taper, see r2' : `uniform, ${mm(a0 + a2)}` };
+    // ---- Least-squares over (dr, dwide, dtall, ddeep). No axis is chosen:
+    // w is each sample's own world direction, so a diagonal bone puts weight
+    // in several columns and the fit distributes it.
+    const A: number[][] = [];
+    for (const s of bin.samples) {
+      const ct = Math.cos(s.theta), st = Math.sin(s.theta);
+      const w: Vec3 = [
+        bin.basis.e1[0] * ct + bin.basis.e2[0] * st,
+        bin.basis.e1[1] * ct + bin.basis.e2[1] * st,
+        bin.basis.e1[2] * ct + bin.basis.e2[2] * st,
+      ];
+      let q = 0;
+      for (let k = 0; k < 3; k++) q += (w[k]! / prim.scale[k]!) ** 2;
+      if (q < 1e-18) continue;
+      const rho = prim.radius / Math.sqrt(q);
+      A.push([
+        rho / prim.radius,
+        (rho ** 3 * w[0]! ** 2) / (prim.radius ** 2 * prim.scale[0] ** 3),
+        (rho ** 3 * w[1]! ** 2) / (prim.radius ** 2 * prim.scale[1] ** 3),
+        (rho ** 3 * w[2]! ** 2) / (prim.radius ** 2 * prim.scale[2] ** 3),
+      ]);
     }
 
-    if (Math.abs(a2) > floor && rNew > 1e-6) {
-      const solvedNew = (prim.radius * solvedNow + (a0 - a2)) / rNew;
-      sug.solvedScale = {
-        axis: SCALE_AXIS_NAMES[bin.basis.solvedAxis]!,
-        from: solvedNow, to: solvedNew,
-        why: `cos2θ: ${mm(a0 + a2)} on ${SCALE_AXIS_NAMES[bin.basis.heldAxis]}, ${mm(a0 - a2)} on ${SCALE_AXIS_NAMES[bin.basis.solvedAxis]}`,
-      };
+    const colNorm = [0, 0, 0, 0];
+    const AtA = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    const Atb = [0, 0, 0, 0];
+    A.forEach((row, i) => {
+      for (let p = 0; p < 4; p++) {
+        colNorm[p]! += row[p]! ** 2;
+        Atb[p]! += row[p]! * d[i]!;
+        for (let q2 = 0; q2 < 4; q2++) AtA[p]![q2]! += row[p]! * row[q2]!;
+      }
+    });
+    // Ridge, sized off the system itself: enough to keep the rank-deficient
+    // along-bone column from exploding, small enough not to bias the rest.
+    const lambda = 1e-4 * Math.max(AtA[0]![0]!, AtA[1]![1]!, AtA[2]![2]!, AtA[3]![3]!);
+    for (let p = 0; p < 4; p++) AtA[p]![p]! += lambda;
+    const x = solve(AtA, Atb);
+
+    const tapered = Math.abs(m) > floor && bin.basis.length > 1e-9;
+    if (tapered) {
+      const r2Now = prim.radiusB ?? prim.radius;
+      sug.r = { from: prim.radius, to: prim.radius + (a0 + m * (0 - tbar)),
+                why: 'taper, see r2' };
+      sug.r2 = { from: r2Now, to: r2Now + (a0 + m * (1 - tbar)),
+                 why: `taper: ${mm(m)} of residual across the primitive` };
+    } else if (x && Math.abs(x[0]!) > floor) {
+      sug.r = { from: prim.radius, to: prim.radius + x[0]!,
+                why: `least squares, ${mm(x[0]!)}` };
+    }
+
+    if (x) {
+      const biggest = Math.max(colNorm[1]!, colNorm[2]!, colNorm[3]!);
+      const scales: NonNullable<Suggestion['scales']> = [];
+      for (let k = 0; k < 3; k++) {
+        // A column the samples barely touch cannot be read; saying nothing is
+        // the honest answer, not reporting whatever the ridge term left there.
+        if (colNorm[k + 1]! < MIN_COLUMN_SHARE * biggest) continue;
+        const delta = x[k + 1]!;
+        if (Math.abs(delta) * prim.radius <= floor) continue;
+        scales.push({
+          axis: SCALE_AXIS_NAMES[k]!,
+          from: prim.scale[k]!, to: prim.scale[k]! + delta,
+          why: `least squares over rho(w), column share ${(100 * colNorm[k + 1]! / biggest).toFixed(0)}%`,
+        });
+      }
+      if (scales.length) sug.scales = scales;
     }
 
     if (Math.hypot(a1, b1) > floor) {
@@ -1398,22 +1518,28 @@ export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
     out.push(sug);
   }
 
-  return out.sort((x, y) => y.meanAbs - x.meanAbs);
+  return out.sort((x2, y2) => y2.meanAbs - x2.meanAbs);
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lab/sdf-zombie/ring-fit.test.ts`
-Expected: PASS, 14 tests.
+Expected: PASS.
 
-If the round-trip tolerances fail marginally, **do not widen them to make the test green.** Widening a tolerance to fit the error it is meant to catch measures nothing. Raise the sample count in `roundTrip` first, and only if the error is genuinely structural, record what it is in a comment on the test.
+If a round-trip tolerance fails marginally, **do not widen it to make the test green.** Widening a tolerance to fit the error it is meant to catch measures nothing. Raise the sample count in `roundTrip` first; tune `lambda` second; and only if the error is structural, record what it is in a comment on the test.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Run the whole gate**
 
 ```bash
-git add src/lab/sdf-zombie/ring-fit.ts src/lab/sdf-zombie/ring-fit.test.ts
-git commit -m "feat(ring-fit): decompose residuals into r/scale/offset/taper suggestions"
+npx tsc --noEmit && npx vitest run src/lab/sdf-zombie/
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/lab/sdf-zombie/ring-fit.ts src/lab/sdf-zombie/ring-fit.test.ts src/lab/sdf-zombie/ref-align.ts src/lab/sdf-zombie/ref-align.test.ts
+git commit -m "feat(ring-fit): least-squares fit of r and scale, replacing the axis rule"
 ```
 
 ---
@@ -1525,9 +1651,17 @@ export function mergeMirrored(suggestions: Suggestion[]): Suggestion[] {
     };
     if (a.r || b.r) merged.r = { from: a.r?.from ?? b.r!.from, to: avg(a.r?.to, b.r?.to)!, why: a.r?.why ?? b.r!.why };
     if (a.r2 || b.r2) merged.r2 = { from: a.r2?.from ?? b.r2!.from, to: avg(a.r2?.to, b.r2?.to)!, why: a.r2?.why ?? b.r2!.why };
-    if (a.solvedScale || b.solvedScale) {
-      const s = (a.solvedScale ?? b.solvedScale)!;
-      merged.solvedScale = { ...s, to: avg(a.solvedScale?.to, b.solvedScale?.to)! };
+    // `scales` is a list keyed by axis; merge per axis, keeping only axes both
+    // sides could read. An axis one side could see and the other could not is
+    // evidence the two sides are not measuring the same thing — drop it.
+    if (a.scales && b.scales) {
+      const merged2 = a.scales
+        .map((sa) => {
+          const sb = b.scales!.find((z) => z.axis === sa.axis);
+          return sb === undefined ? undefined : { ...sa, to: (sa.to + sb.to) / 2 };
+        })
+        .filter((z): z is NonNullable<typeof z> => z !== undefined);
+      if (merged2.length) merged.scales = merged2;
     }
     // Offset is NOT averaged: mirrored sides carry opposite lateral offsets by
     // construction, so their mean is meaningless. Keep the left side's and say so.
@@ -1733,7 +1867,7 @@ console.log();
 let rank = 0;
 for (const s of suggestions) {
   if (s.skipped !== undefined) continue;
-  if (!s.r && !s.r2 && !s.solvedScale && !s.offset) continue;
+  if (!s.r && !s.r2 && !s.scales && !s.offset) continue;
   rank++;
   console.log(`  ${rank}. ${name}.blob:${s.src ?? '?'}   ${s.bone ?? '?'}`);
   const flags = [`n=${s.n}`, `blend-dominated ${(s.blendDominated * 100).toFixed(0)}%`];
@@ -1742,7 +1876,7 @@ for (const s of suggestions) {
   console.log(`     mean ${mm(s.meanAbs)}    ${flags.join('   ')}`);
   if (s.r) console.log(`     r      ${s.r.from.toFixed(4)} -> ${s.r.to.toFixed(4)}   ${s.r.why}`);
   if (s.r2) console.log(`     r2     ${s.r2.from.toFixed(4)} -> ${s.r2.to.toFixed(4)}   ${s.r2.why}`);
-  if (s.solvedScale) console.log(`     ${s.solvedScale.axis.padEnd(6)} ${s.solvedScale.from.toFixed(3)} -> ${s.solvedScale.to.toFixed(3)}    ${s.solvedScale.why}`);
+  for (const sc of s.scales ?? []) console.log(`     ${sc.axis.padEnd(6)} ${sc.from.toFixed(3)} -> ${sc.to.toFixed(3)}    ${sc.why}`);
   if (s.offset) console.log(`     offset delta (${s.offset.delta.map((v) => v.toFixed(4)).join(', ')})   ${s.offset.why}`);
   console.log();
 }
