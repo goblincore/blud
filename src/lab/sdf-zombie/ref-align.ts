@@ -10,8 +10,9 @@
 // its own bone's frame. Refusing a PER-BONE scale keeps proportion errors
 // visible: a bone of the wrong length shows up as residual piling up at one
 // end instead of being quietly normalised away.
-import type { Vec3 } from './types';
+import type { ResolvedBone, Vec3 } from './types';
 import type { RefSkin } from './ref-skin';
+import { add, cross, dot, len, normalize, scale as vscale, sub } from './vec';
 
 export interface BoneMapEntry {
   /** Reference joint at this bone's head. */
@@ -39,10 +40,6 @@ export interface BoneMapEntry {
  * head prims are offset-positioned features plus a face block — use
  * scripts/head-profile.ts.
  */
-function side(l: string, r: string) {
-  return { l, r };
-}
-
 export const BONE_MAP: Record<string, BoneMapEntry> = (() => {
   const m: Record<string, BoneMapEntry> = {
     pelvis: { head: 'Hips',    tail: 'Spine02', claims: ['Hips'] },
@@ -63,7 +60,6 @@ export const BONE_MAP: Record<string, BoneMapEntry> = (() => {
     m[`${name}.l`] = make('Left');
     m[`${name}.r`] = make('Right');
   }
-  void side;
   return m;
 })();
 
@@ -93,4 +89,129 @@ export function groupByBone(skin: RefSkin): Grouped {
     list.push(v.position);
   }
   return { byBone, unmapped };
+}
+
+/** Index order of Primitive.scale. */
+export const SCALE_AXIS_NAMES = ['wide', 'tall', 'deep'] as const;
+
+export interface RingBasis {
+  origin: Vec3;
+  /** Cross-section axis whose scale component is HELD at its authored value. */
+  e1: Vec3;
+  /** Cross-section axis whose scale component is SOLVED alongside r. */
+  e2: Vec3;
+  /** Along the bone, head -> tail. */
+  u: Vec3;
+  length: number;
+  /** Index into Primitive.scale for e1. */
+  heldAxis: 0 | 1 | 2;
+  /** Index into Primitive.scale for e2. */
+  solvedAxis: 0 | 1 | 2;
+}
+
+const WORLD: Vec3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+/**
+ * Orthonormal frame for measuring a ring around a bone.
+ *
+ * NOT vec.ts's basisFromAxis: that seeds from the world axis LEAST aligned
+ * with the bone, so its roll turns as the bone turns. Primitive.scale is
+ * applied in WORLD axes, so the cross-section axes must track world axes or
+ * the cos-2-theta term cannot be attributed to a scale component.
+ */
+export function ringBasis(head: Vec3, tail: Vec3): RingBasis {
+  const d = sub(tail, head);
+  const length = len(d);
+  const u = length === 0 ? ([0, 1, 0] as Vec3) : normalize(d);
+
+  // Drop the world axis most aligned with the bone; hold the first survivor,
+  // solve the second.
+  let drop: 0 | 1 | 2 = 0;
+  for (const i of [1, 2] as const) if (Math.abs(u[i]) > Math.abs(u[drop])) drop = i;
+  const rest = ([0, 1, 2] as const).filter((i) => i !== drop) as [0 | 1 | 2, 0 | 1 | 2];
+  const [heldAxis, solvedAxis] = rest;
+
+  const seed = WORLD[heldAxis]!;
+  const e1 = normalize(sub(seed, vscale(u, dot(seed, u))));
+  const e2 = cross(u, e1);
+  return { origin: head, e1, e2, u, length, heldAxis, solvedAxis };
+}
+
+export interface Local { x1: number; x2: number; along: number }
+
+export function toLocal(p: Vec3, b: RingBasis): Local {
+  const v = sub(p, b.origin);
+  return { x1: dot(v, b.e1), x2: dot(v, b.e2), along: dot(v, b.u) };
+}
+
+export function fromLocal(l: Local, b: RingBasis): Vec3 {
+  return add(b.origin, add(vscale(b.e1, l.x1), add(vscale(b.e2, l.x2), vscale(b.u, l.along))));
+}
+
+export interface GlobalScale {
+  /** Multiply reference lengths by this to reach our metres. */
+  scale: number;
+  /** 100 * (max - min) / median across mapped bones. */
+  spreadPct: number;
+  /** Bone whose ratio is furthest from the median — read this before trusting the fit. */
+  worstBone: string;
+  n: number;
+}
+
+/**
+ * ONE uniform scale for the whole figure, from the median of per-bone length
+ * ratios. Deliberately not per bone: a per-bone scale would normalise away a
+ * bone of the wrong LENGTH, which is a `len=` edit we want to stay visible.
+ */
+export function globalScale(
+  refBones: Map<string, { head: Vec3; tail: Vec3 }>,
+  ourBones: Map<string, ResolvedBone>,
+): GlobalScale {
+  const ratios: Array<{ bone: string; r: number }> = [];
+  // Every bone present in BOTH maps. refBones() only ever emits BONE_MAP
+  // bones, so this is already the mapped set; intersecting here rather than
+  // re-filtering through BONE_MAP keeps the function honest about its inputs
+  // and lets our body carry bones (hand, fingers, skull) the reference lacks.
+  for (const [bone, ref] of refBones) {
+    const our = ourBones.get(bone);
+    if (!our) continue;
+    const refLen = len(sub(ref.tail, ref.head));
+    const ourLen = len(sub(our.tail, our.head));
+    if (refLen < 1e-9 || ourLen < 1e-9) continue;
+    ratios.push({ bone, r: ourLen / refLen });
+  }
+  if (ratios.length === 0) throw new Error('no bone appears in both the reference and the body');
+  const sorted = [...ratios].sort((a, b) => a.r - b.r);
+  const mid = sorted[Math.floor((sorted.length - 1) / 2)]!.r;
+  const median = sorted.length % 2 === 1
+    ? mid
+    : (mid + sorted[Math.floor(sorted.length / 2)]!.r) / 2;
+  const worst = ratios.reduce((w, c) => (Math.abs(c.r - median) > Math.abs(w.r - median) ? c : w));
+  return {
+    scale: median,
+    spreadPct: 100 * (sorted[sorted.length - 1]!.r - sorted[0]!.r) / median,
+    worstBone: worst.bone,
+    n: ratios.length,
+  };
+}
+
+/**
+ * Reference point -> our body's space: scale the bone-local coordinates by the
+ * ONE global scale, then rebuild them in our bone's frame. Rotation and
+ * translation are absorbed here, which is what makes the fit pose-independent;
+ * `along` is NOT renormalised, so a bone of the wrong length still shows.
+ */
+export function refToBody(p: Vec3, refB: RingBasis, ourB: RingBasis, s: number): Vec3 {
+  const l = toLocal(p, refB);
+  return fromLocal({ x1: l.x1 * s, x2: l.x2 * s, along: l.along * s }, ourB);
+}
+
+/** Reference bone head/tail from joint world positions, via BONE_MAP. */
+export function refBones(jointWorld: Map<string, Vec3>): Map<string, { head: Vec3; tail: Vec3 }> {
+  const out = new Map<string, { head: Vec3; tail: Vec3 }>();
+  for (const [bone, e] of Object.entries(BONE_MAP)) {
+    const head = jointWorld.get(e.head), tail = jointWorld.get(e.tail);
+    if (head && tail) out.set(bone, { head, tail });
+  }
+  return out;
 }
