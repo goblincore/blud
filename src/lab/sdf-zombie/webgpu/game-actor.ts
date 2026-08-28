@@ -388,16 +388,20 @@ export function createZombieActor(opts: {
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
     pendingShot = {
-      type: 'pellet',
+      type: wound.type,
       dirWorld: [...dirWorld] as Vec3,
       woundWorld: [...hitWorld] as Vec3,
       torso: field.prims[wound.primIdx]?.limb === 'torso',
     };
     // Recoil shove through the rig — the rest-pose pull springs it back.
+    // Scaled BY WOUND KIND: a slug stamps a blast-profile wound and must
+    // shove like one, not like a single pellet (the defect this task was
+    // opened for).
+    const push = IMPULSE[wound.type];
     bound = impulseAt(bound, hitWorld, [
-      dirWorld[0] * PELLET_IMPULSE,
-      dirWorld[1] * PELLET_IMPULSE,
-      dirWorld[2] * PELLET_IMPULSE,
+      dirWorld[0] * push,
+      dirWorld[1] * push,
+      dirWorld[2] * push,
     ]);
     // Sever checks BEFORE the pose re-apply so a severed limb is gone from
     // the very next rendered frame.
