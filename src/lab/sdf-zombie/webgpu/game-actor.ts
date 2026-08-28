@@ -56,9 +56,33 @@ const CALM: Omit<MotionSignals, 'dt'> = {
 /** Wound-type ids the shader expects — same mapping as lab-main's TYPE_ID. */
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
-/** Hit shove along the shot direction, scaled up from the lab's 0.04/0.16
- *  pair because a pellet is small but arrives eight at a time. */
-const PELLET_IMPULSE = 0.05;
+/** Hit shove along the shot direction, PER WOUND PROFILE — the defect this
+ *  file shipped with was one constant (0.05) for everything, so a slug
+ *  stamped a blast-profile wound and then shoved like a single pellet. The
+ *  baseline is the lab's own scale (lab-main.ts: blast 0.16, pellet 0.06,
+ *  burn 0.04); the slug path rides 'blast' because woundFromSlug stamps the
+ *  blast calibre. Raised slightly above the lab for first-person range —
+ *  the lab's numbers were tuned for a god-cam further out (see the lab's
+ *  "scaled up in the motion-polish pass" note). */
+const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.04 };
+
+/** Stagger amplitude multiplier sent with a SLUG's motion signal — the slug
+ *  is a hand-cannon round and should lurch harder than the lab's tuned
+ *  blast response (stagger.ts StaggerHit.gain; default 1 = lab amplitudes).
+ *  Pellets send no gain: eight arrive together and re-flinch the body. */
+const SLUG_GAIN = 1.3;
+
+/** Heavy-hit walk stop: after a blast-profile hit the zombie HALTS for this
+ *  long (the lurch plays on a stopped walker — a stagger that never
+ *  interrupts locomotion reads weightless), then resumes its wander. */
+const BLAST_HOLD_SEC = 0.55;
+
+/** Heavy-hit root knockback: initial ground-plane speed (m/s) along the
+ *  shot's horizontal direction — the body's ROOT actually travels back
+ *  (a real stumble, not just a joint offsets), decaying at BLAST_KNOCK_DECAY
+ *  per second. ∫ v0·e^(−kt) ≈ v0/k metres of total travel. */
+const BLAST_KNOCK_MPS = 1.2;
+const BLAST_KNOCK_DECAY = 7;
 
 /** A detached piece, placed in WORLD space where the rendered limb hung.
  *  game-main turns this into a ballistic chunk + SDF view. */
@@ -86,6 +110,20 @@ export interface ZombieActor {
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
+  /** Choreography + motion diagnostics from the LAST step() — the heavy-hit
+   *  tuning seam (is the hold engaged? did the knock decay? did the meter
+   *  cross?) and the capture driver's oracle. Not a simulation input. */
+  debug: () => {
+    holdSecs: number;
+    knockV: number;
+    phase: string;
+    meter: number;
+    blend: number;
+    speed: number;
+    staggerKind: string | null;
+    target: Vec3 | null;
+    idle: number;
+  };
   /**
    * One pellet lands at `hitWorld`, travelling along `dirWorld`.
    * Stamps a wound through damage.ts, shoves the rig, then runs the existing
@@ -148,6 +186,22 @@ export function createZombieActor(opts: {
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
+
+  let lastDebug: ReturnType<ZombieActor['debug']> | null = null;
+  let lastFrame: ReturnType<typeof stepMotion>['frame'] | null = null;
+
+  // Heavy-hit choreography state (blast-profile hits — the slug). A stagger
+  // that never interrupts locomotion reads weightless: after a blast hit the
+  // zombie HALTS for BLAST_HOLD_SEC (the lurch plays on a stopped walker;
+  // MotionConfig.wander=false fades the stride out and it resumes after),
+  // while its ROOT is knocked back along the shot's ground-plane direction
+  // from BLAST_KNOCK_MPS, decaying exponentially at BLAST_KNOCK_DECAY/s
+  // (total travel ≈ v0/k). Actor-owned on purpose: MotionConfig.wander and a
+  // wander.pos delta already express both, so the shared motion modules and
+  // the lab's wiring — which must stay bit-identical — are untouched.
+  let holdSecs = 0;
+  let knockV = 0;
+  let knockDir: Vec3 = [0, 0, 0];
 
   function woundedLimbs() {
     const w = { armL: false, armR: false, legL: false, legR: false };
@@ -265,6 +319,29 @@ export function createZombieActor(opts: {
   function step(dt: number) {
     let firstSub = true;
     for (const sdt of planSubSteps(dt)) {
+      // Heavy-hit choreography (see the state block): knock the ROOT before
+      // the motion step so this sub-step's targets ride the moved root, and
+      // gate the wander off while the hold lasts. Bounds-clamped like
+      // stepWander's own integration, so a knock cannot shove the body
+      // through a room wall.
+      if (knockV > 1e-4) {
+        const w = state.wander;
+        const nx = w.pos[0] + knockDir[0] * knockV * sdt;
+        const nz = w.pos[2] + knockDir[2] * knockV * sdt;
+        state = {
+          ...state,
+          wander: {
+            ...w,
+            pos: [
+              Math.min(Math.max(nx, opts.bounds.minX), opts.bounds.maxX),
+              0,
+              Math.min(Math.max(nz, opts.bounds.minZ), opts.bounds.maxZ),
+            ],
+          },
+        };
+        knockV *= Math.exp(-BLAST_KNOCK_DECAY * sdt);
+      }
+      holdSecs = Math.max(0, holdSecs - sdt);
       // Real signals on the damaged path; CALM otherwise. severed/freshWounds
       // alias the pending arrays and drain after the FIRST sub-step, exactly
       // like the lab's hero signals.
@@ -284,11 +361,12 @@ export function createZombieActor(opts: {
       const prevPos: Vec3 = [...state.wander.pos] as Vec3;
       const stepR = stepMotion(
         state, joints,
-        { enabled: true, wander: true },
+        { enabled: true, wander: holdSecs <= 0 },
         signals,
         bound.rig.points, opts.bounds, rng,
       );
       state = stepR.state;
+      lastFrame = stepR.frame;
       const f = stepR.frame;
       // Furniture rejection: restore the position, drop the target. The
       // heading stays, so the body turns as it picks the next target.
@@ -329,6 +407,18 @@ export function createZombieActor(opts: {
     view.update(posed, current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
+    const d = lastFrame;
+    if (d) lastDebug = {
+      holdSecs,
+      knockV,
+      phase: d.phase,
+      meter: d.meter,
+      blend: d.blend,
+      speed: d.speed,
+      staggerKind: d.staggerKind,
+      target: state.wander.target ? [...state.wander.target] as Vec3 : null,
+      idle: state.wander.idle,
+    };
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3): void {
@@ -364,16 +454,33 @@ export function createZombieActor(opts: {
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
     pendingShot = {
-      type: 'pellet',
+      type: wound.type,
       dirWorld: [...dirWorld] as Vec3,
       woundWorld: [...hitWorld] as Vec3,
       torso: field.prims[wound.primIdx]?.limb === 'torso',
+      // The slug is a hand-cannon round: its lurch + localized recoil play at
+      // SLUG_GAIN (above the lab's blast amplitudes — first-person range).
+      // Pellets send no gain: eight arrive together and re-flinch at 1.
+      ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
     };
+    if (wound.type === 'blast') {
+      // Heavy-hit choreography: stop the walk, knock the ROOT back.
+      holdSecs = BLAST_HOLD_SEC;
+      const l = Math.hypot(dirWorld[0], dirWorld[2]);
+      if (l > 1e-6) {
+        knockV = BLAST_KNOCK_MPS;
+        knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
+      }
+    }
     // Recoil shove through the rig — the rest-pose pull springs it back.
+    // Scaled BY WOUND KIND: a slug stamps a blast-profile wound and must
+    // shove like one, not like a single pellet (the defect this task was
+    // opened for).
+    const push = IMPULSE[wound.type];
     bound = impulseAt(bound, hitWorld, [
-      dirWorld[0] * PELLET_IMPULSE,
-      dirWorld[1] * PELLET_IMPULSE,
-      dirWorld[2] * PELLET_IMPULSE,
+      dirWorld[0] * push,
+      dirWorld[1] * push,
+      dirWorld[2] * push,
     ]);
     // Sever checks BEFORE the pose re-apply so a severed limb is gone from
     // the very next rendered frame.
@@ -394,6 +501,10 @@ export function createZombieActor(opts: {
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
     step,
     wounds: () => wounds,
+    debug: () => lastDebug ?? {
+      holdSecs, knockV, phase: 'standing', meter: 0, blend: 0, speed: 0,
+      staggerKind: null, target: null, idle: 0,
+    },
     hit,
     hitSlug,
     stampBlast,

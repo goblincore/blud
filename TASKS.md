@@ -20,6 +20,31 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**HIT-STAGGER FEEL — DONE on branch `dispatch/hit-stagger-feel`, awaiting
+owner playtest (2026-08-28).** Owner's "the zombie needs to read as really
+staggered and hit by something of substantial force" was three stacked
+defects: (1) the game shoved with ONE constant (0.05) for every wound kind
+while the lab scales by kind (blast 0.16); (2) the motion signal hardcoded
+`type:'pellet'` so the slug — a blast-calibre wound — could only ever trigger
+the weakest stagger kind (flinch); (3) no reaction ever interrupted
+locomotion, which is why even a correct shove would have read weightless.
+All three fixed, actor-owned so the lab stays bit-identical: per-kind
+IMPULSE {pellet 0.07, blast 0.18, burn 0.04}; slug sends `shot.gain 1.3`
+(lurch + recoil at 1.3x lab amplitudes); blast hits HALT the wander 0.55 s
+(the lurch plays on a stopped walker) and knock the ROOT back ~0.17 m
+(1.2 m/s, exp decay 7/s, bounds-clamped), then the zombie resumes its
+target. Pellets deliberately unchanged (flinch-and-keep-walking = lab
+reference). Buckshot of 16 still collapses via the meter (0.88 > 0.8).
+Cost: steady-state actor step 15.5 vs 15.8 µs/step (noise); room-4 frame
+EMA unchanged — the march still dominates. Gates + the lab comparison reel:
+docs/dev-notes/2026-08-28-hit-stagger-feel/ (before/after/lab sequences).
+Capture drivers: scripts/sdf-game-stagger-seq.mjs,
+scripts/sdf-lab-stagger-seq.mjs. GOTCHA worth remembering: test/capture
+aims must raycast a SURFACE point — a torso cluster centre sits inside the
+field, anchors the crater pathologically, and the slug's severRadius cuts
+both hip necks → instant collapse (never player-visible; the page's
+predictor always aims at surfaces).
+
 **WOUND HULL HOLES — FIXED (worktree `2026-08-27-wound-hull-holes`, 2026-08-27).**
 The owner's "parts of the zombie become invisible / transparent holes when one
 walks in front of another" was NOT the hull exclusions (`dcd61ca`): the
