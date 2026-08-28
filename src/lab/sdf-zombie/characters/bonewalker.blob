@@ -148,14 +148,14 @@ body
   # for the segmentation. BONE paint — the paint boundary is the prim
   # boundary.
   # ============================================================
-  bar torso on pelvis  from=0.35 to=1.00 offset=(0,0,-0.075) r=0.024 r2=0.027 blend=0.006 color=dbc0a0
-  bar torso on spine1  from=0.05 to=0.95 offset=(0,0,-0.080) r=0.026 r2=0.029 blend=0.006 color=dbc0a0
-  bar torso on chest   from=0.10 to=1.60 offset=(0,0,-0.085) r=0.028 r2=0.031 blend=0.006 color=dbc0a0
+  bar torso on pelvis  from=0.35 to=1.00 offset=(0,0,-0.075) r=0.024 r2=0.027 blend=0.006 color=dbc0a0 gloss=0.45
+  bar torso on spine1  from=0.05 to=0.95 offset=(0,0,-0.080) r=0.026 r2=0.029 blend=0.006 color=dbc0a0 gloss=0.45
+  bar torso on chest   from=0.10 to=1.60 offset=(0,0,-0.085) r=0.028 r2=0.031 blend=0.006 color=dbc0a0 gloss=0.45
   # The ridge continues up the upper back to the neck base — the mesh's
   # thoracic vertebrae run to y ~1.04 (its upper-spine ridge verts are
   # claimed by the clavicle cloud there). Without this segment the back
   # plane at 0.95-1.04 is 45mm shallower than the mesh's.
-  bar torso on spine2  from=-0.2 to=1.20 offset=(0,0,-0.072) r=0.026 r2=0.024 blend=0.006 color=dbc0a0
+  bar torso on spine2  from=-0.2 to=1.20 offset=(0,0,-0.072) r=0.026 r2=0.024 blend=0.006 color=dbc0a0 gloss=0.45
   # Segmentation grooves across the lumbar and thoracic ridge.
   groove torso on spine1 at=0.50 offset=(0,0,-0.070) r=0.030 wide=1.6 tall=0.10 depth=0.004 width=0.005
   groove torso on chest  at=0.45 offset=(0,0,-0.075) r=0.032 wide=1.6 tall=0.10 depth=0.004 width=0.005
@@ -170,7 +170,7 @@ body
   # out to x +/-0.103 + r 0.024 = 0.127 (mesh 0.143) and up to y ~1.29,
   # curling forward. Bend x pushes the belly outward; `both` mirrors the
   # sweep so the pair curls symmetrically.
-  bar head on skull from=0.27 to=0.33 offset=(0.048,0.062,-0.005) tip=(0.070,0.075,0.014) bend=(0.050,0.012,0.0) r=0.024 r2=0.007 blend=0.004 chamfer both color=dbc0a0
+  bar head on skull from=0.27 to=0.33 offset=(0.048,0.062,-0.005) tip=(0.070,0.075,0.014) bend=(0.050,0.012,0.0) r=0.024 r2=0.007 blend=0.004 chamfer both color=dbc0a0 gloss=0.45
   # Small pointed ears under the horn bases (the head cloud is 56-63mm
   # half-wide at y 1.17-1.20 vs the 52mm cranium — only ~10mm of ear
   # protrudes; v1's 0.014+0.020tip rendered as bat wings). PAINTED flesh:
@@ -196,10 +196,10 @@ body
   # Four claw fingers fanning off the palm, pale bone, tapering to points.
   # Splay via distinct x offsets; each tip curls slightly forward (+z) and
   # inward — a relaxed raking hand. ~0.012 apart at 0.008 radius.
-  bar arm on hand from=0.45 to=1.40 offset=(0.016,0,-0.004) tip=(0.010,0,0.028) r=0.009 r2=0.003 blend=0.0025 mirror color=dbc0a0
-  bar arm on hand from=0.50 to=1.45 offset=(0.005,0,-0.002) tip=(0.003,0,0.030) r=0.009 r2=0.003 blend=0.0025 mirror color=dbc0a0
-  bar arm on hand from=0.50 to=1.40 offset=(-0.006,0,-0.001) tip=(-0.004,0,0.029) r=0.008 r2=0.003 blend=0.0025 mirror color=dbc0a0
-  bar arm on hand from=0.45 to=1.30 offset=(-0.016,0,0.002) tip=(-0.011,0,0.025) r=0.008 r2=0.002 blend=0.0025 mirror color=dbc0a0
+  bar arm on hand from=0.45 to=1.40 offset=(0.016,0,-0.004) tip=(0.010,0,0.028) r=0.009 r2=0.003 blend=0.0025 mirror color=dbc0a0 gloss=0.45
+  bar arm on hand from=0.50 to=1.45 offset=(0.005,0,-0.002) tip=(0.003,0,0.030) r=0.009 r2=0.003 blend=0.0025 mirror color=dbc0a0 gloss=0.45
+  bar arm on hand from=0.50 to=1.40 offset=(-0.006,0,-0.001) tip=(-0.004,0,0.029) r=0.008 r2=0.003 blend=0.0025 mirror color=dbc0a0 gloss=0.45
+  bar arm on hand from=0.45 to=1.30 offset=(-0.016,0,0.002) tip=(-0.011,0,0.025) r=0.008 r2=0.002 blend=0.0025 mirror color=dbc0a0 gloss=0.45
 
   # ============================================================
   # LEGS — thin thighs (rho 0.032-0.054), knees that KNOB (the mesh shows
@@ -226,9 +226,9 @@ body
   # yawed slightly out (mesh feet splay; toes reach x +/-0.286).
   blob leg on foot  at=0.10 offset=(0.018,-0.062,0.020) r=0.048 wide=1.10 tall=1.30 deep=1.40 blend=0.006 mirror
   # Three toe claws per paw, pale bone, splayed in x, reaching forward-down.
-  blob leg on foot  at=0.0 offset=(0.052,-0.070,0.095) tip=(0.016,-0.045,0.050) r=0.017 r2=0.004 blend=0.003 mirror color=dbc0a0
-  blob leg on foot  at=0.0 offset=(0.014,-0.075,0.105) tip=(0.004,-0.048,0.055) r=0.018 r2=0.004 blend=0.003 mirror color=dbc0a0
-  blob leg on foot  at=0.0 offset=(-0.026,-0.070,0.095) tip=(-0.010,-0.045,0.048) r=0.016 r2=0.004 blend=0.003 mirror color=dbc0a0
+  blob leg on foot  at=0.0 offset=(0.052,-0.070,0.095) tip=(0.016,-0.045,0.050) r=0.017 r2=0.004 blend=0.003 mirror color=dbc0a0 gloss=0.45
+  blob leg on foot  at=0.0 offset=(0.014,-0.075,0.105) tip=(0.004,-0.048,0.055) r=0.018 r2=0.004 blend=0.003 mirror color=dbc0a0 gloss=0.45
+  blob leg on foot  at=0.0 offset=(-0.026,-0.070,0.095) tip=(-0.010,-0.045,0.048) r=0.016 r2=0.004 blend=0.003 mirror color=dbc0a0 gloss=0.45
 
 # ============================================================
 # FACE — cranium measured off the Head cloud: halfW 0.052-0.063, back
@@ -291,13 +291,13 @@ palette
   baseColor     0.155 0.050 0.028
   deepColor     0.28 0.05 0.05
   charColor     0.20 0.08 0.05
-  specIntensity 0.50
-  specRoughness 0.42
-  fresnelBoost  0.35
+  specIntensity 0.66
+  specRoughness 0.30
+  fresnelBoost  0.45
   translucency  0.18
   surfaceNoiseAmp    0.25
   silhouetteNoiseAmp 0.0
-  wetness       0.15
+  wetness       0.28
   mottleAmp     0.38
   mottleScale   1.6
   mottleColor   0.46 0.38 0.31
