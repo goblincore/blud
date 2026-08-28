@@ -20,6 +20,20 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SCHOOLGIRL-ALT — INSTRUMENT TRIAL COMPLETE (worktree `2026-08-28-schoolgirl-alt-character`,
+2026-08-28).** The controlled experiment: `schoolgirl-alt.blob` authored from scratch against the
+same mesh as the hand-authored `schoolgirl.blob` (untouched control), using `blob:rings` +
+`blob:measure` + measured test pins. Starting bones from the reference rig (the brief's biggest
+lever) plus an UNMAPPED "bridge" bone carrying the rig's own Hips float produced: **rings spread
+18.2% vs control 285.4%, ZERO `BONE LENGTH IS OFF` blocks (control: several, rank-1 −62.1%), and
+`blob:measure --range 0.6:1` IoU 0.898 vs control 0.765.** 13 measured pins; tsc 0; suite 1769
+green; render-check clean. Cloth findings worth reusing: the mesh's knees are APART (segmented
+slices, centres ±0.078 — the control's knees-touching read pair-width-right/split-wrong); the
+control's sock/calf prims run ~2x the mesh's per-leg radius (rings actually flagged this on the
+control — `wide 1.000 -> 0.67` ranks 2/3/4 — and was right); the shell skirt needs tall >=~0.3
+(a 16x-anisotropic tall=0.06 shell GPU-holes, render-check catches it). Full report in the
+dispatch transcript; every number's source is in the .blob header.
+
 **HIT-STAGGER FEEL — DONE on branch `dispatch/hit-stagger-feel`, awaiting
 owner playtest (2026-08-28).** Owner's "the zombie needs to read as really
 staggered and hit by something of substantial force" was three stacked

@@ -1,0 +1,358 @@
+# Schoolgirl-alt — the same subject as schoolgirl.blob, authored WITH the
+# instrument (blob:rings + blob:measure + test pins) instead of by eye.
+# This is the treatment arm of a controlled experiment: schoolgirl.blob is the
+# hand-authored CONTROL and must not be edited, deleted or copied from.
+#
+# Reference: docs/dev-notes/refs/schoolgirl-mesh/schoolgirl.glb (the SAME mesh
+# the control was authored against). 115226 verts, standard 24-joint Meshy rig,
+# bind T-pose, 1.700 m, feet at y=0, facing +z. 79% of its vertices reach a
+# measurable bone — the highest of any reference in the repo.
+#
+# AUTHORED AT 1.58 m (= 0.9294 x the mesh), so every measured bone length below
+# is the rig's own joint-to-joint distance x 0.9294. Measured off the rig bind
+# pose (scripts dump of jointWorld, 2026-08-28; .l bones, .r within 3%):
+#   pelvis (Hips->Spine02)        0.1037
+#   spine1 (Spine02->Spine01)     0.1037
+#   chest  (Spine01->Spine)       0.1037
+#   spine2 (Spine->neck)          0.0544
+#   neck   (neck->Head)           0.0790
+#   clavicle (Shoulder->Arm)      0.1070
+#   upperarm (Arm->ForeArm)       0.2291
+#   forearm  (ForeArm->Hand)      0.2146
+#   thigh   (UpLeg->Leg)          0.3686
+#   shin    (Leg->Foot)           0.3504
+#   foot    (Foot->ToeBase)       0.1270
+# These are NOT corrected toward nicer proportions — blob:rings flags any drift
+# over ~10% and the whole point of this file is to start from measured bones.
+#
+# THE RIG-vs-SURFACE OFFSET (same Meshy rig as bonewalker.glb, but this rig
+# floats its chain HIGH): the surface crotch/skirt hem sits at 45.5% while the
+# rig's Hips joint is at 58.3% — a 0.20 m gap (at this scale) with NO bone in
+# the rig under it, and the thighs branch from UpLeg (52.5%), 9 cm BELOW Hips.
+# The .blob grammar attaches every child at its parent's TAIL, so a single
+# pelvis bone cannot anchor both the legs and the spine at their rig heights.
+# Solve (the bonewalker's "deliberately long skull" move, applied once):
+#   root pelvis 0.730 -> tail 0.834 = the rig's UpLeg height, so the measured
+#     legs land the ankle at the rig's own 0.115 exactly;
+#   bridge (UNMAPPED, len 0.191 = Spine02 - UpLeg): the rig's own root float,
+#     carried honestly as a named bone no fit sees;
+#   spine1..neck: every joint at its rig height (spine1 head 1.025 = Spine02,
+#     neck tail 1.365 = Head);
+#   clavicle parents to SPINE2 (tail 1.286 = the rig's neck joint, 1 cm below
+#     the 1.296 shoulder surface line — the control could not do this split
+#     because its torso was two long bones);
+#   skull len 0.223: the face block rides skull at=0.45 -> cranium centre
+#     1.465, midway between the measured chin (1.351) and crown (1.58).
+#
+# THE MESH IS DRESSED — cloth offsets are decisions, recorded here:
+#   * SKIRT: A-line, stands far away from the legs (hem half-width 0.186 vs
+#     thigh flesh radius 0.063): modelled as its own shell cone, never as leg
+#     mass. Thigh sizing comes ONLY from the bare bands below the hem.
+#   * BLOUSE: loose sailor top. Flesh taken 7 mm inside the blouse silhouette
+#     at the ribs (blouse full width 0.254 at the bust -> flesh half
+#     0.127-0.007 = 0.120), 4 mm at the fitted shoulder yoke.
+#   * SOCK: thick slouched terry — the sock prim carries the FABRIC surface
+#     directly (it IS the visible surface there); the shin flesh under it
+#     stays at the bare-calf measurement (r 0.042) so the sock is +8 mm
+#     fatter than the leg inside it. A rings suggestion that moves either prim
+#     toward the other is the tool being cloth-blind (sock verts dominate the
+#     shin bone's samples) and is overruled.
+#
+# MEASURED SURFACE LANDMARKS (this author's own mesh reads, 2026-08-28; joint
+# -filtered + texture-classified per-vertex, so the T-pose arms pollute
+# nothing; heights are fractions of 1.70 x 1.58, widths are FULL x/Z extents
+# x 0.9294; per-leg numbers from segmented slices):
+#   crown (hair)        1.000   hair dome to the very top
+#   skull+hair widest  .94-.95  w 0.106  d 0.125
+#   ears (pointed)     .86-.88  skin, stick out past the bob
+#   chin / jaw          .855    w 0.045
+#   neck narrowest      .84     w ~0.050
+#   shoulder line       .80-.82 w 0.202 (torso only) — rig Shoulder 79.6%
+#   bust (blouse)      .72      w 0.254  d 0.208  -> flesh half 0.120
+#   blouse hem         .64-.66  w 0.199
+#   midriff (SKIN)     .62-.66  w ~0.195 (bare, no cloth offset)
+#   skirt waistband    .62-.63  w 0.219 (half 0.110)
+#   skirt widest       .46-.48  w 0.383  d 0.294 (half 0.186 x 0.147)
+#   skirt hem          .455     legs split; bare below
+#   bare thigh         .37-.43  per-leg r 0.059 -> 0.063 upward, deeper than
+#                                wide (r_z 0.066-0.069, deep 1.10)
+#   knee (narrowest)   .27-.29  per-leg r 0.038-0.045, centre x 0.078
+#   calf               .21-.25  per-leg r 0.042-0.046 (slim; no big bulge)
+#   sock top (slouch)  .19-.20  per-sock r 0.050 — +8mm over the calf
+#   sock column        .07-.19  per-sock r 0.045-0.047
+#   ankle              .073     centre x 0.092 (legs slant slightly outward)
+#   shoe body          .03-.06  centre x 0.092, r ~0.052, z-centre -0.04
+#   sole                .00
+#
+# STANCE: the mesh's legs are NOT touching — segmented slices show knee
+# centres at x +/-0.078 (1.58 m) with knee radii 0.040, an 8 cm air gap, and
+# the columns slant slightly outward down to ankle centres 0.092 (toes-out).
+# (The control authored knees touching — pair width right, split wrong; the
+# front silhouette cannot tell the difference, the side view can.)
+#
+# STYLE: Ichiro Tanida early-2000s Japanese CG — smooth rounded forms, clean
+# simple masses, toy-like. Paint palette measured off the mesh texture
+# (per-class mean texels, sRGB): skin (216,175,138) mean / (236,211,186)
+# bright-island, navy (2,4,106), blouse white (232,232,233), sock+sole grey
+# (216,214,214), hair/shoe (25,17,9), NECKERCHIEF + nails RED (174,10,8) —
+# the scarf is red, not navy like the control's.
+model schoolgirl-alt
+  # 0.9294 x the 1.70 m mesh — the control experiments at 1.70; sizes here are
+  # mesh x 0.9294 throughout so the A/B compares method, not scale.
+  height 1.58
+  # Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # Root: children attach at a bone's TAIL (resolve.ts, no exceptions), so the
+  # root sits at 0.730 = tail 0.834: the THIGH heads at the rig's UpLeg height
+  # and the measured legs' ankle at the rig's 0.115 exactly.
+  root pelvis at 0.730 len=0.1037
+  # The rig's own root float (crotch -> Spine02), UNMAPPED on purpose — no fit
+  # sees its length. Tail 1.025 = the rig's Spine02; every mapped bone below
+  # then sits at its rig height.
+  bone bridge parent=pelvis dir=up pitch=0 len=0.191
+
+  # Measured spine chain — three short bones where the control has two long
+  # ones. Slight backward lean: the rig's spine column rises z +0.034 -> +0.003
+  # (at 1.58) over the torso, about -2 deg per bone.
+  bone spine1 parent=bridge dir=up pitch=-2 len=0.1037
+  bone chest  parent=spine1 dir=up pitch=-2 len=0.1037
+  bone spine2 parent=chest  dir=up pitch=-1 len=0.0544
+  bone neck   parent=spine2 dir=up pitch=0  len=0.0790
+  # Carries the face block up to cranium centre 1.465 (chin 1.351, crown
+  # 1.58); base 1.365 = the rig's Head joint. The visible neck is authored as
+  # a prim on the neck bone below it (the house pattern).
+  bone skull  parent=neck   dir=up pitch=3 len=0.223
+
+  mirror
+    # Clavicle on SPINE2 (tail 1.286 = the rig's neck joint, at the shoulder
+    # line), side 0.030 = the rig's Shoulder joint x; measured 0.107 lands the
+    # arm socket at the rig's own Arm joint (x 0.137 at this scale).
+    bone clavicle parent=spine2  side=0.030 dir=side  len=0.1070
+    # Arms rest DOWN and slightly OUT (the mesh T-poses; rings is per-bone so
+    # this costs nothing). The out-angle is not stylistic: the measured waist
+    # (0.098 half) sits exactly on the natural hang line of the forearm, and
+    # at <=6 deg of tilt the two fields smin-fog together (solid -0.16..+0.16
+    # at y 1.01 in the extent scan). 9/7 clears the waist by ~6 cm while the
+    # forearms still swing FORWARD below the elbow (pitch 18) so the hands
+    # rest against the skirt's front slope — the control's owner-tested route.
+    bone upperarm parent=clavicle dir=down tilt=9 pitch=3  len=0.2291
+    bone forearm  parent=upperarm dir=down tilt=7 pitch=18 len=0.2146
+    bone hand     parent=forearm  dir=down tilt=0 pitch=12 len=0.090
+    # Legs: measured lengths, slight OUTWARD slant (mesh centres: hip 0.062,
+    # knee 0.078, ankle 0.092 — the toes-out stand).
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.062 len=0.3686
+    bone shin     parent=thigh  dir=down tilt=3           len=0.3504
+    # The foot bone only positions shoe prims (see the control's shoe note).
+    bone foot     parent=shin   dir=fwd                   len=0.1270
+  end
+
+body
+  # ============================================================
+  # TORSO FLESH — a few large smooth masses; the garments are paint and
+  # shells on top. Radii are the FLESH (blouse measured minus its cloth
+  # offset, midriff bare as measured) — see the header for the offsets.
+  # Blend 0.025 hides seams between overlapping bars without webbing the
+  # neck-only band (the kk=4k reach lesson both this repo's torso rebuilds
+  # paid for).
+  # ============================================================
+  # Hip/pelvis filler under the skirt (never seen; keeps the legs fused to
+  # the torso). Half 0.095 x 0.075 — hip flesh, not the skirt's 0.186.
+  blob torso on pelvis  at=0.45 r=0.095 deep=0.79 blend=0.020 color=ecd3ba
+  # Waist: the bare midriff band (0.98-1.04) is SKIN — measured 0.195 full,
+  # no cloth offset here. One tapered bar up the bridge (0.935-1.025),
+  # 0.095 -> 0.090 half-width; the blouse hem is the paint boundary where the
+  # bust bar's field crosses it (~1.05, mesh hem 1.02-1.05).
+  # blend 0.008, not the torso's 0.025: alone on its bone it needs no seam
+  # hiding, and 0.025's ~10 cm smin reach webbed it into the forearms.
+  bar  torso on bridge  from=0.53 to=1.00 r=0.095 r2=0.090 deep=0.80 blend=0.008 color=ecd3ba
+  # Ribs to bust: the BLOUSE is loose — flesh is the clean rib rows
+  # (0.208-0.218 full at 0.66-0.68, the 0.72+ rows carried sleeve-cap verts)
+  # minus its 7 mm cloth: x-half 0.106 at the fullest (1.13), z-half 0.090.
+  bar  torso on spine1  from=0.50 to=1.00 r=0.085 r2=0.106 deep=0.85 blend=0.012 color=e8e8e9
+  # Chest to the shoulder yoke: thin front-to-back (the blouse yoke is fitted;
+  # shoulder band only 0.101 half and shallow), ends LOW with a tight blend so
+  # nothing smin-bridges the neck-only band at 1.327 (w 0.050) shut.
+  bar  torso on chest   from=0.30 to=0.85 r=0.108 r2=0.096 deep=0.55 blend=0.008 color=e8e8e9
+  # The skin midriff SHOWS between skirt waistband (top 0.995) and blouse hem
+  # (~1.03): the two bars above cross at ~1.01-1.03, and the paint boundary
+  # between them is the hem line — a colour change on a smooth column.
+
+  # ============================================================
+  # SKIRT — one flared shell cone (cloth, not mass). Measured: waistband half
+  # 0.110 at 0.995 -> hem half 0.186 at 0.719 (drop 0.276, flare +0.076);
+  # 0.383 wide x 0.294 deep at the widest -> deep 0.78 of the x-radius.
+  # Thin shell (abs(d)-0.006) clipped at the hem with a rounded rim so the
+  # hem edge reads as folded cloth. tall 0.42 squashes the caps: the bottom
+  # tall 0.06 (a flat cap at the waistband top) GPU-HOLED: render-check put a
+  # 112 px hole at the waist — a 16x anisotropic shell (minScale 0.06) is out
+  # of the renderer's family (the control's shells: tall 0.42-0.92). tall 0.40
+  # then painted a dome of navy 3 cm ABOVE the waistband line (the extent pin
+  # caught it: 0.232 at y 1.01 vs the mesh's bare-midriff 0.195). Final form:
+  # tall 0.30 (3.3x anisotropy), base 0.112 at 0.975 — the cap dome tops at
+  # 1.007, just 1 cm above the waistband, and reads 0.099 half at 0.99 where
+  # the mesh says 0.110. blend 0.006: the shell is one prim — its only seam is
+  # the waistband crossing, and 0.018's smin reach fogged the whole
+  # waist-to-forearm slab.
+  shell torso on bridge  at=0.738 r=0.112 r2=0.186 tip=(0,-0.256,0) wide=1.00 tall=0.30 deep=0.78 thick=0.006 clip=(0,-1,0) clipd=-0.719 rim=0.007 blend=0.006 color=01046a
+  # PLEATS — the mesh's skirt is pleated (vertical shadow lines near the hem,
+  # visible in the front render). Four shallow grooves riding the cone's
+  # slope, cut into the surface: pleat LINES, not geometry.
+  groove torso on bridge at=0.53 offset=(0.075,0,0.062) tip=(0.036,-0.170,0.030) r=0.012 depth=0.004 width=0.006 both
+  groove torso on bridge at=0.53 offset=(0.075,0,-0.062) tip=(0.036,-0.170,-0.030) r=0.012 depth=0.004 width=0.006 both
+
+  # ============================================================
+  # SAILOR COLLAR — navy shell cape over the shoulders + back, front clipped
+  # open (mesh: navy collar band 0.74-0.84 frac = y 1.17-1.33, w up to 0.45
+  # across the shoulder pair). The rim is the folded edge over the shoulder.
+  # ============================================================
+  # tall 0.55 / at 0.80: the v1 cape (tall 0.90 at 0.86) rode up the neck
+  # sides and read as a turtleneck; this one drapes 1.13-1.29 and opens the
+  # front to z 0.06 so the blouse V shows.
+  shell torso on chest at=0.80 offset=(0,0.028,-0.016) r=0.115 wide=1.05 tall=0.55 deep=1.05 thick=0.006 clip=(0,0,1) clipd=0.06 rim=0.005 blend=0.006 color=01046a
+  # NECKERCHIEF — RED (measured ae0a08; the control's scarf is navy, the
+  # mesh's is not). A knot at the throat proud of the bust plus two short
+  # shell tails down the chest V.
+  blob  torso on spine2 at=0.55 offset=(0,0,0.108) r=0.018 wide=1.25 tall=0.90 deep=0.60 blend=0.0040 color=ae0a08
+  # tails run from the knot (z 0.108, proud of the bust's 0.085) down the
+  # blouse surface to z 0.088 — the v1 lesson: a tail based inside the bust
+  # z-half never shows. r 0.009 at x 0.030: the v2 tails (r 0.013 at 0.024)
+  # overlapped into a solid red bib.
+  shell torso on chest at=0.80 offset=(0.030,0.018,0.108) tip=(0.002,-0.070,-0.020) r=0.009 r2=0.005 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.12 rim=0.004 blend=0.005 both color=ae0a08
+
+  # Neck: the visible neck (narrowest 1.327, w ~0.050) rides the neck bone
+  # (1.286-1.365), x-half 0.028, z-half 0.036.
+  bar head on neck from=0.05 to=0.95 r=0.028 deep=1.29 blend=0.0040 color=ecd3ba
+
+  # ============================================================
+  # HAIR — dark swept bob (measured hair/shoe (25,17,9)), bell-shaped:
+  # widest just below the crown, cut to the ear line. Crown dome + side
+  # lobes + fringe rim + nape, all smooth masses; front locks frame the
+  # face past the ears. Plus the RED hair bow the mesh wears high on the
+# right of the crown (red texels reach 0.94 of height).
+  # ============================================================
+  # Crown dome: centre 1.503, half (0.092, 0.085, 0.092) — hair peak to 1.58
+  # (the smin with fringe/lobes shaves the march peak ~8 mm, measured).
+  blob head on skull at=0.45 offset=(0,0.038,-0.018) r=0.092 wide=1.00 tall=0.92 deep=0.92 blend=0.0060 color=191109 gloss=0.22
+  # Side lobes: the flare, outer edge ~0.098 at 1.46, bottom 1.40.
+  blob head on skull at=0.45 offset=(0.070,-0.028,-0.028) r=0.032 wide=1.00 tall=1.30 deep=2.10 blend=0.0060 both color=191109 gloss=0.35
+  # Fringe rim at the brow depth, hairline high at 1.45 (the decal paints the
+  # part and the widow's peak — the mesh's forehead is open to 1.450).
+  blob head on skull at=0.45 offset=(0,0.047,0.044) r=0.048 wide=1.30 tall=1.25 deep=0.95 blend=0.0035 color=191109 gloss=0.22
+  # Nape: the bob's underside at the back, closing to the neck at 1.40.
+  blob head on skull at=0.45 offset=(0,-0.070,-0.062) r=0.048 wide=0.80 tall=1.05 deep=1.00 blend=0.0050 color=191109 gloss=0.35
+  # Front side locks: temple to jaw, framing the face.
+  blob head on skull at=0.45 offset=(0.054,0.000,0.048) tip=(0.004,-0.118,0.004) r=0.014 r2=0.004 blend=0.0030 chamfer both color=191109 gloss=0.22
+  # The red bow, high right of the crown, ON the dome (a small knot).
+  blob head on skull at=0.45 offset=(0.048,0.078,0.006) r=0.017 wide=1.25 tall=0.80 deep=0.60 blend=0.0030 color=ae0a08
+
+  # Chin: the mesh's chin is a definite point at (1.351, z ~0.088).
+  blob head on skull at=0.45 offset=(0,-0.110,0.072) r=0.020 wide=1.20 tall=0.55 deep=0.90 blend=0.0040 color=ecd3ba
+
+  # EARS — pointed, elf-ish, skin: they reach ~0.068 out at 1.34-1.38, past
+  # the bob (the mesh renders them clearly).
+  blob head on skull at=0.45 offset=(0.048,-0.088,-0.006) tip=(0.030,0.012,-0.010) r=0.015 r2=0.004 blend=0.0020 chamfer both color=ecd3ba
+
+  # ============================================================
+  # ARMS — white sleeve to mid-upper-arm (with a navy cuff stripe — the mesh
+  # shows striped cuffs), skin below. Shoulder cap = the arm's core.
+  # ============================================================
+  blob arm on clavicle at=1.00 offset=(0,-0.016,0) r=0.030 tall=0.85 blend=0.0045 mirror core color=ececed
+  # Sleeve: slightly puffed over the 0.024 arm inside.
+  bar  arm on upperarm from=0.08 to=0.40 r=0.030 r2=0.027 blend=0.0050 mirror color=ececed
+  # The navy cuff stripe (paint boundary = prim boundary).
+  bar  arm on upperarm from=0.40 to=0.48 r=0.027 r2=0.026 blend=0.0030 mirror color=01046a
+  bar  arm on upperarm from=0.48 to=0.98 r=0.024 r2=0.021 blend=0.0042 mirror color=ecd3ba
+  blob arm on forearm  at=0.00 r=0.021 blend=0.0042 mirror color=ecd3ba
+  bar  arm on forearm  from=0.05 to=0.95 r=0.020 r2=0.017 blend=0.0040 mirror color=ecd3ba
+  # Hand: a slim smooth mitt, no fingers; the forearm pitch carries it in
+  # front of the hem, offset z keeps it resting on the skirt front slope.
+  blob arm on hand at=0.45 offset=(0,0,0.034) r=0.026 wide=0.85 tall=1.15 deep=1.25 blend=0.0040 mirror color=ecd3ba
+
+  # ============================================================
+  # LEGS — flesh at the BARE-band measurements only (thigh sized below the
+  # hem, shin at the calf): the skirt and the sock are separate cloth prims.
+  # Thigh cross-section is deeper than wide (deep 1.10, measured).
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.062 deep=1.10 blend=0.0050 mirror core color=ecd3ba
+  # Cone 0.070 -> 0.043: at the hem (t 0.31) that reads 0.062 — the bare band
+  # measured 0.063 there — and swells to 0.068 under the skirt as measured.
+  bar  leg on thigh from=0.02 to=1.00 r=0.070 r2=0.041 deep=1.10 blend=0.0046 mirror color=ecd3ba
+  blob leg on shin  at=0.00 r=0.041 deep=1.05 blend=0.0048 mirror color=ecd3ba
+  # Shin flesh: the calf is SLIM (per-leg 0.042-0.046, no big bulge).
+  bar  leg on shin  from=0.00 to=0.44 r=0.043 r2=0.042 deep=1.05 blend=0.0044 mirror color=ecd3ba
+  # THE SOCK carries the fabric: top 0.316 = shin t 0.426, +8 mm over the
+  # calf, slouching thinnest at the ankle. Cuff bulge first (the slouch
+  # bunches at the TOP: 0.050 at the cuff vs 0.042 calf).
+  bar  leg on shin  from=0.42 to=0.97 r=0.050 r2=0.045 deep=0.95 blend=0.0050 mirror color=d8d6d6 gloss=0.10
+
+  # ============================================================
+  # SHOES — near-black (25,17,9) mary-janes, toes-out; sole grey d8d6d6 in
+  # the mesh but no separate sole prim (the shoe body's tread reaches the
+  # floor; the control's owner deleted its sole plate and the mesh read
+  # doesn't need one). Authored as world displacements off the foot bone
+  # (head = the ankle at 0.115).
+  # ============================================================
+  # Body: heel (0.092, 0.030, -0.075) to toe (0.105, 0.028, +0.055) — the
+  # mesh's shoe mass sits BEHIND the ankle (z-centre -0.04..-0.066).
+  blob leg on foot at=0.00 r=0.030 r2=0.026 wide=1.90 tall=1.05 deep=1.30 blend=0.0060 offset=(0.002,-0.085,-0.055) tip=(0.012,-0.002,0.100) mirror color=191109 gloss=0.20
+  # Vamp/collar wrapping the ankle (mesh per-shoe half ~0.051 at the top).
+  blob leg on foot at=0.00 r=0.042 wide=1.25 tall=0.95 deep=1.30 blend=0.0060 offset=(-0.004,-0.030,0.000) mirror color=191109 gloss=0.20
+
+# ============================================================
+# FACE BLOCK — the skin skull under the hair. Half-extents 0.066 x 0.076 x
+# 0.083 (mesh head 0.106 wide under the 0.19 hair at 1.58), centre 1.464.
+# The jaw carries the chin (measured chin w 0.045, bottom 1.351).
+# ============================================================
+face
+  headRadius 0.072
+  headWidth  0.95
+  headHeight 1.30
+  headDepth  1.16
+  jawWidth   0.92
+  jawHeight  0.80
+  jawDrop    0.070
+  jawJut     0.042
+  # A small button nose — the Tanida profile has almost no nose mass.
+  noseLength 0.002
+  noseWidth  0.30
+  noseDrop   0.026
+  browHeavy  0.003
+  browRise   0.024
+  headBlend  0.0045
+
+# The mesh's own face, baked flat and pasted on (see the skill: painted
+# faces never read; three dispatches proved it).
+sheet
+  image       schoolgirl-alt-face.png
+  decal       1
+  # Aims MEASURED off the baked image (eyes uv 0.42, mouth uv 0.16, painted
+  # hairline uv 0.70) and solved against the fattest head prim (crown dome,
+  # centre 1.503, semi 0.092/0.085/0.085): eyes land 1.429, mouth 1.362 (the
+  # mesh's own eye/mouth rows x 0.9294). The solved 0.71 was still a squint
+  # in the frames; centreY 0.65 (BLOB_PROBE A/B, 0.60/0.65/0.71) places the
+  # eyes at mid-face under the fringe — kept over the arithmetic, the render
+  # wins.
+  projScaleX  0.44
+  projScaleY  0.33
+  projCentreX 0.5
+  projCentreY 0.65
+
+# Skin: bright-island texels (236,211,186) sRGB -> linear (0.839,0.651,0.491);
+# the per-class mean (216,175,138) includes baked shading. Toy-clean: no
+# mottle to speak of, no surface noise, moderate gloss. Wounds stay red.
+palette
+  baseColor     0.839 0.651 0.491
+  deepColor     0.50 0.08 0.08
+  charColor     0.22 0.13 0.10
+  specIntensity 0.45
+  specRoughness 0.35
+  fresnelBoost  0.30
+  translucency  0.22
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  wetness       0.12
+  mottleAmp     0.02
+  mottleScale   1.2
+  mottleColor   0.55 0.38 0.22
