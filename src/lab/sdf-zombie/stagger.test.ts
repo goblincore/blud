@@ -325,3 +325,33 @@ describe('stagger — tuning sanity', () => {
     expect(T.flinchBeat).toBeGreaterThan(0);
   });
 });
+
+describe('stagger — gain knob (game hits; default leaves the lab bit-identical)', () => {
+  it('defaults to the tuned amplitudes: gain-less == gain 1, state carries 1', () => {
+    expect(makeStaggerState(7).gain).toBe(1);
+    const plain = runHits([hit('blast'), ...Array(20).fill(null)]);
+    const one = runHits([{ type: 'blast', dir: FWD, gain: 1 }, ...Array(20).fill(null)]);
+    for (let i = 0; i < plain.length; i++) {
+      expect(plain[i]!.rootOffset).toEqual(one[i]!.rootOffset);
+      expect(plain[i]!.offsets).toEqual(one[i]!.offsets);
+      expect(plain[i]!.state.gain).toBe(1);
+    }
+  });
+
+  it('scales the whole reaction: gain 2 doubles the lurch peak', () => {
+    const steps = runHits([{ type: 'blast', dir: FWD, gain: 2 }], 7, DT, 60);
+    expect(maxRoot(steps)).toBeCloseTo(T.lurchAmp * 2, 3);
+    const peak = steps.reduce((a, b) => (len(b.rootOffset) > len(a.rootOffset) ? b : a));
+    expect(peak.offsets.chest![2]).toBeCloseTo(peak.rootOffset[2] * T.lurchUpperScale, 5);
+  });
+
+  it('persists for the whole reaction, resets on expiry, clamps negatives', () => {
+    const steps = runHits([{ type: 'pellet', dir: FWD, gain: 3 }, ...Array(30).fill(null)]);
+    const beatFrames = Math.ceil(T.flinchBeat / DT);
+    for (let i = 0; i < beatFrames - 1; i++) expect(steps[i]!.state.gain).toBe(3);
+    expect(steps[beatFrames - 1]!.state.gain).toBe(1); // expired — reset
+    const neg = runHits([{ type: 'pellet', dir: FWD, gain: -5 }], 7, DT, 4);
+    expect(maxRoot(neg)).toBeCloseTo(0, 9); // clamped to 0 → inert shove
+    expect(neg[0]!.state.gain).toBe(0);
+  });
+});

@@ -75,7 +75,7 @@ import { TILE_MAX_ENTRIES } from './tile-cull';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 18;
+export const DATA_ROWS = 19;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -83,6 +83,13 @@ export const ROW_CLUSTER_BOUNDS = 3;
 export const ROW_CLUSTER_RANGE = 4;
 export const ROW_WOUND = 5;
 export const ROW_WOUND_META = 6;
+/** Wound carve depth-slab (2026-08-27): xyz = INWARD unit normal at the
+ *  stamp (prim-local frame rotated out by the uploader), w = max carve depth
+ *  below the anchor plane, metres. w <= 0 = uncapped — APPLY_WOUNDS then
+ *  carves the plain sphere, bit-identical to the pre-slab field (the max()
+ *  with `-1e5` selects the sphere term exactly), which is what keeps the
+ *  LAB (which uploads no caps) pixel-stable across this change. */
+export const ROW_WOUND_CAP = 18;
 export const ROW_PRIM_QUAT = 7;
 export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;
@@ -588,10 +595,32 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
+    // Depth slab (2026-08-27): the sphere stays centred on the uploaded
+    // anchor — the lab's deep bowl — and is clipped by a plane through the
+    // anchor facing inward, at most wCap.w deep. The carve region is the
+    // CONVEX INTERSECTION {inside sphere} ∩ {shallower than the cap}; its
+    // inside-positive SDF is -max(sphereSDF, slabSDF) = min(depth - r,
+    // capEff - dot). The sign of the dot term matters more than it looks:
+    // a dot - capEff term is positive BEYOND the cap, so a max() with that
+    // form kept the term positive across the entire half-space behind the
+    // kept the term positive across the entire half-space behind the cap
+    // plane — every wound silently deleted all flesh deeper than its cap,
+    // out to infinity, and a body with wounds from mixed directions (the
+    // shotgun) lost whole quadrants of itself while a single wound looked
+    // perfect from the front. That regression is why whole zombies went
+    // invisible on 2026-08-27. With min(depth - r, capEff - dot) the carve
+    // is a bounded bowl: shallow+inside carves, beyond the cap flesh
+    // remains, outside the sphere nothing changes. With wCap.w <= 0
+    // (uncapped: the lab uploads no caps, old wounds, chunk torn-ends) the
+    // 1e5 term loses the min for any real distance, so the carve is
+    // BIT-IDENTICAL to the pre-slab sphere — that is what keeps the lab
+    // reference stable.
+    let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
+    let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
     let r = length(p - w.xyz);
-    d = smax(d, -(r - depth), woundCfg.y);
+    d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
     if (r < depth * 2.0) { near = 1.0; }
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
@@ -1803,6 +1832,16 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // ramp colours emit raw; depth (t) still goes out, so the composite's
   // depth path runs identically to a shaded frame.
   if (debugCfg.x > 0.5) {
+    // MODE 3 (hull-holes diagnosis, 2026-08-27): heat of occT itself — the
+    // distance this pixel's march will be clamped by. 0 m = blue, 4 m = red,
+    // no hull = white. Shows WHICH hull surface a wounded body's pixels are
+    // being cut by. Temporary diagnostic.
+    if (debugCfg.x > 2.5 && debugCfg.x < 3.5) {
+      let occNorm = clamp(occT / 4.0, 0.0, 1.0);
+      var occCol = mix(vec3<f32>(0.05, 0.15, 0.75), vec3<f32>(0.95, 0.85, 0.15), clamp(occNorm * 2.0, 0.0, 1.0));
+      occCol = mix(occCol, vec3<f32>(1.0, 1.0, 1.0), select(0.0, 1.0, occT > 3.9));
+      return vec4<f32>(occCol, t);
+    }
     let heatNorm = select(debugSteps / max(marchCfg.x, 1.0), debugPrims / 2000.0, debugCfg.x > 1.5);
     let rampA = vec3<f32>(0.05, 0.15, 0.75);
     let rampB = vec3<f32>(0.95, 0.85, 0.15);

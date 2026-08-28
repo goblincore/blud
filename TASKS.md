@@ -20,6 +20,71 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**HIT-STAGGER FEEL — DONE on branch `dispatch/hit-stagger-feel`, awaiting
+owner playtest (2026-08-28).** Owner's "the zombie needs to read as really
+staggered and hit by something of substantial force" was three stacked
+defects: (1) the game shoved with ONE constant (0.05) for every wound kind
+while the lab scales by kind (blast 0.16); (2) the motion signal hardcoded
+`type:'pellet'` so the slug — a blast-calibre wound — could only ever trigger
+the weakest stagger kind (flinch); (3) no reaction ever interrupted
+locomotion, which is why even a correct shove would have read weightless.
+All three fixed, actor-owned so the lab stays bit-identical: per-kind
+IMPULSE {pellet 0.07, blast 0.18, burn 0.04}; slug sends `shot.gain 1.3`
+(lurch + recoil at 1.3x lab amplitudes); blast hits HALT the wander 0.55 s
+(the lurch plays on a stopped walker) and knock the ROOT back ~0.17 m
+(1.2 m/s, exp decay 7/s, bounds-clamped), then the zombie resumes its
+target. Pellets deliberately unchanged (flinch-and-keep-walking = lab
+reference). Buckshot of 16 still collapses via the meter (0.88 > 0.8).
+Cost: steady-state actor step 15.5 vs 15.8 µs/step (noise); room-4 frame
+EMA unchanged — the march still dominates. Gates + the lab comparison reel:
+docs/dev-notes/2026-08-28-hit-stagger-feel/ (before/after/lab sequences).
+Capture drivers: scripts/sdf-game-stagger-seq.mjs,
+scripts/sdf-lab-stagger-seq.mjs. GOTCHA worth remembering: test/capture
+aims must raycast a SURFACE point — a torso cluster centre sits inside the
+field, anchors the crater pathologically, and the slug's severRadius cuts
+both hip necks → instant collapse (never player-visible; the page's
+predictor always aims at surfaces).
+
+**WOUND HULL HOLES — FIXED (worktree `2026-08-27-wound-hull-holes`, 2026-08-27).**
+The owner's "parts of the zombie become invisible / transparent holes when one
+walks in front of another" was NOT the hull exclusions (`dcd61ca`): the
+empty-exclusion experiment renders the identical vanishing body, and
+exclusions visibly fix the pale-disc artifact they were added for — path
+stays. Real cause: `b33af36`'s depth slab used `max(-(r−depth), dot−capEff)`;
+the dot term is positive BEYOND the cap, so every wound carved the entire
+half-space behind its cap plane out to infinity. One wound looks perfect from
+the front (placement gate passed); mixed-direction wounds hollowed whole
+torsos and the march hit nothing. Lab never showed it — the lab uploads no
+caps. Fixed as `min(-(r−depth), capEff − dot)` (bounded convex intersection);
+uncapped path bit-identical (lab parity 0.002–0.003% vs 0.02% floor).
+tsc 0, vitest 1662 (2 new behavioural slab tests that fail on the broken
+form), slug placement gate 2.69 cm, multi-angle + overlap + red-bowl gates in
+docs/dev-notes/2026-08-27-wound-hull-holes/. Occluder perf A/B re-taken: this
+machine cannot resolve it (within-config noise > every delta) — re-gate on a
+quiet machine before any removal call. New game seams:
+`__sdfGame.setOccluder/setHullExclusions/refreshHull/hullDebug`,
+`stampWoundAt(..., bodyId)`; march debug mode 3 = occT heat.
+
+**WOUND RED-INTERIOR — FIXED (worktree `2026-08-27-wound-red-interior`, branch
+`dispatch/wound-red-interior`, 2026-08-27).** Owner's "wounds read pale, not
+red like the lab" was TWO stacked defects: (1) `traceProjectile` bisected to
+its 1 cm `hitEps` shell — hits sat outside the skin, `probeFlesh` measured
+zero flesh on EVERY projectile wound, and the thickness cap shifted the carve
+sphere by the FULL radius → tangent, invisible craters with `rimScale 0` (the
+blast path's `traceSurface` at eps 0.002 was always on-skin and unaffected);
+(2) the cap worked by shifting the sphere CENTRE, which caps depth only by
+guaranteeing the visible dish grazes the sphere's outer shell. Fixed by
+bisecting to the true surface and capping DEPTH instead: carve sphere centred
+ON the anchor (the lab's deep bowl) clipped by an inward slab at 45% of local
+flesh (`Wound.carveN/carveDepth`, shader `max()` of the two SDF bounds,
+`ROW_WOUND_CAP` = data row 18). Uncapped (lab, old wounds) takes a −1e5 slab
+term that loses the max bit-exactly — lab pixel-verified at the same-code
+noise floor (holdStill + fixed stamp + fixed cam, main-repo vite as pre-fix).
+Game gates: slug torso reads RED like the lab; forearm slug severs to a
+capped stump (no hole); staged pellet pocks red; occluder hull exclusion
+added (real craters exposed hull spheres as pale discs). Evidence + staging
+recipes: docs/dev-notes/2026-08-27-wound-red-interior/.
+
 **SDF GAME PAGE FIXES — worktree `2026-08-25-game-page-fixes`, branch
 `dispatch/game-page-fixes` (2026-08-25, three commits on the level work).**
 Owner-reported breakage, root-caused: (1) dollhouse walls — wallPlanes wrote

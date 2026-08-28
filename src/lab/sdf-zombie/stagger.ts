@@ -107,7 +107,8 @@ export const STAGGER_TUNING = {
 // ---------------------------------------------------------------------------
 
 /** The stagger clock. age is the current reaction's seconds so far; seed is
- *  the per-body determinism source (shudder phase). */
+ *  the per-body determinism source (shudder phase). gain is the active
+ *  reaction's amplitude multiplier (1 = tuned amplitudes). */
 export interface StaggerState {
   /** Active reaction, or null when calm. */
   kind: StaggerKind | null;
@@ -117,11 +118,13 @@ export interface StaggerState {
   dir: Vec3;
   /** Per-body seed — any integer; never changes. */
   seed: number;
+  /** Amplitude multiplier of the active (or next) reaction. */
+  gain: number;
 }
 
 /** A fresh calm stagger state. */
 export function makeStaggerState(seed: number): StaggerState {
-  return { kind: null, age: 0, dir: Z, seed: seed >>> 0 };
+  return { kind: null, age: 0, dir: Z, seed: seed >>> 0, gain: 1 };
 }
 
 /** A hit that landed this frame. */
@@ -130,6 +133,12 @@ export interface StaggerHit {
   type: WoundType;
   /** Shot direction, BODY-LOCAL (see the header) — the reaction follows it. */
   dir: Vec3;
+  /** Amplitude multiplier, default 1 = the tuned amplitudes above (which the
+   *  lab ships). The game passes >1 for heavier-than-lab hits at first-person
+   *  range; the lab never sets it, so every lab reaction is bit-identical to
+   *  a build without this knob (x·1 === x in IEEE-754). Persisted on the
+   *  state at hit time so the WHOLE reaction plays at the hit's gain. */
+  gain?: number;
 }
 
 /** Per-frame input. */
@@ -216,7 +225,7 @@ function hashPhase(seed: number): number {
  */
 export function stepStagger(state: StaggerState, sig: StaggerSignal, dt: number): StaggerStep {
   const T = STAGGER_TUNING;
-  let { kind, age, dir } = state;
+  let { kind, age, dir, gain } = state;
   const seed = state.seed;
 
   const hit = sig.hit;
@@ -224,6 +233,7 @@ export function stepStagger(state: StaggerState, sig: StaggerSignal, dt: number)
     kind = KIND_FOR[hit.type];
     age = 0;
     dir = [hit.dir[0], hit.dir[1], hit.dir[2]];
+    gain = Math.max(hit.gain ?? 1, 0);
   }
 
   if (kind) {
@@ -232,10 +242,11 @@ export function stepStagger(state: StaggerState, sig: StaggerSignal, dt: number)
       kind = null;
       age = 0;
       dir = Z;
+      gain = 1;
     }
   }
 
-  const next: StaggerState = { kind, age, dir, seed };
+  const next: StaggerState = { kind, age, dir, seed, gain };
   if (!kind) {
     return { state: next, rootOffset: Z, offsets: {}, staggered: false, recoveryStep: false, phaseKnock: 0 };
   }
@@ -247,14 +258,14 @@ export function stepStagger(state: StaggerState, sig: StaggerSignal, dt: number)
 
   if (kind === 'flinch') {
     const env = beatEnv(age / T.flinchBeat);
-    const d = scale(dir, env * T.flinchAmp);
-    rootOffset = scale(dir, env * T.flinchAmp * T.flinchRootScale);
+    const d = scale(dir, env * T.flinchAmp * gain);
+    rootOffset = scale(dir, env * T.flinchAmp * T.flinchRootScale * gain);
     offsets.chest = scale(d, T.flinchChestScale);
     offsets.shoulderL = d;
     offsets.shoulderR = d;
   } else if (kind === 'lurch') {
     const env = attackDecayEnv(age, T.lurchRise, T.lurchDecay);
-    rootOffset = scale(dir, env * T.lurchAmp);
+    rootOffset = scale(dir, env * T.lurchAmp * gain);
     const up = scale(rootOffset, T.lurchUpperScale);
     offsets.chest = up;
     offsets.neck = up;
@@ -274,7 +285,7 @@ export function stepStagger(state: StaggerState, sig: StaggerSignal, dt: number)
   } else {
     const env = attackDecayEnv(age, T.shudderRise, T.shudderDecay);
     const osc = Math.sin(TAU * T.shudderFreq * age + hashPhase(seed));
-    const d = scale(dir, env * osc * T.shudderAmp);
+    const d = scale(dir, env * osc * T.shudderAmp * gain);
     rootOffset = scale(d, T.shudderRootScale);
     offsets.chest = d;
     offsets.neck = scale(d, T.shudderLimbScale);

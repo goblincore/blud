@@ -45,6 +45,19 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { sdBody } from '../validate';
+import {
+  GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
+  stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
+} from './game-weapon';
+import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
+import { woundWorldPos, woundCarveNormal } from '../damage';
+import { makeChunk, stepChunk } from '../gib-chunks';
+import { chunkExtent } from '../extent';
+import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import type { Primitive } from '../types';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -274,6 +287,11 @@ async function main() {
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
   sdfLayer.setOccluderEnabled(true);
+  // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
+  // ON/ON; the driver flips these between captures. Mirrors the lab's
+  // __sdfLab.setOccluder.
+  let hullExclusionsEnabled = true;
+  let occluderDesired = true;
 
   // -----------------------------------------------------------------------
   // Zombies. One compiled .blob, ten bodies; seeds/headings vary, the
@@ -291,6 +309,10 @@ async function main() {
   const faceAtlas = new THREE.Vector4(fw / fsw, fh / fsh, fx / fsw, fy / fsh);
 
   let probeWeight = DEFAULT_PROBE_WEIGHT;
+
+  /** Sever dispatch indirection — actors are built before the weapon block;
+   *  the grapeshot wiring below assigns this once the chunk spawner exists. */
+  let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[] }) => void) | null = null;
 
   const actors: ZombieActor[] = [];
   const errors: string[] = [];
@@ -331,12 +353,15 @@ async function main() {
       view.coneObject.layers.set(CONE_LAYER);
       scene.add(view.object);
       scene.add(view.coneObject);
-      actors.push(createZombieActor({
-        id: nextId++, room: room.id, body: placed, view, start,
+      const zombieId = nextId++;
+      const actor = createZombieActor({
+        id: zombieId, room: room.id, body: placed, view, start,
         seed: 1337 + nextId * 101,
         bounds: wanderBounds(room),
         furniture: roomFurniture,
-      }));
+        onSever: (piece) => onSeverDispatch?.(actor, piece),
+      });
+      actors.push(actor);
     }
   }
   if (errors.length > 0) {
@@ -380,16 +405,222 @@ async function main() {
       if (probeWeight > 0) { parked = probeWeight; pushProbeWeight(0); }
       else pushProbeWeight(parked);
     }
+    if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   let parked = DEFAULT_PROBE_WEIGHT;
 
+  // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
+  // locks the pointer; shots need lock so a stray desktop click cannot fire.
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('mousedown', (e) => {
+    if (document.pointerLockElement !== canvas) return;
+    if (e.button === 0) fire(1);
+    else if (e.button === 2) fire(2);
+  });
+
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
-  // which rides the camera every frame. Empty today.
+  // which rides the camera every frame.
   const viewModelAnchor = new THREE.Group();
   viewModelAnchor.name = 'view-model-anchor';
+  // Ride height of the whole view-model (gun + orb hands move together).
+  // Owner playtest 2026-08-26: the gun sat high enough to crowd the frame.
+  // Captured current / −5 cm / −10 cm from the same spot and compared: −5 cm
+  // frees the centre of the frame while the breech and hammers — the detail
+  // that chose this model — stay fully in frame; −10 cm starts to sink the
+  // grip out of the bottom edge. −5 cm is the shipped height.
+  viewModelAnchor.position.y = -0.05;
   camera.add(viewModelAnchor);
   scene.add(camera);
+
+  // -----------------------------------------------------------------------
+  // GRAPESHOT — the first weapon. View-model (k3 GLB + green orb hands),
+  // travelling pellets, wound/sever wiring through the actors, and ballistic
+  // chunks for whatever comes off. Fire model per the spec §2 as trimmed by
+  // the dispatch brief: click = one barrel, right-click = both, cooldown +
+  // camera kick in; break-open reload animation and muzzle smoke are not.
+  // -----------------------------------------------------------------------
+  const GUN_GLB = '/assets/lab/grapeshot-gun-k3.glb';
+  /** Grip-point origin, muzzles down -Y. Muzzle sits ~0.515 m down-barrel
+   *  from the grip centre (model script: natural muzzle Y≈-0.44 minus the
+   *  GRIP_NATURAL shift). */
+  const MUZZLE_LOCAL: [number, number, number] = [0, -0.515, 0];
+  let gunGroup: THREE.Group | null = null;
+  let gunReady = false;
+  try {
+    const gltf = await new GLTFLoader().loadAsync(GUN_GLB);
+    // PBR metal is black without something to reflect — this page has no
+    // environment and the flesh's hand-written lighting does not apply to a
+    // MeshStandardMaterial. Per-material env, kit-overlay style, so the level
+    // meshes keep their gallery look.
+    const pmrem = new THREE.PMREMGenerator(handle.renderer);
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    gltf.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+        const std = mat as THREE.MeshStandardMaterial;
+        if (std.isMeshStandardMaterial) {
+          std.envMap = env;
+          std.envMapIntensity = 0.7;
+          std.needsUpdate = true;
+        }
+      }
+    });
+    gunGroup = new THREE.Group();
+    gunGroup.name = 'grapeshot-k3';
+    gunGroup.add(gltf.scene);
+    // AXIS NOTE: the model script's "muzzles down -Y" is BLENDER space;
+    // Blender's Z-up -> glTF Y-up conversion (x,z,-y) lands them at +Z in
+    // GLB space, up stays +Y. rotation.y = PI aims +Z down the camera's -Z
+    // (forward) with the hammers still on top. (rotation.x = PI/2 pointed
+    // the gun at the sky — first live capture caught it.)
+    gunGroup.rotation.y = Math.PI;
+    gunGroup.position.set(0.17, -0.2, -0.32);
+    viewModelAnchor.add(gunGroup);
+
+    // HANDS ARE GREEN ORBS — deliberate, per the owner: the player is the
+    // goblin and its hands were never detailed. One on the grip, one braced
+    // under the fore-end. Anchored in VIEW space (not gun space) so the
+    // axis convention of the GLB cannot move them.
+    const orbGeo = new THREE.SphereGeometry(0.055, 20, 14);
+    const orbMat = new THREE.MeshStandardMaterial({ color: 0x5a8f3c, roughness: 0.85 });
+    const gripHand = new THREE.Mesh(orbGeo, orbMat);
+    gripHand.position.set(0.17, -0.26, -0.30);
+    const foreHand = new THREE.Mesh(orbGeo, orbMat);
+    foreHand.position.set(0.17, -0.24, -0.62);
+    viewModelAnchor.add(gripHand, foreHand);
+    gunReady = true;
+  } catch (err) {
+    console.error('[sdf-game] gun model failed to load — firing still works', err);
+  }
+
+  /** Muzzle world position from the current camera pose (independent of the
+   *  gun mesh's matrix state — fires identically headless). */
+  function muzzleWorld(): Vec3 {
+    const eye = eyeOf(player);
+    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+    const right: Vec3 = [cy, 0, sy];
+    return [
+      eye[0] + right[0] * 0.2 - sy * 0.5,
+      eye[1] - 0.12,
+      eye[2] + right[2] * 0.2 + cy * 0.5,
+    ];
+  }
+  function aimDir(): Vec3 {
+    const cp = Math.cos(player.pitch);
+    return [Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp];
+  }
+  /** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
+   *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
+   *  to the camera ray — so at ANY range impacts landed that whole offset off
+   *  the crosshair. Standard FPS remedy: every projectile converges on the
+   *  point where the camera ray meets AIM_CONVERGE_M. Close shots still group;
+   *  the parallel-ray offset is gone by construction. */
+  const AIM_CONVERGE_M = 8;
+  function convergedDir(origin: Vec3): Vec3 {
+    const eye = eyeOf(player);
+    const a = aimDir();
+    const target: Vec3 = [
+      eye[0] + a[0] * AIM_CONVERGE_M,
+      eye[1] + a[1] * AIM_CONVERGE_M,
+      eye[2] + a[2] * AIM_CONVERGE_M,
+    ];
+    const d: Vec3 = [target[0] - origin[0], target[1] - origin[1], target[2] - origin[2]];
+    const l = Math.hypot(d[0], d[1], d[2]) || 1;
+    return [d[0] / l, d[1] / l, d[2] / l];
+  }
+
+  // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool that
+  // grows on demand inside the tick's sync step.
+  const pellets: Projectile[] = [];
+  const pelletGeo = new THREE.SphereGeometry(GRAPESHOT.radius, 10, 8);
+  const pelletMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
+  const pelletViews: THREE.Mesh[] = [];
+
+  let nextSeed = 0x5df1;
+  let cooldown = 0;
+  let recoilPitch = 0;
+
+  /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
+   *  barely-visible 5.5 cm craters gave no signal about placement or look.
+   *  Reachable three ways: ?slug URL param at boot, KeyE in-page toggle, or
+   *  __sdfGame.fireSlug(). The HUD shows which mode is live. */
+  let slugMode = new URLSearchParams(location.search).has('slug');
+
+  function fire(barrels: 1 | 2): boolean {
+    if (!gunReady || cooldown > 0) return false;
+    cooldown = GRAPESHOT.fireCooldownSec;
+    recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
+    if (slugMode) {
+      // One lump down one known ray instead of a pellet volley.
+      pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
+      nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
+      return true;
+    }
+    const muz = muzzleWorld();
+    const dir = convergedDir(muz);
+    // spawnPellets spreads around `dir`; convergence just re-centres the cone.
+    pellets.push(...spawnPellets(muz, dir, barrels, nextSeed));
+    nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
+    return true;
+  }
+
+  // Chunks: detached pieces fly ballistically and render through the shared
+  // SDF chunk path — the same pipeline the lab gibs with, capped and
+  // recycled so a gore party cannot churn views unboundedly.
+  const MAX_CHUNKS = 12;
+  const chunkMaterial = createSharedChunkGpuMaterial();
+  const chunkViews: ChunkGpuView[] = [];
+  const liveChunks: { state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
+  function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
+    let best: Vec3 = [0, 1, 0];
+    let bestLen = 0;
+    for (const p of prims) {
+      if (p.op === 'sub') continue;
+      const d: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
+      const l = Math.hypot(d[0], d[1], d[2]);
+      if (l > bestLen) { bestLen = l; best = d; }
+    }
+    return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
+  }
+  function spawnChunkPiece(
+    piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[] },
+    template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
+  ) {
+    const rng = mulberry32(nextSeed++);
+    const vel: Vec3 = [
+      (rng() - 0.5) * 4.5,
+      2.5 + rng() * 2.5,
+      (rng() - 0.5) * 4.5,
+    ];
+    const state = makeChunk(
+      piece.limb as never, piece.origin, vel,
+      chunkExtent(piece.prims, piece.origin), primsLongAxis(piece.prims, piece.origin),
+      rng, 'limb',
+    );
+    const oldest = liveChunks.length >= MAX_CHUNKS ? liveChunks.shift() : undefined;
+    if (oldest) {
+      oldest.view.reset(state, piece.prims, piece.tornAt.length ? piece.tornAt : undefined);
+      liveChunks.push({ state, view: oldest.view });
+    } else {
+      const view = createChunkGpuView(
+        state, piece.prims, template.uniforms,
+        piece.tornAt.length ? piece.tornAt : undefined,
+        template.volumeTexture, chunkMaterial,
+      );
+      view.object.layers.set(SDF_LAYER);
+      scene.add(view.object);
+      chunkViews.push(view);
+      liveChunks.push({ state, view });
+    }
+  }
+
+  // Wire every actor's severs into the chunk spawner (template = that
+  // actor's own look — the chunk shades like the flesh it came from).
+  onSeverDispatch = (a, piece) => {
+    spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+  };
 
   // -----------------------------------------------------------------------
   // HUD: frame time, bodies on screen, probeWeight, where you are.
@@ -421,6 +652,7 @@ async function main() {
     hudEl.textContent =
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
+      (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -430,6 +662,8 @@ async function main() {
   // -----------------------------------------------------------------------
   let wanderFrozen = false;
   let frameCount = 0;
+  /** The __sdfGame.placeMarker debug sphere. */
+  let marker: THREE.Mesh | null = null;
   /** Headless driver autopilot: walk toward (x, z) until within 0.25 m. */
   let autopilot: { x: number; z: number } | null = null;
   /** Stuck recovery: a wanderer frozen/standing on the path blocks the line
@@ -503,15 +737,115 @@ async function main() {
         const skull = headShape(a.posed());
         if (skull) a.view.setHeadShape(skull.centre, skull.axes);
       }
-      occluderHull.update(actors.map(a => a.posed()));
+      // Wound exclusion, same contract as the lab's woundSpheres: hull
+      // endpoint spheres must not sit inside carve zones, or they render as
+      // pale discs inside craters. The carve sphere is centred ON the anchor
+      // (depth-slab-clipped in the shader), so the full-radius sphere here is
+      // a superset — it can only over-exclude (a slightly looser hull), never
+      // expose. The game never passed this before 2026-08-27 because its
+      // craters were tangent (the pale-wound defect) and never reached the
+      // hull; real craters exposed it within one capture.
+      occluderHull.update(
+        actors.map(a => a.posed()),
+        hullExclusionsEnabled
+          ? actors.flatMap(a => {
+            const prims = a.posed().prims;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+          })
+          : [],
+      );
+    }
+
+    // ---------------------------------------------------------------
+    // GRAPESHOT SIM — pellets fly, land as wounds through actor.hit();
+    // detached pieces fly ballistically through the shared chunk path.
+    // ---------------------------------------------------------------
+    cooldown = Math.max(0, cooldown - dt);
+    recoilPitch *= Math.exp(-9 * dt);
+    {
+      const prevs = pellets.map(p => [...p.pos] as Vec3);
+      stepProjectiles(pellets, dt);
+      for (let i = pellets.length - 1; i >= 0; i--) {
+        const p = pellets[i]!;
+        const from = prevs[i]!;
+        let dead = expired(p) || p.pos[1] <= 0.02;
+        if (!dead) {
+          // Level geometry: a point-in-AABB test is enough — pellets are
+          // small and the substepped trace already bounds their travel.
+          for (const b of colliders) {
+            if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
+              && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
+              && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
+          }
+        }
+        if (!dead) {
+          // Actors: bounding-sphere reject on the frame segment, then a
+          // substepped trace against the posed field. Nearest hit wins.
+          let bestDist = Infinity;
+          let hitActor: ZombieActor | null = null;
+          let hitPoint: Vec3 | null = null;
+          const segLen = Math.hypot(p.pos[0] - from[0], p.pos[1] - from[1], p.pos[2] - from[2]);
+          for (const a of actors) {
+            const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+            if (!c) continue;
+            // Segment-to-centre distance (clamped closest approach).
+            const t = Math.max(0, Math.min(segLen,
+              ((c[0]-from[0])*(p.pos[0]-from[0]) + (c[1]-from[1])*(p.pos[1]-from[1]) + (c[2]-from[2])*(p.pos[2]-from[2]))
+              / (segLen * segLen || 1)));
+            const qx = from[0] + (p.pos[0]-from[0]) * t / (segLen || 1);
+            const qy = from[1] + (p.pos[1]-from[1]) * t / (segLen || 1);
+            const qz = from[2] + (p.pos[2]-from[2]) * t / (segLen || 1);
+            if (Math.hypot(qx-c[0], qy-c[1], qz-c[2]) > 1.35) continue;
+            const posedA = a.posed();
+            const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));
+            if (!hp) continue;
+            const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
+            if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
+          }
+          if (hitActor && hitPoint) {
+            const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
+            if (p.kind === 'slug') hitActor.hitSlug(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
+            else hitActor.hit(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
+            dead = true;
+          }
+        }
+        if (dead) pellets.splice(i, 1);
+      }
+      // Sync the mesh pool to the sim list — growing it on demand (the
+      // pool is ONLY grown here; fire() must not touch meshes because it
+      // runs from an evaluate() with no frame in between).
+      while (pelletViews.length < pellets.length) {
+        const mesh = new THREE.Mesh(pelletGeo, pelletMat);
+        mesh.frustumCulled = false;
+        scene.add(mesh);
+        pelletViews.push(mesh);
+      }
+      for (let k = 0; k < pelletViews.length; k++) {
+        const v = pelletViews[k]!;
+        if (k < pellets.length) {
+          v.visible = true;
+          v.position.set(pellets[k]!.pos[0], pellets[k]!.pos[1], pellets[k]!.pos[2]);
+          // Slug balls are drawn at their own (larger) calibre.
+          const s = pellets[k]!.radius / GRAPESHOT.radius;
+          v.scale.setScalar(s);
+        } else {
+          v.visible = false;
+        }
+      }
+      // Chunks: ballistic step + world-space field repack, lab contract.
+      const cdt = Math.min(dt, 1 / 30);
+      for (const c of liveChunks) {
+        c.state = stepChunk(c.state, cdt);
+        c.view.update(c.state);
+      }
     }
 
     const eye = eyeOf(player);
     camera.position.set(eye[0], eye[1], eye[2]);
-    const cp = Math.cos(player.pitch);
+    const cp = Math.cos(player.pitch + recoilPitch);
     camera.lookAt(
       eye[0] + Math.sin(player.yaw) * cp,
-      eye[1] + Math.sin(player.pitch),
+      eye[1] + Math.sin(player.pitch + recoilPitch),
       eye[2] - Math.cos(player.yaw) * cp,
     );
     camera.updateMatrixWorld();
@@ -582,7 +916,29 @@ async function main() {
      *  posed() (raycast target), boundRig() (impulse/recoil entry). */
     zombie: (id: number) => {
       const a = actors.find(a => a.id === id);
-      return a ? { view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room } : undefined;
+      return a ? {
+        view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
+        woundCount: () => a.wounds().length,
+        woundList: () => [...a.wounds()],
+      } : undefined;
+    },
+    /** Where every wound of a body sits IN WORLD SPACE right now — the
+     *  surface anchor (= the GPU carve sphere's centre) plus the depth-slab
+     *  cap, all at the yaw-0 contract. The placement gate diffs the surface
+     *  against the fired ray's impact point; carveDepth is the punch-through
+     *  guard (0.45 × measured local flesh). */
+    debugWounds: (id: number) => {
+      const a = actors.find(a => a.id === id);
+      if (!a) return undefined;
+      const prims = a.posed().prims;
+      return a.wounds().map(w => ({
+        surface: woundWorldPos(prims, w, 0),
+        carveNormal: woundCarveNormal(prims, w, 0),
+        carveDepth: w.carveDepth,
+        radius: w.radius,
+        type: w.type,
+        primIdx: w.primIdx,
+      }));
     },
     /** Walk the player toward (x, z) through the real collision path until
      *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
@@ -591,6 +947,114 @@ async function main() {
     get walking() { return autopilot !== null; },
     frameMs: () => frameEma,
     bodiesOnScreen,
+    // ---------------------------------------------------------------
+    // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
+    // the headless driver can shoot; aim with setPose(yaw, pitch).
+    // ---------------------------------------------------------------
+    fire: (barrels: 1 | 2 = 1) => fire(barrels),
+    get gunReady() { return gunReady; },
+    get cooldown() { return cooldown; },
+    // SLUG MODE surface + HUD-truthful flag.
+    get slugMode() { return slugMode; },
+    setSlugMode(on: boolean) { slugMode = on; updateHud(); },
+    fireSlug: () => { const keep = slugMode; slugMode = true; try { return fire(1); } finally { slugMode = keep; } },
+    /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
+     *  computed by exactly the code fire() uses (muzzleWorld + converged
+     *  dir) against each actor's CURRENT posed field. No state mutated.
+     *  Diff against debugWounds() after firing to assert the crater landed
+     *  where the ray struck. */
+    predictSlugHit: () => {
+      const origin = muzzleWorld();
+      const dir = convergedDir(origin);
+      let bestD = Infinity;
+      let hitActorId = -1;
+      let hitPoint: Vec3 | null = null;
+      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
+      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
+      // which the placement gate duly failed (2026-08-27).
+      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
+      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
+      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
+      const dt = 1 / 120;
+      for (const a of actors) {
+        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        if (!c) continue;
+        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
+        const posedA = a.posed();
+        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
+        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
+        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
+        for (let i = 0; i < 240; i++) {
+          const next: Vec3 = [
+            pos[0] + vel[0] * dt,
+            pos[1] + vel[1] * dt,
+            pos[2] + vel[2] * dt,
+          ];
+          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
+          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
+          if (hp) {
+            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
+            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
+            break;
+          }
+          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
+          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
+        }
+      }
+      return { origin, dir, actorId: hitActorId, hit: hitPoint };
+    },
+    /** Hull-holes A/B seams (2026-08-27). setOccluder turns the occluder
+     *  pre-pass (and its tMax clamp) on/off; setHullExclusions passes an
+     *  empty wound list to the hull builder instead of the live one. Both
+     *  default to shipped behaviour. */
+    setOccluder: (on: boolean) => {
+      occluderDesired = on;
+      sdfLayer.setOccluderEnabled(on);
+    },
+    get occluder() { return sdfLayer.occluderEnabled && occluderDesired; },
+    setHullExclusions: (on: boolean) => { hullExclusionsEnabled = on; },
+    get hullExclusions() { return hullExclusionsEnabled; },
+    /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
+     *  so frozen captures would otherwise shoot through a stale hull). No
+     *  simulation steps, so a stamped body stays exactly where it was put. */
+    refreshHull: () => {
+      occluderHull.update(
+        actors.map(a => a.posed()),
+        hullExclusionsEnabled
+          ? actors.flatMap(a => {
+            const prims = a.posed().prims;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+          })
+          : [],
+      );
+    },
+    hullDebug: () => ({
+      occluder: sdfLayer.occluderEnabled,
+      exclusions: hullExclusionsEnabled,
+      instances: occluderHull.instanceCount,
+      woundsPerBody: actors.map(a => a.wounds().length),
+    }),
+    /** A visible sphere in WORLD space, drawn through the normal geometry
+     *  pass — so captures can mark predicted impacts vs actual craters.
+     *  One marker at a time; pass null coords to remove. */
+    placeMarker(x: number | null, y = 0, z = 0, colorHex = 0xff00ff) {
+      if (!marker) {
+        const geo = new THREE.SphereGeometry(0.03, 12, 8);
+        marker = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colorHex }));
+        marker.frustumCulled = false;
+        scene.add(marker);
+      }
+      (marker.material as THREE.MeshBasicMaterial).color.setHex(colorHex);
+      if (x === null) { marker.visible = false; return; }
+      marker.visible = true;
+      marker.position.set(x, y, z);
+    },
+    projectiles: () => pellets.map(p => ({
+      pos: [...p.pos] as Vec3,
+      vel: [...p.vel] as Vec3,
+      ageSec: p.ageSec,
+    })),
+    get chunkCount() { return liveChunks.length; },
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
     setSdfScale: (v: number) => applySdfScale(v),
     get sdfScale() { return sdfScale; },
@@ -621,6 +1085,48 @@ async function main() {
         content: { ...content },
         letterboxed: cap.mode === 'fixed',
       };
+    },
+    /** Dev twin of the lab's stampWoundAt (2026-08-27): ONE wound by ray
+     *  through the same worldHitToWound path the pellet uses, pushed via
+     *  stampBlast — no damage, no shove, no sever. A full grapeshot volley
+     *  kills and death-gibs (the weapon works), so a pocked STANDING torso
+     *  only exists through this seam. */
+    stampWoundAt: (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
+      kind: 'pellet' | 'slug' = 'pellet', bodyId?: number) => {
+      const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId);
+      if (!a) return null;
+      const posed = a.posed();
+      const hit = traceProjectile(
+        [ox, oy, oz],
+        [ox + dx * 8, oy + dy * 8, oz + dz * 8],
+        q => sdBody(q, posed),
+      );
+      if (!hit) return null;
+      // 'slug' carries the BLAST profile at 0.16 (see SLUG) — the blast-class
+      // crater look without resolveExplosion's 16-wound kill-gib.
+      const field = (q: Vec3) => sdBody(q, posed);
+      const w = kind === 'slug'
+        ? woundFromSlug(posed.prims, hit, field)
+        : woundFromPellet(posed.prims, hit, 0, field);
+      a.stampBlast([w]);
+      return hit;
+    },
+    /** Diagnostic detonation: one blast stamped through resolveExplosion
+     *  (the SAME worldHitToWound path dynamite uses) with falloff-scaled
+     *  blast calibre — wounds only, no shove/sever/gib, so captures are not
+     *  displaced by their own impact. Returns what it did. */
+    explode: (x: number, y: number, z: number) => {
+      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed() }));
+      const fx = resolveExplosion([x, y, z], bodies);
+      let totalWounds = 0;
+      for (const pb of fx.perBody) {
+        if (pb.wounds.length === 0) continue;
+        const a = actors.find(q => String(q.id) === pb.bodyId);
+        if (!a) continue;
+        a.stampBlast(pb.wounds);
+        totalWounds += pb.wounds.length;
+      }
+      return { radiusM: fx.radiusM, bodiesHit: fx.perBody.length, totalWounds };
     },
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },

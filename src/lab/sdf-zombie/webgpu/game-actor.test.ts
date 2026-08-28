@@ -18,6 +18,10 @@ import { translateBody } from '../translate';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import { createZombieActor } from './game-actor';
 import { ROOMS, FURNITURE, wanderBounds, spawnPoints } from './game-level';
+import { sdBody } from '../validate';
+import { woundWorldPos } from '../damage';
+import { mulberry32 } from './game-weapon';
+import type { Vec3 } from '../types';
 
 const stubView = () => ({
   setRootShift: () => {},
@@ -140,5 +144,253 @@ describe('wandering zombies stay where the actor thinks they are', () => {
       }
     }
     expect(id - 1).toBe(10);
+  });
+});
+
+describe('pellet hits flow through the existing damage pipeline', () => {
+  /** A real translated zombie + actor, exactly like the page spawns it. */
+  function makeActor(id: number) {
+    const doc = parseBlob(zombieBlobSrc);
+    const face = compileFace(doc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const built = buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS, {});
+    const placed = translateBody(built, start);
+    const severs: { limb: string; origin: Vec3; primCount: number }[] = [];
+    const actor = createZombieActor({
+      id, room: room.id, body: placed, view: stubView() as never,
+      start, seed: 1337 + (id + 1) * 101,
+      bounds: wanderBounds(room), furniture: [],
+      onSever: (piece) => severs.push({
+        limb: piece.limb, origin: piece.origin, primCount: piece.prims.length,
+      }),
+    });
+    for (let f = 0; f < 60; f++) actor.step(1 / 60); // settle into a walk
+    return { actor, severs };
+  }
+
+  /** Raycast the posed field from `origin` along `dir` — lab-main's march. */
+  function raycast(actor: ReturnType<typeof makeActor>['actor'], origin: Vec3, dir: Vec3): Vec3 | null {
+    let t = 0;
+    for (let i = 0; i < 128 && t < 20; i++) {
+      const p: Vec3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
+      if (sdBody(p, actor.posed()) < 0.002) return p;
+      t += Math.max(sdBody(p, actor.posed()), 0.002);
+    }
+    return null;
+  }
+
+  it('a wound lands where the pellet hit and rides the posed body', () => {
+    const { actor } = makeActor(1);
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    const hit = raycast(actor, [torso[0], torso[1], torso[2] + 4], [0, 0, -1]);
+    expect(hit).not.toBeNull();
+    const yaw = actor.pose().yaw;
+    const before = actor.posed(); // the pose the wound was STAMPED on
+    actor.hit(hit!, [0, 0, -1]);
+    expect(actor.wounds().length).toBe(1);
+    // Exact gate on the STAMP pose: the wound anchors at the impact point.
+    // (After the impulse shove the pose moves ~5 cm and the anchor rides it
+    // — that is the wound staying ON the flesh, working as designed.)
+    const w = actor.wounds()[0]!;
+    // Yaw 0 — the actor stamps on posed (world-space) prims; see game-actor's
+    // refreshWounds note. Passing the walk yaw here would double-rotate.
+    const back = woundWorldPos(before.prims, w, 0);
+    expect(Math.hypot(back[0] - hit![0], back[1] - hit![1], back[2] - hit![2]))
+      .toBeLessThan(1e-6);
+    // And it RIDES the body: after a second of walking, the anchor moves with
+    // the flesh rather than staying at the stamp point.
+    for (let f = 0; f < 60; f++) actor.step(1 / 60);
+    const after = woundWorldPos(actor.posed().prims, w, actor.pose().yaw);
+    const torsoNow = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    expect(Math.hypot(after[0] - torsoNow[0], after[2] - torsoNow[2]))
+      .toBeLessThan(0.8); // torso-local offset, not a world-fixed hole
+  });
+
+  it('a pellet storm on one shoulder takes the arm off and reports a world-placed piece', () => {
+    const { actor, severs } = makeActor(2);
+    // Find which side the arm hangs on from the posed clusters, then pour
+    // pellets into that shoulder joint region until it goes.
+    // Aim at the SHOULDER JOINT — the arm's highest endpoint, where the
+    // attachment neck cutLimbs samples actually runs — and scatter the way
+    // the spread cone does. Measured on the rest body (scratch probe): a
+    // tight ±3 cm cluster never severs (one carve sphere covers one side of
+    // the section disc); the CONE'S NATURAL SPREAD is what cuts — ±9 cm
+    // severs within 14 pellets.
+    const armL = actor.posed().clusters.find(c => c.limb === 'armL')!;
+    let shoulder: Vec3 = [0, 0, 0];
+    let bestY = -Infinity;
+    for (let i = armL.start; i < armL.start + armL.count; i++) {
+      const p = actor.posed().prims[i]!;
+      if (p.op === 'sub' || p.dead) continue;
+      for (const e of [p.a, p.b]) {
+        if (e[1] > bestY) { bestY = e[1]; shoulder = [...e] as Vec3; }
+      }
+    }
+    const rng = mulberry32(20260826);
+    let fired = 0;
+    while (
+      actor.posed().clusters.find(c => c.limb === 'armL')!.alive && fired < 40
+    ) {
+      // Re-aim every shot: the body wanders while we pour.
+      const cl = actor.posed().clusters.find(c => c.limb === 'armL')!;
+      let top: Vec3 = shoulder;
+      let y = -Infinity;
+      for (let i = cl.start; i < cl.start + cl.count; i++) {
+        const p = actor.posed().prims[i]!;
+        if (p.op === 'sub' || p.dead) continue;
+        for (const e of [p.a, p.b]) if (e[1] > y) { y = e[1]; top = [...e] as Vec3; }
+      }
+      shoulder = top;
+      const j: Vec3 = [
+        shoulder[0] + (rng() - 0.5) * 2 * 0.09,
+        shoulder[1] + (rng() - 0.5) * 2 * 0.09,
+        shoulder[2] + (rng() - 0.5) * 2 * 0.09,
+      ];
+      actor.hit(j, [0, -0.1, -1]);
+      fired++;
+    }
+    const gone = !actor.posed().clusters.find(c => c.limb === 'armL')!.alive;
+    expect(gone, `arm still attached after ${fired} point-blank pellets`).toBe(true);
+    expect(severs.some(s => s.limb === 'armL')).toBe(true);
+    const piece = severs.find(s => s.limb === 'armL')!;
+    // The piece is placed where the RENDERED arm hung — near the body's own
+    // extent, not back at the spawn/origin-space rest pose.
+    const b = posedBounds(actor.posed().prims);
+    expect(piece.origin[0]).toBeGreaterThan(b.lo[0]! - 0.6);
+    expect(piece.origin[0]).toBeLessThan(b.hi[0]! + 0.6);
+    expect(piece.primCount).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Heavy-hit choreography (slug = blast-profile wound). The owner: "we need
+// more readable stun and hit states … the zombie is really staggered and hit
+// by something of substantial force". A stagger that never interrupts
+// locomotion reads weightless, so a blast hit HALTS the walk and knocks the
+// ROOT back; pellets keep the lab's flinch-and-keep-walking reference.
+// ---------------------------------------------------------------------------
+describe('heavy-hit choreography (slug vs pellet)', () => {
+  /** A real translated zombie + actor, exactly like the page spawns it
+   *  (same recipe as the pellet tests above — seeds differ per id). */
+  function makeActor(id: number) {
+    const doc = parseBlob(zombieBlobSrc);
+    const face = compileFace(doc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const built = buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS, {});
+    const placed = translateBody(built, start);
+    const actor = createZombieActor({
+      id, room: room.id, body: placed, view: stubView() as never,
+      start, seed: 1337 + (id + 1) * 101,
+      bounds: wanderBounds(room), furniture: [],
+    });
+    for (let f = 0; f < 60; f++) actor.step(1 / 60); // settle into a walk
+    return { actor };
+  }
+
+  /** Path length of pose() over the next `frames` steps. */
+  function travel(actor: ReturnType<typeof makeActor>['actor'], frames: number): number {
+    let acc = 0;
+    let prev = actor.pose().pos;
+    for (let f = 0; f < frames; f++) {
+      actor.step(1 / 60);
+      const p = actor.pose().pos;
+      acc += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+      prev = p;
+    }
+    return acc;
+  }
+
+  /** A CHEST-height surface impact straight in front of the body — a real
+   *  impact point the way the page's predictor produces one (never a cluster
+   *  centre: that sits INSIDE the field and anchors the crater pathologically
+   *  — measured: a slug 'hit' at the torso centre severed BOTH hip necks and
+   *  collapsed the body, muddying every choreography signal). */
+  function chestHit(actor: ReturnType<typeof makeActor>['actor']): Vec3 {
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    const o: Vec3 = [torso[0], 1.3, torso[2] + 4];
+    const d: Vec3 = [0, 0, -1];
+    let t = 0;
+    for (let i = 0; i < 128 && t < 20; i++) {
+      const p: Vec3 = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+      const s = sdBody(p, actor.posed());
+      if (s < 0.002) return p;
+      t += Math.max(s, 0.002);
+    }
+    throw new Error('chest raycast missed the body');
+  }
+
+  it('a slug HALTS the walk (locomotion interrupted) where the control keeps striding', () => {
+    // Same seed twice: the only difference is the hit. Over the 0.55 s hold
+    // the hit body covers knock (~0.17 m) plus the stride's fade-out, far
+    // less than the control's cruise stride over the same window.
+    const hitRun = makeActor(3);
+    const control = makeActor(3);
+    const impact = chestHit(hitRun.actor);
+    hitRun.actor.hitSlug(impact, [0, 0, -1]);
+    hitRun.actor.step(1 / 60); // debug() reports the LAST step's state
+    expect(hitRun.actor.debug().holdSecs, 'the slug engages the walk hold').toBeGreaterThan(0);
+    const hitTravel = travel(hitRun.actor, 36); // 0.6 s ≥ the 0.55 s hold
+    const controlTravel = travel(control.actor, 36);
+    expect(hitTravel, 'slug hit should break stride').toBeLessThan(controlTravel * 0.75);
+    // And the ROOT actually went BACKWARD along the shot: net z displacement
+    // of the hit run vs its pre-hit impact depth is negative while the
+    // control roams freely.
+    const endZ = hitRun.actor.pose().pos[2] - impact[2];
+    expect(endZ, 'root knocked back along -z').toBeLessThan(-0.05);
+  });
+
+  it('the knock is bounded: ≈ v0/k of root travel, then the zombie holds, then resumes', () => {
+    const { actor } = makeActor(4);
+    const impact = chestHit(actor);
+    actor.hitSlug(impact, [0, 0, -1]);
+    // Immediate knock window (0.25 s): ∫ v0·e^(−kt) = 1.2·(1−e^−1.75)/7 ≈
+    // 0.138 m; the hold gates the walk controller, so this is pure knock.
+    let prev = actor.pose().pos;
+    let early = 0;
+    for (let f = 0; f < 15; f++) {
+      actor.step(1 / 60);
+      const p = actor.pose().pos;
+      early += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+      prev = p;
+    }
+    expect(early, 'knock travel in the first 0.25 s').toBeGreaterThan(0.06);
+    expect(early, 'and bounded well under a metre').toBeLessThan(0.3);
+    // Total knock converges: over the NEXT 0.35 s the root barely adds
+    // (integral tail ≈ 0.03 m) — the shove stops, it does not glide.
+    let late = 0;
+    for (let f = 0; f < 21; f++) {
+      actor.step(1 / 60);
+      const p = actor.pose().pos;
+      late += Math.hypot(p[0] - prev[0], p[2] - prev[2]);
+      prev = p;
+    }
+    expect(late).toBeLessThan(early * 0.9);
+    // Stronger form of the resume gate: over 2.5 s the zombie MUST have
+    // covered real ground again (cruise 1.15 m/s minus ramp/idle slack).
+    const resumed = makeActor(4);
+    resumed.actor.hitSlug(chestHit(resumed.actor), [0, 0, -1]);
+    travel(resumed.actor, 33); // burn the hold
+    // 5 s: long enough to outlast the wander's own idle pauses (≤ 2.4 s) and
+    // show sustained cruising — a staggered-forever zombie covers ~0.
+    const after = travel(resumed.actor, 300);
+    expect(after, 'zombie resumes wandering after the stagger').toBeGreaterThan(1.0);
+  });
+
+  it('a pellet neither halts nor knocks — the shamble continues (lab reference)', () => {
+    // pose() is the wander controller; pellet hits touch neither the hold,
+    // the knock nor the wander state, so two same-seed runs stay bit-equal.
+    const hitRun = makeActor(5);
+    const control = makeActor(5);
+    hitRun.actor.hit(chestHit(hitRun.actor), [0, 0, -1]);
+    for (let f = 0; f < 40; f++) {
+      hitRun.actor.step(1 / 60);
+      control.actor.step(1 / 60);
+      const a = hitRun.actor.pose().pos;
+      const b = control.actor.pose().pos;
+      expect(a[0]).toBe(b[0]);
+      expect(a[2]).toBe(b[2]);
+    }
   });
 });
