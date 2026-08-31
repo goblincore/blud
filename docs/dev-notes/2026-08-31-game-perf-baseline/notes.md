@@ -572,3 +572,38 @@ predicted the market was.
 Shell remains **default OFF** pending the owner's manual pass at the correct
 settings — `__sdfGame.setShell(true)` with relax LEFT AT 1.0. The earlier
 manual pass never actually tested this combination.
+
+---
+
+# Follow-up 6: the stale-hull mask, and the ship
+
+## The owner's catch
+
+With the shell on, a **walking** zombie shed its own render — flesh scraps
+floating where the body used to be; "like the shell doesn't move with the
+model." Exactly right. The hull's instance matrices updated every frame; the
+RENDER didn't. The entry/exit passes shared one material flipped between them
+(side + depthFunc + `needsUpdate`, twice per frame), and on the WebGPU backend
+`needsUpdate` forces a pipeline rebuild — a pass whose pipeline is mid-rebuild
+renders stale bounds. The occluder never hits this because its material is
+never touched after creation.
+
+**Why every automated gate missed it:** they all froze the wanderers first,
+and a stale hull is indistinguishable from a fresh one on a frozen body. The
+owner's live walk was the one scenario never scripted. It is scripted now.
+
+## Fix and gate
+
+Two `InstancedMesh`es with fixed materials — front/LessEqual on `SHELL_LAYER`,
+back/GreaterDepth on `SHELL_EXIT_LAYER` — instance data written to both,
+nothing mutated per frame. Gate: shell on, 300 frames of live walking,
+mid-walk capture (bodies intact), then freeze-settle A/B — same-state noise
+floors exactly 0.000%, shell effect 0.062%/0.016%, residue isolated
+single-pixel silhouette grazes.
+
+## Shipped
+
+Owner passed the live walk on 2026-08-31. **Shell defaults ON**: −54% / −40%
+frame time at parity. Bench baseline now carries the shell; the `shell-off`
+leg measures the cost of turning it off. `__sdfGame.setShell(false)` is the
+kill switch.
