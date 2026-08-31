@@ -126,9 +126,10 @@ console.log('backend: webgpu');
 // ---------------------------------------------------------------------------
 const ALL_LEGS = {
   baseline: {},
-  // The outer-hull shell march (shell-hull-outer.ts). Rasterises 2.9-4.9x
-  // fewer march pixels; real-render parity verified 2026-08-31 at relax 1.0.
-  'shell-on': { setShell: true },
+  // The shell march SHIPS ON as of 2026-08-31 (owner-passed; -40%/-54%).
+  // baseline above therefore includes it; this leg measures what turning it
+  // OFF costs — the ablation direction flipped with the default.
+  'shell-off': { setShell: false },
   'occluder-off': { setOccluder: false },
   'cone-on': { setCone: true },
   'fxaa-off': { setFxaa: false },
@@ -163,7 +164,7 @@ async function applyLeg(name) {
     __sdfGame.setSdfScale(1.0);
     __sdfGame.setAdaptive(false);
     __sdfGame.setMarchSteps(96);
-    __sdfGame.setShell(false);
+    __sdfGame.setShell(true);
     __sdfGame.setRelax(1.0);
     return 1;
   })()`);

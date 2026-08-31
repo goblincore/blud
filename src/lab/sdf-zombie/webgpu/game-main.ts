@@ -347,7 +347,12 @@ async function main() {
   outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
   scene.add(outerHull.entryObject);
   scene.add(outerHull.exitObject);
-  sdfLayer.setShellEnabled(false);
+  // SHELL ON BY DEFAULT (owner visual pass, 2026-08-31). Worth -40%/-54%
+  // frame time (room 4/3) at real-render parity below the same-state noise
+  // floor. The hull is populated by the frame loop before the first draw
+  // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
+  // .setShell(false) is the kill switch.
+  sdfLayer.setShellEnabled(true);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -1165,8 +1170,9 @@ async function main() {
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),
 
-    /** Rasterise the conservative outer hull (shell-hull-outer.ts). Default
-     *  OFF — until the march consumes it this is an instrument, not a lever. */
+    /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
+     *  owner-passed 2026-08-31 after the stale-hull mask fix; -40%/-54%
+     *  frame time at real-render parity. This is the kill switch. */
     setShell(on: boolean) {
       sdfLayer.setShellEnabled(on);
       if (on) outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
