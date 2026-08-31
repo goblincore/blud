@@ -20,6 +20,18 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**IN FLIGHT via dispatch (2026-08-31):** `temporal-c2-spike` (RUNNING — half-rate
+SDF layer + reprojection as an AESTHETIC experiment; deliverable is a capture
+reel for the owner's look verdict, not perf) and `bleeding-wounds` (QUEUED
+behind it — per-calibre wound emitters + splat decals per
+[spec](docs/superpowers/specs/2026-08-31-bleeding-wounds-design.md) /
+[plan](docs/superpowers/plans/2026-08-31-bleeding-wounds.md); the plan
+pre-solves the droplet-depthWrite/composite trap). **Gun-feel-r2 REJECTED at
+owner playtest** — starts with the model itself (unhappy with the grapeshot
+pick) and no visible barrel-end flash; needs a rethink from the model up, do
+not merge or re-propose the branch as-is.
+
+
 **SHELL MARCH — SHIPPED ON (owner-passed 2026-08-31).** Per-limb posed hulls
 (`shell-hull-outer.ts`) bound the march: **−54% / −40% frame time** (room 3
 23.3→10.8 ms, room 4 15.9→9.5, spread 2-9%) at real-render parity below the
