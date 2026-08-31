@@ -364,7 +364,18 @@ async function main() {
       // marches world space.
       const placed = translateBody(built, start);
       const view: ZombieGpuView = createZombieGpuView(placed,
-        { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
+        {
+          cone: sdfLayer.cone,
+          occluder: sdfLayer.occluder,
+          // The outer hull's bounds. Passing them unconditionally is safe:
+          // the fetch identities (0 / 1e9) make the march bit-identical while
+          // sdfLayer.shellEnabled is false, which is the ship default.
+          shell: {
+            entry: sdfLayer.shellEntry.texture,
+            exit: sdfLayer.shellExit.texture,
+            uniforms: sdfLayer.shellEntry.uniforms,
+          },
+        });
       view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
