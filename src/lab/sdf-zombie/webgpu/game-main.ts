@@ -45,6 +45,8 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { buildFirefight, validateScenario } from './game-bench-scenario';
+import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
@@ -873,6 +875,38 @@ async function main() {
   // builds on this: zombies are addressable by id, the player pose is
   // settable, frames are steppable, wanderers freezable.
   // -----------------------------------------------------------------------
+  /**
+   * Point the player at the nearest zombie's SURFACE, using the same eye and
+   * the same posed body fire() will raycast.
+   *
+   * NOT a cluster centre. A torso centre sits INSIDE the field: aiming there
+   * anchors the crater pathologically, and a slug's severRadius then cuts both
+   * hip necks into an instant collapse. That never happens to a player (the
+   * page's predictor always resolves to a surface) but it would silently wreck
+   * a bench — the run would report the cost of a body that fell apart on the
+   * first shot.
+   *
+   * The centre is used only to POINT the camera; predictSlugHit then confirms
+   * the ray actually reaches a surface. If it does not, the aim is left alone
+   * and the shot misses, which is honest — a bench that quietly re-aimed until
+   * it hit would be measuring something the scenario did not describe.
+   */
+  function aimAtNearestSurface(): boolean {
+    const eye = eyeOf(player);
+    let best: { d: number; c: Vec3 } | null = null;
+    for (const a of actors) {
+      const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+      if (!c) continue;
+      const d = Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]);
+      if (!best || d < best.d) best = { d, c: [...c] as Vec3 };
+    }
+    if (!best) return false;
+    const c = best.c;
+    player.yaw = Math.atan2(c[0] - eye[0], c[2] - eye[2]);
+    player.pitch = Math.atan2(c[1] - eye[1], Math.hypot(c[0] - eye[0], c[2] - eye[2]));
+    return true;
+  }
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
@@ -1014,6 +1048,100 @@ async function main() {
     get occluder() { return sdfLayer.occluderEnabled && occluderDesired; },
     setHullExclusions: (on: boolean) => { hullExclusionsEnabled = on; },
     get hullExclusions() { return hullExclusionsEnabled; },
+
+    // -------------------------------------------------------------------
+    // BENCH SEAMS (2026-08-31). Everything the ablation legs toggle, plus
+    // the fence the harness times against. Ship defaults are unchanged —
+    // these only move when a driver moves them.
+    // -------------------------------------------------------------------
+    /** The GPU completion fence. Trust the fence, never a timestamp value. */
+    resolveGpu: () => handle.resolveGpu(),
+    // setAdaptive / setSdfScale already exist further down this object and
+    // are better than the versions this block first added (they also clear
+    // the adaptive sample window and report the whole ladder). Not
+    // duplicated here — the driver calls those.
+    setCone: (on: boolean) => sdfLayer.setConeEnabled(on),
+    get cone() { return sdfLayer.coneEnabled; },
+    setFxaa: (on: boolean) => postAa.setFxaa(on),
+    get fxaa() { return postAa.fxaa; },
+    setSmear: (v: number) => postAa.setSmear(v),
+    /** Aim at the nearest body's surface. Exposed so a driver can stage a
+     *  shot the same way the bench scenario does. */
+    aimSurface: () => aimAtNearestSurface(),
+
+    /**
+     * Run one bench leg.
+     *
+     * Parks the result on window.__gameBench as well as returning it: a
+     * console call that returns a value can itself hide the page, and a
+     * hidden page has no swapchain texture, so its passes do nothing and the
+     * fence resolves to ~0.065 ms of nothing. That reads as a 70x speedup.
+     * The harness counts hidden frames and invalidates the run, but reading
+     * the value back afterwards avoids provoking it in the first place.
+     */
+    async bench(o: {
+      room?: number; mode?: 'throughput' | 'spike';
+      walkFrames?: number; fireFrames?: number; gibFrames?: number;
+      chunkFrames?: number; warmup?: number; label?: string;
+    } = {}) {
+      const scenario = buildFirefight({
+        room: o.room ?? 4,
+        walkFrames: o.walkFrames,
+        fireFrames: o.fireFrames,
+        gibFrames: o.gibFrames,
+      });
+      const problems = validateScenario(scenario);
+      if (problems.length) throw new Error(`bad scenario: ${problems.join('; ')}`);
+
+      handle.setLoopRunning(false);
+      const hadAdaptive = adaptiveEnabled;
+      adaptiveEnabled = false;
+      try {
+        const deps: BenchDeps = {
+          step: (dt) => handle.step(dt),
+          resolveGpu: () => handle.resolveGpu(),
+          now: () => performance.now(),
+          hidden: () => document.hidden,
+          perform: (a) => {
+            switch (a.kind) {
+              case 'teleport': {
+                const r = ROOMS.find(x => x.id === a.room);
+                if (r) {
+                  player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+                  player.vel = [0, 0, 0];
+                  player.yaw = 0;
+                  player.pitch = 0;
+                  player.grounded = true;
+                }
+                break;
+              }
+              case 'freeze': wanderFrozen = a.on; break;
+              case 'look': player.yaw = a.yaw; player.pitch = a.pitch; break;
+              case 'aimSurface': aimAtNearestSurface(); break;
+              case 'fire': fire(a.barrels); break;
+              case 'fireSlug': {
+                const keep = slugMode;
+                slugMode = true;
+                try { fire(1); } finally { slugMode = keep; }
+                break;
+              }
+            }
+          },
+        };
+        const result = await runBench(deps, scenario, {
+          mode: o.mode ?? 'throughput',
+          chunkFrames: o.chunkFrames,
+          warmup: o.warmup,
+          label: o.label,
+        });
+        (window as unknown as { __gameBench: unknown }).__gameBench = result;
+        return result;
+      } finally {
+        adaptiveEnabled = hadAdaptive;
+        adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+        handle.setLoopRunning(true);
+      }
+    },
     /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
      *  so frozen captures would otherwise shoot through a stale hull). No
      *  simulation steps, so a stamped body stays exactly where it was put. */
