@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { binResiduals, fitPrims, mergeMirrored, projectToSurface, sampleBodySurface,
   type Suggestion, type PrimBin, type PrimSample } from './ring-fit';
-import { ringBasis, ringBasis as rb, groupByBone, refBones, globalScale, refToBody } from './ref-align';
+import { ringBasis, ringBasis as rb, groupByBone, refBones, globalScale, refToBody, detectRig } from './ref-align';
 import { sdBody } from './validate';
 import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
@@ -597,9 +597,10 @@ describe.skipIf(!existsSync(MOUSE_GLB))('integration: mouse against its referenc
     const doc = parseBlob(readFileSync('src/lab/sdf-zombie/characters/mouse.blob', 'utf8'));
     const body = buildBody(compileBlob(doc, compileFace(doc)));
     const skin = readRefSkin(new Uint8Array(readFileSync(MOUSE_GLB)));
-    const ref = refBones(skin.jointWorld);
+    const rig = detectRig([...skin.jointWorld.keys()]);
+    const ref = refBones(skin.jointWorld, rig);
     const g = globalScale(ref, body.bones);
-    const { byBone } = groupByBone(skin);
+    const { byBone } = groupByBone(skin, rig);
     const inBody = new Map<string, Vec3[]>();
     for (const [bone, pts] of byBone) {
       const r = ref.get(bone), o = body.bones.get(bone);

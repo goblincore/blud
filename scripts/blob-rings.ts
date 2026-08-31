@@ -31,7 +31,7 @@ import { parseBlob } from '../src/lab/sdf-zombie/blob-parse';
 import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
 import { buildBody } from '../src/lab/sdf-zombie/build-body';
 import { readRefSkin } from '../src/lab/sdf-zombie/ref-skin';
-import { groupByBone, refBones, ringBasis, globalScale, refToBody } from '../src/lab/sdf-zombie/ref-align';
+import { detectRig, groupByBone, refBones, ringBasis, globalScale, refToBody } from '../src/lab/sdf-zombie/ref-align';
 import { binResiduals, fitPrims, mergeMirrored, TAPER_T_MIN, TAPER_T_MAX } from '../src/lab/sdf-zombie/ring-fit';
 import type { Vec3 } from '../src/lab/sdf-zombie/types';
 
@@ -71,9 +71,18 @@ const skin = (() => {
   catch (e) { fail(`${glbPath}: ${(e as Error).message}`); }
 })();
 
-const ref = refBones(skin.jointWorld);
+// THE RIG IS SELECTED HERE, LOUDLY. A reference whose joints no rig table
+// names once produced an empty report instead of an error — every joint was
+// "unmapped" and the fit measured nothing. Detection failure is a `fail()`
+// (exit 2), naming the reference's joints and every known rig.
+const rig = (() => {
+  try { return detectRig([...skin.jointWorld.keys()]); }
+  catch (e) { fail(`${glbPath}: ${(e as Error).message}`); }
+})();
+
+const ref = refBones(skin.jointWorld, rig);
 const g = globalScale(ref, body.bones);
-const { byBone, unmapped } = groupByBone(skin);
+const { byBone, unmapped } = groupByBone(skin, rig);
 
 const inBody = new Map<string, Vec3[]>();
 for (const [bone, pts] of byBone) {
@@ -90,7 +99,7 @@ let inScope = 0;
 for (const pts of inBody.values()) inScope += pts.length;
 
 if (asJson) {
-  console.log(JSON.stringify({ character: name, mesh: glbPath, scale: g, coverage: {
+  console.log(JSON.stringify({ character: name, mesh: glbPath, rig: rig.name, scale: g, coverage: {
     total: skin.total, dropped: skin.dropped, inScope, unmapped: Object.fromEntries(unmapped),
   }, suggestions }, null, 2));
   process.exit(0);
