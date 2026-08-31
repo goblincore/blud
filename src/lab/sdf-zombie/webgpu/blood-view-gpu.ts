@@ -9,7 +9,7 @@
 // this view keeps the fine burst beads too small to fuse into a surface,
 // and the floor splats, which already read well.
 import * as THREE from 'three/webgpu';
-import type { BloodSim } from '../blood-sim';
+import { TRAIL_HIST, type BloodSim } from '../blood-sim';
 import { GOO_TUNING } from './goo-layer';
 
 const MAX_DROPLETS = 600;
@@ -85,11 +85,32 @@ export interface BloodViewOpts {
    *  the lab camera sits close. The game camera sits far, so it passes 1
    *  and droplets read at their sim size — the game-tuned BLOOD_TRAIL band. */
   dropletViewScale?: number;
+  /** FILAMENT stretch (X1.bleed-look). Default = the lab's frozen behaviour
+   *  (k 0.18, max 0.8, no thinning), which reads as oval cells — the owner's
+   *  exact words. A liquid filament conserves volume: as it stretches along
+   *  velocity it must THIN across it (y /= sqrt(stretch)), and fast spray
+   *  wants 4:1+ aspect, not the lab's 1.8:1 cap. */
+  stretch?: { k: number; max: number; thin: boolean };
+  /** RIBBONS (X1.bleed-look round 2 — owner: "ribbons and blood trails to
+   *  create cohesive lines of fluid", and "stylized excess", not realism).
+   *  Beads with enough path history render as camera-facing tapered strips
+   *  swept through their recent positions — arcs of liquid, not particles.
+   *  Beads too young for a ribbon fall back to the stretched quad so fresh
+   *  spawns are never invisible. OFF = every bead is a quad (lab default). */
+  ribbons?: boolean;
+  /** Render 'mist' droplets on a dedicated instanced mesh (X1.bleed-look).
+   *  alphaHash + depthWrite: dithered coverage that still writes depth, so
+   *  mist survives the SDF composite's depth test (soft-blended depthWrite:
+   *  false would vanish against any body behind it — the muzzle-flash trap)
+   *  while reading softer than the beads' hard alphaTest cutout. The dither
+   *  is period-correct for this game. OFF = mist droplets render nothing. */
+  mist?: boolean;
 }
 
 export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   const dropDepth = opts.dropletDepthWrite ?? false;
   const viewScale = opts.dropletViewScale ?? DROPLET_VIEW_SCALE;
+  const stretchCfg = opts.stretch ?? { k: 0.18, max: 0.8, thin: false };
   const dropGeom = new THREE.PlaneGeometry(1, 1);
   const drops = new THREE.InstancedMesh(
     dropGeom,
@@ -110,7 +131,60 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   );
   splats.frustumCulled = false;
 
+  // Mist: its own mesh + material. alphaHash needs no sorted transparency
+  // and WRITES DEPTH — see BloodViewOpts.mist for why that is load-bearing.
+  const mist = opts.mist
+    ? new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(1, 1),
+      (() => {
+        // Cutout, not alphaHash: hashed coverage rendered the quads as
+        // unshaped translucent SQUARES on the WebGPU backend (the map's
+        // alpha never gated coverage) — capture round 3. Same recipe as the
+        // beads instead; at mist sizes the hard edge reads as specks, which
+        // is the wanted graininess anyway.
+        const mat = new THREE.MeshBasicMaterial({
+          map: dropletTexture(),
+          alphaTest: 0.45,
+          depthWrite: true,
+        });
+        return mat;
+      })(),
+      MAX_DROPLETS,
+    )
+    : null;
+  if (mist) mist.frustumCulled = false;
+
+  // Ribbon mesh: one dynamic geometry for every strip. Preallocated at the
+  // worst case (MAX_DROPLETS strips x TRAIL_HIST points x 2 verts); per-frame
+  // CPU fill + setDrawRange. Vertex colours carry the head->tail darkening —
+  // opaque, depth-writing, so the SDF composite arbitrates it like any
+  // geometry (the same reason the beads went cutout).
+  const RIB_VPP = 2; // verts per path point
+  const ribMax = 600 * TRAIL_HIST * RIB_VPP;
+  const ribbons = opts.ribbons
+    ? (() => {
+      const geo = new THREE.BufferGeometry();
+      const pos = new THREE.BufferAttribute(new Float32Array(ribMax * 3), 3);
+      const col = new THREE.BufferAttribute(new Float32Array(ribMax * 3), 3);
+      pos.setUsage(THREE.DynamicDrawUsage);
+      col.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('position', pos);
+      geo.setAttribute('color', col);
+      const idx = new Uint32Array(600 * (TRAIL_HIST - 1) * 6);
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      const mat = new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.frustumCulled = false;
+      return { geo, pos, col, idx, mesh };
+    })()
+    : null;
+
   const m = new THREE.Matrix4();
+  const zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
   const p = new THREE.Vector3();
   const s = new THREE.Vector3();
   const q = new THREE.Quaternion();
@@ -119,8 +193,12 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   const camInv = new THREE.Quaternion();
   const vCam = new THREE.Vector3();
 
+  const ribbonBeads: { pos: [number, number, number] | number[]; size: number; hist?: [number, number, number][] }[] = [];
+  const camPos = new THREE.Vector3();
   function sync(sim: BloodSim, camera: THREE.Camera): void {
     camInv.copy(camera.quaternion).invert();
+    ribbonBeads.length = 0;
+    camera.getWorldPosition(camPos);
     for (let i = 0; i < MAX_DROPLETS; i++) {
       const d = sim.droplets[i];
       // Every droplet poses here, INCLUDING the ones feeding the metaball
@@ -128,24 +206,122 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
       // carry the game-style density, the goo carries the wet surface
       // (owner mix, 2026-08-16). Scraps stay goo-only (they are flesh, not
       // spray).
-      if (!d || d.kind === 'scrap') {
+      // Every slot writes BOTH meshes every frame — a slot that recycles
+      // from mist to bead (or dies) must zero its counterpart, or a stale
+      // matrix ghosts at the old position.
+      const isMist = d?.kind === 'mist';
+      const renderable = !!d && d.kind !== 'scrap' && (!isMist || !!mist);
+      if (!renderable) {
         m.makeScale(0, 0, 0);
         drops.setMatrixAt(i, m);
+        if (mist) mist.setMatrixAt(i, m);
         continue;
       }
-      p.set(d.pos[0], d.pos[1], d.pos[2]);
+      // Ribbon-capable bead? Fill its strip and zero both sprite slots.
+      if (ribbons && d!.kind === 'drop' && d!.ribbon && d!.hist && d!.hist.length >= 3) {
+        ribbonBeads.push(d!);
+        drops.setMatrixAt(i, zeroM);
+        if (mist) mist.setMatrixAt(i, zeroM);
+        continue;
+      }
+      p.set(d!.pos[0], d!.pos[1], d!.pos[2]);
       // Billboard, then roll in screen space so the stretch follows velocity.
-      vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
-      const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
-      // Stretch cap 0.8: trails streak, orbs balloon (was capped at 1.4).
-      const stretch = 1 + Math.min(speed * 0.18, 0.8);
+      vCam.set(d!.vel[0], d!.vel[1], d!.vel[2]).applyQuaternion(camInv);
+      const speed = Math.hypot(d!.vel[0], d!.vel[1], d!.vel[2]);
+      const stretch = 1 + Math.min(speed * stretchCfg.k, stretchCfg.max);
+      // Volume conservation: a stretching filament thins. Off in the lab.
+      const thin = stretchCfg.thin ? 1 / Math.sqrt(stretch) : 1;
       roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
       q.copy(camera.quaternion).multiply(roll);
-      s.set(d.size * stretch * viewScale, d.size * viewScale, 1);
+      s.set(d!.size * stretch * viewScale, d!.size * thin * viewScale, 1);
       m.compose(p, q, s);
-      drops.setMatrixAt(i, m);
+      if (isMist && mist) {
+        mist.setMatrixAt(i, m);
+        drops.setMatrixAt(i, zeroM);
+      } else {
+        drops.setMatrixAt(i, m);
+        if (mist) mist.setMatrixAt(i, zeroM);
+      }
     }
     drops.instanceMatrix.needsUpdate = true;
+    if (mist) mist.instanceMatrix.needsUpdate = true;
+
+    if (ribbons) {
+      // Sweep a tapered strip through each bead's history. Extrusion is
+      // perpendicular to both the local path direction and the view ray, so
+      // the strip always shows its face; width tapers tail -> head at 25%.
+      const P = ribbons.pos.array as Float32Array;
+      const C = ribbons.col.array as Float32Array;
+      const I = ribbons.idx;
+      let v = 0;
+      let ii = 0;
+      for (const b of ribbonBeads) {
+        // THIN, aspect-locked, absolutely clamped. Capture round 1 rendered
+        // half-metre sails (width scaled with burst beads' fat sim sizes);
+        // round 2's fixed clamp still read as rigid blades — long straight
+        // strips need width tied to their LENGTH or they wedge. Half-width =
+        // 4% of the arc, capped at 1.2 cm.
+        // Walk BACKWARD from the head accumulating arc; drop samples past
+        // the cap so a fast bead's ribbon stays a streak, never a rod.
+        const fullHist = b.hist!;
+        let arcLen = 0;
+        let startK = fullHist.length - 1;
+        for (let k = fullHist.length - 1; k >= 1; k--) {
+          const a2 = fullHist[k - 1]!;
+          const b2 = fullHist[k]!;
+          arcLen += Math.hypot(b2[0] - a2[0], b2[1] - a2[1], b2[2] - a2[2]);
+          startK = k - 1;
+          if (arcLen > 0.5) break;
+        }
+        const h = fullHist.slice(startK);
+        const n = h.length;
+        const halfW = Math.min(0.012, Math.max(0.003, arcLen * 0.04));
+        const v0 = v;
+        for (let k = 0; k < n; k++) {
+          const pt = h[k]!;
+          const prev = h[Math.max(0, k - 1)]!;
+          const next = h[Math.min(n - 1, k + 1)]!;
+          let dx = next[0] - prev[0];
+          let dy = next[1] - prev[1];
+          let dz = next[2] - prev[2];
+          // view ray from camera to this point
+          const rx = pt[0] - camPos.x;
+          const ry = pt[1] - camPos.y;
+          const rz = pt[2] - camPos.z;
+          // side = normalize(cross(dir, ray))
+          let sx = dy * rz - dz * ry;
+          let sy = dz * rx - dx * rz;
+          let sz = dx * ry - dy * rx;
+          const sl = Math.hypot(sx, sy, sz) || 1;
+          // Taper INVERTED from round 2: a spurt is thickest at its ROOT
+          // (oldest sample, nearest the wound) and breaks up toward the
+          // flying tip — root-fat reads as pouring fluid, tip-fat read as
+          // shattered glass.
+          const t = k / (n - 1);
+          const w = halfW * (1.0 - 0.7 * t);
+          sx = sx / sl * w; sy = sy / sl * w; sz = sz / sl * w;
+          P[v * 3] = pt[0] - sx; P[v * 3 + 1] = pt[1] - sy; P[v * 3 + 2] = pt[2] - sz;
+          P[v * 3 + 3] = pt[0] + sx; P[v * 3 + 4] = pt[1] + sy; P[v * 3 + 5] = pt[2] + sz;
+          // colour: dark tail -> bright arterial head (stylized excess).
+          // Gore red — wet-bright at the root, drying dark toward the tip.
+          const r = 0.5 - 0.3 * t;
+          const g = 0.03 - 0.02 * t;
+          const bl = 0.035 - 0.02 * t;
+          C[v * 3] = r; C[v * 3 + 1] = g; C[v * 3 + 2] = bl;
+          C[v * 3 + 3] = r; C[v * 3 + 4] = g; C[v * 3 + 5] = bl;
+          v += 2;
+        }
+        for (let k = 0; k < n - 1; k++) {
+          const a = v0 + k * 2;
+          I[ii++] = a; I[ii++] = a + 1; I[ii++] = a + 2;
+          I[ii++] = a + 1; I[ii++] = a + 3; I[ii++] = a + 2;
+        }
+      }
+      ribbons.geo.setDrawRange(0, ii);
+      ribbons.pos.needsUpdate = true;
+      ribbons.col.needsUpdate = true;
+      ribbons.geo.index!.needsUpdate = true;
+    }
 
     for (let i = 0; i < MAX_SPLATS; i++) {
       const sp = sim.splats[i];
@@ -161,13 +337,17 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
     splats.instanceMatrix.needsUpdate = true;
   }
 
+  const objects: THREE.Object3D[] = [drops, splats];
+  if (mist) objects.push(mist);
+  if (ribbons) objects.push(ribbons.mesh);
   return {
-    objects: [drops, splats],
+    objects,
     sync,
     dispose() {
-      for (const o of [drops, splats]) {
-        o.geometry.dispose();
-        (o.material as THREE.Material).dispose();
+      for (const o of [drops, splats, mist, ribbons?.mesh]) {
+        if (!o) continue;
+        (o as THREE.Mesh).geometry.dispose();
+        ((o as THREE.Mesh).material as THREE.Material).dispose();
       }
     },
   };

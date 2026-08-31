@@ -721,7 +721,19 @@ async function main() {
   // exactly this. 0.5 keeps them a hair beefier than the lab since the game
   // wants the blood to READ; the deeper look change (gooey spray + mist
   // instead of sprite blobs) is a tracked exploration, not a scale knob.
-  const bloodView = createBloodView({ dropletDepthWrite: true, dropletViewScale: 0.5 });
+  // X1.bleed-look pass 1 (owner: "big oval blood cells"): aggressive filament
+  // stretch with volume-conserving thinning (fast spray reads as streaks, slow
+  // drips stay beads) + a mist haze mesh (alphaHash so it survives the
+  // composite's depth test while reading soft).
+  const bloodView = createBloodView({
+    dropletDepthWrite: true,
+    dropletViewScale: 0.5,
+    stretch: { k: 0.5, max: 3.5, thin: true },
+    mist: true,
+    // Round 2 (owner): "ribbons and blood trails to create cohesive lines of
+    // fluid" — beads sweep tapered strips through their path history.
+    ribbons: true,
+  });
   for (const o of bloodView.objects) {
     o.visible = true; // ships ON (it is the feature); setBleed(false) hides
     scene.add(o);
