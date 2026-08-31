@@ -35,18 +35,23 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
-- `X1.bleed-look` [~] **Visceral fluid look** (owner: "cohesive lines of
-  fluid", "stylized excess", not realism). **Round 1 LANDED** (`6319104`,
-  branch `claude/bleed-look-spike`): path-history RIBBONS on bleed beads
-  (root-fat taper, aspect-locked width, 0.5 m arc cap), mist haze kind
-  (cutout — alphaHash drew unshaped squares on WebGPU), filament stretch with
-  thinning, slowed bleed speeds so streams arc. Owner live-judgment pending.
-  **Exploration menu for later rounds (owner-sketched):** blood-shape texture
-  ATLAS (rotated/scaled sprites — Blood-native), SPECULAR + post blur for wet
-  shine, BAKED LOW-RES FLUID SIM flipbooks (offline sim → sprite sheets; the
-  dynamite burst's procedural-flipbook fallback is in-repo prior art),
-  screen-space metaball pass over droplets (goo-layer math on a small
-  buffer). Budget-gate with the firefight bench like everything else.
+- `X1.bleed-look` [~] **Visceral fluid look.** Round 1 (RIBBONS + mist +
+  filament stretch, `6319104` on `claude/bleed-look-spike`) **owner-judged NOT
+  IT**: "too thin and uninteresting" — ribbons are LINES, the ask is VOLUMES.
+  Target in owner's words: "viscous and gooey and shiny blobby, **no hard
+  edges**", "stylized excess, not realism", "kinda like the metablob for the
+  goo system but more refined and performant". **ROUND 2 = PORT `goo-layer.ts`
+  TO THE GAME PAGE** — that file already IS this look (X1.21: half-res
+  additive density so blobs SUM, separable Gaussian blur fusing beads into
+  ropes/sheets per X1.21.1, gradient-normal surface lit by the march rig with
+  reconstructed depth). Deferred in the bleeding spec on the assumption
+  droplets would do; they don't. Open: cost (3 extra passes on a ~10 ms page —
+  the shell march bought exactly this headroom; bench it), the Y-flip
+  odd-pass-count trap, a refinement pass vs the lab's tuning, and note the lab
+  LAYERS sprites over goo rather than replacing them. Round-1 ribbons likely
+  superseded — do not merge that branch pending the port.
+  Later-round menu (owner-sketched, still open): blood-shape texture atlas,
+  specular + post blur for wet shine, baked low-res fluid-sim flipbooks.
 
 **GUN-FEEL-R2 REJECTED at owner playtest (2026-08-31)** — starts with the
 model itself (unhappy with the grapeshot pick) and no visible barrel-end
