@@ -1433,6 +1433,7 @@ async function main() {
           spec: gooLayer.spec,
           gloss: gooLayer.gloss,
           rim: gooLayer.rim,
+          stretch: gooLayer.stretch,
         }
         : { enabled: false, unavailable: true };
     },
@@ -1503,6 +1504,7 @@ async function main() {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
       mode?: 'overlay' | 'depth';
       absorb?: number; spec?: number; gloss?: number; rim?: number;
+      stretch?: number;
     }) {
       if (!gooLayer) return;
       if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
@@ -1514,6 +1516,7 @@ async function main() {
       if (o.spec !== undefined) gooLayer.setSpec(o.spec);
       if (o.gloss !== undefined) gooLayer.setGloss(o.gloss);
       if (o.rim !== undefined) gooLayer.setRim(o.rim);
+      if (o.stretch !== undefined) gooLayer.setStretch(o.stretch);
     },
 
     /** Sweep gout density/shape without a rebuild. Mutates the shared table,

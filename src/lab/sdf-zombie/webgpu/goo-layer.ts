@@ -122,6 +122,19 @@ export const GOO_TUNING = {
    * 0.55 is the 2D prototype's owner-selected value.
    */
   absorb: 0.55,
+  /**
+   * Cap on the velocity stretch applied to each density quad: a particle's
+   * quad is elongated along its screen-space motion by 1 + min(speed * 0.18,
+   * stretchMax). The lab wants this — it turns a slow trail into a strand.
+   *
+   * It is ACTIVELY WRONG for a gout. Impact droplets leave at up to 8 m/s, so
+   * every one of them pins at the cap and points radially outward from the
+   * hit, which renders as a starburst of needles rather than a fused mass
+   * (owner, 2026-08-31: "reads distinctly as elongated ovals"). The 2D
+   * prototype that set the target look had no velocity stretch at all.
+   * 0 = round blobs, which is the reference-look setting.
+   */
+  stretchMax: 0.8,
   /** Specular strength — the wet glint that sells "shiny". */
   spec: 1.4,
   /** Specular exponent. LOW = broad wet sheen, HIGH = a pinpoint star. */
@@ -362,6 +375,8 @@ export interface GooLayer {
   setGloss(v: number): void;
   /** Fresnel rim strength. */
   setRim(v: number): void;
+  /** Velocity-stretch cap (GOO_TUNING.stretchMax). 0 = round blobs. */
+  setStretch(v: number): void;
   /**
    * 'overlay' (default) composites the goo over the finished frame with no
    * depth involvement. 'depth' restores the original reconstructed-depth
@@ -380,6 +395,7 @@ export interface GooLayer {
   readonly spec: number;
   readonly gloss: number;
   readonly rim: number;
+  readonly stretch: number;
   readonly targetSize: { width: number; height: number };
   /** DIAGNOSTIC: how many density quads the last sync() posed. 0 while blood
    *  is on screen means the mist/size cutoff rejected everything. */
@@ -550,6 +566,7 @@ export function createGooLayer(
   let mode: 'overlay' | 'depth' = 'overlay';
 
   // DIAGNOSTIC counters — see the note where they are assigned in sync().
+  let stretchMax: number = GOO_TUNING.stretchMax;
   let syncCalls = 0;
   let liveCount = 0;
 
@@ -719,7 +736,7 @@ export function createGooLayer(
         // Billboard, then roll in screen space so the stretch follows velocity.
         vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
         const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
-        const stretch = 1 + Math.min(speed * 0.18, 0.8);
+        const stretch = 1 + Math.min(speed * 0.18, stretchMax);
         roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
         q.copy(camera.quaternion).multiply(roll);
         const gs = d.size * sizeScale;
@@ -809,6 +826,9 @@ export function createGooLayer(
     // the whole surface reads as flat white, which looks like a broken pass.
     setGloss(v) { uGloss.value = Math.max(8, Math.min(220, v)); },
     setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
+    // Ceiling 4, not 0.8: the old hard-coded 0.8 was a floor-to-ceiling range
+    // of exactly one value, and the knob is only interesting BELOW it anyway.
+    setStretch(v) { stretchMax = Math.max(0, Math.min(4, v)); },
     setMode(m: 'overlay' | 'depth') { mode = m; },
     get mode() { return mode; },
     get debugTargets() { return { density: target, blurred: blurB }; },
@@ -823,6 +843,7 @@ export function createGooLayer(
     get spec() { return uSpec.value; },
     get gloss() { return uGloss.value; },
     get rim() { return uRim.value; },
+    get stretch() { return stretchMax; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
