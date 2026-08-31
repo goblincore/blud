@@ -670,9 +670,12 @@ export function createGooLayer(
       between();
 
       // Pass B — composite the goo surface onto the canvas. autoClear off,
-      // or this wipes the frame it is composited onto. The material picks
-      // blurred-vs-raw density; reassigned only on crossings of the
-      // blurPx = 0 line so the steady frame mutates nothing.
+      // or this wipes the frame it is composited onto. The material is picked
+      // per frame from BOTH live axes — mode (overlay/depth) and blurred-vs-raw
+      // density — and reassigned only when the pick actually differs from what
+      // the quad already holds, so a steady frame mutates nothing while
+      // setMode() still takes effect on the very next frame rather than
+      // waiting for a blurPx = 0 crossing.
       const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];
       if (quad.material !== wantMat) quad.material = wantMat;
       renderer.setRenderTarget(outputTarget);
