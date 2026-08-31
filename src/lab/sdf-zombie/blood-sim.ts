@@ -218,20 +218,29 @@ export interface WoundBleedProfile {
  *  the arcing gush, ~10 s. Burn wounds do not bleed (charred) — no entry
  *  by construction. */
 export const WOUND_BLEED: Record<BleedKind, WoundBleedProfile> = {
+  // DENSITY IS THE LOOK (X1.bleed-look round 2). The metaball fuses
+  // neighbours whose density peaks overlap, so a stream reads as a connected
+  // rope only when its droplets are packed tighter than a blob radius apart.
+  // Measured 2026-08-31: at the old rates the goo fused only right at the
+  // wound and every spread droplet stayed a discrete bead — correct metaball
+  // behaviour, wrong picture. So the bleed profiles now trade DROPLET SIZE
+  // for DROPLET COUNT (~2.5x the rate, smaller beads), and narrow the cone
+  // and the speed spread so a stream stays a stream instead of fanning into
+  // isolated specks. Reference: dense continuous jets, not sparse spray.
   pellet: {
-    baseHz: 7, tailHz: 7, decayTauSec: 1, lifetimeSec: 2,
-    coneRad: 0.5, speedMin: 0.5, speedMax: 1.2, sizeMin: 0.08, sizeMax: 0.14,
+    baseHz: 18, tailHz: 18, decayTauSec: 1, lifetimeSec: 2,
+    coneRad: 0.32, speedMin: 0.5, speedMax: 0.9, sizeMin: 0.07, sizeMax: 0.11,
     mistPerDrop: 1, mistSizeScale: 0.35, mistLifeSec: 0.35, mistSpeedScale: 0.7,
   },
   slug: {
-    baseHz: 42, tailHz: 1.5, decayTauSec: 0.45, lifetimeSec: 6,
-    coneRad: 0.35, speedMin: 1.1, speedMax: 2.2, sizeMin: 0.12, sizeMax: 0.2,
-    mistPerDrop: 3, mistSizeScale: 0.3, mistLifeSec: 0.45, mistSpeedScale: 0.65,
+    baseHz: 110, tailHz: 4, decayTauSec: 0.45, lifetimeSec: 6,
+    coneRad: 0.2, speedMin: 1.1, speedMax: 1.7, sizeMin: 0.1, sizeMax: 0.15,
+    mistPerDrop: 2, mistSizeScale: 0.3, mistLifeSec: 0.45, mistSpeedScale: 0.65,
   },
   stump: {
-    baseHz: 90, tailHz: 5, decayTauSec: 1.4, lifetimeSec: 10,
-    coneRad: 0.55, speedMin: 1.5, speedMax: 3.2, sizeMin: 0.16, sizeMax: 0.26,
-    mistPerDrop: 3, mistSizeScale: 0.3, mistLifeSec: 0.5, mistSpeedScale: 0.6,
+    baseHz: 220, tailHz: 12, decayTauSec: 1.4, lifetimeSec: 10,
+    coneRad: 0.3, speedMin: 1.5, speedMax: 2.4, sizeMin: 0.12, sizeMax: 0.18,
+    mistPerDrop: 2, mistSizeScale: 0.3, mistLifeSec: 0.5, mistSpeedScale: 0.6,
   },
 };
 

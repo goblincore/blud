@@ -542,6 +542,13 @@ export function createGooLayer(
         const d = sim.droplets[i]!;
         // Mist cutoff: the fine beads stay in the billboard view; everything
         // else feeds the density field. Scraps always go.
+        //
+        // The explicit 'mist' kind (bleeding-wounds, 2026-08-31) is haze by
+        // construction and NEVER feeds density, whatever its size — some
+        // stump mist rolls above mistMaxSize, and letting it in fogs the
+        // field instead of thickening the stream. No-op for the lab, which
+        // has no mist particles.
+        if (d.kind === 'mist') continue;
         if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
         p.set(d.pos[0], d.pos[1], d.pos[2]);
         // Billboard, then roll in screen space so the stretch follows velocity.

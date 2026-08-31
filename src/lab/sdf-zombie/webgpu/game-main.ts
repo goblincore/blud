@@ -58,6 +58,7 @@ import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import { createBloodSim, spawnWoundDroplets, emitTrails, stepBlood } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import { createBloodView } from './blood-view-gpu';
+import { createGooLayer, type GooLayer } from './goo-layer';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -234,10 +235,24 @@ async function main() {
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
   let sdfScale = 1.0;
+  // Declared AHEAD of sizeSdfLayer because that function reads it and runs
+  // during init — a `let` further down is a temporal dead zone and the page
+  // dies before __sdfGame exists (caught immediately: headless boot found no
+  // __sdfGame at all). Assigned once the actors give it a light rig.
+  let gooLayer: GooLayer | null = null;
+  let gooEnabled = false;
+
   function sizeSdfLayer() {
     const s = postAa.contentSize;
     sdfLayer.setSize(s.width, s.height);
     sdfLayer.setConeGeometry(camera.fov, sdfLayer.targetSize.height);
+    // Density follows the SDF layer at GOO_TUNING.densityScale. Called from
+    // here rather than a separate resize listener (lab-main's shape) because
+    // ADAPTIVE RESOLUTION moves the SDF target at runtime through
+    // applySdfScale -> sizeSdfLayer: a listener would never fire and the goo
+    // would keep splatting into a stale-sized field.
+    const t = sdfLayer.targetSize;
+    gooLayer?.setSize(t.width, t.height);
   }
   sdfLayer.setScale(sdfScale);
   sizeSdfLayer();
@@ -302,7 +317,23 @@ async function main() {
     const hi = s[m]!;
     return s.length % 2 ? hi : (s[m - 1]! + hi) / 2;
   }
-  handle.setDrawFn(() => postAa.render(() => sdfLayer.render(scene, camera)));
+  // The frame's draw. With the goo layer on, the chain nests exactly as
+  // lab-main's does: goo DENSITY (+ blur) first, the whole sdf/cone/occluder/
+  // composite flow in the middle, then the goo SURFACE composited on top with
+  // its reconstructed depth so the metaball blood interleaves with flesh and
+  // floor. gooLayer is assigned further down (it needs a body view's light
+  // uniforms, which only exist once the actors are built) — safe in this
+  // closure because everything up to the end of main() is synchronous, so no
+  // frame can fire against the hole.
+  //
+  // Goo OFF takes the original single-call path, so the toggle is exact.
+  handle.setDrawFn(() => postAa.render(() => {
+    if (gooEnabled && gooLayer) {
+      gooLayer.render(camera, () => sdfLayer.render(scene, camera));
+    } else {
+      sdfLayer.render(scene, camera);
+    }
+  }));
 
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
@@ -710,6 +741,36 @@ async function main() {
   // -----------------------------------------------------------------------
   const bloodSim = createBloodSim();
   const bleed = new BleedRegistry();
+
+  // -----------------------------------------------------------------------
+  // GOO — screen-space metaball blood (X1.bleed-look round 2). The owner's
+  // brief was "viscous and gooey and shiny blobbys and no hard edges ...
+  // kinda like the metablob for the goo system", which is goo-layer.ts's own
+  // job description; round 1's ribbons were judged "too thin and
+  // uninteresting" because lines cannot be volumes.
+  //
+  // It shares a body view's light uniform NODES — not copies — so the goo and
+  // the flesh stay lit by one rig. That is why it is created HERE, after the
+  // actors: those nodes do not exist until a view does.
+  // -----------------------------------------------------------------------
+  const gooRigView = actors[0]?.view;
+  if (gooRigView) {
+    gooLayer = createGooLayer(handle.renderer, {
+      lightDir: gooRigView.uniforms.lightDir,
+      keyColor: gooRigView.uniforms.keyColor,
+      lightCfg: gooRigView.uniforms.lightCfg,
+    });
+    postAa.addSink(gooLayer);
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+    // Game defaults, swept 2026-08-31 against the owner's reference frames.
+    // The lab's 0.4/2.5 leaves every droplet its own peak (beads); 0.05/9
+    // overshoots the other way and passes isolated specks as fat blobs.
+    // 0.12/5.5 fuses dense stream sections into sheets while sparse fallout
+    // still resolves as separate drops — which is what the references show.
+    gooLayer.setThreshold(0.12);
+    gooLayer.setBlurPx(5.5);
+  }
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -1292,6 +1353,38 @@ async function main() {
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),
+
+    /**
+     * Screen-space metaball blood (X1.bleed-look round 2). ON suppresses the
+     * bead + ribbon sprites: the goo surface carries the fluid body, and
+     * those are the hard-edged shapes it exists to replace (they would also
+     * draw the same particles twice). Mist and floor splats stay.
+     */
+    setGoo(on: boolean) {
+      if (!gooLayer) return false;
+      gooEnabled = on;
+      bloodView.setBeadsVisible(!on);
+      return true;
+    },
+    get goo() {
+      return gooLayer
+        ? {
+          enabled: gooEnabled,
+          threshold: gooLayer.threshold,
+          edge: gooLayer.edge,
+          blurPx: gooLayer.blurPx,
+          target: gooLayer.targetSize,
+        }
+        : { enabled: false, unavailable: true };
+    },
+    /** Live tuning for the look pass — threshold/edge/blur are the three
+     *  knobs that decide beads-vs-ropes-vs-sheets. */
+    setGooTuning(o: { threshold?: number; edge?: number; blurPx?: number }) {
+      if (!gooLayer) return;
+      if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
+      if (o.edge !== undefined) gooLayer.setEdge(o.edge);
+      if (o.blurPx !== undefined) gooLayer.setBlurPx(o.blurPx);
+    },
 
     /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
      *  owner-passed 2026-08-31 after the stale-hull mask fix; -40%/-54%

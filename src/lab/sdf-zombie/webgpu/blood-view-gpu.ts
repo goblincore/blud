@@ -63,6 +63,16 @@ function splatTexture(): THREE.Texture {
 
 export interface BloodView {
   objects: THREE.Object3D[];
+  /**
+   * Hide the BEADS and RIBBONS, keeping mist and splats.
+   *
+   * For the goo layer: once the metaball surface carries the fluid body, the
+   * cutout bead quads and the ribbon strips are the exact hard-edged shapes
+   * the goo exists to replace, and they render the same particles twice.
+   * Mist stays (fine haze over the surface) and splats stay (floor decals,
+   * which the goo does not draw).
+   */
+  setBeadsVisible(v: boolean): void;
   /** Re-pose every instance from sim state; call once per frame. */
   sync(sim: BloodSim, camera: THREE.Camera): void;
   dispose(): void;
@@ -193,6 +203,7 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   const camInv = new THREE.Quaternion();
   const vCam = new THREE.Vector3();
 
+  let beadsVisible = true;
   const ribbonBeads: { pos: [number, number, number] | number[]; size: number; hist?: [number, number, number][] }[] = [];
   const camPos = new THREE.Vector3();
   function sync(sim: BloodSim, camera: THREE.Camera): void {
@@ -210,7 +221,8 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
       // from mist to bead (or dies) must zero its counterpart, or a stale
       // matrix ghosts at the old position.
       const isMist = d?.kind === 'mist';
-      const renderable = !!d && d.kind !== 'scrap' && (!isMist || !!mist);
+      const renderable = !!d && d.kind !== 'scrap' && (!isMist || !!mist)
+        && (isMist || beadsVisible);
       if (!renderable) {
         m.makeScale(0, 0, 0);
         drops.setMatrixAt(i, m);
@@ -218,7 +230,10 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
         continue;
       }
       // Ribbon-capable bead? Fill its strip and zero both sprite slots.
-      if (ribbons && d!.kind === 'drop' && d!.ribbon && d!.hist && d!.hist.length >= 3) {
+      // beadsVisible gates ribbons too — they are the other hard-edged shape
+      // the goo layer replaces.
+      if (beadsVisible && ribbons && d!.kind === 'drop' && d!.ribbon
+        && d!.hist && d!.hist.length >= 3) {
         ribbonBeads.push(d!);
         drops.setMatrixAt(i, zeroM);
         if (mist) mist.setMatrixAt(i, zeroM);
@@ -342,6 +357,7 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   if (ribbons) objects.push(ribbons.mesh);
   return {
     objects,
+    setBeadsVisible(v) { beadsVisible = v; },
     sync,
     dispose() {
       for (const o of [drops, splats, mist, ribbons?.mesh]) {
