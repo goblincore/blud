@@ -1400,12 +1400,14 @@ async function main() {
      *  knobs that decide beads-vs-ropes-vs-sheets. */
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
+      depthTest?: boolean;
     }) {
       if (!gooLayer) return;
       if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
       if (o.edge !== undefined) gooLayer.setEdge(o.edge);
       if (o.blurPx !== undefined) gooLayer.setBlurPx(o.blurPx);
       if (o.sizeScale !== undefined) gooLayer.setSizeScale(o.sizeScale);
+      if (o.depthTest !== undefined) gooLayer.setDepthTest(o.depthTest);
     },
 
     /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —

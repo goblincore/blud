@@ -279,6 +279,12 @@ export interface GooLayer {
    *  file's own tuning note: 0.15 breaks trails into disconnected beads,
    *  0.22 gives thin connected strands, 0.4 reads as thick hose-water ropes. */
   setSizeScale(v: number): void;
+  /** DIAGNOSTIC: drop the surface pass's depth test. The surface normally
+   *  writes a depth RECONSTRUCTED from the density field's average view
+   *  depth and interleaves with flesh; if that reconstruction is wrong the
+   *  goo silently loses everywhere except against distant background, which
+   *  looks exactly like "the goo is not rendering". */
+  setDepthTest(on: boolean): void;
   readonly sizeScale: number;
   /** Mirror of the march's legacy-gamma flag — keep both on one switch. */
   setLegacyGamma(on: boolean): void;
@@ -324,6 +330,8 @@ export function createGooLayer(
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
   const uThresh = uniform(GOO_TUNING.threshold);
+  /** Surface materials, so the depth test can be disabled for diagnosis. */
+  const surfaceMaterials: THREE.Material[] = [];
   /** Runtime sizeScale — see setSizeScale. */
   let sizeScale: number = GOO_TUNING.sizeScale;
   // Matches the march's lodCfg.y default (legacy gamma ON) — lab-main's
@@ -394,6 +402,7 @@ export function createGooLayer(
     m.depthNode = surfaced.w as never;
     m.depthWrite = true;
     m.depthTest = true;
+    surfaceMaterials.push(m);
     return m;
   }
   const surfRawMat = makeSurfaceMat(target.texture);
@@ -626,6 +635,9 @@ export function createGooLayer(
     // threshold sees them. (5.5 was being silently clamped to 5.)
     setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(16, v)); },
     setSizeScale(v) { sizeScale = Math.max(0.05, Math.min(1.5, v)); },
+    setDepthTest(on) {
+      for (const m of surfaceMaterials) { m.depthTest = on; m.needsUpdate = true; }
+    },
     setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },
     get threshold() { return uThresh.value; },
     get sizeScale() { return sizeScale; },
