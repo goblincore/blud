@@ -673,7 +673,19 @@ which thickness does not address. The question here is "where a mass does form,
 does it read as fluid?", NOT "is there enough blood?". Volume of blood is Task 5's
 job. Judging this step on quantity would reject shading that is working.
 
-- [ ] **Step 5: STOP and wait for the verdict**
+- [x] **Step 5: STOP and wait for the verdict** — **SUPERSEDED 2026-08-31.**
+
+**Outcome: the gate could not produce a judgeable image, and the owner
+released it.** With the trickle alone the field cannot fuse at any setting:
+`threshold` 0.6 sits below the ~1.0 peak of a lone blob, so every isolated
+droplet draws its own blob ("little droplets"); raising it above 1.0 to demand
+overlap makes a sparse trickle draw nothing. That is blocker 2 restated, and no
+shading change can move it. The owner's call was to build Task 5 and judge the
+shading and the gout together, on the event the feature actually exists for.
+
+Keep this task in the plan as the record of WHY the early gate failed — the
+lesson is that a look-gate needs an input that can actually exercise the thing
+being judged, and this one did not.
 
 Do not start Task 5 until the owner has passed the shading or asked for changes. If they ask for changes, retune `GOO_TUNING` defaults and re-run this task.
 
