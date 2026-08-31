@@ -147,6 +147,14 @@ export const GOO_TUNING = {
    * the physically-pure (and, per the owner, wrong-looking) behaviour.
    */
   shadowRed: 0.12,
+  /**
+   * Reconstruct world-oriented surface normals from the field's own view
+   * depth, instead of tilting a camera-facing base by the density gradient.
+   * The gradient normal cannot respond to where a surface points in the
+   * world, which is what made the goo read as pasted on even once it
+   * occluded correctly (owner, 2026-08-31).
+   */
+  surfaceNormals: true,
 } as const;
 
 /**
@@ -172,7 +180,8 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   camCfg: vec4<f32>,
   gooCfg: vec3<f32>,
   gooCfg2: vec4<f32>,
-  shadowRed: f32
+  shadowRed: f32,
+  normalMode: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -187,27 +196,82 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let rimStr = gooCfg2.w;
   if (dens < thresh) { discard; }
 
-  // Normal from the density gradient, central differences (4 taps). The
-  // gradient lies in the image plane, so the camera-space normal tilts
-  // against it over a flat-facing base. Scaled GENTLY: the density target
-  // is low-res, so a blob is only a few texels wide and a steep multiplier
-  // turns every texel into a silhouette edge — which fires the fresnel rim
-  // across the whole surface and washes the deep red out (measured: the
-  // fringe averaged G/R 0.68, i.e. pink-gray, where the base is 0.25).
-  let dl = textureLoad(densTex, clamp(px - vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0).r;
-  let dr = textureLoad(densTex, clamp(px + vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0).r;
-  let dn = textureLoad(densTex, clamp(px - vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0).r;
-  let du = textureLoad(densTex, clamp(px + vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0).r;
-  let grad = vec2<f32>(dr - dl, du - dn) * ${GOO_TUNING.bump.toFixed(1)};
-  let nCam = normalize(vec3<f32>(-grad.x, -grad.y, 1.0));
-  let n = normalize((camWorld * vec4<f32>(nCam, 0.0)).xyz);
-
   // The scene-camera ray through this pixel, rebuilt from NDC: the camera
   // looks down -z and the view plane spans tan(halfFov) in y (times aspect
-  // in x), so no inverse projection is needed.
+  // in x), so no inverse projection is needed. Computed HERE because the
+  // surface-normal reconstruction below needs the same NDC.
   let ndc = st * 2.0 - 1.0;
   let rayCam = normalize(vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0));
   let ray = normalize((camWorld * vec4<f32>(rayCam, 0.0)).xyz);
+
+  // Four neighbours, loaded WHOLE: .r is density (the gradient normal) and
+  // g/b is the density-weighted view depth (the surface normal). One set of
+  // taps feeds both paths, so the new normal costs no extra samples.
+  let cl = textureLoad(densTex, clamp(px - vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0);
+  let cr = textureLoad(densTex, clamp(px + vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0);
+  let cd = textureLoad(densTex, clamp(px - vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0);
+  let cu = textureLoad(densTex, clamp(px + vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0);
+
+  // GRADIENT NORMAL (normalMode 0, the original). The gradient lies in the
+  // image plane, so the camera-space normal tilts against it over a flat
+  // CAMERA-FACING base. Scaled gently: the density target is low-res, so a
+  // blob is only a few texels wide and a steep multiplier turns every texel
+  // into a silhouette edge — which fires the fresnel rim across the whole
+  // surface and washes the deep red out (measured: fringe G/R 0.68,
+  // pink-gray, where the base is 0.25).
+  //
+  // Its limitation is STRUCTURAL, not tuning: the base is always +z in view
+  // space, so every blob is lit as though facing the camera and the lighting
+  // cannot respond to where the surface actually points in the world. That is
+  // what made the goo read as pasted on even once it occluded correctly.
+  let grad = vec2<f32>(cr.r - cl.r, cu.r - cd.r) * ${GOO_TUNING.bump.toFixed(1)};
+  let nGrad = normalize(vec3<f32>(-grad.x, -grad.y, 1.0));
+
+  // SURFACE NORMAL (normalMode 1). The standard screen-space fluid
+  // reconstruction: turn each texel's view depth back into a view-space
+  // POSITION, then cross the screen-space derivatives of that position. The
+  // result is a real surface normal that responds to the shape of the blood
+  // in 3D. The unnormalised ray with z = -1, scaled by view depth, IS the
+  // view position — so this needs no inverse projection either.
+  let texel = vec2<f32>(2.0, 2.0) / dims;
+  let dC = c.g / max(c.b, 1e-4);
+  let pC = vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0) * dC;
+  let pL = vec3<f32>((ndc.x - texel.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
+    * (cl.g / max(cl.b, 1e-4));
+  let pR = vec3<f32>((ndc.x + texel.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
+    * (cr.g / max(cr.b, 1e-4));
+  let pD = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y - texel.y) * camCfg.x, -1.0)
+    * (cd.g / max(cd.b, 1e-4));
+  let pU = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y + texel.y) * camCfg.x, -1.0)
+    * (cu.g / max(cu.b, 1e-4));
+
+  // MIN-DIFFERENCE against silhouettes: at the edge of a blob one neighbour
+  // sits on empty field, where g/b is a ratio of two near-zeros and the
+  // reconstructed depth is meaningless. Using it would bend the normal hard
+  // along every silhouette and ring each mass with a bright rim. Take
+  // whichever of the forward/backward difference has the smaller depth jump,
+  // and reject a neighbour outright when it carries no density at all.
+  var ddx = pR - pC;
+  let ddxB = pC - pL;
+  if (cr.b < 1e-4 || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; }
+  var ddy = pU - pC;
+  let ddyB = pC - pD;
+  if (cu.b < 1e-4 || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; }
+  var nSurf = cross(ddx, ddy);
+  let nSurfLen = length(nSurf);
+  // Degenerate on an isolated texel (both differences empty): fall back to
+  // the gradient normal rather than emitting a NaN that would blacken the px.
+  if (nSurfLen < 1e-8) {
+    nSurf = nGrad;
+  } else {
+    nSurf = nSurf / nSurfLen;
+    // The camera looks down -z, so a surface facing it has a +z normal; the
+    // cross product's winding depends on which differences survived above.
+    if (nSurf.z < 0.0) { nSurf = -nSurf; }
+  }
+
+  let nCam = select(nGrad, nSurf, normalMode > 0.5);
+  let n = normalize((camWorld * vec4<f32>(nCam, 0.0)).xyz);
 
   // Fake depth: the density-weighted average view depth accumulated in G/B.
   // Converted to the [0,1] depth-buffer value with the same mapping three's
@@ -402,6 +466,9 @@ export interface GooLayer {
   setStretch(v: number): void;
   /** Deep-red floor so blood never reads black. 0 = off. */
   setShadowRed(v: number): void;
+  /** true = world-oriented surface normals reconstructed from depth;
+   *  false = the original screen-space density-gradient normals. */
+  setSurfaceNormals(on: boolean): void;
   /**
    * 'overlay' (default) composites the goo over the finished frame with no
    * depth involvement. 'depth' restores the original reconstructed-depth
@@ -422,6 +489,7 @@ export interface GooLayer {
   readonly rim: number;
   readonly stretch: number;
   readonly shadowRed: number;
+  readonly surfaceNormals: boolean;
   readonly targetSize: { width: number; height: number };
   /** DIAGNOSTIC: how many density quads the last sync() posed. 0 while blood
    *  is on screen means the mist/size cutoff rejected everything. */
@@ -484,6 +552,7 @@ export function createGooLayer(
   const uGloss = uniform(GOO_TUNING.gloss);
   const uRim = uniform(GOO_TUNING.rim);
   const uShadowRed = uniform(GOO_TUNING.shadowRed);
+  const uNormalMode = uniform(GOO_TUNING.surfaceNormals ? 1 : 0);
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
   const uCamCfg = uniform(new THREE.Vector4(1, 1, 0.1, 200));
@@ -546,6 +615,7 @@ export function createGooLayer(
       gooCfg: vec3(uThresh, uEdge, uLegacy),
       gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
       shadowRed: uShadowRed,
+      normalMode: uNormalMode,
     }) as unknown as Swizzled;
   }
 
@@ -862,6 +932,7 @@ export function createGooLayer(
     // of exactly one value, and the knob is only interesting BELOW it anyway.
     setStretch(v) { stretchMax = Math.max(0, Math.min(8, v)); },
     setShadowRed(v) { uShadowRed.value = Math.max(0, Math.min(0.6, v)); },
+    setSurfaceNormals(on) { uNormalMode.value = on ? 1 : 0; },
     setMode(m: 'overlay' | 'depth') { mode = m; },
     get mode() { return mode; },
     get debugTargets() { return { density: target, blurred: blurB }; },
@@ -878,6 +949,7 @@ export function createGooLayer(
     get rim() { return uRim.value; },
     get stretch() { return stretchMax; },
     get shadowRed() { return uShadowRed.value; },
+    get surfaceNormals() { return uNormalMode.value > 0.5; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();

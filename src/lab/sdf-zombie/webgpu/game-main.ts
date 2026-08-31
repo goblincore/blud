@@ -794,7 +794,17 @@ async function main() {
     // read — the opposite of the round fused mass I kept steering toward.
     gooLayer.setSizeScale(0.14);
     gooLayer.setThreshold(0.65);
-    gooLayer.setBlurPx(0.5);
+    // BLUR OFF (owner, 2026-08-31: "we can remove the blur"). 0 bypasses both
+    // blur passes ENTIRELY — not a degenerate copy — so this is also two
+    // fewer full-screen passes per frame. The code stays because goo-layer is
+    // shared with the LAB, whose look is tuned around blurPx 2.5.
+    gooLayer.setBlurPx(0);
+    // DEPTH, not overlay. Overlay never depth-tests, so blood paints over the
+    // crate it is behind and over the far side of the body it came out of,
+    // which reads as a sticker regardless of scale. Overlay was added to
+    // route around a depth blocker that turned out not to exist — the real
+    // bug was the post-aa sink — so the reconstruction gets to do its job.
+    gooLayer.setMode('depth');
     gooLayer.setStretch(4);
     gooLayer.setEdge(2.75);
     gooLayer.setAbsorb(1.6);
@@ -862,6 +872,15 @@ async function main() {
           hint: 'overlay = always on top (no occlusion). depth = interleaves with the scene.',
           onClick: () => L.setMode(L.mode === 'overlay' ? 'depth' : 'overlay'),
         },
+        {
+          // The other half of "reads pasted on": the gradient normal tilts a
+          // flat CAMERA-FACING base, so every blob is lit as though facing
+          // you. The surface normal is reconstructed from the field's own
+          // view depth and responds to where the blood actually points.
+          label: () => `normals: ${L.surfaceNormals ? 'surface' : 'gradient'}`,
+          hint: 'surface = world-oriented, reconstructed from depth. gradient = original screen-space tilt.',
+          onClick: () => L.setSurfaceNormals(!L.surfaceNormals),
+        },
       ],
       presets: [
         { label: 'blobby',
@@ -871,7 +890,7 @@ async function main() {
           values: { sizeScale: 0.22, threshold: 0.8, blurPx: 5, stretch: 0.8, edge: 1.6,
             absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, shadowRed: 0.12, count: 90, speedMax: 8, speedMin: 1.5 } },
         { label: 'shipped',
-          values: { sizeScale: 0.14, threshold: 0.65, blurPx: 0.5, stretch: 4, edge: 2.75,
+          values: { sizeScale: 0.14, threshold: 0.65, blurPx: 0, stretch: 4, edge: 2.75,
             absorb: 1.6, spec: 2.85, gloss: 220, rim: 0, shadowRed: 0.12,
             count: 85, speedMax: 0.5, speedMin: 0.2 } },
       ],

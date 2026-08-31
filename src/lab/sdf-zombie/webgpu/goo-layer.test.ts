@@ -349,3 +349,52 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
     expect(src).toMatch(/gooLayer\.sync\(bloodSim, camera\)/);
   });
 });
+
+describe('goo surface normals (world-oriented reconstruction)', () => {
+  it('reconstructs a VIEW POSITION per texel, not just a density gradient', () => {
+    // The unnormalised ray with z = -1 scaled by view depth is the view
+    // position; that is the whole trick, and it is what lets the normal
+    // respond to where the surface points in the world.
+    expect(GOO_SURFACE_WGSL).toMatch(/let pC = vec3<f32>\([^;]*-1\.0\) \* dC;/);
+    expect(GOO_SURFACE_WGSL).toContain('let texel = vec2<f32>(2.0, 2.0) / dims;');
+  });
+
+  it('crosses the screen-space derivatives of that position', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/var nSurf = cross\(ddx, ddy\);/);
+  });
+
+  it('uses min-difference so silhouettes do not bend the normal', () => {
+    // At a blob edge one neighbour sits on empty field, where g/b is a ratio
+    // of near-zeros. Using it would ring every mass with a bright rim.
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(cr\.b < 1e-4 \|\| abs\(ddxB\.z\) < abs\(ddx\.z\)\)/);
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(cu\.b < 1e-4 \|\| abs\(ddyB\.z\) < abs\(ddy\.z\)\)/);
+  });
+
+  it('falls back to the gradient normal rather than emitting a NaN', () => {
+    // An isolated texel has no valid difference in either axis; normalising a
+    // zero-length cross product would blacken the pixel.
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(nSurfLen < 1e-8\) \{\s*nSurf = nGrad;/);
+  });
+
+  it('keeps the normal facing the camera', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(nSurf\.z < 0\.0\) \{ nSurf = -nSurf; \}/);
+  });
+
+  it('keeps BOTH normals reachable, selected by a uniform', () => {
+    // The gradient path is the A/B control, not dead code — it is how the two
+    // get compared on the live panel.
+    expect(GOO_SURFACE_WGSL).toContain('let nCam = select(nGrad, nSurf, normalMode > 0.5);');
+    expect(GOO_SURFACE_WGSL).toMatch(/normalMode: f32/);
+  });
+
+  it('reuses ONE set of neighbour taps for both normals', () => {
+    // Loading .r for the gradient and g/b for the position separately would
+    // double the sample count for no gain.
+    const taps = GOO_SURFACE_WGSL.match(/textureLoad\(densTex, clamp\(px [+-]/g) ?? [];
+    expect(taps.length).toBe(4);
+  });
+
+  it('defaults to the surface normal', () => {
+    expect(GOO_TUNING.surfaceNormals).toBe(true);
+  });
+});
