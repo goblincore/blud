@@ -126,6 +126,11 @@ console.log('backend: webgpu');
 // ---------------------------------------------------------------------------
 const ALL_LEGS = {
   baseline: {},
+  // BLEED (bleeding-wounds, 2026-08-31) SHIPS ON, so baseline includes it;
+  // this leg is the "before" column — setBleed(false) is pixel-identical to
+  // the pre-feature page (the off-state parity gate proves that in pixels),
+  // so the fire-segment delta between these legs IS the feature's cost.
+  'bleed-off': { setBleed: false },
   // The shell march SHIPS ON as of 2026-08-31 (owner-passed; -40%/-54%).
   // baseline above therefore includes it; this leg measures what turning it
   // OFF costs — the ablation direction flipped with the default.
@@ -166,6 +171,7 @@ async function applyLeg(name) {
     __sdfGame.setMarchSteps(96);
     __sdfGame.setShell(true);
     __sdfGame.setRelax(1.0);
+    __sdfGame.setBleed(true);
     return 1;
   })()`);
   for (const [fn, arg] of Object.entries(overrides)) {

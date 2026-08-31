@@ -20,6 +20,16 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**BLEEDING WOUNDS — BUILT, GATES GREEN (owner look-verdict pending, 2026-08-31).**
+Per-calibre wound bleed on the game page (pellet ooze / slug spurt-to-drip /
+stump gush, chunk trails, floor splat decals), anchored to wounds by reference
+so blood rides the animated body. Ships ON, `__sdfGame.setBleed(false)` kill
+switch. Depth fix (droplet depthWrite cutout) verified in-capture; off-state
+gate PASS (toggle cycle 0 px vs measured 42px/Δ1 same-state floor — this
+page's edge-AA jitters per frame, captures are samples not fixed points);
+bench fire-segment delta UNRESOLVED under 2-9% spread (≈ +0.1-0.25 ms).
+Reel + gates: docs/dev-notes/2026-08-31-bleeding-wounds/
+
 **C2 half-rate SDF layer — BUILT, REEL READY (owner look-verdict pending, 2026-08-31).**
 March every other frame, per-pixel depth reproject (or raw hold) on holds, default OFF,
 `__sdfGame.setHalfRate/setHalfRateMode`. Toggle-OFF proven bit-identical (0 px, within-load;
