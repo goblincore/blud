@@ -126,6 +126,9 @@ console.log('backend: webgpu');
 // ---------------------------------------------------------------------------
 const ALL_LEGS = {
   baseline: {},
+  // The outer-hull shell march (shell-hull-outer.ts). Rasterises 2.9-4.9x
+  // fewer march pixels; real-render parity verified 2026-08-31 at relax 1.0.
+  'shell-on': { setShell: true },
   'occluder-off': { setOccluder: false },
   'cone-on': { setCone: true },
   'fxaa-off': { setFxaa: false },
@@ -160,6 +163,8 @@ async function applyLeg(name) {
     __sdfGame.setSdfScale(1.0);
     __sdfGame.setAdaptive(false);
     __sdfGame.setMarchSteps(96);
+    __sdfGame.setShell(false);
+    __sdfGame.setRelax(1.0);
     return 1;
   })()`);
   for (const [fn, arg] of Object.entries(overrides)) {

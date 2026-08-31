@@ -1182,6 +1182,108 @@ async function main() {
     },
 
     /**
+     * PER-PIXEL CROSS-TAB of shell OFF vs ON — the diagnostic that competing
+     * aggregates could not settle (2026-08-31: one run said the shell added
+     * +10k hits, another said zero; both were sums).
+     *
+     * Renders the occupancy buffer twice on the SAME frozen frame (shell off,
+     * then on) and classifies every pixel by (hitOff, hitOn). For pixels that
+     * hit ONLY with the shell on, reports what the OFF march did instead:
+     * how many steps it burned and whether it hit the 96-step budget — which
+     * separates "budget exhausted at grazing incidence" from "terminated on
+     * distance and the extra hits are something else".
+     */
+    async shellDiag() {
+      const readGrid = async () => {
+        const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+        for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
+        try {
+          handle.setLoopRunning(false);
+          handle.step(1 / 60);
+          await handle.resolveGpu();
+          const t = sdfLayer.marchTarget;
+          const w = t.width;
+          const h = t.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          return { w, h, buf, floatsPerRow };
+        } finally {
+          for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        }
+      };
+      const wasOn = sdfLayer.shellEnabled;
+      try {
+        sdfLayer.setShellEnabled(false);
+        const off = await readGrid();
+        sdfLayer.setShellEnabled(true);
+        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+        const on = await readGrid();
+        const stepsHist = new Array(13).fill(0); // OFF steps/8 for ON-only hits
+        const onStepsHist = new Array(13).fill(0); // ON steps at ON-only hits
+        let onOnly = 0;
+        let offOnly = 0;
+        let both = 0;
+        let onOnlyOffBudget = 0; // OFF burned >= 90 steps at those pixels
+        let onOnlyOffMarched = 0; // OFF actually marched there (vs no fragment)
+        let onOnlyFirstSample = 0; // ON hit within 2 steps of shellIn = started in/on flesh
+        let tSum = 0;
+        // For pixels BOTH hit: does the shell move the hit? Identical means the
+        // entry bound is sound for hit rays; a shifted t means shellIn lands
+        // past the true surface.
+        let bothTOff = 0;
+        let bothTOn = 0;
+        let bothTMoved = 0; // |tOn - tOff| > 5 mm
+        for (let row = 0; row < off.h; row++) {
+          const ob = row * off.floatsPerRow;
+          const nb = row * on.floatsPerRow;
+          for (let col = 0; col < off.w; col++) {
+            const o = ob + col * 4;
+            const n = nb + col * 4;
+            const hitOff = off.buf[o + 2]! > 0.5 && off.buf[o + 1]! > 0.5;
+            const hitOn = on.buf[n + 2]! > 0.5 && on.buf[n + 1]! > 0.5;
+            if (hitOff && hitOn) {
+              both++;
+              bothTOff += off.buf[o + 3]!;
+              bothTOn += on.buf[n + 3]!;
+              if (Math.abs(on.buf[n + 3]! - off.buf[o + 3]!) > 0.005) bothTMoved++;
+            }
+            else if (hitOff) offOnly++;
+            else if (hitOn) {
+              onOnly++;
+              tSum += on.buf[n + 3]!;
+              const onSt = on.buf[n]!;
+              onStepsHist[Math.min(12, Math.floor(onSt / 8))]!++;
+              if (onSt <= 2) onOnlyFirstSample++;
+              if (off.buf[o + 2]! > 0.5) {
+                onOnlyOffMarched++;
+                const st = off.buf[o]!;
+                if (st >= 90) onOnlyOffBudget++;
+                stepsHist[Math.min(12, Math.floor(st / 8))]!++;
+              }
+            }
+          }
+        }
+        return {
+          both, offOnly, onOnly,
+          onOnlyOffMarched, onOnlyOffBudget,
+          onOnlyFirstSample,
+          onOnlyMeanT: onOnly ? tSum / onOnly : 0,
+          bothMeanTOff: both ? bothTOff / both : 0,
+          bothMeanTOn: both ? bothTOn / both : 0,
+          bothTMoved,
+          // Histograms bucketed by 8 steps.
+          offStepsAtOnOnly: stepsHist,
+          onStepsAtOnOnly: onStepsHist,
+        };
+      } finally {
+        sdfLayer.setShellEnabled(wasOn);
+        handle.setLoopRunning(true);
+      }
+    },
+
+    /**
      * SCREEN COVERAGE of the outer hull, against the proxy boxes it would
      * replace.
      *
