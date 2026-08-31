@@ -829,6 +829,18 @@ async function main() {
         hint: 'Tail speed. The head/tail gap is what stretches the pulse into a rope.',
         get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
     ], {
+      toggles: [
+        {
+          // The depth cue, and the reason the goo can read as "pasted on".
+          // OVERLAY never depth-tests, so blood paints over the crate it is
+          // behind and over the far side of the body it came out of — which
+          // the eye reads as a sticker, no matter what the scale is. DEPTH
+          // writes a reconstructed depth and interleaves with flesh and floor.
+          label: () => `mode: ${L.mode}`,
+          hint: 'overlay = always on top (no occlusion). depth = interleaves with the scene.',
+          onClick: () => L.setMode(L.mode === 'overlay' ? 'depth' : 'overlay'),
+        },
+      ],
       presets: [
         { label: 'blobby',
           values: { sizeScale: 0.35, threshold: 1.2, blurPx: 9, stretch: 0, edge: 1.6,

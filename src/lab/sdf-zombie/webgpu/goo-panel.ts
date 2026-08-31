@@ -42,6 +42,14 @@ export interface GooPanel {
   dispose(): void;
 }
 
+/** A button whose label reflects live state — e.g. the depth/overlay mode. */
+export interface GooPanelToggle {
+  /** Recomputed on every refresh, so the label always shows the real state. */
+  label(): string;
+  onClick(): void;
+  hint?: string;
+}
+
 /** Presets are just named knob->value maps; unknown keys are ignored. */
 export interface GooPanelPreset {
   label: string;
@@ -58,7 +66,11 @@ const PANEL_CSS = `
 
 export function createGooPanel(
   knobs: GooPanelKnob[],
-  opts: { presets?: GooPanelPreset[]; onCopy?: (text: string) => void } = {},
+  opts: {
+    presets?: GooPanelPreset[];
+    toggles?: GooPanelToggle[];
+    onCopy?: (text: string) => void;
+  } = {},
 ): GooPanel {
   const el = document.createElement('div');
   el.setAttribute('style', PANEL_CSS);
@@ -69,6 +81,20 @@ export function createGooPanel(
   title.setAttribute('style',
     'font-size:10px; letter-spacing:.12em; color:#9a8b86; margin-bottom:7px;');
   el.appendChild(title);
+
+  const toggleRow = document.createElement('div');
+  toggleRow.setAttribute('style', 'display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;');
+  const toggleBtns: { def: GooPanelToggle; btn: HTMLButtonElement }[] = [];
+  for (const t of opts.toggles ?? []) {
+    const btn = button(t.label(), () => { t.onClick(); refreshToggles(); });
+    if (t.hint) btn.title = t.hint;
+    toggleRow.appendChild(btn);
+    toggleBtns.push({ def: t, btn });
+  }
+  if (toggleBtns.length) el.appendChild(toggleRow);
+  function refreshToggles(): void {
+    for (const t of toggleBtns) t.btn.textContent = t.def.label();
+  }
 
   const rows: { knob: GooPanelKnob; input: HTMLInputElement; out: HTMLSpanElement }[] = [];
 
@@ -110,6 +136,7 @@ export function createGooPanel(
   }
 
   function refresh(): void {
+    refreshToggles();
     for (const r of rows) {
       r.input.value = String(r.knob.get());
       r.out.textContent = fmt(r.knob.get());
