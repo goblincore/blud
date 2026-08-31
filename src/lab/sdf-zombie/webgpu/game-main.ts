@@ -875,36 +875,93 @@ async function main() {
   // builds on this: zombies are addressable by id, the player pose is
   // settable, frames are steppable, wanderers freezable.
   // -----------------------------------------------------------------------
+  /** Where a slug fired RIGHT NOW would hit — the shared predictor.
+   *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
+   *  with the same code the placement gate uses, rather than trusting a
+   *  cluster centre. No state mutated. */
+  function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
+      const origin = muzzleWorld();
+      const dir = convergedDir(origin);
+      let bestD = Infinity;
+      let hitActorId = -1;
+      let hitPoint: Vec3 | null = null;
+      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
+      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
+      // which the placement gate duly failed (2026-08-27).
+      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
+      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
+      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
+      const dt = 1 / 120;
+      for (const a of actors) {
+        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        if (!c) continue;
+        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
+        const posedA = a.posed();
+        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
+        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
+        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
+        for (let i = 0; i < 240; i++) {
+          const next: Vec3 = [
+            pos[0] + vel[0] * dt,
+            pos[1] + vel[1] * dt,
+            pos[2] + vel[2] * dt,
+          ];
+          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
+          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
+          if (hp) {
+            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
+            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
+            break;
+          }
+          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
+          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
+        }
+      }
+      return { origin, dir, actorId: hitActorId, hit: hitPoint };
+  }
+
   /**
-   * Point the player at the nearest zombie's SURFACE, using the same eye and
-   * the same posed body fire() will raycast.
+   * Aim at a body the ballistic predictor CONFIRMS is hittable.
    *
-   * NOT a cluster centre. A torso centre sits INSIDE the field: aiming there
-   * anchors the crater pathologically, and a slug's severRadius then cuts both
-   * hip necks into an instant collapse. That never happens to a player (the
-   * page's predictor always resolves to a surface) but it would silently wreck
-   * a bench — the run would report the cost of a body that fell apart on the
-   * first shot.
+   * Two things this must not do, both learned by measurement (2026-08-31):
    *
-   * The centre is used only to POINT the camera; predictSlugHit then confirms
-   * the ray actually reaches a surface. If it does not, the aim is left alone
-   * and the shot misses, which is honest — a bench that quietly re-aimed until
-   * it hit would be measuring something the scenario did not describe.
+   *   1. Do not stamp at a cluster CENTRE. A torso centre sits INSIDE the
+   *      field: it anchors the crater pathologically, and a slug's severRadius
+   *      cuts both hip necks into an instant collapse. The centre is used only
+   *      to POINT the camera; the shot itself resolves to a surface.
+   *   2. Do not aim at whatever is nearest. Room 4 spawns its zombies around
+   *      the room centre, so a bench standing at the centre had a body 0.97 m
+   *      away — close enough that the aim pitched 26 degrees DOWN into it, the
+   *      predictor returned actorId -1, and all eight pellets expired having
+   *      hit nothing. The bench then reported "firing" segments that contained
+   *      no wounds at all.
+   *
+   * So: candidates in distance order, skipping anything inside MIN_STANDOFF,
+   * and the first one the predictor confirms wins. Returns false if none do,
+   * which leaves the aim untouched — a bench that silently re-aimed until it
+   * connected would be measuring something the scenario never described.
    */
+  const MIN_STANDOFF = 1.5;
   function aimAtNearestSurface(): boolean {
     const eye = eyeOf(player);
-    let best: { d: number; c: Vec3 } | null = null;
-    for (const a of actors) {
-      const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
-      if (!c) continue;
-      const d = Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]);
-      if (!best || d < best.d) best = { d, c: [...c] as Vec3 };
+    const candidates = actors
+      .map((a) => {
+        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
+      })
+      .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
+      .sort((a, b) => a.d - b.d);
+
+    const yaw0 = player.yaw;
+    const pitch0 = player.pitch;
+    for (const cand of candidates) {
+      player.yaw = Math.atan2(cand.c[0] - eye[0], cand.c[2] - eye[2]);
+      player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
+      if (predictSlugHitNow().actorId >= 0) return true;
     }
-    if (!best) return false;
-    const c = best.c;
-    player.yaw = Math.atan2(c[0] - eye[0], c[2] - eye[2]);
-    player.pitch = Math.atan2(c[1] - eye[1], Math.hypot(c[0] - eye[0], c[2] - eye[2]));
-    return true;
+    player.yaw = yaw0;
+    player.pitch = pitch0;
+    return false;
   }
 
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
@@ -997,46 +1054,7 @@ async function main() {
      *  dir) against each actor's CURRENT posed field. No state mutated.
      *  Diff against debugWounds() after firing to assert the crater landed
      *  where the ray struck. */
-    predictSlugHit: () => {
-      const origin = muzzleWorld();
-      const dir = convergedDir(origin);
-      let bestD = Infinity;
-      let hitActorId = -1;
-      let hitPoint: Vec3 | null = null;
-      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
-      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
-      // which the placement gate duly failed (2026-08-27).
-      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
-      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
-      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
-      const dt = 1 / 120;
-      for (const a of actors) {
-        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
-        if (!c) continue;
-        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
-        const posedA = a.posed();
-        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
-        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
-        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
-        for (let i = 0; i < 240; i++) {
-          const next: Vec3 = [
-            pos[0] + vel[0] * dt,
-            pos[1] + vel[1] * dt,
-            pos[2] + vel[2] * dt,
-          ];
-          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
-          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
-          if (hp) {
-            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
-            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
-            break;
-          }
-          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
-          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
-        }
-      }
-      return { origin, dir, actorId: hitActorId, hit: hitPoint };
-    },
+    predictSlugHit: () => predictSlugHitNow(),
     /** Hull-holes A/B seams (2026-08-27). setOccluder turns the occluder
      *  pre-pass (and its tMax clamp) on/off; setHullExclusions passes an
      *  empty wound list to the hull builder instead of the live one. Both
@@ -1102,14 +1120,46 @@ async function main() {
           resolveGpu: () => handle.resolveGpu(),
           now: () => performance.now(),
           hidden: () => document.hidden,
+          census: () => ({
+            bodies: bodiesOnScreen(),
+            wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
+            chunks: liveChunks.length,
+          }),
           perform: (a) => {
             switch (a.kind) {
               case 'teleport': {
                 const r = ROOMS.find(x => x.id === a.room);
                 if (r) {
-                  player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+                  // Stand back from where the BODIES actually are, facing
+                  // them. Two heuristics were tried and both failed against
+                  // the census (2026-08-31): the room centre put a zombie
+                  // 0.97 m away so every shot pitched down into it and
+                  // missed, and an outer corner pointed the camera at a wall
+                  // with bodies 1 -> 0 on screen. The room's own actors are
+                  // the only thing that reliably says where to look.
+                  const mine = actors.filter(x => x.room === a.room);
+                  const cx = (r.minX + r.maxX) / 2;
+                  const cz = (r.minZ + r.maxZ) / 2;
+                  let tx = cx;
+                  let tz = cz;
+                  if (mine.length) {
+                    tx = mine.reduce((n, x) => n + x.pose().pos[0], 0) / mine.length;
+                    tz = mine.reduce((n, x) => n + x.pose().pos[2], 0) / mine.length;
+                  }
+                  // Back off along the direction from the room centre toward
+                  // the outer wall, so the whole group stays in front.
+                  const away = Math.hypot(tx - cx, tz - cz);
+                  let ax = away > 0.2 ? (cx - tx) / away : 0;
+                  let az = away > 0.2 ? (cz - tz) / away : 1;
+                  // Degenerate group (all at the centre): back off along -z.
+                  if (!Number.isFinite(ax) || (ax === 0 && az === 0)) { ax = 0; az = 1; }
+                  const STANDOFF = 4.0;
+                  const inset = 0.6;
+                  const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
+                  const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
+                  player.pos = [px, 0, pz];
                   player.vel = [0, 0, 0];
-                  player.yaw = 0;
+                  player.yaw = Math.atan2(tx - px, tz - pz);
                   player.pitch = 0;
                   player.grounded = true;
                 }

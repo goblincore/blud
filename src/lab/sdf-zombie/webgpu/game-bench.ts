@@ -38,6 +38,27 @@ export interface BenchDeps {
   hidden(): boolean;
   /** Apply one scenario action to the page. */
   perform(action: BenchAction): void;
+  /**
+   * What is actually on screen right now. Optional, and the single most
+   * important field in the result.
+   *
+   * A perf number without a census is unreadable. The first run of this bench
+   * reported the firing segments at ~9 ms against ~40 ms walking and looked
+   * like firing was cheap; in fact the shots had shredded every zombie in the
+   * room and the cheap segments were timing an empty floor. A census makes
+   * that visible in the output instead of leaving it to be discovered.
+   */
+  census?(): SceneCensus;
+}
+
+/** A cheap count of what the frame contained. */
+export interface SceneCensus {
+  /** Bodies inside the view frustum. */
+  bodies: number;
+  /** Total wounds carved across all bodies. */
+  wounds: number;
+  /** Gib chunks in flight. */
+  chunks: number;
 }
 
 export interface BenchOpts {
@@ -53,6 +74,8 @@ export interface BenchOpts {
 export interface SegmentSummary {
   name: string; n: number;
   p50: number; p95: number; p99: number; max: number; mean: number;
+  /** Census at the START and END of the segment, when deps supply one. */
+  census?: { first: SceneCensus; last: SceneCensus };
 }
 
 export interface BenchResult {
@@ -119,6 +142,7 @@ export async function runBench(
   await deps.resolveGpu();
 
   const bySegment = new Map<string, number[]>();
+  const censusBySegment = new Map<string, { first: SceneCensus; last: SceneCensus }>();
   const all: number[] = [];
   const record = (name: string, ms: number) => {
     let bucket = bySegment.get(name);
@@ -129,6 +153,13 @@ export async function runBench(
 
   // Chunk WITHIN each segment. A chunk never crosses a boundary.
   for (const seg of scenario.segments) {
+    // Census is taken OUTSIDE the timed region, so counting never shows up
+    // as cost. Wrapped: a census that throws must not fail a bench.
+    const takeCensus = (): SceneCensus | null => {
+      if (!deps.census) return null;
+      try { return deps.census(); } catch { return null; }
+    };
+    const firstCensus = takeCensus();
     let f = seg.from;
     while (f < seg.to) {
       const n = Math.min(chunkFrames, seg.to - f);
@@ -137,6 +168,10 @@ export async function runBench(
       await deps.resolveGpu();
       record(seg.name, (deps.now() - t0) / n);
       f += n;
+    }
+    const lastCensus = takeCensus();
+    if (firstCensus && lastCensus) {
+      censusBySegment.set(seg.name, { first: firstCensus, last: lastCensus });
     }
   }
 
@@ -148,7 +183,11 @@ export async function runBench(
     frames: scenario.frames,
     chunkFrames,
     overall: summarise('overall', all),
-    segments: scenario.segments.map(s => summarise(s.name, bySegment.get(s.name) ?? [])),
+    segments: scenario.segments.map((s) => {
+      const summary = summarise(s.name, bySegment.get(s.name) ?? []);
+      const c = censusBySegment.get(s.name);
+      return c ? { ...summary, census: c } : summary;
+    }),
   };
 }
 

@@ -53,8 +53,23 @@ export const FIREFIGHT_DEFAULTS = {
   gibFrames: 120,
 } as const;
 
-/** How often the fire segment re-aims and shoots. */
-const FIRE_PERIOD = 20;
+/**
+ * How often the fire segment re-aims and shoots, and with how many barrels.
+ *
+ * MEASURED THE HARD WAY (2026-08-31). The first draft fired BOTH barrels every
+ * 20 frames: six double blasts over the segment shredded all four of room 4's
+ * zombies into collapsed corpses within the first second. The bench then
+ * reported fire and gib at ~9 ms against walk at ~40 ms and looked like the
+ * firing segments were cheap — they were measuring an empty room.
+ *
+ * One barrel every 40 frames accumulates craters on bodies that are still
+ * standing and still rendering, which is the cost this bench exists to find.
+ * The per-segment census in the result is what makes that checkable rather
+ * than assumed: if bodiesOnScreen collapses mid-run, the run is not
+ * describing a firefight.
+ */
+const FIRE_PERIOD = 40;
+const FIRE_BARRELS: 1 | 2 = 1;
 
 /**
  * The script. Three segments, in the order a real encounter runs them:
@@ -85,7 +100,7 @@ export function buildFirefight(opts: FirefightOpts): Scenario {
   const gibStart = fireStart + fireFrames;
   for (let f = fireStart; f + 1 < gibStart; f += FIRE_PERIOD) {
     steps.push({ at: f, action: { kind: 'aimSurface' } });
-    steps.push({ at: f + 1, action: { kind: 'fire', barrels: 2 } });
+    steps.push({ at: f + 1, action: { kind: 'fire', barrels: FIRE_BARRELS } });
   }
 
   // GIB: one slug, then let the chunks fly for the rest of the segment.
