@@ -1109,6 +1109,25 @@ async function main() {
       eye[2] - Math.cos(player.yaw) * cp,
     );
     camera.updateMatrixWorld();
+
+    // GOO DENSITY QUADS — pose them from the same sim state, every frame,
+    // AFTER the camera is final and before the drawFn composites. The lab
+    // has always done this (lab-main: bloodView.sync then gooLayer.sync);
+    // the game-page port shipped without it, and that ONE MISSING LINE is
+    // why the goo never appeared here.
+    //
+    // Without sync the InstancedMesh keeps its zeroed instance matrices, so
+    // every density quad is degenerate, the field is empty on every frame,
+    // and NO threshold can ever be crossed. That is not a look bug with a
+    // tuning fix — it is the pass rendering nothing at all, which is exactly
+    // what five threshold sweeps and a depth-reconstruction investigation
+    // were unknowingly chasing. There is a source tripwire on this call in
+    // goo-layer.test.ts; do not remove one without the other.
+    //
+    // Unconditional, NOT under bleedEnabled like bloodView.sync above: floor
+    // splats persist in the sim after bleed is switched off, and the goo
+    // draws them. Gating this would freeze the pools mid-frame instead.
+    gooLayer?.sync(bloodSim, camera);
   }
 
   handle.setRenderCallback((dt) => {

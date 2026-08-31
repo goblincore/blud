@@ -307,3 +307,34 @@ describe('goo overlay mode wiring (source tripwires)', () => {
     expect(src).toMatch(/let mode: 'overlay' \| 'depth' = 'overlay';/);
   });
 });
+
+describe('goo sync wiring (the bug that hid the whole layer)', () => {
+  // The game-page port shipped WITHOUT a gooLayer.sync() call. sync() poses
+  // the InstancedMesh density quads from sim state; without it every instance
+  // matrix stays zeroed, the density field is empty on every frame, and no
+  // threshold can ever be crossed — the pass renders nothing at all. That
+  // presented as "the goo does not work in game", and cost five threshold
+  // sweeps plus a depth-reconstruction investigation before anyone checked
+  // whether the field had anything in it.
+  //
+  // These are source tripwires, in the same style as the blur-wiring guards
+  // above: nothing here constructs a renderer.
+  it('the game page syncs the density quads every frame', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+    expect(src).toMatch(/gooLayer\?\.sync\(bloodSim, camera\)/);
+  });
+
+  it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+    const cam = src.indexOf('camera.updateMatrixWorld();');
+    const sync = src.indexOf('gooLayer?.sync(bloodSim, camera)');
+    expect(cam, 'camera.updateMatrixWorld() must be present').toBeGreaterThan(-1);
+    expect(sync, 'the goo sync must be present').toBeGreaterThan(-1);
+    expect(sync).toBeGreaterThan(cam);
+  });
+
+  it('the lab still syncs too — this contract belongs to both pages', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/lab-main.ts', 'utf8');
+    expect(src).toMatch(/gooLayer\.sync\(bloodSim, camera\)/);
+  });
+});
