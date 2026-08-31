@@ -73,6 +73,10 @@ export interface BloodView {
    * which the goo does not draw).
    */
   setBeadsVisible(v: boolean): void;
+  /** Hide the MIST haze sprites. They are billboard quads like any other, so
+   *  with the goo surface on they are themselves "little oval drops" — the
+   *  thing the goo exists to stop looking like. */
+  setMistVisible(v: boolean): void;
   /** Re-pose every instance from sim state; call once per frame. */
   sync(sim: BloodSim, camera: THREE.Camera): void;
   dispose(): void;
@@ -204,6 +208,7 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   const vCam = new THREE.Vector3();
 
   let beadsVisible = true;
+  let mistVisible = true;
   const ribbonBeads: { pos: [number, number, number] | number[]; size: number; hist?: [number, number, number][] }[] = [];
   const camPos = new THREE.Vector3();
   function sync(sim: BloodSim, camera: THREE.Camera): void {
@@ -222,7 +227,7 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
       // matrix ghosts at the old position.
       const isMist = d?.kind === 'mist';
       const renderable = !!d && d.kind !== 'scrap' && (!isMist || !!mist)
-        && (isMist || beadsVisible);
+        && (isMist ? mistVisible : beadsVisible);
       if (!renderable) {
         m.makeScale(0, 0, 0);
         drops.setMatrixAt(i, m);
@@ -358,6 +363,7 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
   return {
     objects,
     setBeadsVisible(v) { beadsVisible = v; },
+    setMistVisible(v) { mistVisible = v; },
     sync,
     dispose() {
       for (const o of [drops, splats, mist, ribbons?.mesh]) {

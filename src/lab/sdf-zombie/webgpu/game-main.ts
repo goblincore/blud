@@ -763,13 +763,18 @@ async function main() {
     postAa.addSink(gooLayer);
     const t = sdfLayer.targetSize;
     gooLayer.setSize(t.width, t.height);
-    // Game defaults, swept 2026-08-31 against the owner's reference frames.
-    // The lab's 0.4/2.5 leaves every droplet its own peak (beads); 0.05/9
-    // overshoots the other way and passes isolated specks as fat blobs.
-    // 0.12/5.5 fuses dense stream sections into sheets while sparse fallout
-    // still resolves as separate drops — which is what the references show.
-    gooLayer.setThreshold(0.12);
-    gooLayer.setBlurPx(5.5);
+    // Game defaults, swept against the owner's reference frames (Gears-style
+    // viscous ropes and sheets). THRESHOLD ABOVE 1 IS THE WHOLE TRICK: a lone
+    // blob peaks near 1.0, so anything under that renders every isolated
+    // droplet as its own oval — which is exactly what three rounds of tuning
+    // kept producing. At 1.5 a droplet needs real neighbours to survive, so
+    // only the dense parts of a stream draw, and they draw CONNECTED.
+    // Fat blobs (0.8 vs the lab's 0.22) + wide blur (10) are what fuse them;
+    // the lab's own note calls 0.4 "thick hose-water ropes", and this brief
+    // wants thicker than that.
+    gooLayer.setThreshold(1.5);
+    gooLayer.setBlurPx(10);
+    gooLayer.setSizeScale(0.8);
   }
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
@@ -1364,6 +1369,10 @@ async function main() {
       if (!gooLayer) return false;
       gooEnabled = on;
       bloodView.setBeadsVisible(!on);
+      // Mist goes too. It is a billboard quad like any other, so leaving it
+      // on with the goo surface keeps exactly the "little oval drops" look
+      // the goo is meant to replace — the owner was reading the MIST.
+      bloodView.setMistVisible(!on);
       return true;
     },
     get goo() {
@@ -1373,17 +1382,21 @@ async function main() {
           threshold: gooLayer.threshold,
           edge: gooLayer.edge,
           blurPx: gooLayer.blurPx,
+          sizeScale: gooLayer.sizeScale,
           target: gooLayer.targetSize,
         }
         : { enabled: false, unavailable: true };
     },
     /** Live tuning for the look pass — threshold/edge/blur are the three
      *  knobs that decide beads-vs-ropes-vs-sheets. */
-    setGooTuning(o: { threshold?: number; edge?: number; blurPx?: number }) {
+    setGooTuning(o: {
+      threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
+    }) {
       if (!gooLayer) return;
       if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
       if (o.edge !== undefined) gooLayer.setEdge(o.edge);
       if (o.blurPx !== undefined) gooLayer.setBlurPx(o.blurPx);
+      if (o.sizeScale !== undefined) gooLayer.setSizeScale(o.sizeScale);
     },
 
     /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
