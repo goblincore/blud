@@ -1427,6 +1427,8 @@ async function main() {
           sizeScale: gooLayer.sizeScale,
           target: gooLayer.targetSize,
           mode: gooLayer.mode,
+          liveCount: gooLayer.liveCount,
+          syncCalls: gooLayer.syncCalls,
           absorb: gooLayer.absorb,
           spec: gooLayer.spec,
           gloss: gooLayer.gloss,

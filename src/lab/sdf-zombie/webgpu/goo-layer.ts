@@ -381,6 +381,13 @@ export interface GooLayer {
   readonly gloss: number;
   readonly rim: number;
   readonly targetSize: { width: number; height: number };
+  /** DIAGNOSTIC: how many density quads the last sync() posed. 0 while blood
+   *  is on screen means the mist/size cutoff rejected everything. */
+  readonly liveCount: number;
+  /** DIAGNOSTIC: how many times sync() has been called. STAYS 0 if the host
+   *  page never wired it — the failure that hid this layer entirely on the
+   *  game page, and which no amount of tuning could have revealed. */
+  readonly syncCalls: number;
   dispose(): void;
 }
 
@@ -537,6 +544,10 @@ export function createGooLayer(
     depth: { raw: makeDepthMat(target.texture), blur: makeDepthMat(blurB.texture) },
   };
   let mode: 'overlay' | 'depth' = 'overlay';
+
+  // DIAGNOSTIC counters — see the note where they are assigned in sync().
+  let syncCalls = 0;
+  let liveCount = 0;
 
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), surfMats.overlay.raw);
   quad.frustumCulled = false;
@@ -740,6 +751,16 @@ export function createGooLayer(
       // Draw only the live instances. At 0 the pass still runs (and clears),
       // which the first-clear discipline depends on.
       quads.count = n;
+      // DIAGNOSTIC (blood-viscosity): the two numbers that tell you whether
+      // this layer is being fed at all. syncCalls proves sync() is wired into
+      // the host page's frame at all — it shipped MISSING on the game page,
+      // which made the density field empty forever and every threshold sweep
+      // unwinnable. liveCount is how many quads the last sync actually posed:
+      // 0 with blood visible on screen means the cutoff rejected everything,
+      // non-zero means the field has input and any remaining problem is
+      // downstream in the density/surface passes.
+      syncCalls++;
+      liveCount = n;
     },
 
     setSize(sdfWidth, sdfHeight) {
@@ -786,6 +807,8 @@ export function createGooLayer(
     setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
     setMode(m: 'overlay' | 'depth') { mode = m; },
     get mode() { return mode; },
+    get liveCount() { return liveCount; },
+    get syncCalls() { return syncCalls; },
     setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },
     get threshold() { return uThresh.value; },
     get sizeScale() { return sizeScale; },
