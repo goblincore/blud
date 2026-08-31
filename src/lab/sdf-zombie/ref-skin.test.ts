@@ -64,6 +64,62 @@ function twoJointGlb(): Uint8Array {
   }, bin);
 }
 
+/**
+ * The same two-joint rig, but vertex influences split across TWO JOINTS_n
+ * sets, as exporters do when a vertex carries more than four influences.
+ * Four vertices (joint indices are per the skin: 0 = A, 1 = B):
+ *
+ *   v0  set0 [A=0.2]  set1 [B=0.6, B=0.2]  — set-0 max is 0.2 (the old code
+ *       drops it); the true dominant, 0.6 on B, lives in JOINTS_1. KEPT as B.
+ *   v1  set0 [A=0.7, B=0.1] set1 [B=0.2]   — dominant A=0.7 in set 0; KEPT as
+ *       A, and its POSITION must blend the set-1 weight in too (see test).
+ *   v2  set0 [A=0.5]  set1 [B=0.5]         — a tie ACROSS sets is still a
+ *       tie. DROPPED.
+ *   v3  set0 [A=1.0]  set1 [all zero]      — a second set present but unused
+ *       must change nothing. KEPT as A.
+ */
+function twoSetGlb(): Uint8Array {
+  const pos = new Float32Array([1, 0, 0,  0, 1, 0,  0, 0, 1,  0, 0, 1]);
+  const j0 = new Uint8Array([0,0,0,0,  0,1,0,0,  0,0,0,0,  0,0,0,0]);
+  const w0 = new Float32Array([0.2,0,0,0,  0.7,0.1,0,0,  0.5,0,0,0,  1,0,0,0]);
+  const j1 = new Uint8Array([1,1,0,0,  1,0,0,0,  1,0,0,0,  0,0,0,0]);
+  const w1 = new Float32Array([0.6,0.2,0,0,  0.2,0,0,0,  0.5,0,0,0,  0,0,0,0]);
+  const parts = [new Uint8Array(pos.buffer), j0, new Uint8Array(w0.buffer), j1, new Uint8Array(w1.buffer)];
+  let off = 0; const offs: number[] = [];
+  for (const p of parts) { offs.push(off); off += p.length + ((4 - (p.length % 4)) % 4); }
+  const bin = new Uint8Array(off);
+  parts.forEach((p, i) => bin.set(p, offs[i]!));
+  return makeGlb({
+    asset: { version: '2.0' },
+    scenes: [{ nodes: [0] }], scene: 0,
+    nodes: [
+      { name: 'Root', scale: [2, 2, 2], children: [1, 2, 3] },
+      { name: 'A', translation: [0, 0, 0] },
+      { name: 'B', translation: [0, 3, 0] },
+      { name: 'MeshNode', mesh: 0, skin: 0 },
+    ],
+    skins: [{ joints: [1, 2] }],
+    meshes: [{ primitives: [{
+      attributes: { POSITION: 0, JOINTS_0: 1, WEIGHTS_0: 2, JOINTS_1: 3, WEIGHTS_1: 4 },
+    }] }],
+    buffers: [{ byteLength: bin.length }],
+    bufferViews: [
+      { buffer: 0, byteOffset: offs[0], byteLength: pos.byteLength },
+      { buffer: 0, byteOffset: offs[1], byteLength: j0.byteLength },
+      { buffer: 0, byteOffset: offs[2], byteLength: w0.byteLength },
+      { buffer: 0, byteOffset: offs[3], byteLength: j1.byteLength },
+      { buffer: 0, byteOffset: offs[4], byteLength: w1.byteLength },
+    ],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: 4, type: 'VEC3' },
+      { bufferView: 1, componentType: 5121, count: 4, type: 'VEC4' },
+      { bufferView: 2, componentType: 5126, count: 4, type: 'VEC4' },
+      { bufferView: 3, componentType: 5121, count: 4, type: 'VEC4' },
+      { bufferView: 4, componentType: 5126, count: 4, type: 'VEC4' },
+    ],
+  }, bin);
+}
+
 describe('readRefSkin', () => {
   it('assigns each vertex to its dominant joint and drops ambiguous ones', () => {
     const skin = readRefSkin(twoJointGlb());
@@ -121,5 +177,77 @@ describe('readRefSkin', () => {
       accessors: [{ bufferView: 0, componentType: 5126, count: 1, type: 'VEC3' }],
     }, new Uint8Array(12));
     expect(() => readRefSkin(bare)).toThrow(/no skin/i);
+  });
+
+  // The dragon reference carries JOINTS_0/1/2 — up to 12 influences per
+  // vertex — and reading only set 0 mis-assigns dominants and shrinks kept
+  // vertices' positions by the weight mass that lives outside set 0.
+  describe('multiple JOINTS_n/WEIGHTS_n sets', () => {
+    it('picks the dominant joint across every set, not just JOINTS_0', () => {
+      const skin = readRefSkin(twoSetGlb());
+      expect(skin.total).toBe(4);
+      // v2 (the 0.5/0.5 tie across sets) is the only drop.
+      expect(skin.dropped).toBe(1);
+      // v0's dominant (B, 0.6) lives in JOINTS_1; v1/v3 are dominated from
+      // set 0 and must be untouched by the extra set's presence.
+      expect(skin.verts.map((v) => v.joint)).toEqual(['B', 'A', 'A']);
+    });
+
+    it('blends kept vertices over the weights of ALL sets', () => {
+      const skin = readRefSkin(twoSetGlb());
+      // v1: P=[0,1,0], joint A maps P under the 2x root, joint B additionally
+      // translates [0,6,0]. Weights A=0.7 (set 0), B=0.1 (set 0) + 0.2
+      // (set 1). The blended position must use the FULL weight set:
+      // 0.7*[0,2,0] + 0.3*[0,8,0] = [0, 3.8, 0]. Reading set 0 alone would
+      // shrink this to [0, 2.2, 0] — the exact position-shrinkage defect.
+      const v1 = skin.verts[1]!;
+      expect(v1.joint).toBe('A');
+      // 7, not 12: the fixture weights are float32, so 0.7/0.3 carry ~1e-8
+      // before the arithmetic even starts.
+      expect(v1.position[0]).toBeCloseTo(0, 7);
+      expect(v1.position[1]).toBeCloseTo(3.8, 7);
+      expect(v1.position[2]).toBeCloseTo(0, 7);
+    });
+
+    it('still drops a 0.5/0.5 tie thrown across two sets', () => {
+      const skin = readRefSkin(twoSetGlb());
+      expect(skin.dropped).toBe(1);
+    });
+
+    it('refuses a JOINTS_n whose WEIGHTS_n partner is missing', () => {
+      // Valid set-0 accessors, JOINTS_1 present and readable, WEIGHTS_1
+      // absent — the refusal must name the broken set, not crash reading.
+      const j1 = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      const parts = [j1];
+      let off = 0; const offs: number[] = [];
+      for (const p of parts) { offs.push(off); off += p.length + ((4 - (p.length % 4)) % 4); }
+      const bin = new Uint8Array(off);
+      parts.forEach((p, i) => bin.set(p, offs[i]!));
+      const broken = makeGlb({
+        asset: { version: '2.0' }, scenes: [{ nodes: [0] }], scene: 0,
+        nodes: [
+          { name: 'Root', scale: [2, 2, 2], children: [1, 2, 3] },
+          { name: 'A', translation: [0, 0, 0] },
+          { name: 'B', translation: [0, 3, 0] },
+          { name: 'MeshNode', mesh: 0, skin: 0 },
+        ],
+        skins: [{ joints: [1, 2] }],
+        meshes: [{ primitives: [{
+          attributes: { POSITION: 0, JOINTS_0: 1, WEIGHTS_0: 2, JOINTS_1: 3 },
+        }] }],
+        buffers: [{ byteLength: bin.length }],
+        bufferViews: [
+          { buffer: 0, byteOffset: 0, byteLength: 4 },
+          { buffer: 0, byteOffset: offs[0], byteLength: j1.byteLength },
+        ],
+        accessors: [
+          { bufferView: 0, componentType: 5126, count: 1, type: 'VEC3' },
+          { bufferView: 1, componentType: 5121, count: 1, type: 'VEC4' },
+          { bufferView: 0, componentType: 5126, count: 1, type: 'VEC4' },
+          { bufferView: 1, componentType: 5121, count: 1, type: 'VEC4' },
+        ],
+      }, bin);
+      expect(() => readRefSkin(broken)).toThrow(/JOINTS_1.*WEIGHTS_1|WEIGHTS_1.*JOINTS_1/);
+    });
   });
 });

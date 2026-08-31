@@ -206,17 +206,46 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
   });
 
   const pos = readAccessor(gltf, bin, prim.attributes.POSITION);
-  const jt = readAccessor(gltf, bin, prim.attributes.JOINTS_0);
-  const wt = readAccessor(gltf, bin, prim.attributes.WEIGHTS_0);
+
+  /**
+   * EVERY JOINTS_n/WEIGHTS_n PAIR, not just set 0. glTF allows up to 8 sets
+   * (32 influences); the dragon reference carries three (12 influences), and
+   * 10630 of its vertices hold weight OUTSIDE set 0. Two things went wrong
+   * when only set 0 was read, measured on that file:
+   *
+   * - the dominant joint was chosen from set 0 alone, so a vertex whose top
+   *   influence sat in JOINTS_1 was attributed to whichever set-0 joint
+   *   happened to lead; and
+   * - the position blend summed only set-0 weights. At a bind pose every
+   *   skin matrix is the identity, so the "blend" degenerates to scaling the
+   *   raw position by the set-0 weight sum — 860 kept dragon vertices sat up
+   *   to 18% of their position closer to the origin than the true surface.
+   *
+   * Sets are iterated in file order, components within a set in index order,
+   * and the dominant/blend comparisons are the same strictly-greater rules
+   * as before, so a single-set file (both Meshy references) takes exactly the
+   * same path through the same arithmetic as when only JOINTS_0 existed.
+   */
+  const sets: Array<{ j: number[]; w: number[] }> = [];
+  for (let n = 0; ; n++) {
+    const ja = prim.attributes[`JOINTS_${n}`], wa = prim.attributes[`WEIGHTS_${n}`];
+    if (ja === undefined && wa === undefined) break;
+    if (ja === undefined || wa === undefined) {
+      throw new Error(`attribute set ${n}: JOINTS_${n} and WEIGHTS_${n} must be present together`);
+    }
+    sets.push({ j: readAccessor(gltf, bin, ja), w: readAccessor(gltf, bin, wa) });
+  }
 
   const verts: RefVertex[] = [];
   let dropped = 0;
   const total = pos.length / 3;
   for (let i = 0; i < total; i++) {
     let bestW = -1, bestJ = 0;
-    for (let c = 0; c < 4; c++) {
-      const w = wt[i * 4 + c]!;
-      if (w > bestW) { bestW = w; bestJ = jt[i * 4 + c]!; }
+    for (const set of sets) {
+      for (let c = 0; c < 4; c++) {
+        const w = set.w[i * 4 + c]!;
+        if (w > bestW) { bestW = w; bestJ = set.j[i * 4 + c]!; }
+      }
     }
     // `<=`, not `<`: an exact 0.5/0.5 split is a tie, not a majority, and the
     // tie-break would be whichever weight the exporter happened to write first.
@@ -228,11 +257,13 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
     // the surface that actually exists.
     const raw: Vec3 = [pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!];
     let px = 0, py = 0, pz = 0;
-    for (let c = 0; c < 4; c++) {
-      const w = wt[i * 4 + c]!;
-      if (w === 0) continue;
-      const q = apply(skinMatrix[jt[i * 4 + c]!] ?? IDENTITY, raw);
-      px += w * q[0]; py += w * q[1]; pz += w * q[2];
+    for (const set of sets) {
+      for (let c = 0; c < 4; c++) {
+        const w = set.w[i * 4 + c]!;
+        if (w === 0) continue;
+        const q = apply(skinMatrix[set.j[i * 4 + c]!] ?? IDENTITY, raw);
+        px += w * q[0]; py += w * q[1]; pz += w * q[2];
+      }
     }
     verts.push({ joint: jointNames[bestJ] ?? `joint${bestJ}`, position: [px, py, pz] });
   }
