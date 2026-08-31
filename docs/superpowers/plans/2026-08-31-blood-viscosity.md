@@ -23,7 +23,16 @@
 | `src/lab/sdf-zombie/webgpu/game-main.ts` | Game page wiring + `__sdfGame` debug seams. | Modify: fire gouts at 2 call sites; `setGooTuning` grows knobs |
 | `TASKS.md` | Status board. | Modify: record state at the end |
 
-**Baseline to hold throughout:** `npx tsc --noEmit` clean, `npx vitest run` at 1719 tests or more.
+**Baseline to hold throughout:** `npx tsc --noEmit` clean, `npx vitest run` at
+**2333 passing**.
+
+**Known pre-existing failure — do NOT try to fix it.** `scripts/blob-measure.test.ts`
+fails 7 tests with `spawnSync .../node_modules/.bin/tsx ELOOP`. The `tsx` package is
+not installed in this repo (`node_modules/tsx/` is absent) and `node_modules/.bin/tsx`
+is a self-referential symlink. This predates the branch, the merge never touched that
+file, and it is unrelated to blood FX. "All tests pass" throughout this plan means
+**2333 passing, those same 7 failing**. A count below 2333, or a failure in any other
+file, is a real regression.
 
 ---
 
@@ -64,15 +73,17 @@ Run:
 ```bash
 npx tsc --noEmit && npx vitest run 2>&1 | tail -5
 ```
-Expected: tsc silent; vitest reports 1719 passing tests, 0 failures.
+Expected: tsc silent; vitest reports 2333 passing and the 7 known
+`scripts/blob-measure.test.ts` failures described in the baseline note above.
 
 - [ ] **Step 5: Confirm the seams arrived**
 
 Run:
 ```bash
-grep -c "setGoo\|setGooTuning" src/lab/sdf-zombie/webgpu/game-main.ts
+grep -c "setGoo" src/lab/sdf-zombie/webgpu/game-main.ts
 ```
-Expected: a number ≥ 4.
+Expected: `3` — one comment reference plus the `setGoo` and `setGooTuning`
+definitions. Anything less means the port did not arrive.
 
 ---
 
@@ -593,7 +604,7 @@ Run:
 ```bash
 npx vitest run && npx tsc --noEmit
 ```
-Expected: all tests PASS (1719 + the new ones), tsc silent.
+Expected: all tests PASS (2333 + the new ones, with the 7 known blob-measure failures unchanged), tsc silent.
 
 - [ ] **Step 10: Commit**
 
