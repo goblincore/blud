@@ -57,6 +57,7 @@ import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import { createBloodSim, spawnWoundDroplets, emitTrails, stepBlood } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
+import { createBloodView } from './blood-view-gpu';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -709,6 +710,17 @@ async function main() {
   // -----------------------------------------------------------------------
   const bloodSim = createBloodSim();
   const bleed = new BleedRegistry();
+  // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
+  // (the SDF composite's depth test then occludes droplets both ways — see
+  // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
+  // camera compensation; BLOOD_TRAIL.size is already game-camera tuned).
+  // Splats keep the lab's soft depthWrite:false — the floor's depth already
+  // arbitrates them, and their 0.005 m lift beats z-fighting.
+  const bloodView = createBloodView({ dropletDepthWrite: true, dropletViewScale: 1 });
+  for (const o of bloodView.objects) {
+    o.visible = true; // ships ON (it is the feature); setBleed(false) hides
+    scene.add(o);
+  }
   // One seeded stream for EVERY bleed decision (spawns, trails, splat
   // stamps) — advanced only while bleed is enabled, so setBleed(false)
   // freezes the subsystem exactly (OFF mid-stream = ON-stream-paused).
@@ -982,6 +994,9 @@ async function main() {
           cdt, bleedRng,
         );
         stepBlood(bloodSim, cdt, bleedRng);
+        // Re-pose every instance from sim state (billboards track the camera
+        // even frozen — same contract as the lab's always-sync).
+        bloodView.sync(bloodSim, camera);
       }
     }
 
@@ -1199,6 +1214,7 @@ async function main() {
     // ---------------------------------------------------------------
     setBleed: (on: boolean) => {
       bleedEnabled = on;
+      for (const o of bloodView.objects) o.visible = on;
       if (!on) {
         bloodSim.droplets.length = 0;
         bloodSim.splats.length = 0;

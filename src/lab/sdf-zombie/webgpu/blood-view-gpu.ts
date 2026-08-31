@@ -68,11 +68,37 @@ export interface BloodView {
   dispose(): void;
 }
 
-export function createBloodView(): BloodView {
+export interface BloodViewOpts {
+  /** GAME PAGE ONLY (bleeding-wounds plan task 3): the droplet material
+   *  writes depth and cuts out (alphaTest) instead of soft-blending. On the
+   *  game page the SDF composite depth-tests its flesh against the POLYGONAL
+   *  depth buffer (the march's depth rides the target alpha into the
+   *  composite's depthNode), so a droplet that wrote no depth is painted
+   *  over by any body whose depth beats the wall BEHIND the droplet — the
+   *  droplet vanishes exactly when a body is behind it. depthWrite:true lets
+   *  the composite's depth test handle occlusion both ways for free. The
+   *  lab stays on the default (false): its look is tuned and bit-frozen.
+   *  Splats are NOT affected — they lie on the floor and the floor's own
+   *  depth already arbitrates them. */
+  dropletDepthWrite?: boolean;
+  /** Lab-camera compensation override. Default DROPLET_VIEW_SCALE (0.45):
+   *  the lab camera sits close. The game camera sits far, so it passes 1
+   *  and droplets read at their sim size — the game-tuned BLOOD_TRAIL band. */
+  dropletViewScale?: number;
+}
+
+export function createBloodView(opts: BloodViewOpts = {}): BloodView {
+  const dropDepth = opts.dropletDepthWrite ?? false;
+  const viewScale = opts.dropletViewScale ?? DROPLET_VIEW_SCALE;
   const dropGeom = new THREE.PlaneGeometry(1, 1);
   const drops = new THREE.InstancedMesh(
     dropGeom,
-    new THREE.MeshBasicMaterial({ map: dropletTexture(), transparent: true, depthWrite: false }),
+    new THREE.MeshBasicMaterial({
+      map: dropletTexture(),
+      ...(dropDepth
+        ? { transparent: false, depthWrite: true, alphaTest: 0.3 }
+        : { transparent: true, depthWrite: false }),
+    }),
     MAX_DROPLETS,
   );
   drops.frustumCulled = false;
@@ -115,7 +141,7 @@ export function createBloodView(): BloodView {
       const stretch = 1 + Math.min(speed * 0.18, 0.8);
       roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
       q.copy(camera.quaternion).multiply(roll);
-      s.set(d.size * stretch * DROPLET_VIEW_SCALE, d.size * DROPLET_VIEW_SCALE, 1);
+      s.set(d.size * stretch * viewScale, d.size * viewScale, 1);
       m.compose(p, q, s);
       drops.setMatrixAt(i, m);
     }
