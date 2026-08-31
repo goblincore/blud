@@ -130,10 +130,15 @@ in the hit-stagger work; never player-visible, but it will corrupt a bench).
 segment** — walking, firing, gibbing — so a moment that breaks the budget is
 visible instead of averaged away.
 
-**The crowd ladder is free.** The ring already spawns 1/2/3/4 zombies in rooms
-1-4 (`game-level.ts` `ROOMS[].zombies`, 10 bodies total), so benching per room
-gives a 1→4 body curve using existing content. The denser leg gathers frozen
-actors into one room rather than inventing a spawn path.
+**~~The crowd ladder is free.~~ CORRECTED 2026-08-31 — it is not.** The
+assumption was that `ROOMS[].zombies` (1/2/3/4 across the ring, 10 total) makes
+benching per room a free 1→4 body curve. The scene census disproves it:
+standing in room 4, `bodiesOnScreen` reads **9**, because the tunnels give
+sightlines into the neighbouring rooms. Room choice barely changes what is in
+frustum. Two consequences: the crowd curve Phase 1 needs must come from a
+deliberate spawn ladder, and the game's real worst case is already ~9 bodies on
+screen, not 4. See
+`docs/dev-notes/2026-08-31-game-perf-baseline/notes.md`.
 
 **Chunk means hide spikes — measure twice, and never mix the two.** The
 lab's `benchGpu` samples *chunk elapsed / chunkFrames*, so a single 60 ms

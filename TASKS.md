@@ -20,6 +20,27 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**GAME CROWD PERF (Phase 0) — HARNESS BUILT, BASELINE NOT TAKEN (2026-08-31).**
+Owner shifted focus to SDF rendering perf; target is his own: "stable 30 with
+multiple bodies and other effects" = bench-main's p95 <= 33 ms over a
+*firefight*, not a quiet walk. A scripted-firefight bench now exists
+(`__sdfGame.bench`, `scripts/sdf-game-bench.sh`, 17 new tests) with a
+per-segment **scene census** that caught three scenario bugs, each of which had
+produced a plausible-looking table: the firefight shredded its own subjects so
+the "firing" segments timed an empty floor; the player teleported onto a
+zombie 0.97 m away so no shot ever landed (`wounds 0 -> 0`); and `p95` over six
+chunk-samples was just the max. **No number from this session is quotable** —
+three identical back-to-back runs read 10.1 / 5.6 / 56.1 ms, and the owner's
+own Chrome was live at ~32% CPU. The fence itself is sound (Metal-3,
+timestamp-query supported, ~10 ms/frame repeating across five chunks). Re-run
+on a quiet machine. **Finding that changes the plan: room 4 shows NINE bodies
+on screen, not four** — the tunnels give sightlines across the ring, so rooms
+are not a crowd ladder and the worst case is already ~9 bodies.
+[spec](docs/superpowers/specs/2026-08-31-sdf-crowd-perf-investigation-design.md) ·
+[plan](docs/superpowers/plans/2026-08-31-game-perf-baseline.md) ·
+[note](docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
+
+
 **HIT-STAGGER FEEL — DONE on branch `dispatch/hit-stagger-feel`, awaiting
 owner playtest (2026-08-28).** Owner's "the zombie needs to read as really
 staggered and hit by something of substantial force" was three stacked
