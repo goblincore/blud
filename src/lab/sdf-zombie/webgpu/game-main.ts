@@ -55,7 +55,10 @@ import {
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
-import { createBloodSim, spawnWoundDroplets, emitTrails, stepBlood } from '../blood-sim';
+import type { ImpactGoutProfile } from '../blood-sim';
+import {
+  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT,
+} from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer } from './goo-layer';
@@ -818,6 +821,17 @@ async function main() {
   function registerBleed(a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump'): void {
     if (!bleedEnabled) return;
     bleed.register(a.id, wound, kind, bleedClock);
+    // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
+    // the wound's own anchor so it leaves the body where the hole is. Fired
+    // here rather than at each call site because both the impact path and
+    // the sever path already funnel through this function, and two copies
+    // would drift. Uses the SAME bleedRng, so setBleed(false) freezes gouts
+    // and the trickle together and captures stay deterministic.
+    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    // The gout sprays back along the incoming shot; spawnImpactGout negates
+    // what it is handed, and the wound normal already points OUT of the
+    // body, so pass the inward direction.
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng);
   }
 
   // Wire every actor's severs into the chunk spawner (template = that
@@ -1418,6 +1432,16 @@ async function main() {
       if (o.spec !== undefined) gooLayer.setSpec(o.spec);
       if (o.gloss !== undefined) gooLayer.setGloss(o.gloss);
       if (o.rim !== undefined) gooLayer.setRim(o.rim);
+    },
+
+    /** Sweep gout density/shape without a rebuild. Mutates the shared table,
+     *  so it affects every later impact of that kind. */
+    setGoutTuning(kind: 'pellet' | 'slug' | 'stump', o: Partial<ImpactGoutProfile>) {
+      Object.assign(IMPACT_GOUT[kind], o);
+      return { ...IMPACT_GOUT[kind] };
+    },
+    get gout() {
+      return { pellet: { ...IMPACT_GOUT.pellet }, slug: { ...IMPACT_GOUT.slug }, stump: { ...IMPACT_GOUT.stump } };
     },
 
     /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
