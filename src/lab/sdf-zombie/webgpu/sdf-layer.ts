@@ -36,6 +36,48 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
 import { createConeUniforms, type ConeSource, type OccluderSource } from './zombie-gpu';
 
+// ---------------------------------------------------------------------------
+// HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
+// frame, reproject the held frame in between. DEFAULT OFF; the composite side
+// is the only place it touches.
+//
+// The march (pass 2) leaves its result in `target`, and NOTHING between
+// frames clears it — a render target only ever clears when it is rendered
+// INTO. So a hold frame needs no copy pass: skip the pre-passes and the
+// march, and composite the same texture again. The composite quad is the
+// same single pass it always was (odd/even pass-count Y-flip trap avoided by
+// construction — no pass is added, ever), with a holdMode uniform selecting
+// between the classic sample, a raw hold, and a per-pixel reprojection.
+//
+// The reprojection uses the depth the march already wrote into the target's
+// ALPHA: unproject the held pixel through the HELD camera's inverse
+// view-projection, project the world point with the CURRENT camera, sample
+// there. That is the stretch goal of the C2 brief, and it subsumes the
+// full-screen homography (a homography is what you get when every depth is
+// the same value). The depth written to depthNode is recomputed for the
+// current camera, so occlusion against the full-rate polygonal pass tracks
+// camera motion; the colour is one or two frames stale, which is the point —
+// the smear IS the candidate look.
+//
+// NDC conventions (the Y-flip trap, derived once so it is written down): in
+// the target's texture space, u = ndc.x * 0.5 + 0.5 and v = 0.5 - ndc.y * 0.5
+// (v = 0 is the TOP of the framebuffer, ndc.y = +1). The st the composite
+// works in after the flipY adjustment IS that texture space, which is why
+// the unproject/project below converts through it and the flipY uniform
+// needs no special-casing here.
+// ---------------------------------------------------------------------------
+
+/**
+ * Pure half-rate frame decision: is THIS frame index a hold (composite a
+ * held march) rather than a fresh march? Even frames are fresh so enabling
+ * mid-session seeds the held frame immediately; `needsFresh` (first frame,
+ * resize, enable) overrides to fresh regardless of parity, because the
+ * target's backing memory is (re)allocated garbage in those cases.
+ */
+export function isHoldFrame(frameIndex: number, halfRate: boolean, needsFresh: boolean): boolean {
+  return halfRate && !needsFresh && frameIndex % 2 === 1;
+}
+
 /**
  * The layer SDF bodies live on. Everything raymarched goes here; the polygonal
  * scene stays on the default layer 0, so the two passes are a camera layer
@@ -137,17 +179,41 @@ export const CONE_TILE_FINE = 0;
 export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   layerTex: texture_2d<f32>,
   texCoord: vec2<f32>,
-  flipY: f32
+  flipY: f32,
+  holdMode: f32,
+  heldInv: mat4x4<f32>,
+  curVp: mat4x4<f32>
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  // holdMode: 0 = fresh/classic, 1 = raw hold, 2 = per-pixel reprojection.
+  // The classic path below is deliberately UNCHANGED when holdMode < 1.5 —
+  // the toggle-OFF frame must stay bit-identical.
+  var outDepth = -1.0;
+  if (holdMode > 1.5) {
+    // Reproject: this screen pixel's held depth -> world (held camera) ->
+    // current camera -> a different texel of the SAME held texture.
+    let probe = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+    let here = textureLoad(layerTex, probe, 0);
+    if (here.w >= 1.0) { discard; }
+    let ndcHeld = vec2<f32>(st.x * 2.0 - 1.0, 1.0 - st.y * 2.0);
+    let world = heldInv * vec4<f32>(ndcHeld, here.w, 1.0);
+    let clipCur = curVp * (world / world.w);
+    if (clipCur.w <= 0.0) { discard; }
+    let ndcCur = clipCur.xy / clipCur.w;
+    st = vec2<f32>((ndcCur.x + 1.0) * 0.5, (1.0 - ndcCur.y) * 0.5);
+    // The held point's depth under the CURRENT camera — occlusion tracks
+    // camera motion instead of lagging a frame behind it.
+    outDepth = clamp(clipCur.z / clipCur.w, 0.0, 0.9999);
+  }
   let c = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
   let texel = textureLoad(layerTex, c, 0);
   // The target is cleared with alpha 1.0, which is the far plane and means
   // "the march discarded here". Without this the clear colour would paint over
   // the polygonal scene everywhere the bodies are not.
   if (texel.w >= 1.0) { discard; }
+  if (outDepth >= 0.0) { return vec4<f32>(texel.xyz, outDepth); }
   return texel;
 }`;
 
@@ -193,6 +259,13 @@ export interface SdfLayer {
   readonly shellEnabled: boolean;
   setOccluderEnabled(on: boolean): void;
   readonly occluderEnabled: boolean;
+  /** C2 half-rate: march every OTHER frame, composite the held march in
+   *  between (mode 0 = raw hold, 1 = per-pixel depth reproject). Default
+   *  OFF; off is the ship behaviour and must stay bit-identical to it. */
+  setHalfRate(on: boolean): void;
+  readonly halfRate: boolean;
+  setHalfRateMode(n: number): void;
+  readonly halfRateMode: number;
   /** Turns the cone pre-pass on or off, for measurement. */
   setConeEnabled(on: boolean): void;
   /** Lens and layer height, from which both levels' cone widths are derived. */
@@ -232,6 +305,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   let scale = DEFAULT_SDF_SCALE;
   let fullW = 1;
   let fullH = 1;
+
+  // ---- half-rate state (C2) ------------------------------------------------
+  let halfRate = false;
+  let halfRateMode = 1;
+  let frameIndex = 0;
+  /** Fresh overrides parity: first frame, every (re)allocation, every enable. */
+  let forceFreshFrame = true;
+  /** view-projection of the camera the held march was rendered with. */
+  const heldVp = new THREE.Matrix4();
+  const heldVpInv = new THREE.Matrix4();
+  const _view = new THREE.Matrix4();
+  const _curVp = new THREE.Matrix4();
+  // holdMode: 0 fresh/classic, 1 raw hold, 2 reprojected hold (see WGSL).
+  const uHoldMode = uniform(0);
+  const uHeldInv = uniform(new THREE.Matrix4());
+  const uCurVp = uniform(new THREE.Matrix4());
 
   // FloatType because the alpha channel carries DEPTH. At 8 bits per channel
   // the composite would resolve depth to 256 steps and the flesh would z-fight
@@ -332,6 +421,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     layerTex: texture(target.texture),
     texCoord: uv(),
     flipY: uFlipY,
+    holdMode: uHoldMode,
+    heldInv: uHeldInv,
+    curVp: uCurVp,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const quadMat = new MeshBasicNodeMaterial();
@@ -362,6 +454,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   function resize() {
     const w = Math.max(1, Math.round(fullW * scale));
     const h = Math.max(1, Math.round(fullH * scale));
+    // setSize reallocates the march target's backing memory — a hold frame
+    // would composite garbage until the next fresh march.
+    forceFreshFrame = true;
     target.setSize(w, h);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
@@ -396,6 +491,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     render(scene, camera) {
       const restore = camera.layers.mask;
 
+      // ---- half-rate decision (C2) ---------------------------------------
+      // Snapshot the camera every frame (hold frames reproject through it);
+      // a fresh frame additionally seeds the HELD view-projection the next
+      // hold will unproject through.
+      camera.updateMatrixWorld();
+      _view.copy(camera.matrixWorld).invert();
+      _curVp.multiplyMatrices(camera.projectionMatrix, _view);
+      uCurVp.value.copy(_curVp);
+      const hold = isHoldFrame(frameIndex, halfRate, forceFreshFrame);
+      uHoldMode.value = hold ? (halfRateMode === 1 ? 2 : 1) : 0;
+      if (!hold) {
+        heldVp.copy(_curVp);
+        heldVpInv.copy(heldVp).invert();
+        uHeldInv.value.copy(heldVpInv);
+      }
+
       if (targetsNeedInit) {
         targetsNeedInit = false;
         // The clear colour is irrelevant: a disabled pre-pass is never
@@ -414,6 +525,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       renderer.setRenderTarget(outputTarget);
       void renderer.render(scene, camera);
 
+      // Passes 1b/1c/1d + 2 — pre-passes and march. SKIPPED ENTIRELY on a
+      // hold frame: they exist only to feed the march, and the march target
+      // still holds the last fresh frame's result (nothing between frames
+      // clears it). This skip IS the half-rate win.
+      if (!hold) {
       // Pass 1b — the cone pre-pass, wide level then narrow, each starting
       // where the last stopped. No shading in either; the wide level is a
       // sixty-fourth of the pixels and the narrow one a quarter.
@@ -498,6 +614,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       camera.layers.set(SDF_LAYER);
       renderer.setRenderTarget(target);
       void renderer.render(scene, camera);
+      } // !hold
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       camera.layers.mask = restore;
@@ -506,6 +623,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
+
+      frameIndex++;
+      if (!hold) forceFreshFrame = false;
     },
     setOutputTarget(t) { outputTarget = t; },
     setSize(width, height) {
@@ -538,6 +658,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },
     setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },
     get shellEnabled() { return shellUniforms.enabled.value > 0.5; },
+    setHalfRate(on) {
+      if (on === halfRate) return;
+      halfRate = on;
+      // Seed immediately: the first frame after enabling is a fresh march,
+      // never a hold of whatever the target happened to be holding.
+      forceFreshFrame = true;
+    },
+    get halfRate() { return halfRate; },
+    setHalfRateMode(n) { halfRateMode = n === 0 ? 0 : 1; },
+    get halfRateMode() { return halfRateMode; },
     setOccluderEnabled(on) { occluderUniforms.enabled.value = on ? 1 : 0; },
     get occluderEnabled() { return occluderUniforms.enabled.value > 0.5; },
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },

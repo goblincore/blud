@@ -20,6 +20,13 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**C2 half-rate SDF layer — BUILT, REEL READY (owner look-verdict pending, 2026-08-31).**
+March every other frame, per-pixel depth reproject (or raw hold) on holds, default OFF,
+`__sdfGame.setHalfRate/setHalfRateMode`. Toggle-OFF proven bit-identical (0 px, within-load;
+cross-load floor 1.2% documented); 500-frame gate clean; 3/3 bench pairs faster (footnote only).
+Artifacts catalogued honestly: silhouette edge-streaks, 1/30s late wound pops, gait stop-motion.
+[reel + note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
+
 **SHELL MARCH — SHIPPED ON (owner-passed 2026-08-31).** Per-limb posed hulls
 (`shell-hull-outer.ts`) bound the march: **−54% / −40% frame time** (room 3
 23.3→10.8 ms, room 4 15.9→9.5, spread 2-9%) at real-render parity below the
