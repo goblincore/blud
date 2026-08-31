@@ -306,6 +306,33 @@ async function main() {
   scene.add(occluderHull.object);
   sdfLayer.setOccluderEnabled(true);
 
+/**
+   * Over-relaxation factor for the game page's march (woundCfg2.y).
+   *
+   * 1.0 = OFF, which falls through to marchCfg.y = 0.6. X1.10 measured 1.4 as
+   * the optimum in the LAB and it is tempting here — it drops mean steps from
+   * 18.1 to 10.7 and appears to resolve far more flesh (room 4: 26841 -> 50685
+   * hit pixels).
+   *
+   * IT FAILED ITS VISUAL GATE ON THIS PAGE (2026-08-31). Those extra "hits"
+   * are FALSE, and they are box-shaped: large translucent rectangles washing
+   * over the walls, exactly the screen extents of the bodies' proxy boxes.
+   * Mechanism is the same one that produced the shell halo — above omega 1.0
+   * the tracer does `t = tMax; clamped = true` and takes a FINAL CLAMPED
+   * SAMPLE, and at the far side of a big proxy box the AA epsilon
+   * (t * aaCfg.x, growing with distance) accepts that sample as a surface.
+   *
+   * Interesting wrinkle worth keeping: the outer-hull shell SUPPRESSES the
+   * artifact, because the false hits sit on box pixels outside the hull and
+   * the shell discards those before the march runs (room 3 measured 8773
+   * fewer hits with the shell on at 1.4, room 4 only 87 — the difference is
+   * how much box lies outside the hull). So 1.4 may become available once the
+   * shell defaults on, but it is not a free win on its own.
+   *
+   * Do not raise this without re-running the visual gate.
+   */
+  const GAME_RELAX = 1.0;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -377,6 +404,9 @@ async function main() {
           },
         });
       view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
+      // Relaxation, explicit rather than inherited from the uniform default —
+      // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
+      view.uniforms.woundCfg2.value.y = GAME_RELAX;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -1215,6 +1245,12 @@ async function main() {
      * it is for benching only; nothing should ship on a reduced budget without
      * its own visual gate.
      */
+    /** Over-relaxation (woundCfg2.y). Ships at GAME_RELAX; <= 1.0 falls back
+     *  to marchCfg.y, which is the UNDER-relaxed 0.6 the page used to run. */
+    setRelax(v: number) {
+      for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
+    },
+    get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },
