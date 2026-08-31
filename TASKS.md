@@ -35,7 +35,36 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
-- `X1.bleed-look` [~] **Visceral fluid look — PARKED for its own session**
+- `X1.blood-viscosity` [~] **Impact gouts + goo that actually renders** — branch
+  `claude/blood-effects-viscosity-8adcc3`, **NOT merged**. The goo layer now
+  draws on `sdf-game.html` for the first time, ships **ON** by default with
+  `mode:'depth'`, `blurPx 0`, world-oriented surface normals reconstructed from
+  the field's own view depth, a per-impact `spawnImpactGout()` fired from
+  `registerBleed`, a deep-red shadow floor so blood never reads black, and a
+  live tuning panel (`goo-panel.ts`: 12 sliders, presets, a COPY button that
+  emits the exact console calls).
+  **BOTH round-2 blockers below were misdiagnoses.** The real bug:
+  `postAa.addSink()` never handed a LATE-registered sink its output target, so
+  the goo composited onto the canvas and the post-AA blit erased it every
+  frame — it had never drawn a pixel here, which is why no threshold ever
+  worked. "Depth rejects near-body blood" was an artefact of that (toggling
+  fxaa/smear re-runs the redirect, so it intermittently worked). Overlay mode
+  was built to route around a blocker that did not exist, cost the occlusion
+  cue, and is reverted to `depth` by default.
+  **Owner's tuned defaults** (found in one panel pass): sizeScale 0.14,
+  threshold 0.65, blurPx 0, stretch 4, edge 2.75, absorb 1.6, spec 2.85,
+  gloss 220, rim 0, shadowRed 0.12; slug gout count 85 @ speed 0.5/0.2.
+  **Outstanding — read before merging:** Task 7's off-state parity gate and
+  the fire-segment cost bench NEVER RAN, and goo now ships ON, so the extra
+  passes are paid every frame unmeasured. Task 3's code-quality review never
+  ran. And the tuned values were found in overlay mode with the OLD gradient
+  normals — both have changed since, so absorb/spec/gloss want a revisit.
+  [spec](docs/superpowers/specs/2026-08-31-blood-viscosity-design.md) ·
+  [plan](docs/superpowers/plans/2026-08-31-blood-viscosity.md)
+
+- `X1.bleed-look` [x] ~~**Visceral fluid look — PARKED for its own session**~~
+  **SUPERSEDED by `X1.blood-viscosity`; the two blockers recorded below were
+  both wrong.** Kept for the record —
   (owner call 2026-08-31). Round 1 RIBBONS rejected ("too thin and
   uninteresting" — lines cannot be volumes). Round 2 **`goo-layer.ts` PORTED**
   to the game page on `claude/bleed-look-spike` (**unmerged**): density/blur/
