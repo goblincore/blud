@@ -249,7 +249,22 @@ async function main() {
   // into the render callback. DEFAULT OFF: the chosen rung is what ships;
   // this is the frame-rate safety net the owner can switch on.
   // -----------------------------------------------------------------------
-  let adaptiveEnabled = false;
+  // ADAPTIVE ON by default (2026-08-31), and the baseline is why.
+  //
+  // It lands AFTER the baseline on purpose: adaptive moves the pixel count
+  // under load, so measuring with it on would have measured the safety net
+  // instead of the cost. __sdfGame.bench suspends it for the same reason.
+  //
+  // The baseline then made the case for it stronger than expected. Resolution
+  // scale is the ONLY lever that moved the frame — 0.7 is -39%/-25% and 0.5 is
+  // -58%/-54%, while the occluder, the cone and FXAA all measured inside
+  // repeat spread. Adaptive works by walking exactly that ladder, so it is the
+  // one safety net with a measured mechanism behind it.
+  // (docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
+  //
+  // It is still a FLOOR, not an answer: it buys frames by making the flesh
+  // coarser during exactly the moments that matter most.
+  let adaptiveEnabled = true;
   let adaptiveBudgetMs = 1000 / 30;
   let adaptiveState = initialAdaptiveState(performance.now());
   const ADAPTIVE_WINDOW = 30;
