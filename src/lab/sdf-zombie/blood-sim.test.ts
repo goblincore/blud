@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   createBloodSim, burst, emitTrails, stepBlood, addScraps, SCRAP_TUNING,
-  spawnWoundDroplets, WOUND_BLEED, TRAIL_HIST,
+  spawnWoundDroplets, WOUND_BLEED, TRAIL_HIST, spawnImpactGout, IMPACT_GOUT,
 } from './blood-sim';
+import type { Vec3 } from './types';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -341,5 +342,96 @@ describe('ribbon history (X1.bleed-look: cohesive lines of fluid)', () => {
     for (const m of sim.droplets.filter(d => d.kind === 'mist')) {
       expect(m.hist).toBeUndefined();
     }
+  });
+});
+
+describe('impact gouts (blood-viscosity spec §a)', () => {
+  const seeded = () => {
+    let s = 0x12345678;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
+  };
+  const anchor: Vec3 = [0, 1.2, 0];
+  const dir: Vec3 = [0, 0, 1]; // travelling +z, so blood sprays back along -z
+
+  it('emits the profile count in ONE call — the density the metaball needs', () => {
+    for (const kind of ['pellet', 'slug', 'stump'] as const) {
+      const sim = createBloodSim();
+      spawnImpactGout(sim, kind, anchor, dir, seeded());
+      expect(sim.droplets.length, kind).toBe(IMPACT_GOUT[kind].count);
+    }
+  });
+
+  it('sprays BACK along the incoming direction, not through the body', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    // Every droplet's velocity must have a negative z component: the cone
+    // half-angles are all under 90 degrees around -dir.
+    for (const d of sim.droplets) expect(d.vel[2]).toBeLessThan(0);
+  });
+
+  it('is head-fast/tail-slow: speeds decrease monotonically across the pulse', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    const speeds = sim.droplets.map(d => Math.hypot(d.vel[0], d.vel[1], d.vel[2]));
+    for (let i = 1; i < speeds.length; i++) {
+      // Strictly decreasing: the ramp carries no jitter, precisely so the
+      // pulse STRETCHES into a rope instead of expanding as a ball.
+      expect(speeds[i]!).toBeLessThan(speeds[i - 1]!);
+    }
+    expect(speeds[0]!).toBeCloseTo(IMPACT_GOUT.slug.speedMax, 5);
+    expect(speeds[speeds.length - 1]!).toBeCloseTo(IMPACT_GOUT.slug.speedMin, 5);
+  });
+
+  it('keeps every droplet inside the profile cone half-angle', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'stump', anchor, dir, seeded());
+    const axis: Vec3 = [-dir[0], -dir[1], -dir[2]];
+    for (const d of sim.droplets) {
+      const len = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
+      const cos = (d.vel[0] * axis[0] + d.vel[1] * axis[1] + d.vel[2] * axis[2]) / len;
+      expect(Math.acos(Math.min(1, cos))).toBeLessThanOrEqual(IMPACT_GOUT.stump.coneRad + 1e-6);
+    }
+  });
+
+  it('draws exactly 4 rng values per droplet, in a fixed order', () => {
+    const sim = createBloodSim();
+    let draws = 0;
+    const rng = () => { draws++; return 0.5; };
+    spawnImpactGout(sim, 'pellet', anchor, dir, rng);
+    expect(draws).toBe(IMPACT_GOUT.pellet.count * 4);
+  });
+
+  it('spawns kind "drop" — gout beads are the fluid body, not haze', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    expect(sim.droplets.every(d => d.kind === 'drop')).toBe(true);
+  });
+
+  it('does NOT mark gout beads ribbon-eligible', () => {
+    // Ribbons draw straight metre rods at gib speeds -- the round-1 "laser
+    // spaghetti" bug. Only slow bleed streams arc enough to read as liquid.
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    expect(sim.droplets.some(d => d.ribbon)).toBe(false);
+  });
+
+  it('a full 8-pellet shotgun blast fits inside MAX_DROPLETS', () => {
+    // 8 simultaneous pellet gouts must not evict each other mid-blast, or
+    // the shotgun reads as one gout instead of eight.
+    const sim = createBloodSim();
+    const rng = seeded();
+    for (let i = 0; i < 8; i++) spawnImpactGout(sim, 'pellet', anchor, dir, rng);
+    expect(sim.droplets.length).toBe(IMPACT_GOUT.pellet.count * 8);
+  });
+
+  it('is deterministic under a fixed seed', () => {
+    const a = createBloodSim();
+    const b = createBloodSim();
+    spawnImpactGout(a, 'slug', anchor, dir, seeded());
+    spawnImpactGout(b, 'slug', anchor, dir, seeded());
+    expect(a.droplets).toEqual(b.droplets);
   });
 });

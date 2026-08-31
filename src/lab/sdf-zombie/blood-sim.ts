@@ -244,6 +244,46 @@ export const WOUND_BLEED: Record<BleedKind, WoundBleedProfile> = {
   },
 };
 
+export interface ImpactGoutProfile {
+  /** Droplets emitted in ONE call. Density is the whole point: a stream
+   *  spread over time never overlaps enough for the metaball to fuse, and
+   *  the same blood fired as one packed pulse does. */
+  count: number;
+  /** Cone HALF-angle around the BACKWARD axis, radians. */
+  coneRad: number;
+  /** Head speed — droplet 0. */
+  speedMax: number;
+  /** Tail speed — the last droplet. */
+  speedMin: number;
+  lifeMin: number;
+  lifeMax: number;
+  sizeMin: number;
+  sizeMax: number;
+}
+
+/**
+ * Per-calibre impact gouts (blood-viscosity spec §a). Fired ONCE at the
+ * moment a projectile lands, and once per sever — not a rate.
+ *
+ * Counts are budgeted against MAX_DROPLETS (600): a shotgun lands 8 pellets
+ * at one instant, so `pellet.count * 8` must fit or the blast evicts itself
+ * mid-spawn and reads as a single gout instead of eight.
+ */
+export const IMPACT_GOUT: Record<BleedKind, ImpactGoutProfile> = {
+  pellet: {
+    count: 14, coneRad: 0.9, speedMax: 5.5, speedMin: 1.2,
+    lifeMin: 0.35, lifeMax: 0.7, sizeMin: 0.05, sizeMax: 0.1,
+  },
+  slug: {
+    count: 90, coneRad: 0.7, speedMax: 8, speedMin: 1.5,
+    lifeMin: 0.4, lifeMax: 0.9, sizeMin: 0.06, sizeMax: 0.14,
+  },
+  stump: {
+    count: 140, coneRad: 1, speedMax: 7, speedMin: 1.5,
+    lifeMin: 0.5, lifeMax: 1, sizeMin: 0.07, sizeMax: 0.16,
+  },
+};
+
 /** Wound droplets die like any mist bead (then cascade into splats). */
 const WOUND_DROPLET_LIFE = BLOOD_TRAIL.lifetimeSec;
 
@@ -316,6 +356,55 @@ export function spawnWoundDroplets(
     }
   }
   return carry - count;
+}
+
+/**
+ * One impact's gout: the whole pulse in a single call, sprayed BACK along
+ * the incoming direction (blood comes toward the shooter, which also means
+ * toward the camera — the read overlay mode exists to deliver).
+ *
+ * PURE. Draws exactly 4 rng values per droplet in a fixed order (cone r,
+ * cone theta, size, life), so seeded streams pin it.
+ *
+ * SPEED IS A DETERMINISTIC RAMP, not a random band: droplet 0 leaves at
+ * speedMax and the last at speedMin, so the pulse STRETCHES along its axis
+ * into an arcing rope. Jittering it collapses the rope back into a ball —
+ * in the 2D prototype that was the entire difference between "one pink
+ * blob" and the reference look.
+ */
+export function spawnImpactGout(
+  sim: BloodSim, kind: BleedKind, anchor: Vec3, dirN: Vec3, rng: () => number,
+): void {
+  const p = IMPACT_GOUT[kind];
+  // Back along the shot. A zero/degenerate direction falls back to straight
+  // up, the same guard spawnWoundDroplets uses for a degenerate normal.
+  const back: Vec3 = [-dirN[0], -dirN[1], -dirN[2]];
+  const axis = normalize(
+    Math.hypot(back[0], back[1], back[2]) < 1e-9 ? [0, 1, 0] as Vec3 : back,
+  );
+  const { u, v, w } = basisFromAxis(axis);
+  for (let i = 0; i < p.count; i++) {
+    const r = p.coneRad * Math.sqrt(rng());
+    const theta = rng() * Math.PI * 2;
+    const cr = Math.cos(r);
+    const sr = Math.sin(r);
+    const dir = normalize(add(add(scale(w, cr), scale(u, Math.cos(theta) * sr)), scale(v, Math.sin(theta) * sr)));
+    const size = p.sizeMin + rng() * (p.sizeMax - p.sizeMin);
+    const life = p.lifeMin + rng() * (p.lifeMax - p.lifeMin);
+    const t = p.count > 1 ? i / (p.count - 1) : 0;
+    const speed = p.speedMax + (p.speedMin - p.speedMax) * t;
+    push(sim, {
+      pos: [anchor[0] + dir[0] * WOUND_SPAWN_OFFSET,
+        anchor[1] + dir[1] * WOUND_SPAWN_OFFSET, anchor[2] + dir[2] * WOUND_SPAWN_OFFSET],
+      vel: [dir[0] * speed, dir[1] * speed, dir[2] * speed],
+      age: 0,
+      life,
+      size,
+      kind: 'drop',
+      // NOT ribbon-eligible: at gout speeds a 0.15 s path history is a
+      // straight metre of line, which renders as a laser rod, not fluid.
+    });
+  }
 }
 
 function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap' = 'drop'): void {
