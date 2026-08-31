@@ -763,18 +763,21 @@ async function main() {
     postAa.addSink(gooLayer);
     const t = sdfLayer.targetSize;
     gooLayer.setSize(t.width, t.height);
-    // Game defaults, swept against the owner's reference frames (Gears-style
-    // viscous ropes and sheets). THRESHOLD ABOVE 1 IS THE WHOLE TRICK: a lone
-    // blob peaks near 1.0, so anything under that renders every isolated
-    // droplet as its own oval — which is exactly what three rounds of tuning
-    // kept producing. At 1.5 a droplet needs real neighbours to survive, so
-    // only the dense parts of a stream draw, and they draw CONNECTED.
-    // Fat blobs (0.8 vs the lab's 0.22) + wide blur (10) are what fuse them;
-    // the lab's own note calls 0.4 "thick hose-water ropes", and this brief
-    // wants thicker than that.
-    gooLayer.setThreshold(1.5);
-    gooLayer.setBlurPx(10);
-    gooLayer.setSizeScale(0.8);
+    // Game defaults. The threshold trades two failure modes against each
+    // other and BOTH were hit on the way here:
+    //   too low  -> every isolated droplet clears it and draws its own oval
+    //               (three rounds of "little oval drops"; the old 0.95 clamp
+    //               made this unavoidable, since a lone blob peaks near 1.0)
+    //   too high -> only dense overlap draws, so an ordinary pellet hit
+    //               renders NOTHING (measured: 10 droplets, zero pixels)
+    // 0.6 sits where dense stream sections fuse into connected ropes while a
+    // thin hit still reads. Fat blobs and wide blur do the fusing; mist
+    // carries the sparse case and the satellite grain the references show.
+    // Tune live with __sdfGame.setGooTuning — 1.2+ for heavy ropes, 0.4 for
+    // a wetter, beadier read.
+    gooLayer.setThreshold(0.6);
+    gooLayer.setBlurPx(9);
+    gooLayer.setSizeScale(0.75);
   }
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
@@ -1368,11 +1371,17 @@ async function main() {
     setGoo(on: boolean) {
       if (!gooLayer) return false;
       gooEnabled = on;
+      // Beads and ribbons go: they are the hard-edged shapes the goo
+      // replaces, and they would draw the same particles twice.
       bloodView.setBeadsVisible(!on);
-      // Mist goes too. It is a billboard quad like any other, so leaving it
-      // on with the goo surface keeps exactly the "little oval drops" look
-      // the goo is meant to replace — the owner was reading the MIST.
-      bloodView.setMistVisible(!on);
+      // MIST STAYS. Hiding it (first cut) was a bug with teeth: the goo only
+      // draws where droplets OVERLAP, so a sparse hit — an ordinary pellet
+      // at range — crosses no threshold and draws NOTHING, and with mist off
+      // too the result was a wound with no blood at all. Reproduced headless:
+      // pellet at threshold 1.5 spawned 10 droplets and rendered zero pixels.
+      // The reference frames want both anyway — connected masses PLUS fine
+      // satellite specks — so mist is the sparse-case floor and the grain.
+      bloodView.setMistVisible(true);
       return true;
     },
     get goo() {
