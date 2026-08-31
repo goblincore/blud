@@ -11,8 +11,8 @@
 **Stable** is the requirement, not a peak number. 33 ms that holds through a
 firefight beats 20 ms that spikes to 60 the moment you shoot someone. The
 success metric is therefore the one `bench-main.ts` already uses for 30 fps:
-**p95 ≤ 33 ms**, measured over a run that includes the effects — wounds, gibs,
-goo, muzzle flash — not over a quiet walk.
+**p95 ≤ 33 ms**, measured over a run that includes the effects — wounds, gib
+chunks, projectiles, muzzle flash — not over a quiet walk.
 
 ## Where we actually are
 
@@ -44,9 +44,15 @@ investigation is therefore by **interleaved ablation** — toggle one pass,
 measure the delta, alternate legs to cancel thermal drift. This is how the
 rest of the codebase measures and it is not negotiable here.
 
-A corollary of (3): wall clock is vsync-pinned, so nothing below ~16.7 ms is
-measurable. That is fine for a 33 ms target, but any leg that lands under the
-cap must be re-measured on a heavier scene rather than quoted as "16.7".
+A corollary of (3) that is easy to get backwards: wall clock is vsync-pinned
+only on the **rAF** path — which is what `frameMs()` and the adaptive
+controller read, so those cannot see below ~16.7 ms. The **bench** path is not
+pinned. `handle.step(dtSec)` drives a frame by hand and takes the compositor
+out of the loop, and `handle.resolveGpu()` is an honest completion fence: it
+does not return until submitted work has executed (`lab-renderer.ts:36-56`).
+Chunked stepping with a fence at each chunk boundary therefore measures
+execution rather than submission, at full resolution below the refresh rate.
+Quote bench numbers, never `frameMs()`, in any A/B.
 
 ## Quality LOD is dead — do not re-propose it
 
@@ -114,18 +120,38 @@ already drives `__sdfGame` over CDP, but its per-room frame ms is explicitly
 accumulator from `bench-stats.ts` rather than reinventing percentiles.
 
 The scenario is deterministic: fixed seed, fixed camera path through the room
-ring, N bodies, and **scripted shots at known frames** so wounds, gibs and goo
-all fire reproducibly. Aim points must raycast a **surface** point — a torso
+ring, N bodies, and **scripted shots at known frames** so wounds, severs and
+gib chunks all fire reproducibly. Aim points must raycast a **surface** point — a torso
 cluster centre sits inside the field, anchors the crater pathologically, and a
 slug's `severRadius` then cuts both hip necks into instant collapse (recorded
 in the hit-stagger work; never player-visible, but it will corrupt a bench).
 
 **Report:** p95, p99 and worst frame over the run, plus the same **per
 segment** — walking, firing, gibbing — so a moment that breaks the budget is
-visible instead of averaged away. Run at N=4 and N=8.
+visible instead of averaged away.
 
-**Attribute:** interleaved ablation legs — bodies only, +goo, +post-AA,
-occluder off, adaptive off.
+**The crowd ladder is free.** The ring already spawns 1/2/3/4 zombies in rooms
+1-4 (`game-level.ts` `ROOMS[].zombies`, 10 bodies total), so benching per room
+gives a 1→4 body curve using existing content. The denser leg gathers frozen
+actors into one room rather than inventing a spawn path.
+
+**Chunk means hide spikes — measure twice, and never mix the two.** The
+lab's `benchGpu` samples *chunk elapsed / chunkFrames*, so a single 60 ms
+spike inside a 20-frame chunk averages down to ~2 ms and disappears. That
+shape is right for steady-state A/B and wrong for "stable". So: a
+**throughput** leg (chunked + fenced, the lab's exact pattern) for every
+comparison, and a **spike** leg (fence per frame) used only to locate which
+frames blow up, relative to its own run's baseline. Fencing every frame
+drains the queue and clocks the GPU down, so spike-leg absolutes are NOT
+comparable to throughput-leg absolutes — ratios within a run only.
+
+**Attribute:** interleaved ablation legs — bodies only, +effects, +post-AA,
+occluder off, cone on, SDF scale rungs.
+
+**Note what is NOT on the game page yet.** `grep -c goo game-main.ts` is 0 —
+the screen-space blood goo layer is lab-only, and so are shell silhouettes.
+They are future cost, not current cost, so the budget this bench measures has
+to leave headroom for them rather than being spent to the line.
 
 **Deliverable:** a table of where 33 ms actually goes, and which moments spike.
 Every later claim is judged against it.
