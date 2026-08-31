@@ -194,14 +194,13 @@ export function buildOuterHullInstances(
 }
 
 export interface OuterHull {
-  /** Front faces — the ENTRY distance. */
-  readonly object: THREE.Mesh;
+  /** Front faces + LessEqual — rendered into the ENTRY target. */
+  readonly entryObject: THREE.Mesh;
+  /** Back faces + GreaterDepth — rendered into the EXIT target. */
+  readonly exitObject: THREE.Mesh;
   update(bodies: BuiltBody[], opts?: OuterHullOpts): void;
   readonly instanceCount: number;
   readonly overflowed: boolean;
-  /** Flip between the entry (front/nearest) and exit (back/farthest) passes.
-   *  Driven by the SDF layer through its shell side hook. */
-  setSide(side: THREE.Side, depthFunc: THREE.DepthModes): void;
   dispose(): void;
 }
 
@@ -225,15 +224,42 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
   // Dividing by it inflates the mesh until its FACES reach the true sphere.
   const FACE_INSET = 0.9356;
 
-  const material = new MeshBasicNodeMaterial();
-  const dist = length(sub(positionWorld, cameraPosition));
-  material.colorNode = vec4(dist, dist, dist, 1);
-  material.depthWrite = true;
-  material.depthTest = true;
+  // TWO meshes with FIXED materials, not one flipped between passes.
+  //
+  // The first build flipped a single material (side + depthFunc +
+  // needsUpdate) twice per frame between the entry and exit renders. On the
+  // WebGPU backend needsUpdate forces a pipeline rebuild, and a pass whose
+  // pipeline is mid-rebuild renders stale or nothing — so the RENDERED hull
+  // stopped tracking the bodies even though the instance matrices updated
+  // every frame. On screen: the body walks out of its own frozen hull and the
+  // march masks it against the stale bounds — flesh scraps floating where the
+  // body used to be. Caught by the owner in live play (2026-08-31); every
+  // automated gate had frozen the wanderers first, and a stale hull is
+  // indistinguishable from a fresh one on a frozen body.
+  //
+  // The occluder never hit this because its material is never touched after
+  // creation. Same rule here now: create two, mutate neither.
+  const makeMaterial = (side: THREE.Side, depthFunc: THREE.DepthModes) => {
+    const material = new MeshBasicNodeMaterial();
+    const dist = length(sub(positionWorld, cameraPosition));
+    // Distance from the camera — exactly the ray parameter the march compares
+    // against; depth would need the projection undone per marched pixel.
+    material.colorNode = vec4(dist, dist, dist, 1);
+    material.depthWrite = true;
+    material.depthTest = true;
+    material.side = side;
+    material.depthFunc = depthFunc;
+    return material;
+  };
+  const entryMaterial = makeMaterial(THREE.FrontSide, THREE.LessEqualDepth);
+  const exitMaterial = makeMaterial(THREE.BackSide, THREE.GreaterDepth);
 
-  const mesh = new THREE.InstancedMesh(geo, material, maxInstances);
-  mesh.frustumCulled = false;
-  mesh.count = 0;
+  const entryMesh = new THREE.InstancedMesh(geo, entryMaterial, maxInstances);
+  const exitMesh = new THREE.InstancedMesh(geo, exitMaterial, maxInstances);
+  for (const m of [entryMesh, exitMesh]) {
+    m.frustumCulled = false;
+    m.count = 0;
+  }
 
   const m = new THREE.Matrix4();
   let count = 0;
@@ -248,27 +274,32 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
       const r = s.radius / FACE_INSET;
       m.makeScale(r, r, r);
       m.setPosition(s.centre[0], s.centre[1], s.centre[2]);
-      mesh.setMatrixAt(i, m);
+      entryMesh.setMatrixAt(i, m);
+      exitMesh.setMatrixAt(i, m);
     }
-    mesh.count = count;
-    mesh.instanceMatrix.needsUpdate = true;
+    entryMesh.count = count;
+    exitMesh.count = count;
+    entryMesh.instanceMatrix.needsUpdate = true;
+    exitMesh.instanceMatrix.needsUpdate = true;
   }
 
   update([]);
 
   return {
-    object: mesh,
+    entryObject: entryMesh,
+    exitObject: exitMesh,
     update,
-    setSide(side, depthFunc) {
-      material.side = side;
-      material.depthFunc = depthFunc;
-      material.needsUpdate = true;
-    },
     get instanceCount() { return count; },
     // An overflowed hull is NOT a slightly worse hull — the instances that did
     // not fit leave uncovered flesh, and uncovered flesh renders as a hole.
     // The consumer must fall back to the unbounded march when this is true.
     get overflowed() { return overflowed; },
-    dispose() { geo.dispose(); material.dispose(); mesh.dispose(); },
+    dispose() {
+      geo.dispose();
+      entryMaterial.dispose();
+      exitMaterial.dispose();
+      entryMesh.dispose();
+      exitMesh.dispose();
+    },
   };
 }

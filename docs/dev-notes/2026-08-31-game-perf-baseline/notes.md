@@ -502,3 +502,108 @@ Correct and cheap, still **default OFF**. Remaining before it defaults on:
 3. Wounds and severing under the shell. The hull ignores wounds by design
    (subtraction only shrinks), but severed clusters drop out of the hull via
    the live-cluster filter, and that path has not been exercised on screen.
+
+---
+
+# Follow-up 5: three instruments walk into a wounded room — two were lying
+
+## The owner's report
+
+Manual pass (2026-08-31): visual glitches at relax 1.4 (confirmed — box-shaped
+washes, reverted) AND with `setShell(true)` — missing body parts. The console
+history shows the shell test ran **while relax was still 1.4**, a combination
+already known broken. But the report forced a rigorous look at shell-at-1.0,
+and that look caught two lying instruments.
+
+## Instrument 1: the occupancy counter — lies in crowds
+
+`occupancy()` reported +9-10k hits with the shell ON, deterministically. The
+cross-tab (`shellDiag()`) showed those "extra" hits fire after 8-15 real steps
+(not first-sample), the OFF march burned only 0-15 steps at those pixels (not
+budget exhaustion), shared-hit t identical to 7 decimals, and — the tell — the
+ON-only hits sit NEARER than the shared-hit mean.
+
+Cause: **in debug mode 4, misses do not discard.** A near proxy box's miss
+fragment writes its end-t as depth and can WIN the depth test over a far
+body's real hit, hiding it in the OFF buffer. The shell discards those miss
+fragments before they write, unmasking hits that were always in the real
+image. The counter was diffing its own depth pollution.
+
+Caveat now attached to the tool: occupancy() is sound for single-body scenes
+and for coverage fractions; per-pixel hit attribution in CROWDS is unreliable
+wherever proxy boxes overlap.
+
+## Instrument 2: capture pairs across a freeze — the smear settles
+
+The "pink rim" I reported earlier came from comparing two captures taken a few
+steps apart. On a frozen scene, two captures of the IDENTICAL off state differ
+by **7.9% of pixels** — the post-AA temporal smear is still converging after
+the freeze. Capture comparisons are only valid between SETTLED states, with a
+same-state pair as the noise floor.
+
+## The verdict, from the one honest protocol
+
+Frozen frame, settled, A/B/A/B with same-state noise floors:
+
+| pair | differing >8 | >32 |
+| --- | ---: | ---: |
+| off vs off (noise floor) | 7.9% (settling) / 0.015% (settled) | — |
+| **off vs on (the effect)** | **0.012%** | **11 px** |
+| occluder on vs off | 0.000% | 0 px |
+
+**Shell at relax 1.0 is real-render parity — below the same-state noise floor —
+wounds included.** And the occluder contributes zero pixels to the image.
+
+## The frame-time win
+
+`BENCH_LEGS=baseline,shell-on`, 3 repeats, spread 2-9%:
+
+| room | baseline | shell-on | delta |
+| ---: | ---: | ---: | ---: |
+| 3 | 23.28 ms | **10.82 ms** | **−54%** |
+| 4 | 15.89 ms | **9.50 ms** | **−40%** |
+
+Net of the hull's own two rasterisation passes. This is the largest measured
+win of the investigation, and it lands exactly where the occupancy measurement
+predicted the market was.
+
+## Status
+
+Shell remains **default OFF** pending the owner's manual pass at the correct
+settings — `__sdfGame.setShell(true)` with relax LEFT AT 1.0. The earlier
+manual pass never actually tested this combination.
+
+---
+
+# Follow-up 6: the stale-hull mask, and the ship
+
+## The owner's catch
+
+With the shell on, a **walking** zombie shed its own render — flesh scraps
+floating where the body used to be; "like the shell doesn't move with the
+model." Exactly right. The hull's instance matrices updated every frame; the
+RENDER didn't. The entry/exit passes shared one material flipped between them
+(side + depthFunc + `needsUpdate`, twice per frame), and on the WebGPU backend
+`needsUpdate` forces a pipeline rebuild — a pass whose pipeline is mid-rebuild
+renders stale bounds. The occluder never hits this because its material is
+never touched after creation.
+
+**Why every automated gate missed it:** they all froze the wanderers first,
+and a stale hull is indistinguishable from a fresh one on a frozen body. The
+owner's live walk was the one scenario never scripted. It is scripted now.
+
+## Fix and gate
+
+Two `InstancedMesh`es with fixed materials — front/LessEqual on `SHELL_LAYER`,
+back/GreaterDepth on `SHELL_EXIT_LAYER` — instance data written to both,
+nothing mutated per frame. Gate: shell on, 300 frames of live walking,
+mid-walk capture (bodies intact), then freeze-settle A/B — same-state noise
+floors exactly 0.000%, shell effect 0.062%/0.016%, residue isolated
+single-pixel silhouette grazes.
+
+## Shipped
+
+Owner passed the live walk on 2026-08-31. **Shell defaults ON**: −54% / −40%
+frame time at parity. Bench baseline now carries the shell; the `shell-off`
+leg measures the cost of turning it off. `__sdfGame.setShell(false)` is the
+kill switch.

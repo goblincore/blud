@@ -80,6 +80,15 @@ export const OCCLUDER_LAYER = 3;
 export const SHELL_LAYER = 4;
 
 /**
+ * The outer hull's EXIT twin (back faces + GreaterDepth) lives on its own
+ * layer. Two meshes with fixed materials rather than one flipped between
+ * passes: flipping side + needsUpdate per pass forced a WebGPU pipeline
+ * rebuild mid-frame, and a pass whose pipeline is rebuilding renders stale —
+ * the rendered hull stopped tracking the bodies (owner-caught, 2026-08-31).
+ */
+export const SHELL_EXIT_LAYER = 5;
+
+/**
  * Tile size of the cone pre-pass, in full-resolution pixels.
  *
  * 8 is the figure the technique is usually quoted with. Bigger tiles make the
@@ -182,15 +191,6 @@ export interface SdfLayer {
   readonly shellExit: OccluderSource;
   setShellEnabled(on: boolean): void;
   readonly shellEnabled: boolean;
-  /**
-   * How the layer flips the outer hull between its front and back passes.
-   *
-   * A hook rather than a direct material reference: the layer renders the
-   * scene through a camera layer mask and never holds the hull object, and
-   * threading one in just to mutate `side` would couple them for no gain.
-   * Owner wires this to OuterHull.setSide.
-   */
-  setShellSideHook(fn: ((side: THREE.Side, depthFunc: THREE.DepthModes) => void) | null): void;
   setOccluderEnabled(on: boolean): void;
   readonly occluderEnabled: boolean;
   /** Turns the cone pre-pass on or off, for measurement. */
@@ -291,10 +291,6 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const shellEntry = new THREE.RenderTarget(1, 1, { ...shellOpts });
   const shellExit = new THREE.RenderTarget(1, 1, { ...shellOpts });
   const shellUniforms = { enabled: uniform(0) };
-  let shellSideHook: ((side: THREE.Side, depthFunc: THREE.DepthModes) => void) | null = null;
-  const shellMaterialSide = (side: THREE.Side, depthFunc: THREE.DepthModes) => {
-    shellSideHook?.(side, depthFunc);
-  };
   const clearColorScratch = new THREE.Color();
 
   /**
@@ -475,22 +471,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         const prevClear = renderer.getClearColor(clearColorScratch).getHex();
         const prevDepth = renderer.getClearDepth();
         renderer.setClearColor(0x000000);
-        camera.layers.set(SHELL_LAYER);
 
-        // ENTRY: front faces, nearest wins — the standard depth setup.
-        shellMaterialSide(THREE.FrontSide, THREE.LessEqualDepth);
+        // ENTRY: the front-face twin (LessEqual), nearest wins.
+        camera.layers.set(SHELL_LAYER);
         renderer.setClearDepth(1);
         renderer.setRenderTarget(shellEntry);
         void renderer.render(scene, camera);
 
-        // EXIT: back faces, FARTHEST wins — clear depth to near and reverse
-        // the test, the same inversion the 2026-08-25 shell spike used.
-        shellMaterialSide(THREE.BackSide, THREE.GreaterDepth);
+        // EXIT: the back-face twin (GreaterDepth), farthest wins — clear
+        // depth to near, the same inversion the 2026-08-25 shell spike used.
+        // A separate MESH on a separate LAYER, not a material flip: pipelines
+        // stay fixed, so nothing rebuilds mid-frame.
+        camera.layers.set(SHELL_EXIT_LAYER);
         renderer.setClearDepth(0);
         renderer.setRenderTarget(shellExit);
         void renderer.render(scene, camera);
 
-        shellMaterialSide(THREE.FrontSide, THREE.LessEqualDepth);
         renderer.setClearDepth(prevDepth);
         renderer.setClearColor(prevClear);
       }
@@ -542,7 +538,6 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },
     setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },
     get shellEnabled() { return shellUniforms.enabled.value > 0.5; },
-    setShellSideHook(fn) { shellSideHook = fn; },
     setOccluderEnabled(on) { occluderUniforms.enabled.value = on ? 1 : 0; },
     get occluderEnabled() { return occluderUniforms.enabled.value > 0.5; },
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },

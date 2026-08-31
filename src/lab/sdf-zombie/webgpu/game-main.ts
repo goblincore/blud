@@ -27,7 +27,7 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -306,6 +306,33 @@ async function main() {
   scene.add(occluderHull.object);
   sdfLayer.setOccluderEnabled(true);
 
+/**
+   * Over-relaxation factor for the game page's march (woundCfg2.y).
+   *
+   * 1.0 = OFF, which falls through to marchCfg.y = 0.6. X1.10 measured 1.4 as
+   * the optimum in the LAB and it is tempting here — it drops mean steps from
+   * 18.1 to 10.7 and appears to resolve far more flesh (room 4: 26841 -> 50685
+   * hit pixels).
+   *
+   * IT FAILED ITS VISUAL GATE ON THIS PAGE (2026-08-31). Those extra "hits"
+   * are FALSE, and they are box-shaped: large translucent rectangles washing
+   * over the walls, exactly the screen extents of the bodies' proxy boxes.
+   * Mechanism is the same one that produced the shell halo — above omega 1.0
+   * the tracer does `t = tMax; clamped = true` and takes a FINAL CLAMPED
+   * SAMPLE, and at the far side of a big proxy box the AA epsilon
+   * (t * aaCfg.x, growing with distance) accepts that sample as a surface.
+   *
+   * Interesting wrinkle worth keeping: the outer-hull shell SUPPRESSES the
+   * artifact, because the false hits sit on box pixels outside the hull and
+   * the shell discards those before the march runs (room 3 measured 8773
+   * fewer hits with the shell on at 1.4, room 4 only 87 — the difference is
+   * how much box lies outside the hull). So 1.4 may become available once the
+   * shell defaults on, but it is not a free win on its own.
+   *
+   * Do not raise this without re-running the visual gate.
+   */
+  const GAME_RELAX = 1.0;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -316,10 +343,16 @@ async function main() {
   // measurement instrument until the march consumes it, and rasterising it
   // for nothing is pure cost.
   const outerHull = createOuterHull();
-  outerHull.object.layers.set(SHELL_LAYER);
-  scene.add(outerHull.object);
-  sdfLayer.setShellSideHook((side, depthFunc) => outerHull.setSide(side, depthFunc));
-  sdfLayer.setShellEnabled(false);
+  outerHull.entryObject.layers.set(SHELL_LAYER);
+  outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
+  scene.add(outerHull.entryObject);
+  scene.add(outerHull.exitObject);
+  // SHELL ON BY DEFAULT (owner visual pass, 2026-08-31). Worth -40%/-54%
+  // frame time (room 4/3) at real-render parity below the same-state noise
+  // floor. The hull is populated by the frame loop before the first draw
+  // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
+  // .setShell(false) is the kill switch.
+  sdfLayer.setShellEnabled(true);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -377,6 +410,9 @@ async function main() {
           },
         });
       view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
+      // Relaxation, explicit rather than inherited from the uniform default —
+      // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
+      view.uniforms.woundCfg2.value.y = GAME_RELAX;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -1134,8 +1170,9 @@ async function main() {
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),
 
-    /** Rasterise the conservative outer hull (shell-hull-outer.ts). Default
-     *  OFF — until the march consumes it this is an instrument, not a lever. */
+    /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
+     *  owner-passed 2026-08-31 after the stale-hull mask fix; -40%/-54%
+     *  frame time at real-render parity. This is the kill switch. */
     setShell(on: boolean) {
       sdfLayer.setShellEnabled(on);
       if (on) outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
@@ -1149,6 +1186,108 @@ async function main() {
         overflowed: outerHull.overflowed,
         shellAmp: shellAmpOf(),
       };
+    },
+
+    /**
+     * PER-PIXEL CROSS-TAB of shell OFF vs ON — the diagnostic that competing
+     * aggregates could not settle (2026-08-31: one run said the shell added
+     * +10k hits, another said zero; both were sums).
+     *
+     * Renders the occupancy buffer twice on the SAME frozen frame (shell off,
+     * then on) and classifies every pixel by (hitOff, hitOn). For pixels that
+     * hit ONLY with the shell on, reports what the OFF march did instead:
+     * how many steps it burned and whether it hit the 96-step budget — which
+     * separates "budget exhausted at grazing incidence" from "terminated on
+     * distance and the extra hits are something else".
+     */
+    async shellDiag() {
+      const readGrid = async () => {
+        const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+        for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
+        try {
+          handle.setLoopRunning(false);
+          handle.step(1 / 60);
+          await handle.resolveGpu();
+          const t = sdfLayer.marchTarget;
+          const w = t.width;
+          const h = t.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          return { w, h, buf, floatsPerRow };
+        } finally {
+          for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        }
+      };
+      const wasOn = sdfLayer.shellEnabled;
+      try {
+        sdfLayer.setShellEnabled(false);
+        const off = await readGrid();
+        sdfLayer.setShellEnabled(true);
+        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+        const on = await readGrid();
+        const stepsHist = new Array(13).fill(0); // OFF steps/8 for ON-only hits
+        const onStepsHist = new Array(13).fill(0); // ON steps at ON-only hits
+        let onOnly = 0;
+        let offOnly = 0;
+        let both = 0;
+        let onOnlyOffBudget = 0; // OFF burned >= 90 steps at those pixels
+        let onOnlyOffMarched = 0; // OFF actually marched there (vs no fragment)
+        let onOnlyFirstSample = 0; // ON hit within 2 steps of shellIn = started in/on flesh
+        let tSum = 0;
+        // For pixels BOTH hit: does the shell move the hit? Identical means the
+        // entry bound is sound for hit rays; a shifted t means shellIn lands
+        // past the true surface.
+        let bothTOff = 0;
+        let bothTOn = 0;
+        let bothTMoved = 0; // |tOn - tOff| > 5 mm
+        for (let row = 0; row < off.h; row++) {
+          const ob = row * off.floatsPerRow;
+          const nb = row * on.floatsPerRow;
+          for (let col = 0; col < off.w; col++) {
+            const o = ob + col * 4;
+            const n = nb + col * 4;
+            const hitOff = off.buf[o + 2]! > 0.5 && off.buf[o + 1]! > 0.5;
+            const hitOn = on.buf[n + 2]! > 0.5 && on.buf[n + 1]! > 0.5;
+            if (hitOff && hitOn) {
+              both++;
+              bothTOff += off.buf[o + 3]!;
+              bothTOn += on.buf[n + 3]!;
+              if (Math.abs(on.buf[n + 3]! - off.buf[o + 3]!) > 0.005) bothTMoved++;
+            }
+            else if (hitOff) offOnly++;
+            else if (hitOn) {
+              onOnly++;
+              tSum += on.buf[n + 3]!;
+              const onSt = on.buf[n]!;
+              onStepsHist[Math.min(12, Math.floor(onSt / 8))]!++;
+              if (onSt <= 2) onOnlyFirstSample++;
+              if (off.buf[o + 2]! > 0.5) {
+                onOnlyOffMarched++;
+                const st = off.buf[o]!;
+                if (st >= 90) onOnlyOffBudget++;
+                stepsHist[Math.min(12, Math.floor(st / 8))]!++;
+              }
+            }
+          }
+        }
+        return {
+          both, offOnly, onOnly,
+          onOnlyOffMarched, onOnlyOffBudget,
+          onOnlyFirstSample,
+          onOnlyMeanT: onOnly ? tSum / onOnly : 0,
+          bothMeanTOff: both ? bothTOff / both : 0,
+          bothMeanTOn: both ? bothTOn / both : 0,
+          bothTMoved,
+          // Histograms bucketed by 8 steps.
+          offStepsAtOnOnly: stepsHist,
+          onStepsAtOnOnly: onStepsHist,
+        };
+      } finally {
+        sdfLayer.setShellEnabled(wasOn);
+        handle.setLoopRunning(true);
+      }
     },
 
     /**
@@ -1215,6 +1354,12 @@ async function main() {
      * it is for benching only; nothing should ship on a reduced budget without
      * its own visual gate.
      */
+    /** Over-relaxation (woundCfg2.y). Ships at GAME_RELAX; <= 1.0 falls back
+     *  to marchCfg.y, which is the UNDER-relaxed 0.6 the page used to run. */
+    setRelax(v: number) {
+      for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
+    },
+    get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },

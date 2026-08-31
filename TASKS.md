@@ -20,21 +20,24 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**SHELL MARCH — WIRED, PARITY VERIFIED, DEFAULT OFF (2026-08-31).** Per-limb
-posed hulls (`shell-hull-outer.ts`) are built from `posed().prims`, so they
-follow the rig for free — no re-meshing, unlike the 2026-08-25 spike's 0.5 s
-marching-tets mesh. `MARCH_BODY` now takes `shellIn`/`shellOut` via a
-standalone `shellFetch` (HELPERS chain untouched); off-state fetches are exact
-identities. **Parity at 1 pixel** (room 3 104183 vs 104184; room 4 46224 vs
-46225, zero drift) while rasterised pixels drop **2.85x / 4.88x** and occupancy
-rises 23%→66% / 7%→48%. Visual gate caught the one real bug: folding `shellOut`
-into `tMax` put X1.15's clamped final sample on the hull, which the
-distance-growing AA epsilon accepts as a hit — halos on every silhouette,
-distant bodies as ghost hull outlines. Dropped + regression-guarded.
-**Before it defaults on:** settle the relaxation item below (it moves the
-baseline), a crowd FRAME-TIME A/B on a quiet machine (all numbers so far are
-pixel/step counts, and the hull's two raster passes cost something), and a
-sever/wound pass on screen.
+**SHELL MARCH — SHIPPED ON (owner-passed 2026-08-31).** Per-limb posed hulls
+(`shell-hull-outer.ts`) bound the march: **−54% / −40% frame time** (room 3
+23.3→10.8 ms, room 4 15.9→9.5, spread 2-9%) at real-render parity below the
+same-state noise floor. Three bugs found en route, all by gates: (1) folding
+`shellOut` into `tMax` put X1.15's clamped final sample on the hull — halos
+(regression-guarded); (2) relax 1.4 fails its own visual gate on this page —
+box-shaped washes, artifact suppressed but not fixed by the shell, stays 1.0
+(`X1.game-relax` re-scoped: only viable after rework of the clamped-sample
+path); (3) the OWNER caught the stale-hull mask — one material flipped
+side/depthFunc+needsUpdate twice per frame forces WebGPU pipeline rebuilds
+mid-frame and the rendered hull stops tracking walking bodies; every automated
+gate had frozen the wanderers, so the live walk was the one untested path.
+Fixed as two fixed-material meshes on two layers; live-walk gate scripted.
+Also: TWO measurement instruments proven liars — occupancy mode in crowds
+(misses don't discard → depth pollution hides real hits) and capture pairs
+across a freeze (post-AA smear settles for ~7.9% of pixels). The occluder
+measures ZERO (pixels and ms) on the game page — removal candidate.
+`__sdfGame.setShell(false)` is the kill switch.
 [note](docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
 
 **`X1.game-relax` [ ] THE GAME PAGE MARCHES UN-RELAXED — owner call needed.**
