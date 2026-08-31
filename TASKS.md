@@ -35,14 +35,18 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
-- `X1.bleed-look` [ ] **Visceral fluid spray + mist exploration** (owner ask
-  2026-08-31): droplets currently read as sprite blobs — placeholder by spec.
-  Owner wants (a) spray that reads GOOEY/fluid, (b) finer mist particles.
-  Candidate directions to spike: velocity-stretched billboards (cheap,
-  classic), screen-space metaball pass over droplets only (goo-layer math on
-  a small buffer), soft mist sprites with additive falloff + short lifetimes,
-  or SDF metaball micro-blobs riding the existing chunk path. Budget-gate
-  with the firefight bench like everything else.
+- `X1.bleed-look` [~] **Visceral fluid look** (owner: "cohesive lines of
+  fluid", "stylized excess", not realism). **Round 1 LANDED** (`6319104`,
+  branch `claude/bleed-look-spike`): path-history RIBBONS on bleed beads
+  (root-fat taper, aspect-locked width, 0.5 m arc cap), mist haze kind
+  (cutout — alphaHash drew unshaped squares on WebGPU), filament stretch with
+  thinning, slowed bleed speeds so streams arc. Owner live-judgment pending.
+  **Exploration menu for later rounds (owner-sketched):** blood-shape texture
+  ATLAS (rotated/scaled sprites — Blood-native), SPECULAR + post blur for wet
+  shine, BAKED LOW-RES FLUID SIM flipbooks (offline sim → sprite sheets; the
+  dynamite burst's procedural-flipbook fallback is in-repo prior art),
+  screen-space metaball pass over droplets (goo-layer math on a small
+  buffer). Budget-gate with the firefight bench like everything else.
 
 **GUN-FEEL-R2 REJECTED at owner playtest (2026-08-31)** — starts with the
 model itself (unhappy with the grapeshot pick) and no visible barrel-end
