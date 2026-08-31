@@ -130,14 +130,18 @@ export interface ZombieActor {
    * sever checks; any detachment is reported through `onSever` as world-space
    * piece data. Safe to call while the wander is frozen — the pose refresh is
    * done here, not left to the next step().
+   * Returns the wound THIS impact stamped (pre-sever — a hit that also
+   * severs reports its stump through onSever), so callers can hang per-hit
+   * effects (bleed emitters) off the exact wound without ring-index sniffing.
    */
-  hit(hitWorld: Vec3, dirWorld: Vec3): void;
+  hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null;
   /**
    * A SLUG (one big projectile) lands at `hitWorld`: same choreography as
    * hit() but stamps the slug calibre crater. Separate method on purpose —
    * nothing about the pellet path may drift while it is under diagnosis.
+   * Returns the stamped wound — see hit().
    */
-  hitSlug(hitWorld: Vec3, dirWorld: Vec3): void;
+  hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null;
   /**
    * Diagnostic blast: push a resolver-provided bundle of blast wounds
    * (resolveExplosion ran against this actor's POSED body) with no shove,
@@ -157,8 +161,10 @@ export function createZombieActor(opts: {
   seed: number;
   bounds: WanderBounds;
   furniture: readonly Aabb[];
-  /** Receives every detached piece, already placed in world space. */
-  onSever?: (piece: DetachedPiece) => void;
+  /** Receives every detached piece, already placed in world space, plus the
+   *  stump wound the sever stamped on the REMAINING body (null when no live
+   *  anchor existed) — the bleed emitters register from it directly. */
+  onSever?: (piece: DetachedPiece, stumpWound: Wound | null) => void;
 }): ZombieActor {
   const { body, view } = opts;
   let bound = bindRig(body);
@@ -293,7 +299,7 @@ export function createZombieActor(opts: {
       origin: applyRigidYaw(t, r.chunk.origin),
       prims: r.chunk.prims.map(p => ({ ...p, a: applyRigidYaw(t, p.a), b: applyRigidYaw(t, p.b) })),
       tornAt: r.chunk.tornAt.map(v => applyRigidYaw(t, v)),
-    });
+    }, r.stumpWound);
   }
 
   function runSeverChecks() {
@@ -421,15 +427,15 @@ export function createZombieActor(opts: {
     };
   }
 
-  function hit(hitWorld: Vec3, dirWorld: Vec3): void {
+  function hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
     // Yaw 0 — see refreshWounds: posed prims are already world space.
     const field = posed;
-    applyProjectileHit(woundFromPellet(field.prims, hitWorld, 0, p => sdBody(p, field)), hitWorld, dirWorld);
+    return applyProjectileHit(woundFromPellet(field.prims, hitWorld, 0, p => sdBody(p, field)), hitWorld, dirWorld);
   }
 
-  function hitSlug(hitWorld: Vec3, dirWorld: Vec3): void {
+  function hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
     const field = posed;
-    applyProjectileHit(woundFromSlug(field.prims, hitWorld, p => sdBody(p, field)), hitWorld, dirWorld);
+    return applyProjectileHit(woundFromSlug(field.prims, hitWorld, p => sdBody(p, field)), hitWorld, dirWorld);
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
@@ -448,8 +454,8 @@ export function createZombieActor(opts: {
 
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
    *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
-   *  the actor's CURRENT posed body at call time. */
-  function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): void {
+   *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
+  function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound {
     const field = posed;
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
@@ -489,6 +495,7 @@ export function createZombieActor(opts: {
     view.update(posed, current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
+    return wound;
   }
 
   return {
