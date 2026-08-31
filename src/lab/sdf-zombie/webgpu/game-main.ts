@@ -1124,6 +1124,78 @@ async function main() {
     get marchSteps() { return actors[0]?.view.uniforms.marchCfg.value.x ?? 0; },
 
     /**
+     * PROXY-BOX OCCUPANCY — the shell-march decision measurement.
+     *
+     * How much of the screen area the march actually rasterises is flesh?
+     * A bounded entry/exit hull never rasterises the rest, so `1 - occupancy`
+     * is the shell march's addressable market. This exists because the step
+     * budget sweep showed the spike's "14x fewer evals" counted the CHEAP
+     * evals: cost is per-PIXEL, not per-step, so what matters is how many
+     * pixels are marched for nothing.
+     *
+     * Method: march debug mode 4 returns raw counters BEFORE the miss-discard
+     * (r = steps, g = hit, b = rasterised, a = t), one frame is rendered, and
+     * the float target is read back and summed.
+     *
+     * Reported occupancy is a LOWER BOUND on the waste: depth-testing means
+     * only the front-most body writes each pixel, so overlapping proxy boxes
+     * hide extra fragment invocations this cannot see.
+     */
+    async occupancy() {
+      const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
+      try {
+        handle.setLoopRunning(false);
+        handle.step(1 / 60);
+        await handle.resolveGpu();
+        const t = sdfLayer.marchTarget;
+        const w = t.width;
+        const h = t.height;
+        const buf = new Float32Array(
+          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+        );
+        // ROW PADDING, and it is not optional: WebGPU aligns bytesPerRow to
+        // 256, so the readback is NOT densely packed. Walking it as w*h*4
+        // reads progressively misaligned rows and still yields a plausible
+        // percentage — the exact shape of wrong number this whole exercise
+        // keeps producing. (Same arithmetic as shell-spike-main.ts.)
+        const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+        let rasterised = 0;
+        let hits = 0;
+        let stepsOnHit = 0;
+        let stepsOnMiss = 0;
+        for (let row = 0; row < h; row++) {
+          const base = row * floatsPerRow;
+          for (let col = 0; col < w; col++) {
+            const o = base + col * 4;
+            if (buf[o + 2]! < 0.5) continue;
+            rasterised++;
+            if (buf[o + 1]! > 0.5) { hits++; stepsOnHit += buf[o]!; }
+            else { stepsOnMiss += buf[o]!; }
+          }
+        }
+        const misses = rasterised - hits;
+        return {
+          targetW: w, targetH: h, screenPx: w * h,
+          rasterised, hits, misses,
+          /** Fraction of MARCHED pixels that actually hit flesh. */
+          occupancy: rasterised ? hits / rasterised : 0,
+          /** Fraction of the SDF target the march touched at all. */
+          coverage: rasterised / (w * h),
+          meanStepsHit: hits ? stepsOnHit / hits : 0,
+          meanStepsMiss: misses ? stepsOnMiss / misses : 0,
+          /** Share of all marched STEPS spent on rays that hit nothing. */
+          missStepShare: (stepsOnHit + stepsOnMiss) > 0
+            ? stepsOnMiss / (stepsOnHit + stepsOnMiss) : 0,
+          bodiesOnScreen: bodiesOnScreen(),
+        };
+      } finally {
+        for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        handle.setLoopRunning(true);
+      }
+    },
+
+    /**
      * Run one bench leg.
      *
      * Parks the result on window.__gameBench as well as returning it: a

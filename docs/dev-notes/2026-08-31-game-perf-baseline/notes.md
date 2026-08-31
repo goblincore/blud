@@ -261,3 +261,81 @@ box is empty**, not how many steps rays take.
 3. Only then decide on per-limb posed hulls.
 
 **Do not start the posed-hull work on the strength of the spike's eval count.**
+
+---
+
+# Follow-up 2: proxy-box occupancy — the shell march's market, measured
+
+## Method
+
+March debug mode 4 (`debugCfg.x == 4`) returns raw counters **before** the
+miss-discard: `r` = steps this ray took, `g` = 1 if it hit flesh, `b` = 1
+always (this fragment was rasterised and marched). One frame is rendered and
+the float target is read back and summed — `__sdfGame.occupancy()`.
+
+**This is a counter, not a timer**, which matters enormously here: it is
+immune to the background load that made every timing sweep unresolvable. Two
+independent runs agree closely.
+
+Two traps worth recording. The readback is **row-padded** (`bytesPerRow`
+aligned to 256), so walking it as a dense `w*h*4` array reads progressively
+misaligned rows and still yields a plausible percentage. And the debug return
+must sit *above* `if (!hit) { discard; }`, or miss pixels write nothing and
+occupancy reads as 100% by construction.
+
+## Result (800x600 SDF target, two runs)
+
+| room | bodies on screen | coverage | occupancy (hit / marched) | mean steps: hit | miss | share of all steps spent on misses |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 1 | 100% | **17.1% / 17.6%** | 18.6 / 18.5 | 13.7 | 78% / 78% |
+| 3 | 3 | 100% | **18.0% / 15.5%** | 18.9 / 18.4 | 7.9 / 5.9 | 66% / 64% |
+| 4 | 8 | 77% / 75% | **8.9% / 7.5%** | 18.4 / 18.5 | 8.1 / 8.0 | 82% / 84% |
+
+(Room 1 reads zero — the known bench-placement bug, not a measurement fault.)
+
+## What it says
+
+**82-92% of every pixel the march rasterises hits nothing.** The proxy boxes
+cover 75-100% of the SDF target, while flesh occupies 7.5-18% of it. Those
+wasted pixels carry **63-84% of all march steps**.
+
+Also: **no ray comes near the step budget.** Hits average ~18.5 steps against
+a budget of 96, misses 6-14. That fully explains the step-budget sweep's null
+result — cutting the cap from 96 to 16 cannot help work that never exceeded 19
+steps. The sweep measured the *cap*, not the step count.
+
+## This corrects the previous follow-up
+
+Follow-up 1 concluded from the budget sweep that "miss pixels are already
+cheap" and that the shell-march premise was **not supported**. That inference
+was wrong, and this measurement is the direct evidence.
+
+Miss rays are individually cheaper than hit rays (≈8 vs ≈18.5 steps), but
+there are **five to eleven times more of them**, so in aggregate they are
+where most of the marching goes. The spec's original instinct was right; the
+budget sweep was simply the wrong instrument for the question, and reading a
+null from it as "misses are free" over-corrected.
+
+## Where that leaves the shell march
+
+Its addressable market is now measured rather than asserted, and it is large:
+
+- **Pixels**: from 75-100% of the target down to the body footprint, 7.5-18%.
+  A pixel outside the hull is never rasterised, so it pays no per-pixel setup,
+  no tile-list read, no shading — and the baseline showed cost is dominated by
+  per-pixel work (quartering pixels bought −54%).
+- **Steps**: deletes the 63-84% of stepping currently spent on rays that hit
+  nothing.
+- **Hit rays too**: the spike measured bounded hit rays at 3.30 steps against
+  8.02 unbounded. Here hits run ~18.5, so there is headroom on the pixels that
+  *do* matter as well.
+
+**Recommendation: proceed with the shell march.** The remaining risk is not
+whether the win exists but whether per-limb posed hulls can be built cheaply
+enough to keep it — the hull must follow the skeleton by rigid per-cluster
+moves, since the spike's single rest-pose mesh took ~0.5 s to build and cannot
+be rebuilt per frame.
+
+Do not use the occupancy figure as a predicted speed-up. It bounds the work
+that can be removed; the hull passes have their own cost, and that trade is
+what a crowd A/B has to settle.
