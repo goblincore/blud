@@ -274,6 +274,18 @@ export interface GooLayer {
   setEdge(v: number): void;
   /** Gaussian sigma in density-target pixels; 0 bypasses the blur passes. */
   setBlurPx(v: number): void;
+  /** World-size multiplier per particle (GOO_TUNING.sizeScale). Bigger blobs
+   *  overlap more, which is what turns beads into ropes and sheets — the
+   *  file's own tuning note: 0.15 breaks trails into disconnected beads,
+   *  0.22 gives thin connected strands, 0.4 reads as thick hose-water ropes. */
+  setSizeScale(v: number): void;
+  /** DIAGNOSTIC: drop the surface pass's depth test. The surface normally
+   *  writes a depth RECONSTRUCTED from the density field's average view
+   *  depth and interleaves with flesh; if that reconstruction is wrong the
+   *  goo silently loses everywhere except against distant background, which
+   *  looks exactly like "the goo is not rendering". */
+  setDepthTest(on: boolean): void;
+  readonly sizeScale: number;
   /** Mirror of the march's legacy-gamma flag — keep both on one switch. */
   setLegacyGamma(on: boolean): void;
   readonly threshold: number;
@@ -318,6 +330,10 @@ export function createGooLayer(
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
   const uThresh = uniform(GOO_TUNING.threshold);
+  /** Surface materials, so the depth test can be disabled for diagnosis. */
+  const surfaceMaterials: THREE.Material[] = [];
+  /** Runtime sizeScale — see setSizeScale. */
+  let sizeScale: number = GOO_TUNING.sizeScale;
   // Matches the march's lodCfg.y default (legacy gamma ON) — lab-main's
   // setLegacyGamma drives both together.
   const uLegacy = uniform(1);
@@ -386,6 +402,7 @@ export function createGooLayer(
     m.depthNode = surfaced.w as never;
     m.depthWrite = true;
     m.depthTest = true;
+    surfaceMaterials.push(m);
     return m;
   }
   const surfRawMat = makeSurfaceMat(target.texture);
@@ -542,6 +559,13 @@ export function createGooLayer(
         const d = sim.droplets[i]!;
         // Mist cutoff: the fine beads stay in the billboard view; everything
         // else feeds the density field. Scraps always go.
+        //
+        // The explicit 'mist' kind (bleeding-wounds, 2026-08-31) is haze by
+        // construction and NEVER feeds density, whatever its size — some
+        // stump mist rolls above mistMaxSize, and letting it in fogs the
+        // field instead of thickening the stream. No-op for the lab, which
+        // has no mist particles.
+        if (d.kind === 'mist') continue;
         if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
         p.set(d.pos[0], d.pos[1], d.pos[2]);
         // Billboard, then roll in screen space so the stretch follows velocity.
@@ -550,7 +574,7 @@ export function createGooLayer(
         const stretch = 1 + Math.min(speed * 0.18, 0.8);
         roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
         q.copy(camera.quaternion).multiply(roll);
-        const gs = d.size * GOO_TUNING.sizeScale;
+        const gs = d.size * sizeScale;
         s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
         m.compose(p, q, s);
         quads.setMatrixAt(n++, m);
@@ -597,11 +621,26 @@ export function createGooLayer(
     },
     setOutputTarget(t) { outputTarget = t; },
     setFlipY(on) { uFlipY.value = on ? 1 : 0; },
-    setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(0.95, v)); },
+    // CEILING RAISED TO 4 (2026-08-31). It was 0.95, and the file's own note
+    // says "a lone blob peaks near 1.0" — so no threshold in the old range
+    // could ever REJECT a single droplet, and the field rendered every
+    // isolated bead as its own oval blob no matter how it was tuned. Owner
+    // read that as "little oval drops" three rounds running. Above 1 the
+    // threshold starts demanding genuine overlap, which is the whole point
+    // of a metaball: 2 blobs to cross ~1.5, 3 to cross ~2.5. The lab keeps
+    // its 0.4 default, so nothing there moves.
+    setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(4, v)); },
     setEdge(v) { uEdge.value = Math.max(1.01, Math.min(4, v)); },
-    setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(5, v)); },
+    // Ceiling 5 -> 16: wider blur is how neighbouring peaks merge before the
+    // threshold sees them. (5.5 was being silently clamped to 5.)
+    setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(16, v)); },
+    setSizeScale(v) { sizeScale = Math.max(0.05, Math.min(1.5, v)); },
+    setDepthTest(on) {
+      for (const m of surfaceMaterials) { m.depthTest = on; m.needsUpdate = true; }
+    },
     setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },
     get threshold() { return uThresh.value; },
+    get sizeScale() { return sizeScale; },
     get edge() { return uEdge.value; },
     get blurPx() { return uBlurPx.value; },
     get targetSize() { return { width: target.width, height: target.height }; },

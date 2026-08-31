@@ -35,14 +35,27 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
-- `X1.bleed-look` [ ] **Visceral fluid spray + mist exploration** (owner ask
-  2026-08-31): droplets currently read as sprite blobs — placeholder by spec.
-  Owner wants (a) spray that reads GOOEY/fluid, (b) finer mist particles.
-  Candidate directions to spike: velocity-stretched billboards (cheap,
-  classic), screen-space metaball pass over droplets only (goo-layer math on
-  a small buffer), soft mist sprites with additive falloff + short lifetimes,
-  or SDF metaball micro-blobs riding the existing chunk path. Budget-gate
-  with the firefight bench like everything else.
+- `X1.bleed-look` [~] **Visceral fluid look — PARKED for its own session**
+  (owner call 2026-08-31). Round 1 RIBBONS rejected ("too thin and
+  uninteresting" — lines cannot be volumes). Round 2 **`goo-layer.ts` PORTED**
+  to the game page on `claude/bleed-look-spike` (**unmerged**): density/blur/
+  surface nested in the draw chain like lab-main, postAa sink, light-rig nodes
+  shared with a body view, `setSize` inside `sizeSdfLayer` (adaptive moves the
+  target at runtime). Seams `__sdfGame.setGoo` / `setGooTuning(threshold, edge,
+  blurPx, sizeScale, depthTest)`. It composites, is lit and glossy — and still
+  does NOT reach the reference. **Two blockers, neither is tuning:**
+  (1) **DEPTH** — the surface writes a depth reconstructed from the density
+  field and goo appears ONLY against distant background, never against a body;
+  `depthTest:false` reveals rejected blobs, i.e. near-wound blood is discarded.
+  (2) **EMISSION MODEL** — metaball fusion needs overlap; 80-300 droplets
+  spread through a volume never provide it. The lab's goo reads well because a
+  GIB BURST is hundreds of droplets in a tight volume at one instant; a
+  sustained bleed stream is the opposite. Next step is dense tight short-lived
+  JETS + the depth reconstruction — **not more threshold sweeps** (five run,
+  both failure modes proven: too low = every droplet its own oval, too high =
+  nothing renders). Also unbenched (3 extra passes on a ~10 ms page).
+  Reference frames (owner-supplied, Gears-style): connected glossy masses with
+  torn sheets, tapering tendrils, fine satellite specks.
 
 **GUN-FEEL-R2 REJECTED at owner playtest (2026-08-31)** — starts with the
 model itself (unhappy with the grapeshot pick) and no visible barrel-end
