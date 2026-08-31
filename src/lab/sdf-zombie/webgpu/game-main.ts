@@ -27,7 +27,8 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER } from './sdf-layer';
+import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull } from './occluder-hull';
@@ -304,6 +305,21 @@ async function main() {
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
   sdfLayer.setOccluderEnabled(true);
+
+  /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
+   *  Read from the live uniform rather than a constant, so retuning the noise
+   *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
+   *  cone and occluder bounds. */
+  const shellAmpOf = () => actors[0]?.view.uniforms.marchCfg.value.z ?? 0;
+
+  // The conservative OUTER hull (shell-hull-outer.ts). Default OFF: it is a
+  // measurement instrument until the march consumes it, and rasterising it
+  // for nothing is pure cost.
+  const outerHull = createOuterHull();
+  outerHull.object.layers.set(SHELL_LAYER);
+  scene.add(outerHull.object);
+  sdfLayer.setShellSideHook((side, depthFunc) => outerHull.setSide(side, depthFunc));
+  sdfLayer.setShellEnabled(false);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -762,6 +778,11 @@ async function main() {
       // expose. The game never passed this before 2026-08-27 because its
       // craters were tangent (the pale-wound defect) and never reached the
       // hull; real craters exposed it within one capture.
+      if (sdfLayer.shellEnabled) {
+        // Same posed bodies the occluder hull is built from, one line below —
+        // this is what makes the hull "posed" at no extra cost.
+        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      }
       occluderHull.update(
         actors.map(a => a.posed()),
         hullExclusionsEnabled
@@ -1101,6 +1122,71 @@ async function main() {
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),
+
+    /** Rasterise the conservative outer hull (shell-hull-outer.ts). Default
+     *  OFF — until the march consumes it this is an instrument, not a lever. */
+    setShell(on: boolean) {
+      sdfLayer.setShellEnabled(on);
+      if (on) outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+    },
+    get shell() {
+      return {
+        enabled: sdfLayer.shellEnabled,
+        instances: outerHull.instanceCount,
+        // An overflowed hull leaves flesh uncovered, which under a bounded
+        // march is a HOLE, not a slightly worse bound. Never ignore this.
+        overflowed: outerHull.overflowed,
+        shellAmp: shellAmpOf(),
+      };
+    },
+
+    /**
+     * SCREEN COVERAGE of the outer hull, against the proxy boxes it would
+     * replace.
+     *
+     * The decisive number for the shell march, and it can be taken WITHOUT
+     * touching the march: occupancy() already reports what fraction of the
+     * target the proxy boxes rasterise (75-100%). This reports what fraction
+     * the hull covers. The gap between them is the work a bounded march
+     * deletes.
+     */
+    async hullCoverage() {
+      const wasOn = sdfLayer.shellEnabled;
+      sdfLayer.setShellEnabled(true);
+      outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      try {
+        handle.setLoopRunning(false);
+        handle.step(1 / 60);
+        await handle.resolveGpu();
+        const read = async (t: THREE.RenderTarget) => {
+          const w = t.width;
+          const h = t.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          );
+          // Row padding again — bytesPerRow is aligned to 256. RedFormat, so
+          // one float per pixel rather than four.
+          const floatsPerRow = Math.ceil((w * 4) / 256) * 256 / 4;
+          let covered = 0;
+          for (let row = 0; row < h; row++) {
+            const base = row * floatsPerRow;
+            for (let col = 0; col < w; col++) if (buf[base + col]! > 0) covered++;
+          }
+          return { w, h, covered, frac: covered / (w * h) };
+        };
+        const entry = await read(sdfLayer.shellEntryTarget);
+        const exit = await read(sdfLayer.shellExitTarget);
+        return {
+          entry, exit,
+          instances: outerHull.instanceCount,
+          overflowed: outerHull.overflowed,
+          bodiesOnScreen: bodiesOnScreen(),
+        };
+      } finally {
+        sdfLayer.setShellEnabled(wasOn);
+        handle.setLoopRunning(true);
+      }
+    },
 
     /**
      * March step budget across every body (marchCfg.x, ships at 96).

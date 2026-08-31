@@ -70,6 +70,16 @@ export const CONE_LAYER = 2;
 export const OCCLUDER_LAYER = 3;
 
 /**
+ * The layer the conservative OUTER hull lives on (shell-hull-outer.ts).
+ *
+ * Separate from OCCLUDER_LAYER because the two hulls are opposites and are
+ * consumed in opposite directions: the occluder is INSIDE the flesh and cuts
+ * tMax short, this one CONTAINS the flesh and says where a ray may start —
+ * and, more valuably, whether it is worth marching at all.
+ */
+export const SHELL_LAYER = 4;
+
+/**
  * Tile size of the cone pre-pass, in full-resolution pixels.
  *
  * 8 is the figure the technique is usually quoted with. Bigger tiles make the
@@ -162,6 +172,25 @@ export interface SdfLayer {
   readonly cone: ConeSource;
   /** The inner-hull pre-pass the march clamps its tMax by. See OCCLUDER_LAYER. */
   readonly occluder: OccluderSource;
+  /** Outer-hull ENTRY distance (nearest front face) — 0 where no hull covers
+   *  the pixel, which means no flesh can be there either. */
+  readonly shellEntry: OccluderSource;
+  /** Outer-hull EXIT distance (farthest back face). Needed to tell "no hull
+   *  here" from "camera is INSIDE the hull", which the entry pass alone
+   *  cannot: a camera inside a sphere sees no front face, and treating that
+   *  as no-hull would discard flesh at point-blank range. */
+  readonly shellExit: OccluderSource;
+  setShellEnabled(on: boolean): void;
+  readonly shellEnabled: boolean;
+  /**
+   * How the layer flips the outer hull between its front and back passes.
+   *
+   * A hook rather than a direct material reference: the layer renders the
+   * scene through a camera layer mask and never holds the hull object, and
+   * threading one in just to mutate `side` would couple them for no gain.
+   * Owner wires this to OuterHull.setSide.
+   */
+  setShellSideHook(fn: ((side: THREE.Side, depthFunc: THREE.DepthModes) => void) | null): void;
   setOccluderEnabled(on: boolean): void;
   readonly occluderEnabled: boolean;
   /** Turns the cone pre-pass on or off, for measurement. */
@@ -179,6 +208,9 @@ export interface SdfLayer {
   /** The float target the march writes into. Exposed for MEASUREMENT
    *  readback only (the occupancy probe); do not render through it. */
   readonly marchTarget: THREE.RenderTarget;
+  /** Outer-hull entry/exit targets, for MEASUREMENT readback only. */
+  readonly shellEntryTarget: THREE.RenderTarget;
+  readonly shellExitTarget: THREE.RenderTarget;
   /** One-pixel footprint radius per unit distance (tan(fovY/2) / passHeight),
    *  for the march's AA epsilon. Follows the adaptive resolution ladder. */
   readonly pixelConeK: number;
@@ -245,6 +277,24 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     magFilter: THREE.NearestFilter,
   });
   const occluderUniforms = { enabled: uniform(0) };
+
+  // Outer-hull entry/exit. Same float-distance encoding as the occluder, and
+  // the same "cleared to zero means nothing here" contract.
+  const shellOpts = {
+    type: THREE.FloatType,
+    format: THREE.RedFormat,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    depthBuffer: true,
+    generateMipmaps: false,
+  } as const;
+  const shellEntry = new THREE.RenderTarget(1, 1, { ...shellOpts });
+  const shellExit = new THREE.RenderTarget(1, 1, { ...shellOpts });
+  const shellUniforms = { enabled: uniform(0) };
+  let shellSideHook: ((side: THREE.Side, depthFunc: THREE.DepthModes) => void) | null = null;
+  const shellMaterialSide = (side: THREE.Side, depthFunc: THREE.DepthModes) => {
+    shellSideHook?.(side, depthFunc);
+  };
   const clearColorScratch = new THREE.Color();
 
   /**
@@ -318,6 +368,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     const h = Math.max(1, Math.round(fullH * scale));
     target.setSize(w, h);
     occluder.setSize(w, h);
+    shellEntry.setSize(w, h);
+    shellExit.setSize(w, h);
     // setSize reallocates the backing textures, so they are uninitialised
     // again and the lazy-init conflict would return on the next frame.
     targetsNeedInit = true;
@@ -353,7 +405,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // The clear colour is irrelevant: a disabled pre-pass is never
         // FETCHED (the enable uniforms gate occFetch/coneFetch), and an
         // enabled one clears for real at the top of its own pass.
-        for (const t of [coneCoarse, coneFine, occluder]) {
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -409,6 +461,40 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.setClearColor(prevClear);
       }
 
+      // Pass 1d — the OUTER hull, twice: nearest front face (entry) and
+      // farthest back face (exit).
+      //
+      // Cleared to BLACK for the same reason the occluder is, and it is the
+      // same trap: the renderer's clear colour is the scene background, and a
+      // non-zero clear would read as "a hull surface 10 cm away" on every
+      // pixel — here that would start every ray inside the body.
+      //
+      // Front and back are separated by side + depth function rather than by
+      // two meshes: one instanced hull, drawn twice.
+      if (shellUniforms.enabled.value > 0.5) {
+        const prevClear = renderer.getClearColor(clearColorScratch).getHex();
+        const prevDepth = renderer.getClearDepth();
+        renderer.setClearColor(0x000000);
+        camera.layers.set(SHELL_LAYER);
+
+        // ENTRY: front faces, nearest wins — the standard depth setup.
+        shellMaterialSide(THREE.FrontSide, THREE.LessEqualDepth);
+        renderer.setClearDepth(1);
+        renderer.setRenderTarget(shellEntry);
+        void renderer.render(scene, camera);
+
+        // EXIT: back faces, FARTHEST wins — clear depth to near and reverse
+        // the test, the same inversion the 2026-08-25 shell spike used.
+        shellMaterialSide(THREE.BackSide, THREE.GreaterDepth);
+        renderer.setClearDepth(0);
+        renderer.setRenderTarget(shellExit);
+        void renderer.render(scene, camera);
+
+        shellMaterialSide(THREE.FrontSide, THREE.LessEqualDepth);
+        renderer.setClearDepth(prevDepth);
+        renderer.setClearColor(prevClear);
+      }
+
       // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
       // starting from the distance the pre-pass proved empty. The clear leaves
       // alpha at 1.0, which is the "nothing here" sentinel the composite
@@ -452,12 +538,19 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get coneFineTile() { return coneFineTile; },
     setConeEnabled(on) { coneUniforms.enabled.value = on ? 1 : 0; },
     occluder: { texture: occluder.texture, uniforms: occluderUniforms },
+    shellEntry: { texture: shellEntry.texture, uniforms: shellUniforms },
+    shellExit: { texture: shellExit.texture, uniforms: shellUniforms },
+    setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },
+    get shellEnabled() { return shellUniforms.enabled.value > 0.5; },
+    setShellSideHook(fn) { shellSideHook = fn; },
     setOccluderEnabled(on) { occluderUniforms.enabled.value = on ? 1 : 0; },
     get occluderEnabled() { return occluderUniforms.enabled.value > 0.5; },
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },
     get marchTarget() { return target; },
+    get shellEntryTarget() { return shellEntry; },
+    get shellExitTarget() { return shellExit; },
     get targetSize() { return { width: target.width, height: target.height }; },
     /** One-pixel footprint radius per unit distance, for the march's AA
      *  epsilon. Derived from the SDF pass height, so it follows the adaptive

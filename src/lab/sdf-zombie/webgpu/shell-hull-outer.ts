@@ -199,6 +199,9 @@ export interface OuterHull {
   update(bodies: BuiltBody[], opts?: OuterHullOpts): void;
   readonly instanceCount: number;
   readonly overflowed: boolean;
+  /** Flip between the entry (front/nearest) and exit (back/farthest) passes.
+   *  Driven by the SDF layer through its shell side hook. */
+  setSide(side: THREE.Side, depthFunc: THREE.DepthModes): void;
   dispose(): void;
 }
 
@@ -256,6 +259,11 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
   return {
     object: mesh,
     update,
+    setSide(side, depthFunc) {
+      material.side = side;
+      material.depthFunc = depthFunc;
+      material.needsUpdate = true;
+    },
     get instanceCount() { return count; },
     // An overflowed hull is NOT a slightly worse hull — the instances that did
     // not fit leave uncovered flesh, and uncovered flesh renders as a hole.
