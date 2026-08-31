@@ -163,9 +163,11 @@ describe('goo tuning pins', () => {
     expect(GOO_TUNING.spec).toBeGreaterThanOrEqual(0);
     expect(GOO_TUNING.spec).toBeLessThanOrEqual(4);
     expect(GOO_TUNING.gloss).toBeGreaterThanOrEqual(8);
-    expect(GOO_TUNING.gloss).toBeLessThanOrEqual(220);
+    expect(GOO_TUNING.gloss).toBeLessThanOrEqual(400);
     expect(GOO_TUNING.rim).toBeGreaterThanOrEqual(0);
     expect(GOO_TUNING.rim).toBeLessThanOrEqual(1);
+    expect(GOO_TUNING.shadowRed).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.shadowRed).toBeLessThanOrEqual(0.6);
   });
 });
 
@@ -247,8 +249,17 @@ describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
     };
     clamp('setAbsorb', 'uAbsorb', '0', '3');
     clamp('setSpec', 'uSpec', '0', '4');
-    clamp('setGloss', 'uGloss', '8', '220');
+    // CEILING 220 -> 400 (2026-08-31). The owner's own tuning pass landed on
+    // gloss EXACTLY 220 — the old ceiling — which is the signature of a clamp
+    // capping intent rather than guarding a range. Same story for stretch
+    // (4 -> 8, pinned below). Both originals were guesses; do not "restore"
+    // them without measuring what the shader produces up there.
+    clamp('setGloss', 'uGloss', '8', '400');
     clamp('setRim', 'uRim', '0', '1');
+    // shadowRed: the deep-red floor that stops absorption or a grazing light
+    // from driving blood to black. Ceiling 0.6 — past that the floor swamps
+    // the thickness gradient it exists to preserve.
+    clamp('setShadowRed', 'uShadowRed', '0', '0.6');
   });
 });
 

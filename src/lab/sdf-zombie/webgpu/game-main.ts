@@ -245,7 +245,10 @@ async function main() {
   // __sdfGame at all). Assigned once the actors give it a light rig.
   let gooLayer: GooLayer | null = null;
   let gooPanel: GooPanel | null = null;
-  let gooEnabled = false;
+  // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
+  // so i dont have to toggle it on each time"). setGoo(false) stays the kill
+  // switch; mode 'depth' vs 'overlay' stays a separate toggle.
+  let gooEnabled = true;
 
   function sizeSdfLayer() {
     const s = postAa.contentSize;
@@ -780,9 +783,25 @@ async function main() {
     // carries the sparse case and the satellite grain the references show.
     // Tune live with __sdfGame.setGooTuning — 1.2+ for heavy ropes, 0.4 for
     // a wetter, beadier read.
-    gooLayer.setThreshold(0.6);
-    gooLayer.setBlurPx(9);
-    gooLayer.setSizeScale(0.75);
+    // GAME-PAGE GOO DEFAULTS — the owner's own tuning pass, 2026-08-31,
+    // found on the live panel and pasted back verbatim. Set here rather than
+    // in GOO_TUNING because that table is shared with the LAB, whose look was
+    // tuned separately and must not move.
+    //
+    // Worth reading as a whole, because it is not where I expected to land:
+    // small blobs (0.14), almost NO blur (0.5), stretch at maximum, gloss at
+    // maximum, and a nearly stationary gout. That is a sharp, wet, elongated
+    // read — the opposite of the round fused mass I kept steering toward.
+    gooLayer.setSizeScale(0.14);
+    gooLayer.setThreshold(0.65);
+    gooLayer.setBlurPx(0.5);
+    gooLayer.setStretch(4);
+    gooLayer.setEdge(2.75);
+    gooLayer.setAbsorb(1.6);
+    gooLayer.setSpec(2.85);
+    gooLayer.setGloss(220);
+    gooLayer.setRim(0);
+
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
@@ -819,6 +838,9 @@ async function main() {
       { key: 'rim', group: 'goo', min: 0, max: 1, step: 0.02,
         hint: 'Fresnel rim strength.',
         get: () => L.rim, set: v => L.setRim(v) },
+      { key: 'shadowRed', group: 'goo', min: 0, max: 0.6, step: 0.01,
+        hint: 'Deep-red floor. Stops heavy absorption or a grazing light from driving blood to black. 0 = off.',
+        get: () => L.shadowRed, set: v => L.setShadowRed(v) },
       { key: 'count', group: 'gout', min: 10, max: 300, step: 5,
         hint: 'Slug gout droplets per impact. More = denser mass, but MAX_DROPLETS is 600 across the whole sim.',
         get: () => IMPACT_GOUT.slug.count, set: v => { IMPACT_GOUT.slug.count = Math.round(v); } },
@@ -844,13 +866,14 @@ async function main() {
       presets: [
         { label: 'blobby',
           values: { sizeScale: 0.35, threshold: 1.2, blurPx: 9, stretch: 0, edge: 1.6,
-            absorb: 1, spec: 2, gloss: 55, rim: 0.3, count: 140, speedMax: 3.5, speedMin: 1 } },
+            absorb: 1, spec: 2, gloss: 55, rim: 0.3, shadowRed: 0.12, count: 140, speedMax: 3.5, speedMin: 1 } },
         { label: 'strands',
           values: { sizeScale: 0.22, threshold: 0.8, blurPx: 5, stretch: 0.8, edge: 1.6,
-            absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, count: 90, speedMax: 8, speedMin: 1.5 } },
+            absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, shadowRed: 0.12, count: 90, speedMax: 8, speedMin: 1.5 } },
         { label: 'shipped',
-          values: { sizeScale: 0.75, threshold: 0.6, blurPx: 9, stretch: 0.8, edge: 1.6,
-            absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, count: 90, speedMax: 8, speedMin: 1.5 } },
+          values: { sizeScale: 0.14, threshold: 0.65, blurPx: 0.5, stretch: 4, edge: 2.75,
+            absorb: 1.6, spec: 2.85, gloss: 220, rim: 0, shadowRed: 0.12,
+            count: 85, speedMax: 0.5, speedMin: 0.2 } },
       ],
     });
   }
@@ -881,6 +904,20 @@ async function main() {
   for (const o of bloodView.objects) {
     o.visible = true; // ships ON (it is the feature); setBleed(false) hides
     scene.add(o);
+  }
+
+  // Goo ships ON, so apply the view state setGoo(true) would have set. Placed
+  // here rather than beside the goo tuning above because bloodView does not
+  // exist yet at that point in main().
+  //
+  // Beads off: the goo surface replaces them, and drawing both renders the
+  // same particles twice. MIST STAYS — it is the sparse-case floor. The goo
+  // only draws where droplets OVERLAP, so an ordinary pellet hit crosses no
+  // threshold and draws nothing; with mist hidden too the result is a wound
+  // with no blood at all (reproduced headless, 2026-08-31).
+  if (gooEnabled) {
+    bloodView.setBeadsVisible(false);
+    bloodView.setMistVisible(true);
   }
   // One seeded stream for EVERY bleed decision (spawns, trails, splat
   // stamps) — advanced only while bleed is enabled, so setBleed(false)
@@ -1507,6 +1544,7 @@ async function main() {
           gloss: gooLayer.gloss,
           rim: gooLayer.rim,
           stretch: gooLayer.stretch,
+          shadowRed: gooLayer.shadowRed,
         }
         : { enabled: false, unavailable: true };
     },
@@ -1583,6 +1621,7 @@ async function main() {
       mode?: 'overlay' | 'depth';
       absorb?: number; spec?: number; gloss?: number; rim?: number;
       stretch?: number;
+      shadowRed?: number;
     }) {
       if (!gooLayer) return;
       if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
@@ -1595,6 +1634,7 @@ async function main() {
       if (o.gloss !== undefined) gooLayer.setGloss(o.gloss);
       if (o.rim !== undefined) gooLayer.setRim(o.rim);
       if (o.stretch !== undefined) gooLayer.setStretch(o.stretch);
+      if (o.shadowRed !== undefined) gooLayer.setShadowRed(o.shadowRed);
     },
 
     /** Sweep gout density/shape without a rebuild. Mutates the shared table,

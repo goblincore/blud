@@ -141,6 +141,12 @@ export const GOO_TUNING = {
   gloss: 80,
   /** Fresnel rim strength, warm-tinted so edges do not read pink. */
   rim: 0.3,
+  /**
+   * Unlit deep-red floor added to every goo pixel, so neither heavy
+   * absorption nor a grazing light angle can drive blood to black. 0 restores
+   * the physically-pure (and, per the owner, wrong-looking) behaviour.
+   */
+  shadowRed: 0.12,
 } as const;
 
 /**
@@ -165,7 +171,8 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   camWorld: mat4x4<f32>,
   camCfg: vec4<f32>,
   gooCfg: vec3<f32>,
-  gooCfg2: vec4<f32>
+  gooCfg2: vec4<f32>,
+  shadowRed: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -235,6 +242,22 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let lambert = lightCfg.y + diff * lightCfg.x;
   var lit = vec3<f32>(0.62, 0.11, 0.10) * trans * lambert * keyColor
     * mix(0.55, 1.0, softEdge);
+
+  // SHADOW FLOOR (owner, 2026-08-31: "get rid of black for the shadow areas
+  // of the blood, i always want it to read red"). Two independent terms drive
+  // this surface to zero: absorption at high thickness (trans -> 0 in the
+  // core) and the diffuse term at grazing light (lambert -> ambient). Both
+  // are correct as transport, and together they make the darkest blood
+  // colourless — which reads as a hole in the frame rather than as blood.
+  //
+  // Rather than weaken either term, add an unlit floor that nothing can
+  // subtract from: a deep saturated red standing in for the light that
+  // scatters back out of a thick medium instead of being absorbed by it.
+  // The result is that the darkest possible blood is DARK RED, never black.
+  // Added, not maxed, so it lifts the shadows without flattening the
+  // gradient the thickness term produces. Scaled by softEdge so the very
+  // outer sliver still tapers out rather than ending on a lit fringe.
+  lit = lit + vec3<f32>(1.0, 0.055, 0.07) * shadowRed * softEdge;
 
   // Highlights ride ON TOP of the absorbed body and are NOT absorbed — a
   // surface reflection never travelled through the blood, so neither term
@@ -377,6 +400,8 @@ export interface GooLayer {
   setRim(v: number): void;
   /** Velocity-stretch cap (GOO_TUNING.stretchMax). 0 = round blobs. */
   setStretch(v: number): void;
+  /** Deep-red floor so blood never reads black. 0 = off. */
+  setShadowRed(v: number): void;
   /**
    * 'overlay' (default) composites the goo over the finished frame with no
    * depth involvement. 'depth' restores the original reconstructed-depth
@@ -396,6 +421,7 @@ export interface GooLayer {
   readonly gloss: number;
   readonly rim: number;
   readonly stretch: number;
+  readonly shadowRed: number;
   readonly targetSize: { width: number; height: number };
   /** DIAGNOSTIC: how many density quads the last sync() posed. 0 while blood
    *  is on screen means the mist/size cutoff rejected everything. */
@@ -457,6 +483,7 @@ export function createGooLayer(
   const uSpec = uniform(GOO_TUNING.spec);
   const uGloss = uniform(GOO_TUNING.gloss);
   const uRim = uniform(GOO_TUNING.rim);
+  const uShadowRed = uniform(GOO_TUNING.shadowRed);
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
   const uCamCfg = uniform(new THREE.Vector4(1, 1, 0.1, 200));
@@ -518,6 +545,7 @@ export function createGooLayer(
       camCfg: uCamCfg,
       gooCfg: vec3(uThresh, uEdge, uLegacy),
       gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
+      shadowRed: uShadowRed,
     }) as unknown as Swizzled;
   }
 
@@ -824,11 +852,16 @@ export function createGooLayer(
     setSpec(v) { uSpec.value = Math.max(0, Math.min(4, v)); },
     // gloss FLOOR of 8, not 1: below ~8 the lobe is wider than the blob and
     // the whole surface reads as flat white, which looks like a broken pass.
-    setGloss(v) { uGloss.value = Math.max(8, Math.min(220, v)); },
+    setGloss(v) { uGloss.value = Math.max(8, Math.min(400, v)); },
     setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
+    // CEILING RAISED 4 -> 8 (2026-08-31): the owner's chosen value landed
+    // exactly ON the old ceiling, which is the signature of a clamp that is
+    // silently capping intent rather than guarding a range. Same reason the
+    // gloss ceiling went 220 -> 400. Both were guesses; neither was measured.
     // Ceiling 4, not 0.8: the old hard-coded 0.8 was a floor-to-ceiling range
     // of exactly one value, and the knob is only interesting BELOW it anyway.
-    setStretch(v) { stretchMax = Math.max(0, Math.min(4, v)); },
+    setStretch(v) { stretchMax = Math.max(0, Math.min(8, v)); },
+    setShadowRed(v) { uShadowRed.value = Math.max(0, Math.min(0.6, v)); },
     setMode(m: 'overlay' | 'depth') { mode = m; },
     get mode() { return mode; },
     get debugTargets() { return { density: target, blurred: blurB }; },
@@ -844,6 +877,7 @@ export function createGooLayer(
     get gloss() { return uGloss.value; },
     get rim() { return uRim.value; },
     get stretch() { return stretchMax; },
+    get shadowRed() { return uShadowRed.value; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();

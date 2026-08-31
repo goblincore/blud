@@ -274,8 +274,11 @@ export const IMPACT_GOUT: Record<BleedKind, ImpactGoutProfile> = {
     count: 14, coneRad: 0.9, speedMax: 5.5, speedMin: 1.2,
     lifeMin: 0.35, lifeMax: 0.7, sizeMin: 0.05, sizeMax: 0.1,
   },
+  // Owner's tuned values, 2026-08-31: a nearly STATIONARY gout. At the
+  // original 8 m/s the pulse was metres wide within two frames and read as a
+  // starburst of needles; at 0.5 it stays where it was born and holds together.
   slug: {
-    count: 90, coneRad: 0.7, speedMax: 8, speedMin: 1.5,
+    count: 85, coneRad: 0.7, speedMax: 0.5, speedMin: 0.2,
     lifeMin: 0.4, lifeMax: 0.9, sizeMin: 0.06, sizeMax: 0.14,
   },
   stump: {
