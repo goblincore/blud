@@ -35,23 +35,27 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
-- `X1.bleed-look` [~] **Visceral fluid look.** Round 1 (RIBBONS + mist +
-  filament stretch, `6319104` on `claude/bleed-look-spike`) **owner-judged NOT
-  IT**: "too thin and uninteresting" — ribbons are LINES, the ask is VOLUMES.
-  Target in owner's words: "viscous and gooey and shiny blobby, **no hard
-  edges**", "stylized excess, not realism", "kinda like the metablob for the
-  goo system but more refined and performant". **ROUND 2 = PORT `goo-layer.ts`
-  TO THE GAME PAGE** — that file already IS this look (X1.21: half-res
-  additive density so blobs SUM, separable Gaussian blur fusing beads into
-  ropes/sheets per X1.21.1, gradient-normal surface lit by the march rig with
-  reconstructed depth). Deferred in the bleeding spec on the assumption
-  droplets would do; they don't. Open: cost (3 extra passes on a ~10 ms page —
-  the shell march bought exactly this headroom; bench it), the Y-flip
-  odd-pass-count trap, a refinement pass vs the lab's tuning, and note the lab
-  LAYERS sprites over goo rather than replacing them. Round-1 ribbons likely
-  superseded — do not merge that branch pending the port.
-  Later-round menu (owner-sketched, still open): blood-shape texture atlas,
-  specular + post blur for wet shine, baked low-res fluid-sim flipbooks.
+- `X1.bleed-look` [~] **Visceral fluid look — PARKED for its own session**
+  (owner call 2026-08-31). Round 1 RIBBONS rejected ("too thin and
+  uninteresting" — lines cannot be volumes). Round 2 **`goo-layer.ts` PORTED**
+  to the game page on `claude/bleed-look-spike` (**unmerged**): density/blur/
+  surface nested in the draw chain like lab-main, postAa sink, light-rig nodes
+  shared with a body view, `setSize` inside `sizeSdfLayer` (adaptive moves the
+  target at runtime). Seams `__sdfGame.setGoo` / `setGooTuning(threshold, edge,
+  blurPx, sizeScale, depthTest)`. It composites, is lit and glossy — and still
+  does NOT reach the reference. **Two blockers, neither is tuning:**
+  (1) **DEPTH** — the surface writes a depth reconstructed from the density
+  field and goo appears ONLY against distant background, never against a body;
+  `depthTest:false` reveals rejected blobs, i.e. near-wound blood is discarded.
+  (2) **EMISSION MODEL** — metaball fusion needs overlap; 80-300 droplets
+  spread through a volume never provide it. The lab's goo reads well because a
+  GIB BURST is hundreds of droplets in a tight volume at one instant; a
+  sustained bleed stream is the opposite. Next step is dense tight short-lived
+  JETS + the depth reconstruction — **not more threshold sweeps** (five run,
+  both failure modes proven: too low = every droplet its own oval, too high =
+  nothing renders). Also unbenched (3 extra passes on a ~10 ms page).
+  Reference frames (owner-supplied, Gears-style): connected glossy masses with
+  torn sheets, tapering tendrils, fine satellite specks.
 
 **GUN-FEEL-R2 REJECTED at owner playtest (2026-08-31)** — starts with the
 model itself (unhappy with the grapeshot pick) and no visible barrel-end
