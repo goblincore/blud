@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createSdfLayer, SDF_LAYER } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, SDF_LAYER } from './sdf-layer';
 
 describe('SDF-layer material precompile', () => {
   it('compiles in the real float-target context and restores renderer/camera state', async () => {
@@ -40,5 +40,33 @@ describe('SDF-layer material precompile', () => {
 
     layer.dispose();
     previousTarget.dispose();
+  });
+});
+
+describe('half-rate hold decision (C2)', () => {
+  it('alternates fresh/hold by frame parity while enabled', () => {
+    // Even index = fresh march, odd = hold, forever.
+    expect(isHoldFrame(0, true, false)).toBe(false);
+    expect(isHoldFrame(1, true, false)).toBe(true);
+    expect(isHoldFrame(2, true, false)).toBe(false);
+    expect(isHoldFrame(41, true, false)).toBe(true);
+  });
+  it('never holds while disabled or while a fresh frame is forced', () => {
+    expect(isHoldFrame(1, false, false)).toBe(false);
+    expect(isHoldFrame(1, true, true)).toBe(false);
+    // The first frame ever is fresh even on an odd index.
+    expect(isHoldFrame(1, true, true)).toBe(false);
+  });
+  it('alternation survives a forced-fresh frame (enable/resize mid-run)', () => {
+    // frameIndex keeps counting; the forced frame is fresh, the next odd
+    // frame holds again — enabling mid-session cannot put the layer in a
+    // permanent all-fresh or all-hold state.
+    const idxAfterForce = 6;              // even index anyway
+    expect(isHoldFrame(idxAfterForce, true, true)).toBe(false);
+    expect(isHoldFrame(idxAfterForce + 1, true, false)).toBe(true);
+    const idxAfterForceOdd = 7;
+    expect(isHoldFrame(idxAfterForceOdd, true, true)).toBe(false);
+    expect(isHoldFrame(idxAfterForceOdd + 1, true, false)).toBe(false);
+    expect(isHoldFrame(idxAfterForceOdd + 2, true, false)).toBe(true);
   });
 });

@@ -54,7 +54,10 @@ import {
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
-import { woundWorldPos, woundCarveNormal } from '../damage';
+import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
+import { createBloodSim, spawnWoundDroplets, emitTrails, stepBlood } from '../blood-sim';
+import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
+import { createBloodView } from './blood-view-gpu';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -378,7 +381,7 @@ async function main() {
 
   /** Sever dispatch indirection — actors are built before the weapon block;
    *  the grapeshot wiring below assigns this once the chunk spawner exists. */
-  let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[] }) => void) | null = null;
+  let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[] }, stumpWound: Wound | null) => void) | null = null;
 
   const actors: ZombieActor[] = [];
   const errors: string[] = [];
@@ -439,7 +442,7 @@ async function main() {
         seed: 1337 + nextId * 101,
         bounds: wanderBounds(room),
         furniture: roomFurniture,
-        onSever: (piece) => onSeverDispatch?.(actor, piece),
+        onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
       });
       actors.push(actor);
     }
@@ -652,7 +655,8 @@ async function main() {
   const MAX_CHUNKS = 12;
   const chunkMaterial = createSharedChunkGpuMaterial();
   const chunkViews: ChunkGpuView[] = [];
-  const liveChunks: { state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
+  const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
+  let nextChunkId = 1;
   function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
     let best: Vec3 = [0, 1, 0];
     let bestLen = 0;
@@ -682,7 +686,7 @@ async function main() {
     const oldest = liveChunks.length >= MAX_CHUNKS ? liveChunks.shift() : undefined;
     if (oldest) {
       oldest.view.reset(state, piece.prims, piece.tornAt.length ? piece.tornAt : undefined);
-      liveChunks.push({ state, view: oldest.view });
+      liveChunks.push({ id: nextChunkId++, state, view: oldest.view });
     } else {
       const view = createChunkGpuView(
         state, piece.prims, template.uniforms,
@@ -692,14 +696,56 @@ async function main() {
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
       chunkViews.push(view);
-      liveChunks.push({ state, view });
+      liveChunks.push({ id: nextChunkId++, state, view });
     }
   }
 
+  // -----------------------------------------------------------------------
+  // BLEED (bleeding-wounds spec, 2026-08-31). Wounds ooze/spurt/gush per
+  // calibre; flying chunks trail droplets; everything settles into floor
+  // splats. The pure sim lives in blood-sim.ts, the ledger in
+  // bleed-registry.ts; this block owns anchors + the seeded stream.
+  // Ships ON (it is the feature); __sdfGame.setBleed(false) is the off
+  // gate, and OFF must be pixel-identical to the pre-feature page.
+  // -----------------------------------------------------------------------
+  const bloodSim = createBloodSim();
+  const bleed = new BleedRegistry();
+  // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
+  // (the SDF composite's depth test then occludes droplets both ways — see
+  // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
+  // camera compensation; BLOOD_TRAIL.size is already game-camera tuned).
+  // Splats keep the lab's soft depthWrite:false — the floor's depth already
+  // arbitrates them, and their 0.005 m lift beats z-fighting.
+  // dropletViewScale 0.5: the owner's first-look verdict (2026-08-31) was
+  // "really big" at FPV range — the lab's own 0.45 compensation exists for
+  // exactly this. 0.5 keeps them a hair beefier than the lab since the game
+  // wants the blood to READ; the deeper look change (gooey spray + mist
+  // instead of sprite blobs) is a tracked exploration, not a scale knob.
+  const bloodView = createBloodView({ dropletDepthWrite: true, dropletViewScale: 0.5 });
+  for (const o of bloodView.objects) {
+    o.visible = true; // ships ON (it is the feature); setBleed(false) hides
+    scene.add(o);
+  }
+  // One seeded stream for EVERY bleed decision (spawns, trails, splat
+  // stamps) — advanced only while bleed is enabled, so setBleed(false)
+  // freezes the subsystem exactly (OFF mid-stream = ON-stream-paused).
+  const bleedRng = mulberry32(0x5eedb1e);
+  let bleedEnabled = true;
+  /** Bleed's own sim clock — an accumulator, never wall time, so hand-
+   *  stepped captures are deterministic. */
+  let bleedClock = 0;
+  function registerBleed(a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump'): void {
+    if (!bleedEnabled) return;
+    bleed.register(a.id, wound, kind, bleedClock);
+  }
+
   // Wire every actor's severs into the chunk spawner (template = that
-  // actor's own look — the chunk shades like the flesh it came from).
-  onSeverDispatch = (a, piece) => {
+  // actor's own look — the chunk shades like the flesh it came from), and
+  // each sever's stump wound into the bleed ledger (the gushing emitter —
+  // the wound is the actor's own reference, so the anchor rides the body).
+  onSeverDispatch = (a, piece, stumpWound) => {
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    if (stumpWound) registerBleed(a, stumpWound, 'stump');
   };
 
   // -----------------------------------------------------------------------
@@ -733,6 +779,9 @@ async function main() {
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
       (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
+      (sdfLayer.halfRate
+        ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
+        : '') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -889,8 +938,14 @@ async function main() {
           }
           if (hitActor && hitPoint) {
             const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
-            if (p.kind === 'slug') hitActor.hitSlug(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
-            else hitActor.hit(hitPoint, [p.vel[0]/l, p.vel[1]/l, p.vel[2]/l]);
+            const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
+            // hit/hitSlug RETURN the wound this impact stamped (pre-sever),
+            // so the bleed emitter binds the exact wound instead of sniffing
+            // the ring tail (a hit that also severs puts a stump there).
+            const stamped = p.kind === 'slug'
+              ? hitActor.hitSlug(hitPoint, dirN)
+              : hitActor.hit(hitPoint, dirN);
+            if (stamped) registerBleed(hitActor, stamped, p.kind);
             dead = true;
           }
         }
@@ -922,6 +977,31 @@ async function main() {
       for (const c of liveChunks) {
         c.state = stepChunk(c.state, cdt);
         c.view.update(c.state);
+      }
+      // BLEED — emitters spray (anchors recomputed from the CURRENT posed
+      // prims, so droplets ride the walking body), flying chunks trail, and
+      // the sim settles into splats. Runs even with the wander frozen: it is
+      // a cosmetic sim exactly like the pellets and chunks above (a frozen
+      // capture that fired still bleeds), and posed() is always current.
+      if (bleedEnabled) {
+        bleedClock += cdt;
+        for (const e of bleed.live(bleedClock)) {
+          const a = actors.find(q => q.id === e.bodyId);
+          if (!a) { bleed.evictForBody(e.bodyId); continue; }
+          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound);
+          e.acc = spawnWoundDroplets(
+            bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
+          );
+        }
+        emitTrails(
+          bloodSim,
+          liveChunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+          cdt, bleedRng,
+        );
+        stepBlood(bloodSim, cdt, bleedRng);
+        // Re-pose every instance from sim state (billboards track the camera
+        // even frozen — same contract as the lab's always-sync).
+        bloodView.sync(bloodSim, camera);
       }
     }
 
@@ -1132,6 +1212,27 @@ async function main() {
     get slugMode() { return slugMode; },
     setSlugMode(on: boolean) { slugMode = on; updateHud(); },
     fireSlug: () => { const keep = slugMode; slugMode = true; try { return fire(1); } finally { slugMode = keep; } },
+    // ---------------------------------------------------------------
+    // BLEED seams (bleeding-wounds). Ships ON; setBleed(false) is the
+    // off gate — it freezes AND clears the blood sim so OFF is pixel-
+    // identical to the pre-feature page (no frozen mid-air droplets).
+    // ---------------------------------------------------------------
+    setBleed: (on: boolean) => {
+      bleedEnabled = on;
+      for (const o of bloodView.objects) o.visible = on;
+      if (!on) {
+        bloodSim.droplets.length = 0;
+        bloodSim.splats.length = 0;
+      }
+    },
+    get bleed() {
+      return {
+        enabled: bleedEnabled,
+        emitters: bleed.live(bleedClock).length,
+        droplets: bloodSim.droplets.length,
+        splats: bloodSim.splats.length,
+      };
+    },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
      *  computed by exactly the code fire() uses (muzzleWorld + converged
      *  dir) against each actor's CURRENT posed field. No state mutated.
@@ -1166,6 +1267,16 @@ async function main() {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    // ---------------------------------------------------------------
+    // C2 HALF-RATE — march every other frame, reproject the held march
+    // in between (sdf-layer.ts header). Default OFF; the look verdict is
+    // the owner's, from the capture reel.
+    // ---------------------------------------------------------------
+    setHalfRate: (on: boolean) => sdfLayer.setHalfRate(on),
+    get halfRate() { return sdfLayer.halfRate; },
+    /** 0 = hold only, 1 = per-pixel depth reproject (default). */
+    setHalfRateMode: (n: number) => sdfLayer.setHalfRateMode(n),
+    get halfRateMode() { return sdfLayer.halfRateMode; },
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),

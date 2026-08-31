@@ -1,0 +1,82 @@
+=== phase classification (half sequences vs their full twins, err-at-dx0 <4 = fresh, else hold) ===
+strafe-half-smear0: ..H.H.H.H.H.H.H.
+strafe-half-smear25: HHHHHHHHHHHHHHHH
+strafe-halfhold-smear0: .H.H.H.H.H.H.H.H
+strafe-halfhold-smear25: HHHHHHHHHHHHHHHH
+walk-half-smear0: ................
+walk-half-smear25: ................
+walk-halfhold-smear0: 
+walk-halfhold-smear25: 
+fire-half-smear0: ..................
+fire-half-smear25: ..................
+fire-halfhold-smear0: 
+fire-halfhold-smear25: 
+sever-half-smear0: ....................
+sever-half-smear25: ....................
+sever-halfhold-smear0: 
+sever-halfhold-smear25: 
+
+=== shift-scan strafe smear0: half (reproject) vs full ===
+f0:  half best dx=0 (err 0.61)  halfhold best dx=0 (err 0.61)
+f1:  half best dx=0 (err 0.59)  halfhold best dx=0 (err 0.59)
+f2:  half best dx=0 (err 9.85)  halfhold best dx=0 (err 9.85)
+f3:  half best dx=0 (err 0.69)  halfhold best dx=0 (err 0.69)
+f4:  half best dx=0 (err 11.14)  halfhold best dx=0 (err 11.14)
+f5:  half best dx=0 (err 0.70)  halfhold best dx=0 (err 0.70)
+f6:  half best dx=0 (err 11.88)  halfhold best dx=0 (err 11.88)
+f7:  half best dx=0 (err 0.70)  halfhold best dx=0 (err 0.70)
+f8:  half best dx=0 (err 12.09)  halfhold best dx=0 (err 12.09)
+f9:  half best dx=0 (err 0.69)  halfhold best dx=0 (err 0.69)
+f10:  half best dx=0 (err 11.44)  halfhold best dx=0 (err 11.44)
+f11:  half best dx=0 (err 0.66)  halfhold best dx=0 (err 0.66)
+f12:  half best dx=0 (err 10.72)  halfhold best dx=0 (err 10.72)
+f13:  half best dx=0 (err 0.68)  halfhold best dx=0 (err 0.68)
+f14:  half best dx=0 (err 10.57)  halfhold best dx=0 (err 10.57)
+f15:  half best dx=0 (err 0.67)  halfhold best dx=0 (err 0.67)
+
+=== shift-scan strafe smear0: halfhold (raw hold) vs full ===
+f0:  half best dx=0 (err 1.94)  halfhold best dx=0 (err 1.94)
+f1:  half best dx=0 (err 8.34)  halfhold best dx=0 (err 8.34)
+f2:  half best dx=0 (err 1.98)  halfhold best dx=0 (err 1.98)
+f3:  half best dx=12 (err 8.72)  halfhold best dx=12 (err 8.72)
+f4:  half best dx=0 (err 2.22)  halfhold best dx=0 (err 2.22)
+f5:  half best dx=12 (err 9.03)  halfhold best dx=12 (err 9.03)
+f6:  half best dx=0 (err 2.23)  halfhold best dx=0 (err 2.23)
+f7:  half best dx=12 (err 9.30)  halfhold best dx=12 (err 9.30)
+f8:  half best dx=0 (err 2.29)  halfhold best dx=0 (err 2.29)
+f9:  half best dx=12 (err 9.40)  halfhold best dx=12 (err 9.40)
+f10:  half best dx=0 (err 2.15)  halfhold best dx=0 (err 2.15)
+f11:  half best dx=12 (err 9.38)  halfhold best dx=12 (err 9.38)
+f12:  half best dx=0 (err 2.04)  halfhold best dx=0 (err 2.04)
+f13:  half best dx=0 (err 9.70)  halfhold best dx=0 (err 9.70)
+f14:  half best dx=0 (err 2.08)  halfhold best dx=0 (err 2.08)
+f15:  half best dx=0 (err 9.68)  halfhold best dx=0 (err 9.68)
+
+=== within-load alternation + sign proof (reproj-probe, smear 0, 0.1 m/frame sweep, frozen zombie) ===
+per-frame pct2 vs full-rate twin of the SAME load:
+f0: mode1 5.17% | mode0 7.94%   <- hold
+f1: both 0.0000% (max 0)        <- fresh: bit-identical to full rate
+f2: mode1 5.60% | mode0 6.02%   <- hold
+f3: both 0.0000% (max 0)
+f4: mode1 6.43% | mode0 6.97%   <- hold
+f5: both 0.0000% (max 0)
+f6: mode1 6.56% | mode0 7.10%   <- hold
+f7: both 0.0000% (max 0)
+
+=== shift-scan of the same probe (best horizontal alignment, +/-40 px) ===
+f0:  mode0 best dx=0  (err 17.55)   mode1 best dx=0  (err 11.42)
+f1:  mode0 best dx=0  (err 0.00)    mode1 best dx=0  (err 0.00)
+f2:  mode0 best dx=21 (err 12.04)   mode1 best dx=0  (err 12.98)
+f3:  mode0 best dx=0  (err 0.00)    mode1 best dx=0  (err 0.00)
+f4:  mode0 best dx=21 (err 12.64)   mode1 best dx=0  (err 14.38)
+f5:  mode0 best dx=0  (err 0.00)    mode1 best dx=0  (err 0.00)
+f6:  mode0 best dx=21 (err 13.12)   mode1 best dx=0  (err 13.92)
+f7:  mode0 best dx=0  (err 0.00)    mode1 best dx=0  (err 0.00)
+READ: raw hold (mode0) lags one frame of sweep (~21 px at 6 m/s, 2 m);
+reproject (mode1) cancels the lag — best-aligned at dx=0. Residual error
+changes character: displacement -> resample/edge-streak.
+
+=== reproj-check (0.05 m/frame, default smear) ===
+Superseded by reproj-probe: with post-aa smear 0.25 on, fresh/hold diffs vs
+full are dominated by the smear history and mode1 vs mode0 read nearly equal.
+Lesson: measure half-rate with smear 0; the smear is its own temporal filter.

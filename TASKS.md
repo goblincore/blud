@@ -20,18 +20,34 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**IN FLIGHT via dispatch (2026-08-31):** `temporal-c2-spike` (RUNNING — half-rate
-SDF layer + reprojection as an AESTHETIC experiment; deliverable is a capture
-reel for the owner's look verdict, not perf) and `bleeding-wounds` (QUEUED
-behind it — per-calibre wound emitters + splat decals per
-[spec](docs/superpowers/specs/2026-08-31-bleeding-wounds-design.md) /
-[plan](docs/superpowers/plans/2026-08-31-bleeding-wounds.md); the plan
-pre-solves the droplet-depthWrite/composite trap). **Gun-feel-r2 REJECTED at
-owner playtest** — starts with the model itself (unhappy with the grapeshot
-pick) and no visible barrel-end flash; needs a rethink from the model up, do
-not merge or re-propose the branch as-is.
+**BLEEDING WOUNDS + C2 TEMPORAL — BOTH OWNER-PASSED (2026-08-31).** Bleeding
+(per-calibre emitters: pellet ooze / slug spurt-to-drip / stump gush, chunk
+trails, floor splat decals, wounds-anchored so blood rides the animated body)
+"definitely makes it feel better" — SHIPS ON at 0.5 droplet view scale (first
+look read "really big" at FPV range); `__sdfGame.setBleed(false)` kill switch;
+depth fix verified in-capture; bench fire-segment delta UNRESOLVED under
+spread (≈ +0.1-0.25 ms). C2 half-rate verdict: ghosting "isn't that
+bothersome" and should "work nicely combined with additional post-process
+effects" — **stays a toggle (`setHalfRate`/`setHalfRateMode`), default OFF**,
+revisit as part of the post-fx look package (waits on the X1.3 color-chain
+retune). Artifacts catalogued honestly in its note (edge streaks, 1/30 s late
+wound pops, gait stop-motion).
+[bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
+[c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
+- `X1.bleed-look` [ ] **Visceral fluid spray + mist exploration** (owner ask
+  2026-08-31): droplets currently read as sprite blobs — placeholder by spec.
+  Owner wants (a) spray that reads GOOEY/fluid, (b) finer mist particles.
+  Candidate directions to spike: velocity-stretched billboards (cheap,
+  classic), screen-space metaball pass over droplets only (goo-layer math on
+  a small buffer), soft mist sprites with additive falloff + short lifetimes,
+  or SDF metaball micro-blobs riding the existing chunk path. Budget-gate
+  with the firefight bench like everything else.
 
+**GUN-FEEL-R2 REJECTED at owner playtest (2026-08-31)** — starts with the
+model itself (unhappy with the grapeshot pick) and no visible barrel-end
+flash; needs a rethink from the model up. Do not merge or re-propose
+`dispatch/gun-feel-r2` as-is.
 **SHELL MARCH — SHIPPED ON (owner-passed 2026-08-31).** Per-limb posed hulls
 (`shell-hull-outer.ts`) bound the march: **−54% / −40% frame time** (room 3
 23.3→10.8 ms, room 4 15.9→9.5, spread 2-9%) at real-render parity below the
