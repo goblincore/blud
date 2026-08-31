@@ -20,6 +20,29 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**GAME CROWD PERF (Phase 0) — BASELINE TAKEN (2026-08-31).** Owner shifted to
+SDF rendering perf; target is his own: "stable 30 with multiple bodies and
+other effects" = p95 <= 33 ms over a *firefight*. A scripted-firefight bench
+now exists (`__sdfGame.bench`, `scripts/sdf-game-bench.sh`, 17 tests) with a
+per-segment **scene census** that caught four bugs, each of which had produced
+a plausible-looking table — the worst being that **damage persisted across
+runs** (the page was never reloaded, so room 3 opened at `wounds 20` carried
+from room 2 and every run tracked cumulative damage). Reloading per run took
+repeat spread from **583% to 1-13%**. **Headline: resolution scale is the only
+lever that moves this frame — scale 0.7 is −39%/−25% and 0.5 is −58%/−54%,
+while the occluder pre-pass, the cone and FXAA are all inside spread. The
+occluder is currently worth ~nothing.** That confirms fill-bound cost and
+STRENGTHENS the shell-march case (it shrinks the traced pixel set; the
+occluder only bounds ray length). Spike pass vs target: room 4 p95 30.3
+(inside), room 3 37.7 (outside). **Also: rooms are NOT a crowd ladder — room 4
+shows NINE bodies on screen**, the tunnels give sightlines across the ring.
+Unresolved: cone-on/occluder-off on room 3 (spread > delta); rooms 1-2
+placement faces a wall; gib segment reaches only `chunks 0->1`.
+[spec](docs/superpowers/specs/2026-08-31-sdf-crowd-perf-investigation-design.md) ·
+[plan](docs/superpowers/plans/2026-08-31-game-perf-baseline.md) ·
+[note](docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
+
+
 **HIT-STAGGER FEEL — DONE on branch `dispatch/hit-stagger-feel`, awaiting
 owner playtest (2026-08-28).** Owner's "the zombie needs to read as really
 staggered and hit by something of substantial force" was three stacked

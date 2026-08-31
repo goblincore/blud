@@ -45,6 +45,8 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { buildFirefight, validateScenario } from './game-bench-scenario';
+import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
@@ -247,7 +249,22 @@ async function main() {
   // into the render callback. DEFAULT OFF: the chosen rung is what ships;
   // this is the frame-rate safety net the owner can switch on.
   // -----------------------------------------------------------------------
-  let adaptiveEnabled = false;
+  // ADAPTIVE ON by default (2026-08-31), and the baseline is why.
+  //
+  // It lands AFTER the baseline on purpose: adaptive moves the pixel count
+  // under load, so measuring with it on would have measured the safety net
+  // instead of the cost. __sdfGame.bench suspends it for the same reason.
+  //
+  // The baseline then made the case for it stronger than expected. Resolution
+  // scale is the ONLY lever that moved the frame — 0.7 is -39%/-25% and 0.5 is
+  // -58%/-54%, while the occluder, the cone and FXAA all measured inside
+  // repeat spread. Adaptive works by walking exactly that ladder, so it is the
+  // one safety net with a measured mechanism behind it.
+  // (docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
+  //
+  // It is still a FLOOR, not an answer: it buys frames by making the flesh
+  // coarser during exactly the moments that matter most.
+  let adaptiveEnabled = true;
   let adaptiveBudgetMs = 1000 / 30;
   let adaptiveState = initialAdaptiveState(performance.now());
   const ADAPTIVE_WINDOW = 30;
@@ -873,6 +890,95 @@ async function main() {
   // builds on this: zombies are addressable by id, the player pose is
   // settable, frames are steppable, wanderers freezable.
   // -----------------------------------------------------------------------
+  /** Where a slug fired RIGHT NOW would hit — the shared predictor.
+   *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
+   *  with the same code the placement gate uses, rather than trusting a
+   *  cluster centre. No state mutated. */
+  function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
+      const origin = muzzleWorld();
+      const dir = convergedDir(origin);
+      let bestD = Infinity;
+      let hitActorId = -1;
+      let hitPoint: Vec3 | null = null;
+      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
+      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
+      // which the placement gate duly failed (2026-08-27).
+      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
+      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
+      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
+      const dt = 1 / 120;
+      for (const a of actors) {
+        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        if (!c) continue;
+        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
+        const posedA = a.posed();
+        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
+        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
+        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
+        for (let i = 0; i < 240; i++) {
+          const next: Vec3 = [
+            pos[0] + vel[0] * dt,
+            pos[1] + vel[1] * dt,
+            pos[2] + vel[2] * dt,
+          ];
+          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
+          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
+          if (hp) {
+            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
+            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
+            break;
+          }
+          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
+          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
+        }
+      }
+      return { origin, dir, actorId: hitActorId, hit: hitPoint };
+  }
+
+  /**
+   * Aim at a body the ballistic predictor CONFIRMS is hittable.
+   *
+   * Two things this must not do, both learned by measurement (2026-08-31):
+   *
+   *   1. Do not stamp at a cluster CENTRE. A torso centre sits INSIDE the
+   *      field: it anchors the crater pathologically, and a slug's severRadius
+   *      cuts both hip necks into an instant collapse. The centre is used only
+   *      to POINT the camera; the shot itself resolves to a surface.
+   *   2. Do not aim at whatever is nearest. Room 4 spawns its zombies around
+   *      the room centre, so a bench standing at the centre had a body 0.97 m
+   *      away — close enough that the aim pitched 26 degrees DOWN into it, the
+   *      predictor returned actorId -1, and all eight pellets expired having
+   *      hit nothing. The bench then reported "firing" segments that contained
+   *      no wounds at all.
+   *
+   * So: candidates in distance order, skipping anything inside MIN_STANDOFF,
+   * and the first one the predictor confirms wins. Returns false if none do,
+   * which leaves the aim untouched — a bench that silently re-aimed until it
+   * connected would be measuring something the scenario never described.
+   */
+  const MIN_STANDOFF = 1.5;
+  function aimAtNearestSurface(): boolean {
+    const eye = eyeOf(player);
+    const candidates = actors
+      .map((a) => {
+        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
+      })
+      .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
+      .sort((a, b) => a.d - b.d);
+
+    const yaw0 = player.yaw;
+    const pitch0 = player.pitch;
+    for (const cand of candidates) {
+      player.yaw = Math.atan2(cand.c[0] - eye[0], cand.c[2] - eye[2]);
+      player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
+      if (predictSlugHitNow().actorId >= 0) return true;
+    }
+    player.yaw = yaw0;
+    player.pitch = pitch0;
+    return false;
+  }
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
@@ -963,46 +1069,7 @@ async function main() {
      *  dir) against each actor's CURRENT posed field. No state mutated.
      *  Diff against debugWounds() after firing to assert the crater landed
      *  where the ray struck. */
-    predictSlugHit: () => {
-      const origin = muzzleWorld();
-      const dir = convergedDir(origin);
-      let bestD = Infinity;
-      let hitActorId = -1;
-      let hitPoint: Vec3 | null = null;
-      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
-      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
-      // which the placement gate duly failed (2026-08-27).
-      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
-      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
-      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
-      const dt = 1 / 120;
-      for (const a of actors) {
-        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
-        if (!c) continue;
-        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
-        const posedA = a.posed();
-        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
-        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
-        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
-        for (let i = 0; i < 240; i++) {
-          const next: Vec3 = [
-            pos[0] + vel[0] * dt,
-            pos[1] + vel[1] * dt,
-            pos[2] + vel[2] * dt,
-          ];
-          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
-          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
-          if (hp) {
-            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
-            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
-            break;
-          }
-          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
-          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
-        }
-      }
-      return { origin, dir, actorId: hitActorId, hit: hitPoint };
-    },
+    predictSlugHit: () => predictSlugHitNow(),
     /** Hull-holes A/B seams (2026-08-27). setOccluder turns the occluder
      *  pre-pass (and its tMax clamp) on/off; setHullExclusions passes an
      *  empty wound list to the hull builder instead of the live one. Both
@@ -1014,6 +1081,132 @@ async function main() {
     get occluder() { return sdfLayer.occluderEnabled && occluderDesired; },
     setHullExclusions: (on: boolean) => { hullExclusionsEnabled = on; },
     get hullExclusions() { return hullExclusionsEnabled; },
+
+    // -------------------------------------------------------------------
+    // BENCH SEAMS (2026-08-31). Everything the ablation legs toggle, plus
+    // the fence the harness times against. Ship defaults are unchanged —
+    // these only move when a driver moves them.
+    // -------------------------------------------------------------------
+    /** The GPU completion fence. Trust the fence, never a timestamp value. */
+    resolveGpu: () => handle.resolveGpu(),
+    // setAdaptive / setSdfScale already exist further down this object and
+    // are better than the versions this block first added (they also clear
+    // the adaptive sample window and report the whole ladder). Not
+    // duplicated here — the driver calls those.
+    setCone: (on: boolean) => sdfLayer.setConeEnabled(on),
+    get cone() { return sdfLayer.coneEnabled; },
+    setFxaa: (on: boolean) => postAa.setFxaa(on),
+    get fxaa() { return postAa.fxaa; },
+    setSmear: (v: number) => postAa.setSmear(v),
+    /** Aim at the nearest body's surface. Exposed so a driver can stage a
+     *  shot the same way the bench scenario does. */
+    aimSurface: () => aimAtNearestSurface(),
+
+    /**
+     * Run one bench leg.
+     *
+     * Parks the result on window.__gameBench as well as returning it: a
+     * console call that returns a value can itself hide the page, and a
+     * hidden page has no swapchain texture, so its passes do nothing and the
+     * fence resolves to ~0.065 ms of nothing. That reads as a 70x speedup.
+     * The harness counts hidden frames and invalidates the run, but reading
+     * the value back afterwards avoids provoking it in the first place.
+     */
+    async bench(o: {
+      room?: number; mode?: 'throughput' | 'spike';
+      walkFrames?: number; fireFrames?: number; gibFrames?: number;
+      chunkFrames?: number; warmup?: number; label?: string;
+    } = {}) {
+      const scenario = buildFirefight({
+        room: o.room ?? 4,
+        walkFrames: o.walkFrames,
+        fireFrames: o.fireFrames,
+        gibFrames: o.gibFrames,
+      });
+      const problems = validateScenario(scenario);
+      if (problems.length) throw new Error(`bad scenario: ${problems.join('; ')}`);
+
+      handle.setLoopRunning(false);
+      const hadAdaptive = adaptiveEnabled;
+      adaptiveEnabled = false;
+      try {
+        const deps: BenchDeps = {
+          step: (dt) => handle.step(dt),
+          resolveGpu: () => handle.resolveGpu(),
+          now: () => performance.now(),
+          hidden: () => document.hidden,
+          census: () => ({
+            bodies: bodiesOnScreen(),
+            wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
+            chunks: liveChunks.length,
+          }),
+          perform: (a) => {
+            switch (a.kind) {
+              case 'teleport': {
+                const r = ROOMS.find(x => x.id === a.room);
+                if (r) {
+                  // Stand back from where the BODIES actually are, facing
+                  // them. Two heuristics were tried and both failed against
+                  // the census (2026-08-31): the room centre put a zombie
+                  // 0.97 m away so every shot pitched down into it and
+                  // missed, and an outer corner pointed the camera at a wall
+                  // with bodies 1 -> 0 on screen. The room's own actors are
+                  // the only thing that reliably says where to look.
+                  const mine = actors.filter(x => x.room === a.room);
+                  const cx = (r.minX + r.maxX) / 2;
+                  const cz = (r.minZ + r.maxZ) / 2;
+                  let tx = cx;
+                  let tz = cz;
+                  if (mine.length) {
+                    tx = mine.reduce((n, x) => n + x.pose().pos[0], 0) / mine.length;
+                    tz = mine.reduce((n, x) => n + x.pose().pos[2], 0) / mine.length;
+                  }
+                  // Back off along the direction from the room centre toward
+                  // the outer wall, so the whole group stays in front.
+                  const away = Math.hypot(tx - cx, tz - cz);
+                  let ax = away > 0.2 ? (cx - tx) / away : 0;
+                  let az = away > 0.2 ? (cz - tz) / away : 1;
+                  // Degenerate group (all at the centre): back off along -z.
+                  if (!Number.isFinite(ax) || (ax === 0 && az === 0)) { ax = 0; az = 1; }
+                  const STANDOFF = 4.0;
+                  const inset = 0.6;
+                  const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
+                  const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
+                  player.pos = [px, 0, pz];
+                  player.vel = [0, 0, 0];
+                  player.yaw = Math.atan2(tx - px, tz - pz);
+                  player.pitch = 0;
+                  player.grounded = true;
+                }
+                break;
+              }
+              case 'freeze': wanderFrozen = a.on; break;
+              case 'look': player.yaw = a.yaw; player.pitch = a.pitch; break;
+              case 'aimSurface': aimAtNearestSurface(); break;
+              case 'fire': fire(a.barrels); break;
+              case 'fireSlug': {
+                const keep = slugMode;
+                slugMode = true;
+                try { fire(1); } finally { slugMode = keep; }
+                break;
+              }
+            }
+          },
+        };
+        const result = await runBench(deps, scenario, {
+          mode: o.mode ?? 'throughput',
+          chunkFrames: o.chunkFrames,
+          warmup: o.warmup,
+          label: o.label,
+        });
+        (window as unknown as { __gameBench: unknown }).__gameBench = result;
+        return result;
+      } finally {
+        adaptiveEnabled = hadAdaptive;
+        adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+        handle.setLoopRunning(true);
+      }
+    },
     /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
      *  so frozen captures would otherwise shoot through a stale hull). No
      *  simulation steps, so a stamped body stays exactly where it was put. */
