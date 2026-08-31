@@ -176,6 +176,9 @@ export interface SdfLayer {
   readonly flipY: boolean;
   /** Actual SDF target size, for the panel to display. */
   readonly targetSize: { width: number; height: number };
+  /** The float target the march writes into. Exposed for MEASUREMENT
+   *  readback only (the occupancy probe); do not render through it. */
+  readonly marchTarget: THREE.RenderTarget;
   /** One-pixel footprint radius per unit distance (tan(fovY/2) / passHeight),
    *  for the march's AA epsilon. Follows the adaptive resolution ladder. */
   readonly pixelConeK: number;
@@ -454,6 +457,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get coneEnabled() { return coneUniforms.enabled.value > 0.5; },
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },
+    get marchTarget() { return target; },
     get targetSize() { return { width: target.width, height: target.height }; },
     /** One-pixel footprint radius per unit distance, for the march's AA
      *  epsilon. Derived from the SDF pass height, so it follows the adaptive

@@ -1498,6 +1498,25 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       clamped = true;
     }
   }
+  // OCCUPANCY MODE (debugCfg.x == 4, 2026-08-31). Returns RAW COUNTERS
+  // instead of a colour, and — the whole point — returns BEFORE the discard,
+  // so pixels that missed still write. Channels:
+  //   r = steps this ray took   g = 1 if it hit flesh, else 0
+  //   b = 1 always (this fragment was rasterised and marched)
+  //   a = t (kept so the target's depth channel behaves as usual)
+  //
+  // WHAT IT MEASURES, and what it does not. Summing over the target gives
+  // hits/rasterised = the fraction of proxy-box screen area that actually
+  // shows flesh. That is the shell march's addressable market: a bounded
+  // hull never rasterises the rest. It is a LOWER BOUND on the waste,
+  // because depth-testing means only the front-most body writes to a pixel —
+  // where several bodies' boxes overlap, the real fragment-invocation count
+  // is higher than this can see.
+  //
+  // Only ever read back; it does not composite to anything meaningful.
+  if (debugCfg.x > 3.5 && debugCfg.x < 4.5) {
+    return vec4<f32>(gDebugSteps, select(0.0, 1.0, hit), 1.0, t);
+  }
   if (!hit) { discard; }
   // Snapshot the counters BEFORE the post-hit probes: calcNormal folds
   // four more mapBody calls and the wound shadow up to fourteen, and the
