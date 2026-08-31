@@ -733,6 +733,9 @@ async function main() {
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
       (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
+      (sdfLayer.halfRate
+        ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
+        : '') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -1166,6 +1169,16 @@ async function main() {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    // ---------------------------------------------------------------
+    // C2 HALF-RATE — march every other frame, reproject the held march
+    // in between (sdf-layer.ts header). Default OFF; the look verdict is
+    // the owner's, from the capture reel.
+    // ---------------------------------------------------------------
+    setHalfRate: (on: boolean) => sdfLayer.setHalfRate(on),
+    get halfRate() { return sdfLayer.halfRate; },
+    /** 0 = hold only, 1 = per-pixel depth reproject (default). */
+    setHalfRateMode: (n: number) => sdfLayer.setHalfRateMode(n),
+    get halfRateMode() { return sdfLayer.halfRateMode; },
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),
