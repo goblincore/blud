@@ -20,6 +20,23 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SHELL MARCH — GO (2026-08-31).** `__sdfGame.occupancy()` (march debug mode 4:
+raw counters returned BEFORE the miss-discard, float target summed) measures the
+shell march's market instead of asserting it: **82-92% of every pixel the march
+rasterises hits nothing**, and those pixels carry **63-84% of all march steps**.
+Proxy boxes cover 75-100% of the SDF target; flesh occupies 7.5-18%. A COUNTER,
+not a timer — immune to the machine noise that made every timing A/B here
+unresolvable, and two runs agree. Also explains the step-budget null: nothing
+comes near the 96 cap (hits ~18.5 steps, misses 6-14), so the sweep measured the
+cap rather than the step count. **This reversed an earlier wrong call** that read
+that null as "miss pixels are already cheap" — misses are individually cheaper
+but there are 5-11x more of them. Next: per-limb posed hulls that follow the
+skeleton by rigid per-cluster moves (the spike's single rest-pose mesh took
+~0.5 s and cannot be rebuilt per frame), then a crowd A/B — hull passes have
+their own cost and occupancy bounds removable work, it does not predict speed-up.
+[note](docs/dev-notes/2026-08-31-game-perf-baseline/notes.md) ·
+[spike](docs/dev-notes/2026-08-25-shell-march-spike.md)
+
 **GAME CROWD PERF (Phase 0) — BASELINE TAKEN (2026-08-31).** Owner shifted to
 SDF rendering perf; target is his own: "stable 30 with multiple bodies and
 other effects" = p95 <= 33 ms over a *firefight*. A scripted-firefight bench
