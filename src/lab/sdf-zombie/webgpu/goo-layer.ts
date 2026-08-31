@@ -251,6 +251,36 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
 }`;
 
 /**
+ * Overlay mode's alpha (blood-viscosity spec §c). `gooSurface` spends its w
+ * on the reconstructed depth value, so the soft-edge band that overlay mode
+ * blends with comes from here — one texel load, no gradient taps.
+ *
+ * The discard condition is duplicated deliberately and must stay identical
+ * to the surface pass's: if the two disagreed on the cutoff, overlay would
+ * blend a colour the surface never shaded.
+ *
+ * Returns a vec4 rather than a bare f32 so it swizzles through the same
+ * `Swizzled` cast every other pass here uses.
+ */
+export const GOO_ALPHA_WGSL = /* wgsl */ `fn gooAlpha(
+  densTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  gooCfg: vec3<f32>
+) -> vec4<f32> {
+  let dims = vec2<f32>(textureDimensions(densTex, 0));
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let maxP = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let px = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), maxP);
+  let dens = textureLoad(densTex, px, 0).r;
+  let thresh = gooCfg.x;
+  if (dens < thresh) { discard; }
+  let a = smoothstep(thresh, thresh * gooCfg.y, dens);
+  return vec4<f32>(0.0, 0.0, 0.0, a);
+}`;
+
+/**
  * One axis of the separable blur (the pass runs twice: dir = (1,0) then
  * (0,1)). Integer-coordinate textureLoad with edge clamping, the same fetch
  * shape the surface pass and coneFetch use — and NO flipY: target-to-target
@@ -332,12 +362,14 @@ export interface GooLayer {
   setGloss(v: number): void;
   /** Fresnel rim strength. */
   setRim(v: number): void;
-  /** DIAGNOSTIC: drop the surface pass's depth test. The surface normally
-   *  writes a depth RECONSTRUCTED from the density field's average view
-   *  depth and interleaves with flesh; if that reconstruction is wrong the
-   *  goo silently loses everywhere except against distant background, which
-   *  looks exactly like "the goo is not rendering". */
-  setDepthTest(on: boolean): void;
+  /**
+   * 'overlay' (default) composites the goo over the finished frame with no
+   * depth involvement. 'depth' restores the original reconstructed-depth
+   * interleaving — kept as the escape hatch if the overlay reads wrong
+   * against walls in play.
+   */
+  setMode(m: 'overlay' | 'depth'): void;
+  readonly mode: 'overlay' | 'depth';
   readonly sizeScale: number;
   /** Mirror of the march's legacy-gamma flag — keep both on one switch. */
   setLegacyGamma(on: boolean): void;
@@ -387,8 +419,6 @@ export function createGooLayer(
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
   const uThresh = uniform(GOO_TUNING.threshold);
-  /** Surface materials, so the depth test can be disabled for diagnosis. */
-  const surfaceMaterials: THREE.Material[] = [];
   /** Runtime sizeScale — see setSizeScale. */
   let sizeScale: number = GOO_TUNING.sizeScale;
   // Matches the march's lodCfg.y default (legacy gamma ON) — lab-main's
@@ -446,8 +476,11 @@ export function createGooLayer(
   // graph at construction.
   // ---------------------------------------------------------------
   const surface = wgslFn(GOO_SURFACE_WGSL);
-  function makeSurfaceMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
-    const surfaced = surface({
+  const alphaFn = wgslFn(GOO_ALPHA_WGSL);
+
+  /** The shaded colour, shared by both modes. */
+  function shadeOf(densTexture: THREE.Texture): Swizzled {
+    return surface({
       densTex: texture(densTexture),
       texCoord: uv(),
       flipY: uFlipY,
@@ -459,18 +492,53 @@ export function createGooLayer(
       gooCfg: vec3(uThresh, uEdge, uLegacy),
       gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
     }) as unknown as Swizzled;
+  }
+
+  /**
+   * OVERLAY (default). No depth at all: the goo composites over the finished
+   * frame. This DELETES the depth blocker rather than fixing it — the
+   * reconstruction from the density field's average view depth rejected
+   * near-body blood, so goo appeared only against distant background. The
+   * accepted cost is that a burst behind a pillar still paints over it,
+   * which for a sub-second event centred on the thing you just shot is close
+   * to theoretical.
+   */
+  function makeOverlayMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeOf(densTexture);
+    const a = alphaFn({
+      densTex: texture(densTexture),
+      texCoord: uv(),
+      flipY: uFlipY,
+      gooCfg: vec3(uThresh, uEdge, uLegacy),
+    }) as unknown as Swizzled;
     const m = new MeshBasicNodeMaterial();
-    m.colorNode = vec4(surfaced.xyz as never, 1.0);
-    m.depthNode = surfaced.w as never;
-    m.depthWrite = true;
-    m.depthTest = true;
-    surfaceMaterials.push(m);
+    m.colorNode = vec4(shaded.xyz as never, a.w as never);
+    m.depthWrite = false;
+    m.depthTest = false;
+    m.transparent = true;
+    m.fog = false;
     return m;
   }
-  const surfRawMat = makeSurfaceMat(target.texture);
-  const surfBlurMat = makeSurfaceMat(blurB.texture);
 
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), surfRawMat);
+  /** DEPTH (the escape hatch). The original behaviour, kept intact. */
+  function makeDepthMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeOf(densTexture);
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(shaded.xyz as never, 1.0);
+    m.depthNode = shaded.w as never;
+    m.depthWrite = true;
+    m.depthTest = true;
+    m.fog = false;
+    return m;
+  }
+
+  const surfMats = {
+    overlay: { raw: makeOverlayMat(target.texture), blur: makeOverlayMat(blurB.texture) },
+    depth: { raw: makeDepthMat(target.texture), blur: makeDepthMat(blurB.texture) },
+  };
+  let mode: 'overlay' | 'depth' = 'overlay';
+
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), surfMats.overlay.raw);
   quad.frustumCulled = false;
   const quadScene = new THREE.Scene();
   quadScene.add(quad);
@@ -605,7 +673,7 @@ export function createGooLayer(
       // or this wipes the frame it is composited onto. The material picks
       // blurred-vs-raw density; reassigned only on crossings of the
       // blurPx = 0 line so the steady frame mutates nothing.
-      const wantMat = blurred ? surfBlurMat : surfRawMat;
+      const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];
       if (quad.material !== wantMat) quad.material = wantMat;
       renderer.setRenderTarget(outputTarget);
       const prevAutoClear = renderer.autoClear;
@@ -713,9 +781,8 @@ export function createGooLayer(
     // the whole surface reads as flat white, which looks like a broken pass.
     setGloss(v) { uGloss.value = Math.max(8, Math.min(220, v)); },
     setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
-    setDepthTest(on) {
-      for (const m of surfaceMaterials) { m.depthTest = on; m.needsUpdate = true; }
-    },
+    setMode(m: 'overlay' | 'depth') { mode = m; },
+    get mode() { return mode; },
     setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },
     get threshold() { return uThresh.value; },
     get sizeScale() { return sizeScale; },
@@ -733,8 +800,9 @@ export function createGooLayer(
       quads.geometry.dispose();
       densMat.dispose();
       quad.geometry.dispose();
-      surfRawMat.dispose();
-      surfBlurMat.dispose();
+      for (const byMode of Object.values(surfMats)) {
+        for (const m of Object.values(byMode)) m.dispose();
+      }
       blurH.quad.geometry.dispose();
       blurV.quad.geometry.dispose();
       blurHMat.dispose();

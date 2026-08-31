@@ -1393,6 +1393,11 @@ async function main() {
           blurPx: gooLayer.blurPx,
           sizeScale: gooLayer.sizeScale,
           target: gooLayer.targetSize,
+          mode: gooLayer.mode,
+          absorb: gooLayer.absorb,
+          spec: gooLayer.spec,
+          gloss: gooLayer.gloss,
+          rim: gooLayer.rim,
         }
         : { enabled: false, unavailable: true };
     },
@@ -1400,14 +1405,19 @@ async function main() {
      *  knobs that decide beads-vs-ropes-vs-sheets. */
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
-      depthTest?: boolean;
+      mode?: 'overlay' | 'depth';
+      absorb?: number; spec?: number; gloss?: number; rim?: number;
     }) {
       if (!gooLayer) return;
       if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
       if (o.edge !== undefined) gooLayer.setEdge(o.edge);
       if (o.blurPx !== undefined) gooLayer.setBlurPx(o.blurPx);
       if (o.sizeScale !== undefined) gooLayer.setSizeScale(o.sizeScale);
-      if (o.depthTest !== undefined) gooLayer.setDepthTest(o.depthTest);
+      if (o.mode !== undefined) gooLayer.setMode(o.mode);
+      if (o.absorb !== undefined) gooLayer.setAbsorb(o.absorb);
+      if (o.spec !== undefined) gooLayer.setSpec(o.spec);
+      if (o.gloss !== undefined) gooLayer.setGloss(o.gloss);
+      if (o.rim !== undefined) gooLayer.setRim(o.rim);
     },
 
     /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —

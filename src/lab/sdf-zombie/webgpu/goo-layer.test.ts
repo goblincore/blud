@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
-import { GOO_TUNING, GOO_SURFACE_WGSL, GOO_BLUR_WGSL } from './goo-layer';
+import { GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL } from './goo-layer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -106,13 +106,14 @@ describe('goo blur wiring (source tripwires)', () => {
     // surface's choice of blurred-vs-raw texture. No degenerate copy pass.
     expect(src).toContain('const blurred = uBlurPx.value > 0');
     expect(src).toContain('if (blurred) {');
-    expect(src).toContain('blurred ? surfBlurMat : surfRawMat');
+    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
     expect(src).toContain('void renderer.render(blurH.scene, quadCam)');
     expect(src).toContain('void renderer.render(blurV.scene, quadCam)');
   });
 
   it('the surface reads the blurred buffer, and the pair rides the density size', () => {
-    expect(src).toContain('makeSurfaceMat(blurB.texture)');
+    expect(src).toContain('makeOverlayMat(blurB.texture)');
+    expect(src).toContain('makeDepthMat(blurB.texture)');
     expect(src).toContain('makeBlurMat(blurA.texture, 0, 1)');
     // Same explicit-first-clear treatment as the density target (the
     // lazy-init trap) and the same resize in setSize.
@@ -248,5 +249,61 @@ describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
     clamp('setSpec', 'uSpec', '0', '4');
     clamp('setGloss', 'uGloss', '8', '220');
     clamp('setRim', 'uRim', '0', '1');
+  });
+});
+
+describe('goo alpha WGSL (overlay mode)', () => {
+  it('starts with fn, since three anchors its parse to ^', () => {
+    expect(GOO_ALPHA_WGSL.startsWith('fn ')).toBe(true);
+  });
+
+  it('declares nothing reserved', () => {
+    for (const name of declaredNames(GOO_ALPHA_WGSL)) {
+      expect(RESERVED_WORDS, `"${name}" is a WGSL reserved word`).not.toContain(name);
+    }
+  });
+
+  it('discards below the threshold, exactly as the surface pass does', () => {
+    // If the two passes disagreed on the cutoff, overlay mode would blend a
+    // colour the surface pass never shaded.
+    expect(GOO_ALPHA_WGSL).toContain('if (dens < thresh) { discard; }');
+  });
+
+  it('returns the soft-edge band in w so strands feather instead of hard-cutting', () => {
+    expect(GOO_ALPHA_WGSL).toMatch(/smoothstep\(thresh, thresh \* gooCfg\.y, dens\)/);
+    expect(GOO_ALPHA_WGSL).toMatch(/return vec4<f32>\(0\.0, 0\.0, 0\.0, a\)/);
+  });
+});
+
+describe('goo overlay mode wiring (source tripwires)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('builds a material per (mode x blurred) combination', () => {
+    // Asserted on the table literal and the dynamic lookup, NOT on
+    // "surfMats.depth.blur"-style paths: render() indexes the pair with
+    // computed keys, so those strings never appear in the source.
+    expect(src).toMatch(/overlay: \{ raw: makeOverlayMat\(target\.texture\), blur: makeOverlayMat\(blurB\.texture\) \}/);
+    expect(src).toMatch(/depth: \{ raw: makeDepthMat\(target\.texture\), blur: makeDepthMat\(blurB\.texture\) \}/);
+    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
+  });
+
+  it('overlay materials neither test nor write depth, and are transparent', () => {
+    expect(src).toMatch(/m\.depthWrite = false;\s*\n\s*m\.depthTest = false;\s*\n\s*m\.transparent = true;/);
+  });
+
+  it('overlay materials do not bind a depthNode', () => {
+    // Binding depthNode in overlay mode would silently reinstate the
+    // reconstruction this mode exists to delete.
+    const overlayFn = src.slice(src.indexOf('function makeOverlayMat'), src.indexOf('function makeDepthMat'));
+    expect(overlayFn).not.toContain('depthNode');
+  });
+
+  it('retires setDepthTest in favour of setMode', () => {
+    expect(src).not.toContain('setDepthTest');
+    expect(src).toContain("setMode(m: 'overlay' | 'depth')");
+  });
+
+  it('defaults to overlay — the shipped answer to the depth blocker', () => {
+    expect(src).toMatch(/let mode: 'overlay' \| 'depth' = 'overlay';/);
   });
 });
