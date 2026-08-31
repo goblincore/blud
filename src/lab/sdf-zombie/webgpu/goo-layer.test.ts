@@ -152,6 +152,20 @@ describe('goo tuning pins', () => {
     expect(GOO_TUNING.blurPx).toBe(2.5);
     expect(Number.isInteger(GOO_TUNING.blurPx * 2)).toBe(true);
   });
+
+  it('absorb/spec/gloss/rim defaults sit inside their own setter clamp range', () => {
+    // A default outside its own clamp is a real bug class: the console
+    // could never restore the shipped value once a knob was slid away from
+    // it (M-5).
+    expect(GOO_TUNING.absorb).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.absorb).toBeLessThanOrEqual(3);
+    expect(GOO_TUNING.spec).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.spec).toBeLessThanOrEqual(4);
+    expect(GOO_TUNING.gloss).toBeGreaterThanOrEqual(8);
+    expect(GOO_TUNING.gloss).toBeLessThanOrEqual(220);
+    expect(GOO_TUNING.rim).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.rim).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('goo thickness shading (blood-viscosity spec §d)', () => {
@@ -173,12 +187,32 @@ describe('goo thickness shading (blood-viscosity spec §d)', () => {
     expect(GOO_SURFACE_WGSL).toMatch(/let thick = max\(dens - thresh, 0\.0\) \* gooCfg2\.x/);
   });
 
-  it('takes specular strength, exponent and rim from uniforms, not literals', () => {
-    expect(GOO_SURFACE_WGSL).toMatch(/pow\(max\(dot\(n, H\), 0\.0\), gooCfg2\.z\)/);
-    expect(GOO_SURFACE_WGSL).toContain('gooCfg2.y');
-    expect(GOO_SURFACE_WGSL).toContain('gooCfg2.w');
-    // The old hard-coded exponent must be gone, or the uniform is dead code.
-    expect(GOO_SURFACE_WGSL).not.toContain('0.0), 90.0)');
+  it('takes specular strength, exponent and rim from aliased uniform locals, not literals', () => {
+    // I-4: gooCfg2's swizzles are aliased near `thresh` (the same convention
+    // gooCfg.x already uses), so the shading terms below must read the
+    // ALIAS, not a bare gooCfg2.y/.z/.w — that's what proves the uniform
+    // actually reaches the shading term instead of sitting as a dead
+    // binding that only appears in a comment.
+    expect(GOO_SURFACE_WGSL).toMatch(/let specStr = gooCfg2\.y;/);
+    expect(GOO_SURFACE_WGSL).toMatch(/let glossPow = gooCfg2\.z;/);
+    expect(GOO_SURFACE_WGSL).toMatch(/let rimStr = gooCfg2\.w;/);
+    expect(GOO_SURFACE_WGSL).toMatch(/pow\(max\(dot\(n, H\), 0\.0\),\s*glossPow\)/);
+    expect(GOO_SURFACE_WGSL).toMatch(/glint\s*\*\s*specStr/);
+    expect(GOO_SURFACE_WGSL).toMatch(/fres\s*\*\s*rimStr/);
+    // No numeric literal exponent left on the glint pow — a hard-coded
+    // number there (the old 90.0) would mean the uniform is dead code.
+    expect(GOO_SURFACE_WGSL).not.toMatch(/pow\(max\(dot\(n, H\), 0\.0\),\s*[\d.]+\)/);
+  });
+
+  it('adds highlights OUTSIDE the absorbed body, not scaled by transmittance', () => {
+    // The central claim of this commit: a surface reflection never
+    // travelled through the blood, so the glint term must NOT carry the
+    // `trans` (Beer-Lambert transmittance) factor the base colour does.
+    // Without this guard, `lit = lit + trans * keyColor * glint * ...`
+    // would pass every other test in this file.
+    const glintLine = GOO_SURFACE_WGSL.match(/lit = lit \+ [^;]*glint[^;]*;/);
+    expect(glintLine, 'a glint highlight line must be present').not.toBeNull();
+    expect(glintLine![0]).not.toMatch(/\btrans\b/);
   });
 
   it('declares gooCfg2 as a vec4 parameter', () => {
@@ -198,9 +232,21 @@ describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
     }
   });
 
-  it('clamps absorb above 3 and gloss down to a broad 8, per the 2D prototype range', () => {
+  it('clamps all four setters to the range the shader actually produces', () => {
+    // Whitespace-tolerant (not pinned to one-line formatting) so a reformat
+    // doesn't break this, but still asserts the exact bounds per setter —
+    // absorb and gloss per the 2D prototype range, spec and rim previously
+    // unpinned entirely.
     const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    expect(src).toMatch(/setAbsorb\(v\) \{ uAbsorb\.value = Math\.max\(0, Math\.min\(3, v\)\); \}/);
-    expect(src).toMatch(/setGloss\(v\) \{ uGloss\.value = Math\.max\(8, Math\.min\(220, v\)\); \}/);
+    const clamp = (fn: string, uniformName: string, lo: string, hi: string) => {
+      const re = new RegExp(
+        `${fn}\\(v\\)\\s*\\{\\s*${uniformName}\\.value\\s*=\\s*Math\\.max\\(${lo},\\s*Math\\.min\\(${hi},\\s*v\\)\\)\\s*;\\s*\\}`,
+      );
+      expect(src, `${fn} must clamp to [${lo}, ${hi}]`).toMatch(re);
+    };
+    clamp('setAbsorb', 'uAbsorb', '0', '3');
+    clamp('setSpec', 'uSpec', '0', '4');
+    clamp('setGloss', 'uGloss', '8', '220');
+    clamp('setRim', 'uRim', '0', '1');
   });
 });
