@@ -175,6 +175,15 @@ describe('post-aa module wiring', () => {
     expect(src).toContain('targetsNeedInit = true;');
   });
 
+  it('a sink added AFTER the redirect is handed the current target', () => {
+    // The redirect loop only fires on the transition, so a late sink would
+    // keep drawing to the canvas and be blitted over every frame. That is
+    // what hid the goo layer entirely on the game page: game-main awaits the
+    // gun GLB between registering sdfLayer and registering gooLayer, so the
+    // redirect had already happened by the time the goo arrived.
+    expect(src).toMatch(/addSink\(s\) \{[\s\S]*?if \(redirected\) s\.setOutputTarget\(sceneTarget\);[\s\S]*?\}/);
+  });
+
   it('the scene capture target carries a depth buffer', () => {
     // The sdf composite and goo surface depth-test against what the
     // polygonal pass left — without depth the flesh paints over the floor.

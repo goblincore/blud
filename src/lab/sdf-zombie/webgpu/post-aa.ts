@@ -536,7 +536,22 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       void renderer.render(blitScene, quadCam);
       renderer.autoClear = prevAutoClear;
     },
-    addSink(s) { sinks.push(s); },
+    addSink(s) {
+      sinks.push(s);
+      // A sink registered AFTER the first redirect must be handed the current
+      // state immediately. The redirect above only fires on the TRANSITION
+      // (`if (!redirected)`), so without this a late sink keeps its output on
+      // the canvas while every other pass renders into sceneTarget — and the
+      // blit at the end of this frame then paints sceneTarget over the canvas,
+      // erasing whatever the late sink drew. Every frame. Silently.
+      //
+      // This is exactly what hid the goo layer on the game page: game-main
+      // awaits the gun GLB between addSink(sdfLayer) and addSink(gooLayer), so
+      // frames render (and redirect) during that await and the goo was added
+      // afterwards. It also explains why toggling fxaa/smear appeared to
+      // "fix" it — a toggle flips `redirected` and re-runs the loop above.
+      if (redirected) s.setOutputTarget(sceneTarget);
+    },
     setFxaa(on) { fxaaOn = on; },
     setSmear(v) { uSmear.value = Math.max(0, Math.min(POST_AA_SMEAR_MAX, v)); },
     setSharpUpscale(on) {
