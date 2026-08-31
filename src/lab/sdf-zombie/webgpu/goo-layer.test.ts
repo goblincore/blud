@@ -60,7 +60,7 @@ describe('goo surface WGSL', () => {
     expect(GOO_SURFACE_WGSL).toContain('discard');
     expect(GOO_SURFACE_WGSL).toContain('textureLoad');
     expect(GOO_SURFACE_WGSL).toContain('smoothstep');
-    expect(GOO_SURFACE_WGSL).toContain('vec3<f32>(0.35, 0.02, 0.05)');
+    expect(GOO_SURFACE_WGSL).toContain('vec3<f32>(0.62, 0.11, 0.10)');
     // The WebGPU [0,1] depth mapping three's perspective matrix produces.
     expect(GOO_SURFACE_WGSL).toContain('far * (viewDepth - near)');
   });
@@ -151,5 +151,56 @@ describe('goo tuning pins', () => {
     expect(GOO_TUNING.blurPx).toBeLessThanOrEqual(5);
     expect(GOO_TUNING.blurPx).toBe(2.5);
     expect(Number.isInteger(GOO_TUNING.blurPx * 2)).toBe(true);
+  });
+});
+
+describe('goo thickness shading (blood-viscosity spec §d)', () => {
+  it('absorbs green and blue harder than red, so a thick core goes dark crimson', () => {
+    const m = GOO_SURFACE_WGSL.match(
+      /exp\(-thick \* vec3<f32>\(([\d.]+), ([\d.]+), ([\d.]+)\)\)/,
+    );
+    expect(m, 'the Beer-Lambert absorption vector must be present').not.toBeNull();
+    const [r, g, b] = [Number(m![1]), Number(m![2]), Number(m![3])];
+    // Blood is red because red survives the path length. If red were absorbed
+    // as hard as green, thick blood would go grey, not crimson.
+    expect(r).toBeLessThan(g);
+    expect(r).toBeLessThan(b);
+  });
+
+  it('measures thickness from the field ABOVE the threshold, not raw density', () => {
+    // dens alone would make the whole surface dark the moment the threshold
+    // moves; (dens - thresh) keeps the thin fringe bright at any setting.
+    expect(GOO_SURFACE_WGSL).toMatch(/let thick = max\(dens - thresh, 0\.0\) \* gooCfg2\.x/);
+  });
+
+  it('takes specular strength, exponent and rim from uniforms, not literals', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/pow\(max\(dot\(n, H\), 0\.0\), gooCfg2\.z\)/);
+    expect(GOO_SURFACE_WGSL).toContain('gooCfg2.y');
+    expect(GOO_SURFACE_WGSL).toContain('gooCfg2.w');
+    // The old hard-coded exponent must be gone, or the uniform is dead code.
+    expect(GOO_SURFACE_WGSL).not.toContain('0.0), 90.0)');
+  });
+
+  it('declares gooCfg2 as a vec4 parameter', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/gooCfg2: vec4<f32>/);
+  });
+});
+
+describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
+  // The clamp trap, in test form: setThreshold was clamped at 0.95 while a
+  // lone blob peaks near 1.0, so no reachable value could reject a single
+  // droplet and three rounds of tuning were unwinnable. Every new setter gets
+  // its ceiling checked against the range the shader actually produces.
+  it('exposes absorb/spec/gloss/rim on the layer interface', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+    for (const fn of ['setAbsorb', 'setSpec', 'setGloss', 'setRim']) {
+      expect(src, `${fn} must exist`).toContain(`${fn}(`);
+    }
+  });
+
+  it('clamps absorb above 3 and gloss down to a broad 8, per the 2D prototype range', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+    expect(src).toMatch(/setAbsorb\(v\) \{ uAbsorb\.value = Math\.max\(0, Math\.min\(3, v\)\); \}/);
+    expect(src).toMatch(/setGloss\(v\) \{ uGloss\.value = Math\.max\(8, Math\.min\(220, v\)\); \}/);
   });
 });

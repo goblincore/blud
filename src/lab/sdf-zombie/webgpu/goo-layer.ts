@@ -112,6 +112,19 @@ export const GOO_TUNING = {
    * note in the file header. 0 bypasses both blur passes entirely.
    */
   blurPx: 2.5,
+  /**
+   * Beer-Lambert thickness strength (blood-viscosity spec §d). Multiplies
+   * (density - threshold) before the absorption exponential, so it scales
+   * how fast a mass darkens as it thickens. 0 reproduces the old flat base.
+   * 0.55 is the 2D prototype's owner-selected value.
+   */
+  absorb: 0.55,
+  /** Specular strength — the wet glint that sells "shiny". */
+  spec: 1.4,
+  /** Specular exponent. LOW = broad wet sheen, HIGH = a pinpoint star. */
+  gloss: 80,
+  /** Fresnel rim strength, warm-tinted so edges do not read pink. */
+  rim: 0.3,
 } as const;
 
 /**
@@ -135,7 +148,8 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   lightCfg: vec2<f32>,
   camWorld: mat4x4<f32>,
   camCfg: vec4<f32>,
-  gooCfg: vec3<f32>
+  gooCfg: vec3<f32>,
+  gooCfg2: vec4<f32>
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -178,20 +192,34 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let far = camCfg.w;
   let depthBuf = clamp(far * (viewDepth - near) / (max(viewDepth, 1e-4) * (far - near)), 0.0, 1.0);
 
-  // Shade with the march's rig: deep red base, key diffuse, a tight wet
-  // glint and a fresnel rim. The soft-edge factor darkens and de-glints the
-  // thin fringe, so strands taper into darkness rather than ending in a
-  // bright hard cut — alpha itself stays 1 (opaque, depth-written).
+  // Shade with the march's rig, over a BEER-LAMBERT body (blood-viscosity
+  // spec §d). The old flat base made every mass the same red whatever its
+  // depth, which is exactly why the layer read as stickers rather than
+  // fluid. Absorption over the field ABOVE the threshold gives a thick core
+  // that goes near-black crimson while a thin film stays bright orange-red;
+  // that gradient IS the volume read, and it is what the reference frames
+  // have that the shipped effect did not. Red is absorbed lightly and green
+  // and blue hard, which is why blood is red rather than grey at depth.
   let L = normalize(lightDir);
   let Vv = -ray;
   let H = normalize(L + Vv);
   let diff = max(dot(n, L), 0.0);
-  let glint = pow(max(dot(n, H), 0.0), 90.0);
-  let rim = pow(1.0 - max(dot(n, Vv), 0.0), 4.0) * 0.35;
   let softEdge = smoothstep(thresh, thresh * gooCfg.y, dens);
-  let base = vec3<f32>(0.35, 0.02, 0.05);
-  var lit = base * (lightCfg.y + diff * lightCfg.x) * keyColor * mix(0.55, 1.0, softEdge);
-  lit = lit + keyColor * (glint * 1.2 + rim) * softEdge;
+
+  let thick = max(dens - thresh, 0.0) * gooCfg2.x;
+  let absorb = exp(-thick * vec3<f32>(0.30, 2.40, 2.00));
+  let lambert = lightCfg.y + diff * lightCfg.x;
+  var lit = vec3<f32>(0.62, 0.11, 0.10) * absorb * lambert * keyColor
+    * mix(0.55, 1.0, softEdge);
+
+  // Highlights ride ON TOP of the absorbed body and are NOT absorbed —
+  // a surface reflection never travelled through the blood. Glint is white
+  // and tight (the wet read); the rim stays warm so a fringe cannot wash the
+  // mass pink, which is what a neutral rim did at high bump values.
+  let glint = pow(max(dot(n, H), 0.0), gooCfg2.z);
+  lit = lit + keyColor * glint * gooCfg2.y * softEdge;
+  let fres = pow(1.0 - max(dot(n, Vv), 0.0), 3.0);
+  lit = lit + vec3<f32>(0.85, 0.14, 0.12) * fres * gooCfg2.w * softEdge;
 
   // Legacy display look (gooCfg.z) — the SAME decode marchBody applies (see
   // march.wgsl.ts): without it the flesh renders through the legacy chain
@@ -279,6 +307,18 @@ export interface GooLayer {
    *  file's own tuning note: 0.15 breaks trails into disconnected beads,
    *  0.22 gives thin connected strands, 0.4 reads as thick hose-water ropes. */
   setSizeScale(v: number): void;
+  /** Beer-Lambert thickness strength — 0 is the old flat base. */
+  setAbsorb(v: number): void;
+  /** Specular strength (the wet glint). */
+  setSpec(v: number): void;
+  /** Specular exponent — low is a broad sheen, high is a pinpoint. */
+  setGloss(v: number): void;
+  /** Fresnel rim strength. */
+  setRim(v: number): void;
+  readonly absorb: number;
+  readonly spec: number;
+  readonly gloss: number;
+  readonly rim: number;
   /** DIAGNOSTIC: drop the surface pass's depth test. The surface normally
    *  writes a depth RECONSTRUCTED from the density field's average view
    *  depth and interleaves with flesh; if that reconstruction is wrong the
@@ -339,6 +379,10 @@ export function createGooLayer(
   const uLegacy = uniform(1);
   const uEdge = uniform(GOO_TUNING.edge);
   const uBlurPx = uniform(GOO_TUNING.blurPx);
+  const uAbsorb = uniform(GOO_TUNING.absorb);
+  const uSpec = uniform(GOO_TUNING.spec);
+  const uGloss = uniform(GOO_TUNING.gloss);
+  const uRim = uniform(GOO_TUNING.rim);
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
   const uCamCfg = uniform(new THREE.Vector4(1, 1, 0.1, 200));
@@ -396,6 +440,7 @@ export function createGooLayer(
       camWorld: uCamWorld,
       camCfg: uCamCfg,
       gooCfg: vec3(uThresh, uEdge, uLegacy),
+      gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
     }) as unknown as Swizzled;
     const m = new MeshBasicNodeMaterial();
     m.colorNode = vec4(surfaced.xyz as never, 1.0);
@@ -635,6 +680,15 @@ export function createGooLayer(
     // threshold sees them. (5.5 was being silently clamped to 5.)
     setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(16, v)); },
     setSizeScale(v) { sizeScale = Math.max(0.05, Math.min(1.5, v)); },
+    // CLAMP RANGES are checked against what the shader actually produces, not
+    // guessed — see the setThreshold note above for what guessing cost.
+    // absorb: 0 is the old flat base; past ~2.5 even the fringe is black.
+    setAbsorb(v) { uAbsorb.value = Math.max(0, Math.min(3, v)); },
+    setSpec(v) { uSpec.value = Math.max(0, Math.min(4, v)); },
+    // gloss FLOOR of 8, not 1: below ~8 the lobe is wider than the blob and
+    // the whole surface reads as flat white, which looks like a broken pass.
+    setGloss(v) { uGloss.value = Math.max(8, Math.min(220, v)); },
+    setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
     setDepthTest(on) {
       for (const m of surfaceMaterials) { m.depthTest = on; m.needsUpdate = true; }
     },
@@ -643,6 +697,10 @@ export function createGooLayer(
     get sizeScale() { return sizeScale; },
     get edge() { return uEdge.value; },
     get blurPx() { return uBlurPx.value; },
+    get absorb() { return uAbsorb.value; },
+    get spec() { return uSpec.value; },
+    get gloss() { return uGloss.value; },
+    get rim() { return uRim.value; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
