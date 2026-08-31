@@ -62,6 +62,7 @@ import {
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer } from './goo-layer';
+import { createGooPanel, type GooPanel } from './goo-panel';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -243,6 +244,7 @@ async function main() {
   // dies before __sdfGame exists (caught immediately: headless boot found no
   // __sdfGame at all). Assigned once the actors give it a light rig.
   let gooLayer: GooLayer | null = null;
+  let gooPanel: GooPanel | null = null;
   let gooEnabled = false;
 
   function sizeSdfLayer() {
@@ -781,6 +783,64 @@ async function main() {
     gooLayer.setThreshold(0.6);
     gooLayer.setBlurPx(9);
     gooLayer.setSizeScale(0.75);
+
+    // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
+    // manually"). The look is a five-knob family found by sweeping two at a
+    // time and watching; retyping setGooTuning after every reload is not a
+    // sweep. Shown automatically with setGoo(true) — this is a debug page and
+    // the panel is the reason to turn the layer on at all — and dismissable
+    // with __sdfGame.gooPanel(false).
+    const L = gooLayer;
+    gooPanel = createGooPanel([
+      { key: 'sizeScale', group: 'goo', min: 0.05, max: 1.5, step: 0.01,
+        hint: 'World-size multiplier per blob. The scale knob: too high and the mass swallows the room.',
+        get: () => L.sizeScale, set: v => L.setSizeScale(v) },
+      { key: 'threshold', group: 'goo', min: 0.05, max: 4, step: 0.05,
+        hint: 'Density needed to be goo. A LONE blob peaks near 1.0, so below 1 every isolated droplet draws its own shape.',
+        get: () => L.threshold, set: v => L.setThreshold(v) },
+      { key: 'blurPx', group: 'goo', min: 0, max: 16, step: 0.5,
+        hint: 'Gaussian sigma. Wider blur fuses neighbouring peaks BEFORE the threshold sees them — the grapes-to-sheets knob.',
+        get: () => L.blurPx, set: v => L.setBlurPx(v) },
+      { key: 'stretch', group: 'goo', min: 0, max: 4, step: 0.05,
+        hint: 'Velocity elongation cap. 0 = round blobs. High values turn a fast gout into a starburst of needles.',
+        get: () => L.stretch, set: v => L.setStretch(v) },
+      { key: 'edge', group: 'goo', min: 1.05, max: 4, step: 0.05,
+        hint: 'Soft-edge band width, as a multiple of threshold.',
+        get: () => L.edge, set: v => L.setEdge(v) },
+      { key: 'absorb', group: 'goo', min: 0, max: 3, step: 0.05,
+        hint: 'Beer-Lambert thickness. Higher = darker crimson core against a brighter thin fringe.',
+        get: () => L.absorb, set: v => L.setAbsorb(v) },
+      { key: 'spec', group: 'goo', min: 0, max: 4, step: 0.05,
+        hint: 'Specular strength — the wet glint.',
+        get: () => L.spec, set: v => L.setSpec(v) },
+      { key: 'gloss', group: 'goo', min: 8, max: 220, step: 2,
+        hint: 'Specular exponent. Low = broad sheen, high = pinpoint.',
+        get: () => L.gloss, set: v => L.setGloss(v) },
+      { key: 'rim', group: 'goo', min: 0, max: 1, step: 0.02,
+        hint: 'Fresnel rim strength.',
+        get: () => L.rim, set: v => L.setRim(v) },
+      { key: 'count', group: 'gout', min: 10, max: 300, step: 5,
+        hint: 'Slug gout droplets per impact. More = denser mass, but MAX_DROPLETS is 600 across the whole sim.',
+        get: () => IMPACT_GOUT.slug.count, set: v => { IMPACT_GOUT.slug.count = Math.round(v); } },
+      { key: 'speedMax', group: 'gout', min: 0.5, max: 12, step: 0.25,
+        hint: 'Head speed. High values scatter the pulse before it can fuse.',
+        get: () => IMPACT_GOUT.slug.speedMax, set: v => { IMPACT_GOUT.slug.speedMax = v; } },
+      { key: 'speedMin', group: 'gout', min: 0.2, max: 8, step: 0.1,
+        hint: 'Tail speed. The head/tail gap is what stretches the pulse into a rope.',
+        get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
+    ], {
+      presets: [
+        { label: 'blobby',
+          values: { sizeScale: 0.35, threshold: 1.2, blurPx: 9, stretch: 0, edge: 1.6,
+            absorb: 1, spec: 2, gloss: 55, rim: 0.3, count: 140, speedMax: 3.5, speedMin: 1 } },
+        { label: 'strands',
+          values: { sizeScale: 0.22, threshold: 0.8, blurPx: 5, stretch: 0.8, edge: 1.6,
+            absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, count: 90, speedMax: 8, speedMin: 1.5 } },
+        { label: 'shipped',
+          values: { sizeScale: 0.75, threshold: 0.6, blurPx: 9, stretch: 0.8, edge: 1.6,
+            absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, count: 90, speedMax: 8, speedMin: 1.5 } },
+      ],
+    });
   }
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
@@ -1415,6 +1475,7 @@ async function main() {
       // The reference frames want both anyway — connected masses PLUS fine
       // satellite specks — so mist is the sparse-case floor and the grain.
       bloodView.setMistVisible(true);
+      gooPanel?.setVisible(on);
       return true;
     },
     get goo() {
@@ -1499,6 +1560,11 @@ async function main() {
         density: await readOne(density),
         blurredBuf: await readOne(blurred),
       };
+    },
+    /** Show/hide the live tuning panel independently of the layer. */
+    gooPanel(on: boolean) {
+      gooPanel?.setVisible(on);
+      return gooPanel?.visible ?? false;
     },
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
