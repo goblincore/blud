@@ -20,6 +20,32 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SHELL MARCH — WIRED, PARITY VERIFIED, DEFAULT OFF (2026-08-31).** Per-limb
+posed hulls (`shell-hull-outer.ts`) are built from `posed().prims`, so they
+follow the rig for free — no re-meshing, unlike the 2026-08-25 spike's 0.5 s
+marching-tets mesh. `MARCH_BODY` now takes `shellIn`/`shellOut` via a
+standalone `shellFetch` (HELPERS chain untouched); off-state fetches are exact
+identities. **Parity at 1 pixel** (room 3 104183 vs 104184; room 4 46224 vs
+46225, zero drift) while rasterised pixels drop **2.85x / 4.88x** and occupancy
+rises 23%→66% / 7%→48%. Visual gate caught the one real bug: folding `shellOut`
+into `tMax` put X1.15's clamped final sample on the hull, which the
+distance-growing AA epsilon accepts as a hit — halos on every silhouette,
+distant bodies as ghost hull outlines. Dropped + regression-guarded.
+**Before it defaults on:** settle the relaxation item below (it moves the
+baseline), a crowd FRAME-TIME A/B on a quiet machine (all numbers so far are
+pixel/step counts, and the hull's two raster passes cost something), and a
+sever/wound pass on screen.
+[note](docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
+
+**`X1.game-relax` [ ] THE GAME PAGE MARCHES UN-RELAXED — owner call needed.**
+`woundCfg2.y` defaults to 1.0 and the march tests `> 1.0`, so `sdf-game.html`
+runs at omega 0.6 (under-relaxed). Only `lab-main` has a `setRelax`; the game
+page never got X1.10's measured 1.4 (~5%, 14.89 → 9.31 ms at ten bodies). It
+costs **quality too**: room 4 resolves **27171 hit pixels at 0.6 vs 46224 at
+1.4** — ~40% of the flesh the same field can resolve, unresolved at distance.
+Strictly better on both axes by measurement, but it changes what renders, so it
+wants its own visual gate rather than a silent flip.
+
 **SHELL MARCH — GO (2026-08-31).** `__sdfGame.occupancy()` (march debug mode 4:
 raw counters returned BEFORE the miss-discard, float target summed) measures the
 shell march's market instead of asserting it: **82-92% of every pixel the march
