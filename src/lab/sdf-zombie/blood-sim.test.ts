@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { createBloodSim, burst, emitTrails, stepBlood, addScraps, SCRAP_TUNING } from './blood-sim';
+import {
+  createBloodSim, burst, emitTrails, stepBlood, addScraps, SCRAP_TUNING,
+  spawnWoundDroplets, WOUND_BLEED,
+} from './blood-sim';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -150,5 +153,126 @@ describe('blood-sim scraps (gobs-and-goo §1)', () => {
     addScraps(b, scraps, [0, 1, 0], seeded(33));
     for (let i = 0; i < 600; i++) { stepBlood(a, 1 / 60, seeded(9)); stepBlood(b, 1 / 60, seeded(9)); }
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+describe('wound bleed emitters (bleeding-wounds spec, 2026-08-31)', () => {
+  const ANCHOR: [number, number, number] = [1, 1.2, 0.5];
+  const NORMAL: [number, number, number] = [0, 1, 0];
+
+  /** Steps one fresh emitter for `secs` at 60 Hz, returns droplet count. */
+  function emitFor(kind: 'pellet' | 'slug' | 'stump', secs: number, seed = 11): number {
+    const sim = createBloodSim();
+    let acc = 0;
+    const rng = seeded(seed);
+    const steps = Math.round(secs * 60);
+    for (let i = 0; i < steps; i++) {
+      acc = spawnWoundDroplets(sim, kind, i / 60, ANCHOR, NORMAL, 1 / 60, acc, rng);
+    }
+    return sim.droplets.length;
+  }
+
+  it('pellet oozes a small PINNED count over its 2 s life at a constant low rate', () => {
+    expect(WOUND_BLEED.pellet.lifetimeSec).toBe(2);
+    expect(WOUND_BLEED.pellet.tailHz).toBe(WOUND_BLEED.pellet.baseHz); // constant
+    // Pinned exact: the fractional accumulator must land 7 Hz x 2 s = 14
+    // spawns; drift of even one droplet means the carry logic is broken.
+    expect(emitFor('pellet', 2)).toBe(14);
+  });
+
+  it('slug spurt is front-loaded: most of its droplets in the first second', () => {
+    expect(WOUND_BLEED.slug.lifetimeSec).toBeGreaterThanOrEqual(6);
+    expect(WOUND_BLEED.slug.lifetimeSec).toBeLessThanOrEqual(8);
+    const first = emitFor('slug', 1);
+    const total = emitFor('slug', 8); // past the 6 s life: spawn fn already dead
+    expect(first).toBeGreaterThan(total - first); // strict majority up front
+    expect(total).toBeGreaterThan(first); // and the drip keeps contributing
+  });
+
+  it('stump gushes MORE in total than the slug, and arcs (high speed band)', () => {
+    expect(emitFor('stump', 10)).toBeGreaterThan(emitFor('slug', 6));
+    expect(WOUND_BLEED.stump.speedMax).toBeGreaterThan(WOUND_BLEED.slug.speedMax);
+    expect(WOUND_BLEED.stump.speedMin).toBeGreaterThan(WOUND_BLEED.slug.speedMin);
+  });
+
+  it('every kind hits ZERO spawns after its lifetime (2 s / 6 s / 10 s)', () => {
+    const sim = createBloodSim();
+    let acc = 0;
+    const rng = seeded(4);
+    for (let i = 0; i < 60 * 12; i++) {
+      acc = spawnWoundDroplets(sim, 'pellet', i / 60, ANCHOR, NORMAL, 1 / 60, acc, rng);
+    }
+    expect(sim.droplets.length).toBe(14); // nothing beyond the pinned 2 s count
+    expect(spawnWoundDroplets(sim, 'slug', 6.01, ANCHOR, NORMAL, 1 / 60, 0, rng)).toBe(0);
+    expect(spawnWoundDroplets(sim, 'stump', 10.01, ANCHOR, NORMAL, 1 / 60, 0, rng)).toBe(0);
+    expect(sim.droplets.length).toBe(14); // and nothing spawned above
+  });
+
+  it('same seed + same step sequence => identical droplet counts AND positions', () => {
+    const run = () => {
+      const sim = createBloodSim();
+      let acc = 0;
+      const rng = seeded(77);
+      for (let i = 0; i < 60 * 3; i++) {
+        acc = spawnWoundDroplets(sim, 'stump', i / 60, ANCHOR, NORMAL, 1 / 60, acc, rng);
+        stepBlood(sim, 1 / 60, seeded(5));
+      }
+      return sim;
+    };
+    const a = run(); const b = run();
+    expect(JSON.stringify(a.droplets)).toBe(JSON.stringify(b.droplets));
+    expect(a.droplets.length).toBe(b.droplets.length);
+    expect(a.droplets.length).toBeGreaterThan(0);
+  });
+
+  it('spawned velocities lie within the cone around the passed normal', () => {
+    const sim = createBloodSim();
+    const rng = seeded(31);
+    const n: [number, number, number] = [0.6, 0.8, 0];
+    let acc = 0;
+    for (let i = 0; i < 60; i++) {
+      acc = spawnWoundDroplets(sim, 'stump', i / 60, ANCHOR, n, 1 / 60, acc, rng);
+    }
+    const bound = Math.cos(WOUND_BLEED.stump.coneRad);
+    expect(sim.droplets.length).toBeGreaterThan(30);
+    for (const d of sim.droplets) {
+      const l = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
+      const dot = (d.vel[0] * n[0] + d.vel[1] * n[1] + d.vel[2] * n[2]) / l;
+      expect(dot).toBeGreaterThanOrEqual(bound - 1e-9);
+    }
+  });
+
+  it('wound droplets are mist beads (kind "drop") in the per-kind size band', () => {
+    const sim = createBloodSim();
+    const rng = seeded(17);
+    let acc = 0;
+    for (let i = 0; i < 30; i++) {
+      acc = spawnWoundDroplets(sim, 'stump', i / 60, ANCHOR, NORMAL, 1 / 60, acc, rng);
+    }
+    for (const d of sim.droplets) {
+      expect(d.kind).toBe('drop');
+      expect(d.size).toBeGreaterThanOrEqual(WOUND_BLEED.stump.sizeMin - 1e-9);
+      expect(d.size).toBeLessThanOrEqual(WOUND_BLEED.stump.sizeMax + 1e-9);
+    }
+  });
+
+  it('spawning past MAX_DROPLETS recycles oldest and never grows', () => {
+    const sim = createBloodSim();
+    const rng = seeded(3);
+    for (let i = 0; i < 700; i++) {
+      spawnWoundDroplets(sim, 'stump', 0, ANCHOR, NORMAL, 1 / 60, 0, rng); // 1 droplet/fresh call
+    }
+    expect(sim.droplets.length).toBe(600);
+    for (let i = 0; i < 100; i++) {
+      spawnWoundDroplets(sim, 'stump', 0, ANCHOR, NORMAL, 1 / 60, 0, rng);
+    }
+    expect(sim.droplets.length).toBe(600); // FIFO cap, no growth
+  });
+
+  it('the fractional accumulator carries: a carry of 0.9 emits on the next step', () => {
+    const sim = createBloodSim();
+    const acc = spawnWoundDroplets(sim, 'stump', 0, ANCHOR, NORMAL, 1 / 600, 0.95, seeded(2));
+    expect(sim.droplets.length).toBe(1); // 0.95 + 90/600 = 1.1 -> one spawn
+    expect(acc).toBeCloseTo(0.1, 9);
   });
 });
