@@ -339,3 +339,83 @@ be rebuilt per frame.
 Do not use the occupancy figure as a predicted speed-up. It bounds the work
 that can be removed; the hull passes have their own cost, and that trade is
 what a crowd A/B has to settle.
+
+---
+
+# Follow-up 3: per-limb posed hulls — built, and the coverage win measured
+
+## What "per-limb posed hulls" turned out to mean
+
+The 2026-08-25 spike built its hull by marching tetrahedra over the CPU field:
+one rest-pose world-space mesh, ~0.5 s to build. Its own notes named per-limb
+posed hulls as the biggest missing piece for an animated body.
+
+They are cheaper than that. The body is made of **primitives**, and the rig
+already poses them every frame — so a hull built from `posed().prims` follows
+the skeleton for free, with no re-meshing at all. `occluder-hull.ts` has been
+doing exactly this for the INNER hull the whole time, rebuilt per frame at
+~300 instances.
+
+`shell-hull-outer.ts` is that machinery mirrored. Every sign flips:
+
+| | inner (occluder) | outer (shell) |
+| --- | --- | --- |
+| scale | `min(scale)` — largest sphere that FITS | `max(scale)` — smallest that CONTAINS |
+| wounds | must DROP spheres a wound hollowed | ignored: subtraction only shrinks |
+| shellAmp | subtract (dent side escapes) | add (bump side escapes) |
+| coverage | two end spheres per prim is fine | needs a sphere CHAIN — see below |
+
+## Two bugs the containment tests caught before any GPU work
+
+**The blend width convention.** `smin` works internally in `kk = k * 4`
+(`validate.ts`), so `min(a,b) - h*h*kk*0.25` undercuts by up to `kk/4 = k`.
+The surface therefore sits up to a **full blendK** outside the raw primitives —
+not `k/4`, which is what the design assumed. Solving for where the folded value
+reaches zero gives `k` for `smin` and `2k` for `sminChamfer`. The blended-bulge
+test failed by **49 mm** on the wrong constant.
+
+**A sphere chain is not a bounding sphere.** `assignClusters` can fit a
+bounding sphere to `{a, ctrl, b}`, because a sphere containing the control
+polygon contains the Bezier inside it. A *chain* threaded through those three
+points does not: the curve bows away from its control polygon and the middle of
+the arc falls outside. Measured on a 0.12 m bend, the surface escaped by
+**17 mm**. The spine is now the tessellated curve.
+
+Both were found by ray-cast containment against the **shipped zombie** — 900
+inward Fibonacci-distributed rays, deterministic so a failure reproduces. That
+test is also what guards the SEQUENTIAL fold: the analytic bound covers one
+fold, and the zombie folds 23 primitives.
+
+## The coverage win, measured without touching the march
+
+`__sdfGame.hullCoverage()` rasterises the hull and counts covered pixels;
+`occupancy()` already reported what the proxy boxes cover. The gap is the work
+a bounded march deletes — and it needed no change to `march.wgsl.ts` to get.
+
+| room | bodies | proxy-box coverage | outer-hull coverage | actual flesh | hull / box |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 7 | 84.0% | **17.5%** | 13.2% | **0.21x** |
+| 4 | 4 | 100.0% | **36.6%** | 16.2% | **0.37x** |
+
+**2.7-4.8x fewer rasterised pixels**, and the hull hugs tightly: room 3's 17.5%
+against 13.2% of real flesh means occupancy *inside* the hull rises from ~16%
+to ~75%. 731-734 instances for a ten-body crowd, no buffer overflow.
+
+## Remaining work
+
+The march does not consume entry/exit yet — the hull ships **default OFF**,
+because until it does, rasterising it is pure cost. What is left:
+
+1. A `shellFetch` in `zombie-gpu.ts` and two more parameters into `MARCH_BODY`.
+   **Mind the HELPERS chain**: giving every WGSL helper all previous helpers as
+   deps is quadratic and once cost 57 s of boot (`zombie-gpu.ts` header).
+2. In the march: discard when entry is 0 and exit is 0 (no hull covers this
+   pixel — no flesh can be there); start at `max(startT, entry)`; clamp `tMax`
+   by exit. The entry/exit split exists precisely so "no hull" and "camera
+   inside the hull" stay distinguishable.
+3. A visual gate before it defaults on. Containment is proven against the CPU
+   field and the GPU hull is the same spheres rasterised, but a sizing or
+   instance-budget slip renders as HOLES, so this needs eyes on it — the same
+   failure mode the wound-hull work chased for a day.
+4. Then the crowd A/B: hull passes have their own cost, and coverage bounds
+   removable work rather than predicting a speed-up.
