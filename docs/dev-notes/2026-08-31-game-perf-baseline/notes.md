@@ -176,3 +176,88 @@ LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 BENCH_REPEATS=3 BENCH_ROOMS=3,4 scripts/sdf
 
 Read the census table before any timing: if `bodies` is 0, or `wounds` stays 0
 through `fire`, the numbers describe something other than a firefight.
+
+---
+
+# Follow-up: the step-budget sweep (shell-march decision experiment)
+
+## Why this experiment
+
+The shell march's case rested on the spike's "~14x fewer `mapBody` evals"
+(285k proxy-box pixels traced for a ~30k-pixel body). But an eval count is not
+a cost. Before committing to per-limb posed hulls — the largest piece of work
+on the table — it is worth knowing *which* evals are expensive.
+
+The march budget (`marchCfg.x`, ships at 96) gives a way to ask without
+writing a shader. A ray that lands on flesh converges in ~8 steps (the spike
+measured 8.02 over surface pixels); a ray that misses runs on toward the
+budget. So:
+
+```
+cost(budget) ≈ hitPixels × (steps to converge) + missPixels × budget
+```
+
+Sweep the budget, fit the line: the **slope** is what miss pixels cost, and
+miss pixels are exactly the work a bounded entry/exit shell deletes.
+`__sdfGame.setMarchSteps(n)` and the `steps-*` bench legs implement this.
+
+## Result: directionally clear, numerically UNRESOLVED
+
+Two sweeps were run. The second hit a background system load spike
+(`ANECompilerService` at 92% CPU, WindowServer at 34% — an Apple Neural
+Engine compile, nothing to do with this project) and repeat spread went to
+31-91%, which is larger than the deltas being measured. **No number here is
+quotable.**
+
+What survives across both sweeps, noise included, is the sign and rough scale:
+
+| | room 3, 96 → 16 steps | room 4, 96 → 16 steps |
+| --- | ---: | ---: |
+| sweep 1 (rep 0) | 21.74 → 15.03 (−31%) | 13.98 → 12.12 (−13%) |
+| sweep 2 (medians) | 22.22 → 20.25 (−9%) | 14.45 → 13.54 (−6%) |
+
+**A 6x cut in the step budget buys single-digit to low-double-digit percent.**
+Every leg agrees on that, and it is a large enough qualitative gap to survive
+the noise. Compare the resolution result from the main baseline: quartering
+the pixels (scale 0.5) bought **−54%**.
+
+## What that means — and it revises the shell-march argument
+
+**Rays are not exhausting their step budget.** Miss rays terminate on distance
+(the proxy box's far side, or the occluder's `tMax`) long before step 96, and
+the relaxed tracer strides through empty space cheaply. The spike's 14x eval
+reduction is real, but those evals are the *cheap* ones.
+
+So the spec's framing — "the shell march wins by deleting 255k wasted marched
+pixels' worth of stepping" — is **not supported**. That stepping is nearly
+free.
+
+**The case for the shell march is not dead; it rests on a different mechanism.**
+Cost is dominated by *per-pixel* work, not per-step work: that is what the
+scale result (−54% for a quarter of the pixels) and the step result (−6 to
+−31% for a sixth of the steps) say together. A shell march deletes pixels
+outright — a pixel outside the hull's screen footprint is never rasterised, so
+it pays no per-pixel setup, no tile-list read, no shading. It also tightens the
+interval for the pixels that DO hit, which the spike measured as 8.02 → 3.30
+steps.
+
+That is a better argument than the one in the spec, and it predicts something
+testable: **the shell march's win should track how much of each body's proxy
+box is empty**, not how many steps rays take.
+
+## Before building anything
+
+1. **Re-run the sweep on a quiet machine.** One command; the method is sound,
+   only the conditions were bad.
+   ```bash
+   LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 BENCH_REPEATS=3 BENCH_ROOMS=3,4 \
+     BENCH_LEGS=steps-96,steps-48,steps-24,steps-16 scripts/sdf-game-bench.sh
+   ```
+2. **Measure proxy-box occupancy** — what fraction of each body's rasterised
+   box pixels actually hit flesh, at real crowd scale. That is the shell
+   march's addressable market under the revised argument, and it is cheap to
+   get (the march already carries `debugCfg` step/prim instrumentation; a raw
+   float output mode plus a readback would do it).
+3. Only then decide on per-limb posed hulls.
+
+**Do not start the posed-hull work on the strength of the spike's eval count.**
