@@ -657,8 +657,21 @@ Give them these console lines and ask for a verdict on the shading alone:
 ```js
 __sdfGame.setGooTuning({ absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.30 })  // spec default
 __sdfGame.setGooTuning({ absorb: 1.40, spec: 2.4, gloss: 44, rim: 0.30 })  // "thick sheet"
-__sdfGame.setGooTuning({ absorb: 0.00 })                                    // old flat base, for A/B
+__sdfGame.setGooTuning({ absorb: 0.00 })                                    // thickness OFF control
+__sdfGame.setGoo(false)                                                     // TODAY's shipped look
 ```
+
+**`absorb: 0` is NOT the shipped look — do not present it as one.** Task 2 changed
+the base colour literal in the same commit, so at `absorb: 0` you get a flat red
+that is brighter and less saturated than anything that has ever shipped. It is a
+useful control for "is the thickness term doing the work?", and nothing else. The
+only honest A/B against today is `setGoo(false)`, which shows the actual shipped
+sprite path.
+
+**And judge the right question.** The trickle is a SPARSE distribution — blocker 2,
+which thickness does not address. The question here is "where a mass does form,
+does it read as fluid?", NOT "is there enough blood?". Volume of blood is Task 5's
+job. Judging this step on quantity would reject shading that is working.
 
 - [ ] **Step 5: STOP and wait for the verdict**
 
