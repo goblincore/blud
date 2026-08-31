@@ -383,6 +383,10 @@ export interface GooLayer {
   readonly targetSize: { width: number; height: number };
   /** DIAGNOSTIC: how many density quads the last sync() posed. 0 while blood
    *  is on screen means the mist/size cutoff rejected everything. */
+  /** DIAGNOSTIC: the density targets, for console/headless readback. Reading
+   *  these is how you tell "the field is empty" apart from "the field is full
+   *  and the surface is not drawing it" — the two look identical on screen. */
+  readonly debugTargets: { density: THREE.RenderTarget; blurred: THREE.RenderTarget };
   readonly liveCount: number;
   /** DIAGNOSTIC: how many times sync() has been called. STAYS 0 if the host
    *  page never wired it — the failure that hid this layer entirely on the
@@ -807,6 +811,7 @@ export function createGooLayer(
     setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
     setMode(m: 'overlay' | 'depth') { mode = m; },
     get mode() { return mode; },
+    get debugTargets() { return { density: target, blurred: blurB }; },
     get liveCount() { return liveCount; },
     get syncCalls() { return syncCalls; },
     setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },

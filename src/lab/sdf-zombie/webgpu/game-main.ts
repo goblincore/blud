@@ -1438,6 +1438,67 @@ async function main() {
     },
     /** Live tuning for the look pass — threshold/edge/blur are the three
      *  knobs that decide beads-vs-ropes-vs-sheets. */
+    /**
+     * DIAGNOSTIC: read the density field back off the GPU and report what is
+     * actually in it.
+     *
+     * This exists because "the goo is invisible" has two completely different
+     * causes that look identical on screen: an EMPTY field (nothing upstream
+     * ever wrote density) versus a FULL field the surface pass is failing to
+     * draw. Guessing between them cost several rounds; measuring takes one
+     * call. Compare `max` against `threshold`: max below it means no pixel can
+     * ever qualify and the fault is upstream in sync/density; max above it
+     * with nothing on screen means the fault is the surface or the composite.
+     */
+    async gooProbe() {
+      if (!gooLayer) return { unavailable: true };
+      // Half-float decode: WebGPU hands back raw 16-bit patterns, and the
+      // density targets are HalfFloatType because additive blending is only
+      // guaranteed on 16-bit float in WebGPU core.
+      const h2f = (h: number): number => {
+        const sign = (h & 0x8000) ? -1 : 1;
+        const exp = (h & 0x7c00) >> 10;
+        const frac = h & 0x03ff;
+        if (exp === 0) return sign * Math.pow(2, -14) * (frac / 1024);
+        if (exp === 0x1f) return frac ? NaN : sign * Infinity;
+        return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+      };
+      const readOne = async (t: THREE.RenderTarget) => {
+        const w = t.width;
+        const h = t.height;
+        const raw = new Uint16Array(
+          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h) as ArrayLike<number>,
+        );
+        // WebGPU pads each readback row to a 256-byte boundary; at 8 bytes per
+        // RGBA16F texel that is not the same as w * 4 shorts, and ignoring it
+        // reads garbage from the padding as if it were density.
+        const shortsPerRow = Math.ceil((w * 8) / 256) * 256 / 2;
+        let max = 0;
+        let nonZero = 0;
+        let sum = 0;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const r = h2f(raw[y * shortsPerRow + x * 4] ?? 0);
+            if (!Number.isFinite(r)) continue;
+            if (r > 0) nonZero++;
+            if (r > max) max = r;
+            sum += r;
+          }
+        }
+        return { w, h, max, nonZero, mean: sum / (w * h) };
+      };
+      const { density, blurred } = gooLayer.debugTargets;
+      return {
+        enabled: gooEnabled,
+        mode: gooLayer.mode,
+        threshold: gooLayer.threshold,
+        blurPx: gooLayer.blurPx,
+        liveCount: gooLayer.liveCount,
+        syncCalls: gooLayer.syncCalls,
+        density: await readOne(density),
+        blurredBuf: await readOne(blurred),
+      };
+    },
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
       mode?: 'overlay' | 'depth';
