@@ -131,6 +131,17 @@ const ALL_LEGS = {
   'fxaa-off': { setFxaa: false },
   'scale-0.7': { setSdfScale: 0.7 },
   'scale-0.5': { setSdfScale: 0.5 },
+  // STEP-BUDGET SWEEP — the shell-march decision experiment. See
+  // __sdfGame.setMarchSteps: the slope of cost against budget is what the
+  // MISS pixels cost, and miss pixels are exactly what a bounded entry/exit
+  // shell deletes. These legs degrade the image on purpose; they are a
+  // measurement, not a config.
+  'steps-96': { setMarchSteps: 96 },
+  'steps-64': { setMarchSteps: 64 },
+  'steps-48': { setMarchSteps: 48 },
+  'steps-32': { setMarchSteps: 32 },
+  'steps-24': { setMarchSteps: 24 },
+  'steps-16': { setMarchSteps: 16 },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -138,6 +149,9 @@ const LEGS = process.env.BENCH_LEGS
   : ALL_LEGS;
 
 async function applyLeg(name) {
+  // Fall back to ALL_LEGS: the spike pass always runs 'baseline', which a
+  // BENCH_LEGS filter may have excluded from the throughput matrix.
+  const overrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   // Ship defaults first, so legs cannot contaminate each other.
   await evaluate(`(() => {
     __sdfGame.setOccluder(true);
@@ -145,9 +159,10 @@ async function applyLeg(name) {
     __sdfGame.setFxaa(true);
     __sdfGame.setSdfScale(1.0);
     __sdfGame.setAdaptive(false);
+    __sdfGame.setMarchSteps(96);
     return 1;
   })()`);
-  for (const [fn, arg] of Object.entries(LEGS[name])) {
+  for (const [fn, arg] of Object.entries(overrides)) {
     await evaluate(`__sdfGame.${fn}(${JSON.stringify(arg)})`);
   }
 }
@@ -280,7 +295,11 @@ lines.push('');
 lines.push('| room | segment | bodies in→out | wounds in→out | chunks in→out |');
 lines.push('| ---: | --- | ---: | ---: | ---: |');
 for (const room of ROOM_IDS) {
-  const r = results.find((x) => x.leg === 'baseline' && x.room === room);
+  // Prefer baseline, but fall back to ANY leg for this room — a BENCH_LEGS
+  // filter can exclude baseline, and an empty census table is worse than a
+  // census from a different leg (the scene is the same either way).
+  const r = results.find((x) => x.leg === 'baseline' && x.room === room)
+    ?? results.find((x) => x.room === room);
   if (!r) continue;
   for (const seg of r.segments) {
     if (!seg.census) continue;

@@ -1103,6 +1103,27 @@ async function main() {
     aimSurface: () => aimAtNearestSurface(),
 
     /**
+     * March step budget across every body (marchCfg.x, ships at 96).
+     *
+     * This is a MEASUREMENT seam, and the measurement it exists for is the
+     * shell-march decision. Cost decomposes as roughly
+     *   cost(budget) ~= hitPixels * (steps to converge) + missPixels * budget
+     * because a ray that lands on flesh converges in ~8 steps while a ray that
+     * misses runs on toward the budget. Sweeping the budget and fitting the
+     * line therefore splits the frame into what HITS cost (the intercept) and
+     * what MISSES cost (the slope) — and the misses are exactly the work a
+     * bounded entry/exit shell would delete.
+     *
+     * Lowering this degrades the image (rays give up before converging), so
+     * it is for benching only; nothing should ship on a reduced budget without
+     * its own visual gate.
+     */
+    setMarchSteps(n: number) {
+      for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
+    },
+    get marchSteps() { return actors[0]?.view.uniforms.marchCfg.value.x ?? 0; },
+
+    /**
      * Run one bench leg.
      *
      * Parks the result on window.__gameBench as well as returning it: a
