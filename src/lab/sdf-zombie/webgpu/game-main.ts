@@ -27,7 +27,7 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -343,9 +343,10 @@ async function main() {
   // measurement instrument until the march consumes it, and rasterising it
   // for nothing is pure cost.
   const outerHull = createOuterHull();
-  outerHull.object.layers.set(SHELL_LAYER);
-  scene.add(outerHull.object);
-  sdfLayer.setShellSideHook((side, depthFunc) => outerHull.setSide(side, depthFunc));
+  outerHull.entryObject.layers.set(SHELL_LAYER);
+  outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
+  scene.add(outerHull.entryObject);
+  scene.add(outerHull.exitObject);
   sdfLayer.setShellEnabled(false);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
