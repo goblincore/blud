@@ -409,7 +409,31 @@ describe('ported features reach the entry point', () => {
     // nearer than the hull and never needed it. At amp 0 the bound is
     // bit-identical to the undisplaced one, so the guard pins the EXPRESSION
     // rather than a value.
+    // The outer-hull shell (2026-08-31) folds its own exit bound into the
+    // same min(), so this pins the OCCLUDER TERM rather than the whole line —
+    // the amp must ride occT wherever that expression ends up.
+    expect(MARCH_BODY).toContain('occT + woundCfg2.z');
     expect(MARCH_BODY).toContain('let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);');
+  });
+
+  it('bounds the march by the outer hull, and is an identity when it is off', () => {
+    // shellOut <= 0 means no hull covers the pixel, so no surface can be
+    // there. The RETURN matters as much as the discard: WGSL discard demotes
+    // the invocation but does not stop it, so without the return the pixel
+    // still walks its whole budget before being thrown away.
+    expect(MARCH_BODY).toContain('if (shellOut <= 0.0) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
+    // The ray may start at the hull's near face; max() with startT so the cone
+    // pre-pass is not thrown away when it reaches further.
+    expect(MARCH_BODY).toContain('var t = clamp(max(startT, shellIn), 0.0, tMax);');
+    // Both parameters exist, so a material built without a shell source still
+    // type-checks and takes the 0 / 1e9 identities.
+    expect(MARCH_BODY).toContain('shellIn: f32');
+    expect(MARCH_BODY).toContain('shellOut: f32');
+    // shellOut must NOT bound tMax. X1.15's clamped final sample would then
+    // land on the hull — outside the flesh — and the AA epsilon accepts it,
+    // which renders as a halo on every silhouette and ghost outlines at
+    // distance. Regression guard for the 2026-08-31 visual gate.
+    expect(MARCH_BODY).not.toContain('occT + woundCfg2.z), shellOut');
   });
 
   it('stops the cone one shell amp early (X1.21.2 pale tile wedges)', () => {

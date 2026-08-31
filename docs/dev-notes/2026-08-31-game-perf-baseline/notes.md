@@ -419,3 +419,86 @@ because until it does, rasterising it is pure cost. What is left:
    failure mode the wound-hull work chased for a day.
 4. Then the crowd A/B: hull passes have their own cost, and coverage bounds
    removable work rather than predicting a speed-up.
+
+---
+
+# Follow-up 4: the hull wired into the march — parity, one bug, one discovery
+
+## Wiring
+
+`MARCH_BODY` takes `shellIn` / `shellOut`. `shellFetch` mirrors `occFetch` as a
+standalone `wgslFn` passed as a parameter, so the HELPERS chain — and its
+documented quadratic-dependency trap — is untouched. With the shell off the
+fetches return `0` and `1e9`, which are exact identities, so a material built
+without a shell source marches bit-identically.
+
+Consumption is two lines: discard-and-return when `shellOut <= 0` (no hull
+covers the pixel, so no surface can be there), and start at
+`max(startT, shellIn)`.
+
+## The bug the visual gate caught
+
+Folding `shellOut` into `tMax` looked obviously right and was wrong. `X1.15`
+made the relaxed tracer take a **clamped final sample at `tMax`** so an
+overshoot could still retract. Clamping `tMax` to the hull's back face
+therefore puts that final sample *on the hull* — a surface sitting
+`blendK + shellAmp + chain inflation` outside the flesh — and the AA epsilon
+(`t * aaCfg.x`, which grows with distance) accepts it as a hit.
+
+On screen: a bright halo hugging every silhouette, and distant bodies
+collapsing into ghost outlines of their own hulls, worst far away where the
+epsilon is largest. Nothing is lost by dropping it — the exit bound only
+tightened a far clamp the occluder already provides, and the entire win comes
+from the discard and the entry start. Regression-guarded.
+
+(A second error never reached a run: the first edit patched `CONE_MARCH`'s
+`var t = clamp(startT, 0.0, tMax)` — the same line, in a function with no
+`shellIn` in scope. A shader compile error, caught by the duplicate-line check.)
+
+## Parity, and the cost win
+
+Deterministic — zero drift across alternating legs.
+
+| room | OFF | ON | delta |
+| ---: | ---: | ---: | ---: |
+| 3 | 104183 hits | 104184 | **1 px** |
+| 4 | 46224 hits | 46225 | **1 px** |
+
+| room | rasterised OFF -> ON | occupancy OFF -> ON |
+| ---: | --- | --- |
+| 3 | 480000 -> 168291 (**2.85x**) | 23.0% -> 65.7% |
+| 4 | 367213 -> 75314 (**4.88x**) | 7.1% -> 48.4% |
+
+## The discovery: the game page never got X1.10's relaxation default
+
+Chasing an apparent +37% hit delta led somewhere unrelated and more valuable.
+`woundCfg2` defaults to `y = 1.0`, and the march tests `relax = woundCfg2.y >
+1.0` — so **the game page marches UN-RELAXED at omega = marchCfg.y = 0.6**.
+Only `lab-main` exposes a `setRelax`; the game page never received the default
+`X1.10` measured and flipped (**1.4**, worth ~5% and 14.89 -> 9.31 ms at ten
+bodies).
+
+It is not only a speed cost. At omega 0.6 with a 96-step budget the march
+leaves resolvable flesh unresolved at distance — room 4 measured **27171 hit
+pixels at 0.6 against 46224 at 1.4**, i.e. roughly 40% of the flesh the same
+field can resolve. The shell's head start was recovering about half that gap
+on its own, which is exactly why the delta looked like a shell effect until
+relaxation was controlled for.
+
+**Recommended, but NOT done here**: set the game page's relax to 1.4. It is
+strictly better on both axes by measurement, but it changes what renders, and
+a rendering change deserves its own visual gate rather than being slipped in
+at the end of a session.
+
+## Where the shell stands
+
+Correct and cheap, still **default OFF**. Remaining before it defaults on:
+
+1. The relaxation question above, settled first — it changes the baseline the
+   shell would be measured against.
+2. A crowd frame-time A/B. Every number above is a pixel or step count; the
+   hull's own two rasterisation passes cost something, and only a timing A/B
+   on a quiet machine settles the trade.
+3. Wounds and severing under the shell. The hull ignores wounds by design
+   (subtraction only shrinks), but severed clusters drop out of the hull via
+   the live-cluster filter, and that path has not been exercised on screen.

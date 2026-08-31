@@ -1213,7 +1213,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   tileCfg: vec4<f32>,
   screenUV: vec2<f32>,
   startT: f32,
-  occT: f32
+  occT: f32,
+  shellIn: f32,
+  shellOut: f32
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
@@ -1271,6 +1273,45 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // amp reaches every dent the fbm can cut, while bumps stand PROUD of the
   // hull and were never at risk. Zero when the shell is off, so the
   // undisplaced bound is bit-identical.
+  // OUTER-HULL BOUNDS (shell-hull-outer.ts). The hull CONTAINS the flesh, so
+  // it answers two questions the occluder cannot:
+  //
+  //   shellOut <= 0 — no hull covers this pixel, therefore no surface can be
+  //     here, therefore there is nothing to march. Measured 2026-08-31: that
+  //     is 82-92% of every pixel the march rasterises, carrying 63-84% of all
+  //     its steps.
+  //   shellIn — where the hull's near surface is. No surface exists before it,
+  //     so the ray may start there instead of at the proxy box's front.
+  //
+  // THE return IS NOT REDUNDANT WITH THE discard. In WGSL, discard demotes the
+  // invocation to a helper; it does NOT stop execution. Without the return the
+  // pixel would still walk its entire budget and only then be thrown away —
+  // which is precisely the work this exists to delete.
+  // (No backticks in this file: it is one big template literal.)
+  //
+  // ENTRY AND EXIT ARE SEPARATE for one reason: a camera INSIDE a hull sphere
+  // sees no front face, so entry reads 0 there exactly as it does where there
+  // is no hull at all. Exit tells them apart — inside the hull it is positive.
+  // Collapsing the two would discard flesh at point-blank range.
+  //
+  // With the shell OFF the fetches hand back shellIn 0 / shellOut 1e9, so both
+  // uses below are identities and this path stays bit-identical.
+  //
+  // shellOut IS DELIBERATELY NOT FOLDED INTO tMax, and that is a bug fix, not
+  // an oversight. X1.15 made the relaxed tracer take a CLAMPED FINAL SAMPLE at
+  // tMax so an overshoot past tMax could still retract. Clamping tMax to the
+  // hull's back face therefore puts that final sample ON THE HULL — a surface
+  // sitting blendK + shellAmp + chain-inflation OUTSIDE the flesh — and the
+  // AA epsilon (t * aaCfg.x, which grows with distance) accepts it as a hit.
+  // Rendered result: a bright halo hugging every silhouette, and distant
+  // bodies collapsing into ghost outlines of their own hulls, worst far away
+  // where the epsilon is largest. Caught by the on/off visual gate.
+  //
+  // Nothing is lost by leaving it out. The exit bound only ever tightened a
+  // far clamp that the occluder already provides — and the occluder measured
+  // as worth nothing anyway. The entire win here comes from the discard and
+  // the entry start, both of which are exact.
+  if (shellOut <= 0.0) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
   let steps = i32(marchCfg.x);
   // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
@@ -1369,7 +1410,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
   // never push the ray straight out the back of the proxy box.
-  var t = clamp(startT, 0.0, tMax);
+  // max(startT, shellIn): the cone pre-pass proved empty space ahead, and the
+  // outer hull proves no surface exists before its own near face. Take
+  // whichever reaches further; clamped to tMax so neither can push the ray out
+  // the back of the box.
+  var t = clamp(max(startT, shellIn), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;

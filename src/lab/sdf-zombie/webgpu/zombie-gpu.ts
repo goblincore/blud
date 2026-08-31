@@ -464,6 +464,39 @@ const OCC_FETCH_WGSL = /* wgsl */ `fn occFetch(
 }`;
 export const occFetchNode = wgslFn(OCC_FETCH_WGSL);
 
+/**
+ * Reads one of the outer hull's distance targets (shell-hull-outer.ts).
+ *
+ * ZERO MEANS ABSENT, same contract as the occluder and for the same reason —
+ * the targets clear to zero. But unlike the occluder the caller must choose
+ * what "the shell is switched off" means per target, because entry and exit
+ * want OPPOSITE identities: a disabled entry must read 0 (start at the camera,
+ * change nothing) while a disabled exit must read 1e9 (bound nothing). Passing
+ * that in as `disabledValue` keeps both in one helper and makes the asymmetry
+ * explicit at the two call sites instead of hiding it in a branch.
+ */
+const SHELL_FETCH_WGSL = /* wgsl */ `fn shellFetch(
+  shellTex: texture_2d<f32>,
+  screenUV: vec2<f32>,
+  enabled: f32,
+  disabledValue: f32
+) -> f32 {
+  if (enabled < 0.5) { return disabledValue; }
+  let dims = vec2<f32>(textureDimensions(shellTex, 0));
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  return textureLoad(shellTex, c, 0).x;
+}`;
+export const shellFetchNode = wgslFn(SHELL_FETCH_WGSL);
+
+/** The outer hull's entry/exit pre-pass output, as the march material needs
+ *  it. Same shape as OccluderSource; a distinct type so the two hulls cannot
+ *  be passed to each other's parameter by accident — they are opposites. */
+export interface ShellSource {
+  entry: THREE.Texture;
+  exit: THREE.Texture;
+  uniforms: { enabled: ReturnType<typeof uniform> };
+}
+
 /** The occluder pre-pass's output, as the march material needs it. */
 export interface OccluderSource {
   texture: THREE.Texture;
@@ -516,6 +549,7 @@ export function createMarchMaterial(
   march = marchBody,
   cone?: ConeSource, occluder?: OccluderSource,
   tiles?: { header: unknown; entries: unknown },
+  shell?: ShellSource,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -586,6 +620,24 @@ export function createMarchMaterial(
           occTex: texture(occluder.texture),
           screenUV: screenUV,
           enabled: occluder.uniforms.enabled,
+        })
+      : float(1e9),
+    // 0 and 1e9 are the no-shell identities — see shellFetch. A material built
+    // without a shell source therefore marches exactly as before.
+    shellIn: shell
+      ? shellFetchNode({
+          shellTex: texture(shell.entry),
+          screenUV: screenUV,
+          enabled: shell.uniforms.enabled,
+          disabledValue: float(0),
+        })
+      : float(0),
+    shellOut: shell
+      ? shellFetchNode({
+          shellTex: texture(shell.exit),
+          screenUV: screenUV,
+          enabled: shell.uniforms.enabled,
+          disabledValue: float(1e9),
         })
       : float(1e9),
   }) as unknown as Swizzled;
@@ -801,6 +853,9 @@ export interface GpuViewOpts {
    * the early-Z that frag_depth + discard rule out.
    */
   occluder?: OccluderSource;
+  /** Outer-hull entry/exit bounds (shell-hull-outer.ts). Omit for the
+   *  unbounded march — the fetch identities make it bit-identical. */
+  shell?: ShellSource;
   /**
    * Generate a shader specialised to THIS body's structure — loops unrolled,
    * carve decisions and blend constants baked. See specialise.ts. Costs one
@@ -913,7 +968,7 @@ export function createZombieGpuView(
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
-    opts.cone, opts.occluder, tileNodes);
+    opts.cone, opts.occluder, tileNodes, opts.shell);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
