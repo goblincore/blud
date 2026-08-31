@@ -716,7 +716,12 @@ async function main() {
   // camera compensation; BLOOD_TRAIL.size is already game-camera tuned).
   // Splats keep the lab's soft depthWrite:false — the floor's depth already
   // arbitrates them, and their 0.005 m lift beats z-fighting.
-  const bloodView = createBloodView({ dropletDepthWrite: true, dropletViewScale: 1 });
+  // dropletViewScale 0.5: the owner's first-look verdict (2026-08-31) was
+  // "really big" at FPV range — the lab's own 0.45 compensation exists for
+  // exactly this. 0.5 keeps them a hair beefier than the lab since the game
+  // wants the blood to READ; the deeper look change (gooey spray + mist
+  // instead of sprite blobs) is a tracked exploration, not a scale knob.
+  const bloodView = createBloodView({ dropletDepthWrite: true, dropletViewScale: 0.5 });
   for (const o of bloodView.objects) {
     o.visible = true; // ships ON (it is the feature); setBleed(false) hides
     scene.add(o);

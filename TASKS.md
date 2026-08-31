@@ -20,6 +20,26 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**BLEEDING WOUNDS + C2 TEMPORAL — BOTH OWNER-PASSED (2026-08-31).** Bleeding
+(per-calibre emitters, splat decals, chunk trails) "definitely makes it feel
+better" — merged with droplets scaled to 0.5 view scale (first look read
+"really big" at FPV range). C2 half-rate verdict: ghosting "isn't that
+bothersome" and should "work nicely combined with additional post-process
+effects" — **stays a toggle (`setHalfRate`), default OFF**, to be revisited as
+part of the post-fx look package (which waits on the X1.3 color-chain retune).
+[bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
+[c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
+
+- `X1.bleed-look` [ ] **Visceral fluid spray + mist exploration** (owner ask
+  2026-08-31): droplets currently read as sprite blobs — placeholder by spec.
+  Owner wants (a) spray that reads GOOEY/fluid, (b) finer mist particles.
+  Candidate directions to spike: velocity-stretched billboards (cheap,
+  classic), screen-space metaball pass over droplets only (goo-layer math on
+  a small buffer), soft mist sprites with additive falloff + short lifetimes,
+  or SDF metaball micro-blobs riding the existing chunk path. Budget-gate
+  with the firefight bench like everything else.
+
+
 **BLEEDING WOUNDS — BUILT, GATES GREEN (owner look-verdict pending, 2026-08-31).**
 Per-calibre wound bleed on the game page (pellet ooze / slug spurt-to-drip /
 stump gush, chunk trails, floor splat decals), anchored to wounds by reference
