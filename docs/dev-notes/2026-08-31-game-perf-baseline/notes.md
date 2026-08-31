@@ -1,4 +1,4 @@
-# Game perf baseline (Phase 0) — harness built, baseline NOT taken
+# Game perf baseline (Phase 0) — taken
 
 **Date:** 2026-08-31 · **Branch:** `claude/sdf-rendering-improvements-b3b219`
 **Spec:** [2026-08-31-sdf-crowd-perf-investigation-design.md](../../superpowers/specs/2026-08-31-sdf-crowd-perf-investigation-design.md)
@@ -6,26 +6,78 @@
 
 ## Verdict
 
-**The harness is built, unit-tested and behaviourally correct. The baseline
-number was NOT taken, because this machine cannot currently produce one that
-repeats.** Three identical runs of the same scenario, back to back in one
-browser session, returned overall medians of **10.1 / 5.6 / 56.1 ms**. That
-spread is larger than every delta Phase 1 would want to measure, so any table
-taken here would be decoration.
+**Baseline taken.** The harness is built, unit-tested, and now produces
+repeatable numbers — most legs repeat within **1-13%** across three identical
+runs. Raw output: [`bench-rooms34.md`](bench-rooms34.md) /
+[`bench-rooms34.json`](bench-rooms34.json).
 
-Do not quote a number from this session. The next step is a re-run on a quiet
-machine, not more harness work.
+The headline, and it is not what the plan expected:
+
+> **Resolution scale is the dominant lever by a wide margin, and the occluder
+> pre-pass is currently worth approximately nothing.**
+
+| leg | room 3 (8 bodies) | room 4 (9 bodies) | read |
+| --- | ---: | ---: | --- |
+| baseline | 21.42 | 14.56 | — |
+| occluder-off | 21.24 | 14.93 | **no effect** (−0.8% / +2.5%, inside spread) |
+| cone-on | 18.77 | 14.73 | no effect (inside spread) |
+| fxaa-off | 21.40 | 13.96 | FXAA ≈ 0-4%, marginal |
+| scale-0.7 | 13.03 | 10.95 | **−39% / −25%** |
+| scale-0.5 | 9.06 | 6.64 | **−58% / −54%** |
+
+Throughput = median chunk-mean ms, median of 3 repeats.
+
+Against the owner's target (p95 ≤ 33 ms over a firefight), the per-frame spike
+pass reads **room 4 p95 30.3 ms** (inside) and **room 3 p95 37.7 ms**
+(outside). Note the spike pass fences every frame, which drains the queue and
+lets the GPU clock down, so these are the pessimistic end.
+
+**This strengthens the case for the shell march.** The scale result is a direct
+confirmation that cost is fill-bound — pixel count is the only thing that
+moves it. The occluder gives a far bound but does not shrink the traced pixel
+set; the shell march does exactly that, and the measured lack of occluder
+benefit says the remaining win is in the pixels being traced, not in how far
+each ray runs.
+
+### Caveats, stated plainly
+
+- **Two legs are still unresolved**: `cone-on` room 3 spread 40% and
+  `occluder-off` room 3 spread 19%. Their deltas are smaller than their own
+  spread, so "no effect" for those two means *not resolvable here*, not
+  *proven zero*. The scale deltas (25-58%) are many times any leg's spread and
+  are solid.
+- **Rooms 1 and 2 were excluded**: the camera placement faces a wall there
+  (`bodies 0 -> 0`). Rooms 3 and 4 are the valid ones. This matters less than
+  it sounds — see the crowd-ladder correction below.
+- **The gib segment barely gibs**: room 4 reaches `chunks 0 -> 1`, room 3
+  reaches none. The slug wounds but rarely severs, so the gib column is closer
+  to a second firing segment than to a gore spike.
+- The driver's own summary line flags the single worst leg and then says to
+  treat every comparison as unresolved. That is too blunt — judge each delta
+  against its own legs' spread, as above.
+
+## History: why the first three attempts produced nothing
 
 ## Why the numbers do not repeat
 
-The machine was not quiet: the owner's own Chrome was live at ~32% CPU (58
-Chrome processes) alongside the agent session, both contending for the GPU.
+Two causes, and the second was the real one.
 
-This is not a new discovery so much as a confirmation. The wound-hull work
-(2026-08-27) already recorded that the occluder A/B "could not be resolved on
-this machine — within-config noise > every delta". This session put a
-controlled experiment behind that: same scenario, same page, three runs in a
-row, 10x spread.
+**A busy machine.** The first attempts ran with the owner's own Chrome live at
+~32% CPU (58 processes). Three identical back-to-back runs read 10.1 / 5.6 /
+56.1 ms. Re-running with Chrome at 3.2% removed much of this.
+
+**Damage persisted across runs — the actual defect.** The page was never
+reloaded between legs, and wounds, severed limbs and collapsed bodies survive
+on it. The census caught it: room 3's walk segment *opened* at `wounds 20`,
+carried over from room 2's run, with `bodies 0 -> 0` because the survivors had
+already been shot to pieces. Every run's cost therefore depended on cumulative
+damage from all previous runs rather than on the leg under test. Fixed by
+reloading the page before every run; repeat spread fell from **583% to 1-13%**
+on most legs.
+
+This is why the 2026-08-27 wound-hull note could not resolve its occluder A/B
+either. That finding stands, but the cause was probably not machine noise
+alone.
 
 What was ruled OUT, with evidence:
 
@@ -40,7 +92,7 @@ What was ruled OUT, with evidence:
   and reads as a 70x speedup — the harness fails the run on any such frame.)
 - **Not a WebGL fallback.** Backend asserted `webgpu` on every run.
 
-## What the census caught — three scenario bugs, each of which produced a plausible table
+## What the census caught — four bugs, each of which produced a plausible table
 
 The per-segment scene census (bodies / wounds / chunks at each segment's start
 and end) is the most valuable thing built here. Every bug below shipped a
@@ -63,7 +115,10 @@ wall instead: `bodies 1 -> 0`. The fix is goal-directed rather than heuristic �
 back off 4 m from the room's **actual body centroid**, facing it. Census now
 reads `wounds 0 -> 16` across the fire segment.
 
-**3. `p95` over six samples is just the max.** 120 frames / 20-frame chunks =
+**3. Damage persisted across every run.** Covered above — the single largest
+source of false numbers in this whole exercise, and invisible without a census.
+
+**4. `p95` over six samples is just the max.** 120 frames / 20-frame chunks =
 6 samples per segment, and `floor(0.95 * 6) = 5` — the last index. Every "p95"
 in the first table was a maximum wearing a percentile's name, which is why the
 first segment (carrying each leg's setup cost) dominated every row. Throughput
@@ -104,12 +159,20 @@ files, 17 of them new.
 
 ## Next step
 
-Re-run on a quiet machine:
+The Phase 2 gate can now be argued from data. The ordering the spec proposed
+(C2 → C1 → shell march) should be reconsidered in light of the scale result:
+resolution is doing all the work, which is precisely the axis the shell march
+attacks, while the occluder — the existing bounding lever — has stopped paying.
+
+Before Phase 1 reads anything off this:
+
+- Re-run with rooms 1-2 placement fixed, if a low-body-count point is wanted.
+- Stage a real sever so the gib segment contains gore.
+- Re-take `cone-on` and `occluder-off` on room 3 — those two are unresolved.
 
 ```bash
-LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 BENCH_REPEATS=3 scripts/sdf-game-bench.sh
+LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 BENCH_REPEATS=3 BENCH_ROOMS=3,4 scripts/sdf-game-bench.sh
 ```
 
-Close other browsers first. Check the census table before reading any timing:
-if `bodies` falls through a run, or `wounds` stays 0 through `fire`, the
-numbers describe something other than a firefight and should be discarded.
+Read the census table before any timing: if `bodies` is 0, or `wounds` stays 0
+through `fire`, the numbers describe something other than a firefight.

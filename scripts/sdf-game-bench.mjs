@@ -82,30 +82,49 @@ await send('Emulation.setDeviceMetricsOverride', {
 
 const url = `http://localhost:${VITE}/sdf-game.html`;
 console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')})`);
-await send('Page.navigate', { url });
 
-let backend = null;
-for (let i = 0; i < 240; i++) {
-  await sleep(500);
-  backend = await evaluate('typeof window.__sdfGame === "object" ? window.__sdfGame.backend : null');
-  if (backend) break;
+/**
+ * Load the page fresh.
+ *
+ * CALLED BEFORE EVERY RUN, and that is not paranoia — it is the fix for the
+ * defect that made the 2026-08-31 matrix unreadable. Wounds, severed limbs and
+ * collapsed bodies PERSIST on the page: run N inherits every crater run N-1
+ * carved. The census caught it (room 3's walk segment opened at `wounds 20`,
+ * carried over from room 2's run, with `bodies 0 -> 0` because the survivors
+ * had been shot to pieces). Cost then depends on cumulative damage rather than
+ * on the leg under test, and identical repeats spread by up to 583%.
+ *
+ * A reload costs ~10 s. Sharing one page across 76 runs costs the whole
+ * measurement.
+ */
+async function bootPage(settleMs = 5000) {
+  await send('Page.navigate', { url: 'about:blank' });
+  await sleep(200);
+  await send('Page.navigate', { url });
+  let backend = null;
+  for (let i = 0; i < 240; i++) {
+    await sleep(500);
+    backend = await evaluate('typeof window.__sdfGame === "object" ? window.__sdfGame.backend : null');
+    if (backend) break;
+  }
+  if (!backend) {
+    console.error('console tail:', consoleEvents.slice(-8));
+    fail('game page never booted (__sdfGame absent)');
+  }
+  if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu — a WebGL fallback bench means nothing here`);
+  // Settle: let the boot loop render and the shaders finish compiling before
+  // anything is timed. First-use pipeline stalls are real.
+  await sleep(settleMs);
+  return backend;
 }
-if (!backend) {
-  console.error('console tail:', consoleEvents.slice(-8));
-  fail('game page never booted (__sdfGame absent)');
-}
-if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu — a WebGL fallback bench means nothing here`);
+
+const backend = await bootPage();
 console.log('backend: webgpu');
-
-// Settle: let the boot loop render and the shaders finish compiling before
-// anything is timed. First-use pipeline stalls are real and would land
-// entirely in whichever leg happened to run first.
-await sleep(5000);
 
 // ---------------------------------------------------------------------------
 // The legs. Each is a named set of overrides applied on top of ship defaults.
 // ---------------------------------------------------------------------------
-const LEGS = {
+const ALL_LEGS = {
   baseline: {},
   'occluder-off': { setOccluder: false },
   'cone-on': { setCone: true },
@@ -113,6 +132,10 @@ const LEGS = {
   'scale-0.7': { setSdfScale: 0.7 },
   'scale-0.5': { setSdfScale: 0.5 },
 };
+// BENCH_LEGS lets a validation pass run one leg without the whole matrix.
+const LEGS = process.env.BENCH_LEGS
+  ? Object.fromEntries(process.env.BENCH_LEGS.split(',').map((k) => [k, ALL_LEGS[k] ?? {}]))
+  : ALL_LEGS;
 
 async function applyLeg(name) {
   // Ship defaults first, so legs cannot contaminate each other.
@@ -140,6 +163,9 @@ const WARMUP = Number(process.env.BENCH_WARMUP ?? 120);
 const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 
 async function runLeg(name, room, mode) {
+  // Fresh page per run — see bootPage. Damage does not survive a reload,
+  // which is the entire point.
+  await bootPage(2500);
   await applyLeg(name);
   const label = `${name}/room${room}/${mode}`;
   const opts = mode === 'spike'
@@ -149,6 +175,10 @@ async function runLeg(name, room, mode) {
   const raw = await evaluate('JSON.stringify(window.__gameBench)');
   const r = JSON.parse(raw);
   if (!r.valid) fail(`${label}: ${r.hiddenSteps} hidden frames — INVALID (a hidden page renders nothing)`);
+  // A run that saw no bodies measured an empty room, whatever its timings say.
+  const seen = Math.max(0, ...r.segments.flatMap((sg) => sg.census ? [sg.census.first.bodies, sg.census.last.bodies] : [0]));
+  if (seen === 0) console.warn(`  WARN ${label}: census saw ZERO bodies — this run measured an empty room`);
+  r.bodiesSeen = seen;
   return r;
 }
 
@@ -214,6 +244,33 @@ lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
 for (const t of table) {
   lines.push(`| ${t.leg} | ${t.room} | ${t.bodies} | ${t.overallP50.toFixed(2)} | ${t.walkP50.toFixed(2)} | ${t.fireP50.toFixed(2)} | ${t.gibP50.toFixed(2)} | ${t.overallMax.toFixed(2)} |`);
 }
+lines.push('');
+lines.push('## Repeatability — READ THIS BEFORE ANY DELTA');
+lines.push('');
+lines.push('Spread of the overall median across identical repeats. A leg whose');
+lines.push('spread exceeds the delta you care about has not measured anything.');
+lines.push('On 2026-08-31 three identical runs read 10.1 / 5.6 / 56.1 ms on a busy');
+lines.push('machine, which is why this section exists.');
+lines.push('');
+lines.push('| leg | room | reps (overall median ms) | spread | spread % of min |');
+lines.push('| --- | ---: | --- | ---: | ---: |');
+let worstSpreadPct = 0;
+for (const leg of Object.keys(LEGS)) {
+  for (const room of ROOM_IDS) {
+    const rs = results.filter((r) => r.leg === leg && r.room === room);
+    if (rs.length < 2) continue;
+    const vals = rs.map((r) => r.overall.p50);
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const pct = ((hi - lo) / lo) * 100;
+    worstSpreadPct = Math.max(worstSpreadPct, pct);
+    lines.push(`| ${leg} | ${room} | ${vals.map((v) => v.toFixed(2)).join(' / ')} | ${(hi - lo).toFixed(2)} | ${pct.toFixed(0)}% |`);
+  }
+}
+lines.push('');
+lines.push(`**Worst repeat spread: ${worstSpreadPct.toFixed(0)}%.** Judge each delta`);
+lines.push('against ITS OWN legs\' spread, not against this worst case — one noisy leg');
+lines.push('does not invalidate a delta measured between two quiet ones. A delta smaller');
+lines.push('than either leg\'s spread is UNRESOLVED, not zero.');
 lines.push('');
 lines.push('## Census — what was ON SCREEN while those numbers were taken');
 lines.push('');
