@@ -27,7 +27,7 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
@@ -444,6 +444,12 @@ async function main() {
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
+  // The inflated shadow-casting twin (see occluder-hull.ts). castShadow and
+  // the layer are already set in the factory; spelled out here to sit beside
+  // the occlusion hull's wiring, where the next reader will look first.
+  occluderHull.shadowObject.layers.set(SHADOW_HULL_LAYER);
+  occluderHull.shadowObject.castShadow = true;
+  scene.add(occluderHull.shadowObject);
   sdfLayer.setOccluderEnabled(true);
 
 /**
