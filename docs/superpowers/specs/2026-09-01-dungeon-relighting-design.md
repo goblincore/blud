@@ -40,7 +40,7 @@ had. Where the two disagree, the owner's stated preference wins.
 |---|---|---|
 | Scope | Lighting **+ procedurally generated stone maps** | Specular needs relief; procedural sidesteps the never-ship asset guardrail entirely |
 | Light rig | Flashlight **+ fire practicals** | Reuses the 5 existing `AccentLight` entries — the only channel by which SDF characters see world light |
-| Palette | **Cold wet gray stone, warm fire** | Owner's ask on record was "dark, dank, wet gray"; cold stone makes fire pools read warm, and a neutral beam keeps highlights white — warm-on-warm muddies exactly the specular being asked for |
+| Palette | **Cold wet gray stone, warm fire** | Owner's ask on record was "dark, dank, wet gray"; cold stone makes fire pools read warm, and a neutral beam keeps highlights white — warm-on-warm muddies exactly the specular being asked for. **Confirmed by owner 2026-09-01** against the reference video: "we dont need the warm sepia from the reference" |
 | Flashlight mount | **Weapon-mounted, offset** ~0.25 m right / 0.15 m down | An eye-mounted light casts no *visible* shadow — every shadow hides behind its caster. The offset **is** the Doom 3 read |
 | Character self-shadow | **Cut** (owner call) | The only mechanism that cost `mapBody` evals. Without it the whole design holds the zero-extra-eval line |
 | `ambientAt` | **Unmodified** | Fed dungeon albedos instead of gallery white. The seam stays a data swap, per the P1 spec |
@@ -143,8 +143,33 @@ re-posed every frame from live bodies. Two caveats, both real:
 - Its material is a custom `MeshBasicNodeMaterial` writing camera distance;
   the shadow depth pass may need a `customDepthMaterial`.
 - The silhouette is hull-approximate (shrunk spheres, `HULL_SHRINK 0.8`), so
-  shadows are **chunky, not exact**. In a dark room with a soft map this is
-  expected to read fine — and if it does not, that is a look finding, not a bug.
+  shadows are **chunky, not exact**. **Owner has accepted this** (2026-09-01):
+  "character shadows dont need to be exact silhouettes atm, we can further blur
+  them maybe too."
+
+#### Shadow softness — spiked, and narrower than expected
+
+The owner's blur suggestion was tested against a **sphere cluster shaped like
+the occluder hull**, so the blur was judged on the thing it would actually be
+softening. Three findings, all on `WebGPURenderer` r185:
+
+| Lever | Verdict |
+|---|---|
+| `PCFSoftShadowMap` | **Works.** The hull cluster reads as a soft blobby figure shadow — already close to what the owner is asking for |
+| `spot.shadow.radius` | **No-op.** `radius: 1` and `radius: 12` are pixel-identical, and `PCFShadowMap` matches both |
+| `VSMShadowMap` + `blurSamples` | **Unusable.** Severe banding striped across the whole floor |
+
+So *"blur them further"* is **not** available through the obvious three.js
+knobs. The remaining levers are shadow-map **resolution** (a smaller map is
+softer but blockier) and the hull's own inflation. The good news is that
+`PCFSoftShadowMap`'s built-in softness already produces the blobby,
+non-silhouette look the owner signed off on — so this is likely a
+non-problem, but it must not be planned around as if `shadow.radius` worked.
+
+**Softness is global, not per-caster.** One shadow-casting light means one
+shadow map, so anything softening character shadows softens wall shadows too.
+That is arguably correct anyway — a torch is an area source — but it is a
+constraint, not a choice.
 
 **#3** loops ~56 AABBs from `levelColliders()`, slab tests only, only on
 character pixels. Room-local culling via the existing `enclosureOf()` is the
@@ -196,9 +221,13 @@ room format, no baked irradiance volumes (P3), no character self-shadowing.
 
 ## Open questions
 
-1. **Does hull-approximate character shadow read acceptably**, or does the
-   chunky silhouette break the illusion? Cheap to judge once task 1 lands.
+1. ~~Does hull-approximate character shadow read acceptably?~~ **CLOSED
+   (2026-09-01, owner):** exact silhouettes are not required. Softness levers
+   are spiked and constrained — see §3.
 2. **Do 5 braziers read as fire or as coloured point lights?** Same question P1
    left open about bounce lights, now with flicker and visible sources.
 3. **Is one shadow-casting spotlight affordable** at 1024² over ~98 meshes on a
    page already ~10 ms? Task 2 answers this with a number.
+4. **If `PCFSoftShadowMap`'s fixed softness is not soft enough**, is a lower
+   shadow-map resolution an acceptable trade, or does the blockiness cost more
+   than the hard edge did? Only judgeable on screen, after task 1.
