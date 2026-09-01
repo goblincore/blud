@@ -406,6 +406,27 @@ async function main() {
   // Goo OFF takes the original single-call path, so the toggle is exact.
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
+    // Hand the march the same beam the meshes get. The SDF bodies shade
+    // inside the march and cannot see the scene's SpotLight at all (the
+    // owner's "characters aren't lit by the light direction" report), so
+    // the beam is replayed into per-body uniforms: same lamp pose, same
+    // cone maths, per pixel. spotCfg.x gates it — 0 (gallery/lab) makes
+    // the shader collapse to the old key exactly.
+    {
+      const sAxis = new THREE.Vector3();
+      flashlight.spot.target.getWorldPosition(sAxis).sub(flashlight.spot.position).normalize();
+      // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
+      // comes straight off the light so the two systems cannot drift.
+      const spotOn = dungeonOn ? 1 : 0;
+      const cosInner = Math.cos(flashlight.spot.angle * (1 - flashlight.spot.penumbra));
+      const cosOuter = Math.cos(flashlight.spot.angle);
+      for (const a of actors) {
+        a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
+        a.view.uniforms.spotAxis.value.copy(sAxis);
+        a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+      }
+    }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
     // two-rate wobble reads as flame; white noise reads as a broken light.
     const ft = performance.now() * 0.001;

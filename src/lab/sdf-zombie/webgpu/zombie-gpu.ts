@@ -227,6 +227,13 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     keyColor: uniform(new THREE.Color(1, 0.96, 0.92)),
     /** x keyIntensity, y fillIntensity */
     lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
+    /** Flashlight world position. */
+    spotPos: uniform(new THREE.Vector3(0, 0, 0)),
+    /** Flashlight beam axis, normalised, pointing AWAY from the lamp. */
+    spotAxis: uniform(new THREE.Vector3(0, 0, -1)),
+    /** x intensity (0 disables), y cosInner, z cosOuter, w range. */
+    spotCfg: uniform(new THREE.Vector4(0, 0.93, 0.80, 16)),
+    spotColor: uniform(new THREE.Color(0.94, 0.96, 1.0)),
     /** x specIntensity, y specRoughness, z fresnelBoost, w translucency */
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
@@ -579,6 +586,10 @@ export function createMarchMaterial(
     lightDir: u.lightDir,
     keyColor: u.keyColor,
     lightCfg: u.lightCfg,
+    spotPos: u.spotPos,
+    spotAxis: u.spotAxis,
+    spotCfg: u.spotCfg,
+    spotColor: u.spotColor,
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
     mottleColor: u.mottleColor,
@@ -1190,6 +1201,10 @@ export function createChunkGpuView(
     u.lightDir.value.copy(template.lightDir.value);
     u.keyColor.value.copy(template.keyColor.value);
     u.lightCfg.value.copy(template.lightCfg.value);
+    u.spotPos.value.copy(template.spotPos.value);
+    u.spotAxis.value.copy(template.spotAxis.value);
+    u.spotCfg.value.copy(template.spotCfg.value);
+    u.spotColor.value.copy(template.spotColor.value);
     // Chunks must light like the body they came off. Miss this and gibs
     // carry the old flat fill while the torso takes the room's colour.
     u.bounceCfg.value.copy(template.bounceCfg.value);
