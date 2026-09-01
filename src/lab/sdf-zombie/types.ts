@@ -103,8 +103,11 @@ export interface PrimDef {
    * meets the assembled body — a mouth line, a panel seam, a nostril slit —
    * rather than removing a solid. Both apply AFTER the complete additive fold;
    * see applyCarves in march.glsl.ts for why not per-cluster.
+   * 'bone' is a second material strictly INSIDE the flesh: skipped by both the
+   * additive fold and the carve pass, folded as a hard min after wounds are
+   * carved, so it appears only where a wound has reached it.
    */
-  op?: 'add' | 'sub' | 'groove';
+  op?: 'add' | 'sub' | 'groove' | 'bone';
   /**
    * Displacement from the bone-relative placement, in world axes. The body is
    * authored in a rest pose with no rotations, so world and bone axes coincide
@@ -214,8 +217,11 @@ export interface Primitive {
   /**
    * Absent means 'add'. Optional rather than required so the many existing
    * test fixtures that build Primitive literals keep compiling.
+   * 'bone' is a second material strictly INSIDE the flesh: skipped by both the
+   * additive fold and the carve pass, folded as a hard min after wounds are
+   * carved, so it appears only where a wound has reached it.
    */
-  op?: 'add' | 'sub' | 'groove';
+  op?: 'add' | 'sub' | 'groove' | 'bone';
   /** Groove depth and width, in metres. Only read when `op` is 'groove'. */
   grooveDepth?: number;
   grooveWidth?: number;

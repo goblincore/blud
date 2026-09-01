@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
+import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -266,5 +266,51 @@ body
   it('returns -1 when no cluster is alive', () => {
     const noneAlive = { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) };
     expect(nearestPrim([0, 0, 0], noneAlive)).toBe(-1);
+  });
+});
+
+describe('bone prims are invisible to the CPU field (wound pass r2)', () => {
+  // sdBody backs click-to-shoot. It mirrors mapBody + applyCarves and does NOT
+  // apply wounds, and bone is always strictly inside flesh — so adding bone
+  // prims must not move the CPU field by even a float. If it does, shots land
+  // where nothing is drawn.
+  const flesh: Primitive = {
+    a: [0, 0, 0], b: [0, 0.4, 0], radius: 0.09,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'legL', cluster: 0,
+  };
+  // The bone surface sits INSIDE the flesh's smin fillet band (gap 0.005 <
+  // blendK 0.01) — the adversarial case. With a fat gap the smin degenerates
+  // to an exact min of the flesh and an additive-folded bone would be a
+  // bit-identical no-op, and this test would pass against a broken fold.
+  const bone: Primitive = { ...flesh, radius: 0.085, op: 'bone' };
+
+  const withoutBone = {
+    prims: [flesh],
+    clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+  } as unknown as Body;
+  const withBone = {
+    prims: [flesh, bone],
+    clusters: [{ limb: 'legL', start: 0, count: 2, alive: true }],
+  } as unknown as Body;
+
+  const probes: Vec3[] = [
+    [0, 0.2, 0], [0.05, 0.2, 0], [0.12, 0.2, 0], [0, 0.5, 0],
+    [0.3, 0.2, 0], [0, 0.2, 0.08], [-0.06, 0.1, 0.02],
+  ];
+
+  it('sdBody is bit-identical with and without bone prims', () => {
+    for (const p of probes) {
+      expect(sdBody(p, withBone)).toBe(sdBody(p, withoutBone));
+    }
+  });
+
+  it('never reports a bone prim as the nearest additive primitive', () => {
+    // A contract pin rather than a red/green test: for bone strictly inside
+    // flesh, dBone > dFlesh at every point, so bone can never win the argmin
+    // even before the skip existed. It pins the contract against future
+    // fixtures where the two could tie or invert.
+    for (const p of probes) {
+      expect(nearestPrim(p, withBone)).not.toBe(1);
+    }
   });
 });

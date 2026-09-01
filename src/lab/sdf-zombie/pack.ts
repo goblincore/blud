@@ -13,6 +13,11 @@ export const W_DEAD = 2;
 /** Cuts a channel along its surface rather than removing a solid. Handled in
  *  the carve pass beside W_CARVE — see sdGroove in validate.ts. */
 export const W_GROOVE = 3;
+/** Bone: a second material inside the flesh. Skipped by the additive fold and
+ *  by the carve pass; folded as a hard `min` AFTER applyWounds, so it is only
+ *  ever visible where a carve has eaten down to it. See
+ *  docs/superpowers/specs/2026-09-01-wound-pass-r2-design.md §1. */
+export const W_BONE = 4;
 
 export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
@@ -137,7 +142,10 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // prims, but if a carve ever went dead it must stop carving too.
     const isCarve = p.op === 'sub';
     if (isCarve && !p.dead) carveCount++;
-    const w = p.dead ? W_DEAD : p.op === 'groove' ? W_GROOVE : isCarve ? W_CARVE : W_ADD;
+    const w = p.dead ? W_DEAD
+      : p.op === 'groove' ? W_GROOVE
+      : p.op === 'bone' ? W_BONE
+      : isCarve ? W_CARVE : W_ADD;
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
     primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], w], o);

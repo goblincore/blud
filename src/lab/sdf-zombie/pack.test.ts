@@ -1,13 +1,13 @@
 // src/lab/sdf-zombie/pack.test.ts
 import { describe, it, expect } from 'vitest';
-import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX } from './pack';
+import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, W_ADD, W_BONE, W_DEAD } from './pack';
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
-import type { Vec3 } from './types';
+import type { BuiltBody, Primitive, Vec3 } from './types';
 
 /** Packs into Float32Array, so expected values must be rounded to float32. */
 const f32 = (v: number) => Math.fround(v);
@@ -236,5 +236,34 @@ describe('bound groups (the fold cull unit)', () => {
       expect(p.groupRange[ci * 4 + 1]).toBe(c.count);
       expect(p.groupBounds[ci * 4 + 3]).toBeCloseTo(c.radius, 6);
     });
+  });
+});
+
+describe('bone prims (wound pass r2)', () => {
+  it('encodes op bone as primScale.w = 4', () => {
+    const bone: Primitive = {
+      a: [0, 0, 0], b: [0, 0.3, 0], radius: 0.03,
+      scale: [1, 1, 1], blendK: 0, limb: 'legL', cluster: 0, op: 'bone',
+    };
+    const flesh: Primitive = { ...bone, radius: 0.08, op: undefined };
+    const packed = packBody({
+      prims: [flesh, bone],
+      clusters: [{ id: 0, limb: 'legL', start: 0, count: 2, center: [0, 0.15, 0], radius: 0.2, alive: true }],
+    } as unknown as BuiltBody);
+    expect(packed.primScale[3]).toBe(W_ADD);
+    expect(packed.primScale[PRIM_STRIDE + 3]).toBe(W_BONE);
+  });
+
+  it('dead outranks bone, exactly as it outranks carve', () => {
+    const bone: Primitive = {
+      a: [0, 0, 0], b: [0, 0.3, 0], radius: 0.03,
+      scale: [1, 1, 1], blendK: 0, limb: 'legL', cluster: 0,
+      op: 'bone', dead: true,
+    };
+    const packed = packBody({
+      prims: [bone],
+      clusters: [{ id: 0, limb: 'legL', start: 0, count: 1, center: [0, 0.15, 0], radius: 0.2, alive: true }],
+    } as unknown as BuiltBody);
+    expect(packed.primScale[3]).toBe(W_DEAD);
   });
 });

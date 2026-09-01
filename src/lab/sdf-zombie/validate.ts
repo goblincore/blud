@@ -51,7 +51,8 @@ export interface ValidateOpts {
   stepMultiplier: number;
 }
 
-interface Body { prims: Primitive[]; clusters: ClusterInfo[] }
+/** The minimal shape every field function needs: sorted prims + clusters. */
+export interface Body { prims: Primitive[]; clusters: ClusterInfo[] }
 
 /** Distance from p to one primitive, matching the shader's ellipsoid capsule. */
 export function sdPrimitive(p: Vec3, prim: Primitive): number {
@@ -401,7 +402,7 @@ export function sdBody(p: Vec3, body: Body): number {
   for (const c of body.clusters) {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub' || prim.op === 'groove' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.op === 'bone' || prim.dead) continue;
       d = prim.blendProfile === 'chamfer'
         ? sminChamfer(d, sdPrimitive(p, prim), prim.blendK)
         : smin(d, sdPrimitive(p, prim), prim.blendK);
@@ -411,6 +412,8 @@ export function sdBody(p: Vec3, body: Body): number {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
       if (prim.dead) continue;
+      // 'bone' matches neither branch on purpose: it is not a carve, and the
+      // CPU field never shows it (see the bit-identical test in validate.test.ts).
       if (prim.op === 'sub') {
         d = smax(d, -sdPrimitive(p, prim), prim.blendK);
       } else if (prim.op === 'groove') {
@@ -436,7 +439,7 @@ export function nearestPrim(p: Vec3, body: Body): number {
     if (!c.alive) continue;
     for (let i = c.start; i < c.start + c.count; i++) {
       const prim = body.prims[i]!;
-      if (prim.op === 'sub' || prim.op === 'groove' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.op === 'bone' || prim.dead) continue;
       const d = sdPrimitive(p, prim);
       if (d < bestD) { bestD = d; best = i; }
     }
@@ -478,7 +481,7 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
   // detach the head from the neck is reported.
   for (const c of body.clusters)
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'bone' || prim.dead) continue;
       const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
       // A bent prim's surface swings out to its control point, not just its
       // chord — sample the ctrl too or every strongly-bent horn reports as
@@ -605,7 +608,7 @@ export function restSpacePoint(p: Vec3, body: Body, rest?: Body): Vec3 {
     if (!c.alive) continue;
     for (let i = c.start; i < c.start + c.count; i++) {
       const prim = body.prims[i]!;
-      if (prim.op === 'sub' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'bone' || prim.dead) continue;
       const sd = sdPrimitive(p, prim);
       if (sd < best) { best = sd; bestIdx = i; }
     }
@@ -656,7 +659,7 @@ export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let best: Primitive | null = null;
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
-    if (p.op === 'sub' || p.dead) continue;
+    if (p.op === 'sub' || p.op === 'bone' || p.dead) continue;
     // A SHELL is a thin film riding a base's surface — its axis midpoint is
     // EMPTY, not the cluster's structural mass, so it must never win the core
     // selection (a collar base ellipsoid is often the fattest prim in the
