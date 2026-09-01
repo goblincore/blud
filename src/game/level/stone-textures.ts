@@ -6,6 +6,8 @@
 //
 // The CORE is pure: no canvas, no three, no DOM. That is what lets the look be
 // gated by unit test in a codebase where nothing compiles a shader.
+import * as THREE from 'three';
+
 export const STONE_SIZE = 256;
 
 export type StoneKind = 'wallBrick' | 'floorCobble' | 'ceilingVault';
@@ -168,4 +170,30 @@ export function generateStone(
     }
   }
   return { albedo, normal, roughness, wetMask };
+}
+
+/** Wrap generated pixels as GPU textures.
+ *
+ *  COLOUR SPACE IS NOT COSMETIC HERE. three defaults textures to NoColorSpace
+ *  while the renderer outputs sRGB, so an untagged albedo double-converts and
+ *  washes out — a bug this codebase has already paid for once. Albedo is sRGB;
+ *  normal and roughness are DATA and must stay linear. */
+export function stoneTextures(
+  kind: StoneKind,
+  seed: number,
+  tuning: Partial<StoneTuning> = {},
+): { map: THREE.DataTexture; normalMap: THREE.DataTexture; roughnessMap: THREE.DataTexture } {
+  const { albedo, normal, roughness } = generateStone(kind, seed, tuning);
+  const make = (data: Uint8ClampedArray, srgb: boolean) => {
+    const t = new THREE.DataTexture(data, STONE_SIZE, STONE_SIZE, THREE.RGBAFormat);
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.needsUpdate = true;
+    return t;
+  };
+  return {
+    map: make(albedo, true),
+    normalMap: make(normal, false),
+    roughnessMap: make(roughness, false),
+  };
 }
