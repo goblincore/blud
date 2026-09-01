@@ -263,10 +263,17 @@ async function main() {
    *  light — at 0 a lit body hard-clips and crater, lip and clean skin all
    *  saturate to the same white, so a shot enemy looks unshot exactly when you
    *  are close enough to aim (owner, 2026-09-01). */
-  // Owner's tuned values (2026-09-01, found on the panel). The high gain
-  // works precisely BECAUSE the shoulder is on: 2.9 would have clipped a
-  // body to featureless white under the old hard clamp.
-  const beamTuning = { gain: 2.9, shoulder: 0.45, keyFloor: 0.4 };
+  // Owner's tuned values (2026-09-01, second panel pass). The high gain works
+  // precisely BECAUSE the shoulder is on: 4.0 would have clipped a body to a
+  // featureless white silhouette under the old hard clamp.
+  //
+  // keyFloor is ZERO, and the earlier worry that zero would make an unlit body
+  // vanish was wrong: ambientAt still returns the fill term (lightCfg.y *
+  // keyColor), so a body out of the beam keeps a real floor without the preset
+  // key. Owner: "higher makes the zombies a bit too bright against ambient
+  // when not lit" — which is the point of a carried lamp. What you can see is
+  // what you are pointing at.
+  const beamTuning = { gain: 4, shoulder: 0.35, keyFloor: 0 };
   const flashlight = createFlashlight();
   // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
   // castShadow has to be decided BEFORE the first frame: toggling it live
@@ -1020,7 +1027,7 @@ async function main() {
       { key: 'speedMin', group: 'gout', min: 0.2, max: 8, step: 0.1,
         hint: 'Tail speed. The head/tail gap is what stretches the pulse into a rope.',
         get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
-      { key: 'beamGain', group: 'beam', min: 0, max: 4, step: 0.05,
+      { key: 'beamGain', group: 'beam', min: 0, max: 8, step: 0.05,
         hint: 'How hard the flashlight drives the key on CHARACTERS. Was a fixed 2.2, which blew bodies past white. Raise for punch, lower if faces flatten out.',
         get: () => beamTuning.gain, set: v => { beamTuning.gain = v; } },
       { key: 'beamShoulder', group: 'beam', min: 0, max: 0.9, step: 0.05,

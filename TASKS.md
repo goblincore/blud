@@ -412,9 +412,14 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
    OFFSET flashlight and warm fire braziers, with per-pixel bumped specular on
    procedurally generated stone. 9 dispatch tasks on `zai/glm-5.3-flash` plus
    owner tuning passes.
-   **Owner-tuned defaults, live on the goo panel:** beam gain 2.9 / shoulder
-   0.45 / keyFloor 0.4; goo shadowRed 0.19 (raised from 0.12 — its job is that
-   blood never reads black and it was calibrated against white gallery walls).
+   **Owner-tuned defaults, live on the goo panel:** beam gain 4 / shoulder
+   0.35 / **keyFloor 0**; goo shadowRed 0.19 (raised from 0.12 — its job is
+   that blood never reads black and it was calibrated against white gallery
+   walls). keyFloor 0 means a body out of the beam runs on `ambientAt`'s fill
+   term alone, so the carried lamp is the reason anything is visible; an
+   earlier note claiming 0 would make bodies vanish was wrong (the fill term
+   survives). Owner: "higher makes the zombies a bit too bright against ambient
+   when not lit".
    **Bench** (`scripts/dungeon-bench.sh`, room-4 firefight, 3 alternating reps):
    dungeon-off 18.84 ms, no-shadow 21.46, shadow 21.36 — shadow overhead
    **-0.5%**, far inside the +40% gate; relight overall ~+12% over off-state.
