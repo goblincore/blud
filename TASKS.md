@@ -444,16 +444,33 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
   overlap. Owner has already waived EXACT silhouettes — a chunky connected
   shadow is fine, a scatter of circles is not.
 
-- `L2.followup-frozen-ab` [ ] **The frozen capture path may not re-march, which
-  would make every character-look A/B a lie.** With
-  `freeze(true)` + `setLoopRunning(false)` + `step()`, every
-  character-affecting uniform measured IDENTICAL flesh luminance AND an
-  identical flesh pixel COUNT — including `spotCfg.w`, which predates the beam
-  knobs. An unchanging pixel count across a lighting change is not a subtle
-  effect, it is no effect. The owner then tuned the same knobs by hand on the
-  live page and they clearly worked, so the MEASUREMENT is the suspect, not the
-  feature. This matters because `scripts/dungeon-look.sh` uses that path and it
-  is what the dispatch agents and the bench were told to verify through.
+- `L2.followup-frozen-ab` [x] **DISPROVED (2026-09-01) — the frozen capture path
+  re-marches; the canvas readback was the liar.** The suspicion was that
+  `freeze(true)` + `setLoopRunning(false)` + `step()` composites a held march, so
+  character-only changes would be invisible to `scripts/dungeon-look.sh` and the
+  bench built on it. It does not: `halfRate` (the only thing that skips the
+  march) defaults false and no capture script enables it, and `step()` is
+  `cb(dt); drawFn()` — the same two calls the rAF loop makes, so the per-actor
+  uniform writes are reached. Proved with a discriminating capture: flesh albedo
+  -> green at the `beam` pose moves **10496 px** against a same-state floor of
+  **0**, and restoring it comes back to **111** (the HUD clock). The lighting
+  knobs move it too — `beamKeyFloor` 0 vs 1 = 21103 px frozen against 21123 px
+  live, i.e. frozen does not under-report. **The bench numbers taken through this
+  path stand; nothing needs re-running.** What actually explained the identical
+  readings: sampling the WebGPU canvas in-page with `drawImage` + `getImageData`
+  returns an ALL-BLACK image (whole-frame mean rgb 0,0,0) at moments when
+  `Page.captureScreenshot` returns the correct frame — with the loop running or
+  stopped. Diff the PNG, never the in-page canvas. Second trap: a pixel COUNT
+  under a hue predicate (`r > g+18`) survives a large uniform luminance change,
+  so it is a poor detector even when the readback works. Third: `beamGain`
+  legitimately does nothing at the `room` pose (92 px frozen / 11 px live) —
+  `keyI = lightCfg.x*keyFloor + beam*gain`, so gain only bites where `beam > 0`;
+  shoot that A/B at `beam` or `corridor` (7124 / 12917 px). Full write-up:
+  [frozen-capture-verdict.md](docs/dev-notes/2026-09-01-dungeon-relight/frozen-capture-verdict.md).
+  Guarded going forward by `scripts/dungeon-look-canary.sh`, which runs the
+  albedo test through the real capture path and exits non-zero if a
+  character-only change stops showing up — run it after touching `sdf-layer.ts`
+  frame logic, `lab-renderer.ts` `step`/loop, or `gallery-look.mjs`.
 
 - `L2.followup-wounds` [ ] **Wound pass round 2 (owner ask, not yet designed):**
   bone showing through deep wounds, plus additional wound coloring/texture. The

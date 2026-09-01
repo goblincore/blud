@@ -1,5 +1,15 @@
 // scripts/gallery-look.mjs — quick look driver: one pose, one shot.
 // Usage: node scripts/gallery-look.mjs [vitePort] [cdpPort] [outName]
+//
+// MEASURING one of these shots? Diff the PNG (see scripts/dungeon-shadowab.mjs).
+// Do NOT sample the game canvas from inside the page: `drawImage` +
+// `getImageData` off this WebGPU canvas returns an ALL-BLACK image at moments
+// when Page.captureScreenshot returns the correct frame — with the rAF loop
+// running or stopped — so an A/B built on it reports "no change" for changes
+// that are plainly there. That cost a day chasing a renderer bug that did not
+// exist; the whole verdict is in
+// docs/dev-notes/2026-09-01-dungeon-relight/frozen-capture-verdict.md.
+// scripts/dungeon-look-canary.sh guards the path this file drives.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
