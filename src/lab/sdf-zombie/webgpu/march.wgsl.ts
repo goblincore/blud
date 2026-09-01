@@ -1322,7 +1322,51 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // as worth nothing anyway. The entire win here comes from the discard and
   // the entry start, both of which are exact.
   if (shellOut <= 0.0) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
-  let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
+  // THE OCCLUDER NO LONGER BOUNDS tMax, AND IT MUST NOT (2026-09-01).
+  //
+  // Everything above about the inner hull being safe to clamp against is
+  // sound as GEOMETRY, and the hull really is inside the flesh: sampling
+  // sdBody at all 300 emitted spheres of the live POSED bodies puts every one
+  // of them at least its own radius deep (__sdfGame.hullInsideness). What is
+  // not sound is the NUMBER the pre-pass writes for them.
+  //
+  // Measured with one synthetic sphere of known centre and radius, rasterised
+  // alone and read straight back (__sdfGame.syntheticSphereCheck). The value
+  // the pre-pass stores tracks the true camera distance only in the near
+  // field and then comes apart -- and the error depends on DISTANCE alone,
+  // not on the sphere's radius or its size on screen:
+  //
+  //   true 1.9 -> 1.905    true 2.4 -> 2.405   true 2.9 -> 2.892   (exact)
+  //   true 3.9 -> 3.714    true 4.9 -> 4.252   true 5.9 -> 4.447
+  //   true 7.9 -> 3.782    true 9.9 -> 2.079   true 11.9 -> 0.367
+  //
+  // An UNDER-reported occT is the one error this bound cannot survive: tMax
+  // lands in front of the surface, the ray gives up before reaching skin, and
+  // the fragment discards. On screen that is the owner's report of bodies
+  // "full of holes until you get fairly close" -- holes because the clamp
+  // bites per pixel wherever the hull covers, and distance-keyed because the
+  // encoding is accurate exactly where the player is close. Measured on a
+  // single isolated zombie at 4.9 m: 1369 of 1375 lost pixels had tMax IN
+  // FRONT of the flesh, worst case 0.68 m short, and the hull's own CPU
+  // ray-sphere entry (4.814 m) sat correctly BEHIND the surface (4.757 m)
+  // while the pre-pass wrote 4.225 m for the same pixel.
+  //
+  // The bound bought nothing to weigh against that. Interleaved frame timing
+  // with the outer shell hull shipping (room 3, 8 bodies, 6 rounds x 30
+  // frames, GPU-fenced): occluder on 14.23 ms mean, off 14.32 ms, against a
+  // 13.4-14.9 ms spread WITHIN either leg. That matches what the shell work
+  // already recorded -- "the occluder measured as worth nothing anyway".
+  //
+  // So the clamp goes and the pre-pass ships disabled. Everything else stays:
+  // occluder-hull.ts still builds, occFetch still fetches, debug mode 3 still
+  // heats occT, and __sdfGame.setOccluder still renders the pass -- so
+  // whoever works out why an instanced MeshBasicNodeMaterial writing
+  // length(positionWorld - cameraPosition) decays with distance can revive
+  // this by putting the term back. Do not put it back before that: the outer
+  // hull (shell-hull-outer.ts) writes distance the same way, and is unharmed
+  // only because shellIn is a ray START and shellOut a > 0 test, where
+  // under-reporting is conservative. Here it is fatal.
+  let tMax = length(worldPos - camPos);
   let steps = i32(marchCfg.x);
   // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
   // reconstruction of a baked SDF is not exact to the surface, so volume
@@ -1558,7 +1602,19 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // so pixels that missed still write. Channels:
   //   r = steps this ray took   g = 1 if it hit flesh, else 0
   //   b = 1 always (this fragment was rasterised and marched)
-  //   a = t (kept so the target's depth channel behaves as usual)
+  //   a = t -- BUT DO NOT READ IT BACK AS A DISTANCE. createMarchMaterial's
+  //     outputNode replaces alpha with CLIP-SPACE DEPTH, so a readback of
+  //     this channel always lands in [0, 1]. (2026-09-01: that silently
+  //     collapsed a whole "lost pixels by distance" histogram into the
+  //     0-1 m bucket before it was caught.)
+  //
+  // ONE MORE BIAS, and it matters for the counts below: this returns BEFORE
+  // the discard, so a MISSED ray still writes depth -- at the distance it
+  // gave up, which for a near body's proxy box is nearer than a far body's
+  // real hit. The missed fragment then wins the depth test and the readback
+  // reports "no flesh" for a pixel the shipping render draws. Wherever proxy
+  // boxes overlap, occupancy()'s hit counts are therefore a LOWER bound for
+  // that reason too, on top of the overdraw one below.
   //
   // WHAT IT MEASURES, and what it does not. Summing over the target gives
   // hits/rasterised = the fraction of proxy-box screen area that actually

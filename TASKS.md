@@ -184,6 +184,62 @@ field, anchors the crater pathologically, and the slug's severRadius cuts
 both hip necks → instant collapse (never player-visible; the page's
 predictor always aims at surfaces).
 
+**BODIES FULL OF HOLES AT RANGE — FIXED (2026-09-01).** Owner: "the
+zombie/character occlusion is so aggressive that from most distances it
+doesn't render the full body — they look full of holes until you get fairly
+close." Root cause is the OCCLUDER PRE-PASS's `tMax` clamp, and it is a
+DISTANCE-ENCODING bug, not a hull-geometry one. The inner hull is correct:
+sampling `sdBody` at all 300 spheres of the live POSED bodies puts every one
+at least its own radius deep (`__sdfGame.hullInsideness` → 0 outside). What
+is wrong is the number `occluder-hull.ts` rasterises for them. Measured with
+ONE synthetic sphere of known centre and radius drawn alone
+(`__sdfGame.syntheticSphereCheck`), the stored distance tracks truth only in
+the near field and then collapses — and the error depends on DISTANCE alone,
+not on the sphere's radius or its screen footprint:
+
+    true 2.4 → 2.405 (exact)   true 4.9 → 4.252   true 5.9 → 4.447
+    true 7.9 → 3.782           true 9.9 → 2.079   true 11.9 → 0.367
+
+An UNDER-reported `occT` is the one error `tMax = min(box, occT + amp)`
+cannot survive: the bound lands in front of the skin, the ray gives up, the
+fragment discards. Holes because it bites per pixel wherever the hull covers;
+distance-keyed because the encoding is accurate exactly where the player is
+close. On one isolated zombie at 4.9 m: **1369 of 1375 lost pixels had tMax
+IN FRONT of the flesh**, worst 0.68 m short; the hull's own CPU ray-sphere
+entry (4.814 m) sat correctly BEHIND the surface (4.757 m) while the pre-pass
+wrote 4.225 m for that pixel.
+
+RULED OUT WITH EVIDENCE (all zero-noise-floor A/Bs, same page load): march
+step budget — 96 → 192/384/1024 recovers 2 hit pixels and `meanStepsHit` is
+13.8 against a 96 budget, and at 1024 the body is still just as holed; the
+OUTER shell hull — off gains 2 hits while cutting rasterised px 120672 →
+23762; tile culling — never enabled on this page (`tileCfg.x` stays 0); stale
+hull — `refreshHull()` changes nothing; fetch misregistration — the shader's
+`occT` matches the target texel 1391/1391; cross-body — a body's own hull does
+the damage, the other nine contribute 0 changed pixels.
+
+FIX: `march.wgsl.ts` no longer folds `occT` into `tMax`, and the pre-pass
+ships disabled in game/lab/bench. It cost nothing to remove — interleaved
+GPU-fenced timing (room 3, 8 bodies, 6 × 30 frames) was 14.23 ms occluder-on
+vs 14.32 off against a 13.4–14.9 spread WITHIN either leg, matching the note
+the shell work already left ("the occluder measured as worth nothing
+anyway"); post-fix median 13.34 ms. Post-fix `setOccluder(true/false)` changes
+**0 pixels**. Everything stays built and plumbed — `occluder-hull.ts`,
+`occFetch`, debug mode 3, the `setOccluder` seam — so whoever works out why an
+instanced `MeshBasicNodeMaterial` writing
+`length(positionWorld - cameraPosition)` decays with distance can revive the
+bound. **Do not revive it before that**: `shell-hull-outer.ts` writes distance
+the same way and is unharmed only because `shellIn` is a ray START and
+`shellOut` a `> 0` test, where under-reporting is conservative.
+
+SEPARATE LANDMINE FOUND, NOT FIXED: march debug mode 4 documents `a = t`, but
+`createMarchMaterial`'s `outputNode` overwrites alpha with CLIP DEPTH, so that
+channel always reads back in [0,1]. Mode 4 also returns BEFORE the miss
+discard, so a missed ray writes depth where it gave up and can WIN the depth
+test over a farther body's real hit — which biases `occupancy()` and
+`shellDiag()` low wherever proxy boxes overlap. Comments corrected; the
+numbers those seams have produced were not re-taken.
+
 **WOUND HULL HOLES — FIXED (worktree `2026-08-27-wound-hull-holes`, 2026-08-27).**
 The owner's "parts of the zombie become invisible / transparent holes when one
 walks in front of another" was NOT the hull exclusions (`dcd61ca`): the

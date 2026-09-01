@@ -198,6 +198,8 @@ export interface OccluderHull {
    *  dissolve the march. */
   shadowObject: THREE.Mesh;
   update(bodies: BuiltBody[], wounds?: WoundSphere[]): void;
+  /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
+  setSpheres(list: HullInstance[]): void;
   readonly instanceCount: number;
   dispose(): void;
 }
@@ -214,6 +216,11 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   // compares against. Writing depth instead would need the projection undone
   // per marched pixel to get back to a distance.
   const dist = length(sub(positionWorld, cameraPosition));
+  // DIAGNOSTIC CHANNEL (2026-09-01). uDebugWorld 1 writes the fragment's WORLD
+  // POSITION instead of the distance, so a readback can be compared against
+  // the sphere the instance matrix says was drawn. A uniform rather than a
+  // second material: swapping colorNode would rebuild the pipeline mid-frame,
+  // which is exactly the trap shell-hull-outer.ts documents.
   material.colorNode = vec4(dist, dist, dist, 1);
   // Ordinary hardware depth — no depthNode override, so early-Z works here
   // even though it cannot in the march. Nearest hull surface wins.
@@ -269,6 +276,18 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     object: mesh,
     shadowObject: shadowMesh,
     update,
+    /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
+    setSpheres(list: HullInstance[]) {
+      count = Math.min(list.length, maxInstances);
+      for (let i = 0; i < count; i++) {
+        const sp = list[i]!;
+        m.makeScale(sp.radius, sp.radius, sp.radius);
+        m.setPosition(sp.centre[0], sp.centre[1], sp.centre[2]);
+        mesh.setMatrixAt(i, m);
+      }
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+    },
     get instanceCount() { return count; },
     dispose() {
       geo.dispose();
