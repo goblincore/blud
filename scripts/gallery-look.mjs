@@ -41,11 +41,22 @@ if (!(await evaluate('typeof window.__sdfGame === "object"'))) { console.error('
 console.log('resolution:', JSON.stringify(await evaluate('window.__sdfGame.resolution')));
 console.log('sdf target:', JSON.stringify(await evaluate('window.__sdfGame.sdfTarget')));
 
-// The pose to look at comes from the URL hash or defaults to room3 zombies.
+// The pose comes from LOOK_POSE ("x,z,yaw,pitch" in radians) and defaults to
+// the room3 zombies the gallery work framed on. Overridable because different
+// looks want different shots: a corridor for falloff, a wall close-up for
+// specular, a figure in the beam for shadows. The default is unchanged, so
+// every existing caller keeps the frame it was reading.
+const POSE = (process.env.LOOK_POSE ?? '4.8,4.8,3.141592653589793,0')
+  .split(',').map(Number);
+if (POSE.length !== 4 || POSE.some(Number.isNaN)) {
+  console.error(`bad LOOK_POSE ${process.env.LOOK_POSE} — want "x,z,yaw,pitch"`);
+  process.exit(2);
+}
+const SETTLE = Number(process.env.LOOK_STEPS ?? 20);
 await evaluate('window.__sdfGame.freeze(true)');
 await evaluate('window.__sdfGame.setLoopRunning(false)');
-await evaluate(`window.__sdfGame.setPose(4.8, 4.8, Math.PI, 0)`);
-await evaluate('window.__sdfGame.step(20, 1/60)');
+await evaluate(`window.__sdfGame.setPose(${POSE[0]}, ${POSE[1]}, ${POSE[2]}, ${POSE[3]})`);
+await evaluate(`window.__sdfGame.step(${SETTLE}, 1/60)`);
 const s = await send('Page.captureScreenshot', { format: 'png' });
 writeFileSync(`${OUT}/${NAME}.png`, Buffer.from(s.result.data, 'base64'));
 console.log(`shot ${OUT}/${NAME}.png`);

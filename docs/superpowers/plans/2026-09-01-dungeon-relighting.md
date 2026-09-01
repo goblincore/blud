@@ -19,7 +19,14 @@ These come from scars this project already has. Violating one costs a day.
 1. **`ambientAt` is fed, never modified.** `ambient.wgsl.ts` is a pinned twin of `ambient.ts`; a test greps its source for field calls. Do not widen its signature.
 2. **Brightness rides `keyColor`, not albedo.** `ambientAt` renormalises bounce to unit luminance, so albedo boosts change *hue only*. The flashlight is a brightness change.
 3. **Zero extra `mapBody` evaluations.** Character self-shadowing was cut by the owner precisely to hold this line. If you find yourself adding a field sample to the shading block, stop.
-4. **Nothing compiles WGSL in tests.** A green suite does not mean the shader works. Every visual change gets an eyeball pass on `sdf-game.html`.
+4. **Nothing compiles WGSL in tests.** A green suite does not mean the shader works — three render bugs have survived eight green dispatch tasks here. Every visual change gets an eyeball pass, and there is a one-command headless capture for it (works for agents and humans alike):
+
+   ```bash
+   LAB_VITE_PORT=5288 LAB_CDP_PORT=9288 scripts/dungeon-look.sh beam
+   # -> /tmp/dungeon-look/beam.png ; poses: corridor | wall | beam | room
+   ```
+
+   It boots Vite and a WebGPU headless Chrome if needed, freezes the sim, poses the camera deterministically, captures a PNG and stops only what it started. The HUD frame time in that shot is trustworthy; ad-hoc console sampling on a live page is not.
 5. **Set `colorSpace` on colour textures only.** `THREE.SRGBColorSpace` on albedo; normal and roughness maps are *data* and must stay linear.
 
 ---
