@@ -31,7 +31,12 @@ OWNER CALL) → **front-to-back per-body passes gated on accumulated depth**
 (the largest untouched cost: a body behind a body marches its whole pixel
 set) → distortion-corrected footprint AA epsilon → level shadows RECEIVED
 by bodies via a level-only twin light → measure the per-body upload.
-Each task has a bench gate and a frozen-capture parity gate.
+Each task has a bench gate and a frozen-capture parity gate. **QUEUED on
+dispatch-ui** as `2026-09-01-sdf-render-perf-r2-task-{0..9}` (glm-5.3-flash/pi,
+base branch `claude/sdf-character-rendering-optimization-d0570b`): trigger
+task-1, tasks 2-8 chain; task-0 (baseline) and task-9 (bench sweep) are
+unchained — trigger them only on a quiet machine. Bench steps inside 1-8 are
+recorded DEFERRED while the wound-r2 chain runs; parity gates are not.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
