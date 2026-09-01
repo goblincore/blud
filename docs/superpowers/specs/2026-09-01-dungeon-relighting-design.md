@@ -80,17 +80,48 @@ allocated at 1024² — and a box hung **directly in the beam** cast nothing. Wi
 the post chain bypassed and the same scene rendered plainly, the same box threw
 a hard black shadow.
 
-**Leading hypothesis.** `sdfLayer.render` mutates `camera.layers` for its cone
-and occluder passes ([`sdf-layer.ts:541,561`](../../../src/lab/sdf-zombie/webgpu/sdf-layer.ts))
-and issues several `renderer.render()` calls per frame. If three's WebGPU shadow
-pass builds its caster list from the **camera-filtered** render list rather than
-walking the scene graph, the level meshes fall out of the shadow map whenever
-the camera is pinned to `CONE_LAYER` or `OCCLUDER_LAYER`. This is a hypothesis,
-not a finding — confirming it is task 1.
+**ROOT CAUSE — confirmed in three's source, then fixed and verified on screen.**
+`ShadowNode.js:731`:
+
+```js
+const _shadowCameraLayer = shadow.camera.layers.mask;
+if ( ( shadow.camera.layers.mask & 0xFFFFFFFE ) === 0 ) {
+    shadow.camera.layers.mask = camera.layers.mask;   // inherits the MAIN camera
+}
+```
+
+If the shadow camera's mask has **no bit set above bit 0** — the default — three
+copies the *main camera's* mask onto it for the shadow pass. `sdfLayer.render`
+pins `camera.layers` to `CONE_LAYER` (2) and `OCCLUDER_LAYER` (3) for its
+pre-passes and issues several `renderer.render()` calls per frame
+([`sdf-layer.ts:541,561`](../../../src/lab/sdf-zombie/webgpu/sdf-layer.ts)), so
+the shadow map is rendered containing only those layers and every layer-0 level
+mesh falls out of it.
+
+**The fix, verified live:**
+
+```ts
+spot.shadow.camera.layers.set(0);                  // level meshes
+spot.shadow.camera.layers.enable(OCCLUDER_LAYER);  // character hulls
+```
+
+Setting a high bit stops the inheritance *and* opts the character hull in as a
+caster in the same stroke — one change buys both mechanism 1 and mechanism 2 in
+§3. Confirmed by a `castShadow` true/false A/B in the live game: shadows appear
+and disappear on cue.
 
 **This is the single most valuable output of the spike.** Every other item here
 is ordinary work; this one would have silently consumed a dispatch task and
 come back green.
+
+**Second finding, from the same verification — the hull shadow reads as
+DISCONNECTED BLOBS, not a figure.** Owner's words: *"the blobs are not good
+obviously."* `HULL_SHRINK 0.8` shrinks each sphere, which is correct for
+depth-occlusion (conservatively inside the body) and wrong for shadow casting,
+where the gaps between spheres become gaps in the shadow. This is a distinct
+problem from silhouette *accuracy*, which the owner already waived: a chunky
+connected shadow is fine, a scatter of separate blobs is not. **Task 8 owns
+this** — a shadow-caster hull wants its own inflation, not `HULL_SHRINK`.
 
 ## Architecture
 
@@ -130,7 +161,7 @@ Delete the gallery rig (`game-main.ts:186–207`): `HemisphereLight` 0.8,
 
 | # | What | Mechanism | Cost |
 |---|---|---|---|
-| 1 | walls → walls | `SpotLight` shadow map | native, **once task 1 lands** |
+| 1 | walls → walls | `SpotLight` shadow map + the `shadow.camera.layers` fix | native, **once task 1 lands** |
 | 2 | characters → walls | existing occluder hull, `castShadow = true` | ≈free |
 | 3 | walls → characters | analytic AABB ray in the march vs `levelColliders()` | **zero** `mapBody` |
 
@@ -139,9 +170,14 @@ is *already* an `InstancedMesh` in the game scene (`game-main.ts:346`), already
 re-posed every frame from live bodies. Two caveats, both real:
 
 - It is on `OCCLUDER_LAYER`, so the shadow camera will not see it until the
-  light's layer mask includes that layer.
-- Its material is a custom `MeshBasicNodeMaterial` writing camera distance;
-  the shadow depth pass may need a `customDepthMaterial`.
+  light's layer mask includes that layer — which the task-1 fix already does.
+  **Verified working:** the zombie casts.
+- Its material is a custom `MeshBasicNodeMaterial` writing camera distance.
+  In practice `scene.overrideMaterial` in the shadow pass replaced it and no
+  `customDepthMaterial` was needed — verified on screen.
+- **It casts as disconnected blobs.** See the spike section: `HULL_SHRINK 0.8`
+  leaves gaps between spheres that become gaps in the shadow. Owner-rejected in
+  that form. Task 8 gives the shadow caster its own inflation.
 - The silhouette is hull-approximate (shrunk spheres, `HULL_SHRINK 0.8`), so
   shadows are **chunky, not exact**. **Owner has accepted this** (2026-09-01):
   "character shadows dont need to be exact silhouettes atm, we can further blur
@@ -227,7 +263,11 @@ room format, no baked irradiance volumes (P3), no character self-shadowing.
 2. **Do 5 braziers read as fire or as coloured point lights?** Same question P1
    left open about bounce lights, now with flicker and visible sources.
 3. **Is one shadow-casting spotlight affordable** at 1024² over ~98 meshes on a
-   page already ~10 ms? Task 2 answers this with a number.
+   page already ~10 ms? **Still unmeasured** — ad-hoc `frameMs` sampling during
+   the spike was defeated by a hidden/stalled preview pane, and the HUD showed
+   readings around 100 ms that could not be trusted or reproduced. This is
+   exactly why it goes on the real `game-bench` harness rather than the console.
+   Task 9 answers it with a number, and it is a **gate, not a report**.
 4. **If `PCFSoftShadowMap`'s fixed softness is not soft enough**, is a lower
    shadow-map resolution an acceptable trade, or does the blockiness cost more
    than the hard edge did? Only judgeable on screen, after task 1.
