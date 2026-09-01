@@ -360,22 +360,27 @@ no live wounds.
    looking specifically for annuli at mask edges and crescents that sweep with
    the camera. This file has produced that failure twice; it gets its own check
    rather than riding on general judgement.
-7. **Bench with bone — as three alternating legs inside ONE run**, never as a
-   fresh run compared against a stored baseline. New scenario legs in
-   `game-bench-scenario.ts`: `wounds-off` / `wounds-no-bone` / `wounds-bone`,
-   alternating across repeats exactly as the lighting legs do, so all three
-   share one process and one machine state.
+7. **Bench with bone — a MEASUREMENT, not a blocking gate** (owner call,
+   2026-09-01). Three legs in `game-bench-scenario.ts` — `wounds-off` /
+   `wounds-no-bone` / `wounds-bone` — alternating inside one run exactly as the
+   lighting legs do, with a pinned wound and body census.
 
-   This follows directly from gate 1: a stored-baseline comparison drifts ~45%
-   on machine state, which would swamp anything the bone fold costs. It is also
-   why the goo fire-segment delta is still recorded as UNRESOLVED at
-   ±0.1–0.25 ms — it was chasing an effect an order of magnitude below this
-   bench's cross-run drift, and no number of repeats would have rescued it.
+   Run it and report the number. **Do not block the work on it.** The bench has
+   5–11% within-run spread even at its best, and the bone fold may well cost
+   less than that; demanding a resolved delta would stall on noise. If the delta
+   lands under the spread, record **UNRESOLVED** and move on — that is an honest
+   outcome, not a failure.
 
-   The scenario must also pin the body census. The lighting runs differed
-   (8 bodies through the fire segment in one, 5 in the other), so a
-   wound-cost leg needs a fixed wound count on a fixed number of bodies rather
-   than whatever the firefight script happens to leave alive.
+   Within-run legs are still the right shape *when* the bench is run, because
+   cross-run comparison additionally drifts ~45% on machine state (gate 1) and
+   would be meaningless. This is about how to measure, not whether to gate.
+
+   **What actually protects us instead of this gate:** the amplitude guards.
+   `woundDepthAmp 0`, `woundFibreAmp 0` and `boneRatio 0` each disable their
+   feature and restore the previous shading bit-for-bit, per character or
+   globally. So an unmeasured cost is recoverable by a knob rather than a
+   revert — which is exactly what `X1.blood-viscosity` lacked when goo shipped
+   ON with its cost unmeasured and no per-character off switch.
 
 ### Risks on the record
 
