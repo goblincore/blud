@@ -263,7 +263,7 @@ async function main() {
    *  light — at 0 a lit body hard-clips and crater, lip and clean skin all
    *  saturate to the same white, so a shot enemy looks unshot exactly when you
    *  are close enough to aim (owner, 2026-09-01). */
-  const beamTuning = { gain: 1.1, shoulder: 0.45 };
+  const beamTuning = { gain: 1.1, shoulder: 0.45, keyFloor: 0.15 };
   const flashlight = createFlashlight();
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
@@ -304,9 +304,10 @@ async function main() {
      *  WebGPU crashes rebuilding a disposed shadow map). */
     spot: flashlight.spot,
     /** Beam knobs, also on the tuning panel. */
-    setBeam(t: { gain?: number; shoulder?: number }) {
+    setBeam(t: { gain?: number; shoulder?: number; keyFloor?: number }) {
       if (t.gain !== undefined) beamTuning.gain = t.gain;
       if (t.shoulder !== undefined) beamTuning.shoulder = t.shoulder;
+      if (t.keyFloor !== undefined) beamTuning.keyFloor = t.keyFloor;
       return { ...beamTuning };
     },
     get beam() { return { ...beamTuning }; },
@@ -438,7 +439,7 @@ async function main() {
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
-        a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, 0, 0);
+        a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
       }
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
@@ -998,6 +999,9 @@ async function main() {
       { key: 'beamShoulder', group: 'beam', min: 0, max: 0.9, step: 0.05,
         hint: 'Highlight rolloff. 0 = hard clip, and a lit body loses its WOUNDS (crater, lip and skin all saturate to the same white). Higher keeps them readable under the beam.',
         get: () => beamTuning.shoulder, set: v => { beamTuning.shoulder = v; } },
+      { key: 'beamKeyFloor', group: 'beam', min: 0, max: 1, step: 0.05,
+        hint: 'How much of the PRESET key survives when the beam is off. 1.0 = the old bug (characters brightly lit in pitch darkness from a fixed direction). 0 = an unlit body vanishes entirely, because bounce carries hue, not level.',
+        get: () => beamTuning.keyFloor, set: v => { beamTuning.keyFloor = v; } },
     ], {
       toggles: [
         {

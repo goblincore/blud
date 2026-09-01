@@ -1890,7 +1890,22 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // blew a lit body clean past 1.0 on every channel, and a clipped
     // body has no wound in it: crater, lip and char all saturate to the
     // same white. See the shoulder below.
-    keyI = lightCfg.x + beam * spotCfg2.x;
+    // THE BEAM IS THE KEY, NOT A BONUS ON TOP OF IT (spotCfg2.z).
+    //
+    // This used to be lightCfg.x + beam*gain, which left the preset's own key
+    // — 2.4 for practical-hard-key — burning at full strength from a fixed
+    // direction that nothing could switch off. So a character standing in an
+    // unlit corridor was still brightly lit from nowhere (owner, 2026-09-01:
+    // "the unlit characters seem still to be lit ... bright in the darkness
+    // without light"). In a dungeon the lamp you carry has to be the reason a
+    // body is visible.
+    //
+    // spotCfg2.z is what survives of the preset key when the beam is off: a
+    // floor, not a fill. It is NOT zero on purpose — ambientAt carries hue
+    // rather than brightness (bounce is renormalised to unit luminance), so a
+    // character lit by nothing but bounce has no level at all and disappears
+    // completely rather than reading as a shape in the dark.
+    keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
     beamAmt = beam;
   }
   // ---- END ANALYTIC FLASHLIGHT --------------------------------------------

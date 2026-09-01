@@ -236,8 +236,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     spotColor: uniform(new THREE.Color(0.94, 0.96, 1.0)),
     /** x beamKeyGain (how hard the beam drives the key), y highlightShoulder
      *  (0 = hard clip, the pre-2026-09-01 behaviour; higher = more headroom
-     *  above the knee so wounds keep contrast under direct light). */
-    spotCfg2: uniform(new THREE.Vector4(1.1, 0.45, 0, 0)),
+     *  above the knee so wounds keep contrast under direct light), z ambient
+     *  key floor (what is left of the PRESET key when the beam is off — 1.0
+     *  restores the old always-lit behaviour, 0 makes an unlit body vanish
+     *  since bounce carries hue and not level). */
+    spotCfg2: uniform(new THREE.Vector4(1.1, 0.45, 0.15, 0)),
     /** x specIntensity, y specRoughness, z fresnelBoost, w translucency */
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
@@ -593,8 +596,14 @@ export function createMarchMaterial(
     spotPos: u.spotPos,
     spotAxis: u.spotAxis,
     spotCfg: u.spotCfg,
-    spotColor: u.spotColor,
+    // ORDER MATTERS HERE. These are bound POSITIONALLY against the WGSL
+    // signature in march.wgsl.ts, not by name, so a key sitting in the wrong
+    // slot silently hands the shader a different uniform instead of failing.
+    // spotCfg2 was declared after spotColor here while the signature has it
+    // before, so every beam knob was reading spotColor's constant
+    // (0.94, 0.96, 1.0) and no slider did anything (2026-09-01).
     spotCfg2: u.spotCfg2,
+    spotColor: u.spotColor,
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
     mottleColor: u.mottleColor,
