@@ -30,6 +30,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { positionWorld, cameraPosition, vec4, length, sub } from 'three/tsl';
+import { SHADOW_HULL_LAYER } from './sdf-layer';
 import type { BuiltBody, Vec3 } from '../types';
 
 /**
@@ -41,6 +42,22 @@ import type { BuiltBody, Vec3 } from '../types';
  * little culling and removes a whole class of hole.
  */
 export const HULL_SHRINK = 0.8;
+
+/** Scale for the SHADOW-CASTING hull, as opposed to the depth-occlusion hull.
+ *
+ *  HULL_SHRINK exists to keep the hull conservatively INSIDE the body so the
+ *  march never skips real geometry. Reusing it for shadows was wrong: shrunk
+ *  spheres leave gaps between them, and those gaps show up as holes in the
+ *  shadow — the figure casts as a scatter of blobs rather than a body
+ *  (owner-rejected, 2026-09-01). A shadow caster wants the opposite bias:
+ *  overlap, so neighbouring spheres fuse into one silhouette.
+ *
+ *  This hull is NEVER consumed by the march — it exists only to be rendered
+ *  into a shadow map — so inside-ness, the constraint that shapes everything
+ *  above, simply does not apply to it. Being safely OUTSIDE the body is fine;
+ *  a fat shadow reads as a soft edge, a hole reads as broken.
+ */
+export const SHADOW_HULL_INFLATE = 1.35;
 
 /**
  * Radius under which a sphere is not worth an instance. Tiny face primitives
@@ -169,7 +186,20 @@ export function buildHullInstances(
 
 export interface OccluderHull {
   object: THREE.Mesh;
+  /** A SECOND hull over the same instances, INFLATED (SHADOW_HULL_INFLATE),
+   *  used only as a shadow caster. Invisible to the camera — it lives on
+   *  SHADOW_HULL_LAYER, which no view pass ever enables — but seen by the
+   *  flashlight's shadow camera, whose frustum it fills with one connected
+   *  silhouette instead of the occlusion hull's scatter of shrunk blobs.
+   *  Lives on its own layer rather than OCCLUDER_LAYER because the occluder
+   *  pre-pass (sdf-layer.ts pass 1c) flips the camera mask to that layer and
+   *  rasterises everything on it into the occT target — an inflated hull in
+   *  that target would clamp tMax in empty space in front of every body and
+   *  dissolve the march. */
+  shadowObject: THREE.Mesh;
   update(bodies: BuiltBody[], wounds?: WoundSphere[]): void;
+  /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
+  setSpheres(list: HullInstance[]): void;
   readonly instanceCount: number;
   dispose(): void;
 }
@@ -186,6 +216,11 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   // compares against. Writing depth instead would need the projection undone
   // per marched pixel to get back to a distance.
   const dist = length(sub(positionWorld, cameraPosition));
+  // DIAGNOSTIC CHANNEL (2026-09-01). uDebugWorld 1 writes the fragment's WORLD
+  // POSITION instead of the distance, so a readback can be compared against
+  // the sphere the instance matrix says was drawn. A uniform rather than a
+  // second material: swapping colorNode would rebuild the pipeline mid-frame,
+  // which is exactly the trap shell-hull-outer.ts documents.
   material.colorNode = vec4(dist, dist, dist, 1);
   // Ordinary hardware depth — no depthNode override, so early-Z works here
   // even though it cannot in the march. Nearest hull surface wins.
@@ -196,32 +231,69 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   mesh.frustumCulled = false;
   mesh.count = 0;
 
+  // The shadow twin: same geometry, same distance-material (irrelevant in a
+  // shadow pass, which consumes depth), INFLATED radii. Shares geo/material
+  // deliberately — the two hulls are the same spheres at two scales, and a
+  // material flip between passes is the WebGPU pipeline-rebuild trap recorded
+  // on SHELL_EXIT_LAYER.
+  const shadowMesh = new THREE.InstancedMesh(geo, material, maxInstances);
+  shadowMesh.frustumCulled = false;
+  shadowMesh.count = 0;
+  // Not `visible = false`: three only renders visible objects into a shadow
+  // map. The layers keep it out of every camera pass — including the occluder
+  // pre-pass, whose flipped mask is exactly why this is NOT OCCLUDER_LAYER
+  // (see the interface doc). Set here so a caller that forgets to set layers
+  // still never rasterises grey blobs into the main pass.
+  shadowMesh.layers.set(SHADOW_HULL_LAYER);
+  shadowMesh.castShadow = true;
+  mesh.castShadow = false;
+
   const m = new THREE.Matrix4();
   let count = 0;
+  let shadowCount = 0;
 
-  function update(bodies: BuiltBody[], wounds: WoundSphere[] = []) {
-    const inst = buildHullInstances(bodies, HULL_SHRINK, wounds);
-    count = Math.min(inst.length, maxInstances);
-    for (let i = 0; i < count; i++) {
+  function fillInstances(target: THREE.InstancedMesh, inst: HullInstance[]): number {
+    const n = Math.min(inst.length, maxInstances);
+    for (let i = 0; i < n; i++) {
       const s = inst[i]!;
       m.makeScale(s.radius, s.radius, s.radius);
       m.setPosition(s.centre[0], s.centre[1], s.centre[2]);
-      mesh.setMatrixAt(i, m);
+      target.setMatrixAt(i, m);
     }
-    mesh.count = count;
-    mesh.instanceMatrix.needsUpdate = true;
+    target.count = n;
+    target.instanceMatrix.needsUpdate = true;
+    return n;
+  }
+
+  function update(bodies: BuiltBody[], wounds: WoundSphere[] = []) {
+    count = fillInstances(mesh, buildHullInstances(bodies, HULL_SHRINK, wounds));
+    shadowCount = fillInstances(shadowMesh, buildHullInstances(bodies, SHADOW_HULL_INFLATE, wounds));
   }
 
   update([]);
 
   return {
     object: mesh,
+    shadowObject: shadowMesh,
     update,
+    /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
+    setSpheres(list: HullInstance[]) {
+      count = Math.min(list.length, maxInstances);
+      for (let i = 0; i < count; i++) {
+        const sp = list[i]!;
+        m.makeScale(sp.radius, sp.radius, sp.radius);
+        m.setPosition(sp.centre[0], sp.centre[1], sp.centre[2]);
+        mesh.setMatrixAt(i, m);
+      }
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+    },
     get instanceCount() { return count; },
     dispose() {
       geo.dispose();
       material.dispose();
       mesh.dispose();
+      shadowMesh.dispose();
     },
   };
 }

@@ -8,7 +8,13 @@
 // blast-crater hole, observed and fixed).
 
 import { describe, it, expect } from 'vitest';
-import { buildHullInstances, HULL_SHRINK, type WoundSphere } from './occluder-hull';
+// Entry-point SOURCE, imported with Vite's ?raw rather than read through
+// node:fs — this tsconfig ships `types: ['vite/client']` and no @types/node,
+// so an fs read does not type-check here even though vitest runs it.
+import gameMainSrc from './game-main.ts?raw';
+import labMainSrc from './lab-main.ts?raw';
+import benchMainSrc from './bench-main.ts?raw';
+import { buildHullInstances, HULL_SHRINK, createOccluderHull, SHADOW_HULL_INFLATE, type WoundSphere } from './occluder-hull';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
 import { DEFAULT_FACE } from '../face';
@@ -252,6 +258,60 @@ describe('shell displacement (X1.21.2) — inside-ness under the dented field', 
   });
 });
 
+describe('shadow-caster hull', () => {
+  // The owner rejected the figure's shadow casting as DISCONNECTED BLOBS
+  // (2026-09-01). Cause: the shadow caster was the depth-occlusion hull, and
+  // HULL_SHRINK 0.8 keeps every sphere conservatively INSIDE its primitive —
+  // correct for occlusion (the march cuts rays at the hull), wrong for shadows
+  // (gaps between shrunk spheres are gaps in the shadow map). A shadow caster
+  // wants the opposite bias: inflation, so neighbouring spheres fuse into one
+  // silhouette.
+  it('inflates rather than shrinks — gaps between spheres become gaps in the shadow', () => {
+    expect(SHADOW_HULL_INFLATE).toBeGreaterThan(1.0);
+    expect(HULL_SHRINK).toBeLessThan(1.0);
+  });
+
+  it('shadow spheres are strictly larger than occlusion spheres for the same body', () => {
+    // Compared per CENTRE, not per index: prims share endpoint centres (joints)
+    // and the two hulls keep different sets of tiny prims (inflated radii clear
+    // MIN_HULL_RADIUS where shrunk ones did not), so index i is not the same
+    // sphere across the two hulls. The property that matters is per sphere:
+    // same centre, strictly bigger radius.
+    const occl = buildHullInstances([body], HULL_SHRINK, []);
+    const shad = buildHullInstances([body], SHADOW_HULL_INFLATE, []);
+    expect(shad.length).toBeGreaterThanOrEqual(occl.length);
+    const biggest = (inst: ReturnType<typeof buildHullInstances>) => {
+      const m = new Map<string, number>();
+      for (const s of inst) {
+        const k = `${s.centre}`;
+        const r = m.get(k);
+        if (r === undefined || s.radius > r) m.set(k, s.radius);
+      }
+      return m;
+    };
+    const occlR = biggest(occl);
+    const shadR = biggest(shad);
+    for (const [centre, r] of occlR) {
+      const twin = shadR.get(centre);
+      expect(twin, `shadow sphere at ${centre}`).toBeDefined();
+      expect(twin!).toBeGreaterThan(r);
+    }
+  });
+
+  it('the shadow mesh casts; the occlusion mesh does not', () => {
+    // The split of duties, pinned where a camera test cannot see it: the
+    // inflated hull exists ONLY to be rendered into the shadow map, and the
+    // occlusion hull must stay a pure depth pre-pass.
+    const hull = createOccluderHull();
+    expect(hull.shadowObject.castShadow).toBe(true);
+    expect(hull.object.castShadow).toBe(false);
+    // Visible, because three only renders shadow casters that pass the
+    // visibility test; layers, not visibility, keep it off the camera.
+    expect(hull.shadowObject.visible).toBe(true);
+    hull.dispose();
+  });
+});
+
 describe('dead prims (mid-limb severing)', () => {
   it('emits no hull spheres for dead prims — a phantom hull punches discard holes', () => {
     // Regression: after severDistal marks a forearm dead, the flesh field
@@ -271,4 +331,34 @@ describe('dead prims (mid-limb severing)', () => {
     expect(instances).toHaveLength(2);
     for (const i of instances) expect(i.centre[1]).toBeLessThanOrEqual(1);
   });
+});
+
+describe('the pre-pass ships DISABLED (2026-09-01 holes-at-range)', () => {
+  // The hull this file builds is correct — every test above pins that, and
+  // __sdfGame.hullInsideness confirms it on the live POSED bodies too. What
+  // is not correct is the distance the pre-pass RASTERISES for it: measured
+  // with one synthetic sphere of known geometry, it is exact below ~3 m and
+  // then collapses (true 7.9 m reads 3.78, true 11.9 m reads 0.37), and the
+  // error depends on distance alone, not on the sphere's size or its screen
+  // footprint. march.wgsl.ts no longer clamps tMax by it for that reason.
+  //
+  // Rendering a pre-pass nothing consumes is pure cost, so all three entry
+  // points ship it off. This is a source guard rather than a behavioural one
+  // because the defect only exists on a GPU — nothing here compiles WGSL, so
+  // a green suite is not evidence that the holes are gone. The evidence is
+  // the before/after capture and the frame-time A/B in the commit.
+  const entries: [string, string][] = [
+    ['game-main.ts', gameMainSrc],
+    ['lab-main.ts', labMainSrc],
+    ['bench-main.ts', benchMainSrc],
+  ];
+  for (const [file, src] of entries) {
+    it(`${file} does not enable the occluder pre-pass at startup`, () => {
+      expect(src).toContain('sdfLayer.setOccluderEnabled(false);');
+      // Two-space indent = module scope, i.e. the startup line. Deeper
+      // indents are the diagnostics turning the pass on to read it back, and
+      // those stay: they are how the bound gets re-measured.
+      expect(src).not.toMatch(/\n {2}sdfLayer\.setOccluderEnabled\(true\);/);
+    });
+  }
 });

@@ -9,7 +9,7 @@
 // copies of three and the node system stops recognising lights constructed by
 // the other copy (lab-renderer.ts header). Do not split these imports.
 import * as THREE from 'three/webgpu';
-import { OCCLUDER_LAYER } from './sdf-layer';
+import { OCCLUDER_LAYER, SHADOW_HULL_LAYER } from './sdf-layer';
 
 export type Vec3 = [number, number, number];
 
@@ -103,8 +103,15 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
   // above bit 0 stops three inheriting the main camera's (mid-frame, wrong)
   // mask, AND opts the character hull in as a shadow caster. One change, both
   // shadow mechanisms.
+  //
+  // SHADOW_HULL_LAYER is the caster this task actually renders: the occluder
+  // hull's INFLATED twin (occluder-hull.ts). The shrunk OCCLUDER_LAYER hull is
+  // still enabled here but casts nothing — its meshes have castShadow false —
+  // and reusing it left gaps between the shrunk spheres that read as a scatter
+  // of blobs (owner-rejected); the inflated twin fuses into one silhouette.
   spot.shadow.camera.layers.set(0);
   spot.shadow.camera.layers.enable(OCCLUDER_LAYER);
+  spot.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
 
   const eye = new THREE.Vector3();
   const off = new THREE.Vector3();

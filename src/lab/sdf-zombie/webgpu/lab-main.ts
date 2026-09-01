@@ -479,7 +479,13 @@ async function main() {
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
-  sdfLayer.setOccluderEnabled(true);
+  // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
+  // march -- the distance it rasterises is only accurate in the near field
+  // and under-reports badly beyond ~3 m, which shredded bodies at range.
+  // The full measurement and the revival conditions are in march.wgsl.ts
+  // above tMax. __sdfGame.setOccluder still renders the pass for
+  // diagnostics; nothing consumes it.
+  sdfLayer.setOccluderEnabled(false);
 
   // The character's own palette if it declared one, else the lab default.
   // `body` above already ran compileZombie, so lastBlobPalette is populated by

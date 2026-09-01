@@ -400,20 +400,33 @@ describe('ported features reach the entry point', () => {
       'if (d < -max(hitEpsBase, t * aaK) && omega > 1.0 && !conservative) {');
   });
 
-  it('extends the occluder bound by the shell amp (X1.21.2 dark dropout)', () => {
-    // The hull is sized against the SMOOTH field, but a shell DENT retreats
-    // up to ~0.9 amp below it — past the hull's (1 - shrink) clearance on
-    // thin limbs — and a march clamped at the raw occT discards those pixels
-    // outright: dark dropout patches, A/B-confirmed with the occluder off.
-    // The bound must carry the amp so the dent stays reachable. Bumps are
-    // nearer than the hull and never needed it. At amp 0 the bound is
-    // bit-identical to the undisplaced one, so the guard pins the EXPRESSION
-    // rather than a value.
-    // The outer-hull shell (2026-08-31) folds its own exit bound into the
-    // same min(), so this pins the OCCLUDER TERM rather than the whole line —
-    // the amp must ride occT wherever that expression ends up.
-    expect(MARCH_BODY).toContain('occT + woundCfg2.z');
-    expect(MARCH_BODY).toContain('let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);');
+  it('does NOT bound tMax by the occluder — the bound under-reports at range', () => {
+    // 2026-09-01, the owner's "zombies are full of holes until you get fairly
+    // close". The inner hull is sound GEOMETRY (every emitted sphere sits at
+    // least its own radius inside the posed flesh — __sdfGame.hullInsideness
+    // reports 0 of 300 outside), but the DISTANCE the pre-pass rasterises for
+    // it is accurate only in the near field. Measured with one synthetic
+    // sphere of known centre and radius, and the error tracks distance alone,
+    // not the sphere's radius or its screen size:
+    //
+    //   true 2.4 -> 2.405 (exact)    true 4.9 -> 4.252
+    //   true 7.9 -> 3.782            true 11.9 -> 0.367
+    //
+    // An under-reported occT puts tMax IN FRONT of the surface, so the ray
+    // gives up before reaching skin and the fragment discards — per pixel,
+    // wherever the hull covers, and worse the further away the body is. On a
+    // single isolated zombie at 4.9 m that destroyed 1369 of 1375 lost
+    // pixels, worst case 0.68 m short.
+    //
+    // Re-adding the term reintroduces the bug, so this test pins its absence
+    // rather than its shape. Revive it only once the pre-pass writes a
+    // distance that survives syntheticSphereCheck at range; the full
+    // measurement is in march.wgsl.ts above tMax.
+    expect(MARCH_BODY).toContain('let tMax = length(worldPos - camPos);');
+    expect(MARCH_BODY).not.toContain('occT + woundCfg2.z');
+    // occT stays PLUMBED — debug mode 3 heats it, and reviving the bound
+    // should not need the parameter threaded back through.
+    expect(MARCH_BODY).toContain('occT: f32');
   });
 
   it('bounds the march by the outer hull, and is an identity when it is off', () => {
@@ -482,8 +495,10 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
   it('darkens ONLY the key diffuse + specular; fill/ambient/scatter stay lit', () => {
     // Multiply the whole lit sum and craters go pitch black — the fill and
     // the fake scatter are what keep the cavity readable from the dark side.
+    // (keyI/keyC are the analytic-flashlight blend; with the beam off they
+    // reduce to lightCfg.x/keyColor exactly — see the task-7 block below.)
     expect(MARCH_BODY).toContain(
-      'albedo * (amb + diff * wShadow * lightCfg.x * keyColor) * ao');
+      'albedo * (amb + diff * wShadow * keyI * keyC) * ao');
     expect(MARCH_BODY).toContain('shine * wShadow * mix(surfCfg.x, 1.5, gloss)');
     // The fill term must NOT carry the shadow...
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
@@ -1125,7 +1140,7 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     expect(MARCH_BODY).not.toContain('keyGate');
     expect(MARCH_BODY).not.toContain('shineOcc');
     expect(MARCH_BODY).not.toContain('ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm))');
-    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * lightCfg.x * keyColor) * ao');
+    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * keyI * keyC) * ao');
   });
 
   it('routes ambient through ambientAt, and pays for it once', () => {
@@ -1203,6 +1218,52 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     // counts, or a heatmap taken against a specialised crowd lies.
     expect(specialiseMapBody(oneClusterBody())).toContain(
       'if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
+  });
+});
+
+describe('analytic flashlight (dungeon relighting task 7)', () => {
+  // The dungeon's SpotLight is invisible to the march — SDF bodies shade
+  // inside this WGSL — so the beam is re-evaluated analytically per pixel.
+  // These pins hold the seam the design rests on.
+  const start = () => MARCH_BODY.indexOf('// ---- ANALYTIC FLASHLIGHT');
+  const end = () => MARCH_BODY.indexOf('// ---- END ANALYTIC FLASHLIGHT');
+  const block = () => MARCH_BODY.slice(start(), end());
+
+  it('is present in the shading block', () => {
+    expect(MARCH_BODY).toContain('spotCfg');
+    expect(MARCH_BODY).toContain('spotPos');
+    expect(MARCH_BODY).toContain('spotAxis');
+  });
+
+  it('adds ZERO mapBody evaluations — the constraint the whole design rests on', () => {
+    // Extract the spotlight block and prove no field call hides in it.
+    expect(start()).toBeGreaterThan(-1);
+    expect(end()).toBeGreaterThan(start());
+    expect(block()).not.toContain('mapBody');
+    expect(block()).not.toContain('map(');
+  });
+
+  it('drives keyColor, not albedo — brightness cannot ride the bounce hue', () => {
+    expect(start()).toBeGreaterThan(-1);
+    expect(block()).toContain('keyColor');
+  });
+
+  it('collapses to the old key when the beam is off (spotCfg.x = 0)', () => {
+    // Lab parity: with the dungeon off, L/keyC/keyI must reduce to exactly
+    // lightDir/keyColor/lightCfg.x so the gallery renders bit-identically.
+    expect(block()).toContain('var L = normalize(lightDir);');
+    expect(block()).toContain('var keyC = keyColor;');
+    expect(block()).toContain('var keyI = lightCfg.x;');
+    expect(block()).toContain('if (spotCfg.x > 0.0) {');
+  });
+
+  it('feeds the blended key into the lit expressions, ambient hue untouched', () => {
+    expect(start()).toBeGreaterThan(-1);
+    // The two fleshLit sites ride the blended key...
+    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * keyI * keyC) * ao');
+    // ...while ambientAt keeps the ORIGINAL keyColor as its hue basis.
+    expect(MARCH_BODY).toContain(
+      'bounceCfg, lightCfg.y, keyColor);');
   });
 });
 

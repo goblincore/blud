@@ -3,6 +3,7 @@
 // resolves them here. Blood tile art is the FIRST implementation of this
 // interface, not a dependency of it. Promoted from src/dev/theme-preview.ts.
 import * as THREE from 'three';
+import { stoneTextures } from './stone-textures';
 
 export type SurfaceRole =
   | 'floor' | 'wall' | 'coverLow' | 'coverMid' | 'perimeterAccent' | 'pocketFloor';
@@ -29,5 +30,37 @@ export function defaultMaterialSet(): ThemeMaterialSet {
     coverLow: new THREE.MeshStandardMaterial({ color: 0x6b5f52, roughness: 0.9 }),
     coverMid: new THREE.MeshStandardMaterial({ color: 0x4f463c, roughness: 0.9 }),
     perimeterAccent: new THREE.MeshStandardMaterial({ color: 0x5c5044, roughness: 0.9 }),
+  };
+}
+
+/** The dungeon set. Replaces defaultMaterialSet() on the game page; the
+ *  untextured default stays for the gallery A/B. */
+export function dungeonMaterialSet(): ThemeMaterialSet {
+  const wall = stoneTextures('wallBrick', 11);
+  const floor = stoneTextures('floorCobble', 23);
+  const ceil = stoneTextures('ceilingVault', 37);
+  const mat = (
+    tex: ReturnType<typeof stoneTextures>,
+    repeat: number,
+  ) => {
+    const m = new THREE.MeshStandardMaterial({
+      ...tex,
+      // Relief comes from the normal map, so keep the scalar low and let the
+      // roughness MAP carry the wet/dry story.
+      roughness: 1.0,
+      metalness: 0.0,
+      normalScale: new THREE.Vector2(1.1, 1.1),
+    });
+    for (const t of [m.map, m.normalMap, m.roughnessMap]) {
+      if (t) t.repeat.set(repeat, repeat);
+    }
+    return m;
+  };
+  return {
+    wall: mat(wall, 2),
+    floor: mat(floor, 3),
+    coverLow: mat(wall, 1),
+    coverMid: mat(wall, 1),
+    perimeterAccent: mat(ceil, 2),
   };
 }

@@ -1008,6 +1008,20 @@ export const TEXEL = /* wgsl */ `fn texel(tex: texture_2d<f32>, uv: vec2<f32>) -
 // Irregular flicker. Three incommensurate sines rather than one, because a
 // single sine reads as a machine pulsing and the eye picks the period out
 // immediately; overlapping periods never quite repeat.
+export const SOFT_SHOULDER = /* wgsl */ `fn softShoulder(x: f32, knee: f32) -> f32 {
+  // Below the knee, identity — the whole midtone range is untouched, so a
+  // body out of the beam shades exactly as it always did. Above it, compress
+  // [knee, inf) into [knee, 1) with an exponential that is C1 at the join and
+  // strictly monotonic, which is the property that matters here: monotonic
+  // means two surfaces that differed in brightness still differ afterwards.
+  // That is what keeps a wound crater darker than the skin around it when the
+  // flashlight is pointed straight at the body, instead of both clipping to
+  // white and the damage vanishing at exactly the range you aim from.
+  if (x <= knee) { return x; }
+  let head = max(1.0 - knee, 1e-4);
+  return knee + head * (1.0 - exp(-(x - knee) / head));
+}`;
+
 export const FLICKER = /* wgsl */ `fn flicker(t: f32, amt: f32) -> f32 {
   let a = sin(t * 11.3) * 0.5 + 0.5;
   let b = sin(t * 23.7 + 1.3) * 0.5 + 0.5;
@@ -1119,6 +1133,12 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
 //   woundCfg2  x rimWidth, y relaxation factor, z shellAmp (silhouette shell)
 //   lightCfg   x keyIntensity, y fillIntensity
+//   spotPos    world position of the analytic flashlight (dungeon task 7)
+//   spotAxis   normalised beam axis, pointing AWAY from the lamp
+//   spotCfg    x intensity (0 disables — lab parity), y cosInner,
+//              z cosOuter, w range
+//   spotColor  the beam's colour; the KEY blends toward it, the ambient
+//              hue basis never moves
 //   surfCfg    x specIntensity, y specRoughness, z fresnelBoost, w translucency
 //   surfCfg2   x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale
 //   mottleColor  the colour the mottle mixes toward (linear RGB)
@@ -1183,6 +1203,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   lightDir: vec3<f32>,
   keyColor: vec3<f32>,
   lightCfg: vec2<f32>,
+  spotPos: vec3<f32>,
+  spotAxis: vec3<f32>,
+  spotCfg: vec4<f32>,
+  spotCfg2: vec4<f32>,
+  spotColor: vec3<f32>,
   surfCfg: vec4<f32>,
   surfCfg2: vec4<f32>,
   mottleColor: vec3<f32>,
@@ -1312,7 +1337,51 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // as worth nothing anyway. The entire win here comes from the discard and
   // the entry start, both of which are exact.
   if (shellOut <= 0.0) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
-  let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);
+  // THE OCCLUDER NO LONGER BOUNDS tMax, AND IT MUST NOT (2026-09-01).
+  //
+  // Everything above about the inner hull being safe to clamp against is
+  // sound as GEOMETRY, and the hull really is inside the flesh: sampling
+  // sdBody at all 300 emitted spheres of the live POSED bodies puts every one
+  // of them at least its own radius deep (__sdfGame.hullInsideness). What is
+  // not sound is the NUMBER the pre-pass writes for them.
+  //
+  // Measured with one synthetic sphere of known centre and radius, rasterised
+  // alone and read straight back (__sdfGame.syntheticSphereCheck). The value
+  // the pre-pass stores tracks the true camera distance only in the near
+  // field and then comes apart -- and the error depends on DISTANCE alone,
+  // not on the sphere's radius or its size on screen:
+  //
+  //   true 1.9 -> 1.905    true 2.4 -> 2.405   true 2.9 -> 2.892   (exact)
+  //   true 3.9 -> 3.714    true 4.9 -> 4.252   true 5.9 -> 4.447
+  //   true 7.9 -> 3.782    true 9.9 -> 2.079   true 11.9 -> 0.367
+  //
+  // An UNDER-reported occT is the one error this bound cannot survive: tMax
+  // lands in front of the surface, the ray gives up before reaching skin, and
+  // the fragment discards. On screen that is the owner's report of bodies
+  // "full of holes until you get fairly close" -- holes because the clamp
+  // bites per pixel wherever the hull covers, and distance-keyed because the
+  // encoding is accurate exactly where the player is close. Measured on a
+  // single isolated zombie at 4.9 m: 1369 of 1375 lost pixels had tMax IN
+  // FRONT of the flesh, worst case 0.68 m short, and the hull's own CPU
+  // ray-sphere entry (4.814 m) sat correctly BEHIND the surface (4.757 m)
+  // while the pre-pass wrote 4.225 m for the same pixel.
+  //
+  // The bound bought nothing to weigh against that. Interleaved frame timing
+  // with the outer shell hull shipping (room 3, 8 bodies, 6 rounds x 30
+  // frames, GPU-fenced): occluder on 14.23 ms mean, off 14.32 ms, against a
+  // 13.4-14.9 ms spread WITHIN either leg. That matches what the shell work
+  // already recorded -- "the occluder measured as worth nothing anyway".
+  //
+  // So the clamp goes and the pre-pass ships disabled. Everything else stays:
+  // occluder-hull.ts still builds, occFetch still fetches, debug mode 3 still
+  // heats occT, and __sdfGame.setOccluder still renders the pass -- so
+  // whoever works out why an instanced MeshBasicNodeMaterial writing
+  // length(positionWorld - cameraPosition) decays with distance can revive
+  // this by putting the term back. Do not put it back before that: the outer
+  // hull (shell-hull-outer.ts) writes distance the same way, and is unharmed
+  // only because shellIn is a ray START and shellOut a > 0 test, where
+  // under-reporting is conservative. Here it is fatal.
+  let tMax = length(worldPos - camPos);
   let steps = i32(marchCfg.x);
   // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
   // reconstruction of a baked SDF is not exact to the surface, so volume
@@ -1548,7 +1617,19 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // so pixels that missed still write. Channels:
   //   r = steps this ray took   g = 1 if it hit flesh, else 0
   //   b = 1 always (this fragment was rasterised and marched)
-  //   a = t (kept so the target's depth channel behaves as usual)
+  //   a = t -- BUT DO NOT READ IT BACK AS A DISTANCE. createMarchMaterial's
+  //     outputNode replaces alpha with CLIP-SPACE DEPTH, so a readback of
+  //     this channel always lands in [0, 1]. (2026-09-01: that silently
+  //     collapsed a whole "lost pixels by distance" histogram into the
+  //     0-1 m bucket before it was caught.)
+  //
+  // ONE MORE BIAS, and it matters for the counts below: this returns BEFORE
+  // the discard, so a MISSED ray still writes depth -- at the distance it
+  // gave up, which for a near body's proxy box is nearer than a far body's
+  // real hit. The missed fragment then wins the depth test and the readback
+  // reports "no flesh" for a pixel the shipping render draws. Wherever proxy
+  // boxes overlap, occupancy()'s hit counts are therefore a LOWER bound for
+  // that reason too, on top of the overdraw one below.
   //
   // WHAT IT MEASURES, and what it does not. Summing over the target gives
   // hits/rasterised = the fraction of proxy-box screen area that actually
@@ -1776,7 +1857,58 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   albedo = mix(albedo, charColor, cm);
 
-  let L = normalize(lightDir);
+  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
+  // The world's SpotLight is invisible to the march — SDF bodies are shaded
+  // here, not by three — so the beam is re-evaluated analytically per pixel.
+  //
+  // PER-PIXEL, not per-body, so the cone edge cuts ACROSS a figure instead of
+  // the whole zombie popping on at once.
+  //
+  // ZERO field taps: a normalise, two dots and a divide. This is the
+  // constraint that let character self-shadowing be cut rather than paid for.
+  //
+  // It drives L and keyColor — NOT albedo. ambientAt renormalises bounce to
+  // unit luminance, so an albedo boost would change hue and leave brightness
+  // untouched. Brightness must ride the key.
+  var L = normalize(lightDir);
+  var keyC = keyColor;
+  var keyI = lightCfg.x;
+  var beamAmt = 0.0;
+  if (spotCfg.x > 0.0) {
+    let toLamp = spotPos - p;
+    let dist = length(toLamp);
+    let Ls = toLamp / max(dist, 1e-4);
+    let cone = dot(-Ls, normalize(spotAxis));
+    let coneFall = clamp((cone - spotCfg.z) / max(spotCfg.y - spotCfg.z, 1e-4), 0.0, 1.0);
+    let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
+    let beam = coneFall * coneFall * distFall * distFall * spotCfg.x;
+    // Blend the key TOWARD the beam. At beam 0 this is exactly the old key,
+    // which keeps the lab and every existing preset bit-identical.
+    L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
+    keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
+    // spotCfg2.x is the beam's KEY GAIN, a live knob. The 2.2 it replaces
+    // blew a lit body clean past 1.0 on every channel, and a clipped
+    // body has no wound in it: crater, lip and char all saturate to the
+    // same white. See the shoulder below.
+    // THE BEAM IS THE KEY, NOT A BONUS ON TOP OF IT (spotCfg2.z).
+    //
+    // This used to be lightCfg.x + beam*gain, which left the preset's own key
+    // — 2.4 for practical-hard-key — burning at full strength from a fixed
+    // direction that nothing could switch off. So a character standing in an
+    // unlit corridor was still brightly lit from nowhere (owner, 2026-09-01:
+    // "the unlit characters seem still to be lit ... bright in the darkness
+    // without light"). In a dungeon the lamp you carry has to be the reason a
+    // body is visible.
+    //
+    // spotCfg2.z is what survives of the preset key when the beam is off: a
+    // floor, not a fill. It is NOT zero on purpose — ambientAt carries hue
+    // rather than brightness (bounce is renormalised to unit luminance), so a
+    // character lit by nothing but bounce has no level at all and disappears
+    // completely rather than reading as a shape in the dark.
+    keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
+    beamAmt = beam;
+  }
+  // ---- END ANALYTIC FLASHLIGHT --------------------------------------------
   let V = -rd;
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
@@ -1846,8 +1978,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // falloff, gated by a test that greps its source for field calls. The
   // post-hit eval budget is unchanged.
   let amb = ambientAt(p, n, boxMin, boxMax, wallNegX, wallPosX, wallNegY, wallPosY, wallNegZ, wallPosZ, bounceCfg, lightCfg.y, keyColor);
-  var fleshLit = albedo * (amb + diff * wShadow * lightCfg.x * keyColor) * ao
-               + keyColor * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
+  // past 1.0 on every channel and hard-clip, which does not just look blown —
+  // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
+  // same white, so a shot enemy reads identical to an unshot one exactly when
+  // you are close enough to aim. The shoulder compresses [knee, inf) into
+  // [knee, 1) monotonically, so those differences survive as differences.
+  //
+  // Gated on the beam existing at all, so the lab and every stock preset keep
+  // their old arithmetic bit-for-bit.
+  var fleshLit = albedo * (amb + diff * wShadow * keyI * keyC) * ao
+               + keyC * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
@@ -1857,6 +1998,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.52 * lightCfg.x * keyColor),
                  faceFlat * 0.85);
+  if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
+    let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
+    fleshLit = vec3<f32>(softShoulder(fleshLit.x, knee),
+                         softShoulder(fleshLit.y, knee),
+                         softShoulder(fleshLit.z, knee));
+  }
 
   // The eye REPLACES the flesh rather than adding to it.
   //
@@ -1988,7 +2135,7 @@ export const HELPERS = [
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
-  FOLD_GROUP, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER,
+  FOLD_GROUP, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT,
 ];
 

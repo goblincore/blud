@@ -122,44 +122,44 @@ export interface TunnelDef {
 
 const R = ROOM_HALF, B = BAND_HALF, O = OUTER, T = TUNNEL_OFF, W = TUNNEL_HALF_W;
 
-// WHITE-WALL GALLERY. Owner: "rooms should be more light like white wall
-// gallery and then some color lights here and there". Walls near-white so
-// geometry reads and zombies read against them; floor a step darker so the
-// room keeps a horizon; ceiling brightest (it faces the rig's fill).
-const GALLERY_WALL: Vec3 = [0.88, 0.87, 0.85];
-const GALLERY_FLOOR: Vec3 = [0.45, 0.44, 0.42];
-const GALLERY_CEIL: Vec3 = [0.93, 0.92, 0.90];
+// DUNGEON STONE. Cold gray, deliberately not the reference video's sepia:
+// warm light on warm stone gives soft golden highlights that fight the
+// specular this pivot exists to deliver. Ceilings sit BELOW walls now —
+// the gallery lifted them so they read as a top surface under flat ambient;
+// here the flashlight does that job and a lifted ceiling only kills the dark.
+const GALLERY_WALL: Vec3 = [0.21, 0.215, 0.225];
+const GALLERY_FLOOR: Vec3 = [0.135, 0.138, 0.142];
+const GALLERY_CEIL: Vec3 = [0.175, 0.18, 0.19];
 
 export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // RED wash on the west wall, over the low furniture.
-    accents: [{ pos: [-7.5, 2.5, -2.8], color: [1.0, 0.10, 0.06], power: 14 }],
+    // FIRE brazier low on the west side, over the low furniture.
+    accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.46, 0.13], power: 9 }],
     zombies: 1 },
   { id: 2, name: 'room2', minX: B, maxX: O, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // TEAL wash on the east wall by the tall crate.
-    accents: [{ pos: [7.6, 2.6, -6.3], color: [0.05, 0.85, 0.60], power: 14 }],
+    // FIRE brazier on the east wall by the tall crate.
+    accents: [{ pos: [7.6, 1.15, -6.3], color: [1.0, 0.42, 0.11], power: 9 }],
     zombies: 2 },
   { id: 3, name: 'room3', minX: B, maxX: O, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // AMBER pool near the (3,3) spawn — the accent-pair capture stands a
-    // zombie beside it. VIOLET in the far corner for depth.
+    // Two fires, one cooler and further off, for depth. The accent-pair
+    // capture stands a zombie beside the near one.
     accents: [
-      { pos: [2.0, 2.4, 2.2], color: [1.0, 0.55, 0.12], power: 14 },
-      { pos: [7.8, 2.6, 7.8], color: [0.30, 0.20, 1.00], power: 12 },
+      { pos: [2.0, 1.15, 2.2], color: [1.0, 0.50, 0.16], power: 10 },
+      { pos: [7.8, 1.15, 7.8], color: [0.95, 0.38, 0.10], power: 7 },
     ],
     zombies: 3 },
   { id: 4, name: 'room4', minX: -O, maxX: -B, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // MAGENTA wash along the north wall.
-    accents: [{ pos: [-3.5, 2.6, 7.9], color: [0.95, 0.15, 0.75], power: 14 }],
+    // FIRE brazier along the north wall.
+    accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 }],
     zombies: 4 },
 ];
 
-// Dimmer than either room's white so the passage still reads as a throat
-// between galleries — but no longer a cave: grey, not black.
-const TUNNEL_COLOR: Vec3 = [0.52, 0.51, 0.49];
+// Darker than either room: the passage is a throat between chambers.
+const TUNNEL_COLOR: Vec3 = [0.10, 0.104, 0.112];
 export const TUNNELS: TunnelDef[] = [
   { name: 'tunnel-1-2', a: 1, b: 2, minX: -B, maxX: B, minZ: -T - W, maxZ: -T + W,
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },

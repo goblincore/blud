@@ -27,12 +27,13 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
-import { createOccluderHull } from './occluder-hull';
+import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
@@ -143,6 +144,11 @@ async function main() {
   const surfaces = levelSurfaces();
   const levelGroup = new THREE.Group();
   levelGroup.name = 'ring-level';
+  const stoneSet = dungeonMaterialSet();
+  const stoneFor = (axis: 0 | 1 | 2, facing: 1 | -1) =>
+    axis !== 1 ? stoneSet.wall
+      : facing > 0 ? stoneSet.floor
+        : stoneSet.perimeterAccent;
   for (const p of surfaces.planes) {
     const axis = p.axis;
     // Walls span (x|z, y); floors/ceilings span (x, z).
@@ -155,11 +161,14 @@ async function main() {
     // failure pointing up. A small emissive term in their own colour keeps
     // them legible as the room's top surface without flattening the mood.
     const isCeiling = axis === 1 && p.facing < 0;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: new THREE.Color(p.color[0], p.color[1], p.color[2]),
-      roughness: 1,
-      ...(isCeiling ? { emissive: new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.45) } : {}),
-    }));
+    const base = stoneFor(axis, p.facing) as THREE.MeshStandardMaterial;
+    const mesh = new THREE.Mesh(geo, base.clone());
+    const mm = mesh.material as THREE.MeshStandardMaterial;
+    mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
+    // Ceilings keep a whisper of self-light so they do not read as a void —
+    // but far less than the gallery needed, because the flashlight now
+    // reaches them.
+    if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
     const mid: Vec3 = [
       (p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2,
     ];
@@ -172,10 +181,9 @@ async function main() {
   for (const b of surfaces.boxes) {
     const geo = new THREE.BoxGeometry(
       b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: new THREE.Color(b.color[0], b.color[1], b.color[2]),
-      roughness: 1,
-    }));
+    const mesh = new THREE.Mesh(geo, (stoneSet.coverLow as THREE.MeshStandardMaterial).clone());
+    (mesh.material as THREE.MeshStandardMaterial).color =
+      new THREE.Color(b.color[0], b.color[1], b.color[2]);
     mesh.position.set(
       (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     levelGroup.add(mesh);
@@ -221,12 +229,26 @@ async function main() {
   // is watching.
   const accentGroup = new THREE.Group();
   accentGroup.name = 'accent-lights';
+  const flickerLights: { light: THREE.PointLight; base: number; phase: number }[] = [];
   for (const r of ROOMS) {
     for (const a of r.accents) {
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
       pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
       accentGroup.add(pl);
+      flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
+
+      // A visible source. Without it the light has no cause and reads as a bug.
+      const bowl = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.16, 1),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
+          emissive: new THREE.Color(a.color[0], a.color[1], a.color[2]),
+          emissiveIntensity: 2.2,
+          roughness: 0.7,
+        }));
+      bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+      accentGroup.add(bowl);
     }
   }
   scene.add(accentGroup);
@@ -236,7 +258,25 @@ async function main() {
   // must render exactly as before, so the rig is applied, not hard-coded.
   // ---------------------------------------------------------------------
   let dungeonOn = true;
+  /** Live beam tuning (panel + console). x is how hard the beam drives the
+   *  key; y is the highlight shoulder that keeps WOUNDS readable under direct
+   *  light — at 0 a lit body hard-clips and crater, lip and clean skin all
+   *  saturate to the same white, so a shot enemy looks unshot exactly when you
+   *  are close enough to aim (owner, 2026-09-01). */
+  // Owner's tuned values (2026-09-01, found on the panel). The high gain
+  // works precisely BECAUSE the shoulder is on: 2.9 would have clipped a
+  // body to featureless white under the old hard clamp.
+  const beamTuning = { gain: 2.9, shoulder: 0.45, keyFloor: 0.4 };
   const flashlight = createFlashlight();
+  // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
+  // castShadow has to be decided BEFORE the first frame: toggling it live
+  // crashes three r185 WebGPU (ShadowNode.updateShadow dereferences the
+  // disposed map's depthTexture — see the __dungeon note below), and
+  // shadow.intensity=0 cannot stand in — it only zeroes the SAMPLING term;
+  // the 1024² map still renders every frame, so it would measure the wrong
+  // split. At boot, AnalyticLightNode.setup never builds the shadow node at
+  // all, so the leg is a true zero-cost ablation.
+  flashlight.spot.castShadow = new URLSearchParams(location.search).get('spotshadow') !== '0';
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
 
@@ -275,6 +315,24 @@ async function main() {
      *  shadow kill switch — do NOT toggle spot.castShadow live, three r185
      *  WebGPU crashes rebuilding a disposed shadow map). */
     spot: flashlight.spot,
+    /** Beam knobs, also on the tuning panel. */
+    /** Accepts BOTH the short names and the panel's slider names, because the
+     *  panel's COPY button emits the slider names (beamGain, ...) and a line
+     *  you paste back must actually do something — it silently did nothing
+     *  until 2026-09-01. */
+    setBeam(t: {
+      gain?: number; shoulder?: number; keyFloor?: number;
+      beamGain?: number; beamShoulder?: number; beamKeyFloor?: number;
+    }) {
+      const gain = t.gain ?? t.beamGain;
+      const shoulder = t.shoulder ?? t.beamShoulder;
+      const keyFloor = t.keyFloor ?? t.beamKeyFloor;
+      if (gain !== undefined) beamTuning.gain = gain;
+      if (shoulder !== undefined) beamTuning.shoulder = shoulder;
+      if (keyFloor !== undefined) beamTuning.keyFloor = keyFloor;
+      return { ...beamTuning };
+    },
+    get beam() { return { ...beamTuning }; },
   };
 
   // -----------------------------------------------------------------------
@@ -384,6 +442,35 @@ async function main() {
   // Goo OFF takes the original single-call path, so the toggle is exact.
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
+    // Hand the march the same beam the meshes get. The SDF bodies shade
+    // inside the march and cannot see the scene's SpotLight at all (the
+    // owner's "characters aren't lit by the light direction" report), so
+    // the beam is replayed into per-body uniforms: same lamp pose, same
+    // cone maths, per pixel. spotCfg.x gates it — 0 (gallery/lab) makes
+    // the shader collapse to the old key exactly.
+    {
+      const sAxis = new THREE.Vector3();
+      flashlight.spot.target.getWorldPosition(sAxis).sub(flashlight.spot.position).normalize();
+      // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
+      // comes straight off the light so the two systems cannot drift.
+      const spotOn = dungeonOn ? 1 : 0;
+      const cosInner = Math.cos(flashlight.spot.angle * (1 - flashlight.spot.penumbra));
+      const cosOuter = Math.cos(flashlight.spot.angle);
+      for (const a of actors) {
+        a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
+        a.view.uniforms.spotAxis.value.copy(sAxis);
+        a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+        a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+      }
+    }
+    // Fire flicker. Cheap and deliberately not random per frame — a smooth
+    // two-rate wobble reads as flame; white noise reads as a broken light.
+    const ft = performance.now() * 0.001;
+    for (const f of flickerLights) {
+      const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
+      f.light.intensity = f.base * (1 + w * 0.14);
+    }
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -394,7 +481,26 @@ async function main() {
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
-  sdfLayer.setOccluderEnabled(true);
+  // The inflated shadow-casting twin (see occluder-hull.ts). castShadow and
+  // the layer are already set in the factory; spelled out here to sit beside
+  // the occlusion hull's wiring, where the next reader will look first.
+  //
+  // NOTE it rides SHADOW_HULL_LAYER, NOT the occluder layer — which is why
+  // the pre-pass being switched off below does not cost us character
+  // shadows. The two hulls are twins in shape only; they have opposite
+  // biases (shrunk to stay inside the body vs inflated to close the gaps
+  // between spheres) and now opposite fates.
+  occluderHull.shadowObject.layers.set(SHADOW_HULL_LAYER);
+  occluderHull.shadowObject.castShadow = true;
+  scene.add(occluderHull.shadowObject);
+
+  // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
+  // march -- the distance it rasterises is only accurate in the near field
+  // and under-reports badly beyond ~3 m, which shredded bodies at range.
+  // The full measurement and the revival conditions are in march.wgsl.ts
+  // above tMax. __sdfGame.setOccluder still renders the pass for
+  // diagnostics; nothing consumes it.
+  sdfLayer.setOccluderEnabled(false);
 
 /**
    * Over-relaxation factor for the game page's march (woundCfg2.y).
@@ -859,6 +965,11 @@ async function main() {
     gooLayer.setSpec(2.85);
     gooLayer.setGloss(220);
     gooLayer.setRim(0);
+    // shadowRed RETUNED 0.12 -> 0.19 for the dungeon (owner, 2026-09-01).
+    // Its whole job is that blood never reads black, and it was calibrated
+    // against WHITE gallery walls that this relight deleted — against dark
+    // wet stone the old floor was not enough to keep shadowed blood red.
+    gooLayer.setShadowRed(0.19);
 
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
@@ -909,6 +1020,15 @@ async function main() {
       { key: 'speedMin', group: 'gout', min: 0.2, max: 8, step: 0.1,
         hint: 'Tail speed. The head/tail gap is what stretches the pulse into a rope.',
         get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
+      { key: 'beamGain', group: 'beam', min: 0, max: 4, step: 0.05,
+        hint: 'How hard the flashlight drives the key on CHARACTERS. Was a fixed 2.2, which blew bodies past white. Raise for punch, lower if faces flatten out.',
+        get: () => beamTuning.gain, set: v => { beamTuning.gain = v; } },
+      { key: 'beamShoulder', group: 'beam', min: 0, max: 0.9, step: 0.05,
+        hint: 'Highlight rolloff. 0 = hard clip, and a lit body loses its WOUNDS (crater, lip and skin all saturate to the same white). Higher keeps them readable under the beam.',
+        get: () => beamTuning.shoulder, set: v => { beamTuning.shoulder = v; } },
+      { key: 'beamKeyFloor', group: 'beam', min: 0, max: 1, step: 0.05,
+        hint: 'How much of the PRESET key survives when the beam is off. 1.0 = the old bug (characters brightly lit in pitch darkness from a fixed direction). 0 = an unlit body vanishes entirely, because bounce carries hue, not level.',
+        get: () => beamTuning.keyFloor, set: v => { beamTuning.keyFloor = v; } },
     ], {
       toggles: [
         {
@@ -2090,6 +2210,98 @@ async function main() {
       } finally {
         adaptiveEnabled = hadAdaptive;
         adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+        handle.setLoopRunning(true);
+      }
+    },
+    /**
+     * INSIDE-NESS OF THE LIVE, POSED OCCLUDER HULL.
+     *
+     * occluder-hull.test.ts already asserts every emitted sphere sits inside
+     * the flesh — but only for bodies straight out of buildBody, i.e. in the
+     * REST pose. This runs the same assertion against the bodies the game is
+     * actually rendering, through the same sdBody the raycaster trusts, and
+     * reports which primitive authored each sphere that fails.
+     */
+    hullInsideness(tol = 1e-4) {
+      const bad: Array<Record<string, unknown>> = [];
+      let total = 0;
+      let worst = 0;
+      for (let bi = 0; bi < actors.length; bi++) {
+        const body = actors[bi]!.posed();
+        const spheres = buildHullInstances([body], HULL_SHRINK);
+        for (const sph of spheres) {
+          total++;
+          // Inside means the centre is at least `radius` deep in the flesh.
+          const d = sdBody(sph.centre, body);
+          const proud = d + sph.radius;
+          if (proud > worst) worst = proud;
+          if (proud > tol) {
+            bad.push({
+              actor: actors[bi]!.id, centre: sph.centre.map(v => +v.toFixed(3)),
+              radius: +sph.radius.toFixed(4), sdBody: +d.toFixed(4),
+              proudMm: +(proud * 1000).toFixed(1),
+            });
+          }
+        }
+      }
+      return {
+        spheres: total, outside: bad.length,
+        worstProudMm: +(worst * 1000).toFixed(1),
+        sample: bad.slice(0, 12),
+      };
+    },
+    /**
+     * Rasterise ONE sphere of known centre and radius and read back what the
+     * pre-pass wrote for it, next to the analytic ray-sphere entry for the
+     * same pixel. With a single instance there is no ambiguity about which
+     * sphere a fragment came from.
+     */
+    async syntheticSphereCheck(dist = 5, radius = 0.2) {
+      const wasOn = sdfLayer.occluderEnabled;
+      try {
+        handle.setLoopRunning(false);
+        // Straight ahead of the camera, `dist` metres away.
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        const c = camera.position.clone().addScaledVector(fwd, dist);
+        occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
+        sdfLayer.setOccluderEnabled(true);
+        handle.step(1 / 60);
+        await handle.resolveGpu();
+        const ot = sdfLayer.occluderTarget;
+        const buf = new Float32Array(
+          await handle.renderer.readRenderTargetPixelsAsync(ot, 0, 0, ot.width, ot.height),
+        );
+        const fpr = Math.ceil((ot.width * 16) / 256) * 256 / 4;
+        // The pixel the sphere centre projects to.
+        const ndc = c.clone().project(camera);
+        const col = Math.round(((ndc.x + 1) / 2) * ot.width - 0.5);
+        const rowTop = Math.round(((1 - ndc.y) / 2) * ot.height - 0.5);
+        const read = (r: number, cc: number) => buf[r * fpr + cc * 4]!;
+        let covered = 0, minV = Infinity, maxV = -Infinity;
+        for (let r = 0; r < ot.height; r++) {
+          for (let cc = 0; cc < ot.width; cc++) {
+            const v = read(r, cc);
+            if (v <= 0) continue;
+            covered++;
+            if (v < minV) minV = v;
+            if (v > maxV) maxV = v;
+          }
+        }
+        return {
+          sphereCentreDistFromCam: +camera.position.distanceTo(c).toFixed(4),
+          radius,
+          /** What it SHOULD read at the centre pixel: centre distance - radius. */
+          analyticCentrePixel: +(camera.position.distanceTo(c) - radius).toFixed(4),
+          atCentrePixelTopDown: +read(rowTop, col).toFixed(4),
+          atCentrePixelBottomUp: +read(ot.height - 1 - rowTop, col).toFixed(4),
+          coveredPx: covered,
+          minWritten: minV === Infinity ? null : +minV.toFixed(4),
+          maxWritten: maxV === -Infinity ? null : +maxV.toFixed(4),
+          col, rowTop,
+        };
+      } finally {
+        sdfLayer.setOccluderEnabled(wasOn);
         handle.setLoopRunning(true);
       }
     },
