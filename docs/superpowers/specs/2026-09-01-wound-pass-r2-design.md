@@ -66,13 +66,45 @@ where it applies.
 posing, cluster culling and the data-texture upload for free — bone rides every
 pipeline flesh already rides.
 
-### Cluster membership
+### Storage: a SEPARATE `body.bones` array (revised 2026-09-01)
 
-Bone prims live in the **same cluster as the flesh around them**. Severing,
-collapse and gibbing all operate on cluster alive-flags and prim ranges
-(`sever.ts` clears `cluster.alive` and never repacks the array), so they need no
-changes: sever an arm and its bone leaves with it, and a gibbed chunk carries
-its bone.
+**This supersedes the original "bone prims live in `body.prims`" design, which
+was wrong.** Bone prims carry a `cluster` field naming the flesh cluster they
+belong to, but they live in their own `body.bones` array — not in `body.prims`.
+
+**Why the original was wrong.** The claim was that bone would ride every
+pipeline flesh already rides, for free. Task 4 proved otherwise: about twenty
+modules walk `body.prims` and filter on `op`, and each one that does not know
+about bone breaks in its own quiet way. Three were confirmed broken before the
+design was changed:
+
+- `occluder-hull.ts:210` filters `sub`/`groove`/`dead` but not bone, so derived
+  bones inflated the shadow hull.
+- `zombie-gpu.ts` chunk path writes `p.op === 'sub' ? 1 : 0`, so a bone inside a
+  gibbed chunk became `W_ADD` and rendered as **visible flesh**.
+- `sever.ts`'s `severDistal` slices `order.slice(pos)` POSITIONALLY, so bones
+  appended after a cluster's flesh dragged a whole limb's bones into a distal
+  chunk. Cluster membership was never sufficient — position in the run mattered.
+
+Still unaudited under that design: `extent.ts`, `explosion-aoe.ts`, `gobs.ts`,
+`simplify.ts`, `ring-fit.ts`, `damage.ts`, `blob-checks.ts`,
+`shell-hull-outer.ts`, `specialise.ts` and three `*-main.ts` entry points.
+
+**The asymmetry that decides it.** Only about four pipelines genuinely NEED
+bone — rig-bind to pose it, pack to upload it, sever to drop it with its limb,
+validate to contain it. The other fifteen want to EXCLUDE it. When the
+overwhelming default is "exclude", the correct structure is "not in the list",
+not fifteen filters that must each be remembered — including in code nobody has
+written yet, whose failures surface as subtly wrong shadows rather than errors.
+
+**What this costs, stated honestly:** rig binding and rest-row packing must
+handle a second array, and the spec's original "bone rides every pipeline flesh
+rides" claim is false. Bone rides placement, mirroring, rig and pose; it does
+not ride the incidental consumers, by design.
+
+**What it buys beyond safety:** every unaudited consumer is correct by
+construction, and gibbed chunks simply have no bone rather than having bone
+rendered as flesh — a safe default that can be extended later additively.
 
 ### The fold
 
@@ -82,6 +114,13 @@ after `applyWounds` returns:
 ```wgsl
 d = min(dmg, dBone);   // hard union — NOT smin
 ```
+
+On the GPU, bones occupy the prim texture rows **after** the flesh prims:
+`applyBones` scans `[counts.x, counts.x + boneCount)`, with `boneCount` riding
+`woundCfg2.w` — the slot the row map already documents as spare. `foldGroup`
+and `applyCarves` walk only cluster and group ranges, which cover flesh alone,
+so neither can see a bone even by accident. `MAX_PRIMS` (128) now bounds flesh
+plus bones together, and `validateBody`'s ceiling check must count both.
 
 A hard seam where meat meets bone is correct. They are different materials, not
 a blend, and a smooth-min here would produce a fillet of half-bone half-meat
@@ -142,11 +181,17 @@ shape — a ribcage plate and a cranium dome, not a scaled blob.
 
 ### The stump payoff
 
-Severing removes a limb's bone with it, but the **parent** bone survives, and
-the stump wound carves the flesh around it. A torn-off forearm therefore leaves
-the upper-arm bone protruding into the stump crater with no new machinery. If
-it reads as too much, the stump wound's existing cap depth (`ROW_WOUND_CAP.w`)
-is already the limiter.
+Severing drops a limb's bones with it — `pack` skips bones whose cluster is no
+longer alive, one explicit site — but the **parent** bone survives, and the
+stump wound carves the flesh around it. A torn-off forearm therefore leaves the
+upper-arm bone protruding into the stump crater. If it reads as too much, the
+stump wound's existing cap depth (`ROW_WOUND_CAP.w`) is already the limiter.
+
+**Detached chunks carry no bone in this pass** (revised 2026-09-01). Chunk
+packing reads `chunk.prims`, which under the separate-array design never
+contains bones, so a gib is bone-free rather than — as the shared-array design
+actually produced — carrying a bone prim rendered as visible flesh. Giving
+chunks real bone is a later additive change, not a regression to fix.
 
 ### Budget
 
