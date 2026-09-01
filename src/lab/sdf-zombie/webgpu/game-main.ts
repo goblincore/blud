@@ -32,7 +32,7 @@ import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './d
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
-import { createOccluderHull } from './occluder-hull';
+import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
@@ -394,7 +394,13 @@ async function main() {
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
   scene.add(occluderHull.object);
-  sdfLayer.setOccluderEnabled(true);
+  // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
+  // march -- the distance it rasterises is only accurate in the near field
+  // and under-reports badly beyond ~3 m, which shredded bodies at range.
+  // The full measurement and the revival conditions are in march.wgsl.ts
+  // above tMax. __sdfGame.setOccluder still renders the pass for
+  // diagnostics; nothing consumes it.
+  sdfLayer.setOccluderEnabled(false);
 
 /**
    * Over-relaxation factor for the game page's march (woundCfg2.y).
@@ -2090,6 +2096,98 @@ async function main() {
       } finally {
         adaptiveEnabled = hadAdaptive;
         adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
+        handle.setLoopRunning(true);
+      }
+    },
+    /**
+     * INSIDE-NESS OF THE LIVE, POSED OCCLUDER HULL.
+     *
+     * occluder-hull.test.ts already asserts every emitted sphere sits inside
+     * the flesh — but only for bodies straight out of buildBody, i.e. in the
+     * REST pose. This runs the same assertion against the bodies the game is
+     * actually rendering, through the same sdBody the raycaster trusts, and
+     * reports which primitive authored each sphere that fails.
+     */
+    hullInsideness(tol = 1e-4) {
+      const bad: Array<Record<string, unknown>> = [];
+      let total = 0;
+      let worst = 0;
+      for (let bi = 0; bi < actors.length; bi++) {
+        const body = actors[bi]!.posed();
+        const spheres = buildHullInstances([body], HULL_SHRINK);
+        for (const sph of spheres) {
+          total++;
+          // Inside means the centre is at least `radius` deep in the flesh.
+          const d = sdBody(sph.centre, body);
+          const proud = d + sph.radius;
+          if (proud > worst) worst = proud;
+          if (proud > tol) {
+            bad.push({
+              actor: actors[bi]!.id, centre: sph.centre.map(v => +v.toFixed(3)),
+              radius: +sph.radius.toFixed(4), sdBody: +d.toFixed(4),
+              proudMm: +(proud * 1000).toFixed(1),
+            });
+          }
+        }
+      }
+      return {
+        spheres: total, outside: bad.length,
+        worstProudMm: +(worst * 1000).toFixed(1),
+        sample: bad.slice(0, 12),
+      };
+    },
+    /**
+     * Rasterise ONE sphere of known centre and radius and read back what the
+     * pre-pass wrote for it, next to the analytic ray-sphere entry for the
+     * same pixel. With a single instance there is no ambiguity about which
+     * sphere a fragment came from.
+     */
+    async syntheticSphereCheck(dist = 5, radius = 0.2) {
+      const wasOn = sdfLayer.occluderEnabled;
+      try {
+        handle.setLoopRunning(false);
+        // Straight ahead of the camera, `dist` metres away.
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        const c = camera.position.clone().addScaledVector(fwd, dist);
+        occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
+        sdfLayer.setOccluderEnabled(true);
+        handle.step(1 / 60);
+        await handle.resolveGpu();
+        const ot = sdfLayer.occluderTarget;
+        const buf = new Float32Array(
+          await handle.renderer.readRenderTargetPixelsAsync(ot, 0, 0, ot.width, ot.height),
+        );
+        const fpr = Math.ceil((ot.width * 16) / 256) * 256 / 4;
+        // The pixel the sphere centre projects to.
+        const ndc = c.clone().project(camera);
+        const col = Math.round(((ndc.x + 1) / 2) * ot.width - 0.5);
+        const rowTop = Math.round(((1 - ndc.y) / 2) * ot.height - 0.5);
+        const read = (r: number, cc: number) => buf[r * fpr + cc * 4]!;
+        let covered = 0, minV = Infinity, maxV = -Infinity;
+        for (let r = 0; r < ot.height; r++) {
+          for (let cc = 0; cc < ot.width; cc++) {
+            const v = read(r, cc);
+            if (v <= 0) continue;
+            covered++;
+            if (v < minV) minV = v;
+            if (v > maxV) maxV = v;
+          }
+        }
+        return {
+          sphereCentreDistFromCam: +camera.position.distanceTo(c).toFixed(4),
+          radius,
+          /** What it SHOULD read at the centre pixel: centre distance - radius. */
+          analyticCentrePixel: +(camera.position.distanceTo(c) - radius).toFixed(4),
+          atCentrePixelTopDown: +read(rowTop, col).toFixed(4),
+          atCentrePixelBottomUp: +read(ot.height - 1 - rowTop, col).toFixed(4),
+          coveredPx: covered,
+          minWritten: minV === Infinity ? null : +minV.toFixed(4),
+          maxWritten: maxV === -Infinity ? null : +maxV.toFixed(4),
+          col, rowTop,
+        };
+      } finally {
+        sdfLayer.setOccluderEnabled(wasOn);
         handle.setLoopRunning(true);
       }
     },

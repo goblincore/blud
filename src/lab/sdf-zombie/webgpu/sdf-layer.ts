@@ -281,6 +281,8 @@ export interface SdfLayer {
   /** The float target the march writes into. Exposed for MEASUREMENT
    *  readback only (the occupancy probe); do not render through it. */
   readonly marchTarget: THREE.RenderTarget;
+  /** The occluder pre-pass target, for MEASUREMENT readback only. */
+  readonly occluderTarget: THREE.RenderTarget;
   /** Outer-hull entry/exit targets, for MEASUREMENT readback only. */
   readonly shellEntryTarget: THREE.RenderTarget;
   readonly shellExitTarget: THREE.RenderTarget;
@@ -674,6 +676,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get scale() { return scale; },
     get flipY() { return uFlipY.value > 0.5; },
     get marchTarget() { return target; },
+    /** The occluder pre-pass target, for diagnostics that need occT per pixel
+     *  (same access the shell targets already have). */
+    get occluderTarget() { return occluder; },
     get shellEntryTarget() { return shellEntry; },
     get shellExitTarget() { return shellExit; },
     get targetSize() { return { width: target.width, height: target.height }; },

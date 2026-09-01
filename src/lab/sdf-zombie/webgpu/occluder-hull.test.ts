@@ -8,6 +8,8 @@
 // blast-crater hole, observed and fixed).
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { buildHullInstances, HULL_SHRINK, type WoundSphere } from './occluder-hull';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
@@ -271,4 +273,35 @@ describe('dead prims (mid-limb severing)', () => {
     expect(instances).toHaveLength(2);
     for (const i of instances) expect(i.centre[1]).toBeLessThanOrEqual(1);
   });
+});
+
+describe('the pre-pass ships DISABLED (2026-09-01 holes-at-range)', () => {
+  // The hull this file builds is correct — every test above pins that, and
+  // __sdfGame.hullInsideness confirms it on the live POSED bodies too. What
+  // is not correct is the distance the pre-pass RASTERISES for it: measured
+  // with one synthetic sphere of known geometry, it is exact below ~3 m and
+  // then collapses (true 7.9 m reads 3.78, true 11.9 m reads 0.37), and the
+  // error depends on distance alone, not on the sphere's size or its screen
+  // footprint. march.wgsl.ts no longer clamps tMax by it for that reason.
+  //
+  // Rendering a pre-pass nothing consumes is pure cost, so all three entry
+  // points ship it off. This is a source guard rather than a behavioural one
+  // because the defect only exists on a GPU — nothing here compiles WGSL, so
+  // a green suite is not evidence that the holes are gone. The evidence is
+  // the before/after capture and the frame-time A/B in the commit.
+  const entries = [
+    'src/lab/sdf-zombie/webgpu/game-main.ts',
+    'src/lab/sdf-zombie/webgpu/lab-main.ts',
+    'src/lab/sdf-zombie/webgpu/bench-main.ts',
+  ];
+  for (const file of entries) {
+    it(`${file} does not enable the occluder pre-pass at startup`, () => {
+      const src = readFileSync(resolve(process.cwd(), file), 'utf8');
+      expect(src).toContain('sdfLayer.setOccluderEnabled(false);');
+      // Two-space indent = module scope, i.e. the startup line. Deeper
+      // indents are the diagnostics turning the pass on to read it back, and
+      // those stay: they are how the bound gets re-measured.
+      expect(src).not.toMatch(/\n {2}sdfLayer\.setOccluderEnabled\(true\);/);
+    });
+  }
 });

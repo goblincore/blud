@@ -400,20 +400,33 @@ describe('ported features reach the entry point', () => {
       'if (d < -max(hitEpsBase, t * aaK) && omega > 1.0 && !conservative) {');
   });
 
-  it('extends the occluder bound by the shell amp (X1.21.2 dark dropout)', () => {
-    // The hull is sized against the SMOOTH field, but a shell DENT retreats
-    // up to ~0.9 amp below it — past the hull's (1 - shrink) clearance on
-    // thin limbs — and a march clamped at the raw occT discards those pixels
-    // outright: dark dropout patches, A/B-confirmed with the occluder off.
-    // The bound must carry the amp so the dent stays reachable. Bumps are
-    // nearer than the hull and never needed it. At amp 0 the bound is
-    // bit-identical to the undisplaced one, so the guard pins the EXPRESSION
-    // rather than a value.
-    // The outer-hull shell (2026-08-31) folds its own exit bound into the
-    // same min(), so this pins the OCCLUDER TERM rather than the whole line —
-    // the amp must ride occT wherever that expression ends up.
-    expect(MARCH_BODY).toContain('occT + woundCfg2.z');
-    expect(MARCH_BODY).toContain('let tMax = min(length(worldPos - camPos), occT + woundCfg2.z);');
+  it('does NOT bound tMax by the occluder — the bound under-reports at range', () => {
+    // 2026-09-01, the owner's "zombies are full of holes until you get fairly
+    // close". The inner hull is sound GEOMETRY (every emitted sphere sits at
+    // least its own radius inside the posed flesh — __sdfGame.hullInsideness
+    // reports 0 of 300 outside), but the DISTANCE the pre-pass rasterises for
+    // it is accurate only in the near field. Measured with one synthetic
+    // sphere of known centre and radius, and the error tracks distance alone,
+    // not the sphere's radius or its screen size:
+    //
+    //   true 2.4 -> 2.405 (exact)    true 4.9 -> 4.252
+    //   true 7.9 -> 3.782            true 11.9 -> 0.367
+    //
+    // An under-reported occT puts tMax IN FRONT of the surface, so the ray
+    // gives up before reaching skin and the fragment discards — per pixel,
+    // wherever the hull covers, and worse the further away the body is. On a
+    // single isolated zombie at 4.9 m that destroyed 1369 of 1375 lost
+    // pixels, worst case 0.68 m short.
+    //
+    // Re-adding the term reintroduces the bug, so this test pins its absence
+    // rather than its shape. Revive it only once the pre-pass writes a
+    // distance that survives syntheticSphereCheck at range; the full
+    // measurement is in march.wgsl.ts above tMax.
+    expect(MARCH_BODY).toContain('let tMax = length(worldPos - camPos);');
+    expect(MARCH_BODY).not.toContain('occT + woundCfg2.z');
+    // occT stays PLUMBED — debug mode 3 heats it, and reviving the bound
+    // should not need the parameter threaded back through.
+    expect(MARCH_BODY).toContain('occT: f32');
   });
 
   it('bounds the march by the outer hull, and is an identity when it is off', () => {
