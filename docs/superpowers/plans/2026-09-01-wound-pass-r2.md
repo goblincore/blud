@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-01-wound-pass-r2-design.md`
 
+**Base:** `main` at `eea6620` (Blobforge ring-fit merge). Every line number below
+was re-verified against that commit after a rebase — the Blobforge merge moved
+`pack.ts` and `march.wgsl.ts` by a few lines and added three characters.
+
 ---
 
 ## Dispatch configuration
@@ -125,7 +129,7 @@ In `src/lab/sdf-zombie/pack.ts`, after the `W_GROOVE` declaration (line 15):
 export const W_BONE = 4;
 ```
 
-Then at `pack.ts:143`, extend the role ladder. `dead` stays at the top for the
+Then at `pack.ts:140`, extend the role ladder. `dead` stays at the top for the
 reason the existing comment gives:
 
 ```ts
@@ -603,7 +607,9 @@ supplies `op: 'bone'`.
 **Files:**
 - Modify: `src/lab/sdf-zombie/blob-ast.ts` (add `bones` to `BlobDoc`)
 - Modify: `src/lab/sdf-zombie/blob-parse.ts` (the block dispatcher and `parseBodyLine`)
-- Modify: `src/lab/sdf-zombie/blob-compile.ts` (derive + override)
+- Modify: `src/lab/sdf-zombie/blob-compile.ts` (authored override + `boneRatio`)
+- Modify: `src/lab/sdf-zombie/build-body.ts:36` (auto-derive — see step 5b)
+- Modify: `src/lab/sdf-zombie/types.ts` (`BodyDef.boneRatio`)
 - Test: `src/lab/sdf-zombie/blob-compile.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -707,33 +713,64 @@ dispatcher:
 Update the existing `body` call site to pass the body parts array, so both
 paths go through one grammar.
 
-- [ ] **Step 5: Wire compilation**
+- [ ] **Step 5: Compile the AUTHORED bone parts only**
 
-In `src/lab/sdf-zombie/blob-compile.ts`, import the deriver:
-
-```ts
-import { deriveBones, DEFAULT_BONE_RATIO } from './bone-derive';
-```
-
-After the body prims are compiled (where `prims` is assembled into `BodyDef`),
-append bone prims:
+In `src/lab/sdf-zombie/blob-compile.ts`, compile the authored parts through the
+same path the `body` block uses, tag them `op: 'bone'`, and carry the ratio onto
+the `BodyDef`:
 
 ```ts
-  // Bone (wound pass r2). Authored lines win per BONE, and auto-derivation
-  // fills every bone they do not name — so authoring a skull dome does not
-  // cost you auto-derived limbs.
-  const authored = (doc.bones?.parts ?? []).map(part =>
+  // Authored bone overrides. Auto-derivation does NOT happen here — see
+  // build-body.ts for why it belongs one layer up.
+  const bonePrims = (doc.bones?.parts ?? []).map(part =>
     ({ ...compilePart(part), op: 'bone' as const }));
-  const authoredBones = new Set(authored.map(p => p.bone).filter(Boolean));
-  const ratio = doc.bones?.ratio ?? DEFAULT_BONE_RATIO;
-  const derived = deriveBones(prims, ratio)
-    .filter(p => !authoredBones.has(p.bone));
-  prims.push(...derived, ...authored);
+  prims.push(...bonePrims);
 ```
+
+and add `boneRatio: doc.bones?.ratio ?? DEFAULT_BONE_RATIO` to the returned
+`BodyDef` (add the field to the `BodyDef` interface in `types.ts` with a doc
+comment saying it drives auto-derivation in `buildBody`).
 
 Use whatever the file's existing part-to-`PrimDef` function is actually called
 in place of `compilePart` — read the `body` block's compilation path and reuse
 the same call.
+
+- [ ] **Step 5b: Auto-derive in `buildBody`, NOT in the compiler**
+
+This is load-bearing and is the one place the plan deviates from the naive
+reading of the spec.
+
+`src/lab/sdf-zombie/characters/zombie-blob.test.ts` and
+`schoolgirl-blob.test.ts` assert that the `.blob` path reproduces a hand-written
+TypeScript body (`makeZombie()`) **prim-for-prim, by index**. If auto-derivation
+happened in `blob-compile`, only the `.blob` side would gain bone prims, the
+counts would diverge, and both tests would fail — and the TS-authored bodies
+would render with no bone at all, which is a real behaviour split, not just a
+test problem.
+
+Deriving in `buildBody` fixes both at once: every body gets bone regardless of
+which path built it, and the parity tests keep passing untouched because both
+sides derive identically.
+
+In `src/lab/sdf-zombie/build-body.ts`, inside `buildBody` (line 36), after the
+prims are resolved and before validation runs:
+
+```ts
+  // Bone auto-derivation lives HERE, not in blob-compile, so that
+  // TS-authored bodies (makeZombie and friends) get bone too — and so the
+  // .blob-vs-TS parity tests in characters/*.test.ts stay honest, since both
+  // paths derive the same bones from the same flesh.
+  //
+  // Authored bones win per BONE: a `bones` block naming the skull suppresses
+  // derivation on the skull only, and the limbs still derive themselves.
+  const authoredBones = new Set(
+    prims.filter(p => p.op === 'bone').map(p => p.bone).filter(Boolean));
+  prims.push(...deriveBones(prims, def.boneRatio ?? DEFAULT_BONE_RATIO)
+    .filter(p => !authoredBones.has(p.bone)));
+```
+
+with `import { deriveBones, DEFAULT_BONE_RATIO } from './bone-derive';` at the
+top. Use the file's real local variable name for the resolved prim array.
 
 - [ ] **Step 6: Run the test — it should pass**
 
@@ -744,7 +781,14 @@ Expected: PASS (5 tests)
 
 Run: `npm test`
 Expected: PASS. Every character now gains auto-derived bone prims, so this run
-also exercises Task 2's containment validator against all seven `.blob` files.
+also exercises Task 2's containment validator against all **ten** `.blob` files
+(`bonewalker`, `clown`, `clown-alt`, `cyclops`, `dragon`, `goblin`, `mouse`,
+`schoolgirl`, `schoolgirl-alt`, `zombie`).
+
+Prim headroom against `MAX_PRIMS = 128`, measured on `main` at `eea6620`:
+mouse 61, dragon 56, bonewalker 51, schoolgirl/-alt 47, cyclops 46, clown/-alt
+39, goblin 37, zombie 19. Auto-derive roughly adds the count of structural
+prims, so even mouse lands well under the ceiling.
 
 If containment fails on a character, that is a real finding, not a test to
 loosen: it means the default ratio puts bone through the skin somewhere.
@@ -773,7 +817,7 @@ the limbs. All seven characters get bone with zero edits."
 - [ ] **Step 1: Fix the latent groove misclassification FIRST**
 
 This is a live bug the moment `W_BONE = 4` exists. In `APPLY_CARVES`
-(`march.wgsl.ts`, ~line 537) the groove test is unbounded:
+(`march.wgsl.ts`, ~line 534) the groove test is unbounded:
 
 ```wgsl
       let isGroove = S.w > 2.5;
@@ -872,7 +916,7 @@ it exactly as the neighbouring constants in this file interpolate `ROW_*`.
 
 - [ ] **Step 5: Call it from `MAP_BODY` and return `carved`**
 
-In `MAP_BODY` (`march.wgsl.ts:953-980`), replace the tail of the function.
+In `MAP_BODY` (`march.wgsl.ts:954-980`), replace the tail of the function.
 The current code is:
 
 ```wgsl
@@ -970,7 +1014,7 @@ bone prim into the body as a groove."
 
 **Files:**
 - Modify: `src/lab/sdf-zombie/material.ts` (new material fields)
-- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (the shading block at ~1669)
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (the shading block at ~1673)
 - Modify: `src/lab/sdf-zombie/webgpu/zombie-gpu.ts` (upload the new uniforms)
 - Test: `src/lab/sdf-zombie/material.test.ts`, `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 
@@ -1010,7 +1054,14 @@ In `src/lab/sdf-zombie/material.ts`, add to the `FleshMaterial` interface:
 
 ```ts
   /** Bone albedo, linear RGB. Blood-stained toward `deepColor` at its junction
-   *  with flesh in the shader, so it never reads as a clean white decal. */
+   *  with flesh in the shader, so it never reads as a clean white decal.
+   *
+   *  The default is the project's OWN established bone colour, not a fresh
+   *  guess: `bonewalker.blob` paints its proud spine and rib bars `color=dbc0a0`
+   *  (sRGB 219,192,160 -> linear 0.71, 0.53, 0.35), chosen against a reference
+   *  mesh whose bone texels measure sRGB 175,140,119. A brighter bone-white
+   *  reads as plastic next to that and would make the two kinds of bone in this
+   *  game disagree. */
   boneColor: Vec3;
   /** Subcutaneous fat, linear RGB. The load-bearing ramp stop: it is what makes
    *  a crater read as OPENED rather than merely stained. */
@@ -1028,7 +1079,7 @@ In `src/lab/sdf-zombie/material.ts`, add to the `FleshMaterial` interface:
 Add values to every preset. For the human-ish presets:
 
 ```ts
-    boneColor: [0.86, 0.82, 0.70], fatColor: [0.83, 0.72, 0.42],
+    boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1, woundFibreAmp: 0.6,
 ```
@@ -1100,7 +1151,7 @@ export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3
 }`;
 ```
 
-In the shading block at `march.wgsl.ts:1669-1673`, replace:
+In the shading block at `march.wgsl.ts:1673`, replace:
 
 ```wgsl
   var albedo = mix(baseColor, deepColor, wm);
@@ -1178,7 +1229,7 @@ the owner-tuned 1.6x mask is untouched."
 ## Task 7: Torn-fibre texture, wet, and bone material
 
 **Files:**
-- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (shading block, ~1669-1730 and the `wet` line at ~1921)
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (shading block, ~1673-1730 and the `wet` line at ~1921)
 - Test: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -1518,8 +1569,18 @@ Auto-derive is correct for limbs and wrong for the two places players actually
 shoot: a scaled torso blob is not a ribcage, and a scaled face ellipsoid is not
 a cranium.
 
+**Do not touch `bonewalker.blob`.** It already expresses bone a different and
+deliberate way: additive `color=dbc0a0` bars deliberately `offset` to sit
+*proud* of the flesh, so its spine ridge and ribs read as exposed bone at all
+times. That is painted, always-visible bone; `op: 'bone'` is hidden bone
+revealed by a wound. The two coexist without conflict — the containment
+validator only inspects `op: 'bone'` prims, so bonewalker's proud bars are
+never flagged — and it will additionally get auto-derived interior bone, which
+is correct: a wound in its meat should still find something underneath.
+
 **Files:**
 - Modify: `src/lab/sdf-zombie/characters/zombie.blob`, `src/lab/sdf-zombie/characters/goblin.blob`
+- Modify: `src/lab/sdf-zombie/characters/zombie-blob.test.ts` (bone filter, step 2)
 
 - [ ] **Step 1: Add a `bones` block to `zombie.blob`**
 
@@ -1540,14 +1601,37 @@ bones
   bar bone on spine from=0.20 to=0.92 r=0.052 wide=1.45 deep=0.55
 ```
 
-- [ ] **Step 2: Validate containment**
+- [ ] **Step 2: Let the .blob-vs-TS parity test ignore bone**
+
+`zombie.blob` now has content the hand-written `makeZombie()` does not, so the
+prim-for-prim parity test must compare flesh only. In
+`src/lab/sdf-zombie/characters/zombie-blob.test.ts`, filter both sides:
+
+```ts
+const flesh = (b: { prims: Primitive[] }) => b.prims.filter(p => p.op !== 'bone');
+```
+
+and use `flesh(fromBlob())` / `flesh(fromTs())` in the count and
+placement assertions. Add a comment saying why:
+
+```ts
+// Bone is authored only in the .blob (a `bones` block); the legacy TS body is
+// the reference for FLESH. Comparing bone prims would assert that the TS body
+// has content it was never meant to have.
+```
+
+Auto-derived bone needs no filter — `buildBody` derives it on both paths
+identically — but the filter covers both cases and is the honest statement of
+what this test is for.
+
+- [ ] **Step 3: Validate containment**
 
 Run: `npm test`
 Expected: PASS. If `checkBoneContainment` fails, the authored bone is breaking
 the skin — **shrink the bone**, do not weaken the validator. The error names
 the prim and the breach point.
 
-- [ ] **Step 3: Look at it**
+- [ ] **Step 4: Look at it**
 
 ```bash
 BLOB_PROBE='(window.__sdfLab.stampWounds(5),1)' npm run blob:shot -- zombie /tmp/wound-r2/zombie-authored
@@ -1556,16 +1640,16 @@ BLOB_PROBE='(window.__sdfLab.stampWounds(5),1)' npm run blob:shot -- zombie /tmp
 Confirm the cranium reads as a dome inside a head wound and the ribcage as a
 plate inside a chest wound.
 
-- [ ] **Step 4: Repeat for `goblin.blob`**
+- [ ] **Step 5: Repeat for `goblin.blob`**
 
 Same two shapes, scaled to the goblin's proportions. Read its `skeleton` block
 for the actual bone names and lengths — do not assume they match the zombie's.
 Validate and capture the same way.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/lab/sdf-zombie/characters/zombie.blob src/lab/sdf-zombie/characters/goblin.blob
+git add src/lab/sdf-zombie/characters/
 git commit -m "bone: authored cranium and ribcage for zombie and goblin
 
 Auto-derive is right for limbs — a femur IS a thinner capsule inside the
@@ -1697,6 +1781,19 @@ stretch is worth having.
 | §4 risk: `bestIdx` through retract | 5 step 5 moves the read after the fold |
 
 No gaps.
+
+**Deviations from the spec, all discovered by re-checking against `main`:**
+
+1. **Auto-derive runs in `buildBody`, not `blob-compile`** (Task 4 step 5b).
+   The `.blob`-vs-TS parity tests compare prims by index, so deriving in the
+   compiler would break them — and, more importantly, TS-authored bodies would
+   have had no bone at all. Deriving one layer up fixes both.
+2. **`boneColor` defaults to the project's existing bone colour** (`dbc0a0`,
+   linear `[0.71, 0.53, 0.35]`) rather than the brighter value the spec
+   suggested, so the two kinds of bone in this game agree with each other.
+3. **Ten characters, not seven** — `bonewalker`, `dragon` and `schoolgirl-alt`
+   landed in the Blobforge merge. `bonewalker` is explicitly out of scope for
+   authoring (Task 10).
 
 **Grammar note against the spec:** §3's example wrote `blob bone on skull`,
 putting `bone` in the limb-word slot. The real grammar validates that slot via
