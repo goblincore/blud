@@ -1,0 +1,915 @@
+// src/lab/sdf-zombie/ring-fit.ts
+//
+// Fit existing .blob primitives to a reference surface by reading the SIGNED
+// RESIDUAL OF OUR OWN FIELD at reference points.
+//
+// WHY THE RESIDUAL AND NOT THE RING OUTLINE DIRECTLY. Primitives smooth-union,
+// and smin(a, b) < min(a, b), so the union surface is always FATTER than any
+// single primitive. Reading a measured ring straight onto a prim's `r`
+// systematically over-fattens — which is visible being corrected by hand all
+// through mouse.blob's comments. sdBody IS the blended field, so its value at
+// a reference point is the error with blending already folded in.
+import type { ClusterInfo, Primitive, ResolvedBone, Vec3 } from './types';
+import { ringBasis, toLocal, SCALE_AXIS_NAMES, type RingBasis } from './ref-align';
+import { sdBody, sdPrimitive } from './validate';
+import { add, len, normalize, scale as vscale, sub } from './vec';
+
+interface Body { prims: Primitive[]; clusters: ClusterInfo[] }
+
+/** Central-difference gradient of sdBody, normalised. */
+function gradient(p: Vec3, body: Body, h = 1e-4): Vec3 {
+  const g: Vec3 = [
+    sdBody([p[0] + h, p[1], p[2]], body) - sdBody([p[0] - h, p[1], p[2]], body),
+    sdBody([p[0], p[1] + h, p[2]], body) - sdBody([p[0], p[1] - h, p[2]], body),
+    sdBody([p[0], p[1], p[2] + h], body) - sdBody([p[0], p[1], p[2] - h], body),
+  ];
+  return len(g) < 1e-12 ? [0, 1, 0] : normalize(g);
+}
+
+/**
+ * Newton-step a point onto sdBody == 0. Converges from either side; the field
+ * is not a true distance for anisotropic prims (it under-reports by minScale),
+ * so this iterates rather than taking one step.
+ *
+ * ON THE ZERO SET, BUT NOT NECESSARILY THE NEAREST POINT. A seed sitting
+ * exactly on a prim's medial axis has a SYMMETRIC field around it, so the
+ * central difference cancels to exactly zero in all three axes, `gradient`
+ * takes its `len(g) < 1e-12` fallback of straight up, and the point walks
+ * along the axis until it hits a cap. The result is a genuine surface point
+ * (|d| ~ 1e-16) but it can be most of the prim's length away from the seed.
+ * `sampleBodySurface` never seeds on-axis so it cannot hit this, but anything
+ * projecting AUTHORED points — a bone head, a joint centre, a cluster centre —
+ * can, and will get a silently non-nearest answer. Nudge such a seed off-axis
+ * first: an offset of 1e-9 is already enough for the h = 1e-4 stencil to
+ * recover the true direction.
+ *
+ * `steps` stays caller-controlled and defaults to 24, which is exact for
+ * near-isotropic prims; see `stepsForPrim` for why an anisotropic one needs
+ * far more, and never assume the default is enough for one.
+ */
+export function projectToSurface(p: Vec3, body: Body, steps = 24): Vec3 {
+  let q = p;
+  for (let i = 0; i < steps; i++) {
+    const d = sdBody(q, body);
+    if (Math.abs(d) < 1e-9) break;
+    q = sub(q, vscale(gradient(q, body), d));
+  }
+  return q;
+}
+
+/**
+ * Newton budget for one primitive, from its anisotropy ratio.
+ *
+ * NOT A CONSTANT, and this is the whole correctness of the instrument.
+ * `sdPrimitive` divides by `scale` and then multiplies the result by
+ * `minScale`, so for an anisotropic prim the field UNDER-REPORTS true distance
+ * by up to `minScale/maxScale`. Each Newton step therefore covers only that
+ * fraction of the remaining gap along the major axis: convergence degrades
+ * from quadratic to LINEAR with rate `1 - minScale/maxScale`, and the
+ * iterations needed grow linearly in the ratio.
+ *
+ * That failure is nastier than it sounds because it is BIASED, not noisy. The
+ * points that run out of budget are exactly the ones at the major-axis
+ * extremes, where the gradient is shortest — so the `< 1e-6` filter in
+ * `sampleBodySurface` eats the outermost samples first and the surviving set
+ * quietly shrinks inward. A fixed budget does not give a rougher measurement;
+ * it gives a confidently wrong one.
+ *
+ * Measured minimum steps for full retention of 400 samples on a lone capsule:
+ *
+ *   ratio  1.0 → 8     ratio  4.0 → 48    ratio 10.0 → 96
+ *   ratio  1.5 → 16    ratio  6.0 → 64    ratio 12.0 → 128
+ *   ratio  2.0 → 16    ratio  8.0 → 96    ratio 20.0 → 256
+ *
+ * The trend is linear with slope ~13, so `24 * ratio` keeps at least a 2x
+ * margin over every measured point while staying cheap. The floor of 24 keeps
+ * the isotropic case bit-identical to the original fixed budget. The cap of
+ * 512 bounds the cost of a pathological prim — it covers a true need up to
+ * ratio ~39 — and past it the sampler warns rather than pretending.
+ */
+function stepsForPrim(prim: Primitive): number {
+  const lo = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+  const hi = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+  // A zero or negative scale is degenerate; ratio goes non-finite and we just
+  // spend the cap on it rather than silently taking the floor.
+  const ratio = lo > 0 ? hi / lo : Infinity;
+  return Math.min(512, Math.max(24, Math.ceil(24 * ratio)));
+}
+
+/**
+ * Fraction of a prim's requested samples that may fail to land before the
+ * sampler complains. Some loss is a fact about a hard body (a point seeded
+ * inside a neighbouring prim's bulge can converge somewhere unhelpful); a lot
+ * of loss is the instrument running out of budget, which is ours to report.
+ */
+const MIN_RETENTION = 0.98;
+
+/**
+ * Synthesise a reference-shaped point set FROM a body: sample each primitive's
+ * own surface, then project onto the blended body. Test instrument, and the
+ * only way to check the fitter against ground truth without a GLB.
+ *
+ * NO SILENT CAPS. Points that fail to land on the zero set are dropped, and a
+ * dropped point is invisible in the returned array — a biased sample set would
+ * otherwise be indistinguishable from a complete one. So the budget is derived
+ * per prim (see `stepsForPrim`), and any loss past `MIN_RETENTION` is warned
+ * about, naming the prim. It warns rather than throwing: a later task sampling
+ * a real body should degrade with a complaint, not die.
+ */
+export function sampleBodySurface(body: Body, perPrim = 200): Map<string, Vec3[]> {
+  const out = new Map<string, Vec3[]>();
+  for (const prim of body.prims) {
+    if (prim.dead || prim.op === 'sub' || prim.op === 'groove') continue;
+    const bone = prim.bone ?? 'unknown';
+    let list = out.get(bone);
+    if (list === undefined) { list = []; out.set(bone, list); }
+    const axis = sub(prim.b, prim.a);
+    const axisLen = len(axis);
+    // The ring is built in the plane genuinely PERPENDICULAR to this
+    // primitive's own axis. `ringBasis` returns an orthonormal {e1, e2, u} for
+    // exactly that, and for a degenerate prim (a == b) it falls back to a
+    // FIXED frame (u = +y, e1 = +x) — arbitrary, but a point prim has no axis
+    // to be perpendicular to, and a stable choice keeps the sample set
+    // reproducible.
+    const basis = ringBasis(prim.a, prim.b);
+    const steps = stepsForPrim(prim);
+    let kept = 0;
+    for (let i = 0; i < perPrim; i++) {
+      // Deterministic spiral over the prim's own surface: no Math.random, so
+      // a failing test reproduces exactly.
+      const t = perPrim === 1 ? 0.5 : i / (perPrim - 1);
+      const theta = i * 2.399963229728653; // golden angle, in radians
+      const along = add(prim.a, vscale(axis, axisLen === 0 ? 0 : t));
+      const r = prim.radius + ((prim.radiusB ?? prim.radius) - prim.radius) * t;
+      // Push out along the perpendicular ring, then apply the prim's
+      // anisotropy PER WORLD COMPONENT so the seed still reaches further along
+      // a stretched axis — which is what the `r * 1.4` overshoot below relies
+      // on to clear the surface.
+      //
+      // NOT the world xz-plane with y pinned to zero, which is what this was.
+      // That is perpendicular only for a bone running along world y; for a
+      // bone along world z it swept a line segment DOWN the axis and every
+      // sample came back with |y| = 0 exactly, so a `tall=` error on `foot`
+      // (dir=fwd) or `clavicle` (dir=side) was not mismeasured but invisible.
+      const ct = Math.cos(theta), st = Math.sin(theta);
+      const seed: Vec3 = [
+        (basis.e1[0] * ct + basis.e2[0] * st) * prim.scale[0],
+        (basis.e1[1] * ct + basis.e2[1] * st) * prim.scale[1],
+        (basis.e1[2] * ct + basis.e2[2] * st) * prim.scale[2],
+      ];
+      const p = add(along, vscale(seed, r * 1.4));
+      const q = projectToSurface(p, body, steps);
+      if (Math.abs(sdBody(q, body)) < 1e-6) { list.push(q); kept++; }
+    }
+    if (kept < perPrim * MIN_RETENTION) {
+      const lo = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+      const hi = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+      const ratio = lo > 0 ? (hi / lo).toFixed(1) : 'degenerate';
+      const where = prim.src === undefined ? bone : `${bone} (line ${prim.src})`;
+      console.warn(
+        `sampleBodySurface: ${where} kept only ${kept}/${perPrim} samples at ` +
+        `${steps} Newton steps (anisotropy ratio ${ratio}). The lost points are ` +
+        `the major-axis extremes, so this prim's sample set is biased INWARD — ` +
+        `do not read an extent off it.`,
+      );
+    }
+  }
+  return out;
+}
+
+/** Nearest and second-nearest add-primitive indices, mirroring nearestPrim's skips. */
+export function twoNearestPrims(p: Vec3, body: Body): { first: number; firstD: number; secondD: number } {
+  let first = -1, firstD = Infinity, secondD = Infinity;
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const prim = body.prims[i]!;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.dead) continue;
+      const d = sdPrimitive(p, prim);
+      if (d < firstD) { secondD = firstD; firstD = d; first = i; }
+      else if (d < secondD) { secondD = d; }
+    }
+  }
+  return { first, firstD, secondD };
+}
+
+export interface PrimSample {
+  /** Position along the primitive's own axis, 0 at `a` and 1 at `b`. */
+  t: number;
+  /** Angle in the ring basis: 0 along e1, +pi/2 along e2. */
+  theta: number;
+  /** sdBody at the reference point. Negative == our surface is PROUD of it. */
+  d: number;
+}
+
+export interface PrimBin {
+  prim: number;
+  basis: RingBasis;
+  samples: PrimSample[];
+  /** Share of samples with a second primitive within blendK. Their numbers are soft. */
+  blendDominated: number;
+  /** Reference points that landed on a prim belonging to a DIFFERENT bone. */
+  crossBone: number;
+  /**
+   * Reference points whose foot on the primitive's axis fell OUTSIDE its own
+   * span, and which were therefore dropped. A bin whose `outOfRange` dwarfs
+   * its sample count was measured mostly off the ends of the thing it names.
+   */
+  outOfRange: number;
+}
+
+/**
+ * Attribute every reference point to a primitive and record its residual in
+ * that primitive's ring frame.
+ *
+ * A point whose nearest primitive rides a different bone than the one that
+ * claimed it is counted in `crossBone` and DROPPED. That happens legitimately
+ * where a torso prim's flesh covers the shoulder, and silently averaging it
+ * into the shoulder's radius is exactly the mis-attribution this tool exists
+ * to remove. `crossBone` is reported per bin rather than swallowed precisely
+ * because the rule is lossy: a bin whose crossBone rivals its sample count is
+ * measuring a seam, not a limb, and whatever is fitted from it should be
+ * treated as such.
+ *
+ * A POINT BEYOND THE PRIMITIVE'S ENDS IS DROPPED TOO, into `outOfRange`, and
+ * this used to be a `Math.max(0, Math.min(1, ...))` clamp. Clamping was wrong
+ * twice over. It FABRICATED end coverage — measured on the real mouse, 88.3%
+ * of `pelvis` src 126's points and 68.6% of src 122's sat at exactly t=0, and
+ * 49.2% of `upperarm.l` src 433's at exactly t=1 — which walked straight
+ * through the TAPER_T_MIN/TAPER_T_MAX gate that exists to stop the taper line
+ * being extrapolated outside its support. And it corrupted the least-squares
+ * rows as well as the taper: a point past a cap is displaced from the axis
+ * mostly ALONG it, but `toLocal` hands the ring frame only its perpendicular
+ * part, so `theta` is near-arbitrary and the residual — the largest in the bin,
+ * because the field off the end is nothing like the primitive's own surface —
+ * is charged to a radial direction the point does not have.
+ *
+ * THE CUT IS HARD AT [0, 1], WITH NO TOLERANCE BAND, and that is a measured
+ * choice rather than a tidy one. A genuine surface point on an end cap sits an
+ * axial excess `e` past the end at true perpendicular radius
+ * `sqrt(rho^2 - e^2)`, while the fit's field model (see `fitPrims`) reads its
+ * radius as the full `rho`. Retaining it therefore mis-locates it by
+ * `rho - sqrt(rho^2 - e^2)`, and for that to stay under `RESOLUTION` (1e-6 m,
+ * the instrument's own floor) on the mouse's thinnest measured prims —
+ * `rho` ~ 40mm — needs `e` < 0.28mm, i.e. under 0.3% of a 100mm primitive's
+ * length. A band that narrow retains nothing; a band wide enough to retain
+ * anything mis-locates its points by more than the instrument can resolve.
+ * Half a millimetre of honestly-lost cap is cheaper than a millimetre of
+ * invented radius.
+ */
+export function binResiduals(
+  pointsByBone: Map<string, Vec3[]>,
+  body: Body,
+  bones: Map<string, ResolvedBone>,
+): Map<number, PrimBin> {
+  const bins = new Map<number, PrimBin>();
+  const basisOf = new Map<number, RingBasis>();
+
+  for (const [boneName, points] of pointsByBone) {
+    const bone = bones.get(boneName);
+    if (!bone) continue;
+    for (const p of points) {
+      const { first, firstD, secondD } = twoNearestPrims(p, body);
+      if (first < 0) continue;
+      const prim = body.prims[first]!;
+
+      let bin = bins.get(first);
+      if (bin === undefined) {
+        // The ring frame follows the PRIMITIVE's own axis where it has one, so
+        // a prim offset off its bone still measures around itself. A point
+        // prim (a == b) falls back to the bone's direction.
+        let basis = basisOf.get(first);
+        if (basis === undefined) {
+          const axisLen = len(sub(prim.b, prim.a));
+          basis = axisLen > 1e-9
+            ? ringBasis(prim.a, prim.b)
+            : ringBasis(prim.a, add(prim.a, sub(bone.tail, bone.head)));
+          basisOf.set(first, basis);
+        }
+        bin = { prim: first, basis, samples: [], blendDominated: 0, crossBone: 0, outOfRange: 0 };
+        bins.set(first, bin);
+      }
+
+      if (prim.bone !== undefined && prim.bone !== boneName) { bin.crossBone++; continue; }
+
+      const l = toLocal(p, bin.basis);
+      // A point prim has no span to be outside of, so every point sits at its
+      // notional middle; only a prim with a real axis can have ends to miss.
+      const t = bin.basis.length > 1e-9 ? l.along / bin.basis.length : 0.5;
+      if (t < 0 || t > 1) { bin.outOfRange++; continue; }
+      bin.samples.push({ t, theta: Math.atan2(l.x2, l.x1), d: sdBody(p, body) });
+      if (secondD - firstD < prim.blendK) bin.blendDominated++;
+    }
+  }
+
+  for (const bin of bins.values()) {
+    // Denominator is every point OFFERED to the bin, matching how `crossBone`
+    // already counts: the share is of points that reached this primitive, not
+    // of the subset that survived every rule.
+    const n = bin.samples.length + bin.crossBone + bin.outOfRange;
+    bin.blendDominated = n === 0 ? 0 : bin.blendDominated / n;
+  }
+  return bins;
+}
+
+/** Below this many samples a primitive's numbers are noise; it is reported, not fitted. */
+export const MIN_SAMPLES = 40;
+/**
+ * How far into a primitive the samples must reach from each end before its
+ * TAPER may be fitted. `t` runs 0 at `a` to 1 at `b`.
+ *
+ * THESE BOUND EXTRAPOLATION, NOT SAMPLE COUNT, AND THE TWO ARE DIFFERENT AXES.
+ * The taper is reported by evaluating a least-squares line at t=0 and t=1, and
+ * a line is only a measurement inside its own support. `MIN_SAMPLES` cannot
+ * stand in for this: measured on the real mouse, `thigh.r` (src 459) carried
+ * 46 samples — comfortably above the threshold of 40 — spanning t 0.000 to
+ * 0.008, and the fit was then evaluated 125x beyond the data it saw. That is
+ * how the report came to suggest `r 0.0220 -> 0.0576` on a 1m character. A
+ * thousand samples crammed into one sliver are still one sliver.
+ *
+ * 0.25/0.75 is a judgement, not a derivation: it admits a fit that misses a
+ * quarter of each end (the caps, where the perpendicular ring shrinks and
+ * seeds thin out) while refusing one that has to invent half the primitive.
+ * Below the gate the uniform `r` branch takes over — it averages over whatever
+ * was seen and is well-conditioned at any coverage.
+ */
+export const TAPER_T_MIN = 0.25;
+export const TAPER_T_MAX = 0.75;
+/**
+ * How far the taper line may depart from its own data, as a multiple of the
+ * taper it claims, before it is refused.
+ *
+ * COVERAGE IS NOT SHAPE, AND TAPER_T_MIN/MAX ONLY CHECK COVERAGE. They ask
+ * whether the samples reach both ends; they say nothing about whether a LINE
+ * describes what lies between them, and a line fitted to something that is not
+ * one puts its worst error exactly where the report reads it — at the
+ * endpoints.
+ *
+ * Measured on schoolgirl.blob:297, the thigh bar, against its reference mesh.
+ * Binned by t the residual HUMPS — -7.9mm at t=0.26, peaking at +14.8mm by
+ * t=0.45, then falling monotonically to +0.4mm at t=0.95 — and the least-
+ * squares line through it comes out with a POSITIVE slope, its sign set
+ * entirely by that leading negative clump. The line then reports +7.9mm at
+ * t=1 where the data in that end's own bin says +0.4mm, which became
+ * `r2 0.0535 -> 0.0639`: a knee band 10mm per side WIDER than the reference
+ * mesh it was fitted to, and a break of the character's own hand-measured pin.
+ *
+ * 1.0 is the threshold and it states itself: if the line misses its own data
+ * by more than the whole change it is claiming, the change is not what the
+ * data says. Measured across schoolgirl and mouse, every healthy taper sits at
+ * 0.05-0.62 of its swing and the pathological ones at 1.1-2.6, so the line
+ * falls in a real gap rather than between neighbours. It is still a judgement:
+ * a taper refused here is not proven absent, only unsupported by a straight
+ * line, and the uniform `r` fallback takes over.
+ */
+export const TAPER_LOF_RATIO = 1;
+/**
+ * The taper line is tested against groups of EQUAL SAMPLE COUNT, not equal
+ * width in `t`. Real coverage is lumpy — the thigh above has nothing at all
+ * below t=0.2 — and fixed-width bins would compare a group mean backed by 300
+ * points against one backed by 4, so the sparse bin's noise would look like
+ * curvature. Equal counts make every group mean equally well determined.
+ *
+ * At least 3 groups are needed to see a bend at all, and each wants enough
+ * samples that its mean is a measurement rather than a sample: with
+ * MIN_SAMPLES at 40, the smallest fitted primitive gets 3 groups of ~13, and
+ * anything past 160 samples gets the full 8.
+ */
+const LOF_GROUPS_MAX = 8;
+const LOF_GROUP_MIN_SAMPLES = 20;
+/** A scale column carrying less than this share of the largest column is unreadable. */
+const MIN_COLUMN_SHARE = 0.05;
+/**
+ * Below this angle between two scale columns, their split is not a measurement.
+ *
+ * The ring only ever constrains the combination of a near-parallel pair: the
+ * standard error on the SPLIT between two coefficients whose columns sit at
+ * angle `phi` is inflated by `1 / sin(phi)` relative to the error on their sum.
+ * At 90 degrees — a bone along a world axis, `wide` against `deep` — there is
+ * no inflation and both are honestly measured. At 15 degrees it is already
+ * 3.9x, and on the real mouse rig `upperarm` sits near 7 degrees, an 8.2x
+ * inflation on a quantity the reader is being invited to type into a `.blob`.
+ *
+ * 15 degrees is the line, and it is a judgement rather than a derivation: it
+ * is where the split's error passes the fit's own honest residual and the
+ * number stops carrying more signal than noise. The pair is still reported —
+ * their sum IS measured — but as one coupled fact about the bone.
+ */
+const DEGENERATE_ANGLE_DEG = 15;
+/**
+ * The instrument's own resolution, in metres.
+ *
+ * `sampleBodySurface` accepts a point once `|sdBody| < 1e-6`, so a residual of
+ * that size is the projector stopping, not the body being wrong. Without an
+ * ABSOLUTE floor the relative one below (`stdev/4`) has nothing to bite on when
+ * a body already matches its reference: the residuals are all ~1e-10, their
+ * spread is ~1e-10 too, and a quarter of nearly-nothing still lets nanometre
+ * "corrections" through. A suggestion finer than the measurement is not a
+ * measurement.
+ */
+const RESOLUTION = 1e-6;
+
+export interface Change<T> { from: T; to: T; why: string }
+
+export interface Suggestion {
+  prim: number;
+  /** 1-based .blob line, carried through from PrimDef.src. */
+  src?: number;
+  bone?: string;
+  n: number;
+  /** Mean |residual| in metres — the sort key. */
+  meanAbs: number;
+  blendDominated: number;
+  crossBone: number;
+  /**
+   * Reference points dropped because they fell off this primitive's own ends.
+   * Carried into the report beside `crossBone`: a primitive whose points were
+   * mostly beyond its span was not measured, however many of them there were.
+   */
+  outOfRange: number;
+  r?: Change<number>;
+  r2?: Change<number>;
+  /** Only components the data could actually see. */
+  scales?: Array<{ axis: (typeof SCALE_AXIS_NAMES)[number] } & Change<number>>;
+  /**
+   * Two scale axes whose least-squares columns are nearly parallel on this
+   * bone, with the angle between them. Their COMBINED effect is measured; the
+   * split between them is not, and whatever split appears in `scales` came
+   * from the ridge rather than from the reference. Report it as one number
+   * about the pair, never as two independent suggestions.
+   */
+  degenerate?: { axes: [(typeof SCALE_AXIS_NAMES)[number], (typeof SCALE_AXIS_NAMES)[number]]; angleDeg: number };
+  offset?: { delta: Vec3; why: string };
+  /**
+   * Span of `t` the samples actually covered, 0 at the primitive's `a` and 1
+   * at its `b`. Reported on every fitted primitive, because a block measured
+   * over 13% of its own length is a different kind of claim from one measured
+   * end to end, and the reader cannot tell them apart from `n` alone.
+   */
+  tRange?: { min: number; max: number };
+  /**
+   * Set when a taper WAS present in the residuals but was refused because the
+   * samples did not reach both ends of the primitive. The uniform `r` below is
+   * the fallback. Said out loud rather than silently swapped, because a
+   * suppressed finding that looks like an absent one is its own error.
+   */
+  taperRefused?: string;
+  /** Set when the primitive was deliberately not fitted. Nothing else is populated. */
+  skipped?: string;
+  mirrorDisagreement?: number;
+}
+
+function mm(v: number): string { return `${(v * 1000).toFixed(1)}mm`; }
+
+/**
+ * Why a primitive cannot be fitted, or undefined when it can.
+ *
+ * bend/shell/orient all move or reshape the surface in ways this fit does not
+ * model. Reporting them as skipped is honest; fitting them anyway would give a
+ * confident wrong number, which is worse than no number at all.
+ */
+function skipReason(prim: Primitive): string | undefined {
+  if (prim.dead) return 'dead (severed)';
+  if (prim.op === 'sub') return 'carve — subtractive, no outer surface of its own';
+  if (prim.op === 'groove') return 'groove — cuts a channel, not mass';
+  if (prim.shell) return 'shell — a clipped sheet, not a ring';
+  if (prim.bend) return 'bend — the medial curve is not the chord';
+  if (prim.orient && Math.abs(1 - prim.orient[3]) > 1e-6) return 'orient — scale frame is rotated';
+  if (Math.min(prim.scale[0], prim.scale[1], prim.scale[2]) <= 0) {
+    return 'degenerate scale — a zero or negative component has no surface to measure';
+  }
+  return undefined;
+}
+
+/** Solve `M x = y` for a small dense system by Gauss-Jordan with partial pivoting. */
+function solve(M: number[][], y: number[]): number[] | undefined {
+  const n = y.length;
+  const a = M.map((row, i) => [...row, y[i]!]);
+  for (let c = 0; c < n; c++) {
+    let piv = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(a[r]![c]!) > Math.abs(a[piv]![c]!)) piv = r;
+    if (Math.abs(a[piv]![c]!) < 1e-18) return undefined;
+    [a[c], a[piv]] = [a[piv]!, a[c]!];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = a[r]![c]! / a[c]![c]!;
+      for (let k = c; k <= n; k++) a[r]![k]! -= f * a[c]![k]!;
+    }
+  }
+  return a.map((row, i) => row[n]! / row[i]!);
+}
+
+/**
+ * Worst departure of the fitted taper line from its own binned data, and where.
+ *
+ * Binning first is the whole point: the raw residual scatter is dominated by
+ * the RING (theta), not by t — on the schoolgirl's thigh the back of the leg
+ * sits +28mm and the front -11mm — so a lack-of-fit test on raw samples would
+ * drown. Averaging within a t-group cancels the theta term and leaves the
+ * profile along the axis, which is the thing the line claims to describe.
+ *
+ * Returns undefined when there are too few samples to resolve a shape; the
+ * caller then lets the taper through, because "cannot tell" is not "wrong".
+ */
+function taperLackOfFit(
+  samples: PrimSample[], a0: number, m: number, tbar: number,
+): { dep: number; at: number } | undefined {
+  const groups = Math.min(LOF_GROUPS_MAX, Math.floor(samples.length / LOF_GROUP_MIN_SAMPLES));
+  if (groups < 3) return undefined;
+  const sorted = [...samples].sort((p, q) => p.t - q.t);
+  let dep = 0, at = 0;
+  for (let k = 0; k < groups; k++) {
+    const lo = Math.floor((k * sorted.length) / groups);
+    const hi = Math.floor(((k + 1) * sorted.length) / groups);
+    if (hi <= lo) continue;
+    let sd = 0, st = 0;
+    for (let i = lo; i < hi; i++) { sd += sorted[i]!.d; st += sorted[i]!.t; }
+    const mt = st / (hi - lo);
+    const e = Math.abs(sd / (hi - lo) - (a0 + m * (mt - tbar)));
+    if (e > dep) { dep = e; at = mt; }
+  }
+  return { dep, at };
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const n = s.length;
+  return n % 2 === 1 ? s[(n - 1) / 2]! : (s[n / 2 - 1]! + s[n / 2]!) / 2;
+}
+
+/**
+ * Turn binned residuals into per-primitive parameter suggestions.
+ *
+ * NO AXIS IS CHOSEN. The predecessor attributed the residual's cos-2-theta term
+ * to ONE world axis picked from the bone direction. On mouse.blob that had
+ * `upperarm` and `forearm` — two bones in a single chain, both sitting ~42
+ * degrees off any world axis — pick DIFFERENT axes, with upperarm's margin only
+ * 0.074, so a 3-degree authoring change flipped the answer. Here every sample
+ * contributes its own world direction `w` and the fit distributes the residual
+ * across whatever columns that direction actually touches; a diagonal bone
+ * lands in several at once, which is the honest description of it.
+ *
+ * THE ROWS PREDICT THE FIELD, NOT THE SURFACE DISPLACEMENT. `sdPrimitive`
+ * measures in the prim's SCALED space and rescales by `minScale`, so for
+ * `w` at perpendicular radius `rho` it reads
+ *
+ *     d = minScale * (rho * sqrt(Q) - r),   Q = sum_k (w_k / s_k)^2
+ *
+ * Differentiating THAT (rather than the surface radius `rho = r / sqrt(Q)`)
+ * gives the step that drives `d` to zero:
+ *
+ *     -dd/dr    = minScale
+ *     -dd/ds_k  = minScale * rho * w_k^2 / (s_k^3 * sqrt(Q))
+ *
+ * and `rho` comes from the measurement itself, `(d/minScale + r)/sqrt(Q)`,
+ * rather than being assumed equal to our own surface. Differentiating `rho`
+ * instead — as an earlier draft did — under-reports every anisotropic
+ * correction by the varying factor `minScale * sqrt(Q)`: a deep=1.25 capsule
+ * measured against an isotropic reference came back at deep=1.08 instead of
+ * 1.00, which reads as a real but smaller error rather than as a wrong answer.
+ *
+ * TWO KINDS OF BLINDNESS ARE HANDLED, AND THEY ARE NOT THE SAME.
+ *
+ * 1. A component the samples never touch. The axis running ALONG the bone has
+ *    `w_k ~ 0` in every sample, so its column is near-zero, the ridge term
+ *    absorbs it, and it is left unsuggested. Not a rule — the data cannot see
+ *    it.
+ * 2. A component the samples touch but cannot SEPARATE. The ring only ever
+ *    determines the world semi-axes `A_k = r * s_k`, so `(r, s)` and
+ *    `(c*r, s/c)` describe the identical surface and the system is EXACTLY
+ *    rank-deficient in that direction. Minimum-norm smears one real error
+ *    across `r`, `wide` and `deep` alike. `regauge` below picks a
+ *    representative instead of pretending the smear is a measurement.
+ */
+export function fitPrims(bins: Map<number, PrimBin>, body: Body): Suggestion[] {
+  const out: Suggestion[] = [];
+
+  // Iterate the BODY, not the bins. A primitive that is never the nearest one
+  // anywhere on the surface gets no bin at all — measured on mouse.blob, 9 of
+  // 67 — and iterating bins would drop it from the report silently. An
+  // unmeasurable primitive must SAY it is unmeasurable.
+  for (let index = 0; index < body.prims.length; index++) {
+    const prim = body.prims[index]!;
+    const bin = bins.get(index);
+    const base = {
+      prim: index, src: prim.src, bone: prim.bone,
+      n: bin?.samples.length ?? 0,
+      blendDominated: bin?.blendDominated ?? 0,
+      crossBone: bin?.crossBone ?? 0,
+      outOfRange: bin?.outOfRange ?? 0,
+    };
+
+    const skipped = skipReason(prim);
+    if (skipped !== undefined) { out.push({ ...base, meanAbs: 0, skipped }); continue; }
+    if (bin === undefined) {
+      out.push({ ...base, meanAbs: 0,
+        skipped: 'no samples — never the nearest primitive anywhere on the surface (fully buried under the blend)' });
+      continue;
+    }
+    if (bin.samples.length < MIN_SAMPLES) {
+      // Say WHERE the missing points went. "Too few samples" reads as a thin
+      // reference mesh; "most of its points lay off its own ends" is a
+      // different fact about a different problem, and the reader acts on it
+      // differently (a `len=` or placement edit, not a denser scan).
+      const lost: string[] = [];
+      if (bin.crossBone > 0) lost.push(`${bin.crossBone} more went to another bone`);
+      if (bin.outOfRange > 0) lost.push(`${bin.outOfRange} more lay beyond its own ends`);
+      const why = lost.length === 0
+        ? `only ${bin.samples.length} samples (need ${MIN_SAMPLES})`
+        : `only ${bin.samples.length} samples (need ${MIN_SAMPLES}); ${lost.join(', ')}`;
+      out.push({ ...base, meanAbs: 0, skipped: why });
+      continue;
+    }
+
+    const n = bin.samples.length;
+    const d = bin.samples.map((s) => s.d);
+    const a0 = d.reduce((s, x) => s + x, 0) / n;
+    const sd = Math.sqrt(d.reduce((s, x) => s + (x - a0) ** 2, 0) / n);
+    // Relative to the spread so it scales with the character, but never finer
+    // than the instrument can resolve. The 1/4 is a GUESS — re-derive it from
+    // the observed spread after the first real pass (see the spec).
+    const floor = Math.max(sd / 4, RESOLUTION);
+    // The field is measured in scaled space and rescaled by minScale, so a
+    // residual in FIELD units becomes metres of radius by dividing by it.
+    const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+
+    let a1 = 0, b1 = 0, tbar = 0;
+    let tMin = Infinity, tMax = -Infinity;
+    for (const s of bin.samples) {
+      a1 += s.d * Math.cos(s.theta); b1 += s.d * Math.sin(s.theta); tbar += s.t;
+      if (s.t < tMin) tMin = s.t;
+      if (s.t > tMax) tMax = s.t;
+    }
+    a1 = 2 * a1 / n; b1 = 2 * b1 / n; tbar /= n;
+
+    let sxy = 0, sxx = 0;
+    for (const s of bin.samples) { const dt = s.t - tbar; sxy += dt * s.d; sxx += dt * dt; }
+    const m = sxx < 1e-12 ? 0 : sxy / sxx;
+
+    const sug: Suggestion = {
+      ...base,
+      meanAbs: d.reduce((s, x) => s + Math.abs(x), 0) / n,
+      tRange: { min: tMin, max: tMax },
+    };
+
+    // ---- Least squares over (dr, dwide, dtall, ddeep). See the header: the
+    // rows differentiate the FIELD, and `w` is each sample's own world
+    // direction so no axis has to be picked.
+    const A: number[][] = [];
+    // Targets are collected ALONGSIDE the rows, not indexed back into `d`: a
+    // degenerate sample is skipped below, and reading `d[i]` afterwards would
+    // silently pair every later row with the wrong residual.
+    const rhs: number[] = [];
+    for (const s of bin.samples) {
+      const ct = Math.cos(s.theta), st = Math.sin(s.theta);
+      const w: Vec3 = [
+        bin.basis.e1[0] * ct + bin.basis.e2[0] * st,
+        bin.basis.e1[1] * ct + bin.basis.e2[1] * st,
+        bin.basis.e1[2] * ct + bin.basis.e2[2] * st,
+      ];
+      let q = 0;
+      for (let k = 0; k < 3; k++) q += (w[k]! / prim.scale[k]!) ** 2;
+      if (q < 1e-18) continue;
+      const sq = Math.sqrt(q);
+      // The REFERENCE point's own perpendicular radius, read back out of the
+      // residual rather than assumed to be our surface's.
+      const rho = (s.d / minScale + prim.radius) / sq;
+      const g = minScale * rho / sq;
+      A.push([
+        minScale,
+        (g * w[0]! ** 2) / prim.scale[0] ** 3,
+        (g * w[1]! ** 2) / prim.scale[1] ** 3,
+        (g * w[2]! ** 2) / prim.scale[2] ** 3,
+      ]);
+      rhs.push(s.d);
+    }
+
+    const colNorm = [0, 0, 0, 0];
+    const AtA = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    const Atb = [0, 0, 0, 0];
+    A.forEach((row, i) => {
+      for (let p = 0; p < 4; p++) {
+        colNorm[p]! += row[p]! ** 2;
+        Atb[p]! += row[p]! * rhs[i]!;
+        for (let q2 = 0; q2 < 4; q2++) AtA[p]![q2]! += row[p]! * row[q2]!;
+      }
+    });
+    // ---- Degeneracy, read off the RAW normal matrix before the ridge touches
+    // it. AtA[p][q] is the dot product of columns p and q, so the angle between
+    // them falls straight out of the Gram matrix — no extra pass over the rows.
+    // This must happen before `lambda` is added to the diagonal, or the ridge
+    // inflates the norms and rotates every pair apart.
+    const readable = ([0, 1, 2] as const)
+      .filter((k) => colNorm[k + 1]! >= MIN_COLUMN_SHARE * Math.max(colNorm[1]!, colNorm[2]!, colNorm[3]!));
+    let worstPair: Suggestion['degenerate'];
+    for (let i = 0; i < readable.length; i++) {
+      for (let j = i + 1; j < readable.length; j++) {
+        const p1 = readable[i]! + 1, q1 = readable[j]! + 1;
+        const denom = Math.sqrt(AtA[p1]![p1]! * AtA[q1]![q1]!);
+        if (denom < 1e-30) continue;
+        const cos = Math.min(1, Math.abs(AtA[p1]![q1]!) / denom);
+        const angleDeg = (Math.acos(cos) * 180) / Math.PI;
+        if (angleDeg >= DEGENERATE_ANGLE_DEG) continue;
+        if (worstPair !== undefined && worstPair.angleDeg <= angleDeg) continue;
+        worstPair = { axes: [SCALE_AXIS_NAMES[readable[i]!]!, SCALE_AXIS_NAMES[readable[j]!]!], angleDeg };
+      }
+    }
+    if (worstPair !== undefined) sug.degenerate = worstPair;
+
+    // Ridge, sized off the system itself: enough to keep the rank-deficient
+    // columns from exploding, small enough not to bias the rest. It selects the
+    // minimum-norm representative of the null space, which `regauge` then
+    // replaces with a more actionable one.
+    const lambda = 1e-4 * Math.max(AtA[0]![0]!, AtA[1]![1]!, AtA[2]![2]!, AtA[3]![3]!);
+    for (let p = 0; p < 4; p++) AtA[p]![p]! += lambda;
+    const x = solve(AtA, Atb);
+
+    // ---- Re-gauge. `r` and a uniform scale are the SAME edit, so the solver's
+    // split between them is arbitrary; only the world semi-axes `A_k = r*s_k`
+    // are measured. Work in gauge-invariant relative terms, `rel_k = dA_k/A_k`,
+    // then split `rel_k = gamma + sigma_k` (gamma = dr/r, sigma_k = ds_k/s_k)
+    // by the choice that touches the FEWEST authored numbers: the minimiser of
+    // |gamma| + sum |sigma_k| is the median of {0} together with the rel_k.
+    // Reporting the minimum-norm split instead spreads one wrong `deep=` across
+    // `r=`, `wide=` and `deep=` — three edits with the same net effect as one,
+    // and no way for a reader to tell which was actually wrong.
+    const biggest = Math.max(colNorm[1]!, colNorm[2]!, colNorm[3]!);
+    const visible = x === undefined ? [] : ([0, 1, 2] as const)
+      .filter((k) => colNorm[k + 1]! >= MIN_COLUMN_SHARE * biggest);
+    const rel = new Map<number, number>();
+    let gamma = 0;
+    if (x !== undefined) {
+      const gamma0 = x[0]! / prim.radius;
+      for (const k of visible) rel.set(k, gamma0 + x[k + 1]! / prim.scale[k]!);
+      gamma = visible.length === 0 ? gamma0 : median([0, ...rel.values()]);
+    }
+    const dr = prim.radius * gamma;
+
+    // The taper is REPORTED at t=0 and t=1, so it may only be fitted when the
+    // samples reach both ends. See TAPER_T_MIN/TAPER_T_MAX: this is a bound on
+    // extrapolation and is independent of `MIN_SAMPLES`, which counts.
+    const covered = tMin <= TAPER_T_MIN && tMax >= TAPER_T_MAX;
+    const slope = Math.abs(m) > floor && bin.basis.length > 1e-9;
+    // Only worth asking once there IS a line to test, and only meaningful
+    // against the line's own claimed swing — see TAPER_LOF_RATIO.
+    const lof = slope ? taperLackOfFit(bin.samples, a0, m, tbar) : undefined;
+    const straight = lof === undefined || lof.dep <= TAPER_LOF_RATIO * Math.abs(m);
+    const tapered = slope && covered && straight;
+    if (slope && !covered) {
+      sug.taperRefused = `residual varies along the axis (${mm(m / minScale)} per length), but the `
+        + `samples only cover t ${tMin.toFixed(3)}-${tMax.toFixed(3)}; reporting the line at t=0 and `
+        + `t=1 would extrapolate outside the data. Uniform fit below instead. A line is only a `
+        + `measurement inside its own support: if this primitive really does taper, the fit cannot `
+        + `see it from here — get samples onto both ends first (bone length, blend, or a `
+        + `neighbouring prim's bulge).`;
+    } else if (slope && !straight) {
+      sug.taperRefused = `residual varies along the axis (${mm(m / minScale)} per length) and the `
+        + `samples cover it end to end, but it is NOT A LINE: binned by t, the fitted line departs `
+        + `from its own data by ${mm(lof!.dep / minScale)} at t=${lof!.at.toFixed(2)} — more than `
+        + `the ${mm(Math.abs(m) / minScale)} taper it claims. Its endpoints would report a shape `
+        + `the reference does not have. Uniform fit below instead. Look for what bends the profile `
+        + `before believing a taper here: a biased clump of retained points at one end, a `
+        + `neighbouring primitive's blend, or fabric over flesh.`;
+    }
+    if (tapered) {
+      const r2Now = prim.radiusB ?? prim.radius;
+      sug.r = { from: prim.radius, to: prim.radius + (a0 + m * (0 - tbar)) / minScale,
+                why: 'taper, see r2' };
+      sug.r2 = { from: r2Now, to: r2Now + (a0 + m * (1 - tbar)) / minScale,
+                 why: `taper: ${mm(m / minScale)} of residual across the primitive` };
+    } else if (x !== undefined && Math.abs(dr) * minScale > floor) {
+      sug.r = { from: prim.radius, to: prim.radius + dr,
+                why: `least squares, ${mm(dr)}` };
+    }
+
+    if (x !== undefined) {
+      const scales: NonNullable<Suggestion['scales']> = [];
+      for (const k of visible) {
+        const sigma = rel.get(k)! - gamma;
+        // Gate on the metres of surface this moves, not on the bare ratio: a
+        // 1% change to a 5mm feature is not a measurement.
+        if (Math.abs(sigma) * prim.radius * prim.scale[k]! * minScale <= floor) continue;
+        scales.push({
+          axis: SCALE_AXIS_NAMES[k]!,
+          from: prim.scale[k]!, to: prim.scale[k]! * (1 + sigma),
+          why: `least squares over the field, column share ${(100 * colNorm[k + 1]! / biggest).toFixed(0)}%`,
+        });
+      }
+      if (scales.length) sug.scales = scales;
+    }
+
+    if (Math.hypot(a1, b1) > floor) {
+      const delta = add(vscale(bin.basis.e1, a1 / minScale), vscale(bin.basis.e2, b1 / minScale));
+      // THE X COMPONENT OF A MIRRORED LINE'S OFFSET IS NOT A TRANSLATION, and
+      // it is dropped HERE rather than in `mergeMirrored` on purpose. The
+      // constraint belongs to the SOURCE LINE — one authored number applied
+      // through a reflection — not to the accident of both placed copies
+      // having been measurable. `mergeMirrored` only ever sees a pair when
+      // both sides cleared MIN_SAMPLES and neither was skipped; a mirrored
+      // primitive whose other side fell short arrives there alone, in a group
+      // of one, and would pass its x straight through. A TS-authored body has
+      // no `src` at all, so the pair could not even be recognised.
+      //
+      // WHY IT IS WRONG. `expandMirror` negates offset.x on the second copy,
+      // so writing dx back to the line moves the two sides in OPPOSITE world
+      // directions. The cos-theta term was measured on ONE side (see
+      // `mergeMirrored`: averaging the two cancels it, so one side is kept),
+      // and "this leg sits 15mm off-centre in +x" then becomes "both legs move
+      // 15mm toward each other" — a WIDTH change, not a translation. Measured
+      // on schoolgirl.blob:297, that component alone dropped the legs'
+      // silhouette IoU from 0.786 to 0.752 while y and z were harmless.
+      //
+      // y and z pass through the mirror unchanged, so they stay measured. The
+      // suppression is said out loud in `why` rather than applied silently: a
+      // reader handed a different vector than the tool measured should be told
+      // which constraint changed it.
+      const suppressX = prim.mirrored === true;
+      sug.offset = {
+        delta: suppressX ? [0, delta[1], delta[2]] : delta,
+        why: `cos1θ ${mm(Math.hypot(a1, b1) / minScale)} off-centre`
+          + (suppressX
+            ? `; x DROPPED (measured ${mm(Math.abs(delta[0]))}) — this line is mirrored, and the `
+              + `mirror negates offset.x, so writing it back moves the two sides in opposite `
+              + `world directions: a width change, not a translation. y/z mirror cleanly.`
+            : ''),
+      };
+    }
+
+    out.push(sug);
+  }
+
+  return out.sort((x2, y2) => y2.meanAbs - x2.meanAbs);
+}
+
+/**
+ * Fold the two placed primitives of a mirrored .blob line back into one
+ * suggestion, because the source carries ONE number.
+ *
+ * The averaged value is only half the output: `mirrorDisagreement` is how far
+ * apart the two sides wanted to be. A large one means the reference is
+ * genuinely asymmetric or the alignment is wrong, and both are worth knowing
+ * before trusting the average.
+ *
+ * A primitive with no `src` is never merged — an absent line number is not a
+ * shared line number.
+ *
+ * OFFSET IS NOT AVERAGED, AND THIS IS NOT AN OVERSIGHT TO TIDY UP. The
+ * left/right frame relationship depends on the bone's direction: measured on
+ * the real mouse rig, for bones whose most-aligned world axis is y, `e1`
+ * ANTI-mirrors while `e2` mirrors, and for bones aligned to x it is exactly
+ * reversed. So the two sides carry opposite-signed cos-theta offset residuals
+ * by construction, and averaging them CANCELS the term instead of reinforcing
+ * it — the tool would report a centred prim however far off-centre both sides
+ * actually were. Keep one side's number and label it as such.
+ */
+export function mergeMirrored(suggestions: Suggestion[]): Suggestion[] {
+  const bySrc = new Map<number, Suggestion[]>();
+  const loose: Suggestion[] = [];
+  for (const s of suggestions) {
+    if (s.src === undefined) { loose.push(s); continue; }
+    let list = bySrc.get(s.src);
+    if (list === undefined) { list = []; bySrc.set(s.src, list); }
+    list.push(s);
+  }
+
+  const out: Suggestion[] = [...loose];
+  for (const group of bySrc.values()) {
+    if (group.length === 1) { out.push(group[0]!); continue; }
+    const [a, b] = group as [Suggestion, Suggestion];
+    const avg = (x?: number, y?: number) => (x !== undefined && y !== undefined ? (x + y) / 2 : x ?? y);
+    const merged: Suggestion = {
+      ...a,
+      n: group.reduce((s, g) => s + g.n, 0),
+      meanAbs: group.reduce((s, g) => s + g.meanAbs, 0) / group.length,
+      blendDominated: group.reduce((s, g) => s + g.blendDominated, 0) / group.length,
+      crossBone: group.reduce((s, g) => s + g.crossBone, 0),
+      outOfRange: group.reduce((s, g) => s + g.outOfRange, 0),
+      mirrorDisagreement: Math.abs((a.r?.to ?? 0) - (b.r?.to ?? 0)),
+      // COVERAGE MERGES AS THE INTERSECTION, NOT THE UNION. The merged numbers
+      // are an average of the two sides, so they are only as well-supported as
+      // the WORSE-covered side; taking the union would let a well-sampled left
+      // leg vouch for a right leg measured over a sliver.
+      tRange: a.tRange && b.tRange
+        ? { min: Math.max(a.tRange.min, b.tRange.min), max: Math.min(a.tRange.max, b.tRange.max) }
+        : a.tRange ?? b.tRange,
+      taperRefused: a.taperRefused ?? b.taperRefused,
+    };
+    if (a.r || b.r) merged.r = { from: a.r?.from ?? b.r!.from, to: avg(a.r?.to, b.r?.to)!, why: a.r?.why ?? b.r!.why };
+    if (a.r2 || b.r2) merged.r2 = { from: a.r2?.from ?? b.r2!.from, to: avg(a.r2?.to, b.r2?.to)!, why: a.r2?.why ?? b.r2!.why };
+    // `scales` is a list keyed by axis; merge per axis, keeping only axes both
+    // sides could read. An axis one side could see and the other could not is
+    // evidence the two sides are not measuring the same thing — drop it.
+    if (a.scales && b.scales) {
+      const merged2 = a.scales
+        .map((sa) => {
+          const sb = b.scales!.find((z) => z.axis === sa.axis);
+          return sb === undefined ? undefined : { ...sa, to: (sa.to + sb.to) / 2 };
+        })
+        .filter((z): z is NonNullable<typeof z> => z !== undefined);
+      if (merged2.length) merged.scales = merged2;
+    }
+    merged.offset = a.offset ? { ...a.offset, why: `${a.offset.why} (left side; mirrored line)` } : undefined;
+    out.push(merged);
+  }
+  return out.sort((x, y) => y.meanAbs - x.meanAbs);
+}

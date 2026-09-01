@@ -158,6 +158,35 @@ placement faces a wall; gib segment reaches only `chunks 0->1`.
 [plan](docs/superpowers/plans/2026-08-31-game-perf-baseline.md) ·
 [note](docs/dev-notes/2026-08-31-game-perf-baseline/notes.md)
 
+**DRAGON CHARACTER — FIRST NON-HUMANOID .BLOB AUTHORED (worktree `2026-08-28-dragon-character`,
+branch `dispatch/dragon-character`, 2026-08-31).** `dragon.blob` (59 prims, 2.04 m = 1.2x the
+1.70 m mesh) authored against `docs/dev-notes/refs/dragon-mesh/dragon.glb` from measured bones
+(20/20 joints land within 0.5 mm; scale 1.20000, rings spread 13.7%, ZERO BONE-LENGTH blocks).
+13 measured pins in `dragon-blob.test.ts` (wingspan:body 0.75, hock height, metatarsus:tibia 2.4x,
+tail reach+curl, head verticals, palette); tsc 0; suite 1801 green; render-check 0 holes after
+raising the membrane lobes' anisotropy out of the renderer's hole family (deep 0.18 -> 0.28).
+`stance digitigrade` validates only because the knee was pulled back mid-chord — the rig's
+knee-forward bird fold classifies as 'humanoid' in `checkStance` (full story in the .blob header;
+recommended fix: classify by metatarsus, not knee-vs-chord). Format findings: the rig has NO tail
+joints (all tail surface rides Bone_001, authored on two unmapped bones + a measured bend), head+
+horns are 24% of the mesh and unmapped (rings coverage ceiling 25%), `blob:measure` band
+attribution breaks down when a spread membrane dominates every width band, and bar+`deep` squash
+membranes top out as "wing nubs" — a real spar+sheet (shell) construction is the missing feature.
+Vision-graded 4/5 dragon; owner eyeball still pending.
+
+SCHOOLGIRL-ALT — INSTRUMENT TRIAL COMPLETE (worktree `2026-08-28-schoolgirl-alt-character`,
+2026-08-28).** The controlled experiment: `schoolgirl-alt.blob` authored from scratch against the
+same mesh as the hand-authored `schoolgirl.blob` (untouched control), using `blob:rings` +
+`blob:measure` + measured test pins. Starting bones from the reference rig (the brief's biggest
+lever) plus an UNMAPPED "bridge" bone carrying the rig's own Hips float produced: **rings spread
+18.2% vs control 285.4%, ZERO `BONE LENGTH IS OFF` blocks (control: several, rank-1 −62.1%), and
+`blob:measure --range 0.6:1` IoU 0.898 vs control 0.765.** 13 measured pins; tsc 0; suite 1769
+green; render-check clean. Cloth findings worth reusing: the mesh's knees are APART (segmented
+slices, centres ±0.078 — the control's knees-touching read pair-width-right/split-wrong); the
+control's sock/calf prims run ~2x the mesh's per-leg radius (rings actually flagged this on the
+control — `wide 1.000 -> 0.67` ranks 2/3/4 — and was right); the shell skirt needs tall >=~0.3
+(a 16x-anisotropic tall=0.06 shell GPU-holes, render-check catches it). Full report in the
+dispatch transcript; every number's source is in the .blob header.
 
 **HIT-STAGGER FEEL — DONE on branch `dispatch/hit-stagger-feel`, awaiting
 owner playtest (2026-08-28).** Owner's "the zombie needs to read as really
@@ -1096,6 +1125,37 @@ Key reference docs (open these before touching their area):
   **WOUND HALO SOLVED (2026-08-24 night, main `224fbbd`; post-mortem: Obsidian `Claude Notes/Blud/2026-08-24-wound-halo-postmortem.md`):** the sweeping halos / white slabs / 'distorted-lens' clipping around craters was RELAXED SPHERE TRACING (relax 1.4) x carved wound fields — the omega>1-only paths (overshoot retraction + the new deep-crossing retract guard) step rays BACKWARD at grazing wound angles and fail to reconverge; whole screen-space circles render the body from an offset view, flipping with tiny camera moves. `relax` (woundCfg2.y) now defaults **1.0** — DO NOT raise it while wounds exist until the retract guard reconverges (bound the back-step, finish conservative); the X1.10 '1.4 optimum, visually unchanged' sweep PREDATES wounds. Adaptive resolution defaults OFF again (its close-up rung drops read as blur-halos and confounded the hunt). The wound pipeline is restored to 2026-08-22 (`c7f8afb`) byte-parity: entries (4)-(6) above — the whole 2026-08-23 crater-shading pass (split masks, facing gate, cavity-AO darkening, lip locality flip, rimWidth 0.25, pellet splay 0.35, smin overlap union) — are REVERTED wholesale; every owner verdict against/for them was rendered through the relax lens, so re-evaluate each ONE at a time at relax 1.0 if wanted (all preserved in branch history with reasoning). KEPT: the tracer retract guard (real bug — perpendicular crossings with radius+prevRadius == stepLen exactly evaded the strict-< overshoot test and landed rays ~10 cm INSIDE the body = the rear white slab; dead code at relax 1.0), nearWound plain stepping, the fold cull (exonerated twice), and the thin-limb carve-shift machinery in damage.ts (dormant, unwired). NEW **X1.28 wound soft shadow** merged DEFAULT OFF (see its row). Live-pokeable diagnostic views (masks/components/hit-depth) recorded as a paste-in at docs/dev-notes/2026-08-24-wound-debug-views.md; the owner's console kill-switches in the failing view were what cracked it. Unrelated: recurring 535 ms frame stalls during diagnosis were the Claude desktop browser pane's GPU process, not the app (headless bisect: every branch commit p95 < 19 ms) — restart the app to clear. FOLLOW-UPS: retract-guard reconvergence (wins back relax 1.4's ~1.6x crowd speedup — fold into the perf plan), soft-shadow rework, one-at-a-time re-eval of the reverted refinements. **PERF CHAIN RE-BASELINED + RUNNING (2026-08-24, main `19d1860`):** the perf spec/plan/shader were written at relax 1.4 + adaptive-on and asserted a world that no longer exists. Corrected: the spec filed relaxed tracing as a non-lever ("< 0.5 ms") on a CLOSE-camera reading — on crowds it is **1.60x** (X1.10: 10 bodies, 1.0 -> 14.89 ms vs 1.4 -> 9.31 ms), the largest single item on the board, and the renderer pays it in full today. `march.wgsl.ts` still claimed "over-relaxation is always safe"; that predates wounds (applyWounds returns no distance bound) and now states the real constraint. Both retraction faults are documented in place: the overshoot path undoes d*(w-1) where the excess is d*(w-1)/w (**40% over-retraction** at 1.4), and the deep-crossing guard steps back by a SCALED-space d that under-reports Euclid by the group distortion factor (22x, schoolgirl sole plate) so it need not leave the solid, unbounded. NEW **plan Task 2.5 / dispatch task-1b**: retract-guard reconvergence — retract to the last known-outside sample `tSafe`, never by a computed distance; CPU mirror of the tracer under property tests (nothing here compiles WGSL, so vitest cannot see shader bugs); 3-character wounded visual gate; relax sweep re-run WITH wounds. Runs BEFORE tasks 3/5 since both rewrite the march loop. Task 6's coverage predictor is now conditional (adaptive defaults off — it would improve a disabled controller). Chain: **task-1 (bench) -> task-1b -> task-2 -> 3 -> 4**, with 1b and 2 left `queued` (INERT) so the owner gates the baselines and then the relax verdict before anything builds on 1.4. Also fixed: the lab's adaptive button hardcoded the label 'on' while the flag defaults false.
   **SDF perf brainstorm additions (2026-08-24 night):** measured why schoolgirl/cyclops tank vs zombie/goblin — primitive counts: zombie 12, goblin 25, schoolgirl 37 (+22x sole-plate distortion forcing tiny steps), cyclops 38, mouse 40; cost = pixels x steps x prims and every step folds the whole character. Spec gained levers **7 (temporal depth reprojection)** and **8 (low-res conservative prepass)** — both attack the step-count factor by starting rays near the surface; queued as **dispatch task-5** (depends_on task-4, pending). Invariant for both: a seeded start may only ever be NEARER than the true surface, and the margin must cover the wound lip's outward eversion; prepass is stateless and doubles as reprojection's disocclusion fallback. Separately dispatched a **hybrid shell-marching spike** (`~/.claude/dispatch/plans/2026-08-24-shell-march-spike.md`, branch dispatch/shell-march-spike): mesh the zombie's analytic field at iso d=+0.03 via marching cubes over `sdBody` (validate.ts), rasterize the hull for entry/exit depth, sphere-trace only the thin shell (budget 16 steps) — if the look survives it obsoletes most step-count work for hero bodies. The spike is ALSO the first real task on the NEW **dsh harness** (DeepSeek, model `deepseek-v4-flash-vision-exp`, vision — it judges its own capture pairs; dsh resolves auth itself, no api_key_env/base_url in frontmatter). Judge it like any dispatch: verify commits on the branch, remember the silent-noop-on-rate-limit signature. Reference noted: PardesLine tutorial 04 (github.com/1904jonathan/PardesLine) does mesh->SDF->shell via voxel erosion + skimage marching_cubes — we have the analytic field so iso-offset replaces morphology exactly, but skimage marching_cubes is the fallback if a TS mesher is annoying (bake hulls in Python beside bake_humanoid_sdf.py), and erosion-band inner shells are the trick if back-face exit depths prove imprecise. Wider context recorded in Obsidian `Claude Notes/Blud/2026-08-24-sdf-render-optimization-options.md` (incl. why native Rust/C++ would NOT vastly speed this up — GPU-bound, WGSL compiles to the same Metal — and the gib-voxelization worker plan). **Shell-march spike DONE (2026-08-24 22:06, dsh harness test PASSED, branch `dispatch/shell-march-spike` `79cd406` — dispatch auto-committed after the dsh sandbox blocked git in the worktree, a known dsh gotcha not a failure):** look survives at geometry level (silhouette/smin/normals match at all 8 yaws, self-judged by the vision model); ~14x fewer mapBody evals/frame (shell 4.56 steps/px on a 30k footprint vs full 6.79 on 285k), frame ~16 vs ~29ms single-body (~1.8x; the 14x eval cut is the crowd win); CONFIRMED failure mode: +3cm hull inflation eats sub-3cm detail (mitten hands, no face) — productionizing = per-part hulls with adaptive inflation + posed hulls + wound handling. tsc clean, 1510 lab tests green, protected files untouched. dsh/deepseek-v4-flash verdict: precise brief-following, honest reporting, vision works — good enough for mechanical chain tasks (task-2) if zai quota needs relief; hold task-1b for a stronger model. **iq "Selfie Girl" (shadertoy WsSBzh) studied** — techniques note: Obsidian `Claude Notes/Blud/2026-08-24-selfie-girl-techniques.md` (license: techniques only, NEVER port its code). Top takeaways: (a) analytic bounding-INTERVAL clip — intersect ray vs cluster spheres and march only [entry, exit]; cheap sibling of levers 7/8, could land before either; (b) hair = ONE bezier + cross-section grid repetition = ~18 strands per curve eval — the answer to schoolgirl fringe prim cost; (c) `mapD` pattern: pores/fuzz detail only in the normal-pass map, the march runs the clean field (audit where surfaceNoiseAmp is paid today); (d) per-axis radius ramps on ellipsoids collapse several prims into one (his jaw); (e) cloth = onion-shell ellipsoid + sine warp + seam rounding via length(vec2(dA,dB)) — for the sailor collar/skirt hem; (f) iq ships UNDER-relaxed (0.95) and gets speed from bounding + cheap fields — counterpoint for the relax-1.4 debate.
   **Cyclops run result (2026-08-22/23, `zai/glm-5.3:xhigh`, 2h15, merged):** PASS on gates — front IoU 0.838 (mean 0.019, worst +0.044), side 0.751 (gate 0.75, just); render-check clean; registered in the lab; `cyclops-blob.test.ts` pins eye/maw/fangs/claws/tail-hook. Eye check: one domed eye in the upper chest, fang row, clawed arms, no legs, tail hooks up in profile. Weak (follow-up run, not a blocker): arms read as stubby sacks not long clawed limbs; spiked trapezius hood + dorsal spines absent; the maw groove is barely visible in the dark flesh — consider a lighter lip paint. Three characters now validate the measured loop on glm-5.3.
+  **Bonewalker authored WITH blob:rings — the tool's first from-scratch trial
+  (2026-08-27, `dispatch/bonewalker-character`):** sixth .blob character, a
+  horned skeletal undead at 1.30 m off `refs/bonewalker-mesh/bonewalker.glb`
+  (1.700 m Meshy T-pose, 67% measurable verts). Skeleton built entirely from
+  the brief's rig-measured len= table — result: ZERO "BONE LENGTH IS OFF"
+  blocks in every ring fit (mouse/schoolgirl drowned in them). Converged in 3
+  ring rounds to ≤14mm mean residual everywhere except the foot (46mm — claw
+  fan + the rig's 45° down-forward foot bone vs our horizontal one confound
+  the ring mapping) and the pelvis (23mm — the fit reads bowl-mass rho ~55mm
+  while the mesh's iliac wings spike to 119mm halfW; a radial blob cannot
+  express blades, so the wings got their own prims). VERDICT: blob:rings
+  earned its place — radius/scale/offset findings were applied as printed
+  (blocks 3-12 round 1) and survived cross-checks; its flags correctly
+  disowned the weak blocks (IMPOSSIBLE on the blend-buried spine ridge, NOT
+  A LINE on calf/forearm bulges, t-support flags on the shoulder ball); it
+  has NO eye and NO paint sense: it asked the pelvis 3x to shrink to 52mm
+  semi-axis (render + mesh profile said starved), asked the painted spine
+  ridge to vanish (twice, IMPOSSIBLE r), and cannot see the face/horns/claws
+  at all. blob:measure was nearly useless here — even the legs are posed
+  (wide crouch) so no clean --range window exists; row jerk 0.017 vs our
+  0.006 says the mesh's bony knobbly read is a remaining gap. Face = baked
+  decal (horns included in the head box; projection AIMED eyes+chin), body
+  = rusted-red palette + bone-dust mottle + painted spine ridge/horns/claws.
+  Character pins: 11 tests (bone lengths, lankiness, floor contact, waist
+  pinch as a RELATION, ribcage deeper than wide, claw paint counts). tsc 0,
+  1715 lab tests, render-check clean. Two tool lessons for the skill: (1) a
+  capsule's bottom cap is a half-radius hemisphere — a ribcage bar starting
+  at the bone head fills the waist pinch 2cm below it (the pin caught it);
+  (2) a high-Hips rig (Meshy 58.1%) vs surface crotch (49.7%) means the
+  spine chain rides ~0.108 low; parent clavicle to NECK and let an unmapped
+  skull bone absorb the offset.
   **Schoolgirl run result (2026-08-23, `zai/glm-5.3:xhigh`, 65 min, merged as v1):** process PASS (measured both windows every edit, head-profile, vision-ask on front/back frames, 6 commits, tests pin measured numbers); band numbers PASS (legs window mean width err 0.008 worst +0.020; head 0.010/-0.027). LOOK: FAIL for the style goal — the torso is a stack of horizontal discs (collar plate, two white rings, skirt cylinder + disc hem, pleat fragments on the thighs); recognisable as a schoolgirl, not Tanida-smooth. TWO TOOL LESSONS: (1) in-range IoU is meaningless when whole-figure aspects differ (T-pose 0.919 vs 0.259): compareSilhouette normalises to the whole-figure bbox before taking range rows — fix: normalise within the window; (2) per-band width matching is satisfied exactly by stacked discs — the measure needs a stacking/step detector and the skill must say the bands cannot see it. Follow-up run after the tool fixes: smooth masses, blended torso, skirt as a flared cone.
   **Mouse proportions run (2026-08-22, `dispatch/mouse-proportions`):** rebuilt
   the mouse to the maus-biped RIG joint heights (skeleton was a big head on
@@ -1119,6 +1179,12 @@ Key reference docs (open these before touching their area):
   hair tufts mount at the hairline and drape down ~100deg, capcone is a rounder
   beret, ruff silver-grey, eyes smaller + specular catchlight (eyeGlint).
   [branch `dispatch/clown-skull`]
+
+- `P9` [x] **Ring-fit (`blob:rings`)** — fits existing `.blob` prims to a skinned
+  reference mesh via `sdBody` residuals; pose-independent, suggests rather than
+  applies, reports each prim as one coupled edit with its semi-axes. Spec
+  `docs/superpowers/specs/2026-08-26-blob-ring-fit-design.md`, plan
+  `docs/superpowers/plans/2026-08-26-blob-ring-fit.md`.
 
 ---
 

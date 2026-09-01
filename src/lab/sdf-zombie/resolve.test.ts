@@ -84,6 +84,15 @@ describe('placePrims with offset and op', () => {
     expect(p!.b).toEqual([0.05, 1.1, -0.02]);
   });
 
+  it('carries the mirrored flag onto the placed primitive', () => {
+    const mk = (mirrored?: true) => placePrims([{
+      bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,
+      limb: 'head', ...(mirrored ? { mirrored } : {}),
+    }] as ExpandedPrim[], skull as never)[0]!;
+    expect(mk(true).mirrored).toBe(true);
+    expect(mk().mirrored).toBeUndefined();
+  });
+
   it('defaults op to add and passes sub through', () => {
     const mk = (op?: 'add' | 'sub') => placePrims([{
       bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,

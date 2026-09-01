@@ -121,6 +121,57 @@ the `.blob` rests them at ~47 degrees, so score a `--range` window where the
 poses agree (`--range 0.75:1` is legs and shoes, where nothing is posed) and
 act on those bands.
 
+**When the reference is a SKINNED mesh, `npm run blob:rings -- <name>` is the
+sharper tool.** It does not rasterise: it assigns every reference vertex to its
+dominant joint, aligns each bone rigidly under one measured global scale, and
+reads `sdBody` at each point — so the residual it reports is the error in
+millimetres with blending already folded in, and it names a specific `.blob`
+line rather than a band. Same reference resolution as `blob:measure`, same exit
+codes: 0 whenever it ran however bad the numbers, 2 for "did not run".
+
+**Every numbered block is ONE edit. Do not apply part of one.** Only the world
+semi-axes `r x scale` are measurable — `r` and a uniform scale are the same
+change to the surface — so the fit returns one representative of a family, not
+four independent findings. That is why each scale line prints its SEMI-AXIS in
+millimetres beside the ratio: the ratio is what you type, the semi-axis is what
+was measured. On mouse `upperarm` the tool asks for `deep 1.000 -> 1.196`, which
+looks like a 20% correction and moves the semi-axis 50.0mm -> 50.6mm. Applying
+that line alone, without the `r` above it, makes the character worse.
+
+A block can also say **NOT SEPARABLE**, naming two axes and the angle between
+them. That happens when the bone's direction makes two scale columns nearly
+parallel, so only their combined effect is measured and the split shown between
+them came from the solver rather than the reference — mouse `upperarm` sits at
+5.8 degrees, `forearm` at 4.9. Move that pair together or not at all.
+
+Three more things it will tell you, in the order they should change your mind:
+
+- **Fix the bone LENGTH first.** A block headed `BONE LENGTH IS OFF BY -44.8%`
+  is not a radius finding. The fit can only spend a residual on radius, scale
+  and offset, so a `len=` mismatch arrives as nonsense elsewhere: mouse's foot
+  is 45% short, and that alone extrapolates a toe blob's `r` from 0.043 to
+  0.205. A suggestion at or below zero is printed as IMPOSSIBLE for the same
+  reason — schoolgirl's foot asks for `r2 = -0.187`.
+- **Read the coverage line.** It is measuring the part of the character in
+  scope, and that is not the whole character: 79% of `schoolgirl.glb`'s vertices
+  reach a measurable bone against only 40% of `mouse.glb`'s, because 55% of the
+  mouse mesh is head and hands. Primitives that got no samples, or fewer than
+  40, are listed as skipped rather than quietly missing.
+- **Read `blend-dominated` before acting on a number.** A primitive at 60% is
+  telling you its suggestion is soft, because the surface there belongs to the
+  smooth-min of two prims and the nearest-prim rule had to pick one. Treat a
+  large `cross-bone dropped` the same way — that bin is measuring a seam.
+
+Two consequences of the rigid per-bone alignment worth knowing:
+
+- **Pose does not matter.** Each bone is measured in its own frame, so the mouse
+  mesh's T-posed arms against the `.blob`'s 47-degree rest are not a problem and
+  no `--range` window is needed. `blob:measure` still needs one.
+- **It cannot see the head, the hands, or an unrigged reference.** Head prims
+  are offset-positioned features plus a `face` block; the reference rig lumps
+  the whole hand into one joint; `cyclops.glb` has no skin at all and exits 2.
+  Those print as skipped or exit, never as a score.
+
 `scripts/silhouette-match.ts` is the older whole-outline scorer blob-measure
 supersedes — same raster, but it cannot name the line that owns a band.
 

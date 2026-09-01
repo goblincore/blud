@@ -73,6 +73,9 @@ export function placePrims(
       // (it is what placed it), while `src` is absent for TS-authored prims.
       bone: p.bone,
       ...(p.src === undefined ? {} : { src: p.src }),
+      // Rides through placement because it is a fact about the SOURCE LINE,
+      // not about where the rig put the copy. See Primitive.mirrored.
+      ...(p.mirrored ? { mirrored: true } : {}),
       radius: p.radius,
       ...(p.radiusB === undefined ? {} : { radiusB: p.radiusB }),
       scale: p.scale,

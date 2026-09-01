@@ -34,6 +34,19 @@ describe('expandMirror', () => {
     expect(out.bones.find(b => b.name === 'thigh')).toBeUndefined();
   });
 
+  /**
+   * A MIRRORED SOURCE LINE IS ONE AUTHORED NUMBER APPLIED THROUGH A REFLECTION,
+   * and a consumer that cannot see that will mis-apply anything x-signed. The
+   * flag is set here, at the only place that knows, rather than inferred later
+   * from two placed prims sharing a `src` — a TS-authored body has no `src` at
+   * all, and a pair whose second copy is unmeasurable arrives downstream alone.
+   */
+  it('marks both copies of a mirrored prim as mirrored, and an unmirrored one not', () => {
+    expect(out.prims.find(p => p.bone === 'thigh.l')!.mirrored).toBe(true);
+    expect(out.prims.find(p => p.bone === 'thigh.r')!.mirrored).toBe(true);
+    expect(out.prims.find(p => p.bone === 'pelvis')!.mirrored).toBeUndefined();
+  });
+
   it('splits a mirrored prim, retargets its bone, and resolves limb to L/R', () => {
     const l = out.prims.find(p => p.bone === 'thigh.l');
     const r = out.prims.find(p => p.bone === 'thigh.r');
@@ -119,6 +132,17 @@ describe('mirrorOffset', () => {
       }],
     });
     expect(out.prims.every(p => p.op === 'sub')).toBe(true);
+  });
+
+  it('MARKS BOTH COPIES AS MIRRORED — a downstream fit must be able to tell', () => {
+    const out = expandMirror({
+      ...skullOnly,
+      prims: [{
+        bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,
+        limb: 'head', offset: [0.04, 0.01, -0.05], mirrorOffset: true,
+      }],
+    });
+    expect(out.prims.every(p => p.mirrored === true)).toBe(true);
   });
 
   it('rejects a prim that asks for both mirror modes', () => {
