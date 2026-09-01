@@ -372,6 +372,18 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
    builds casters from the camera-filtered render list. Unconfirmed. This bug is
    invisible to all 2378 passing tests — it gets a regression test.
    [spec](docs/superpowers/specs/2026-09-01-dungeon-relighting-design.md)
+   **PLAN WRITTEN** (10 tasks):
+   [plan](docs/superpowers/plans/2026-09-01-dungeon-relighting.md). Task 1 rig
+   data, 2 flashlight + THE SHADOW FIX, 3-4 procedural stone, 5 palette, 6
+   braziers, 7 flashlight in the march (owner already caught this by eye:
+   "characters dont seem to be lit by the direction of the light source"), 8
+   inflated shadow hull (fixes owner-rejected blob shadows), 9 bench + parity
+   GATE, 10 blood retune.
+   **CUT FROM THE PLAN, deliberately:** walls-shadow-characters via an analytic
+   AABB ray in the march (spec §3 mechanism 3). With the lamp mounted near the
+   eye a character you can see is nearly always one the lamp can see, so it is
+   a small effect; a per-pixel loop over ~56 AABBs is the wrong trade before
+   task 9 establishes a frame budget. Recorded here rather than dropped.
 
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
    chromatic bounce; `ambientAt(p, n)` is the seam every later implementation
