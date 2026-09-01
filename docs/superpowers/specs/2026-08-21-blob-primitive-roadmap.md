@@ -1,7 +1,7 @@
 # `.blob` primitive and fold roadmap
 
 **Date:** 2026-08-21
-**Status:** taper + chamfer shipped; the rest queued
+**Status:** taper, chamfer, arc capsule (`bend=`), groove and `shell` shipped; rounded box, blend exponent, torus and prism still queued (status corrected 2026-09-01 — the line above had gone stale at "taper + chamfer")
 
 ## Why this document exists
 

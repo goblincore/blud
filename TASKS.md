@@ -20,6 +20,33 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SDF RENDER PERF ROUND 2 — PLANNED (2026-09-01), not started.** A read-only
+review of the march, the pass chain and the perf record after the shell
+march produced an 8-task plan: fresh baseline → hull exit bounds `tMax` on
+the un-relaxed path (exact; the halo lives on the `omega > 1` path only) →
+plain sphere tracing at omega 1.0 (the page runs no shell displacement) →
+wound-loop early-out → drop the disabled occluder rebuild + delete the
+bit-rotted `specialise.ts` (emits 3-arg `sdPrim` vs the 7-arg signature;
+OWNER CALL) → **front-to-back per-body passes gated on accumulated depth**
+(the largest untouched cost: a body behind a body marches its whole pixel
+set) → distortion-corrected footprint AA epsilon → level shadows RECEIVED
+by bodies via a level-only twin light → measure the per-body upload.
+Each task has a bench gate and a frozen-capture parity gate.
+[plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
+review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
+
+**BLOBFORGE RING-FIT BRANCH MERGED (2026-09-01, main `eea6620`).**
+`claude/sdf-character-workflow-837c40` (blob:rings, ref-skin/ref-align,
+bonewalker, schoolgirl-alt, dragon) had sat 115 commits behind main; merged
+with TASKS.md as the only conflict (both blocks kept). tsc 0; suite green
+except `scripts/blob-measure.test.ts` (7 tests, fail identically on
+`b771ab8` — environmental, pre-existing). Next for the toolchain, in order:
+LBS-pose the skinned reference into the `.blob` rest pose (kills POSE
+MISMATCH), a start-from-mesh scaffold (one `bar` per rig bone, radius from
+the ring median, `# fit:` comment per number), a front/side depth-image
+diff (silhouette cannot see interior creases), `emitBlob` generalised →
+`blob:rings --apply` that refuses to move a pinned test property.
+
 **BLEEDING WOUNDS + C2 TEMPORAL — BOTH OWNER-PASSED (2026-08-31).** Bleeding
 (per-calibre emitters: pellet ooze / slug spurt-to-drip / stump gush, chunk
 trails, floor splat decals, wounds-anchored so blood rides the animated body)
@@ -1070,10 +1097,10 @@ Key reference docs (open these before touching their area):
   inside the mass it grows from reads as a bump (cranium semi-depth 0.118, the
   first tapered nose tipped at 0.122 and was still a bump); and *two features at
   the same height fuse* — separation must beat the SUM of the two blends.
-  **Next session: the rest of the primitives**, in roadmap order — arc capsule
-  (quadratic Bézier + taper; the biggest gap, since horns/tusks/tails/claws are
-  all N-prim chains today and every link has its own round base), rounded box
-  (the first flat face in the format), blend exponent, torus, prism.
+  **Primitives since:** arc capsule (`bend=`), groove and `shell` SHIPPED;
+  still unbuilt from the roadmap — rounded box (the first flat face), blend
+  exponent (cheapest, most general), torus, prism; plus a spar+sheet
+  construction the dragon's wings showed is missing (2026-09-01 review).
   **Also open:** lab cold boot is 19-30 s and it is three's TSL node builder, not
   the GPU or the network — ~85% of a CPU profile; deferring the warm-up made it
   WORSE (36.8 s vs 18.8 s) because nothing paints until `main()` returns, so the
