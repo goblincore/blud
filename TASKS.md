@@ -407,51 +407,54 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
 `Claude Notes/Blud/2026-08-24-sdf-render-optimization-options.md`.
 
 **Next session — pick up (prioritized):**
-0. **`L2` — dungeon relighting: wet gray stone + offset flashlight + Doom 3
-   specular.** Spec written 2026-09-01, **owner-approved in brainstorm**, branch
-   `claude/dungeon-relighting-specularity-15dbea`. Supersedes the *world* half of
-   the `L1` spec (the gallery it lights); `ambientAt` itself is UNCHANGED and
-   still bit-exact at `probeWeight 0`. Decisions: procedural stone maps (normal
-   map is the feature — specular needs relief), cold wet-gray stone with warm
-   fire practicals reusing the 5 existing `AccentLight` entries, flashlight
-   **weapon-mounted and OFFSET** (an eye-mounted light casts no visible shadow),
-   character self-shadow CUT by owner so the whole design holds the
-   zero-extra-`mapBody` line. Blood retune is in scope — goo was tuned against
-   white walls this deletes.
-   **SPIKE FINDING, READ BEFORE STARTING:** `SpotLight` shadows work in
-   `WebGPURenderer` r185 (proved isolated), work through a plain render target
-   (proved), and work on the real game scene rendered plainly (proved by
-   `castShadow` A/B) — but **vanish entirely through the `postAa` -> `sdfLayer`
-   chain**, with `castShadow` true on all 98 meshes and a 1024² map allocated.
-   Leading hypothesis: `sdfLayer.render` pins `camera.layers` to `CONE_LAYER` /
-   `OCCLUDER_LAYER` (`sdf-layer.ts:541,561`) and three's WebGPU shadow pass
-   builds casters from the camera-filtered render list. Unconfirmed. This bug is
-   invisible to all 2378 passing tests — it gets a regression test.
-   [spec](docs/superpowers/specs/2026-09-01-dungeon-relighting-design.md)
-   **PLAN WRITTEN** (10 tasks):
-   [plan](docs/superpowers/plans/2026-09-01-dungeon-relighting.md). Task 1 rig
-   data, 2 flashlight + THE SHADOW FIX, 3-4 procedural stone, 5 palette, 6
-   braziers, 7 flashlight in the march (owner already caught this by eye:
-   "characters dont seem to be lit by the direction of the light source"), 8
-   inflated shadow hull (fixes owner-rejected blob shadows), 9 bench + parity
-   GATE, 10 blood retune.
-   **CUT FROM THE PLAN, deliberately:** walls-shadow-characters via an analytic
-   AABB ray in the march (spec §3 mechanism 3). With the lamp mounted near the
-   eye a character you can see is nearly always one the lamp can see, so it is
-   a small effect; a per-pixel loop over ~56 AABBs is the wrong trade before
-   task 9 establishes a frame budget. Recorded here rather than dropped.
-   **`L2.bench` — task 9 GATE PASSED (2026-09-01):** room-4 throughput, 3
-   alternating reps — dungeon-off **18.84 ms**, dungeon-no-shadow **21.46**,
-   dungeon-shadow **21.36** (overall p50; p95 42–46; p95 recorded, the harness
-   computes no p90). Shadow overhead **−0.5% vs no-shadow — gate +40% PASS**
-   with headroom: per-leg spread 14–16%, so the exact shadow delta is
-   UNRESOLVED, only bounded far under the gate; rig+flashlight reads ~+12% over
-   the off-state. Shadow legs ablated at BOOT (`?spotshadow=0`) —
-   `shadow.intensity=0` still renders the 1024² map, and live `castShadow`
-   toggles crash r185.
-   [baselines](docs/dev-notes/2026-09-01-dungeon-relight/baselines.json) ·
-   driver `scripts/dungeon-bench.sh` (fresh page per run, ship defaults +
-   leg-state readback asserted)
+0. **`L2` — dungeon relighting: DONE + MERGED (2026-09-01, main `11942ca`).**
+   `sdf-game.html` is a dark wet-gray stone dungeon lit by a weapon-mounted
+   OFFSET flashlight and warm fire braziers, with per-pixel bumped specular on
+   procedurally generated stone. 9 dispatch tasks on `zai/glm-5.3-flash` plus
+   owner tuning passes.
+   **Owner-tuned defaults, live on the goo panel:** beam gain 2.9 / shoulder
+   0.45 / keyFloor 0.4; goo shadowRed 0.19 (raised from 0.12 — its job is that
+   blood never reads black and it was calibrated against white gallery walls).
+   **Bench** (`scripts/dungeon-bench.sh`, room-4 firefight, 3 alternating reps):
+   dungeon-off 18.84 ms, no-shadow 21.46, shadow 21.36 — shadow overhead
+   **-0.5%**, far inside the +40% gate; relight overall ~+12% over off-state.
+   Numbers predate the occluder-pre-pass disable, so they are conservative.
+   **Two bugs found that no test could see:** (1) three's `ShadowNode` copies
+   the MAIN camera's layer mask onto the shadow camera when that mask has no
+   bit above bit 0, and `sdfLayer` pins `camera.layers` mid-frame — the shadow
+   map rendered with no level geometry in it; fixed by setting
+   `spot.shadow.camera.layers` explicitly, which also enrols the character
+   hull. (2) the occluder pre-pass's rasterised distance is exact below ~3 m
+   then collapses (true 7.9 m reads 3.78), so `tMax` landed in front of the
+   skin and rays gave up — the owner's "bodies full of holes at range". The
+   pre-pass now ships DISABLED; it measured as free anyway.
+   [spec](docs/superpowers/specs/2026-09-01-dungeon-relighting-design.md) ·
+   [plan](docs/superpowers/plans/2026-09-01-dungeon-relighting.md)
+
+- `L2.followup-shadows` [ ] **Character cast shadows still read as separate
+  blobs.** Task 8 shipped `SHADOW_HULL_INFLATE = 1.35` on a dedicated
+  `SHADOW_HULL_LAYER` hull, and it is not enough to fuse the spheres into one
+  silhouette (owner: "the shadows are still blobs"). Cheapest next step is 1.6
+  -> 1.8 and a look; the geometric bound is that adjacent sphere centres must
+  overlap. Owner has already waived EXACT silhouettes — a chunky connected
+  shadow is fine, a scatter of circles is not.
+
+- `L2.followup-frozen-ab` [ ] **The frozen capture path may not re-march, which
+  would make every character-look A/B a lie.** With
+  `freeze(true)` + `setLoopRunning(false)` + `step()`, every
+  character-affecting uniform measured IDENTICAL flesh luminance AND an
+  identical flesh pixel COUNT — including `spotCfg.w`, which predates the beam
+  knobs. An unchanging pixel count across a lighting change is not a subtle
+  effect, it is no effect. The owner then tuned the same knobs by hand on the
+  live page and they clearly worked, so the MEASUREMENT is the suspect, not the
+  feature. This matters because `scripts/dungeon-look.sh` uses that path and it
+  is what the dispatch agents and the bench were told to verify through.
+
+- `L2.followup-wounds` [ ] **Wound pass round 2 (owner ask, not yet designed):**
+  bone showing through deep wounds, plus additional wound coloring/texture. The
+  highlight shoulder helps rather than competes — it is what gives a wound room
+  to read DARKER than lit skin under the beam.
+
 
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
    chromatic bounce; `ambientAt(p, n)` is the seam every later implementation
