@@ -263,7 +263,10 @@ async function main() {
    *  light — at 0 a lit body hard-clips and crater, lip and clean skin all
    *  saturate to the same white, so a shot enemy looks unshot exactly when you
    *  are close enough to aim (owner, 2026-09-01). */
-  const beamTuning = { gain: 1.1, shoulder: 0.45, keyFloor: 0.15 };
+  // Owner's tuned values (2026-09-01, found on the panel). The high gain
+  // works precisely BECAUSE the shoulder is on: 2.9 would have clipped a
+  // body to featureless white under the old hard clamp.
+  const beamTuning = { gain: 2.9, shoulder: 0.45, keyFloor: 0.4 };
   const flashlight = createFlashlight();
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
@@ -304,10 +307,20 @@ async function main() {
      *  WebGPU crashes rebuilding a disposed shadow map). */
     spot: flashlight.spot,
     /** Beam knobs, also on the tuning panel. */
-    setBeam(t: { gain?: number; shoulder?: number; keyFloor?: number }) {
-      if (t.gain !== undefined) beamTuning.gain = t.gain;
-      if (t.shoulder !== undefined) beamTuning.shoulder = t.shoulder;
-      if (t.keyFloor !== undefined) beamTuning.keyFloor = t.keyFloor;
+    /** Accepts BOTH the short names and the panel's slider names, because the
+     *  panel's COPY button emits the slider names (beamGain, ...) and a line
+     *  you paste back must actually do something — it silently did nothing
+     *  until 2026-09-01. */
+    setBeam(t: {
+      gain?: number; shoulder?: number; keyFloor?: number;
+      beamGain?: number; beamShoulder?: number; beamKeyFloor?: number;
+    }) {
+      const gain = t.gain ?? t.beamGain;
+      const shoulder = t.shoulder ?? t.beamShoulder;
+      const keyFloor = t.keyFloor ?? t.beamKeyFloor;
+      if (gain !== undefined) beamTuning.gain = gain;
+      if (shoulder !== undefined) beamTuning.shoulder = shoulder;
+      if (keyFloor !== undefined) beamTuning.keyFloor = keyFloor;
       return { ...beamTuning };
     },
     get beam() { return { ...beamTuning }; },
@@ -943,6 +956,11 @@ async function main() {
     gooLayer.setSpec(2.85);
     gooLayer.setGloss(220);
     gooLayer.setRim(0);
+    // shadowRed RETUNED 0.12 -> 0.19 for the dungeon (owner, 2026-09-01).
+    // Its whole job is that blood never reads black, and it was calibrated
+    // against WHITE gallery walls that this relight deleted — against dark
+    // wet stone the old floor was not enough to keep shadowed blood red.
+    gooLayer.setShadowRed(0.19);
 
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo

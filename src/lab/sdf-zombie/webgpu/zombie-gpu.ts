@@ -240,7 +240,7 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  key floor (what is left of the PRESET key when the beam is off — 1.0
      *  restores the old always-lit behaviour, 0 makes an unlit body vanish
      *  since bounce carries hue and not level). */
-    spotCfg2: uniform(new THREE.Vector4(1.1, 0.45, 0.15, 0)),
+    spotCfg2: uniform(new THREE.Vector4(2.9, 0.45, 0.4, 0)),
     /** x specIntensity, y specRoughness, z fresnelBoost, w translucency */
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
