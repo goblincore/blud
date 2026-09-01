@@ -4,6 +4,13 @@
 // gated by test without standing up a renderer, and so the gallery rig survives
 // as a live A/B rather than as a comment. See
 // docs/superpowers/specs/2026-09-01-dungeon-relighting-design.md.
+//
+// THREE comes from 'three/webgpu', never bare 'three': importing both loads two
+// copies of three and the node system stops recognising lights constructed by
+// the other copy (lab-renderer.ts header). Do not split these imports.
+import * as THREE from 'three/webgpu';
+import { OCCLUDER_LAYER } from './sdf-layer';
+
 export type Vec3 = [number, number, number];
 
 export interface AmbientRig {
@@ -57,3 +64,63 @@ export const DUNGEON_RIG: AmbientRig = {
   flashlightColor: [0.94, 0.96, 1.0], // cold near-white
   practicalColor: [1.0, 0.46, 0.13],  // fire
 };
+
+/** Offset from the eye, in view space: right, up, forward.
+ *
+ *  LOAD-BEARING. A flashlight AT the eye casts no visible shadow — every
+ *  shadow it throws is exactly hidden behind the object throwing it (the
+ *  headlight problem, demonstrated live during the spike). The horizontal
+ *  offset is what makes shadows emerge, and it is the entire Doom 3 read. */
+export const FLASHLIGHT_OFFSET: Vec3 = [0.25, -0.15, 0.1];
+
+export interface Flashlight {
+  spot: THREE.SpotLight;
+  /** Pose the light from the camera each frame. */
+  update(camera: THREE.PerspectiveCamera): void;
+}
+
+export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
+  const c = rig.flashlightColor;
+  const spot = new THREE.SpotLight(
+    new THREE.Color(c[0], c[1], c[2]),
+    90,               // intensity — physically-correct falloff wants a big number
+    16,               // distance
+    Math.PI * 0.12,   // cone half-angle. 0.24π (the first cut) is a FLOODLIGHT:
+                      // an 86° full cone at this intensity swallows the whole
+                      // room and the page reads gallery-bright (seen on the
+                      // 2026-09-01 task-2 captures). ~22° half reads as a
+                      // torch: one bright disc, dark everywhere else.
+    0.45,             // penumbra
+    1.6,              // decay
+  );
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  spot.shadow.camera.near = 0.2;
+  spot.shadow.camera.far = 18;
+  spot.shadow.bias = -0.002;
+
+  // THE FIX — see the test above and the spec's spike section. Setting any bit
+  // above bit 0 stops three inheriting the main camera's (mid-frame, wrong)
+  // mask, AND opts the character hull in as a shadow caster. One change, both
+  // shadow mechanisms.
+  spot.shadow.camera.layers.set(0);
+  spot.shadow.camera.layers.enable(OCCLUDER_LAYER);
+
+  const eye = new THREE.Vector3();
+  const off = new THREE.Vector3();
+  const fwd = new THREE.Vector3();
+
+  function update(camera: THREE.PerspectiveCamera) {
+    camera.updateMatrixWorld();
+    camera.getWorldPosition(eye);
+    off.set(FLASHLIGHT_OFFSET[0], FLASHLIGHT_OFFSET[1], FLASHLIGHT_OFFSET[2])
+      .applyQuaternion(camera.quaternion);
+    spot.position.copy(eye).add(off);
+    camera.getWorldDirection(fwd);
+    spot.target.position.copy(spot.position).addScaledVector(fwd, 10);
+    spot.target.updateMatrixWorld();
+    spot.updateMatrixWorld();
+  }
+
+  return { spot, update };
+}
