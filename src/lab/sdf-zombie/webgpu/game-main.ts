@@ -229,12 +229,26 @@ async function main() {
   // is watching.
   const accentGroup = new THREE.Group();
   accentGroup.name = 'accent-lights';
+  const flickerLights: { light: THREE.PointLight; base: number; phase: number }[] = [];
   for (const r of ROOMS) {
     for (const a of r.accents) {
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
       pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
       accentGroup.add(pl);
+      flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
+
+      // A visible source. Without it the light has no cause and reads as a bug.
+      const bowl = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.16, 1),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
+          emissive: new THREE.Color(a.color[0], a.color[1], a.color[2]),
+          emissiveIntensity: 2.2,
+          roughness: 0.7,
+        }));
+      bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+      accentGroup.add(bowl);
     }
   }
   scene.add(accentGroup);
@@ -392,6 +406,13 @@ async function main() {
   // Goo OFF takes the original single-call path, so the toggle is exact.
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
+    // Fire flicker. Cheap and deliberately not random per frame — a smooth
+    // two-rate wobble reads as flame; white noise reads as a broken light.
+    const ft = performance.now() * 0.001;
+    for (const f of flickerLights) {
+      const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
+      f.light.intensity = f.base * (1 + w * 0.14);
+    }
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {

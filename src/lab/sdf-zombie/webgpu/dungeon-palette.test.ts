@@ -26,4 +26,23 @@ describe('dungeon palette', () => {
   it('tunnels are darker than the rooms they join — a throat, not a gallery', () => {
     for (const t of TUNNELS) expect(lum(t.color)).toBeLessThan(lum(ROOMS[0]!.wallColor));
   });
+
+  describe('braziers', () => {
+    it('every accent is FIRE — warm, never the gallery art-wash', () => {
+      for (const r of ROOMS) {
+        for (const a of r.accents) {
+          expect(a.color[0]!, r.name).toBeGreaterThan(a.color[2]! + 0.35);
+          expect(a.color[1]!, r.name).toBeGreaterThan(a.color[2]!);
+        }
+      }
+    });
+
+    it('at least one brazier per room, so no chamber is lit only by the beam', () => {
+      for (const r of ROOMS) expect(r.accents.length, r.name).toBeGreaterThanOrEqual(1);
+    });
+
+    it('braziers sit low enough to be furniture, not ceiling fixtures', () => {
+      for (const r of ROOMS) for (const a of r.accents) expect(a.pos[1]!).toBeLessThan(2.0);
+    });
+  });
 });

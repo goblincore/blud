@@ -134,27 +134,27 @@ const GALLERY_CEIL: Vec3 = [0.175, 0.18, 0.19];
 export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // RED wash on the west wall, over the low furniture.
-    accents: [{ pos: [-7.5, 2.5, -2.8], color: [1.0, 0.10, 0.06], power: 14 }],
+    // FIRE brazier low on the west side, over the low furniture.
+    accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.46, 0.13], power: 9 }],
     zombies: 1 },
   { id: 2, name: 'room2', minX: B, maxX: O, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // TEAL wash on the east wall by the tall crate.
-    accents: [{ pos: [7.6, 2.6, -6.3], color: [0.05, 0.85, 0.60], power: 14 }],
+    // FIRE brazier on the east wall by the tall crate.
+    accents: [{ pos: [7.6, 1.15, -6.3], color: [1.0, 0.42, 0.11], power: 9 }],
     zombies: 2 },
   { id: 3, name: 'room3', minX: B, maxX: O, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // AMBER pool near the (3,3) spawn — the accent-pair capture stands a
-    // zombie beside it. VIOLET in the far corner for depth.
+    // Two fires, one cooler and further off, for depth. The accent-pair
+    // capture stands a zombie beside the near one.
     accents: [
-      { pos: [2.0, 2.4, 2.2], color: [1.0, 0.55, 0.12], power: 14 },
-      { pos: [7.8, 2.6, 7.8], color: [0.30, 0.20, 1.00], power: 12 },
+      { pos: [2.0, 1.15, 2.2], color: [1.0, 0.50, 0.16], power: 10 },
+      { pos: [7.8, 1.15, 7.8], color: [0.95, 0.38, 0.10], power: 7 },
     ],
     zombies: 3 },
   { id: 4, name: 'room4', minX: -O, maxX: -B, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
-    // MAGENTA wash along the north wall.
-    accents: [{ pos: [-3.5, 2.6, 7.9], color: [0.95, 0.15, 0.75], power: 14 }],
+    // FIRE brazier along the north wall.
+    accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 }],
     zombies: 4 },
 ];
 
