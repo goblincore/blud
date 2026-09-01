@@ -55,9 +55,14 @@ import {
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
-import { createBloodSim, spawnWoundDroplets, emitTrails, stepBlood } from '../blood-sim';
+import type { ImpactGoutProfile } from '../blood-sim';
+import {
+  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT,
+} from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import { createBloodView } from './blood-view-gpu';
+import { createGooLayer, type GooLayer } from './goo-layer';
+import { createGooPanel, type GooPanel } from './goo-panel';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -234,10 +239,28 @@ async function main() {
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
   let sdfScale = 1.0;
+  // Declared AHEAD of sizeSdfLayer because that function reads it and runs
+  // during init — a `let` further down is a temporal dead zone and the page
+  // dies before __sdfGame exists (caught immediately: headless boot found no
+  // __sdfGame at all). Assigned once the actors give it a light rig.
+  let gooLayer: GooLayer | null = null;
+  let gooPanel: GooPanel | null = null;
+  // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
+  // so i dont have to toggle it on each time"). setGoo(false) stays the kill
+  // switch; mode 'depth' vs 'overlay' stays a separate toggle.
+  let gooEnabled = true;
+
   function sizeSdfLayer() {
     const s = postAa.contentSize;
     sdfLayer.setSize(s.width, s.height);
     sdfLayer.setConeGeometry(camera.fov, sdfLayer.targetSize.height);
+    // Density follows the SDF layer at GOO_TUNING.densityScale. Called from
+    // here rather than a separate resize listener (lab-main's shape) because
+    // ADAPTIVE RESOLUTION moves the SDF target at runtime through
+    // applySdfScale -> sizeSdfLayer: a listener would never fire and the goo
+    // would keep splatting into a stale-sized field.
+    const t = sdfLayer.targetSize;
+    gooLayer?.setSize(t.width, t.height);
   }
   sdfLayer.setScale(sdfScale);
   sizeSdfLayer();
@@ -302,7 +325,23 @@ async function main() {
     const hi = s[m]!;
     return s.length % 2 ? hi : (s[m - 1]! + hi) / 2;
   }
-  handle.setDrawFn(() => postAa.render(() => sdfLayer.render(scene, camera)));
+  // The frame's draw. With the goo layer on, the chain nests exactly as
+  // lab-main's does: goo DENSITY (+ blur) first, the whole sdf/cone/occluder/
+  // composite flow in the middle, then the goo SURFACE composited on top with
+  // its reconstructed depth so the metaball blood interleaves with flesh and
+  // floor. gooLayer is assigned further down (it needs a body view's light
+  // uniforms, which only exist once the actors are built) — safe in this
+  // closure because everything up to the end of main() is synchronous, so no
+  // frame can fire against the hole.
+  //
+  // Goo OFF takes the original single-call path, so the toggle is exact.
+  handle.setDrawFn(() => postAa.render(() => {
+    if (gooEnabled && gooLayer) {
+      gooLayer.render(camera, () => sdfLayer.render(scene, camera));
+    } else {
+      sdfLayer.render(scene, camera);
+    }
+  }));
 
   const occluderHull = createOccluderHull();
   occluderHull.object.layers.set(OCCLUDER_LAYER);
@@ -710,6 +749,153 @@ async function main() {
   // -----------------------------------------------------------------------
   const bloodSim = createBloodSim();
   const bleed = new BleedRegistry();
+
+  // -----------------------------------------------------------------------
+  // GOO — screen-space metaball blood (X1.bleed-look round 2). The owner's
+  // brief was "viscous and gooey and shiny blobbys and no hard edges ...
+  // kinda like the metablob for the goo system", which is goo-layer.ts's own
+  // job description; round 1's ribbons were judged "too thin and
+  // uninteresting" because lines cannot be volumes.
+  //
+  // It shares a body view's light uniform NODES — not copies — so the goo and
+  // the flesh stay lit by one rig. That is why it is created HERE, after the
+  // actors: those nodes do not exist until a view does.
+  // -----------------------------------------------------------------------
+  const gooRigView = actors[0]?.view;
+  if (gooRigView) {
+    gooLayer = createGooLayer(handle.renderer, {
+      lightDir: gooRigView.uniforms.lightDir,
+      keyColor: gooRigView.uniforms.keyColor,
+      lightCfg: gooRigView.uniforms.lightCfg,
+    });
+    postAa.addSink(gooLayer);
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+    // Game defaults. The threshold trades two failure modes against each
+    // other and BOTH were hit on the way here:
+    //   too low  -> every isolated droplet clears it and draws its own oval
+    //               (three rounds of "little oval drops"; the old 0.95 clamp
+    //               made this unavoidable, since a lone blob peaks near 1.0)
+    //   too high -> only dense overlap draws, so an ordinary pellet hit
+    //               renders NOTHING (measured: 10 droplets, zero pixels)
+    // 0.6 sits where dense stream sections fuse into connected ropes while a
+    // thin hit still reads. Fat blobs and wide blur do the fusing; mist
+    // carries the sparse case and the satellite grain the references show.
+    // Tune live with __sdfGame.setGooTuning — 1.2+ for heavy ropes, 0.4 for
+    // a wetter, beadier read.
+    // GAME-PAGE GOO DEFAULTS — the owner's own tuning pass, 2026-08-31,
+    // found on the live panel and pasted back verbatim. Set here rather than
+    // in GOO_TUNING because that table is shared with the LAB, whose look was
+    // tuned separately and must not move.
+    //
+    // Worth reading as a whole, because it is not where I expected to land:
+    // small blobs (0.14), almost NO blur (0.5), stretch at maximum, gloss at
+    // maximum, and a nearly stationary gout. That is a sharp, wet, elongated
+    // read — the opposite of the round fused mass I kept steering toward.
+    gooLayer.setSizeScale(0.14);
+    gooLayer.setThreshold(0.65);
+    // BLUR OFF (owner, 2026-08-31: "we can remove the blur"). 0 bypasses both
+    // blur passes ENTIRELY — not a degenerate copy — so this is also two
+    // fewer full-screen passes per frame. The code stays because goo-layer is
+    // shared with the LAB, whose look is tuned around blurPx 2.5.
+    gooLayer.setBlurPx(0);
+    // DEPTH, not overlay. Overlay never depth-tests, so blood paints over the
+    // crate it is behind and over the far side of the body it came out of,
+    // which reads as a sticker regardless of scale. Overlay was added to
+    // route around a depth blocker that turned out not to exist — the real
+    // bug was the post-aa sink — so the reconstruction gets to do its job.
+    gooLayer.setMode('depth');
+    gooLayer.setStretch(4);
+    gooLayer.setEdge(2.75);
+    gooLayer.setAbsorb(1.6);
+    gooLayer.setSpec(2.85);
+    gooLayer.setGloss(220);
+    gooLayer.setRim(0);
+
+
+    // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
+    // manually"). The look is a five-knob family found by sweeping two at a
+    // time and watching; retyping setGooTuning after every reload is not a
+    // sweep. Shown automatically with setGoo(true) — this is a debug page and
+    // the panel is the reason to turn the layer on at all — and dismissable
+    // with __sdfGame.gooPanel(false).
+    const L = gooLayer;
+    gooPanel = createGooPanel([
+      { key: 'sizeScale', group: 'goo', min: 0.05, max: 1.5, step: 0.01,
+        hint: 'World-size multiplier per blob. The scale knob: too high and the mass swallows the room.',
+        get: () => L.sizeScale, set: v => L.setSizeScale(v) },
+      { key: 'threshold', group: 'goo', min: 0.05, max: 4, step: 0.05,
+        hint: 'Density needed to be goo. A LONE blob peaks near 1.0, so below 1 every isolated droplet draws its own shape.',
+        get: () => L.threshold, set: v => L.setThreshold(v) },
+      { key: 'blurPx', group: 'goo', min: 0, max: 16, step: 0.5,
+        hint: 'Gaussian sigma. Wider blur fuses neighbouring peaks BEFORE the threshold sees them — the grapes-to-sheets knob.',
+        get: () => L.blurPx, set: v => L.setBlurPx(v) },
+      { key: 'stretch', group: 'goo', min: 0, max: 4, step: 0.05,
+        hint: 'Velocity elongation cap. 0 = round blobs. High values turn a fast gout into a starburst of needles.',
+        get: () => L.stretch, set: v => L.setStretch(v) },
+      { key: 'edge', group: 'goo', min: 1.05, max: 4, step: 0.05,
+        hint: 'Soft-edge band width, as a multiple of threshold.',
+        get: () => L.edge, set: v => L.setEdge(v) },
+      { key: 'absorb', group: 'goo', min: 0, max: 3, step: 0.05,
+        hint: 'Beer-Lambert thickness. Higher = darker crimson core against a brighter thin fringe.',
+        get: () => L.absorb, set: v => L.setAbsorb(v) },
+      { key: 'spec', group: 'goo', min: 0, max: 4, step: 0.05,
+        hint: 'Specular strength — the wet glint.',
+        get: () => L.spec, set: v => L.setSpec(v) },
+      { key: 'gloss', group: 'goo', min: 8, max: 220, step: 2,
+        hint: 'Specular exponent. Low = broad sheen, high = pinpoint.',
+        get: () => L.gloss, set: v => L.setGloss(v) },
+      { key: 'rim', group: 'goo', min: 0, max: 1, step: 0.02,
+        hint: 'Fresnel rim strength.',
+        get: () => L.rim, set: v => L.setRim(v) },
+      { key: 'shadowRed', group: 'goo', min: 0, max: 0.6, step: 0.01,
+        hint: 'Deep-red floor. Stops heavy absorption or a grazing light from driving blood to black. 0 = off.',
+        get: () => L.shadowRed, set: v => L.setShadowRed(v) },
+      { key: 'count', group: 'gout', min: 10, max: 300, step: 5,
+        hint: 'Slug gout droplets per impact. More = denser mass, but MAX_DROPLETS is 600 across the whole sim.',
+        get: () => IMPACT_GOUT.slug.count, set: v => { IMPACT_GOUT.slug.count = Math.round(v); } },
+      { key: 'speedMax', group: 'gout', min: 0.5, max: 12, step: 0.25,
+        hint: 'Head speed. High values scatter the pulse before it can fuse.',
+        get: () => IMPACT_GOUT.slug.speedMax, set: v => { IMPACT_GOUT.slug.speedMax = v; } },
+      { key: 'speedMin', group: 'gout', min: 0.2, max: 8, step: 0.1,
+        hint: 'Tail speed. The head/tail gap is what stretches the pulse into a rope.',
+        get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
+    ], {
+      toggles: [
+        {
+          // The depth cue, and the reason the goo can read as "pasted on".
+          // OVERLAY never depth-tests, so blood paints over the crate it is
+          // behind and over the far side of the body it came out of — which
+          // the eye reads as a sticker, no matter what the scale is. DEPTH
+          // writes a reconstructed depth and interleaves with flesh and floor.
+          label: () => `mode: ${L.mode}`,
+          hint: 'overlay = always on top (no occlusion). depth = interleaves with the scene.',
+          onClick: () => L.setMode(L.mode === 'overlay' ? 'depth' : 'overlay'),
+        },
+        {
+          // The other half of "reads pasted on": the gradient normal tilts a
+          // flat CAMERA-FACING base, so every blob is lit as though facing
+          // you. The surface normal is reconstructed from the field's own
+          // view depth and responds to where the blood actually points.
+          label: () => `normals: ${L.surfaceNormals ? 'surface' : 'gradient'}`,
+          hint: 'surface = world-oriented, reconstructed from depth. gradient = original screen-space tilt.',
+          onClick: () => L.setSurfaceNormals(!L.surfaceNormals),
+        },
+      ],
+      presets: [
+        { label: 'blobby',
+          values: { sizeScale: 0.35, threshold: 1.2, blurPx: 9, stretch: 0, edge: 1.6,
+            absorb: 1, spec: 2, gloss: 55, rim: 0.3, shadowRed: 0.12, count: 140, speedMax: 3.5, speedMin: 1 } },
+        { label: 'strands',
+          values: { sizeScale: 0.22, threshold: 0.8, blurPx: 5, stretch: 0.8, edge: 1.6,
+            absorb: 0.55, spec: 1.4, gloss: 80, rim: 0.3, shadowRed: 0.12, count: 90, speedMax: 8, speedMin: 1.5 } },
+        { label: 'shipped',
+          values: { sizeScale: 0.14, threshold: 0.65, blurPx: 0, stretch: 4, edge: 2.75,
+            absorb: 1.6, spec: 2.85, gloss: 220, rim: 0, shadowRed: 0.12,
+            count: 85, speedMax: 0.5, speedMin: 0.2 } },
+      ],
+    });
+  }
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -721,10 +907,36 @@ async function main() {
   // exactly this. 0.5 keeps them a hair beefier than the lab since the game
   // wants the blood to READ; the deeper look change (gooey spray + mist
   // instead of sprite blobs) is a tracked exploration, not a scale knob.
-  const bloodView = createBloodView({ dropletDepthWrite: true, dropletViewScale: 0.5 });
+  // X1.bleed-look pass 1 (owner: "big oval blood cells"): aggressive filament
+  // stretch with volume-conserving thinning (fast spray reads as streaks, slow
+  // drips stay beads) + a mist haze mesh (alphaHash so it survives the
+  // composite's depth test while reading soft).
+  const bloodView = createBloodView({
+    dropletDepthWrite: true,
+    dropletViewScale: 0.5,
+    stretch: { k: 0.5, max: 3.5, thin: true },
+    mist: true,
+    // Round 2 (owner): "ribbons and blood trails to create cohesive lines of
+    // fluid" — beads sweep tapered strips through their path history.
+    ribbons: true,
+  });
   for (const o of bloodView.objects) {
     o.visible = true; // ships ON (it is the feature); setBleed(false) hides
     scene.add(o);
+  }
+
+  // Goo ships ON, so apply the view state setGoo(true) would have set. Placed
+  // here rather than beside the goo tuning above because bloodView does not
+  // exist yet at that point in main().
+  //
+  // Beads off: the goo surface replaces them, and drawing both renders the
+  // same particles twice. MIST STAYS — it is the sparse-case floor. The goo
+  // only draws where droplets OVERLAP, so an ordinary pellet hit crosses no
+  // threshold and draws nothing; with mist hidden too the result is a wound
+  // with no blood at all (reproduced headless, 2026-08-31).
+  if (gooEnabled) {
+    bloodView.setBeadsVisible(false);
+    bloodView.setMistVisible(true);
   }
   // One seeded stream for EVERY bleed decision (spawns, trails, splat
   // stamps) — advanced only while bleed is enabled, so setBleed(false)
@@ -737,6 +949,17 @@ async function main() {
   function registerBleed(a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump'): void {
     if (!bleedEnabled) return;
     bleed.register(a.id, wound, kind, bleedClock);
+    // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
+    // the wound's own anchor so it leaves the body where the hole is. Fired
+    // here rather than at each call site because both the impact path and
+    // the sever path already funnel through this function, and two copies
+    // would drift. Uses the SAME bleedRng, so setBleed(false) freezes gouts
+    // and the trickle together and captures stay deterministic.
+    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    // The gout sprays back along the incoming shot; spawnImpactGout negates
+    // what it is handed, and the wound normal already points OUT of the
+    // body, so pass the inward direction.
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng);
   }
 
   // Wire every actor's severs into the chunk spawner (template = that
@@ -1014,6 +1237,25 @@ async function main() {
       eye[2] - Math.cos(player.yaw) * cp,
     );
     camera.updateMatrixWorld();
+
+    // GOO DENSITY QUADS — pose them from the same sim state, every frame,
+    // AFTER the camera is final and before the drawFn composites. The lab
+    // has always done this (lab-main: bloodView.sync then gooLayer.sync);
+    // the game-page port shipped without it, and that ONE MISSING LINE is
+    // why the goo never appeared here.
+    //
+    // Without sync the InstancedMesh keeps its zeroed instance matrices, so
+    // every density quad is degenerate, the field is empty on every frame,
+    // and NO threshold can ever be crossed. That is not a look bug with a
+    // tuning fix — it is the pass rendering nothing at all, which is exactly
+    // what five threshold sweeps and a depth-reconstruction investigation
+    // were unknowingly chasing. There is a source tripwire on this call in
+    // goo-layer.test.ts; do not remove one without the other.
+    //
+    // Unconditional, NOT under bleedEnabled like bloodView.sync above: floor
+    // splats persist in the sim after bleed is switched off, and the goo
+    // draws them. Gating this would freeze the pools mid-frame instead.
+    gooLayer?.sync(bloodSim, camera);
   }
 
   handle.setRenderCallback((dt) => {
@@ -1280,6 +1522,149 @@ async function main() {
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. */
     aimSurface: () => aimAtNearestSurface(),
+
+    /**
+     * Screen-space metaball blood (X1.bleed-look round 2). ON suppresses the
+     * bead + ribbon sprites: the goo surface carries the fluid body, and
+     * those are the hard-edged shapes it exists to replace (they would also
+     * draw the same particles twice). Mist and floor splats stay.
+     */
+    setGoo(on: boolean) {
+      if (!gooLayer) return false;
+      gooEnabled = on;
+      // Beads and ribbons go: they are the hard-edged shapes the goo
+      // replaces, and they would draw the same particles twice.
+      bloodView.setBeadsVisible(!on);
+      // MIST STAYS. Hiding it (first cut) was a bug with teeth: the goo only
+      // draws where droplets OVERLAP, so a sparse hit — an ordinary pellet
+      // at range — crosses no threshold and draws NOTHING, and with mist off
+      // too the result was a wound with no blood at all. Reproduced headless:
+      // pellet at threshold 1.5 spawned 10 droplets and rendered zero pixels.
+      // The reference frames want both anyway — connected masses PLUS fine
+      // satellite specks — so mist is the sparse-case floor and the grain.
+      bloodView.setMistVisible(true);
+      gooPanel?.setVisible(on);
+      return true;
+    },
+    get goo() {
+      return gooLayer
+        ? {
+          enabled: gooEnabled,
+          threshold: gooLayer.threshold,
+          edge: gooLayer.edge,
+          blurPx: gooLayer.blurPx,
+          sizeScale: gooLayer.sizeScale,
+          target: gooLayer.targetSize,
+          mode: gooLayer.mode,
+          liveCount: gooLayer.liveCount,
+          syncCalls: gooLayer.syncCalls,
+          absorb: gooLayer.absorb,
+          spec: gooLayer.spec,
+          gloss: gooLayer.gloss,
+          rim: gooLayer.rim,
+          stretch: gooLayer.stretch,
+          shadowRed: gooLayer.shadowRed,
+        }
+        : { enabled: false, unavailable: true };
+    },
+    /** Live tuning for the look pass — threshold/edge/blur are the three
+     *  knobs that decide beads-vs-ropes-vs-sheets. */
+    /**
+     * DIAGNOSTIC: read the density field back off the GPU and report what is
+     * actually in it.
+     *
+     * This exists because "the goo is invisible" has two completely different
+     * causes that look identical on screen: an EMPTY field (nothing upstream
+     * ever wrote density) versus a FULL field the surface pass is failing to
+     * draw. Guessing between them cost several rounds; measuring takes one
+     * call. Compare `max` against `threshold`: max below it means no pixel can
+     * ever qualify and the fault is upstream in sync/density; max above it
+     * with nothing on screen means the fault is the surface or the composite.
+     */
+    async gooProbe() {
+      if (!gooLayer) return { unavailable: true };
+      // Half-float decode: WebGPU hands back raw 16-bit patterns, and the
+      // density targets are HalfFloatType because additive blending is only
+      // guaranteed on 16-bit float in WebGPU core.
+      const h2f = (h: number): number => {
+        const sign = (h & 0x8000) ? -1 : 1;
+        const exp = (h & 0x7c00) >> 10;
+        const frac = h & 0x03ff;
+        if (exp === 0) return sign * Math.pow(2, -14) * (frac / 1024);
+        if (exp === 0x1f) return frac ? NaN : sign * Infinity;
+        return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+      };
+      const readOne = async (t: THREE.RenderTarget) => {
+        const w = t.width;
+        const h = t.height;
+        const raw = new Uint16Array(
+          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h) as ArrayLike<number>,
+        );
+        // WebGPU pads each readback row to a 256-byte boundary; at 8 bytes per
+        // RGBA16F texel that is not the same as w * 4 shorts, and ignoring it
+        // reads garbage from the padding as if it were density.
+        const shortsPerRow = Math.ceil((w * 8) / 256) * 256 / 2;
+        let max = 0;
+        let nonZero = 0;
+        let sum = 0;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const r = h2f(raw[y * shortsPerRow + x * 4] ?? 0);
+            if (!Number.isFinite(r)) continue;
+            if (r > 0) nonZero++;
+            if (r > max) max = r;
+            sum += r;
+          }
+        }
+        return { w, h, max, nonZero, mean: sum / (w * h) };
+      };
+      const { density, blurred } = gooLayer.debugTargets;
+      return {
+        enabled: gooEnabled,
+        mode: gooLayer.mode,
+        threshold: gooLayer.threshold,
+        blurPx: gooLayer.blurPx,
+        liveCount: gooLayer.liveCount,
+        syncCalls: gooLayer.syncCalls,
+        density: await readOne(density),
+        blurredBuf: await readOne(blurred),
+      };
+    },
+    /** Show/hide the live tuning panel independently of the layer. */
+    gooPanel(on: boolean) {
+      gooPanel?.setVisible(on);
+      return gooPanel?.visible ?? false;
+    },
+    setGooTuning(o: {
+      threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
+      mode?: 'overlay' | 'depth';
+      absorb?: number; spec?: number; gloss?: number; rim?: number;
+      stretch?: number;
+      shadowRed?: number;
+    }) {
+      if (!gooLayer) return;
+      if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
+      if (o.edge !== undefined) gooLayer.setEdge(o.edge);
+      if (o.blurPx !== undefined) gooLayer.setBlurPx(o.blurPx);
+      if (o.sizeScale !== undefined) gooLayer.setSizeScale(o.sizeScale);
+      if (o.mode !== undefined) gooLayer.setMode(o.mode);
+      if (o.absorb !== undefined) gooLayer.setAbsorb(o.absorb);
+      if (o.spec !== undefined) gooLayer.setSpec(o.spec);
+      if (o.gloss !== undefined) gooLayer.setGloss(o.gloss);
+      if (o.rim !== undefined) gooLayer.setRim(o.rim);
+      if (o.stretch !== undefined) gooLayer.setStretch(o.stretch);
+      if (o.shadowRed !== undefined) gooLayer.setShadowRed(o.shadowRed);
+    },
+
+    /** Sweep gout density/shape without a rebuild. Mutates the shared table,
+     *  so it affects every later impact of that kind. */
+    setGoutTuning(kind: 'pellet' | 'slug' | 'stump', o: Partial<ImpactGoutProfile>) {
+      Object.assign(IMPACT_GOUT[kind], o);
+      return { ...IMPACT_GOUT[kind] };
+    },
+    get gout() {
+      return { pellet: { ...IMPACT_GOUT.pellet }, slug: { ...IMPACT_GOUT.slug }, stump: { ...IMPACT_GOUT.stump } };
+    },
 
     /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
      *  owner-passed 2026-08-31 after the stale-hull mask fix; -40%/-54%

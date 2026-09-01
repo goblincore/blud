@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
-import { GOO_TUNING, GOO_SURFACE_WGSL, GOO_BLUR_WGSL } from './goo-layer';
+import { GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL } from './goo-layer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -60,7 +60,7 @@ describe('goo surface WGSL', () => {
     expect(GOO_SURFACE_WGSL).toContain('discard');
     expect(GOO_SURFACE_WGSL).toContain('textureLoad');
     expect(GOO_SURFACE_WGSL).toContain('smoothstep');
-    expect(GOO_SURFACE_WGSL).toContain('vec3<f32>(0.35, 0.02, 0.05)');
+    expect(GOO_SURFACE_WGSL).toContain('vec3<f32>(0.62, 0.11, 0.10)');
     // The WebGPU [0,1] depth mapping three's perspective matrix produces.
     expect(GOO_SURFACE_WGSL).toContain('far * (viewDepth - near)');
   });
@@ -106,13 +106,14 @@ describe('goo blur wiring (source tripwires)', () => {
     // surface's choice of blurred-vs-raw texture. No degenerate copy pass.
     expect(src).toContain('const blurred = uBlurPx.value > 0');
     expect(src).toContain('if (blurred) {');
-    expect(src).toContain('blurred ? surfBlurMat : surfRawMat');
+    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
     expect(src).toContain('void renderer.render(blurH.scene, quadCam)');
     expect(src).toContain('void renderer.render(blurV.scene, quadCam)');
   });
 
   it('the surface reads the blurred buffer, and the pair rides the density size', () => {
-    expect(src).toContain('makeSurfaceMat(blurB.texture)');
+    expect(src).toContain('makeOverlayMat(blurB.texture)');
+    expect(src).toContain('makeDepthMat(blurB.texture)');
     expect(src).toContain('makeBlurMat(blurA.texture, 0, 1)');
     // Same explicit-first-clear treatment as the density target (the
     // lazy-init trap) and the same resize in setSize.
@@ -151,5 +152,249 @@ describe('goo tuning pins', () => {
     expect(GOO_TUNING.blurPx).toBeLessThanOrEqual(5);
     expect(GOO_TUNING.blurPx).toBe(2.5);
     expect(Number.isInteger(GOO_TUNING.blurPx * 2)).toBe(true);
+  });
+
+  it('absorb/spec/gloss/rim defaults sit inside their own setter clamp range', () => {
+    // A default outside its own clamp is a real bug class: the console
+    // could never restore the shipped value once a knob was slid away from
+    // it (M-5).
+    expect(GOO_TUNING.absorb).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.absorb).toBeLessThanOrEqual(3);
+    expect(GOO_TUNING.spec).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.spec).toBeLessThanOrEqual(4);
+    expect(GOO_TUNING.gloss).toBeGreaterThanOrEqual(8);
+    expect(GOO_TUNING.gloss).toBeLessThanOrEqual(400);
+    expect(GOO_TUNING.rim).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.rim).toBeLessThanOrEqual(1);
+    expect(GOO_TUNING.shadowRed).toBeGreaterThanOrEqual(0);
+    expect(GOO_TUNING.shadowRed).toBeLessThanOrEqual(0.6);
+  });
+});
+
+describe('goo thickness shading (blood-viscosity spec §d)', () => {
+  it('absorbs green and blue harder than red, so a thick core goes dark crimson', () => {
+    const m = GOO_SURFACE_WGSL.match(
+      /exp\(-thick \* vec3<f32>\(([\d.]+), ([\d.]+), ([\d.]+)\)\)/,
+    );
+    expect(m, 'the Beer-Lambert absorption vector must be present').not.toBeNull();
+    const [r, g, b] = [Number(m![1]), Number(m![2]), Number(m![3])];
+    // Blood is red because red survives the path length. If red were absorbed
+    // as hard as green, thick blood would go grey, not crimson.
+    expect(r).toBeLessThan(g);
+    expect(r).toBeLessThan(b);
+  });
+
+  it('measures thickness from the field ABOVE the threshold, not raw density', () => {
+    // dens alone would make the whole surface dark the moment the threshold
+    // moves; (dens - thresh) keeps the thin fringe bright at any setting.
+    expect(GOO_SURFACE_WGSL).toMatch(/let thick = max\(dens - thresh, 0\.0\) \* gooCfg2\.x/);
+  });
+
+  it('takes specular strength, exponent and rim from aliased uniform locals, not literals', () => {
+    // I-4: gooCfg2's swizzles are aliased near `thresh` (the same convention
+    // gooCfg.x already uses), so the shading terms below must read the
+    // ALIAS, not a bare gooCfg2.y/.z/.w — that's what proves the uniform
+    // actually reaches the shading term instead of sitting as a dead
+    // binding that only appears in a comment.
+    expect(GOO_SURFACE_WGSL).toMatch(/let specStr = gooCfg2\.y;/);
+    expect(GOO_SURFACE_WGSL).toMatch(/let glossPow = gooCfg2\.z;/);
+    expect(GOO_SURFACE_WGSL).toMatch(/let rimStr = gooCfg2\.w;/);
+    expect(GOO_SURFACE_WGSL).toMatch(/pow\(max\(dot\(n, H\), 0\.0\),\s*glossPow\)/);
+    expect(GOO_SURFACE_WGSL).toMatch(/glint\s*\*\s*specStr/);
+    expect(GOO_SURFACE_WGSL).toMatch(/fres\s*\*\s*rimStr/);
+    // No numeric literal exponent left on the glint pow — a hard-coded
+    // number there (the old 90.0) would mean the uniform is dead code.
+    expect(GOO_SURFACE_WGSL).not.toMatch(/pow\(max\(dot\(n, H\), 0\.0\),\s*[\d.]+\)/);
+  });
+
+  it('adds highlights OUTSIDE the absorbed body, not scaled by transmittance', () => {
+    // The central claim of this commit: a surface reflection never
+    // travelled through the blood, so the glint term must NOT carry the
+    // `trans` (Beer-Lambert transmittance) factor the base colour does.
+    // Without this guard, `lit = lit + trans * keyColor * glint * ...`
+    // would pass every other test in this file.
+    const glintLine = GOO_SURFACE_WGSL.match(/lit = lit \+ [^;]*glint[^;]*;/);
+    expect(glintLine, 'a glint highlight line must be present').not.toBeNull();
+    expect(glintLine![0]).not.toMatch(/\btrans\b/);
+  });
+
+  it('declares gooCfg2 as a vec4 parameter', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/gooCfg2: vec4<f32>/);
+  });
+});
+
+describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
+  // The clamp trap, in test form: setThreshold was clamped at 0.95 while a
+  // lone blob peaks near 1.0, so no reachable value could reject a single
+  // droplet and three rounds of tuning were unwinnable. Every new setter gets
+  // its ceiling checked against the range the shader actually produces.
+  it('exposes absorb/spec/gloss/rim on the layer interface', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+    for (const fn of ['setAbsorb', 'setSpec', 'setGloss', 'setRim']) {
+      expect(src, `${fn} must exist`).toContain(`${fn}(`);
+    }
+  });
+
+  it('clamps all four setters to the range the shader actually produces', () => {
+    // Whitespace-tolerant (not pinned to one-line formatting) so a reformat
+    // doesn't break this, but still asserts the exact bounds per setter —
+    // absorb and gloss per the 2D prototype range, spec and rim previously
+    // unpinned entirely.
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+    const clamp = (fn: string, uniformName: string, lo: string, hi: string) => {
+      const re = new RegExp(
+        `${fn}\\(v\\)\\s*\\{\\s*${uniformName}\\.value\\s*=\\s*Math\\.max\\(${lo},\\s*Math\\.min\\(${hi},\\s*v\\)\\)\\s*;\\s*\\}`,
+      );
+      expect(src, `${fn} must clamp to [${lo}, ${hi}]`).toMatch(re);
+    };
+    clamp('setAbsorb', 'uAbsorb', '0', '3');
+    clamp('setSpec', 'uSpec', '0', '4');
+    // CEILING 220 -> 400 (2026-08-31). The owner's own tuning pass landed on
+    // gloss EXACTLY 220 — the old ceiling — which is the signature of a clamp
+    // capping intent rather than guarding a range. Same story for stretch
+    // (4 -> 8, pinned below). Both originals were guesses; do not "restore"
+    // them without measuring what the shader produces up there.
+    clamp('setGloss', 'uGloss', '8', '400');
+    clamp('setRim', 'uRim', '0', '1');
+    // shadowRed: the deep-red floor that stops absorption or a grazing light
+    // from driving blood to black. Ceiling 0.6 — past that the floor swamps
+    // the thickness gradient it exists to preserve.
+    clamp('setShadowRed', 'uShadowRed', '0', '0.6');
+  });
+});
+
+describe('goo alpha WGSL (overlay mode)', () => {
+  it('starts with fn, since three anchors its parse to ^', () => {
+    expect(GOO_ALPHA_WGSL.startsWith('fn ')).toBe(true);
+  });
+
+  it('declares nothing reserved', () => {
+    for (const name of declaredNames(GOO_ALPHA_WGSL)) {
+      expect(RESERVED_WORDS, `"${name}" is a WGSL reserved word`).not.toContain(name);
+    }
+  });
+
+  it('discards below the threshold, exactly as the surface pass does', () => {
+    // If the two passes disagreed on the cutoff, overlay mode would blend a
+    // colour the surface pass never shaded.
+    expect(GOO_ALPHA_WGSL).toContain('if (dens < thresh) { discard; }');
+  });
+
+  it('returns the soft-edge band in w so strands feather instead of hard-cutting', () => {
+    expect(GOO_ALPHA_WGSL).toMatch(/smoothstep\(thresh, thresh \* gooCfg\.y, dens\)/);
+    expect(GOO_ALPHA_WGSL).toMatch(/return vec4<f32>\(0\.0, 0\.0, 0\.0, a\)/);
+  });
+});
+
+describe('goo overlay mode wiring (source tripwires)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('builds a material per (mode x blurred) combination', () => {
+    // Asserted on the table literal and the dynamic lookup, NOT on
+    // "surfMats.depth.blur"-style paths: render() indexes the pair with
+    // computed keys, so those strings never appear in the source.
+    expect(src).toMatch(/overlay: \{ raw: makeOverlayMat\(target\.texture\), blur: makeOverlayMat\(blurB\.texture\) \}/);
+    expect(src).toMatch(/depth: \{ raw: makeDepthMat\(target\.texture\), blur: makeDepthMat\(blurB\.texture\) \}/);
+    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
+  });
+
+  it('overlay materials neither test nor write depth, and are transparent', () => {
+    expect(src).toMatch(/m\.depthWrite = false;\s*\n\s*m\.depthTest = false;\s*\n\s*m\.transparent = true;/);
+  });
+
+  it('overlay materials do not bind a depthNode', () => {
+    // Binding depthNode in overlay mode would silently reinstate the
+    // reconstruction this mode exists to delete.
+    const overlayFn = src.slice(src.indexOf('function makeOverlayMat'), src.indexOf('function makeDepthMat'));
+    expect(overlayFn).not.toContain('depthNode');
+  });
+
+  it('retires setDepthTest in favour of setMode', () => {
+    expect(src).not.toContain('setDepthTest');
+    expect(src).toContain("setMode(m: 'overlay' | 'depth')");
+  });
+
+  it('defaults to overlay — the shipped answer to the depth blocker', () => {
+    expect(src).toMatch(/let mode: 'overlay' \| 'depth' = 'overlay';/);
+  });
+});
+
+describe('goo sync wiring (the bug that hid the whole layer)', () => {
+  // The game-page port shipped WITHOUT a gooLayer.sync() call. sync() poses
+  // the InstancedMesh density quads from sim state; without it every instance
+  // matrix stays zeroed, the density field is empty on every frame, and no
+  // threshold can ever be crossed — the pass renders nothing at all. That
+  // presented as "the goo does not work in game", and cost five threshold
+  // sweeps plus a depth-reconstruction investigation before anyone checked
+  // whether the field had anything in it.
+  //
+  // These are source tripwires, in the same style as the blur-wiring guards
+  // above: nothing here constructs a renderer.
+  it('the game page syncs the density quads every frame', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+    expect(src).toMatch(/gooLayer\?\.sync\(bloodSim, camera\)/);
+  });
+
+  it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+    const cam = src.indexOf('camera.updateMatrixWorld();');
+    const sync = src.indexOf('gooLayer?.sync(bloodSim, camera)');
+    expect(cam, 'camera.updateMatrixWorld() must be present').toBeGreaterThan(-1);
+    expect(sync, 'the goo sync must be present').toBeGreaterThan(-1);
+    expect(sync).toBeGreaterThan(cam);
+  });
+
+  it('the lab still syncs too — this contract belongs to both pages', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/lab-main.ts', 'utf8');
+    expect(src).toMatch(/gooLayer\.sync\(bloodSim, camera\)/);
+  });
+});
+
+describe('goo surface normals (world-oriented reconstruction)', () => {
+  it('reconstructs a VIEW POSITION per texel, not just a density gradient', () => {
+    // The unnormalised ray with z = -1 scaled by view depth is the view
+    // position; that is the whole trick, and it is what lets the normal
+    // respond to where the surface points in the world.
+    expect(GOO_SURFACE_WGSL).toMatch(/let pC = vec3<f32>\([^;]*-1\.0\) \* dC;/);
+    expect(GOO_SURFACE_WGSL).toContain('let texel = vec2<f32>(2.0, 2.0) / dims;');
+  });
+
+  it('crosses the screen-space derivatives of that position', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/var nSurf = cross\(ddx, ddy\);/);
+  });
+
+  it('uses min-difference so silhouettes do not bend the normal', () => {
+    // At a blob edge one neighbour sits on empty field, where g/b is a ratio
+    // of near-zeros. Using it would ring every mass with a bright rim.
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(cr\.b < 1e-4 \|\| abs\(ddxB\.z\) < abs\(ddx\.z\)\)/);
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(cu\.b < 1e-4 \|\| abs\(ddyB\.z\) < abs\(ddy\.z\)\)/);
+  });
+
+  it('falls back to the gradient normal rather than emitting a NaN', () => {
+    // An isolated texel has no valid difference in either axis; normalising a
+    // zero-length cross product would blacken the pixel.
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(nSurfLen < 1e-8\) \{\s*nSurf = nGrad;/);
+  });
+
+  it('keeps the normal facing the camera', () => {
+    expect(GOO_SURFACE_WGSL).toMatch(/if \(nSurf\.z < 0\.0\) \{ nSurf = -nSurf; \}/);
+  });
+
+  it('keeps BOTH normals reachable, selected by a uniform', () => {
+    // The gradient path is the A/B control, not dead code — it is how the two
+    // get compared on the live panel.
+    expect(GOO_SURFACE_WGSL).toContain('let nCam = select(nGrad, nSurf, normalMode > 0.5);');
+    expect(GOO_SURFACE_WGSL).toMatch(/normalMode: f32/);
+  });
+
+  it('reuses ONE set of neighbour taps for both normals', () => {
+    // Loading .r for the gradient and g/b for the position separately would
+    // double the sample count for no gain.
+    const taps = GOO_SURFACE_WGSL.match(/textureLoad\(densTex, clamp\(px [+-]/g) ?? [];
+    expect(taps.length).toBe(4);
+  });
+
+  it('defaults to the surface normal', () => {
+    expect(GOO_TUNING.surfaceNormals).toBe(true);
   });
 });

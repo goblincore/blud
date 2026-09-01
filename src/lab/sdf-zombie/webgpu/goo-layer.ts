@@ -112,6 +112,49 @@ export const GOO_TUNING = {
    * note in the file header. 0 bypasses both blur passes entirely.
    */
   blurPx: 2.5,
+  /**
+   * Beer-Lambert thickness strength (blood-viscosity spec §d). Multiplies
+   * (density - threshold) before the absorption exponential, so it scales
+   * how fast a mass darkens as it thickens. 0 flattens the body to a single
+   * colour (no thickness falloff) — this is NOT the pre-viscosity look,
+   * since the base colour literal changed in this same commit too (0.35,
+   * 0.02, 0.05 → 0.62, 0.11, 0.10).
+   * 0.55 is the 2D prototype's owner-selected value.
+   */
+  absorb: 0.55,
+  /**
+   * Cap on the velocity stretch applied to each density quad: a particle's
+   * quad is elongated along its screen-space motion by 1 + min(speed * 0.18,
+   * stretchMax). The lab wants this — it turns a slow trail into a strand.
+   *
+   * It is ACTIVELY WRONG for a gout. Impact droplets leave at up to 8 m/s, so
+   * every one of them pins at the cap and points radially outward from the
+   * hit, which renders as a starburst of needles rather than a fused mass
+   * (owner, 2026-08-31: "reads distinctly as elongated ovals"). The 2D
+   * prototype that set the target look had no velocity stretch at all.
+   * 0 = round blobs, which is the reference-look setting.
+   */
+  stretchMax: 0.8,
+  /** Specular strength — the wet glint that sells "shiny". */
+  spec: 1.4,
+  /** Specular exponent. LOW = broad wet sheen, HIGH = a pinpoint star. */
+  gloss: 80,
+  /** Fresnel rim strength, warm-tinted so edges do not read pink. */
+  rim: 0.3,
+  /**
+   * Unlit deep-red floor added to every goo pixel, so neither heavy
+   * absorption nor a grazing light angle can drive blood to black. 0 restores
+   * the physically-pure (and, per the owner, wrong-looking) behaviour.
+   */
+  shadowRed: 0.12,
+  /**
+   * Reconstruct world-oriented surface normals from the field's own view
+   * depth, instead of tilting a camera-facing base by the density gradient.
+   * The gradient normal cannot respond to where a surface points in the
+   * world, which is what made the goo read as pasted on even once it
+   * occluded correctly (owner, 2026-08-31).
+   */
+  surfaceNormals: true,
 } as const;
 
 /**
@@ -135,7 +178,10 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   lightCfg: vec2<f32>,
   camWorld: mat4x4<f32>,
   camCfg: vec4<f32>,
-  gooCfg: vec3<f32>
+  gooCfg: vec3<f32>,
+  gooCfg2: vec4<f32>,
+  shadowRed: f32,
+  normalMode: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -145,29 +191,87 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let c = textureLoad(densTex, px, 0);
   let dens = c.r;
   let thresh = gooCfg.x;
+  let specStr = gooCfg2.y;
+  let glossPow = gooCfg2.z;
+  let rimStr = gooCfg2.w;
   if (dens < thresh) { discard; }
-
-  // Normal from the density gradient, central differences (4 taps). The
-  // gradient lies in the image plane, so the camera-space normal tilts
-  // against it over a flat-facing base. Scaled GENTLY: the density target
-  // is low-res, so a blob is only a few texels wide and a steep multiplier
-  // turns every texel into a silhouette edge — which fires the fresnel rim
-  // across the whole surface and washes the deep red out (measured: the
-  // fringe averaged G/R 0.68, i.e. pink-gray, where the base is 0.25).
-  let dl = textureLoad(densTex, clamp(px - vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0).r;
-  let dr = textureLoad(densTex, clamp(px + vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0).r;
-  let dn = textureLoad(densTex, clamp(px - vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0).r;
-  let du = textureLoad(densTex, clamp(px + vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0).r;
-  let grad = vec2<f32>(dr - dl, du - dn) * ${GOO_TUNING.bump.toFixed(1)};
-  let nCam = normalize(vec3<f32>(-grad.x, -grad.y, 1.0));
-  let n = normalize((camWorld * vec4<f32>(nCam, 0.0)).xyz);
 
   // The scene-camera ray through this pixel, rebuilt from NDC: the camera
   // looks down -z and the view plane spans tan(halfFov) in y (times aspect
-  // in x), so no inverse projection is needed.
+  // in x), so no inverse projection is needed. Computed HERE because the
+  // surface-normal reconstruction below needs the same NDC.
   let ndc = st * 2.0 - 1.0;
   let rayCam = normalize(vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0));
   let ray = normalize((camWorld * vec4<f32>(rayCam, 0.0)).xyz);
+
+  // Four neighbours, loaded WHOLE: .r is density (the gradient normal) and
+  // g/b is the density-weighted view depth (the surface normal). One set of
+  // taps feeds both paths, so the new normal costs no extra samples.
+  let cl = textureLoad(densTex, clamp(px - vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0);
+  let cr = textureLoad(densTex, clamp(px + vec2<i32>(1, 0), vec2<i32>(0, 0), maxP), 0);
+  let cd = textureLoad(densTex, clamp(px - vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0);
+  let cu = textureLoad(densTex, clamp(px + vec2<i32>(0, 1), vec2<i32>(0, 0), maxP), 0);
+
+  // GRADIENT NORMAL (normalMode 0, the original). The gradient lies in the
+  // image plane, so the camera-space normal tilts against it over a flat
+  // CAMERA-FACING base. Scaled gently: the density target is low-res, so a
+  // blob is only a few texels wide and a steep multiplier turns every texel
+  // into a silhouette edge — which fires the fresnel rim across the whole
+  // surface and washes the deep red out (measured: fringe G/R 0.68,
+  // pink-gray, where the base is 0.25).
+  //
+  // Its limitation is STRUCTURAL, not tuning: the base is always +z in view
+  // space, so every blob is lit as though facing the camera and the lighting
+  // cannot respond to where the surface actually points in the world. That is
+  // what made the goo read as pasted on even once it occluded correctly.
+  let grad = vec2<f32>(cr.r - cl.r, cu.r - cd.r) * ${GOO_TUNING.bump.toFixed(1)};
+  let nGrad = normalize(vec3<f32>(-grad.x, -grad.y, 1.0));
+
+  // SURFACE NORMAL (normalMode 1). The standard screen-space fluid
+  // reconstruction: turn each texel's view depth back into a view-space
+  // POSITION, then cross the screen-space derivatives of that position. The
+  // result is a real surface normal that responds to the shape of the blood
+  // in 3D. The unnormalised ray with z = -1, scaled by view depth, IS the
+  // view position — so this needs no inverse projection either.
+  let texel = vec2<f32>(2.0, 2.0) / dims;
+  let dC = c.g / max(c.b, 1e-4);
+  let pC = vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0) * dC;
+  let pL = vec3<f32>((ndc.x - texel.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
+    * (cl.g / max(cl.b, 1e-4));
+  let pR = vec3<f32>((ndc.x + texel.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
+    * (cr.g / max(cr.b, 1e-4));
+  let pD = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y - texel.y) * camCfg.x, -1.0)
+    * (cd.g / max(cd.b, 1e-4));
+  let pU = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y + texel.y) * camCfg.x, -1.0)
+    * (cu.g / max(cu.b, 1e-4));
+
+  // MIN-DIFFERENCE against silhouettes: at the edge of a blob one neighbour
+  // sits on empty field, where g/b is a ratio of two near-zeros and the
+  // reconstructed depth is meaningless. Using it would bend the normal hard
+  // along every silhouette and ring each mass with a bright rim. Take
+  // whichever of the forward/backward difference has the smaller depth jump,
+  // and reject a neighbour outright when it carries no density at all.
+  var ddx = pR - pC;
+  let ddxB = pC - pL;
+  if (cr.b < 1e-4 || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; }
+  var ddy = pU - pC;
+  let ddyB = pC - pD;
+  if (cu.b < 1e-4 || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; }
+  var nSurf = cross(ddx, ddy);
+  let nSurfLen = length(nSurf);
+  // Degenerate on an isolated texel (both differences empty): fall back to
+  // the gradient normal rather than emitting a NaN that would blacken the px.
+  if (nSurfLen < 1e-8) {
+    nSurf = nGrad;
+  } else {
+    nSurf = nSurf / nSurfLen;
+    // The camera looks down -z, so a surface facing it has a +z normal; the
+    // cross product's winding depends on which differences survived above.
+    if (nSurf.z < 0.0) { nSurf = -nSurf; }
+  }
+
+  let nCam = select(nGrad, nSurf, normalMode > 0.5);
+  let n = normalize((camWorld * vec4<f32>(nCam, 0.0)).xyz);
 
   // Fake depth: the density-weighted average view depth accumulated in G/B.
   // Converted to the [0,1] depth-buffer value with the same mapping three's
@@ -178,20 +282,59 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let far = camCfg.w;
   let depthBuf = clamp(far * (viewDepth - near) / (max(viewDepth, 1e-4) * (far - near)), 0.0, 1.0);
 
-  // Shade with the march's rig: deep red base, key diffuse, a tight wet
-  // glint and a fresnel rim. The soft-edge factor darkens and de-glints the
-  // thin fringe, so strands taper into darkness rather than ending in a
-  // bright hard cut — alpha itself stays 1 (opaque, depth-written).
+  // Shade with the march's rig, over a BEER-LAMBERT body (blood-viscosity
+  // spec §d). The old flat base made every mass the same red whatever its
+  // depth, which is exactly why the layer read as stickers rather than
+  // fluid. Absorption over the field ABOVE the threshold does NOT make
+  // brightness rise monotonically toward the edge: the softEdge mix below
+  // dims the outermost sliver of the silhouette (strands taper into
+  // darkness there — preserved from the pre-Beer-Lambert version), so the
+  // profile is dark right at the edge, brightest orange-red just inside the
+  // soft-edge band, then darkens again toward a near-black crimson core as
+  // thickness accumulates. That non-monotonic profile IS the volume read,
+  // and it is what the reference frames have that the shipped effect did
+  // not. Red is absorbed lightly and green and blue hard, which is why
+  // blood is red rather than grey at depth.
   let L = normalize(lightDir);
   let Vv = -ray;
   let H = normalize(L + Vv);
   let diff = max(dot(n, L), 0.0);
-  let glint = pow(max(dot(n, H), 0.0), 90.0);
-  let rim = pow(1.0 - max(dot(n, Vv), 0.0), 4.0) * 0.35;
   let softEdge = smoothstep(thresh, thresh * gooCfg.y, dens);
-  let base = vec3<f32>(0.35, 0.02, 0.05);
-  var lit = base * (lightCfg.y + diff * lightCfg.x) * keyColor * mix(0.55, 1.0, softEdge);
-  lit = lit + keyColor * (glint * 1.2 + rim) * softEdge;
+
+  let thick = max(dens - thresh, 0.0) * gooCfg2.x;
+  let trans = exp(-thick * vec3<f32>(0.30, 2.40, 2.00));
+  let lambert = lightCfg.y + diff * lightCfg.x;
+  var lit = vec3<f32>(0.62, 0.11, 0.10) * trans * lambert * keyColor
+    * mix(0.55, 1.0, softEdge);
+
+  // SHADOW FLOOR (owner, 2026-08-31: "get rid of black for the shadow areas
+  // of the blood, i always want it to read red"). Two independent terms drive
+  // this surface to zero: absorption at high thickness (trans -> 0 in the
+  // core) and the diffuse term at grazing light (lambert -> ambient). Both
+  // are correct as transport, and together they make the darkest blood
+  // colourless — which reads as a hole in the frame rather than as blood.
+  //
+  // Rather than weaken either term, add an unlit floor that nothing can
+  // subtract from: a deep saturated red standing in for the light that
+  // scatters back out of a thick medium instead of being absorbed by it.
+  // The result is that the darkest possible blood is DARK RED, never black.
+  // Added, not maxed, so it lifts the shadows without flattening the
+  // gradient the thickness term produces. Scaled by softEdge so the very
+  // outer sliver still tapers out rather than ending on a lit fringe.
+  lit = lit + vec3<f32>(1.0, 0.055, 0.07) * shadowRed * softEdge;
+
+  // Highlights ride ON TOP of the absorbed body and are NOT absorbed — a
+  // surface reflection never travelled through the blood, so neither term
+  // below carries the trans factor. The glint is tight but NOT white: it
+  // takes the key light's own colour (keyColor), same as the diffuse term.
+  // The rim also rides keyColor (GooLightRig's own doc: one re-tune moves
+  // both) but keeps its own warm tint on top, so a fringe cannot wash the
+  // mass pink — a neutral rim did that at high bump values.
+  let glint = pow(max(dot(n, H), 0.0), glossPow);
+  lit = lit + keyColor * glint * specStr * softEdge;
+  // Fresnel exponent 3.0 (was 4.0 pre-viscosity) — a slightly wider rim band.
+  let fres = pow(1.0 - max(dot(n, Vv), 0.0), 3.0);
+  lit = lit + keyColor * vec3<f32>(0.85, 0.14, 0.12) * fres * rimStr * softEdge;
 
   // Legacy display look (gooCfg.z) — the SAME decode marchBody applies (see
   // march.wgsl.ts): without it the flesh renders through the legacy chain
@@ -205,6 +348,36 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   }
 
   return vec4<f32>(lit, depthBuf);
+}`;
+
+/**
+ * Overlay mode's alpha (blood-viscosity spec §c). `gooSurface` spends its w
+ * on the reconstructed depth value, so the soft-edge band that overlay mode
+ * blends with comes from here — one texel load, no gradient taps.
+ *
+ * The discard condition is duplicated deliberately and must stay identical
+ * to the surface pass's: if the two disagreed on the cutoff, overlay would
+ * blend a colour the surface never shaded.
+ *
+ * Returns a vec4 rather than a bare f32 so it swizzles through the same
+ * `Swizzled` cast every other pass here uses.
+ */
+export const GOO_ALPHA_WGSL = /* wgsl */ `fn gooAlpha(
+  densTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  gooCfg: vec3<f32>
+) -> vec4<f32> {
+  let dims = vec2<f32>(textureDimensions(densTex, 0));
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let maxP = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let px = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), maxP);
+  let dens = textureLoad(densTex, px, 0).r;
+  let thresh = gooCfg.x;
+  if (dens < thresh) { discard; }
+  let a = smoothstep(thresh, thresh * gooCfg.y, dens);
+  return vec4<f32>(0.0, 0.0, 0.0, a);
 }`;
 
 /**
@@ -274,12 +447,61 @@ export interface GooLayer {
   setEdge(v: number): void;
   /** Gaussian sigma in density-target pixels; 0 bypasses the blur passes. */
   setBlurPx(v: number): void;
+  /** World-size multiplier per particle (GOO_TUNING.sizeScale). Bigger blobs
+   *  overlap more, which is what turns beads into ropes and sheets — the
+   *  file's own tuning note: 0.15 breaks trails into disconnected beads,
+   *  0.22 gives thin connected strands, 0.4 reads as thick hose-water ropes. */
+  setSizeScale(v: number): void;
+  /** Beer-Lambert thickness strength — 0 flattens the body to a single
+   *  colour; NOT the pre-viscosity look, since the base colour literal
+   *  changed in the same commit that added this. */
+  setAbsorb(v: number): void;
+  /** Specular strength (the wet glint). */
+  setSpec(v: number): void;
+  /** Specular exponent — low is a broad sheen, high is a pinpoint. */
+  setGloss(v: number): void;
+  /** Fresnel rim strength. */
+  setRim(v: number): void;
+  /** Velocity-stretch cap (GOO_TUNING.stretchMax). 0 = round blobs. */
+  setStretch(v: number): void;
+  /** Deep-red floor so blood never reads black. 0 = off. */
+  setShadowRed(v: number): void;
+  /** true = world-oriented surface normals reconstructed from depth;
+   *  false = the original screen-space density-gradient normals. */
+  setSurfaceNormals(on: boolean): void;
+  /**
+   * 'overlay' (default) composites the goo over the finished frame with no
+   * depth involvement. 'depth' restores the original reconstructed-depth
+   * interleaving — kept as the escape hatch if the overlay reads wrong
+   * against walls in play.
+   */
+  setMode(m: 'overlay' | 'depth'): void;
+  readonly mode: 'overlay' | 'depth';
+  readonly sizeScale: number;
   /** Mirror of the march's legacy-gamma flag — keep both on one switch. */
   setLegacyGamma(on: boolean): void;
   readonly threshold: number;
   readonly edge: number;
   readonly blurPx: number;
+  readonly absorb: number;
+  readonly spec: number;
+  readonly gloss: number;
+  readonly rim: number;
+  readonly stretch: number;
+  readonly shadowRed: number;
+  readonly surfaceNormals: boolean;
   readonly targetSize: { width: number; height: number };
+  /** DIAGNOSTIC: how many density quads the last sync() posed. 0 while blood
+   *  is on screen means the mist/size cutoff rejected everything. */
+  /** DIAGNOSTIC: the density targets, for console/headless readback. Reading
+   *  these is how you tell "the field is empty" apart from "the field is full
+   *  and the surface is not drawing it" — the two look identical on screen. */
+  readonly debugTargets: { density: THREE.RenderTarget; blurred: THREE.RenderTarget };
+  readonly liveCount: number;
+  /** DIAGNOSTIC: how many times sync() has been called. STAYS 0 if the host
+   *  page never wired it — the failure that hid this layer entirely on the
+   *  game page, and which no amount of tuning could have revealed. */
+  readonly syncCalls: number;
   dispose(): void;
 }
 
@@ -318,11 +540,19 @@ export function createGooLayer(
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
   const uThresh = uniform(GOO_TUNING.threshold);
+  /** Runtime sizeScale — see setSizeScale. */
+  let sizeScale: number = GOO_TUNING.sizeScale;
   // Matches the march's lodCfg.y default (legacy gamma ON) — lab-main's
   // setLegacyGamma drives both together.
   const uLegacy = uniform(1);
   const uEdge = uniform(GOO_TUNING.edge);
   const uBlurPx = uniform(GOO_TUNING.blurPx);
+  const uAbsorb = uniform(GOO_TUNING.absorb);
+  const uSpec = uniform(GOO_TUNING.spec);
+  const uGloss = uniform(GOO_TUNING.gloss);
+  const uRim = uniform(GOO_TUNING.rim);
+  const uShadowRed = uniform(GOO_TUNING.shadowRed);
+  const uNormalMode = uniform(GOO_TUNING.surfaceNormals ? 1 : 0);
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
   const uCamCfg = uniform(new THREE.Vector4(1, 1, 0.1, 200));
@@ -369,8 +599,11 @@ export function createGooLayer(
   // graph at construction.
   // ---------------------------------------------------------------
   const surface = wgslFn(GOO_SURFACE_WGSL);
-  function makeSurfaceMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
-    const surfaced = surface({
+  const alphaFn = wgslFn(GOO_ALPHA_WGSL);
+
+  /** The shaded colour, shared by both modes. */
+  function shadeOf(densTexture: THREE.Texture): Swizzled {
+    return surface({
       densTex: texture(densTexture),
       texCoord: uv(),
       flipY: uFlipY,
@@ -380,18 +613,62 @@ export function createGooLayer(
       camWorld: uCamWorld,
       camCfg: uCamCfg,
       gooCfg: vec3(uThresh, uEdge, uLegacy),
+      gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
+      shadowRed: uShadowRed,
+      normalMode: uNormalMode,
+    }) as unknown as Swizzled;
+  }
+
+  /**
+   * OVERLAY (default). No depth at all: the goo composites over the finished
+   * frame. This DELETES the depth blocker rather than fixing it — the
+   * reconstruction from the density field's average view depth rejected
+   * near-body blood, so goo appeared only against distant background. The
+   * accepted cost is that a burst behind a pillar still paints over it,
+   * which for a sub-second event centred on the thing you just shot is close
+   * to theoretical.
+   */
+  function makeOverlayMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeOf(densTexture);
+    const a = alphaFn({
+      densTex: texture(densTexture),
+      texCoord: uv(),
+      flipY: uFlipY,
+      gooCfg: vec3(uThresh, uEdge, uLegacy),
     }) as unknown as Swizzled;
     const m = new MeshBasicNodeMaterial();
-    m.colorNode = vec4(surfaced.xyz as never, 1.0);
-    m.depthNode = surfaced.w as never;
-    m.depthWrite = true;
-    m.depthTest = true;
+    m.colorNode = vec4(shaded.xyz as never, a.w as never);
+    m.depthWrite = false;
+    m.depthTest = false;
+    m.transparent = true;
+    m.fog = false;
     return m;
   }
-  const surfRawMat = makeSurfaceMat(target.texture);
-  const surfBlurMat = makeSurfaceMat(blurB.texture);
 
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), surfRawMat);
+  /** DEPTH (the escape hatch). The original behaviour, kept intact. */
+  function makeDepthMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeOf(densTexture);
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(shaded.xyz as never, 1.0);
+    m.depthNode = shaded.w as never;
+    m.depthWrite = true;
+    m.depthTest = true;
+    m.fog = false;
+    return m;
+  }
+
+  const surfMats = {
+    overlay: { raw: makeOverlayMat(target.texture), blur: makeOverlayMat(blurB.texture) },
+    depth: { raw: makeDepthMat(target.texture), blur: makeDepthMat(blurB.texture) },
+  };
+  let mode: 'overlay' | 'depth' = 'overlay';
+
+  // DIAGNOSTIC counters — see the note where they are assigned in sync().
+  let stretchMax: number = GOO_TUNING.stretchMax;
+  let syncCalls = 0;
+  let liveCount = 0;
+
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), surfMats.overlay.raw);
   quad.frustumCulled = false;
   const quadScene = new THREE.Scene();
   quadScene.add(quad);
@@ -523,10 +800,13 @@ export function createGooLayer(
       between();
 
       // Pass B — composite the goo surface onto the canvas. autoClear off,
-      // or this wipes the frame it is composited onto. The material picks
-      // blurred-vs-raw density; reassigned only on crossings of the
-      // blurPx = 0 line so the steady frame mutates nothing.
-      const wantMat = blurred ? surfBlurMat : surfRawMat;
+      // or this wipes the frame it is composited onto. The material is picked
+      // per frame from BOTH live axes — mode (overlay/depth) and blurred-vs-raw
+      // density — and reassigned only when the pick actually differs from what
+      // the quad already holds, so a steady frame mutates nothing while
+      // setMode() still takes effect on the very next frame rather than
+      // waiting for a blurPx = 0 crossing.
+      const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];
       if (quad.material !== wantMat) quad.material = wantMat;
       renderer.setRenderTarget(outputTarget);
       const prevAutoClear = renderer.autoClear;
@@ -542,15 +822,22 @@ export function createGooLayer(
         const d = sim.droplets[i]!;
         // Mist cutoff: the fine beads stay in the billboard view; everything
         // else feeds the density field. Scraps always go.
+        //
+        // The explicit 'mist' kind (bleeding-wounds, 2026-08-31) is haze by
+        // construction and NEVER feeds density, whatever its size — some
+        // stump mist rolls above mistMaxSize, and letting it in fogs the
+        // field instead of thickening the stream. No-op for the lab, which
+        // has no mist particles.
+        if (d.kind === 'mist') continue;
         if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
         p.set(d.pos[0], d.pos[1], d.pos[2]);
         // Billboard, then roll in screen space so the stretch follows velocity.
         vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
         const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
-        const stretch = 1 + Math.min(speed * 0.18, 0.8);
+        const stretch = 1 + Math.min(speed * 0.18, stretchMax);
         roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
         q.copy(camera.quaternion).multiply(roll);
-        const gs = d.size * GOO_TUNING.sizeScale;
+        const gs = d.size * sizeScale;
         s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
         m.compose(p, q, s);
         quads.setMatrixAt(n++, m);
@@ -583,6 +870,16 @@ export function createGooLayer(
       // Draw only the live instances. At 0 the pass still runs (and clears),
       // which the first-clear discipline depends on.
       quads.count = n;
+      // DIAGNOSTIC (blood-viscosity): the two numbers that tell you whether
+      // this layer is being fed at all. syncCalls proves sync() is wired into
+      // the host page's frame at all — it shipped MISSING on the game page,
+      // which made the density field empty forever and every threshold sweep
+      // unwinnable. liveCount is how many quads the last sync actually posed:
+      // 0 with blood visible on screen means the cutoff rejected everything,
+      // non-zero means the field has input and any remaining problem is
+      // downstream in the density/surface passes.
+      syncCalls++;
+      liveCount = n;
     },
 
     setSize(sdfWidth, sdfHeight) {
@@ -597,13 +894,62 @@ export function createGooLayer(
     },
     setOutputTarget(t) { outputTarget = t; },
     setFlipY(on) { uFlipY.value = on ? 1 : 0; },
-    setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(0.95, v)); },
+    // CEILING RAISED TO 4 (2026-08-31). It was 0.95, and the file's own note
+    // says "a lone blob peaks near 1.0" — so no threshold in the old range
+    // could ever REJECT a single droplet, and the field rendered every
+    // isolated bead as its own oval blob no matter how it was tuned. Owner
+    // read that as "little oval drops" three rounds running. Above 1 the
+    // threshold starts demanding genuine overlap, which is the whole point
+    // of a metaball: 2 blobs to cross ~1.5, 3 to cross ~2.5. The lab keeps
+    // its 0.4 default, so nothing there moves.
+    setThreshold(v) { uThresh.value = Math.max(0.05, Math.min(4, v)); },
     setEdge(v) { uEdge.value = Math.max(1.01, Math.min(4, v)); },
-    setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(5, v)); },
+    // Ceiling 5 -> 16: wider blur is how neighbouring peaks merge before the
+    // threshold sees them. (5.5 was being silently clamped to 5.)
+    setBlurPx(v) { uBlurPx.value = Math.max(0, Math.min(16, v)); },
+    setSizeScale(v) { sizeScale = Math.max(0.05, Math.min(1.5, v)); },
+    // CLAMP RANGES are checked against what the shader actually produces, not
+    // guessed — see the setThreshold note above for what guessing cost.
+    // absorb: 0 flattens the body to one colour (not the pre-viscosity look
+    // — the base literal changed too, see GOO_TUNING.absorb above). Ceiling
+    // kept at 3: it is the CORE that saturates, not the fringe — the fringe
+    // band (dens - thresh <= ~0.24 at default threshold/edge) still
+    // transmits ~81% red at absorb 3, but past absorb ~2.5 a core of dens
+    // ~2 is already down to ~24% red survival (and near-zero green/blue),
+    // so a higher ceiling would only push the fringe darker, not recover
+    // any usable range in the core.
+    setAbsorb(v) { uAbsorb.value = Math.max(0, Math.min(3, v)); },
+    setSpec(v) { uSpec.value = Math.max(0, Math.min(4, v)); },
+    // gloss FLOOR of 8, not 1: below ~8 the lobe is wider than the blob and
+    // the whole surface reads as flat white, which looks like a broken pass.
+    setGloss(v) { uGloss.value = Math.max(8, Math.min(400, v)); },
+    setRim(v) { uRim.value = Math.max(0, Math.min(1, v)); },
+    // CEILING RAISED 4 -> 8 (2026-08-31): the owner's chosen value landed
+    // exactly ON the old ceiling, which is the signature of a clamp that is
+    // silently capping intent rather than guarding a range. Same reason the
+    // gloss ceiling went 220 -> 400. Both were guesses; neither was measured.
+    // Ceiling 4, not 0.8: the old hard-coded 0.8 was a floor-to-ceiling range
+    // of exactly one value, and the knob is only interesting BELOW it anyway.
+    setStretch(v) { stretchMax = Math.max(0, Math.min(8, v)); },
+    setShadowRed(v) { uShadowRed.value = Math.max(0, Math.min(0.6, v)); },
+    setSurfaceNormals(on) { uNormalMode.value = on ? 1 : 0; },
+    setMode(m: 'overlay' | 'depth') { mode = m; },
+    get mode() { return mode; },
+    get debugTargets() { return { density: target, blurred: blurB }; },
+    get liveCount() { return liveCount; },
+    get syncCalls() { return syncCalls; },
     setLegacyGamma(on) { uLegacy.value = on ? 1 : 0; },
     get threshold() { return uThresh.value; },
+    get sizeScale() { return sizeScale; },
     get edge() { return uEdge.value; },
     get blurPx() { return uBlurPx.value; },
+    get absorb() { return uAbsorb.value; },
+    get spec() { return uSpec.value; },
+    get gloss() { return uGloss.value; },
+    get rim() { return uRim.value; },
+    get stretch() { return stretchMax; },
+    get shadowRed() { return uShadowRed.value; },
+    get surfaceNormals() { return uNormalMode.value > 0.5; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
@@ -612,8 +958,9 @@ export function createGooLayer(
       quads.geometry.dispose();
       densMat.dispose();
       quad.geometry.dispose();
-      surfRawMat.dispose();
-      surfBlurMat.dispose();
+      for (const byMode of Object.values(surfMats)) {
+        for (const m of Object.values(byMode)) m.dispose();
+      }
       blurH.quad.geometry.dispose();
       blurV.quad.geometry.dispose();
       blurHMat.dispose();

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   createBloodSim, burst, emitTrails, stepBlood, addScraps, SCRAP_TUNING,
-  spawnWoundDroplets, WOUND_BLEED,
+  spawnWoundDroplets, WOUND_BLEED, TRAIL_HIST, spawnImpactGout, IMPACT_GOUT,
 } from './blood-sim';
+import type { Vec3 } from './types';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -172,12 +173,28 @@ describe('wound bleed emitters (bleeding-wounds spec, 2026-08-31)', () => {
     return sim.droplets.length;
   }
 
+  /** Mist rides every bead (mistPerDrop each), so droplet totals split by
+   *  kind: beads() is the pinned bleed rate, mist is beads * mistPerDrop. */
+  const beads = (sim: { droplets: { kind: string }[] }) =>
+    sim.droplets.filter(d => d.kind === 'drop').length;
+
   it('pellet oozes a small PINNED count over its 2 s life at a constant low rate', () => {
     expect(WOUND_BLEED.pellet.lifetimeSec).toBe(2);
     expect(WOUND_BLEED.pellet.tailHz).toBe(WOUND_BLEED.pellet.baseHz); // constant
     // Pinned exact: the fractional accumulator must land 7 Hz x 2 s = 14
     // spawns; drift of even one droplet means the carry logic is broken.
-    expect(emitFor('pellet', 2)).toBe(14);
+    // emitFor counts ALL droplets; each pellet bead brings mistPerDrop mist.
+    // Pinned to the TABLE, not a literal: the rate is a look knob and has
+    // moved once already (density round). The ideal is baseHz * lifetime
+    // beads, each with its mist retinue — but the accumulator sums baseHz/60
+    // per step in floating point, so the LAST fractional spawn can round
+    // away (18/60 x 120 lands at 35.999..., not 36). One short is the float
+    // boundary; two short would be a carry bug, which is what this guards.
+    const ideal = WOUND_BLEED.pellet.baseHz * WOUND_BLEED.pellet.lifetimeSec;
+    const perBead = 1 + WOUND_BLEED.pellet.mistPerDrop;
+    const got = emitFor('pellet', 2);
+    expect(got).toBeLessThanOrEqual(ideal * perBead);
+    expect(got).toBeGreaterThanOrEqual((ideal - 1) * perBead);
   });
 
   it('slug spurt is front-loaded: most of its droplets in the first second', () => {
@@ -202,10 +219,13 @@ describe('wound bleed emitters (bleeding-wounds spec, 2026-08-31)', () => {
     for (let i = 0; i < 60 * 12; i++) {
       acc = spawnWoundDroplets(sim, 'pellet', i / 60, ANCHOR, NORMAL, 1 / 60, acc, rng);
     }
-    expect(sim.droplets.length).toBe(14); // nothing beyond the pinned 2 s count
+    const idealBeads = WOUND_BLEED.pellet.baseHz * WOUND_BLEED.pellet.lifetimeSec;
+    expect(beads(sim)).toBeGreaterThanOrEqual(idealBeads - 1);
+    expect(beads(sim)).toBeLessThanOrEqual(idealBeads);
+    const total = sim.droplets.length; // beads + their mist
     expect(spawnWoundDroplets(sim, 'slug', 6.01, ANCHOR, NORMAL, 1 / 60, 0, rng)).toBe(0);
     expect(spawnWoundDroplets(sim, 'stump', 10.01, ANCHOR, NORMAL, 1 / 60, 0, rng)).toBe(0);
-    expect(sim.droplets.length).toBe(14); // and nothing spawned above
+    expect(sim.droplets.length).toBe(total); // and nothing spawned above
   });
 
   it('same seed + same step sequence => identical droplet counts AND positions', () => {
@@ -234,26 +254,48 @@ describe('wound bleed emitters (bleeding-wounds spec, 2026-08-31)', () => {
       acc = spawnWoundDroplets(sim, 'stump', i / 60, ANCHOR, n, 1 / 60, acc, rng);
     }
     const bound = Math.cos(WOUND_BLEED.stump.coneRad);
-    expect(sim.droplets.length).toBeGreaterThan(30);
-    for (const d of sim.droplets) {
+    expect(sim.droplets.filter(d => d.kind === 'drop').length).toBeGreaterThan(30);
+    // BEADS only: mist deliberately scatters wider than the cone (its whole
+    // point is haze around the stream), so the cone bound applies to drops.
+    for (const d of sim.droplets.filter(x => x.kind === 'drop')) {
       const l = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
       const dot = (d.vel[0] * n[0] + d.vel[1] * n[1] + d.vel[2] * n[2]) / l;
       expect(dot).toBeGreaterThanOrEqual(bound - 1e-9);
     }
   });
 
-  it('wound droplets are mist beads (kind "drop") in the per-kind size band', () => {
+  it('wound BEADS are kind "drop" in the size band; mist is smaller and short-lived', () => {
     const sim = createBloodSim();
     const rng = seeded(17);
     let acc = 0;
     for (let i = 0; i < 30; i++) {
       acc = spawnWoundDroplets(sim, 'stump', i / 60, ANCHOR, NORMAL, 1 / 60, acc, rng);
     }
-    for (const d of sim.droplets) {
-      expect(d.kind).toBe('drop');
+    const drops = sim.droplets.filter(d => d.kind === 'drop');
+    const mist = sim.droplets.filter(d => d.kind === 'mist');
+    expect(drops.length).toBeGreaterThan(0);
+    expect(mist.length).toBe(drops.length * WOUND_BLEED.stump.mistPerDrop);
+    for (const d of drops) {
       expect(d.size).toBeGreaterThanOrEqual(WOUND_BLEED.stump.sizeMin - 1e-9);
       expect(d.size).toBeLessThanOrEqual(WOUND_BLEED.stump.sizeMax + 1e-9);
     }
+    for (const m of mist) {
+      expect(m.size).toBeLessThan(WOUND_BLEED.stump.sizeMin); // finer than any bead
+      expect(m.life).toBe(WOUND_BLEED.stump.mistLifeSec);
+    }
+  });
+
+  it('mist EVAPORATES: stepping past mist life stamps no splat for it', () => {
+    const sim = createBloodSim();
+    spawnWoundDroplets(sim, 'stump', 0, ANCHOR, NORMAL, 1 / 60, 0.99, seeded(9));
+    const mistCount = sim.droplets.filter(d => d.kind === 'mist').length;
+    expect(mistCount).toBeGreaterThan(0);
+    const splatsBefore = sim.splats.length;
+    // Step long enough for mist to expire but not beads (mist life 0.5 s,
+    // bead life BLOOD_TRAIL.lifetimeSec is longer) and keep them airborne.
+    for (let i = 0; i < 40; i++) stepBlood(sim, 1 / 60, seeded(6));
+    expect(sim.droplets.filter(d => d.kind === 'mist').length).toBe(0);
+    expect(sim.splats.length).toBe(splatsBefore); // no confetti from mist
   });
 
   it('spawning past MAX_DROPLETS recycles oldest and never grows', () => {
@@ -271,8 +313,125 @@ describe('wound bleed emitters (bleeding-wounds spec, 2026-08-31)', () => {
 
   it('the fractional accumulator carries: a carry of 0.9 emits on the next step', () => {
     const sim = createBloodSim();
+    const rate = WOUND_BLEED.stump.baseHz; // table-driven: the rate is a look knob
     const acc = spawnWoundDroplets(sim, 'stump', 0, ANCHOR, NORMAL, 1 / 600, 0.95, seeded(2));
-    expect(sim.droplets.length).toBe(1); // 0.95 + 90/600 = 1.1 -> one spawn
-    expect(acc).toBeCloseTo(0.1, 9);
+    // One bead + its mist retinue.
+    expect(sim.droplets.filter(d => d.kind === 'drop').length).toBe(1); // 0.95 + 90/600 = 1.1 -> one spawn
+    expect(acc).toBeCloseTo(0.95 + rate / 600 - 1, 9);
+  });
+});
+
+describe('ribbon history (X1.bleed-look: cohesive lines of fluid)', () => {
+  const ANCHOR: [number, number, number] = [1, 1.2, 0.5];
+  const NORMAL: [number, number, number] = [0, 1, 0];
+  it('beads accumulate a capped, path-following history; mist does not', () => {
+    const sim = createBloodSim();
+    let acc = 0;
+    const rng = seeded(11);
+    acc = spawnWoundDroplets(sim, 'stump', 0, ANCHOR, NORMAL, 1 / 60, 0.99, rng);
+    for (let i = 0; i < 20; i++) stepBlood(sim, 1 / 60, seeded(6));
+    const bead = sim.droplets.find(d => d.kind === 'drop')!;
+    expect(bead.hist!.length).toBe(TRAIL_HIST); // capped, not 20
+    // Newest sample is the current position...
+    const last = bead.hist![bead.hist!.length - 1]!;
+    expect(last[0]).toBeCloseTo(bead.pos[0], 12);
+    // ...and the trail actually spans the path (oldest != newest).
+    const first = bead.hist![0]!;
+    expect(Math.hypot(last[0] - first[0], last[1] - first[1], last[2] - first[2]))
+      .toBeGreaterThan(0.01);
+    for (const m of sim.droplets.filter(d => d.kind === 'mist')) {
+      expect(m.hist).toBeUndefined();
+    }
+  });
+});
+
+describe('impact gouts (blood-viscosity spec §a)', () => {
+  const seeded = () => {
+    let s = 0x12345678;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
+  };
+  const anchor: Vec3 = [0, 1.2, 0];
+  const dir: Vec3 = [0, 0, 1]; // travelling +z, so blood sprays back along -z
+
+  it('emits the profile count in ONE call — the density the metaball needs', () => {
+    for (const kind of ['pellet', 'slug', 'stump'] as const) {
+      const sim = createBloodSim();
+      spawnImpactGout(sim, kind, anchor, dir, seeded());
+      expect(sim.droplets.length, kind).toBe(IMPACT_GOUT[kind].count);
+    }
+  });
+
+  it('sprays BACK along the incoming direction, not through the body', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    // Every droplet's velocity must have a negative z component: the cone
+    // half-angles are all under 90 degrees around -dir.
+    for (const d of sim.droplets) expect(d.vel[2]).toBeLessThan(0);
+  });
+
+  it('is head-fast/tail-slow: speeds decrease monotonically across the pulse', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    const speeds = sim.droplets.map(d => Math.hypot(d.vel[0], d.vel[1], d.vel[2]));
+    for (let i = 1; i < speeds.length; i++) {
+      // Strictly decreasing: the ramp carries no jitter, precisely so the
+      // pulse STRETCHES into a rope instead of expanding as a ball.
+      expect(speeds[i]!).toBeLessThan(speeds[i - 1]!);
+    }
+    expect(speeds[0]!).toBeCloseTo(IMPACT_GOUT.slug.speedMax, 5);
+    expect(speeds[speeds.length - 1]!).toBeCloseTo(IMPACT_GOUT.slug.speedMin, 5);
+  });
+
+  it('keeps every droplet inside the profile cone half-angle', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'stump', anchor, dir, seeded());
+    const axis: Vec3 = [-dir[0], -dir[1], -dir[2]];
+    for (const d of sim.droplets) {
+      const len = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
+      const cos = (d.vel[0] * axis[0] + d.vel[1] * axis[1] + d.vel[2] * axis[2]) / len;
+      expect(Math.acos(Math.min(1, cos))).toBeLessThanOrEqual(IMPACT_GOUT.stump.coneRad + 1e-6);
+    }
+  });
+
+  it('draws exactly 4 rng values per droplet, in a fixed order', () => {
+    const sim = createBloodSim();
+    let draws = 0;
+    const rng = () => { draws++; return 0.5; };
+    spawnImpactGout(sim, 'pellet', anchor, dir, rng);
+    expect(draws).toBe(IMPACT_GOUT.pellet.count * 4);
+  });
+
+  it('spawns kind "drop" — gout beads are the fluid body, not haze', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    expect(sim.droplets.every(d => d.kind === 'drop')).toBe(true);
+  });
+
+  it('does NOT mark gout beads ribbon-eligible', () => {
+    // Ribbons draw straight metre rods at gib speeds -- the round-1 "laser
+    // spaghetti" bug. Only slow bleed streams arc enough to read as liquid.
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded());
+    expect(sim.droplets.some(d => d.ribbon)).toBe(false);
+  });
+
+  it('a full 8-pellet shotgun blast fits inside MAX_DROPLETS', () => {
+    // 8 simultaneous pellet gouts must not evict each other mid-blast, or
+    // the shotgun reads as one gout instead of eight.
+    const sim = createBloodSim();
+    const rng = seeded();
+    for (let i = 0; i < 8; i++) spawnImpactGout(sim, 'pellet', anchor, dir, rng);
+    expect(sim.droplets.length).toBe(IMPACT_GOUT.pellet.count * 8);
+  });
+
+  it('is deterministic under a fixed seed', () => {
+    const a = createBloodSim();
+    const b = createBloodSim();
+    spawnImpactGout(a, 'slug', anchor, dir, seeded());
+    spawnImpactGout(b, 'slug', anchor, dir, seeded());
+    expect(a.droplets).toEqual(b.droplets);
   });
 });

@@ -18,6 +18,10 @@ import { add, basisFromAxis, dot, normalize, scale } from './vec';
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
 
+/** Path samples a bead keeps for its ribbon — ~0.15 s of arc at 60 Hz.
+ *  Short on purpose: a streak, not a snake. */
+export const TRAIL_HIST = 9;
+
 /** Mutable xyz — droplets integrate in place each frame (Vec3 is readonly). */
 type MutVec3 = [number, number, number];
 
@@ -27,8 +31,21 @@ export interface Droplet {
   age: number;
   life: number;
   size: number;
-  /** 'drop' = mist bead (burst/trails); 'scrap' = heavy amorphous hunk. */
-  kind: 'drop' | 'scrap';
+  /** 'drop' = bead (burst/trails/bleed); 'scrap' = heavy amorphous hunk;
+   *  'mist' = fine short-lived spray haze (bleed only — evaporates, never
+   *  stamps a splat, triple drag so it hangs then dies in place). */
+  kind: 'drop' | 'scrap' | 'mist';
+  /** Recent path samples, oldest first, newest last — appended by stepBlood
+   *  for beads, capped at TRAIL_HIST. The ribbon renderer (X1.bleed-look:
+   *  owner asked for "cohesive lines of fluid", not particles) sweeps a
+   *  tapered strip through these. Optional so lab fixtures and older
+   *  constructors need not carry it; renderers ignore it unless asked. */
+  hist?: [number, number, number][];
+  /** Marks a WOUND-BLEED bead as ribbon-eligible. Burst/trail beads stay
+   *  sprites: at gib speeds (6-8 m/s) a 0.15 s path is a straight metre of
+   *  line — rendered as a ribbon it reads as a laser rod, not fluid. Only
+   *  the slower bleed streams arc enough to read as liquid. */
+  ribbon?: boolean;
 }
 
 // Scrap feel knobs (gobs-and-goo §1): scraps are the amorphous meat bits
@@ -184,6 +201,15 @@ export interface WoundBleedProfile {
    *  DROPLET_VIEW_SCALE compensation does NOT apply to these). */
   sizeMin: number;
   sizeMax: number;
+  /** Mist particles spawned alongside EACH bead (owner ask 2026-08-31: finer
+   *  mist around the spray, not just oval cells). */
+  mistPerDrop: number;
+  /** Mist size as a fraction of the bead's rolled size. */
+  mistSizeScale: number;
+  /** Mist lifetime — short; it evaporates rather than landing. */
+  mistLifeSec: number;
+  /** Mist launch speed as a fraction of the bead's rolled speed. */
+  mistSpeedScale: number;
 }
 
 /** Per-calibre bleed tuning — the panel and tests share this one table
@@ -192,17 +218,72 @@ export interface WoundBleedProfile {
  *  the arcing gush, ~10 s. Burn wounds do not bleed (charred) — no entry
  *  by construction. */
 export const WOUND_BLEED: Record<BleedKind, WoundBleedProfile> = {
+  // DENSITY IS THE LOOK (X1.bleed-look round 2). The metaball fuses
+  // neighbours whose density peaks overlap, so a stream reads as a connected
+  // rope only when its droplets are packed tighter than a blob radius apart.
+  // Measured 2026-08-31: at the old rates the goo fused only right at the
+  // wound and every spread droplet stayed a discrete bead — correct metaball
+  // behaviour, wrong picture. So the bleed profiles now trade DROPLET SIZE
+  // for DROPLET COUNT (~2.5x the rate, smaller beads), and narrow the cone
+  // and the speed spread so a stream stays a stream instead of fanning into
+  // isolated specks. Reference: dense continuous jets, not sparse spray.
   pellet: {
-    baseHz: 7, tailHz: 7, decayTauSec: 1, lifetimeSec: 2,
-    coneRad: 0.5, speedMin: 0.5, speedMax: 1.2, sizeMin: 0.08, sizeMax: 0.14,
+    baseHz: 18, tailHz: 18, decayTauSec: 1, lifetimeSec: 2,
+    coneRad: 0.32, speedMin: 0.5, speedMax: 0.9, sizeMin: 0.07, sizeMax: 0.11,
+    mistPerDrop: 1, mistSizeScale: 0.35, mistLifeSec: 0.35, mistSpeedScale: 0.7,
   },
   slug: {
-    baseHz: 42, tailHz: 1.5, decayTauSec: 0.45, lifetimeSec: 6,
-    coneRad: 0.35, speedMin: 1.8, speedMax: 3.6, sizeMin: 0.12, sizeMax: 0.2,
+    baseHz: 110, tailHz: 4, decayTauSec: 0.45, lifetimeSec: 6,
+    coneRad: 0.2, speedMin: 1.1, speedMax: 1.7, sizeMin: 0.1, sizeMax: 0.15,
+    mistPerDrop: 2, mistSizeScale: 0.3, mistLifeSec: 0.45, mistSpeedScale: 0.65,
   },
   stump: {
-    baseHz: 90, tailHz: 5, decayTauSec: 1.4, lifetimeSec: 10,
-    coneRad: 0.55, speedMin: 2.5, speedMax: 5.5, sizeMin: 0.16, sizeMax: 0.26,
+    baseHz: 220, tailHz: 12, decayTauSec: 1.4, lifetimeSec: 10,
+    coneRad: 0.3, speedMin: 1.5, speedMax: 2.4, sizeMin: 0.12, sizeMax: 0.18,
+    mistPerDrop: 2, mistSizeScale: 0.3, mistLifeSec: 0.5, mistSpeedScale: 0.6,
+  },
+};
+
+export interface ImpactGoutProfile {
+  /** Droplets emitted in ONE call. Density is the whole point: a stream
+   *  spread over time never overlaps enough for the metaball to fuse, and
+   *  the same blood fired as one packed pulse does. */
+  count: number;
+  /** Cone HALF-angle around the BACKWARD axis, radians. */
+  coneRad: number;
+  /** Head speed — droplet 0. */
+  speedMax: number;
+  /** Tail speed — the last droplet. */
+  speedMin: number;
+  lifeMin: number;
+  lifeMax: number;
+  sizeMin: number;
+  sizeMax: number;
+}
+
+/**
+ * Per-calibre impact gouts (blood-viscosity spec §a). Fired ONCE at the
+ * moment a projectile lands, and once per sever — not a rate.
+ *
+ * Counts are budgeted against MAX_DROPLETS (600): a shotgun lands 8 pellets
+ * at one instant, so `pellet.count * 8` must fit or the blast evicts itself
+ * mid-spawn and reads as a single gout instead of eight.
+ */
+export const IMPACT_GOUT: Record<BleedKind, ImpactGoutProfile> = {
+  pellet: {
+    count: 14, coneRad: 0.9, speedMax: 5.5, speedMin: 1.2,
+    lifeMin: 0.35, lifeMax: 0.7, sizeMin: 0.05, sizeMax: 0.1,
+  },
+  // Owner's tuned values, 2026-08-31: a nearly STATIONARY gout. At the
+  // original 8 m/s the pulse was metres wide within two frames and read as a
+  // starburst of needles; at 0.5 it stays where it was born and holds together.
+  slug: {
+    count: 85, coneRad: 0.7, speedMax: 0.5, speedMin: 0.2,
+    lifeMin: 0.4, lifeMax: 0.9, sizeMin: 0.06, sizeMax: 0.14,
+  },
+  stump: {
+    count: 140, coneRad: 1, speedMax: 7, speedMin: 1.5,
+    lifeMin: 0.5, lifeMax: 1, sizeMin: 0.07, sizeMax: 0.16,
   },
 };
 
@@ -254,9 +335,79 @@ export function spawnWoundDroplets(
       life: WOUND_DROPLET_LIFE,
       size,
       kind: 'drop',
+      ribbon: true,
     });
+    // MIST — fine spray haze riding each bead (X1.bleed-look, owner ask):
+    // spawned around the bead's own direction with a wider scatter, smaller,
+    // short-lived, and it evaporates (stepBlood skips its splat). Exactly 3
+    // rng draws per mist particle, AFTER the bead's 4, so seeded streams
+    // stay pinnable: a bead costs 4 + 3*mistPerDrop draws.
+    for (let mi = 0; mi < p.mistPerDrop; mi++) {
+      const mTheta = rng() * Math.PI * 2;
+      const mR = 0.25 * Math.sqrt(rng());
+      const mSpeed = speed * p.mistSpeedScale * (0.6 + rng() * 0.8);
+      const mDir = normalize(add(dir, add(scale(u, Math.cos(mTheta) * mR), scale(v, Math.sin(mTheta) * mR))));
+      push(sim, {
+        pos: [anchor[0] + mDir[0] * WOUND_SPAWN_OFFSET,
+          anchor[1] + mDir[1] * WOUND_SPAWN_OFFSET, anchor[2] + mDir[2] * WOUND_SPAWN_OFFSET],
+        vel: [mDir[0] * mSpeed, mDir[1] * mSpeed, mDir[2] * mSpeed],
+        age: 0,
+        life: p.mistLifeSec,
+        size: size * p.mistSizeScale,
+        kind: 'mist',
+      });
+    }
   }
   return carry - count;
+}
+
+/**
+ * One impact's gout: the whole pulse in a single call, sprayed BACK along
+ * the incoming direction (blood comes toward the shooter, which also means
+ * toward the camera — the read overlay mode exists to deliver).
+ *
+ * PURE. Draws exactly 4 rng values per droplet in a fixed order (cone r,
+ * cone theta, size, life), so seeded streams pin it.
+ *
+ * SPEED IS A DETERMINISTIC RAMP, not a random band: droplet 0 leaves at
+ * speedMax and the last at speedMin, so the pulse STRETCHES along its axis
+ * into an arcing rope. Jittering it collapses the rope back into a ball —
+ * in the 2D prototype that was the entire difference between "one pink
+ * blob" and the reference look.
+ */
+export function spawnImpactGout(
+  sim: BloodSim, kind: BleedKind, anchor: Vec3, dirN: Vec3, rng: () => number,
+): void {
+  const p = IMPACT_GOUT[kind];
+  // Back along the shot. A zero/degenerate direction falls back to straight
+  // up, the same guard spawnWoundDroplets uses for a degenerate normal.
+  const back: Vec3 = [-dirN[0], -dirN[1], -dirN[2]];
+  const axis = normalize(
+    Math.hypot(back[0], back[1], back[2]) < 1e-9 ? [0, 1, 0] as Vec3 : back,
+  );
+  const { u, v, w } = basisFromAxis(axis);
+  for (let i = 0; i < p.count; i++) {
+    const r = p.coneRad * Math.sqrt(rng());
+    const theta = rng() * Math.PI * 2;
+    const cr = Math.cos(r);
+    const sr = Math.sin(r);
+    const dir = normalize(add(add(scale(w, cr), scale(u, Math.cos(theta) * sr)), scale(v, Math.sin(theta) * sr)));
+    const size = p.sizeMin + rng() * (p.sizeMax - p.sizeMin);
+    const life = p.lifeMin + rng() * (p.lifeMax - p.lifeMin);
+    const t = p.count > 1 ? i / (p.count - 1) : 0;
+    const speed = p.speedMax + (p.speedMin - p.speedMax) * t;
+    push(sim, {
+      pos: [anchor[0] + dir[0] * WOUND_SPAWN_OFFSET,
+        anchor[1] + dir[1] * WOUND_SPAWN_OFFSET, anchor[2] + dir[2] * WOUND_SPAWN_OFFSET],
+      vel: [dir[0] * speed, dir[1] * speed, dir[2] * speed],
+      age: 0,
+      life,
+      size,
+      kind: 'drop',
+      // NOT ribbon-eligible: at gout speeds a 0.15 s path history is a
+      // straight metre of line, which renders as a laser rod, not fluid.
+    });
+  }
 }
 
 function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap' = 'drop'): void {
@@ -280,13 +431,21 @@ export function stepBlood(sim: BloodSim, dt: number, rng: () => number): void {
     const d = sim.droplets[i]!;
     // Scraps are chunky — they feel double the airdrag of a mist bead.
     const drag = Math.max(0, 1 - BLOOD_TRAIL.airdrag
-      * (d.kind === 'scrap' ? SCRAP_TUNING.dragMul : 1) * dt);
+      * (d.kind === 'scrap' ? SCRAP_TUNING.dragMul : d.kind === 'mist' ? 3 : 1) * dt);
     d.vel[1] -= BLOOD_TRAIL.gravity * dt;
     d.vel[0] *= drag; d.vel[1] *= drag; d.vel[2] *= drag;
     d.pos[0] += d.vel[0] * dt; d.pos[1] += d.vel[1] * dt; d.pos[2] += d.vel[2] * dt;
     d.age += dt;
+    // Ribbon history — beads only (mist stays a haze sprite, scraps are
+    // flesh). Ring capped at TRAIL_HIST; shift is fine at these sizes.
+    if (d.kind === 'drop') {
+      (d.hist ??= []).push([d.pos[0], d.pos[1], d.pos[2]]);
+      if (d.hist.length > TRAIL_HIST) d.hist.shift();
+    }
     if (d.pos[1] <= 0.01 || d.age >= d.life) {
-      stamp(sim, d.pos, rng, d.kind);
+      // Mist evaporates — a splat per mist particle would carpet the floor
+      // in confetti within one spurt.
+      if (d.kind !== 'mist') stamp(sim, d.pos, rng, d.kind);
       sim.droplets.splice(i, 1);
     }
   }
