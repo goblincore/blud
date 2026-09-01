@@ -2326,6 +2326,10 @@ async function main() {
           : [],
       );
     },
+    /** A/B seam: rebuild the SHADOW hull with spanning off (the pre-fix
+     *  bead-chain) or on. Pair it with refreshHull() — and use it INSTEAD of
+     *  a two-build cross-load A/B, which the wander makes untrustworthy. */
+    setShadowSpan: (on: boolean, inflate?: number) => occluderHull.setShadowSpan(on, inflate),
     hullDebug: () => ({
       occluder: sdfLayer.occluderEnabled,
       exclusions: hullExclusionsEnabled,

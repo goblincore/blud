@@ -8,13 +8,14 @@
 // blast-crater hole, observed and fixed).
 
 import { describe, it, expect } from 'vitest';
+import type * as THREE from 'three/webgpu';
 // Entry-point SOURCE, imported with Vite's ?raw rather than read through
 // node:fs — this tsconfig ships `types: ['vite/client']` and no @types/node,
 // so an fs read does not type-check here even though vitest runs it.
 import gameMainSrc from './game-main.ts?raw';
 import labMainSrc from './lab-main.ts?raw';
 import benchMainSrc from './bench-main.ts?raw';
-import { buildHullInstances, HULL_SHRINK, createOccluderHull, SHADOW_HULL_INFLATE, type WoundSphere } from './occluder-hull';
+import { buildHullInstances, HULL_SHRINK, createOccluderHull, SHADOW_HULL_INFLATE, SHADOW_SPAN_STEP, type WoundSphere } from './occluder-hull';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
 import { DEFAULT_FACE } from '../face';
@@ -296,6 +297,189 @@ describe('shadow-caster hull', () => {
       expect(twin, `shadow sphere at ${centre}`).toBeDefined();
       expect(twin!).toBeGreaterThan(r);
     }
+  });
+
+  // ---------------------------------------------------------------------
+  // THE SECOND REJECTION (2026-09-01): still blobs at 1.35.
+  //
+  // Inflation was the wrong lever and the prim table says so without a
+  // screenshot. Two end spheres of one primitive touch only when
+  //     inflate >= L / (rA + rB)
+  // and the zombie's limbs are long and thin, so that ratio is 2.2-2.95.
+  // The fix is to fill the primitive's AXIS instead — which is not an
+  // approximation of anything, it IS the capsule the primitive already is.
+  // ---------------------------------------------------------------------
+
+  /** Union-find over sphere overlap: how many disjoint pieces the hull is in.
+   *  A 3D-connected union projects to a connected 2D shadow, so this is the
+   *  property the shadow map actually cares about, measured on the CPU. */
+  const componentSizes = (inst: ReturnType<typeof buildHullInstances>) => {
+    const parent = inst.map((_, i) => i);
+    const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)));
+    for (let i = 0; i < inst.length; i++) {
+      for (let j = i + 1; j < inst.length; j++) {
+        const a = inst[i]!, b = inst[j]!;
+        const d = Math.hypot(a.centre[0] - b.centre[0], a.centre[1] - b.centre[1], a.centre[2] - b.centre[2]);
+        if (d > a.radius + b.radius) continue;
+        const ra = find(i), rb = find(j);
+        if (ra !== rb) parent[ra] = rb;
+      }
+    }
+    const sizes = new Map<number, number>();
+    for (let i = 0; i < inst.length; i++) sizes.set(find(i), (sizes.get(find(i)) ?? 0) + 1);
+    return [...sizes.values()].sort((a, b) => b - a);
+  };
+
+  it('no uniform inflation connects the zombie without spanning, short of tripling its limbs', () => {
+    // The measurement that killed the inflate-harder approach. Every value in
+    // the range the owner suggested (1.6-1.8) still leaves the figure in
+    // pieces, and the value that DOES connect it puts a 0.19 m sphere on a
+    // 0.062 m shin — a shadow three times the width of the leg casting it.
+    for (const inflate of [1.35, 1.6, 1.8, 2.0]) {
+      const inst = buildHullInstances([body], inflate, [], 0, false);
+      expect(componentSizes(inst).length, `inflate ${inflate}`).toBeGreaterThan(1);
+    }
+    // And the price of the value that would work, stated in metres so the
+    // trade is legible: the shin prim is r 0.062, L 0.365.
+    const shin = body.prims
+      .filter(p => p.op !== 'sub' && p.op !== 'groove' && !p.dead)
+      .map(p => {
+        const ms = Math.min(p.scale[0], p.scale[1], p.scale[2]);
+        const rA = p.radius * ms, rB = (p.radiusB ?? p.radius) * ms;
+        const L = Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]);
+        return L / (rA + rB);
+      })
+      .reduce((a, b) => Math.max(a, b), 0);
+    expect(shin).toBeGreaterThan(2.9);
+    // Which is why the shipped inflation is modest: it is no longer doing
+    // the connecting, so it only has to cover min(scale) and the smin blend.
+    expect(SHADOW_HULL_INFLATE).toBeLessThan(1.5);
+  });
+
+  it('spanning fuses the zombie into ONE connected figure', () => {
+    const spanned = buildHullInstances([body], SHADOW_HULL_INFLATE, [], 0, true);
+    const beads = buildHullInstances([body], SHADOW_HULL_INFLATE, [], 0, false);
+    expect(componentSizes(beads).length).toBeGreaterThan(5);
+    expect(componentSizes(spanned)).toEqual([spanned.length]);
+    // Spanning is not free, but it is cheap: the extra spheres are the ones
+    // that were missing from the middle of every limb.
+    expect(spanned.length).toBeGreaterThan(beads.length);
+    expect(spanned.length).toBeLessThan(beads.length * 3);
+  });
+
+  it('spans every character on the cast into 3 pieces or fewer', () => {
+    // The zombie is what the game spawns, but the hull is shared. Cyclops is
+    // excluded on purpose and is the honest limitation of a raw-prim hull:
+    // several of its clusters never touch as PRIMITIVES and are joined only
+    // by the smin blend, which the hull cannot see. Nothing spanning does
+    // reaches those, and no character the game ships depends on it.
+    for (const [name, src] of [['mouse', mouseSrc], ['clown', clownSrc], ['goblin', goblinSrc]] as const) {
+      const doc = parseBlob(src);
+      const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
+      const sizes = componentSizes(buildHullInstances([b], SHADOW_HULL_INFLATE, [], 0, true));
+      expect(sizes.length, `${name}: ${sizes.join(',')}`).toBeLessThanOrEqual(3);
+      // And the stragglers must be stragglers, not a severed half.
+      expect(sizes[0]!, `${name}: ${sizes.join(',')}`).toBeGreaterThan(0.9 * sizes.reduce((a, c) => a + c, 0));
+    }
+  });
+
+  it('steps spanned spheres close enough to overlap, sized off the THIN end of a taper', () => {
+    // A round cone long enough to need several steps. The tightest pair on a
+    // taper is at the thin end, so the step rule uses min(rA, rB); sizing off
+    // the mean would leave the last pair short of touching.
+    const cone = {
+      prims: [{
+        a: [0, 0, 0] as Vec3, b: [0, 0, 1.0] as Vec3,
+        radius: 0.20, radiusB: 0.05, scale: [1, 1, 1] as Vec3, blendK: 0,
+        limb: body.prims[0]!.limb, cluster: 0,
+      }],
+      clusters: [{ ...body.clusters[0]!, id: 0, start: 0, count: 1, alive: true }],
+      bones: body.bones,
+    };
+    const inst = buildHullInstances([cone], 1, [], 0, true)
+      .sort((a, b) => a.centre[2] - b.centre[2]);
+    expect(inst.length).toBeGreaterThan(4);
+    // Ends unchanged: spanning ADDS interior spheres, it does not move the
+    // endpoints the un-spanned hull already emitted.
+    expect(inst[0]!.centre[2]).toBeCloseTo(0, 6);
+    expect(inst[0]!.radius).toBeCloseTo(0.20, 6);
+    expect(inst[inst.length - 1]!.centre[2]).toBeCloseTo(1.0, 6);
+    expect(inst[inst.length - 1]!.radius).toBeCloseTo(0.05, 6);
+    for (let i = 1; i < inst.length; i++) {
+      const a = inst[i - 1]!, b = inst[i]!;
+      const gap = b.centre[2] - a.centre[2];
+      // Overlapping, not merely touching — a tangent pair is a single point
+      // and a 1024^2 shadow map rasterises that as nothing.
+      expect(gap, `pair ${i}`).toBeLessThanOrEqual(SHADOW_SPAN_STEP * (a.radius + b.radius) + 1e-9);
+      // Radius follows the cone's own taper, so the span is the primitive
+      // rather than a fattened tube around it.
+      expect(b.radius).toBeLessThanOrEqual(a.radius + 1e-9);
+    }
+  });
+
+  it('leaves the occlusion hull bit-identical — spanning is opt-in', () => {
+    // The march clamps tMax by this hull and the shell tests pin it exactly;
+    // spanning must not leak into it by default.
+    expect(buildHullInstances([body], HULL_SHRINK, [], 0, false))
+      .toEqual(buildHullInstances([body]));
+  });
+
+  it('still drops spanned spheres a wound bites into', () => {
+    // The interior spheres go through the same wound filter as the endpoints:
+    // a crater in mid-thigh must clear the span, not just the joints.
+    const base = buildHullInstances([body], SHADOW_HULL_INFLATE, [], 0, true);
+    const target = base[Math.floor(base.length / 2)]!;
+    const wound: WoundSphere = { centre: target.centre, radius: 0.08 };
+    const after = buildHullInstances([body], SHADOW_HULL_INFLATE, [wound], 0, true);
+    expect(after.length).toBeLessThan(base.length);
+    for (const s of after) {
+      const d = Math.hypot(
+        s.centre[0] - wound.centre[0],
+        s.centre[1] - wound.centre[1],
+        s.centre[2] - wound.centre[2],
+      );
+      expect(d).toBeGreaterThan(wound.radius + s.radius);
+    }
+  });
+
+  it('emits nothing extra for dead prims or carves when spanning', () => {
+    // Spanning multiplies whatever the filters let through, so the filters
+    // are re-pinned with it on: a dead forearm must contribute no interior
+    // spheres either, or severing leaves a phantom limb in the shadow.
+    const dead = {
+      clusters: [{ id: 0, limb: 'armL' as const, start: 0, count: 2, center: [0, 0, 0] as const, radius: 1, alive: true }],
+      prims: [
+        { a: [0, 0, 0], b: [0, 1, 0], radius: 0.2, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0 },
+        { a: [0, 1, 0], b: [0, 2, 0], radius: 0.2, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0, dead: true },
+      ],
+    } as never;
+    const inst = buildHullInstances([dead], SHADOW_HULL_INFLATE, [], 0, true);
+    expect(inst.length).toBeGreaterThan(2);
+    for (const i of inst) expect(i.centre[1]).toBeLessThanOrEqual(1 + 1e-9);
+  });
+
+  it('setShadowSpan reproduces the rejected state and the fix on the same page', () => {
+    // The A/B seam. It exists because a cross-load A/B of this feature cannot
+    // be trusted: the actors wander, so two builds captured back to back
+    // differ by an arm as well as by the caster (measured, 2026-09-01 — a
+    // same-state pair moved ~6.6k px of a 1.0 Mpx frame and the residual sat
+    // ON the figure). Toggling inside one load holds everything else still.
+    // Both arguments matter: the state the owner rejected was no-span AND
+    // 1.35, so the seam has to be able to say both.
+    const hull = createOccluderHull();
+    const counts: number[] = [];
+    for (const [span, inflate] of [[false, 1.35], [true, undefined], [false, undefined]] as const) {
+      hull.setShadowSpan(span, inflate);
+      hull.update([body]);
+      counts.push((hull.shadowObject as THREE.InstancedMesh).count);
+    }
+    const [rejected, fixed, beadsAtShipped] = counts as [number, number, number];
+    expect(fixed).toBeGreaterThan(rejected);
+    // And it is a real toggle, not a one-way latch: going back reproduces the
+    // bead-chain count at the shipped inflation.
+    expect(beadsAtShipped).toBeLessThan(fixed);
+    expect(beadsAtShipped).toBe(buildHullInstances([body], SHADOW_HULL_INFLATE).length);
+    hull.dispose();
   });
 
   it('the shadow mesh casts; the occlusion mesh does not', () => {

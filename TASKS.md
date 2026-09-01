@@ -436,13 +436,31 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
    [spec](docs/superpowers/specs/2026-09-01-dungeon-relighting-design.md) ·
    [plan](docs/superpowers/plans/2026-09-01-dungeon-relighting.md)
 
-- `L2.followup-shadows` [ ] **Character cast shadows still read as separate
-  blobs.** Task 8 shipped `SHADOW_HULL_INFLATE = 1.35` on a dedicated
-  `SHADOW_HULL_LAYER` hull, and it is not enough to fuse the spheres into one
-  silhouette (owner: "the shadows are still blobs"). Cheapest next step is 1.6
-  -> 1.8 and a look; the geometric bound is that adjacent sphere centres must
-  overlap. Owner has already waived EXACT silhouettes — a chunky connected
-  shadow is fine, a scatter of circles is not.
+- `L2.followup-shadows` [x] **Character cast shadows read as one figure —
+  fixed by SPANNING the primitives, not by inflating harder.** The suggested
+  1.6 -> 1.8 sweep cannot work and the prim table says so without a capture:
+  a primitive's two end spheres touch only when `inflate >= L / (rA + rB)`,
+  and on the zombie that ratio is **2.95** for the shins (L 0.365, r 0.062),
+  2.66 / 2.54 for the arms, 2.20 for the thighs. All nine spanning prims are
+  still gapped at 1.6, eight of nine at 1.8, and the set only fuses at 3.0 —
+  a 0.186 m sphere on a 0.062 m limb, a shadow three times the width of the
+  leg casting it. So there is no inflation that closes the gaps AND keeps the
+  silhouette. `buildHullInstances(..., span)` now steps spheres along each
+  primitive's own axis at `SHADOW_SPAN_STEP` (0.75 of the two radii, so they
+  overlap rather than merely touch), which is not an approximation of
+  anything — it IS the capsule the primitive already is. Zombie: 10 disjoint
+  components -> **1**, 30 -> 51 spheres; whole cast down to <=3 (cyclops
+  excepted, see below). `SHADOW_HULL_INFLATE` dropped 1.35 -> **1.15**, since
+  it is no longer doing the connecting. Shadow mesh budget doubled
+  (`SHADOW_INSTANCE_FACTOR`) because `fillInstances` truncates SILENTLY and
+  spanning halved the headroom. Verified: `scripts/shadow-ab.sh` — shadow area
+  5398 px, before/after delta 2050 px against a 197 px in-load floor; the
+  gained pixels are exactly the shoulder and shin gaps, the lost ones the rim
+  that 1.35 had over-fattened.
+  KNOWN LIMIT: the cyclops still spans into 11 pieces. Its clusters never
+  touch as PRIMITIVES and are joined only by the smin blend, which a raw-prim
+  hull cannot see. Nothing the game ships depends on it; pinned in the test as
+  an explicit exclusion rather than left to be rediscovered.
 
 - `L2.followup-frozen-ab` [x] **DISPROVED (2026-09-01) — the frozen capture path
   re-marches; the canvas readback was the liar.** The suspicion was that
@@ -471,6 +489,13 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
   albedo test through the real capture path and exits non-zero if a
   character-only change stops showing up — run it after touching `sdf-layer.ts`
   frame logic, `lab-renderer.ts` `step`/loop, or `gallery-look.mjs`.
+  ALSO, from the shadow follow-up: what is NOT trustworthy is comparing two
+  BUILDS across two loads. The actors wander, so a same-state pair already
+  moves ~6.6k px of a 1.0 Mpx frame and the residual sits ON the figure —
+  exactly where a character change would be — and reloading re-rolls which
+  zombie stands in the beam (one attempt framed an empty wall). Toggle the
+  feature INSIDE one frozen load instead (e.g. `__sdfGame.setShadowSpan`),
+  which takes the floor from 6600 px to ~150.
 
 - `L2.followup-wounds` [ ] **Wound pass round 2 (owner ask, not yet designed):**
   bone showing through deep wounds, plus additional wound coloring/texture. The
