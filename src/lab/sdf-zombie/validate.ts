@@ -447,6 +447,63 @@ export function nearestPrim(p: Vec3, body: Body): number {
   return best;
 }
 
+/** How far inside the flesh a bone surface must sit, in metres. Generous
+ *  enough that a rig pose or a jiggle cannot push a compliant bone through
+ *  the skin, tight enough that a real femur still fits inside a thigh. */
+export const BONE_CONTAINMENT_MARGIN = 0.004;
+
+/**
+ * Every bone primitive must sit strictly inside the flesh field.
+ *
+ * The shader gates its bone fold on `nearWound`, which is only sound because
+ * `min(flesh, bone) === flesh` wherever the flesh is intact. A protruding bone
+ * breaks that identity ONLY outside the gate, so the fragment would appear and
+ * disappear as the gate flips — the discontinuity class that produced the black
+ * crack seams inside wound cavities. Catching it at build time is much cheaper
+ * than recognising it on screen.
+ *
+ * Samples each bone prim's own surface rather than its bounding box: a capsule
+ * shoved sideways can keep its radius and still breach, so radius alone is not
+ * the test.
+ */
+export function checkBoneContainment(body: Body): string[] {
+  const errs: string[] = [];
+  // A fixed low-discrepancy-ish sphere sampling. 26 directions — the 6 axes,
+  // 12 edge midpoints and 8 corners of a cube, normalised — is enough to catch
+  // a breach without making validation quadratic in prim count.
+  const dirs: Vec3[] = [];
+  for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
+    if (x === 0 && y === 0 && z === 0) continue;
+    const l = Math.hypot(x, y, z);
+    dirs.push([x / l, y / l, z / l]);
+  }
+
+  body.prims.forEach((prim, i) => {
+    if (prim.op !== 'bone' || prim.dead) return;
+    // Both endpoints, because a capsule can breach at either cap.
+    for (const end of [prim.a, prim.b]) {
+      for (const d of dirs) {
+        const p: Vec3 = [
+          end[0] + d[0] * prim.radius,
+          end[1] + d[1] * prim.radius,
+          end[2] + d[2] * prim.radius,
+        ];
+        // sdBody skips bone prims entirely (Task 1), so this is the FLESH
+        // field — exactly the surface the bone must stay inside.
+        if (sdBody(p, body) > -BONE_CONTAINMENT_MARGIN) {
+          errs.push(
+            `bone prim ${i} (${prim.limb}) breaches the flesh surface at ` +
+            `[${p.map(v => v.toFixed(3)).join(', ')}] — bone must sit at least ` +
+            `${BONE_CONTAINMENT_MARGIN}m inside the flesh, or the shader's ` +
+            `nearWound gate stops being an identity and the bone pops`);
+          return;
+        }
+      }
+    }
+  });
+  return errs;
+}
+
 export function validateBody(body: Body, opts: ValidateOpts): string[] {
   const errs: string[] = [];
 
@@ -454,6 +511,8 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
     errs.push(`primitive count ${body.prims.length} exceeds shader ceiling ${MAX_PRIMS}`);
   if (body.clusters.length > MAX_CLUSTERS)
     errs.push(`cluster count ${body.clusters.length} exceeds shader ceiling ${MAX_CLUSTERS}`);
+
+  errs.push(...checkBoneContainment(body));
 
   // Per-cluster ceiling. The total staying under MAX_PRIMS does not save a
   // single fat cluster: the WGSL folds each one with a fixed 64-iteration loop,

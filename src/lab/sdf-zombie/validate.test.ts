@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
+import { validateBody, sdBody, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -312,5 +312,39 @@ describe('bone prims are invisible to the CPU field (wound pass r2)', () => {
     for (const p of probes) {
       expect(nearestPrim(p, withBone)).not.toBe(1);
     }
+  });
+});
+
+describe('bone containment (wound pass r2)', () => {
+  const flesh: Primitive = {
+    a: [0, 0, 0], b: [0, 0.4, 0], radius: 0.09,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'legL', cluster: 0,
+  };
+  const mk = (boneRadius: number) => ({
+    prims: [flesh, { ...flesh, radius: boneRadius, op: 'bone' as const }],
+    clusters: [{ limb: 'legL', start: 0, count: 2, alive: true }],
+  } as unknown as Body);
+
+  it('accepts a bone comfortably inside its flesh', () => {
+    expect(checkBoneContainment(mk(0.03))).toEqual([]);
+  });
+
+  it('rejects a bone fatter than the flesh around it', () => {
+    const errs = checkBoneContainment(mk(0.12));
+    expect(errs.length).toBeGreaterThan(0);
+    expect(errs[0]).toMatch(/bone/i);
+    expect(errs[0]).toMatch(/prim 1/);
+  });
+
+  it('rejects a bone that only breaches on one side', () => {
+    // Same radius as a passing bone, but shoved sideways until it breaks the
+    // skin. Radius alone is not the test — position matters.
+    const offset = { ...flesh, radius: 0.03, op: 'bone' as const,
+      a: [0.075, 0, 0] as Vec3, b: [0.075, 0.4, 0] as Vec3 };
+    const body = {
+      prims: [flesh, offset],
+      clusters: [{ limb: 'legL', start: 0, count: 2, alive: true }],
+    } as unknown as Body;
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
   });
 });
