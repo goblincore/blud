@@ -1119,6 +1119,12 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
 //   woundCfg2  x rimWidth, y relaxation factor, z shellAmp (silhouette shell)
 //   lightCfg   x keyIntensity, y fillIntensity
+//   spotPos    world position of the analytic flashlight (dungeon task 7)
+//   spotAxis   normalised beam axis, pointing AWAY from the lamp
+//   spotCfg    x intensity (0 disables — lab parity), y cosInner,
+//              z cosOuter, w range
+//   spotColor  the beam's colour; the KEY blends toward it, the ambient
+//              hue basis never moves
 //   surfCfg    x specIntensity, y specRoughness, z fresnelBoost, w translucency
 //   surfCfg2   x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale
 //   mottleColor  the colour the mottle mixes toward (linear RGB)
@@ -1183,6 +1189,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   lightDir: vec3<f32>,
   keyColor: vec3<f32>,
   lightCfg: vec2<f32>,
+  spotPos: vec3<f32>,
+  spotAxis: vec3<f32>,
+  spotCfg: vec4<f32>,
+  spotColor: vec3<f32>,
   surfCfg: vec4<f32>,
   surfCfg2: vec4<f32>,
   mottleColor: vec3<f32>,
@@ -1776,7 +1786,37 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   albedo = mix(albedo, charColor, cm);
 
-  let L = normalize(lightDir);
+  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
+  // The world's SpotLight is invisible to the march — SDF bodies are shaded
+  // here, not by three — so the beam is re-evaluated analytically per pixel.
+  //
+  // PER-PIXEL, not per-body, so the cone edge cuts ACROSS a figure instead of
+  // the whole zombie popping on at once.
+  //
+  // ZERO field taps: a normalise, two dots and a divide. This is the
+  // constraint that let character self-shadowing be cut rather than paid for.
+  //
+  // It drives L and keyColor — NOT albedo. ambientAt renormalises bounce to
+  // unit luminance, so an albedo boost would change hue and leave brightness
+  // untouched. Brightness must ride the key.
+  var L = normalize(lightDir);
+  var keyC = keyColor;
+  var keyI = lightCfg.x;
+  if (spotCfg.x > 0.0) {
+    let toLamp = spotPos - p;
+    let dist = length(toLamp);
+    let Ls = toLamp / max(dist, 1e-4);
+    let cone = dot(-Ls, normalize(spotAxis));
+    let coneFall = clamp((cone - spotCfg.z) / max(spotCfg.y - spotCfg.z, 1e-4), 0.0, 1.0);
+    let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
+    let beam = coneFall * coneFall * distFall * distFall * spotCfg.x;
+    // Blend the key TOWARD the beam. At beam 0 this is exactly the old key,
+    // which keeps the lab and every existing preset bit-identical.
+    L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
+    keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
+    keyI = mix(lightCfg.x, lightCfg.x + beam * 2.2, 1.0);
+  }
+  // ---- END ANALYTIC FLASHLIGHT --------------------------------------------
   let V = -rd;
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
@@ -1846,8 +1886,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // falloff, gated by a test that greps its source for field calls. The
   // post-hit eval budget is unchanged.
   let amb = ambientAt(p, n, boxMin, boxMax, wallNegX, wallPosX, wallNegY, wallPosY, wallNegZ, wallPosZ, bounceCfg, lightCfg.y, keyColor);
-  var fleshLit = albedo * (amb + diff * wShadow * lightCfg.x * keyColor) * ao
-               + keyColor * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  var fleshLit = albedo * (amb + diff * wShadow * keyI * keyC) * ao
+               + keyC * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its

@@ -29,6 +29,7 @@ import {
 } from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -143,6 +144,11 @@ async function main() {
   const surfaces = levelSurfaces();
   const levelGroup = new THREE.Group();
   levelGroup.name = 'ring-level';
+  const stoneSet = dungeonMaterialSet();
+  const stoneFor = (axis: 0 | 1 | 2, facing: 1 | -1) =>
+    axis !== 1 ? stoneSet.wall
+      : facing > 0 ? stoneSet.floor
+        : stoneSet.perimeterAccent;
   for (const p of surfaces.planes) {
     const axis = p.axis;
     // Walls span (x|z, y); floors/ceilings span (x, z).
@@ -155,11 +161,14 @@ async function main() {
     // failure pointing up. A small emissive term in their own colour keeps
     // them legible as the room's top surface without flattening the mood.
     const isCeiling = axis === 1 && p.facing < 0;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: new THREE.Color(p.color[0], p.color[1], p.color[2]),
-      roughness: 1,
-      ...(isCeiling ? { emissive: new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.45) } : {}),
-    }));
+    const base = stoneFor(axis, p.facing) as THREE.MeshStandardMaterial;
+    const mesh = new THREE.Mesh(geo, base.clone());
+    const mm = mesh.material as THREE.MeshStandardMaterial;
+    mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
+    // Ceilings keep a whisper of self-light so they do not read as a void —
+    // but far less than the gallery needed, because the flashlight now
+    // reaches them.
+    if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
     const mid: Vec3 = [
       (p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2,
     ];
@@ -172,10 +181,9 @@ async function main() {
   for (const b of surfaces.boxes) {
     const geo = new THREE.BoxGeometry(
       b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: new THREE.Color(b.color[0], b.color[1], b.color[2]),
-      roughness: 1,
-    }));
+    const mesh = new THREE.Mesh(geo, (stoneSet.coverLow as THREE.MeshStandardMaterial).clone());
+    (mesh.material as THREE.MeshStandardMaterial).color =
+      new THREE.Color(b.color[0], b.color[1], b.color[2]);
     mesh.position.set(
       (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     levelGroup.add(mesh);
@@ -221,12 +229,26 @@ async function main() {
   // is watching.
   const accentGroup = new THREE.Group();
   accentGroup.name = 'accent-lights';
+  const flickerLights: { light: THREE.PointLight; base: number; phase: number }[] = [];
   for (const r of ROOMS) {
     for (const a of r.accents) {
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
       pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
       accentGroup.add(pl);
+      flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
+
+      // A visible source. Without it the light has no cause and reads as a bug.
+      const bowl = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.16, 1),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
+          emissive: new THREE.Color(a.color[0], a.color[1], a.color[2]),
+          emissiveIntensity: 2.2,
+          roughness: 0.7,
+        }));
+      bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+      accentGroup.add(bowl);
     }
   }
   scene.add(accentGroup);
@@ -384,6 +406,34 @@ async function main() {
   // Goo OFF takes the original single-call path, so the toggle is exact.
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
+    // Hand the march the same beam the meshes get. The SDF bodies shade
+    // inside the march and cannot see the scene's SpotLight at all (the
+    // owner's "characters aren't lit by the light direction" report), so
+    // the beam is replayed into per-body uniforms: same lamp pose, same
+    // cone maths, per pixel. spotCfg.x gates it — 0 (gallery/lab) makes
+    // the shader collapse to the old key exactly.
+    {
+      const sAxis = new THREE.Vector3();
+      flashlight.spot.target.getWorldPosition(sAxis).sub(flashlight.spot.position).normalize();
+      // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
+      // comes straight off the light so the two systems cannot drift.
+      const spotOn = dungeonOn ? 1 : 0;
+      const cosInner = Math.cos(flashlight.spot.angle * (1 - flashlight.spot.penumbra));
+      const cosOuter = Math.cos(flashlight.spot.angle);
+      for (const a of actors) {
+        a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
+        a.view.uniforms.spotAxis.value.copy(sAxis);
+        a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+      }
+    }
+    // Fire flicker. Cheap and deliberately not random per frame — a smooth
+    // two-rate wobble reads as flame; white noise reads as a broken light.
+    const ft = performance.now() * 0.001;
+    for (const f of flickerLights) {
+      const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
+      f.light.intensity = f.base * (1 + w * 0.14);
+    }
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {

@@ -51,18 +51,21 @@ describe('ring layout', () => {
     expect(ROOMS.reduce((n, r) => n + r.zombies, 0)).toBe(10);
   });
 
-  it('adjacent rooms have distinctly different ACCENT hues', () => {
-    // The white-gallery pivot: walls no longer tell rooms apart, accents do.
+  it('accents are FIRE braziers — warm in every room (SUPERSEDES hue distinctness)', () => {
+    // The gallery told rooms apart by accent HUE. The dungeon unifies them:
+    // every practical is flame, and rooms are told apart by geometry. The
+    // braziers still vary in coolness/depth (room3's pair), so assert the
+    // fire band rather than pairwise distinctness. L2, 2026-09-01.
     const ring = [1, 2, 3, 4, 1];
-    for (let i = 0; i < 4; i++) {
-      const a = ROOMS.find(r => r.id === ring[i])!.accents[0]!.color;
-      const b = ROOMS.find(r => r.id === ring[i + 1])!.accents[0]!.color;
-      const dist = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-      expect(dist).toBeGreaterThan(0.2);
+    for (const id of ring) {
+      const c = ROOMS.find(r => r.id === id)!.accents[0]!.color;
+      expect(c[0]).toBeGreaterThan(c[2]! + 0.35); // red dominates blue
+      expect(c[1]).toBeGreaterThan(c[2]!);        // green over blue
+      expect(c[0]).toBeGreaterThan(c[1]!);        // and red leads
     }
   });
 
-  it('every room has one or two accents, placed INSIDE the room and high', () => {
+  it('every room has one or two accents, placed INSIDE the room at brazier height', () => {
     for (const r of ROOMS) {
       expect(r.accents.length).toBeGreaterThanOrEqual(1);
       expect(r.accents.length).toBeLessThanOrEqual(2);
@@ -71,7 +74,8 @@ describe('ring layout', () => {
         expect(a.pos[0]).toBeLessThan(r.maxX);
         expect(a.pos[2]).toBeGreaterThan(r.minZ);
         expect(a.pos[2]).toBeLessThan(r.maxZ);
-        expect(a.pos[1]).toBeGreaterThan(1.5);   // above head height-ish
+        expect(a.pos[1]).toBeGreaterThan(0.5);   // off the floor — furniture
+        expect(a.pos[1]).toBeLessThan(2.0);      // NOT a ceiling fixture (L2)
         expect(a.pos[1]).toBeLessThan(r.height); // under the ceiling
         expect(a.power).toBeGreaterThan(0);
       }
