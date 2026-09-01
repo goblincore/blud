@@ -597,227 +597,26 @@ for a mouse and an ogre alike and a nose never grows a bone."
 
 ---
 
-## Task 4: The `bones` block in the `.blob` grammar
+## Task 4a / 4b: bone storage, then the `bones` grammar
 
-> **Step 0 added 2026-09-01 after reviewing Task 2's output:**
-> `checkBoneContainment` samples a plain sphere of radius `r` and so ignores
-> `prim.scale`, `radiusB` and `bend`. Since `sdPrimitive` divides by `scale`, a
-> bone with `scale.x = 1.45` reaches `1.45 x r` in x — so the ribcage Task 10
-> authors as `wide=1.45` would pass containment while genuinely breaching the
-> skin. Verified against the real validator: the breach is real
-> (`sdBody > 0` at the true surface) and `checkBoneContainment` returned `[]`.
-> The fix — scale-aware sampling, stations along the axis, Bezier centre line
-> for bent prims, taper-aware radius — is Step 0 of the dispatch task file and
-> must land before any bone is authored with a non-uniform scale.
-
-Wires auto-derive into compilation and adds the authored override. The grammar
-inside `bones` is **identical to the `body` block's** — same `blob`/`bar`
-words, same limb word, same `on <bone>`, same `mirror`. The block itself
-supplies `op: 'bone'`.
-
-**Files:**
-- Modify: `src/lab/sdf-zombie/blob-ast.ts` (add `bones` to `BlobDoc`)
-- Modify: `src/lab/sdf-zombie/blob-parse.ts` (the block dispatcher and `parseBodyLine`)
-- Modify: `src/lab/sdf-zombie/blob-compile.ts` (authored override + `boneRatio`)
-- Modify: `src/lab/sdf-zombie/build-body.ts:36` (auto-derive — see step 5b)
-- Modify: `src/lab/sdf-zombie/types.ts` (`BodyDef.boneRatio`)
-- Test: `src/lab/sdf-zombie/blob-compile.test.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `src/lab/sdf-zombie/blob-compile.test.ts` (match the existing helper
-used in that file for compiling source text; if it is named differently, use
-the file's own helper rather than inventing one):
-
-```ts
-describe('bones block (wound pass r2)', () => {
-  const SKELETON = `
-model test
-  height 1.78
-skeleton
-  root pelvis at 0.92
-  bone thigh parent=pelvis dir=down len=0.40
-body
-  bar leg on thigh from=0.05 to=0.95 r=0.080 blend=0.01
-`;
-
-  it('auto-derives a bone for a body with no bones block', () => {
-    const body = compileBlob(SKELETON);
-    const bones = body.prims.filter(p => p.op === 'bone');
-    expect(bones).toHaveLength(1);
-    expect(bones[0]!.radius).toBeCloseTo(0.080 * DEFAULT_BONE_RATIO, 6);
-  });
-
-  it('honours an explicit ratio', () => {
-    const body = compileBlob(`${SKELETON}bones\n  ratio 0.25\n`);
-    const bones = body.prims.filter(p => p.op === 'bone');
-    expect(bones[0]!.radius).toBeCloseTo(0.080 * 0.25, 6);
-  });
-
-  it('ratio 0 opts a character out of bone entirely', () => {
-    const body = compileBlob(`${SKELETON}bones\n  ratio 0\n`);
-    expect(body.prims.filter(p => p.op === 'bone')).toEqual([]);
-  });
-
-  it('an authored line replaces auto-derivation for that cluster', () => {
-    const body = compileBlob(
-      `${SKELETON}bones\n  bar leg on thigh from=0.1 to=0.9 r=0.021\n`);
-    const bones = body.prims.filter(p => p.op === 'bone');
-    expect(bones).toHaveLength(1);
-    expect(bones[0]!.radius).toBeCloseTo(0.021, 6);
-  });
-
-  it('rejects an unknown bone name with a located error', () => {
-    expect(() => compileBlob(`${SKELETON}bones\n  bar leg on femur from=0 to=1 r=0.02\n`))
-      .toThrow(/unknown bone "femur"/);
-  });
-});
-```
-
-- [ ] **Step 2: Run it and watch it fail**
-
-Run: `npx vitest run src/lab/sdf-zombie/blob-compile.test.ts -t "bones block"`
-Expected: FAIL — `bones` is not a recognised block.
-
-- [ ] **Step 3: Add `bones` to the AST**
-
-In `src/lab/sdf-zombie/blob-ast.ts`, add to the `BlobDoc` interface:
-
-```ts
-  /** `bones` block. `ratio` drives auto-derivation for clusters this block
-   *  does not name; `parts` are authored overrides using the same grammar as
-   *  `body`. Absent means "auto-derive everything at the default ratio". */
-  bones?: { ratio: number | null; parts: BlobPart[] };
-```
-
-- [ ] **Step 4: Parse the block**
-
-In `src/lab/sdf-zombie/blob-parse.ts`, find the block dispatcher that routes
-`body`, `skeleton`, `face` etc. Add a `bones` case that collects its lines.
-Reuse `parseBodyLine` — the grammar is deliberately identical — by giving it a
-target array. Concretely, change `parseBodyLine`'s signature to take the array
-it pushes into:
-
-```ts
-function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
-```
-
-and at its end push into `into` rather than the body list. Then in the
-dispatcher:
-
-```ts
-    case 'bones': {
-      s.doc.bones ??= { ratio: null, parts: [] };
-      // `ratio <n>` is the one non-part line the block accepts.
-      if (l.words[0] === 'ratio') {
-        const v = Number(l.words[1]);
-        if (!Number.isFinite(v) || v < 0)
-          throw new BlobError('ratio needs a non-negative number', l.line, l.indent + 1);
-        s.doc.bones.ratio = v;
-        return;
-      }
-      parseBodyLine(l, s, s.doc.bones.parts);
-      return;
-    }
-```
-
-Update the existing `body` call site to pass the body parts array, so both
-paths go through one grammar.
-
-- [ ] **Step 5: Compile the AUTHORED bone parts only**
-
-In `src/lab/sdf-zombie/blob-compile.ts`, compile the authored parts through the
-same path the `body` block uses, tag them `op: 'bone'`, and carry the ratio onto
-the `BodyDef`:
-
-```ts
-  // Authored bone overrides. Auto-derivation does NOT happen here — see
-  // build-body.ts for why it belongs one layer up.
-  const bonePrims = (doc.bones?.parts ?? []).map(part =>
-    ({ ...compilePart(part), op: 'bone' as const }));
-  prims.push(...bonePrims);
-```
-
-and add `boneRatio: doc.bones?.ratio ?? DEFAULT_BONE_RATIO` to the returned
-`BodyDef` (add the field to the `BodyDef` interface in `types.ts` with a doc
-comment saying it drives auto-derivation in `buildBody`).
-
-Use whatever the file's existing part-to-`PrimDef` function is actually called
-in place of `compilePart` — read the `body` block's compilation path and reuse
-the same call.
-
-- [ ] **Step 5b: Auto-derive in `buildBody`, NOT in the compiler**
-
-This is load-bearing and is the one place the plan deviates from the naive
-reading of the spec.
-
-`src/lab/sdf-zombie/characters/zombie-blob.test.ts` and
-`schoolgirl-blob.test.ts` assert that the `.blob` path reproduces a hand-written
-TypeScript body (`makeZombie()`) **prim-for-prim, by index**. If auto-derivation
-happened in `blob-compile`, only the `.blob` side would gain bone prims, the
-counts would diverge, and both tests would fail — and the TS-authored bodies
-would render with no bone at all, which is a real behaviour split, not just a
-test problem.
-
-Deriving in `buildBody` fixes both at once: every body gets bone regardless of
-which path built it, and the parity tests keep passing untouched because both
-sides derive identically.
-
-In `src/lab/sdf-zombie/build-body.ts`, inside `buildBody` (line 36), after the
-prims are resolved and before validation runs:
-
-```ts
-  // Bone auto-derivation lives HERE, not in blob-compile, so that
-  // TS-authored bodies (makeZombie and friends) get bone too — and so the
-  // .blob-vs-TS parity tests in characters/*.test.ts stay honest, since both
-  // paths derive the same bones from the same flesh.
-  //
-  // Authored bones win per BONE: a `bones` block naming the skull suppresses
-  // derivation on the skull only, and the limbs still derive themselves.
-  const authoredBones = new Set(
-    prims.filter(p => p.op === 'bone').map(p => p.bone).filter(Boolean));
-  prims.push(...deriveBones(prims, def.boneRatio ?? DEFAULT_BONE_RATIO)
-    .filter(p => !authoredBones.has(p.bone)));
-```
-
-with `import { deriveBones, DEFAULT_BONE_RATIO } from './bone-derive';` at the
-top. Use the file's real local variable name for the resolved prim array.
-
-- [ ] **Step 6: Run the test — it should pass**
-
-Run: `npx vitest run src/lab/sdf-zombie/blob-compile.test.ts -t "bones block"`
-Expected: PASS (5 tests)
-
-- [ ] **Step 7: Run the whole suite and check every character still validates**
-
-Run: `npm test`
-Expected: PASS. Every character now gains auto-derived bone prims, so this run
-also exercises Task 2's containment validator against all **ten** `.blob` files
-(`bonewalker`, `clown`, `clown-alt`, `cyclops`, `dragon`, `goblin`, `mouse`,
-`schoolgirl`, `schoolgirl-alt`, `zombie`).
-
-Prim headroom against `MAX_PRIMS = 128`, measured on `main` at `eea6620`:
-mouse 61, dragon 56, bonewalker 51, schoolgirl/-alt 47, cyclops 46, clown/-alt
-39, goblin 37, zombie 19. Auto-derive roughly adds the count of structural
-prims, so even mouse lands well under the ceiling.
-
-If containment fails on a character, that is a real finding, not a test to
-loosen: it means the default ratio puts bone through the skin somewhere.
-Report the character and prim rather than raising `BONE_CONTAINMENT_MARGIN`.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add src/lab/sdf-zombie/blob-ast.ts src/lab/sdf-zombie/blob-parse.ts src/lab/sdf-zombie/blob-compile.ts src/lab/sdf-zombie/blob-compile.test.ts
-git commit -m "bone: bones block in the .blob grammar, with auto-derive fallback
-
-The block reuses the body grammar exactly — same words, same limb, same
-mirror — and supplies op:'bone' itself. Authored lines win per bone and
-auto-derivation fills the rest, so authoring a skull costs you nothing on
-the limbs. All seven characters get bone with zero edits."
-```
-
----
+> **Task 4 was split and redesigned on 2026-09-01 after it timed out.** The
+> original put bone in `body.prims` with `op: 'bone'` and claimed severing and
+> every other consumer needed no changes. That was wrong: ~20 modules walk
+> `body.prims` and filter on `op`, and three broke — `occluder-hull` inflated
+> the shadow hull, the chunk path rendered bone as visible flesh, and
+> `severDistal`'s POSITIONAL slice dragged a limb's bones into a distal chunk.
+> Cluster membership was never enough; position in the run mattered.
+>
+> Bone now lives in its own `body.bones` array and never enters `body.prims`,
+> so the ~16 consumers that must exclude it are correct by construction. The
+> four that need it — rig-bind, pack, sever, validate — integrate it explicitly.
+> See the spec's revised storage section.
+>
+> Live task files:
+> `~/.claude/dispatch/plans/2026-09-01-wound-r2-task-4a.md` (storage + the
+> containment-validator scale fix) and `-4b.md` (the grammar). Task 5 now
+> depends on 4b, and its `applyBones` scans the contiguous range
+> `[counts.x, counts.x + woundCfg2.w)` rather than filtering prims by material.
 
 ## Task 5: The bone fold in the shader
 
