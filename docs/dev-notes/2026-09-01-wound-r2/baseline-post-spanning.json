@@ -1,0 +1,68 @@
+{
+  "when": "2026-09-01T21:49:28.923Z",
+  "viewport": "1280x800",
+  "room": 4,
+  "repeats": 3,
+  "warmup": 120,
+  "chunkFrames": 10,
+  "gate": {
+    "maxShadowOverheadPct": 40,
+    "measuredPct": -0.1,
+    "pass": true
+  },
+  "scenarios": {
+    "dungeon-off": {
+      "n": 108,
+      "runs": 3,
+      "p50": 11.15,
+      "p95": 32.62,
+      "p99": 33.28,
+      "mean": 13.26,
+      "walkP50": 13.33,
+      "fireP50": 11.07,
+      "gibP50": 8.25,
+      "bodies": 4
+    },
+    "dungeon-no-shadow": {
+      "n": 108,
+      "runs": 3,
+      "p50": 11.81,
+      "p95": 32.7,
+      "p99": 33.16,
+      "mean": 13.26,
+      "walkP50": 13.69,
+      "fireP50": 11.64,
+      "gibP50": 8.79,
+      "bodies": 4
+    },
+    "dungeon-shadow": {
+      "n": 108,
+      "runs": 3,
+      "p50": 11.8,
+      "p95": 33.13,
+      "p99": 34.49,
+      "mean": 13.34,
+      "walkP50": 13.58,
+      "fireP50": 11.62,
+      "gibP50": 8.8,
+      "bodies": 4
+    }
+  },
+  "spread": {
+    "dungeon-off": {
+      "lo": 10.39,
+      "hi": 11.55,
+      "pct": 11
+    },
+    "dungeon-no-shadow": {
+      "lo": 11.33,
+      "hi": 12.36,
+      "pct": 9
+    },
+    "dungeon-shadow": {
+      "lo": 11.61,
+      "hi": 12.19,
+      "pct": 5
+    }
+  }
+}
