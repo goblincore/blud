@@ -20,7 +20,23 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**SCHOOLGIRL-ALT — INSTRUMENT TRIAL COMPLETE (worktree `2026-08-28-schoolgirl-alt-character`,
+**DRAGON CHARACTER — FIRST NON-HUMANOID .BLOB AUTHORED (worktree `2026-08-28-dragon-character`,
+branch `dispatch/dragon-character`, 2026-08-31).** `dragon.blob` (59 prims, 2.04 m = 1.2x the
+1.70 m mesh) authored against `docs/dev-notes/refs/dragon-mesh/dragon.glb` from measured bones
+(20/20 joints land within 0.5 mm; scale 1.20000, rings spread 13.7%, ZERO BONE-LENGTH blocks).
+13 measured pins in `dragon-blob.test.ts` (wingspan:body 0.75, hock height, metatarsus:tibia 2.4x,
+tail reach+curl, head verticals, palette); tsc 0; suite 1801 green; render-check 0 holes after
+raising the membrane lobes' anisotropy out of the renderer's hole family (deep 0.18 -> 0.28).
+`stance digitigrade` validates only because the knee was pulled back mid-chord — the rig's
+knee-forward bird fold classifies as 'humanoid' in `checkStance` (full story in the .blob header;
+recommended fix: classify by metatarsus, not knee-vs-chord). Format findings: the rig has NO tail
+joints (all tail surface rides Bone_001, authored on two unmapped bones + a measured bend), head+
+horns are 24% of the mesh and unmapped (rings coverage ceiling 25%), `blob:measure` band
+attribution breaks down when a spread membrane dominates every width band, and bar+`deep` squash
+membranes top out as "wing nubs" — a real spar+sheet (shell) construction is the missing feature.
+Vision-graded 4/5 dragon; owner eyeball still pending.
+
+SCHOOLGIRL-ALT — INSTRUMENT TRIAL COMPLETE (worktree `2026-08-28-schoolgirl-alt-character`,
 2026-08-28).** The controlled experiment: `schoolgirl-alt.blob` authored from scratch against the
 same mesh as the hand-authored `schoolgirl.blob` (untouched control), using `blob:rings` +
 `blob:measure` + measured test pins. Starting bones from the reference rig (the brief's biggest

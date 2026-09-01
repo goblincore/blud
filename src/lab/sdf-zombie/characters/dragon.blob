@@ -1,0 +1,263 @@
+# Dragon — the first NON-HUMANOID .blob: green bipedal dragon, wings on the
+# arm clusters, tail on the torso cluster, digitigrade hind legs.
+#
+# Reference: docs/dev-notes/refs/dragon-mesh/dragon.glb (== green_dragon_rigged.glb).
+# 29891 in-scope verts, 29 joints Bone_000..Bone_028, exact bind pose, no
+# animations, facing +z (tail sweeps to z -0.55, snout to z +0.71), feet at
+# y=0, mesh 1.700 tall (horn tips) with a 0.946 wingspan and a 1.269 nose-to-
+# tail length. Only 65.1% of verts hold a strict-majority dominant joint
+# (genuine 4-6-joint blends, measured 2026-08-31 -- reading JOINTS_1/2 does
+# not recover them), and 61.8% of SURVIVING verts sit on joints the rig has
+# no .blob bone for (head/horn cloud = 24% of the mesh; wing tips; tail).
+# That is the authoring coverage ceiling for this reference: blob:rings sees
+# 25% of the mesh at best. Said plainly, per the brief.
+#
+# AUTHORED AT 2.04 m = 1.2 x the 1.70 m mesh. A monster, not a person: 1.2x
+# puts the crown-of-head at 1.92 m and the horns at 2.04 -- taller than the
+# 1.8 m zombie -- while 6/5 keeps the arithmetic honest (every measured
+# number below is ref x 1.2). The compiled root bone is hardcoded dir=up
+# (blob-compile.ts), so the hip line -- the root's tail -- defines z=0 and
+# the whole figure is translated back by the rig's hip z (0.0357 x 1.2):
+# pure frame choice, nothing anchors absolute z.
+#
+# SKELETON: every len= is the rig's own joint-to-joint distance x 1.2
+# (scripts/dragon-probe.ts dump, 2026-08-31; the DRAGON_BIPED table in
+# ref-align.ts maps our bone names onto Bone_00N). Directions solved from
+# the joint targets by inverting dirVector (scripts/dragon-solve.ts), then
+# re-verified: 20/20 bones land within 0.5 mm of their targets.
+#   pelvis  (root 0.189->tail 0.459)  root len 0.2704 = rig 001->005 0.2253 x 1.2
+#   bridge  (unmapped, 0.1721)        = hip line -> Bone_005, the rig's own root offset
+#   spine1  0.1312  chest 0.1391  spine2 0.1554  neck 0.2327   (rig 005->004->003->028->027)
+#   skull   0.4030 (unmapped)         = Bone_027 -> Bone_026 (head top, y 1.392 ref)
+#   thigh   0.1692 vs rig 0.1425x1.2=0.1710 (-1.1%): the knee z is MOVED (see stance)
+#   shin    0.0940 vs rig 0.0789x1.2=0.0947 (-0.8%) -- the SHORT tibia. DO NOT
+#           "fix" toward human proportions: the rig's long segment is the
+#           metatarsus (foot 0.2306), the bird-style digitigrade split.
+#   foot    0.2306  upperarm 0.1581  forearm 0.2346  (within 0.5%)
+#   clavicle 0.1705 vs rig 0.1572 (+8.5%), DELIBERATE: the grammar attaches it at
+#           spine2's tail, 17 mm above the rig's own shoulder joint (Bone_020 y
+#           0.860 vs Bone_028 y 0.874 ref) -- the extra length lands the ELBOW,
+#           wrist and wing tip at their rig positions instead. foot.r reads
+#           -5.3% because the rig itself is asymmetric there (0.2029 vs 0.1921
+#           ref); we author the .l length on both sides.
+#
+# STANCE digitigrade -- and the check DID fight, recorded here for the report.
+# The rig's knees sit FORWARD of the hip->hock line (z 0.0835 vs line 0.0527
+# ref, BOTH sides symmetric): checkStance classifies that as 'humanoid'
+# (+0.031 x 1.2 = +0.037 m > the 4 mm tolerance). But this is a BIRD-style
+# digitigrade leg -- knee forward, hock back, long metatarsus to the toes --
+# and the check was built for the kangaroo fold (knee BEHIND the chord, the
+# zombie's old accident). The knee surface is nearly blind (46/54 dominant
+# verts, z spread -0.03..0.12 ref), so the rig itself barely pins it. Author's
+# call: knee z pulled back to 0.045 ref (mid-chord), which passes digitigrade
+# (offset -0.0092 m both sides) at thigh -1.0% / shin -0.7% length error, and
+# reads as the proper zigzag in profile. The real fix belongs in
+# blob-checks.ts: classify by the METATARSUS (a long segment below the hock),
+# not by knee-vs-hip->hock.
+model dragon
+  # 1.2 x the 1.70 m mesh -- monster scale, see header.
+  height 2.04
+  # Checked, not decorative -- see blob-checks.ts and the header note.
+  stance digitigrade
+
+skeleton
+  # Root: children attach at a bone's TAIL (resolve.ts, no exceptions), so the
+  # root runs 0.189 -> 0.459: its tail IS the hip line (rig y 0.3829 x 1.2),
+  # where the thighs branch, at the rig's own hip height. len 0.2704 keeps
+  # blob:rings' pelvis bone-length check quiet (rig 001->005 = 0.2253).
+  root pelvis at 0.1891 len=0.2704
+  # The rig's root offset (hip line -> Bone_005, the belly joint), UNMAPPED --
+  # no fit sees it. Tail lands on Bone_005 (y 0.5261 x 1.2 = 0.631), so the
+  # measured spine chain below sits at its rig heights.
+  bone bridge parent=pelvis dir=up pitch=-2.7 tilt=1.2 len=0.1721
+  # Spine chain, measured. spine2 pitches FORWARD 18.5 deg: the rig's chest
+  # tips toward the throat (Bone_003 z 0.036 -> Bone_028 z 0.077).
+  bone spine1 parent=bridge dir=up pitch=3.6 len=0.1312
+  bone chest  parent=spine1 dir=up              len=0.1391
+  bone spine2 parent=chest  dir=up pitch=18.5   len=0.1554
+  # Neck (rig 028->027) and the unmapped skull continuation to Bone_026 (the
+  # head-top joint at ref y 1.392) -- the head/horn mass rides prims on skull.
+  bone neck  parent=spine2 dir=up pitch=10.1 tilt=0    len=0.2327
+  bone skull parent=neck   dir=up pitch=12.9 tilt=-1.2 len=0.4030
+  # THE TAIL: the mesh has NO tail joints -- all 1306 tail verts ride Bone_001
+  # (the pelvis/tail-base joint). So the tail is authored on two UNMAPPED
+  # bones fitted to the measured tail centreline (probe z-bin centroids,
+  # ref): (0,0.43,-0.06) base -> (-0.126,0.335,-0.40) mid -> tip curl
+  # (-0.31,0.535,-0.59). The base anchors INSIDE the haunch mass (the bone
+  # starts at the hip line, 0.1 forward of the visible tail root) so the
+  # tail can never detach. tail2 carries the up-left tip flick.
+  bone tail  parent=pelvis dir=down pitch=-72.8 tilt=-69.2 len=0.5473
+  bone tail2 parent=tail  dir=up   pitch=-35.0 tilt=-42.6 len=0.3979
+
+  mirror
+    # Hind legs, digitigrade: thigh 29 deg out (rig x 0.086->0.140 splay),
+    # shin nearly vertical (10 deg), foot pitches 58 deg forward-down -- the
+    # metatarsus is the LONG segment (0.2306) and lands the toe joint at the
+    # rig's own height (y 0.0965 x 1.2 = 0.116); the toes reach the ground.
+    bone thigh parent=pelvis dir=down pitch=3.8  tilt=29.3 side=0.0858 len=0.1692
+    bone shin  parent=thigh  dir=down pitch=13.3 tilt=10.4           len=0.0940
+    bone foot  parent=shin   dir=down pitch=58.4 tilt=28.3           len=0.2306
+    # Wings = the arm clusters. The rig's clavicle (Bone_020) is the wing's
+    # first segment out of the BACK at y 0.860 -- 17 mm below spine2's tail
+    # (Bone_028, y 0.874 ref) where the grammar forces it to attach; the whole
+    # wing chain rides that +17 mm (invisible at 2 m, noted for honesty).
+    # Clavicle runs out-down-forward (71 deg out), upperarm continues out-down,
+    # forearm drops steeply to the wrist at ref (0.338, 0.540) -- the wing
+    # folds down along the body's flank. Tip joints (016/021) stay unmapped
+    # like the meshy hands; the membrane fan is authored as prims.
+    bone clavicle parent=spine2   dir=down pitch=8.3  tilt=67.1 side=0.0585 len=0.1705
+    bone upperarm parent=clavicle dir=down pitch=6.0  tilt=38.7            len=0.1581
+    bone forearm  parent=upperarm dir=down pitch=10.0 tilt=22.9            len=0.2346
+  end
+
+body
+  # ============================================================
+  # TORSO -- deep-chested and laterally slim: trunk slices read half-width
+  # 0.117-0.136 ref against half-DEPTH ~0.20 (belly z +0.23, back z -0.17 --
+  # Bone_004's dorsal cloud). x1.2: half-width ~0.16, half-depth ~0.24.
+  # ============================================================
+  # Haunch: the hindquarters mass the legs and tail root into. blob:rings (n=204)
+  # reads it as a taper: slim low (r 0.104), fat at the hip line (r2 0.212),
+  # slightly wider than deep -- the underbelly narrows below, the hips spread
+  # above. Converted from a blob to this tapered bar to carry that gradient.
+  # Belly WASH: the mesh's underside is a slightly lighter dirty tan than the
+  # back (texture-classified read) -- the paint boundary runs where this bar
+  # meets the spine-side bars above.
+  bar  torso on pelvis from=0.55 to=1.00 r=0.105 r2=0.190 wide=1.05 deep=1.15 blend=0.025 color=7c7a54
+  # Belly/root bar up the bridge: r 0.165 wide 0.92 (-> 0.152 half) deep 1.30
+  # (-> 0.215 half) -- deep 1.30 is the measured belly-to-back, not a guess.
+  bar  torso on bridge from=0.10 to=1.00 r=0.165 r2=0.150 wide=0.92 deep=1.30 blend=0.030 color=7c7a54
+  # Chest: narrows upward (spine1->chest); rings (n=60, blend 47% = soft) asked
+  # deep 1.38 and the centre 43 mm forward -- the belly hangs ahead of the spine.
+  bar  torso on spine1 from=0.15 to=0.95 r=0.150 r2=0.155 wide=0.90 deep=1.38 blend=0.016 offset=(0,0,0.04) color=5a7c42
+  # Upper chest to the throat: spine2 pitches forward 18.5 deg, so this bar
+  # leans into the neck; tight blend so nothing webs the neck-only band shut.
+  bar  torso on spine2 from=0.00 to=0.60 r=0.120 r2=0.095 wide=0.88 deep=1.10 blend=0.010 color=5a7c42
+
+  # TAIL MASS -- one bent tapered bar for the main tail, one for the tip
+  # flick. Radii from the probe's z-bin medians (x1.2): 0.145 at z -0.16,
+  # 0.094 at -0.28, 0.079 at -0.43. The bend is MEASURED, not styled: the
+  # real centreline stays high (y ~0.51 ref) until z -0.30 then descends, so
+  # the chord midpoint needs +0.093 x +0.157 of control displacement to pass
+  # through the measured z -0.26 centroid (bend = 2x apex offset).
+  bar  torso on tail from=0.06 to=0.98 r=0.140 r2=0.085 bend=(0.093,0.157,0) blend=0.014 color=5a7c42
+  # Tip: the last 0.15 ref of tail curls UP and LEFT (centroid climbs
+  # y 0.335 -> 0.535 while x falls to -0.26) and THINS to a blade
+  # (median r 0.035-0.055). One tapered bar to a near-point.
+  bar  torso on tail2 from=0.05 to=0.97 r=0.085 r2=0.014 blend=0.010 color=5a7c42
+  # Tail spade: the tip bins' median is thin (0.04) but rmax hits 0.126 -- a
+  # FLAT vertical blade, not a cone. One squashed blob: half 0.03 x 0.18.
+  blob torso on tail2 at=0.72 offset=(0,0.02,0) r=0.075 wide=0.40 tall=2.40 deep=0.90 blend=0.008 color=5a7c42
+
+  # Neck: rings (n=102) wants it SLIMMER and less forward than v1: r 0.10
+  # tapering to 0.08, half-depth only 0.75 of r (an oval blade, not a tube),
+  # centre pulled back 42 mm from my first guess.
+  bar  head on neck from=0.05 to=0.92 r=0.100 r2=0.080 deep=0.75 blend=0.012 offset=(0,0,0.02) color=5a7c42
+
+  # ============================================================
+  # HEAD -- 24% of the mesh rides Bone_027/026 (skull + horns + jaw + snout),
+  # far more than any meshy head. Unmapped by the rig past the neck bone, so
+  # every number below is a mesh-cloud read x1.2 (probe head z/y bins).
+  # ============================================================
+  # Cranium: the big skull mass (mid-skull half-width 0.16-0.21 ref, crown
+  # y ~1.55, jaw line y ~1.0). Centre t 0.8 + offset lands (0,1.62,0.16).
+  blob head on skull at=0.80 offset=(0,0.03,0) r=0.200 wide=1.05 tall=1.10 deep=1.10 blend=0.030 color=5a7c42
+  # Snout: re-aimed from the mesh profile (top edge 1.79@z0.44 -> 1.58@z0.75
+  # in shifted frame; v1 sat at jaw height and melted into the jaw bar -- a
+  # muzzle must hang off the MIDDLE of the skull, not under it).
+  bar  head on skull from=0.70 to=0.78 r=0.160 r2=0.095 wide=1.10 deep=1.05 blend=0.014 offset=(0,-0.005,0.125) tip=(0,-0.10,0.495) color=5a7c42
+  # Jaw: thin bar under the snout; root raised INTO the snout/cranium underside
+  # (v3's root sat 0.14 below the cranium and read as a floating flap).
+  bar  head on skull from=0.28 to=0.36 r=0.075 r2=0.040 blend=0.014 offset=(0,-0.10,0.10) tip=(0,0.02,0.46) color=6b8148
+  # Horns (pair): from the skull crown up-out, tips curling back to
+  # (+/-0.43, 1.86, -0.14); bend bows the curve up through the measured horn
+  # mass (y up to 1.98). One bent tapered prim each, chamfered to a point.
+  bar  head on skull from=0.85 to=0.88 r=0.075 r2=0.012 blend=0.006 chamfer offset=(0.10,0.14,0.02) tip=(0.33,0.10,-0.33) bend=(0.06,0.22,0.04) mirrorOffset color=cdc3a5
+  # Central spike: single mid-horn reaching y 2.04 (mesh 1.70 x 1.2), narrow
+  # (x +/-0.02 ref).
+  bar  head on skull from=0.95 to=0.98 r=0.055 r2=0.008 blend=0.005 chamfer offset=(0,0.16,0.10) tip=(0,0.22,-0.02) color=cdc3a5
+
+  # ============================================================
+  # WINGS (arm clusters) -- arm tubes at measured radii, then the membrane
+  # as flattened fans. NOTE: blob:rings measures the arm bones against clouds
+  # that INCLUDE membrane verts (forearm cloud reaches t 1.86 of the bone,
+  # rmax 0.167 ref) -- its radius suggestion there is membrane-inflated and
+  # is overruled by the tube measurements (0.065-0.077 ref).
+  # ============================================================
+  # Wing root plate where the wing leaves the back; rings' split-support
+  # clavicle fits (5.6-10.9 mm) read flat-wide: wide 1.10 tall 0.85, half-dose.
+  blob arm on clavicle at=0.10 r=0.135 wide=1.10 tall=0.85 blend=0.016 mirror core color=5a7c42
+  # Arm tubes: clavicle bins 0.078-0.114, upperarm 0.069-0.078, forearm
+  # 0.065-0.077 (ref x1.2).
+  bar  arm on clavicle from=0.15 to=0.95 r=0.105 r2=0.092 blend=0.012 mirror color=5a7c42
+  bar  arm on upperarm from=0.05 to=0.95 r=0.090 r2=0.088 blend=0.012 mirror color=5a7c42
+  bar  arm on forearm  from=0.05 to=0.85 r=0.088 r2=0.078 blend=0.012 mirror color=5a7c42
+  # Membrane: the reference's own wing point-cloud (Bone_016..025 verts below
+  # the shoulder line, 2261 pts) reads as a SCALLOPED FAN hinged along the arm,
+  # hanging BELOW the arm line, inner edge a hand's width off the flank,
+  # reaching x 0.57 shifted. Three lobes of ALTERNATING length = the ragged
+  # scalloped hem (the mesh's hem ends in small claw-like points, cream-tipped);
+  # thin in z (v3 lesson); painted DARK olive -- same-shaded panels read as
+  # body lumps (v5 lesson); offset x keeps a shadow gap off the flank (v6:
+  # flush panels read as a cape, negative space is what says WING).
+  bar  arm on forearm from=0.30 to=0.40 r=0.110 r2=0.055 wide=1.60 deep=0.30 blend=0.008 offset=(0.04,-0.06,0.00) tip=(0.16,-0.30,-0.02) mirror color=2e3d22
+  bar  arm on forearm from=0.55 to=0.65 r=0.095 r2=0.038 wide=1.40 deep=0.28 blend=0.008 offset=(0.05,-0.02,0.01) tip=(0.16,-0.18,-0.04) mirror color=2e3d22
+  bar  arm on forearm from=0.75 to=0.83 r=0.085 r2=0.035 wide=1.30 deep=0.28 blend=0.008 offset=(0.05,-0.02,0.01) tip=(0.14,-0.24,-0.07) mirror color=2e3d22
+  # Cream tips on the two outer lobe points (the mesh's scalloped edges carry
+  # pale yellow/cream accents -- texture read).
+  bar  arm on forearm from=0.83 to=0.86 r=0.018 r2=0.004 blend=0.004 chamfer offset=(0.17,-0.16,-0.03) tip=(0.03,-0.06,-0.01) mirror color=cdc3a5
+  bar  arm on forearm from=0.83 to=0.86 r=0.018 r2=0.004 blend=0.004 chamfer offset=(0.16,-0.21,-0.06) tip=(0.03,-0.05,-0.02) mirror color=cdc3a5
+  # Wing fingers: two thin spars arcing within the panel, BODY-green so they
+  # contrast the dark membrane (the mesh's fingers are hide-coloured).
+  bar  arm on forearm from=0.62 to=0.68 r=0.022 r2=0.005 blend=0.004 chamfer offset=(0.05,-0.04,0.01) tip=(0.13,-0.24,-0.02) mirror color=6b8148
+  bar  arm on forearm from=0.70 to=0.76 r=0.020 r2=0.005 blend=0.004 chamfer offset=(0.06,-0.03,0.00) tip=(0.09,-0.28,-0.06) mirror color=6b8148
+  # Wing claw at the wrist's leading edge.
+  bar  arm on forearm from=0.88 to=0.90 r=0.030 r2=0.006 blend=0.004 chamfer offset=(0.02,-0.02,0.01) tip=(0.05,-0.05,0.02) mirror color=cdc3a5
+
+  # ============================================================
+  # HIND LEGS (leg clusters) -- the digitigrade read: fat thigh, slim short
+  # shin, swollen hock, long metatarsus, toes on the ground.
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.105 blend=0.014 mirror core color=5a7c42
+  # Thigh cone: rings (blend 57% = soft; half-dose applied) wants a harder
+  # taper and the mass 20-30 mm back: r 0.115 -> 0.055, offset z -0.02.
+  bar  leg on thigh from=0.05 to=0.95 r=0.115 r2=0.055 deep=1.05 blend=0.012 offset=(0,0,-0.02) mirror color=5a7c42
+  # Shin: the SHORT segment; r from the (thin-sampled, n=46) bins ~0.10.
+  bar  leg on shin from=0.05 to=0.95 r=0.085 r2=0.080 deep=1.05 blend=0.010 mirror color=5a7c42
+  # Hock: the swollen heel where the metatarsus hinges (foot t0 bins read
+  # 0.18 with hock bleed; true hock mass ~0.10-0.12; rings rank 1 wanted the
+  # foot's top end fatter -> this blob, not the metatarsus tube).
+  blob leg on foot at=0.02 r=0.115 blend=0.012 mirror color=5a7c42
+  # Metatarsus: the long forward column. rings rank 1 (n=543) asked tall 1.22
+  # and the centre down 54 mm: the metatarsus is a deep oval, hung low.
+  bar  leg on foot from=0.10 to=0.85 r=0.125 r2=0.095 tall=1.15 deep=0.90 blend=0.012 offset=(0,-0.04,-0.02) mirror color=5a7c42
+  # Toe pad: the ground contact fan (toe cloud spans 0.23 full-width per foot
+  # and sits 0.03 further out than v1's pad; bottom edge lands at y ~0).
+  blob leg on foot at=1.02 offset=(0.03,-0.05,0.05) r=0.080 wide=1.35 deep=1.45 blend=0.010 mirror color=4c6b38
+  # Claws: three splayed points off the pad (the .r copy mirrors offset.x);
+  # sized up from v4's 0.035, which read as detached yellow specks.
+  bar  leg on foot from=1.02 to=1.06 r=0.045 r2=0.010 blend=0.005 chamfer offset=(0.00,-0.05,0.11) tip=(0.00,-0.03,0.07) mirror color=cdc3a5
+  bar  leg on foot from=1.02 to=1.06 r=0.040 r2=0.008 blend=0.005 chamfer offset=(0.055,-0.05,0.09) tip=(0.015,-0.03,0.06) mirror color=cdc3a5
+  bar  leg on foot from=1.02 to=1.06 r=0.040 r2=0.008 blend=0.005 chamfer offset=(-0.040,-0.05,0.10) tip=(-0.015,-0.03,0.06) mirror color=cdc3a5
+
+# ============================================================
+# PALETTE -- the mesh texture is a DARK bronze-olive (whole-texture mean
+# sRGB (44,33,30) incl. baked shading; hide reads brown-olive-charcoal with
+# bronze/tan flecking, belly a lighter dirty tan). baseColor is the dark
+# olive-green the owner calls "green dragon"; mottle is BRONZE in hue, not
+# just darker -- the mesh's worn-camouflage flecking. Wounds stay red.
+# ============================================================
+palette
+  baseColor     0.062 0.105 0.042
+  deepColor     0.50 0.08 0.08
+  charColor     0.10 0.13 0.06
+  specIntensity 0.40
+  specRoughness 0.42
+  fresnelBoost  0.30
+  translucency  0.18
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  wetness       0.14
+  mottleAmp     0.50
+  mottleScale   1.8
+  mottleColor   0.160 0.105 0.045

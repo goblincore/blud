@@ -24,8 +24,25 @@ export interface BoneMapEntry {
 }
 
 /**
- * Our bone name -> reference rig joints. Written down, never inferred from
- * names.
+ * A named rig: our bone name -> reference rig joints, written down, never
+ * inferred from names.
+ *
+ * WHY A REGISTRY AND NOT ONE GLOBAL TABLE. BONE_MAP was written for the one
+ * rig every reference then shared, and green_dragon_rigged.glb broke that
+ * assumption: its 29 joints are named Bone_000..Bone_028, so every joint was
+ * unmapped and the report came back silently EMPTY — which reads as a perfect
+ * measurement of nothing. Rigs are now named and selected by joint-name
+ * signature (see detectRig), and a reference no rig matches is a loud error,
+ * not an empty report.
+ */
+export interface RigDef {
+  /** Registry name; printed with the report and named in detection errors. */
+  name: string;
+  boneMap: Record<string, BoneMapEntry>;
+}
+
+/**
+ * The Meshy biped rig (mouse, schoolgirl, schoolgirl-alt, bonewalker).
  *
  * THE SPINE NAMES ARE COUNTER-INTUITIVE AND WERE VERIFIED AGAINST THE FILE.
  * The reference chain runs Hips -> Spine02 -> Spine01 -> Spine ->
@@ -40,7 +57,9 @@ export interface BoneMapEntry {
  * head prims are offset-positioned features plus a face block — use
  * scripts/head-profile.ts.
  */
-export const BONE_MAP: Record<string, BoneMapEntry> = (() => {
+export const MESHY_BIPED: RigDef = {
+  name: 'meshy-biped',
+  boneMap: (() => {
   const m: Record<string, BoneMapEntry> = {
     pelvis: { head: 'Hips',    tail: 'Spine02', claims: ['Hips'] },
     spine1: { head: 'Spine02', tail: 'Spine01', claims: ['Spine02'] },
@@ -61,12 +80,122 @@ export const BONE_MAP: Record<string, BoneMapEntry> = (() => {
     m[`${name}.r`] = make('Right');
   }
   return m;
-})();
+  })(),
+};
 
-/** Reference joint name -> our bone name, derived from BONE_MAP's claims. */
-const CLAIMED: Map<string, string> = new Map(
-  Object.entries(BONE_MAP).flatMap(([bone, e]) => e.claims.map((j) => [j, bone] as [string, string])),
-);
+/**
+ * The Meshy table itself, under its historical name. Kept because it IS the
+ * meshy-biped table — existing callers and tests mean exactly this object —
+ * but new code should select a rig with detectRig rather than reaching for a
+ * global.
+ */
+export const BONE_MAP: Record<string, BoneMapEntry> = MESHY_BIPED.boneMap;
+
+/**
+ * The green_dragon_rigged.glb rig (docs/dev-notes/refs/dragon-mesh/): 29
+ * joints Bone_000..Bone_028, one skin, no animations, exact bind pose.
+ *
+ * VERIFIED against the file, not read off the names — measured from composed
+ * joint world positions and per-joint vertex clouds. The chain: Bone_000
+ * (root, its cloud sits at the pelvis/tail underside) -> Bone_001 (the
+ * pelvis AND tail base — the mesh has no tail joints, so tail surface rides
+ * here) -> {Bone_005 -> Bone_004 -> Bone_003 -> Bone_002 (the spine, and
+ * unlike the meshy rig the numbering ASCENDS it), legL 010 -> 009 -> 008 ->
+ * 007 -> 006, legR 015 -> 014 -> 013 -> 012 -> 011}, and off Bone_002:
+ * {wingL 020 -> 019 -> 018 -> 017 -> 016, wingR 025 -> 024 -> 023 -> 022 ->
+ * 021, neck 028 -> 027 -> 026}.
+ *
+ * The wings ARE the arms: they leave the shoulder at y 0.86 and reach |x|
+ * 0.36 while only descending to y 0.44, so the arm chain maps onto their
+ * first three segments and the tip (017/016, 022/021) stays unmapped — the
+ * wing's "hand", same call as the meshy hands. The hind legs are
+ * DIGITIGRADE: the chain reaches the ground at 007 (y 0.035), so the foot
+ * spans hock -> toe (008 -> 006) and claims the whole load-bearing assembly
+ * (008, 007, 006); the .blob `stance` keyword supports the pose.
+ *
+ * The head is deliberately unmapped: Bone_027's vertex cloud alone spans y
+ * 1.01..1.60 and x +-0.36 — head, jaw and horns (24% of the mesh), far above
+ * the 1.065 joint the neck bone ends at. Head work belongs to
+ * scripts/head-profile.ts, as on the meshy rig. spine2 claims Bone_003 and
+ * Bone_002, which carry no dominant vertices (the wing shoulders take that
+ * surface) — the claims keep the shoulder bridge's ownership explicit.
+ */
+export const DRAGON_BIPED: RigDef = {
+  name: 'dragon-biped',
+  boneMap: (() => {
+    // Joint names are zero-padded to three digits; a bare template literal
+    // produced Bone_9 for Bone_009 and the whole table silently matched
+    // nothing — caught by the detection test, which is why it exists.
+    const joint = (i: number) => `Bone_${String(i).padStart(3, '0')}`;
+    const m: Record<string, BoneMapEntry> = {
+      pelvis:  { head: joint(1), tail: joint(5), claims: [joint(1), joint(0)] },
+      spine1:  { head: joint(5), tail: joint(4), claims: [joint(5)] },
+      chest:   { head: joint(4), tail: joint(3), claims: [joint(4)] },
+      spine2:  { head: joint(3), tail: joint(28), claims: [joint(3), joint(2)] },
+      neck:    { head: joint(28), tail: joint(27), claims: [joint(28)] },
+    };
+    const limbs: Array<[string, (n: 0 | 1) => BoneMapEntry]> = [
+      ['clavicle', (n) => ({ head: joint(20 + n * 5), tail: joint(19 + n * 5), claims: [joint(20 + n * 5)] })],
+      ['upperarm', (n) => ({ head: joint(19 + n * 5), tail: joint(18 + n * 5), claims: [joint(19 + n * 5)] })],
+      ['forearm',  (n) => ({ head: joint(18 + n * 5), tail: joint(17 + n * 5), claims: [joint(18 + n * 5)] })],
+      ['thigh',    (n) => ({ head: joint(10 + n * 5), tail: joint(9 + n * 5),  claims: [joint(10 + n * 5)] })],
+      ['shin',     (n) => ({ head: joint(9 + n * 5),  tail: joint(8 + n * 5),  claims: [joint(9 + n * 5)] })],
+      ['foot',     (n) => ({ head: joint(8 + n * 5),  tail: joint(6 + n * 5),  claims: [joint(8 + n * 5), joint(7 + n * 5), joint(6 + n * 5)] })],
+    ];
+    const side: Array<'l' | 'r'> = ['l', 'r'];
+    for (const [name, make] of limbs) for (const s of side) m[`${name}.${s}`] = make(s === 'l' ? 0 : 1);
+    return m;
+  })(),
+};
+
+/** Every rig this tool can measure, in detection order. */
+const RIGS: RigDef[] = [MESHY_BIPED, DRAGON_BIPED];
+
+/** All joint names a rig's table references — its detection signature. */
+function requiredJoints(rig: RigDef): Set<string> {
+  return new Set(Object.values(rig.boneMap).flatMap((e) => [e.head, e.tail, ...e.claims]));
+}
+
+/**
+ * Select the rig whose table this reference can satisfy: a rig matches when
+ * EVERY joint its table names is present. Anything less would silently skip
+ * bones in refBones, so the match is all-or-nothing.
+ *
+ * Throws — by name, on both sides — when nothing matches (listing the
+ * reference's joints and every known rig) or when several match. The empty
+ * report a previous global-table world produced for the dragon must not be
+ * reachable.
+ */
+export function detectRig(jointNames: Iterable<string>): RigDef {
+  const present = new Set(jointNames);
+  const matches = RIGS.filter((rig) => {
+    for (const j of requiredJoints(rig)) if (!present.has(j)) return false;
+    return true;
+  });
+  if (matches.length === 1) return matches[0]!;
+  const names = [...present].sort();
+  const listing = names.length > 12
+    ? `${names.slice(0, 12).join(', ')}, … (${names.length} joints)`
+    : names.join(', ');
+  if (matches.length === 0) {
+    throw new Error(
+      `no known rig matches this reference's joints: ${listing}. ` +
+      `Known rigs: ${RIGS.map((r) => r.name).join(', ')} — a rig matches only when every joint its table names is present. ` +
+      'To measure this reference, add its rig table to ref-align.ts.',
+    );
+  }
+  throw new Error(
+    `ambiguous rig: the reference's joints (${listing}) satisfy more than one table: ` +
+    `${matches.map((r) => r.name).join(', ')}. Disambiguate with an explicit rig.`,
+  );
+}
+
+/** Reference joint name -> our bone name, derived from a rig's claims. */
+function claimedBy(rig: RigDef): Map<string, string> {
+  return new Map(
+    Object.entries(rig.boneMap).flatMap(([bone, e]) => e.claims.map((j) => [j, bone] as [string, string])),
+  );
+}
 
 export interface Grouped {
   /** Our bone name -> the reference positions claimed by it. */
@@ -75,11 +204,12 @@ export interface Grouped {
   unmapped: Map<string, number>;
 }
 
-export function groupByBone(skin: RefSkin): Grouped {
+export function groupByBone(skin: RefSkin, rig: RigDef): Grouped {
   const byBone = new Map<string, Vec3[]>();
   const unmapped = new Map<string, number>();
+  const claimed = claimedBy(rig);
   for (const v of skin.verts) {
-    const bone = CLAIMED.get(v.joint);
+    const bone = claimed.get(v.joint);
     if (bone === undefined) {
       unmapped.set(v.joint, (unmapped.get(v.joint) ?? 0) + 1);
       continue;
@@ -173,7 +303,7 @@ export function globalScale(
   ourBones: Map<string, ResolvedBone>,
 ): GlobalScale {
   const ratios: Array<{ bone: string; r: number }> = [];
-  // Every bone present in BOTH maps. refBones() only ever emits BONE_MAP
+  // Every bone present in BOTH maps. refBones() only ever emits the rig's
   // bones, so this is already the mapped set; intersecting here rather than
   // re-filtering through BONE_MAP keeps the function honest about its inputs
   // and lets our body carry bones (hand, fingers, skull) the reference lacks.
@@ -211,10 +341,10 @@ export function refToBody(p: Vec3, refB: RingBasis, ourB: RingBasis, s: number):
   return fromLocal({ x1: l.x1 * s, x2: l.x2 * s, along: l.along * s }, ourB);
 }
 
-/** Reference bone head/tail from joint world positions, via BONE_MAP. */
-export function refBones(jointWorld: Map<string, Vec3>): Map<string, { head: Vec3; tail: Vec3 }> {
+/** Reference bone head/tail from joint world positions, via the rig's table. */
+export function refBones(jointWorld: Map<string, Vec3>, rig: RigDef): Map<string, { head: Vec3; tail: Vec3 }> {
   const out = new Map<string, { head: Vec3; tail: Vec3 }>();
-  for (const [bone, e] of Object.entries(BONE_MAP)) {
+  for (const [bone, e] of Object.entries(rig.boneMap)) {
     const head = jointWorld.get(e.head), tail = jointWorld.get(e.tail);
     if (head && tail) out.set(bone, { head, tail });
   }
