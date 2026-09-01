@@ -61,6 +61,31 @@ await evaluate('window.__sdfGame.freeze(true)');
 await evaluate('window.__sdfGame.setLoopRunning(false)');
 await evaluate(`window.__sdfGame.setPose(${POSE[0]}, ${POSE[1]}, ${POSE[2]}, ${POSE[3]})`);
 await evaluate(`window.__sdfGame.step(${SETTLE}, 1/60)`);
+
+// FORCE A SHADOW-MAP UPDATE BEFORE CAPTURING, or this path lies.
+//
+// With the loop stopped and frames hand-stepped, three r185's WebGPU
+// ShadowNode does not re-render the shadow map, so the capture composites
+// WITHOUT shadows while the live game shows them plainly. Measured: a frozen
+// capture sat inside the run-to-run noise floor of a deliberately
+// shadow-disabled frame (5160 changed px against a 4550 floor) and 2x outside
+// it from the shadow-enabled one — i.e. the shot was silently shadow-less.
+// Touching the shadow's live uniform marks it dirty; one more step then
+// renders it. Guarded so pages without the seam still capture.
+await evaluate(`(() => {
+  const s = window.__dungeon && window.__dungeon.spot;
+  if (!s || !s.shadow) return false;
+  s.shadow.intensity = 1;   // a real write; this is what arms the shadow node
+  return true;
+})()`);
+await evaluate('window.__sdfGame.step(3, 1/60)');
+
+// SETTLE BEFORE GRABBING. Page.captureScreenshot can return before the
+// just-submitted GPU work reaches the compositor, so a shot taken immediately
+// after step() shows the PREVIOUS frame — which is how a shadow-less frame
+// survived three separate "fixes" here. Diagnosed 2026-09-01 by diffing the
+// grabbed frame against a known shadow-on/shadow-off pair.
+await sleep(Number(process.env.LOOK_SETTLE_MS ?? 450));
 const s = await send('Page.captureScreenshot', { format: 'png' });
 writeFileSync(`${OUT}/${NAME}.png`, Buffer.from(s.result.data, 'base64'));
 console.log(`shot ${OUT}/${NAME}.png`);
