@@ -15,6 +15,23 @@
 // severRadius cuts both hip necks into instant collapse. That is never
 // player-visible (the page's predictor always aims at surfaces) but it would
 // silently corrupt a bench.
+//
+// WHY LIGHTING LEGS. The dungeon relighting (2026-09-01) added a flashlight
+// and shadow mapping to the same page, and their frame cost was UNMEASURED —
+// the spec calls task 9 a gate, not a report. The three dungeon scenarios
+// below are the A/B/C: same firefight script, three lighting states, so any
+// delta between them is lighting and nothing else. `rig` carries the ACTUAL
+// rig object (not a name) because the off-state parity gate has to assert
+// dungeon-off drives the same values the gallery shipped with — a string
+// would make that a tautology.
+//
+// HOW A LEG APPLIES. The data crosses to the page through the __dungeon
+// seam: rig GALLERY_RIG <=> setDungeon(false) (the page's applyRig hides the
+// spot with it); castShadow is a BOOT decision (?spotshadow=0) because
+// toggling spot.castShadow live crashes three r185 WebGPU (disposed shadow
+// map) and shadow.intensity=0 still RENDERS the map — it only zeroes the
+// sampling term, which would measure the wrong split.
+import { DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 
 /** One thing the harness asks the page to do, between frames. */
 export type BenchAction =
@@ -120,6 +137,58 @@ export function buildFirefight(opts: FirefightOpts): Scenario {
       { name: 'gib', from: gibStart, to: gibStart + gibFrames },
     ],
   };
+}
+
+// ---------------------------------------------------------------------------
+// DUNGEON BENCH LEGS — same firefight, three lighting states.
+// ---------------------------------------------------------------------------
+
+/** The lighting state a bench run runs under. Pure data: the driver applies
+ *  it through the page's seams, nothing here touches three. */
+export interface LightingLeg {
+  /** Rig values driving the page lights. `dungeon-off` pins GALLERY_RIG —
+   *  that identity IS the off-state parity gate. */
+  rig: AmbientRig;
+  /** Weapon-mounted flashlight lit? */
+  flashlight: boolean;
+  /** Spot shadow map on? Only ever true with the flashlight. */
+  castShadow: boolean;
+}
+
+/** A firefight script plus the lighting state it runs under. The script is
+ *  IDENTICAL across all three legs — deltas between legs are lighting only. */
+export interface BenchScenario extends Scenario, LightingLeg {
+  name: DungeonScenarioName;
+}
+
+export const DUNGEON_SCENARIOS = [
+  'dungeon-off',
+  'dungeon-no-shadow',
+  'dungeon-shadow',
+] as const;
+
+export type DungeonScenarioName = (typeof DUNGEON_SCENARIOS)[number];
+
+// Room 4 (four zombies) for every leg: the worst case is what a frame budget
+// is about, and a shared room keeps the three columns comparable.
+const LEG_ROOM = 4;
+
+/** The named lighting legs. Every call rebuilds the firefight so no leg can
+ *  be mutated in place through the shared object. */
+export function scenarioByName(name: DungeonScenarioName): BenchScenario {
+  const base = buildFirefight({ room: LEG_ROOM });
+  switch (name) {
+    case 'dungeon-off':
+      // Off-state parity: the gallery's own rig, no flashlight, no shadows.
+      return { ...base, name, rig: GALLERY_RIG, flashlight: false, castShadow: false };
+    case 'dungeon-no-shadow':
+      // Full dungeon look, shadow pipeline ablated — the baseline the cost
+      // gate (<= +40% for shadows) is measured against.
+      return { ...base, name, rig: DUNGEON_RIG, flashlight: true, castShadow: false };
+    case 'dungeon-shadow':
+      // What ships.
+      return { ...base, name, rig: DUNGEON_RIG, flashlight: true, castShadow: true };
+  }
 }
 
 /** Every action scheduled for exactly this frame, in insertion order. */

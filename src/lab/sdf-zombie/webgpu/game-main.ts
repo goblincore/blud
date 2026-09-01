@@ -259,6 +259,15 @@ async function main() {
   // ---------------------------------------------------------------------
   let dungeonOn = true;
   const flashlight = createFlashlight();
+  // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
+  // castShadow has to be decided BEFORE the first frame: toggling it live
+  // crashes three r185 WebGPU (ShadowNode.updateShadow dereferences the
+  // disposed map's depthTexture — see the __dungeon note below), and
+  // shadow.intensity=0 cannot stand in — it only zeroes the SAMPLING term;
+  // the 1024² map still renders every frame, so it would measure the wrong
+  // split. At boot, AnalyticLightNode.setup never builds the shadow node at
+  // all, so the leg is a true zero-cost ablation.
+  flashlight.spot.castShadow = new URLSearchParams(location.search).get('spotshadow') !== '0';
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
 

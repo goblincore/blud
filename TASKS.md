@@ -384,6 +384,18 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
    eye a character you can see is nearly always one the lamp can see, so it is
    a small effect; a per-pixel loop over ~56 AABBs is the wrong trade before
    task 9 establishes a frame budget. Recorded here rather than dropped.
+   **`L2.bench` — task 9 GATE PASSED (2026-09-01):** room-4 throughput, 3
+   alternating reps — dungeon-off **18.84 ms**, dungeon-no-shadow **21.46**,
+   dungeon-shadow **21.36** (overall p50; p95 42–46; p95 recorded, the harness
+   computes no p90). Shadow overhead **−0.5% vs no-shadow — gate +40% PASS**
+   with headroom: per-leg spread 14–16%, so the exact shadow delta is
+   UNRESOLVED, only bounded far under the gate; rig+flashlight reads ~+12% over
+   the off-state. Shadow legs ablated at BOOT (`?spotshadow=0`) —
+   `shadow.intensity=0` still renders the 1024² map, and live `castShadow`
+   toggles crash r185.
+   [baselines](docs/dev-notes/2026-09-01-dungeon-relight/baselines.json) ·
+   driver `scripts/dungeon-bench.sh` (fresh page per run, ship defaults +
+   leg-state readback asserted)
 
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
    chromatic bounce; `ambientAt(p, n)` is the seam every later implementation
