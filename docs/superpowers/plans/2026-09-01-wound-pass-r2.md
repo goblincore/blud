@@ -599,6 +599,17 @@ for a mouse and an ogre alike and a nose never grows a bone."
 
 ## Task 4: The `bones` block in the `.blob` grammar
 
+> **Step 0 added 2026-09-01 after reviewing Task 2's output:**
+> `checkBoneContainment` samples a plain sphere of radius `r` and so ignores
+> `prim.scale`, `radiusB` and `bend`. Since `sdPrimitive` divides by `scale`, a
+> bone with `scale.x = 1.45` reaches `1.45 x r` in x — so the ribcage Task 10
+> authors as `wide=1.45` would pass containment while genuinely breaching the
+> skin. Verified against the real validator: the breach is real
+> (`sdBody > 0` at the true surface) and `checkBoneContainment` returned `[]`.
+> The fix — scale-aware sampling, stations along the axis, Bezier centre line
+> for bent prims, taper-aware radius — is Step 0 of the dispatch task file and
+> must land before any bone is authored with a non-uniform scale.
+
 Wires auto-derive into compilation and adds the authored override. The grammar
 inside `bones` is **identical to the `body` block's** — same `blob`/`bar`
 words, same limb word, same `on <bone>`, same `mirror`. The block itself
