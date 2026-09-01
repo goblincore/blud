@@ -351,6 +351,40 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
 `Claude Notes/Blud/2026-08-24-sdf-render-optimization-options.md`.
 
 **Next session — pick up (prioritized):**
+0. **`L2` — dungeon relighting: wet gray stone + offset flashlight + Doom 3
+   specular.** Spec written 2026-09-01, **owner-approved in brainstorm**, branch
+   `claude/dungeon-relighting-specularity-15dbea`. Supersedes the *world* half of
+   the `L1` spec (the gallery it lights); `ambientAt` itself is UNCHANGED and
+   still bit-exact at `probeWeight 0`. Decisions: procedural stone maps (normal
+   map is the feature — specular needs relief), cold wet-gray stone with warm
+   fire practicals reusing the 5 existing `AccentLight` entries, flashlight
+   **weapon-mounted and OFFSET** (an eye-mounted light casts no visible shadow),
+   character self-shadow CUT by owner so the whole design holds the
+   zero-extra-`mapBody` line. Blood retune is in scope — goo was tuned against
+   white walls this deletes.
+   **SPIKE FINDING, READ BEFORE STARTING:** `SpotLight` shadows work in
+   `WebGPURenderer` r185 (proved isolated), work through a plain render target
+   (proved), and work on the real game scene rendered plainly (proved by
+   `castShadow` A/B) — but **vanish entirely through the `postAa` -> `sdfLayer`
+   chain**, with `castShadow` true on all 98 meshes and a 1024² map allocated.
+   Leading hypothesis: `sdfLayer.render` pins `camera.layers` to `CONE_LAYER` /
+   `OCCLUDER_LAYER` (`sdf-layer.ts:541,561`) and three's WebGPU shadow pass
+   builds casters from the camera-filtered render list. Unconfirmed. This bug is
+   invisible to all 2378 passing tests — it gets a regression test.
+   [spec](docs/superpowers/specs/2026-09-01-dungeon-relighting-design.md)
+   **PLAN WRITTEN** (10 tasks):
+   [plan](docs/superpowers/plans/2026-09-01-dungeon-relighting.md). Task 1 rig
+   data, 2 flashlight + THE SHADOW FIX, 3-4 procedural stone, 5 palette, 6
+   braziers, 7 flashlight in the march (owner already caught this by eye:
+   "characters dont seem to be lit by the direction of the light source"), 8
+   inflated shadow hull (fixes owner-rejected blob shadows), 9 bench + parity
+   GATE, 10 blood retune.
+   **CUT FROM THE PLAN, deliberately:** walls-shadow-characters via an analytic
+   AABB ray in the march (spec §3 mechanism 3). With the lamp mounted near the
+   eye a character you can see is nearly always one the lamp can see, so it is
+   a small effect; a per-pixel loop over ~56 AABBs is the wrong trade before
+   task 9 establishes a frame budget. Recorded here rather than dropped.
+
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
    chromatic bounce; `ambientAt(p, n)` is the seam every later implementation
    swaps into (P3 volumes, the SDF-cone endgame). Zero extra `mapBody` evals,
