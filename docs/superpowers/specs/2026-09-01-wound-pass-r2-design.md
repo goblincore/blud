@@ -335,11 +335,17 @@ no live wounds.
 
 ### Gates, in run order
 
-1. **Re-establish the bench baseline.** `scripts/dungeon-bench.sh` has not been
-   re-run since shadow-hull spanning took instances from 30 to 51 per body. The
-   only reading since is a one-off HUD number of 54.4 ms against 21–27 ms
-   earlier, never reproduced or trusted. Until that is resolved any regression
-   measured afterwards is unattributable. **Prerequisite, not a loose end.**
+1. **Bench baseline — DONE, 2026-09-01, and it changed the method.** Post-spanning
+   p50 is 11.80 ms with shadows, shadow gate +0.1%, spread 5–11%. The untrusted
+   54.4 ms HUD read did not reproduce; there is no regression from spanning.
+
+   But the run also proved this bench's **absolute numbers are not comparable
+   across runs**: against the old baseline every leg dropped ~45%, including
+   `dungeon-off`, which casts no shadows at all and therefore cannot have been
+   sped up by a shadow-only change. That drop is machine state, and the body
+   census differed between runs as well. Only leg-to-leg deltas *within one
+   run* mean anything, because the legs alternate in one process on one machine
+   state. See `docs/dev-notes/2026-09-01-wound-r2/bench-baseline.md`.
 2. **Off-state parity.** `woundDepthAmp 0` with no bone prims renders
    bit-identical to main. This is the gate `X1.blood-viscosity`'s Task 7 never
    ran, which is why goo ships ON with its per-frame cost unmeasured. Not
@@ -354,8 +360,22 @@ no live wounds.
    looking specifically for annuli at mask edges and crescents that sweep with
    the camera. This file has produced that failure twice; it gets its own check
    rather than riding on general judgement.
-7. **Bench with bone**, three conditions: no wounds / wounds without bone /
-   wounds with bone.
+7. **Bench with bone — as three alternating legs inside ONE run**, never as a
+   fresh run compared against a stored baseline. New scenario legs in
+   `game-bench-scenario.ts`: `wounds-off` / `wounds-no-bone` / `wounds-bone`,
+   alternating across repeats exactly as the lighting legs do, so all three
+   share one process and one machine state.
+
+   This follows directly from gate 1: a stored-baseline comparison drifts ~45%
+   on machine state, which would swamp anything the bone fold costs. It is also
+   why the goo fire-segment delta is still recorded as UNRESOLVED at
+   ±0.1–0.25 ms — it was chasing an effect an order of magnitude below this
+   bench's cross-run drift, and no number of repeats would have rescued it.
+
+   The scenario must also pin the body census. The lighting runs differed
+   (8 bodies through the fire segment in one, 5 in the other), so a
+   wound-cost leg needs a fixed wound count on a fixed number of bodies rather
+   than whatever the firefight script happens to leave alive.
 
 ### Risks on the record
 
@@ -370,7 +390,7 @@ no live wounds.
 
 ### Sequence
 
-Bench baseline → containment validator + CPU mirror → bone field layer with
+Containment validator + CPU mirror → bone field layer with
 parity gate → depth ramp → fibre → panel → author skull and ribcage for zombie
 and goblin → owner judgement pass.
 
