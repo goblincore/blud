@@ -28,6 +28,7 @@ import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
+import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -230,6 +231,52 @@ async function main() {
   }
   scene.add(accentGroup);
 
+  // ---------------------------------------------------------------------
+  // DUNGEON RIG. Off-state parity matters: with dungeon disabled the gallery
+  // must render exactly as before, so the rig is applied, not hard-coded.
+  // ---------------------------------------------------------------------
+  let dungeonOn = true;
+  const flashlight = createFlashlight();
+  scene.add(flashlight.spot);
+  scene.add(flashlight.spot.target);
+
+  handle.renderer.shadowMap.enabled = true;
+  handle.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  levelGroup.traverse((o) => {
+    if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
+  });
+
+  function applyRig(rig: AmbientRig) {
+    hemi.intensity = rig.hemiIntensity;
+    hemi.color.setRGB(...rig.hemiSky);
+    hemi.groundColor.setRGB(...rig.hemiGround);
+    for (const child of scene.children) {
+      if (child instanceof THREE.DirectionalLight) child.intensity = rig.sunIntensity;
+      if (child instanceof THREE.AmbientLight) {
+        child.intensity = rig.ambientIntensity;
+        child.color.setRGB(...rig.ambientColor);
+      }
+    }
+    const fog = scene.fog as THREE.Fog | null;
+    if (fog) {
+      fog.color.setRGB(...rig.fogColor);
+      fog.near = rig.fogNear;
+      fog.far = rig.fogFar;
+    }
+    handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
+    flashlight.spot.visible = rig === DUNGEON_RIG;
+  }
+  applyRig(DUNGEON_RIG);
+
+  (globalThis as Record<string, unknown>).__dungeon = {
+    setDungeon(on: boolean) { dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
+    get on() { return dungeonOn; },
+    /** The weapon light itself, for runtime A/Bs (shadow.intensity 0/1 is the
+     *  shadow kill switch — do NOT toggle spot.castShadow live, three r185
+     *  WebGPU crashes rebuilding a disposed shadow map). */
+    spot: flashlight.spot,
+  };
+
   // -----------------------------------------------------------------------
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
@@ -336,6 +383,7 @@ async function main() {
   //
   // Goo OFF takes the original single-call path, so the toggle is exact.
   handle.setDrawFn(() => postAa.render(() => {
+    flashlight.update(camera);
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {

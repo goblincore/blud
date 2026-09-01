@@ -5,7 +5,9 @@
 // assertions compare the dungeon rig against the GALLERY rig it replaces, so
 // they cannot pass by accident on an all-zero struct.
 import { describe, expect, it } from 'vitest';
-import { DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import * as THREE from 'three/webgpu';
+import { DUNGEON_RIG, GALLERY_RIG, createFlashlight, FLASHLIGHT_OFFSET, type AmbientRig } from './dungeon-lighting';
+import { OCCLUDER_LAYER } from './sdf-layer';
 
 const lum = (c: readonly [number, number, number]) =>
   0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
@@ -30,5 +32,36 @@ describe('dungeon rig', () => {
     const [pr, , pb] = DUNGEON_RIG.practicalColor;
     expect(pr).toBeGreaterThan(pb + 0.3);            // warm: red clearly over blue
     expect(fg).toBeGreaterThan(0.9);                 // near-white, not blue-tinted
+  });
+});
+
+describe('createFlashlight', () => {
+  it('sets a shadow-camera layer mask with a bit ABOVE bit 0 — the whole bug', () => {
+    // ShadowNode.js:731 copies the MAIN camera's mask onto the shadow camera
+    // whenever (mask & 0xFFFFFFFE) === 0. sdfLayer pins camera.layers to
+    // CONE_LAYER/OCCLUDER_LAYER mid-frame, so inheriting it renders a shadow
+    // map with no level geometry in it. A high bit here stops the copy.
+    const { spot } = createFlashlight();
+    expect(spot.shadow.camera.layers.mask & 0xFFFFFFFE).not.toBe(0);
+  });
+
+  it('casts from BOTH the level (layer 0) and the character hull', () => {
+    const { spot } = createFlashlight();
+    expect(spot.shadow.camera.layers.test(new THREE.Layers())).toBe(true); // layer 0
+    const hullLayer = new THREE.Layers();
+    hullLayer.set(OCCLUDER_LAYER);
+    expect(spot.shadow.camera.layers.test(hullLayer)).toBe(true);
+  });
+
+  it('is mounted OFFSET from the eye — an eye-mounted light casts no visible shadow', () => {
+    // Horizontal offset is what makes the shadow emerge from behind its caster.
+    expect(Math.abs(FLASHLIGHT_OFFSET[0])).toBeGreaterThan(0.15);
+    expect(FLASHLIGHT_OFFSET[1]).toBeLessThan(0);   // below the eye
+  });
+
+  it('casts shadows and is cold', () => {
+    const { spot } = createFlashlight();
+    expect(spot.castShadow).toBe(true);
+    expect(spot.color.b).toBeGreaterThanOrEqual(spot.color.r);
   });
 });
