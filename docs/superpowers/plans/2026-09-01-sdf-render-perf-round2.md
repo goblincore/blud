@@ -16,7 +16,10 @@
 
 - **Machine quiet during any bench.** Deltas here are smaller than a background build.
 - **Reload the page per bench run.** Damage persists otherwise (the 583% spread bug).
-- **Parity means the frozen-capture A/B/A/B procedure**, with an off-vs-off pair taken FIRST for the noise floor (0.015% settled). Never `drawImage`/`getImageData` off the WebGPU canvas — it returns black.
+- **Parity means the frozen-capture A/B/A/B procedure**, with an off-vs-off pair taken FIRST for the noise floor (0.015% settled). Never `drawImage`/`getImageData` off the WebGPU canvas — it returns black. Task 1 builds the harness for it (`scripts/perf-r2-parity.sh`); every later task uses that.
+- **Machine load.** While another dispatch chain is running on this machine, a bench number is noise. If `~/.claude/dispatch/plans/*.md` shows any task with `status: running` other than your own, write `DEFERRED (machine loaded)` for the bench step in the notes and move on; the parity and visual gates are NOT deferrable. Task 9 re-takes every bench when the machine is quiet.
+- **Concurrent edits to `march.wgsl.ts`.** The wound-pass-r2 chain (branch `claude/continue-previous-work-91055b`) is editing `APPLY_WOUNDS`, `MAP_BODY`'s `.w` return slot and the hit shading at the same time. Keep every shader diff here minimal and local so the merge stays small; never repurpose `mapBody`'s `.w`.
+- **Vision.** If your model cannot see a PNG through `Read` (glm-5.x and kimi-k3 on pi cannot), judge captures with `python3 scripts/vision-ask.py <png> "<question>"` and quote its answer in the notes.
 - **Numbers go in** `docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md` (create in Task 0). One section per task, before/after, spread, verdict.
 - **Kill switch per task.** Every behavioural change ships behind a `__sdfGame.setX()` seam so the owner can A/B it live.
 - Tests: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/sdf-layer.test.ts` for the fast loop; `npx vitest run src/lab/sdf-zombie/` before each commit. `scripts/blob-measure.test.ts` (7 tests) fails on main today for an environmental reason unrelated to this plan — ignore it, do not "fix" it here.
@@ -136,6 +139,23 @@ Then rewrite the comment block above the discard ("shellOut IS DELIBERATELY NOT 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 Expected: PASS.
 
+- [ ] **Step 4b: Build the parity harness (used by every later task)**
+
+Create `scripts/perf-r2-parity.mjs` and its wrapper `scripts/perf-r2-parity.sh`. Borrow the PNG decode + diff functions and the CDP driving pattern from `scripts/dungeon-shadowab.mjs` (read it fully), the freeze/settle recipe from `scripts/crowd-capture.mjs`, and the per-room camera poses from `scripts/sdf-game-bench.mjs` (reuse the bench's room 3 and room 4 poses; do not invent your own).
+
+```
+Usage:
+  scripts/perf-r2-parity.sh capture <outDir> [--room 3|4] [--on "<js>" --off "<js>"]
+  scripts/perf-r2-parity.sh diff <pngA> <pngB>
+```
+
+- `capture`: open `sdf-game.html`, place the camera at the room's bench pose, `__sdfGame.freeze(true)`, wait for the post-AA smear to settle (2500 ms; the notes record 7.9% of pixels still differing across a freeze until it settles), then capture the same state TWICE via CDP `Page.captureScreenshot` (`state-1.png`, `state-2.png`) and print that pair's diff as the noise floor. With `--on/--off` (JS expressions evaluated in the page, e.g. `__sdfGame.setDepthGate(true)` / `(false)`) it additionally captures A/B/A/B (`a-1 b-1 a-2 b-2`), re-settling after each toggle, and prints the four pairwise diffs.
+- `diff`: print changed-pixel count, changed fraction, max channel delta, and the 32-px coarse cell map shadowab prints.
+- The `.sh` wrapper sources `scripts/lab-servers.sh` exactly as `scripts/sdf-game-bench.sh` does, with `LAB_VITE_PORT` default 5299 and `LAB_CDP_PORT` default 9299 (other chains use the usual ports). Output directory default `/tmp/perf-r2/<label>/`.
+- Never sample the canvas from inside the page — `drawImage`/`getImageData`/`createImageBitmap` return black on this page.
+
+Build the harness and take the room 3 / room 4 "before" captures on the UNCHANGED shader first (i.e. do this step before Step 3 lands in your working tree, or `git show HEAD:src/lab/sdf-zombie/webgpu/march.wgsl.ts` into place temporarily), then apply Step 3 and take "after".
+
 - [ ] **Step 5: Parity gate**
 
 Frozen capture, room 3 and room 4, A (before) / B (after) / A / B, plus an off-vs-off pair first. Expected: B-vs-A within the settled noise floor (≤ 0.02% of pixels). Also `__sdfGame.occupancy()` hits unchanged (room 3 ≈ 104184, room 4 ≈ 46225 at Task 0's state). Record in notes.
@@ -151,8 +171,8 @@ Expected: mean steps on miss pixels drop (they were 6–14); frame time at or be
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md
-git commit -m "march: hull exit bounds tMax on the un-relaxed path"
+git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md scripts/perf-r2-parity.mjs scripts/perf-r2-parity.sh
+git commit -m "march: hull exit bounds tMax on the un-relaxed path; perf-r2 parity harness"
 ```
 
 ---
@@ -686,15 +706,18 @@ git commit -m "march: front-to-back per-body passes gated on the accumulated dep
 - Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` (`aaCfg.value.y`, `__sdfGame.setAa`)
 - Test: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 
+`mapBody`'s `.w` return slot is NOT available — the wound-pass-r2 chain is taking it for the pre-wound field. The distortion rides a private global instead, exactly like `gFoldBestIdx` does: `mapBody` resets it, `foldGroup` writes it at the argmin, and MARCH_BODY reads it straight after its `mapBody` call (private globals are per-invocation, so this is the same contract the argmin already relies on).
+
 - [ ] **Step 1: Failing test**
 
 ```ts
-  it('returns the dominant group distortion in mapBody.w and divides the footprint epsilon by it', () => {
+  it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
     expect(FOLD_GROUP).toContain('var<private> gFoldBestDistort: f32 = 1.0;');
     expect(FOLD_GROUP).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }');
     expect(MAP_BODY).toContain('gFoldBestDistort = 1.0;');
-    expect(MAP_BODY).toContain('return vec4<f32>(dmg, f32(bestIdx), nearWound, gFoldBestDistort);');
-    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK / max(dres.w, 1.0));');
+    expect(MAP_BODY).not.toContain('nearWound, gFoldBestDistort');
+    expect(MARCH_BODY).toContain('let distort = max(gFoldBestDistort, 1.0);');
+    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK / distort);');
   });
 ```
 
@@ -707,8 +730,8 @@ Expected: FAIL.
 
 In FOLD_GROUP's tail declarations add `var<private> gFoldBestDistort: f32 = 1.0;` beside `gFoldBestIdx`, and change the argmin line to
 `if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }`.
-In MAP_BODY, reset `gFoldBestDistort = 1.0;` beside the other two resets, and change both returns' `.w` from `0.0` to `gFoldBestDistort`.
-In MARCH_BODY, `let hitEps = max(hitEpsBase, t * aaK);` becomes `let hitEps = max(hitEpsBase, t * aaK / max(dres.w, 1.0));` and the matching inner `-max(hitEpsBase, t * aaK)` the same. `dres.w` is 1.0 for the volume branch and for any prim whose group has no distortion, so nothing changes at strength 0.
+In MAP_BODY, reset `gFoldBestDistort = 1.0;` beside the other two resets. Do NOT touch the returns.
+In MARCH_BODY, directly after the `let dres = mapBody(...)` line inside the loop, add `let distort = max(gFoldBestDistort, 1.0);`, then `let hitEps = max(hitEpsBase, t * aaK);` becomes `let hitEps = max(hitEpsBase, t * aaK / distort);` and the matching inner `-max(hitEpsBase, t * aaK)` becomes `-max(hitEpsBase, t * aaK / distort)`. The global is 1.0 for the volume branch and for any prim whose group has no distortion, so nothing changes at strength 0.
 
 - [ ] **Step 4: Run the tests**
 
@@ -877,6 +900,34 @@ Expected: green; render-check exit 0.
 ```bash
 git add src/lab/sdf-zombie/webgpu docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md
 git commit -m "upload: per-body data texture sized to the body"
+```
+
+---
+
+### Task 9: Bench sweep when the machine is quiet
+
+Every bench step above may have been deferred. This task re-takes them all in one sitting, on the finished chain, using the live seams so each lever's delta is measured against the same session. **Trigger it only when no other dispatch task is running** (`grep -l 'status: running' ~/.claude/dispatch/plans/*.md` prints nothing but this task).
+
+**Files:**
+- Modify: `docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md`
+
+- [ ] **Step 1: Baseline of the finished chain, then one lever off at a time**
+
+```bash
+BENCH_ROOMS=2,3,4 BENCH_REPEATS=3 scripts/sdf-game-bench.sh
+```
+
+Then, using `BENCH_PRELUDE` if the bench script exposes one (read `scripts/sdf-game-bench.mjs` — if it does not, add an env var that evaluates a JS expression in the page after load, and commit that), repeat with each of: `__sdfGame.setOmega(0.6)`, `__sdfGame.setDepthGate(false)`, `__sdfGame.setAa(0)`, `__sdfGame.setLevelShadow(false)`. Record a table: lever, room, median ms, spread, delta vs the finished chain. Note which bench steps in Tasks 1–8 were deferred and are now covered.
+
+- [ ] **Step 2: Occupancy counters at the finished chain**
+
+`__sdfGame.occupancy()` in rooms 3 and 4; record hits / marched / rasterised / mean steps.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md scripts/sdf-game-bench.mjs
+git commit -m "perf round 2: bench sweep on a quiet machine"
 ```
 
 ---
