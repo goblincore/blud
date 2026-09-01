@@ -8,7 +8,7 @@
 // blast-crater hole, observed and fixed).
 
 import { describe, it, expect } from 'vitest';
-import { buildHullInstances, HULL_SHRINK, type WoundSphere } from './occluder-hull';
+import { buildHullInstances, HULL_SHRINK, createOccluderHull, SHADOW_HULL_INFLATE, type WoundSphere } from './occluder-hull';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
 import { DEFAULT_FACE } from '../face';
@@ -249,6 +249,60 @@ describe('shell displacement (X1.21.2) — inside-ness under the dented field', 
     const key = (s: { centre: Vec3 }) => `${s.centre}`;
     const offSet = new Set(off.map(s => key(s)));
     for (const s of on) expect(offSet.has(key(s)), `new sphere at ${s.centre}`).toBe(true);
+  });
+});
+
+describe('shadow-caster hull', () => {
+  // The owner rejected the figure's shadow casting as DISCONNECTED BLOBS
+  // (2026-09-01). Cause: the shadow caster was the depth-occlusion hull, and
+  // HULL_SHRINK 0.8 keeps every sphere conservatively INSIDE its primitive —
+  // correct for occlusion (the march cuts rays at the hull), wrong for shadows
+  // (gaps between shrunk spheres are gaps in the shadow map). A shadow caster
+  // wants the opposite bias: inflation, so neighbouring spheres fuse into one
+  // silhouette.
+  it('inflates rather than shrinks — gaps between spheres become gaps in the shadow', () => {
+    expect(SHADOW_HULL_INFLATE).toBeGreaterThan(1.0);
+    expect(HULL_SHRINK).toBeLessThan(1.0);
+  });
+
+  it('shadow spheres are strictly larger than occlusion spheres for the same body', () => {
+    // Compared per CENTRE, not per index: prims share endpoint centres (joints)
+    // and the two hulls keep different sets of tiny prims (inflated radii clear
+    // MIN_HULL_RADIUS where shrunk ones did not), so index i is not the same
+    // sphere across the two hulls. The property that matters is per sphere:
+    // same centre, strictly bigger radius.
+    const occl = buildHullInstances([body], HULL_SHRINK, []);
+    const shad = buildHullInstances([body], SHADOW_HULL_INFLATE, []);
+    expect(shad.length).toBeGreaterThanOrEqual(occl.length);
+    const biggest = (inst: ReturnType<typeof buildHullInstances>) => {
+      const m = new Map<string, number>();
+      for (const s of inst) {
+        const k = `${s.centre}`;
+        const r = m.get(k);
+        if (r === undefined || s.radius > r) m.set(k, s.radius);
+      }
+      return m;
+    };
+    const occlR = biggest(occl);
+    const shadR = biggest(shad);
+    for (const [centre, r] of occlR) {
+      const twin = shadR.get(centre);
+      expect(twin, `shadow sphere at ${centre}`).toBeDefined();
+      expect(twin!).toBeGreaterThan(r);
+    }
+  });
+
+  it('the shadow mesh casts; the occlusion mesh does not', () => {
+    // The split of duties, pinned where a camera test cannot see it: the
+    // inflated hull exists ONLY to be rendered into the shadow map, and the
+    // occlusion hull must stay a pure depth pre-pass.
+    const hull = createOccluderHull();
+    expect(hull.shadowObject.castShadow).toBe(true);
+    expect(hull.object.castShadow).toBe(false);
+    // Visible, because three only renders shadow casters that pass the
+    // visibility test; layers, not visibility, keep it off the camera.
+    expect(hull.shadowObject.visible).toBe(true);
+    hull.dispose();
   });
 });
 

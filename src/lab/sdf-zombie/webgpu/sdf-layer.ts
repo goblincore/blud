@@ -131,6 +131,19 @@ export const SHELL_LAYER = 4;
 export const SHELL_EXIT_LAYER = 5;
 
 /**
+ * The SHADOW-CASTING twin of the occluder hull (occluder-hull.ts
+ * `shadowObject`): the same instances at SHADOW_HULL_INFLATE, rendered into
+ * the flashlight's shadow map only.
+ *
+ * Its own bit, and deliberately NOT OCCLUDER_LAYER: pass 1c rasterises
+ * everything on OCCLUDER_LAYER into the occT distance target, and an inflated
+ * hull in that target would put a surface OUTSIDE the body in front of every
+ * ray — tMax clamping in empty space, bodies dissolving. Enabled only on the
+ * shadow camera (dungeon-lighting.ts), never on a view camera.
+ */
+export const SHADOW_HULL_LAYER = 6;
+
+/**
  * Tile size of the cone pre-pass, in full-resolution pixels.
  *
  * 8 is the figure the technique is usually quoted with. Bigger tiles make the
