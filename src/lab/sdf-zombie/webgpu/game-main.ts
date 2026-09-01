@@ -816,9 +816,10 @@ async function main() {
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
     // time and watching; retyping setGooTuning after every reload is not a
-    // sweep. Shown automatically with setGoo(true) — this is a debug page and
-    // the panel is the reason to turn the layer on at all — and dismissable
-    // with __sdfGame.gooPanel(false).
+    // sweep. Goo ships ON, so the panel ships VISIBLE with it — this is a
+    // debug page and the panel is the reason to turn the layer on at all.
+    // Dismissable with __sdfGame.gooPanel(false), which is also what the
+    // headless look-capture calls so screenshots frame the room, not the UI.
     const L = gooLayer;
     gooPanel = createGooPanel([
       { key: 'sizeScale', group: 'goo', min: 0.05, max: 1.5, step: 0.01,
@@ -937,6 +938,12 @@ async function main() {
   if (gooEnabled) {
     bloodView.setBeadsVisible(false);
     bloodView.setMistVisible(true);
+    // ...AND show the panel. It used to appear only via setGoo(true), which
+    // this boot path deliberately does not call — so the panel that exists to
+    // make the goo tunable was invisible on the page where goo ships ON, and
+    // the owner had to toggle the layer off and on to get at it (owner ask,
+    // 2026-09-01: "it should be default on tbh").
+    gooPanel?.setVisible(true);
   }
   // One seeded stream for EVERY bleed decision (spawns, trails, splat
   // stamps) — advanced only while bleed is enabled, so setBleed(false)

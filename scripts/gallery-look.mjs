@@ -53,6 +53,10 @@ if (POSE.length !== 4 || POSE.some(Number.isNaN)) {
   process.exit(2);
 }
 const SETTLE = Number(process.env.LOOK_STEPS ?? 20);
+// The goo tuning panel ships VISIBLE on this page (it is a debug page and the
+// panel is the point). A screenshot wants the ROOM, not the UI over it, so the
+// capture dismisses it — guarded, because older builds have no such seam.
+await evaluate('typeof window.__sdfGame.gooPanel === "function" && window.__sdfGame.gooPanel(false)');
 await evaluate('window.__sdfGame.freeze(true)');
 await evaluate('window.__sdfGame.setLoopRunning(false)');
 await evaluate(`window.__sdfGame.setPose(${POSE[0]}, ${POSE[1]}, ${POSE[2]}, ${POSE[3]})`);
