@@ -258,6 +258,12 @@ async function main() {
   // must render exactly as before, so the rig is applied, not hard-coded.
   // ---------------------------------------------------------------------
   let dungeonOn = true;
+  /** Live beam tuning (panel + console). x is how hard the beam drives the
+   *  key; y is the highlight shoulder that keeps WOUNDS readable under direct
+   *  light — at 0 a lit body hard-clips and crater, lip and clean skin all
+   *  saturate to the same white, so a shot enemy looks unshot exactly when you
+   *  are close enough to aim (owner, 2026-09-01). */
+  const beamTuning = { gain: 1.1, shoulder: 0.45 };
   const flashlight = createFlashlight();
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
@@ -297,6 +303,13 @@ async function main() {
      *  shadow kill switch — do NOT toggle spot.castShadow live, three r185
      *  WebGPU crashes rebuilding a disposed shadow map). */
     spot: flashlight.spot,
+    /** Beam knobs, also on the tuning panel. */
+    setBeam(t: { gain?: number; shoulder?: number }) {
+      if (t.gain !== undefined) beamTuning.gain = t.gain;
+      if (t.shoulder !== undefined) beamTuning.shoulder = t.shoulder;
+      return { ...beamTuning };
+    },
+    get beam() { return { ...beamTuning }; },
   };
 
   // -----------------------------------------------------------------------
@@ -425,6 +438,7 @@ async function main() {
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+        a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, 0, 0);
       }
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
@@ -978,6 +992,12 @@ async function main() {
       { key: 'speedMin', group: 'gout', min: 0.2, max: 8, step: 0.1,
         hint: 'Tail speed. The head/tail gap is what stretches the pulse into a rope.',
         get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
+      { key: 'beamGain', group: 'beam', min: 0, max: 4, step: 0.05,
+        hint: 'How hard the flashlight drives the key on CHARACTERS. Was a fixed 2.2, which blew bodies past white. Raise for punch, lower if faces flatten out.',
+        get: () => beamTuning.gain, set: v => { beamTuning.gain = v; } },
+      { key: 'beamShoulder', group: 'beam', min: 0, max: 0.9, step: 0.05,
+        hint: 'Highlight rolloff. 0 = hard clip, and a lit body loses its WOUNDS (crater, lip and skin all saturate to the same white). Higher keeps them readable under the beam.',
+        get: () => beamTuning.shoulder, set: v => { beamTuning.shoulder = v; } },
     ], {
       toggles: [
         {

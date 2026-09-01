@@ -1008,6 +1008,20 @@ export const TEXEL = /* wgsl */ `fn texel(tex: texture_2d<f32>, uv: vec2<f32>) -
 // Irregular flicker. Three incommensurate sines rather than one, because a
 // single sine reads as a machine pulsing and the eye picks the period out
 // immediately; overlapping periods never quite repeat.
+export const SOFT_SHOULDER = /* wgsl */ `fn softShoulder(x: f32, knee: f32) -> f32 {
+  // Below the knee, identity — the whole midtone range is untouched, so a
+  // body out of the beam shades exactly as it always did. Above it, compress
+  // [knee, inf) into [knee, 1) with an exponential that is C1 at the join and
+  // strictly monotonic, which is the property that matters here: monotonic
+  // means two surfaces that differed in brightness still differ afterwards.
+  // That is what keeps a wound crater darker than the skin around it when the
+  // flashlight is pointed straight at the body, instead of both clipping to
+  // white and the damage vanishing at exactly the range you aim from.
+  if (x <= knee) { return x; }
+  let head = max(1.0 - knee, 1e-4);
+  return knee + head * (1.0 - exp(-(x - knee) / head));
+}`;
+
 export const FLICKER = /* wgsl */ `fn flicker(t: f32, amt: f32) -> f32 {
   let a = sin(t * 11.3) * 0.5 + 0.5;
   let b = sin(t * 23.7 + 1.3) * 0.5 + 0.5;
@@ -1192,6 +1206,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   spotPos: vec3<f32>,
   spotAxis: vec3<f32>,
   spotCfg: vec4<f32>,
+  spotCfg2: vec4<f32>,
   spotColor: vec3<f32>,
   surfCfg: vec4<f32>,
   surfCfg2: vec4<f32>,
@@ -1858,6 +1873,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var L = normalize(lightDir);
   var keyC = keyColor;
   var keyI = lightCfg.x;
+  var beamAmt = 0.0;
   if (spotCfg.x > 0.0) {
     let toLamp = spotPos - p;
     let dist = length(toLamp);
@@ -1870,7 +1886,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // which keeps the lab and every existing preset bit-identical.
     L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
     keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
-    keyI = mix(lightCfg.x, lightCfg.x + beam * 2.2, 1.0);
+    // spotCfg2.x is the beam's KEY GAIN, a live knob. The 2.2 it replaces
+    // blew a lit body clean past 1.0 on every channel, and a clipped
+    // body has no wound in it: crater, lip and char all saturate to the
+    // same white. See the shoulder below.
+    keyI = lightCfg.x + beam * spotCfg2.x;
+    beamAmt = beam;
   }
   // ---- END ANALYTIC FLASHLIGHT --------------------------------------------
   let V = -rd;
@@ -1942,6 +1963,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // falloff, gated by a test that greps its source for field calls. The
   // post-hit eval budget is unchanged.
   let amb = ambientAt(p, n, boxMin, boxMax, wallNegX, wallPosX, wallNegY, wallPosY, wallNegZ, wallPosZ, bounceCfg, lightCfg.y, keyColor);
+  // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
+  // past 1.0 on every channel and hard-clip, which does not just look blown —
+  // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
+  // same white, so a shot enemy reads identical to an unshot one exactly when
+  // you are close enough to aim. The shoulder compresses [knee, inf) into
+  // [knee, 1) monotonically, so those differences survive as differences.
+  //
+  // Gated on the beam existing at all, so the lab and every stock preset keep
+  // their old arithmetic bit-for-bit.
   var fleshLit = albedo * (amb + diff * wShadow * keyI * keyC) * ao
                + keyC * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
@@ -1953,6 +1983,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.52 * lightCfg.x * keyColor),
                  faceFlat * 0.85);
+  if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
+    let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
+    fleshLit = vec3<f32>(softShoulder(fleshLit.x, knee),
+                         softShoulder(fleshLit.y, knee),
+                         softShoulder(fleshLit.z, knee));
+  }
 
   // The eye REPLACES the flesh rather than adding to it.
   //
@@ -2084,7 +2120,7 @@ export const HELPERS = [
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
-  FOLD_GROUP, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER,
+  FOLD_GROUP, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT,
 ];
 

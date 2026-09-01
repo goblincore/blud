@@ -23,7 +23,7 @@ export interface GooPanelKnob {
   /** Property name as it appears in the emitted tuning call. */
   key: string;
   /** Which call reproduces it — the two have different shapes. */
-  group: 'goo' | 'gout';
+  group: 'goo' | 'gout' | 'beam';
   min: number;
   max: number;
   step: number;
@@ -106,7 +106,8 @@ export function createGooPanel(
     const name = document.createElement('span');
     name.textContent = knob.key;
     name.setAttribute('style', 'width:74px; flex:none;'
-      + (knob.group === 'gout' ? ' color:#d8a02f;' : ''));
+      + (knob.group === 'gout' ? ' color:#d8a02f;' : '')
+      + (knob.group === 'beam' ? ' color:#8fd0ff;' : ''));
 
     const input = document.createElement('input');
     input.type = 'range';
@@ -209,6 +210,7 @@ function fmt(v: number): string {
 export function emit(knobs: GooPanelKnob[]): string {
   const goo = knobs.filter(k => k.group === 'goo');
   const gout = knobs.filter(k => k.group === 'gout');
+  const beam = knobs.filter(k => k.group === 'beam');
   const pair = (k: GooPanelKnob) => `${k.key}: ${round(k.get())}`;
   const lines: string[] = [];
   if (goo.length) {
@@ -216,6 +218,9 @@ export function emit(knobs: GooPanelKnob[]): string {
   }
   if (gout.length) {
     lines.push(`__sdfGame.setGoutTuning('slug', { ${gout.map(pair).join(', ')} })`);
+  }
+  if (beam.length) {
+    lines.push(`__dungeon.setBeam({ ${beam.map(pair).join(', ')} })`);
   }
   return lines.join('\n');
 }

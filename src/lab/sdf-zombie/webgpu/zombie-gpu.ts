@@ -234,6 +234,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     /** x intensity (0 disables), y cosInner, z cosOuter, w range. */
     spotCfg: uniform(new THREE.Vector4(0, 0.93, 0.80, 16)),
     spotColor: uniform(new THREE.Color(0.94, 0.96, 1.0)),
+    /** x beamKeyGain (how hard the beam drives the key), y highlightShoulder
+     *  (0 = hard clip, the pre-2026-09-01 behaviour; higher = more headroom
+     *  above the knee so wounds keep contrast under direct light). */
+    spotCfg2: uniform(new THREE.Vector4(1.1, 0.45, 0, 0)),
     /** x specIntensity, y specRoughness, z fresnelBoost, w translucency */
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
@@ -590,6 +594,7 @@ export function createMarchMaterial(
     spotAxis: u.spotAxis,
     spotCfg: u.spotCfg,
     spotColor: u.spotColor,
+    spotCfg2: u.spotCfg2,
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
     mottleColor: u.mottleColor,
@@ -1205,6 +1210,7 @@ export function createChunkGpuView(
     u.spotAxis.value.copy(template.spotAxis.value);
     u.spotCfg.value.copy(template.spotCfg.value);
     u.spotColor.value.copy(template.spotColor.value);
+    u.spotCfg2.value.copy(template.spotCfg2.value);
     // Chunks must light like the body they came off. Miss this and gibs
     // carry the old flat fill while the torso takes the room's colour.
     u.bounceCfg.value.copy(template.bounceCfg.value);
