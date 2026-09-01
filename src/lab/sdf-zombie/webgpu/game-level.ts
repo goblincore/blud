@@ -122,13 +122,14 @@ export interface TunnelDef {
 
 const R = ROOM_HALF, B = BAND_HALF, O = OUTER, T = TUNNEL_OFF, W = TUNNEL_HALF_W;
 
-// WHITE-WALL GALLERY. Owner: "rooms should be more light like white wall
-// gallery and then some color lights here and there". Walls near-white so
-// geometry reads and zombies read against them; floor a step darker so the
-// room keeps a horizon; ceiling brightest (it faces the rig's fill).
-const GALLERY_WALL: Vec3 = [0.88, 0.87, 0.85];
-const GALLERY_FLOOR: Vec3 = [0.45, 0.44, 0.42];
-const GALLERY_CEIL: Vec3 = [0.93, 0.92, 0.90];
+// DUNGEON STONE. Cold gray, deliberately not the reference video's sepia:
+// warm light on warm stone gives soft golden highlights that fight the
+// specular this pivot exists to deliver. Ceilings sit BELOW walls now —
+// the gallery lifted them so they read as a top surface under flat ambient;
+// here the flashlight does that job and a lifted ceiling only kills the dark.
+const GALLERY_WALL: Vec3 = [0.21, 0.215, 0.225];
+const GALLERY_FLOOR: Vec3 = [0.135, 0.138, 0.142];
+const GALLERY_CEIL: Vec3 = [0.175, 0.18, 0.19];
 
 export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
@@ -157,9 +158,8 @@ export const ROOMS: RoomDef[] = [
     zombies: 4 },
 ];
 
-// Dimmer than either room's white so the passage still reads as a throat
-// between galleries — but no longer a cave: grey, not black.
-const TUNNEL_COLOR: Vec3 = [0.52, 0.51, 0.49];
+// Darker than either room: the passage is a throat between chambers.
+const TUNNEL_COLOR: Vec3 = [0.10, 0.104, 0.112];
 export const TUNNELS: TunnelDef[] = [
   { name: 'tunnel-1-2', a: 1, b: 2, minX: -B, maxX: B, minZ: -T - W, maxZ: -T + W,
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },

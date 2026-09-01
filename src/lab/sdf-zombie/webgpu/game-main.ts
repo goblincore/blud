@@ -29,6 +29,7 @@ import {
 } from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -143,6 +144,11 @@ async function main() {
   const surfaces = levelSurfaces();
   const levelGroup = new THREE.Group();
   levelGroup.name = 'ring-level';
+  const stoneSet = dungeonMaterialSet();
+  const stoneFor = (axis: 0 | 1 | 2, facing: 1 | -1) =>
+    axis !== 1 ? stoneSet.wall
+      : facing > 0 ? stoneSet.floor
+        : stoneSet.perimeterAccent;
   for (const p of surfaces.planes) {
     const axis = p.axis;
     // Walls span (x|z, y); floors/ceilings span (x, z).
@@ -155,11 +161,14 @@ async function main() {
     // failure pointing up. A small emissive term in their own colour keeps
     // them legible as the room's top surface without flattening the mood.
     const isCeiling = axis === 1 && p.facing < 0;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: new THREE.Color(p.color[0], p.color[1], p.color[2]),
-      roughness: 1,
-      ...(isCeiling ? { emissive: new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.45) } : {}),
-    }));
+    const base = stoneFor(axis, p.facing) as THREE.MeshStandardMaterial;
+    const mesh = new THREE.Mesh(geo, base.clone());
+    const mm = mesh.material as THREE.MeshStandardMaterial;
+    mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
+    // Ceilings keep a whisper of self-light so they do not read as a void —
+    // but far less than the gallery needed, because the flashlight now
+    // reaches them.
+    if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
     const mid: Vec3 = [
       (p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2,
     ];
@@ -172,10 +181,9 @@ async function main() {
   for (const b of surfaces.boxes) {
     const geo = new THREE.BoxGeometry(
       b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: new THREE.Color(b.color[0], b.color[1], b.color[2]),
-      roughness: 1,
-    }));
+    const mesh = new THREE.Mesh(geo, (stoneSet.coverLow as THREE.MeshStandardMaterial).clone());
+    (mesh.material as THREE.MeshStandardMaterial).color =
+      new THREE.Color(b.color[0], b.color[1], b.color[2]);
     mesh.position.set(
       (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     levelGroup.add(mesh);

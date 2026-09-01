@@ -15,15 +15,14 @@ import {
   type AccentLight,
 } from './game-level';
 
-describe('gallery paint', () => {
-  it('walls are near-white; floors stay a step darker; ceilings brightest', () => {
-    for (const r of ROOMS) {
-      for (const ch of r.wallColor) expect(ch).toBeGreaterThanOrEqual(0.8);
-      const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
-      // The horizon: floor must NOT read as another white wall.
-      expect(lum(r.floorColor)).toBeLessThan(lum(r.wallColor) - 0.3);
-      expect(lum(r.ceilColor)).toBeGreaterThan(lum(r.wallColor));
-    }
+describe('gallery paint — SUPERSEDED by the dungeon pivot', () => {
+  // The white-gallery assertions moved to dungeon-palette.test.ts, which
+  // asserts the opposite on purpose (L2, 2026-09-01). What survives here is
+  // the STRUCTURAL rule that outlived the repaint: the floor must never read
+  // as another wall, or the horizon disappears.
+  it('floors stay clearly darker than walls', () => {
+    const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+    for (const r of ROOMS) expect(lum(r.floorColor)).toBeLessThan(lum(r.wallColor));
   });
 });
 
