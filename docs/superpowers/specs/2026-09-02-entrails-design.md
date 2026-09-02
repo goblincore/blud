@@ -15,25 +15,41 @@ skin. That is a **wall model**. It is correct for a limb — a thigh really is a
 wall of meat — and wrong for a torso, which is mostly cavity. A slug to the gut
 currently reveals more red meat where it should reveal a hole with things in it.
 
-### The constraint that shapes everything here
+### The constraint that shapes everything here — AND ITS EVIDENCE IS VOID
 
-The rib pass immediately before this one is the reason this spec keeps
-insisting on gross contrast over detail. Ribs were rebuilt from straight bars
-into six strongly curved pairs (bends up to 0.162, visibly different in 5x lab
-crops) and the owner's verdict in game was **"i dont notice the rib changes
-lol"**.
+**CORRECTION, 2026-09-02.** This section originally rested on the rib result:
+ribs were rebuilt from straight bars into six strongly curved pairs and the
+owner did not notice in game, which was read as proof that fine internal
+structure cannot survive combat range.
 
-At combat range the wound window is small and fine internal structure does not
-resolve — only large value and colour blocks do. So:
+**That experiment never ran.** `applyBones` called
+`sdPrim(p, i, data, -1.0, 0.0, vec3(0), band)` — taper, profile and bend
+hard-coded to "none" — so every bone rendered as a straight untapered capsule
+regardless of what the `.blob` authored. The curvature was never drawn. The
+owner's "i dont notice the rib changes" and later "the ribs are still just
+straight" were literally correct. Fixed at `3dc8373`.
 
-- viscera must separate from muscle by **value** (darker), not by hue;
-- the gut rope must read by **silhouette and motion**, not by modelled form;
-- rope-versus-body collision is not worth paying for, because nobody can see a
-  gut clipping a shin at 3 m under a flashlight.
+So the rib result is **not evidence for anything about perception**. It is
+evidence about a shader bug.
 
-A related trap, also recorded: judging this from max-exposure diagnostic
-captures (20+ stacked wounds at 5x zoom) made the fat band look dominant when
-at gameplay range the owner finds it subtle. **Judge at combat range.**
+**What survives, and it is weaker:**
+
+- The fat band *is* subtle at combat range while dominating 5x crops — the
+  owner reported that independently, and nothing was broken about it.
+- The torn-fibre pass was judged invisible with its slider at the ceiling,
+  and that path had no equivalent bug.
+- Task 8's own finding that the viscera tint is not discernible at 1.8 m, with
+  the bone plug claiming the crater floor.
+
+Those still support "prefer gross value contrast", but they do **not** support
+the stronger claim that modelled internal detail is worthless at range. That
+claim is now untested.
+
+**Consequences for this spec, stated honestly:** the decisions it justified —
+declining rope-to-body collision and organ-specific shapes — were made partly
+on void evidence. They may still be right on cost grounds alone, but if the
+gut rope fails to read, "add shape detail" is back on the table rather than
+ruled out.
 
 ## Design decisions (owner-selected)
 
