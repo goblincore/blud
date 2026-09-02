@@ -546,6 +546,12 @@ async function main() {
    *  rooms pass the parity gate with the bound on. */
   const GAME_HULL_EXIT_BOUND = 0;
 
+  /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
+   *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
+   *  see the march.wgsl.ts reach comment; `__sdfGame.setWoundEarlyOut()`
+   *  flips it live for A/B. */
+  const GAME_WOUND_EARLY_OUT = 1;
+
   /**
    * Step multiplier for the game page's march (marchCfg.y). The lab ships
    * 0.6 (under-relaxed) to survive the fbm shell displacement, which this
@@ -638,6 +644,8 @@ async function main() {
       view.uniforms.woundCfg2.value.y = GAME_RELAX;
       // Hull-exit tMax bound (perf round 2 task 1) — see GAME_HULL_EXIT_BOUND.
       view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
+      // Wound-loop early-out (perf round 2 task 3) — see GAME_WOUND_EARLY_OUT.
+      view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
       // Plain sphere tracing (perf round 2 task 2) — see GAME_OMEGA.
       view.uniforms.marchCfg.value.y = GAME_OMEGA;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
@@ -2064,6 +2072,9 @@ async function main() {
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
     setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
     get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
+    /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
+    setWoundEarlyOut(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
+    get woundEarlyOut() { return (actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {
       const n = Math.max(0.1, Math.min(1.0, v));

@@ -587,13 +587,27 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
 // change was walked back this was the last geometric delta standing. If the
 // overlap ridge returns as a complaint, re-derive the union against THIS
 // baseline with the owner judging, one change at a time.
-export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec2<f32> {
+export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>) -> vec2<f32> {
   var d = dIn;
   var near = 0.0;
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+    let r = length(p - w.xyz);
+    // Reach of this wound's influence, beyond which the carve, the fillet
+    // and the rim bump all contribute exactly nothing (see the test):
+    //   crater .......... r < depth <= w.w, and nearWound at 2 depth
+    //   smax fillet ..... quadratic smin is exactly min once |a-b| >= 4k;
+    //                     a-b here is (r - depth) + d, and d >= -0.25 inside
+    //                     any limb this game has
+    //   rim bump ........ exp(-x^2) at x >= 3 is 1.2e-4 of amp — sub-micron
+    // Skipping here saves the two texel loads below and every op after them
+    // for every wound the sample is nowhere near — which, per march step,
+    // is all of them but one. (perfCfg.y seam, game page ON; lab default 0
+    // keeps its reference bit-identical.)
+    let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
+    if (perfCfg.y > 0.5 && r > reach) { continue; }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     // Depth slab (2026-08-27): the sphere stays centred on the uploaded
     // anchor — the lab's deep bowl — and is clipped by a plane through the
@@ -619,7 +633,6 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
-    let r = length(p - w.xyz);
     d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
     if (r < depth * 2.0) { near = 1.0; }
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
@@ -875,7 +888,7 @@ var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;`;
 
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> vec4<f32> {
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
   // Argmin tracking now lives in private globals shared with foldGroup
   // (above); reset per call — calcNormal calls mapBody four times and each
@@ -952,7 +965,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   }
   let bestIdx = i32(gFoldBestIdx);
   let carved = applyCarves(d, p, data, counts);
-  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2);
+  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg);
   let dmg = dmgRes.x;
   let nearWound = dmgRes.y;
   // Silhouette detail. The MARCH passes 0.0 here and only calcNormal passes a
@@ -982,13 +995,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>) -> vec3<f32> {
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
-    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
-    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x);
+    e.xyy * mapBody(p + e.xyy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.yyx * mapBody(p + e.yyx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.yxy * mapBody(p + e.yxy, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.xxx * mapBody(p + e.xxx, data, counts, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -1076,7 +1089,8 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
   coneK: f32,
-  startT: f32
+  startT: f32,
+  perfCfg: vec4<f32>
 ) -> f32 {
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
@@ -1093,7 +1107,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // the zero vector keeps this pass independent of the motion plumbing.
     // The volume block rides along for the same reason (X1.26): a cone that
     // ignored an enabled volume would certify empty space inside the hand.
-    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x;
+    let d = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -1517,7 +1531,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
+    let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
     var d = dres.x;
     hitBest = i32(dres.y);
     // Shell displacement: inside a thin shell of the smooth surface, the
@@ -1662,7 +1676,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
+  var n = calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -1944,7 +1958,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -1955,7 +1969,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x / 0.06, 0.35, 1.0);
   }
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
@@ -1974,7 +1988,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // fill, ambient and scatter stay untouched or craters go pitch black.
   var wShadow = 1.0;
   if (woundShadowCfg.x > 0.0 && hitNearWound) {
-    wShadow = mix(1.0, woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x);
+    wShadow = mix(1.0, woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x);
   }
 
   // ENVIRONMENT BOUNCE (lighting P1). Replaces the flat scalar fill with a
@@ -2120,12 +2134,13 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
-  volumeClip: vec4<f32>
+  volumeClip: vec4<f32>,
+  perfCfg: vec4<f32>
 ) -> f32 {
   var res = 1.0;
   var t = 0.02;
   for (var i = 0; i < 14; i = i + 1) {
-    let h = mapBody(p + L * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x;
+    let h = mapBody(p + L * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
     res = min(res, k * h / t);
     if (res < 0.02 || t > 0.4) { break; }
     t = t + clamp(h, 0.01, 0.06);

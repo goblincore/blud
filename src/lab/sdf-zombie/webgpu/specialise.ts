@@ -143,8 +143,10 @@ export function specialiseMapBody(body: BuildResult): string {
 
   lines.push('  }');
   // applyWounds returns (field, nearWound); the flag rides mapBody.z so the
-  // shared march steps plain near wounds on specialised bodies too.
-  lines.push('  let dw = applyWounds(d, p, data, woundCfg, woundCfg2);');
+  // shared march steps plain near wounds on specialised bodies too. The
+  // trailing vec4 is the perfCfg seam (march perf r2 task 3) — the
+  // specialised path keeps every seam OFF, same field as before.
+  lines.push('  let dw = applyWounds(d, p, data, woundCfg, woundCfg2, vec4<f32>(0.0));');
   lines.push('  d = dw.x;');
   // Same guard as the generic version: the silhouette fbm is the single most
   // expensive term in the shader and must stay branched out at zero amplitude.

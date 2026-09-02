@@ -1032,6 +1032,10 @@ export function createZombieGpuView(
           enabled: opts.cone.uniforms.chain,
         })
       : float(0),
+    // Bound POSITIONALLY last, matching CONE_MARCH's WGSL signature (the
+    // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
+    // same seams the march does.
+    perfCfg: u.perfCfg,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();

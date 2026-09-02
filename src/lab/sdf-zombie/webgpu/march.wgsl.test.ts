@@ -19,7 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, ROW_PRIM_COLOR, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-  SAMPLE_VOLUME, APPLY_CARVES, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
+  SAMPLE_VOLUME, APPLY_CARVES, APPLY_WOUNDS, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
@@ -204,6 +204,22 @@ describe('ported features reach the entry point', () => {
     expect(applyWounds).toContain('select(1.0e5, wCap.w, wCap.w > 0.0)');
   });
 
+  it('skips a wound before loading its meta/cap rows when the sample is out of reach (perf round 2 task 3)', () => {
+    const iPos = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
+    const iReach = APPLY_WOUNDS.indexOf('if (perfCfg.y > 0.5 && r > reach) { continue; }');
+    const iMeta = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_META})`);
+    const iCap = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_CAP})`);
+    expect(iPos).toBeGreaterThan(-1);
+    expect(iReach).toBeGreaterThan(iPos);
+    expect(iMeta).toBeGreaterThan(iReach);
+    expect(iCap).toBeGreaterThan(iReach);
+    // Reach covers the crater (2 depth, the nearWound radius), the smax
+    // fillet (exact min beyond 4k, plus 0.25 m for how deep inside a limb
+    // the running field can be) and three rim widths past the rim offset.
+    expect(APPLY_WOUNDS).toContain(
+      'let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;');
+  });
+
   // Line-for-line TS transcription of the fixed carve term (the inside-positive
   // SDF of {inside sphere} ∩ {shallower than cap}), so the semantics of the
   // pinned string are proven, not just its spelling. The REGRESSION this
@@ -315,7 +331,7 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -338,7 +354,7 @@ describe('ported features reach the entry point', () => {
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x');
+      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
   });
 
   it('mottles ALBEDO from the rest-space anchor, guarded by its amplitude', () => {
@@ -511,7 +527,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
-      'woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x');
+      'woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x');
   });
 });
 
@@ -1093,8 +1109,9 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     expect(CONE_MARCH).toContain('volumeClip: vec4<f32>');
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
-    // Every calcNormal mapBody tap (4 of them) carries it.
-    expect((calcNormal.match(/volumeWarp, volumeClip\)/g) ?? []).length).toBe(4);
+    // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg
+    // pass-through behind it (perf round 2 task 3).
+    expect((calcNormal.match(/volumeWarp, volumeClip, perfCfg\)/g) ?? []).length).toBe(4);
   });
 });
 
