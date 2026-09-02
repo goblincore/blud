@@ -183,6 +183,10 @@ describe('sdPrimitive box', () => {
     // This is the property `round` being a FRACTION rather than metres exists
     // to protect: an absolute round in a divided frame would distort exactly
     // this reach anisotropically.
+    //
+    // NOTE: every assertion here is ON the surface (sdRoundBox === 0), so it
+    // cannot see whether `* minScale` is even applied — 0 times anything is
+    // 0. That is a separate property, pinned below.
     const scale: Vec3 = [1.4, 0.7, 1.0];
     const radius = 0.1;
     const anis = { ...base, scale, radius, box: { round: 0.35 } } as unknown as Primitive;
@@ -192,6 +196,29 @@ describe('sdPrimitive box', () => {
       [0, 0, radius * scale[2]],
     ];
     for (const p of points) expect(sdPrimitive(p, anis)).toBeCloseTo(0, 6);
+  });
+
+  it('applies minScale OFF the surface, where an on-surface point cannot see it', () => {
+    // Every other test in this block reads the surface (distance 0), and
+    // 0 * minScale === 0 for ANY minScale — a missing or misplaced
+    // `* minScale` in the box branch is invisible to an on-surface
+    // assertion. This point sits strictly outside the box, so the
+    // scale-correction factor shows up in the returned NUMBER itself.
+    //
+    // Derivation (a = b = [0,0,0], so the divided-frame closest point is the
+    // origin for any p): scale = [1.4, 0.7, 1.0], radius = 0.1, round = 0
+    // (so e = radius = 0.1, r = 0). At world p = [0.28, 0, 0]:
+    //   q  = p / scale = [0.2, 0, 0]           (divide by scale[0] = 1.4)
+    //   qx = |0.2| - e = 0.1;  qy = qz = 0 - e = -0.1
+    //   sdRoundBox = hypot(max(qx,0), 0, 0) + min(max(qx,qy,qz), 0) - r
+    //              = 0.1 + min(0.1, 0) - 0 = 0.1
+    //   minScale = min(1.4, 0.7, 1.0) = 0.7
+    //   base = sdRoundBox * minScale = 0.1 * 0.7 = 0.07
+    // Deleting `* minScale` from the box branch would yield 0.1 here, not
+    // 0.07 — that is exactly what this assertion is pinning.
+    const scale: Vec3 = [1.4, 0.7, 1.0];
+    const anis = { ...base, scale, radius: 0.1, box: { round: 0 } } as unknown as Primitive;
+    expect(sdPrimitive([0.28, 0, 0], anis)).toBeCloseTo(0.07, 6);
   });
 });
 
