@@ -6,8 +6,13 @@ kept in-repo so the brief is reviewable and versioned. Built from
 from that template on purpose.** A dispatched agent that improvises its own loop
 is how the last several characters drifted.
 
-**Depends on the `box` primitive** (`X1.box-prim`, tasks 1-8 of
+**Depends on the `box` primitive** (`X1.box-prim`,
 `2026-09-02-blob-hard-surface-box.md`). `base_branch` must carry it.
+
+`base_branch: main` is correct **only once `main` has been advanced** to include
+the box work — the branch was merged forward and `main` fast-forwards onto it.
+Advance `main` BEFORE triggering, or the dispatched agent gets a worktree with
+no `box` primitive and the leg cannot be authored as specified.
 
 ---
 
@@ -18,7 +23,7 @@ status: queued
 project: /Users/donny/Projects/blud
 model: zai/glm-5.3-flash
 branch: dispatch/minotaur-character
-base_branch: claude/enemy-characters-blobforge-b45932
+base_branch: main
 priority: 1
 max_runtime: 120m
 created: 2026-09-02
