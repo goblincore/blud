@@ -175,6 +175,17 @@ describe('box rejections', () => {
       .toThrow(/round= must be between 0 and 1/);
   });
 
+  it('accepts the boundary values 0 and 1', () => {
+    // 0 is a dead-sharp corner and 1 is exactly the capsule — both are
+    // documented as valid, and Task 3 pins the round=1 equivalence. Without
+    // this, changing `< 0 || > 1` to `<= 0 || >= 1` would pass every other
+    // test here and silently take away a documented boundary.
+    for (const round of [0, 1]) {
+      const body = compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05 box round=${round}\n`));
+      expect(body.prims[0]!.box).toEqual({ round });
+    }
+  });
+
   it('carries box onto the compiled prim', () => {
     const body = compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05 box round=0.2\n`));
     expect(body.prims[0]!.box).toEqual({ round: 0.2 });

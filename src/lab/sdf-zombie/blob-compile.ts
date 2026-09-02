@@ -274,6 +274,19 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
         'bend= needs two distinct ends to curve BETWEEN: use it on a bar, or '
         + 'give the blob a tip=(x,y,z) so its far end sits somewhere else',
         p.src.line, p.src.indent + 1);
+    // A shell thins a CLOSED base field to a sheet; sdShellWrap takes that
+    // base from the capsule path. Boxing the base is a shape nobody has asked
+    // for and the spec puts out of scope, so it fails rather than silently
+    // producing a boxed sheet nobody designed. This runs BEFORE the
+    // argument-level box checks below (same ordering as chamfer-on-carve/shell
+    // ahead of r2/bend-on-blob above): a `shell ... box bend=(...)` is a kind
+    // mismatch, not an argument mismatch, and `box` is the thing to drop —
+    // if the bend= check ran first it would tell the author to drop `bend`,
+    // which does not fix anything.
+    if (p.box && p.kind === 'shell')
+      throw new BlobError(
+        'box is not supported on a shell — a shell thins a closed capsule; '
+        + 'drop one of the two', p.src.line, p.src.indent + 1);
     // A box is swept along its segment as a rounded BOX, and sdRoundBox has
     // no bent, tapered or tip-displaced form. Each of these would otherwise
     // be silently dropped in the field while the emitter echoed it back, so
@@ -292,14 +305,6 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       throw new BlobError(
         'tip= is not supported on a box — its far end is the segment end; move '
         + 'the whole prim with offset=', p.src.line, p.src.indent + 1);
-    // A shell thins a CLOSED base field to a sheet; sdShellWrap takes that
-    // base from the capsule path. Boxing the base is a shape nobody has asked
-    // for and the spec puts out of scope, so it fails rather than silently
-    // producing a boxed sheet nobody designed.
-    if (p.box && p.kind === 'shell')
-      throw new BlobError(
-        'box is not supported on a shell — a shell thins a closed capsule; '
-        + 'drop one of the two', p.src.line, p.src.indent + 1);
     // Deliberately NOT a clamp: above 1 the inset extent goes negative and the
     // field inverts, and a silent clamp would hide a typo in a character file.
     if (p.box && (p.round < 0 || p.round > 1))
