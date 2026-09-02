@@ -1355,6 +1355,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   mottleColor: vec3<f32>,
   fatColor: vec3<f32>,
   boneColor: vec3<f32>,
+  organColor: vec3<f32>,
+  organAmp: f32,
   visceraColor: vec3<f32>,
   visceraDepth: f32,
   faceCfg: vec4<f32>,
@@ -1899,6 +1901,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     let boneStain = 1.0 - smoothstep(0.0, 0.012, tissueDepth - surfCfg3.z);
     albedo = mix(boneColor, deepColor * 0.8, clamp(boneStain, 0.0, 1.0) * 0.55);
   }
+  // Organs share the load and the gate; only the code differs (organs r3).
+  let isOrgan = hitMat > 4.5 && hitMat < 5.5;
+  if (isOrgan) {
+    // Pale, wet, and NOT stained toward the meat the way bone is: bone is a
+    // dry plate that needs blood to seat it, viscera is already wet and
+    // already the same family of colour as the flesh around it. organAmp 0
+    // falls through to the bone treatment, which is the off-state.
+    albedo = mix(albedo, organColor, organAmp);
+  }
 
   // Colour mottle. surfaceNoiseAmp above perturbs the NORMAL, which reads as
   // texture but never as colour — under a broad key the whole creature stays
@@ -2155,7 +2166,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // polished.
   let lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
   let wetWound = max(wm * lip, gore);
-  let wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone), 1.0, gloss);
+  let wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan), 1.0, gloss);
   let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound

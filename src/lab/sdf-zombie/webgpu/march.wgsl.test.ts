@@ -1403,6 +1403,22 @@ describe('bone material (wound pass r2)', () => {
   });
 });
 
+describe('organ shading (organs r3)', () => {
+  // The shading block lives inside marchBody — MARCH_BODY is the fragment
+  // source the plan calls SHADE_BODY.
+  const SHADE_BODY = MARCH_BODY;
+
+  it('reads the organ code from the SAME hitMat load as bone', () => {
+    // One texel load serves both; a second load would undo refinement 5.
+    expect((SHADE_BODY.match(/textureLoad\(data, vec2<i32>\(hitBest, \d+\), 0\)\.w/g) ?? []))
+      .toHaveLength(1);
+    expect(SHADE_BODY).toContain('isOrgan');
+  });
+  it('is amplitude-guarded by organAmp', () => {
+    expect(SHADE_BODY).toContain('organAmp');
+  });
+});
+
 describe('viscera ramp (entrails)', () => {
   // The shading block lives inside marchBody — MARCH_BODY is the fragment
   // source the plan calls SHADE_BODY.

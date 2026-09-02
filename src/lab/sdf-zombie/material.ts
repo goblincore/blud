@@ -76,6 +76,13 @@ export interface FleshMaterial {
   visceraDepth: number;
   /** 0 disables the viscera stop and shades bit-for-bit as before. */
   visceraAmp: number;
+  /** Cavity viscera, linear RGB. Pale salmon — MUST be lighter than
+   *  `deepColor`, or it vanishes into the muscle around it the way the
+   *  viscera tint did. */
+  organColor: Vec3;
+  /** 0 shades organ prims as plain bone, so the off-state is one knob
+   *  rather than a rebuild. */
+  organAmp: number;
 }
 
 export type FleshPresetName = 'henenlotter-latex' | 'wet-meat' | 'clay';
@@ -98,6 +105,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1,
     visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
+    organColor: [0.72, 0.32, 0.30], organAmp: 1,
   },
   // Rotten meat: darker, broader highlight, veiny, more scatter.
   'wet-meat': {
@@ -113,6 +121,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1,
     visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
+    organColor: [0.72, 0.32, 0.30], organAmp: 1,
   },
   // Claymation: matte, waxy, thumb-smushed.
   clay: {
@@ -128,6 +137,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1,
     visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
+    organColor: [0.72, 0.32, 0.30], organAmp: 1,
   },
 };
 

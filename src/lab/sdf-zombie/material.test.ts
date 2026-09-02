@@ -119,3 +119,25 @@ describe('viscera material (entrails)', () => {
     }
   });
 });
+
+describe('organ material (organs r3)', () => {
+  it('every preset carries an organ colour', () => {
+    for (const [name, p] of Object.entries(FLESH_PRESETS)) {
+      expect(p.organColor, name).toHaveLength(3);
+    }
+  });
+  it('organ is LIGHTER than deepColor — it must read as pale viscera', () => {
+    // The reference is a pale salmon intestine. Darker than the muscle around
+    // it and it disappears into the cavity, which is what the viscera TINT
+    // already failed at.
+    const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+    for (const [name, p] of Object.entries(FLESH_PRESETS)) {
+      expect(lum(p.organColor!), name).toBeGreaterThan(lum(p.deepColor));
+    }
+  });
+  it('ships organAmp on, and it is a 0..1 mix weight', () => {
+    for (const [name, p] of Object.entries(FLESH_PRESETS)) {
+      expect(p.organAmp, name).toBe(1);
+    }
+  });
+});

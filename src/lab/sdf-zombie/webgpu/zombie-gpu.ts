@@ -264,6 +264,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     /** Exposed bone (wound pass r2), mixed toward deepColor at the flesh
      *  junction. Matches the FleshMaterial preset default. */
     boneColor: uniform(new THREE.Color(0.71, 0.53, 0.35)),
+    /** Cavity organ prims (organs r3), pale salmon. Mixed over the shaded
+     *  albedo by organAmp; at amp 0 organ prims shade as plain bone. Matches
+     *  the FleshMaterial preset default. */
+    organColor: uniform(new THREE.Color(0.72, 0.32, 0.30)),
+    organAmp: uniform(1),
     /** Cavity interior for the viscera stop (entrails, linear RGB). Darker
      *  than deepColor so it separates by VALUE at combat range. Inert while
      *  surfCfg3.w (visceraAmp) is 0. Matches the FleshMaterial preset default. */
@@ -634,6 +639,8 @@ export function createMarchMaterial(
     mottleColor: u.mottleColor,
     fatColor: u.fatColor,
     boneColor: u.boneColor,
+    organColor: u.organColor,
+    organAmp: u.organAmp,
     visceraColor: u.visceraColor,
     visceraDepth: u.visceraDepth,
     faceCfg: u.faceCfg,
@@ -1158,6 +1165,8 @@ export function createZombieGpuView(
       u.mottleColor.value.setRGB(...m.mottleColor);
       u.fatColor.value.setRGB(...m.fatColor);
       u.boneColor.value.setRGB(...m.boneColor);
+      u.organColor.value.setRGB(...m.organColor);
+      u.organAmp.value = m.organAmp;
       u.visceraColor.value.setRGB(...m.visceraColor);
       u.visceraDepth.value = m.visceraDepth;
       u.marchCfg.value.z = m.silhouetteNoiseAmp;
@@ -1289,6 +1298,8 @@ export function createChunkGpuView(
     u.mottleColor.value.copy(template.mottleColor.value);
     u.fatColor.value.copy(template.fatColor.value);
     u.boneColor.value.copy(template.boneColor.value);
+    u.organColor.value.copy(template.organColor.value);
+    u.organAmp.value = template.organAmp.value;
     u.visceraColor.value.copy(template.visceraColor.value);
     u.visceraDepth.value = template.visceraDepth.value;
     u.marchCfg.value.copy(template.marchCfg.value);
