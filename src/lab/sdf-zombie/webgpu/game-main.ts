@@ -1212,6 +1212,13 @@ async function main() {
       },
     ],
   });
+  // Visible on boot, for the same reason the goo panel is (owner ask,
+  // 2026-09-02: the sliders could not be found). `woundPanel(true)` was the
+  // only way in, and a tuning panel nobody can find is a panel that does not
+  // exist — the owner played a whole session against defaults without knowing
+  // the knobs were there. `__sdfGame.woundPanel(false)` dismisses it, and
+  // capture scripts already guard the seam typeof-style.
+  woundPanel?.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
