@@ -23,7 +23,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
-  ROW_WOUND_CAP, APPLY_BONES,
+  ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { specialiseMapBody } from './specialise';
@@ -699,7 +699,7 @@ describe('data texture layout', () => {
       ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META,
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-      ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP,
+      ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -909,8 +909,9 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // ROW_PRIM_COLOR, bound groups added ROW_GROUP_BOUNDS/RANGE and
     // ROW_CLUSTER_GROUPS, and the shell fold added ROW_PRIM_SHELL/ROW_PRIM_CLIP
     // — each without displacing any existing row. The wound depth slab added
-    // ROW_WOUND_CAP (2026-08-27, pale-wound fix).
-    expect(DATA_ROWS).toBe(19);
+    // ROW_WOUND_CAP (2026-08-27, pale-wound fix). The entrails cavity flag
+    // added ROW_WOUND_FLAGS (2026-09-02).
+    expect(DATA_ROWS).toBe(20);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

@@ -4,7 +4,8 @@
 // the contract gets pinned explicitly.
 import { describe, expect, it } from 'vitest';
 import { writeWounds } from './zombie-gpu';
-import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP } from './march.wgsl';
+import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS } from './march.wgsl';
+import { MAX_PRIMS } from '../validate';
 
 const STRIDE = 64; // any stride; tests below read through the same layout math
 
@@ -70,5 +71,33 @@ describe('writeWounds — depth-slab cap row', () => {
     // per-frame clear.
     expectRow(read(t, ROW_WOUND, 0), [8, 8, 8, 0.1]);
     expectRow(read(t, ROW_WOUND_CAP, 0), [0, 0, 1, 0.02]);
+  });
+});
+
+describe('cavity flag (entrails)', () => {
+  it('writes 1 for a cavity wound and 0 otherwise, on the flags row', () => {
+    const texels = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+    writeWounds(texels, [[0, 1, 0], [0.2, 1, 0]], [0.1, 0.1], [0, 0], [0, 0],
+      undefined, undefined, undefined, undefined, [true, false]);
+    const base = ROW_WOUND_FLAGS * MAX_PRIMS * 4;
+    expect(texels[base]).toBe(1);
+    expect(texels[base + 4]).toBe(0);
+  });
+
+  it('defaults every wound to non-cavity when the argument is omitted', () => {
+    const texels = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+    writeWounds(texels, [[0, 1, 0]], [0.1], [0], [0]);
+    expect(texels[ROW_WOUND_FLAGS * MAX_PRIMS * 4]).toBe(0);
+  });
+
+  it('leaves the existing wound and meta rows untouched', () => {
+    // The flags row is ADDITIVE. If this fails, a row index collided.
+    const a = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+    const b = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+    writeWounds(a, [[0, 1, 0]], [0.1], [1], [0.5]);
+    writeWounds(b, [[0, 1, 0]], [0.1], [1], [0.5], undefined, undefined, undefined, undefined, [true]);
+    const wBase = ROW_WOUND * MAX_PRIMS * 4, mBase = ROW_WOUND_META * MAX_PRIMS * 4;
+    expect(Array.from(a.slice(wBase, wBase + 4))).toEqual(Array.from(b.slice(wBase, wBase + 4)));
+    expect(Array.from(a.slice(mBase, mBase + 4))).toEqual(Array.from(b.slice(mBase, mBase + 4)));
   });
 });

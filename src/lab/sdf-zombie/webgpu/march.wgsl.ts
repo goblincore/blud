@@ -76,7 +76,7 @@ import { MAX_PRIMS } from '../validate';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 19;
+export const DATA_ROWS = 20;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -91,6 +91,15 @@ export const ROW_WOUND_META = 6;
  *  with `-1e5` selects the sphere term exactly), which is what keeps the
  *  LAB (which uploads no caps) pixel-stable across this change. */
 export const ROW_WOUND_CAP = 18;
+/** Per-wound flags (entrails, 2026-09-02): x = 1 when this wound opened a
+ *  CAVITY, 0 otherwise; yzw spare.
+ *
+ *  A new row rather than a bit on wMeta because wMeta is full — x type,
+ *  y age, z splayScale, w offsetScale — and rather than a new code on
+ *  `type`, because the shader tests types with unbounded comparisons
+ *  (`isBurn = wMeta.x > 1.5`) that a fourth code would silently break. One
+ *  row costs MAX_PRIMS * 16 bytes = 2 KiB per body. */
+export const ROW_WOUND_FLAGS = 19;
 export const ROW_PRIM_QUAT = 7;
 export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;

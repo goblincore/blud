@@ -94,6 +94,13 @@ export interface Wound {
    * WOUND_CARVE_DEPTH_FRAC × (flesh measured behind the hit).
    */
   carveDepth?: number;
+  /**
+   * This wound opened a body CAVITY — set on the CPU at stamp time, where
+   * cluster membership is known and free. Drives the viscera ramp stop and
+   * gates whether a gut rope can spawn. Absent means false; limbs are never
+   * cavities (a thigh is genuinely a wall of meat).
+   */
+  cavity?: boolean;
 }
 
 /**

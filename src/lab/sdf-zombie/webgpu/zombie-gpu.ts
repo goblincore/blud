@@ -36,7 +36,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
 
 export interface ZombieGpuView {
@@ -846,6 +846,8 @@ export interface WriteWoundsLayout {
   metaRow?: number;
   /** Row index for the depth-slab cap texels (was ROW_WOUND_CAP). */
   capRow?: number;
+  /** Row index for the per-wound flag texels (was ROW_WOUND_FLAGS). */
+  flagsRow?: number;
   /** Data-texture column stride (was MAX_PRIMS). */
   stride?: number;
 }
@@ -860,6 +862,10 @@ export function writeWounds(
    *  (zeroed at allocation; applyWounds treats w <= 0 as uncapped), so the
    *  LAB (which never passes caps) renders bit-identically to pre-slab. */
   caps?: readonly ({ n: Vec3; depth: number } | null)[],
+  /** Per-wound cavity flags (ROW_WOUND_FLAGS: x = 1 = this wound opened a
+   *  body cavity). Omitted or absent per wound = 0 — non-cavity, the state
+   *  every pre-entrails wound had. Written for i < n only, like every row. */
+  cavities?: readonly boolean[],
 ): number {
   const stride = layout.stride ?? MAX_PRIMS;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -868,6 +874,7 @@ export function writeWounds(
   const wBase = woundRow * stride * 4;
   const mBase = metaRow * stride * 4;
   const capBase = (layout.capRow ?? ROW_WOUND_CAP) * stride * 4;
+  const flagBase = (layout.flagsRow ?? ROW_WOUND_FLAGS) * stride * 4;
   for (let i = 0; i < n; i++) {
     const p = worldPositions[i]!;
     texels[wBase + i * 4] = p[0];
@@ -885,6 +892,7 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
+    texels[flagBase + i * 4] = cavities?.[i] ? 1 : 0;
   }
   return n;
 }
