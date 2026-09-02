@@ -18,6 +18,11 @@ export const W_GROOVE = 3;
  *  ever visible where a carve has eaten down to it. See
  *  docs/superpowers/specs/2026-09-01-wound-pass-r2-design.md §1. */
 export const W_BONE = 4;
+/** Organ: soft viscera inside the cavity. Rides the SAME array and the same
+ *  nearWound gate as bone — the array is "things inside the flesh", not bones
+ *  specifically — and differs only in material, so shading can tell a rib from
+ *  a loop of gut by an identity read on this code. */
+export const W_ORGAN = 5;
 
 export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
@@ -218,6 +223,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const w = p.dead ? W_DEAD
       : p.op === 'groove' ? W_GROOVE
       : p.op === 'bone' ? W_BONE
+      : p.op === 'organ' ? W_ORGAN
       : isCarve ? W_CARVE : W_ADD;
     writePrim(p, i, w, (rest ?? body).prims[i]);
     // Cull margin is a distance: always the magnitude, never the sign.
@@ -227,15 +233,21 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   // BONE rows (wound pass r2): written AFTER the flesh, at indices
   // [prims.length, prims.length + boneCount), never inside a cluster or group
   // range — foldGroup and applyCarves walk those spans only, so neither can
-  // see a bone even by accident. The one line that makes severing work: a
-  // bone whose cluster is not alive is SKIPPED, so a severed limb's bones go
-  // with it. Rest rows index the rest body's bonePrims positionally — applyRig
-  // poses bones without reordering, the same contract as prims.
+  // see a bone even by accident. Organs (organs r3) share this range: the
+  // array is "things inside the flesh", and only primScale.w tells them
+  // apart. The one line that makes severing work: a bone whose cluster is
+  // not alive is SKIPPED, so a severed limb's bones go with it. A dead row
+  // is WRITTEN as W_DEAD — same ladder treatment the flesh gets — so the
+  // encoding never depends on a skip (nothing sets dead on a bonePrim today;
+  // severing kills whole clusters). Rest rows index the rest body's
+  // bonePrims positionally — applyRig poses bones without reordering, the
+  // same contract as prims.
   const restBones = (rest ?? body).bonePrims ?? [];
   let boneCount = 0;
   (body.bonePrims ?? []).forEach((b, j) => {
-    if (b.dead || !body.clusters[b.cluster]?.alive) return;
-    writePrim(b, body.prims.length + boneCount, W_BONE, restBones[j]);
+    if (!body.clusters[b.cluster]?.alive) return;
+    writePrim(b, body.prims.length + boneCount,
+      b.dead ? W_DEAD : b.op === 'organ' ? W_ORGAN : W_BONE, restBones[j]);
     boneCount++;
   });
 

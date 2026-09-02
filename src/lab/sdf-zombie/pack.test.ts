@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/pack.test.ts
 import { describe, it, expect } from 'vitest';
-import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, W_ADD, W_BONE, W_DEAD } from './pack';
+import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, W_ADD, W_BONE, W_DEAD, W_ORGAN } from './pack';
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
@@ -323,5 +323,38 @@ describe('bone rows (wound pass r2)', () => {
     // And the flesh rows are untouched — severing flags a cluster, it does
     // not touch the prim array, and bones must not change that.
     expect(packedSevered.primCount).toBe(posed.prims.length);
+  });
+});
+
+describe('organ prims (organs r3)', () => {
+  const mk = (op: 'bone' | 'organ'): Primitive => ({
+    a: [0, 0, 0], b: [0, 0.3, 0], radius: 0.03,
+    scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, op,
+  });
+
+  it('encodes op organ as primScale.w = 5', () => {
+    const packed = packBody({
+      prims: [], bonePrims: [mk('organ')],
+      clusters: [{ limb: 'torso', start: 0, count: 0, center: [0, 0.15, 0], radius: 0.2, alive: true }],
+    } as unknown as BuiltBody);
+    expect(packed.primScale[3]).toBe(W_ORGAN);
+  });
+
+  it('packs organs and bones into the same range, distinguished only by w', () => {
+    const packed = packBody({
+      prims: [], bonePrims: [mk('bone'), mk('organ')],
+      clusters: [{ limb: 'torso', start: 0, count: 0, center: [0, 0.15, 0], radius: 0.2, alive: true }],
+    } as unknown as BuiltBody);
+    expect(packed.boneCount).toBe(2);
+    expect(packed.primScale[3]).toBe(W_BONE);
+    expect(packed.primScale[PRIM_STRIDE + 3]).toBe(W_ORGAN);
+  });
+
+  it('dead still outranks organ', () => {
+    const packed = packBody({
+      prims: [], bonePrims: [{ ...mk('organ'), dead: true }],
+      clusters: [{ limb: 'torso', start: 0, count: 0, center: [0, 0.15, 0], radius: 0.2, alive: true }],
+    } as unknown as BuiltBody);
+    expect(packed.primScale[3]).toBe(W_DEAD);
   });
 });

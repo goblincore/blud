@@ -412,7 +412,8 @@ export function sdBody(p: Vec3, body: Body): number {
   for (const c of body.clusters) {
     if (!c.alive) continue;
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub' || prim.op === 'groove' || prim.op === 'bone' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.op === 'bone'
+        || prim.op === 'organ' || prim.dead) continue;
       d = prim.blendProfile === 'chamfer'
         ? sminChamfer(d, sdPrimitive(p, prim), prim.blendK)
         : smin(d, sdPrimitive(p, prim), prim.blendK);
@@ -449,7 +450,8 @@ export function nearestPrim(p: Vec3, body: Body): number {
     if (!c.alive) continue;
     for (let i = c.start; i < c.start + c.count; i++) {
       const prim = body.prims[i]!;
-      if (prim.op === 'sub' || prim.op === 'groove' || prim.op === 'bone' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'groove' || prim.op === 'bone'
+        || prim.op === 'organ' || prim.dead) continue;
       const d = sdPrimitive(p, prim);
       if (d < bestD) { bestD = d; best = i; }
     }
@@ -479,7 +481,8 @@ export const BONE_CONTAINMENT_MARGIN = 0.004;
  * Reads `body.bonePrims` — the dedicated bone array (wound pass r2) — NOT
  * `body.prims`. Bone no longer lives among the flesh prims; a prim with
  * `op: 'bone'` in `prims` folds nowhere (additive skip, carve skip) and is
- * inert, so there is nothing left to contain there.
+ * inert, so there is nothing left to contain there. Organs (organs r3) ride
+ * the same array under the same gate, so they are contained identically.
  *
  * The sampler is shape-aware, because sdPrimitive DIVIDES the sample point by
  * prim.scale: a prim with scale.x = 1.45 reaches 1.45 x radius in x, so
@@ -493,11 +496,11 @@ export const BONE_CONTAINMENT_MARGIN = 0.004;
 export function checkBoneContainment(body: Body): string[] {
   const errs: string[] = [];
   (body.bonePrims ?? []).forEach((prim, i) => {
-    if (prim.op !== 'bone' || prim.dead) return;
+    if ((prim.op !== 'bone' && prim.op !== 'organ') || prim.dead) return;
     const first = boneBreach(body, prim);
     if (first !== null) {
       errs.push(
-        `bone prim ${i} (${prim.limb}) breaches the flesh surface at ` +
+        `bone/organ prim ${i} (${prim.limb}) breaches the flesh surface at ` +
         `[${first.map(v => v.toFixed(3)).join(', ')}] — bone must sit at least ` +
         `${BONE_CONTAINMENT_MARGIN}m inside the flesh, or the shader's ` +
         `nearWound gate stops being an identity and the bone pops`);
@@ -598,7 +601,7 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
   // detach the head from the neck is reported.
   for (const c of body.clusters)
     for (const prim of body.prims.slice(c.start, c.start + c.count)) {
-      if (prim.op === 'sub' || prim.op === 'bone' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'bone' || prim.op === 'organ' || prim.dead) continue;
       const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
       // A bent prim's surface swings out to its control point, not just its
       // chord — sample the ctrl too or every strongly-bent horn reports as
@@ -725,7 +728,7 @@ export function restSpacePoint(p: Vec3, body: Body, rest?: Body): Vec3 {
     if (!c.alive) continue;
     for (let i = c.start; i < c.start + c.count; i++) {
       const prim = body.prims[i]!;
-      if (prim.op === 'sub' || prim.op === 'bone' || prim.dead) continue;
+      if (prim.op === 'sub' || prim.op === 'bone' || prim.op === 'organ' || prim.dead) continue;
       const sd = sdPrimitive(p, prim);
       if (sd < best) { best = sd; bestIdx = i; }
     }
@@ -776,7 +779,7 @@ export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   let best: Primitive | null = null;
   let bestDepth = -Infinity;
   for (const p of body.prims.slice(c.start, c.start + c.count)) {
-    if (p.op === 'sub' || p.op === 'bone' || p.dead) continue;
+    if (p.op === 'sub' || p.op === 'bone' || p.op === 'organ' || p.dead) continue;
     // A SHELL is a thin film riding a base's surface — its axis midpoint is
     // EMPTY, not the cluster's structural mass, so it must never win the core
     // selection (a collar base ellipsoid is often the fattest prim in the

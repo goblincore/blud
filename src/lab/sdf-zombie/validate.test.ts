@@ -426,3 +426,36 @@ describe('bone containment (wound pass r2)', () => {
     expect(checkBoneContainment(body).length).toBeGreaterThan(0);
   });
 });
+
+describe('organ prims are invisible to the CPU field (organs r3)', () => {
+  const flesh: Primitive = {
+    a: [0, 0, 0], b: [0, 0.4, 0], radius: 0.09,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'torso', cluster: 0,
+  };
+  const organ: Primitive = { ...flesh, radius: 0.085, op: 'organ' };
+  const withOrgan = {
+    prims: [flesh], bonePrims: [organ],
+    clusters: [{ limb: 'torso', start: 0, count: 1, alive: true }],
+  } as unknown as Body;
+  const without = {
+    prims: [flesh], bonePrims: [],
+    clusters: [{ limb: 'torso', start: 0, count: 1, alive: true }],
+  } as unknown as Body;
+
+  it('sdBody is bit-identical with and without organs', () => {
+    for (const p of [[0, 0.2, 0], [0.05, 0.2, 0], [0.3, 0.2, 0]] as Vec3[]) {
+      expect(sdBody(p, withOrgan)).toBe(sdBody(p, without));
+    }
+  });
+
+  it('containment covers organs, not just bones', () => {
+    // Organs must sit inside flesh for exactly the same reason bones do: the
+    // shader's nearWound gate is only an identity while nothing in this array
+    // protrudes. A breaching organ pops as the gate flips.
+    const breaching = {
+      prims: [flesh], bonePrims: [{ ...flesh, radius: 0.12, op: 'organ' as const }],
+      clusters: [{ limb: 'torso', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    expect(checkBoneContainment(breaching).length).toBeGreaterThan(0);
+  });
+});

@@ -105,9 +105,10 @@ export interface PrimDef {
    * see applyCarves in march.glsl.ts for why not per-cluster.
    * 'bone' is a second material strictly INSIDE the flesh: skipped by both the
    * additive fold and the carve pass, folded as a hard min after wounds are
-   * carved, so it appears only where a wound has reached it.
+   * carved, so it appears only where a wound has reached it. 'organ' is soft
+   * viscera on the same array and the same terms — see W_ORGAN in pack.ts.
    */
-  op?: 'add' | 'sub' | 'groove' | 'bone';
+  op?: 'add' | 'sub' | 'groove' | 'bone' | 'organ';
   /**
    * Displacement from the bone-relative placement, in world axes. The body is
    * authored in a rest pose with no rotations, so world and bone axes coincide
@@ -239,9 +240,10 @@ export interface Primitive {
    * test fixtures that build Primitive literals keep compiling.
    * 'bone' is a second material strictly INSIDE the flesh: skipped by both the
    * additive fold and the carve pass, folded as a hard min after wounds are
-   * carved, so it appears only where a wound has reached it.
+   * carved, so it appears only where a wound has reached it. 'organ' is soft
+   * viscera on the same array and the same terms — see W_ORGAN in pack.ts.
    */
-  op?: 'add' | 'sub' | 'groove' | 'bone';
+  op?: 'add' | 'sub' | 'groove' | 'bone' | 'organ';
   /** Groove depth and width, in metres. Only read when `op` is 'groove'. */
   grooveDepth?: number;
   grooveWidth?: number;

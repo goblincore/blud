@@ -29,7 +29,7 @@ type BoneSource = {
   radiusB?: number;
   scale: Vec3;
   blendK: number;
-  op?: 'add' | 'sub' | 'groove' | 'bone';
+  op?: 'add' | 'sub' | 'groove' | 'bone' | 'organ';
   shell?: ShellParams;
   core?: boolean;
   color?: Vec3;
@@ -54,14 +54,14 @@ export function deriveBones<T extends BoneSource>(prims: T[], ratio: number): T[
   // bone is measured against.
   const fattest = new Map<string, number>();
   for (const p of prims) {
-    if (p.op === 'sub' || p.op === 'groove' || p.op === 'bone') continue;
+    if (p.op === 'sub' || p.op === 'groove' || p.op === 'bone' || p.op === 'organ') continue;
     if (!p.bone) continue;
     fattest.set(p.bone, Math.max(fattest.get(p.bone) ?? 0, p.radius));
   }
 
   const out: T[] = [];
   for (const p of prims) {
-    if (p.op === 'sub' || p.op === 'groove' || p.op === 'bone') continue;
+    if (p.op === 'sub' || p.op === 'groove' || p.op === 'bone' || p.op === 'organ') continue;
     if (!p.bone) continue;
     // Shell prims are cloth, not mass — a coat does not have a bone in it.
     if (p.shell) continue;
