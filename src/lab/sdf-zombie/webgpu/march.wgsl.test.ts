@@ -422,7 +422,9 @@ describe('ported features reach the entry point', () => {
     // rather than its shape. Revive it only once the pre-pass writes a
     // distance that survives syntheticSphereCheck at range; the full
     // measurement is in march.wgsl.ts above tMax.
-    expect(MARCH_BODY).toContain('let tMax = length(worldPos - camPos);');
+    // tMaxBox is the raw proxy-box far plane; the hull-exit fold (perfCfg.x)
+    // never references occT, so an occluder bound cannot sneak back in here.
+    expect(MARCH_BODY).toContain('let tMaxBox = length(worldPos - camPos);');
     expect(MARCH_BODY).not.toContain('occT + woundCfg2.z');
     // occT stays PLUMBED — debug mode 3 heats it, and reviving the bound
     // should not need the parameter threaded back through.
@@ -442,11 +444,16 @@ describe('ported features reach the entry point', () => {
     // type-checks and takes the 0 / 1e9 identities.
     expect(MARCH_BODY).toContain('shellIn: f32');
     expect(MARCH_BODY).toContain('shellOut: f32');
-    // shellOut must NOT bound tMax. X1.15's clamped final sample would then
-    // land on the hull — outside the flesh — and the AA epsilon accepts it,
-    // which renders as a halo on every silhouette and ghost outlines at
-    // distance. Regression guard for the 2026-08-31 visual gate.
-    expect(MARCH_BODY).not.toContain('occT + woundCfg2.z), shellOut');
+    // The hull exit bounds tMax ONLY on the un-relaxed path and only behind
+    // perfCfg.x. The relaxed tracer takes a clamped final sample at tMax;
+    // clamping to the hull put that sample on the hull and rendered a halo
+    // (2026-08-31 visual gate), so above omega 1.0 the proxy-box far plane
+    // stays the bound regardless of the seam.
+    expect(MARCH_BODY).toContain('perfCfg: vec4<f32>');
+    expect(MARCH_BODY.indexOf('shellOut: f32')).toBeLessThan(MARCH_BODY.indexOf('perfCfg: vec4<f32>'));
+    expect(MARCH_BODY).toContain('let tMax = select(tMaxBox, min(tMaxBox, shellOut), perfCfg.x > 0.5 && !relax);');
+    expect(MARCH_BODY.indexOf('let relax = woundCfg2.y > 1.0;'))
+      .toBeLessThan(MARCH_BODY.indexOf('let tMax = select('));
   });
 
   it('stops the cone one shell amp early (X1.21.2 pale tile wedges)', () => {

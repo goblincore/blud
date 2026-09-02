@@ -536,6 +536,10 @@ async function main() {
    */
   const GAME_RELAX = 1.0;
 
+  /** Perf round 2, task 1: the hull exit bounds tMax on the un-relaxed march
+   *  (perfCfg.x). Exact; `__sdfGame.setHullExitBound()` flips it for A/B. */
+  const GAME_HULL_EXIT_BOUND = 1;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -616,6 +620,8 @@ async function main() {
       // Relaxation, explicit rather than inherited from the uniform default —
       // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
       view.uniforms.woundCfg2.value.y = GAME_RELAX;
+      // Hull-exit tMax bound (perf round 2 task 1) — see GAME_HULL_EXIT_BOUND.
+      view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -2038,6 +2044,8 @@ async function main() {
       for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
     },
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
+    setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
+    get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },

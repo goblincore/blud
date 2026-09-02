@@ -363,6 +363,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      */
     aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
+    /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
+     *  early-out, zw spare. All zero = the pre-plan shader, which is what the
+     *  lab binds. */
+    perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /**
  * PER-TILE PRIMITIVE LISTS (perf task 5, now compute-binned). x enabled,
  * y tiles-per-row, z tile px size, w tile rows. INERT at x=0: MARCH_BODY
@@ -666,6 +670,10 @@ export function createMarchMaterial(
           disabledValue: float(1e9),
         })
       : float(1e9),
+    // Perf round 2 seams. Bound POSITIONALLY last, matching the WGSL
+    // signature (see the ORDER MATTERS note above — a slot swap here
+    // silently hands the shader the wrong uniform).
+    perfCfg: u.perfCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1239,6 +1247,7 @@ export function createChunkGpuView(
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);
     u.woundShadowCfg.value.copy(template.woundShadowCfg.value);
+    u.perfCfg.value.copy(template.perfCfg.value);
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
     u.faceCfg3.value.copy(template.faceCfg3.value);
