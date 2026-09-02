@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
 import { buildBody } from './build-body';
-import { depthFromBody, maskFromBody, maskFromTriangles, normalise, compareSilhouette } from './silhouette';
+import { depthFromBody, maskFromBody, maskFromTriangles, normalise, compareSilhouette, type Mask } from './silhouette';
 import { diffDepth, resampleDepth } from './depth-diff';
 
 // Same builder idiom as silhouette.test.ts's describe blocks — local rather
@@ -89,6 +89,20 @@ describe('diffDepth', () => {
     expect(countG(na)).toBeGreaterThan(countG(nb));
     expect(rep.samples).toBeLessThan(countG(na));
 
+    // Per band, the samples must be THAT band's rows of the same overlap —
+    // counted here from the masks, band for band. This pins the row->band
+    // mapping: a one-row shift moves hundreds of cells between neighbouring
+    // bands and this catches it exactly, where the totals above would not
+    // notice at all.
+    for (const b of rep.bands) {
+      const y0 = Math.floor(b.y0 * 128), y1 = Math.floor(b.y1 * 128);
+      let expected = 0;
+      for (let y = y0; y < y1; y++)
+        for (let x = 0; x < 128; x++)
+          if (na.bits[y * 128 + x] && nb.bits[y * 128 + x]) expected++;
+      expect(b.samples, `band ${b.y0}-${b.y1}`).toBe(expected);
+    }
+
     // The shared disc is the SAME geometry seen twice, so the depth error
     // over the overlap is alignment jitter only: the lump's cluster sphere
     // perturbs A's march phase at the rim, its subject bounds shift by a
@@ -139,6 +153,10 @@ describe('diffDepth', () => {
     // slab does not — flipping this sign in the implementation must fail
     // this line.
     expect(rep.signedErr).toBeGreaterThan(0.02);
+    // Bands come back worst-first by meanErr — the report IS a to-do list,
+    // so the order is part of the contract, not a courtesy.
+    for (let i = 1; i < rep.bands.length; i++)
+      expect(rep.bands[i - 1]!.meanErr).toBeGreaterThanOrEqual(rep.bands[i]!.meanErr);
   });
 
   it('names the .blob line that owns each band', () => {
@@ -186,5 +204,29 @@ describe('resampleDepth', () => {
       if (out.mask.bits[i]) expect(Number.isFinite(out.depth[i]!)).toBe(true);
       else expect(Number.isNaN(out.depth[i]!)).toBe(true);
     }
+  });
+
+  it('averages only the FINITE sources in a box, and NaNs unoccupied output', () => {
+    // A kit-supplied source pixel is occupied with NaN depth (no field
+    // behind it). The box mean must skip it rather than read it as a number,
+    // and a background-majority box must not leak the occupied corners'
+    // depths into pixels the mask calls background — the invariant both
+    // source rasters uphold.
+    const mask: Mask = { w: 2, h: 2, bits: Uint8Array.from([1, 1, 0, 1]) };
+    const depth = Float32Array.from([1, NaN, NaN, 3]);
+    const out = resampleDepth(mask, depth, 1, 1);
+    // The single output box sees depths {1, 3} — the NaN contributes
+    // nothing to either the sum or the count — so the mean is 2, not NaN
+    // and not (1 + NaN + 3) / 3.
+    expect(out.mask.bits[0]).toBe(1);
+    expect(out.depth[0]).toBe(2);
+    // And an output box where occupancy is the minority (two corners of a
+    // 3x3 subject box) must come out bit-0 with NO depth at all — the
+    // occupied corners' depths must not leak into a background pixel.
+    const bg: Mask = { w: 3, h: 3, bits: Uint8Array.from([1, 0, 0, 0, 0, 0, 0, 0, 1]) };
+    const bgDepth = Float32Array.from([1, NaN, NaN, NaN, NaN, NaN, NaN, NaN, 3]);
+    const out2 = resampleDepth(bg, bgDepth, 1, 1);
+    expect(out2.mask.bits[0]).toBe(0);
+    expect(Number.isNaN(out2.depth[0]!)).toBe(true);
   });
 });

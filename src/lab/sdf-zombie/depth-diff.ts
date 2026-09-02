@@ -188,6 +188,14 @@ export function diffDepth(
     const bi = Math.min(bands - 1, Math.floor((y / g) * bands));
     for (let x = 0; x < g; x++) {
       const i = y * g + x;
+      // ONE rule, written as two lines: skip every pixel that has no reading
+      // on either side. The mask line is the contract (silhouette differences
+      // belong to blob:measure); the finite line is what enforces it for kit
+      // pixels (occupied, NaN depth — no field behind them). For every input
+      // the current API can construct, either line alone suffices — NaN
+      // wherever a mask is 0 is pinned on both rasters and on resampleDepth —
+      // and the mutation matrix confirms each line's removal is caught only
+      // by removing BOTH. They stay as the contract and its enforcement.
       if (!an.mask.bits[i] || !rn.mask.bits[i]) continue;
       const ad = an.depth[i]!, rd = rn.depth[i]!;
       if (!Number.isFinite(ad) || !Number.isFinite(rd)) continue;
