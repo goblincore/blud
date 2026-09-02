@@ -1813,11 +1813,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // WOUND_MASK is the record.
   let tissueDepth = max(0.0, -hitField.w) * surfCfg3.x;
   // Viscera (entrails): low-frequency fbm over the rest-space anchor lumps
-  // the cavity colour so it reads as organs and not as noise. Amplitude-
-  // guarded by visceraAmp (surfCfg3.w) folding into the cavity gate below —
-  // 0 leaves the ramp shading bit-for-bit as before entrails.
-  let lump = fbm(anchor * 2.5) * 0.5 + 0.5;
-  let viscera = visceraColor * mix(0.75, 1.25, lump);
+  // the cavity colour so it reads as organs and not as noise. Lumped only
+  // where it can be SEEN: inside a cavity wound, with the stop enabled. The
+  // amplitude guard has to wrap the fbm, not just its result — guarding the
+  // result leaves the cost on every pixel, which is the mistake that cost
+  // the torn-fibre pass its life. 0 leaves the ramp shading bit-for-bit as
+  // before entrails.
+  var viscera = visceraColor;
+  if (surfCfg3.w > 0.0 && wmCav > 0.0) {
+    let lump = fbm(anchor * 2.5) * 0.5 + 0.5;
+    viscera = visceraColor * mix(0.75, 1.25, lump);
+  }
   let tissue = select(deepColor,
     tissueRamp(tissueDepth, baseColor, fatColor, deepColor, surfCfg3.y, surfCfg3.z,
       wmCav * surfCfg3.w, viscera, visceraDepth),

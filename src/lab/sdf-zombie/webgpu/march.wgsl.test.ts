@@ -1402,6 +1402,11 @@ describe('viscera ramp (entrails)', () => {
     expect(SHADE_BODY).toContain('visceraAmp');
   });
 
+  it('does not pay for the viscera fbm outside a cavity wound', () => {
+    // Guarding the RESULT is not guarding the COST.
+    expect(SHADE_BODY).toMatch(/surfCfg3\.w > 0\.0 && wmCav > 0\.0[\s\S]{0,120}fbm\(anchor/);
+  });
+
   it('still composes inside the single radial mask', () => {
     // The 2026-08-23 halo came from splitting one mask into three. Viscera
     // must ride the SAME mask — one woundMask call, one mix against wm.
