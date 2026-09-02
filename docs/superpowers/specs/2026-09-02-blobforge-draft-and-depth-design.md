@@ -39,7 +39,8 @@ anywhere in the toolchain. **Tool A** removes that.
 
 Emits a first-draft `.blob` to stdout, built from a skinned reference. The
 author then runs the normal `blob:rings` loop from a body that is already
-roughly right instead of from nothing.
+roughly right instead of from nothing. The target is **a body you refine, not
+a scaffold you rebuild** — see the budget section for how much it emits.
 
 Reference resolution matches `blob:rings` exactly: `--glb`, else
 `docs/dev-notes/refs/<name>-mesh/<name>.glb`, else the first `.glb` in that
@@ -59,14 +60,32 @@ axis of the cloud). `len` is that line's extent, not the joint-to-joint
 distance. The rig is still used to *group* vertices — that part is exact by
 construction, being skin weights — but never to place geometry.
 
+### One prim per bone would GENERATE the bug Tool B detects
+
+The first draft of this spec emitted one `bar` per bone. That is wrong, and
+worth recording as the reason the scope grew: **one prim per bone is a smooth
+tube**, which is precisely the featureless-blob failure that got the minotaur
+rejected. A draft built that way would reliably manufacture the defect the
+other half of this spec exists to catch.
+
+So the draft breaks each bone's cloud at **radial-profile inflections** — where
+`r(t)` changes slope materially — and emits a prim per band. A torso gets chest
+and waist masses; a thigh gets its bulge. That is the single highest-value
+thing this tool does.
+
 ### What each number comes from
 
 | field | source |
 | --- | --- |
 | `len` | extent of the cloud's medial line |
-| `r` | ring MEDIAN of the cloud's radial distance from that line |
-| `wide`/`deep` | the cos-2θ term of those radial distances |
+| bands | inflections in the cloud's `r(t)` profile |
+| `r` | ring MEDIAN of the cloud's radial distance, per band |
+| `wide`/`deep` | the cos-2θ term of those radial distances, per band |
 | `dir`/`pitch`/`tilt` | inverting `dirVector` on the medial line's direction |
+| `color=` | dominant texel of the band's vertices |
+| `palette` | mean body colour, and a mottle from its spread |
+| `stance` | knee position against the hip-to-ankle line |
+| `mirror` blocks | the rig's own bilateral pairs |
 
 A median rather than a mean for `r` deliberately: the extremes are where blades
 and spurs live, and a mean lets one spike move the whole ring. The 2θ term is
@@ -94,22 +113,65 @@ Two things an implementer would otherwise have to guess, pinned here:
 the house rule ("every number has a source") by construction rather than by an
 author's discipline.
 
-### What it will NOT emit, and why that is stated in the output
+### Colour, because a colourless draft is the zombie in a different shape
 
-- **`side`/`fwd` bones get a bare `dir=` and NO pitch/tilt.** `dirVector`'s
-  pitch is a no-op when the base has no vertical component — `side` has
-  `y0 = 0`, so `sign(y0) = 0` (see `blob-compile.ts`). Clavicles are commonly
-  `dir=side`. Emitting a derived angle there would be a confident wrong
-  number; the draft emits the direction and a comment saying it is not
-  derivable.
-- **No head, no hands.** The reference rig lumps the whole hand into one
-  joint, and head prims are offset-positioned features plus a `face` block.
-  `blob:rings` cannot see either, and neither can this.
-- **No paint, no palette.** Colour is measured off the mesh's texture, which
-  is a different pass.
+The skill is blunt that the `palette` block is the biggest lever there is, and
+that the first goblin still read as "the zombie with different limbs" after its
+skeleton had been rebuilt end to end. The reference carries a texture and the
+machinery to read it already exists — `blob-face-bake.py` decodes the atlas and
+samples texels, and the mouse's shades, shoes, tee and shorts were all authored
+by classifying mesh vertices by texel.
 
-The draft's header comment says all three out loud, so nobody mistakes a
-scaffold for a character.
+So the draft emits `color=` per band from its vertices' dominant texel, and a
+`palette` block from the body's mean colour with `mottleAmp`/`mottleColor` off
+its spread. Where a band's texels are strongly bimodal — a paint boundary
+falling mid-band — it splits the band at that boundary, because **a paint
+boundary is a primitive boundary** in this format.
+
+### Head, hands, stance, mirrors
+
+- **Head:** a cranium mass sized from the head cloud, a `face` block with
+  `headRadius`/`headDepth` derived from it, and the decal wiring
+  (`sheet` / `image <name>-face.png` / `decal 1`) pre-written with a
+  `# run: npm run blob:face-bake -- <name>` reminder. The draft does not paint
+  a face; three dispatches proved agents cannot.
+- **Hands:** one mass per hand joint, sized from its cloud. **No fingers** —
+  the reference rig lumps the whole hand into one joint, so they are not
+  derivable, and a sized mitten is a better starting point than a missing hand.
+- **`stance`:** derived from the knee's position against the hip-to-ankle line.
+  Omitting it means "not checked", never "humanoid", so a derived value is
+  strictly better than silence.
+- **`mirror` blocks** for the rig's bilateral pairs. Where a `.l`/`.r` pair's
+  clouds differ materially, the draft does NOT mirror them — it emits both
+  sides and flags that `side=` may be wanted. That is exactly the minotaur's
+  one-sided prosthetic, and the case that motivated `side=l|r` in the first
+  place.
+
+### The primitive budget — a real ceiling, and a silent one
+
+`MAX_PRIMS` is 128 per body and `MAX_CLUSTERS` is 6, both of which
+`validateBody` errors on. **`MAX_CLUSTER_PRIMS` is 64 and is the dangerous
+one:** `march.wgsl.ts` folds a cluster with a fixed `for (var i = 0; i < 64)`,
+so a cluster carrying more silently stops folding and the surface loses
+geometry with no error at the shader level. It went unchecked until raising
+`MAX_PRIMS` from 48 to 128 made it reachable.
+
+Measured across every shipped character on 2026-09-02:
+
+| | prims / 128 | worst cluster / 64 |
+| --- | --- | --- |
+| zombie | 23 | 5 |
+| goblin, clown | 41-42 | 10-11 |
+| schoolgirl, dragon, bonewalker | 57-59 | 12-16 |
+| mouse (the richest) | 67 | 16 |
+| cyclops | 48 | 27 |
+
+Nothing shipped uses half of either limit, so a richer draft fits. But the
+draft must **budget explicitly rather than emit and let `validateBody` fail**:
+target roughly 60-80 prims total with a per-cluster ceiling of 40, leaving the
+author headroom to add detail during refinement rather than forcing them to
+delete before they can add. The draft prints its budget usage in the header
+comment, so an author can see how much room is left.
 
 ## Tool B — `blob:depth <name>`
 
@@ -150,3 +212,8 @@ synthetic one.
 - **`--apply`.** Deferred. Suggestions are still applied by a person.
 - **Fix the prosthetic-reads-as-a-gravestone class.** That is `daylightOf`,
   which exists. The fix is a brief that requires it, not a tool.
+- **Fingers.** The reference rig lumps the whole hand into one joint, so they
+  are not derivable from it at all. Hands get a sized mass and the author adds
+  fingers by hand, as every character has done.
+- **`bend=`.** A straight medial line cannot fit a curve. The draft reports the
+  cloud's residual about that line so the author knows which bones want one.
