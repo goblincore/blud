@@ -22,6 +22,14 @@ export const GUT_TUNING = {
   /** Below this total movement per step a detached chain is considered at
    *  rest and stops being stepped at all. */
   settleEps: 1e-4,
+  /** Skip-one target as a fraction of two segments. 1.0 is a straight rope;
+   *  lower is a tighter coil. This is the graceful-failure lever — if the
+   *  spring reads comedic rather than visceral, 1.0 is the old behaviour. */
+  coilTightness: 0.55,
+  /** Skip-one correction weight relative to the segment constraints, 0..1.
+   *  Kept well under 1 so segments still win and the tube cannot crush
+   *  itself — the two families pull against each other by design. */
+  springiness: 0.35,
 };
 
 export interface GutNode { pos: Vec3; prev: Vec3 }
@@ -29,11 +37,15 @@ export interface GutChain {
   nodes: GutNode[];
   /** Segment rest length — restLength / (nodes - 1). */
   seg: number;
+  coilTightness: number;
+  springiness: number;
   attached: boolean;
   settled: boolean;
 }
 
-export function makeGutChain(anchor: Vec3): GutChain {
+export function makeGutChain(
+  anchor: Vec3, opts: { coilTightness?: number; springiness?: number } = {},
+): GutChain {
   const nodes: GutNode[] = [];
   for (let i = 0; i < GUT_TUNING.nodes; i++) {
     // pos: every node at the anchor (the wound is a point). prev: offset
@@ -42,15 +54,21 @@ export function makeGutChain(anchor: Vec3): GutChain {
     // degenerate start pushes apart along an arbitrary axis and the chain
     // locks into a permanent accordion fold (span ~1.4 seg). Seeding prev is
     // also the right look: a gut emerges from a wound already unspooling.
+    // A helix needs a handedness: the offsets also spiral around the axis so
+    // a symmetric chain has a reason to prefer one plane and coil instead of
+    // folding flat.
+    const ang = i * 1.1;
     nodes.push({
       pos: [...anchor] as Vec3,
-      prev: [anchor[0], anchor[1] + i * GUT_TUNING.restLength / (GUT_TUNING.nodes - 1),
-        anchor[2]] as Vec3,
+      prev: [anchor[0] - Math.cos(ang) * 0.004, anchor[1] + i * GUT_TUNING.restLength / (GUT_TUNING.nodes - 1),
+        anchor[2] - Math.sin(ang) * 0.004] as Vec3,
     });
   }
   return {
     nodes,
     seg: GUT_TUNING.restLength / (GUT_TUNING.nodes - 1),
+    coilTightness: opts.coilTightness ?? GUT_TUNING.coilTightness,
+    springiness: opts.springiness ?? GUT_TUNING.springiness,
     attached: true,
     settled: false,
   };
@@ -121,6 +139,23 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
       b.pos = [b.pos[0] - dx * corr * (wb / sum) * (aFixed ? 2 : 2),
         b.pos[1] - dy * corr * (wb / sum) * (aFixed ? 2 : 2),
         b.pos[2] - dz * corr * (wb / sum) * (aFixed ? 2 : 2)];
+    }
+    // SKIP-ONE: the spring. Constraining i-1 to i+1 at less than two segments
+    // encodes a preferred bend at every node, and a uniform preferred bend is
+    // a coil. Without this the chain has nothing resisting a straight line,
+    // which is exactly the "rigid T" the owner reported.
+    const skipTarget = c.seg * 2 * c.coilTightness;
+    for (let i = 1; i < nodes.length - 1; i++) {
+      const a = nodes[i - 1]!, b = nodes[i + 1]!;
+      const dx = b.pos[0] - a.pos[0], dy = b.pos[1] - a.pos[1], dz = b.pos[2] - a.pos[2];
+      const d = Math.hypot(dx, dy, dz) || 1e-9;
+      // Weighted BELOW the segment constraints so the tube keeps its length.
+      const corr = (d - skipTarget) / d * 0.5 * c.springiness;
+      const aFixed = c.attached && i - 1 === 0;
+      if (!aFixed) {
+        a.pos = [a.pos[0] + dx * corr, a.pos[1] + dy * corr, a.pos[2] + dz * corr];
+      }
+      b.pos = [b.pos[0] - dx * corr, b.pos[1] - dy * corr, b.pos[2] - dz * corr];
     }
     // Floor, inside the constraint loop so a resting chain does not jitter.
     for (const n of nodes) if (n.pos[1] < 0) n.pos = [n.pos[0], 0, n.pos[2]];

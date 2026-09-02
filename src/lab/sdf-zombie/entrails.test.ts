@@ -15,9 +15,13 @@ describe('gut chain', () => {
     for (let i = 0; i < 600; i++) c = stepGutChain(c, 1 / 60);
     const head = c.nodes[0]!.pos, tail = c.nodes[c.nodes.length - 1]!.pos;
     const span = Math.hypot(tail[0] - head[0], tail[1] - head[1], tail[2] - head[2]);
-    // Constraints converge to the rest length, not past it.
+    // Segments never stretch past the rest length (upper bound), and the
+    // chain never locks into the old coincident-node accordion fold
+    // (span ~1.4 seg). Since the skip-one spring (organs r3) the rest shape
+    // is a coil, so a hung chain sits at ~0.6 of contour, not ~1.0 — the
+    // lower bound holds well above accordion-lock while allowing that.
     expect(span).toBeLessThan(GUT_TUNING.restLength * 1.15);
-    expect(span).toBeGreaterThan(GUT_TUNING.restLength * 0.7);
+    expect(span).toBeGreaterThan(GUT_TUNING.restLength * 0.5);
   });
 
   it('keeps node 0 exactly at the pin while attached', () => {
@@ -73,5 +77,56 @@ describe('gut chain', () => {
     const tail = fell.nodes[fell.nodes.length - 1]!.pos;
     expect(tail[1]).toBeLessThan(0.2);   // actually reached the floor
     expect(fell.settled).toBe(true);     // and then came to rest
+  });
+});
+
+describe('the gut chain is a SPRING (organs r3)', () => {
+  it('a chain released straight pulls itself into a coil', () => {
+    // The owner's report was "a rigid dark T shape". A chain with only
+    // distance constraints has nothing that resists a straight line; the
+    // skip-one constraint is what makes a coil the REST shape.
+    let c = makeGutChain([0, 2, 0]);
+    c = detachGutChain(c);
+    for (let i = 0; i < 400; i++) c = stepGutChain(c, 1 / 60);
+    const head = c.nodes[0]!.pos, tail = c.nodes[c.nodes.length - 1]!.pos;
+    const span = Math.hypot(tail[0] - head[0], tail[1] - head[1], tail[2] - head[2]);
+    // A coil is markedly SHORTER end-to-end than its own contour length.
+    expect(span).toBeLessThan(GUT_TUNING.restLength * 0.7);
+  });
+
+  it('coilTightness 1.0 degrades to a plain hanging rope', () => {
+    // The graceful-failure lever: if the spring reads comedic, this is the
+    // way back to the old behaviour without a revert.
+    let c = makeGutChain([0, 2, 0], { coilTightness: 1.0 });
+    c = detachGutChain(c);
+    for (let i = 0; i < 400; i++) c = stepGutChain(c, 1 / 60);
+    const head = c.nodes[0]!.pos, tail = c.nodes[c.nodes.length - 1]!.pos;
+    const span = Math.hypot(tail[0] - head[0], tail[1] - head[1], tail[2] - head[2]);
+    expect(span).toBeGreaterThan(GUT_TUNING.restLength * 0.7);
+  });
+
+  it('stays finite and bounded — the two constraint families must not fight', () => {
+    // Skip-one pulls nodes together while segments push them apart. Weighted
+    // wrongly they oscillate and blow up.
+    let c = makeGutChain([0, 2, 0]);
+    for (let i = 0; i < 2000; i++) {
+      c = pinGutChain(c, [Math.sin(i / 20) * 0.3, 2, 0]);
+      c = stepGutChain(c, 1 / 60);
+    }
+    for (const n of c.nodes) {
+      for (const v of n.pos) {
+        expect(Number.isFinite(v)).toBe(true);
+        expect(Math.abs(v)).toBeLessThan(50);
+      }
+    }
+  });
+
+  it('still freezes once settled', () => {
+    let c = detachGutChain(makeGutChain([0, 2, 0]));
+    for (let i = 0; i < 1200; i++) c = stepGutChain(c, 1 / 60);
+    expect(c.settled).toBe(true);
+    const before = c.nodes.map(n => [...n.pos]);
+    c = stepGutChain(c, 1 / 60);
+    expect(c.nodes.map(n => [...n.pos])).toEqual(before);
   });
 });
