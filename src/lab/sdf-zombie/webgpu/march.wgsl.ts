@@ -813,6 +813,10 @@ fn sampleHandVolume(pWorld: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: 
 var<private> gDebugMode: f32 = 0.0;
 var<private> gDebugPrims: f32 = 0.0;
 var<private> gDebugSteps: f32 = 0.0;
+/** Bone-capsule evaluations this ray (gore r3 refinement 3). The bone fold
+ *  has no spatial cull, so this is the number the cull has to move — and a
+ *  counter is honest where a 0.0% timing delta under a 4% spread is not. */
+var<private> gDebugBones: f32 = 0.0;
 // NOTE: these live at the tail of SAMPLE_VOLUME's source rather than in
 // their own HELPERS entry because three's wgslFn parser is ^-anchored on
 // "fn" — a var-declaration source would fail its parse contract.`;
@@ -978,6 +982,7 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
     if ((i32(prof) & 2) != 0) {
       cpos = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).xyz;
     }
+    if (gDebugMode > 0.5) { gDebugBones = gDebugBones + 1.0; }
     let sd = sdPrim(p, i, data, r2, prof, cpos, band);
     // A hard min, never smin — meat meeting bone should crease. Winning the
     // min claims gFoldBestIdx so shading reads a bone prim's primScale.w.
@@ -1388,7 +1393,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
   // shipping path pays exactly one uniform branch; gDebugMode hands the
   // flag to mapBody's fold without forking its signature.
-  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; }
+  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugBones = 0.0; }
   // TILE-LIST PRELOAD (perf task 5 step 2). Read ONCE per pixel, here at the
   // march entry — never per step. The entry's groups then ride every mapBody
   // call in this fragment through gTileActive (march steps AND the post-hit
@@ -1791,6 +1796,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   if (debugCfg.x > 3.5 && debugCfg.x < 4.5) {
     return vec4<f32>(gDebugSteps, select(0.0, 1.0, hit), 1.0, t);
   }
+  // BONE-EVAL MODE (debugCfg.x == 5, gore r3 refinement 3). Same contract as
+  // occupancy above — raw counters, returned BEFORE the discard so missed
+  // rays still write, alpha unusable. r = bone capsule evaluations this ray.
+  // This is what the bone-fold cull must move; the timing bench could not
+  // resolve the fold at all (+0.0% under a 4% spread), so the counter is the
+  // measurement and the bench is only a sanity check.
+  if (debugCfg.x > 4.5 && debugCfg.x < 5.5) {
+    return vec4<f32>(gDebugBones, select(0.0, 1.0, hit), 1.0, t);
+  }
   if (!hit) { discard; }
   // Snapshot the counters BEFORE the post-hit probes: calcNormal folds
   // four more mapBody calls and the wound shadow up to fourteen, and the
@@ -1866,8 +1880,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // entirely — so this is an identity read, not a guess from depth or
   // radius. hitBest is -1 on the baked-volume path (no dominant prim), so
   // clamp the row index and gate on it, like the painted-prim read below.
-  let hitMat = textureLoad(data, vec2<i32>(max(hitBest, 0), ${ROW_PRIM_SCALE}), 0).w;
-  let isBone = hitBest >= 0 && hitMat > 3.5 && hitMat < 4.5;
+  // Gated on wm (gore r3 refinement 5): bone can only ever be the dominant
+  // prim INSIDE a wound — applyBones runs only where nearWound is set — so on
+  // an unwounded pixel this texel load can never change the answer. It ran on
+  // every hit pixel of every body before the gate.
+  var hitMat = 0.0;
+  if (wm > 0.0 && hitBest >= 0) {
+    hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE}), 0).w;
+  }
+  let isBone = hitMat > 3.5 && hitMat < 4.5;
   if (isBone) {
     // Stained toward the meat at the junction. A clean plate popping out of
     // red flesh reads as a decal; blood in the transition is what seats it.

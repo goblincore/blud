@@ -1184,7 +1184,7 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     expect(foldGroup).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
     // The march entry: init + per-step count guarded on the uniform itself.
     expect(MARCH_BODY).toContain(
-      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; }');
+      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugBones = 0.0; }');
     expect(MARCH_BODY).toContain(
       'if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }');
     // No UNGUARDED write anywhere: strip the guarded forms, and no
@@ -1287,6 +1287,13 @@ function oneClusterBody(): import("../build-body").BuildResult {
 }
 
 describe('bone fold (wound pass r2)', () => {
+  it('guards the bone counter too — debugCfg.x == 0 pays no counting', () => {
+    // gore r3 refinement 3. The counter exists because the timing bench could
+    // not resolve the bone fold at all (+0.0% under a 4% spread); it must not
+    // become a cost of its own on the shipping path.
+    expect(APPLY_BONES).toContain('if (gDebugMode > 0.5) { gDebugBones');
+  });
+
   it('reads the shape and bend rows, so authored curvature actually renders', () => {
     // These were hard-coded to -1.0 / 0.0 / vec3(0), so every bone drew as a
     // straight untapered capsule while the packer wrote its bend rows. Two
