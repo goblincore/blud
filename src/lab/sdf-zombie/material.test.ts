@@ -76,3 +76,26 @@ describe('flesh presets', () => {
     expect(LIGHT_PRESETS['practical-hard-key'].ambientGain).toBe(4);
   });
 });
+
+describe('wound tissue material (wound pass r2)', () => {
+  // No `zombie` key exists in FLESH_PRESETS (its keys are the three flesh
+  // looks: henenlotter-latex / wet-meat / clay), so the plan's zombie-keyed
+  // assertions run over every preset instead. All three are human-stature and
+  // all ship the ramp on, so the stronger form is still exactly the plan's
+  // intent.
+  it('every preset carries bone and fat colours and ramp knees', () => {
+    for (const [name, preset] of Object.entries(FLESH_PRESETS)) {
+      expect(preset.boneColor, name).toHaveLength(3);
+      expect(preset.fatColor, name).toHaveLength(3);
+      expect(preset.fatDepth, name).toBeGreaterThan(0);
+      expect(preset.muscleDepth, name).toBeGreaterThan(preset.fatDepth);
+    }
+  });
+
+  it('ships the depth ramp on and the fibre on', () => {
+    for (const preset of Object.values(FLESH_PRESETS)) {
+      expect(preset.woundDepthAmp).toBe(1);
+      expect(preset.woundFibreAmp).toBeGreaterThan(0);
+    }
+  });
+});

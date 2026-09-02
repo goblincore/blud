@@ -662,6 +662,27 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   return vec2<f32>(m, m);
 }`
 
+// Tissue colour by depth beneath the ORIGINAL skin — the signal `carved`
+// carries in mapBody's .w.
+//
+// Keyed to the crater WALL rather than to the impact point, which is the
+// difference that makes an oblique hit and a pair of overlapping craters read
+// correctly: the radial mask rings the entry wound, this follows the surface
+// that was actually opened.
+//
+// The fat band is the load-bearing stop. It is the cue that says "opened"
+// rather than "stained", and a single base->deep lerp has no way to express it.
+export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3<f32>, fatColor: vec3<f32>, deepColor: vec3<f32>, fatDepth: f32, muscleDepth: f32) -> vec3<f32> {
+  let dermis = mix(baseColor, deepColor, 0.5);
+  let clot = deepColor * 0.45;
+  let toFat = smoothstep(0.0, fatDepth, depth);
+  let toMuscle = smoothstep(fatDepth, muscleDepth, depth);
+  let toClot = smoothstep(muscleDepth, muscleDepth * 2.5, depth);
+  var c = mix(dermis, fatColor, toFat);
+  c = mix(c, deepColor, toMuscle);
+  return mix(c, clot, toClot);
+}`;
+
 // 0 unburned, 1 fully charred.
 export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
   var m = 0.0;
@@ -1206,7 +1227,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //              hue basis never moves
 //   surfCfg    x specIntensity, y specRoughness, z fresnelBoost, w translucency
 //   surfCfg2   x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale
+//   surfCfg3   x woundDepthAmp (0 = ramp off, shades as before), y fatDepth,
+//              z muscleDepth, w woundFibreAmp
 //   mottleColor  the colour the mottle mixes toward (linear RGB)
+//   fatColor   subcutaneous fat for the wound tissue ramp (linear RGB)
 //   faceCfg    x enabled, y strength, z forward (+1/-1), w relief
 //   faceCfg2   x projMode (0 planar, 1 spherical), y mean, z glowThreshold,
 //              w glowStrength
@@ -1276,7 +1300,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   spotColor: vec3<f32>,
   surfCfg: vec4<f32>,
   surfCfg2: vec4<f32>,
+  surfCfg3: vec4<f32>,
   mottleColor: vec3<f32>,
+  fatColor: vec3<f32>,
   faceCfg: vec4<f32>,
   faceCfg2: vec4<f32>,
   faceCfg3: vec4<f32>,
@@ -1557,6 +1583,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // Dominant prim at the last field sample (mapBody.y) — the hit pixel's
   // noise anchor reuses it instead of re-running the fold (task 6).
   var hitBest = -1;
+  // The last field sample's full mapBody result (wound-r2 task 6). Re-assigned
+  // every iteration exactly like hitBest/hitNearWound so it always describes
+  // the sample the loop actually lands on; at the break it is therefore the
+  // ACCEPTING sample, whose .w is the pre-wound field carved — depth
+  // beneath the original skin, the tissue ramp's signal.
+  var hitField = vec4<f32>(0.0);
   // Whether the ACCEPTED hit sample sat in a wound's near zone (mapBody.z).
   // Re-derived every iteration so it always describes the sample the loop
   // actually lands on — retractions and shell steps included. This is the
@@ -1575,6 +1607,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     let dres = mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
     var d = dres.x;
     hitBest = i32(dres.y);
+    hitField = dres;
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz
@@ -1736,7 +1769,24 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let cm = charMask(p, data, woundCfg);
-  var albedo = mix(baseColor, deepColor, wm);
+  // Tissue depth rides mapBody's .w (the PRE-wound field). The ramp chooses
+  // WHICH colour the wounded end of the lerp reaches for; wm remains the
+  // sole authority on WHETHER this pixel is wounded. That composition is what
+  // makes the ramp halo-safe by construction: at wm = 0 nothing it computes
+  // can reach the albedo, so it has no edge to disagree with the mask's.
+  //
+  // surfCfg3 = (woundDepthAmp, fatDepth, muscleDepth, woundFibreAmp); the
+  // select is the amplitude gate — woundDepthAmp 0 shades bit-for-bit as
+  // before the ramp existed.
+  //
+  // Do NOT refactor this into a second mask. The 2026-08-23 crater pass split
+  // one mask into three and cost two days to the resulting halo; the note above
+  // WOUND_MASK is the record.
+  let tissueDepth = max(0.0, -hitField.w) * surfCfg3.x;
+  let tissue = select(deepColor,
+    tissueRamp(tissueDepth, baseColor, fatColor, deepColor, surfCfg3.y, surfCfg3.z),
+    surfCfg3.x > 0.0);
+  var albedo = mix(baseColor, tissue, wm);
 
   // Colour mottle. surfaceNoiseAmp above perturbs the NORMAL, which reads as
   // texture but never as colour — under a broad key the whole creature stays
@@ -2201,7 +2251,7 @@ export const HELPERS = [
   SD_SHELL,
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
-  APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
+  APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT,
 ];

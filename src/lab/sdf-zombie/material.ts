@@ -47,6 +47,28 @@ export interface FleshMaterial {
   mottleScale: number;
   /** The colour the mottle mixes TOWARD, linear RGB. */
   mottleColor: Vec3;
+
+  /** Bone albedo, linear RGB. Blood-stained toward `deepColor` at its junction
+   *  with flesh in the shader, so it never reads as a clean white decal.
+   *
+   *  The default is the project's OWN established bone colour, not a fresh
+   *  guess: `bonewalker.blob` paints its proud spine and rib bars `color=dbc0a0`
+   *  (sRGB 219,192,160 -> linear 0.71, 0.53, 0.35), chosen against a reference
+   *  mesh whose bone texels measure sRGB 175,140,119. A brighter bone-white
+   *  reads as plastic next to that and would make the two kinds of bone in this
+   *  game disagree. */
+  boneColor: Vec3;
+  /** Subcutaneous fat, linear RGB. The load-bearing ramp stop: it is what makes
+   *  a crater read as OPENED rather than merely stained. */
+  fatColor: Vec3;
+  /** Depth beneath the original skin at which dermis becomes fat, metres. */
+  fatDepth: number;
+  /** Depth at which fat becomes muscle, metres. */
+  muscleDepth: number;
+  /** 0 disables the tissue ramp and shades bit-for-bit as before it existed. */
+  woundDepthAmp: number;
+  /** 0 disables the torn-fibre mottle inside wounds. */
+  woundFibreAmp: number;
 }
 
 export type FleshPresetName = 'henenlotter-latex' | 'wet-meat' | 'clay';
@@ -65,6 +87,9 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     // plausible starting point for a character that opts in, not a look this
     // preset wears.
     mottleAmp: 0, mottleScale: 1.2, mottleColor: [0.62, 0.24, 0.30],
+    boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
+    fatDepth: 0.004, muscleDepth: 0.014,
+    woundDepthAmp: 1, woundFibreAmp: 0.6,
   },
   // Rotten meat: darker, broader highlight, veiny, more scatter.
   'wet-meat': {
@@ -76,6 +101,9 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     surfaceNoiseAmp: 0.22, silhouetteNoiseAmp: 0.018,
     wetness: 0.85,
     mottleAmp: 0, mottleScale: 1.2, mottleColor: [0.30, 0.14, 0.12],
+    boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
+    fatDepth: 0.004, muscleDepth: 0.014,
+    woundDepthAmp: 1, woundFibreAmp: 0.6,
   },
   // Claymation: matte, waxy, thumb-smushed.
   clay: {
@@ -87,6 +115,9 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     surfaceNoiseAmp: 0.14, silhouetteNoiseAmp: 0.006,
     wetness: 0.1,
     mottleAmp: 0, mottleScale: 1.2, mottleColor: [0.44, 0.32, 0.24],
+    boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
+    fatDepth: 0.004, muscleDepth: 0.014,
+    woundDepthAmp: 1, woundFibreAmp: 0.6,
   },
 };
 
