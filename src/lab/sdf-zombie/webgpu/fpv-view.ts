@@ -20,6 +20,15 @@
 //      two proxy boxes sit in opposite corners of the frame and barely
 //      overlap, and the sheet costs texture fetches at the HIT point, not
 //      inside mapBody's inner loop.
+//
+//      DORMANT-BUT-REACHABLE (X1.28 task 4b/4c): the seven flesh prims this
+//      view packs are typed as plain `Primitive[]`, so nothing stops a future
+//      hand prop or prosthetic from authoring `box:` on one. No .blob does
+//      today — hands.ts only ever emits capsules — which is why the boxReach
+//      fixes below (fitHandCluster, and the proxy-box sizing in apply())
+//      guard against a bug nothing currently triggers. Task 6 lands the WGSL
+//      twin that makes a box actually visible on the GPU; that is the point
+//      at which this stops being theoretical.
 //   2. createStickProp / createCigaretteProp — the held props: a cheap
 //      cylinder-bundle mesh and a cigarette (never flesh) posed by the hand
 //      anchors hands.ts derives, plus their emissive tips (fuse spark, lit
@@ -211,8 +220,8 @@ export const HAND_SHEET_TUNING = {
  * outside that sphere skips the whole cluster fold, box corner included. An
  * undersized radius here is therefore the literal silent-vanish mechanism,
  * reachable via the FPV hand path the moment a box-shaped prim reaches a
- * hand (nothing does yet — see the module header's dormant-but-reachable
- * note).
+ * hand — see the module header's DORMANT-BUT-REACHABLE note above
+ * createHandsGpuView for why nothing triggers it today.
  *
  * Exported for tests: this is the value the reviewer's Site 6 reproduction
  * checks directly, since the packed cluster bound is not otherwise
@@ -228,6 +237,11 @@ export function fitHandCluster(members: Primitive[]): { center: Vec3; radius: nu
   const center: Vec3 = [cx / n, cy / n, cz / n];
   let radius = 0;
   for (const m of members) {
+    // Bare `m.radius`, not Math.max(radius, radiusB ?? radius) like the other
+    // seven boxReach sites: deliberate, not an oversight — no hand prim ever
+    // tapers (hands.ts only emits capsules with a single radius; grep finds
+    // no `radiusB` anywhere in the hand-authoring files). If that ever
+    // changes, this term needs the same max() the others use.
     const s = Math.max(m.scale[0], m.scale[1], m.scale[2]) * m.radius * boxReach(m.box);
     for (const e of [m.a, m.b]) {
       const d = Math.hypot(e[0] - center[0], e[1] - center[1], e[2] - center[2]);
@@ -359,6 +373,8 @@ export function createHandsGpuView(
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     for (const p of prims) {
+      // Same deliberate bare-`radius` omission as fitHandCluster above — no
+      // hand prim tapers today.
       const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]) * boxReach(p.box) + 0.02;
       for (const e of [p.a, p.b]) {
         minX = Math.min(minX, e[0] - r); maxX = Math.max(maxX, e[0] + r);

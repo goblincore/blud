@@ -228,6 +228,13 @@ export function primPropContact(
   const s = raw < 0 ? 0 : raw > 1 ? 1 : raw;
   const at = add3(pa.radial, mul3(d, s));
   const radial = Math.hypot(at[0], at[1], at[2]);
+  // `prim.radius * Math.min(scale)`, not boxReach()-adjusted: this is an
+  // INNER estimate of the prim's surface (same min-scale convention as
+  // occluder-hull.ts, and excluded for the identical reason — see the note
+  // there). A rounded box strictly contains the capsule of the same
+  // semi-axes, so this under-estimate stays safely inside the box; it can
+  // only make a grip read as sinking slightly less than it visually does,
+  // never place a finger outside real geometry.
   const surfaceM = radial - prim.radius * Math.min(...prim.scale);
   return { surfaceM, sinkM: seat.radius - surfaceM, axialM: pa.axial + (pb.axial - pa.axial) * s };
 }
