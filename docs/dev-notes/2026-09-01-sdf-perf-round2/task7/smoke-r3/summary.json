@@ -1,0 +1,130 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 731,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 3,
+  "onJs": "__sdfGame.setLevelShadow(true)",
+  "offJs": "__sdfGame.setLevelShadow(false)",
+  "preJs": "",
+  "outDir": "docs/dev-notes/2026-09-01-sdf-perf-round2/task7/smoke-r3",
+  "noiseFloor": {
+    "changed": 124,
+    "bigChanged": 75,
+    "meanD": 2.07,
+    "maxD": 691,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 519,
+      "bigChanged": 237,
+      "meanD": 1.93,
+      "maxD": 691,
+      "hotCells": [
+        "19,14"
+      ]
+    },
+    "a-2 vs b-2": {
+      "changed": 461,
+      "bigChanged": 220,
+      "meanD": 0.48,
+      "maxD": 691,
+      "hotCells": [
+        "19,14"
+      ]
+    },
+    "a-1 vs a-2": {
+      "changed": 112,
+      "bigChanged": 74,
+      "meanD": 1.78,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 93,
+      "bigChanged": 44,
+      "meanD": 0.35,
+      "maxD": 691,
+      "hotCells": []
+    }
+  },
+  "occupancy": {
+    "off": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 116083,
+        "hits": 78252,
+        "misses": 37831,
+        "occupancy": 0.6741038739522583,
+        "coverage": 0.24183958333333333,
+        "meanStepsHit": 5.763712109594643,
+        "meanStepsMiss": 15.545293542333008,
+        "missStepShare": 0.5659560626532553,
+        "bodiesOnScreen": 3
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 116083,
+        "hits": 78252,
+        "misses": 37831,
+        "occupancy": 0.6741038739522583,
+        "coverage": 0.24183958333333333,
+        "meanStepsHit": 5.763712109594643,
+        "meanStepsMiss": 15.545293542333008,
+        "missStepShare": 0.5659560626532553,
+        "bodiesOnScreen": 3
+      }
+    ],
+    "on": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 116083,
+        "hits": 78252,
+        "misses": 37831,
+        "occupancy": 0.6741038739522583,
+        "coverage": 0.24183958333333333,
+        "meanStepsHit": 5.763712109594643,
+        "meanStepsMiss": 15.545293542333008,
+        "missStepShare": 0.5659560626532553,
+        "bodiesOnScreen": 3
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 116083,
+        "hits": 78252,
+        "misses": 37831,
+        "occupancy": 0.6741038739522583,
+        "coverage": 0.24183958333333333,
+        "meanStepsHit": 5.763712109594643,
+        "meanStepsMiss": 15.545293542333008,
+        "missStepShare": 0.5659560626532553,
+        "bodiesOnScreen": 3
+      }
+    ]
+  }
+}

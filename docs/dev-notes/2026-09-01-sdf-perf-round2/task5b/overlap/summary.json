@@ -1,0 +1,126 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 730,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 4,
+  "onJs": "__sdfGame.setDepthGate(true)",
+  "offJs": "__sdfGame.setDepthGate(false)",
+  "preJs": "// task 5b step 2 --pre: synthetic maximal-overlap staging.\n// Camera just behind the nearest of the two farthest-apart zombies in the\n// current room, looking through it at the far one (task 5's overlap scene,\n// recreated as a --pre so the noise floor is taken IN the staged scene).\n// Zombies are already frozen (the harness freezes before --pre), so the\n// poses read here pin the scene for every capture below.\n(async () => {\n  const zs = __sdfGame.zombies();\n  const rid = Number(__sdfGame.room().replace('room', ''));\n  // Room interiors (game-level.ts: BAND_HALF 0.8 + ROOM_HALF 4).\n  const bounds = { 3: [0.8, 8.8, 0.8, 8.8], 4: [-8.8, -0.8, 0.8, 8.8] }[rid];\n  const inRoom = zs.filter(z => z.room === rid);\n  let best = null, bd = -1;\n  for (const a of inRoom) for (const b of inRoom) {\n    if (a.id === b.id) continue;\n    const d = Math.hypot(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]);\n    if (d > bd) { bd = d; best = [a, b]; }\n  }\n  if (!best) return { error: 'no pair in room ' + rid, zombies: zs };\n  const [A, Bf] = best;\n  const dx = Bf.pos[0] - A.pos[0], dz = Bf.pos[2] - A.pos[2];\n  const L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;\n  // Back off behind A toward -dir, shrinking until the camera sits 0.6 m\n  // inside the room (setPose teleports without collision resolve).\n  let back = 1.6;\n  const inside = (x, z) => x > bounds[0] + 0.6 && x < bounds[1] - 0.6 && z > bounds[2] + 0.6 && z < bounds[3] - 0.6;\n  for (let k = 0; k < 10 && !inside(A.pos[0] - ux * back, A.pos[2] - uz * back); k++) back *= 0.7;\n  const cx = A.pos[0] - ux * back, cz = A.pos[2] - uz * back;\n  // Look vector (sin yaw, -cos yaw) = (ux, uz)  =>  yaw = atan2(ux, -uz).\n  __sdfGame.setPose(cx, cz, Math.atan2(ux, -uz));\n  return {\n    room: rid, near: A.id, far: Bf.id, gap_m: +L.toFixed(2), backoff_m: +back.toFixed(2),\n    cam: [+cx.toFixed(2), +cz.toFixed(2)], others: inRoom.filter(z => z.id !== A.id && z.id !== Bf.id).map(z => z.id),\n    poses: inRoom.map(z => ({ id: z.id, pos: z.pos.map(v => +v.toFixed(2)) })),\n  };\n})()",
+  "outDir": "/tmp/perf-r2/task5b-overlap",
+  "noiseFloor": {
+    "changed": 99,
+    "bigChanged": 59,
+    "meanD": 0.85,
+    "maxD": 691,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 200,
+      "bigChanged": 85,
+      "meanD": 0.68,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-2 vs b-2": {
+      "changed": 125,
+      "bigChanged": 55,
+      "meanD": 0.75,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-1 vs a-2": {
+      "changed": 94,
+      "bigChanged": 69,
+      "meanD": 0.15,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 88,
+      "bigChanged": 54,
+      "meanD": 0.18,
+      "maxD": 691,
+      "hotCells": []
+    }
+  },
+  "occupancy": {
+    "off": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 141081,
+        "hits": 76314,
+        "misses": 64767,
+        "occupancy": 0.5409232993812065,
+        "coverage": 0.29391875,
+        "meanStepsHit": 6.748198233613754,
+        "meanStepsMiss": 10.433353405283555,
+        "missStepShare": 0.5675033320204012,
+        "bodiesOnScreen": 9
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 141081,
+        "hits": 76314,
+        "misses": 64767,
+        "occupancy": 0.5409232993812065,
+        "coverage": 0.29391875,
+        "meanStepsHit": 6.748198233613754,
+        "meanStepsMiss": 10.433353405283555,
+        "missStepShare": 0.5675033320204012,
+        "bodiesOnScreen": 9
+      }
+    ],
+    "on": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 141081,
+        "hits": 76314,
+        "misses": 64767,
+        "occupancy": 0.5409232993812065,
+        "coverage": 0.29391875,
+        "meanStepsHit": 6.748198233613754,
+        "meanStepsMiss": 10.433353405283555,
+        "missStepShare": 0.5675033320204012,
+        "bodiesOnScreen": 9
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 141081,
+        "hits": 76314,
+        "misses": 64767,
+        "occupancy": 0.5409232993812065,
+        "coverage": 0.29391875,
+        "meanStepsHit": 6.748198233613754,
+        "meanStepsMiss": 10.433353405283555,
+        "missStepShare": 0.5675033320204012,
+        "bodiesOnScreen": 9
+      }
+    ]
+  }
+}
