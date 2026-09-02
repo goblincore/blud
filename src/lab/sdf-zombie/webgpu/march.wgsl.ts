@@ -1240,7 +1240,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   startT: f32,
   occT: f32,
   shellIn: f32,
-  shellOut: f32
+  shellOut: f32,
+  perfCfg: vec4<f32>
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
@@ -1322,20 +1323,29 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // With the shell OFF the fetches hand back shellIn 0 / shellOut 1e9, so both
   // uses below are identities and this path stays bit-identical.
   //
-  // shellOut IS DELIBERATELY NOT FOLDED INTO tMax, and that is a bug fix, not
-  // an oversight. X1.15 made the relaxed tracer take a CLAMPED FINAL SAMPLE at
-  // tMax so an overshoot past tMax could still retract. Clamping tMax to the
-  // hull's back face therefore puts that final sample ON THE HULL — a surface
-  // sitting blendK + shellAmp + chain-inflation OUTSIDE the flesh — and the
-  // AA epsilon (t * aaCfg.x, which grows with distance) accepts it as a hit.
-  // Rendered result: a bright halo hugging every silhouette, and distant
-  // bodies collapsing into ghost outlines of their own hulls, worst far away
-  // where the epsilon is largest. Caught by the on/off visual gate.
+  // shellOut FOLDS INTO tMax ON THE UN-RELAXED PATH, behind perfCfg.x, and
+  // there the fold is EXACT: the hull contains the flesh, so no ray can hit
+  // anything beyond the hull's back face. Cutting the march there deletes
+  // only the empty space a miss ray used to walk between the hull exit and
+  // the proxy box's far plane. The game page binds perfCfg.x 1 (see
+  // GAME_HULL_EXIT_BOUND); the lab binds zero and stays bit-identical.
   //
-  // Nothing is lost by leaving it out. The exit bound only ever tightened a
-  // far clamp that the occluder already provides — and the occluder measured
-  // as worth nothing anyway. The entire win here comes from the discard and
-  // the entry start, both of which are exact.
+  // The relaxed tracer (omega > 1.0) is the exception, and why the fold ships
+  // behind a seam at all: X1.15 made that tracer take a CLAMPED FINAL SAMPLE
+  // at tMax so an overshoot past tMax could still retract. Clamping tMax to
+  // the hull puts that sample ON THE HULL — a surface sitting blendK +
+  // shellAmp + chain-inflation OUTSIDE the flesh — and the AA epsilon
+  // (t * aaCfg.x, which grows with distance) accepts it as a hit: a bright
+  // halo hugging every silhouette and distant ghost outlines, worst far away
+  // where the epsilon is largest. Caught by the 2026-08-31 on/off visual
+  // gate. The clamped final sample exists only above omega 1.0, so the fold
+  // is guarded with !relax and the relaxed path keeps the proxy-box far
+  // plane. (History: the fold was first left out entirely as the fix for
+  // that halo; perf round 2 re-adds it for the un-relaxed path only.)
+  //
+  // With the shell OFF the fetch hands back shellOut 1e9, so min() is the
+  // identity; with perfCfg.x 0 select() is the identity. Both identities are
+  // bit-exact — nothing else about the march changes.
   if (shellOut <= 0.0) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   // THE OCCLUDER NO LONGER BOUNDS tMax, AND IT MUST NOT (2026-09-01).
   //
@@ -1381,7 +1391,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // hull (shell-hull-outer.ts) writes distance the same way, and is unharmed
   // only because shellIn is a ray START and shellOut a > 0 test, where
   // under-reporting is conservative. Here it is fatal.
-  let tMax = length(worldPos - camPos);
+  let tMaxBox = length(worldPos - camPos);
+  let relax = woundCfg2.y > 1.0;
+  let tMax = select(tMaxBox, min(tMaxBox, shellOut), perfCfg.x > 0.5 && !relax);
   let steps = i32(marchCfg.x);
   // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
   // reconstruction of a baked SDF is not exact to the surface, so volume
@@ -1474,7 +1486,6 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // path that brings the bumpy outline BACK: the relaxed march runs the
   // smooth field until it is inside a thin shell of the surface, and only
   // there does the fbm displace the stepped distance — see the loop body.
-  let relax = woundCfg2.y > 1.0;
   var omega = select(marchCfg.y, woundCfg2.y, relax);
   // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
