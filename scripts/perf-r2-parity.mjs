@@ -193,11 +193,12 @@ if (mode === 'diff') {
 // --- capture mode -----------------------------------------------------------
 const outDir = argv[1];
 if (!outDir) usage();
-let room, onJs, offJs, wantOccupancy = false;
+let room, onJs, offJs, wantOccupancy = false, preJs = '';
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === '--room') room = Number(argv[++i]);
   else if (argv[i] === '--on') onJs = argv[++i];
   else if (argv[i] === '--off') offJs = argv[++i];
+  else if (argv[i] === '--pre') preJs = argv[++i];
   else if (argv[i] === '--occupancy') wantOccupancy = true;
 }
 if (room !== 3 && room !== 4) fail('--room must be 3 or 4');
@@ -253,6 +254,16 @@ await evaluate(`(() => {
 })()`);
 await sleep(2000); // ~120 frames of natural wander, as in the walk segment
 await evaluate(`__sdfGame.freeze(true)`);
+// Optional pre-state (perf round 2 task 2): JS that mutates the frozen scene
+// itself — e.g. `__sdfGame.aimSurface(); __sdfGame.fireSlug()` to put a wound
+// on a body — runs ONCE here, so every capture below sees the SAME wound set
+// and the on/off toggles stay the only difference between legs. The settle
+// after it lets fire transients (impact gout, spawned chunks) decay before
+// the noise floor is taken.
+if (preJs) {
+  await evaluate(preJs);
+  await sleep(2500);
+}
 await sleep(2500); // post-AA smear settle on the frozen scene
 
 // 1) noise floor: the SAME state captured twice.
@@ -290,7 +301,7 @@ const pairs = {
 
 await evaluate(`__sdfGame.freeze(false)`); // leave the page as we found it
 
-const summary = { state, room, onJs, offJs, outDir, noiseFloor, pairs };
+const summary = { state, room, onJs, offJs, preJs, outDir, noiseFloor, pairs };
 if (wantOccupancy) {
   summary.occupancy = occ;
   console.log(`occupancy off: ${JSON.stringify(occ.off.map((o) => ({

@@ -540,6 +540,16 @@ async function main() {
    *  (perfCfg.x). Exact; `__sdfGame.setHullExitBound()` flips it for A/B. */
   const GAME_HULL_EXIT_BOUND = 1;
 
+  /**
+   * Step multiplier for the game page's march (marchCfg.y). The lab ships
+   * 0.6 (under-relaxed) to survive the fbm shell displacement, which this
+   * page runs with amplitude 0. With a conservative field, 1.0 is plain
+   * sphere tracing: exact, fewer steps, and it never enters the omega > 1
+   * overshoot path that produced the 2026-08-31 box washes.
+   * `__sdfGame.setOmega()` flips it live for A/B.
+   */
+  const GAME_OMEGA = 1.0;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -622,6 +632,8 @@ async function main() {
       view.uniforms.woundCfg2.value.y = GAME_RELAX;
       // Hull-exit tMax bound (perf round 2 task 1) — see GAME_HULL_EXIT_BOUND.
       view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
+      // Plain sphere tracing (perf round 2 task 2) — see GAME_OMEGA.
+      view.uniforms.marchCfg.value.y = GAME_OMEGA;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -2046,6 +2058,12 @@ async function main() {
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
     setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
     get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
+    /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
+    setOmega(v: number) {
+      const n = Math.max(0.1, Math.min(1.0, v));
+      for (const a of actors) a.view.uniforms.marchCfg.value.y = n;
+    },
+    get omega() { return actors[0]?.view.uniforms.marchCfg.value.y ?? 0; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },
