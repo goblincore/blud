@@ -403,6 +403,14 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
     gloss: parseGlossArg(l, strArg(l, 'color') !== null),
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
+    // `box` — a bare word like `hard`/`mirror`/`chamfer`. Swaps the swept
+    // shape from a sphere to a rounded box; see BlobPart.box for why the
+    // half-extents deliberately match a capsule's semi-axes.
+    box: l.words.includes('box'),
+    // Default 0.08, not 0: a dead-sharp corner is almost never what an author
+    // means on a first pass, and 0.08 still reads machined. See BlobPart.round
+    // for why this is a fraction rather than metres.
+    round: numArg(l, 'round', 0.08),
     src: l,
   } satisfies BlobPart;
 
