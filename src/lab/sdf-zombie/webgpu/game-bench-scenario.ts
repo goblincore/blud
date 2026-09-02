@@ -175,7 +175,7 @@ export type DungeonScenarioName = (typeof DUNGEON_SCENARIOS)[number];
 // spec §4 gate 7). NOT a gate: a measurement. The bone fold may cost less
 // than the bench's 5–11% within-run spread; if the delta lands under the
 // spread the honest report is UNRESOLVED, and the amplitude guards
-// (woundDepthAmp 0 / woundFibreAmp 0 / boneRatio 0 — each restores the
+// (woundDepthAmp 0 / boneRatio 0 — each restores the
 // previous shading bit-for-bit) are what contain the cost instead.
 // ---------------------------------------------------------------------------
 
@@ -249,7 +249,7 @@ export function scenarioByName(
       return { ...base, name, rig: DUNGEON_RIG, flashlight: true, castShadow: true };
     case 'wounds-off':
       // Pre-r2 state: every r2 amplitude at 0. The driver additionally
-      // zeroes woundFibreAmp on this leg — fibre never ran on standing
+      // (the torn-fibre pass was cut 2026-09-02; nothing to zero) — it never ran on standing
       // bodies before r2, so the off leg must ablate it too.
       return { ...base, name, woundCount: woundShots, bodyCount: LEG_ROOM, woundDepthAmp: 0, boneRatio: 0 };
     case 'wounds-no-bone':

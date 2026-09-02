@@ -52,15 +52,53 @@ body
 bones
   ratio 0.38
 
-  # Cranium — a dome, not a scaled face ellipsoid. Sits inside the head mass
-  # the face block emits, so a slug to the skull exposes bone instead of
-  # hollowing the head.
-  blob head on skull at=0.55 r=0.072 wide=0.88 tall=0.95 deep=0.86
+  # SKULL — cranium + jaw.
+  #
+  # The first version was one blob at r=0.072 and the owner's read was "a
+  # really small round ball, and there's no jaw of course" (playtest
+  # 2026-09-02). It was small because it WAS small: the face block's head
+  # ellipsoid has semi-axes ~(0.090, 0.137, 0.105), and a 0.072 sphere at 0.88/
+  # 0.95/0.86 sits ~(0.063, 0.068, 0.062) — barely half the head it lives in,
+  # so a headshot exposed a marble.
+  blob head on skull at=0.56 r=0.086 wide=0.94 tall=1.06 deep=0.92
+  # Jaw — dropped and jutted to follow the face block's own jaw (jawDrop 0.076,
+  # jawJut 0.04). Separate from the cranium and hard-folded, so a blown-open
+  # face reads as two bones meeting rather than one smooth helmet.
+  blob head on skull at=0.30 offset=(0,-0.028,0.030) r=0.050 wide=0.82 tall=0.58 deep=0.96
 
-  # Ribcage — a broad shallow plate, wide across and thin front-to-back. The
-  # auto-derived twin of the torso blobs would be a fat cylinder, which reads
-  # as a spine-sized bone in the middle of the chest.
-  bar torso on spine from=0.20 to=0.92 r=0.052 wide=1.45 deep=0.55
+  # RIBCAGE — real ribs, not a plate.
+  #
+  # The plate this replaces (`bar torso on spine ... wide=1.45 deep=0.55`) is
+  # what the owner saw as "a big white central pillar running through the
+  # torso" — because that is what it was. A slab cannot read as a ribcage no
+  # matter how it is coloured; the shape has to carry it, and a wound only ever
+  # opens a small window onto the bone, so the STRUCTURE inside that window is
+  # the whole read.
+  #
+  # Each rib is a short bar whose far end is thrown out, down and forward by
+  # `tip` (its bone runs vertically, the rib does not) and curved by `bend`.
+  # `both` emits the mirrored pair — `mirror` is unavailable here because the
+  # spine is not itself a mirrored bone.
+  #
+  # Kept well inside the torso flesh (half-width ~0.19, half-depth ~0.117 at
+  # the chest): checkBoneContainment fails the build otherwise, and the
+  # nearWound gate stops being an identity if a rib breaches.
+  bar torso on spine from=0.72 to=0.76 offset=(0.012,0,0.010) tip=(0.088,-0.034,0.052) bend=(0.014,0,0.020) r=0.0115 both
+  bar torso on spine from=0.58 to=0.62 offset=(0.012,0,0.010) tip=(0.101,-0.038,0.058) bend=(0.016,0,0.022) r=0.0120 both
+  bar torso on spine from=0.44 to=0.48 offset=(0.012,0,0.010) tip=(0.104,-0.040,0.058) bend=(0.016,0,0.022) r=0.0120 both
+  bar torso on spine from=0.30 to=0.34 offset=(0.012,0,0.010) tip=(0.096,-0.042,0.054) bend=(0.015,0,0.020) r=0.0115 both
+  # Sternum — the front plate the ribs reach toward. Thin, so it reads as a
+  # bone edge rather than a second pillar.
+  bar torso on spine from=0.34 to=0.74 offset=(0,0,0.062) r=0.016 wide=1.5 deep=0.45
+  # Pelvis — authored so the hips read as a basin rather than the derived
+  # sphere (0.145 x 0.38 = a 55 mm ball in the gut). Wide and shallow, low on
+  # the bone, which is also what stops it joining the spine rod into one
+  # column.
+  blob torso on pelvis at=0.30 offset=(0,-0.010,0) r=0.044 wide=1.40 tall=0.62 deep=0.86
+
+  # Spine rod — the column behind the ribs. Narrow on purpose: the pillar
+  # complaint was a WIDE central mass, and a spine genuinely is a thin rod.
+  bar torso on spine from=0.10 to=0.98 offset=(0,0,-0.030) r=0.019 wide=0.9 deep=0.8
 
 # Tuned by hand in the panel, then baked. Keep headHeight near 1: raising it
 # SHARPENS the crown rather than doming it, so the height and the gaunt taper

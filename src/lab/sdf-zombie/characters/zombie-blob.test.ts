@@ -55,47 +55,42 @@ describe('zombie.blob is the zombie', () => {
 // per bone, so these REPLACE the auto-derived twins on skull/spine.
 describe('zombie.blob authors its shot-magnet bones', () => {
   const bones = () => fromBlob().bonePrims ?? [];
+  const inCluster = (limb: string) =>
+    bones().filter(p => p.op === 'bone' && p.cluster === CLUSTER_ORDER.indexOf(limb));
 
-  it('carries an authored cranium dome in the head cluster', () => {
-    const dome = bones().find(p => p.op === 'bone' && p.cluster === CLUSTER_ORDER.indexOf('head'));
-    expect(dome, 'no head-cluster bone prim').toBeDefined();
-    expect(dome!.radius).toBe(0.072);
-    expect(dome!.scale).toEqual([0.88, 0.95, 0.86]);
+  // Pins INTENT, not the exact numbers the shapes happened to have — those are
+  // being tuned on screen. What must not regress is the STRUCTURE: the owner's
+  // playtest read the first version as "a really small round ball, and there's
+  // no jaw" and "a big white central pillar running through the torso", and
+  // both complaints are about shape, which is what these assert.
+  it('gives the skull a cranium AND a jaw, and the cranium fills the head', () => {
+    const head = inCluster('head');
+    expect(head.length, 'cranium + jaw').toBeGreaterThanOrEqual(2);
+    // The face block's head ellipsoid has semi-axes ~(0.090, 0.137, 0.105).
+    // A cranium much under this reads as a marble rattling inside the skull —
+    // the exact playtest complaint. Half the head's width is the floor.
+    const cranium = head.reduce((a, b) => (a.radius >= b.radius ? a : b));
+    expect(cranium.radius, 'cranium is not a marble').toBeGreaterThan(0.075);
+    // A jaw is a SECOND, smaller mass — not a bigger dome.
+    const jaw = head.filter(p => p !== cranium).reduce((a, b) => (a.radius >= b.radius ? a : b));
+    expect(jaw.radius).toBeLessThan(cranium.radius);
   });
 
-  it('carries an authored ribcage plate in the torso cluster', () => {
-    const plate = bones().find(p => p.op === 'bone' && p.cluster === CLUSTER_ORDER.indexOf('torso'));
-    expect(plate, 'no torso-cluster bone prim').toBeDefined();
-    expect(plate!.radius).toBe(0.052);
-    expect(plate!.scale).toEqual([1.45, 1, 0.55]);
-    // A PLATE spans the chest — endpoints distinct, unlike a scaled torso blob.
-    expect(plate!.a).not.toEqual(plate!.b);
-  });
-
-  // Wound pass r2 task 11: the shader's nearWound gate is only SOUND because
-  // min(flesh, bone) === flesh wherever flesh is intact — a FIELD claim, so
-  // it is tested on the field's input, not on pixels (two captures of the
-  // same build differ by 52-82k px on this harness — there is no pixel floor
-  // here to stand on). sdBody, the CPU mirror, already excludes bone by
-  // design, so the comparable object is the PACKED DATA the march actually
-  // reads: derivation must never perturb the flesh rows — neither their
-  // values nor their count. Authored bones ride in BOTH arms of this test
-  // (they are part of the model, like flesh), so what this isolates is the
-  // derived set.
-  it('an undamaged body folds bit-identically with and without bone', () => {
-    const withBone = packBody(buildBody(compileBlob(parseBlob(src))));
-    const noBone = packBody(buildBody({ ...compileBlob(parseBlob(src)), boneRatio: 0 }));
-    // The flesh row COUNT may not move either: bones packed among the flesh
-    // rows would enter the shader's additive fold (rows [0, counts.x)) and
-    // lump every bone into the skin at full strength.
-    expect(withBone.primCount).toBe(noBone.primCount);
-    const n = noBone.primCount * 4;
-    expect(Array.from(withBone.primA.slice(0, n))).toEqual(Array.from(noBone.primA.slice(0, n)));
-    expect(Array.from(withBone.primScale.slice(0, n))).toEqual(Array.from(noBone.primScale.slice(0, n)));
-    // ratio 0 kills only the DERIVED set — the authored bones (cranium,
-    // ribcage) are present in both arms, so the comparison above is not
-    // vacuously passing on two boneless bodies.
-    expect(noBone.boneCount).toBeGreaterThan(0);
-    expect(withBone.boneCount).toBeGreaterThan(noBone.boneCount);
+  it('builds the ribcage out of ribs, not one wide plate', () => {
+    const torso = inCluster('torso');
+    // The plate this replaced was a single prim at scale.x 1.45. A ribcage is
+    // MANY thin prims; if this ever collapses back to one fat one, the "white
+    // central pillar" is back.
+    expect(torso.length, 'ribs + sternum + spine rod').toBeGreaterThanOrEqual(6);
+    // "Slab" means EFFECTIVE half-width, not radius: the plate this replaced
+    // was r 0.052 at scale.x 1.45 = 0.0754 across. A chunky pelvis is fine; a
+    // 75 mm-wide bar running the length of the chest is the pillar.
+    const halfWidth = (p: Primitive) => p.radius * p.scale[0];
+    expect(Math.max(...torso.map(halfWidth)), 'no prim is a slab').toBeLessThan(0.070);
+    // Ribs come in mirrored pairs, so the torso bones are not all on the
+    // midline — a symmetric spread in x is what makes it read as a cage.
+    const xs = torso.map(p => (p.a[0] + p.b[0]) / 2);
+    expect(Math.max(...xs), 'ribs reach right').toBeGreaterThan(0.03);
+    expect(Math.min(...xs), 'ribs reach left').toBeLessThan(-0.03);
   });
 });

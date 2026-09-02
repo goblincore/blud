@@ -30,14 +30,13 @@ export interface WoundKey<K extends string = string> {
  *  (a COPY that silently omits a knob). The exported WOUND_KEYS is the
  *  widened `WoundKey[]` view — plain `key: string` — which is what keeps
  *  this module's consumers (and the test) simple. */
-export type WoundTuningKey = 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'woundFibreAmp' | 'boneRatio';
+export type WoundTuningKey = 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
   { key: 'woundDepthAmp', label: 'depth ramp', min: 0, max: 1, step: 0.01, value: 1 },
   { key: 'fatDepth', label: 'fat knee (m)', min: 0, max: 0.03, step: 0.0005, value: 0.004 },
   { key: 'muscleDepth', label: 'muscle knee (m)', min: 0, max: 0.06, step: 0.0005, value: 0.014 },
-  { key: 'woundFibreAmp', label: 'fibre', min: 0, max: 2, step: 0.01, value: 0.6 },
   { key: 'boneRatio', label: 'bone ratio', min: 0, max: 1, step: 0.01, value: 0.38, commit: 'change' },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 

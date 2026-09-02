@@ -252,7 +252,7 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
     surfCfg2: uniform(new THREE.Vector4(1.0, 0.06, 0, 1.2)),
-    /** x woundDepthAmp, y fatDepth, z muscleDepth, w woundFibreAmp — the
+    /** x woundDepthAmp, y fatDepth, z muscleDepth, w spare — the
      *  wound tissue ramp (march.wgsl.ts TISSUE_RAMP). Defaults mirror
      *  henenlotter-latex; applyMaterial overwrites from the material. */
     surfCfg3: uniform(new THREE.Vector4(1.0, 0.004, 0.014, 0.6)),
@@ -1137,7 +1137,7 @@ export function createZombieGpuView(
       u.charColor.value.setRGB(...m.charColor);
       u.surfCfg.value.set(m.specIntensity, m.specRoughness, m.fresnelBoost, m.translucency);
       u.surfCfg2.value.set(m.wetness, m.surfaceNoiseAmp, m.mottleAmp, m.mottleScale);
-      u.surfCfg3.value.set(m.woundDepthAmp, m.fatDepth, m.muscleDepth, m.woundFibreAmp);
+      u.surfCfg3.value.set(m.woundDepthAmp, m.fatDepth, m.muscleDepth, 0);
       u.mottleColor.value.setRGB(...m.mottleColor);
       u.fatColor.value.setRGB(...m.fatColor);
       u.boneColor.value.setRGB(...m.boneColor);

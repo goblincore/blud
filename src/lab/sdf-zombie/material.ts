@@ -67,8 +67,6 @@ export interface FleshMaterial {
   muscleDepth: number;
   /** 0 disables the tissue ramp and shades bit-for-bit as before it existed. */
   woundDepthAmp: number;
-  /** 0 disables the torn-fibre mottle inside wounds. */
-  woundFibreAmp: number;
 }
 
 export type FleshPresetName = 'henenlotter-latex' | 'wet-meat' | 'clay';
@@ -89,7 +87,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     mottleAmp: 0, mottleScale: 1.2, mottleColor: [0.62, 0.24, 0.30],
     boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
-    woundDepthAmp: 1, woundFibreAmp: 0.6,
+    woundDepthAmp: 1,
   },
   // Rotten meat: darker, broader highlight, veiny, more scatter.
   'wet-meat': {
@@ -103,7 +101,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     mottleAmp: 0, mottleScale: 1.2, mottleColor: [0.30, 0.14, 0.12],
     boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
-    woundDepthAmp: 1, woundFibreAmp: 0.6,
+    woundDepthAmp: 1,
   },
   // Claymation: matte, waxy, thumb-smushed.
   clay: {
@@ -117,7 +115,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     mottleAmp: 0, mottleScale: 1.2, mottleColor: [0.44, 0.32, 0.24],
     boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
-    woundDepthAmp: 1, woundFibreAmp: 0.6,
+    woundDepthAmp: 1,
   },
 };
 

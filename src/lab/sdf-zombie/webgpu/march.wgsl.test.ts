@@ -1355,15 +1355,17 @@ describe('tissue ramp (wound pass r2)', () => {
   });
 });
 
-describe('wound fibre and bone material (wound pass r2)', () => {
+describe('bone material (wound pass r2)', () => {
   // The shading block lives inside marchBody — MARCH_BODY is the fragment
   // source the plan calls SHADE_BODY.
   const SHADE_BODY = MARCH_BODY;
 
-  it('confines the fibre mottle to the wound interior', () => {
-    // Multiplied by wm, NOT by switching goreStrength on — that would repaint
-    // whole standing bodies as torn meat.
-    expect(SHADE_BODY).toMatch(/woundFibre[\s\S]{0,200}\*\s*wm/);
+  it('has no torn-fibre pass at all', () => {
+    // Cut on the owner's playtest verdict (2026-09-02): swept to the slider's
+    // ceiling it was "not really noticeable". Asserted as ABSENCE rather than
+    // removed as a test, so nobody quietly reintroduces a per-pixel fbm that
+    // was already judged invisible — if it comes back it needs a new verdict.
+    expect(SHADE_BODY).not.toContain('woundFibre');
   });
 
   it('stains bone toward deepColor where it meets flesh', () => {

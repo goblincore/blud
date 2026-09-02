@@ -613,14 +613,14 @@ async function main() {
 
   /** Push the panel's tissue ramp into one view's surfCfg3. Component order
    *  is pinned by zombie-gpu's uniform table (x depthAmp, y fat, z muscle,
-   *  w fibre) — the same order applyMaterial writes the material defaults,
+   *  w spare) — the same order applyMaterial writes the material defaults,
    *  so this is a re-apply, not a second writer with its own opinion. */
   function applyWoundRamp(view: ZombieGpuView): void {
     const c = view.uniforms.surfCfg3.value;
     c.x = woundTuning.woundDepthAmp;
     c.y = woundTuning.fatDepth;
     c.z = woundTuning.muscleDepth;
-    c.w = woundTuning.woundFibreAmp;
+    c.w = 0;   // spare — the torn-fibre pass was cut (2026-09-02)
   }
 
   /** The applied tuning record plus body 1's live surfCfg3 — the shader
@@ -638,7 +638,6 @@ async function main() {
     if (o.woundDepthAmp !== undefined) { woundTuning.woundDepthAmp = o.woundDepthAmp; ramp = true; }
     if (o.fatDepth !== undefined) { woundTuning.fatDepth = o.fatDepth; ramp = true; }
     if (o.muscleDepth !== undefined) { woundTuning.muscleDepth = o.muscleDepth; ramp = true; }
-    if (o.woundFibreAmp !== undefined) { woundTuning.woundFibreAmp = o.woundFibreAmp; ramp = true; }
     if (ramp) for (const a of actors) applyWoundRamp(a.view);
     if (o.boneRatio !== undefined && o.boneRatio !== woundTuning.boneRatio) {
       boneRatioOverride = o.boneRatio;
@@ -1205,10 +1204,10 @@ async function main() {
     presets: [
       { label: 'shipped', values: { ...woundTuning } },
       {
-        // A "what the ramp can do" reference: knees pulled deep, fibre
-        // maxed. For seeing the fat/muscle bands at a glance, not a look.
+        // A "what the ramp can do" reference: knees pulled deep. For seeing
+        // the fat/muscle bands at a glance, not a look.
         label: 'raw',
-        values: { woundDepthAmp: 1, fatDepth: 0.008, muscleDepth: 0.03, woundFibreAmp: 1.4 },
+        values: { woundDepthAmp: 1, fatDepth: 0.008, muscleDepth: 0.03 },
       },
     ],
   });

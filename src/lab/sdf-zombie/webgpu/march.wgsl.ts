@@ -1228,7 +1228,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   surfCfg    x specIntensity, y specRoughness, z fresnelBoost, w translucency
 //   surfCfg2   x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale
 //   surfCfg3   x woundDepthAmp (0 = ramp off, shades as before), y fatDepth,
-//              z muscleDepth, w woundFibreAmp
+//              z muscleDepth, w SPARE (was woundFibreAmp, cut 2026-09-02)
 //   mottleColor  the colour the mottle mixes toward (linear RGB)
 //   fatColor   subcutaneous fat for the wound tissue ramp (linear RGB)
 //   faceCfg    x enabled, y strength, z forward (+1/-1), w relief
@@ -1776,7 +1776,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // makes the ramp halo-safe by construction: at wm = 0 nothing it computes
   // can reach the albedo, so it has no edge to disagree with the mask's.
   //
-  // surfCfg3 = (woundDepthAmp, fatDepth, muscleDepth, woundFibreAmp); the
+  // surfCfg3 = (woundDepthAmp, fatDepth, muscleDepth, spare); the
   // select is the amplitude gate — woundDepthAmp 0 shades bit-for-bit as
   // before the ramp existed.
   //
@@ -1789,18 +1789,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     surfCfg3.x > 0.0);
   var albedo = mix(baseColor, tissue, wm);
 
-  // Torn fibre (wound pass r2). The gore mottle fbm already exists but is
-  // dead on standing bodies — goreStrength is 0 there — so rather than
-  // switching that on globally, which would repaint whole undamaged bodies
-  // as torn meat, the mottle enters multiplied by wm: it exists only inside
-  // a wound. Same call and same rest-space anchor as the chunk path, so
-  // chunks and wounds agree about where the fibre is. The amplitude rides
-  // surfCfg3.w (woundFibreAmp), so 0 skips the fbm and shades bit-for-bit
-  // as before this existed.
-  if (surfCfg3.w > 0.0 && wm > 0.0) {
-    let woundFibre = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);
-    albedo = mix(albedo, albedo * mix(0.7, 1.25, woundFibre), surfCfg3.w * wm);
-  }
+  // NO TORN-FIBRE PASS. It shipped in wound pass r2 and was CUT on the
+  // owner's playtest verdict (2026-09-02): "rather subtle... just seems to
+  // make the texture a little different but not really noticeable or that
+  // visibly different from default", judged with the panel slider swept to
+  // its ceiling. An fbm per wound-interior pixel that nobody can see is
+  // cost without a look, so it is gone rather than defaulted to 0 — a dead
+  // knob invites someone to turn it back on and re-litigate this.
+  // surfCfg3.w is consequently SPARE; the row map above says so.
 
   // Bone material (wound pass r2). The dominant prim carries the material
   // code in primScale.w — W_BONE is 4, and only applyBones can claim bestIdx

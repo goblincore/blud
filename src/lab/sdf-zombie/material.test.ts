@@ -92,10 +92,9 @@ describe('wound tissue material (wound pass r2)', () => {
     }
   });
 
-  it('ships the depth ramp on and the fibre on', () => {
+  it('ships the depth ramp on', () => {
     for (const preset of Object.values(FLESH_PRESETS)) {
       expect(preset.woundDepthAmp).toBe(1);
-      expect(preset.woundFibreAmp).toBeGreaterThan(0);
     }
   });
 });
