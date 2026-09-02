@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/blob-compile.ts
-import { type BlobDoc, BlobError } from './blob-ast';
+import { type BlobDoc, type BlobPart, BlobError } from './blob-ast';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 import { DEFAULT_SHEET, type FaceSheetParams } from './blob-face-sheet';
@@ -221,20 +221,20 @@ export function compilePalette(doc: BlobDoc): FleshMaterial | null {
  * default. **If your caller always supplies a face, call `compileFace(doc)`
  * yourself first** to get the validation back.
  */
-export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
-  const bones: BoneDef[] = [
-    { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: doc.rootLen },
-    ...doc.bones.map(b => ({
-      name: b.name,
-      parent: b.parent,
-      dir: dirVector(b.dir, b.pitchDeg, b.tiltDeg),
-      length: b.len,
-      side: b.side,
-      mirror: b.mirror,
-    } satisfies BoneDef)),
-  ];
-
-  const prims: PrimDef[] = doc.parts.map(p => {
+/**
+ * Compiles ONE parsed part line into a PrimDef — the single grammar-to-engine
+ * translation both the `body` block and the `bones` block (wound pass r2)
+ * go through. The bones block reuses the body grammar word for word, so it
+ * gets the same per-kind validation for free: the groove-zero, chamfer-carve,
+ * chamfer-shell, r2=-on-blob and bend=-on-blob rejections below all fire for
+ * an authored bone line too, at the same line and column.
+ *
+ * The caller decides the OP: body parts compile to what they wrote (a carve
+ * is a sub); the bones block FORCES `op: 'bone'` on the result, because a
+ * bone authored in the body grammar is still a bone no matter which words
+ * placed it.
+ */
+function partToPrim(p: BlobPart): PrimDef {
     // A chamfered CARVE would fold through smax, and a chamfered subtraction
     // is a different operator with its own sign conventions — the shader's
     // carve pass deliberately does not read the profile. Rejecting it here is
@@ -308,12 +308,41 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
           }
         : {}),
     } satisfies PrimDef;
-  });
+}
+
+export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
+  const bones: BoneDef[] = [
+    { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: doc.rootLen },
+    ...doc.bones.map(b => ({
+      name: b.name,
+      parent: b.parent,
+      dir: dirVector(b.dir, b.pitchDeg, b.tiltDeg),
+      length: b.len,
+      side: b.side,
+      mirror: b.mirror,
+    } satisfies BoneDef)),
+  ];
+
+  const prims: PrimDef[] = doc.parts.map(partToPrim);
 
   return {
     name: doc.name,
     root: [0, doc.rootHeight, 0],
     bones,
     prims: [...prims, ...facePrims(face)],
+    // Authored bones (a `bones` block) compile through the SAME partToPrim
+    // path as body parts, then get `op: 'bone'` forced on: they are bones no
+    // matter which words placed them. They land on BodyDef.bonePrims — NEVER
+    // on `prims` — so buildBody can expand/place them separately and every
+    // unaudited prims consumer stays correct by construction. `ratio` rides
+    // along only when the author wrote one (null = untouched); buildBody
+    // applies DEFAULT_BONE_RATIO itself, and an explicit compile-time default
+    // here would make `absent` and `defaulted` indistinguishable downstream.
+    ...(doc.bonesBlock === null
+      ? {}
+      : {
+          bonePrims: doc.bonesBlock.parts.map(p => ({ ...partToPrim(p), op: 'bone' as const })),
+          ...(doc.bonesBlock.ratio === null ? {} : { boneRatio: doc.bonesBlock.ratio }),
+        }),
   };
 }

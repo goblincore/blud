@@ -4,6 +4,7 @@ import { parseBlob } from './blob-parse';
 import { BlobError } from './blob-ast';
 import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage, dirVector } from './blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import { DEFAULT_BONE_RATIO } from './bone-derive';
 import { DEFAULT_FACE } from './face';
 import { FLESH_PRESETS } from './material';
 import zombieBlobSrc from './characters/zombie.blob?raw';
@@ -413,5 +414,125 @@ body
   });
   it('rejects an image line with the wrong arity', () => {
     expect(() => parseBlob(BODY + 'sheet\n  image a.png b.png\n')).toThrow(/filename/);
+  });
+});
+
+describe('bones block (wound pass r2)', () => {
+  // Limb word is `torso`, not `leg`: expandMirror throws on a leg-limb prim
+  // without the mirror word ("limb \"leg\" requires a mirrored prim"), and this
+  // fixture deliberately keeps thigh unmirrored so exactly one authored bone
+  // exists. The skull bone is mandatory in ANY body built through compileBlob:
+  // facePrims ride it, so placePrims throws without it.
+  const SKELETON = `
+model test
+  height 1.78
+skeleton
+  root pelvis at 0.92
+  bone skull parent=pelvis dir=up len=0.1
+  bone thigh parent=pelvis dir=down len=0.40
+body
+  bar torso on thigh from=0.05 to=0.95 r=0.080 blend=0.01
+`;
+  const build = (src: string) => buildBody(compileBlob(parseBlob(src)));
+  /** Bone prims on ONE named bone — facePrims derive skull bones of their
+   *  own, so total-length pins would couple these tests to the face preset. */
+  const onBone = (b: ReturnType<typeof build>, bone: string) =>
+    b.bonePrims.filter(p => p.bone === bone);
+
+  it('auto-derives a bone when there is no bones block', () => {
+    const b = build(SKELETON);
+    expect(onBone(b, 'thigh')).toHaveLength(1);
+    expect(onBone(b, 'thigh')[0]!.radius).toBeCloseTo(0.080 * DEFAULT_BONE_RATIO, 6);
+  });
+
+  it('honours an explicit ratio', () => {
+    const b = build(`${SKELETON}bones\n  ratio 0.25\n`);
+    expect(onBone(b, 'thigh')[0]!.radius).toBeCloseTo(0.080 * 0.25, 6);
+  });
+
+  it('ratio 0 opts a character out of bone entirely', () => {
+    expect(build(`${SKELETON}bones\n  ratio 0\n`).bonePrims).toEqual([]);
+  });
+
+  it('an authored line replaces derivation for that bone only', () => {
+    const b = build(`${SKELETON}bones\n  bar torso on thigh from=0.1 to=0.9 r=0.021\n`);
+    expect(onBone(b, 'thigh')).toHaveLength(1);
+    expect(onBone(b, 'thigh')[0]!.radius).toBeCloseTo(0.021, 6);
+  });
+
+  it('derivation still fills bones the block does not name', () => {
+    const src = `\nmodel test
+  height 1.78
+skeleton
+  root pelvis at 0.92
+  bone skull parent=pelvis dir=up len=0.1
+  bone spine parent=pelvis dir=up len=0.28
+  bone thigh parent=pelvis dir=down len=0.40
+body
+  bar torso on spine from=0.1 to=0.9 r=0.090 blend=0.01
+  bar torso on thigh from=0.05 to=0.95 r=0.080 blend=0.01
+bones
+  bar torso on thigh from=0.1 to=0.9 r=0.021
+`;
+    const b = build(src);
+    expect(onBone(b, 'thigh')).toHaveLength(1);
+    expect(onBone(b, 'thigh')[0]!.radius).toBeCloseTo(0.021, 6); // authored wins on thigh
+    expect(onBone(b, 'spine')).toHaveLength(1);
+    expect(onBone(b, 'spine')[0]!.radius).toBeCloseTo(0.090 * DEFAULT_BONE_RATIO, 6); // derived on spine
+  });
+
+  it('an authored line on a mirrored bone covers both sides and stops derivation', () => {
+    const src = `\nmodel test
+  height 1.78
+skeleton
+  root pelvis at 0.92
+  bone skull parent=pelvis dir=up len=0.1
+mirror
+  bone thigh parent=pelvis dir=down len=0.40
+end
+body
+  bar leg on thigh from=0.05 to=0.95 r=0.080 blend=0.01 mirror
+bones
+  bar leg on thigh from=0.1 to=0.9 r=0.021 mirror
+`;
+    const b = build(src);
+    expect(onBone(b, 'thigh.l')).toHaveLength(1);
+    expect(onBone(b, 'thigh.r')).toHaveLength(1);
+    expect(onBone(b, 'thigh.l')[0]!.radius).toBe(0.021);
+    expect(onBone(b, 'thigh.r')[0]!.radius).toBe(0.021);
+    expect(b.prims.some(p => p.op === 'bone')).toBe(false);
+  });
+
+  it('an authored bone that breaches containment is a build ERROR, not a drop', () => {
+    // 4a's contract: derivation output is containment-FILTERED (a heuristic's
+    // guess), authored output is not — an author's explicit claim that pokes
+    // out of the flesh is reported by validateBody instead, because silently
+    // second-guessing an explicit number is how authors lose hours.
+    const b = build(`${SKELETON}bones\n  bar torso on thigh from=0.1 to=0.9 r=0.5\n`);
+    expect(onBone(b, 'thigh')).toHaveLength(1); // still built, still posed
+    expect(b.errors.some(e => /breaches the flesh surface/.test(e))).toBe(true);
+  });
+
+  it('rejects an unknown bone name with a located error', () => {
+    expect(() => build(`${SKELETON}bones\n  bar torso on femur from=0 to=1 r=0.02\n`))
+      .toThrow(/unknown bone "femur"/);
+  });
+
+  it('still never puts a bone in body.prims', () => {
+    const b = build(`${SKELETON}bones\n  bar torso on thigh from=0.1 to=0.9 r=0.021\n`);
+    expect(b.prims.some(p => p.op === 'bone')).toBe(false);
+  });
+
+  it('keeps the authored lines for the emitter to replay', () => {
+    const src = `${SKELETON}bones
+  # skull dome, hand-tuned
+  ratio 0.25
+  bar torso on thigh from=0.1 to=0.9 r=0.021
+`;
+    const doc = parseBlob(src);
+    expect(doc.bonesBlock).not.toBeNull();
+    expect(doc.bonesBlock!.ratio).toBe(0.25);
+    expect(doc.bonesBlock!.parts).toHaveLength(1);
+    expect(doc.bonesTrivia.map(l => l.words[0])).toEqual(['ratio']);
   });
 });

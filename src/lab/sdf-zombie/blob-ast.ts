@@ -128,6 +128,31 @@ export interface BlobDoc {
   rootLen: number;
   bones: BlobBone[];
   parts: BlobPart[];
+  /**
+   * A `bones` block's content, or null when the character did not declare one.
+   *
+   * Named `bonesBlock`, not the plan prose's `bones`: `BlobDoc.bones` is TAKEN
+   * — it is the SKELETON's bone declarations above — and this is a different
+   * thing entirely (authored bone PRIMITIVES, not the rig). Same reasoning
+   * that named `BuiltBody.bonePrims` in task 4a.
+   *
+   * `ratio` drives auto-derivation for bones this block does not name (null =
+   * untouched, DEFAULT_BONE_RATIO applies; 0 opts the character out of bone);
+   * `parts` are authored bone overrides written in EXACTLY the body grammar
+   * (`blob`/`bar` words only — a carve/groove/shell is not a bone shape) and
+   * are kept OUT of `parts` above: body parts and bone parts never mix, or
+   * every unaudited `body.prims` consumer is back to filtering on `op` by
+   * hand, which is the design that failed.
+   */
+  bonesBlock: { ratio: number | null; parts: BlobPart[] } | null;
+  /**
+   * The `bones` block's `ratio` source lines — the same trivia contract as
+   * `faceTrivia`/`sheetTrivia`/`paletteTrivia`: the emitter replays them
+   * verbatim so a round trip keeps the authored numbers, padding and
+   * comments. Parts ride their own `src` lines; the block keyword itself
+   * lives in `structure`.
+   */
+  bonesTrivia: BlobLine[];
   face: Record<string, number> | null;
   faceTrivia: BlobLine[];
   /**

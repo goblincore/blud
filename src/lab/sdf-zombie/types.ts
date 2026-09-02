@@ -173,10 +173,23 @@ export interface BodyDef {
   bones: BoneDef[];
   prims: PrimDef[];
   /**
+   * AUTHORED bone primitives from a `.blob` `bones` block (wound pass r2,
+   * task 4b), tagged `op: 'bone'` by compileBlob. Named `bonePrims`, not the
+   * plan's `bones`: `BodyDef.bones` is TAKEN — it is the rig skeleton above.
+   *
+   * Kept OUT of `prims` for the same reason BuiltBody keeps them out: the
+   * authoring-time field must not be the place where flesh and bone mix.
+   * buildBody expands them through the same mirror pass as flesh, places
+   * them, and moves them to BuiltBody.bonePrims — an authored bone wins PER
+   * BONE, suppressing auto-derivation for the bones it names.
+   */
+  bonePrims?: PrimDef[];
+  /**
    * Bone radius as a fraction of the flesh prim it sits inside — drives the
    * auto-derivation `buildBody` runs over the flesh prims (deriveBones).
    * Absent means DEFAULT_BONE_RATIO; 0 opts a body out of bone entirely.
-   * An authored `bones` block (Task 4b) will override per cluster.
+   * Set by a `bones` block's `ratio` line; the block's authored parts
+   * (bonePrims above) override derivation per bone on top of it.
    */
   boneRatio?: number;
 }

@@ -70,4 +70,21 @@ describe('emitBlob', () => {
     const out = emitBlob(doc);
     expect(out).toBe(withTrailingComment);
   });
+
+  // The `bones` block (wound pass r2) is a FOURTH block in the sense of the
+  // sheetTrivia story above: its part lines ride `bonesBlock.parts[].src` and
+  // its `ratio` lines ride `bonesTrivia`, and if either missed the owned list
+  // a re-emitted character would keep the `bones` keyword (it lives in
+  // `structure`) while silently losing everything under it — compiling fine,
+  // wearing auto-derived bones instead of the authored ones. This test is
+  // the same guard the shipped-character round trip provides, exercised on
+  // the block itself, because no shipped character uses `bones` yet.
+  it('round-trips a bones block — parts, ratio and trivia — to identical text', () => {
+    const withBones =
+      'model tiny\nskeleton\n  root pelvis at 0.5\n  bone skull parent=pelvis dir=up len=0.1\n' +
+      'body\n  blob head on skull at=0.5 r=0.1\n' +
+      'bones\n  # hand-tuned skull dome, retuned 2026-09\n  ratio 0.25\n' +
+      '  blob head on skull at=0.5 r=0.02\n';
+    expect(emitBlob(parseBlob(withBones))).toBe(withBones);
+  });
 });

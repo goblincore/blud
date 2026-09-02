@@ -40,9 +40,19 @@ export function buildBody(
   opts: BuildOpts = DEFAULT_BUILD_OPTS,
   override: BodyOverride = {},
 ): BuildResult {
-  const expanded = expandMirror(def);
+  // Authored bones (wound pass r2, task 4b) ride the SAME mirror expansion as
+  // flesh, so one authored line on a mirrored bone yields both sides — the
+  // whole point of reusing the body grammar. The concatenation below is a
+  // temporary for EXPANSION ONLY: the prims are split apart again right after
+  // (compiled bone defs carry op:'bone') and an authored bone never reaches
+  // the built `prims` array.
+  const authored = def.bonePrims ?? [];
+  const expanded = expandMirror(
+    authored.length === 0 ? def : { ...def, prims: [...def.prims, ...authored] });
+  const authoredDefs = expanded.prims.filter(p => p.op === 'bone');
+  const fleshDefs = expanded.prims.filter(p => p.op !== 'bone');
   const bones = resolveBones(expanded.bones, expanded.root);
-  const placed = placePrims(expanded.prims, bones);
+  const placed = placePrims(fleshDefs, bones);
   const { prims, clusters } = assignClusters(placed);
 
   // Overrides apply AFTER clustering, so indices are stable built-array indices.
@@ -65,14 +75,25 @@ export function buildBody(
   // identity while it holds. An appendage prim (an ear, a hand ball) or a
   // flattened disc cannot host a contained bone at the default ratio, so its
   // derived bone is DROPPED rather than emitted to float in air inside a wound
-  // cavity. Auto-derivation must never break the field identity; an AUTHORED
-  // bone (task 4b) instead surfaces as a validateBody error, because an
-  // author's explicit claim should be reported, not silently second-guessed.
+  // cavity. Auto-derivation must never break the field identity.
   const ratio = def.boneRatio ?? DEFAULT_BONE_RATIO;
-  const bonePlaced = placePrims(deriveBones(expanded.prims, ratio), bones);
-  const bonePrims: Primitive[] = bonePlaced
-    .map(p => ({ ...p, cluster: CLUSTER_ORDER.indexOf(p.limb) }))
-    .filter(b => boneBreach({ prims, clusters }, b) === null);
+  // Authored bones win PER BONE: an authored skull must not cost the author
+  // every auto-derived limb bone, and an authored line on `thigh` must not
+  // coexist with a derived one on `thigh` (two bones on one bone is the
+  // neither-shape). The set holds CONCRETE post-expansion names ('thigh.l'),
+  // matching what derivation filters. Derivation output stays
+  // CONTAINMENT-FILTERED (dropped, not reported — it is a heuristic's guess);
+  // AUTHORED bones are NOT filtered: an author's explicit claim that breaches
+  // is a fact to report, so validateBody's containment check surfaces it as a
+  // build error instead of buildBody silently second-guessing the author.
+  const authoredBones = new Set(authoredDefs.map(p => p.bone));
+  const toBone = (p: Omit<Primitive, 'cluster'>): Primitive => ({ ...p, cluster: CLUSTER_ORDER.indexOf(p.limb) });
+  const bonePrims: Primitive[] = [
+    ...placePrims(authoredDefs, bones).map(toBone),
+    ...placePrims(deriveBones(fleshDefs.filter(p => !authoredBones.has(p.bone)), ratio), bones)
+      .map(toBone)
+      .filter(b => boneBreach({ prims, clusters }, b) === null),
+  ];
 
   const body = { prims, clusters, bonePrims };
   return { ...body, bones, errors: validateBody(body, opts) };

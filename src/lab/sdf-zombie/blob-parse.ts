@@ -325,8 +325,16 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
  * become a real word in the grammar, not stay guessed here.) `blob`/`bar`
  * DO validate their limb word, via `limbArg` — see its doc comment for why
  * that isn't optional.
+ *
+ * `into` names the array the parsed part is pushed onto. This is the ONE
+ * grammar for both `body` and `bones` part lines — the `bones` block
+ * (wound pass r2) reuses it word for word, same limb word, same `on <bone>`,
+ * same `mirror` — and the caller decides where the part lands. The bones
+ * dispatcher passes `doc.bonesBlock.parts` so an authored bone can never
+ * drift into `doc.parts` (and from there into `body.prims`, the design that
+ * silently broke shadows, gibs and severing).
  */
-function parseBodyLine(l: BlobLine, s: ParseState): void {
+function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
   const [head, ...rest] = l.words;
   const kind = head as BlobPartKind;
   if (kind !== 'blob' && kind !== 'bar' && kind !== 'carve' && kind !== 'groove' && kind !== 'shell')
@@ -417,7 +425,39 @@ function parseBodyLine(l: BlobLine, s: ParseState): void {
       throw new BlobError('shell needs rim=<rounding radius>', l.line, l.indent + 1);
   }
 
-  s.doc.parts.push(part);
+  into.push(part);
+}
+
+/**
+ * Handles one line inside a `bones` block (wound pass r2): `ratio <r>`, or an
+ * authored bone part written in the BODY grammar — `parseBodyLine` does the
+ * parsing, this function only decides where the part lands and gates the two
+ * kinds that could actually be a bone (`blob`/`bar`). A `carve`/`groove`/
+ * `shell` line is rejected here, at the line, rather than at compile where
+ * the same words would have to be re-interpreted as something they are not.
+ *
+ * `ratio` is the derivation fallback for bones the block does not name; it is
+ * NOT the radius of anything. Negative or non-numeric throws — a ratio is a
+ * fraction of flesh radius, and a nonsense one would either opt the character
+ * out of bone silently (negative, after the `v < 0` check were dropped) or
+ * NaN its way past every comparison.
+ */
+function parseBonesLine(l: BlobLine, s: ParseState): void {
+  s.doc.bonesBlock ??= { ratio: null, parts: [] };
+  const head = l.words[0]!;
+  if (head === 'ratio') {
+    const v = Number(l.words[1]);
+    if (!Number.isFinite(v) || v < 0)
+      throw new BlobError('ratio needs a non-negative number', l.line, wordCol(l, 1));
+    s.doc.bonesBlock.ratio = v;
+    s.doc.bonesTrivia.push(l);
+    return;
+  }
+  if (head !== 'blob' && head !== 'bar')
+    throw new BlobError(
+      `a bones line must be "blob", "bar" or "ratio", got "${head}"`,
+      l.line, l.indent + 1);
+  parseBodyLine(l, s, s.doc.bonesBlock.parts);
 }
 
 /**
@@ -516,7 +556,7 @@ export function parseBlob(src: string): BlobDoc {
   const s: ParseState = {
     doc: {
       name: '', height: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
-      bones: [], parts: [], face: null, faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
+      bones: [], parts: [], bonesBlock: null, bonesTrivia: [], face: null, faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
       palette: null, paletteTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),
@@ -539,10 +579,11 @@ export function parseBlob(src: string): BlobDoc {
       s.doc.structure.push(l);
       continue;
     }
-    if (head === 'skeleton' || head === 'body' || head === 'face' || head === 'sheet' || head === 'palette') { section = head; s.doc.structure.push(l); continue; }
+    if (head === 'skeleton' || head === 'body' || head === 'bones' || head === 'face' || head === 'sheet' || head === 'palette') { section = head; s.doc.structure.push(l); continue; }
 
     if (section === 'skeleton') { parseSkeletonLine(l, s); continue; }
-    if (section === 'body') { parseBodyLine(l, s); continue; }
+    if (section === 'body') { parseBodyLine(l, s, s.doc.parts); continue; }
+    if (section === 'bones') { parseBonesLine(l, s); continue; }
     if (section === 'face') { parseNamedNumberLine(l, s, 'face'); continue; }
     if (section === 'sheet') { parseNamedNumberLine(l, s, 'sheet'); continue; }
     if (section === 'palette') { parsePaletteLine(l, s); continue; }
