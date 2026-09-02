@@ -46,6 +46,18 @@ queued before task 3) flips the default OFF, proves it by readback, fixes
 the exit pass or leaves it off. Task 2 (omega 1.0) PASSED: hits unchanged
 or up, steps −33..−45%. Task 3 timed out on wound staging; re-queued with
 its first attempt's commit and lessons.
+**2026-09-02 later:** Task 1c REFUTED the nearest-face hypothesis and found
+the real cause — the hull's WRITTEN DISTANCE decays with range (true 9 m
+stores 2.8 m; near field exact), the SAME unexplained three-r185 TSL
+phenomenon that killed the occluder pre-pass. Max semantics of the exit
+pass are correct. `GAME_HULL_EXIT_BOUND` STAYS 0 until someone root-causes
+the decay; the step win (missStepShare 0.54→0.41 r3) is untakeable until
+then. Also: occupancy `hits` "identical on/off" is NOT evidence of an
+unchanged hit set where proxy boxes overlap (near-box misses clobber far
+hits before readback). Task 3 (wound early-out) PASSED parity on one load
+(craters identical, HUD clock the only diff) + lab render-check; its second
+run timed out inside bench legs; controller wrote the notes, restored the
+seam default ON, marked done. Chain continues at task 4.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
