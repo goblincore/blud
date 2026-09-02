@@ -94,6 +94,21 @@ export interface BlobPart {
   /** The bare word `organ` (bones block only): soft viscera, not bone.
    *  Rides the same array and gates as bone; differs only in material. */
   organ: boolean;
+  /**
+   * The bare word `box`: this primitive is a rounded BOX swept along its
+   * segment, not a capsule. Half-extents are `radius * wide/tall/deep` — the
+   * SAME world semi-axes a capsule gets — so `blob:rings` measures and
+   * suggests against a box with no change to the fitter.
+   */
+  box: boolean;
+  /**
+   * `round=` — corner radius as a FRACTION of `radius`, 0..1, inset so the
+   * total half-extent stays `radius * scale`. A fraction and not metres
+   * because `sdPrimitive` evaluates in the SCALE-DIVIDED frame, where an
+   * absolute length would come out anisotropically distorted on any part with
+   * unequal wide/tall/deep. Ignored unless `box`.
+   */
+  round: number;
   src: BlobLine;
 }
 

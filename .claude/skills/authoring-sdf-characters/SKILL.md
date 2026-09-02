@@ -55,9 +55,13 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
    `--side` for the torso: a T-posed reference's arms pollute the front view
    there. If it prints STACKED, blend the masses before chasing another band.
 4. **Every ~5 edits, look:** `npm run blob:shot -- <name>`, then `Read` the
-   frames — or, if your model has no native vision (glm-5.x and kimi-k3 on pi:
-   `Read` on a PNG shows you nothing), `python3 scripts/vision-ask.py <frame>
-   "<question>"` and quote the answer. The measure cannot see a hole behind the front surface, a feature
+   frames — or, if your model has no native vision, `python3
+   scripts/vision-ask.py <frame> "<question>"` and quote the answer.
+   **Check, do not assume: vision is per-MODEL, not per-family.** In
+   `~/.pi/agent/models.json`, `input` must list `"image"`. On pi today
+   `zai/glm-5.3-flash` HAS vision (and is the dispatch default, so `Read` the
+   frames directly); `glm-5.3`, `glm-5.2`, `glm-5.1` and kimi-k3 do not.
+   Prefer seeing the frame over quoting a sidecar's description of it. The measure cannot see a hole behind the front surface, a feature
    smeared by `blend=`, or a colour. The pictures can.
 5. **See something the measure did not predict?** Run
    `npm run blob:render-check -- <name>` *before* editing the `.blob`. It starts

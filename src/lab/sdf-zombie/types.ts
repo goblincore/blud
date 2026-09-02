@@ -19,6 +19,19 @@ export interface ShellParams {
   rim: number;
 }
 
+/**
+ * A rounded box swept along the primitive's segment. Half-extents are
+ * `radius * scale` — identical to the capsule's semi-axes, which is what keeps
+ * `blob:rings` meaningful on a box. `round` is the corner radius as a FRACTION
+ * of `radius`, 0..1, applied INSET:
+ *
+ *     sdBox(q - closest, vec3(radius * (1 - round))) - radius * round
+ *
+ * so raising it softens the corner without growing the part. `round: 1` is
+ * exactly the capsule; `round: 0.05` reads machined.
+ */
+export interface BoxParams { round: number }
+
 /** Fixed fold order. Index into this array IS the cluster id. Never reorder. */
 export const CLUSTER_ORDER = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'] as const;
 export type LimbId = (typeof CLUSTER_ORDER)[number];
@@ -165,6 +178,12 @@ export interface PrimDef {
    * Additive, and folds exactly as any other prim; see ShellParams.
    */
   shell?: ShellParams;
+  /**
+   * Present when this primitive is a rounded BOX swept along its segment
+   * rather than a capsule. `round` is the corner radius as a fraction of
+   * `radius` (0..1), inset — see BoxParams.
+   */
+  box?: BoxParams;
 }
 
 export interface BodyDef {
@@ -273,6 +292,8 @@ export interface Primitive {
   core?: boolean;
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */
   shell?: ShellParams;
+  /** See PrimDef.box. Carried through mirror, resolve and the rig untouched. */
+  box?: BoxParams;
 }
 
 export interface ClusterInfo {

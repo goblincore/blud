@@ -1,8 +1,8 @@
 # `.blob` syntax reference
 
 The companion to `SKILL.md`. That file is the loop and the lessons; this one is
-the grammar for the four features that are pure syntax to look up. Everything
-here was true of the format on 2026-08-22.
+the grammar for the features that are pure syntax to look up. Everything here
+was true of the format on 2026-09-02.
 
 ## Sharp features: `r2=`, `tip=`, `chamfer`
 
@@ -97,6 +97,58 @@ depend on sub-tenth-millimetre bends surviving.
 Same rejection as the taper, for the same reason: `bend=` on a `blob` with no
 `tip=` has no midpoint to displace from. Use a `bar`, or give the blob a
 `tip=`.
+
+## Hard surface: the bare word `box` (added 2026-09-02)
+
+Every primitive was a capsule or round cone until this, which ruled out a FLAT
+FACE. `chamfer` bevels the fold BETWEEN two prims; the prim itself still had
+round ends, so a machined plate read as a lozenge. That is the whole reason the
+first biomechanical reference could not be authored. `box` sweeps a rounded BOX
+along the segment instead of a sphere:
+
+```
+bar leg on shin from=0.18 to=0.86 r=0.055 wide=1.35 deep=0.80 box round=0.10 color=8d9299
+blob leg on knee at=0.50 r=0.070 box round=0.22 chamfer color=6f747b
+```
+
+`blob ... box` is a cube; `bar ... box` is a slab — the same point/segment
+duality as everywhere else. It is a MODIFIER, not a part kind, so it composes
+with `mirror`/`both`, `offset=`, `core`, `color=`/`gloss=` and `chamfer`
+exactly as they already work.
+
+- **Half-extents are `r x wide/tall/deep`** — the SAME world semi-axes a capsule
+  gets. That is deliberate: `blob:rings` measures semi-axes, so its "one block
+  is one edit" suggestions stay meaningful on a box with no change to the
+  fitter. Do not reason about a box as though it had its own size convention.
+- **`round=` is a FRACTION of `r`, 0..1, default 0.08** — not metres. The field
+  is evaluated in the scale-divided frame, where an absolute length would come
+  out anisotropically distorted on any part with unequal `wide/tall/deep`. It is
+  INSET, so raising it softens the corner without growing the part.
+  `round=0.05` reads machined; `round=0.40` reads soft; **`round=1` is exactly
+  the capsule**, which is the useful mental anchor.
+- **A box extends past its endpoints, exactly as a capsule does** — it reaches
+  its half-extent beyond A and B along the axis. Surprising for a box, but it
+  keeps `from=`/`to=` meaning what they already mean.
+
+Rejected loudly, never silently ignored: `bend=`, `r2=` and `tip=` on a box
+(`sdRoundBox` has no bent, tapered or tip-displaced form), `box` on a `shell`,
+and `round=` outside 0..1 — above 1 the inset extent goes negative and the field
+inverts, so a clamp would hide a typo.
+
+**Judging a box by measurement: on-axis probes CANNOT see it.** The inset is
+defined so a box's axis-aligned extreme point coincides exactly with a
+same-`r` capsule's. Every on-axis width, every band in `blob:measure`, and
+`blob:rings`' whole radial fit therefore read a box and a capsule identically —
+they differ only OFF-axis, out to the corner at `r*sqrt(3)` when `round=0`. So
+a silhouette that looks right is not evidence the box is working. Look at a
+CORNER, from a 3/4 yaw: two flat faces meeting at a crisp vertical edge is the
+tell. `docs/dev-notes/2026-09-02-box-primitive/` has reference frames.
+
+Still missing, and known: **`carve` is head-only**, so you cannot bore a socket
+or cut a vent slot into a plate. And `gloss=` pulls toward a WET highlight,
+which is a flesh cue — there is no metalness, so grey plates read as wet plastic
+rather than brushed metal. Both are deliberate gaps left for evidence from a
+real character; raise them rather than routing around them.
 
 ## Colour is the biggest lever you have
 

@@ -95,6 +95,7 @@ export function placePrims(
       ...(p.gloss === undefined ? {} : { gloss: p.gloss }),
       ...(p.core ? { core: true } : {}),
       ...(p.shell === undefined ? {} : { shell: p.shell }),
+      ...(p.box === undefined ? {} : { box: p.box }),
     };
   });
 }

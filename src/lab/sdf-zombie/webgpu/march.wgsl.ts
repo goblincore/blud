@@ -42,9 +42,11 @@ import { MAX_PRIMS } from '../validate';
 //   row 9  restB        xyz = REST endpoint B, w = blendK
 //   row 10 primShape    x = radius at endpoint B (NEGATIVE = untapered),
 //                       y = fold profile (0 round, 1 chamfer,
-//                       2 round+BENT, 3 chamfer+BENT), zw spare
+//                       2 round+BENT, 3 chamfer+BENT, +4 SHELL, +8 BOX),
+//                       zw = groove depth and width
 //   row 11 primBend     xyz = quadratic Bezier control point (world space),
-//                       w spare
+//                       w = a BOX's corner-rounding fraction (see pack.ts;
+//                       the two never coexist — bend= on a box is rejected)
 //   row 12 primColor    xyz = linear albedo, w = 1 + gloss (w=0: flesh)
 //   row 13 groupBnds    xyz = group sphere centre, w = radius
 //   row 14 groupRange   x = start, y = count, z = distort, w = flag bitfield
@@ -315,12 +317,39 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
   return best * minScale;
 }`;
 
+// Rounded box — the exact CPU mirror of sdRoundBox in validate.ts. `e` is the
+// half-extent BEFORE rounding; the caller insets it by `r` so total half-extent
+// is unchanged. Edit both in the same commit or click-to-shoot drifts from
+// what is drawn.
+export const SD_ROUND_BOX = /* wgsl */ `fn sdRoundBox(p: vec3<f32>, e: vec3<f32>, r: f32) -> f32 {
+  let q = abs(p) - e;
+  return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}`;
+
 export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>, band: i32) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A} + band), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B} + band), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE} + band), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
+  // BOX before BENT: bend= is rejected on a box at compile time, so the two
+  // never coexist; testing box first means the bend row is never fetched for
+  // one, which is what makes sharing primBend.w safe. The bend row is
+  // otherwise only fetched by the caller when prof & 2 (see applyCarves and
+  // foldGroup), so a box branch here must load ROW_PRIM_BEND itself.
+  if ((i32(prof) & 8) != 0) {
+    let qq = p * inv;
+    let a = A.xyz * inv;
+    let b = B.xyz * inv;
+    let ab = b - a;
+    let ap = qq - a;
+    let ab2 = dot(ab, ab);
+    let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
+    let closest = a + ab * t;
+    let round = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w;
+    let e = A.w * (1.0 - round);
+    return sdRoundBox(qq - closest, vec3<f32>(e), A.w * round) * minScale;
+  }
   // Bent above tapered above plain: prof's bit 1 (value 2) means the Bezier
   // path (0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent; 4/6 add shell on
   // top, whose bend flag is the same bit), so the bit test keeps every
@@ -381,6 +410,18 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   a = a * inv;
   b = b * inv;
   let minScale = min(S.x, min(S.y, S.z));
+  // BOX before BENT — same reasoning as sdPrim: bend= and box never coexist,
+  // so testing box first means the bend row is fetched only here, on demand.
+  if ((i32(prof) & 8) != 0) {
+    let ab = b - a;
+    let ap = qq - a;
+    let ab2 = dot(ab, ab);
+    let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
+    let closest = a + ab * t;
+    let round = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w;
+    let e = A.w * (1.0 - round);
+    return sdRoundBox(qq - closest, vec3<f32>(e), A.w * round) * minScale;
+  }
   if ((i32(prof) & 2) != 0) { return coneBend(qq, a, b, c * inv, A.w, r2, minScale); }
   return coneCap(qq, a, b, A.w, r2, minScale);
 }`;
@@ -904,20 +945,38 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     }
     var sd = sdPrim(p, idx, data, r2, prof, cpos, band);
     if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }
-    // A SHELL (profile bit 2, value >= 4) thins the closed base field to a
+    // A SHELL (profile bit 2, value 4) thins the closed base field to a
     // sheet and clips it: abs(dBase) - thick, then a rounded-rim clip against
     // the shell plane. Only shell prims read the two extra rows, and only in
     // a shaped group, so additive prims pay nothing.
-    if (prof >= 4.0) {
+    //
+    // MUST be a mask, not a "prof >= 4" magnitude test: that only ever meant
+    // "shell" while bit 2 (shell) was the highest bit anyone set, so nothing
+    // outscored it. A BOX sets bit 3 (value 8) with bit 2 clear, and
+    // 8 >= 4 is true — a magnitude test would fold every box as a
+    // zero-thickness shell (primShell/primClip are all-zero for a box),
+    // instead of the plain body it actually is.
+    if ((i32(prof) & 4) != 0) {
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
       sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
-    // Chamfer is profile bit 0; bend is +2, so the old "prof > 0.5" test
-    // would wrongly chamfer a plain-bent prim — bounded above now. A shell
-    // (prof >= 4) always folds round regardless of the profile's low bits.
-    if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
+    // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
+    // bit 2 (value 4). "& 7 == 1" means "bit 0 set, bits 1 and 2 clear" —
+    // exactly chamfer-and-nothing-else, which is what the OLD bounded-window
+    // test (prof strictly between one half and one and a half) meant back
+    // when prof topped out at 6.
+    //
+    // MUST be a mask, not that bounded window: a BOX sets bit 3 (value 8),
+    // so prof is no longer bounded above by 6, and a chamfered box (prof 9)
+    // falls outside that old window entirely — the author writes chamfer=,
+    // the row packs it (see pack.ts), and the crease silently never
+    // appears. "& 7" ignores bit 3 entirely, so box+chamfer (9 & 7 == 1)
+    // chamfers exactly as a non-box chamfered prim does, and every existing
+    // case (0,1,2,3,4,6) keeps its current answer — verified by
+    // enumeration, see pack.test.ts / the task 5 report.
+    if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
   }
   return d;
 }
@@ -2495,7 +2554,7 @@ export const HELPERS = [
   // ordering test below only checks what is IN the list, so an omitted helper
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
-  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_PRIM, SD_PRIM_ORIENTED,
+  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
   SD_SHELL,
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,

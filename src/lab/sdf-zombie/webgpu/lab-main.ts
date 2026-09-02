@@ -49,6 +49,7 @@ import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
 import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
 import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 import dragonBlobSrc from '../characters/dragon.blob?raw';
+import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -69,6 +70,7 @@ const CHARACTERS: Record<string, string> = {
   'schoolgirl-alt': schoolgirlAltBlobSrc,
   bonewalker: bonewalkerBlobSrc,
   dragon: dragonBlobSrc,
+  'box-fixture': boxFixtureBlobSrc,
 };
 
 /**

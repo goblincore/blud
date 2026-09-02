@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
+import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -60,6 +60,22 @@ describe('validateBody', () => {
     const body = healthy();
     // Move a primitive after bounds were computed — the cull would silently drop it.
     body.prims[body.clusters[0]!.start] = { ...body.prims[body.clusters[0]!.start]!, a: [5, 5, 5], b: [5, 5, 5] };
+    const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
+    expect(errs.join(' ')).toMatch(/bounding sphere/i);
+  });
+
+  it('fails when a BOX primitive escapes its cluster bounding sphere, even though its capsule radius alone would not', () => {
+    // Site 5 (X1.28 task 4b): a dead-sharp box (round=0), radius 0.1 — true
+    // corner reach is 0.1*sqrt(3) ~ 0.1732, vs a plain capsule's 0.1. Undersize
+    // the cluster bound to exactly the CAPSULE reach: this reproduces the
+    // reviewer's finding that the escape check was blind to boxReach even
+    // though clusters.ts (Task 4 site 2) now fits its bound WITH it — the
+    // safety net that exists to catch an undersized bound must itself see the
+    // box term, or it approves a bound it should reject.
+    const body = assignClusters([
+      { ...prim('torso', [0, 0, 0], 0.1), box: { round: 0 } },
+    ]);
+    body.clusters[0]!.radius = 0.1;
     const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
     expect(errs.join(' ')).toMatch(/bounding sphere/i);
   });
@@ -163,6 +179,84 @@ describe('shader/CPU field mirror', () => {
   it('carves in the shader too, behind a count guard', () => {
     expect(FRAG).toContain('applyCarves');
     expect(FRAG).toContain('uCarveCount');
+  });
+});
+
+describe('sdPrimitive box', () => {
+  const base = { a: [0, 0, 0], b: [0, 0, 0], scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, radius: 0.1 } as const;
+  const boxAt = (round: number) => ({ ...base, box: { round } }) as unknown as Primitive;
+
+  it('round=1 is exactly the capsule', () => {
+    const cap = { ...base } as unknown as Primitive;
+    for (const p of [[0.2, 0, 0], [0, 0.15, 0.1], [0.05, 0.05, 0.05]] as Vec3[])
+      expect(sdPrimitive(p, boxAt(1))).toBeCloseTo(sdPrimitive(p, cap), 6);
+  });
+
+  it('reaches r along an axis regardless of round', () => {
+    // On an axis the inset exactly cancels: extent (1-round)*r plus rounding
+    // round*r is r, so the surface sits at r for every round.
+    for (const round of [0, 0.08, 0.5, 1])
+      expect(sdPrimitive([0.1, 0, 0], boxAt(round))).toBeCloseTo(0, 6);
+  });
+
+  it('a sharp corner sits r*(sqrt3-1) outside the capsule on the diagonal', () => {
+    // The far corner of a cube of half-extent r is at r*sqrt(3). At round=0
+    // the box surface reaches it, where the capsule stopped at r.
+    const k = 0.1 * Math.sqrt(3);
+    const corner: Vec3 = [k / Math.sqrt(3), k / Math.sqrt(3), k / Math.sqrt(3)];
+    expect(sdPrimitive(corner, boxAt(0))).toBeCloseTo(0, 6);
+    expect(sdPrimitive(corner, { ...base } as unknown as Primitive)).toBeCloseTo(0.1 * (Math.sqrt(3) - 1), 6);
+  });
+
+  it('leaves a non-box primitive bit-identical', () => {
+    const cap = { ...base, radius: 0.07, scale: [1.3, 0.8, 1.1] } as unknown as Primitive;
+    expect(sdPrimitive([0.2, 0.1, 0], cap)).toBe(sdPrimitive([0.2, 0.1, 0], { ...cap }));
+  });
+
+  it('reaches radius * scale[k] along each world axis on an anisotropic box', () => {
+    // The scale-divide is per-component, so a world point sitting exactly at
+    // radius*scale[k] along axis k maps to `radius` along that axis in the
+    // divided frame regardless of the OTHER axes' scale — the box's e+r
+    // inset (== radius) puts the surface exactly there, same as the capsule.
+    // This is the property `round` being a FRACTION rather than metres exists
+    // to protect: an absolute round in a divided frame would distort exactly
+    // this reach anisotropically.
+    //
+    // NOTE: every assertion here is ON the surface (sdRoundBox === 0), so it
+    // cannot see whether `* minScale` is even applied — 0 times anything is
+    // 0. That is a separate property, pinned below.
+    const scale: Vec3 = [1.4, 0.7, 1.0];
+    const radius = 0.1;
+    const anis = { ...base, scale, radius, box: { round: 0.35 } } as unknown as Primitive;
+    const points: Vec3[] = [
+      [radius * scale[0], 0, 0],
+      [0, radius * scale[1], 0],
+      [0, 0, radius * scale[2]],
+    ];
+    for (const p of points) expect(sdPrimitive(p, anis)).toBeCloseTo(0, 6);
+  });
+
+  it('applies minScale OFF the surface, where an on-surface point cannot see it', () => {
+    // Every other test in this block reads the surface (distance 0), and
+    // 0 * minScale === 0 for ANY minScale — a missing or misplaced
+    // `* minScale` in the box branch is invisible to an on-surface
+    // assertion. This point sits strictly outside the box, so the
+    // scale-correction factor shows up in the returned NUMBER itself.
+    //
+    // Derivation (a = b = [0,0,0], so the divided-frame closest point is the
+    // origin for any p): scale = [1.4, 0.7, 1.0], radius = 0.1, round = 0
+    // (so e = radius = 0.1, r = 0). At world p = [0.28, 0, 0]:
+    //   q  = p / scale = [0.2, 0, 0]           (divide by scale[0] = 1.4)
+    //   qx = |0.2| - e = 0.1;  qy = qz = 0 - e = -0.1
+    //   sdRoundBox = hypot(max(qx,0), 0, 0) + min(max(qx,qy,qz), 0) - r
+    //              = 0.1 + min(0.1, 0) - 0 = 0.1
+    //   minScale = min(1.4, 0.7, 1.0) = 0.7
+    //   base = sdRoundBox * minScale = 0.1 * 0.7 = 0.07
+    // Deleting `* minScale` from the box branch would yield 0.1 here, not
+    // 0.07 — that is exactly what this assertion is pinning.
+    const scale: Vec3 = [1.4, 0.7, 1.0];
+    const anis = { ...base, scale, radius: 0.1, box: { round: 0 } } as unknown as Primitive;
+    expect(sdPrimitive([0.28, 0, 0], anis)).toBeCloseTo(0.07, 6);
   });
 });
 

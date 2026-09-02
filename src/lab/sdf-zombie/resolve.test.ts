@@ -93,6 +93,15 @@ describe('placePrims with offset and op', () => {
     expect(mk().mirrored).toBeUndefined();
   });
 
+  it('carries box through onto the placed primitive', () => {
+    const mk = (box?: { round: number }) => placePrims([{
+      bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,
+      limb: 'head', ...(box ? { box } : {}),
+    }] as ExpandedPrim[], skull as never)[0]!;
+    expect(mk({ round: 0.3 }).box).toEqual({ round: 0.3 });
+    expect(mk().box).toBeUndefined();
+  });
+
   it('defaults op to add and passes sub through', () => {
     const mk = (op?: 'add' | 'sub') => placePrims([{
       bone: 'skull', at: 0.5, radius: 0.03, scale: [1, 1, 1], blendK: 0.01,

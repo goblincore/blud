@@ -26,6 +26,20 @@
 // eye socket or a blast crater removed material is no longer inside anything,
 // and a ray cut there would punch a hole straight through the body. Hence
 // HULL_SHRINK, and hence the wound exclusion in buildHullInstances.
+//
+// BOX PRIMITIVES (X1.28 task 4/4c): deliberately NOT run through boxReach()
+// here, unlike the eight OUTER bounds fixed in extent.ts/clusters.ts/pack.ts/
+// shell-hull-outer.ts/validate.ts/rig-bind.ts/fpv-view.ts. Those sites must
+// GROW under a box or the shader culls real surface; this hull is the
+// opposite risk — INNER spheres that must stay inside the primitive or a ray
+// gets cut short of real geometry. Sizing here is `radius * min(scale)`, the
+// largest sphere guaranteed to fit inside the CAPSULE of a prim's semi-axes
+// (see buildHullInstances below), and a rounded box strictly CONTAINS that
+// same capsule — they touch on the axes, the box is further out everywhere
+// else — so a sphere sized for the capsule is still safely inside the box.
+// The sizing does not need to know about `round` at all. Considered and
+// intentionally excluded, not missed; hands.ts's grip-seat sink depth
+// excludes it for the identical reason.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';

@@ -378,3 +378,25 @@ describe('color= and gloss=', () => {
     expect(() => parseBlob(PAINTED.replace('r=0.1\n', 'r=0.1 gloss=0.2\n'))).toThrow(/only means something on a coloured primitive/);
   });
 });
+
+describe('box', () => {
+  const doc = (body: string) => parseBlob(
+    `model t\nskeleton\n  root pelvis at 1.0\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+
+  it('reads the bare word `box` and a round= fraction', () => {
+    const d = doc('  bar torso on spine from=0.1 to=0.9 r=0.05 box round=0.10');
+    expect(d.parts[0]!.box).toBe(true);
+    expect(d.parts[0]!.round).toBeCloseTo(0.10, 6);
+  });
+
+  it('defaults round to 0.08 when the word is present without it', () => {
+    const d = doc('  bar torso on spine from=0.1 to=0.9 r=0.05 box');
+    expect(d.parts[0]!.round).toBeCloseTo(0.08, 6);
+  });
+
+  it('leaves box false and round at its default on an ordinary prim', () => {
+    const d = doc('  bar torso on spine from=0.1 to=0.9 r=0.05');
+    expect(d.parts[0]!.box).toBe(false);
+    expect(d.parts[0]!.round).toBeCloseTo(0.08, 6);
+  });
+});

@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/pack.test.ts
 import { describe, it, expect } from 'vitest';
-import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, W_ADD, W_BONE, W_DEAD, W_ORGAN } from './pack';
+import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, boundGroups, W_ADD, W_BONE, W_DEAD, W_ORGAN } from './pack';
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
@@ -156,6 +156,106 @@ it('packs a carve as a negative blend constant', () => {
   expect(p.carveCount).toBe(1);
 });
 
+describe('box packing', () => {
+  // Shared skeleton: one prim, one cluster covering it. Each test only
+  // varies the prim fields relevant to the box encoding.
+  const base = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'torso' as const, cluster: 0,
+  };
+  const pack1 = (prim: Primitive) => packBody({
+    prims: [prim],
+    clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+    bones: new Map(), bonePrims: [],
+  });
+
+  it('sets prof bit 3 (value 8) for a box', () => {
+    const p = pack1({ ...base, box: { round: 0.2 } });
+    expect(Math.floor(p.primShape[1]!) & 8).toBe(8);
+  });
+
+  it('puts round in primBend.w', () => {
+    const p = pack1({ ...base, box: { round: 0.2 } });
+    expect(p.primBend[3]).toBeCloseTo(0.2, 6);
+  });
+
+  it('composes with chamfer without disturbing the low bits', () => {
+    const p = pack1({ ...base, box: { round: 0.2 }, blendProfile: 'chamfer' });
+    expect(Math.floor(p.primShape[1]!)).toBe(9); // chamfer(1) + box(8)
+  });
+
+  it('leaves prof and primBend.w untouched on a non-box prim', () => {
+    const p = pack1({ ...base });
+    expect(Math.floor(p.primShape[1]!) & 8).toBe(0);
+    expect(p.primBend[3]).toBe(0);
+  });
+
+  it('still writes a BENT prim\'s control point into primBend.xyz, and leaves w at 0', () => {
+    // The regression this shared row could plausibly cause: a bent
+    // (non-box) prim's Bezier control point must land in xyz exactly as
+    // before, undisturbed by the box's w write.
+    const bent = { ...base, a: [0, 0, 0] as Vec3, b: [1, 0, 0] as Vec3, bend: [0, 0.3, 0] as Vec3 };
+    const p = pack1(bent);
+    // bendCtrl = midpoint(a, b) + bend = (0.5, 0.3, 0).
+    expect(Array.from(p.primBend.slice(0, 3))).toEqual([0.5, 0.3, 0].map(f32));
+    expect(p.primBend[3]).toBe(0);
+  });
+});
+
+describe('shaped bitflag gates box and shell (task 6)', () => {
+  // clusterRange.w and groupRange.w both pack (oriented?1:0) + (shaped?2:0).
+  // `shaped` gates whether the shader loads ROW_PRIM_SHAPE (where `prof`
+  // lives) and ROW_PRIM_BEND at all for that cluster/group — miss a
+  // property here and every prim carrying it arrives at the shader with
+  // prof = 0, indistinguishable from a plain capsule, regardless of what
+  // was authored.
+  const base = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'torso' as const, cluster: 0,
+  };
+  const SHAPED_BIT = 2;
+
+  it('sets the CLUSTER-level shaped bit when the only special prim is a box', () => {
+    const box = { ...base, box: { round: 0.2 } };
+    const p = packBody({
+      prims: [box],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map(), bonePrims: [],
+    });
+    expect(Math.floor(p.clusterRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+
+  it('sets the GROUP-level shaped bit when the only special prim is a box', () => {
+    const box = { ...base, box: { round: 0.2 } };
+    const p = packBody({
+      prims: [box],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map(), bonePrims: [],
+    }, undefined, { singleGroup: true });
+    expect(Math.floor(p.groupRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+
+  it('sets the GROUP-level shaped bit when the only special prim is a shell (pre-existing bug, owner-approved fix)', () => {
+    // Before this fix, the group-level `shaped` some() list omitted `shell`
+    // entirely (only the cluster-level list had it). foldGroup reads ONLY
+    // the group-level flag (grp.w, via ROW_GROUP_RANGE) — the cluster-level
+    // flag feeds applyCarves alone — so a shell whose group carried no
+    // OTHER shaped property arrived at the shader with prof = 0, never hit
+    // `(i32(prof) & 4) != 0`, and rendered as a solid capsule instead of a
+    // thin clipped sheet. schoolgirl-alt's cape (group 10) hit exactly this.
+    const shell = {
+      ...base,
+      shell: { thickness: 0.01, clipNormal: [0, 1, 0] as Vec3, clipOffset: 0, rim: 0.005 },
+    };
+    const p = packBody({
+      prims: [shell],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map(), bonePrims: [],
+    }, undefined, { singleGroup: true });
+    expect(Math.floor(p.groupRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+});
+
 describe('primColor row', () => {
   it('packs flesh as all zeros, so pre-colour bodies are bit-identical', () => {
     const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -242,6 +342,18 @@ describe('bound groups (the fold cull unit)', () => {
       expect(p.groupRange[ci * 4 + 1]).toBe(c.count);
       expect(p.groupBounds[ci * 4 + 3]).toBeCloseTo(c.radius, 6);
     });
+  });
+
+  it("fitSphere (via boundGroups) covers a sharp box's corner, not just the capsule radius", () => {
+    // A lone dead-sharp box (round=0), radius 0.1, degenerate a===b so its
+    // own position is the group center. Corner reach = 0.1*sqrt(3) ~ 0.1732;
+    // a capsule of the same radius would only need 0.1.
+    const p: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0,
+      limb: 'torso', cluster: 0, box: { round: 0 },
+    };
+    const groups = boundGroups([p], 0, 1);
+    expect(groups[0]!.radius).toBeGreaterThanOrEqual(0.1 * Math.sqrt(3) - 1e-9);
   });
 });
 

@@ -2,6 +2,7 @@
 import type { BuiltBody, Primitive } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
+import { boxReach } from './extent';
 
 export const PRIM_STRIDE = 4;    // vec4
 export const CLUSTER_STRIDE = 4; // vec4
@@ -183,11 +184,19 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // existing "> 0.5 means chamfer" consumer keeps working.
     const bent = p.bend !== undefined ? 2 : 0;
     // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
-    // a SHELL adds bit 2 (value 4) so straight=4, bent=6. The shader folds any
-    // prof >= 4 as a shell and reads the shell rows; the low bits still mean
-    // chamfer/bend for the non-shell range and are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0);
-    primBend.set(p.bend === undefined ? [0, 0, 0, 0] : [...bendCtrl(p.a, p.b, p.bend), 0], o);
+    // a SHELL adds bit 2 (value 4) so straight=4, bent=6; a BOX adds bit 3
+    // (value 8). The shader folds any prof >= 4 as a shell and reads the shell
+    // rows; the low bits still mean chamfer/bend for the non-shell range and
+    // are ignored on a shell.
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0);
+    // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
+    // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
+    // box is rejected at compile time, so a box never sets that bit and the
+    // xyz are never fetched for it. The w component is unread in every other
+    // case — the shader loads this row as .xyz.
+    primBend.set(p.bend === undefined
+      ? [0, 0, 0, p.box ? p.box.round : 0]
+      : [...bendCtrl(p.a, p.b, p.bend), 0], o);
     primColor.set(p.color === undefined
       ? [0, 0, 0, 0]
       : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
@@ -272,7 +281,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-      || p.bend !== undefined || p.shell !== undefined);
+      || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -293,9 +302,16 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
       const gOwn = body.prims.slice(g.start, g.start + g.count);
       const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+      // shell and box MUST be tested here too, same as the cluster-level
+      // `shaped` above. This is the flag foldGroup actually reads (the
+      // cluster-level one only feeds applyCarves), so a shell or box prim
+      // whose group carries no other shaped property arrives at the shader
+      // with prof = 0: ROW_PRIM_SHAPE/ROW_PRIM_BEND are never loaded, the
+      // shell/box bits never reach `(i32(prof) & ...) != 0`, and it draws as
+      // a plain closed capsule instead of a clipped sheet or a rounded box.
       const shaped = gOwn.some(p =>
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-        || p.bend !== undefined);
+        || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
       groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
       groupCount++;
     }
@@ -362,7 +378,7 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
   const center: [number, number, number] = [sum[0] / pts, sum[1] / pts, sum[2] / pts];
   let radius = 0;
   for (const p of fitTo) {
-    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(p.scale[0], p.scale[1], p.scale[2])
+    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * Math.max(p.scale[0], p.scale[1], p.scale[2])
       + (p.shell ? p.shell.thickness : 0);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:

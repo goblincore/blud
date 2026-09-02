@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
+import { boxReach } from './extent';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
@@ -64,6 +65,22 @@ export interface Body {
   bonePrims?: Primitive[];
 }
 
+/**
+ * Rounded box. `e` is the half-extent BEFORE rounding and `r` the corner
+ * radius; the caller insets `e` by `r` so the total half-extent is
+ * unchanged (`e + r === radius`).
+ *
+ * Mirrors `sdRoundBox` in march.wgsl.ts exactly — edit both in the same
+ * commit or click-to-shoot drifts from what is drawn.
+ */
+function sdRoundBox(p: Vec3, e: Vec3, r: number): number {
+  const qx = Math.abs(p[0]) - e[0];
+  const qy = Math.abs(p[1]) - e[1];
+  const qz = Math.abs(p[2]) - e[2];
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0))
+    + Math.min(Math.max(qx, qy, qz), 0) - r;
+}
+
 /** Distance from p to one primitive, matching the shader's ellipsoid capsule. */
 export function sdPrimitive(p: Vec3, prim: Primitive): number {
   let qv: Vec3 = p;
@@ -105,7 +122,15 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   // Bent before tapered: a curved horn of CONSTANT radius is legitimate, so
   // the bend branch cannot sit below the untapered shortcut.
   let base: number;
-  if (cv !== undefined) {
+  // BOX FIRST: bend= and r2= are both rejected on a box at compile time, so a
+  // box can never reach the bent or tapered branches below — testing it first
+  // states that, and keeps the capsule paths textually untouched.
+  if (prim.box) {
+    // Half-extents are `radius` in the SCALE-DIVIDED frame, which is
+    // `radius * scale` in world — the same semi-axes a capsule gets.
+    const e = prim.radius * (1 - prim.box.round);
+    base = sdRoundBox(sub(q, closest), [e, e, e], prim.radius * prim.box.round) * minScale;
+  } else if (cv !== undefined) {
     const c: Vec3 = [cv[0] * inv[0], cv[1] * inv[1], cv[2] * inv[2]];
     base = sdBentCone(q, a, b, c, prim.radius, prim.radiusB ?? prim.radius) * minScale;
   } else if (prim.radiusB === undefined || prim.radiusB === prim.radius) {
@@ -609,7 +634,7 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       const ends = prim.bend === undefined
         ? [prim.a, prim.b]
         : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
-      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius);
+      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box);
       const reach = rMax * maxScale + (prim.shell ? prim.shell.thickness : 0);
       for (const end of ends)
         if (len(sub(end, c.center)) + reach > c.radius + 1e-6)
