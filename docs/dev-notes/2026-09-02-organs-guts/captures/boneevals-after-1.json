@@ -1,0 +1,46 @@
+{
+  "tag": "after-1",
+  "ampCheck": true,
+  "staged": 12,
+  "bodies": [
+    {
+      "id": 1,
+      "wounds": 3
+    },
+    {
+      "id": 2,
+      "wounds": 3
+    },
+    {
+      "id": 3,
+      "wounds": 3
+    },
+    {
+      "id": 4,
+      "wounds": 3
+    }
+  ],
+  "misses": [],
+  "evals": {
+    "rasterised": 49838,
+    "hits": 28765,
+    "bonesTotal": 1826800,
+    "meanPerRay": 36.65476142702356,
+    "meanPerPayingRay": 278.77308103158856,
+    "payingShare": 0.13148601468758778,
+    "meanOnHit": 51.08847557795932,
+    "maxBones": 2200,
+    "bodiesOnScreen": 6
+  },
+  "evalsAmp0": {
+    "rasterised": 49838,
+    "hits": 28765,
+    "bonesTotal": 1826800,
+    "meanPerRay": 36.65476142702356,
+    "meanPerPayingRay": 278.77308103158856,
+    "payingShare": 0.13148601468758778,
+    "meanOnHit": 51.08847557795932,
+    "maxBones": 2200,
+    "bodiesOnScreen": 6
+  }
+}

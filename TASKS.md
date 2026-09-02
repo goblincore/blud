@@ -210,6 +210,34 @@ wound pops, gait stop-motion).
   `claude/continue-previous-work-91055b`) ·
   [note](docs/dev-notes/2026-09-02-entrails/notes.md)
 
+- `X1.organs` [~] **Organs in the cavity + springy guts — BUILT, 6/6 dispatch
+  tasks done on `dispatch/2026-09-02-organs-task-6`, awaiting owner playtest**
+  (2026-09-02, NOT merged). Organ prims (`W_ORGAN = 5`) ride the bone array —
+  same `nearWound` gate, same containment validator, packed after the flesh —
+  shaded pale salmon off the shared hitMat load, gated by `organAmp` (0 =
+  shades as plain bone, one-knob off-state); 8 authored coil prims on the
+  zombie's pelvis/spine, below the ribs. The spilled gut rope is now a SPRING
+  (skip-one constraint, `coilTightness 0.55` / `springiness 0.35` — it can no
+  longer hang as the owner's "rigid dark T") and takes the organ colour
+  through goo's previously-unused density alpha (`gutFrac = a/r`, per-pixel,
+  blood near a rope stays blood). Gates: off-state parity PASS (pack rows
+  byte-identical except `primScale.w`; goo inert without gut droplets — all
+  pinned by source tests, the goo one watched failing on the pre-organ build);
+  containment PASS on all ten characters, margin untouched; counter
+  **meanPerPayingRay +31.2%** (12-slug staged set, 3 alternating legs per
+  build, organAmp-0 reads bit-identical counters — delta is the prims; below
+  the ~45% guess because foldGroup culls organs off non-abdomen rays);
+  combat-range captures: the rope recoils into a segmented glossy coil and
+  the absorb-0 discriminator proves the pale-salmon mask end to end, **but at
+  shipped absorb 1.6 the rope reads RED (the `trans` filter eats the tint —
+  owner call: lower absorb or discount absorption by gut fraction)**, and the
+  crater's own organ prims barely surface (bone plug claims the floor — same
+  geometry-beats-tint finding as entrails; lever is placement, not colour).
+  Chest still opens onto ribs. [spec](docs/superpowers/specs/2026-09-02-organs-and-springy-guts-design.md)
+  · [plan](docs/superpowers/plans/2026-09-02-organs-and-springy-guts.md)
+  (spec+plan on branch `claude/continue-previous-work-91055b`) ·
+  [note](docs/dev-notes/2026-09-02-organs-guts/notes.md)
+
 - `X1.zombie-behaviour` [ ] **Zombies never attack, and they clump/clip**
   (owner ask 2026-09-02, for a later session). Two halves: they should attack
   the player at some point, and collision needs work — they clump and clip

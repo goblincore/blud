@@ -1675,6 +1675,16 @@ describe('organ shading (organs r3)', () => {
   it('is amplitude-guarded by organAmp', () => {
     expect(SHADE_BODY).toContain('organAmp');
   });
+
+  it('at organAmp 0 the organ branch is a bit-exact identity (task 6 gate 1)', () => {
+    // organAmp must be the mix WEIGHT itself, not folded into a comparison —
+    // WGSL mix(x, y, 0) returns x exactly, so amp 0 shades organ prims as
+    // plain bone bit-for-bit and the off-state is one knob. A branch on
+    // organAmp, or amp scaled into the colour instead of the weight, would
+    // break that. The one-albedo-load rule above makes the identity exact:
+    // same albedo, same lighting, only the weight differs.
+    expect(SHADE_BODY).toMatch(/albedo\s*=\s*mix\(albedo,\s*organColor,\s*organAmp\)/);
+  });
 });
 
 describe('viscera ramp (entrails)', () => {
