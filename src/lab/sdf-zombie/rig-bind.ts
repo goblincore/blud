@@ -38,11 +38,20 @@ export interface HeadRigid {
   restTip: Vec3;
   /** Skull-owned prims, pivot-relative rest endpoints keyed by prim index. */
   prims: Map<number, { a: Vec3; b: Vec3 }>;
+  /**
+   * Skull-owned BONE prims (wound pass r2), same rule and same frame — a
+   * derived cranium bone is a head-limb sphere and would shear off the face
+   * under per-endpoint nearest-joint binds, the exact bug the rigid pass
+   * exists to prevent. Keyed by index into body.bonePrims.
+   */
+  bones: Map<number, { a: Vec3; b: Vec3 }>;
 }
 
 export interface BoundRig {
   rig: RigState;
   binding: PrimBind[];
+  /** Parallel to body.bonePrims — the same nearest-joint machinery. */
+  boneBinding: PrimBind[];
   /** Null when the body has no `skull` bone or no skull-owned spheres. */
   head: HeadRigid | null;
 }
@@ -118,13 +127,25 @@ export function bindRig(body: BuildResult): BoundRig {
       if (p.limb === 'head' && len(sub(p.a, p.b)) < KEY_EPS)
         prims.set(i, { a: sub(p.a, positions[pivot]!), b: sub(p.b, positions[pivot]!) });
     });
-    if (prims.size > 0) {
+    // Bones follow the SAME membership rule as the face prims above — head-limb
+    // spheres ride the rigid frame, everything else stays per-endpoint.
+    const bones = new Map<number, { a: Vec3; b: Vec3 }>();
+    body.bonePrims.forEach((p, i) => {
+      if (p.limb === 'head' && len(sub(p.a, p.b)) < KEY_EPS)
+        bones.set(i, { a: sub(p.a, positions[pivot]!), b: sub(p.b, positions[pivot]!) });
+    });
+    if (prims.size > 0 || bones.size > 0) {
       const restTip = sub(positions[tip]!, positions[pivot]!);
-      head = { pivot, tip, restDir: normalize(restTip), restTip, prims };
+      head = { pivot, tip, restDir: normalize(restTip), restTip, prims, bones };
     }
   }
 
-  return { rig, binding: body.prims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })), head };
+  return {
+    rig,
+    binding: body.prims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })),
+    boneBinding: body.bonePrims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })),
+    head,
+  };
 }
 
 /**
@@ -165,6 +186,20 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     return { ...p, a: add(pa.pos, bind.a.offset), b: add(pb.pos, bind.b.offset) };
   });
 
+  // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
+  // would float while its limb moves. Skull-owned bones take the rigid-head
+  // branch exactly as the face prims do.
+  const bonePrims: Primitive[] = body.bonePrims.map((p, i) => {
+    const face = rigid?.bones.get(i);
+    if (face && rigid) {
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
+    }
+    const bind = bound.boneBinding[i]!;
+    const pa = pos[bind.a.point]!;
+    const pb = pos[bind.b.point]!;
+    return { ...p, a: add(pa.pos, bind.a.offset), b: add(pb.pos, bind.b.offset) };
+  });
+
   const clusters: ClusterInfo[] = body.clusters.map(c => {
     const members = prims.slice(c.start, c.start + c.count);
     // Same bent-prim rule as assignClusters: the ctrl point joins the fit or
@@ -189,7 +224,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     return { ...c, center, radius };
   });
 
-  return { ...body, prims, clusters };
+  return { ...body, prims, bonePrims, clusters };
 }
 
 /**
@@ -217,6 +252,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
 function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
+  bones: Map<number, { a: Vec3; b: Vec3 }>;
   /** The clamped rigid rotation — applyRig also stamps it as prim.orient. */
   q: Quat;
 } {
@@ -242,7 +278,9 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
 
   const prims = new Map<number, { a: Vec3; b: Vec3 }>();
   h.prims.forEach((rest, i) => prims.set(i, { a: qRotate(q, rest.a), b: qRotate(q, rest.b) }));
-  return { origin, prims, q };
+  const bones = new Map<number, { a: Vec3; b: Vec3 }>();
+  h.bones.forEach((rest, i) => bones.set(i, { a: qRotate(q, rest.a), b: qRotate(q, rest.b) }));
+  return { origin, prims, bones, q };
 }
 
 /**

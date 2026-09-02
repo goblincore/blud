@@ -315,7 +315,7 @@ export function createHandsGpuView(
         id: 0, limb, start: 0, count: members.length,
         center, radius: radius || 0.1, alive: true,
       }],
-      bones: new Map(),
+      bones: new Map(), bonePrims: [],
     });
     writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);

@@ -6,6 +6,8 @@ import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
+import { bindRig, applyRig } from './rig-bind';
+import { severLimb } from './sever';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
 import type { BuiltBody, Primitive, Vec3 } from './types';
 
@@ -50,8 +52,12 @@ describe('packBody', () => {
     const severed = { ...built, clusters: built.clusters.map((c, i) => i === 2 ? { ...c, alive: false } : c) };
     const p2 = packBody(severed);
     expect(p2.clusterRange[2 * CLUSTER_STRIDE + 2]).toBe(0);
-    // Primitive payload is byte-identical — severing never re-packs.
-    expect(Array.from(p2.primA)).toEqual(Array.from(packed.primA));
+    // FLESH payload is byte-identical — severing never re-packs. (Compared over
+    // the flesh region only: wound pass r2 packs bone rows past primCount, and
+    // severing legitimately drops the dead cluster's bones there — that is the
+    // feature, not a repack. p2.primCount === packed.primCount either way.)
+    expect(Array.from(p2.primA.slice(0, p2.primCount * PRIM_STRIDE)))
+      .toEqual(Array.from(packed.primA.slice(0, packed.primCount * PRIM_STRIDE)));
   });
 
   it('packs an absent orient as the identity quat, and a set one verbatim', () => {
@@ -63,7 +69,7 @@ describe('packBody', () => {
         { ...built.prims[0]!, orient: q },
       ],
       clusters: [{ id: 0, limb: 'head', start: 0, count: 2, center: [0, 0, 0], radius: 1, alive: true }],
-      bones: new Map(),
+      bones: new Map(), bonePrims: [],
     });
     expect(Array.from(p.primQuat.slice(0, 4))).toEqual([0, 0, 0, 1]);
     expect(Array.from(p.primQuat.slice(4, 8))).toEqual(q.map(f32));
@@ -84,7 +90,7 @@ describe('packBody', () => {
         { id: 1, limb: 'torso', start: 1, count: 1, center: [0, 0, 0], radius: 1, alive: true },
         { id: 2, limb: 'armL', start: 2, count: 1, center: [0, 0, 0], radius: 1, alive: true },
       ],
-      bones: new Map(),
+      bones: new Map(), bonePrims: [],
     });
     expect(p.clusterRange[0 * CLUSTER_STRIDE + 3]).toBe(0); // absent orient
     expect(p.clusterRange[1 * CLUSTER_STRIDE + 3]).toBe(1); // real quat
@@ -125,7 +131,7 @@ describe('packBody', () => {
   });
 
   it('packs a missing rest prim as zeros — the shader\'s unwritten sentinel', () => {
-    const p = packBody(built, { prims: [], clusters: [], bones: new Map() });
+    const p = packBody(built, { prims: [], clusters: [], bones: new Map(), bonePrims: [] });
     expect(Array.from(p.restA.slice(0, 4))).toEqual([0, 0, 0, 0]);
   });
 });
@@ -138,7 +144,7 @@ it('packs a carve as a negative blend constant', () => {
   const p = packBody({
     prims: [prim, { ...prim, op: 'sub' as const }],
     clusters: [{ id: 0, limb: 'head', start: 0, count: 2, center: [0, 0, 0], radius: 0.1, alive: true }],
-    bones: new Map(),
+    bones: new Map(), bonePrims: [],
   });
   // blendK keeps its magnitude on BOTH; the carve flag rides primScale.w.
   expect(p.primB[3]).toBeCloseTo(0.02, 6);
@@ -265,5 +271,57 @@ describe('bone prims (wound pass r2)', () => {
       clusters: [{ id: 0, limb: 'legL', start: 0, count: 1, center: [0, 0.15, 0], radius: 0.2, alive: true }],
     } as unknown as BuiltBody);
     expect(packed.primScale[3]).toBe(W_DEAD);
+  });
+});
+
+describe('bone rows (wound pass r2)', () => {
+  const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(built);
+  const posed = applyRig(built, bound);
+
+  it('writes bones after the flesh with W_BONE, and counts them', () => {
+    expect(built.bonePrims.length).toBeGreaterThan(0);
+    const packed = packBody(posed);
+    expect(packed.boneCount).toBe(posed.bonePrims.length);
+    for (let k = 0; k < packed.boneCount; k++) {
+      const o = (packed.primCount + k) * PRIM_STRIDE;
+      expect(packed.primScale[o + 3]).toBe(W_BONE);
+      // Endpoints ride the SAME rows the flesh uses — the shader's bone pass
+      // reads them with the ordinary sdPrim machinery at [counts.x, +boneCount).
+      const bone = posed.bonePrims[k]!;
+      expect(packed.primA[o]).toBe(f32(bone.a[0]));
+      expect(packed.primA[o + 1]).toBe(f32(bone.a[1]));
+      expect(packed.primA[o + 2]).toBe(f32(bone.a[2]));
+      expect(packed.primA[o + 3]).toBe(f32(bone.radius));
+    }
+    // Rows past the bones stay zero — no stale data from a previous occupant.
+    const o = (packed.primCount + packed.boneCount) * PRIM_STRIDE;
+    expect(packed.primScale[o + 3]).toBe(0);
+  });
+
+  it('carries rest rows for bones at the same index as the posed bones', () => {
+    const packed = packBody(posed, built);
+    for (let k = 0; k < packed.boneCount; k++) {
+      const o = (packed.primCount + k) * PRIM_STRIDE;
+      const rest = built.bonePrims[k]!;
+      expect(packed.restA[o]).toBe(f32(rest.a[0]));
+      expect(packed.restA[o + 3]).toBe(f32(rest.radius));
+    }
+  });
+
+  it('severing a limb drops its bones from the packed output', () => {
+    const { body: severed } = severLimb(posed, 'legL');
+    const packedSevered = packBody(severed, built);
+    const legLBones = posed.bonePrims.filter(b => b.limb === 'legL').length;
+    expect(legLBones).toBeGreaterThan(0);
+    expect(packedSevered.boneCount).toBe(posed.bonePrims.length - legLBones);
+    // The surviving bone rows are the OTHER clusters' bones, still W_BONE.
+    for (let k = 0; k < packedSevered.boneCount; k++) {
+      const o = (packedSevered.primCount + k) * PRIM_STRIDE;
+      expect(packedSevered.primScale[o + 3]).toBe(W_BONE);
+    }
+    // And the flesh rows are untouched — severing flags a cluster, it does
+    // not touch the prim array, and bones must not change that.
+    expect(packedSevered.primCount).toBe(posed.prims.length);
   });
 });

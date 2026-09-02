@@ -357,7 +357,7 @@ describe('PARITY: CPU sdPrimitive matches the WGSL bezier math on packed data', 
       const packed = packBody({
         prims: [primDef],
         clusters: [{ id: 0, limb: 'head', start: 0, count: 1, center: [0, 0, 0], radius: 10, alive: true }],
-        bones: new Map(),
+        bones: new Map(), bonePrims: [],
       });
       const tex = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
       tex.set(packed.primA, ROW_PRIM_A * MAX_PRIMS * 4);

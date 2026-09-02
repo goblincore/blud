@@ -85,7 +85,7 @@ describe('buildHullInstances', () => {
         limb: body.prims[0]!.limb, cluster: 0,
       }],
       clusters: [{ ...body.clusters[0]!, id: 0, start: 0, count: 1, alive: true }],
-      bones: body.bones,
+      bones: body.bones, bonePrims: [],
     };
     const inst = buildHullInstances([cone]);
     const atB = inst.find((s) => s.centre[2] > 0.2)!;
@@ -394,7 +394,7 @@ describe('shadow-caster hull', () => {
         limb: body.prims[0]!.limb, cluster: 0,
       }],
       clusters: [{ ...body.clusters[0]!, id: 0, start: 0, count: 1, alive: true }],
-      bones: body.bones,
+      bones: body.bones, bonePrims: [],
     };
     const inst = buildHullInstances([cone], 1, [], 0, true)
       .sort((a, b) => a.centre[2] - b.centre[2]);

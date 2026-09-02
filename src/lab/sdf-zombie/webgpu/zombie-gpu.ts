@@ -1320,7 +1320,7 @@ export function createChunkGpuView(
         id: 0, limb: c.limb, start: 0, count: local.length,
         center: [0, 0, 0], radius: extent, alive: true,
       }],
-      bones: new Map(),
+      bones: new Map(), bonePrims: [],
     }, undefined, { singleGroup: true });
 
     // Full-width copies intentionally zero any rows left by the previous

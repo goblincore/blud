@@ -29,5 +29,10 @@ export function translateBody(body: BuildResult, offset: Vec3): BuildResult {
     prims: body.prims.map(p => ({ ...p, a: sh(p.a), b: sh(p.b) })),
     clusters: body.clusters.map(c => ({ ...c, center: sh(c.center) })),
     bones: new Map([...body.bones].map(([k, b]) => [k, { ...b, head: sh(b.head), tail: sh(b.tail) }])),
+    // BONE PRIMS TOO (wound pass r2): they ride the rig like flesh, so leaving
+    // them at rest space would re-create the origin-space bind bug above the
+    // moment a translated body is rigged — bones floating at spawn while the
+    // flesh moved. bend is midpoint-relative and follows untouched.
+    bonePrims: body.bonePrims.map(p => ({ ...p, a: sh(p.a), b: sh(p.b) })),
   };
 }

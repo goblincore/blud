@@ -37,7 +37,7 @@ function ballBody(center: Vec3, radius = 0.3): BuildResult {
     id: 1, limb: 'torso', start: 0, count: 1,
     center: [center[0], center[1], center[2]], radius, alive: true,
   };
-  return { prims: [prim], clusters: [cluster], bones: new Map(), errors: [] };
+  return { prims: [prim], clusters: [cluster], bones: new Map(), bonePrims: [], errors: [] };
 }
 
 /** The real zombie, built once — wound/sever behaviour against authored flesh. */

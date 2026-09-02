@@ -492,6 +492,27 @@ export const BONE_CONTAINMENT_MARGIN = 0.004;
  */
 export function checkBoneContainment(body: Body): string[] {
   const errs: string[] = [];
+  (body.bonePrims ?? []).forEach((prim, i) => {
+    if (prim.op !== 'bone' || prim.dead) return;
+    const first = boneBreach(body, prim);
+    if (first !== null) {
+      errs.push(
+        `bone prim ${i} (${prim.limb}) breaches the flesh surface at ` +
+        `[${first.map(v => v.toFixed(3)).join(', ')}] — bone must sit at least ` +
+        `${BONE_CONTAINMENT_MARGIN}m inside the flesh, or the shader's ` +
+        `nearWound gate stops being an identity and the bone pops`);
+    }
+  });
+  return errs;
+}
+
+/**
+ * First breaching sample on ONE bone's surface, or null if it stays
+ * BONE_CONTAINMENT_MARGIN inside the flesh everywhere sampled. The shared
+ * sampler for checkBoneContainment (report) and buildBody's derivation
+ * filter (drop) — one sampling implementation, two consumers.
+ */
+export function boneBreach(body: Body, prim: Primitive): Vec3 | null {
   // A fixed low-discrepancy-ish sphere sampling. 26 directions — the 6 axes,
   // 12 edge midpoints and 8 corners of a cube, normalised — is enough to catch
   // a breach without making validation quadratic in prim count.
@@ -503,51 +524,49 @@ export function checkBoneContainment(body: Body): string[] {
   }
 
   const STATIONS = 5;
-  (body.bonePrims ?? []).forEach((prim, i) => {
-    if (prim.op !== 'bone' || prim.dead) return;
-    const ctrl = prim.bend === undefined ? undefined : bendCtrl(prim.a, prim.b, prim.bend);
-    for (let s = 0; s <= STATIONS; s++) {
-      const t = s / STATIONS;
-      // Centre line: the straight chord, or the quadratic Bezier through the
-      // control point — the same curve sdPrimitive's bent branch evaluates.
-      const centre: Vec3 = [0, 1, 2].map(k => ctrl === undefined
-        ? prim.a[k]! + (prim.b[k]! - prim.a[k]!) * t
-        : (1 - t) * (1 - t) * prim.a[k]! + 2 * (1 - t) * t * ctrl[k]! + t * t * prim.b[k]!
-      ) as [number, number, number];
-      // Taper: radius runs linearly to radiusB across the SAME parameter the
-      // endpoints interpolate, matching sdRoundCone's lerp.
-      const r = prim.radiusB === undefined
-        ? prim.radius : prim.radius + (prim.radiusB - prim.radius) * t;
-      for (const d of dirs) {
-        // SCALE IS LOAD-BEARING: sdPrimitive divides by prim.scale, so a prim
-        // with scale.x 1.45 reaches 1.45 * r in x. Sampling at r alone probes
-        // a sphere the prim does not have.
-        const p: Vec3 = [
-          centre[0] + d[0] * r * prim.scale[0],
-          centre[1] + d[1] * r * prim.scale[1],
-          centre[2] + d[2] * r * prim.scale[2],
-        ];
-        // sdBody walks prims only, and bone is not in prims any more, so this
-        // is the FLESH field — exactly the surface the bone must stay inside.
-        if (sdBody(p, body) > -BONE_CONTAINMENT_MARGIN) {
-          errs.push(
-            `bone prim ${i} (${prim.limb}) breaches the flesh surface at ` +
-            `[${p.map(v => v.toFixed(3)).join(', ')}] — bone must sit at least ` +
-            `${BONE_CONTAINMENT_MARGIN}m inside the flesh, or the shader's ` +
-            `nearWound gate stops being an identity and the bone pops`);
-          return;
-        }
-      }
+  const ctrl = prim.bend === undefined ? undefined : bendCtrl(prim.a, prim.b, prim.bend);
+  for (let s = 0; s <= STATIONS; s++) {
+    const t = s / STATIONS;
+    // Centre line: the straight chord, or the quadratic Bezier through the
+    // control point — the same curve sdPrimitive's bent branch evaluates.
+    const centre: Vec3 = [0, 1, 2].map(k => ctrl === undefined
+      ? prim.a[k]! + (prim.b[k]! - prim.a[k]!) * t
+      : (1 - t) * (1 - t) * prim.a[k]! + 2 * (1 - t) * t * ctrl[k]! + t * t * prim.b[k]!
+    ) as [number, number, number];
+    // Taper: radius runs linearly to radiusB across the SAME parameter the
+    // endpoints interpolate, matching sdRoundCone's lerp.
+    const r = prim.radiusB === undefined
+      ? prim.radius : prim.radius + (prim.radiusB - prim.radius) * t;
+    for (const d of dirs) {
+      // SCALE IS LOAD-BEARING: sdPrimitive divides by prim.scale, so a prim
+      // with scale.x 1.45 reaches 1.45 * r in x. Sampling at r alone probes
+      // a sphere the prim does not have.
+      const p: Vec3 = [
+        centre[0] + d[0] * r * prim.scale[0],
+        centre[1] + d[1] * r * prim.scale[1],
+        centre[2] + d[2] * r * prim.scale[2],
+      ];
+      // sdBody walks prims only, and bone is not in prims any more, so this
+      // is the FLESH field — exactly the surface the bone must stay inside.
+      if (sdBody(p, body) > -BONE_CONTAINMENT_MARGIN) return p;
     }
-  });
-  return errs;
+  }
+  return null;
 }
 
 export function validateBody(body: Body, opts: ValidateOpts): string[] {
   const errs: string[] = [];
 
-  if (body.prims.length > MAX_PRIMS)
-    errs.push(`primitive count ${body.prims.length} exceeds shader ceiling ${MAX_PRIMS}`);
+  // MAX_PRIMS bounds FLESH AND BONES TOGETHER: the data texture is MAX_PRIMS
+  // wide and the bone rows ride the SAME allocation past primCount, so flesh
+  // under the ceiling with bones overflowing it would have its bone rows
+  // silently unread. The message names both counts so the author knows which
+  // way to move.
+  const boneCount = body.bonePrims?.length ?? 0;
+  if (body.prims.length + boneCount > MAX_PRIMS)
+    errs.push(
+      `primitive count ${body.prims.length} flesh + ${boneCount} bone = ` +
+      `${body.prims.length + boneCount} exceeds shader ceiling ${MAX_PRIMS}`);
   if (body.clusters.length > MAX_CLUSTERS)
     errs.push(`cluster count ${body.clusters.length} exceeds shader ceiling ${MAX_CLUSTERS}`);
 

@@ -172,6 +172,13 @@ export interface BodyDef {
   root: Vec3;
   bones: BoneDef[];
   prims: PrimDef[];
+  /**
+   * Bone radius as a fraction of the flesh prim it sits inside — drives the
+   * auto-derivation `buildBody` runs over the flesh prims (deriveBones).
+   * Absent means DEFAULT_BONE_RATIO; 0 opts a body out of bone entirely.
+   * An authored `bones` block (Task 4b) will override per cluster.
+   */
+  boneRatio?: number;
 }
 
 /** A resolved primitive in rest space. */
@@ -274,4 +281,23 @@ export interface BuiltBody {
   prims: Primitive[];
   clusters: ClusterInfo[];
   bones: Map<string, ResolvedBone>;
+  /**
+   * Bone primitives — a SECOND material strictly inside the flesh, kept OUT
+   * of `prims` on purpose. (Named `bonePrims` rather than the spec prose's
+   * `bones` because BuiltBody.bones is TAKEN — it is the rig skeleton map
+   * above, and every character test pins pose against it.)
+   *
+   * About twenty modules walk `prims` and filter on `op`, and only four of
+   * them would ever want bone: rig-bind (pose it), pack (upload it), sever
+   * (drop it with its limb) and validate (contain it). Keeping bone here
+   * makes the other sixteen correct by construction rather than by fifteen
+   * remembered filters. An earlier design put bone in `prims` and silently
+   * inflated the shadow hull, rendered bone as flesh inside gibs, and broke
+   * severDistal's positional slice.
+   *
+   * Each carries `cluster`, naming the flesh cluster it belongs to, so
+   * severing drops it with its limb (packBody skips bones whose cluster is
+   * not alive).
+   */
+  bonePrims: Primitive[];
 }

@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/bone-derive.ts
-import type { PrimDef } from './types';
+import type { PrimDef, ShellParams, Vec3 } from './types';
 
 /**
  * Bone radius as a fraction of the flesh prim it sits inside.
@@ -18,6 +18,25 @@ export const DEFAULT_BONE_RATIO = 0.38;
 const MASS_FRACTION = 0.5;
 
 /**
+ * The fields derivation reads or copies. Generic over the prim flavour so the
+ * same function derives from AUTHORED defs (PrimDef, Task 3's unit tests) and
+ * from EXPANDED defs with concrete limbs (buildBody's call), each output
+ * keeping its input's full shape.
+ */
+type BoneSource = {
+  bone?: string;
+  radius: number;
+  radiusB?: number;
+  scale: Vec3;
+  blendK: number;
+  op?: 'add' | 'sub' | 'groove' | 'bone';
+  shell?: ShellParams;
+  core?: boolean;
+  color?: Vec3;
+  gloss?: number;
+};
+
+/**
  * Auto-derives bone primitives from a body's flesh primitives.
  *
  * A femur genuinely IS a thinner capsule inside the thigh capsule on the same
@@ -28,7 +47,7 @@ const MASS_FRACTION = 0.5;
  * Shaping is dropped on purpose: `wide`/`tall`/`deep` describe a fleshy mass,
  * and inheriting them would give a ribcage-shaped femur.
  */
-export function deriveBones(prims: PrimDef[], ratio: number): PrimDef[] {
+export function deriveBones<T extends BoneSource>(prims: T[], ratio: number): T[] {
   if (ratio <= 0) return [];
 
   // Fattest additive prim per bone — the mass yardstick everything on that
@@ -40,7 +59,7 @@ export function deriveBones(prims: PrimDef[], ratio: number): PrimDef[] {
     fattest.set(p.bone, Math.max(fattest.get(p.bone) ?? 0, p.radius));
   }
 
-  const out: PrimDef[] = [];
+  const out: T[] = [];
   for (const p of prims) {
     if (p.op === 'sub' || p.op === 'groove' || p.op === 'bone') continue;
     if (!p.bone) continue;

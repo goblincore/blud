@@ -84,6 +84,28 @@ describe('validateBody', () => {
     expect(errs.join(' ')).toMatch(/primitive count/i);
   });
 
+  it('counts bones AGAINST the shader ceiling, naming both counts', () => {
+    // Flesh alone fits; flesh + bones does not. The texture is MAX_PRIMS wide
+    // and the bone rows ride the SAME allocation past primCount, so the bound
+    // is on the total — a body that validates here but overflows the texture
+    // would have its bones silently unread.
+    const flesh = Array.from({ length: MAX_PRIMS - 2 }, (_, i) => prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));
+    const body = {
+      ...assignClusters(flesh),
+      bonePrims: [
+        { ...prim('torso', [0, 1.2, 0], 0.05), op: 'bone' as const, cluster: 1 },
+        { ...prim('torso', [0, 1.201, 0], 0.05), op: 'bone' as const, cluster: 1 },
+        { ...prim('torso', [0, 1.202, 0], 0.05), op: 'bone' as const, cluster: 1 },
+      ],
+    };
+    const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
+    expect(errs.join(' ')).toMatch(/primitive count .*flesh.*bone.*exceeds/s);
+    expect(errs.join(' ')).toContain(`${flesh.length} flesh + 3 bone`);
+    // And one under the combined bound stays clean.
+    const ok = { ...body, bonePrims: body.bonePrims!.slice(0, 1) };
+    expect(validateBody(ok, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 }).join(' ')).not.toMatch(/exceeds shader ceiling/);
+  });
+
   // Regression: the total can sit well under MAX_PRIMS while ONE cluster runs
   // past the shader's 64-iteration fold. Before MAX_CLUSTER_PRIMS this passed
   // validation and the surface silently lost every primitive past the 64th.
