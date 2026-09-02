@@ -5,6 +5,16 @@ Copy this into `~/.claude/dispatch/plans/YYYY-MM-DD-<slug>.md`, fill every
 template — a dispatched agent that improvises its own loop is how the last
 several characters drifted. Keep it verbatim.
 
+**`status:` MUST be `pending`, not `queued`.** `queued` is not a state the
+dispatcher will run: the UI renders its "Run Now" button only for `pending`,
+and `POST /api/tasks/<name>/run` refuses anything else with "task is not
+pending". A task written as `queued` sits forever with `started_at` null and no
+way to start it from the UI. This template said `queued` until 2026-09-02, and
+three real tasks were found stranded that way — `2026-08-24-raymarcher-perf-task-4`
+and `-task-5` since 24 Aug, `2026-08-25-tile-all-bodies` since the 25th. Check
+`curl -s localhost:8090/api/tasks` for `"status":"queued"` before assuming a
+task is merely waiting its turn.
+
 `model:` needs the provider prefix (`zai/glm-5.3-flash`, `openrouter/…`); a bare name
 fails silently with an empty worktree. `base_branch` must already contain the
 reference files — a fresh worktree cannot see an untracked file in the primary
@@ -13,7 +23,7 @@ checkout.
 ```markdown
 ---
 title: "<what the character needs, in the owner's words>"
-status: queued
+status: pending
 project: /Users/donny/Projects/blud
 model: zai/glm-5.3-flash
 branch: dispatch/<slug>

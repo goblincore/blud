@@ -19,7 +19,7 @@ no `box` primitive and the leg cannot be authored as specified.
 ```markdown
 ---
 title: "Author the minotaur — a demon brawler with a prosthetic right leg, using the new box primitive for its plates"
-status: queued
+status: pending
 project: /Users/donny/Projects/blud
 model: zai/glm-5.3-flash
 branch: dispatch/minotaur-character
