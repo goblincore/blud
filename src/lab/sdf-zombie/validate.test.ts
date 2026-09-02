@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
+import { validateBody, sdBody, sdPrimitive, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -141,6 +141,57 @@ describe('shader/CPU field mirror', () => {
   it('carves in the shader too, behind a count guard', () => {
     expect(FRAG).toContain('applyCarves');
     expect(FRAG).toContain('uCarveCount');
+  });
+});
+
+describe('sdPrimitive box', () => {
+  const base = { a: [0, 0, 0], b: [0, 0, 0], scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, radius: 0.1 } as const;
+  const boxAt = (round: number) => ({ ...base, box: { round } }) as unknown as Primitive;
+
+  it('round=1 is exactly the capsule', () => {
+    const cap = { ...base } as unknown as Primitive;
+    for (const p of [[0.2, 0, 0], [0, 0.15, 0.1], [0.05, 0.05, 0.05]] as Vec3[])
+      expect(sdPrimitive(p, boxAt(1))).toBeCloseTo(sdPrimitive(p, cap), 6);
+  });
+
+  it('reaches r along an axis regardless of round', () => {
+    // On an axis the inset exactly cancels: extent (1-round)*r plus rounding
+    // round*r is r, so the surface sits at r for every round.
+    for (const round of [0, 0.08, 0.5, 1])
+      expect(sdPrimitive([0.1, 0, 0], boxAt(round))).toBeCloseTo(0, 6);
+  });
+
+  it('a sharp corner sits r*(sqrt3-1) outside the capsule on the diagonal', () => {
+    // The far corner of a cube of half-extent r is at r*sqrt(3). At round=0
+    // the box surface reaches it, where the capsule stopped at r.
+    const k = 0.1 * Math.sqrt(3);
+    const corner: Vec3 = [k / Math.sqrt(3), k / Math.sqrt(3), k / Math.sqrt(3)];
+    expect(sdPrimitive(corner, boxAt(0))).toBeCloseTo(0, 6);
+    expect(sdPrimitive(corner, { ...base } as unknown as Primitive)).toBeCloseTo(0.1 * (Math.sqrt(3) - 1), 6);
+  });
+
+  it('leaves a non-box primitive bit-identical', () => {
+    const cap = { ...base, radius: 0.07, scale: [1.3, 0.8, 1.1] } as unknown as Primitive;
+    expect(sdPrimitive([0.2, 0.1, 0], cap)).toBe(sdPrimitive([0.2, 0.1, 0], { ...cap }));
+  });
+
+  it('reaches radius * scale[k] along each world axis on an anisotropic box', () => {
+    // The scale-divide is per-component, so a world point sitting exactly at
+    // radius*scale[k] along axis k maps to `radius` along that axis in the
+    // divided frame regardless of the OTHER axes' scale — the box's e+r
+    // inset (== radius) puts the surface exactly there, same as the capsule.
+    // This is the property `round` being a FRACTION rather than metres exists
+    // to protect: an absolute round in a divided frame would distort exactly
+    // this reach anisotropically.
+    const scale: Vec3 = [1.4, 0.7, 1.0];
+    const radius = 0.1;
+    const anis = { ...base, scale, radius, box: { round: 0.35 } } as unknown as Primitive;
+    const points: Vec3[] = [
+      [radius * scale[0], 0, 0],
+      [0, radius * scale[1], 0],
+      [0, 0, radius * scale[2]],
+    ];
+    for (const p of points) expect(sdPrimitive(p, anis)).toBeCloseTo(0, 6);
   });
 });
 
