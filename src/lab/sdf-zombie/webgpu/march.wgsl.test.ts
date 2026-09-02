@@ -1354,3 +1354,24 @@ describe('tissue ramp (wound pass r2)', () => {
     expect(MARCH_BODY).toMatch(/surfCfg3\.x > 0\.0/);
   });
 });
+
+describe('wound fibre and bone material (wound pass r2)', () => {
+  // The shading block lives inside marchBody — MARCH_BODY is the fragment
+  // source the plan calls SHADE_BODY.
+  const SHADE_BODY = MARCH_BODY;
+
+  it('confines the fibre mottle to the wound interior', () => {
+    // Multiplied by wm, NOT by switching goreStrength on — that would repaint
+    // whole standing bodies as torn meat.
+    expect(SHADE_BODY).toMatch(/woundFibre[\s\S]{0,200}\*\s*wm/);
+  });
+
+  it('stains bone toward deepColor where it meets flesh', () => {
+    expect(SHADE_BODY).toContain('boneColor');
+    expect(SHADE_BODY).toMatch(/boneStain|dmg - dBone|fleshGap/);
+  });
+
+  it('identifies bone by the dominant prim material, not a radius guess', () => {
+    expect(SHADE_BODY).toMatch(/isBone/);
+  });
+});

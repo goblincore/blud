@@ -1303,6 +1303,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   surfCfg3: vec4<f32>,
   mottleColor: vec3<f32>,
   fatColor: vec3<f32>,
+  boneColor: vec3<f32>,
   faceCfg: vec4<f32>,
   faceCfg2: vec4<f32>,
   faceCfg3: vec4<f32>,
@@ -1788,6 +1789,38 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     surfCfg3.x > 0.0);
   var albedo = mix(baseColor, tissue, wm);
 
+  // Torn fibre (wound pass r2). The gore mottle fbm already exists but is
+  // dead on standing bodies — goreStrength is 0 there — so rather than
+  // switching that on globally, which would repaint whole undamaged bodies
+  // as torn meat, the mottle enters multiplied by wm: it exists only inside
+  // a wound. Same call and same rest-space anchor as the chunk path, so
+  // chunks and wounds agree about where the fibre is. The amplitude rides
+  // surfCfg3.w (woundFibreAmp), so 0 skips the fbm and shades bit-for-bit
+  // as before this existed.
+  if (surfCfg3.w > 0.0 && wm > 0.0) {
+    let woundFibre = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);
+    albedo = mix(albedo, albedo * mix(0.7, 1.25, woundFibre), surfCfg3.w * wm);
+  }
+
+  // Bone material (wound pass r2). The dominant prim carries the material
+  // code in primScale.w — W_BONE is 4, and only applyBones can claim bestIdx
+  // for a bone prim because foldGroup and applyCarves skip material 4
+  // entirely — so this is an identity read, not a guess from depth or
+  // radius. hitBest is -1 on the baked-volume path (no dominant prim), so
+  // clamp the row index and gate on it, like the painted-prim read below.
+  let hitMat = textureLoad(data, vec2<i32>(max(hitBest, 0), ${ROW_PRIM_SCALE}), 0).w;
+  let isBone = hitBest >= 0 && hitMat > 3.5 && hitMat < 4.5;
+  if (isBone) {
+    // Stained toward the meat at the junction. A clean plate popping out of
+    // red flesh reads as a decal; blood in the transition is what seats it.
+    // tissueDepth is the PRE-wound flesh field, so on a bone pixel it measures
+    // how deeply this bone sits beneath the original skin: bone just under
+    // the muscle line is near the wall flesh and stains, a deep plate stays
+    // clean.
+    let boneStain = 1.0 - smoothstep(0.0, 0.012, tissueDepth - surfCfg3.z);
+    albedo = mix(boneColor, deepColor * 0.8, clamp(boneStain, 0.0, 1.0) * 0.55);
+  }
+
   // Colour mottle. surfaceNoiseAmp above perturbs the NORMAL, which reads as
   // texture but never as colour — under a broad key the whole creature stays
   // one hue and the silhouette reads as a single object. This is the albedo
@@ -2034,7 +2067,16 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // gloss pulls a painted surface toward a tight, fully wet highlight
   // whatever the flesh preset says: a lens on a matte clay character still
   // has to glint.
-  let wet = mix(surfCfg2.x * mix(1.0, 1.6, max(wm, gore)) * (1.0 - cm), 1.0, gloss);
+  //
+  // Wound pass r2: wetness peaks at the fat/muscle boundary — the lip
+  // glistens, the floor does not — instead of wetting the whole crater
+  // uniformly. At woundDepthAmp 0 tissueDepth is 0, so lip is 1 and
+  // wetWound is exactly the old max(wm, gore): the amp-0 guarantee survives
+  // this line. Bone is matte — wet skin reflects, wet bone just looks
+  // polished.
+  let lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
+  let wetWound = max(wm * lip, gore);
+  let wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone), 1.0, gloss);
   let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound

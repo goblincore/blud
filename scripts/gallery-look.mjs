@@ -72,6 +72,15 @@ await evaluate('window.__sdfGame.setLoopRunning(false)');
 await evaluate(`window.__sdfGame.setPose(${POSE[0]}, ${POSE[1]}, ${POSE[2]}, ${POSE[3]})`);
 await evaluate(`window.__sdfGame.step(${SETTLE}, 1/60)`);
 
+// Optional wound probe, so a LOOK change about wounds can be read under the
+// beam without hand-driving CDP: aim+fire work on the frozen scene (the
+// slug-gate precedent). Guarded like the gooPanel seam — pages without the
+// keys still capture.
+if (process.env.LOOK_PROBE) {
+  const probeOut = await evaluate(process.env.LOOK_PROBE);
+  console.log('LOOK_PROBE:', JSON.stringify(probeOut));
+}
+
 // FORCE A SHADOW-MAP UPDATE BEFORE CAPTURING, or this path lies.
 //
 // With the loop stopped and frames hand-stepped, three r185's WebGPU

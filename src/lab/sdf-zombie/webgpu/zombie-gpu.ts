@@ -261,6 +261,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
     /** Subcutaneous fat for the wound tissue ramp (linear RGB). */
     fatColor: uniform(new THREE.Color(0.83, 0.72, 0.42)),
+    /** Exposed bone (wound pass r2), mixed toward deepColor at the flesh
+     *  junction. Matches the FleshMaterial preset default. */
+    boneColor: uniform(new THREE.Color(0.71, 0.53, 0.35)),
     /** x enabled (1 multiplier sheet, 2 decal sheet), y strength, z forward (+1/-1), w relief */
     faceCfg: uniform(new THREE.Vector4(0, 0.85, 1, 1.4)),
     /** x projMode (0 planar, 1 spherical), y mean, z glowThreshold, w glowStrength */
@@ -623,6 +626,7 @@ export function createMarchMaterial(
     surfCfg3: u.surfCfg3,
     mottleColor: u.mottleColor,
     fatColor: u.fatColor,
+    boneColor: u.boneColor,
     faceCfg: u.faceCfg,
     faceCfg2: u.faceCfg2,
     faceCfg3: u.faceCfg3,
@@ -1136,6 +1140,7 @@ export function createZombieGpuView(
       u.surfCfg3.value.set(m.woundDepthAmp, m.fatDepth, m.muscleDepth, m.woundFibreAmp);
       u.mottleColor.value.setRGB(...m.mottleColor);
       u.fatColor.value.setRGB(...m.fatColor);
+      u.boneColor.value.setRGB(...m.boneColor);
       u.marchCfg.value.z = m.silhouetteNoiseAmp;
       u.lightDir.value.set(...light.keyDir);
       u.keyColor.value.setRGB(...light.keyColor);
@@ -1256,6 +1261,7 @@ export function createChunkGpuView(
     u.surfCfg3.value.copy(template.surfCfg3.value);
     u.mottleColor.value.copy(template.mottleColor.value);
     u.fatColor.value.copy(template.fatColor.value);
+    u.boneColor.value.copy(template.boneColor.value);
     u.marchCfg.value.copy(template.marchCfg.value);
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);
