@@ -4,6 +4,7 @@ import src from './zombie.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob } from '../blob-compile';
 import { buildBody } from '../build-body';
+import { packBody } from '../pack';
 import { CLUSTER_ORDER, type Primitive } from '../types';
 import { makeZombie } from '../body';
 
@@ -69,5 +70,32 @@ describe('zombie.blob authors its shot-magnet bones', () => {
     expect(plate!.scale).toEqual([1.45, 1, 0.55]);
     // A PLATE spans the chest — endpoints distinct, unlike a scaled torso blob.
     expect(plate!.a).not.toEqual(plate!.b);
+  });
+
+  // Wound pass r2 task 11: the shader's nearWound gate is only SOUND because
+  // min(flesh, bone) === flesh wherever flesh is intact — a FIELD claim, so
+  // it is tested on the field's input, not on pixels (two captures of the
+  // same build differ by 52-82k px on this harness — there is no pixel floor
+  // here to stand on). sdBody, the CPU mirror, already excludes bone by
+  // design, so the comparable object is the PACKED DATA the march actually
+  // reads: derivation must never perturb the flesh rows — neither their
+  // values nor their count. Authored bones ride in BOTH arms of this test
+  // (they are part of the model, like flesh), so what this isolates is the
+  // derived set.
+  it('an undamaged body folds bit-identically with and without bone', () => {
+    const withBone = packBody(buildBody(compileBlob(parseBlob(src))));
+    const noBone = packBody(buildBody({ ...compileBlob(parseBlob(src)), boneRatio: 0 }));
+    // The flesh row COUNT may not move either: bones packed among the flesh
+    // rows would enter the shader's additive fold (rows [0, counts.x)) and
+    // lump every bone into the skin at full strength.
+    expect(withBone.primCount).toBe(noBone.primCount);
+    const n = noBone.primCount * 4;
+    expect(Array.from(withBone.primA.slice(0, n))).toEqual(Array.from(noBone.primA.slice(0, n)));
+    expect(Array.from(withBone.primScale.slice(0, n))).toEqual(Array.from(noBone.primScale.slice(0, n)));
+    // ratio 0 kills only the DERIVED set — the authored bones (cranium,
+    // ribcage) are present in both arms, so the comparison above is not
+    // vacuously passing on two boneless bodies.
+    expect(noBone.boneCount).toBeGreaterThan(0);
+    expect(withBone.boneCount).toBeGreaterThan(noBone.boneCount);
   });
 });

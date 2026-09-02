@@ -526,10 +526,36 @@ conservative grid, temporal reprojection, checkerboard) in Obsidian
   feature INSIDE one frozen load instead (e.g. `__sdfGame.setShadowSpan`),
   which takes the floor from 6600 px to ~150.
 
-- `L2.followup-wounds` [ ] **Wound pass round 2 (owner ask, not yet designed):**
-  bone showing through deep wounds, plus additional wound coloring/texture. The
-  highlight shoulder helps rather than competes — it is what gives a wound room
-  to read DARKER than lit skin under the beam.
+- `L2.followup-wounds` [~] **Wound pass round 2 — IMPLEMENTED, awaiting owner
+  pass (branch `dispatch/2026-09-01-wound-r2-task-11`, tasks 1-11 of 11,
+  2026-09-01).** Deep wounds now expose anatomically-placed bone that STOPS the
+  carve: bone is an ordinary prim (`op:'bone'` → `primScale.w 4`) in its own
+  `body.bonePrims` array, auto-derived at 0.38× flesh radius + authored
+  overrides (zombie cranium dome + ribcage plate; goblin skull + chest), folded
+  as a hard `min` AFTER `applyWounds` gated on `nearWound` — exact because
+  bones are containment-filtered strictly inside flesh. Wound interiors shade
+  by depth under the original skin — `mapBody`'s spare `.w` slot carries the
+  pre-wound field; ramp skin→fat→muscle/clot + torn fibre ride `surfCfg3`
+  (each key bit-gated at 0); bone-ness rides `bestIdx` with a wall stain.
+  `bones` block in `.blob`; tuning panel on the game page
+  (`__sdfGame.woundPanel(true)`); amplitude guards make every feature a one-key
+  kill. Bench (room-4 firefight, 3 legs alternating): bone fold **+0.0% —
+  UNRESOLVED under the 4% within-run spread**. Gates: off-state parity PASS
+  (structurally — this harness has NO pixel floor: same-build runs differ
+  52-82k px, so gates were field assertions + described captures, per plan
+  amendment); undamaged identity PASS (packed flesh rows bit-identical
+  ±derived bone, mutation-verified); halo check PASS (12 angles, no annuli, no
+  camera-sweeping crescents); dungeon PASS (slug crater reads under the beam at
+  2.6 m; ramp/bone detail does not resolve at that range — owner call).
+  Captures catalogue + traps (stale task-8 vite squatting the default capture
+  ports; plan's Step-2 probe unwritable as printed — lab page has no
+  `__sdfGame`; stump rod is a PRE-EXISTING main artifact only recoloured by
+  the ramp): [dev note](docs/dev-notes/2026-09-01-wound-r2/notes.md).
+  Spec + plan live on branch `claude/continue-previous-work-91055b`, not main.
+  **Owner owes three calls:** bone too readily on skinny limbs (not stageable
+  from the lab — torso-only stamper); stump protrusion feature-or-bug
+  (pre-existing); fibre anchor stretch keep/kill (unevidenced, rest-pose
+  captures cannot show it).
 
 
 0. **`L1` P1 — DONE + MERGED (2026-08-25, `4e4939c`).** Analytic six-wall
