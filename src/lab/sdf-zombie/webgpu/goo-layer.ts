@@ -160,15 +160,26 @@ export const GOO_TUNING = {
 
 /**
  * Gate + documentation flag for the gut-mask channel assignment (organs r3):
- * the density target's ALPHA carries gut-weighted density — .r is density and
- * .g/.b reconstruct view depth, all consumed; .a was a constant 1 nothing ever
- * read, so it is the one free channel. The surface pass turns it into a
- * per-pixel gut fraction by dividing by .r (gutFrac in GOO_SURFACE_WGSL). If
- * a future change needs alpha for something else, this flag must move with
- * the assignment — flip it and fix the surface pass in the same commit, never
- * let two meanings collide silently in one channel.
+ * the density target's BLUE channel carries gut-weighted density.
+ *
+ * NOT alpha, which is what this first tried. The density pass writes through
+ * a node material's `colorNode`, and three FORCES that alpha to `opacity`
+ * (see the density-pass comment below, which said so before this was
+ * written). A custom alpha term is silently discarded, so `.a` accumulated a
+ * constant 1 per overlapping quad — and `gutFrac = a/r` then came out >= 1
+ * almost everywhere, painting every blood pixel with the organ colour. That
+ * is what "the blood looks wrong" was.
+ *
+ * `.b` is genuinely free, and freeing it cost nothing: the pass wrote `fall`
+ * into BOTH `.r` and `.b`, and view depth was reconstructed as `.g/.b`.
+ * Dividing by `.r` instead is the same number — same value, same precision —
+ * so `.b` was redundant, not spare-by-accident.
+ *
+ * If a future change needs `.b`, move this flag with the assignment and fix
+ * the surface pass in the same commit; never let two meanings share a
+ * channel silently.
  */
-export const GOO_DENSITY_ALPHA_IS_GUT_MASK = true;
+export const GOO_DENSITY_BLUE_IS_GUT_MASK = true;
 
 /**
  * The surface pass. Returns vec4(lit colour, depth-buffer value).
@@ -248,16 +259,16 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   // in 3D. The unnormalised ray with z = -1, scaled by view depth, IS the
   // view position — so this needs no inverse projection either.
   let texel = vec2<f32>(2.0, 2.0) / dims;
-  let dC = c.g / max(c.b, 1e-4);
+  let dC = c.g / max(c.r, 1e-4);
   let pC = vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0) * dC;
   let pL = vec3<f32>((ndc.x - texel.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
-    * (cl.g / max(cl.b, 1e-4));
+    * (cl.g / max(cl.r, 1e-4));
   let pR = vec3<f32>((ndc.x + texel.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
-    * (cr.g / max(cr.b, 1e-4));
+    * (cr.g / max(cr.r, 1e-4));
   let pD = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y - texel.y) * camCfg.x, -1.0)
-    * (cd.g / max(cd.b, 1e-4));
+    * (cd.g / max(cd.r, 1e-4));
   let pU = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y + texel.y) * camCfg.x, -1.0)
-    * (cu.g / max(cu.b, 1e-4));
+    * (cu.g / max(cu.r, 1e-4));
 
   // MIN-DIFFERENCE against silhouettes: at the edge of a blob one neighbour
   // sits on empty field, where g/b is a ratio of two near-zeros and the
@@ -267,10 +278,10 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   // and reject a neighbour outright when it carries no density at all.
   var ddx = pR - pC;
   let ddxB = pC - pL;
-  if (cr.b < 1e-4 || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; }
+  if (cr.r < 1e-4 || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; }
   var ddy = pU - pC;
   let ddyB = pC - pD;
-  if (cu.b < 1e-4 || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; }
+  if (cu.r < 1e-4 || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; }
   var nSurf = cross(ddx, ddy);
   let nSurfLen = length(nSurf);
   // Degenerate on an isolated texel (both differences empty): fall back to
@@ -291,7 +302,7 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   // Converted to the [0,1] depth-buffer value with the same mapping three's
   // WebGPU perspective matrix produces (Matrix4.makePerspective for the
   // WebGPU coordinate system): far * (d - near) / ((far - near) * d).
-  let viewDepth = c.g / max(c.b, 1e-4);
+  let viewDepth = c.g / max(c.r, 1e-4);
   let near = camCfg.z;
   let far = camCfg.w;
   let depthBuf = clamp(far * (viewDepth - near) / (max(viewDepth, 1e-4) * (far - near)), 0.0, 1.0);
@@ -325,7 +336,7 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   // (see the density pass's colorNode), so a/r IS the gut share of this
   // pixel's field — and it survives the blur, which filters all four
   // channels with the same normalised weights.
-  var gutFrac = c.a / max(c.r, 1e-4);
+  var gutFrac = c.b / max(c.r, 1e-4);
   gutFrac = clamp(gutFrac, 0.0, 1.0);
   let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac);
   var lit = baseCol * trans * lambert * keyColor
@@ -612,7 +623,7 @@ export function createGooLayer(
   // alpha term the same, so carrying a mask in .a cannot perturb the colour
   // channels. The gate for that: the density target must CLEAR its alpha to
   // 0 (three's setClearColor defaults to 1 — pinned in render()).
-  densMat.colorNode = vec4(fall, fall.mul(viewDepth), fall, fall.mul(gutMask));
+  densMat.colorNode = vec4(fall, fall.mul(viewDepth), fall.mul(gutMask), 1);
   densMat.blending = THREE.AdditiveBlending;
   densMat.premultipliedAlpha = true;
   densMat.transparent = true;
@@ -751,7 +762,7 @@ export function createGooLayer(
       sigma: uBlurPx,
     }) as unknown as Swizzled;
     const m = new MeshBasicNodeMaterial();
-    m.colorNode = vec4(blurred.xyz as never, blurred.w as never);
+    m.colorNode = vec4(blurred.xyz as never, 1.0);
     m.depthWrite = false;
     m.depthTest = false;
     m.fog = false;
@@ -830,14 +841,13 @@ export function createGooLayer(
       // full-frame goo sheet. (Same trap as the occluder pass's clear.)
       const restore = camera.layers.mask;
       const prevClear = renderer.getClearColor(clearColorScratch).getHex();
-      const prevClearAlpha = renderer.getClearAlpha();
       // ALPHA 0, explicitly: setClearColor's alpha parameter defaults to 1,
       // and a cleared-to-1 alpha is a gut mask of 1 in every EMPTY pixel —
       // a/r would clamp to full gut across the whole layer (organs r3).
-      renderer.setClearColor(0x000000, 0);
+      renderer.setClearColor(0x000000);
       renderer.setRenderTarget(target);
       void renderer.render(gooScene, camera);
-      renderer.setClearColor(prevClear, prevClearAlpha);
+      renderer.setClearColor(prevClear);
       camera.layers.mask = restore;
 
       // Pass A2 — the separable blur, horizontal then vertical, each a

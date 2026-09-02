@@ -22,14 +22,25 @@ export const GUT_TUNING = {
   /** Below this total movement per step a detached chain is considered at
    *  rest and stops being stepped at all. */
   settleEps: 1e-4,
-  /** Skip-one target as a fraction of two segments. 1.0 is a straight rope;
-   *  lower is a tighter coil. This is the graceful-failure lever — if the
-   *  spring reads comedic rather than visceral, 1.0 is the old behaviour. */
-  coilTightness: 0.55,
+  /** How COILED the rope wants to be, 0..1. 0 is a straight hanging rope,
+   *  1 is the tightest spring.
+   *
+   *  Named for the behaviour, not the mechanism, because the mechanism reads
+   *  BACKWARDS: internally this scales the skip-one target DOWN, so a bigger
+   *  number is a shorter target and a tighter coil. Exposed the other way
+   *  round it invited exactly the mistake it got — the owner raised "coil" to
+   *  0.79 expecting more coil and got a straight rope (measured: 0.81x rest
+   *  span while attached, i.e. barely bent at all).
+   *
+   *  Default 0.9, not the old 0.55-in-mechanism-units: an ATTACHED chain
+   *  fights gravity along its whole length, and anything looser hangs nearly
+   *  straight. The original default was set from a test that only ever
+   *  measured a DETACHED chain, which coils easily at any setting. */
+  coilTightness: 0.9,
   /** Skip-one correction weight relative to the segment constraints, 0..1.
-   *  Kept well under 1 so segments still win and the tube cannot crush
+   *  Kept under 1 so the segments still win and the tube cannot crush
    *  itself — the two families pull against each other by design. */
-  springiness: 0.35,
+  springiness: 0.5,
 };
 
 export interface GutNode { pos: Vec3; prev: Vec3 }
@@ -144,7 +155,9 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
     // encodes a preferred bend at every node, and a uniform preferred bend is
     // a coil. Without this the chain has nothing resisting a straight line,
     // which is exactly the "rigid T" the owner reported.
-    const skipTarget = c.seg * 2 * c.coilTightness;
+    // coilTightness is "how coiled", so invert it into a target LENGTH here.
+    // 0 -> 2*seg (a straight rope), 1 -> 0.6*seg (a tight spring).
+    const skipTarget = c.seg * 2 * (1 - c.coilTightness * 0.7);
     for (let i = 1; i < nodes.length - 1; i++) {
       const a = nodes[i - 1]!, b = nodes[i + 1]!;
       const dx = b.pos[0] - a.pos[0], dy = b.pos[1] - a.pos[1], dz = b.pos[2] - a.pos[2];

@@ -15,13 +15,16 @@ describe('gut chain', () => {
     for (let i = 0; i < 600; i++) c = stepGutChain(c, 1 / 60);
     const head = c.nodes[0]!.pos, tail = c.nodes[c.nodes.length - 1]!.pos;
     const span = Math.hypot(tail[0] - head[0], tail[1] - head[1], tail[2] - head[2]);
-    // Segments never stretch past the rest length (upper bound), and the
-    // chain never locks into the old coincident-node accordion fold
-    // (span ~1.4 seg). Since the skip-one spring (organs r3) the rest shape
-    // is a coil, so a hung chain sits at ~0.6 of contour, not ~1.0 — the
-    // lower bound holds well above accordion-lock while allowing that.
+    // Two failure modes, and the SPRING sits between them. Upper: segments
+    // must never stretch past the contour length. Lower: the chain must not
+    // collapse to coincident nodes (the accordion lock, span ~0).
+    //
+    // The old lower bound was 0.5x rest, written before the spring existed —
+    // it asserted a hung chain stays EXTENDED, which is exactly the behaviour
+    // the coil deliberately removes. It was pinning the absence of the
+    // feature, so it is relaxed here rather than the feature being weakened.
     expect(span).toBeLessThan(GUT_TUNING.restLength * 1.15);
-    expect(span).toBeGreaterThan(GUT_TUNING.restLength * 0.5);
+    expect(span).toBeGreaterThan(c.seg * 1.5);
   });
 
   it('keeps node 0 exactly at the pin while attached', () => {
@@ -94,10 +97,10 @@ describe('the gut chain is a SPRING (organs r3)', () => {
     expect(span).toBeLessThan(GUT_TUNING.restLength * 0.7);
   });
 
-  it('coilTightness 1.0 degrades to a plain hanging rope', () => {
+  it('coilTightness 0 degrades to a plain hanging rope', () => {
     // The graceful-failure lever: if the spring reads comedic, this is the
     // way back to the old behaviour without a revert.
-    let c = makeGutChain([0, 2, 0], { coilTightness: 1.0 });
+    let c = makeGutChain([0, 2, 0], { coilTightness: 0 });
     c = detachGutChain(c);
     for (let i = 0; i < 400; i++) c = stepGutChain(c, 1 / 60);
     const head = c.nodes[0]!.pos, tail = c.nodes[c.nodes.length - 1]!.pos;
@@ -128,5 +131,20 @@ describe('the gut chain is a SPRING (organs r3)', () => {
     const before = c.nodes.map(n => [...n.pos]);
     c = stepGutChain(c, 1 / 60);
     expect(c.nodes.map(n => [...n.pos])).toEqual(before);
+  });
+});
+
+describe('an ATTACHED chain coils too (organs r3 fix)', () => {
+  it('a hanging rope is visibly coiled, not nearly straight', () => {
+    // The original spring test only ever measured a DETACHED chain, which
+    // coils easily at any setting — so a hanging rope stayed ~0.8x rest span
+    // (essentially the "rigid T" the owner kept reporting) while the test was
+    // green. An attached chain fights gravity along its whole length, so it
+    // is the harder case and the one the game actually shows most of the time.
+    let c = makeGutChain([0, 1.2, 0]);
+    for (let i = 0; i < 600; i++) { c = pinGutChain(c, [0, 1.2, 0]); c = stepGutChain(c, 1 / 60); }
+    const a = c.nodes[0]!.pos, b = c.nodes[c.nodes.length - 1]!.pos;
+    const span = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    expect(span).toBeLessThan(GUT_TUNING.restLength * 0.55);
   });
 });
