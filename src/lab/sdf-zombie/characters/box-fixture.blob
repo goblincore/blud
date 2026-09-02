@@ -1,0 +1,13 @@
+model box-fixture
+  height 1.0
+
+skeleton
+  root pelvis at 0.50
+  bone spine parent=pelvis dir=up len=0.40
+  bone skull parent=spine dir=up len=0.16
+
+body
+  # A machined slab and a soft one on the same bone: the pair exercises both
+  # ends of the `round` sweep in one field.
+  bar torso on spine from=0.10 to=0.60 r=0.060 wide=1.30 deep=0.80 box round=0.05 blend=0.010 core
+  blob torso on spine at=0.75 r=0.070 box round=0.40 blend=0.010

@@ -1,0 +1,14 @@
+
+> blud@0.0.1 blob:render-check
+> scripts/blob-render-check.sh box-fixture
+
+lab-servers: starting vite on 5233
+lab-servers: starting chrome (headless) on debug port 9223
+shooting http://localhost:5233/sdf-lab-webgpu.html?character=box-fixture
+proxy volume: [-0.40,0.46,-0.40] .. [0.40,1.38,0.40], field centre [0.00,0.92,0.00]
+background sample: rgb(26,17,22) (expected 26,17,22)
+camera: fov 75 aspect 1.683 pos [0.00,0.46,2.40]
+marched 345x205 samples (70725 rays) in 0.0s — 317 inside, 98 after erosion
+floor sample:      rgb(26,17,22) at px (689,392)
+0 hole cluster(s), worst 0 px across (threshold 12)
+OK: renderer agrees with the field. If you still see a hole, it is in your .blob.
