@@ -758,3 +758,41 @@ Written by the controller from the run's commits and its smoke capture; the run 
 **Bench:** not run — **DEFERRED to task 9** (`setLevelShadow(false)` lever). Expected cost: one extra 1024² level-only depth pass per frame plus one shadow-map tap per hit pixel.
 
 **Default:** ships 1.0, seam kept. Verdict: landed and compiling; smoke clean; pillar gate pending owner eyeball.
+
+## Task 8 — measure the per-body upload (2026-09-02, branch dispatch/2026-09-01-sdf-render-perf-r2-task-8)
+
+**Step 1 — instrument.** All three `view.update` call sites in `game-actor.ts`
+(per-frame `step`, `stampBlast`, `applyProjectileHit`) routed through one timed
+wrapper accumulating a module-level `uploadMs` + call counter (module-level on
+purpose: all ten actors share it). Exposed as `__sdfGame.uploadMs()` on the
+seam, returning `{ ms, calls }` and zeroing — calls so the sampler divides by
+real frames, not an assumed 60 Hz. Driver: throwaway CDP probe modeled on
+`perf-r2-parity.mjs` (not committed); page booted normally, `setAdaptive(false)`,
+`setSdfScale(1.0)`, teleport room 4, NOT frozen (idle wander), 10 bodies
+uploading per frame, sampled 1×/s.
+
+**Step 2 — the numbers (machine quiet — this task was the only `status:
+running`).** Worktree 5298/9298, headless Chrome, WebGPU resolved:
+
+- Twelve 1 s samples: **0.057–0.123 ms/frame** (all ten uploads summed),
+  total 613.1 ms over 9 590 uploads → **0.064 ms/frame average** (~6.4 µs per
+  body upload). Frames/s ran ~50 early (bodies off-screen) and dipped to ~26-38
+  when the wanderers walked into view — the ms/frame stayed flat across both.
+- Per-frame distribution (114 back-to-back reads): min 0.010, **p50 0.060**,
+  p90 0.080, **max 0.090 ms/frame**.
+
+That is 3-5× under the plan's 0.3 ms threshold, and it matches the mechanism:
+10 bodies × 38 KB RGBA32F = 380 KB/frame ≈ 19 MB/s at 50 fps — packing +
+`writeRow` + `needsUpdate` is noise next to one blit. The 116-of-128 wasted
+columns cost bytes, not time: the WGSL reads texels by integer `textureLoad`
+index and never touches the tail, and the cluster folds early-break on the
+live count, so a narrow texture buys upload bytes and nothing else.
+
+**Verdict: measured, not worth it.** Step 2's branch taken — the
+instrumentation came back OUT (this commit), the texture stays 128 wide, no
+Step 3, no parity gate needed (nothing that renders changed; the instrumented
+tree itself never shipped a pixel). `blob:render-check` not run for the same
+reason. If a future body ever carries ≫12 prims, re-measure before narrowing:
+`MAX_PRIMS` is the allocation width and the pack arrays' size, the shader is
+width-agnostic, and a three.js DataTexture cannot be resized in place — any
+narrowing must be decided once at view creation.

@@ -47,7 +47,7 @@ import {
   enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
-import { createZombieActor, takeUploadMs, type ZombieActor } from './game-actor';
+import { createZombieActor, type ZombieActor } from './game-actor';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
@@ -1769,9 +1769,6 @@ async function main() {
     walkCancel: () => { autopilot = null; },
     get walking() { return autopilot !== null; },
     frameMs: () => frameEma,
-    /** Perf round 2 task 8: total per-body pack+upload ms since the last
-     *  call, across all actors ({ ms, calls }). Read once per second. */
-    uploadMs: () => takeUploadMs(),
     bodiesOnScreen,
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
