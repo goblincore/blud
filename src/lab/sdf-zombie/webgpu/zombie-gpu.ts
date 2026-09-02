@@ -24,7 +24,6 @@ import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
-import { specialiseMapBody } from './specialise';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
   TILE_SIZE_PX,
@@ -112,14 +111,13 @@ export interface ZombieGpuView {
  * Each helper is itself a node, built by folding so that every one carries the
  * helpers declared before it.
  */
-function buildMarchFn(mapBodySrc?: string) {
-  // Swap one entry in the dependency-ordered helper list. mapBody sits at a
-  // fixed place in that order — after the things it calls, before calcNormal
-  // which calls it — so the specialised version has to go in the SAME slot or
-  // WGSL's declaration-before-use rule breaks.
-  const sources = mapBodySrc
-    ? HELPERS.map(h => (/^fn\s+mapBody\s*\(/.test(h) ? mapBodySrc : h))
-    : HELPERS;
+function buildMarchFn() {
+  // mapBody sits at a fixed place in HELPERS — after the things it calls,
+  // before calcNormal which calls it — so any future per-body variant of it
+  // would have to go in the SAME slot or WGSL's declaration-before-use rule
+  // breaks. (The specialiser that used that slot was retired 2026-09-01,
+  // perf r2 task 4: its emitted call signature had rotted against SD_PRIM's.)
+  const sources = HELPERS;
   // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
   // wgslFn includes a dependency's code transitively, and HELPERS is already a
   // strict declaration order, so a chain emits exactly the same WGSL as the
@@ -891,12 +889,6 @@ export interface GpuViewOpts {
    *  unbounded march — the fetch identities make it bit-identical. */
   shell?: ShellSource;
   /**
-   * Generate a shader specialised to THIS body's structure — loops unrolled,
-   * carve decisions and blend constants baked. See specialise.ts. Costs one
-   * pipeline compile per distinct structure, so it is opt-in until measured.
-   */
-  specialise?: boolean;
-  /**
    * The 3D texture bound to the volume slot (X1.26). Omitted, the view binds
    * its own 1-cubed fallback and disposes it in dispose(); pass one to share
    * a single fallback across every non-volume view (the lab renderer owns
@@ -1001,7 +993,7 @@ export function createZombieGpuView(
   const packed = upload(body);
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
-    opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
+    marchBody,
     opts.cone, opts.occluder, tileNodes, opts.shell);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on

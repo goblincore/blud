@@ -1324,6 +1324,11 @@ async function main() {
             return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
           })
           : [],
+        // The pre-pass ships disabled and nothing consumes the occluder
+        // instances; skip their rebuild while it is off (perf r2 task 4).
+        // The shadow twin above always rebuilds. setOccluder(true) resumes
+        // the rebuild on the next frame, so the A/B seam still works.
+        { occluder: sdfLayer.occluderEnabled },
       );
     }
 
@@ -2367,6 +2372,9 @@ async function main() {
             return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
           })
           : [],
+        // Same rule as the frame loop: only rebuild the occluder half when
+        // the pre-pass is on to consume it.
+        { occluder: sdfLayer.occluderEnabled },
       );
     },
     /** A/B seam: rebuild the SHADOW hull with spanning off (the pre-fix

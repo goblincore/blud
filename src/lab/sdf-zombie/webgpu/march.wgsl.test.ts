@@ -26,7 +26,6 @@ import {
   ROW_WOUND_CAP,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
-import { specialiseMapBody } from './specialise';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
 import { packBody } from '../pack';
 import { add, cross, scale as vscale, sub, qFromAxisAngle, qNormalize } from '../vec';
@@ -1196,8 +1195,7 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
 
   it('guards every counter write — debugCfg.x == 0 pays a branch only', () => {
     // mapBody's fold: guarded on the private mode flag (mapBody takes no
-    // debugCfg parameter by design — threading one would fork the
-    // signature specialise.ts mirrors).
+    // debugCfg parameter by design — threading one would fork its signature).
     const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
     expect(foldGroup).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
     // The march entry: init + per-step count guarded on the uniform itself.
@@ -1235,13 +1233,6 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     expect(MARCH_BODY.indexOf('let heatNorm', branch)).toBeGreaterThan(branch);
     // steps ramp: 0..marchCfg.x. prims ramp: 0..2000.
     expect(MARCH_BODY).toContain('select(debugSteps / max(marchCfg.x, 1.0), debugPrims / 2000.0, debugCfg.x > 1.5)');
-  });
-
-  it('counts prims in the specialised fold too (heatmap parity)', () => {
-    // A specialised crowd body must count the same work the generic fold
-    // counts, or a heatmap taken against a specialised crowd lies.
-    expect(specialiseMapBody(oneClusterBody())).toContain(
-      'if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
   });
 });
 
@@ -1290,16 +1281,3 @@ describe('analytic flashlight (dungeon relighting task 7)', () => {
       'bounceCfg, lightCfg.y, keyColor);');
   });
 });
-
-/** Minimal body for the specialise-parity pin: one limb, one prim. */
-function oneClusterBody(): import("../build-body").BuildResult {
-  const prim: Primitive = {
-    a: [0, 0, 0], b: [0, 1, 0], radius: 0.1,
-    scale: [1, 1, 1], blendK: 0.05, limb: 'torso', op: 'add',
-  } as unknown as Primitive;
-  return {
-    prims: [prim],
-    clusters: [{ limb: 'torso', start: 0, count: 1, center: [0, 0.5, 0], radius: 0.7, alive: true }] as never,
-    bones: [], root: 'torso', errors: [],
-  } as unknown as import("../build-body").BuildResult;
-}
