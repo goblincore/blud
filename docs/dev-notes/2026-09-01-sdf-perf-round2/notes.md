@@ -732,3 +732,15 @@ by whatever distortion the zombie's groups carry, and the lab owns the
 extreme-factor eyeball.
 
 Gates below.
+
+### Gates (run by the task; the far-leg verdict and this write-up by the controller after the run hit its cap)
+
+**Strength-0 parity** (`setAa(0)` both legs — the plumbing must be invisible): room 3 a-vs-b 82 / 110 px against a 104-px noise floor, occupancy bit-identical; room 4 a-vs-b 57 / 103 px against 91 px, occupancy bit-identical (hits 88086, rasterised 172640, steps 6.07 / 3.87). **PASS.** Captures `task6/aa0-r3`, `task6/aa0-r4`.
+
+**Visual gate, near (2 m, room 4, `setAa(0)` vs `setAa(1)`):** a-vs-b 6532 / 6434 px (0.63%) against a noise floor of 8 px; hits 34693 → 35202, mean steps on hits 5.75 → 5.10 (−11%), misses 3.87 → 3.70. Vision read on the side-by-side: PASS (silhouettes smoother, body unchanged). Captures `task6/near2m`.
+
+**Visual gate, far (8 m through the tunnel sightline, room 4, 9 bodies on screen, a slug crater staged on the far body via `fire()` + wound poll):** a-vs-b 6915 / 7038 px against a 104-px noise floor; hits 16023 → 16638 (+3.8% — flesh the smaller epsilon left unresolved at range), mean steps on hits 7.57 → 6.16 (**−18.6%**), misses 12.55 → 11.73. Controller's read of `far8m-ab1-crop.png` (left = AA on, right = off): all nine bodies present on both sides; the crater on the far body reads on both; AA-on silhouettes are slightly smoother at the doorway figures and the near arm; no halo, no shrink, no ghost outline. **PASS.** Captures `task6/far8m`.
+
+**Bench:** not run — **DEFERRED to task 9** (`setAa(0)` lever in the sweep). The step deltas above are the load-immune signal: −11% near, −18.6% far on hit pixels.
+
+**Default:** `GAME_AA = 1.0` ships. Verdict: PASS on all three gates.
