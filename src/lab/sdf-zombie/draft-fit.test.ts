@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Vec3 } from './types';
 import { basisFromAxis, dot, len, normalize, scale as vscale, sub } from './vec';
-import { bandCloud, medialLine } from './draft-fit';
+import { dirVector } from './blob-compile';
+import { bandCloud, inferDir, medialLine } from './draft-fit';
 
 // All clouds below are deterministic lattices — no RNG — so a failure is
 // reproducible by construction rather than by seed. Surface sampling (fixed
@@ -292,5 +293,79 @@ describe('bandCloud', () => {
     // circle-ish prim, with the debt owned by `rotated`.
     expect(Math.abs(b.wide - 1)).toBeLessThan(0.05);
     expect(Math.abs(b.deep - 1)).toBeLessThan(0.05);
+  });
+});
+
+describe('inferDir', () => {
+  // (pitch, tilt) pairs lifted from the zombie's real bones — the same ones
+  // blob-compile.test.ts uses: a pure pitch, a pure tilt, and both combined.
+  // The combined case is the one that bites: tilt is applied AFTER pitch and
+  // shrinks |y| by cos(tilt) without touching z, so z/|y| = tan(pitch)/
+  // cos(tilt), NOT tan(pitch) — an inversion that ignores the coupling leaves
+  // a real residual here and nowhere else (scripts/derive_blob_angles.mjs's
+  // "the bit that bites").
+  const ANGLES: Array<[number, number]> = [
+    [0, 0],
+    [6.842773, 0],
+    [0, 16.699244],
+    [5.703515, 2.862405],
+  ];
+
+  it('round-trips an up-based direction through dirVector', () => {
+    // For several (pitch, tilt): dirVector('up', p, t) → inferDir → the same
+    // p and t back. This is the only honest test of an inversion — checking
+    // the angles against hand-derived formulas would just restate the
+    // implementation. The error is analytic, so the round-trip is exact to
+    // float precision, not approximately right.
+    for (const [p, t] of ANGLES) {
+      const fit = inferDir(dirVector('up', p, t));
+      expect(fit.dir).toBe('up');
+      expect(fit.derivable).toBe(true);
+      expect(fit.pitchDeg).toBeCloseTo(p, 5);
+      expect(fit.tiltDeg).toBeCloseTo(t, 5);
+      // What the emitted line reproduces IS what was measured. Tolerance is
+      // float noise on a ~1 dot, not a fudge factor.
+      expect(fit.errDeg).toBeLessThan(1e-4);
+    }
+  });
+
+  it('round-trips a down-based direction', () => {
+    // The sign-fix'd dirVector tips 'down' toward +z exactly like 'up'
+    // (blob-compile's sign(y0) trick), so the SAME pairs must round-trip —
+    // an inversion that worked only for 'up' would silently emit a forearm
+    // pointing backwards, the exact P8 bug in reverse.
+    for (const [p, t] of ANGLES) {
+      const fit = inferDir(dirVector('down', p, t));
+      expect(fit.dir).toBe('down');
+      expect(fit.derivable).toBe(true);
+      expect(fit.pitchDeg).toBeCloseTo(p, 5);
+      expect(fit.tiltDeg).toBeCloseTo(t, 5);
+      expect(fit.errDeg).toBeLessThan(1e-4);
+    }
+  });
+
+  it('picks side/fwd for a horizontal direction and REFUSES angles', () => {
+    // dirVector's pitch is a no-op when the base has no vertical component
+    // (side: y0 = 0, so sign(y0) = 0), and its tilt only swings a side bone
+    // toward +y — so a measured horizontal direction with any z in it is
+    // simply NOT EXPRESSIBLE as base+angles. Emitting nearest numbers anyway
+    // would put inert-but-plausible pitch/tilt into a .blob line: confidently
+    // wrong is worse than absent, so the fit refuses and lets errDeg say how
+    // far off the bare base actually is.
+    const side = inferDir(normalize([2, 0, 1]));
+    expect(side.dir).toBe('side');
+    expect(side.derivable).toBe(false);
+    expect(side.pitchDeg).toBeUndefined();
+    expect(side.tiltDeg).toBeUndefined();
+    // errDeg is ALWAYS owed — on a refusal it is the angle between what was
+    // measured and what the bare `dir=side` line reproduces, here exactly
+    // atan(1/2) off [1,0,0].
+    expect(side.errDeg).toBeCloseTo((Math.atan(1 / 2) * 180) / Math.PI, 5);
+
+    const fwd = inferDir([0, 0, 1]);
+    expect(fwd.dir).toBe('fwd');
+    expect(fwd.derivable).toBe(false);
+    expect(fwd.pitchDeg).toBeUndefined();
+    expect(fwd.tiltDeg).toBeUndefined();
   });
 });

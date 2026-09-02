@@ -11,6 +11,7 @@
 // Spec: docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md.
 
 import type { Vec3 } from './types';
+import { dirVector } from './blob-compile';
 import { cross, dot, len, normalize, scale as vscale, sub } from './vec';
 
 export interface MedialLine {
@@ -284,6 +285,89 @@ export function bandCloud(points: Vec3[], line: MedialLine, opts: BandOpts = {})
     });
   }
   return bands;
+}
+
+export interface DirFit {
+  /** The .blob base whose zero-angle direction is closest to the measured one. */
+  dir: 'up' | 'down' | 'side' | 'fwd';
+  /** Absent when `derivable` is false. */
+  pitchDeg?: number;
+  tiltDeg?: number;
+  /**
+   * False for `side`/`fwd` bases: dirVector's pitch is a NO-OP there (side's
+   * y0 = 0, so sign(y0) = 0) and its tilt only swings a side bone toward +y,
+   * so a measured direction with any component off the bare base is simply
+   * not expressible as base+angles. Refusing is the honest output — the only
+   * thing worse than no angles is angles that compile fine and point the
+   * bone somewhere else. `errDeg` carries what the bare base misses by.
+   */
+  derivable: boolean;
+  /**
+   * Angle between the measured direction and what the emitted
+   * dir/pitch/tilt actually reproduce — always present, so an author can
+   * judge the line's fidelity even where the inversion is refused. ~0 when
+   * the fit is faithful; the refusal's debt otherwise.
+   */
+  errDeg: number;
+}
+
+/**
+ * Invert `dirVector` on a measured direction (the medial line's, in the
+ * draft) into the `dir=`/`pitch=`/`tilt=` a .blob line must carry to point
+ * the same way.
+ *
+ * The inversion reproduces dirVector's ACTUAL composition, not an idealised
+ * rotation: pitch is applied first, then tilt, and tilt shrinks |y| by
+ * cos(tilt) without touching z — so x/|y| = tan(tilt) exactly, but
+ * z/|y| = tan(pitch)/cos(tilt). Deriving pitch as atan(z/|y|) ignores the
+ * coupling and leaves a real residual on any bone with both angles set (the
+ * lesson scripts/derive_blob_angles.mjs already paid for).
+ *
+ * The input's magnitude is irrelevant (resolveBones normalises `dir`), and
+ * the eigenvector-sign canonicalisation of {@link medialLine} needs no
+ * undone: whichever way the sign resolved, the closest-base pick below sees
+ * the same geometry — a mostly-down cloud lands on `down` regardless.
+ */
+export function inferDir(v: Vec3): DirFit {
+  const DEG = 180 / Math.PI;
+  const u = normalize(v);
+
+  // Closest base by dot with each base's zero-angle vector, asked of
+  // dirVector itself rather than a re-typed dictionary — if the grammar's
+  // bases ever move, this moves with them. Fixed iteration order with a
+  // strict `>` makes an exact tie (a direction equidistant from two bases,
+  // e.g. 45° between up and side) deterministic; either winner is a real
+  // fit and `errDeg` says so.
+  const bases = ['up', 'down', 'side', 'fwd'] as const;
+  let best: (typeof bases)[number] = 'up';
+  let bestDot = -Infinity;
+  for (const b of bases) {
+    const d = dot(u, dirVector(b, 0, 0));
+    if (d > bestDot) { bestDot = d; best = b; }
+  }
+
+  const angleTo = (w: Vec3) => Math.acos(Math.min(1, Math.max(-1, dot(u, w)))) * DEG;
+
+  if (best === 'side' || best === 'fwd') {
+    return { dir: best, derivable: false, errDeg: angleTo(dirVector(best, 0, 0)) };
+  }
+
+  // The analytic inverse of the composition (see the interface note): tilt
+  // from the exact x/|y| ratio, then pitch through the cos(tilt) coupling.
+  // atan2 rather than atan on x/ay keeps a perfectly vertical direction at
+  // tilt 0 instead of dividing zero by zero toward NaN.
+  const [x, , z] = u;
+  const ay = Math.abs(u[1]!);
+  const tiltDeg = Math.atan2(x, ay) * DEG;
+  const pitchDeg = Math.atan((z / ay) * Math.cos(tiltDeg / DEG)) * DEG;
+  const reproduced = dirVector(best, pitchDeg, tiltDeg);
+  return {
+    dir: best,
+    pitchDeg,
+    tiltDeg,
+    derivable: true,
+    errDeg: angleTo(reproduced),
+  };
 }
 
 /**
