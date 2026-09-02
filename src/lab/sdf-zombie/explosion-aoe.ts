@@ -343,6 +343,14 @@ export function resolveExplosion(
         WOUND_PROFILES.blast.radius * h.falloff, 'blast', 0,
         p => sdBody(p, body),
       ));
+    // Entrails (2026-09-02): a blast over the TORSO opens a body cavity —
+    // the same gate the slug path applies, read off the prim
+    // worldHitToWound bound each wound to (its arg-min prim IS the struck
+    // prim). Limb blasts are wall-of-meat wounds; pellets never cavity at
+    // all (woundFromPellet sets nothing, game-weapon.ts).
+    for (const w of wounds) {
+      w.cavity = body.prims[w.primIdx]!.limb === 'torso';
+    }
     const meterCredit = wounds.reduce(
       (m, w) => m + w.radius * COLLAPSE_TUNING.meterRadiusWeight, 0);
 

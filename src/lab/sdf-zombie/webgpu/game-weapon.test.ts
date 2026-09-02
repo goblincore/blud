@@ -6,6 +6,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { WOUND_PROFILES, woundWorldPos } from '../damage';
+import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
+import { ZOMBIE } from '../body';
+import { sdBody, sdPrimitive } from '../validate';
 import {
   GRAPESHOT, SLUG, applyRigidYaw, expired, fitRestToPose, mulberry32,
   spawnPellets, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
@@ -241,6 +244,66 @@ describe('spawnSlug', () => {
     const back = woundWorldPos([prim], w, 0);
     expect(Math.hypot(back[0] - hit![0], back[1] - hit![1], back[2] - hit![2]))
       .toBeLessThan(1e-6);
+  });
+});
+
+describe('cavity flag by damage type (entrails)', () => {
+  // The real zombie: the flag's whole point is that it reads the STRUCK
+  // prim's limb off the authored body, not off a hand-rolled fixture.
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const field = (p: Vec3) => sdBody(p, body);
+
+  /** First live prim of `limb` with an outward surface point whose arg-min
+   *  prim IS that prim (the same arg-min rule worldHitToWound uses), so the
+   *  hit genuinely binds where the test claims it does. Stations run along
+   *  the axis pushed out +x by the scaled radius (sdPrimitive divides the
+   *  sample by scale per axis). */
+  function surfaceHitOn(limb: string): { primIdx: number; hit: Vec3 } {
+    for (let i = 0; i < body.prims.length; i++) {
+      const p = body.prims[i]!;
+      if (p.op === 'sub' || p.op === 'groove' || p.dead) continue;
+      if (p.limb !== limb) continue;
+      const ab: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
+      for (const t of [0.35, 0.5, 0.65]) {
+        const hit: Vec3 = [
+          p.a[0] + ab[0] * t + p.radius * p.scale[0],
+          p.a[1] + ab[1] * t,
+          p.a[2] + ab[2] * t,
+        ];
+        let bestIdx = -1;
+        let best = Infinity;
+        body.prims.forEach((q, j) => {
+          if (q.op === 'sub' || q.op === 'groove' || q.dead) return;
+          const d = sdPrimitive(hit, q);
+          if (d < best) { best = d; bestIdx = j; }
+        });
+        if (bestIdx === i) return { primIdx: i, hit };
+      }
+    }
+    throw new Error(`no self-owned surface hit found on limb ${limb}`);
+  }
+
+  const torsoHit = surfaceHitOn('torso');
+  const limbHit = surfaceHitOn('legL');
+
+  it('a slug to the torso opens a cavity', () => {
+    const w = woundFromSlug(body.prims, torsoHit.hit, field);
+    expect(w.primIdx).toBe(torsoHit.primIdx);
+    expect(w.cavity).toBe(true);
+  });
+
+  it('a pellet never does, even on the torso', () => {
+    // A pellet hole is too small to reach a cavity, and that is already the
+    // distinction the game draws between pellet and slug.
+    const w = woundFromPellet(body.prims, torsoHit.hit, 0, field);
+    expect(w.primIdx).toBe(torsoHit.primIdx);
+    expect(w.cavity).toBeFalsy();
+  });
+
+  it('a slug to a LIMB never does — a thigh is a wall of meat', () => {
+    const w = woundFromSlug(body.prims, limbHit.hit, field);
+    expect(w.primIdx).toBe(limbHit.primIdx);
+    expect(w.cavity).toBeFalsy();
   });
 });
 

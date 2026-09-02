@@ -12,6 +12,7 @@ import {
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
 import { ZOMBIE } from './body';
 import { WOUND_PROFILES } from './damage';
+import { sdPrimitive } from './validate';
 import { cutChains, cutLimbs } from './connectivity';
 import { COLLAPSE_TUNING } from './collapse';
 import { HAND_PRIMS } from './hands';
@@ -129,7 +130,68 @@ describe('wound stamping', () => {
     expect(fx.perBody[0]!.severedLimbs).toEqual([]);
     expect(fx.perBody[0]!.chainCuts).toEqual([]);
   });
+
+  it('a blast over the TORSO opens cavities; limb wounds never do (entrails)', () => {
+    const torso = zombie.clusters.find(c => c.limb === 'torso')!;
+    const fx = resolveExplosion(torso.center, [{ id: 'z', body: zombie }]);
+    const e = fx.perBody[0]!;
+    expect(e.wounds.length).toBeGreaterThan(0);
+    const torsoWounds = e.wounds.filter(w => zombie.prims[w.primIdx]!.limb === 'torso');
+    const limbWounds = e.wounds.filter(w => zombie.prims[w.primIdx]!.limb !== 'torso');
+    // Point-blank at the belly: the near side is all torso, so the flag is
+    // genuinely exercised, not vacuously true.
+    expect(torsoWounds.length).toBeGreaterThan(0);
+    for (const w of torsoWounds) expect(w.cavity).toBe(true);
+    // Whatever limb wounds the ring caught stay non-cavity — a thigh is a
+    // wall of meat, same gate as the slug path.
+    for (const w of limbWounds) expect(w.cavity).toBeFalsy();
+  });
+
+  it('a blast grazing a LEG never opens a cavity (entrails)', () => {
+    // A point just off a legL prim's surface whose arg-min prim IS that leg
+    // (the same ownership rule worldHitToWound applies): hits are sorted
+    // nearest-first, so wound 0 binds to the leg — a wall of meat. Array
+    // order is NOT enough: the first legL prim in the array sits under the
+    // hanging arm, whose surface is nearer to its outer-x station.
+    const at = legSurfacePoint(zombie, 'legL');
+    const fx = resolveExplosion(at, [{ id: 'z', body: zombie }]);
+    const e = fx.perBody[0]!;
+    expect(e.wounds.length).toBeGreaterThan(0);
+    const first = e.wounds[0]!;
+    expect(zombie.prims[first.primIdx]!.limb).toBe('legL');
+    expect(first.cavity).toBeFalsy();
+  });
 });
+
+/** A point 0.1 m off some live prim of `limb` whose arg-min prim (the rule
+ *  worldHitToWound stamps by: live additive prims, sdPrimitive arg-min) is
+ *  that prim — the blast there genuinely grazes `limb` first. */
+function legSurfacePoint(
+  body: ReturnType<typeof buildBody>, limb: string,
+): Vec3 {
+  for (let i = 0; i < body.prims.length; i++) {
+    const p = body.prims[i]!;
+    if (p.op === 'sub' || p.op === 'groove' || p.dead) continue;
+    if (p.limb !== limb) continue;
+    const ab: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
+    for (const t of [0.35, 0.5, 0.65]) {
+      const probe: Vec3 = [
+        p.a[0] + ab[0] * t + p.radius * p.scale[0] + 0.1,
+        p.a[1] + ab[1] * t,
+        p.a[2] + ab[2] * t,
+      ];
+      let bestIdx = -1;
+      let best = Infinity;
+      body.prims.forEach((q, j) => {
+        if (q.op === 'sub' || q.op === 'groove' || q.dead) return;
+        const d = sdPrimitive(probe, q);
+        if (d < best) { best = d; bestIdx = j; }
+      });
+      if (bestIdx === i) return probe;
+    }
+  }
+  throw new Error(`no self-owned surface point found on limb ${limb}`);
+}
 
 // ——— Impulses ——————————————————————————————————————————————————————————
 
