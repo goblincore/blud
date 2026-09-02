@@ -1,0 +1,35 @@
+{
+  "tag": "before-3",
+  "ampCheck": false,
+  "staged": 12,
+  "bodies": [
+    {
+      "id": 1,
+      "wounds": 3
+    },
+    {
+      "id": 2,
+      "wounds": 3
+    },
+    {
+      "id": 3,
+      "wounds": 3
+    },
+    {
+      "id": 4,
+      "wounds": 3
+    }
+  ],
+  "misses": [],
+  "evals": {
+    "rasterised": 43350,
+    "hits": 20420,
+    "bonesTotal": 1463968,
+    "meanPerRay": 33.77088811995387,
+    "meanPerPayingRay": 221.98150113722517,
+    "payingShare": 0.15213379469434832,
+    "meanOnHit": 57.57492654260529,
+    "maxBones": 2208,
+    "bodiesOnScreen": 6
+  }
+}

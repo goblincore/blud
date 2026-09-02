@@ -357,4 +357,32 @@ describe('organ prims (organs r3)', () => {
     } as unknown as BuiltBody);
     expect(packed.primScale[3]).toBe(W_DEAD);
   });
+
+  it('an organ row is bit-identical to the same prim packed as bone, except primScale.w (task 6 gate 1)', () => {
+    // The off-state claim: a body with no organ prims packs bit-for-bit as
+    // before. True iff the organ op touches ONLY the w column — every other
+    // packed value must flow the identical code path. Compare every packed
+    // array in full between the same prim labelled bone and labelled organ.
+    const mkClusters = () => [{ limb: 'torso', start: 0, count: 0, center: [0, 0.15, 0], radius: 0.2, alive: true }];
+    const boneRows = packBody({
+      prims: [], bonePrims: [mk('bone')], clusters: mkClusters(),
+    } as unknown as BuiltBody);
+    const organRows = packBody({
+      prims: [], bonePrims: [mk('organ')], clusters: mkClusters(),
+    } as unknown as BuiltBody);
+    const arrays = ['primA', 'primB', 'primQuat', 'primShape', 'primBend',
+      'primColor', 'primShell', 'primClip', 'restA', 'restB',
+      'clusterBounds', 'clusterRange'] as const;
+    for (const key of arrays) {
+      expect(Array.from(organRows[key]), key).toEqual(Array.from(boneRows[key]));
+    }
+    // primScale: identical everywhere except the one w lane, 4 -> 5.
+    const scaleA = Array.from(boneRows.primScale);
+    const scaleO = Array.from(organRows.primScale);
+    expect(scaleO[3]).toBe(W_ORGAN);
+    expect(scaleA[3]).toBe(W_BONE);
+    scaleO[3] = scaleA[3]!;
+    expect(scaleO).toEqual(scaleA);
+    expect(boneRows.boneCount).toBe(organRows.boneCount);
+  });
 });

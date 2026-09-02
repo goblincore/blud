@@ -454,4 +454,19 @@ describe('gut mask wiring (source tripwires — the two alpha traps)', () => {
     expect(src).toContain("d.kind === 'gut' ? 1 : 0");
     expect(src).toContain('gutAttr.needsUpdate = true');
   });
+
+  it('with no gut droplets every .a is 0, so baseCol is the original literal (task 6 gate 1)', () => {
+    // The inertness chain, pinned link by link: the density alpha term is
+    // fall MUL gutMask (so a 0 mask contributes exactly 0 under additive
+    // blending), the clear starts every pixel's accumulator at 0 (pinned
+    // above), gutArr is written 1 ONLY on kind 'gut' (pinned above) — so a
+    // sim of drop/scrap/mist alone reads c.a = 0 everywhere, gutFrac
+    // clamps to 0, and mix(literal, organColor, 0) returns the literal the
+    // pre-organs pass shipped.
+    expect(src).toMatch(/colorNode\s*=\s*vec4\(fall,\s*fall\.mul\(viewDepth\),\s*fall,\s*fall\.mul\(gutMask\)\)/);
+    expect(GOO_SURFACE_WGSL).toMatch(/gutFrac = clamp\(gutFrac, 0\.0, 1\.0\)/);
+    // And the lerp's first argument is still the verbatim pre-organs blood
+    // literal — gutFrac 0 must reproduce it exactly.
+    expect(GOO_SURFACE_WGSL).toContain('let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac)');
+  });
 });
