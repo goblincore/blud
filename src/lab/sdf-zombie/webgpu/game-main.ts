@@ -29,6 +29,7 @@ import {
 } from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
@@ -1010,11 +1011,17 @@ async function main() {
   // the dispatch brief: click = one barrel, right-click = both, cooldown +
   // camera kick in; break-open reload animation and muzzle smoke are not.
   // -----------------------------------------------------------------------
-  const GUN_GLB = '/assets/lab/grapeshot-gun-k3.glb';
-  /** Grip-point origin, muzzles down -Y. Muzzle sits ~0.515 m down-barrel
-   *  from the grip centre (model script: natural muzzle Y≈-0.44 minus the
-   *  GRIP_NATURAL shift). */
-  const MUZZLE_LOCAL: [number, number, number] = [0, -0.515, 0];
+  const GUN_GLB = '/assets/lab/shorty-double.glb';
+  /** Grip-point origin, muzzles down -Y in BLENDER space. The muzzle sits
+   *  0.318 m down-barrel of the grip (model script: BMID - BLEN/2). */
+  const MUZZLE_LOCAL: [number, number, number] = [0, -0.318, 0];
+  /** Pivot parked at the hinge; rotating it about X breaks the action open.
+   *  Blender's "muzzles down -Y" becomes +Z after the glTF y-up conversion, so
+   *  a POSITIVE x-rotation swings the muzzles DOWN, which is the way a break
+   *  action opens. */
+  let hingePivot: THREE.Group | null = null;
+  let gripHandGroup: THREE.Group | null = null;
+  let foreHandGroup: THREE.Group | null = null;
   let gunGroup: THREE.Group | null = null;
   let gunReady = false;
   try {
@@ -1032,7 +1039,10 @@ async function main() {
         const std = mat as THREE.MeshStandardMaterial;
         if (std.isMeshStandardMaterial) {
           std.envMap = env;
-          std.envMapIntensity = 0.7;
+          // The whole point of the new palette is a gun that catches light in a
+          // dark dungeon. 0.7 against its private RoomEnvironment was tuned for
+          // the old near-black metal.
+          std.envMapIntensity = 1.1;
           std.needsUpdate = true;
         }
       }
@@ -1040,26 +1050,77 @@ async function main() {
     gunGroup = new THREE.Group();
     gunGroup.name = 'grapeshot-k3';
     gunGroup.add(gltf.scene);
+    // The break is a code-driven rotation of this node about the hinge locator
+    // -- the GLB carries no animation. A null here means the export lost its
+    // grouping, which must be loud: a silent null would present as a reload
+    // animation that plays and moves nothing.
+    const barrels = gltf.scene.getObjectByName('Barrels') ?? null;
+    const hingeNode = gltf.scene.getObjectByName('Hinge') ?? null;
+    if (!barrels || !hingeNode) {
+      throw new Error('[sdf-game] shorty-double.glb is missing Barrels/Hinge nodes');
+    }
+    // Rotate about the HINGE, not about the barrel node's own origin -- the
+    // latter would swing the barrels through the frame. Standard fix: a pivot
+    // group parked at the hinge, with the barrels offset back by the same
+    // amount, so the group's rotation IS the break.
+    hingePivot = new THREE.Group();
+    hingePivot.position.copy(hingeNode.position);
+    (barrels.parent ?? gltf.scene).add(hingePivot);
+    hingePivot.add(barrels);
+    barrels.position.sub(hingeNode.position);
     // AXIS NOTE: the model script's "muzzles down -Y" is BLENDER space;
     // Blender's Z-up -> glTF Y-up conversion (x,z,-y) lands them at +Z in
     // GLB space, up stays +Y. rotation.y = PI aims +Z down the camera's -Z
     // (forward) with the hammers still on top. (rotation.x = PI/2 pointed
     // the gun at the sky — first live capture caught it.)
+    // FPV pose, carried over from the model script's preview constants so the
+    // Blender FPV render and the game agree. Yaw cants the barrels toward
+    // screen centre so BOTH bores read; pitch lifts the muzzle off the floor.
     gunGroup.rotation.y = Math.PI;
-    gunGroup.position.set(0.17, -0.2, -0.32);
+    gunGroup.rotation.z = THREE.MathUtils.degToRad(-4.5);
+    gunGroup.rotation.x = THREE.MathUtils.degToRad(2.5);
+    gunGroup.position.set(0.125, -0.115, -0.300);
     viewModelAnchor.add(gunGroup);
 
-    // HANDS ARE GREEN ORBS — deliberate, per the owner: the player is the
-    // goblin and its hands were never detailed. One on the grip, one braced
-    // under the fore-end. Anchored in VIEW space (not gun space) so the
-    // axis convention of the GLB cannot move them.
-    const orbGeo = new THREE.SphereGeometry(0.055, 20, 14);
-    const orbMat = new THREE.MeshStandardMaterial({ color: 0x5a8f3c, roughness: 0.85 });
-    const gripHand = new THREE.Mesh(orbGeo, orbMat);
-    gripHand.position.set(0.17, -0.26, -0.30);
-    const foreHand = new THREE.Mesh(orbGeo, orbMat);
-    foreHand.position.set(0.17, -0.24, -0.62);
-    viewModelAnchor.add(gripHand, foreHand);
+    // HANDS ARE GREEN ORBS -- deliberate, per the owner: the player is the
+    // goblin and its hands were never detailed. Colour, radius and roughness
+    // now come from characters/goblin.blob instead of being picked by eye, and
+    // each orb gains a FOREARM because the reload swings the support arm into
+    // frame. Anchored in VIEW space so the GLB's axis convention cannot move
+    // them.
+    const skinTex = new THREE.DataTexture(
+      goblinNormalPixels(256), 256, 256, THREE.RGBAFormat,
+    );
+    skinTex.wrapS = skinTex.wrapT = THREE.RepeatWrapping;
+    skinTex.needsUpdate = true;
+    const orbMat = new THREE.MeshStandardMaterial({
+      color: goblinSkinSrgbHex(),
+      roughness: GOBLIN_SKIN.roughness,
+      normalMap: skinTex,
+      normalScale: new THREE.Vector2(0.8, 0.8),
+    });
+    const orbGeo = new THREE.SphereGeometry(GOBLIN_SKIN.handRadius, 20, 14);
+    const armGeo = new THREE.CapsuleGeometry(
+      GOBLIN_SKIN.forearmRadius, GOBLIN_SKIN.forearmLength * 0.6, 4, 12,
+    );
+
+    function makeHand(hand: THREE.Vector3, elbowBack: number): THREE.Group {
+      const g = new THREE.Group();
+      const orb = new THREE.Mesh(orbGeo, orbMat);
+      // SphereGeometry's UVs pinch at the poles, so aim the pole away from the
+      // camera -- into the gun -- where the pinch cannot be seen.
+      orb.rotation.x = Math.PI / 2;
+      const arm = new THREE.Mesh(armGeo, orbMat);
+      arm.position.set(0, -0.02, elbowBack);
+      arm.rotation.x = Math.PI / 2.6;
+      g.add(orb, arm);
+      g.position.copy(hand);
+      return g;
+    }
+
+    gripHandGroup = makeHand(new THREE.Vector3(0.150, -0.150, -0.250), 0.115);
+    foreHandGroup = makeHand(new THREE.Vector3(0.105, -0.150, -0.395), 0.115);
+    viewModelAnchor.add(gripHandGroup, foreHandGroup);
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
