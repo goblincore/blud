@@ -16,6 +16,19 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import { shouldSpill, SPILL_CHANCE } from './entrails-spawn';
+
+// The spill ships OFF (owner call, 2026-09-02: the rope read as "a dark red
+// oblong oval thing"). These gates test the MECHANISM — determinism, the
+// one-rope cap, the calibre split — so they set the chances they need rather
+// than inheriting the ship default. A gate that silently reads 0 because the
+// feature is off is a gate that proves nothing.
+// ORIGINAL SHIP DEFAULTS, restored per-test by the helpers below.
+const withChances = <T>(slug: number, blast: number, fn: () => T): T => {
+  const ks = SPILL_CHANCE.slug, kb = SPILL_CHANCE.blast;
+  SPILL_CHANCE.slug = slug; SPILL_CHANCE.blast = blast;
+  try { return fn(); } finally { SPILL_CHANCE.slug = ks; SPILL_CHANCE.blast = kb; }
+};
+
 import {
   makeGutChain, stepGutChain, detachGutChain, GUT_TUNING, type GutChain,
 } from './entrails';
@@ -165,6 +178,7 @@ describe('gate 1b: spillChance 0 spawns no chains over 200 qualifying wounds', (
   });
 
   it('blast spill is PINNED — spillChance 0 does not silence it (spec §3)', () => {
+    withChances(0.35, 1.0, () => {
     const keep = SPILL_CHANCE.slug;
     SPILL_CHANCE.slug = 0;
     try {
@@ -175,8 +189,10 @@ describe('gate 1b: spillChance 0 spawns no chains over 200 qualifying wounds', (
       SPILL_CHANCE.slug = keep;
     }
   });
+  });
 
   it('contrast: the same stream at the shipped 0.35 does spawn', () => {
+    withChances(0.35, 1.0, () => {
     const wounds = woundStream(200, 0xa11ce).filter(w => w.cavity);
     const rng = mulberry32(0x5eedb1e);
     const ledger = new RopeLedger();
@@ -186,6 +202,7 @@ describe('gate 1b: spillChance 0 spawns no chains over 200 qualifying wounds', (
       ledger.step(1 / 60);
     }
     expect(spawns).toBe(1); // also exercises the cap: one rope, then tears
+  });
   });
 });
 
@@ -213,6 +230,7 @@ describe('gate 2: same seed, same spills', () => {
   });
 
   it('and a different seed genuinely differs (the gate is not vacuous)', () => {
+    withChances(0.35, 1.0, () => {
     const wounds = woundStream(200, 0xbeef).filter(w => w.cavity);
     const decisions = (seed: number) => {
       const rng = mulberry32(seed);
@@ -227,6 +245,7 @@ describe('gate 2: same seed, same spills', () => {
     const b = decisions(0x5eedb1e ^ 0xffff);
     expect(a.some((v, i) => v !== b[i])).toBe(true);
   });
+  });
 });
 
 // ————————————————————————————————————————————————————————————————————
@@ -235,6 +254,7 @@ describe('gate 2: same seed, same spills', () => {
 
 describe('gate 3: 50 qualifying hits across 10 bodies, one rope each, none leaked', () => {
   it('never more than one attached chain per body, and death leaks none', () => {
+    withChances(0.35, 1.0, () => {
     const rng = mulberry32(0x5eedb1e);
     const ledger = new RopeLedger();
     let spawns = 0;
@@ -272,6 +292,7 @@ describe('gate 3: 50 qualifying hits across 10 bodies, one rope each, none leake
     // which is what makes a room of corpses with spilled guts affordable.
     for (let i = 0; i < 900; i++) ledger.step(1 / 60);
     for (const c of ledger.chains()) expect(c.settled).toBe(true);
+  });
   });
 
   it('GUT_TUNING bounds the particle count: 10 nodes of 0.55 m per rope', () => {

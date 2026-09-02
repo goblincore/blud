@@ -111,11 +111,24 @@ bones
   # Sternum — the front plate the ribs reach toward. Thin, so it reads as a
   # bone edge rather than a second pillar.
   bar torso on spine from=0.34 to=0.74 offset=(0,0,0.062) r=0.016 wide=1.5 deep=0.45
-  # Pelvis — authored so the hips read as a basin rather than the derived
-  # sphere (0.145 x 0.38 = a 55 mm ball in the gut). Wide and shallow, low on
-  # the bone, which is also what stops it joining the spine rod into one
-  # column.
-  blob torso on pelvis at=0.30 offset=(0,-0.010,0) r=0.044 wide=1.40 tall=0.62 deep=0.86
+  # PELVIS — a landmark, not a lump (owner, 2026-09-02: "we need to add a
+  # pelvic bone tbh, that's a major landmark").
+  #
+  # The previous version was ONE squashed blob, which is why it never read:
+  # a pelvis is recognisable by its SHAPE — two blades flaring up and out from
+  # a narrow centre, over a lower ring — and a single ellipsoid has none of
+  # that. Same lesson the ribcage taught when it was a slab.
+  #
+  # Blades: wide, thin, tilted outward, mirrored with `both` (the pelvis bone
+  # is not itself mirrored). Kept inside the hip flesh — the torso blob on
+  # pelvis is r 0.145 at wide 1.10 / deep 0.92, so roughly 0.16 half-width.
+  bar torso on pelvis from=0.34 to=0.52 offset=(0.030,0.004,0.004) tip=(0.062,0.030,-0.004) bend=(0.030,0.010,0.004) r=0.020 wide=1.15 deep=0.55 both
+  # Ilium crest — the flare you actually see at the top of a hip.
+  blob torso on pelvis at=0.54 offset=(0.070,0.026,0.000) r=0.024 wide=0.85 tall=0.60 deep=1.05 both
+  # The basin floor, joining the two sides low and narrow.
+  bar torso on pelvis from=0.16 to=0.30 offset=(0,-0.006,0.004) r=0.026 wide=1.30 tall=0.75 deep=0.80
+  # Ischium masses — the sit bones, low and to each side.
+  blob torso on pelvis at=0.14 offset=(0.036,-0.014,-0.006) r=0.021 wide=0.90 tall=0.80 deep=0.90 both
 
   # Spine rod — the column behind the ribs. Narrow on purpose: the pillar
   # complaint was a WIDE central mass, and a spine genuinely is a thin rod.
