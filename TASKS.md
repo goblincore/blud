@@ -107,6 +107,15 @@ p50 0.060 / max 0.090 ms/frame (room-4 idle, machine quiet), 3-5x under the
 0.3 ms gate; instrumentation removed, texture stays 128 wide, no Step 3.
 Chain's code tasks complete; **task 9** (bench sweep, unchained) waits for a
 quiet machine and a manual trigger.
+**2026-09-02 later:** task 9 DONE — BENCH_PRELUDE one-lever sweep on the
+finished chain (r3/r4 x3). Every ship default survives its lever-off re-run;
+depth gate re-decided OFF (on loses 4.6 ms at 6% spread); hull exit bound
+dead by census (deletes 4 of 9 bodies in r4); occupancy: omega 1.0 + AA cut
+mean march steps ~40% with coverage unchanged — the march is harvested,
+remaining cost is hit-pixel fill. Machine never fully quiet (user Slack/Xcode
+builds) — load recorded per row; CPU-saturating churn wrecks the bench,
+IO-wait does not (see notes §task 9). Perf r2 COMPLETE; owner still owes the
+task-7 pillar eyeball (`setLevelShadow`).
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
