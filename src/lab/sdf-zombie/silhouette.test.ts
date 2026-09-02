@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   maskFromRgba, maskFromBody, depthFromBody, subjectBounds, normalise, compareSilhouette,
-  renderMask, gltfTriangles, maskFromTriangles, bandOwners, type Mask,
+  renderMask, gltfTriangles, maskFromTriangles, depthFromTriangles, bandOwners, type Mask,
 } from './silhouette';
 import { decodePng } from './png-decode';
 import { parseBlob } from './blob-parse';
@@ -384,6 +384,57 @@ describe('maskFromTriangles', () => {
     for (const v of m.bits) on += v;
     expect(on / (m.w * m.h)).toBeGreaterThan(0.95);
     expect(Math.abs(m.w / m.h - 0.5)).toBeLessThan(0.1);
+  });
+});
+
+describe('depthFromTriangles', () => {
+  // Two quads with the SAME x/y footprint at different depths, two triangles
+  // each. Front view: the depth axis is world z and the near side is its dMin
+  // end — the same end the body march starts from — so the z = 0 quad is the
+  // NEAR surface and z = 0.3 the far one.
+  const quad = (z: number): number[] => [
+    0, 0, z, 0.2, 0, z, 0.2, 0.4, z,
+    0, 0, z, 0.2, 0.4, z, 0, 0.4, z,
+  ];
+
+  it('keeps the NEAREST surface when two triangles overlap', () => {
+    // The same soup in two ORDERS: without a real z-buffer the last-written
+    // triangle wins, so these two rasters would disagree, and which surface a
+    // depth diff compared would depend on triangle order in the glTF.
+    const a = depthFromTriangles(new Float32Array([...quad(0), ...quad(0.3)]), { view: 'front', heightPx: 64, pad: 0 });
+    const b = depthFromTriangles(new Float32Array([...quad(0.3), ...quad(0)]), { view: 'front', heightPx: 64, pad: 0 });
+    expect(Array.from(b.depth)).toEqual(Array.from(a.depth));
+    // Every pixel the far quad fills the near quad also fills (identical
+    // footprints), so NO occupied pixel may report the far surface's depth.
+    let occupied = 0;
+    for (let i = 0; i < a.depth.length; i++) {
+      if (!a.mask.bits[i]) continue;
+      occupied++;
+      expect(a.depth[i]).toBeCloseTo(0, 5);
+    }
+    expect(occupied).toBeGreaterThan(0);
+  });
+
+  it('is NaN off the subject, finite on it', () => {
+    const { mask, depth } = depthFromTriangles(new Float32Array(quad(0.3)), { view: 'front', heightPx: 32, pad: 0 });
+    expect(depth.length).toBe(mask.w * mask.h);
+    let occupied = 0;
+    for (let i = 0; i < depth.length; i++) {
+      if (mask.bits[i]) { occupied++; expect(Number.isFinite(depth[i]!)).toBe(true); }
+      else expect(Number.isNaN(depth[i]!)).toBe(true);
+    }
+    expect(occupied).toBeGreaterThan(0);
+  });
+
+  it('leaves maskFromTriangles bit-identical', () => {
+    // A real soup with heavy self-overlap — thousands of kit triangles — not
+    // the two quads above: the failure this guards is the depth path
+    // rasterising a DIFFERENT pixel set than the coverage path it must agree
+    // with, since maskFromTriangles stays depth-free.
+    const kit = gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/goblin-kit.gltf'))));
+    const a = maskFromTriangles(kit, { view: 'front', heightPx: 48, pad: 0 });
+    const b = depthFromTriangles(kit, { view: 'front', heightPx: 48, pad: 0 }).mask;
+    expect(Array.from(b.bits)).toEqual(Array.from(a.bits));
   });
 });
 
