@@ -35,6 +35,35 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
+- `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
+  `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was
+  a capsule or round cone, so the format could not make a FLAT FACE; the next
+  characters are biomechanical (a cannon arm, plated greaves, a tripod chassis).
+  Adds one bare word `box` on `blob`/`bar` — a modifier, not a new kind, so it
+  inherits mirror/offset/core/paint/chamfer for free and will compose with
+  `carve` once that takes a limb word. Half-extents are `r x wide/tall/deep`,
+  the SAME semi-axes a capsule gets, which is what keeps `blob:rings` working on
+  a box with no change to the fitter. `round=` is a FRACTION of `r` (0..1,
+  inset), not metres — the field evaluates in the scale-divided frame where an
+  absolute length distorts anisotropically.
+  **6 of 9 tasks done**, suite 1930 -> 1975 green, tsc clean.
+  **NOT YET PROVEN: nobody has seen a box render.** Task 7 (the end-to-end
+  fixture + `blob:shot` frames) is the next thing and is where a real defect
+  would still surface. Then T8 (document it in the skill) and T9 (author the
+  minotaur).
+  **Two findings worth knowing independently of this work:**
+  (1) the outer-bound survey went 4 -> 8 sites (`boxReach`); the plan claimed
+  four, and the two hardest to find RECOMPUTE a bound instead of consuming one
+  — `rig-bind.ts`'s `applyRig` is the per-frame POSED-body path for every rigged
+  character. (2) **a LIVE pre-existing bug was fixed**: `pack.ts`'s two `shaped`
+  bitflag checks disagreed — the group-level one omitted `p.shell`, and the
+  additive fold reads ONLY that flag, so `schoolgirl-alt`'s cape has been
+  drawing as a SOLID BLOB instead of a thin sheet since `9a85fe7`. **Its
+  appearance changes as a result — that is the fix, not a regression, and it
+  wants an owner look.**
+  [spec](docs/superpowers/specs/2026-09-02-blob-hard-surface-box-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-02-blob-hard-surface-box.md)
+
 - `X1.blood-viscosity` [~] **Impact gouts + goo that actually renders** — branch
   `claude/blood-effects-viscosity-8adcc3`, **NOT merged**. The goo layer now
   draws on `sdf-game.html` for the first time, ships **ON** by default with
