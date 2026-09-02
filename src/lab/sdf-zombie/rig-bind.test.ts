@@ -9,6 +9,7 @@ import { stepRig } from './rig';
 import { sdPrimitive } from './validate';
 import { add, dot, len, normalize, qRotate, scale as vscale, sub } from './vec';
 import type { Primitive, Vec3 } from './types';
+import type { BuildResult } from './build-body';
 import type { Quat } from './vec';
 
 describe('bindRig', () => {
@@ -77,6 +78,26 @@ describe('applyRig', () => {
     const out = applyRig(body, bound);
     expect(out.clusters.map(c => `${c.limb}:${c.start}:${c.count}`))
       .toEqual(body.clusters.map(c => `${c.limb}:${c.start}:${c.count}`));
+  });
+
+  it("RECOMPUTES a box primitive's cluster bound to cover its corner, not just the capsule radius (X1.28 task 4c site 8)", () => {
+    // Minimal synthetic body: one dead-sharp box (round=0), radius 0.1, owned
+    // by a single degenerate bone (bindRig needs at least one rig point to
+    // bind endpoints to). True corner reach is 0.1*sqrt(3) ~ 0.1732, vs a
+    // plain capsule's 0.1. The rig never moves here — this exercises the
+    // cluster REFIT applyRig always performs, not the posing itself.
+    const boxBody: BuildResult = {
+      prims: [{
+        a: [0, 0, 0], b: [0, 0, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0,
+        limb: 'torso', cluster: 0, box: { round: 0 },
+      }],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map([['root', { head: [0, 0, 0], tail: [0, 0, 0] }]]),
+      errors: [],
+    };
+    const boxBound = bindRig(boxBody);
+    const out = applyRig(boxBody, boxBound);
+    expect(out.clusters[0]!.radius).toBeGreaterThanOrEqual(0.1 * Math.sqrt(3) - 1e-9);
   });
 
   it('survives a settled rig without NaN', () => {

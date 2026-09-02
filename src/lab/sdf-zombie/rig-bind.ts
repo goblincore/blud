@@ -2,6 +2,7 @@
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
+import { boxReach } from './extent';
 import { makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
@@ -142,6 +143,15 @@ export function bindRig(body: BuildResult): BoundRig {
  * `validateBody`'s bounding-sphere check exists to catch. Cluster start/count
  * and ordering are left untouched, preserving the fold order.
  *
+ * The refit itself must know about `boxReach` for the same reason: a box
+ * primitive's surface reaches its CORNER, past `radius`, and a refit that
+ * forgets that term reintroduces the exact stale-bound failure above by a
+ * second route — the bound is freshly computed every frame, but freshly
+ * WRONG for any posed body carrying a box (X1.28 task 4c, site 8). This is
+ * the posed-body counterpart of assignClusters' rest-space fit; both must
+ * agree, or a character reads as solid at rest and grows a hole the moment
+ * it moves.
+ *
  * `bodyYaw` is the motion pipeline's applied body rotation (motion.ts
  * state.bodyYaw, 0 in the statue loop): the rigid head's clamp cone is
  * anchored to the ROTATED rest gaze, so turning the body does not clamp the
@@ -182,7 +192,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
       const ends = m.bend === undefined
         ? [m.a, m.b] : [m.a, m.b, bendCtrl(m.a, m.b, m.bend)];
-      const rMax = Math.max(m.radius, m.radiusB ?? m.radius);
+      const rMax = Math.max(m.radius, m.radiusB ?? m.radius) * boxReach(m.box);
       for (const end of ends)
         radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale);
     }
