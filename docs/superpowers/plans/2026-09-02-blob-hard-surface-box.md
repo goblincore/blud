@@ -33,7 +33,35 @@ click-to-shoot while drawing as a plain capsule. No shipped character uses
 character file until Task 6 is green, and do not "fix" the capsule rendering
 you see in between.
 
-**The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are FOUR outer-bound sites that must account for it. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
+**The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are **SEVEN** outer-bound sites that must account for it.
+
+> **The plan originally said FOUR, and that was wrong.** A review on 2026-09-02
+> surveyed the codebase exhaustively instead of grepping for the pattern that
+> found the first four, and turned up three more — `validate.ts`'s own escape
+> check, and two in `webgpu/fpv-view.ts`, one of which feeds the GPU cluster
+> cull at `march.wgsl.ts:930`. The lesson generalises: **searching for the
+> pattern that found your known cases only rediscovers your known cases.**
+> If you extend this work, survey by asking "what must CONTAIN a primitive?"
+> rather than by grepping `Math.max(p.radius, p.radiusB ?? p.radius)`. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
+
+**Two sites are deliberately left alone, and are a DIFFERENT bug class** — both
+under-estimate a box's reach, but neither culls, so neither belongs in this
+task. Recorded so nobody "fixes" them here or rediscovers them as new:
+
+- `blob-checks.ts` `samplesAlong` / `daylightOf` size their effective radius off
+  `min(scale)`. For a box that under-estimates reach, so the author-time linter
+  could report a false "clear" between two interpenetrating box limbs. Dev-time
+  lint, not a runtime cull.
+- `connectivity.ts:84` `endpointGirth` likewise under-estimates a box's girth,
+  which makes severing MORE eager — the opposite direction from culling.
+
+**Transitively safe, verified, needing no change:** `zombie-gpu.ts`'s `fit()`,
+`silhouette.ts`'s box and `shell-spike-main.ts`'s hullBounds all build AABBs
+from `c.center ± c.radius`; `gib-chunks.ts` seeds `Chunk.radius` from
+`chunkExtent`; `tile-cull.ts` / `tile-bin-compute.ts` consume `groupBounds`;
+`simplify.ts`'s `spanCluster` reuses the original `c.radius` and never copies
+`box` onto its LOD stand-in. All consume an already-corrected bound rather than
+recomputing one.
 
 **Fixture grammar, confirmed against `blob-parse.test.ts`'s own `SKEL` during
 Task 1:** the header keyword is `model`, not `name`; `height` is INDENTED under
