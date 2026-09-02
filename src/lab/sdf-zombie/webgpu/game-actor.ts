@@ -42,6 +42,20 @@ import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import type { Aabb } from './game-level';
 
+// Perf round 2 task 8: cumulative cost of the per-body data-texture pack +
+// upload (view.update), across every actor — a module-level accumulator is
+// shared by all of them. Sampled once per second via __sdfGame.uploadMs();
+// returns and zeroes. calls counts update() invocations so the sampler can
+// divide ms by real frames instead of assuming 60 Hz.
+let uploadMsAccum = 0;
+let uploadCalls = 0;
+export function takeUploadMs(): { ms: number; calls: number } {
+  const out = { ms: uploadMsAccum, calls: uploadCalls };
+  uploadMsAccum = 0;
+  uploadCalls = 0;
+  return out;
+}
+
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
   shot: null,
@@ -410,7 +424,7 @@ export function createZombieActor(opts: {
       wounds = wounds.map(w => ({ ...w, ageSec: w.ageSec + dt }));
     }
     posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
+    uploadTimed();
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
     const d = lastFrame;
@@ -425,6 +439,16 @@ export function createZombieActor(opts: {
       target: state.wander.target ? [...state.wander.target] as Vec3 : null,
       idle: state.wander.idle,
     };
+  }
+
+  // Task 8 instrumentation: the one place every upload flows through, timed.
+  // All three call sites (per-frame step, stampBlast, applyProjectileHit) use
+  // this; in room-4 idle only the per-frame site fires, so calls == frames.
+  function uploadTimed(): void {
+    const t0 = performance.now();
+    view.update(posed, current);
+    uploadMsAccum += performance.now() - t0;
+    uploadCalls++;
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
@@ -447,7 +471,7 @@ export function createZombieActor(opts: {
     }
     if (blastWounds.length === 0) return;
     posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
+    uploadTimed();
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
   }
@@ -492,7 +516,7 @@ export function createZombieActor(opts: {
     // the very next rendered frame.
     runSeverChecks();
     posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
+    uploadTimed();
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
     return wound;
