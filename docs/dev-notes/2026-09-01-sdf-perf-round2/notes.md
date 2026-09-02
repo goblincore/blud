@@ -628,8 +628,53 @@ the deleted work is invisible to the instrument by construction.
 
 ### Default
 
-`GAME_DEPTH_GATE` **stays 1**: steps 2 and 3 passed (a-vs-b at/below noise
-floor everywhere; hits identical; deterministic residual confined to
-sub-pixel fringe on already-occluded silhouettes).
+`GAME_DEPTH_GATE` **ships 0** (flipped from the parity verdict after the
+bench read below — see Default, revised). The parity evidence made it
+CORRECT: steps 2 and 3 passed (a-vs-b at/below noise floor everywhere; hits
+identical; deterministic residual confined to sub-pixel fringe on
+already-occluded silhouettes). But a perf lever must default to its measured
+PERFORMANCE direction, and the bench says the per-body pass structure itself
+is a net loss at 3-4 bodies. The seam stays; task 9 re-decides with a quiet
+machine and, if it resolves positive at higher body counts, flips back to 1
+in game-main.ts.
 
-**Bench:** (appended below after the run)
+### Bench (task5b-bench/) — UNRESOLVED spreads, directional read acted on
+
+`BENCH_ROOMS=3,4 BENCH_REPEATS=3 BENCH_LEGS=baseline,depth-gate-off`,
+vite 5301 / CDP 9301 (5299/9299 belong to the task-0 worktree's servers —
+NOT killed, per the never-kill rule; the port guard only proves the page
+loads, not whose build, so a foreign pair must be avoided manually).
+Dispatch board: only this task running. Late-run contamination nevertheless:
+repeatability spread of the overall median — baseline r3 5% (quiet), r4 18%;
+depth-gate-off r3 82%, r4 89% (each off leg's third repeat blew up while
+baseline held: e.g. r4 off 9.08 / 14.42 / 17.15).
+
+| leg | room | reps (overall median ms) | spread % |
+|---|---|---|---|
+| baseline (gate ON) | 3 | 18.65 / 18.55 / 19.41 | 5% |
+| baseline (gate ON) | 4 | 16.37 / 15.46 / 18.19 | 18% |
+| depth-gate-off | 3 | 11.60 / 12.29 / 21.07 | 82% |
+| depth-gate-off | 4 | 9.08 / 14.42 / 17.15 | 89% |
+
+Formally UNRESOLVED by the bench's own rule (delta must exceed each leg's
+spread). But the WALK segments tell a directional story the spread does not
+cover: baseline walk legs are tight (15.80 / 15.84 / 16.93 r3; 17.60 /
+17.46 / 20.49 r4 — 5-17%), and in the run's first two reps (before the
+late-run blow-up) the OFF legs pair tightly WITH EACH OTHER and sit ~6-7 ms
+BELOW baseline: r3 walk off 9.09 / 8.59 vs on 15.80 / 15.84 (−42%); r4 rep0
+10.93 vs 17.60 (−38%). Four independent fresh-page boots agree in direction.
+A skip-work change cannot make the OFF state faster — so the ON path's
+pass structure COSTS ~6-7 ms/frame at these body counts: each body's
+sub-pass pays a full-target blit + a `renderer.render(scene, camera)` call
+(scene-graph re-walk; sdf-layer.ts pass-2 loop), ×(bodies+1) per frame,
+while the march work it skips (hidden fragments behind nearer bodies —
+room views hold 3-4 bodies) is smaller than that overhead. The gate's
+target scenario — many bodies sharing a silhouette — is not the 3-4-body
+rooms; it may still win there, which only a quiet-machine sweep at higher
+census can show.
+
+**Decision recorded above: default 0, bench leg renamed `depth-gate-on`
+(applyLeg pins the off state as ship default), task 9 re-takes the A/B**
+(`BENCH_LEGS=baseline,depth-gate-on`) and re-decides the default on clean
+numbers. Spike pass (baseline only, fenced): r3 p50 32.5 / max 396.8 ms,
+r4 p50 23.6 / max 527.1 — the fenced-max protocol, not a gate.

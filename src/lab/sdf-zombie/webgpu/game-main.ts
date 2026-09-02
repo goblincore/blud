@@ -593,10 +593,21 @@ async function main() {
 
   /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
    *  by the depth nearer passes already recorded at each pixel.
-   *  Exact-by-construction — the single-pass hardware depth test already
-   *  resolved these overlaps; the gate only stops paying for the fragments
-   *  it threw away. `__sdfGame.setDepthGate()` flips it live for A/B. */
-  const GAME_DEPTH_GATE = 1;
+   *  Parity-proven by 5b (rooms 3/4 + staged overlap: a-vs-b at/below the
+   *  capture noise floor; residual = sub-pixel fringe on occluded
+   *  silhouettes) — the gate is CORRECT.
+   *
+   *  DEFAULT 0, not 1 (task 5b): the bench A/B measured the pass structure
+   *  itself as a net LOSS at 3-4 bodies — per-body sub-passes each pay a
+   *  full-target blit plus a renderer.render() scene walk (sdf-layer's pass-2
+   *  loop), ~6-7 ms/frame more than the single-pass march in the run's two
+   *  clean paired reps (r3 walk 9.09/8.59 off vs 15.80/15.84 on; r4 rep0
+   *  agrees), dwarfing the baseline legs' own 5% spread. The skipped
+   *  hidden-fragment marches are smaller than that overhead at these body
+   *  counts. Task 9 re-takes on a quiet machine; if it resolves positive at
+   *  higher body counts, flip back here. `__sdfGame.setDepthGate()` flips it
+   *  live for A/B. */
+  const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's

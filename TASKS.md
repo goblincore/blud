@@ -78,6 +78,17 @@ with a per-body proxy-box `bodyEntry` but shipped `min(shellIn, bodyEntry)`,
 still inert, then timed out on flicker noise. Marked done (code green);
 **task 5b** (new, before 6) switches to `max(...)`, proves parity with a
 gate that bites, decides the default.
+**2026-09-02 later:** task 5b done. `max(shellIn, bodyEntry)` is exact
+(larger of two lower bounds on the first possible hit) and provably bites:
+staged-overlap + rooms 3/4 parity all at/below the capture noise floor,
+residual = sub-pixel fringe on occluded silhouettes, no missing geometry;
+`hits`/`rasterised` bit-identical (mode-4 counters only record the depth
+winner — the instrument CANNOT see this gate). BUT the bench A/B measured
+the per-body PASS STRUCTURE as a ~6-7 ms/frame net loss at 3-4 bodies
+(each sub-pass: full-target blit + renderer.render scene walk; the run's
+two clean paired reps agree, spreads 82-89% otherwise formal-UNRESOLVED).
+`GAME_DEPTH_GATE` ships 0; bench leg renamed `depth-gate-on`; task 9
+re-takes the A/B on a quiet machine and re-decides the default.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
