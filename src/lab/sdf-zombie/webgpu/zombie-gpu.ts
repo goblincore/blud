@@ -12,7 +12,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
-  cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, normalize, sub, mul, add, screenUV,
+  cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
   storage,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
@@ -365,6 +365,13 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  early-out, zw spare. All zero = the pre-plan shader, which is what the
      *  lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** Half extents of the view's proxy box, world space (perf round 2 task
+     *  5): the accumulated-depth gate's conservative per-body ray entry —
+     *  box ⊇ hull ⊇ flesh, so nothing of this body is nearer than the
+     *  ray-box entry. The box CENTRE rides the mesh's model matrix, not a
+     *  uniform. (0,0,0) is a safe identity: the degenerate point at the mesh
+     *  origin only ever discards when even that point lies beyond prevT. */
+    bodyHalf: uniform(new THREE.Vector3(0, 0, 0)),
     /**
  * PER-TILE PRIMITIVE LISTS (perf task 5, now compute-binned). x enabled,
  * y tiles-per-row, z tile px size, w tile rows. INERT at x=0: MARCH_BODY
@@ -723,6 +730,11 @@ export function createMarchMaterial(
           cosRay: mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate(),
         })
       : float(1e9),
+    // The fragment's own proxy box: centre from the mesh's world matrix,
+    // half extents from the uniform above. Consumed by the accumulated-depth
+    // gate — see MARCH_BODY's bodyEntry block.
+    bodyCentre: mul(modelWorldMatrix, vec4(0.0, 0.0, 0.0, 1.0)).xyz,
+    bodyHalf: u.bodyHalf,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1117,6 +1129,7 @@ export function createZombieGpuView(
   }
 
   const first = fit(body, packed.maxBlendK);
+  u.bodyHalf.value.set(first.size.x / 2, first.size.y / 2, first.size.z / 2);
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(first.size.x, first.size.y, first.size.z), material,
   );
@@ -1144,6 +1157,7 @@ export function createZombieGpuView(
       // narrowing it, and a uniform scale would either clip or over-cover.
       mesh.scale.set(
         f.size.x / first.size.x, f.size.y / first.size.y, f.size.z / first.size.z);
+      u.bodyHalf.value.set(f.size.x / 2, f.size.y / 2, f.size.z / 2);
       coneMesh.position.copy(mesh.position);
       coneMesh.scale.copy(mesh.scale);
     },
@@ -1297,6 +1311,7 @@ export function createChunkGpuView(
     u.woundCfg2.value.copy(template.woundCfg2.value);
     u.woundShadowCfg.value.copy(template.woundShadowCfg.value);
     u.perfCfg.value.copy(template.perfCfg.value);
+    u.bodyHalf.value.copy(template.bodyHalf.value);
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
     u.faceCfg3.value.copy(template.faceCfg3.value);
@@ -1411,6 +1426,7 @@ export function createChunkGpuView(
     // No mesh rotation: this box covers every orientation of the rotated
     // field, while squash remains in world axes.
     mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+    u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
   }
 
   reset(chunk, prims, tornAt);
@@ -1424,6 +1440,7 @@ export function createChunkGpuView(
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
       mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+      u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
     },
     dispose() {
       mesh.geometry.dispose();

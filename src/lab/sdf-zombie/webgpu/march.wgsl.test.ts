@@ -474,7 +474,17 @@ describe('ported features reach the entry point', () => {
   it('discards on the accumulated-depth gate before marching and bounds tMax by it', () => {
     expect(MARCH_BODY).toContain('prevT: f32');
     expect(MARCH_BODY.indexOf('perfCfg: vec4<f32>')).toBeLessThan(MARCH_BODY.indexOf('prevT: f32'));
-    expect(MARCH_BODY).toContain('if (shellIn > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
+    // The per-body conservative entry rides LAST (positional): centre from the
+    // mesh's model matrix, half extents from the bodyHalf uniform.
+    expect(MARCH_BODY).toContain('bodyCentre: vec3<f32>,');
+    expect(MARCH_BODY).toContain('bodyHalf: vec3<f32>');
+    expect(MARCH_BODY.indexOf('prevT: f32')).toBeLessThan(MARCH_BODY.indexOf('bodyCentre: vec3<f32>'));
+    // min(shellIn, bodyEntry): shellIn alone is the SHARED nearest hull entry
+    // and can never exceed prevT (it is the nearer body's own hull entry,
+    // which precedes its flesh) — the bodyEntry ray-box term is what makes
+    // the discard live. See the task 5 notes for the occupancy proof.
+    expect(MARCH_BODY).toContain('if (min(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
+    expect(MARCH_BODY).toContain('let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
     expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
   });
 

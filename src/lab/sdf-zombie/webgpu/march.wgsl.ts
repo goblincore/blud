@@ -1256,7 +1256,9 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   shellIn: f32,
   shellOut: f32,
   perfCfg: vec4<f32>,
-  prevT: f32
+  prevT: f32,
+  bodyCentre: vec3<f32>,
+  bodyHalf: vec3<f32>
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
@@ -1412,13 +1414,29 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // Accumulated-depth gate (perf round 2 task 5): a nearer body already
   // owns this pixel out to prevT — the front-to-back per-body passes blit
   // the accumulated frame state before each pass, and prevFetch decodes its
-  // alpha (clip depth) into a ray distance. Hull entry beyond it — nothing
-  // of this body can be seen (all flesh is inside the hull), so the march
-  // the hardware depth test would have thrown away is skipped outright.
-  // Otherwise the recorded hit bounds the ray: a hit beyond prevT loses the
-  // depth test, so marching past it buys nothing. 1e9 (gate off, or nothing
-  // recorded at this pixel) makes both the test and the min() identities.
-  if (shellIn > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+  // alpha (clip depth) into a ray distance.
+  //
+  // bodyEntry is the fragment's OWN conservative entry along the ray: its
+  // proxy box (centre = the mesh's world origin, half extents = bodyHalf)
+  // contains the hull contains the flesh, so nothing of this body can be
+  // nearer than the ray-box entry. The plan's original test used shellIn
+  // alone — but shellIn is the SHARED nearest hull entry across ALL bodies
+  // (one instanced hull pass), so at any pixel a nearer body already hit,
+  // shellIn is that body's hull entry, which is always BEFORE its flesh
+  // (prevT). shellIn > prevT is structurally dead — the occupancy instrument
+  // proved the counters bit-identical on/off (task 5 notes) — hence the
+  // per-body box entry. min() with shellIn keeps the shared entry working
+  // should it ever become per-body.
+  //
+  // invRd's 1e9 fallback (parallel axis) keeps the slab algebra finite: a
+  // fragment's ray genuinely hits the box, so its fixed coordinate lies
+  // inside that slab and the ±1e9 pair cancels in the min/max. The 0 clamp
+  // is the camera-inside-the-box case: entry 0 never discards.
+  let invRd = select(vec3<f32>(1e9), 1.0 / rd, abs(rd) > vec3<f32>(1e-8));
+  let bLo = (bodyCentre - bodyHalf - camPos) * invRd;
+  let bHi = (bodyCentre + bodyHalf - camPos) * invRd;
+  let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
+  if (min(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let tMax = min(tMaxSel, prevT);
   let steps = i32(marchCfg.x);
   // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
