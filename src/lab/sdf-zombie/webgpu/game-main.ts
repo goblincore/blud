@@ -58,11 +58,15 @@ import {
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
 import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
-import type { ImpactGoutProfile } from '../blood-sim';
+import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
   createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT,
 } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
+import {
+  makeGutChain, pinGutChain, stepGutChain, detachGutChain, type GutChain,
+} from '../entrails';
+import { shouldSpill, GUT_DROPLET_SIZE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer } from './goo-layer';
 import { createGooPanel, type GooPanel } from './goo-panel';
@@ -1273,6 +1277,93 @@ async function main() {
   // freezes the subsystem exactly (OFF mid-stream = ON-stream-paused).
   const bleedRng = mulberry32(0x5eedb1e);
   let bleedEnabled = true;
+
+  // GUT ROPES — at most one per body (entrails-spawn.shouldSpill): the first
+  // qualifying cavity wound spawns, a second TEARS the rope free instead of
+  // growing another, which bounds both the verlet sim and the goo particle
+  // count. The chain owns node positions (entrails.ts); the sim only holds
+  // this rope's 'gut' droplets — stepBlood skips that kind — so the goo pass
+  // draws the rope as fused metaballs riding the wound's emit point.
+  const gutRopes = new Map<number, { chain: GutChain; wound: Wound; droplets: Droplet[] }>();
+  /** The one spill decision, taken at stamp time where cluster membership is
+   *  free. Call for EVERY stamped wound (live fire routes through
+   *  registerBleed; the capture twins stamp through stampBlast, so they call
+   *  this directly). Rolls bleedRng — see the freeze note on registerBleed. */
+  function spillVerdict(a: ZombieActor, wound: Wound): void {
+    const entry = gutRopes.get(a.id);
+    const verdict = shouldSpill(wound, entry !== undefined, bleedRng);
+    if (verdict === 'none') return;
+    if (verdict === 'tear') {
+      // Keep the entry: the detached chain keeps falling/settling in
+      // stepGutRopes, and its presence still blocks a second rope.
+      if (entry) gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
+      return;
+    }
+    const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    gutRopes.set(a.id, { chain: makeGutChain(anchor), wound, droplets: [] });
+  }
+
+  /** Per-frame rope sim, BEFORE the bleed block (so stepBlood sees the same
+   *  frame it does): pin to the wound's current emit point — the anchor is
+   *  recomputed from the CURRENT posed prims, which is what makes the rope
+   *  ride the gait — step the chain, then copy node positions into the
+   *  rope's persistent 'gut' droplets. Uses only the actor's already-posed
+   *  prims; never re-poses. Runs regardless of bleedEnabled: a hanging gut
+   *  is body state, not spray, and stepping spends no RNG. */
+  function stepGutRopes(dt: number): void {
+    for (const a of actors) {
+      let entry = gutRopes.get(a.id);
+      if (!entry) continue;
+      // Body down (falling or settled) → the rope tears free. It keeps its
+      // verlet momentum, falls, settles, freezes (entrails.ts).
+      if (entry.chain.attached && a.debug().phase !== 'standing') {
+        entry = { ...entry, chain: detachGutChain(entry.chain) };
+        gutRopes.set(a.id, entry);
+      }
+      if (entry.chain.attached) {
+        const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound);
+        entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
+        gutRopes.set(a.id, entry);
+      }
+      entry = { ...entry, chain: stepGutChain(entry.chain, dt) };
+      gutRopes.set(a.id, entry);
+
+      // Keep the rope's droplets in the sim. They are created once and then
+      // MOVED (Droplet.pos is mutable by contract; stepBlood skips 'gut'),
+      // unless particle pressure evicted them (MAX_DROPLETS shift) — then
+      // rebuild at the nodes' current positions.
+      const nodes = entry.chain.nodes;
+      const live = entry.droplets.length === nodes.length
+        && entry.droplets[0] !== undefined
+        && bloodSim.droplets.includes(entry.droplets[0]);
+      if (!live) {
+        const fresh: Droplet[] = nodes.map(n => ({
+          pos: [...n.pos] as [number, number, number],
+          vel: [0, 0, 0] as [number, number, number],
+          age: 0, life: Infinity,
+          size: GUT_DROPLET_SIZE,
+          kind: 'gut',
+        }));
+        for (const d of fresh) bloodSim.droplets.push(d);
+        entry = { ...entry, droplets: fresh };
+        gutRopes.set(a.id, entry);
+      } else {
+        const invDt = dt > 1e-6 ? 1 / dt : 0;
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i]!;
+          const d = entry.droplets[i]!;
+          // Honest velocity — the goo stretch follows node motion, so a
+          // swinging rope smears, a settled one doesn't.
+          d.vel[0] = (n.pos[0] - n.prev[0]) * invDt;
+          d.vel[1] = (n.pos[1] - n.prev[1]) * invDt;
+          d.vel[2] = (n.pos[2] - n.prev[2]) * invDt;
+          d.pos[0] = n.pos[0];
+          d.pos[1] = n.pos[1];
+          d.pos[2] = n.pos[2];
+        }
+      }
+    }
+  }
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
   let bleedClock = 0;
@@ -1290,6 +1381,12 @@ async function main() {
     // what it is handed, and the wound normal already points OUT of the
     // body, so pass the inward direction.
     spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng);
+    // Gut-rope decision for this stamped wound — placed BELOW the
+    // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
+    // invariant above (OFF mid-stream = ON-stream-paused) only holds if
+    // nothing advances the stream while bleed is frozen. The capture twins
+    // (stampWoundAt/explode) call spillVerdict directly instead.
+    spillVerdict(a, wound);
   }
 
   // Wire every actor's severs into the chunk spawner (template = that
@@ -1527,6 +1624,9 @@ async function main() {
       }
       // Chunks: ballistic step + world-space field repack, lab contract.
       const cdt = Math.min(dt, 1 / 30);
+      // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
+      // sees this frame's chain positions (see stepGutRopes).
+      stepGutRopes(cdt);
       for (const c of liveChunks) {
         c.state = stepChunk(c.state, cdt);
         c.view.update(c.state);
@@ -2598,6 +2698,10 @@ async function main() {
         ? woundFromSlug(posed.prims, hit, field)
         : woundFromPellet(posed.prims, hit, 0, field);
       a.stampBlast([w]);
+      // Capture twins must spill too — task 8 judges the rope from exactly
+      // this seam. Rolls bleedRng deterministically: same command sequence,
+      // same rope-or-not.
+      spillVerdict(a, w);
       return hit;
     },
     /** Diagnostic detonation: one blast stamped through resolveExplosion
@@ -2613,6 +2717,10 @@ async function main() {
         const a = actors.find(q => String(q.id) === pb.bodyId);
         if (!a) continue;
         a.stampBlast(pb.wounds);
+        // One decision PER stamped wound: the first cavity wound spawns,
+        // the rest tear — a blast blows the gut out rather than growing
+        // multiple ropes (shouldSpill's one-rope-per-body rule).
+        for (const w of pb.wounds) spillVerdict(a, w);
         totalWounds += pb.wounds.length;
       }
       return { radiusM: fx.radiusM, bodiesHit: fx.perBody.length, totalWounds };
