@@ -957,7 +957,28 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
   let last = first + i32(boneCount);
   for (var i = first; i < last; i = i + 1) {
     if (i >= ${MAX_PRIMS}) { break; }
-    let sd = sdPrim(p, i, data, -1.0, 0.0, vec3<f32>(0.0, 0.0, 0.0), band);
+    // SHAPE AND BEND, read exactly as foldGroup reads them.
+    //
+    // These were hard-coded to -1.0 / 0.0 / vec3(0) — no taper, no profile,
+    // no bend — so every bone rendered as a straight untapered capsule while
+    // the packer faithfully wrote its shape and bend rows. zombie.blob's six
+    // rib pairs author bend= up to 0.162; the GPU drew none of it, and two
+    // rounds of owner feedback ("horizontal sticks rather than a cage", then
+    // "the ribs are still just straight") were tuning curvature that could
+    // not reach the screen.
+    //
+    // Bones sit outside every cluster/group run, so there is no shaped
+    // group flag to hoist the decision onto: the shape row is read for every
+    // bone, and the bend row only when the profile bit says bent — the same
+    // rule foldGroup applies per prim.
+    let T = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SHAPE} + band), 0);
+    let r2 = T.x;
+    let prof = T.y;
+    var cpos = vec3<f32>(0.0, 0.0, 0.0);
+    if ((i32(prof) & 2) != 0) {
+      cpos = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).xyz;
+    }
+    let sd = sdPrim(p, i, data, r2, prof, cpos, band);
     // A hard min, never smin — meat meeting bone should crease. Winning the
     // min claims gFoldBestIdx so shading reads a bone prim's primScale.w.
     if (sd < d) { gFoldBestIdx = f32(i); }

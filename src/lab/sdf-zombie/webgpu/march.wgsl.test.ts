@@ -1287,6 +1287,18 @@ function oneClusterBody(): import("../build-body").BuildResult {
 }
 
 describe('bone fold (wound pass r2)', () => {
+  it('reads the shape and bend rows, so authored curvature actually renders', () => {
+    // These were hard-coded to -1.0 / 0.0 / vec3(0), so every bone drew as a
+    // straight untapered capsule while the packer wrote its bend rows. Two
+    // rounds of rib-curvature feedback were spent on geometry the GPU could
+    // not draw. If this regresses, curved bones silently go straight again.
+    // The row constants are template-interpolated, so the emitted WGSL holds
+    // their NUMBERS — assert against the constants, not their names.
+    expect(APPLY_BONES).toContain(`vec2<i32>(i, ${ROW_PRIM_SHAPE}`);
+    expect(APPLY_BONES).toContain(`vec2<i32>(i, ${ROW_PRIM_BEND}`);
+    expect(APPLY_BONES).not.toContain('sdPrim(p, i, data, -1.0, 0.0');
+  });
+
   it('bounds the groove test so W_BONE is not read as a groove', () => {
     expect(APPLY_CARVES).toContain('S.w > 2.5 && S.w < 3.5');
   });
