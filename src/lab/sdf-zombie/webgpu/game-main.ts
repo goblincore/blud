@@ -537,8 +537,14 @@ async function main() {
   const GAME_RELAX = 1.0;
 
   /** Perf round 2, task 1: the hull exit bounds tMax on the un-relaxed march
-   *  (perfCfg.x). Exact; `__sdfGame.setHullExitBound()` flips it for A/B. */
-  const GAME_HULL_EXIT_BOUND = 1;
+   *  (perfCfg.x). `__sdfGame.setHullExitBound()` flips it for A/B.
+   *  DEFAULT OFF (task 1b finding): at real-render parity the bound deletes a
+   *  whole background body's visible pixels (room 3: 2055 px, one
+   *  figure-shaped component) while the occupancy hit set stays bit-identical
+   *  — a cross-body hull-texture effect, not a per-ray loss. Do not raise
+   *  until task 1c's shell-exit diagnosis explains the deletion and both
+   *  rooms pass the parity gate with the bound on. */
+  const GAME_HULL_EXIT_BOUND = 0;
 
   /**
    * Step multiplier for the game page's march (marchCfg.y). The lab ships
