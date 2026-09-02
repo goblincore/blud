@@ -703,6 +703,20 @@ written the groove's depth and width there since the groove landed."
 
 ### Task 6: The GPU field, and CPU/GPU parity
 
+> **PREREQUISITE found during Task 5 — do this FIRST or the box branch will not
+> run.** `pack.ts`'s `shaped` bitflag gates whether a cluster/group loads
+> `ROW_PRIM_SHAPE` and `ROW_PRIM_BEND` at all. Neither of its two `.some(...)`
+> checks tests `p.box`, so a box sharing no cluster with another shaped prim
+> gets `prof = 0` and `primBend.w = 0` in the shader — the box branch never
+> fires and it silently draws as a capsule. Harmless before this task (there is
+> no box branch); fatal from here on. Add `p.box !== undefined` to BOTH checks.
+>
+> **While you are there, resolve a pre-existing discrepancy:** the cluster-level
+> check (`pack.ts:225`) tests `p.shell !== undefined`; the group-level one
+> (`pack.ts:248`) does NOT. Determine whether that is deliberate — groups may
+> never carry shells — or a latent bug of the same shape, and say which in the
+> commit message. Do not "fix" it without establishing which it is.
+
 **Files:**
 - Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (add `SD_ROUND_BOX`, branch in `sdPrim`/`sdPrimO`)
 - Test: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
