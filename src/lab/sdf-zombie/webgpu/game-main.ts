@@ -1905,6 +1905,26 @@ async function main() {
         primIdx: w.primIdx,
       }));
     },
+    /** Task-8 evidence seam: live gut-rope state per body, read-only. A body
+     *  with no rope entry reports {none: true}. droplets is the rope's current
+     *  'gut'-kind population in the blood sim (the goo pass's input). */
+    guts: () => actors.map(a => {
+      const e = gutRopes.get(a.id);
+      const nodes = e?.chain.nodes ?? [];
+      return {
+        id: a.id,
+        room: a.room,
+        phase: a.debug().phase,
+        none: !e,
+        attached: e?.chain.attached ?? false,
+        settled: e?.chain.settled ?? false,
+        nodes: nodes.length,
+        head: nodes[0] ? [...nodes[0]!.pos] as Vec3 : null,
+        tail: nodes.length ? [...nodes[nodes.length - 1]!.pos] as Vec3 : null,
+        droplets: e?.droplets.length ?? 0,
+        woundCavity: e ? e.wound.cavity === true : null,
+      };
+    }),
     /** Walk the player toward (x, z) through the real collision path until
      *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
     walkTo: (x: number, z: number) => { autopilot = { x, z }; },
