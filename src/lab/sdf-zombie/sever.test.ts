@@ -241,3 +241,38 @@ describe('severDistal', () => {
     expect(chunk.prims).toHaveLength(1);
   });
 });
+
+describe('bone rides the chunk (gore r3 refinement 6)', () => {
+  // ZOMBIE is the file's existing fixture; buildBody derives its bones.
+  const build = () => buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+
+  it('a severed limb takes its own cluster bones and no others', () => {
+    const body = build();
+    const idx = body.clusters.findIndex(c => c.limb === 'legL');
+    const expected = body.bonePrims.filter(b => b.cluster === idx);
+    // The fixture is only meaningful if the leg HAS bones to take.
+    expect(expected.length).toBeGreaterThan(0);
+
+    const r = severLimb(body, 'legL');
+    expect(r.chunk.bones).toHaveLength(expected.length);
+    for (const b of r.chunk.bones) expect(b.cluster).toBe(idx);
+  });
+
+  it('leaves every other cluster’s bone on the body', () => {
+    const body = build();
+    const idx = body.clusters.findIndex(c => c.limb === 'legL');
+    const others = body.bonePrims.filter(b => b.cluster !== idx).length;
+    const r = severLimb(body, 'legL');
+    // severLimb does not repack arrays — it clears the cluster's alive flag —
+    // so the bones remain present and are skipped at pack time instead.
+    expect(r.body.bonePrims.filter(b => b.cluster !== idx)).toHaveLength(others);
+  });
+
+  it('gives a limb with no authored or derived bone an empty array, not undefined', () => {
+    // Downstream does chunk.bones.map(...) unguarded; undefined would throw
+    // at sever time, which is the worst possible moment.
+    const body = build();
+    const r = severLimb(body, 'armL');
+    expect(Array.isArray(r.chunk.bones)).toBe(true);
+  });
+});
