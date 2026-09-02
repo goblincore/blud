@@ -11,7 +11,7 @@
 //   - disposal owns the fallback, never a caller's loaded volume.
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createHandsGpuView } from './fpv-view';
+import { createHandsGpuView, fitHandCluster } from './fpv-view';
 import { defaultUniforms, blankFaceTexture } from './zombie-gpu';
 import {
   createFallbackHandVolumeTexture, validateHandVolumeManifest,
@@ -212,6 +212,36 @@ describe('HandsGpuView clay mode (X1.26 task B4)', () => {
     // Idempotent toggles.
     view.setClay(true); view.setClay(true); view.setClay(false);
     expect(view.uniforms.baseColor.value.r).toBeCloseTo(0.7, 6);
+    view.dispose();
+  });
+});
+
+describe('outer bound sites the plan missed (X1.28 task 4b)', () => {
+  // Sites 6 and 7: `apply()` builds its own cluster bound and proxy box by
+  // hand rather than through clusters.ts/pack.ts, so Task 4's boxReach fix
+  // did not reach either of them. A dead-sharp box (round=0), radius 0.1:
+  // true corner reach is 0.1*sqrt(3) ~ 0.1732, vs a plain capsule's 0.1.
+  const sharpBoxHand: Primitive = {
+    a: [0, 0, 0], b: [0, 0, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0,
+    limb: 'armR', cluster: 0, box: { round: 0 },
+  };
+
+  it('Site 6 — fitHandCluster covers a sharp box corner, not just the capsule radius (feeds march.wgsl.ts\'s cluster cull via clusterBounds)', () => {
+    // Degenerate a===b, so the cluster center coincides with the point and
+    // the whole reach comes from the box term.
+    const { radius } = fitHandCluster([sharpBoxHand]);
+    expect(radius).toBeGreaterThanOrEqual(0.1 * Math.sqrt(3) - 1e-9);
+  });
+
+  it('Site 7 — the proxy box mesh reaches a sharp box corner, not just the capsule radius', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    view.update([sharpBoxHand], []);
+    // apply()'s AABB half-extent is p.radius*maxScale*boxReach + 0.02 pad;
+    // blendK is 0 so packed.maxBlendK contributes no extra pad. For a
+    // degenerate point prim, mesh.scale.x is exactly twice that half-extent.
+    const expectedHalfExtent = 0.1 * Math.sqrt(3) + 0.02;
+    const mesh = view.object as THREE.Mesh;
+    expect(mesh.scale.x).toBeGreaterThanOrEqual(2 * expectedHalfExtent - 1e-9);
     view.dispose();
   });
 });

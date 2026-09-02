@@ -53,6 +53,7 @@ import { MAX_PRIMS } from '../validate';
 import { WOUND_PROFILES, type Wound } from '../damage';
 import { woundWorldPos } from '../damage';
 import type { Primitive, Vec3 } from '../types';
+import { boxReach } from '../extent';
 import { PROP_MESH } from '../hands';
 import type { HandSheet } from './hands-sheet';
 import type { BurstVisual } from '../explosion-aoe';
@@ -198,6 +199,44 @@ export const HAND_SHEET_TUNING = {
  * still carve), and the full march step budget (the hands are the closest
  * flesh on screen; their quality is the point of the spec's perf gate).
  */
+/**
+ * Bounding-sphere fit for the hand's one-cluster field. `apply()` bypasses
+ * assignClusters entirely (see the module header) and builds this ONE
+ * ClusterInfo by hand, so it does not inherit clusters.ts's boxReach fix
+ * for free — this is Site 6 of X1.28 task 4b.
+ *
+ * The radius this returns is written VERBATIM into packBody's clusterBounds
+ * (no recomputation there — see pack.ts's clusterBounds.set), and
+ * clusterBounds is exactly what march.wgsl.ts's cluster cull reads: a ray
+ * outside that sphere skips the whole cluster fold, box corner included. An
+ * undersized radius here is therefore the literal silent-vanish mechanism,
+ * reachable via the FPV hand path the moment a box-shaped prim reaches a
+ * hand (nothing does yet — see the module header's dormant-but-reachable
+ * note).
+ *
+ * Exported for tests: this is the value the reviewer's Site 6 reproduction
+ * checks directly, since the packed cluster bound is not otherwise
+ * observable from HandsGpuView's public surface (it lives inside a
+ * DataTexture, not a uniform).
+ */
+export function fitHandCluster(members: Primitive[]): { center: Vec3; radius: number } {
+  let cx = 0, cy = 0, cz = 0;
+  for (const m of members) {
+    cx += m.a[0] + m.b[0]; cy += m.a[1] + m.b[1]; cz += m.a[2] + m.b[2];
+  }
+  const n = Math.max(1, members.length * 2);
+  const center: Vec3 = [cx / n, cy / n, cz / n];
+  let radius = 0;
+  for (const m of members) {
+    const s = Math.max(m.scale[0], m.scale[1], m.scale[2]) * m.radius * boxReach(m.box);
+    for (const e of [m.a, m.b]) {
+      const d = Math.hypot(e[0] - center[0], e[1] - center[1], e[2] - center[2]);
+      radius = Math.max(radius, d + s);
+    }
+  }
+  return { center, radius };
+}
+
 export function createHandsGpuView(
   template: MarchUniforms, limb: 'armL' | 'armR',
 ): HandsGpuView {
@@ -295,20 +334,7 @@ export function createHandsGpuView(
   /** Packs this hand as a ONE-cluster field and sizes the proxy box. */
   function apply(prims: Primitive[]) {
     const members = prims.filter(p => p.op !== 'sub');
-    let cx = 0, cy = 0, cz = 0;
-    for (const m of members) {
-      cx += m.a[0] + m.b[0]; cy += m.a[1] + m.b[1]; cz += m.a[2] + m.b[2];
-    }
-    const n = Math.max(1, members.length * 2);
-    const center: Vec3 = [cx / n, cy / n, cz / n];
-    let radius = 0;
-    for (const m of members) {
-      const s = Math.max(m.scale[0], m.scale[1], m.scale[2]) * m.radius;
-      for (const e of [m.a, m.b]) {
-        const d = Math.hypot(e[0] - center[0], e[1] - center[1], e[2] - center[2]);
-        radius = Math.max(radius, d + s);
-      }
-    }
+    const { center, radius } = fitHandCluster(members);
     const packed = packBody({
       prims,
       clusters: [{
@@ -333,7 +359,7 @@ export function createHandsGpuView(
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     for (const p of prims) {
-      const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]) + 0.02;
+      const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]) * boxReach(p.box) + 0.02;
       for (const e of [p.a, p.b]) {
         minX = Math.min(minX, e[0] - r); maxX = Math.max(maxX, e[0] + r);
         minY = Math.min(minY, e[1] - r); maxY = Math.max(maxY, e[1] + r);

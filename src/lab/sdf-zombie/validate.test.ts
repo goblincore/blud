@@ -64,6 +64,22 @@ describe('validateBody', () => {
     expect(errs.join(' ')).toMatch(/bounding sphere/i);
   });
 
+  it('fails when a BOX primitive escapes its cluster bounding sphere, even though its capsule radius alone would not', () => {
+    // Site 5 (X1.28 task 4b): a dead-sharp box (round=0), radius 0.1 — true
+    // corner reach is 0.1*sqrt(3) ~ 0.1732, vs a plain capsule's 0.1. Undersize
+    // the cluster bound to exactly the CAPSULE reach: this reproduces the
+    // reviewer's finding that the escape check was blind to boxReach even
+    // though clusters.ts (Task 4 site 2) now fits its bound WITH it — the
+    // safety net that exists to catch an undersized bound must itself see the
+    // box term, or it approves a bound it should reject.
+    const body = assignClusters([
+      { ...prim('torso', [0, 0, 0], 0.1), box: { round: 0 } },
+    ]);
+    body.clusters[0]!.radius = 0.1;
+    const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
+    expect(errs.join(' ')).toMatch(/bounding sphere/i);
+  });
+
   it('fails when silhouette noise outruns the march step multiplier', () => {
     const errs = validateBody(healthy(), { silhouetteNoiseAmp: 0.5, stepMultiplier: 0.95 });
     expect(errs.join(' ')).toMatch(/lipschitz|step multiplier/i);
