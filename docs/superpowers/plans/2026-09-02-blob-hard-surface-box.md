@@ -711,11 +711,32 @@ written the groove's depth and width there since the groove landed."
 > fires and it silently draws as a capsule. Harmless before this task (there is
 > no box branch); fatal from here on. Add `p.box !== undefined` to BOTH checks.
 >
-> **While you are there, resolve a pre-existing discrepancy:** the cluster-level
-> check (`pack.ts:225`) tests `p.shell !== undefined`; the group-level one
-> (`pack.ts:248`) does NOT. Determine whether that is deliberate — groups may
-> never carry shells — or a latent bug of the same shape, and say which in the
-> commit message. Do not "fix" it without establishing which it is.
+> **ALSO FIX, owner-approved 2026-09-02 — a pre-existing LIVE bug in the same
+> two lines.** The cluster-level check (`pack.ts:225`) tests
+> `p.shell !== undefined`; the group-level one (`pack.ts:248`) does NOT. That is
+> not deliberate — it dates to the original shell commit `9a85fe7`, which added
+> the test to the cluster list and missed the group list, a separate code path
+> from the earlier bound-groups work.
+>
+> It matters because **the additive fold reads ONLY the group-level flag** —
+> `foldGroup` derives `shaped` from `ROW_GROUP_RANGE` alone, and the cluster
+> flag feeds `applyCarves` exclusively. So a shell whose group carries no other
+> shaped property arrives with `prof = 0`, never reaches
+> `(i32(prof) & 4) != 0`, and renders as its SOLID capsule base instead of a
+> thin clipped sheet.
+>
+> **This is live on a shipped character.** Verified by instrumenting `packBody`:
+> `schoolgirl-alt` group 10 holds a shell prim with the shaped bit CLEAR — its
+> cape (`schoolgirl-alt.blob:213`, a `shell` with no `radiusB`/`chamfer`/
+> `groove`/`bend`) is drawing as a solid blob. `schoolgirl` escapes only by
+> luck: its cape shares a `boundGroups` bucket with a neighbour that has
+> `radiusB` set. `clown`/`clown-alt`/`bonewalker` have no shells.
+>
+> Add `p.shell !== undefined` to the group-level check alongside `p.box`, and
+> pin BOTH with a test asserting the shaped bit is set for a group whose only
+> special prim is a shell, and for one whose only special prim is a box.
+> **Expect `schoolgirl-alt` to change appearance** — that is the fix working.
+> Shoot it before and after and report both.
 
 **Files:**
 - Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (add `SD_ROUND_BOX`, branch in `sdPrim`/`sdPrimO`)
