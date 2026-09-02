@@ -1268,7 +1268,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   perfCfg: vec4<f32>,
   prevT: f32,
   bodyCentre: vec3<f32>,
-  bodyHalf: vec3<f32>
+  bodyHalf: vec3<f32>,
+  // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
+  // after bodyHalf — matching createMarchMaterial's binding order (see its
+  // ORDER MATTERS note). cfg gates it: at cfg.x = 0 the helper returns 1.0
+  // and the march is bit-identical to the pre-task-7 shader.
+  levelShadowTex: texture_depth_2d,
+  levelShadowMatrix: mat4x4<f32>,
+  levelShadowCfg: vec4<f32>
 ) -> vec4<f32> {
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
@@ -2040,6 +2047,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     wShadow = mix(1.0, woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x);
   }
 
+  // LEVEL SHADOW (perf round 2 task 7). One texture load per hit pixel, ZERO
+  // extra field evaluations: the lookup is a projection + 4 depth loads
+  // against the twin light's level-only map. At cfg.x = 0 it returns 1.0
+  // before touching the texture — the whole feature is inert in the lab and
+  // until the game page's seam turns it on. Applied to the KEY diffuse and
+  // key specular ONLY — the same discipline as wShadow above: ambient, fill
+  // and scatter stay untouched or a shadowed body goes pitch black.
+  let lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg);
+
   // ENVIRONMENT BOUNCE (lighting P1). Replaces the flat scalar fill with a
   // chromatic ambient derived analytically from the enclosure's six walls.
   //
@@ -2061,8 +2077,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   //
   // Gated on the beam existing at all, so the lab and every stock preset keep
   // their old arithmetic bit-for-bit.
-  var fleshLit = albedo * (amb + diff * wShadow * keyI * keyC) * ao
-               + keyC * (shine * wShadow * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao
+               + keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
@@ -2197,6 +2213,32 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   return clamp(res, 0.0, 1.0);
 }`;
 
+// Level-only shadow map lookup (perf round 2 task 7). cfg = (enabled,
+// normalBias m, depthBias, spare). The map comes from a twin spotlight that
+// renders layer 0 only, so a body never sees its own hull in it. The
+// projection is three's `shadow.matrix` (bias * proj * view), whose output
+// is [0,1] uv with depth in .z — the same contract three's own ShadowNode
+// samples. 4-tap PCF on the texel grid; the owner's PSX look wants soft
+// edges, not hard ones.
+export const LEVEL_SHADOW = /* wgsl */ `fn levelShadow(p: vec3<f32>, n: vec3<f32>, shadowTex: texture_depth_2d, shadowMat: mat4x4<f32>, cfg: vec4<f32>) -> f32 {
+  if (cfg.x < 0.5) { return 1.0; }
+  let sp = shadowMat * vec4<f32>(p + n * cfg.y, 1.0);
+  let uv = sp.xy / sp.w;
+  let z = sp.z / sp.w - cfg.z;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || z > 1.0) { return 1.0; }
+  let dims = vec2<f32>(textureDimensions(shadowTex, 0));
+  let base = uv * dims - vec2<f32>(0.5, 0.5);
+  var lit = 0.0;
+  for (var dy = 0; dy < 2; dy = dy + 1) {
+    for (var dx = 0; dx < 2; dx = dx + 1) {
+      let c = clamp(vec2<i32>(floor(base)) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+      let d = textureLoad(shadowTex, c, 0);
+      lit = lit + select(0.0, 1.0, z <= d);
+    }
+  }
+  return lit * 0.25;
+}`;
+
 export const HELPERS = [
   // ORDER IS LOAD-BEARING: WGSL requires declaration before use, and wgslFn
   // concatenates this list as-is. CONE_CAP must precede both sdPrim and
@@ -2211,6 +2253,6 @@ export const HELPERS = [
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
-  WALL_CONTRIBUTION, AMBIENT_AT,
+  WALL_CONTRIBUTION, AMBIENT_AT, LEVEL_SHADOW,
 ];
 

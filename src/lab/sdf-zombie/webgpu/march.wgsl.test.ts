@@ -23,7 +23,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
-  ROW_WOUND_CAP,
+  ROW_WOUND_CAP, LEVEL_SHADOW,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
@@ -555,13 +555,43 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     // (keyI/keyC are the analytic-flashlight blend; with the beam off they
     // reduce to lightCfg.x/keyColor exactly — see the task-7 block below.)
     expect(MARCH_BODY).toContain(
-      'albedo * (amb + diff * wShadow * keyI * keyC) * ao');
-    expect(MARCH_BODY).toContain('shine * wShadow * mix(surfCfg.x, 1.5, gloss)');
+      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao');
+    expect(MARCH_BODY).toContain('shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss)');
     // The fill term must NOT carry the shadow...
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
       'woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x');
+  });
+});
+
+describe('level shadows on bodies (perf round 2 task 7)', () => {
+  // Bodies CAST via the spanned shadow hull but never RECEIVE: a zombie
+  // behind a pillar is lit by the flashlight. The flashlight's own map is
+  // poisoned for this — the body's inflated hull is IN it, so every flesh
+  // point would shadow itself. The map sampled here comes from a TWIN
+  // spotlight (dungeon-lighting.ts) that renders layer 0 (the level) only.
+  it('applies the level shadow map to the key term only, and only when enabled', () => {
+    expect(LEVEL_SHADOW).toContain('fn levelShadow(p: vec3<f32>, n: vec3<f32>, shadowTex: texture_depth_2d, shadowMat: mat4x4<f32>, cfg: vec4<f32>) -> f32');
+    expect(LEVEL_SHADOW).toContain('if (cfg.x < 0.5) { return 1.0; }');
+    expect(MARCH_BODY).toContain('let lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg);');
+    expect(MARCH_BODY).toContain('diff * wShadow * lvl * keyI * keyC');
+  });
+  it('darkens the key specular with the same factor; the signature ends with the three new slots', () => {
+    expect(MARCH_BODY).toContain('shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss)');
+    // Positional-binding tripwire (see the ORDER MATTERS note in
+    // createMarchMaterial): the new slots sit at the very END, after
+    // bodyHalf, in the exact order the JS object binds them.
+    const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('bodyHalf: vec3<f32>,'));
+    expect(tail.indexOf('levelShadowTex: texture_depth_2d')).toBeGreaterThan(-1);
+    expect(tail.indexOf('levelShadowMatrix: mat4x4<f32>')).toBeGreaterThan(tail.indexOf('levelShadowTex: texture_depth_2d'));
+    expect(tail.indexOf('levelShadowCfg: vec4<f32>')).toBeGreaterThan(tail.indexOf('levelShadowMatrix: mat4x4<f32>'));
+  });
+  it('is parse-checked as a helper and normal-biases the lookup position', () => {
+    expect(HELPERS).toContain(LEVEL_SHADOW);
+    // The bias step keeps the body's own surface off the shadow plane (acne);
+    // it is cfg.y so the owner can raise it live.
+    expect(LEVEL_SHADOW).toContain('shadowMat * vec4<f32>(p + n * cfg.y, 1.0)');
   });
 });
 
@@ -1201,7 +1231,7 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     expect(MARCH_BODY).not.toContain('keyGate');
     expect(MARCH_BODY).not.toContain('shineOcc');
     expect(MARCH_BODY).not.toContain('ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm))');
-    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * keyI * keyC) * ao');
+    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao');
   });
 
   it('routes ambient through ambientAt, and pays for it once', () => {
@@ -1313,7 +1343,7 @@ describe('analytic flashlight (dungeon relighting task 7)', () => {
   it('feeds the blended key into the lit expressions, ambient hue untouched', () => {
     expect(start()).toBeGreaterThan(-1);
     // The two fleshLit sites ride the blended key...
-    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * keyI * keyC) * ao');
+    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao');
     // ...while ambientAt keeps the ORIGINAL keyColor as its hue basis.
     expect(MARCH_BODY).toContain(
       'bounceCfg, lightCfg.y, keyColor);');
