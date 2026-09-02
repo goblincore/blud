@@ -115,11 +115,16 @@ export function createSurfaceNetsCompute(
   const argsCall = k.args(counters, args, meta);
 
   // Worst-case dispatch counts; kernels early-out past the live grid. The
-  // count is INVOCATIONS: three dispatches ceil(count / workgroupThreads)
-  // workgroups along x (WebGPUBackend.js ~1650), so with [4,4,4] = 64
-  // threads workgroupId.x is the linear block index the kernel expects, and
-  // 64 000 workgroups stays under maxComputeWorkgroupsPerDimension.
-  const netsNode = compute(netsCall, cap.blocks * BLOCK ** 3, [BLOCK, BLOCK, BLOCK]);
+  // NETS kernel carries workgroupBarrier(), so it must be dispatched by an
+  // explicit WORKGROUP dispatchSize [blocks,1,1], NOT an invocation count:
+  // a numeric count makes three emit `if (instanceIndex >= count) return;`
+  // ahead of the kernel call (ComputeNode.js ~213), and Tint rejects the
+  // barrier as non-uniform control flow behind that guard. With an array,
+  // count stays null, no guard is emitted, and the barrier is uniform. The
+  // other two kernels have no barrier and keep the invocation-count form.
+  // (the .d.ts types count as number only — the array dispatchSize form is
+  // supported at runtime, ComputeNode.js `compute()` ~291; cast, don't build)
+  const netsNode = compute(netsCall, [cap.blocks, 1, 1] as unknown as number, [BLOCK, BLOCK, BLOCK]);
   const quadsNode = compute(quadsCall, cap.cells, [64]);
   const argsNode = compute(argsCall, 1, [1]);
 

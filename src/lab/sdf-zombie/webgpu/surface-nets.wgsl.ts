@@ -18,10 +18,13 @@ export const HULL_FIELD = /* wgsl */ `fn hullField(p: vec3<f32>, band: f32, data
 
 /**
  * Pass 1. One workgroup [4,4,4] per block; wid.x is the linear block index
- * (three dispatches ceil(count/64) workgroups along x). Thread 0 runs the
- * live test into shared memory; a barrier; dead blocks zero their edge bits
- * and leave. Live blocks fill a 5x5x5 corner tile (125 corners over 64
- * threads, two each), barrier, then each thread does its cell.
+ * (three dispatches ceil(count/64) workgroups along x). EVERY thread runs the
+ * block-centre live test redundantly (not broadcast through workgroup
+ * memory): Tint rejects any barrier reached after a branch on a workgroup
+ * storage read — 'may result in a non-uniform value' — so gBlockLive does
+ * not exist. The test depends only on wid + uniforms, so the whole workgroup
+ * computes the same value and the branch is provably uniform. Dead blocks
+ * skip the corner fill, zero their edge bits after the barrier, and leave.
  */
 export const K_HULL_NETS = /* wgsl */ `fn kHullNets(
   data: texture_2d<f32>,
@@ -63,36 +66,39 @@ export const K_HULL_NETS = /* wgsl */ `fn kHullNets(
   let blockOrigin = gridMin + vec3<f32>(f32(bx), f32(by), f32(bz)) * (f32(BLOCK) * cell);
   let lin = lid.x + lid.y * u32(BLOCK) + lid.z * u32(BLOCK) * u32(BLOCK);
 
-  if (lin == 0u) {
-    let halfDiag = sqrt(3.0) * f32(BLOCK) * cell * 0.5;
-    let c = blockOrigin + vec3<f32>(f32(BLOCK) * cell * 0.5);
-    let v = hullField(c, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-    gBlockLive = select(0u, 1u, abs(v) <= halfDiag * distort + cell);
-  }
-  workgroupBarrier();
+  // Live test per thread — see the header note. Depends only on wid +
+  // uniforms, hence uniform across the workgroup.
+  let halfDiag = sqrt(3.0) * f32(BLOCK) * cell * 0.5;
+  let blockC = blockOrigin + vec3<f32>(f32(BLOCK) * cell * 0.5);
+  let fv = hullField(blockC, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+  let live = abs(fv) <= halfDiag * distort + cell;
 
   let i = bx * BLOCK + i32(lid.x);
   let j = by * BLOCK + i32(lid.y);
   let k = bz * BLOCK + i32(lid.z);
   let ci = u32((k * dims.y + j) * dims.x + i);
-  if (gBlockLive == 0u) {
+
+  // 125 corners, two per thread (64 threads cover 128 slots). Dead blocks
+  // skip the fill but MUST still reach the barrier below (uniform control
+  // flow), then zero their edge bits and return.
+  if (live) {
+    for (var s = 0u; s < 2u; s = s + 1u) {
+      let cidx = lin + s * 64u;
+      if (cidx < 125u) {
+        let cx = i32(cidx % 5u);
+        let cy = i32((cidx / 5u) % 5u);
+        let cz = i32(cidx / 25u);
+        let p = blockOrigin + vec3<f32>(f32(cx), f32(cy), f32(cz)) * cell;
+        gTile[cidx] = hullField(p, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+      }
+    }
+  }
+  workgroupBarrier();
+  if (!live) {
     (*cellEdge)[ci] = 0u;
     (*cellVert)[ci] = NO_VERT;
     return;
   }
-
-  // 125 corners, two per thread (64 threads cover 128 slots).
-  for (var s = 0u; s < 2u; s = s + 1u) {
-    let cidx = lin + s * 64u;
-    if (cidx < 125u) {
-      let cx = i32(cidx % 5u);
-      let cy = i32((cidx / 5u) % 5u);
-      let cz = i32(cidx / 25u);
-      let p = blockOrigin + vec3<f32>(f32(cx), f32(cy), f32(cz)) * cell;
-      gTile[cidx] = hullField(p, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-    }
-  }
-  workgroupBarrier();
 
   let lx = i32(lid.x); let ly = i32(lid.y); let lz = i32(lid.z);
   var v: array<f32, 8>;
@@ -178,7 +184,6 @@ const EDGE_Z_CROSS: u32 = 16u;
 const EDGE_Z_IN2OUT: u32 = 32u;
 const VERT_PULL_TARGET: f32 = 0.6;
 const VERT_PULL_ITERS: i32 = 10;
-var<workgroup> gBlockLive: u32;
 var<workgroup> gTile: array<f32, 125>;`;
 
 /** Pass-2 helpers, each its own chained source (the wgslFn parser is
@@ -263,17 +268,17 @@ const EDGE_Z_IN2OUT: u32 = 32u;`;
 export const K_HULL_ARGS = /* wgsl */ `fn kHullArgs(
   counters: ptr<storage, array<atomic<u32>>, read_write>,
   args: ptr<storage, array<u32>, read_write>,
-  meta: ptr<storage, array<u32>, read_write>
+  metaOut: ptr<storage, array<u32>, read_write>
 ) -> void {
   let verts = min(atomicLoad(&(*counters)[1]), MAX_SOUP_VERTS);
   (*args)[0] = verts;
   (*args)[1] = 1u;
   (*args)[2] = 0u;
   (*args)[3] = 0u;
-  (*meta)[0] = atomicLoad(&(*counters)[2]);
-  (*meta)[1] = atomicLoad(&(*counters)[0]);
-  (*meta)[2] = verts;
-  (*meta)[3] = atomicLoad(&(*counters)[3]);
+  (*metaOut)[0] = atomicLoad(&(*counters)[2]);
+  (*metaOut)[1] = atomicLoad(&(*counters)[0]);
+  (*metaOut)[2] = verts;
+  (*metaOut)[3] = atomicLoad(&(*counters)[3]);
 }
 const MAX_SOUP_VERTS: u32 = 1179648u;`;
 

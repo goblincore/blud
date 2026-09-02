@@ -65,4 +65,21 @@ describe('surface-nets WGSL parse contract', () => {
     expect(HULL_NETS_CHAIN).toEqual([HULL_FIELD, K_HULL_NETS]);
     expect(HULL_QUADS_CHAIN).toEqual([K_VERT_AT, K_PUT_V, K_EMIT_QUAD, K_HULL_QUADS]);
   });
+  it('steers clear of the two Tint rejections the spike page hit (2026-09-02)', () => {
+    // 'meta' is a RESERVED KEYWORD in WGSL — using it as a parameter name
+    // fails shader-module creation.
+    expect(signature(K_HULL_ARGS)).not.toMatch(/\bmeta\b/);
+    // A barrier reached after a branch on a workgroup-storage READ is
+    // non-uniform control flow to Tint. The live test is recomputed per
+    // thread; there is no broadcast variable.
+    expect(K_HULL_NETS).not.toContain('gBlockLive');
+    const barrierIdx = K_HULL_NETS.indexOf('workgroupBarrier');
+    expect(barrierIdx).toBeGreaterThan(-1);
+    // every barrier sits at statement depth inside the fn body, not nested
+    // under an if/for (uniform control flow by construction)
+    for (const m of K_HULL_NETS.matchAll(/workgroupBarrier/g)) {
+      const lineStart = K_HULL_NETS.lastIndexOf('\n', m.index!) + 1;
+      expect(K_HULL_NETS.slice(lineStart, m.index)).toBe('  ');
+    }
+  });
 });
