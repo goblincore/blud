@@ -409,9 +409,11 @@ export function maskFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): M
   return { w: f.w, h: f.h, bits };
 }
 
-/** The mask AND the frame it was taken in. maskFromBody throws the frame away;
- *  bandOwners needs it to turn a mask row back into a world height. */
-function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: Frame } | null {
+/** The mask, the frame it was taken in, AND the per-pixel hit depth.
+ *  maskFromBody throws both frame and depth away; bandOwners needs the frame
+ *  to turn a mask row back into a world height, and depthFromBody needs the
+ *  depth to feed the depth diff (Task 3). */
+function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: Frame; depth: Float32Array } | null {
   const view = opts.view ?? 'front';
   const heightPx = opts.heightPx ?? 256;
   const pad = opts.pad ?? 0.02;
@@ -431,6 +433,11 @@ function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: F
   const f = frameOf(box, view, pad, heightPx);
   const { w, h, u0, spanU, maxY, spanY, dMin, dMax } = f;
   const bits = new Uint8Array(w * h);
+  // Depth of the hit along the view's depth axis (front: world z, side: world
+  // x). NaN where the ray missed. The march already computed this and threw it
+  // away — a silhouette only asks "is anything here", as this file's header
+  // says — so nothing needed it until the depth diff.
+  const depth = new Float32Array(w * h).fill(NaN);
 
   const step = spanY / h; // world units per pixel, used as the march floor
   for (let py = 0; py < h; py++) {
@@ -465,17 +472,46 @@ function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: F
         // otherwise burn every step creeping and report a miss on solid flesh.
         t += Math.max(d, step * 0.25);
       }
-      if (hit) bits[py * w + px] = 1;
+      if (hit) { bits[py * w + px] = 1; depth[py * w + px] = t; }
     }
   }
 
-  // The kit is UNIONED on top, filled as flat triangles.
+  // The kit is UNIONED on top, filled as flat triangles. It never touches
+  // `depth`: a kit is a polygon overlay with no field behind it — there was
+  // no march, so no `t` to record — and those pixels must stay NaN rather
+  // than inherit a stale 0 or whatever the march left there, or the depth
+  // diff would read them as "the field is right here" instead of "unknown".
   if (kit && kit.length) rasterTriangles(bits, kit, f);
-  return { mask: { w, h, bits }, frame: f };
+  return { mask: { w, h, bits }, frame: f, depth };
 }
 
 export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
   return bodyRaster(body, opts)?.mask ?? { w: 1, h: 1, bits: new Uint8Array(1) };
+}
+
+export interface BodyDepth { mask: Mask; depth: Float32Array; frame: Frame }
+
+/**
+ * Body raster WITH the per-pixel hit depth the silhouette path discards.
+ * `depth` is NaN wherever the mask is 0, and also wherever a KIT triangle
+ * supplied the pixel — a kit is a polygon overlay with no field behind it.
+ *
+ * Separate export rather than a flag on maskFromBody: every existing caller
+ * (bandOwners, the silhouette comparisons) wants occupancy only, and giving
+ * them a Float32Array they never read would be pure overhead on the hot path
+ * this file's header describes — one sphere-trace raster per band, per view.
+ */
+export function depthFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): BodyDepth {
+  const r = bodyRaster(body, opts);
+  if (r) return r;
+  // No cluster alive — the same degenerate case maskFromBody falls back to (a
+  // 1x1 all-background mask), extended with a NaN depth and a zero-span frame
+  // rather than framing an empty box, which would divide by zero.
+  return {
+    mask: { w: 1, h: 1, bits: new Uint8Array(1) },
+    depth: new Float32Array(1).fill(NaN),
+    frame: { view: opts.view ?? 'front', u0: 0, spanU: 0, maxY: 0, spanY: 1e-9, dMin: 0, dMax: 0, w: 1, h: 1 },
+  };
 }
 
 /**

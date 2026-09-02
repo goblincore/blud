@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import {
-  maskFromRgba, maskFromBody, subjectBounds, normalise, compareSilhouette,
+  maskFromRgba, maskFromBody, depthFromBody, subjectBounds, normalise, compareSilhouette,
   renderMask, gltfTriangles, maskFromTriangles, bandOwners, type Mask,
 } from './silhouette';
 import { decodePng } from './png-decode';
@@ -227,6 +227,84 @@ describe('maskFromBody', () => {
     expect(lines[0]!.length).toBe(20);
     expect(lines.length).toBeGreaterThan(4);
     expect(art).toContain('#');
+  });
+});
+
+describe('depthFromBody', () => {
+  // Same helper as maskFromBody's own describe block — kept local rather than
+  // hoisted, matching how that block scopes it, since nothing outside either
+  // block needs a built character.
+  const build = (name: string) => {
+    const doc = parseBlob(readFileSync(`src/lab/sdf-zombie/characters/${name}.blob`, 'utf8'));
+    return buildBody(compileBlob(doc, compileFace(doc)));
+  };
+  const body = build('mouse');
+
+  it('returns a depth for every occupied pixel and NaN elsewhere', () => {
+    const { mask, depth } = depthFromBody(body, { view: 'front', heightPx: 64 });
+    expect(depth.length).toBe(mask.w * mask.h);
+    let occupied = 0;
+    for (let i = 0; i < depth.length; i++) {
+      if (mask.bits[i]) { occupied++; expect(Number.isFinite(depth[i]!)).toBe(true); }
+      else expect(Number.isNaN(depth[i]!)).toBe(true);
+    }
+    expect(occupied).toBeGreaterThan(0);
+  });
+
+  // The proof this is real depth and not a constant: two masses placed at
+  // DIFFERENT world z, far enough apart in x that neither's silhouette
+  // touches the other's, so each column's hit can only belong to one mass.
+  // `skull` is required even though nothing is authored on it — compileFace
+  // always emits facePrims that reference it, same as build-body.test.ts's
+  // minimal fixture.
+  it('depth increases with distance from the camera', () => {
+    const SRC = `model t
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=0 len=0.34
+  bone skull parent=spine dir=up len=0.16
+
+body
+  blob torso on pelvis at=0.20 r=0.12 blend=0.02 offset=(-0.4,0,0)
+  blob torso on pelvis at=0.20 r=0.12 blend=0.02 offset=(0.4,0,0.3)
+`;
+    const doc = parseBlob(SRC);
+    // Not a validateBody-clean figure — the two masses are deliberately
+    // unconnected to each other (and the required `skull` bone carries no
+    // flesh of its own), which trips the disconnected-cluster warning. That
+    // warning is about character validity; it has no bearing on whether the
+    // raster's march reports the right depth, which is all this test checks.
+    const twoMasses = buildBody(compileBlob(doc, compileFace(doc)));
+
+    const { mask, depth } = depthFromBody(twoMasses, { view: 'front', heightPx: 64 });
+    // Front view: u = world x, so the offset=(-0.4,...) mass rasterises into
+    // the left half of the image and the offset=(0.4,...) mass into the
+    // right half. The two never share a column, so the first occupied pixel
+    // found scanning each half belongs unambiguously to one mass — EXCEPT
+    // compileFace always emits facePrims on `skull`, which draw a small mass
+    // centred near the top of the frame regardless of what the body block
+    // asked for. Scanning bottom-up rather than top-down skips past it: the
+    // pelvis-anchored masses sit lower in the frame than a head ever does.
+    let leftDepth: number | null = null, rightDepth: number | null = null;
+    for (let py = mask.h - 1; py >= 0 && (leftDepth === null || rightDepth === null); py--) {
+      for (let px = 0; px < mask.w; px++) {
+        const i = py * mask.w + px;
+        if (!mask.bits[i]) continue;
+        if (px < mask.w / 2) leftDepth ??= depth[i]!;
+        else rightDepth ??= depth[i]!;
+      }
+    }
+    expect(leftDepth).not.toBeNull();
+    expect(rightDepth).not.toBeNull();
+    // offset z=0 vs offset z=0.3: the far mass's surface sits at a larger
+    // world z, and world z IS the depth this view reports.
+    expect(rightDepth!).toBeGreaterThan(leftDepth!);
+  });
+
+  it('leaves maskFromBody bit-identical', () => {
+    const a = maskFromBody(body, { view: 'front', heightPx: 48 });
+    const b = depthFromBody(body, { view: 'front', heightPx: 48 }).mask;
+    expect(Array.from(b.bits)).toEqual(Array.from(a.bits));
   });
 });
 
