@@ -26,6 +26,9 @@ import {
   ROW_WOUND_CAP, LEVEL_SHADOW,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+// @ts-expect-error — deep three source import for the real wgslFn parser; no
+// public type declarations exist for three/src/* (see the comment below).
+import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
 import { packBody } from '../pack';
 import { add, cross, scale as vscale, sub, qFromAxisAngle, qNormalize } from '../vec';
@@ -592,6 +595,20 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // The bias step keeps the body's own surface off the shadow plane (acne);
     // it is cfg.y so the owner can raise it live.
     expect(LEVEL_SHADOW).toContain('shadowMat * vec4<f32>(p + n * cfg.y, 1.0)');
+  });
+  it('the real wgslFn parser sees the three slots as the last inputs — no comment phantoms', () => {
+    // WGSLNodeFunction sweeps the WHOLE parameter list — comments included —
+    // with /name\s*:\s*type/ to find inputs. Any `word: word` colon pattern
+    // inside a signature comment becomes a PHANTOM input: the call site then
+    // binds float(0) into that slot and every real binding after it shifts
+    // by one (seen 2026-09-02 — a comment's "cfg gates it: at" inserted one
+    // between bodyHalf and levelShadowTex and the pipeline died with
+    // "cannot convert abstract-float to texture_depth_2d"). This test runs
+    // the actual parser, not a string grep, so no comment can reintroduce it.
+    const parsed = new WGSLNodeFunction(MARCH_BODY);
+    const names = parsed.inputs.map((i: { name: string }) => i.name);
+    expect(names.length).toBe(66);
+    expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
   });
 });
 

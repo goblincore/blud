@@ -1269,10 +1269,13 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   prevT: f32,
   bodyCentre: vec3<f32>,
   bodyHalf: vec3<f32>,
-  // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
-  // after bodyHalf — matching createMarchMaterial's binding order (see its
-  // ORDER MATTERS note). cfg gates it: at cfg.x = 0 the helper returns 1.0
-  // and the march is bit-identical to the pre-task-7 shader.
+  // Level-only shadow (perf round 2 task 7) — bound positionally LAST to
+  // match createMarchMaterial's binding order. The gate is cfg.x — zero
+  // keeps the march bit-identical to the pre-task-7 shader.
+  // NOTE FOR THE NEXT EDITOR — the wgslFn parser regexes the parameter list
+  // for name-colon-type pairs, COMMENTS INCLUDED, so no comment in here may
+  // ever contain a colon between two words; a phantom input shifts every
+  // binding by one slot and the pipeline dies on a type mismatch.
   levelShadowTex: texture_depth_2d,
   levelShadowMatrix: mat4x4<f32>,
   levelShadowCfg: vec4<f32>
