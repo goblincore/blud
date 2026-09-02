@@ -23,7 +23,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
-  ROW_WOUND_CAP,
+  ROW_WOUND_CAP, APPLY_BONES,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { specialiseMapBody } from './specialise';
@@ -271,7 +271,7 @@ describe('ported features reach the entry point', () => {
     // must fall through both.
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
     expect(applyCarves).toContain('let isCarve = S.w > 0.5 && S.w < 1.5;');
-    expect(applyCarves).toContain('let isGroove = S.w > 2.5;');
+    expect(applyCarves).toContain('let isGroove = S.w > 2.5 && S.w < 3.5;');
     expect(applyCarves).toContain('if (!isCarve && !isGroove) { continue; }');
   });
 
@@ -315,7 +315,7 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -330,7 +330,7 @@ describe('ported features reach the entry point', () => {
     expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }');
     expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }');
     expect(foldGroup).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
-    expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
+    expect(mapBody).toContain('let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
     // independent of the motion plumbing — zero shift, dead noise term. The
@@ -338,7 +338,7 @@ describe('ported features reach the entry point', () => {
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x');
+      'mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x');
   });
 
   it('mottles ALBEDO from the rest-space anchor, guarded by its amplitude', () => {
@@ -490,7 +490,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
     expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
     // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).
-    expect(WOUND_SHADOW).toContain('counts, 0.0, woundCfg, woundCfg2');
+    expect(WOUND_SHADOW).toContain('counts2, 0.0, woundCfg, woundCfg2');
   });
   it('darkens ONLY the key diffuse + specular; fill/ambient/scatter stay lit', () => {
     // Multiply the whole lit sum and craters go pitch black — the fill and
@@ -504,7 +504,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
-      'woundShadow(p, L, woundShadowCfg.y, data, counts, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x');
+      'woundShadow(p, L, woundShadowCfg.y, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip), woundShadowCfg.x');
   });
 });
 
@@ -1279,3 +1279,57 @@ function oneClusterBody(): import("../build-body").BuildResult {
     bones: [], root: 'torso', errors: [],
   } as unknown as import("../build-body").BuildResult;
 }
+
+describe('bone fold (wound pass r2)', () => {
+  it('bounds the groove test so W_BONE is not read as a groove', () => {
+    expect(APPLY_CARVES).toContain('S.w > 2.5 && S.w < 3.5');
+  });
+
+  it('folds bone as a hard min, never a smooth min', () => {
+    expect(APPLY_BONES).toContain('min(');
+    expect(APPLY_BONES).not.toContain('smin(');
+  });
+
+  it('gates the bone loop on nearWound so undamaged bodies pay nothing', () => {
+    expect(MAP_BODY).toMatch(/nearWound\s*>\s*0\.5/);
+  });
+
+  it('returns the pre-wound field in .w for the tissue-depth ramp', () => {
+    // Both return sites — the noiseAmp early-out and the full path — must
+    // carry `carved`, or the ramp reads 0 on whichever path is taken. bestIdx
+    // rides the return as the bare f32 global: an f32(bestIdx) cast INSIDE
+    // the vec4 would not even lex past the nested paren, and task 6 reads
+    // .w per march step.
+    const returns = MAP_BODY.match(/return vec4<f32>\([^)]*\)/g) ?? [];
+    expect(returns.length).toBeGreaterThanOrEqual(2);
+    for (const r of returns) expect(r).toContain('carved');
+  });
+
+  it('lets a bone prim win bestIdx so shading can identify it', () => {
+    expect(APPLY_BONES).toContain('gFoldBestIdx');
+  });
+
+  // DEVIATION GUARDS. The dispatched task text carried boneCount on
+  // woundCfg2.w "the slot documented as spare" — but that channel is the
+  // VOLUME HIT-EPSILON override, pinned by the hit-eps test above and
+  // documented NOT spare in zombie-gpu.ts; and it is 0 in every
+  // primitive-mode path, so the gate would never fire and bones would never
+  // render. boneCount rides a NEW counts2 uniform (x = boneCount, yzw
+  // spare) instead. These tests keep it there.
+  it('carries boneCount on counts2.x, never on the taken woundCfg2.w', () => {
+    expect(MAP_BODY).toContain('counts2.x > 0.0');
+    expect(MAP_BODY).toMatch(/nearWound > 0\.5 && counts2\.x > 0\.0/);
+    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0)');
+    expect(MARCH_BODY).toContain('counts2: vec4<f32>');
+    expect(MARCH_BODY).not.toMatch(/woundCfg2\.w[^;]*applyBones/);
+  });
+
+  it('bounds the bone loop by the packed range, not a material scan', () => {
+    // Bones occupy the contiguous rows [counts.x, counts.x + boneCount) —
+    // bounded, never filtered by primScale.w == 4: nothing to get wrong if a
+    // flesh prim's w ever changes meaning.
+    expect(APPLY_BONES).toContain('i32(counts.x)');
+    expect(APPLY_BONES).toContain('i32(boneCount)');
+    expect(APPLY_BONES).not.toContain('> 4.5');
+  });
+});

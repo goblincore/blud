@@ -177,6 +177,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
   return {
     /** x primCount, y clusterCount, z carveCount, w maxBlendK */
     counts: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** x boneCount, yzw spare (wound pass r2). Bone rows pack at
+     *  [counts.x, counts.x + boneCount) and applyBones walks exactly that
+     *  range, gated on nearWound. A NEW vec4 rather than a spare channel:
+     *  counts was already full and woundCfg2.w is the volume hitEps
+     *  override — NOT spare (see the woundShadowCfg note below). */
+    counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** x steps, y stepMul, z silhouetteNoiseAmp */
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0.016)),
     /** x count, y blendK, z rimSplay, w rimOffset */
@@ -585,6 +591,7 @@ export function createMarchMaterial(
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
     counts: u.counts,
+    counts2: u.counts2,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
@@ -980,6 +987,7 @@ export function createZombieGpuView(
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     dataTex.needsUpdate = true;
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
+    u.counts2.value.set(p.boneCount, 0, 0, 0);
     return p;
   }
 
@@ -1013,6 +1021,7 @@ export function createZombieGpuView(
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
     counts: u.counts,
+    counts2: u.counts2,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
@@ -1341,6 +1350,7 @@ export function createChunkGpuView(
     writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
 
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
+    u.counts2.value.set(packed.boneCount, 0, 0, 0);
     u.marchCfg.value.x = 48; // chunks are small; fewer steps
     u.lodCfg.value.w = 1;    // torn-meat gore mask
     u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;
