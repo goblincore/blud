@@ -111,6 +111,12 @@ export interface PrimDef {
   limb: LimbBase;
   mirror?: boolean;
   /**
+   * `side=l|r` on the source line: SINGLE-SIDED. expandMirror emits one copy
+   * on that side of the bone pair and never sets `mirrored` — one authored
+   * number placed once, nothing x-negated. See BlobPart.side.
+   */
+  side?: 'l' | 'r';
+  /**
    * 'sub' carves this primitive out of the assembled field instead of adding
    * to it. 'groove' cuts a narrow CHANNEL along where this primitive's surface
    * meets the assembled body — a mouth line, a panel seam, a nostril slit —

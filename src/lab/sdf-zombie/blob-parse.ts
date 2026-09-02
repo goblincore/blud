@@ -374,6 +374,12 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     mirror: l.words.includes('mirror'),
     hard: l.words.includes('hard'),
     both: l.words.includes('both'),
+    // `side=l|r` — SINGLE-SIDED: one copy on that side of a mirrored bone
+    // pair, instead of the bilateral pair every limb prim otherwise makes.
+    // Validated here (value, no mirror/both, arm|leg limb only) and again in
+    // expandMirror (the bone really is mirrored), because TS-authored prims
+    // skip this parser.
+    side: parseSideArg(l),
     // A bare word, like `hard`/`mirror`/`both`. `chamfer` swaps the fold from
     // the quadratic smooth-min to a flat 45-degree bevel, which keeps a crease
     // where the default gives a fillet.
@@ -437,6 +443,11 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
       throw new BlobError('shell needs rim=<rounding radius>', l.line, l.indent + 1);
   }
 
+  if (part.side !== null && limb !== 'arm' && limb !== 'leg')
+    throw new BlobError(
+      `side=${part.side} needs an arm|leg limb (got "${limb}" — head/torso prims are not mirrored)`,
+      l.line, l.indent + 1);
+
   into.push(part);
 }
 
@@ -470,6 +481,23 @@ function parseBonesLine(l: BlobLine, s: ParseState): void {
       `a bones line must be "blob", "bar" or "ratio", got "${head}"`,
       l.line, l.indent + 1);
   parseBodyLine(l, s, s.doc.bonesBlock.parts);
+}
+
+/**
+ * `side=l|r` — optional single-sided marker on `blob`/`bar`/`groove`/`shell`
+ * body lines. Null when absent. Throws when present but not exactly `l` or
+ * `r`, or when combined with `mirror`/`both`: those already place both sides,
+ * and a line asking for both a pair AND one side is a contradiction, not a
+ * default to guess.
+ */
+function parseSideArg(l: BlobLine): 'l' | 'r' | null {
+  const raw = strArg(l, 'side');
+  if (raw === null) return null;
+  if (raw !== 'l' && raw !== 'r')
+    throw new BlobError(`side= must be l or r, got "${raw}"`, l.line, l.indent + 1);
+  if (l.words.includes('mirror') || l.words.includes('both'))
+    throw new BlobError(`side=${raw} and mirror/both both decide sides — pick one`, l.line, l.indent + 1);
+  return raw;
 }
 
 /**

@@ -400,3 +400,30 @@ describe('box', () => {
     expect(d.parts[0]!.round).toBeCloseTo(0.08, 6);
   });
 });
+
+describe('side=l|r — the single-sided prim marker', () => {
+  const doc = (body: string) => parseBlob(
+    `model t\nskeleton\n  root pelvis at 1.0\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+
+  it('parses side=r on a limb prim', () => {
+    const d = doc('  bar leg on spine from=0.1 to=0.9 r=0.05 side=r');
+    expect(d.parts[0]!.side).toBe('r');
+  });
+
+  it('defaults to null on an ordinary prim', () => {
+    const d = doc('  bar leg on spine from=0.1 to=0.9 r=0.05');
+    expect(d.parts[0]!.side).toBe(null);
+  });
+
+  it('rejects a value that is not l or r', () => {
+    expect(() => doc('  bar leg on spine from=0.1 to=0.9 r=0.05 side=middle')).toThrow(BlobError);
+  });
+
+  it('rejects side= combined with mirror — both decide sides', () => {
+    expect(() => doc('  bar leg on spine from=0.1 to=0.9 r=0.05 side=r mirror')).toThrow(/pick one/);
+  });
+
+  it('rejects side= on a head/torso limb — those are not mirrored', () => {
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 side=r')).toThrow(/arm\|leg/);
+  });
+});

@@ -58,6 +58,14 @@ export interface BlobPart {
   mirror: boolean;
   hard: boolean;
   both: boolean;
+  /**
+   * `side=l|r` — this prim is SINGLE-SIDED: expandMirror emits ONE copy, on
+   * that side of the named mirrored bone pair (`thigh` -> `thigh.r`, limb
+   * legR). Every limb prim before this was forced bilateral, which made a
+   * one-sided prosthetic unauthorable — the minotaur's machined right leg is
+   * the case that proved the gap real. Null = bilateral as always.
+   */
+  side: 'l' | 'r' | null;
   /** `chamfer` — fold with a flat bevel instead of the default fillet. */
   chamfer: boolean;
   /** `r2=` — radius at the far end. Null means untapered. */
