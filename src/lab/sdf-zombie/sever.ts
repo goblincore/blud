@@ -8,6 +8,10 @@ import { basisFromAxis, dot, len, lerp, sub } from './vec';
 export interface ChunkGroup {
   limb: LimbId;
   prims: Primitive[];
+  /** The severed limb's BONE prims (gore r3 refinement 6). Chunks shipped
+   *  bone-free — the separate-array design's safe default — so a torn-off
+   *  forearm was solid meat. Filtered by cluster exactly as `prims` is. */
+  bones: Primitive[];
   /** World-space centre at the moment of detachment. */
   origin: Vec3;
   /** World points where this piece tore away (joints/attachment) — torn-end wounds. */
@@ -33,10 +37,14 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
 
   const cluster = body.clusters.find(c => c.limb === limb);
   if (!cluster || !cluster.alive)
-    return { body, chunk: { limb, prims: [], origin: [0, 0, 0], tornAt: [] }, stumpWound: null };
+    return { body, chunk: { limb, prims: [], bones: [], origin: [0, 0, 0], tornAt: [] }, stumpWound: null };
 
   const prims = body.prims.slice(cluster.start, cluster.start + cluster.count)
     .filter(p => !p.dead); // mid-limb-severed prims already left as chunks
+  // Bone leaves with its limb. Bones live in their own array and carry the
+  // cluster INDEX they belong to, so this is a filter rather than a slice.
+  const clusterIdx = body.clusters.findIndex(c => c.limb === limb);
+  const bones = (body.bonePrims ?? []).filter(b => b.cluster === clusterIdx && !b.dead);
   const clusters = body.clusters.map(c => (c.limb === limb ? { ...c, alive: false } : c));
   const next: BuildResult = { ...body, clusters };
 
@@ -65,7 +73,7 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
     ageSec: 0,
   };
 
-  return { body: next, chunk: { limb, prims, origin: cluster.center, tornAt: [] }, stumpWound };
+  return { body: next, chunk: { limb, prims, bones, origin: cluster.center, tornAt: [] }, stumpWound };
 }
 
 /** Local-frame offset from a primitive's head, matching damage.ts's convention. */
@@ -98,7 +106,11 @@ export function gibAll(body: BuildResult): { body: BuildResult; chunks: ChunkGro
     // them (a full gib after a severed hand must not spawn a second hand).
     const prims = body.prims.slice(c.start, c.start + c.count).filter(p => !p.dead);
     if (prims.length === 0) continue;
-    chunks.push({ limb: c.limb, prims, origin: c.center, tornAt: [] });
+    // A gibbed limb takes its bone with it — the cheapest visible payoff of
+    // the bone array (gore r3 refinement 6).
+    const ci = body.clusters.indexOf(c);
+    const cBones = (body.bonePrims ?? []).filter(b => b.cluster === ci && !b.dead);
+    chunks.push({ limb: c.limb, prims, bones: cBones, origin: c.center, tornAt: [] });
   }
   return {
     body: { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) },
@@ -139,7 +151,9 @@ export function gibAllPieces(
           if (d < best) { best = d; neck = e; }
         }
       }
-      chunks.push({ limb: c.limb, prims, origin: c.center, tornAt: [neck] });
+      const hi = body.clusters.indexOf(c);
+      const hBones = (body.bonePrims ?? []).filter(b => b.cluster === hi && !b.dead);
+      chunks.push({ limb: c.limb, prims, bones: hBones, origin: c.center, tornAt: [neck] });
       continue;
     }
     // Joint partners include dead prims — see the doc comment.
@@ -159,7 +173,9 @@ export function gibAllPieces(
       const origin: Vec3 = [
         (p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2,
       ];
-      chunks.push({ limb: c.limb, prims: [p], origin, tornAt: tornAt.slice(0, 2) });
+      // A single-prim fragment: bone would have to be split to match it, so
+      // this one stays bone-free like the gobs path.
+      chunks.push({ limb: c.limb, prims: [p], bones: [], origin, tornAt: tornAt.slice(0, 2) });
     }
   }
   return {
@@ -179,7 +195,9 @@ export function gibAllPieces(
 export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
   const empty: SeverResult = {
     body,
-    chunk: { limb: cut.limb, prims: [], origin: [0, 0, 0], tornAt: [] },
+    // Mid-limb cuts make SUB-limb pieces; splitting a bone across a cut is
+    // its own problem, so these stay bone-free rather than guessing.
+    chunk: { limb: cut.limb, prims: [], bones: [], origin: [0, 0, 0], tornAt: [] },
     stumpWound: null,
   };
   const cluster = body.clusters.find(c => c.limb === cut.limb);
@@ -222,7 +240,8 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
 
   return {
     body: { ...body, prims },
-    chunk: { limb: cut.limb, prims: chunkPrims, origin, tornAt: [joint] },
+    // Bone-free for the same reason as the empty case above.
+    chunk: { limb: cut.limb, prims: chunkPrims, bones: [], origin, tornAt: [joint] },
     stumpWound,
   };
 }

@@ -91,6 +91,9 @@ export interface DetachedPiece {
   origin: Vec3;
   prims: Primitive[];
   tornAt: Vec3[];
+  /** The piece's BONE prims (gore r3 refinement 6). Empty for sub-limb
+   *  fragments, where a bone would have to be split across the cut. */
+  bones: Primitive[];
 }
 
 /** How far outside a furniture AABB a wanderer's centre must stay. */
@@ -269,7 +272,7 @@ export function createZombieActor(opts: {
     bound = next;
   }
 
-  function detach(limb: LimbId, r: { body: BuildResult; chunk: { prims: Primitive[]; origin: Vec3; tornAt: Vec3[] }; stumpWound: Wound | null }) {
+  function detach(limb: LimbId, r: { body: BuildResult; chunk: { prims: Primitive[]; bones: Primitive[]; origin: Vec3; tornAt: Vec3[] }; stumpWound: Wound | null }) {
     if (r.chunk.prims.length === 0) return;
     // Place the piece where the RENDERED limb hangs: fit rest→posed over the
     // chunk prims' own endpoint pairs (identity-matched against the pre-sever
@@ -298,6 +301,10 @@ export function createZombieActor(opts: {
       limb,
       origin: applyRigidYaw(t, r.chunk.origin),
       prims: r.chunk.prims.map(p => ({ ...p, a: applyRigidYaw(t, p.a), b: applyRigidYaw(t, p.b) })),
+      // Bones take the IDENTICAL rest -> posed transform as the flesh. Giving
+      // them anything else (or nothing) leaves the stub at rest pose while the
+      // limb it belongs to is posed — the same defect translate.ts had.
+      bones: r.chunk.bones.map(p => ({ ...p, a: applyRigidYaw(t, p.a), b: applyRigidYaw(t, p.b) })),
       tornAt: r.chunk.tornAt.map(v => applyRigidYaw(t, v)),
     }, r.stumpWound);
   }

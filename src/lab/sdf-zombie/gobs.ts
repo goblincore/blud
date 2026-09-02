@@ -63,7 +63,9 @@ export function makeGobs(
           if (d < best) { best = d; neck = e; }
         }
       }
-      head = { limb: c.limb, prims, origin: c.center, tornAt: [neck] };
+      // Gobs are SUB-limb fragments; a bone would have to be split across the
+      // fragment boundary, which is its own problem. Bone-free by choice.
+      head = { limb: c.limb, prims, bones: [], origin: c.center, tornAt: [neck] };
       continue;
     }
     for (const p of prims) {
@@ -136,7 +138,7 @@ export function makeGobs(
       const l = len(dir) || 1;
       tornAt.push(add(bp.a, vscale(dir, bp.radius / l)));
     }
-    gobs.push({ limb, prims, origin: mid, tornAt: tornAt.slice(0, 2) });
+    gobs.push({ limb, prims, bones: [], origin: mid, tornAt: tornAt.slice(0, 2) });
   }
   if (head) gobs.push(head);
 

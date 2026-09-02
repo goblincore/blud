@@ -596,7 +596,7 @@ async function main() {
 
   /** Sever dispatch indirection — actors are built before the weapon block;
    *  the grapeshot wiring below assigns this once the chunk spawner exists. */
-  let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[] }, stumpWound: Wound | null) => void) | null = null;
+  let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
 
   const actors: ZombieActor[] = [];
   const errors: string[] = [];
@@ -1019,7 +1019,7 @@ async function main() {
     return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
   }
   function spawnChunkPiece(
-    piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[] },
+    piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] },
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
   ) {
     const rng = mulberry32(nextSeed++);
@@ -1035,13 +1035,14 @@ async function main() {
     );
     const oldest = liveChunks.length >= MAX_CHUNKS ? liveChunks.shift() : undefined;
     if (oldest) {
-      oldest.view.reset(state, piece.prims, piece.tornAt.length ? piece.tornAt : undefined);
+      oldest.view.reset(state, piece.prims,
+        piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
       liveChunks.push({ id: nextChunkId++, state, view: oldest.view });
     } else {
       const view = createChunkGpuView(
         state, piece.prims, template.uniforms,
         piece.tornAt.length ? piece.tornAt : undefined,
-        template.volumeTexture, chunkMaterial,
+        template.volumeTexture, chunkMaterial, piece.bones,
       );
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);

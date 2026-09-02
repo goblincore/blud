@@ -16,7 +16,7 @@ import {
   storage,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
-import { packBody, PRIM_STRIDE } from '../pack';
+import { packBody, PRIM_STRIDE, W_BONE } from '../pack';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
@@ -1192,7 +1192,7 @@ export interface ChunkGpuView {
    *  self-created ones are disposed with the view. */
   volumeTexture: THREE.Texture;
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
-  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[]): void;
+  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
   update(chunk: Chunk): void;
   dispose(): void;
 }
@@ -1225,6 +1225,10 @@ export function createChunkGpuView(
   /** One NodeMaterial shared by every live chunk. Omit for isolated tests or
    * callers that intentionally retain the old privately-owned lifecycle. */
   sharedMaterial?: SharedChunkGpuMaterial,
+  /** The severed limb's BONE prims (gore r3 refinement 6). Omitted, the chunk
+   *  is bone-free — which is what shipped, and why a torn-off forearm was
+   *  solid meat. */
+  bones?: Primitive[],
 ): ChunkGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
@@ -1245,6 +1249,10 @@ export function createChunkGpuView(
   mesh.frustumCulled = false;
 
   let local: Primitive[] = [];
+  /** The severed limb's BONE prims, recentred like `local` (gore r3
+   *  refinement 6). Chunks shipped bone-free — the safe default of the
+   *  separate-array design — so a torn-off forearm was solid meat. */
+  let localBones: Primitive[] = [];
   let extent = 0;
   let tornLocals: Vec3[] = [];
   let tornRadii: number[] = [];
@@ -1311,6 +1319,18 @@ export function createChunkGpuView(
       packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
         p.op === 'sub' ? 1 : 0], o);
     });
+    // Bones ride the same squash and transform, written at the rows packBody
+    // put them on — AFTER the flesh. Missing this would leave them in local
+    // space while the meat moved, so a thrown forearm would trail its own
+    // bone across the room. W_BONE is re-asserted here rather than copied
+    // from packBody's row, because this loop overwrites primScale wholesale.
+    localBones.forEach((p, i) => {
+      const o = (local.length + i) * PRIM_STRIDE;
+      packed.primA.set(chunkPoint(c, p.a, sx, sy, sz), o);
+      packed.primB.set(chunkPoint(c, p.b, sx, sy, sz), o);
+      packed.primScale.set(
+        [p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz, W_BONE], o);
+    });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
     // The chunk's one bound group IS its cluster (singleGroup above): same
     // sphere, rewritten from the chunk's position every frame.
@@ -1346,12 +1366,22 @@ export function createChunkGpuView(
     return { sx, sy, sz };
   }
 
-  function reset(c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[]) {
+  function reset(
+    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[],
+  ) {
     copyTemplateLook();
 
     // c.pos is the cluster centre at sever time, so this recentres the
     // severed limb's rest-space primitives around the chunk's own origin.
     local = nextPrims.map(p => ({
+      ...p,
+      cluster: 0,
+      a: vsub(p.a, c.pos),
+      b: vsub(p.b, c.pos),
+    }));
+    // Bones recentre on the SAME origin as the flesh, so the stub stays where
+    // the limb's own geometry put it. Cluster 0 because a chunk is one cluster.
+    localBones = (nextBones ?? []).map(p => ({
       ...p,
       cluster: 0,
       a: vsub(p.a, c.pos),
@@ -1368,7 +1398,7 @@ export function createChunkGpuView(
         id: 0, limb: c.limb, start: 0, count: local.length,
         center: [0, 0, 0], radius: extent, alive: true,
       }],
-      bones: new Map(), bonePrims: [],
+      bones: new Map(), bonePrims: localBones,
     }, undefined, { singleGroup: true });
 
     // Full-width copies intentionally zero any rows left by the previous
@@ -1404,7 +1434,7 @@ export function createChunkGpuView(
     mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
   }
 
-  reset(chunk, prims, tornAt);
+  reset(chunk, prims, tornAt, bones);
 
   return {
     object: mesh,
