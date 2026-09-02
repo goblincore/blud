@@ -20,6 +20,19 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
+`claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
+[docs/dev-notes/2026-09-02-gore-r3-refinements.md](docs/dev-notes/2026-09-02-gore-r3-refinements.md):
+(1) BUG — `applyBones` hard-codes taper/profile/bend to none, so the
+authored curved ribs render as STRAIGHT capsules (verify: zero one rib's
+`bend=`, diff); (2) cull the bone fold (no spatial test today — ~17 bones ×
+3 loads per field eval in the wound zone, ×4 for normals); (3) count bone
+evals instead of timing them; (4) torso cavity + organs as `W_ORGAN` in the
+same array; (5) gate the per-hit bone-material read on `wm > 0`; (6) bone in
+gib chunks; (7) collision. Merge picture: gore × perf chain conflicts only in
+`march.wgsl.ts` signatures + one `game-main.ts` block — merge ONCE after the
+chain finishes (~1 h); gore × elbow branch is clean.
+
 **SDF RENDER PERF ROUND 2 — PLANNED (2026-09-01), not started.** A read-only
 review of the march, the pass chain and the perf record after the shell
 march produced an 8-task plan: fresh baseline → hull exit bounds `tMax` on
@@ -58,6 +71,13 @@ hits before readback). Task 3 (wound early-out) PASSED parity on one load
 (craters identical, HUD clock the only diff) + lab render-check; its second
 run timed out inside bench legs; controller wrote the notes, restored the
 seam default ON, marked done. Chain continues at task 4.
+**2026-09-02 later:** task 4 done (occluder rebuild gated, specialiser
+deleted). Task 5 landed the per-body passes + `prevT` and found the planned
+gate DEAD (`shellIn` is the SHARED hull entry, never > prevT); replaced it
+with a per-body proxy-box `bodyEntry` but shipped `min(shellIn, bodyEntry)`,
+still inert, then timed out on flicker noise. Marked done (code green);
+**task 5b** (new, before 6) switches to `max(...)`, proves parity with a
+gate that bites, decides the default.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
