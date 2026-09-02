@@ -316,3 +316,100 @@ rooms; room 4 hits rise with omega 1.0). Visual gate PASSES in all four legs
 (silhouettes identical, far flesh better or tied, craters unchanged, zero
 omega-attributable artifacts). Shipping change is safe; timed win to be
 quantified by task 9.
+
+## Task 1c — the shell-exit readback: selection was never wrong, the DISTANCE
+### is (2026-09-02, branch dispatch/2026-09-01-sdf-render-perf-r2-task-1c)
+
+**Machine load:** the wound-pass-r2 chain still holds `status: running`
+across this window. Nothing timed ran here at all (no bench was scheduled
+for this task); the readback below is counters + CDP captures, load-immune.
+Ports: vite 5299 held by the known non-Blud server → 5297/9297 per the
+fallback.
+
+**Step 1 (commit ccbf1bb):** `GAME_HULL_EXIT_BOUND = 0` shipped alone with
+the task-1b finding in its comment, before any diagnosis. The chain no
+longer boots a body-deleting default regardless of what the diagnosis finds.
+
+**Step 2 — the readback.** A temporary `__sdfGame.shellExitProbe(pixels)`
+seam (removed before the final commit; driver recreated from this text if
+gone) froze a room-3 scene per the Task-0 protocol, re-stepped one frame,
+read `shellExitTarget` back with `readRenderTargetPixelsAsync`, and printed
+per pixel: the stored exit vs the nearest-front/farthest-back camera
+distances of EVERY body's hull along that pixel ray (per-body sphere sets
+from `buildOuterHullInstances([posed], { shellAmp })`, radii scaled by the
+mesh's `1/FACE_INSET` = `/0.9356`, so they describe exactly what the exit
+pass rasterises).
+
+Two readback gotchas cost the first attempt and are recorded so the next
+person does not repeat them:
+- `copyTextureToBuffer` on the WebGPU backend does NOT flip rows (buffer
+  row 0 = texture TOP row; `WebGPUTextureUtils.copyTextureToBuffer` is a raw
+  `copyTextureToBuffer` with no flip), unlike WebGL `readPixels`. The first
+  probe read a vertically mirrored frame and still "matched" 65/79 sampled
+  pixels — a slow-varying buffer plus a tolerant threshold makes a wrong
+  mapping look right. Rows are padded to 256 B as the occupancy comment
+  says (`bytesPerRow = ceil(w*4/256)*256`, confirmed in the same file).
+
+Grid probe over task 1b's diff bbox (x 560–960, y 370–640, 20 px steps,
+294 points, 244 covered by some hull), frozen scene, `sdfTarget 800x600`:
+
+| population | count | stored vs computed farthest back face |
+|---|---|---|
+| near-body pixels (body #4, hull entry 0.54–0.79 m) | 219 | match within 0.15 m — near-field encoding EXACT |
+| far clusters (see below) | 19 | stored 2.0–3.7 m where the true hull exit is 8.1–9.1 m |
+| zero-where-covered | 6 | sub-texel edge pixels, benign |
+
+The two far clusters, and this is the whole finding:
+
+| cluster (screenshot px) | stored | computed covering hull | true exit |
+|---|---|---|---|
+| x 568–616, y 392–488 | 2.0–3.5 m | body #2 (room 2, through the far doorway), entry 8.5 | 9.12 m → stored 2.84 |
+| x 776–808, y 392–488 | 3.3–3.7 m | body #1 (room 2, behind the wall), exit 8.1–8.5 | → stored 3.3–3.7 |
+
+`vision-ask.py` on a same-staging screenshot (quote): "a small pink/red
+figure standing far away in the central doorway, roughly x 405–455,
+y 255–345" in its ~900×530 assumed frame = **x 576–647, y 363–490 at
+1280×800 — exactly cluster 1**. The decayed value sits on the VISIBLE
+doorway figure. Cluster 2 sits on blank wall (invisible flesh — consistent
+with task 1b's diff being exactly ONE figure-shaped component). Body #2 at
+~9 m, flesh ~8.9 m, march clamped to 2.84 m → rays stop metres short →
+discard → **body #2 in the doorway is task 1b's deleted figure**. Room 4's
+smaller failure (0.035%) fits the same curve: its visible bodies sit
+nearer, where the encoding is still accurate.
+
+**The task-1c hypothesis is REFUTED in its mechanism, confirmed in its
+consequence.** The exit pass DOES hold the farthest back face: at pixels
+covered by both the near hull (exit ~0.96) and a far hull, the stored value
+is the far hull's — max semantics verified by readback, so `setClearDepth(0)`
++ `GreaterDepth` works and none of Step 3's candidates apply ((a) the clear
+is honoured; (b) MaxEquation would maximise wrong values; (c) a depth-clear
+quad likewise). What decays is the WRITTEN DISTANCE: true ~9 m stores
+~2.8 m, true ~8.3 m stores ~3.5 m, near field exact. That is the SAME
+unresolved phenomenon MARCH_BODY's occluder comment measured on the
+identical material pattern ("true 7.9 -> 3.782, true 9.9 -> 2.079 ... who
+ever works out why an instanced MeshBasicNodeMaterial writing
+length(positionWorld - cameraPosition) decays with distance can revive
+this"). The shell hull "is unharmed only because shellIn is a ray START and
+shellOut a > 0 test" — as a tMax BOUND the under-report is fatal, exactly
+as that comment warned.
+
+**Consequence for the bound:** a correct bound needs `shellOut >= flesh`
+for every visible body; the encoding cannot deliver that beyond ~4–5 m.
+Fixing it means root-causing the three-r185 TSL distance decay — the
+documented open problem, out of this task's scope. **`GAME_HULL_EXIT_BOUND`
+STAYS 0.** Step 4 (parity with the bound on) does not run: it is gated on a
+real fix landing, and task 1b already documents the bound-on failure this
+readback now explains. The step win the bound buys (missStepShare
+0.538 → 0.406 r3) remains untakeable until the decay is fixed.
+
+**Second finding — occupancy `hits` bit-identical was never evidence of an
+unchanged hit set.** MARCH_BODY's occupancy mode returns BEFORE the discard
+so missed rays still write, and a miss writes DEPTH at its give-up distance
+(documented in the shader). Wherever proxy boxes overlap, a near box's miss
+clobbers a far body's real hit before the readback — so the deleted
+figure's hit→miss flips are invisible to the counter. Any future "hits
+identical on/off" claim must be read with that bias in mind.
+
+**Verdict:** readback evidence recorded whichever way it went (acceptance
+criterion met); hypothesis refuted; default 0 ships; suite green (103
+files / 1930 tests); temporary seam removed; no other page changes.
