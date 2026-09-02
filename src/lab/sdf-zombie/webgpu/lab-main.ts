@@ -1176,11 +1176,6 @@ async function main() {
   let crowdSpread = 1;
   /** Seed base for the per-index crowd face draws — see setCrowdCount. */
   const CROWD_FACE_SEED = 20260825;
-  /**
-   * Whether crowd bodies get a shader specialised to their structure.
-   * Applied at spawn, so changing it re-spawns the crowd.
-   */
-  let specialiseShaders = false;
 
   /**
    * Shell-displacement silhouette noise (gobs-and-goo task 4): inside a thin
@@ -1247,7 +1242,7 @@ async function main() {
       const placed = translateBody(crowdBody,
         [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
       const v = createZombieGpuView(placed,
-        { specialise: specialiseShaders, cone: sdfLayer.cone, occluder: sdfLayer.occluder });
+        { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
       trackBody(v, placed);
       v.applyMaterial(flesh, LIGHT_PRESETS[light]);
       if (faceSheet) {
@@ -3982,14 +3977,6 @@ async function main() {
     get sdfFlipY() { return sdfLayer.flipY; },
     setSimplifyOverride(v: boolean | null) { simplifyOverride = v; },
     /** Re-spawns the crowd at a new spacing. 1 = shoulder to shoulder. */
-    /** Re-spawns the crowd with or without per-body specialised shaders. */
-    setSpecialise(on: boolean) {
-      const n = crowd.length;
-      setCrowdCount(0);
-      specialiseShaders = on;
-      setCrowdCount(n);
-    },
-    get specialise() { return specialiseShaders; },
     setCrowdSpread(v: number) {
       const n = crowd.length;
       setCrowdCount(0);
