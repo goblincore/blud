@@ -66,7 +66,7 @@ import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import {
   makeGutChain, pinGutChain, stepGutChain, detachGutChain, type GutChain,
 } from '../entrails';
-import { shouldSpill, GUT_DROPLET_SIZE } from '../entrails-spawn';
+import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer } from './goo-layer';
 import { createGooPanel, type GooPanel } from './goo-panel';
@@ -603,11 +603,21 @@ async function main() {
   let nextId = 1;
 
   // The wound panel's tuning state (wound-panel.ts). Lives HERE — before the
-  // boot loop — because one of its five keys, boneRatio, shapes buildBody's
+  // boot loop — because one of its eight keys, boneRatio, shapes buildBody's
   // bone derivation, so applying it is a REBUILD through the same spawn path
   // as boot. defaultsFrom equals the FleshMaterial defaults and surfCfg3's
-  // uniform defaults, so an untouched panel is exactly the pre-panel page.
+  // uniform defaults, so an untouched panel is exactly the pre-panel page —
+  // EXCEPT the two entrails knobs whose live defaults live in
+  // entrails-spawn (task 5 tuned GUT_DROPLET_SIZE to 0.3 after the panel
+  // table froze 0.12), so they are re-seeded from the constants just below.
   const woundTuning = defaultsFrom(WOUND_KEYS) as WoundTuningValues;
+  // Boot parity: the panel's record must state what the page ACTUALLY does
+  // before anyone drags a slider — gut ropes spawn at GUT_DROPLET_SIZE and
+  // slug spill rolls at SPILL_CHANCE.slug. Seeding (rather than reading the
+  // constants at the use sites) keeps one writer: dragging the slider later
+  // overrides the seeded value and every later spawn honours it.
+  woundTuning.gutSize = GUT_DROPLET_SIZE;
+  woundTuning.spillChance = SPILL_CHANCE.slug;
   /** The owner's explicit bone ratio; null = defer to the doc (absent →
    *  DEFAULT_BONE_RATIO inside buildBody, and a later authored `bones ratio`
    *  would win untouched). Once the owner MOVES the slider their value wins
@@ -615,18 +625,21 @@ async function main() {
    *  the requested semantics, so there is no extra flag machinery. */
   let boneRatioOverride: number | null = null;
 
-  /** Push the panel's tissue ramp into one view's surfCfg3. Component order
-   *  is pinned by zombie-gpu's uniform table (x depthAmp, y fat, z muscle,
-   *  w visceraAmp) — the same order applyMaterial writes the material
-   *  defaults, so this is a re-apply, not a second writer with its own
-   *  opinion. w (visceraAmp) stays where applyMaterial left it until the
-   *  panel grows its own viscera knob (entrails task 7) — stamping 0 here
-   *  would silently kill the cavity stop in-game. */
+  /** Push the panel's tissue ramp into one view's surfCfg3, plus the cavity
+   *  pair. Component order is pinned by zombie-gpu's uniform table (x
+   *  depthAmp, y fat, z muscle, w visceraAmp) — the same order applyMaterial
+   *  writes the material defaults, so this is a re-apply, not a second
+   *  writer with its own opinion. visceraDepth is its own uniform. Until
+   *  entrails task 7 w stayed where applyMaterial left it; the panel's
+   *  viscera knob now owns it, and its default (1) matches the preset, so
+   *  an untouched panel still shades identically. */
   function applyWoundRamp(view: ZombieGpuView): void {
     const c = view.uniforms.surfCfg3.value;
     c.x = woundTuning.woundDepthAmp;
     c.y = woundTuning.fatDepth;
     c.z = woundTuning.muscleDepth;
+    c.w = woundTuning.visceraAmp;
+    view.uniforms.visceraDepth.value = woundTuning.visceraDepth;
   }
 
   /** The applied tuning record plus body 1's live surfCfg3 — the shader
@@ -638,13 +651,27 @@ async function main() {
   }
 
   /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
-   *  The four ramp keys write uniforms live; boneRatio rebuilds the cast. */
+   *  The ramp trio and the viscera pair write uniforms live; gutSize and
+   *  spillChance take effect on the next spawn / next roll (gutSize only
+   *  shapes ropes spawned from now on — existing droplets keep their size,
+   *  they are MOVED, not resized, by the frame loop); boneRatio rebuilds
+   *  the cast. */
   function applyWoundTuning(o: Partial<WoundTuningValues>): void {
     let ramp = false;
     if (o.woundDepthAmp !== undefined) { woundTuning.woundDepthAmp = o.woundDepthAmp; ramp = true; }
     if (o.fatDepth !== undefined) { woundTuning.fatDepth = o.fatDepth; ramp = true; }
     if (o.muscleDepth !== undefined) { woundTuning.muscleDepth = o.muscleDepth; ramp = true; }
+    if (o.visceraAmp !== undefined) { woundTuning.visceraAmp = o.visceraAmp; ramp = true; }
+    if (o.visceraDepth !== undefined) { woundTuning.visceraDepth = o.visceraDepth; ramp = true; }
     if (ramp) for (const a of actors) applyWoundRamp(a.view);
+    if (o.gutSize !== undefined) woundTuning.gutSize = o.gutSize;
+    if (o.spillChance !== undefined) {
+      woundTuning.spillChance = o.spillChance;
+      // The roll reads the shared table (entrails-spawn.shouldSpill), so
+      // overriding slug there is the whole override — no second source of
+      // truth. blast spill stays 1.0.
+      SPILL_CHANCE.slug = o.spillChance;
+    }
     if (o.boneRatio !== undefined && o.boneRatio !== woundTuning.boneRatio) {
       boneRatioOverride = o.boneRatio;
       woundTuning.boneRatio = o.boneRatio;
@@ -1341,7 +1368,7 @@ async function main() {
           pos: [...n.pos] as [number, number, number],
           vel: [0, 0, 0] as [number, number, number],
           age: 0, life: Infinity,
-          size: GUT_DROPLET_SIZE,
+          size: woundTuning.gutSize,
           kind: 'gut',
         }));
         for (const d of fresh) bloodSim.droplets.push(d);
@@ -2088,9 +2115,11 @@ async function main() {
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
      *  the panel's WOUND_KEYS — the table the COPY button emits from — so a
      *  pasted COPY always round-trips. Partial: only the keys present are
-     *  applied (the panel's per-slider set() sends exactly one). The four
-     *  ramp keys are live; boneRatio rebuilds the cast and drops on-body
-     *  wounds (documented in rebuildCast and the slider's tooltip).
+     *  applied (the panel's per-slider set() sends exactly one). The ramp
+     *  trio and the viscera pair are live uniform writes; gutSize and
+     *  spillChance govern ropes/rolls from now on; boneRatio rebuilds the
+     *  cast and drops on-body wounds (documented in rebuildCast and the
+     *  slider's tooltip).
      *  Returns the applied record PLUS the live surfCfg3 uniform from body
      *  1, so a caller can confirm the record actually reached the field —
      *  the verify-the-panel-drives-the-shader check, one call, no guessing. */

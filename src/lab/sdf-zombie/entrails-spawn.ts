@@ -1,6 +1,9 @@
 import type { Wound } from './damage';
 
-export const SPILL_CHANCE = { slug: 0.35, blast: 1.0 } as const;
+/** NOT `as const`: the wound panel's spillChance knob overrides `slug` live
+ *  (game-main's setWoundTuning), the same mutate-the-shared-table pattern as
+ *  IMPACT_GOUT. blast stays pinned at 1.0 — a blast to a torso ALWAYS spills. */
+export const SPILL_CHANCE = { slug: 0.35, blast: 1.0 };
 
 /**
  * Should this wound spill a gut rope?
@@ -24,7 +27,8 @@ export function shouldSpill(
  * contributes. The goo pass (goo-layer) draws droplets ABOVE
  * `GOO_TUNING.mistMaxSize` (0.05) as density blobs, and fuses overlapping
  * blobs into one surface, so the size IS the rope's thickness: 0.3 at the
- * chain's 0.55 m length reads as a fused rope, not beads. Tuning knob — the
- * wound panel wires this up in the next task.
+ * chain's 0.55 m length reads as a fused rope, not beads. Wired: game-main
+ * seeds its panel record from this at boot, and the wound panel's gutSize
+ * knob overrides it for every rope spawned after the drag.
  */
 export const GUT_DROPLET_SIZE = 0.3;

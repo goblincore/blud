@@ -15,7 +15,8 @@ export interface WoundKey<K extends string = string> {
   value: number;
   /**
    * Which DOM event applies the value. 'input' (default) applies on every
-   * drag tick — right for the four ramp knobs, which write a uniform.
+   * drag tick — right for the uniform-writing knobs (the depth ramp trio,
+   * the viscera pair) and for the spawn-time gut knobs.
    * 'change' applies on release: boneRatio REBUILDS the whole cast (bones
    * are derived at build time and packed into the prim texture), and doing
    * that per tick would churn a dozen body builds per drag.
@@ -30,7 +31,9 @@ export interface WoundKey<K extends string = string> {
  *  (a COPY that silently omits a knob). The exported WOUND_KEYS is the
  *  widened `WoundKey[]` view — plain `key: string` — which is what keeps
  *  this module's consumers (and the test) simple. */
-export type WoundTuningKey = 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio';
+export type WoundTuningKey =
+  | 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio'
+  | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -38,6 +41,10 @@ const _WOUND_KEYS = [
   { key: 'fatDepth', label: 'fat knee (m)', min: 0, max: 0.03, step: 0.0005, value: 0.004 },
   { key: 'muscleDepth', label: 'muscle knee (m)', min: 0, max: 0.06, step: 0.0005, value: 0.014 },
   { key: 'boneRatio', label: 'bone ratio', min: 0, max: 1, step: 0.01, value: 0.38, commit: 'change' },
+  { key: 'visceraAmp', label: 'viscera', min: 0, max: 1, step: 0.01, value: 1 },
+  { key: 'visceraDepth', label: 'cavity knee (m)', min: 0.01, max: 0.12, step: 0.001, value: 0.045 },
+  { key: 'gutSize', label: 'gut thickness', min: 0.02, max: 0.30, step: 0.005, value: 0.12 },
+  { key: 'spillChance', label: 'spill chance', min: 0, max: 1, step: 0.01, value: 0.35 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 
 type TableKeys = (typeof _WOUND_KEYS)[number]['key'];
