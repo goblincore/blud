@@ -41,9 +41,11 @@ import { TILE_MAX_ENTRIES } from './tile-cull';
 //   row 9  restB        xyz = REST endpoint B, w = blendK
 //   row 10 primShape    x = radius at endpoint B (NEGATIVE = untapered),
 //                       y = fold profile (0 round, 1 chamfer,
-//                       2 round+BENT, 3 chamfer+BENT), zw spare
+//                       2 round+BENT, 3 chamfer+BENT, +4 SHELL, +8 BOX),
+//                       zw = groove depth and width
 //   row 11 primBend     xyz = quadratic Bezier control point (world space),
-//                       w spare
+//                       w = a BOX's corner-rounding fraction (see pack.ts;
+//                       the two never coexist — bend= on a box is rejected)
 //   row 12 primColor    xyz = linear albedo, w = 1 + gloss (w=0: flesh)
 //   row 13 groupBnds    xyz = group sphere centre, w = radius
 //   row 14 groupRange   x = start, y = count, z = distort, w = flag bitfield

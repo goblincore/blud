@@ -150,6 +150,52 @@ it('packs a carve as a negative blend constant', () => {
   expect(p.carveCount).toBe(1);
 });
 
+describe('box packing', () => {
+  // Shared skeleton: one prim, one cluster covering it. Each test only
+  // varies the prim fields relevant to the box encoding.
+  const base = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'torso' as const, cluster: 0,
+  };
+  const pack1 = (prim: Primitive) => packBody({
+    prims: [prim],
+    clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+    bones: new Map(),
+  });
+
+  it('sets prof bit 3 (value 8) for a box', () => {
+    const p = pack1({ ...base, box: { round: 0.2 } });
+    expect(Math.floor(p.primShape[1]!) & 8).toBe(8);
+  });
+
+  it('puts round in primBend.w', () => {
+    const p = pack1({ ...base, box: { round: 0.2 } });
+    expect(p.primBend[3]).toBeCloseTo(0.2, 6);
+  });
+
+  it('composes with chamfer without disturbing the low bits', () => {
+    const p = pack1({ ...base, box: { round: 0.2 }, blendProfile: 'chamfer' });
+    expect(Math.floor(p.primShape[1]!)).toBe(9); // chamfer(1) + box(8)
+  });
+
+  it('leaves prof and primBend.w untouched on a non-box prim', () => {
+    const p = pack1({ ...base });
+    expect(Math.floor(p.primShape[1]!) & 8).toBe(0);
+    expect(p.primBend[3]).toBe(0);
+  });
+
+  it('still writes a BENT prim\'s control point into primBend.xyz, and leaves w at 0', () => {
+    // The regression this shared row could plausibly cause: a bent
+    // (non-box) prim's Bezier control point must land in xyz exactly as
+    // before, undisturbed by the box's w write.
+    const bent = { ...base, a: [0, 0, 0] as Vec3, b: [1, 0, 0] as Vec3, bend: [0, 0.3, 0] as Vec3 };
+    const p = pack1(bent);
+    // bendCtrl = midpoint(a, b) + bend = (0.5, 0.3, 0).
+    expect(Array.from(p.primBend.slice(0, 3))).toEqual([0.5, 0.3, 0].map(f32));
+    expect(p.primBend[3]).toBe(0);
+  });
+});
+
 describe('primColor row', () => {
   it('packs flesh as all zeros, so pre-colour bodies are bit-identical', () => {
     const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);

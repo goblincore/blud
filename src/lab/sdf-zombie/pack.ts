@@ -158,11 +158,19 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // existing "> 0.5 means chamfer" consumer keeps working.
     const bent = p.bend !== undefined ? 2 : 0;
     // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
-    // a SHELL adds bit 2 (value 4) so straight=4, bent=6. The shader folds any
-    // prof >= 4 as a shell and reads the shell rows; the low bits still mean
-    // chamfer/bend for the non-shell range and are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0);
-    primBend.set(p.bend === undefined ? [0, 0, 0, 0] : [...bendCtrl(p.a, p.b, p.bend), 0], o);
+    // a SHELL adds bit 2 (value 4) so straight=4, bent=6; a BOX adds bit 3
+    // (value 8). The shader folds any prof >= 4 as a shell and reads the shell
+    // rows; the low bits still mean chamfer/bend for the non-shell range and
+    // are ignored on a shell.
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0);
+    // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
+    // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
+    // box is rejected at compile time, so a box never sets that bit and the
+    // xyz are never fetched for it. The w component is unread in every other
+    // case — the shader loads this row as .xyz.
+    primBend.set(p.bend === undefined
+      ? [0, 0, 0, p.box ? p.box.round : 0]
+      : [...bendCtrl(p.a, p.b, p.bend), 0], o);
     primColor.set(p.color === undefined
       ? [0, 0, 0, 0]
       : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
