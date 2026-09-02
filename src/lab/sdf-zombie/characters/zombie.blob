@@ -43,6 +43,25 @@ body
   bar  leg on shin  from=0.05 to=0.92 r=0.062 blend=0.015 mirror
   blob leg on shin  at=1.00 r=0.070 wide=0.85 tall=0.6 deep=1.5 blend=0.0125 mirror
 
+# Wound pass r2: hidden bone, revealed by a wound. Auto-derive (ratio 0.38)
+# is right for limbs — a femur IS a thinner capsule inside the thigh — and
+# wrong for the two places players actually shoot, which are authored here.
+# The limb word is a REAL limb (head|torso|arm|leg), not "bone": the grammar
+# has no `bone` limb, and the word is what gives the prim its cluster, i.e.
+# which wounds can expose it.
+bones
+  ratio 0.38
+
+  # Cranium — a dome, not a scaled face ellipsoid. Sits inside the head mass
+  # the face block emits, so a slug to the skull exposes bone instead of
+  # hollowing the head.
+  blob head on skull at=0.55 r=0.072 wide=0.88 tall=0.95 deep=0.86
+
+  # Ribcage — a broad shallow plate, wide across and thin front-to-back. The
+  # auto-derived twin of the torso blobs would be a fat cylinder, which reads
+  # as a spine-sized bone in the middle of the chest.
+  bar torso on spine from=0.20 to=0.92 r=0.052 wide=1.45 deep=0.55
+
 # Tuned by hand in the panel, then baked. Keep headHeight near 1: raising it
 # SHARPENS the crown rather than doming it, so the height and the gaunt taper
 # both come from the jaw below.
