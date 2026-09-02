@@ -83,10 +83,31 @@ bones
   # Kept well inside the torso flesh (half-width ~0.19, half-depth ~0.117 at
   # the chest): checkBoneContainment fails the build otherwise, and the
   # nearWound gate stops being an identity if a rib breaches.
-  bar torso on spine from=0.72 to=0.76 offset=(0.012,0,0.010) tip=(0.088,-0.034,0.052) bend=(0.014,0,0.020) r=0.0115 both
-  bar torso on spine from=0.58 to=0.62 offset=(0.012,0,0.010) tip=(0.101,-0.038,0.058) bend=(0.016,0,0.022) r=0.0120 both
-  bar torso on spine from=0.44 to=0.48 offset=(0.012,0,0.010) tip=(0.104,-0.040,0.058) bend=(0.016,0,0.022) r=0.0120 both
-  bar torso on spine from=0.30 to=0.34 offset=(0.012,0,0.010) tip=(0.096,-0.042,0.054) bend=(0.015,0,0.020) r=0.0115 both
+  # Six pairs, and the CURVE is the whole point. The first version used
+  # bend displacements of ~0.015 against a ~0.10 span, which is nearly
+  # straight — the owner read them as "horizontal sticks" rather than a cage,
+  # correctly, because that is what they were. A rib leaves the spine going
+  # sideways and BACK, arcs out to its widest at the flank, then sweeps
+  # forward and down to meet the sternum. That lateral arc is what reads as a
+  # cage from inside a wound; without it you get louvres.
+  #
+  # Geometry per rib: a short vertical base segment on the spine, moved to the
+  # spine's surface by `offset`, its far end thrown to the sternum by `tip`,
+  # and bowed outward by `bend` (a control-point displacement from the chord
+  # midpoint — the curve reaches midpoint + bend/2, so a 0.16 bend bulges
+  # ~80 mm past the chord).
+  #
+  # Containment: the chest flesh is ~0.17 half-width, 0.12 half-depth. Widest
+  # curve point lands near 0.12 including radius, so checkBoneContainment
+  # passes with room. Upper ribs are shorter and flatter, middle ribs widest,
+  # lower ribs shorter again and angled down — that taper is most of what
+  # separates a ribcage from a stack of hoops.
+  bar torso on spine from=0.78 to=0.80 offset=(0.014,0,-0.018) tip=(0.030,-0.020,0.070) bend=(0.105,0,-0.012) r=0.0085 both
+  bar torso on spine from=0.68 to=0.70 offset=(0.015,0,-0.020) tip=(0.038,-0.026,0.082) bend=(0.140,0,-0.014) r=0.0090 both
+  bar torso on spine from=0.58 to=0.60 offset=(0.015,0,-0.021) tip=(0.042,-0.030,0.086) bend=(0.160,0,-0.015) r=0.0090 both
+  bar torso on spine from=0.48 to=0.50 offset=(0.015,0,-0.021) tip=(0.044,-0.034,0.086) bend=(0.162,0,-0.015) r=0.0090 both
+  bar torso on spine from=0.38 to=0.40 offset=(0.014,0,-0.020) tip=(0.042,-0.038,0.078) bend=(0.146,0,-0.013) r=0.0085 both
+  bar torso on spine from=0.28 to=0.30 offset=(0.013,0,-0.018) tip=(0.036,-0.040,0.066) bend=(0.118,0,-0.011) r=0.0080 both
   # Sternum — the front plate the ribs reach toward. Thin, so it reads as a
   # bone edge rather than a second pillar.
   bar torso on spine from=0.34 to=0.74 offset=(0,0,0.062) r=0.016 wide=1.5 deep=0.45
