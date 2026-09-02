@@ -16,7 +16,7 @@
 
 - **Machine quiet during any bench.** Deltas here are smaller than a background build.
 - **Reload the page per bench run.** Damage persists otherwise (the 583% spread bug).
-- **Parity means the frozen-capture A/B/A/B procedure**, with an off-vs-off pair taken FIRST for the noise floor (0.015% settled). Never `drawImage`/`getImageData` off the WebGPU canvas — it returns black. Task 1 builds the harness for it (`scripts/perf-r2-parity.sh`); every later task uses that.
+- **Parity means the frozen-capture A/B/A/B procedure**, with an off-vs-off pair taken FIRST for the noise floor (0.015% settled). Never `drawImage`/`getImageData` off the WebGPU canvas — it returns black. Task 1b builds the harness for it (`scripts/perf-r2-parity.sh`, an in-page toggle A/B/A/B at a frozen scene); every later task uses that and ships its change behind a `__sdfGame` seam so it CAN be toggled.
 - **Machine load.** While another dispatch chain is running on this machine, a bench number is noise. If `~/.claude/dispatch/plans/*.md` shows any task with `status: running` other than your own, write `DEFERRED (machine loaded)` for the bench step in the notes and move on; the parity and visual gates are NOT deferrable. Task 9 re-takes every bench when the machine is quiet.
 - **Concurrent edits to `march.wgsl.ts`.** The wound-pass-r2 chain (branch `claude/continue-previous-work-91055b`) is editing `APPLY_WOUNDS`, `MAP_BODY`'s `.w` return slot and the hit shading at the same time. Keep every shader diff here minimal and local so the merge stays small; never repurpose `mapBody`'s `.w`.
 - **Vision.** If your model cannot see a PNG through `Read` (glm-5.x and kimi-k3 on pi cannot), judge captures with `python3 scripts/vision-ask.py <png> "<question>"` and quote its answer in the notes.
@@ -78,24 +78,35 @@ git commit -m "perf round 2: fresh baseline after shadow-hull spanning"
 
 ---
 
-### Task 1: Bound `tMax` by the hull exit on the un-relaxed path
+### Task 1: Bound `tMax` by the hull exit on the un-relaxed path (behind a seam)
 
 Miss rays currently march from hull entry to the proxy-box back face, through the empty space behind the body. The hull exit bounds every possible hit. It was left out of `tMax` because the RELAXED tracer's clamped final sample would land on the hull (the 2026-08-31 halo). That clamped sample only exists when `omega > 1.0` — the game page runs at 0.6 — so on the un-relaxed path the fold is exact.
 
+**This task is the shader change and its seam ONLY.** The capture harness is Task 1b. Do not build, run or debug any capture tooling here; do not touch `sdf-layer.ts` or `game-main.ts` beyond the two lines named below. A first attempt at this task timed out after inventing a requestAnimationFrame-hold boot procedure for captures — that is exactly what not to do.
+
+**Why a seam:** every A/B in this plan is an IN-PAGE toggle at a frozen scene (the proven shell-march gate). Cross-page-load captures are not deterministic (wander drift before the freeze, wall-clock shader time), so a shader change without a toggle cannot be parity-tested. A new `perfCfg` uniform carries this plan's toggles: `.x` = hull exit bound (this task), `.y` = wound early-out (Task 3), `.z`/`.w` spare. The lab leaves it all-zero and stays bit-identical.
+
 **Files:**
-- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (MARCH_BODY, the `let tMax` / `let relax` lines just after the `shellOut <= 0.0` discard, ~1339–1400)
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (MARCH_BODY: signature gains `perfCfg: vec4<f32>` as the LAST parameter after `shellOut: f32`; the `let tMax` / `let relax` lines just after the `shellOut <= 0.0` discard; the comment block above it)
+- Modify: `src/lab/sdf-zombie/webgpu/zombie-gpu.ts` (`defaultUniforms`: add `perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0))` beside `aaCfg` ~364; `createMarchMaterial`: pass `perfCfg: u.perfCfg` as the LAST entry of the `march({...})` call, after `shellOut`)
+- Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` (next to `GAME_RELAX` ~537 and its apply ~618; the `__sdfGame` object next to `setRelax` ~2037)
 - Test: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` (the "shellOut must NOT bound tMax" guard, ~443–450)
+
+**Positional-parameter warning:** `marchBody`'s WGSL parameters are bound POSITIONALLY by `createMarchMaterial` (`zombie-gpu.ts` ~600–605 records the day two slots were swapped and every beam knob silently broke). `perfCfg` goes LAST in both the WGSL signature and the `march({...})` object. `wgslFn` matches by name in the object but the generated call is positional — keep the order identical anyway.
 
 - [ ] **Step 1: Replace the regression guard with the new contract**
 
-In `march.wgsl.test.ts`, replace the assertion at ~449 (`expect(MARCH_BODY).not.toContain('occT + woundCfg2.z), shellOut');`) with:
+In `march.wgsl.test.ts`, replace the assertion `expect(MARCH_BODY).not.toContain('occT + woundCfg2.z), shellOut');` and its comment with:
 
 ```ts
-    // The hull exit bounds tMax ONLY on the un-relaxed path. The relaxed
-    // tracer takes a clamped final sample at tMax; clamping to the hull put
-    // that sample on the hull and rendered a halo (2026-08-31 visual gate),
-    // so above omega 1.0 the proxy-box far plane stays the bound.
-    expect(MARCH_BODY).toContain('let tMax = select(min(tMaxBox, shellOut), tMaxBox, relax);');
+    // The hull exit bounds tMax ONLY on the un-relaxed path and only behind
+    // perfCfg.x. The relaxed tracer takes a clamped final sample at tMax;
+    // clamping to the hull put that sample on the hull and rendered a halo
+    // (2026-08-31 visual gate), so above omega 1.0 the proxy-box far plane
+    // stays the bound regardless of the seam.
+    expect(MARCH_BODY).toContain('perfCfg: vec4<f32>');
+    expect(MARCH_BODY.indexOf('shellOut: f32')).toBeLessThan(MARCH_BODY.indexOf('perfCfg: vec4<f32>'));
+    expect(MARCH_BODY).toContain('let tMax = select(tMaxBox, min(tMaxBox, shellOut), perfCfg.x > 0.5 && !relax);');
     expect(MARCH_BODY.indexOf('let relax = woundCfg2.y > 1.0;'))
       .toBeLessThan(MARCH_BODY.indexOf('let tMax = select('));
 ```
@@ -103,11 +114,11 @@ In `march.wgsl.test.ts`, replace the assertion at ~449 (`expect(MARCH_BODY).not.
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts -t "shell"`
-Expected: FAIL — `MARCH_BODY` does not contain `let tMax = select(`.
+Expected: FAIL — `MARCH_BODY` has no `perfCfg`.
 
 - [ ] **Step 3: Implement in MARCH_BODY**
 
-Find, just after `if (shellOut <= 0.0) { discard; ... }` and the occluder comment block:
+Add `,\n  perfCfg: vec4<f32>` after `shellOut: f32` in the signature. Then, just after `if (shellOut <= 0.0) { discard; ... }` and the occluder comment block, the lines (there are comment lines between some of them — keep those):
 
 ```wgsl
   let tMax = length(worldPos - camPos);
@@ -119,12 +130,12 @@ Find, just after `if (shellOut <= 0.0) { discard; ... }` and the occluder commen
   var omega = select(marchCfg.y, woundCfg2.y, relax);
 ```
 
-Replace with:
+become:
 
 ```wgsl
   let tMaxBox = length(worldPos - camPos);
   let relax = woundCfg2.y > 1.0;
-  let tMax = select(min(tMaxBox, shellOut), tMaxBox, relax);
+  let tMax = select(tMaxBox, min(tMaxBox, shellOut), perfCfg.x > 0.5 && !relax);
   let steps = i32(marchCfg.x);
   let hitEpsBase = max(0.0012, woundCfg2.w);
   let aaK = aaCfg.x * aaCfg.y;
@@ -132,47 +143,216 @@ Replace with:
   var omega = select(marchCfg.y, woundCfg2.y, relax);
 ```
 
-Then rewrite the comment block above the discard ("shellOut IS DELIBERATELY NOT FOLDED INTO tMax...") to say: folded on the un-relaxed path only; the relaxed path keeps the box far plane because its clamped final sample must never land on the hull. With the shell OFF `shellOut` is 1e9 so `min` is the identity.
+WGSL `select(falseValue, trueValue, cond)`. Rewrite the comment block that begins "shellOut IS DELIBERATELY NOT FOLDED INTO tMax" to the new contract: folded on the UN-RELAXED path behind `perfCfg.x` (exact — no ray can hit beyond the hull exit; the clamped final sample exists only above omega 1.0); the relaxed path keeps the proxy-box far plane (the halo); with the shell OFF `shellOut` is 1e9 so `min` is the identity; the lab binds `perfCfg` zero and is unchanged. Keep the history in a sentence or two.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Plumb the uniform**
 
-Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
-Expected: PASS.
+`zombie-gpu.ts` `defaultUniforms`: add
 
-- [ ] **Step 4b: Build the parity harness (used by every later task)**
+```ts
+    /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
+     *  early-out, zw spare. All zero = the pre-plan shader, which is what the
+     *  lab binds. */
+    perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+```
 
-Create `scripts/perf-r2-parity.mjs` and its wrapper `scripts/perf-r2-parity.sh`. Borrow the PNG decode + diff functions and the CDP driving pattern from `scripts/dungeon-shadowab.mjs` (read it fully), the freeze/settle recipe from `scripts/crowd-capture.mjs`, and the per-room camera poses from `scripts/sdf-game-bench.mjs` (reuse the bench's room 3 and room 4 poses; do not invent your own).
+`createMarchMaterial`: add `perfCfg: u.perfCfg,` as the LAST entry of the `march({ ... })` object, after the `shellOut:` entry. If a `MarchUniforms` type lists fields explicitly, add it there too. If chunk materials copy a template's uniforms field by field (search `template.marchCfg`), copy `perfCfg` the same way.
+
+`game-main.ts`: beside `GAME_RELAX` add
+
+```ts
+  /** Perf round 2, task 1: the hull exit bounds tMax on the un-relaxed march
+   *  (perfCfg.x). Exact; `__sdfGame.setHullExitBound()` flips it for A/B. */
+  const GAME_HULL_EXIT_BOUND = 1;
+```
+
+and where `woundCfg2.value.y = GAME_RELAX` is applied per view add `view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;`. In the `__sdfGame` object next to `setRelax`:
+
+```ts
+    setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
+    get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
+```
+
+Apply the same `perfCfg.x` to the gib-chunk material's uniforms if chunks have their own (search how chunks receive `woundCfg2`/`GAME_RELAX`; mirror it).
+
+- [ ] **Step 5: Tests, type-check, lab parity**
+
+Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` → PASS. Then `npx tsc --noEmit && npx vitest run src/lab/sdf-zombie/` → clean/green (ignore `scripts/blob-measure.test.ts`). Then `npm run blob:render-check -- zombie` → exit 0 (the lab binds `perfCfg` zero; a hole here means the positional binding slipped).
+
+- [ ] **Step 6: Notes and commit**
+
+Append to `docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md` a `## Task 1` section: what changed, the seam name, "parity + occupancy: see Task 1b". Commit:
+
+```bash
+git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/zombie-gpu.ts src/lab/sdf-zombie/webgpu/game-main.ts docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md
+git commit -m "march: hull exit bounds tMax on the un-relaxed path, behind perfCfg.x"
+```
+
+---
+
+### Task 1b: The parity harness, and Task 1's parity gate
+
+Every later task's parity gate runs through this script. It is an IN-PAGE toggle A/B/A/B at a frozen scene — the same shape as the 2026-08-31 shell-march gate — never a comparison across page loads, and never a boot choreography. **Do not hold or intercept requestAnimationFrame, do not hand-step the boot, do not add debug seams to the page.** A previous attempt spent thirty minutes on exactly that and produced nothing. The page boots normally; you drive it only through `__sdfGame` after `resolveGpu()` returns.
+
+**Files:**
+- Create: `scripts/perf-r2-parity.mjs`, `scripts/perf-r2-parity.sh`
+- Modify: `docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md`
+
+**Start from the driver Task 0 already proved** (it produced bit-identical occupancy reads on a frozen scene). Copy it into `scripts/perf-r2-parity.mjs` and extend it; this is its full text:
+
+```js
+// Throwaway Task-0 driver: occupancy counters in rooms 3 and 4, at the
+// bench's screen size, with adaptive resolution DISABLED (a loaded machine
+// would otherwise downscale the march target and the counts would not be
+// comparable). Counters, not timers — valid while another chain runs.
+//
+// Protocol per room: unfreeze, teleport to the room (centre, facing +z),
+// 2 s of natural wander (~the bench walk segment), freeze, settle, then
+// TWO occupancy reads (frozen scene => identical state => must agree).
+import { execFileSync } from 'node:child_process';
+
+const VITE = Number(process.argv[2] ?? 5299);
+const CDP = Number(process.argv[3] ?? 9299);
+const ROOMS = (process.env.OCC_ROOMS ?? '3,4').split(',').map(Number);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
+
+const tab = await (
+  await fetch(`http://localhost:${CDP}/json/new?about:blank`, { method: 'PUT' })
+).json();
+const closeUrl = `http://localhost:${CDP}/json/close/${tab.id}`;
+process.on('exit', () => {
+  try { execFileSync('curl', ['-s', '-m', '2', closeUrl], { stdio: 'ignore' }); } catch {}
+});
+
+const ws = new WebSocket(tab.webSocketDebuggerUrl);
+await new Promise((ok, err) => { ws.onopen = ok; ws.onerror = err; });
+let seq = 0;
+const pending = new Map();
+ws.onmessage = (ev) => {
+  const m = JSON.parse(ev.data);
+  if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+};
+const send = (method, params = {}) => new Promise((resolve) => {
+  const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params }));
+});
+const evaluate = async (expression, timeoutMs = 120_000) => {
+  const r = await send('Runtime.evaluate', {
+    expression, awaitPromise: true, returnByValue: true, timeout: timeoutMs,
+  });
+  if (r.result?.exceptionDetails) {
+    fail(`page threw: ${JSON.stringify(r.result.exceptionDetails).slice(0, 400)}`);
+  }
+  return r.result?.result?.value;
+};
+
+await send('Page.enable');
+await send('Runtime.enable');
+await fetch(`http://localhost:${CDP}/json/activate/${tab.id}`);
+await send('Page.bringToFront');
+await send('Emulation.setDeviceMetricsOverride', {
+  width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+});
+
+await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html` });
+
+// Wait for the seam and a resolved GPU backend.
+const ready = await evaluate(`(async () => {
+  for (let i = 0; i < 600; i++) {
+    if (window.__sdfGame?.resolveGpu) {
+      try { await __sdfGame.resolveGpu(); return 'ready'; } catch {}
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return 'never became ready';
+})()`, 180_000);
+if (ready !== 'ready') fail(`page boot: ${ready}`);
+await sleep(5000); // boot settle, same as the bench's bootPage
+
+// Pin the measurement state: bench-style. Adaptive OFF (machine is loaded),
+// scale pinned to 1.0 so the march target is the ship 800x600.
+const state = await evaluate(`(() => {
+  __sdfGame.setAdaptive(false);
+  __sdfGame.setSdfScale(1.0);
+  __sdfGame.setFxaa(true);
+  __sdfGame.setSmear(0.25);
+  __sdfGame.setCone(false);
+  __sdfGame.setOccluder(false);
+  return {
+    shell: __sdfGame.shell, occluder: __sdfGame.occluder, cone: __sdfGame.cone,
+    fxaa: __sdfGame.fxaa, relax: __sdfGame.relax,
+    sdfScale: __sdfGame.sdfScale, adaptive: __sdfGame.adaptive.enabled,
+    halfRate: __sdfGame.halfRate, sdfTarget: __sdfGame.sdfTarget,
+    backend: __sdfGame.backend,
+  };
+})()`);
+console.error(`state: ${JSON.stringify(state)}`);
+
+const out = { state, rooms: {} };
+for (const room of ROOMS) {
+  await evaluate(`(() => {
+    __sdfGame.freeze(false);
+    __sdfGame.teleport(${room});
+  })()`);
+  await sleep(2000); // ~120 frames of natural wander, as in the walk segment
+  await evaluate(`__sdfGame.freeze(true)`);
+  await sleep(500);  // post-AA smear settles on the frozen scene
+
+  const a = await evaluate(`__sdfGame.occupancy()`);
+  await sleep(1000);
+  const b = await evaluate(`__sdfGame.occupancy()`);
+  out.rooms[room] = { reads: [a, b] };
+  console.error(`room ${room}: rasterised ${a.rasterised} hits ${a.hits} ` +
+    `meanSteps hit ${a.meanStepsHit.toFixed(1)} miss ${a.meanStepsMiss.toFixed(1)} ` +
+    `bodies ${a.bodiesOnScreen} (read2: rasterised ${b.rasterised} hits ${b.hits})`);
+}
+await evaluate(`__sdfGame.freeze(false)`);
+console.log(JSON.stringify(out, null, 2));
+```
+
+- [ ] **Step 1: Extend the driver into the harness**
 
 ```
 Usage:
-  scripts/perf-r2-parity.sh capture <outDir> [--room 3|4] [--on "<js>" --off "<js>"]
+  scripts/perf-r2-parity.sh capture <outDir> --room <3|4> --on "<js>" --off "<js>" [--occupancy]
   scripts/perf-r2-parity.sh diff <pngA> <pngB>
 ```
 
-- `capture`: open `sdf-game.html`, place the camera at the room's bench pose, `__sdfGame.freeze(true)`, wait for the post-AA smear to settle (2500 ms; the notes record 7.9% of pixels still differing across a freeze until it settles), then capture the same state TWICE via CDP `Page.captureScreenshot` (`state-1.png`, `state-2.png`) and print that pair's diff as the noise floor. With `--on/--off` (JS expressions evaluated in the page, e.g. `__sdfGame.setDepthGate(true)` / `(false)`) it additionally captures A/B/A/B (`a-1 b-1 a-2 b-2`), re-settling after each toggle, and prints the four pairwise diffs.
-- `diff`: print changed-pixel count, changed fraction, max channel delta, and the 32-px coarse cell map shadowab prints.
-- The `.sh` wrapper sources `scripts/lab-servers.sh` exactly as `scripts/sdf-game-bench.sh` does, with `LAB_VITE_PORT` default 5299 and `LAB_CDP_PORT` default 9299 (other chains use the usual ports). Output directory default `/tmp/perf-r2/<label>/`.
-- Never sample the canvas from inside the page — `drawImage`/`getImageData`/`createImageBitmap` return black on this page.
+`capture`, per room: the driver's boot + pin block unchanged (`resolveGpu`, 5 s settle, `setAdaptive(false)`, `setSdfScale(1.0)`, fxaa on, smear 0.25, cone off, occluder off), then `freeze(false)`, `teleport(room)`, 2 s wander, `freeze(true)`, then **2500 ms** settle (the post-AA smear; 7.9% of pixels still differ across a freeze until it settles). Then:
 
-Build the harness and take the room 3 / room 4 "before" captures on the UNCHANGED shader first (i.e. do this step before Step 3 lands in your working tree, or `git show HEAD:src/lab/sdf-zombie/webgpu/march.wgsl.ts` into place temporarily), then apply Step 3 and take "after".
+1. `state-1.png`, `state-2.png` — the same state captured twice via CDP `Page.captureScreenshot` (`format: 'png'`); print their diff as the **noise floor**.
+2. evaluate `--off`, settle 2500 ms, `b-1.png`; evaluate `--on`, settle, `a-1.png`; `--off`, settle, `b-2.png`; `--on`, settle, `a-2.png`. Print the diffs `a-1 vs b-1`, `a-2 vs b-2`, `a-1 vs a-2`, `b-1 vs b-2`.
+3. With `--occupancy`: after each toggle also `__sdfGame.occupancy()` and print `hits`, `rasterised`, `meanStepsHit`, `meanStepsMiss` per state.
 
-- [ ] **Step 5: Parity gate**
+`diff <pngA> <pngB>`: changed-pixel count, changed fraction, max channel delta, and a 32-px coarse cell map — copy `decodePng` and `diffPngs` from `scripts/dungeon-shadowab.mjs` verbatim (read that file; do not rewrite the PNG decoder).
 
-Frozen capture, room 3 and room 4, A (before) / B (after) / A / B, plus an off-vs-off pair first. Expected: B-vs-A within the settled noise floor (≤ 0.02% of pixels). Also `__sdfGame.occupancy()` hits unchanged (room 3 ≈ 104184, room 4 ≈ 46225 at Task 0's state). Record in notes.
+`scripts/perf-r2-parity.sh`: sources `scripts/lab-servers.sh` exactly as `scripts/sdf-game-bench.sh` does, defaults `LAB_VITE_PORT=5299 LAB_CDP_PORT=9299`, `trap lab_servers_down EXIT`, then `node scripts/perf-r2-parity.mjs "$@"` with the ports exported. If 5299 is already taken by a server that is NOT serving `sdf-game.html` (another chain's worktree), pick 5297/9297 by exporting the variables — never kill a server you did not start.
 
-- [ ] **Step 6: Bench gate**
+- [ ] **Step 2: Prove the harness on the shell seam first**
 
 ```bash
-BENCH_ROOMS=3,4 BENCH_REPEATS=3 scripts/sdf-game-bench.sh
+scripts/perf-r2-parity.sh capture /tmp/perf-r2/harness-check --room 3 --on "__sdfGame.setShell(true)" --off "__sdfGame.setShell(false)" --occupancy
 ```
 
-Expected: mean steps on miss pixels drop (they were 6–14); frame time at or below baseline. Record before/after and spread.
+Expected: noise floor at or near 0 pixels; `a-1 vs a-2` and `b-1 vs b-2` at the noise floor; `a vs b` shows the 11-pixel-class difference the 2026-08-31 gate recorded (the shell changes essentially nothing visible) while occupancy `rasterised` drops several-fold with the shell on. If `hits` reads 0 in any state, STOP: the page is not rendering bodies and the harness is wrong — do not debug the page.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 3: Task 1's parity gate**
 
 ```bash
-git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md scripts/perf-r2-parity.mjs scripts/perf-r2-parity.sh
-git commit -m "march: hull exit bounds tMax on the un-relaxed path; perf-r2 parity harness"
+scripts/perf-r2-parity.sh capture /tmp/perf-r2/task1-r3 --room 3 --on "__sdfGame.setHullExitBound(true)" --off "__sdfGame.setHullExitBound(false)" --occupancy
+scripts/perf-r2-parity.sh capture /tmp/perf-r2/task1-r4 --room 4 --on "__sdfGame.setHullExitBound(true)" --off "__sdfGame.setHullExitBound(false)" --occupancy
+```
+
+Expected: `a vs b` within the noise floor (≤ 0.05% of pixels); `hits` identical on/off; `meanStepsMiss` lower with the bound on. If `a vs b` shows a halo hugging silhouettes in the cell map, report it as a finding and stop — do not tune.
+
+- [ ] **Step 4: Notes and commit**
+
+Write the noise floor, all four pair diffs per room, and the occupancy on/off into the `## Task 1` section of the notes (bench: `DEFERRED (machine loaded)` if any other task is running). Commit:
+
+```bash
+git add scripts/perf-r2-parity.mjs scripts/perf-r2-parity.sh docs/dev-notes/2026-09-01-sdf-perf-round2/notes.md
+git commit -m "scripts: perf-r2-parity — frozen in-page A/B/A/B capture + diff; task 1 parity recorded"
 ```
 
 ---
@@ -251,8 +431,11 @@ git commit -m "game: plain sphere tracing (omega 1.0) — the page runs no shell
 
 `applyWounds` loads three texels per wound (position, meta, cap) for EVERY field evaluation — each march step, the four normal taps, AO and scatter — before it knows whether the wound is anywhere near the sample. Load the position first, compute the distance, skip the rest beyond the wound's reach. The skip is exact: the quadratic `smin` is exactly `min` once the operands differ by 4k, the rim bump at three widths is 1.2e-4 of its amplitude (sub-micron), and `nearWound` (r < 2·depth) is inside the reach by construction.
 
+**Seam:** `perfCfg.y` (the uniform Task 1 added). `applyWounds` does not receive `perfCfg` today — add `perfCfg: vec4<f32>` as its LAST parameter and pass `perfCfg` through from `mapBody` (which must then also take it — add it LAST there too, and update the specialised/CPU mirrors' call sites only if they call `mapBody`; `calcNormal`, `coneMarch`, `woundShadow` and the scatter/AO probes call `mapBody`, so each gains the pass-through). Keep every other diff line untouched — the wound-r2 chain is editing this function concurrently. Game page: `view.uniforms.perfCfg.value.y = 1` beside the Task 1 apply; `__sdfGame.setWoundEarlyOut(on)` beside `setHullExitBound`.
+
 **Files:**
-- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (APPLY_WOUNDS ~605–640)
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts` (APPLY_WOUNDS ~605–640; `mapBody` and its callers for the pass-through)
+- Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` (the seam)
 - Test: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 - Check: `grep -rn "applyWounds\|carveWounds" src/lab/sdf-zombie/*.ts` — if a CPU mirror of the wound carve exists on your branch (the mesh-deform work had one), apply the identical early-out there in the same commit.
 
@@ -261,7 +444,7 @@ git commit -m "game: plain sphere tracing (omega 1.0) — the page runs no shell
 ```ts
   it('skips a wound before loading its meta/cap rows when the sample is out of reach (perf round 2 task 3)', () => {
     const iPos = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
-    const iReach = APPLY_WOUNDS.indexOf('if (r > reach) { continue; }');
+    const iReach = APPLY_WOUNDS.indexOf('if (perfCfg.y > 0.5 && r > reach) { continue; }');
     const iMeta = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_META})`);
     const iCap = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_CAP})`);
     expect(iPos).toBeGreaterThan(-1);
@@ -314,7 +497,7 @@ Reorder to:
     // for every wound the sample is nowhere near — which, per march step,
     // is all of them but one.
     let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
-    if (r > reach) { continue; }
+    if (perfCfg.y > 0.5 && r > reach) { continue; }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
     let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
@@ -331,7 +514,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Parity gate WITH wounds present**
 
-In room 3: fire one slug and eight pellets into a body, `__sdfGame.freeze()` (or the bench's freeze seam), capture A/B/A/B before and after. Expected: within noise floor. Also check the lab: `npm run blob:render-check -- zombie` exit 0 (the lab uploads no caps; the skip must be identical there too).
+Use the Task 1b harness with `--on "__sdfGame.setWoundEarlyOut(true)" --off "__sdfGame.setWoundEarlyOut(false)"`. Wounds must exist first: extend the harness with an optional `--prelude "<js>"` evaluated after the freeze (e.g. a slug and a barrel of pellets into the nearest body via the bench's `aimSurface`/`fire` actions — read `game-bench-scenario.ts` and `__sdfGame.bench` for the seams), then re-settle. Expected: within noise floor. Also check the lab: `npm run blob:render-check -- zombie` exit 0 (the lab uploads no caps; the skip must be identical there too).
 
 - [ ] **Step 6: Bench gate — the fire segment is the one that moves**
 
@@ -468,7 +651,7 @@ Gib chunks stay in one final pass together, gated by the accumulated bodies.
 - Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` (sort actors per frame, `setBodies`, `__sdfGame.setDepthGate`)
 - Test: `src/lab/sdf-zombie/webgpu/sdf-layer.test.ts`, `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 
-**Positional-parameter warning:** `marchBody`'s WGSL signature is bound POSITIONALLY by `createMarchMaterial` (`zombie-gpu.ts:600–605` records the day two slots were swapped and every beam knob silently broke). Add `prevT` as the LAST parameter, after `shellOut`, in both places.
+**Positional-parameter warning:** `marchBody`'s WGSL signature is bound POSITIONALLY by `createMarchMaterial` (`zombie-gpu.ts:600–605` records the day two slots were swapped and every beam knob silently broke). Add `prevT` as the LAST parameter, after `perfCfg` (Task 1's uniform), in both places.
 
 - [ ] **Step 1: Failing test for the sort helper**
 
@@ -629,7 +812,7 @@ Add `prev?: PrevSource` as the last parameter of `createMarchMaterial`. Move `co
 
 - [ ] **Step 5: The two lines in MARCH_BODY**
 
-Add `prevT: f32` after `shellOut: f32` in the signature. After the Task 1 `let tMax = ...` line:
+Add `prevT: f32` after `perfCfg: vec4<f32>` in the signature. After the Task 1 `let tMax = ...` line:
 
 ```wgsl
   // Accumulated-depth gate (perf round 2 task 5): a nearer body already
@@ -644,7 +827,7 @@ Add `prevT: f32` after `shellOut: f32` in the signature. After the Task 1 `let t
 ```ts
   it('discards on the accumulated-depth gate before marching and bounds tMax by it', () => {
     expect(MARCH_BODY).toContain('prevT: f32');
-    expect(MARCH_BODY.indexOf('shellOut: f32')).toBeLessThan(MARCH_BODY.indexOf('prevT: f32'));
+    expect(MARCH_BODY.indexOf('perfCfg: vec4<f32>')).toBeLessThan(MARCH_BODY.indexOf('prevT: f32'));
     expect(MARCH_BODY).toContain('if (shellIn > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
     expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
   });
@@ -917,7 +1100,7 @@ Every bench step above may have been deferred. This task re-takes them all in on
 BENCH_ROOMS=2,3,4 BENCH_REPEATS=3 scripts/sdf-game-bench.sh
 ```
 
-Then, using `BENCH_PRELUDE` if the bench script exposes one (read `scripts/sdf-game-bench.mjs` — if it does not, add an env var that evaluates a JS expression in the page after load, and commit that), repeat with each of: `__sdfGame.setOmega(0.6)`, `__sdfGame.setDepthGate(false)`, `__sdfGame.setAa(0)`, `__sdfGame.setLevelShadow(false)`. Record a table: lever, room, median ms, spread, delta vs the finished chain. Note which bench steps in Tasks 1–8 were deferred and are now covered.
+Then, using `BENCH_PRELUDE` if the bench script exposes one (read `scripts/sdf-game-bench.mjs` — if it does not, add an env var that evaluates a JS expression in the page after load, and commit that), repeat with each of: `__sdfGame.setHullExitBound(false)`, `__sdfGame.setOmega(0.6)`, `__sdfGame.setWoundEarlyOut(false)`, `__sdfGame.setDepthGate(false)`, `__sdfGame.setAa(0)`, `__sdfGame.setLevelShadow(false)`. Record a table: lever, room, median ms, spread, delta vs the finished chain. Note which bench steps in Tasks 1–8 were deferred and are now covered.
 
 - [ ] **Step 2: Occupancy counters at the finished chain**
 
