@@ -36,7 +36,8 @@ const argv = process.argv.slice(2);
 const mode = argv[0];
 const usage = () => {
   console.error(
-    'usage: scripts/perf-r2-parity.sh capture <outDir> --room <3|4> --on "<js>" --off "<js>" [--occupancy]\n' +
+    'usage: scripts/perf-r2-parity.sh capture <outDir> [--room <3|4>] --on "<js>" --off "<js>" [--occupancy]\n' +
+    '         [--url </sdf-game.html>] [--seam <__sdfGame>]\n' +
     '       scripts/perf-r2-parity.sh diff <pngA> <pngB>',
   );
   process.exit(2);
@@ -193,15 +194,24 @@ if (mode === 'diff') {
 // --- capture mode -----------------------------------------------------------
 const outDir = argv[1];
 if (!outDir) usage();
+// --url/--seam (hull-refine plan Task 8): the page and its window seam are
+// parameters so the SAME harness drives the spike pages. Defaults are the
+// game page and its seam — with neither flag, behaviour is byte-identical
+// to before. --on/--off/--pre stay user-supplied raw JS (they reference the
+// seam themselves). --room is optional: pages with no rooms (the spike) have
+// a no-op teleport, and a missing --room skips the call.
 let room, onJs, offJs, wantOccupancy = false, preJs = '';
+let pageUrl = '/sdf-game.html', seam = '__sdfGame';
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === '--room') room = Number(argv[++i]);
   else if (argv[i] === '--on') onJs = argv[++i];
   else if (argv[i] === '--off') offJs = argv[++i];
   else if (argv[i] === '--pre') preJs = argv[++i];
+  else if (argv[i] === '--url') pageUrl = argv[++i];
+  else if (argv[i] === '--seam') seam = argv[++i];
   else if (argv[i] === '--occupancy') wantOccupancy = true;
 }
-if (room !== 3 && room !== 4) fail('--room must be 3 or 4');
+if (room !== undefined && room !== 3 && room !== 4) fail('--room must be 3 or 4');
 if (!onJs || !offJs) fail('--on and --off are required');
 mkdirSync(outDir, { recursive: true });
 
@@ -213,13 +223,13 @@ await send('Emulation.setDeviceMetricsOverride', {
   width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
 });
 
-await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html` });
+await send('Page.navigate', { url: `http://localhost:${VITE}${pageUrl}` });
 
 // Wait for the seam and a resolved GPU backend.
 const ready = await evaluate(`(async () => {
   for (let i = 0; i < 600; i++) {
-    if (window.__sdfGame?.resolveGpu) {
-      try { await __sdfGame.resolveGpu(); return 'ready'; } catch {}
+    if (window.${seam}?.resolveGpu) {
+      try { await ${seam}.resolveGpu(); return 'ready'; } catch {}
     }
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -231,29 +241,29 @@ await sleep(5000); // boot settle, same as the bench's bootPage
 // Pin the measurement state: bench-style. Adaptive OFF (machine is loaded),
 // scale pinned to 1.0 so the march target is the ship 800x600.
 const state = await evaluate(`(() => {
-  __sdfGame.setAdaptive(false);
-  __sdfGame.setSdfScale(1.0);
-  __sdfGame.setFxaa(true);
-  __sdfGame.setSmear(0.25);
-  __sdfGame.setCone(false);
-  __sdfGame.setOccluder(false);
+  ${seam}.setAdaptive(false);
+  ${seam}.setSdfScale(1.0);
+  ${seam}.setFxaa(true);
+  ${seam}.setSmear(0.25);
+  ${seam}.setCone(false);
+  ${seam}.setOccluder(false);
   return {
-    shell: __sdfGame.shell, occluder: __sdfGame.occluder, cone: __sdfGame.cone,
-    fxaa: __sdfGame.fxaa, relax: __sdfGame.relax,
-    sdfScale: __sdfGame.sdfScale, adaptive: __sdfGame.adaptive.enabled,
-    halfRate: __sdfGame.halfRate, sdfTarget: __sdfGame.sdfTarget,
-    backend: __sdfGame.backend,
+    shell: ${seam}.shell, occluder: ${seam}.occluder, cone: ${seam}.cone,
+    fxaa: ${seam}.fxaa, relax: ${seam}.relax,
+    sdfScale: ${seam}.sdfScale, adaptive: ${seam}.adaptive.enabled,
+    halfRate: ${seam}.halfRate, sdfTarget: ${seam}.sdfTarget,
+    backend: ${seam}.backend,
   };
 })()`);
 console.error(`state: ${JSON.stringify(state)}`);
 
 // Freeze the room, settle the smear, THEN touch nothing but the seam.
 await evaluate(`(() => {
-  __sdfGame.freeze(false);
-  __sdfGame.teleport(${room});
+  ${seam}.freeze(false);
+  ${room === undefined ? '' : `${seam}.teleport(${room});`}
 })()`);
 await sleep(2000); // ~120 frames of natural wander, as in the walk segment
-await evaluate(`__sdfGame.freeze(true)`);
+await evaluate(`${seam}.freeze(true)`);
 // Optional pre-state (perf round 2 task 2): JS that mutates the frozen scene
 // itself — e.g. `__sdfGame.aimSurface(); __sdfGame.fireSlug()` to put a wound
 // on a body — runs ONCE here, so every capture below sees the SAME wound set
@@ -261,7 +271,9 @@ await evaluate(`__sdfGame.freeze(true)`);
 // after it lets fire transients (impact gout, spawned chunks) decay before
 // the noise floor is taken.
 if (preJs) {
-  await evaluate(preJs);
+  // Wrapped in an async IIFE so --pre may use `await` (the reel's gait-phase
+  // and gib settles do); evaluate() already passes awaitPromise: true.
+  await evaluate(`(async () => { ${preJs}\n})()`);
   await sleep(2500);
 }
 await sleep(2500); // post-AA smear settle on the frozen scene
@@ -279,7 +291,7 @@ const toggle = async (js, label, file) => {
   await sleep(2500); // settle the smear on the new state
   const file_ = await shot(outDir, file);
   if (wantOccupancy) {
-    const o = await evaluate(`__sdfGame.occupancy()`);
+    const o = await evaluate(`${seam}.occupancy()`);
     (label === 'on' ? occ.on : occ.off).push(o);
     console.error(`occupancy[${label}]: hits ${o.hits} rasterised ${o.rasterised} ` +
       `meanSteps hit ${o.meanStepsHit.toFixed(1)} miss ${o.meanStepsMiss.toFixed(1)} ` +
@@ -299,7 +311,7 @@ const pairs = {
   'b-1 vs b-2': reportDiff('b-1 vs b-2', b1, b2),
 };
 
-await evaluate(`__sdfGame.freeze(false)`); // leave the page as we found it
+await evaluate(`${seam}.freeze(false)`); // leave the page as we found it
 
 const summary = { state, room, onJs, offJs, preJs, outDir, noiseFloor, pairs };
 if (wantOccupancy) {

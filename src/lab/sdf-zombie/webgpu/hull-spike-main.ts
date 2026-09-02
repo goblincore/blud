@@ -171,6 +171,15 @@ async function main() {
       const r = await view.compute.readback(renderer);
       return { overflow: r.meta[0] === 1, cellVerts: r.meta[1], soupVerts: r.meta[2], dropped: r.meta[3], extract: view.lastExtract(), frameMs };
     },
+    // TEMP DIAGNOSTIC (task 8 winding investigation; remove before ship):
+    // first n soup floats + the hull origin, for a node-side winding check.
+    // TEMP DIAGNOSTIC (task 8): ?occDebug=1 sets debugCfg.x=4 (steps/hit colour).
+    setDebugOcc: (on: boolean) => { innerView.uniforms.debugCfg.value.x = on ? 4 : 0; },
+    async debugSoup(offset: number, n: number) {
+      const r = await view.compute.readback(renderer);
+      const o = view.hullObject.position;
+      return { soup: Array.from(r.soup.subarray(offset, offset + n)), origin: [o.x, o.y, o.z], soupVerts: r.meta[2] };
+    },
     /** GPU-vs-CPU parity on the current posed, UNWOUNDED-field body: every
      *  GPU cell vertex must sit within one cell of iso+band by the CPU field. */
     async checkParity() {

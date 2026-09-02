@@ -47,6 +47,12 @@ export interface HullRefineView<Inner extends HullInnerView = HullInnerView> {
 }
 
 function defaultMaterial(inner: HullInnerView, hullMarchCfg: ReturnType<typeof uniform>, band: ReturnType<typeof uniform>) {
+  // TEMP DIAGNOSTIC (task 8): ?plainHull draws the soup as flat red, no march.
+  if (typeof location !== 'undefined' && location.search.includes('plainHull')) {
+    const m = new THREE.MeshBasicNodeMaterial({ color: 0xff2020 });
+    m.side = THREE.FrontSide;
+    return m;
+  }
   const rayDir = normalize(sub(positionWorld, cameraPosition));
   const hullT = length(sub(positionWorld, cameraPosition));
   // tMaxBox = length(worldPos - camPos) inside marchBody, so a point pushed
