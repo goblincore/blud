@@ -33,7 +33,8 @@ export interface WoundKey<K extends string = string> {
  *  this module's consumers (and the test) simple. */
 export type WoundTuningKey =
   | 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio'
-  | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance';
+  | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance'
+  | 'coilTightness' | 'springiness' | 'organAmp';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -45,6 +46,13 @@ const _WOUND_KEYS = [
   { key: 'visceraDepth', label: 'cavity knee (m)', min: 0.01, max: 0.12, step: 0.001, value: 0.045 },
   { key: 'gutSize', label: 'gut thickness', min: 0.02, max: 0.30, step: 0.005, value: 0.12 },
   { key: 'spillChance', label: 'spill chance', min: 0, max: 1, step: 0.01, value: 0.35 },
+  // The spring (organs r3). Both apply to ROPES SPAWNED FROM NOW ON — a
+  // chain's coilTightness/springiness are fixed at makeGutChain time. 1.0
+  // tightness is the graceful failure lever: the old plain hanging rope.
+  { key: 'coilTightness', label: 'coil', min: 0.2, max: 1, step: 0.01, value: 0.55 },
+  { key: 'springiness', label: 'springiness', min: 0, max: 1, step: 0.01, value: 0.35 },
+  // Live uniform write (march side): 0 shades organ prims as plain bone.
+  { key: 'organAmp', label: 'organ tint', min: 0, max: 1, step: 0.01, value: 1 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 
 type TableKeys = (typeof _WOUND_KEYS)[number]['key'];

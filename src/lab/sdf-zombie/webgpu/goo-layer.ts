@@ -48,6 +48,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, texture, uv, vec2, vec3, vec4, uniform, float, max, dot, positionView,
+  attribute,
 } from 'three/tsl';
 import type { BloodSim } from '../blood-sim';
 
@@ -158,6 +159,18 @@ export const GOO_TUNING = {
 } as const;
 
 /**
+ * Gate + documentation flag for the gut-mask channel assignment (organs r3):
+ * the density target's ALPHA carries gut-weighted density — .r is density and
+ * .g/.b reconstruct view depth, all consumed; .a was a constant 1 nothing ever
+ * read, so it is the one free channel. The surface pass turns it into a
+ * per-pixel gut fraction by dividing by .r (gutFrac in GOO_SURFACE_WGSL). If
+ * a future change needs alpha for something else, this flag must move with
+ * the assignment — flip it and fix the surface pass in the same commit, never
+ * let two meanings collide silently in one channel.
+ */
+export const GOO_DENSITY_ALPHA_IS_GUT_MASK = true;
+
+/**
  * The surface pass. Returns vec4(lit colour, depth-buffer value).
  *
  * No matrices are bound from the quad's own camera (that camera is an
@@ -180,6 +193,7 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   camCfg: vec4<f32>,
   gooCfg: vec3<f32>,
   gooCfg2: vec4<f32>,
+  organColor: vec3<f32>,
   shadowRed: f32,
   normalMode: f32
 ) -> vec4<f32> {
@@ -304,7 +318,17 @@ export const GOO_SURFACE_WGSL = /* wgsl */ `fn gooSurface(
   let thick = max(dens - thresh, 0.0) * gooCfg2.x;
   let trans = exp(-thick * vec3<f32>(0.30, 2.40, 2.00));
   let lambert = lightCfg.y + diff * lightCfg.x;
-  var lit = vec3<f32>(0.62, 0.11, 0.10) * trans * lambert * keyColor
+
+  // Guts take the organ colour; blood stays blood. Per-pixel by ratio rather
+  // than a global switch, because a disembowelled body bleeds heavily in
+  // exactly the pixels the rope occupies. .a accumulated gut-weighted density
+  // (see the density pass's colorNode), so a/r IS the gut share of this
+  // pixel's field — and it survives the blur, which filters all four
+  // channels with the same normalised weights.
+  var gutFrac = c.a / max(c.r, 1e-4);
+  gutFrac = clamp(gutFrac, 0.0, 1.0);
+  let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac);
+  var lit = baseCol * trans * lambert * keyColor
     * mix(0.55, 1.0, softEdge);
 
   // SHADOW FLOOR (owner, 2026-08-31: "get rid of black for the shadow areas
@@ -552,6 +576,10 @@ export function createGooLayer(
   const uGloss = uniform(GOO_TUNING.gloss);
   const uRim = uniform(GOO_TUNING.rim);
   const uShadowRed = uniform(GOO_TUNING.shadowRed);
+  // The organ colour the gut fraction lerps toward (organs r3) — the same
+  // pale salmon the flesh presets carry as organColor, so the spilled rope
+  // and the cavity viscera read as one material.
+  const uOrganColor = uniform(new THREE.Vector3(0.72, 0.32, 0.30));
   const uNormalMode = uniform(GOO_TUNING.surfaceNormals ? 1 : 0);
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
@@ -569,8 +597,22 @@ export function createGooLayer(
   // View depth of the billboarded quad centre, per fragment: the quads face
   // the camera, so this is constant across each instance.
   const viewDepth = positionView.z.negate();
+  // Per-instance gut flag (organs r3): 1 on a gut rope's droplets, 0 on
+  // blood. Read as a vertex attribute; the fragment stage gets it through a
+  // varying, the standard path for geometry attributes in a colorNode.
+  const gutMask = attribute<'float'>('gutMask', 'float');
   const densMat = new MeshBasicNodeMaterial();
-  densMat.colorNode = vec4(fall, fall.mul(viewDepth), fall, 1);
+  // ALPHA IS THE GUT MASK (organs r3). It was a constant 1 and never read —
+  // .r is density and .g/.b reconstruct view depth, all consumed — so this is
+  // the one free channel. Writing fall * gutMask makes .a accumulate
+  // gut-weighted density, and a/r is then the per-pixel gut fraction the
+  // surface pass lerps by (gutFrac in GOO_SURFACE_WGSL).
+  //
+  // Additive blending with premultipliedAlpha blends RGB as ONE,ONE, and the
+  // alpha term the same, so carrying a mask in .a cannot perturb the colour
+  // channels. The gate for that: the density target must CLEAR its alpha to
+  // 0 (three's setClearColor defaults to 1 — pinned in render()).
+  densMat.colorNode = vec4(fall, fall.mul(viewDepth), fall, fall.mul(gutMask));
   densMat.blending = THREE.AdditiveBlending;
   densMat.premultipliedAlpha = true;
   densMat.transparent = true;
@@ -582,6 +624,14 @@ export function createGooLayer(
     new THREE.PlaneGeometry(1, 1), densMat, GOO_TUNING.maxParticles,
   );
   quads.frustumCulled = false;
+  // The gut flag's storage (organs r3): one float per instance, written in
+  // sync() alongside the instance matrices. InstancedBufferAttribute so the
+  // vertex buffer steps per instance, not per vertex.
+  const gutAttr = new THREE.InstancedBufferAttribute(
+    new Float32Array(GOO_TUNING.maxParticles), 1,
+  );
+  quads.geometry.setAttribute('gutMask', gutAttr);
+  const gutArr = gutAttr.array as Float32Array;
   const gooScene = new THREE.Scene();
   gooScene.add(quads);
 
@@ -614,6 +664,7 @@ export function createGooLayer(
       camCfg: uCamCfg,
       gooCfg: vec3(uThresh, uEdge, uLegacy),
       gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
+      organColor: uOrganColor,
       shadowRed: uShadowRed,
       normalMode: uNormalMode,
     }) as unknown as Swizzled;
@@ -682,9 +733,12 @@ export function createGooLayer(
   // Blur passes: one fullscreen quad PER DIRECTION (swapping materials on a
   // shared quad every frame would dirty three's render lists for nothing),
   // horizontal density→blurA then vertical blurA→blurB. Opaque full-viewport
-  // writes: no blending, nothing depends on the clear colour. Alpha is dead
-  // — nothing downstream reads .a — so plain colorNode is safe here despite
-  // the alpha-never-reaches-the-target trap (which forces it to 1 anyway).
+  // writes: no blending, nothing depends on the clear colour. The filtered
+  // .w IS written back (organs r3): the gut mask rides the field's .a and
+  // must survive the blur, which filters all four channels with the same
+  // weights — a constant 1 here would repaint every blurred pixel as full
+  // gut. No premultiplied-alpha concern: these materials are opaque, so the
+  // fragment output lands in the target unblended.
   // ---------------------------------------------------------------
   const blur = wgslFn(GOO_BLUR_WGSL);
   function makeBlurMat(
@@ -697,7 +751,7 @@ export function createGooLayer(
       sigma: uBlurPx,
     }) as unknown as Swizzled;
     const m = new MeshBasicNodeMaterial();
-    m.colorNode = vec4(blurred.xyz as never, 1.0);
+    m.colorNode = vec4(blurred.xyz as never, blurred.w as never);
     m.depthWrite = false;
     m.depthTest = false;
     m.fog = false;
@@ -776,10 +830,14 @@ export function createGooLayer(
       // full-frame goo sheet. (Same trap as the occluder pass's clear.)
       const restore = camera.layers.mask;
       const prevClear = renderer.getClearColor(clearColorScratch).getHex();
-      renderer.setClearColor(0x000000);
+      const prevClearAlpha = renderer.getClearAlpha();
+      // ALPHA 0, explicitly: setClearColor's alpha parameter defaults to 1,
+      // and a cleared-to-1 alpha is a gut mask of 1 in every EMPTY pixel —
+      // a/r would clamp to full gut across the whole layer (organs r3).
+      renderer.setClearColor(0x000000, 0);
       renderer.setRenderTarget(target);
       void renderer.render(gooScene, camera);
-      renderer.setClearColor(prevClear);
+      renderer.setClearColor(prevClear, prevClearAlpha);
       camera.layers.mask = restore;
 
       // Pass A2 — the separable blur, horizontal then vertical, each a
@@ -840,6 +898,7 @@ export function createGooLayer(
         const gs = d.size * sizeScale;
         s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
         m.compose(p, q, s);
+        gutArr[n] = d.kind === 'gut' ? 1 : 0;
         quads.setMatrixAt(n++, m);
       }
       // Floor pools: every splat becomes an elongated density blob at its
@@ -860,13 +919,16 @@ export function createGooLayer(
         const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
         s.set(gr * ecc, gr, 1);
         m.compose(p, q, s);
+        gutArr[n] = 0; // floor pools are blood, never gut
         quads.setMatrixAt(n++, m);
       }
       for (let i = n; i < GOO_TUNING.maxParticles; i++) {
         m.makeScale(0, 0, 0);
         quads.setMatrixAt(i, m);
+        gutArr[i] = 0;
       }
       quads.instanceMatrix.needsUpdate = true;
+      gutAttr.needsUpdate = true;
       // Draw only the live instances. At 0 the pass still runs (and clears),
       // which the first-clear discipline depends on.
       quads.count = n;
