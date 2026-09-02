@@ -33,8 +33,12 @@ export interface Droplet {
   size: number;
   /** 'drop' = bead (burst/trails/bleed); 'scrap' = heavy amorphous hunk;
    *  'mist' = fine short-lived spray haze (bleed only — evaporates, never
-   *  stamps a splat, triple drag so it hangs then dies in place). */
-  kind: 'drop' | 'scrap' | 'mist';
+   *  stamps a splat, triple drag so it hangs then dies in place);
+   *  'gut' = a node of an entrails chain — POSITION IS OWNED BY
+   *  `entrails.ts`, so stepBlood must skip it entirely: no integration, no
+   *  ageing, no floor cull, no splat. It exists in the sim only so the goo
+   *  layer draws it. */
+  kind: 'drop' | 'scrap' | 'mist' | 'gut';
   /** Recent path samples, oldest first, newest last — appended by stepBlood
    *  for beads, capped at TRAIL_HIST. The ribbon renderer (X1.bleed-look:
    *  owner asked for "cohesive lines of fluid", not particles) sweeps a
@@ -429,6 +433,8 @@ function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap
 export function stepBlood(sim: BloodSim, dt: number, rng: () => number): void {
   for (let i = sim.droplets.length - 1; i >= 0; i--) {
     const d = sim.droplets[i]!;
+    // Guts are chain-driven, not ballistic — see Droplet.kind.
+    if (d.kind === 'gut') continue;
     // Scraps are chunky — they feel double the airdrag of a mist bead.
     const drag = Math.max(0, 1 - BLOOD_TRAIL.airdrag
       * (d.kind === 'scrap' ? SCRAP_TUNING.dragMul : d.kind === 'mist' ? 3 : 1) * dt);

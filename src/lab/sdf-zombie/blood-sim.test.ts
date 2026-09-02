@@ -4,6 +4,7 @@ import {
   spawnWoundDroplets, WOUND_BLEED, TRAIL_HIST, spawnImpactGout, IMPACT_GOUT,
 } from './blood-sim';
 import type { Vec3 } from './types';
+import type { Droplet } from './blood-sim';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -433,5 +434,42 @@ describe('impact gouts (blood-viscosity spec §a)', () => {
     spawnImpactGout(a, 'slug', anchor, dir, seeded());
     spawnImpactGout(b, 'slug', anchor, dir, seeded());
     expect(a.droplets).toEqual(b.droplets);
+  });
+});
+
+describe('gut droplets (entrails)', () => {
+  const gut = (): Droplet => ({
+    pos: [0, 1, 0], vel: [0, 0, 0], age: 0, life: Infinity, size: 0.1, kind: 'gut',
+  });
+
+  it('stepBlood does not move a gut droplet — the chain owns its position', () => {
+    const sim = createBloodSim();
+    sim.droplets.push(gut());
+    stepBlood(sim, 1 / 60, () => 0.5);
+    expect(sim.droplets[0]!.pos).toEqual([0, 1, 0]);
+  });
+
+  it('never culls a gut droplet by age or by touching the floor', () => {
+    const sim = createBloodSim();
+    const g = gut(); g.pos = [0, 0, 0]; g.age = 1e6;
+    sim.droplets.push(g);
+    stepBlood(sim, 1 / 60, () => 0.5);
+    expect(sim.droplets).toHaveLength(1);
+  });
+
+  it('never stamps a floor splat for a gut droplet', () => {
+    const sim = createBloodSim();
+    const g = gut(); g.pos = [0, 0, 0];
+    sim.droplets.push(g);
+    stepBlood(sim, 1 / 60, () => 0.5);
+    expect(sim.splats).toHaveLength(0);
+  });
+
+  it('still integrates ordinary drops', () => {
+    // Guard against the skip being too broad.
+    const sim = createBloodSim();
+    sim.droplets.push({ pos: [0, 1, 0], vel: [0, 0, 0], age: 0, life: 5, size: 0.02, kind: 'drop' });
+    stepBlood(sim, 1 / 60, () => 0.5);
+    expect(sim.droplets[0]!.pos[1]).toBeLessThan(1);
   });
 });
