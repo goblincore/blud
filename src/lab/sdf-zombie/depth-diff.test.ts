@@ -122,11 +122,11 @@ describe('diffDepth', () => {
     // featureless torso passed blob:measure, blob:rings and nine test pins
     // and still got rejected on sight.
     //
-    // Body: a 0.25 ball (the dome). Reference: a flat 24-gon disc of the same
+    // Body: a 0.25 ball (the dome). Reference: a flat 48-gon disc of the same
     // radius (the slab). Front view: camera side is -z, so the ball's front
     // surface is at -sqrt(r^2-u^2) and the disc sits at a constant 0.
     const body = build(SKELETON + `  blob head on skull at=0.45 r=0.25 blend=0.02\n`);
-    const r = 0.25, n = 24;
+    const r = 0.25, n = 48;
     const disc: number[] = [];
     for (let k = 0; k < n; k++) {
       const t0 = (k / n) * 2 * Math.PI, t1 = ((k + 1) / n) * 2 * Math.PI;
