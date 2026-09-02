@@ -27,6 +27,12 @@ than opening a new one. A box will simply not render on the old WebGL lab path.
 
 **The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are FOUR outer-bound sites that must account for it. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
 
+**Fixture grammar, confirmed against `blob-parse.test.ts`'s own `SKEL` during
+Task 1:** the header keyword is `model`, not `name`; `height` is INDENTED under
+it; and `root` requires an `at <height>` (`root pelvis at 0.92`). The snippets
+below use that form. If one still looks off, follow the test file's real
+conventions rather than the snippet — the assertions are what matter.
+
 Run the full suite with `npx vitest run src/lab/sdf-zombie/` — it should be green (1930 tests, 103 files, measured 2026-09-02) before you start.
 
 ---
@@ -45,7 +51,7 @@ Add to `src/lab/sdf-zombie/blob-parse.test.ts`:
 
 ```ts
 describe('box', () => {
-  const doc = (body: string) => parseBlob(`name t\nheight 1.0\nskeleton\n  root pelvis\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+  const doc = (body: string) => parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n${body}\n`);
 
   it('reads the bare word `box` and a round= fraction', () => {
     const d = doc('  bar torso on spine from=0.1 to=0.9 r=0.05 box round=0.10');
@@ -173,7 +179,7 @@ Add to `src/lab/sdf-zombie/blob-compile.test.ts`:
 ```ts
 describe('box rejections', () => {
   const compile = (line: string) =>
-    () => compileBlob(parseBlob(`name t\nheight 1.0\nskeleton\n  root pelvis\n  bone spine parent=pelvis dir=up len=0.3\nbody\n  ${line}\n`));
+    () => compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  ${line}\n`));
 
   it('rejects bend= on a box', () => {
     expect(compile('bar torso on spine from=0.1 to=0.9 r=0.05 box bend=(0.02,0,0)'))
@@ -203,12 +209,12 @@ describe('box rejections', () => {
   });
 
   it('carries box onto the compiled prim', () => {
-    const body = compileBlob(parseBlob(`name t\nheight 1.0\nskeleton\n  root pelvis\n  bone spine parent=pelvis dir=up len=0.3\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05 box round=0.2\n`));
+    const body = compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05 box round=0.2\n`));
     expect(body.prims[0]!.box).toEqual({ round: 0.2 });
   });
 
   it('leaves box absent on an ordinary prim', () => {
-    const body = compileBlob(parseBlob(`name t\nheight 1.0\nskeleton\n  root pelvis\n  bone spine parent=pelvis dir=up len=0.3\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05\n`));
+    const body = compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05\n`));
     expect(body.prims[0]!.box).toBeUndefined();
   });
 });
@@ -720,11 +726,11 @@ The unit tests prove each layer. This proves the layers agree, which is the fail
 Create `src/lab/sdf-zombie/characters/box-fixture.blob`:
 
 ```
-name box-fixture
-height 1.0
+model box-fixture
+  height 1.0
 
 skeleton
-  root pelvis
+  root pelvis at 0.50
   bone spine parent=pelvis dir=up len=0.40
 
 body
