@@ -129,10 +129,29 @@ time with a reason, never a silently meaningless flag:
   as a numeric arg.
 - `blob-compile.ts` — the three rejections above; carry the flag onto the
   compiled primitive the way `shell` params are carried.
+- `types.ts` — `box?: { round: number }` on both `PrimDef` and `Primitive`.
+- `resolve.ts` — one carry line beside the existing `shell` one. **`mirror.ts`
+  needs no change**: unlike `shell`, a box holds no vector to reflect, so the
+  existing `...rest` spread carries it for free.
 - `validate.ts` — one branch at the `base` assignment in `sdPrimitive`. This is
   the CPU field that backs click-to-shoot, so it must match the shader exactly.
-- `webgpu/march.wgsl.ts` — `sdRoundBox` behind the spare `zw` of
-  `row 10 primShape`. The texture packing does not change.
+- `pack.ts` / `webgpu/march.wgsl.ts` — `sdRoundBox`, encoded as follows. **The
+  texture layout does not change; no new row is added.**
+
+  - **The box flag is bit 3 (value `8`) of the `prof` field**, `primShape.y`.
+    That field already reads `chamfer(1) + bent(2) + shell(4)`, so bit 3 is the
+    next free one and a box claims it exactly as a shell claimed bit 2. Every
+    existing `> 0.5 means chamfer` consumer keeps working.
+  - **`round` rides in `primBend.w`.** That component is genuinely unread — the
+    shader loads `ROW_PRIM_BEND` as `.xyz` only — and the row itself is only
+    fetched when `prof & 2`, which a box never sets because `bend=` on a box is
+    a compile-time rejection. So the collision is impossible by construction,
+    not merely unlikely.
+
+  **Not `primShape.zw`.** An earlier draft of this spec said those were spare,
+  on the strength of the header comment at `march.wgsl.ts` row 10. That comment
+  is **stale**: `pack.ts` writes the groove's depth and width there, and the
+  carve loop reads them as `gr.zw`. Correct the comment while implementing.
 - `occluder-hull.ts` — hull sizing for a box.
 - **`march.glsl.ts` is not touched.** It is frozen per owner decision and only
   `zombie.ts` consumes it. Bent and oriented prims already diverge there; a box
