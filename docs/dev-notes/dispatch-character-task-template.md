@@ -5,7 +5,7 @@ Copy this into `~/.claude/dispatch/plans/YYYY-MM-DD-<slug>.md`, fill every
 template — a dispatched agent that improvises its own loop is how the last
 several characters drifted. Keep it verbatim.
 
-`model:` needs the provider prefix (`zai/glm-5.1`, `openrouter/…`); a bare name
+`model:` needs the provider prefix (`zai/glm-5.3-flash`, `openrouter/…`); a bare name
 fails silently with an empty worktree. `base_branch` must already contain the
 reference files — a fresh worktree cannot see an untracked file in the primary
 checkout.
@@ -15,7 +15,7 @@ checkout.
 title: "<what the character needs, in the owner's words>"
 status: queued
 project: /Users/donny/Projects/blud
-model: zai/glm-5.1
+model: zai/glm-5.3-flash
 branch: dispatch/<slug>
 base_branch: <branch that contains the refs and the blob: commands>
 priority: 1
@@ -34,11 +34,16 @@ harness: pi
 - mesh: docs/dev-notes/refs/<name>-mesh/<name>.glb   (committed — verify with `git ls-files`)
 - plates: docs/dev-notes/refs/<name>-*.png
 
-If your model has native vision (check `~/.pi/agent/models.json` — `input` must
-list `"image"`; glm-5.x and kimi-k3 do NOT), `Read` these and the frames you
-produce. If it does not, `Read` shows you nothing: use the vision sidecar
-`python3 scripts/vision-ask.py <image> "<question>"` on every reference and on
-frame-00/frame-02 after each `blob:shot`, and quote its answers.
+**`zai/glm-5.3-flash` HAS native vision** (`input: ["text","image"]`) — `Read`
+these references and every frame you produce, directly. That is the default
+above and the reason it is the default.
+
+Vision is per-MODEL, not per-family: `glm-5.3`, `glm-5.2`, `glm-5.1` and
+kimi-k3 are text-only. If you change `model:`, check `~/.pi/agent/models.json`
+— `input` must list `"image"`. Where it does not, `Read` on a PNG shows you
+NOTHING and silently: use the sidecar `python3 scripts/vision-ask.py <image>
+"<question>"` on every reference and on frame-00/frame-02 after each
+`blob:shot`, and quote its answers.
 
 ## YOUR LOOP — do not improvise a different one
 

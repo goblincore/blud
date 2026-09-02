@@ -27,7 +27,7 @@ than opening a new one. A box will simply not render on the old WebGL lab path.
 
 **The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are FOUR outer-bound sites that must account for it. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
 
-Run the full suite with `npx vitest run src/lab/sdf-zombie/` — it should be green (1715+ tests) before you start.
+Run the full suite with `npx vitest run src/lab/sdf-zombie/` — it should be green (1930 tests, 103 files, measured 2026-09-02) before you start.
 
 ---
 
@@ -894,6 +894,13 @@ re-derive it:
   there and judge those by render.
 - the face is a baked decal (`npm run blob:face-bake -- minotaur`), never painted prims
 - `base_branch` must be the branch carrying the box primitive AND the reference commit
+- `model: zai/glm-5.3-flash` — it HAS native vision (`input: ["text","image"]`),
+  so the agent `Read`s the reference and its own turntable frames DIRECTLY.
+  Do NOT copy the old vision-sidecar paragraph into the task: telling a
+  sighted model that `Read` shows it nothing wastes the best signal it has.
+  The template was corrected for this on 2026-09-02.
+- **use the box primitive** for the prosthetic leg's plates — that is what it
+  was built for, and this is its first real character
 
 - [ ] **Step 2: Commit**
 
@@ -906,7 +913,7 @@ git commit -m "plan: minotaur character authoring, from the dispatch template"
 
 ## Done when
 
-- `npx vitest run src/lab/sdf-zombie/` green, no regressions against the 1715+ baseline
+- `npx vitest run src/lab/sdf-zombie/` green, no regressions against the 1930-test baseline
 - `npx tsc --noEmit` clean
 - `npm run blob:render-check -- box-fixture` exits 0
 - Frames in `/tmp/blob-shot/box-fixture/` show flat faces and crisp edges

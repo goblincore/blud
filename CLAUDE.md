@@ -28,7 +28,7 @@ Blood-inspired FPS (short-run roguelike, Weird West × online brainrot setting, 
 
 ## Execution pattern
 
-Implementation runs via `~/go/bin/dispatch-ui` at <http://localhost:8090> using model `zai/glm-5.1` on the `pi` harness. M1's 11 tasks are already queued at `~/.claude/dispatch/plans/2026-04-20-blud-m1-task-{1..11}.md` with serial `depends_on` chain — trigger task-1 manually, the rest auto-flow.
+Implementation runs via `~/go/bin/dispatch-ui` at <http://localhost:8090> using model `zai/glm-5.3-flash` on the `pi` harness (the only zai model with vision — `input: ["text","image"]` — which character work needs, since the agent must read reference plates and its own turntable frames). M1's 11 tasks are already queued at `~/.claude/dispatch/plans/2026-04-20-blud-m1-task-{1..11}.md` with serial `depends_on` chain — trigger task-1 manually, the rest auto-flow.
 
 ## Guardrails
 
