@@ -215,3 +215,104 @@ table should keep the bound OFF unless the owner resolves the finding.
 meanStepsMiss down). Task 1 parity gate FAILS in room 3 (0.20%, body loss;
 vision-quoted above) — reported, stopped, not tuned. Harness ready for
 tasks 2–8 as-is.
+
+## Task 2 — plain sphere tracing, omega 1.0 on the game page (2026-09-01,
+### branch dispatch/2026-09-01-sdf-render-perf-r2-task-2, commit 0907cc3)
+
+**Machine load:** `wound-r2-task-5` holds `status: running` across this
+window (the concurrent wound-pass-r2 chain again). Per the ground rules the
+timed bench is **DEFERRED (machine loaded)** — task 9 re-takes it. The
+occupancy counters and pixel diffs are load-immune and all ran normally
+(same reasoning as task 0/1b). Vision judged via `scripts/vision-ask.py`
+(glm-5.x cannot see PNGs); answers quoted below.
+
+**What changed:** `GAME_OMEGA = 1.0` beside `GAME_RELAX`, applied per-view as
+`view.uniforms.marchCfg.value.y = GAME_OMEGA`, seam `__sdfGame.setOmega(v)`
+(clamped 0.1–1.0) / `get omega`. The lab is untouched (its 0.6 stays the
+owner's bisect reference; `characters/zombie-blob.test.ts` pins it).
+
+**Harness configuration for this task (tasks 3–8 may want the same):**
+- `GAME_HULL_EXIT_BOUND = 1` (task 1's default) FAILS parity per task 1b and
+  must not ship — so every capture below pins `__sdfGame.setHullExitBound(false)`
+  inside BOTH legs (`--off`/`--on`), isolating omega from the known-broken
+  bound. The noise-floor pair (state-1/2) ran before the first toggle, i.e. at
+  the boot state (bound ON, omega 1.0); the legs themselves are all bound-OFF.
+- The bench's ship-defaults reset in `scripts/sdf-game-bench.mjs` now pins
+  `setHullExitBound(false)` for the same reason — benches must stay comparable
+  to the task 0 baseline (taken before the bound existed) and to task 9's
+  bound-OFF table.
+- `scripts/perf-r2-parity.mjs` gained `--pre "<js>"`: JS run ONCE on the
+  frozen scene before any capture, then a 2500 ms settle — used here as
+  `--pre "__sdfGame.aimSurface(); __sdfGame.fireSlug()"` for the wounded legs
+  (the slug-gate precedent: aim+fire work on a frozen scene). Default no-op;
+  task 1b behaviour unchanged.
+
+### Occupancy gate (frozen scene, bound OFF in both legs, `--occupancy`)
+
+| room | omega | hits | rasterised | mean steps hit | mean steps miss | missStepShare |
+|---|---|---|---|---|---|---|
+| 3 | 0.6 | 77956 | 115541 | 10.40 | 25.11 | 0.538 |
+| 3 | 1.0 | 77955 | 115541 | 5.76 | 15.54 | 0.565 |
+| 4 | 0.6 | 90303 | 170141 | 10.76 | 6.82 | 0.359 |
+| 4 | 1.0 | 93907 | 170141 | 6.23 | 4.57 | 0.373 |
+
+Both repeat reads within each leg were bit-identical. Room 3: hits unchanged
+(±1 px of AA epsilon), steps −45% on hits, −38% on misses. Room 4: hits RISE
+90303 → 93907 (+3604) — omega 1.0 converges flesh that 0.6 left unresolved at
+range, the direction the plan predicted (the review's 27171 → 46224 was a
+different scene config; the gate here is the rise, which is what shows) —
+with steps −42% on hits, −33% on misses. Gate PASSES.
+
+### Visual gate — frozen A/B/A/B via `scripts/perf-r2-parity.sh`
+
+Ports: vite 5299 held by a non-Blud server (as in task 1b) → ran the plan's
+fallback 5297/9297. Four legs, each `--off "setHullExitBound(false);
+setOmega(0.6)"` / `--on "setHullExitBound(false); setOmega(1.0)"`:
+
+| leg | noise floor | a-1 vs b-1 | a-2 vs b-2 | a-1 vs a-2 | b-1 vs b-2 |
+|---|---|---|---|---|---|
+| r3 unwounded | 66 px 0.0064% | 367 px 0.036% | 347 px 0.034% | 69 px | 75 px |
+| r4 unwounded | 116 px 0.0113% | 1675 px 0.164% | 1664 px 0.163% | 121 px | 64 px |
+| r3 wounded (`--pre` slug) | 95 px 0.0093% | 351 px 0.034% | 355 px 0.035% | 61 px | 62 px |
+| r4 wounded (`--pre` slug) | 34 px 0.0033% | 571 px 0.056% | 565 px 0.055% | 12 px | 13 px |
+
+No hot cells anywhere; maxD equals the noise floor's own 691 (one flickering
+pixel present in every pair including state-1 vs state-2). The a-vs-b deltas
+are 5–30× the repeat pairs but are DIFFUSE silhouette/flesh-resolution
+change, not task 1's concentrated body deletion (which was one 2043-px
+figure-shaped component, 18–19 hot cells). The wounded legs diff at the SAME
+size as the unwounded ones (r3: 351 vs 367 px; r4: 571 vs 1675) — the wound
+adds no omega-sensitivity, which is the quantitative signature of the
+nearWound path holding 0.6 locally.
+
+Vision-ask on the side-by-side composites (TOP = 0.6, BOTTOM = 1.0), quoted:
+
+- r4 unwounded: "1) Yes [same bodies/positions/silhouettes] 2) Neither [no
+  artifact in either half] 3) Bottom [omega 1.0 resolves more far detail]."
+  Individually, 0.6 showed "no clearly resolved humanoid body" in the far
+  background while 1.0 shows the far doorway silhouette — flesh emerging at
+  range, not loss.
+- r3 unwounded: "1) Yes — identical … 2) No unique artifact in either half …
+  3) Essentially tied" (room 3's far body is a few px either way; room 4 was
+  the discriminating case and favours 1.0).
+- r3 wounded: "1) Yes [crater same in each half] 2) Yes [same bodies/poses]
+  3) No [no half-unique artifact]".
+- r4 wounded: "1) 1/1 — a dark-red crater/wound is visible on the nearer
+  right-side body in BOTH halves, and it matches: same location … same size,
+  same dark red interior. 2) 1 — yes … 3) 0 — no half-unique artifact."
+
+No halos, no box washes, no missing bodies in any leg. The rim/lighting
+mentions in individual-frame reads are the shipped rim-light feature and
+appear in both legs.
+
+### Bench gate
+
+**DEFERRED (machine loaded)** — `wound-r2-task-5` status: running; task 9
+re-takes `BENCH_ROOMS=3,4 BENCH_REPEATS=3 scripts/sdf-game-bench.sh` (which
+now benches the bound-OFF state via the reset pin) on a quiet machine.
+
+**Verdict:** occupancy gate PASSES (steps down on hits and misses in both
+rooms; room 4 hits rise with omega 1.0). Visual gate PASSES in all four legs
+(silhouettes identical, far flesh better or tied, craters unchanged, zero
+omega-attributable artifacts). Shipping change is safe; timed win to be
+quantified by task 9.
