@@ -20,6 +20,132 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
+`claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
+[docs/dev-notes/2026-09-02-gore-r3-refinements.md](docs/dev-notes/2026-09-02-gore-r3-refinements.md):
+(1) BUG — `applyBones` hard-codes taper/profile/bend to none, so the
+authored curved ribs render as STRAIGHT capsules (verify: zero one rib's
+`bend=`, diff); (2) cull the bone fold (no spatial test today — ~17 bones ×
+3 loads per field eval in the wound zone, ×4 for normals); (3) count bone
+evals instead of timing them; (4) torso cavity + organs as `W_ORGAN` in the
+same array; (5) gate the per-hit bone-material read on `wm > 0`; (6) bone in
+gib chunks; (7) collision. Merge picture: gore × perf chain conflicts only in
+`march.wgsl.ts` signatures + one `game-main.ts` block — merge ONCE after the
+chain finishes (~1 h); gore × elbow branch is clean.
+
+**SDF RENDER PERF ROUND 2 — PLANNED (2026-09-01), not started.** A read-only
+review of the march, the pass chain and the perf record after the shell
+march produced an 8-task plan: fresh baseline → hull exit bounds `tMax` on
+the un-relaxed path (exact; the halo lives on the `omega > 1` path only) →
+plain sphere tracing at omega 1.0 (the page runs no shell displacement) →
+wound-loop early-out → drop the disabled occluder rebuild + delete the
+bit-rotted `specialise.ts` (emits 3-arg `sdPrim` vs the 7-arg signature;
+OWNER CALL) → **front-to-back per-body passes gated on accumulated depth**
+(the largest untouched cost: a body behind a body marches its whole pixel
+set) → distortion-corrected footprint AA epsilon → level shadows RECEIVED
+by bodies via a level-only twin light → measure the per-body upload.
+Each task has a bench gate and a frozen-capture parity gate. **QUEUED on
+dispatch-ui** as `2026-09-01-sdf-render-perf-r2-task-{0..9}` (glm-5.3-flash/pi,
+base branch `claude/sdf-character-rendering-optimization-d0570b`): trigger
+task-1, tasks 2-8 chain; task-0 (baseline) and task-9 (bench sweep) are
+unchained — trigger them only on a quiet machine. Bench steps inside 1-8 are
+recorded DEFERRED while the wound-r2 chain runs; parity gates are not.
+**Progress 2026-09-02:** tasks 0, 1, 1b, 2, 1c done. **Task 1b's parity gate
+FAILED task 1 in room 3 (0.20%): the hull-exit `tMax` bound DELETES a
+background body seen past a foreground body's hull** while `hits` stay
+bit-identical — a hull-texture effect, most likely the shell EXIT target
+holding the NEAREST back face instead of the farthest. Task 1c (new,
+queued before task 3) flips the default OFF, proves it by readback, fixes
+the exit pass or leaves it off. Task 2 (omega 1.0) PASSED: hits unchanged
+or up, steps −33..−45%. Task 3 timed out on wound staging; re-queued with
+its first attempt's commit and lessons.
+**2026-09-02 later:** Task 1c REFUTED the nearest-face hypothesis and found
+the real cause — the hull's WRITTEN DISTANCE decays with range (true 9 m
+stores 2.8 m; near field exact), the SAME unexplained three-r185 TSL
+phenomenon that killed the occluder pre-pass. Max semantics of the exit
+pass are correct. `GAME_HULL_EXIT_BOUND` STAYS 0 until someone root-causes
+the decay; the step win (missStepShare 0.54→0.41 r3) is untakeable until
+then. Also: occupancy `hits` "identical on/off" is NOT evidence of an
+unchanged hit set where proxy boxes overlap (near-box misses clobber far
+hits before readback). Task 3 (wound early-out) PASSED parity on one load
+(craters identical, HUD clock the only diff) + lab render-check; its second
+run timed out inside bench legs; controller wrote the notes, restored the
+seam default ON, marked done. Chain continues at task 4.
+**2026-09-02 later:** task 4 done (occluder rebuild gated, specialiser
+deleted). Task 5 landed the per-body passes + `prevT` and found the planned
+gate DEAD (`shellIn` is the SHARED hull entry, never > prevT); replaced it
+with a per-body proxy-box `bodyEntry` but shipped `min(shellIn, bodyEntry)`,
+still inert, then timed out on flicker noise. Marked done (code green);
+**task 5b** (new, before 6) switches to `max(...)`, proves parity with a
+gate that bites, decides the default.
+**2026-09-02 later:** task 5b done. `max(shellIn, bodyEntry)` is exact
+(larger of two lower bounds on the first possible hit) and provably bites:
+staged-overlap + rooms 3/4 parity all at/below the capture noise floor,
+residual = sub-pixel fringe on occluded silhouettes, no missing geometry;
+`hits`/`rasterised` bit-identical (mode-4 counters only record the depth
+winner — the instrument CANNOT see this gate). BUT the bench A/B measured
+the per-body PASS STRUCTURE as a ~6-7 ms/frame net loss at 3-4 bodies
+(each sub-pass: full-target blit + renderer.render scene walk; the run's
+two clean paired reps agree, spreads 82-89% otherwise formal-UNRESOLVED).
+`GAME_DEPTH_GATE` ships 0; bench leg renamed `depth-gate-on`; task 9
+re-takes the A/B on a quiet machine and re-decides the default.
+Task 6 DONE (AA on): strength-0 parity bit-identical both rooms; near 2 m
+and far 8 m visual gates pass (owner-independent read of the far pair:
+all nine bodies, crater survives, smoother silhouettes); hit-pixel steps
+−11% near, −18.6% far; `GAME_AA = 1.0` ships. Its run hit the cap mid
+vision-read; controller closed the notes. Next: task 7 (level shadows).
+**2026-09-02 evening:** task 7 LANDED (twin level-only spotlight, 4-tap
+PCF in the march, `setLevelShadow` seam, ships ON) and fixed a real
+wgslFn-parser hazard (a colon pattern in a signature COMMENT parsed as a
+phantom input, shifting every later binding by one — regression test runs
+three's real parser). Its run hit the cap re-running the smoke; controller
+read the pair: no acne on the near body, plausible door-frame shadow on
+the far one. **Pillar-between-lamp-and-body eyeball is the owner's:**
+`__sdfGame.setLevelShadow(true/false)`. Next: task 8 (upload measure).
+**CHAIN COMPLETE (2026-09-02).** Task 8: per-body upload measured at
+0.06 ms/frame for all ten bodies (3-5× under the threshold) — not worth
+narrowing. Task 9 (second run, 90 m cap, targeted sweep rooms 3/4 ×3 with
+`BENCH_PRELUDE` per lever): **every ship default survives its lever-off
+re-run.** Finished chain r3 9.85 ms / r4 7.85 ms. Omega 0.6 costs +0.70/+1.48
+(t2 confirmed); wound early-out ≈0 but free (t3 on); **depth gate ON costs
++4.8/+4.6 ms at 6% spread — stays OFF** (pass-structure overhead beats the
+step saving at 3-4 bodies; the seam stays for higher counts); AA off saves
+≤0.6 ms (t6 stays on); level shadows cost ≈0 r3 / ~0.7 r4 (t7 stays on);
+hull exit bound "wins" −0.28 ms by DELETING 4 of 9 bodies (census) — never
+ships. Occupancy vs task 0: total march steps −41% r3 / −38% r4, hit steps
+−44%. Machine was NOT quiet (owner's Xcode/LearnCard builds mid-sweep);
+every table carries its load and is judged by its own spread. Final branch
+`dispatch/2026-09-01-sdf-render-perf-r2-task-9` = the whole chain; merge
+order: chain → this plan branch → main, then gore, then elbow.
+**2026-09-02 later:** task 8 done — measured, NOT worth it. Ten uploads =
+p50 0.060 / max 0.090 ms/frame (room-4 idle, machine quiet), 3-5x under the
+0.3 ms gate; instrumentation removed, texture stays 128 wide, no Step 3.
+Chain's code tasks complete; **task 9** (bench sweep, unchained) waits for a
+quiet machine and a manual trigger.
+**2026-09-02 later:** task 9 DONE — BENCH_PRELUDE one-lever sweep on the
+finished chain (r3/r4 x3). Every ship default survives its lever-off re-run;
+depth gate re-decided OFF (on loses 4.6 ms at 6% spread); hull exit bound
+dead by census (deletes 4 of 9 bodies in r4); occupancy: omega 1.0 + AA cut
+mean march steps ~40% with coverage unchanged — the march is harvested,
+remaining cost is hit-pixel fill. Machine never fully quiet (user Slack/Xcode
+builds) — load recorded per row; CPU-saturating churn wrecks the bench,
+IO-wait does not (see notes §task 9). Perf r2 COMPLETE; owner still owes the
+task-7 pillar eyeball (`setLevelShadow`).
+[plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
+review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
+
+**BLOBFORGE RING-FIT BRANCH MERGED (2026-09-01, main `eea6620`).**
+`claude/sdf-character-workflow-837c40` (blob:rings, ref-skin/ref-align,
+bonewalker, schoolgirl-alt, dragon) had sat 115 commits behind main; merged
+with TASKS.md as the only conflict (both blocks kept). tsc 0; suite green
+except `scripts/blob-measure.test.ts` (7 tests, fail identically on
+`b771ab8` — environmental, pre-existing). Next for the toolchain, in order:
+LBS-pose the skinned reference into the `.blob` rest pose (kills POSE
+MISMATCH), a start-from-mesh scaffold (one `bar` per rig bone, radius from
+the ring median, `# fit:` comment per number), a front/side depth-image
+diff (silhouette cannot see interior creases), `emitBlob` generalised →
+`blob:rings --apply` that refuses to move a pinned test property.
+
 **BLEEDING WOUNDS + C2 TEMPORAL — BOTH OWNER-PASSED (2026-08-31).** Bleeding
 (per-calibre emitters: pellet ooze / slug spurt-to-drip / stump gush, chunk
 trails, floor splat decals, wounds-anchored so blood rides the animated body)
@@ -1156,10 +1282,10 @@ Key reference docs (open these before touching their area):
   inside the mass it grows from reads as a bump (cranium semi-depth 0.118, the
   first tapered nose tipped at 0.122 and was still a bump); and *two features at
   the same height fuse* — separation must beat the SUM of the two blends.
-  **Next session: the rest of the primitives**, in roadmap order — arc capsule
-  (quadratic Bézier + taper; the biggest gap, since horns/tusks/tails/claws are
-  all N-prim chains today and every link has its own round base), rounded box
-  (the first flat face in the format), blend exponent, torus, prism.
+  **Primitives since:** arc capsule (`bend=`), groove and `shell` SHIPPED;
+  still unbuilt from the roadmap — rounded box (the first flat face), blend
+  exponent (cheapest, most general), torus, prism; plus a spar+sheet
+  construction the dragon's wings showed is missing (2026-09-01 review).
   **Also open:** lab cold boot is 19-30 s and it is three's TSL node builder, not
   the GPU or the network — ~85% of a CPU profile; deferring the warm-up made it
   WORSE (36.8 s vs 18.8 s) because nothing paints until `main()` returns, so the

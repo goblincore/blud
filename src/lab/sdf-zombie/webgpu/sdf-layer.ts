@@ -34,7 +34,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
-import { createConeUniforms, type ConeSource, type OccluderSource } from './zombie-gpu';
+import { createConeUniforms, type ConeSource, type OccluderSource, type PrevSource } from './zombie-gpu';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -76,6 +76,18 @@ import { createConeUniforms, type ConeSource, type OccluderSource } from './zomb
  */
 export function isHoldFrame(frameIndex: number, halfRate: boolean, needsFresh: boolean): boolean {
   return halfRate && !needsFresh && frameIndex % 2 === 1;
+}
+
+/**
+ * Nearest first by world-position distance. Pure; returns a new array. The
+ * front-to-back per-body walk (perf round 2 task 5) draws in this order so
+ * every pass's accumulated depth is the nearest surface so far at each pixel
+ * — the gate a farther body's fragment tests itself against.
+ */
+export function sortFrontToBack(objects: THREE.Object3D[], camPos: THREE.Vector3): THREE.Object3D[] {
+  const d = new Map<THREE.Object3D, number>();
+  for (const o of objects) d.set(o, o.getWorldPosition(new THREE.Vector3()).distanceToSquared(camPos));
+  return [...objects].sort((a, b) => d.get(a)! - d.get(b)!);
 }
 
 /**
@@ -299,6 +311,20 @@ export interface SdfLayer {
   /** Outer-hull entry/exit targets, for MEASUREMENT readback only. */
   readonly shellEntryTarget: THREE.RenderTarget;
   readonly shellExitTarget: THREE.RenderTarget;
+  /** Accumulated colour+depth so far this frame, for the front-to-back
+   *  per-body passes (perf round 2 task 5). Bind into every march material
+   *  that should be gated by nearer hits; `uniforms.enabled` is the gate —
+   *  off is the single-pass ship behaviour and reads as "nothing recorded". */
+  readonly prev: PrevSource;
+  /** Registers the bodies (one pass each, front to back) and the gib chunks
+   *  (one shared final pass, gated by every body). Call every frame before
+   *  render(); with the gate off these lists are simply not walked. */
+  setBodies(bodies: THREE.Object3D[], chunks: THREE.Object3D[]): void;
+  /** The accumulated-depth gate. OFF = one march pass, bit-identical to the
+   *  pre-task-5 frame. ON = one pass per body, nearest first, each gated and
+   *  bounded by the depth every nearer pass recorded. */
+  setDepthGate(on: boolean): void;
+  readonly depthGate: boolean;
   /** One-pixel footprint radius per unit distance (tan(fovY/2) / passHeight),
    *  for the march's AA epsilon. Follows the adaptive resolution ladder. */
   readonly pixelConeK: number;
@@ -346,6 +372,32 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
   });
+
+  // Accumulated colour+depth so far in this frame's front-to-back walk. A
+  // pass cannot read the target it writes, so each body reads a blit of
+  // the previous state. Same format as `target`; its alpha is the clip depth
+  // the composite already consumes (1.0 = "nothing recorded here").
+  const prev = new THREE.RenderTarget(1, 1, {
+    depthBuffer: false,
+    type: THREE.FloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+  const prevUniforms = { enabled: uniform(0) };
+  let bodies: THREE.Object3D[] = [];
+  let chunks: THREE.Object3D[] = [];
+  // The blit is an identity copy target -> prev in texture space: both are
+  // render targets with the same orientation, so no flipY enters (the canvas
+  // composite needs one; a target-to-target copy does not).
+  const blitMat = new MeshBasicNodeMaterial();
+  blitMat.colorNode = texture(target.texture, uv());
+  blitMat.outputNode = texture(target.texture, uv()); // carry alpha (depth) verbatim
+  blitMat.depthTest = false;
+  blitMat.depthWrite = false;
+  const blitQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blitMat);
+  blitQuad.frustumCulled = false;
+  const blitScene = new THREE.Scene();
+  blitScene.add(blitQuad);
 
   // Verified on screen: three's WebGPU backend hands a render target back
   // inverted relative to the canvas, so the composite reads it upside down
@@ -473,6 +525,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // would composite garbage until the next fresh march.
     forceFreshFrame = true;
     target.setSize(w, h);
+    prev.setSize(w, h);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
     shellExit.setSize(w, h);
@@ -527,7 +580,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // The clear colour is irrelevant: a disabled pre-pass is never
         // FETCHED (the enable uniforms gate occFetch/coneFetch), and an
         // enabled one clears for real at the top of its own pass.
-        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit]) {
+        // `prev` rides the list even though nothing samples it while the
+        // gate is off: the march materials bind prev.texture UNCONDITIONALLY
+        // (the enable uniform gates the fetch, not the binding), and an
+        // uninitialised prev would hit the same lazy-init submit conflict
+        // the comment above describes.
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -627,8 +685,39 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // alpha at 1.0, which is the "nothing here" sentinel the composite
       // discards on.
       camera.layers.set(SDF_LAYER);
-      renderer.setRenderTarget(target);
-      void renderer.render(scene, camera);
+      if (prevUniforms.enabled.value > 0.5 && bodies.length > 0) {
+        // Front-to-back per-body passes (perf round 2 task 5). Clear once,
+        // then one pass per body nearest-first, each preceded by a blit of
+        // the accumulated state into `prev` — the march's gate reads it and
+        // discards fragments whose hull entry lies beyond the nearest hit
+        // already recorded at that pixel. Chunks go last, all together,
+        // gated by every body. The hardware depth test already resolved
+        // these overlaps inside one pass; the gate only stops PAYING for
+        // the fragments it would have thrown away, which is why parity is
+        // expected to be exact.
+        const ordered = sortFrontToBack(bodies, camera.position);
+        const wasVisible = new Map<THREE.Object3D, boolean>();
+        for (const o of [...bodies, ...chunks]) { wasVisible.set(o, o.visible); o.visible = false; }
+        renderer.setRenderTarget(target);
+        renderer.clear();
+        const prevAuto = renderer.autoClear;
+        renderer.autoClear = false;
+        const passes: THREE.Object3D[][] = [...ordered.map(o => [o]), chunks];
+        for (const group of passes) {
+          if (group.length === 0) continue;
+          renderer.setRenderTarget(prev);
+          void renderer.render(blitScene, quadCam);
+          for (const o of group) o.visible = true;
+          renderer.setRenderTarget(target);
+          void renderer.render(scene, camera);
+          for (const o of group) o.visible = false;
+        }
+        renderer.autoClear = prevAuto;
+        for (const [o, v] of wasVisible) o.visible = v;
+      } else {
+        renderer.setRenderTarget(target);
+        void renderer.render(scene, camera);
+      }
       } // !hold
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
@@ -673,6 +762,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },
     setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },
     get shellEnabled() { return shellUniforms.enabled.value > 0.5; },
+    prev: { texture: prev.texture, uniforms: prevUniforms },
+    setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
+    setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },
+    get depthGate() { return prevUniforms.enabled.value > 0.5; },
     setHalfRate(on) {
       if (on === halfRate) return;
       halfRate = on;
@@ -701,10 +794,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get pixelConeK() { return coneKFor(1); },
     dispose() {
       target.dispose();
+      prev.dispose();
       coneCoarse.dispose();
       coneFine.dispose();
       quad.geometry.dispose();
       quadMat.dispose();
+      blitQuad.geometry.dispose();
+      blitMat.dispose();
     },
   };
 }

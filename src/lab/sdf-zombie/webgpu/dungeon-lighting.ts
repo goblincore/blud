@@ -75,6 +75,9 @@ export const FLASHLIGHT_OFFSET: Vec3 = [0.25, -0.15, 0.1];
 
 export interface Flashlight {
   spot: THREE.SpotLight;
+  /** Shadow-only twin of the spot: same pose, layer-0 casters only.
+   *  Perf round 2 task 7 — see below. */
+  levelShadow: THREE.SpotLight;
   /** Pose the light from the camera each frame. */
   update(camera: THREE.PerspectiveCamera): void;
 }
@@ -113,6 +116,25 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
   spot.shadow.camera.layers.enable(OCCLUDER_LAYER);
   spot.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
 
+  /**
+   * Shadow-only twin of the flashlight (perf round 2 task 7): same pose
+   * every frame, lights nothing (intensity 0 — the map still renders;
+   * three zeroes the sampling term, not the pass), and its shadow camera
+   * sees LAYER 0 ONLY — the OCCLUDER/SHADOW-HULL layer wiring above stops
+   * here. Bodies (SDF_LAYER), the cone twins and both hulls are all off
+   * layer 0, so this map holds the level's silhouette and nothing else.
+   * The march samples it so bodies take the level's shadows without seeing
+   * their own hull — sampling the flashlight's own map would self-shadow
+   * every flesh point, because the inflated cast hull is in that map.
+   */
+  const levelShadowLight = new THREE.SpotLight(0xffffff, 0);
+  levelShadowLight.castShadow = true;
+  levelShadowLight.shadow.mapSize.set(1024, 1024);
+  levelShadowLight.shadow.camera.layers.set(0);
+  levelShadowLight.angle = spot.angle;
+  levelShadowLight.penumbra = spot.penumbra;
+  levelShadowLight.distance = spot.distance;
+
   const eye = new THREE.Vector3();
   const off = new THREE.Vector3();
   const fwd = new THREE.Vector3();
@@ -129,5 +151,5 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
     spot.updateMatrixWorld();
   }
 
-  return { spot, update };
+  return { spot, levelShadow: levelShadowLight, update };
 }

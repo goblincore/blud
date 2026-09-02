@@ -1,0 +1,143 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 730,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 4,
+  "onJs": "__sdfGame.setAa(1)",
+  "offJs": "__sdfGame.setAa(0)",
+  "preJs": "(async () => { const eye = [-8.3, 1.75, 4.8]; __sdfGame.setPose(-8.3, 4.8, Math.PI/2, 0); const zs = __sdfGame.zombies().filter(z => z.room === 4); let far = null, fx = -1e9; for (const z of zs) { if (z.pos[0] > fx) { fx = z.pos[0]; far = z; } } if (!far) throw new Error('no room-4 body'); const cl = __sdfGame.zombie(far.id).posed().clusters.find(c => c.limb === 'torso'); if (!cl) throw new Error('no torso'); const c = cl.center; const toEye = [eye[0]-c[0], eye[1]-c[1], eye[2]-c[2]]; const L = Math.hypot(toEye[0],toEye[1],toEye[2]); const surf = [c[0]+toEye[0]/L*0.25, c[1]+toEye[1]/L*0.25, c[2]+toEye[2]/L*0.25]; const dx = surf[0]-eye[0], dy = surf[1]-eye[1], dz = surf[2]-eye[2]; const yaw = Math.atan2(dx, -dz), pitch = Math.atan2(dy, Math.hypot(dx,dz)); __sdfGame.setPose(-8.3, 4.8, yaw, pitch); const pred = __sdfGame.predictSlugHit(); if (pred.actorId !== far.id) { __sdfGame.setPose(-8.3, 4.8, Math.PI/2, 0); throw new Error('predict hit actor '+pred.actorId+' want '+far.id); } const ok = __sdfGame.fireSlug(); let wc = 0; for (let i = 0; i < 120; i++) { await new Promise(r => setTimeout(r, 50)); wc = __sdfGame.zombie(far.id).woundCount(); if (wc > 0) break; } const torsoStill = !!__sdfGame.zombie(far.id).posed().clusters.find(cc => cc.limb === 'torso'); __sdfGame.setPose(-8.3, 4.8, Math.PI/2, Math.atan2(1.2-1.75, 8)); if (!ok || wc < 1 || !torsoStill) throw new Error('slug staging failed ok='+ok+' wc='+wc+' torso='+torsoStill); const w = __sdfGame.debugWounds(far.id); const r3 = __sdfGame.zombies().filter(z => z.pos[0] >= 0.8).map(z => [z.id, z.pos.map(v=>+v.toFixed(1))]); return { farId: far.id, farPos: far.pos.map(v=>+v.toFixed(2)), dist: +Math.hypot(dx,dy,dz).toFixed(2), wounds: wc, woundAt: w.map(x=>x.surface.map(v=>+v.toFixed(2))), room3Bodies: r3 }; })()",
+  "outDir": "docs/dev-notes/2026-09-01-sdf-perf-round2/task6/far8m",
+  "noiseFloor": {
+    "changed": 104,
+    "bigChanged": 40,
+    "meanD": 0.64,
+    "maxD": 691,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 6915,
+      "bigChanged": 1256,
+      "meanD": 2.07,
+      "maxD": 691,
+      "hotCells": [
+        "15,12",
+        "16,12",
+        "22,12",
+        "14,12",
+        "16,13",
+        "17,13",
+        "16,14",
+        "35,19"
+      ]
+    },
+    "a-2 vs b-2": {
+      "changed": 7038,
+      "bigChanged": 1272,
+      "meanD": 1.46,
+      "maxD": 691,
+      "hotCells": [
+        "15,12",
+        "16,12",
+        "22,12",
+        "14,12",
+        "17,13",
+        "16,14",
+        "35,19"
+      ]
+    },
+    "a-1 vs a-2": {
+      "changed": 102,
+      "bigChanged": 51,
+      "meanD": 0.84,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 46,
+      "bigChanged": 2,
+      "meanD": 1.01,
+      "maxD": 155,
+      "hotCells": []
+    }
+  },
+  "occupancy": {
+    "off": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 31031,
+        "hits": 16023,
+        "misses": 15008,
+        "occupancy": 0.5163546131288067,
+        "coverage": 0.06464791666666667,
+        "meanStepsHit": 7.5687449291643265,
+        "meanStepsMiss": 12.546108742004265,
+        "missStepShare": 0.6082450915152181,
+        "bodiesOnScreen": 9
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 31031,
+        "hits": 16023,
+        "misses": 15008,
+        "occupancy": 0.5163546131288067,
+        "coverage": 0.06464791666666667,
+        "meanStepsHit": 7.5687449291643265,
+        "meanStepsMiss": 12.546108742004265,
+        "missStepShare": 0.6082450915152181,
+        "bodiesOnScreen": 9
+      }
+    ],
+    "on": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 31031,
+        "hits": 16638,
+        "misses": 14393,
+        "occupancy": 0.5361735039154394,
+        "coverage": 0.06464791666666667,
+        "meanStepsHit": 6.1632407741315065,
+        "meanStepsMiss": 11.72785381782811,
+        "missStepShare": 0.6220871737984764,
+        "bodiesOnScreen": 9
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 31031,
+        "hits": 16638,
+        "misses": 14393,
+        "occupancy": 0.5361735039154394,
+        "coverage": 0.06464791666666667,
+        "meanStepsHit": 6.1632407741315065,
+        "meanStepsMiss": 11.72785381782811,
+        "missStepShare": 0.6220871737984764,
+        "bodiesOnScreen": 9
+      }
+    ]
+  }
+}

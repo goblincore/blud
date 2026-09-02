@@ -545,4 +545,17 @@ describe('the pre-pass ships DISABLED (2026-09-01 holes-at-range)', () => {
       expect(src).not.toMatch(/\n {2}sdfLayer\.setOccluderEnabled\(true\);/);
     });
   }
+
+  it('update({ occluder: false }) refreshes the shadow twin but leaves the occluder instances alone', () => {
+    // The CPU-side consequence of the disable above: with nothing consuming
+    // the occluder instances, every frame still paid a full buildHullInstances
+    // walk for them. The split makes the game page skip that half; the shadow
+    // twin keeps rebuilding because the shadow map is always live.
+    const hull = createOccluderHull(64);
+    hull.update([body]);                       // whatever fixture the file already uses
+    const before = hull.instanceCount;
+    hull.update([], [], { occluder: false });  // no bodies: shadow twin empties
+    expect((hull.shadowObject as THREE.InstancedMesh).count).toBe(0);
+    expect(hull.instanceCount).toBe(before);   // occluder untouched
+  });
 });
