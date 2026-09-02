@@ -91,6 +91,9 @@ export interface BlobPart {
   gloss: number | null;
   /** The bare word `core`: this prim is the limb's structural mass. */
   core: boolean;
+  /** The bare word `organ` (bones block only): soft viscera, not bone.
+   *  Rides the same array and gates as bone; differs only in material. */
+  organ: boolean;
   src: BlobLine;
 }
 

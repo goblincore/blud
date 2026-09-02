@@ -94,3 +94,33 @@ describe('zombie.blob authors its shot-magnet bones', () => {
     expect(Math.min(...xs), 'ribs reach left').toBeLessThan(-0.03);
   });
 });
+
+describe('zombie.blob authors a gut coil (organs r3)', () => {
+  const organs = () => fromBlob().bonePrims.filter(p => p.op === 'organ');
+
+  it('has organ prims, in the torso cluster', () => {
+    expect(organs().length).toBeGreaterThanOrEqual(6);
+    for (const o of organs()) {
+      expect(o.cluster).toBe(CLUSTER_ORDER.indexOf('torso'));
+    }
+  });
+
+  it('they are TUBES that LOOP — bent, not a straight stack', () => {
+    // The whole read is round tubes in visible loops. A stack of straight
+    // bars is the failure mode the ribcage already went through.
+    const bent = organs().filter(o => o.bend !== undefined);
+    expect(bent.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('sits low — a chest shot must still open onto ribs', () => {
+    const ys = organs().map(o => (o.a[1] + o.b[1]) / 2);
+    const ribs = fromBlob().bonePrims
+      .filter(p => p.op === 'bone' && p.cluster === CLUSTER_ORDER.indexOf('torso'))
+      .map(p => (p.a[1] + p.b[1]) / 2);
+    expect(Math.max(...ys)).toBeLessThan(Math.max(...ribs));
+  });
+
+  it('compiles with no validation errors — organs are contained like bone', () => {
+    expect(fromBlob().errors).toEqual([]);
+  });
+});

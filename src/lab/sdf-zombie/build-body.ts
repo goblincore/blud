@@ -49,8 +49,13 @@ export function buildBody(
   const authored = def.bonePrims ?? [];
   const expanded = expandMirror(
     authored.length === 0 ? def : { ...def, prims: [...def.prims, ...authored] });
-  const authoredDefs = expanded.prims.filter(p => p.op === 'bone');
-  const fleshDefs = expanded.prims.filter(p => p.op !== 'bone');
+  // Organs (organs r3) ride the authored array beside bone — the split is
+  // "inside the flesh", not "bone specifically", so the split key is the
+  // same one that keeps them out of the CPU field: everything with a wound-
+  // pass op goes to the bonePrims path, everything else stays flesh.
+  const isInside = (p: { op?: string }) => p.op === 'bone' || p.op === 'organ';
+  const authoredDefs = expanded.prims.filter(isInside);
+  const fleshDefs = expanded.prims.filter(p => !isInside(p));
   const bones = resolveBones(expanded.bones, expanded.root);
   const placed = placePrims(fleshDefs, bones);
   const { prims, clusters } = assignClusters(placed);

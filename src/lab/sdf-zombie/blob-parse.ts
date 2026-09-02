@@ -411,6 +411,10 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     gloss: parseGlossArg(l, strArg(l, 'color') !== null),
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
+    // `organ`: a bones-block line opting into viscera (organs r3). Same bare-
+    // word mechanism as `hard`/`mirror`/`both`; compileBlob turns it into
+    // `op: 'organ'`, which differs from bone only in material code.
+    organ: l.words.includes('organ'),
     src: l,
   } satisfies BlobPart;
 

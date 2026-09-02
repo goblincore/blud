@@ -332,7 +332,9 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
     prims: [...prims, ...facePrims(face)],
     // Authored bones (a `bones` block) compile through the SAME partToPrim
     // path as body parts, then get `op: 'bone'` forced on: they are bones no
-    // matter which words placed them. They land on BodyDef.bonePrims — NEVER
+    // matter which words placed them. A line may opt into viscera with the
+    // bare word `organ` (organs r3) — same array, same gates, different
+    // material. They land on BodyDef.bonePrims — NEVER
     // on `prims` — so buildBody can expand/place them separately and every
     // unaudited prims consumer stays correct by construction. `ratio` rides
     // along only when the author wrote one (null = untouched); buildBody
@@ -341,7 +343,10 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
     ...(doc.bonesBlock === null
       ? {}
       : {
-          bonePrims: doc.bonesBlock.parts.map(p => ({ ...partToPrim(p), op: 'bone' as const })),
+          bonePrims: doc.bonesBlock.parts.map(p => ({
+            ...partToPrim(p),
+            op: p.organ ? 'organ' as const : 'bone' as const,
+          })),
           ...(doc.bonesBlock.ratio === null ? {} : { boneRatio: doc.bonesBlock.ratio }),
         }),
   };

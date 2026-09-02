@@ -121,6 +121,23 @@ bones
   # complaint was a WIDE central mass, and a spine genuinely is a thin rod.
   bar torso on spine from=0.10 to=0.98 offset=(0,0,-0.030) r=0.019 wide=0.9 deep=0.8
 
+  # GUT COIL (organs r3). Suggestive of the classic intestine look, not
+  # anatomical — owner: "doesn't need to be anatomically correct, just
+  # suggestive". The read is round tubes, visible loops, pale pink, wet.
+  #
+  # Only drawable since applyBones started reading bend (3dc8373); before
+  # that every one of these would have rendered as a straight bar.
+  bar torso on pelvis from=0.55 to=0.75 offset=(-0.045,0.010,0.030) tip=(0.090,0.010,0.006) bend=(0.010,0.055,0.030) r=0.024 organ
+  bar torso on pelvis from=0.50 to=0.70 offset=(0.048,0.004,0.034) tip=(-0.092,0.014,-0.010) bend=(-0.012,-0.050,0.026) r=0.023 organ
+  bar torso on pelvis from=0.72 to=0.92 offset=(-0.040,0.004,0.026) tip=(0.084,-0.008,-0.014) bend=(0.008,0.048,0.032) r=0.022 organ
+  bar torso on spine  from=0.06 to=0.20 offset=(0.042,0.000,0.030) tip=(-0.086,-0.010,-0.008) bend=(-0.010,-0.044,0.028) r=0.022 organ
+  # Segmented bulges: overlapping blobs at a tight blend read as haustra far
+  # more cheaply than grooving a smooth tube.
+  blob torso on pelvis at=0.62 offset=(-0.058,0.006,0.038) r=0.026 blend=0.004 organ
+  blob torso on pelvis at=0.62 offset=(-0.020,0.014,0.042) r=0.025 blend=0.004 organ
+  blob torso on pelvis at=0.62 offset=(0.020,0.010,0.042) r=0.025 blend=0.004 organ
+  blob torso on pelvis at=0.62 offset=(0.058,0.002,0.038) r=0.026 blend=0.004 organ
+
 # Tuned by hand in the panel, then baked. Keep headHeight near 1: raising it
 # SHARPENS the crown rather than doming it, so the height and the gaunt taper
 # both come from the jaw below.
