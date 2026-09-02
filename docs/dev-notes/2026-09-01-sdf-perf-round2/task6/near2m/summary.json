@@ -1,0 +1,134 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 731,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 4,
+  "onJs": "__sdfGame.setAa(1)",
+  "offJs": "__sdfGame.setAa(0)",
+  "preJs": "(() => { const zs = __sdfGame.zombies().filter(z => z.room === 4); const cx = -4.8, cz = 4.8; let best = null, bd = 1e9; for (const z of zs) { const d = Math.hypot(z.pos[0]-cx, z.pos[2]-cz); if (d < bd) { bd = d; best = z; } } if (!best) throw new Error('no room-4 body'); const dx = best.pos[0]-cx, dz = best.pos[2]-cz, L = Math.hypot(dx,dz); const px = best.pos[0]-dx/L*2, pz = best.pos[2]-dz/L*2; const yaw = Math.atan2(dx, -dz); const pitch = Math.atan2(1.2-1.75, 2); __sdfGame.setPose(px, pz, yaw, pitch); return { bodyId: best.id, bodyPos: best.pos, player: [px,pz], dist: Math.hypot(best.pos[0]-px, best.pos[2]-pz) }; })()",
+  "outDir": "docs/dev-notes/2026-09-01-sdf-perf-round2/task6/near2m",
+  "noiseFloor": {
+    "changed": 8,
+    "bigChanged": 0,
+    "meanD": 0.27,
+    "maxD": 75,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 6532,
+      "bigChanged": 990,
+      "meanD": 2.1,
+      "maxD": 691,
+      "hotCells": [
+        "21,8",
+        "30,9",
+        "29,15"
+      ]
+    },
+    "a-2 vs b-2": {
+      "changed": 6434,
+      "bigChanged": 944,
+      "meanD": 1.23,
+      "maxD": 551,
+      "hotCells": [
+        "21,8",
+        "30,9",
+        "29,15"
+      ]
+    },
+    "a-1 vs a-2": {
+      "changed": 65,
+      "bigChanged": 40,
+      "meanD": 0.59,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 6,
+      "bigChanged": 0,
+      "meanD": 0.35,
+      "maxD": 63,
+      "hotCells": []
+    }
+  },
+  "occupancy": {
+    "off": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 65932,
+        "hits": 34693,
+        "misses": 31239,
+        "occupancy": 0.5261936540678275,
+        "coverage": 0.13735833333333333,
+        "meanStepsHit": 5.750208975874096,
+        "meanStepsMiss": 3.871698837990973,
+        "missStepShare": 0.37744351516664587,
+        "bodiesOnScreen": 3
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 65932,
+        "hits": 34693,
+        "misses": 31239,
+        "occupancy": 0.5261936540678275,
+        "coverage": 0.13735833333333333,
+        "meanStepsHit": 5.750208975874096,
+        "meanStepsMiss": 3.871698837990973,
+        "missStepShare": 0.37744351516664587,
+        "bodiesOnScreen": 3
+      }
+    ],
+    "on": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 65932,
+        "hits": 35202,
+        "misses": 30730,
+        "occupancy": 0.5339137292968513,
+        "coverage": 0.13735833333333333,
+        "meanStepsHit": 5.098346684847452,
+        "meanStepsMiss": 3.7011389521640092,
+        "missStepShare": 0.3879021036260948,
+        "bodiesOnScreen": 3
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 65932,
+        "hits": 35202,
+        "misses": 30730,
+        "occupancy": 0.5339137292968513,
+        "coverage": 0.13735833333333333,
+        "meanStepsHit": 5.098346684847452,
+        "meanStepsMiss": 3.7011389521640092,
+        "missStepShare": 0.3879021036260948,
+        "bodiesOnScreen": 3
+      }
+    ]
+  }
+}
