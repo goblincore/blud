@@ -397,5 +397,6 @@ describe('box', () => {
   it('leaves box false and round at its default on an ordinary prim', () => {
     const d = doc('  bar torso on spine from=0.1 to=0.9 r=0.05');
     expect(d.parts[0]!.box).toBe(false);
+    expect(d.parts[0]!.round).toBeCloseTo(0.08, 6);
   });
 });
