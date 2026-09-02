@@ -58,6 +58,14 @@ wound pops, gait stop-motion).
   [plan](docs/superpowers/plans/2026-09-02-minotaur-character.md).
   **Watch for:** `blob:rings` is paint-blind and WILL ask for the prosthetic
   plates to shrink — overrule it there, as bonewalker's spine ridge taught.
+  **Two Minor follow-ups from the final review, neither blocking:**
+  (a) no test covers `box` composed with `carve`/`groove` — reading the code it
+  should work (the cluster `shaped` flag accounts for `p.box`, `sdPrim`'s branch
+  is generic) but that is inferred, not verified; low exposure while `carve` is
+  head-only, worth a test before anyone tries a rectangular vent slot.
+  (b) `hands.ts` skips `Math.max(radius, radiusB)` on the grounds that no
+  hand-authoring file sets `radiusB` — true today, rots silently if a tapered
+  hand prop ever lands.
   **Two findings worth knowing independently of this work:**
   (1) the outer-bound survey went 4 -> 8 sites (`boxReach`); the plan claimed
   four, and the two hardest to find RECOMPUTE a bound instead of consuming one
