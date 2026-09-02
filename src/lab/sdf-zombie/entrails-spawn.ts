@@ -18,7 +18,10 @@ export function shouldSpill(
 ): 'spawn' | 'tear' | 'none' {
   if (!wound.cavity) return 'none';
   if (hasRope) return 'tear';
-  const chance = wound.type === 'blast' ? SPILL_CHANCE.blast : SPILL_CHANCE.slug;
+  // Roll by the STAMP-TIME calibre, not by `type`: the slug stamps type
+  // 'blast' (it uses the blast crater profile), so keying on type sent every
+  // slug to the blast pin and left SPILL_CHANCE.slug dead (task-8 finding).
+  const chance = wound.spillCalibre === 'slug' ? SPILL_CHANCE.slug : SPILL_CHANCE.blast;
   return rng() < chance ? 'spawn' : 'none';
 }
 

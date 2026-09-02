@@ -207,6 +207,10 @@ export function woundFromSlug(
   // gut spawning. Torso only. A limb is genuinely a wall of meat, so the r2
   // ramp is already correct there and a cavity stop would be a lie.
   w.cavity = prims[w.primIdx]!.limb === 'torso';
+  // And record the calibre for the spill roll: this wound stamps type
+  // 'blast' (the crater profile), so without this marker shouldSpill reads
+  // every slug at the blast pin (1.0) and SPILL_CHANCE.slug is dead.
+  w.spillCalibre = 'slug';
   return w;
 }
 

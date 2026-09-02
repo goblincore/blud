@@ -101,6 +101,15 @@ export interface Wound {
    * cavities (a thigh is genuinely a wall of meat).
    */
   cavity?: boolean;
+  /** What stamped this wound, for the spill ROLL only (entrails). Set to
+   *  'slug' by woundFromSlug; absent means blast (explosions never mark it).
+   *  Needed because the slug stamps type 'blast' — it uses the blast crater
+   *  profile — so `type` cannot distinguish the two, which is exactly how
+   *  the shipped slug roll (SPILL_CHANCE.slug 0.35) spent a day as dead code:
+   *  every torso slug took the blast pin at 1.0. Same stamp-time pattern as
+   *  `cavity`, so every present and future spill call site is right by
+   *  construction. */
+  spillCalibre?: 'slug';
 }
 
 /**
