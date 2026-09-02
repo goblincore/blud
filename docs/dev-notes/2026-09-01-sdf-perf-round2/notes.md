@@ -413,3 +413,41 @@ identical on/off" claim must be read with that bias in mind.
 **Verdict:** readback evidence recorded whichever way it went (acceptance
 criterion met); hypothesis refuted; default 0 ships; suite green (103
 files / 1930 tests); temporary seam removed; no other page changes.
+
+## Task 3 — wound-loop early-out behind perfCfg.y (2026-09-02, branch dispatch/2026-09-01-sdf-render-perf-r2-task-3)
+
+Two dispatch attempts; the shader change and seam landed in the first
+(`4138ac4`, cherry-picked as `eeae03b`), the gates ran in the second, and the
+second timed out inside its bench legs. This section was written by the
+controller from the second attempt's report; the numbers are the agent's.
+
+**What changed:** `applyWounds` loads a wound's position first, computes
+`r`, and skips the meta/cap loads and every op after them when
+`r > reach = w.w * max(2, 2*rimOffset + 3*rimWidth) + 4k + 0.25` — exact by
+construction (crater r < radius; smin is exactly min beyond 4k; the rim
+bump at three widths is 1.2e-4 of amp). `perfCfg` is threaded through
+`mapBody` and every caller. Seam `__sdfGame.setWoundEarlyOut()`; default
+`GAME_WOUND_EARLY_OUT = 1`.
+
+**Parity, wounds staged (room 3, three slug stamps on the nearest zombie's
+torso via `stampWoundAt` in the harness `--pre`, seam A/B/A/B):** noise
+floor 23 px / 0 big; a-1 vs b-1 7 px (below noise); a-2 vs b-2 70 px with a
+40-px "big" blob that decodes to a 7x9 patch at x 40–46, y 16–26 — the HUD
+frame-time readout ticking 16.7 → 16.6 ms, present identically in the
+same-state pair a-1 vs a-2 (61 px / 40 big / same maxD 691). Torso crops:
+craters present and identical across all four legs. **Gate PASSES.**
+
+**Lab:** `npm run blob:render-check -- zombie` exit 0, 0 hole clusters (the
+lab binds `perfCfg` zero). Note for the next runner: the repo's
+`node_modules/.bin/tsx` was a self-referential symlink on this machine;
+`vite-node` runs the TS scripts.
+
+**Bench:** two legs ran (seam OFF fire-segment p50: room 3 17.86 ms, room 4
+16.04 ms; seam ON: room 3 slower, room 4 faster, both inside 3-repeat
+spread). Inconclusive at that sample size and the run was cut off adding
+repeats — **DEFERRED to task 9**, which A/Bs `setWoundEarlyOut(false)` on
+the finished chain.
+
+**The first attempt's "the early-out eats the craters" was a confounded
+base-vs-branch comparison across two page loads; on one load the seam is
+pixel-identical in the body region.** Verdict: ships ON.

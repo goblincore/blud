@@ -550,7 +550,7 @@ async function main() {
    *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
    *  see the march.wgsl.ts reach comment; `__sdfGame.setWoundEarlyOut()`
    *  flips it live for A/B. */
-  const GAME_WOUND_EARLY_OUT = 0;
+  const GAME_WOUND_EARLY_OUT = 1;
 
   /**
    * Step multiplier for the game page's march (marchCfg.y). The lab ships
