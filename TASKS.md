@@ -78,6 +78,16 @@ with a per-body proxy-box `bodyEntry` but shipped `min(shellIn, bodyEntry)`,
 still inert, then timed out on flicker noise. Marked done (code green);
 **task 5b** (new, before 6) switches to `max(...)`, proves parity with a
 gate that bites, decides the default.
+**2026-09-02 afternoon:** 5b DONE — `max(shellIn, bodyEntry)`, parity PASS
+in the synthetic overlap scene and rooms 3/4 (hits identical, residual on
+already-occluded fringe), but the bench read the per-body pass structure as
+a net LOSS at 3-4 bodies (spreads unresolved) → `GAME_DEPTH_GATE` ships 0,
+seam kept, task 9 re-decides on a quiet machine at higher body counts.
+Task 6 DONE (AA on): strength-0 parity bit-identical both rooms; near 2 m
+and far 8 m visual gates pass (owner-independent read of the far pair:
+all nine bodies, crater survives, smoother silhouettes); hit-pixel steps
+−11% near, −18.6% far; `GAME_AA = 1.0` ships. Its run hit the cap mid
+vision-read; controller closed the notes. Next: task 7 (level shadows).
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
