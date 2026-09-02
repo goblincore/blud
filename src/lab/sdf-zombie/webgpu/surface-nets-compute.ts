@@ -13,7 +13,7 @@ import type { MarchUniforms } from './zombie-gpu';
 import { BLOCK, fitHullGrid, type HullGrid } from './surface-nets-cpu';
 import {
   HULL_NETS_CHAIN, HULL_QUADS_CHAIN, K_HULL_ARGS,
-  MAX_CELL_VERTS, MAX_SOUP_VERTS,
+  MAX_CELL_VERTS, MAX_SOUP_VERTS, SOUP_STRIDE,
 } from './surface-nets.wgsl';
 
 export const MAX_DIM = 160;
@@ -89,7 +89,7 @@ export function createSurfaceNetsCompute(
   const cellVert = storage(cellVertAttr, 'uint', cap.cells);
   const cellEdge = storage(cellEdgeAttr, 'uint', cap.cells);
   const cellPos = storage(cellPosAttr, 'float', cap.cellVerts * 3);
-  const soup = storage(soupAttr, 'float', cap.soupVerts * 3);
+  const soup = storage(soupAttr, 'float', cap.soupVerts * SOUP_STRIDE);
   const counters = storage(countersAttr, 'uint', 4).toAtomic();
   const meta = storage(metaAttr, 'uint', 4);
   const args = storage(indirect, 'uint', 4);
@@ -154,7 +154,7 @@ export function createSurfaceNetsCompute(
       const metaBuf = new Uint32Array(await renderer.getArrayBufferAsync(metaAttr));
       const cellPosBuf = new Float32Array(await renderer.getArrayBufferAsync(cellPosAttr));
       const soupBuf = new Float32Array(await renderer.getArrayBufferAsync(soupAttr));
-      return { meta: metaBuf, cellPos: cellPosBuf.subarray(0, metaBuf[1]! * 3), soup: soupBuf.subarray(0, metaBuf[2]! * 3) };
+      return { meta: metaBuf, cellPos: cellPosBuf.subarray(0, metaBuf[1]! * 3), soup: soupBuf.subarray(0, metaBuf[2]! * SOUP_STRIDE) };
     },
     dispose() {
       for (const a of [cellVertAttr, cellEdgeAttr, cellPosAttr, soupAttr, countersAttr, metaAttr, indirect]) {

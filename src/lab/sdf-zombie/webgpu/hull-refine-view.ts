@@ -11,7 +11,11 @@ import { createSurfaceNetsCompute, type SurfaceNetsCompute, type HullExtractStat
 
 export type HullRenderer = 'march' | 'hull';
 export interface HullKnobs { cell: number; band: number; steps: number }
-export const DEFAULT_HULL_KNOBS: HullKnobs = { cell: 0.02, band: 0.02, steps: 4 };
+/** steps 8, not the spec's 4: smooth-min blend zones under-report distance
+ *  (gradient ~0.55) and the wound zone steps at 0.6*d by design, so a 4-step
+ *  walk from +band leaves gaps at neck/shoulder/wrist and beside craters.
+ *  8 closes them at 2 cm band; 12 is indistinguishable (2026-09-02 notes). */
+export const DEFAULT_HULL_KNOBS: HullKnobs = { cell: 0.02, band: 0.02, steps: 8 };
 
 /** The subset of ZombieGpuView / ChunkGpuView the wrapper relies on. */
 export interface HullInnerView {
@@ -47,12 +51,6 @@ export interface HullRefineView<Inner extends HullInnerView = HullInnerView> {
 }
 
 function defaultMaterial(inner: HullInnerView, hullMarchCfg: ReturnType<typeof uniform>, band: ReturnType<typeof uniform>) {
-  // TEMP DIAGNOSTIC (task 8): ?plainHull draws the soup as flat red, no march.
-  if (typeof location !== 'undefined' && location.search.includes('plainHull')) {
-    const m = new THREE.MeshBasicNodeMaterial({ color: 0xff2020 });
-    m.side = THREE.FrontSide;
-    return m;
-  }
   const rayDir = normalize(sub(positionWorld, cameraPosition));
   const hullT = length(sub(positionWorld, cameraPosition));
   // tMaxBox = length(worldPos - camPos) inside marchBody, so a point pushed
@@ -70,7 +68,12 @@ export function wrapHullRefine<Inner extends HullInnerView>(
 ): HullRefineView<Inner> {
   const knobs: HullKnobs = { ...DEFAULT_HULL_KNOBS };
   const src = inner.uniforms.marchCfg.value;
-  const hullMarchCfg = uniform(new THREE.Vector3(knobs.steps, src.y, src.z));
+  // y = step multiplier. PLAIN sphere tracing (1.0), NOT the inner view's
+  // value: the lab default is 0.6, and a 4-step walk from +band at 0.6 stops
+  // 0.4^4 * band = 1.28 mm short of a 1.2 mm hit epsilon — every hull
+  // fragment missed and discarded (dispatch task 5, 2026-09-02). The game
+  // page runs 1.0 for the same reason (GAME_OMEGA, perf r2 task 2).
+  const hullMarchCfg = uniform(new THREE.Vector3(knobs.steps, 1.0, src.z));
   const uBand = uniform(knobs.band);
   const compute = (deps.makeCompute ?? ((i) => createSurfaceNetsCompute(i.dataTexture, i.volumeTexture, i.uniforms)))(inner);
   const material = (deps.makeMaterial ?? defaultMaterial)(inner, hullMarchCfg, uBand);

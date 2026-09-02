@@ -1,0 +1,73 @@
+{
+  "state": {
+    "shell": false,
+    "occluder": false,
+    "cone": false,
+    "fxaa": false,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "w": 960,
+      "h": 540
+    },
+    "backend": "webgpu"
+  },
+  "onJs": "__hullSpike.setKnobs({cell:0.02,band:0.02,steps:8}); __hullSpike.setRenderer('hull')",
+  "offJs": "__hullSpike.setRenderer('march')",
+  "preJs": "__hullSpike.freeze(false); await new Promise(r=>setTimeout(r, 300 + 350)); __hullSpike.freeze(true)",
+  "outDir": "docs/dev-notes/2026-09-02-hull-refine-spike/reel-c020-b020-s8/2-walk-3",
+  "noiseFloor": {
+    "changed": 307,
+    "bigChanged": 245,
+    "meanD": 0.1,
+    "maxD": 543,
+    "hotCells": [
+      "4,0"
+    ]
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 4254,
+      "bigChanged": 3366,
+      "meanD": 1.59,
+      "maxD": 700,
+      "hotCells": [
+        "1,1",
+        "4,1",
+        "5,1",
+        "20,9",
+        "21,9"
+      ]
+    },
+    "a-2 vs b-2": {
+      "changed": 2211,
+      "bigChanged": 1786,
+      "meanD": 0.91,
+      "maxD": 700,
+      "hotCells": [
+        "20,9",
+        "21,9"
+      ]
+    },
+    "a-1 vs a-2": {
+      "changed": 120,
+      "bigChanged": 73,
+      "meanD": 0.03,
+      "maxD": 543,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 2194,
+      "bigChanged": 1667,
+      "meanD": 0.72,
+      "maxD": 543,
+      "hotCells": [
+        "1,1",
+        "4,1",
+        "5,1"
+      ]
+    }
+  }
+}

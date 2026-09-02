@@ -11,7 +11,8 @@ import { createZombieGpuView, createChunkGpuView, type ZombieGpuView, type Chunk
 import { wrapHullRefine, type HullRefineView, type HullRenderer, type HullKnobs } from './hull-refine-view';
 import { createZombieActor, type ZombieActor, type DetachedPiece } from './game-actor';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
-import { compileBlob, compileFace } from '../blob-compile';
+import { compileBlob, compileFace, compilePalette } from '../blob-compile';
+import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import { parseBlob } from '../blob-parse';
 import { DEFAULT_FACE } from '../face';
 import { makeChunk, stepChunk } from '../gib-chunks';
@@ -41,6 +42,10 @@ async function main() {
   const face = { ...DEFAULT_FACE, ...compileFace(doc) };
   const body = buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS);
   const innerView = createZombieGpuView(body);
+  // The game's look, not the lab defaults: the .blob palette (or the game's
+  // fallback preset), the game's key light, plain sphere tracing (GAME_OMEGA).
+  innerView.applyMaterial(compilePalette(doc) ?? { ...FLESH_PRESETS['henenlotter-latex'] }, LIGHT_PRESETS['practical-hard-key']);
+  innerView.uniforms.marchCfg.value.y = 1.0;
   const view: HullRefineView<ZombieGpuView> = wrapHullRefine(innerView, { renderer });
   scene.add(innerView.object);
   scene.add(view.hullObject);
@@ -74,6 +79,7 @@ async function main() {
     const oldest = live.length >= MAX_CHUNKS ? live.shift() : undefined;
     if (oldest) {
       oldest.view.inner.reset(state, piece.prims, piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
+      oldest.view.update(state);
       live.push({ state, view: oldest.view });
       return;
     }
@@ -83,6 +89,7 @@ async function main() {
     wrapped.setRenderer(view.renderer);
     wrapped.setKnobs(view.knobs());
     scene.add(inner.object); scene.add(wrapped.hullObject);
+    wrapped.update(state);
     live.push({ state, view: wrapped });
   }
 
@@ -101,6 +108,33 @@ async function main() {
       if (t > 20) break;
     }
     return null;
+  }
+  /** World-space aim: march the CPU field from the camera toward `target`.
+   *  The NDC aimWorld depends on where the actor happens to stand; the reel
+   *  needs shots that LAND, so it aims at posed cluster centres. */
+  function aimAt(target: Vec3): { hit: Vec3; dir: Vec3 } | null {
+    const o = camera.position;
+    const dx = target[0] - o.x, dy = target[1] - o.y, dz = target[2] - o.z;
+    const L = Math.hypot(dx, dy, dz) || 1;
+    const d: Vec3 = [dx / L, dy / L, dz / L];
+    const posed = actor.posed();
+    let t = 0;
+    for (let i = 0; i < 160; i++) {
+      const p: Vec3 = [o.x + d[0] * t, o.y + d[1] * t, o.z + d[2] * t];
+      const f = sdBody(p, posed);
+      if (f < 0.002) return { hit: p, dir: d };
+      t += Math.max(f, 0.002);
+      if (t > L + 0.5) break;
+    }
+    return null;
+  }
+  function limbCentre(limb: string, along = 0): Vec3 | null {
+    const posed = actor.posed();
+    const c = posed.clusters.find(k => k.limb === limb && k.alive);
+    if (!c) return null;
+    // `along` slides toward the torso centre (0 = cluster centre, 1 = torso).
+    const torso = posed.clusters.find(k => k.limb === 'torso')?.center ?? c.center;
+    return [c.center[0] + (torso[0] - c.center[0]) * along, c.center[1] + (torso[1] - c.center[1]) * along, c.center[2] + (torso[2] - c.center[2]) * along];
   }
   const canvas = handle.canvas;
   canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -130,15 +164,27 @@ async function main() {
   });
 
   // ---- frame ------------------------------------------------------------
+  // Follow camera (owner: "why so small and far away"): orbit the actor at
+  // cam.dist unless a seam call pins it. setCam(...) sets follow=false.
+  const cam = { follow: true, dist: 2.2, yaw: 0.35, h: 1.45, targetY: 1.0 };
+  function placeCam() {
+    const p = actor.pose().pos;
+    camera.position.set(p[0] + Math.sin(cam.yaw) * cam.dist, cam.h, p[2] + Math.cos(cam.yaw) * cam.dist);
+    camera.lookAt(p[0], cam.targetY, p[2]);
+  }
   let frameMs = 0, tPrev = performance.now();
   handle.setRenderCallback((dt) => {
     const now = performance.now(); frameMs = now - tPrev; tPrev = now;
+    if (cam.follow) placeCam();
     if (!frozen) {
       actor.step(dt);
       for (const c of live) { c.state = stepChunk(c.state, dt); c.view.update(c.state); }
     } else if (view.renderer === 'hull') {
-      // Frozen: still re-extract so knob changes show without motion.
+      // Frozen: still re-extract so knob changes show without motion — the
+      // chunks too, or a frozen sever shows its pieces on the march and
+      // nothing on the hull (chunk extraction only runs inside update).
       view.update(actor.posed(), actor.body);
+      for (const c of live) c.view.update(c.state);
     }
     const k = view.knobs();
     const x = view.lastExtract();
@@ -162,7 +208,26 @@ async function main() {
     get sdfScale() { return 1; }, get adaptive() { return { enabled: false }; }, get halfRate() { return false; },
     get sdfTarget() { return { w: 960, h: 540 }; },
     setRenderer, setKnobs, knobs: () => view.knobs(), get renderer() { return view.renderer; },
+    /** Reel camera: orbit the actor at `dist` metres, `yaw` radians, eye height `h`. */
+    setCam: (dist: number, yaw = 0, h = 1.3, targetY = 1.0, follow = true) => {
+      Object.assign(cam, { dist, yaw, h, targetY, follow });
+      placeCam();
+    },
     aimSurface: () => aimWorld(0, 0.15),
+    /** Shots that land: aim at a posed cluster centre. */
+    slugAt: (limb = 'torso') => { const c = limbCentre(limb); const a = c && aimAt(c); if (a) actor.hitSlug(a.hit, a.dir); return !!a; },
+    pelletAt: (limb = 'torso') => { const c = limbCentre(limb); const a = c && aimAt(c); if (a) actor.hit(a.hit, a.dir); return !!a; },
+    /** Sever: slugs walk up the limb toward the shoulder until a chunk spawns
+     *  (the cut rule is wound-driven — cutLimbs in game-actor). */
+    severLimb: (limb = 'armL') => {
+      const before = live.length;
+      for (const along of [0.15, 0.4, 0.6, 0.8]) {
+        const c = limbCentre(limb, along); const a = c && aimAt(c);
+        if (a) actor.hitSlug(a.hit, a.dir);
+        if (live.length > before) break;
+      }
+      return { chunks: live.length, severed: live.length > before };
+    },
     fireSlug: () => { const a = aimWorld(0, 0.15); if (a) actor.hitSlug(a.hit, a.dir); return !!a; },
     firePellet: () => { const a = aimWorld(0, 0.15); if (a) actor.hit(a.hit, a.dir); return !!a; },
     gib: () => { for (let i = 0; i < 4; i++) { const a = aimWorld((rng() - 0.5) * 0.4, 0.1 + (rng() - 0.5) * 0.6); if (a) actor.hitSlug(a.hit, a.dir); } },

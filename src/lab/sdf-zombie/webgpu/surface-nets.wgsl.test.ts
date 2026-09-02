@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { MAP_BODY } from './march.wgsl';
 import {
   HULL_FIELD, K_HULL_NETS, K_VERT_AT, K_PUT_V, K_EMIT_QUAD, K_HULL_QUADS, K_HULL_ARGS,
-  HULL_NETS_CHAIN, HULL_QUADS_CHAIN, MAX_SOUP_VERTS,
+  HULL_NETS_CHAIN, HULL_QUADS_CHAIN, MAX_SOUP_VERTS, SOUP_STRIDE,
 } from './surface-nets.wgsl';
 import {
   BLOCK, NO_VERT, EDGE_X_CROSS, EDGE_X_IN2OUT, EDGE_Y_CROSS, EDGE_Y_IN2OUT, EDGE_Z_CROSS, EDGE_Z_IN2OUT,
@@ -60,6 +60,11 @@ describe('surface-nets WGSL parse contract', () => {
     const quadsModule = HULL_QUADS_CHAIN.join('\n');
     expect(quadsModule.match(/const NO_VERT:/g)!.length).toBe(1);
     expect(quadsModule.match(/const MAX_SOUP_VERTS:/g)!.length).toBe(1);
+  });
+  it('soup vertices are written at a 4-float stride (three pads itemSize-3 storage attributes to vec4)', () => {
+    expect(SOUP_STRIDE).toBe(4);
+    expect(K_PUT_V).toContain('const SOUP_STRIDE: u32 = 4u;');
+    expect(K_PUT_V).not.toMatch(/at \* 3u/);
   });
   it('chains are in dependency order', () => {
     expect(HULL_NETS_CHAIN).toEqual([HULL_FIELD, K_HULL_NETS]);

@@ -1,0 +1,66 @@
+{
+  "state": {
+    "shell": false,
+    "occluder": false,
+    "cone": false,
+    "fxaa": false,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "w": 960,
+      "h": 540
+    },
+    "backend": "webgpu"
+  },
+  "onJs": "__hullSpike.setKnobs({cell:0.02,band:0.02,steps:8}); __hullSpike.setRenderer('hull')",
+  "offJs": "__hullSpike.setRenderer('march')",
+  "preJs": "__hullSpike.gib(); await new Promise(r=>setTimeout(r, 400))",
+  "outDir": "docs/dev-notes/2026-09-02-hull-refine-spike/reel-c020-b020-s8/3-gib",
+  "noiseFloor": {
+    "changed": 136,
+    "bigChanged": 75,
+    "meanD": 0.03,
+    "maxD": 543,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 4218,
+      "bigChanged": 3143,
+      "meanD": 1.46,
+      "maxD": 700,
+      "hotCells": [
+        "1,1",
+        "4,1",
+        "5,1"
+      ]
+    },
+    "a-2 vs b-2": {
+      "changed": 2088,
+      "bigChanged": 1504,
+      "meanD": 0.75,
+      "maxD": 700,
+      "hotCells": []
+    },
+    "a-1 vs a-2": {
+      "changed": 137,
+      "bigChanged": 94,
+      "meanD": 0.04,
+      "maxD": 543,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 2187,
+      "bigChanged": 1668,
+      "meanD": 0.72,
+      "maxD": 543,
+      "hotCells": [
+        "1,1",
+        "4,1",
+        "5,1"
+      ]
+    }
+  }
+}

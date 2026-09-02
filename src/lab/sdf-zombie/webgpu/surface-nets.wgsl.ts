@@ -195,11 +195,19 @@ export const K_VERT_AT = /* wgsl */ `fn vertAt(i: i32, j: i32, k: i32, dims: vec
 }
 const NO_VERT: u32 = 4294967295u;`;
 
+/** SOUP STRIDE IS 4 FLOATS, NOT 3. three pads a StorageBufferAttribute of
+ *  itemSize 3 to vec4 on upload (WebGPUAttributeUtils.js "WGSL does not
+ *  support packed vec3 data in storage buffers, pad to vec4") and mutates
+ *  the attribute to itemSize 4, so the VERTEX stage reads a 16-byte stride.
+ *  A kernel writing xyzxyz produced garbage triangles spanning the bbox
+ *  (2026-09-02: the "blob" that hid the torso). w is left untouched. */
 export const K_PUT_V = /* wgsl */ `fn putV(id: u32, at: u32, cellPos: ptr<storage, array<f32>, read_write>, soup: ptr<storage, array<f32>, read_write>) -> void {
-  (*soup)[at * 3u] = (*cellPos)[id * 3u];
-  (*soup)[at * 3u + 1u] = (*cellPos)[id * 3u + 1u];
-  (*soup)[at * 3u + 2u] = (*cellPos)[id * 3u + 2u];
-}`;
+  (*soup)[at * SOUP_STRIDE] = (*cellPos)[id * 3u];
+  (*soup)[at * SOUP_STRIDE + 1u] = (*cellPos)[id * 3u + 1u];
+  (*soup)[at * SOUP_STRIDE + 2u] = (*cellPos)[id * 3u + 2u];
+}
+const SOUP_STRIDE: u32 = 4u;`;
+export const SOUP_STRIDE = 4;
 
 export const K_EMIT_QUAD = /* wgsl */ `fn emitQuad(qIn: vec4<u32>, flip: bool, cellPos: ptr<storage, array<f32>, read_write>, soup: ptr<storage, array<f32>, read_write>, counters: ptr<storage, array<atomic<u32>>, read_write>) -> void {
   if (qIn.x == NO_VERT || qIn.y == NO_VERT || qIn.z == NO_VERT || qIn.w == NO_VERT) {
