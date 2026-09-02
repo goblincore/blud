@@ -35,6 +35,39 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
+- `X1.wound-r2` [~] **Bone through wounds + tissue-depth shading** — branch
+  `claude/continue-previous-work-91055b`, **NOT merged**. 11 dispatch tasks,
+  suite green (2620/162). Bone is `op:'bone'` in its own `body.bonePrims`
+  array (NOT in `prims` — ~20 consumers filter on `op` and only 4 want bone),
+  packed after the flesh, folded as a hard `min` after `applyWounds` gated on
+  `nearWound` (an exact identity, since containment keeps bone inside flesh).
+  Tissue ramp skin→fat→muscle→clot off `carved` (mapBody's previously unused
+  `.w`), fibre × `wm`, bone stained at the cavity wall. Panel default-on.
+  Bench **UNRESOLVED +0.0%**; halo PASS 12 angles.
+  **Owner playtest 2026-09-02:** limb bone "looks quite good", a slug reaches
+  bone in one shot (not the lab's 14 pellet blasts). Fibre **not noticeable**
+  at 0.6 — try 1.4, else cut it. **Aesthetic blockers before merge:** the
+  ribcage reads as "a big white central pillar" (it IS a slab — one `bar` on
+  spine at `wide=1.45` plus per-prim derived twins; needs real rib prims and
+  one-bone-per-RIG-BONE derivation instead of per-prim), and the skull is a
+  small round ball with no jaw. **Owner wants organs/entrails exposed on body
+  shots** — the ramp is a WALL model (right for a limb, wrong for a torso,
+  which is mostly cavity); needs its own brainstorm.
+  [spec](docs/superpowers/specs/2026-09-01-wound-pass-r2-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-01-wound-pass-r2.md) ·
+  [note](docs/dev-notes/2026-09-01-wound-r2/notes.md)
+
+- `X1.zombie-behaviour` [ ] **Zombies never attack, and they clump/clip**
+  (owner ask 2026-09-02, for a later session). Two halves: they should attack
+  the player at some point, and collision needs work — they clump and clip
+  into each other. The clipping is not only feel: interpenetrating bodies are
+  a documented render failure mode (`march.wgsl.ts:1703`, "the
+  interpenetrating-crowd holes") and are the owner's leading hypothesis for
+  the intermittent wound-flip glitch (`glitchwound.mov`, not reproducible on
+  demand — PARKED, retest after collision lands). Reuse the existing pure
+  modules — `wander.ts`, `gait.ts`, `motion.ts`, `ik.ts`, `stagger.ts`,
+  `collapse.ts` — this is a retarget, not a new rig.
+
 - `X1.blood-viscosity` [~] **Impact gouts + goo that actually renders** — branch
   `claude/blood-effects-viscosity-8adcc3`, **NOT merged**. The goo layer now
   draws on `sdf-game.html` for the first time, ships **ON** by default with
