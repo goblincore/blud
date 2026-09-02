@@ -313,3 +313,56 @@ describe('applyRig — per-prim orientation (motion-polish task 3)', () => {
     expect(sdPrimitive(add(brow.a, vscale(shortAxis, d)), brow)).toBeGreaterThan(0);
   });
 });
+
+describe('bone prims ride the rig (wound pass r2)', () => {
+  const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+  const bound = bindRig(body);
+
+  it('binds every bone endpoint alongside the flesh binds', () => {
+    expect(bound.boneBinding).toHaveLength(body.bonePrims.length);
+  });
+
+  it('is the identity at rest for bones too', () => {
+    const out = applyRig(body, bound);
+    body.bonePrims.forEach((bp, i) => {
+      expect(len(sub(out.bonePrims[i]!.a, bp.a))).toBeCloseTo(0, 9);
+      expect(len(sub(out.bonePrims[i]!.b, bp.b))).toBeCloseTo(0, 9);
+    });
+  });
+
+  it('poses each bone with its flesh source, never leaves it at rest', () => {
+    // Swing every rig point but the pinned one. Each bone must move by EXACTLY
+    // the amount its flesh source moves — same bone, same binds — and at least
+    // one bone must actually move, else the test proves nothing.
+    const moved = { ...bound, rig: { ...bound.rig,
+      points: bound.rig.points.map(p => p.pinned ? p
+        : ({ ...p, pos: [p.pos[0] + 0.3, p.pos[1], p.pos[2]] as const })) } };
+    const out = applyRig(body, moved);
+    let checked = 0;
+    let movedBones = 0;
+    body.bonePrims.forEach((bp, i) => {
+      // The flesh source shares the bone name, limb and REST endpoints — the
+      // derivation copies geometry, so the pair is unambiguous.
+      const j = body.prims.findIndex(p =>
+        p.bone === bp.bone && p.limb === bp.limb && p.cluster === bp.cluster
+        && p.a[0] === bp.a[0] && p.a[1] === bp.a[1] && p.a[2] === bp.a[2]
+        && p.b[0] === bp.b[0] && p.b[1] === bp.b[1] && p.b[2] === bp.b[2]);
+      expect(j).toBeGreaterThanOrEqual(0);
+      const boneDelta = len(sub(out.bonePrims[i]!.a, bp.a));
+      const fleshDelta = len(sub(out.prims[j]!.a, body.prims[j]!.a));
+      expect(boneDelta).toBeCloseTo(fleshDelta, 9);
+      if (boneDelta > 0.29) movedBones++;
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(0);
+    expect(movedBones).toBeGreaterThan(0);
+  });
+
+  it('keeps bone endpoints finite through a settled rig', () => {
+    let rig = bound.rig;
+    for (let i = 0; i < 120; i++)
+      rig = stepRig(rig, 1 / 60, { gravity: [0, -9.8, 0], damping: 0.04, iterations: 4, restStiffness: 0.2 });
+    const out = applyRig(body, { ...bound, rig });
+    for (const p of out.bonePrims) for (const v of [...p.a, ...p.b]) expect(Number.isFinite(v)).toBe(true);
+  });
+});

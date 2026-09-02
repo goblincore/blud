@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, nearestPrim, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS } from './validate';
+import { validateBody, sdBody, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -82,6 +82,28 @@ describe('validateBody', () => {
     const many = Array.from({ length: MAX_PRIMS + 1 }, (_, i) => prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));
     const errs = validateBody(assignClusters(many), { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
     expect(errs.join(' ')).toMatch(/primitive count/i);
+  });
+
+  it('counts bones AGAINST the shader ceiling, naming both counts', () => {
+    // Flesh alone fits; flesh + bones does not. The texture is MAX_PRIMS wide
+    // and the bone rows ride the SAME allocation past primCount, so the bound
+    // is on the total — a body that validates here but overflows the texture
+    // would have its bones silently unread.
+    const flesh = Array.from({ length: MAX_PRIMS - 2 }, (_, i) => prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));
+    const body = {
+      ...assignClusters(flesh),
+      bonePrims: [
+        { ...prim('torso', [0, 1.2, 0], 0.05), op: 'bone' as const, cluster: 1 },
+        { ...prim('torso', [0, 1.201, 0], 0.05), op: 'bone' as const, cluster: 1 },
+        { ...prim('torso', [0, 1.202, 0], 0.05), op: 'bone' as const, cluster: 1 },
+      ],
+    };
+    const errs = validateBody(body, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 });
+    expect(errs.join(' ')).toMatch(/primitive count .*flesh.*bone.*exceeds/s);
+    expect(errs.join(' ')).toContain(`${flesh.length} flesh + 3 bone`);
+    // And one under the combined bound stays clean.
+    const ok = { ...body, bonePrims: body.bonePrims!.slice(0, 1) };
+    expect(validateBody(ok, { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 }).join(' ')).not.toMatch(/exceeds shader ceiling/);
   });
 
   // Regression: the total can sit well under MAX_PRIMS while ONE cluster runs
@@ -266,5 +288,141 @@ body
   it('returns -1 when no cluster is alive', () => {
     const noneAlive = { ...body, clusters: body.clusters.map(c => ({ ...c, alive: false })) };
     expect(nearestPrim([0, 0, 0], noneAlive)).toBe(-1);
+  });
+});
+
+describe('bone prims are invisible to the CPU field (wound pass r2)', () => {
+  // sdBody backs click-to-shoot. It mirrors mapBody + applyCarves and does NOT
+  // apply wounds, and bone is always strictly inside flesh — so adding bone
+  // prims must not move the CPU field by even a float. If it does, shots land
+  // where nothing is drawn.
+  const flesh: Primitive = {
+    a: [0, 0, 0], b: [0, 0.4, 0], radius: 0.09,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'legL', cluster: 0,
+  };
+  // The bone surface sits INSIDE the flesh's smin fillet band (gap 0.005 <
+  // blendK 0.01) — the adversarial case. With a fat gap the smin degenerates
+  // to an exact min of the flesh and an additive-folded bone would be a
+  // bit-identical no-op, and this test would pass against a broken fold.
+  const bone: Primitive = { ...flesh, radius: 0.085, op: 'bone' };
+
+  const withoutBone = {
+    prims: [flesh],
+    clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+  } as unknown as Body;
+  const withBone = {
+    prims: [flesh, bone],
+    clusters: [{ limb: 'legL', start: 0, count: 2, alive: true }],
+  } as unknown as Body;
+
+  const probes: Vec3[] = [
+    [0, 0.2, 0], [0.05, 0.2, 0], [0.12, 0.2, 0], [0, 0.5, 0],
+    [0.3, 0.2, 0], [0, 0.2, 0.08], [-0.06, 0.1, 0.02],
+  ];
+
+  it('sdBody is bit-identical with and without bone prims', () => {
+    for (const p of probes) {
+      expect(sdBody(p, withBone)).toBe(sdBody(p, withoutBone));
+    }
+  });
+
+  it('never reports a bone prim as the nearest additive primitive', () => {
+    // A contract pin rather than a red/green test: for bone strictly inside
+    // flesh, dBone > dFlesh at every point, so bone can never win the argmin
+    // even before the skip existed. It pins the contract against future
+    // fixtures where the two could tie or invert.
+    for (const p of probes) {
+      expect(nearestPrim(p, withBone)).not.toBe(1);
+    }
+  });
+});
+
+describe('bone containment (wound pass r2)', () => {
+  const flesh: Primitive = {
+    a: [0, 0, 0], b: [0, 0.4, 0], radius: 0.09,
+    scale: [1, 1, 1], blendK: 0.01, limb: 'legL', cluster: 0,
+  };
+  const mk = (boneRadius: number) => ({
+    prims: [flesh],
+    bonePrims: [{ ...flesh, radius: boneRadius, op: 'bone' as const }],
+    clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+  } as unknown as Body);
+
+  it('accepts a bone comfortably inside its flesh', () => {
+    expect(checkBoneContainment(mk(0.03))).toEqual([]);
+  });
+
+  it('rejects a bone fatter than the flesh around it', () => {
+    const errs = checkBoneContainment(mk(0.12));
+    expect(errs.length).toBeGreaterThan(0);
+    expect(errs[0]).toMatch(/bone/i);
+    // Index 0 WITHIN the bone array — bone lives outside body.prims now, so
+    // the error names the bone-array position (was prims[1] under the old
+    // storage this task replaces).
+    expect(errs[0]).toMatch(/prim 0/);
+  });
+
+  it('rejects a bone that only breaches on one side', () => {
+    // Same radius as a passing bone, but shoved sideways until it breaks the
+    // skin. Radius alone is not the test — position matters.
+    const offset = { ...flesh, radius: 0.03, op: 'bone' as const,
+      a: [0.075, 0, 0] as Vec3, b: [0.075, 0.4, 0] as Vec3 };
+    const body = {
+      prims: [flesh], bonePrims: [offset],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
+  });
+
+  it('catches a breach that only a non-uniform scale creates', () => {
+    // sdPrimitive divides the sample point by prim.scale, so a prim with
+    // scale.x = 1.45 reaches 1.45 x radius in x — the ribcage Task 10 authors
+    // as exactly wide=1.45. Sampling a plain sphere of radius r probes a
+    // surface the prim does not have and misses every breach along a widened
+    // axis. The breach below is REAL (flesh r=0.09, bone reaches 0.10875),
+    // confirmed against sdBody before asserting it is caught.
+    const wide = {
+      ...flesh, radius: 0.075, scale: [1.45, 1, 0.55] as Vec3, op: 'bone' as const,
+    };
+    const body = {
+      prims: [flesh], bonePrims: [wide],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    // Confirm the breach is real before asserting it is caught.
+    expect(sdBody([0.075 * 1.45, 0.2, 0], body)).toBeGreaterThan(0);
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
+  });
+
+  it('catches a breach that only the taper creates', () => {
+    // radiusB sits at the FAR end; a bone whose radiusB exceeds the flesh's
+    // reach there breaches only near b. A sampler that never interpolates
+    // radius toward radiusB never looks there.
+    const tapered = {
+      ...flesh, radius: 0.03, radiusB: 0.12, op: 'bone' as const,
+    };
+    const body = {
+      prims: [flesh], bonePrims: [tapered],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    // 0.105 from the axis at the far cap: outside the flesh (r 0.09) but
+    // inside the bone's radiusB (0.12) — where the bone pokes through.
+    expect(sdBody([0.105, 0.4, 0], body)).toBeGreaterThan(0);
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
+  });
+
+  it('catches a breach that only the bend creates', () => {
+    // A bent bone's midsection swings out to the control point — well off the
+    // a-b chord an endpoint-only sampler walks.
+    const bent = {
+      ...flesh, radius: 0.03, bend: [0.15, 0, 0] as Vec3, op: 'bone' as const,
+    };
+    const body = {
+      prims: [flesh], bonePrims: [bent],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    // The Bezier mid lands at x=0.075; the bone's 0.03 radius reaches 0.105,
+    // past the flesh's 0.09. Probe a point inside the bone, outside the flesh.
+    expect(sdBody([0.095, 0.2, 0], body)).toBeGreaterThan(0);
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
   });
 });

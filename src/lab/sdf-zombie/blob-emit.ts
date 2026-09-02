@@ -100,6 +100,13 @@ export function emitBlob(doc: BlobDoc, override: EmitOverride = {}): string {
     ...doc.structure.map((l): Owned => ({ l })),
     ...doc.bones.map((b): Owned => ({ l: b.src })),
     ...doc.parts.map((p): Owned => ({ l: p.src })),
+    // The `bones` block (wound pass r2): authored bone parts ride their own
+    // `src` lines exactly as `doc.parts` do, and the `ratio` lines are trivia
+    // replayed verbatim. Leaving either out would repeat the `sheetTrivia`
+    // bug documented above — an empty-looking block that still compiled while
+    // silently losing everything the author wrote under it.
+    ...(doc.bonesBlock ? doc.bonesBlock.parts.map((p): Owned => ({ l: p.src })) : []),
+    ...doc.bonesTrivia.map((l): Owned => ({ l })),
     // `faceTrivia` lines are `key value` pairs — `parseFaceLine` throws
     // before pushing one that doesn't have both, so `words[0]` is always
     // present here even though its type is `string | undefined`.

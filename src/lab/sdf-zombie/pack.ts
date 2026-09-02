@@ -13,6 +13,11 @@ export const W_DEAD = 2;
 /** Cuts a channel along its surface rather than removing a solid. Handled in
  *  the carve pass beside W_CARVE — see sdGroove in validate.ts. */
 export const W_GROOVE = 3;
+/** Bone: a second material inside the flesh. Skipped by the additive fold and
+ *  by the carve pass; folded as a hard `min` AFTER applyWounds, so it is only
+ *  ever visible where a carve has eaten down to it. See
+ *  docs/superpowers/specs/2026-09-01-wound-pass-r2-design.md §1. */
+export const W_BONE = 4;
 
 export interface PackedBody {
   primA: Float32Array;         // xyz = endpoint A, w = radius
@@ -77,6 +82,21 @@ export interface PackedBody {
   groupCount: number;
   primCount: number;
   clusterCount: number;
+  /**
+   * How many BONE rows were written at [primCount, primCount + boneCount) —
+   * the separate second-material array (BuiltBody.bonePrims), folded by the
+   * shader as a hard min AFTER applyWounds. Bones whose cluster is not alive
+   * are NOT written (severing drops the limb's bones), so this is the live
+   * count, not bonePrims.length. The entry point's counts.x still holds
+   * primCount alone — bones start AT counts.x.
+   *
+   * NOTE for the shader wiring (wound pass r2 task 5): the plan named
+   * `woundCfg2.w` as the carrier, but that channel is TAKEN — it overrides
+   * the hit epsilon in volume mode (see the hit-eps note in the march entry
+   * point and the 'hit epsilon rides the spare woundCfg2.w' test). Pick a
+   * genuinely free channel there.
+   */
+  boneCount: number;
   /** Cull margin: a cluster can still pull the surface from up to this far away. */
   maxBlendK: number;
   /** How many packed primitives are carves. Zero lets the shader skip the pass. */
@@ -121,7 +141,11 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
 
   let maxBlendK = 0;
   let carveCount = 0;
-  body.prims.forEach((p, i) => {
+
+  // One row writer shared by flesh and bone — byte-for-byte the same Float32
+  // writes in the same order, so extracting it cannot drift the flesh rows
+  // the zombie pin demands stay bit-identical.
+  const writePrim = (p: Primitive, i: number, w: number, rp: Primitive | undefined): void => {
     const o = i * PRIM_STRIDE;
     // The prim role rides primScale.w, which held a cluster id the shader
     // never actually read.
@@ -135,9 +159,6 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     //
     // w=2 (dead) outranks w=1 (carve): a mid-limb sever only ever kills add
     // prims, but if a carve ever went dead it must stop carving too.
-    const isCarve = p.op === 'sub';
-    if (isCarve && !p.dead) carveCount++;
-    const w = p.dead ? W_DEAD : p.op === 'groove' ? W_GROOVE : isCarve ? W_CARVE : W_ADD;
     primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
     primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
     primScale.set([p.scale[0], p.scale[1], p.scale[2], w], o);
@@ -185,13 +206,37 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // Rest endpoints (motion-polish task 6). A missing rest prim packs as
     // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
     // always has radius > 0), which falls back to the old noiseLocal anchor.
-    const rp = (rest ?? body).prims[i];
     if (rp) {
       restA.set([rp.a[0], rp.a[1], rp.a[2], rp.radius], o);
       restB.set([rp.b[0], rp.b[1], rp.b[2], rp.blendK], o);
     }
+  };
+
+  body.prims.forEach((p, i) => {
+    const isCarve = p.op === 'sub';
+    if (isCarve && !p.dead) carveCount++;
+    const w = p.dead ? W_DEAD
+      : p.op === 'groove' ? W_GROOVE
+      : p.op === 'bone' ? W_BONE
+      : isCarve ? W_CARVE : W_ADD;
+    writePrim(p, i, w, (rest ?? body).prims[i]);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
+  });
+
+  // BONE rows (wound pass r2): written AFTER the flesh, at indices
+  // [prims.length, prims.length + boneCount), never inside a cluster or group
+  // range — foldGroup and applyCarves walk those spans only, so neither can
+  // see a bone even by accident. The one line that makes severing work: a
+  // bone whose cluster is not alive is SKIPPED, so a severed limb's bones go
+  // with it. Rest rows index the rest body's bonePrims positionally — applyRig
+  // poses bones without reordering, the same contract as prims.
+  const restBones = (rest ?? body).bonePrims ?? [];
+  let boneCount = 0;
+  (body.bonePrims ?? []).forEach((b, j) => {
+    if (b.dead || !body.clusters[b.cluster]?.alive) return;
+    writePrim(b, body.prims.length + boneCount, W_BONE, restBones[j]);
+    boneCount++;
   });
 
   const clusterBounds = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
@@ -250,6 +295,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
+    boneCount,
     maxBlendK,
     carveCount,
   };

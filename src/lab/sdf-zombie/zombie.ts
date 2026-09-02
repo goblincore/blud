@@ -240,7 +240,7 @@ export function createChunkView(
       id: 0, limb: chunk.limb, start: 0, count: local.length,
       center: [0, 0, 0], radius: extent, alive: true,
     }],
-    bones: new Map(),
+    bones: new Map(), bonePrims: [],
   });
 
   material.uniforms.uPrimA = { value: packed.primA };

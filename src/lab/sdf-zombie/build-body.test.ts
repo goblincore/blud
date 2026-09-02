@@ -120,3 +120,42 @@ body
     expect(body.prims.find(p => p.src === torsoLine)!.bone).toBe('spine');
   });
 });
+
+describe('bone derivation (wound pass r2)', () => {
+  const b = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+
+  it('puts derived bones in body.bonePrims and NEVER in body.prims', () => {
+    expect(b.bonePrims.length).toBeGreaterThan(0);
+    expect(b.prims.some(p => p.op === 'bone')).toBe(false);
+  });
+
+  it('gives every derived bone the cluster of the flesh it came from', () => {
+    const live = new Set(b.clusters.map((_, i) => i));
+    for (const bone of b.bonePrims) expect(live.has(bone.cluster)).toBe(true);
+  });
+
+  it('derives a bone strictly inside the flesh it came from', () => {
+    // The containment validator already ran as part of buildBody — an empty
+    // error list IS the containment proof. This pin makes the intent explicit.
+    expect(b.errors).toEqual([]);
+  });
+
+  it('leaves body.prims bit-identical to before bone existed', () => {
+    // The whole point of the separate array: no existing consumer sees a change.
+    const noBone = buildBody({ ...ZOMBIE, boneRatio: 0 }, DEFAULT_BUILD_OPTS);
+    expect(b.prims).toEqual(noBone.prims);
+    expect(b.bonePrims.length).toBeGreaterThan(0);
+    expect(noBone.bonePrims.length).toBe(0);
+  });
+
+  it('sits every derived bone at the same endpoints as its flesh source', () => {
+    for (const bone of b.bonePrims) {
+      const src = b.prims.find(p =>
+        p.bone === bone.bone && p.limb === bone.limb && p.cluster === bone.cluster
+        && p.a[0] === bone.a[0] && p.a[1] === bone.a[1] && p.a[2] === bone.a[2]
+        && p.b[0] === bone.b[0] && p.b[1] === bone.b[1] && p.b[2] === bone.b[2]);
+      expect(src).toBeDefined();
+      expect(bone.radius).toBeLessThan(src!.radius);
+    }
+  });
+});

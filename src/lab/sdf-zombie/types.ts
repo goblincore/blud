@@ -103,8 +103,11 @@ export interface PrimDef {
    * meets the assembled body — a mouth line, a panel seam, a nostril slit —
    * rather than removing a solid. Both apply AFTER the complete additive fold;
    * see applyCarves in march.glsl.ts for why not per-cluster.
+   * 'bone' is a second material strictly INSIDE the flesh: skipped by both the
+   * additive fold and the carve pass, folded as a hard min after wounds are
+   * carved, so it appears only where a wound has reached it.
    */
-  op?: 'add' | 'sub' | 'groove';
+  op?: 'add' | 'sub' | 'groove' | 'bone';
   /**
    * Displacement from the bone-relative placement, in world axes. The body is
    * authored in a rest pose with no rotations, so world and bone axes coincide
@@ -169,6 +172,26 @@ export interface BodyDef {
   root: Vec3;
   bones: BoneDef[];
   prims: PrimDef[];
+  /**
+   * AUTHORED bone primitives from a `.blob` `bones` block (wound pass r2,
+   * task 4b), tagged `op: 'bone'` by compileBlob. Named `bonePrims`, not the
+   * plan's `bones`: `BodyDef.bones` is TAKEN — it is the rig skeleton above.
+   *
+   * Kept OUT of `prims` for the same reason BuiltBody keeps them out: the
+   * authoring-time field must not be the place where flesh and bone mix.
+   * buildBody expands them through the same mirror pass as flesh, places
+   * them, and moves them to BuiltBody.bonePrims — an authored bone wins PER
+   * BONE, suppressing auto-derivation for the bones it names.
+   */
+  bonePrims?: PrimDef[];
+  /**
+   * Bone radius as a fraction of the flesh prim it sits inside — drives the
+   * auto-derivation `buildBody` runs over the flesh prims (deriveBones).
+   * Absent means DEFAULT_BONE_RATIO; 0 opts a body out of bone entirely.
+   * Set by a `bones` block's `ratio` line; the block's authored parts
+   * (bonePrims above) override derivation per bone on top of it.
+   */
+  boneRatio?: number;
 }
 
 /** A resolved primitive in rest space. */
@@ -214,8 +237,11 @@ export interface Primitive {
   /**
    * Absent means 'add'. Optional rather than required so the many existing
    * test fixtures that build Primitive literals keep compiling.
+   * 'bone' is a second material strictly INSIDE the flesh: skipped by both the
+   * additive fold and the carve pass, folded as a hard min after wounds are
+   * carved, so it appears only where a wound has reached it.
    */
-  op?: 'add' | 'sub' | 'groove';
+  op?: 'add' | 'sub' | 'groove' | 'bone';
   /** Groove depth and width, in metres. Only read when `op` is 'groove'. */
   grooveDepth?: number;
   grooveWidth?: number;
@@ -268,4 +294,23 @@ export interface BuiltBody {
   prims: Primitive[];
   clusters: ClusterInfo[];
   bones: Map<string, ResolvedBone>;
+  /**
+   * Bone primitives — a SECOND material strictly inside the flesh, kept OUT
+   * of `prims` on purpose. (Named `bonePrims` rather than the spec prose's
+   * `bones` because BuiltBody.bones is TAKEN — it is the rig skeleton map
+   * above, and every character test pins pose against it.)
+   *
+   * About twenty modules walk `prims` and filter on `op`, and only four of
+   * them would ever want bone: rig-bind (pose it), pack (upload it), sever
+   * (drop it with its limb) and validate (contain it). Keeping bone here
+   * makes the other sixteen correct by construction rather than by fifteen
+   * remembered filters. An earlier design put bone in `prims` and silently
+   * inflated the shadow hull, rendered bone as flesh inside gibs, and broke
+   * severDistal's positional slice.
+   *
+   * Each carries `cluster`, naming the flesh cluster it belongs to, so
+   * severing drops it with its limb (packBody skips bones whose cluster is
+   * not alive).
+   */
+  bonePrims: Primitive[];
 }

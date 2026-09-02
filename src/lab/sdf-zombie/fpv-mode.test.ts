@@ -72,7 +72,7 @@ function ballBody(center: Vec3, radius = 0.3): BuildResult {
       id: 1, limb: 'torso', start: 0, count: 1,
       center: [...center] as Vec3, radius, alive: true,
     }],
-    bones: new Map(), errors: [],
+    bones: new Map(), bonePrims: [], errors: [],
   };
 }
 

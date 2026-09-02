@@ -177,6 +177,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
   return {
     /** x primCount, y clusterCount, z carveCount, w maxBlendK */
     counts: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** x boneCount, yzw spare (wound pass r2). Bone rows pack at
+     *  [counts.x, counts.x + boneCount) and applyBones walks exactly that
+     *  range, gated on nearWound. A NEW vec4 rather than a spare channel:
+     *  counts was already full and woundCfg2.w is the volume hitEps
+     *  override — NOT spare (see the woundShadowCfg note below). */
+    counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** x steps, y stepMul, z silhouetteNoiseAmp */
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0.016)),
     /** x count, y blendK, z rimSplay, w rimOffset */
@@ -246,9 +252,18 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
     surfCfg2: uniform(new THREE.Vector4(1.0, 0.06, 0, 1.2)),
+    /** x woundDepthAmp, y fatDepth, z muscleDepth, w woundFibreAmp — the
+     *  wound tissue ramp (march.wgsl.ts TISSUE_RAMP). Defaults mirror
+     *  henenlotter-latex; applyMaterial overwrites from the material. */
+    surfCfg3: uniform(new THREE.Vector4(1.0, 0.004, 0.014, 0.6)),
     /** The colour the albedo mottle mixes toward. Inert while surfCfg2.z is 0,
      *  which is every stock preset — see FleshMaterial.mottleAmp. */
     mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
+    /** Subcutaneous fat for the wound tissue ramp (linear RGB). */
+    fatColor: uniform(new THREE.Color(0.83, 0.72, 0.42)),
+    /** Exposed bone (wound pass r2), mixed toward deepColor at the flesh
+     *  junction. Matches the FleshMaterial preset default. */
+    boneColor: uniform(new THREE.Color(0.71, 0.53, 0.35)),
     /** x enabled (1 multiplier sheet, 2 decal sheet), y strength, z forward (+1/-1), w relief */
     faceCfg: uniform(new THREE.Vector4(0, 0.85, 1, 1.4)),
     /** x projMode (0 planar, 1 spherical), y mean, z glowThreshold, w glowStrength */
@@ -585,6 +600,7 @@ export function createMarchMaterial(
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
     counts: u.counts,
+    counts2: u.counts2,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
@@ -607,7 +623,10 @@ export function createMarchMaterial(
     spotColor: u.spotColor,
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
+    surfCfg3: u.surfCfg3,
     mottleColor: u.mottleColor,
+    fatColor: u.fatColor,
+    boneColor: u.boneColor,
     faceCfg: u.faceCfg,
     faceCfg2: u.faceCfg2,
     faceCfg3: u.faceCfg3,
@@ -980,6 +999,7 @@ export function createZombieGpuView(
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     dataTex.needsUpdate = true;
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
+    u.counts2.value.set(p.boneCount, 0, 0, 0);
     return p;
   }
 
@@ -1013,6 +1033,7 @@ export function createZombieGpuView(
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
     counts: u.counts,
+    counts2: u.counts2,
     marchCfg: u.marchCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
@@ -1116,7 +1137,10 @@ export function createZombieGpuView(
       u.charColor.value.setRGB(...m.charColor);
       u.surfCfg.value.set(m.specIntensity, m.specRoughness, m.fresnelBoost, m.translucency);
       u.surfCfg2.value.set(m.wetness, m.surfaceNoiseAmp, m.mottleAmp, m.mottleScale);
+      u.surfCfg3.value.set(m.woundDepthAmp, m.fatDepth, m.muscleDepth, m.woundFibreAmp);
       u.mottleColor.value.setRGB(...m.mottleColor);
+      u.fatColor.value.setRGB(...m.fatColor);
+      u.boneColor.value.setRGB(...m.boneColor);
       u.marchCfg.value.z = m.silhouetteNoiseAmp;
       u.lightDir.value.set(...light.keyDir);
       u.keyColor.value.setRGB(...light.keyColor);
@@ -1234,7 +1258,10 @@ export function createChunkGpuView(
     u.wallPosZ.value.copy(template.wallPosZ.value);
     u.surfCfg.value.copy(template.surfCfg.value);
     u.surfCfg2.value.copy(template.surfCfg2.value);
+    u.surfCfg3.value.copy(template.surfCfg3.value);
     u.mottleColor.value.copy(template.mottleColor.value);
+    u.fatColor.value.copy(template.fatColor.value);
+    u.boneColor.value.copy(template.boneColor.value);
     u.marchCfg.value.copy(template.marchCfg.value);
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);
@@ -1320,7 +1347,7 @@ export function createChunkGpuView(
         id: 0, limb: c.limb, start: 0, count: local.length,
         center: [0, 0, 0], radius: extent, alive: true,
       }],
-      bones: new Map(),
+      bones: new Map(), bonePrims: [],
     }, undefined, { singleGroup: true });
 
     // Full-width copies intentionally zero any rows left by the previous
@@ -1341,6 +1368,7 @@ export function createChunkGpuView(
     writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
 
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
+    u.counts2.value.set(packed.boneCount, 0, 0, 0);
     u.marchCfg.value.x = 48; // chunks are small; fewer steps
     u.lodCfg.value.w = 1;    // torn-meat gore mask
     u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;

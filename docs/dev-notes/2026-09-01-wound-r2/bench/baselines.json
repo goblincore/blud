@@ -1,0 +1,87 @@
+{
+  "when": "2026-09-02T03:59:12.857Z",
+  "legSet": "wounds",
+  "viewport": "1280x800",
+  "room": 4,
+  "repeats": 3,
+  "warmup": 120,
+  "chunkFrames": 10,
+  "gate": null,
+  "measurement": {
+    "headline": "wounds-bone",
+    "baseline": "wounds-no-bone",
+    "deltaPct": 0,
+    "baselineSpreadPct": 4,
+    "unresolved": true
+  },
+  "scenarios": {
+    "wounds-off": {
+      "n": 108,
+      "runs": 3,
+      "p50": 9.07,
+      "p95": 11.56,
+      "p99": 22.63,
+      "mean": 9.54,
+      "walkP50": 9.23,
+      "fireP50": 9.33,
+      "gibP50": 8.48,
+      "tuning": {
+        "woundDepthAmp": 0,
+        "woundFibreAmp": 0,
+        "boneRatio": 0
+      },
+      "bodies": 4
+    },
+    "wounds-no-bone": {
+      "n": 108,
+      "runs": 3,
+      "p50": 9.27,
+      "p95": 11.62,
+      "p99": 22.32,
+      "mean": 9.82,
+      "walkP50": 9.37,
+      "fireP50": 9.48,
+      "gibP50": 9,
+      "tuning": {
+        "woundDepthAmp": 1,
+        "woundFibreAmp": 0.6,
+        "boneRatio": 0
+      },
+      "bodies": 4
+    },
+    "wounds-bone": {
+      "n": 108,
+      "runs": 3,
+      "p50": 9.27,
+      "p95": 12.25,
+      "p99": 21.72,
+      "mean": 9.81,
+      "walkP50": 9.44,
+      "fireP50": 9.67,
+      "gibP50": 9.1,
+      "tuning": {
+        "woundDepthAmp": 1,
+        "woundFibreAmp": 0.6,
+        "boneRatio": 0.38
+      },
+      "bodies": 4
+    }
+  },
+  "spread": {
+    "wounds-off": {
+      "lo": 9.05,
+      "hi": 9.07,
+      "pct": 0
+    },
+    "wounds-no-bone": {
+      "lo": 9.01,
+      "hi": 9.35,
+      "pct": 4
+    },
+    "wounds-bone": {
+      "lo": 9.21,
+      "hi": 9.36,
+      "pct": 2
+    }
+  }
+}

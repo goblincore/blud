@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildFirefight, actionsAt, segmentAt, validateScenario, scenarioByName,
-  DUNGEON_SCENARIOS,
+  DUNGEON_SCENARIOS, WOUND_SCENARIOS,
 } from './game-bench-scenario';
 import { DUNGEON_RIG, GALLERY_RIG } from './dungeon-lighting';
 
@@ -112,5 +112,30 @@ describe('dungeon bench legs', () => {
     for (const name of DUNGEON_SCENARIOS) {
       expect(scenarioByName(name)).toEqual(scenarioByName(name));
     }
+  });
+});
+
+describe('wound bench legs (wound pass r2)', () => {
+  it('exposes three wound legs', () => {
+    expect(WOUND_SCENARIOS).toEqual(['wounds-off', 'wounds-no-bone', 'wounds-bone']);
+  });
+
+  it('pins the same wound count and body count on every leg', () => {
+    // The lighting runs carried 8 bodies through the fire segment in one run
+    // and 5 in another, which alone can move the result more than the effect
+    // being measured. A cost leg must fix the workload.
+    const legs = WOUND_SCENARIOS.map(n => scenarioByName(n));
+    const counts = new Set(legs.map(l => `${l.woundCount}/${l.bodyCount}`));
+    expect(counts.size).toBe(1);
+  });
+
+  it('differs only in what is enabled, not in what happens', () => {
+    const [off, noBone, bone] = WOUND_SCENARIOS.map(n => scenarioByName(n));
+    expect(off!.steps).toEqual(noBone!.steps);
+    expect(noBone!.steps).toEqual(bone!.steps);
+    expect(off!.woundDepthAmp).toBe(0);
+    expect(noBone!.woundDepthAmp).toBe(1);
+    expect(noBone!.boneRatio).toBe(0);
+    expect(bone!.boneRatio).toBeGreaterThan(0);
   });
 });

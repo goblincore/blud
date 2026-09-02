@@ -41,7 +41,12 @@ function f(n: number): string {
  * Signature and semantics match the generic MAP_BODY exactly, so the two are
  * interchangeable and can be measured against each other. `counts` is still a
  * parameter even though its values are baked — keeping the signature identical
- * means the entry point does not need a second variant.
+ * means the entry point does not need a second variant. Same for `counts2`
+ * (boneCount, wound pass r2): accepted for signature parity with the generic
+ * mapBody, which the entry calls with the same arg list either way — but NOT
+ * acted on yet, so a specialised (crowd) body silently shows no bone. Bone
+ * rows exist only on wounded bodies, which the crowd path does not drive
+ * today; if that changes, emit the gated applyBones call here too.
  */
 export function specialiseMapBody(body: BuildResult): string {
   // Per-prim ORIENTATION GUARD (motion-polish task 3): sdPrim reads the quat
@@ -62,7 +67,7 @@ export function specialiseMapBody(body: BuildResult): string {
   const lines: string[] = [];
   lines.push(
     'fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, ' +
-    'noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, ' +
+    'counts2: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, ' +
     'volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, ' +
     'volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, ' +
     'volumeClip: vec4<f32>) -> vec4<f32> {',

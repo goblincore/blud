@@ -24,7 +24,14 @@ describe('severLimb', () => {
     const { body: after } = severLimb(body, 'armL');
     expect(after.prims).toHaveLength(body.prims.length);
     expect(after.prims.map(p => p.limb)).toEqual(body.prims.map(p => p.limb));
-    expect(Array.from(packBody(after).primA)).toEqual(Array.from(packBody(body).primA));
+    // FLESH rows byte-identical (wound pass r2: the bone rows past primCount
+    // legitimately differ — severing drops the dead cluster's bones there, so
+    // a full-array compare can no longer hold. The prims-length and limb-order
+    // assertions above are the 'never removes or reorders' contract.)
+    const a = packBody(after);
+    const b = packBody(body);
+    expect(Array.from(a.primA.slice(0, a.primCount * 4)))
+      .toEqual(Array.from(b.primA.slice(0, b.primCount * 4)));
   });
 
   it('leaves the torso field bit-identical — the fold order is unchanged', () => {

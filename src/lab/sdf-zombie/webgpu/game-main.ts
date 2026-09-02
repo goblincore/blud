@@ -45,6 +45,7 @@ import zombieBlobSrc from '../characters/zombie.blob?raw';
 import {
   ROOMS, TUNNELS, FURNITURE, levelColliders, levelSurfaces,
   enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
+  type RoomDef,
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
@@ -65,6 +66,10 @@ import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer } from './goo-layer';
 import { createGooPanel, type GooPanel } from './goo-panel';
+import {
+  createWoundPanel, defaultsFrom, WOUND_KEYS,
+  type WoundPanel, type WoundTuningValues,
+} from './wound-panel';
 import { makeChunk, stepChunk } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -357,6 +362,12 @@ async function main() {
   // __sdfGame at all). Assigned once the actors give it a light rig.
   let gooLayer: GooLayer | null = null;
   let gooPanel: GooPanel | null = null;
+  /** The wound panel (wound-panel.ts). Ships HIDDEN — unlike the goo panel,
+   *  which ships visible because the goo layer ships on — so every existing
+   *  look-capture script (gallery-look, shadow-ab, the canary) keeps framing
+   *  the room and not another piece of UI. __sdfGame.woundPanel(true) opens
+   *  it; that seam is guarded typeof-style in capture scripts like gooPanel. */
+  let woundPanel: WoundPanel | null = null;
   // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
@@ -586,69 +597,176 @@ async function main() {
   const actors: ZombieActor[] = [];
   const errors: string[] = [];
   let nextId = 1;
-  for (const room of ROOMS) {
+
+  // The wound panel's tuning state (wound-panel.ts). Lives HERE — before the
+  // boot loop — because one of its five keys, boneRatio, shapes buildBody's
+  // bone derivation, so applying it is a REBUILD through the same spawn path
+  // as boot. defaultsFrom equals the FleshMaterial defaults and surfCfg3's
+  // uniform defaults, so an untouched panel is exactly the pre-panel page.
+  const woundTuning = defaultsFrom(WOUND_KEYS) as WoundTuningValues;
+  /** The owner's explicit bone ratio; null = defer to the doc (absent →
+   *  DEFAULT_BONE_RATIO inside buildBody, and a later authored `bones ratio`
+   *  would win untouched). Once the owner MOVES the slider their value wins
+   *  every later build — an explicit setting clobbering an authored ratio is
+   *  the requested semantics, so there is no extra flag machinery. */
+  let boneRatioOverride: number | null = null;
+
+  /** Push the panel's tissue ramp into one view's surfCfg3. Component order
+   *  is pinned by zombie-gpu's uniform table (x depthAmp, y fat, z muscle,
+   *  w fibre) — the same order applyMaterial writes the material defaults,
+   *  so this is a re-apply, not a second writer with its own opinion. */
+  function applyWoundRamp(view: ZombieGpuView): void {
+    const c = view.uniforms.surfCfg3.value;
+    c.x = woundTuning.woundDepthAmp;
+    c.y = woundTuning.fatDepth;
+    c.z = woundTuning.muscleDepth;
+    c.w = woundTuning.woundFibreAmp;
+  }
+
+  /** The applied tuning record plus body 1's live surfCfg3 — the shader
+   *  truth half of the seam's woundTuning getter/setWoundTuning return, so
+   *  "did the slider reach the field" is one read, not a hope. */
+  function woundTuningNow(): WoundTuningValues & { surfCfg3: number[] | null } {
+    const c = actors[0]?.view.uniforms.surfCfg3.value;
+    return { ...woundTuning, surfCfg3: c ? [c.x, c.y, c.z, c.w] : null };
+  }
+
+  /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
+   *  The four ramp keys write uniforms live; boneRatio rebuilds the cast. */
+  function applyWoundTuning(o: Partial<WoundTuningValues>): void {
+    let ramp = false;
+    if (o.woundDepthAmp !== undefined) { woundTuning.woundDepthAmp = o.woundDepthAmp; ramp = true; }
+    if (o.fatDepth !== undefined) { woundTuning.fatDepth = o.fatDepth; ramp = true; }
+    if (o.muscleDepth !== undefined) { woundTuning.muscleDepth = o.muscleDepth; ramp = true; }
+    if (o.woundFibreAmp !== undefined) { woundTuning.woundFibreAmp = o.woundFibreAmp; ramp = true; }
+    if (ramp) for (const a of actors) applyWoundRamp(a.view);
+    if (o.boneRatio !== undefined && o.boneRatio !== woundTuning.boneRatio) {
+      boneRatioOverride = o.boneRatio;
+      woundTuning.boneRatio = o.boneRatio;
+      rebuildCast();
+    }
+  }
+
+  /** ONE spawn — the boot-loop body, kept as THE actor path so the wound
+   *  panel's bone-ratio rebuild cannot drift from boot. Pushes build errors
+   *  into errs; the caller decides how to surface them. */
+  function spawnZombie(room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
     const roomFurniture = FURNITURE
       .filter(f => f.room === room.id)
       .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 }));
-    for (const start of spawnPoints(room)) {
-      const compiled = compileBlob(doc, face);
-      const built = buildBody(compiled, DEFAULT_BUILD_OPTS, {});
-      errors.push(...built.errors);
-      if (doc.stance) errors.push(...checkStance(built.bones, doc.stance));
-      // TRANSLATE THE FIELD, NOT THE MESH (translate.ts) — the shader
-      // marches world space.
-      const placed = translateBody(built, start);
-      const view: ZombieGpuView = createZombieGpuView(placed,
-        {
-          cone: sdfLayer.cone,
-          occluder: sdfLayer.occluder,
-          // The outer hull's bounds. Passing them unconditionally is safe:
-          // the fetch identities (0 / 1e9) make the march bit-identical while
-          // sdfLayer.shellEnabled is false, which is the ship default.
-          shell: {
-            entry: sdfLayer.shellEntry.texture,
-            exit: sdfLayer.shellExit.texture,
-            uniforms: sdfLayer.shellEntry.uniforms,
-          },
-        });
-      view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
-      // Relaxation, explicit rather than inherited from the uniform default —
-      // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
-      view.uniforms.woundCfg2.value.y = GAME_RELAX;
-      view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
-      view.uniforms.faceCfg.value.x = 1;
-      view.uniforms.faceCfg.value.y = 1.0;
-      view.uniforms.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
-      const skull = headShape(placed);
-      if (skull) view.setHeadShape(skull.centre, skull.axes);
-      // The room's enclosure: bounds + albedos, with the page's probeWeight.
-      view.uniforms.boxMin.value.set(...enc.box.min);
-      view.uniforms.boxMax.value.set(...enc.box.max);
-      view.uniforms.wallNegX.value.setRGB(...enc.walls.negX);
-      view.uniforms.wallPosX.value.setRGB(...enc.walls.posX);
-      view.uniforms.wallNegY.value.setRGB(...enc.walls.negY);
-      view.uniforms.wallPosY.value.setRGB(...enc.walls.posY);
-      view.uniforms.wallNegZ.value.setRGB(...enc.walls.negZ);
-      view.uniforms.wallPosZ.value.setRGB(...enc.walls.posZ);
-      view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
-      view.object.layers.set(SDF_LAYER);
-      view.coneObject.layers.set(CONE_LAYER);
-      scene.add(view.object);
-      scene.add(view.coneObject);
-      const zombieId = nextId++;
-      const actor = createZombieActor({
-        id: zombieId, room: room.id, body: placed, view, start,
-        seed: 1337 + nextId * 101,
-        bounds: wanderBounds(room),
-        furniture: roomFurniture,
-        onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
+    const compiled = compileBlob(doc, face);
+    // The panel's ratio, once the owner has touched it, overrides whatever
+    // the doc would have done (nothing today; an authored ratio from the
+    // bones block, later).
+    if (boneRatioOverride !== null) compiled.boneRatio = boneRatioOverride;
+    const built = buildBody(compiled, DEFAULT_BUILD_OPTS, {});
+    errs.push(...built.errors);
+    if (doc.stance) errs.push(...checkStance(built.bones, doc.stance));
+    // TRANSLATE THE FIELD, NOT THE MESH (translate.ts) — the shader
+    // marches world space.
+    const placed = translateBody(built, start);
+    const view: ZombieGpuView = createZombieGpuView(placed,
+      {
+        cone: sdfLayer.cone,
+        occluder: sdfLayer.occluder,
+        // The outer hull's bounds. Passing them unconditionally is safe:
+        // the fetch identities (0 / 1e9) make the march bit-identical while
+        // sdfLayer.shellEnabled is false, which is the ship default.
+        shell: {
+          entry: sdfLayer.shellEntry.texture,
+          exit: sdfLayer.shellExit.texture,
+          uniforms: sdfLayer.shellEntry.uniforms,
+        },
       });
-      actors.push(actor);
+    view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
+    // The panel's ramp rides ON TOP of the material: applyMaterial just
+    // wrote the preset defaults, so a tuned panel must re-stamp its values
+    // or a rebuild would silently reset the ramp (the silent-reset class
+    // of bug this panel exists to kill).
+    applyWoundRamp(view);
+    // Relaxation, explicit rather than inherited from the uniform default —
+    // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
+    view.uniforms.woundCfg2.value.y = GAME_RELAX;
+    view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
+    view.uniforms.faceCfg.value.x = 1;
+    view.uniforms.faceCfg.value.y = 1.0;
+    view.uniforms.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
+    const skull = headShape(placed);
+    if (skull) view.setHeadShape(skull.centre, skull.axes);
+    // The room's enclosure: bounds + albedos, with the page's probeWeight.
+    view.uniforms.boxMin.value.set(...enc.box.min);
+    view.uniforms.boxMax.value.set(...enc.box.max);
+    view.uniforms.wallNegX.value.setRGB(...enc.walls.negX);
+    view.uniforms.wallPosX.value.setRGB(...enc.walls.posX);
+    view.uniforms.wallNegY.value.setRGB(...enc.walls.negY);
+    view.uniforms.wallPosY.value.setRGB(...enc.walls.posY);
+    view.uniforms.wallNegZ.value.setRGB(...enc.walls.negZ);
+    view.uniforms.wallPosZ.value.setRGB(...enc.walls.posZ);
+    view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
+    view.object.layers.set(SDF_LAYER);
+    view.coneObject.layers.set(CONE_LAYER);
+    scene.add(view.object);
+    scene.add(view.coneObject);
+    const zombieId = nextId++;
+    const actor = createZombieActor({
+      id: zombieId, room: room.id, body: placed, view, start,
+      seed: 1337 + nextId * 101,
+      bounds: wanderBounds(room),
+      furniture: roomFurniture,
+      onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
+    });
+    return actor;
+  }
+
+  function spawnAll(errs: string[]): void {
+    for (const room of ROOMS) {
+      for (const start of spawnPoints(room)) {
+        actors.push(spawnZombie(room, start, errs));
+      }
     }
   }
+
+  spawnAll(errors);
   if (errors.length > 0) {
     console.error('[sdf-game] body errors:', errors.join(' | '));
+  }
+
+  /** The wound panel's boneRatio lever (applyWoundTuning calls this). Bones
+   *  are derived at BUILD time and packed into the prim data texture — there
+   *  is no live repack — so the only honest way to apply a new ratio is to
+   *  rebuild the cast through the same spawn path as boot. Wound state on
+   *  the old bodies dies with them (the slider's tooltip says so). Ids
+   *  continue from nextId, so capture scripts re-query rather than assume.
+   *  Both hulls re-arm immediately: the frame-loop hull update is gated on
+   *  !wanderFrozen, and a FROZEN bench leg calling setWoundTuning must not
+   *  march through a stale hull. */
+  function rebuildCast(): void {
+    for (const a of actors) {
+      scene.remove(a.view.object);
+      scene.remove(a.view.coneObject);
+      a.view.dispose();
+    }
+    actors.length = 0;
+    const errs: string[] = [];
+    spawnAll(errs);
+    if (errs.length > 0) {
+      console.error('[sdf-game] rebuilt body errors:', errs.join(' | '));
+    }
+    // The exclusion logic mirrors the refreshHull seam, which lives below
+    // this point — object properties do not hoist, so it is restated here.
+    occluderHull.update(
+      actors.map(a => a.posed()),
+      hullExclusionsEnabled
+        ? actors.flatMap(a => {
+          const prims = a.posed().prims;
+          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+        })
+        : [],
+    );
+    if (sdfLayer.shellEnabled) {
+      outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+    }
   }
 
   function pushProbeWeight(v: number) {
@@ -1072,6 +1190,28 @@ async function main() {
       ],
     });
   }
+
+  // Wound tuning panel (wound pass r2 task 8). One key table (WOUND_KEYS)
+  // drives the sliders, the setter and the COPY text, so the panel cannot
+  // emit a key the seam ignores — that drift shipped twice before (setBeam,
+  // then the goo panel) and both times the tuning LOOKED applied and was
+  // not. The four ramp keys are live uniform writes; boneRatio rebuilds the
+  // cast (see rebuildCast — bones are derived at build time and there is no
+  // live repack), which is why it commits on release instead of per tick.
+  // Wounds read best with actual wounds on screen: aim + fire, then sweep.
+  woundPanel = createWoundPanel({
+    get: () => ({ ...woundTuning }),
+    set: (key, v) => applyWoundTuning({ [key]: v }),
+    presets: [
+      { label: 'shipped', values: { ...woundTuning } },
+      {
+        // A "what the ramp can do" reference: knees pulled deep, fibre
+        // maxed. For seeing the fat/muscle bands at a glance, not a look.
+        label: 'raw',
+        values: { woundDepthAmp: 1, fatDepth: 0.008, muscleDepth: 0.03, woundFibreAmp: 1.4 },
+      },
+    ],
+  });
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -1542,7 +1682,19 @@ async function main() {
     const yaw0 = player.yaw;
     const pitch0 = player.pitch;
     for (const cand of candidates) {
-      player.yaw = Math.atan2(cand.c[0] - eye[0], cand.c[2] - eye[2]);
+      // YAW CONVENTION: the page's forward is (sin yaw, −cos yaw) — camera
+      // lookAt (below), aimDir and muzzleWorld all agree — so facing a target
+      // at offset (dx, dz) is atan2(dx, −dz). walkTo (above) already did this
+      // right; these two bench sites had the z sign flipped since cdba91f,
+      // which mirrored the aim across the player's z plane. It only ever
+      // "worked" while bodies happened to sit near that plane; with the group
+      // fully on one side the bench faced a wall, benched an empty frustum
+      // and fired every shot into it (measured 2026-09-02: census 0, 0
+      // wounds, p50 1.5 ms). NOTE the aim search is still needed even with
+      // the sign right: the predictor simulates SLUG GRAVITY, so dead-on
+      // yaw/pitch at the torso can still miss low — try candidates, keep the
+      // first the predictor confirms.
+      player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
       player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
       if (predictSlugHitNow().actorId >= 0) return true;
     }
@@ -1816,6 +1968,30 @@ async function main() {
     gooPanel(on: boolean) {
       gooPanel?.setVisible(on);
       return gooPanel?.visible ?? false;
+    },
+    /** Show/hide the WOUND tuning panel (ships hidden; see woundPanel's
+     *  declaration). Same shape as gooPanel so capture scripts can guard it
+     *  the same typeof way. */
+    woundPanel(on: boolean) {
+      woundPanel?.setVisible(on);
+      return woundPanel?.visible ?? false;
+    },
+
+    /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
+     *  the panel's WOUND_KEYS — the table the COPY button emits from — so a
+     *  pasted COPY always round-trips. Partial: only the keys present are
+     *  applied (the panel's per-slider set() sends exactly one). The four
+     *  ramp keys are live; boneRatio rebuilds the cast and drops on-body
+     *  wounds (documented in rebuildCast and the slider's tooltip).
+     *  Returns the applied record PLUS the live surfCfg3 uniform from body
+     *  1, so a caller can confirm the record actually reached the field —
+     *  the verify-the-panel-drives-the-shader check, one call, no guessing. */
+    setWoundTuning(o: Partial<WoundTuningValues>) {
+      applyWoundTuning(o);
+      return woundTuningNow();
+    },
+    get woundTuning() {
+      return woundTuningNow();
     },
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
@@ -2187,7 +2363,10 @@ async function main() {
                   const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
                   player.pos = [px, 0, pz];
                   player.vel = [0, 0, 0];
-                  player.yaw = Math.atan2(tx - px, tz - pz);
+                  // atan2(dx, −dz): the page's forward is (sin yaw, −cos
+                  // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
+                  // (z-mirrored) since cdba91f.
+                  player.yaw = Math.atan2(tx - px, -(tz - pz));
                   player.pitch = 0;
                   player.grounded = true;
                 }

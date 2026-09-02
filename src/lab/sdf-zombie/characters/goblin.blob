@@ -277,6 +277,26 @@ body
   bar  leg on foot from=0.10 to=0.80 r=0.032 tall=0.80 blend=0.0028 mirror
   blob leg on foot at=0.92 r=0.038 wide=1.15 tall=0.70 deep=0.95 blend=0.0030 mirror
 
+# Wound pass r2: hidden bone, revealed by a wound — same two authored shapes
+# as the zombie, scaled to this body. The limb word is a REAL limb
+# (head|torso|arm|leg), not "bone": the grammar has no `bone` limb, and the
+# word is what gives the prim its cluster, i.e. which wounds can expose it.
+bones
+  ratio 0.38
+
+  # Cranium — a dome, not a scaled face ellipsoid. The face block is the
+  # default head, so the dome keeps the zombie's SIZE; only `at` moves, to
+  # hold the same 1.6 cm crown-ward offset on a skull bone 0.235 long (the
+  # zombie's is 0.16).
+  blob head on skull at=0.52 r=0.072 wide=0.88 tall=0.95 deep=0.86
+
+  # Ribcage — the same broad shallow plate as the zombie's, scaled to a
+  # narrow chest: the biggest chest blob is r=0.071 against the zombie's
+  # torso 0.150, so r scales by the same ratio (0.052 -> 0.025). Rides the
+  # `chest` bone — this torso is a three-bone chain (pelvis/spine1/chest)
+  # and the chest IS the ribcage; the gut below keeps its auto-derived bone.
+  bar torso on chest from=0.20 to=0.92 r=0.025 wide=1.45 deep=0.55
+
 # The head itself is facePrims(), not geometry authored here — .blob gets the
 # zombie's parameterised skull whatever character it is. Pushed toward goblin
 # proportions: a bigger cranium relative to a 1.15 m body, a jutting jaw for the
