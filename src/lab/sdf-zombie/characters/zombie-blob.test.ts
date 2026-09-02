@@ -5,7 +5,7 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { packBody } from '../pack';
-import { CLUSTER_ORDER, type Primitive } from '../types';
+import { CLUSTER_ORDER, type LimbId, type Primitive } from '../types';
 import { makeZombie } from '../body';
 
 const fromBlob = () => buildBody(compileBlob(parseBlob(src)));
@@ -55,7 +55,7 @@ describe('zombie.blob is the zombie', () => {
 // per bone, so these REPLACE the auto-derived twins on skull/spine.
 describe('zombie.blob authors its shot-magnet bones', () => {
   const bones = () => fromBlob().bonePrims ?? [];
-  const inCluster = (limb: string) =>
+  const inCluster = (limb: LimbId) =>
     bones().filter(p => p.op === 'bone' && p.cluster === CLUSTER_ORDER.indexOf(limb));
 
   // Pins INTENT, not the exact numbers the shapes happened to have — those are
