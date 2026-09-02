@@ -50,7 +50,7 @@ base branch `claude/sdf-character-rendering-optimization-d0570b`): trigger
 task-1, tasks 2-8 chain; task-0 (baseline) and task-9 (bench sweep) are
 unchained — trigger them only on a quiet machine. Bench steps inside 1-8 are
 recorded DEFERRED while the wound-r2 chain runs; parity gates are not.
-**Progress 2026-09-02:** tasks 0, 1, 1b, 2 done. **Task 1b's parity gate
+**Progress 2026-09-02:** tasks 0, 1, 1b, 2, 1c done. **Task 1b's parity gate
 FAILED task 1 in room 3 (0.20%): the hull-exit `tMax` bound DELETES a
 background body seen past a foreground body's hull** while `hits` stay
 bit-identical — a hull-texture effect, most likely the shell EXIT target

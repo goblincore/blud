@@ -172,6 +172,12 @@ async function applyLeg(name) {
     __sdfGame.setShell(true);
     __sdfGame.setRelax(1.0);
     __sdfGame.setBleed(true);
+    // Perf round 2 task 1's GAME_HULL_EXIT_BOUND = 1 FAILS render parity
+    // (task 1b: whole background bodies vanish past a foreground hull; see
+    // notes.md). Until the owner resolves that, benches measure the bound OFF
+    // — the state every baseline in these notes was taken in — and task 9's
+    // table keeps it OFF per the plan.
+    __sdfGame.setHullExitBound(false);
     return 1;
   })()`);
   for (const [fn, arg] of Object.entries(overrides)) {

@@ -12,7 +12,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
-  cameraProjectionMatrix, cameraViewMatrix, normalize, sub, mul, add, screenUV,
+  cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
   storage,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
@@ -24,7 +24,6 @@ import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
-import { specialiseMapBody } from './specialise';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
   TILE_SIZE_PX,
@@ -112,14 +111,13 @@ export interface ZombieGpuView {
  * Each helper is itself a node, built by folding so that every one carries the
  * helpers declared before it.
  */
-function buildMarchFn(mapBodySrc?: string) {
-  // Swap one entry in the dependency-ordered helper list. mapBody sits at a
-  // fixed place in that order — after the things it calls, before calcNormal
-  // which calls it — so the specialised version has to go in the SAME slot or
-  // WGSL's declaration-before-use rule breaks.
-  const sources = mapBodySrc
-    ? HELPERS.map(h => (/^fn\s+mapBody\s*\(/.test(h) ? mapBodySrc : h))
-    : HELPERS;
+function buildMarchFn() {
+  // mapBody sits at a fixed place in HELPERS — after the things it calls,
+  // before calcNormal which calls it — so any future per-body variant of it
+  // would have to go in the SAME slot or WGSL's declaration-before-use rule
+  // breaks. (The specialiser that used that slot was retired 2026-09-01,
+  // perf r2 task 4: its emitted call signature had rotted against SD_PRIM's.)
+  const sources = HELPERS;
   // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
   // wgslFn includes a dependency's code transitively, and HELPERS is already a
   // strict declaration order, so a chain emits exactly the same WGSL as the
@@ -363,6 +361,17 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      */
     aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
+    /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
+     *  early-out, zw spare. All zero = the pre-plan shader, which is what the
+     *  lab binds. */
+    perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** Half extents of the view's proxy box, world space (perf round 2 task
+     *  5): the accumulated-depth gate's conservative per-body ray entry —
+     *  box ⊇ hull ⊇ flesh, so nothing of this body is nearer than the
+     *  ray-box entry. The box CENTRE rides the mesh's model matrix, not a
+     *  uniform. (0,0,0) is a safe identity: the degenerate point at the mesh
+     *  origin only ever discards when even that point lies beyond prevT. */
+    bodyHalf: uniform(new THREE.Vector3(0, 0, 0)),
     /**
  * PER-TILE PRIMITIVE LISTS (perf task 5, now compute-binned). x enabled,
  * y tiles-per-row, z tile px size, w tile rows. INERT at x=0: MARCH_BODY
@@ -503,6 +512,39 @@ const SHELL_FETCH_WGSL = /* wgsl */ `fn shellFetch(
 }`;
 export const shellFetchNode = wgslFn(SHELL_FETCH_WGSL);
 
+/**
+ * Reads the accumulated frame state (sdf-layer's `prev` target) for the
+ * front-to-back per-body passes (perf round 2 task 5).
+ *
+ * Returns the RAY DISTANCE to the nearest hit already recorded at this pixel,
+ * or 1e9 when nothing is recorded (alpha >= 1.0 is the composite's "nothing
+ * here" sentinel; the target clears to it) or when the gate is off — both
+ * identities, so a march built without a prev source is bit-identical.
+ *
+ * Alpha holds WebGPU clip depth in [0,1] from three's perspective projection,
+ * depth = far*(z-near)/((far-near)*z), so z = near*far / (far - depth*(far-near));
+ * the ray distance is z over the cosine between the ray and the camera forward
+ * axis (t is euclidean; z is the forward-axis distance, z = t*cos).
+ */
+const PREV_FETCH_WGSL = /* wgsl */ `fn prevFetch(prevTex: texture_2d<f32>, screenUV: vec2<f32>, enabled: f32, near: f32, far: f32, cosRay: f32) -> f32 {
+  if (enabled < 0.5) { return 1e9; }
+  let dims = vec2<f32>(textureDimensions(prevTex, 0));
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  let depth = textureLoad(prevTex, c, 0).a;
+  if (depth >= 1.0) { return 1e9; }
+  let z = near * far / max(far - depth * (far - near), 1e-6);
+  return z / max(cosRay, 1e-4);
+}`;
+export const prevFetchNode = wgslFn(PREV_FETCH_WGSL);
+
+/** The accumulated-depth gate's input, as the march material needs it. Same
+ *  shape as OccluderSource: the texture binds unconditionally, the uniform
+ *  gates the fetch. */
+export interface PrevSource {
+  texture: THREE.Texture;
+  uniforms: { enabled: ReturnType<typeof uniform> };
+}
+
 /** The outer hull's entry/exit pre-pass output, as the march material needs
  *  it. Same shape as OccluderSource; a distinct type so the two hulls cannot
  *  be passed to each other's parameter by accident — they are opposites. */
@@ -565,6 +607,7 @@ export function createMarchMaterial(
   cone?: ConeSource, occluder?: OccluderSource,
   tiles?: { header: unknown; entries: unknown },
   shell?: ShellSource,
+  prev?: PrevSource,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -572,6 +615,9 @@ export function createMarchMaterial(
   const volumeNode = volumeTex instanceof THREE.Texture
     ? texture3D(volumeTex)
     : volumeTex as ReturnType<typeof texture3D>;
+  // Hoisted above the march call: the accumulated-depth gate's cosRay reads
+  // the same ray the march integrates.
+  const rayDir = normalize(sub(positionWorld, cameraPosition));
   const marched = march({
     worldPos: positionWorld,
     camPos: cameraPosition,
@@ -666,6 +712,29 @@ export function createMarchMaterial(
           disabledValue: float(1e9),
         })
       : float(1e9),
+    // Perf round 2 seams. Bound POSITIONALLY last, matching the WGSL
+    // signature (see the ORDER MATTERS note above — a slot swap here
+    // silently hands the shader the wrong uniform).
+    perfCfg: u.perfCfg,
+    // Accumulated-depth gate (perf round 2 task 5). Bound POSITIONALLY last —
+    // prevT sits AFTER perfCfg in MARCH_BODY's signature. 1e9 is the no-gate
+    // identity: a material built without a prev source marches exactly as
+    // before.
+    prevT: prev
+      ? prevFetchNode({
+          prevTex: texture(prev.texture),
+          screenUV: screenUV,
+          enabled: prev.uniforms.enabled,
+          near: cameraNear,
+          far: cameraFar,
+          cosRay: mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate(),
+        })
+      : float(1e9),
+    // The fragment's own proxy box: centre from the mesh's world matrix,
+    // half extents from the uniform above. Consumed by the accumulated-depth
+    // gate — see MARCH_BODY's bodyEntry block.
+    bodyCentre: mul(modelWorldMatrix, vec4(0.0, 0.0, 0.0, 1.0)).xyz,
+    bodyHalf: u.bodyHalf,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -673,7 +742,6 @@ export function createMarchMaterial(
 
   // Depth from the marched hit, so the body composites with real geometry.
   // WebGPU clip z is already [0,1] — no `* 0.5 + 0.5` remap, unlike the GLSL.
-  const rayDir = normalize(sub(positionWorld, cameraPosition));
   const hitPos = add(cameraPosition, mul(rayDir, marched.w as never));
   const clip = mul(cameraProjectionMatrix, mul(cameraViewMatrix, vec4(hitPos, 1.0)));
   const depth = clip.z.div(clip.w);
@@ -744,7 +812,7 @@ export interface SharedChunkGpuMaterial {
   dispose(): void;
 }
 
-export function createSharedChunkGpuMaterial(): SharedChunkGpuMaterial {
+export function createSharedChunkGpuMaterial(prev?: PrevSource): SharedChunkGpuMaterial {
   // These seeds establish the binding types before any chunk exists. They are
   // never sampled by a chunk draw: every node below swaps to the current
   // mesh's state through onObjectUpdate first.
@@ -758,7 +826,7 @@ export function createSharedChunkGpuMaterial(): SharedChunkGpuMaterial {
   }
   const dataNode = bindObjectValue(texture(seedData), state => state.dataTexture);
   const volumeNode = bindObjectValue(texture3D(seedVolume), state => state.volumeTexture);
-  const material = createMarchMaterial(dataNode, volumeNode, seedUniforms);
+  const material = createMarchMaterial(dataNode, volumeNode, seedUniforms, undefined, undefined, undefined, undefined, undefined, prev);
 
   let disposed = false;
   return {
@@ -882,12 +950,9 @@ export interface GpuViewOpts {
   /** Outer-hull entry/exit bounds (shell-hull-outer.ts). Omit for the
    *  unbounded march — the fetch identities make it bit-identical. */
   shell?: ShellSource;
-  /**
-   * Generate a shader specialised to THIS body's structure — loops unrolled,
-   * carve decisions and blend constants baked. See specialise.ts. Costs one
-   * pipeline compile per distinct structure, so it is opt-in until measured.
-   */
-  specialise?: boolean;
+  /** Accumulated colour+depth for the front-to-back per-body passes (perf
+   *  round 2 task 5). Omit for the ungated march — 1e9 is the identity. */
+  prev?: PrevSource;
   /**
    * The 3D texture bound to the volume slot (X1.26). Omitted, the view binds
    * its own 1-cubed fallback and disposes it in dispose(); pass one to share
@@ -993,8 +1058,8 @@ export function createZombieGpuView(
   const packed = upload(body);
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
-    opts.specialise ? buildMarchFn(specialiseMapBody(body)) : marchBody,
-    opts.cone, opts.occluder, tileNodes, opts.shell);
+    marchBody,
+    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -1024,6 +1089,10 @@ export function createZombieGpuView(
           enabled: opts.cone.uniforms.chain,
         })
       : float(0),
+    // Bound POSITIONALLY last, matching CONE_MARCH's WGSL signature (the
+    // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
+    // same seams the march does.
+    perfCfg: u.perfCfg,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -1060,6 +1129,7 @@ export function createZombieGpuView(
   }
 
   const first = fit(body, packed.maxBlendK);
+  u.bodyHalf.value.set(first.size.x / 2, first.size.y / 2, first.size.z / 2);
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(first.size.x, first.size.y, first.size.z), material,
   );
@@ -1087,6 +1157,7 @@ export function createZombieGpuView(
       // narrowing it, and a uniform scale would either clip or over-cover.
       mesh.scale.set(
         f.size.x / first.size.x, f.size.y / first.size.y, f.size.z / first.size.z);
+      u.bodyHalf.value.set(f.size.x / 2, f.size.y / 2, f.size.z / 2);
       coneMesh.position.copy(mesh.position);
       coneMesh.scale.copy(mesh.scale);
     },
@@ -1239,6 +1310,8 @@ export function createChunkGpuView(
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);
     u.woundShadowCfg.value.copy(template.woundShadowCfg.value);
+    u.perfCfg.value.copy(template.perfCfg.value);
+    u.bodyHalf.value.copy(template.bodyHalf.value);
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
     u.faceCfg3.value.copy(template.faceCfg3.value);
@@ -1353,6 +1426,7 @@ export function createChunkGpuView(
     // No mesh rotation: this box covers every orientation of the rotated
     // field, while squash remains in world axes.
     mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+    u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
   }
 
   reset(chunk, prims, tornAt);
@@ -1366,6 +1440,7 @@ export function createChunkGpuView(
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
       mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+      u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
     },
     dispose() {
       mesh.geometry.dispose();

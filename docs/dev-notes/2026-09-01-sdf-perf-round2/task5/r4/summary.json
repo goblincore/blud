@@ -1,0 +1,126 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 731,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 4,
+  "onJs": "__sdfGame.setDepthGate(true)",
+  "offJs": "__sdfGame.setDepthGate(false)",
+  "preJs": "",
+  "outDir": "docs/dev-notes/2026-09-01-sdf-perf-round2/task5/r4",
+  "noiseFloor": {
+    "changed": 54,
+    "bigChanged": 24,
+    "meanD": 0.27,
+    "maxD": 685,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 97,
+      "bigChanged": 66,
+      "meanD": 0.35,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-2 vs b-2": {
+      "changed": 54,
+      "bigChanged": 34,
+      "meanD": 0.11,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-1 vs a-2": {
+      "changed": 105,
+      "bigChanged": 62,
+      "meanD": 0.28,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 110,
+      "bigChanged": 79,
+      "meanD": 0.57,
+      "maxD": 691,
+      "hotCells": []
+    }
+  },
+  "occupancy": {
+    "off": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 172785,
+        "hits": 86343,
+        "misses": 86442,
+        "occupancy": 0.4997135167983332,
+        "coverage": 0.35996875,
+        "meanStepsHit": 6.0652397994047,
+        "meanStepsMiss": 3.849529164063765,
+        "missStepShare": 0.38853432533288496,
+        "bodiesOnScreen": 4
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 172785,
+        "hits": 86343,
+        "misses": 86442,
+        "occupancy": 0.4997135167983332,
+        "coverage": 0.35996875,
+        "meanStepsHit": 6.0652397994047,
+        "meanStepsMiss": 3.849529164063765,
+        "missStepShare": 0.38853432533288496,
+        "bodiesOnScreen": 4
+      }
+    ],
+    "on": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 172785,
+        "hits": 86343,
+        "misses": 86442,
+        "occupancy": 0.4997135167983332,
+        "coverage": 0.35996875,
+        "meanStepsHit": 6.0652397994047,
+        "meanStepsMiss": 4.102762545984591,
+        "missStepShare": 0.40377324550118293,
+        "bodiesOnScreen": 4
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 172785,
+        "hits": 86343,
+        "misses": 86442,
+        "occupancy": 0.4997135167983332,
+        "coverage": 0.35996875,
+        "meanStepsHit": 6.0652397994047,
+        "meanStepsMiss": 4.102762545984591,
+        "missStepShare": 0.40377324550118293,
+        "bodiesOnScreen": 4
+      }
+    ]
+  }
+}

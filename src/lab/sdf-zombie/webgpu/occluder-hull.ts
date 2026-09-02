@@ -266,7 +266,10 @@ export interface OccluderHull {
    *  that target would clamp tMax in empty space in front of every body and
    *  dissolve the march. */
   shadowObject: THREE.Mesh;
-  update(bodies: BuiltBody[], wounds?: WoundSphere[]): void;
+  /** `occluder: false` skips the inner-hull rebuild (the pre-pass consumes
+   *  it, and the pre-pass is off on the game page); the shadow twin is
+   *  always rebuilt because the shadow map is always live. */
+  update(bodies: BuiltBody[], wounds?: WoundSphere[], opts?: { occluder?: boolean }): void;
   /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
   setSpheres(list: HullInstance[]): void;
   /**
@@ -366,8 +369,10 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     return n;
   }
 
-  function update(bodies: BuiltBody[], wounds: WoundSphere[] = []) {
-    count = fillInstances(mesh, buildHullInstances(bodies, HULL_SHRINK, wounds));
+  function update(bodies: BuiltBody[], wounds: WoundSphere[] = [], opts: { occluder?: boolean } = {}) {
+    if (opts.occluder !== false) {
+      count = fillInstances(mesh, buildHullInstances(bodies, HULL_SHRINK, wounds));
+    }
     // SPANNED (last arg): the shadow needs the capsule, not its two ends. See
     // SHADOW_HULL_INFLATE for why inflation alone could never do this.
     fillInstances(shadowMesh, buildHullInstances(bodies, shadowInflate, wounds, 0, shadowSpan));
