@@ -321,8 +321,9 @@ describe('bone containment (wound pass r2)', () => {
     scale: [1, 1, 1], blendK: 0.01, limb: 'legL', cluster: 0,
   };
   const mk = (boneRadius: number) => ({
-    prims: [flesh, { ...flesh, radius: boneRadius, op: 'bone' as const }],
-    clusters: [{ limb: 'legL', start: 0, count: 2, alive: true }],
+    prims: [flesh],
+    bonePrims: [{ ...flesh, radius: boneRadius, op: 'bone' as const }],
+    clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
   } as unknown as Body);
 
   it('accepts a bone comfortably inside its flesh', () => {
@@ -333,7 +334,10 @@ describe('bone containment (wound pass r2)', () => {
     const errs = checkBoneContainment(mk(0.12));
     expect(errs.length).toBeGreaterThan(0);
     expect(errs[0]).toMatch(/bone/i);
-    expect(errs[0]).toMatch(/prim 1/);
+    // Index 0 WITHIN the bone array — bone lives outside body.prims now, so
+    // the error names the bone-array position (was prims[1] under the old
+    // storage this task replaces).
+    expect(errs[0]).toMatch(/prim 0/);
   });
 
   it('rejects a bone that only breaches on one side', () => {
@@ -342,9 +346,61 @@ describe('bone containment (wound pass r2)', () => {
     const offset = { ...flesh, radius: 0.03, op: 'bone' as const,
       a: [0.075, 0, 0] as Vec3, b: [0.075, 0.4, 0] as Vec3 };
     const body = {
-      prims: [flesh, offset],
-      clusters: [{ limb: 'legL', start: 0, count: 2, alive: true }],
+      prims: [flesh], bonePrims: [offset],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
     } as unknown as Body;
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
+  });
+
+  it('catches a breach that only a non-uniform scale creates', () => {
+    // sdPrimitive divides the sample point by prim.scale, so a prim with
+    // scale.x = 1.45 reaches 1.45 x radius in x — the ribcage Task 10 authors
+    // as exactly wide=1.45. Sampling a plain sphere of radius r probes a
+    // surface the prim does not have and misses every breach along a widened
+    // axis. The breach below is REAL (flesh r=0.09, bone reaches 0.10875),
+    // confirmed against sdBody before asserting it is caught.
+    const wide = {
+      ...flesh, radius: 0.075, scale: [1.45, 1, 0.55] as Vec3, op: 'bone' as const,
+    };
+    const body = {
+      prims: [flesh], bonePrims: [wide],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    // Confirm the breach is real before asserting it is caught.
+    expect(sdBody([0.075 * 1.45, 0.2, 0], body)).toBeGreaterThan(0);
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
+  });
+
+  it('catches a breach that only the taper creates', () => {
+    // radiusB sits at the FAR end; a bone whose radiusB exceeds the flesh's
+    // reach there breaches only near b. A sampler that never interpolates
+    // radius toward radiusB never looks there.
+    const tapered = {
+      ...flesh, radius: 0.03, radiusB: 0.12, op: 'bone' as const,
+    };
+    const body = {
+      prims: [flesh], bonePrims: [tapered],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    // 0.105 from the axis at the far cap: outside the flesh (r 0.09) but
+    // inside the bone's radiusB (0.12) — where the bone pokes through.
+    expect(sdBody([0.105, 0.4, 0], body)).toBeGreaterThan(0);
+    expect(checkBoneContainment(body).length).toBeGreaterThan(0);
+  });
+
+  it('catches a breach that only the bend creates', () => {
+    // A bent bone's midsection swings out to the control point — well off the
+    // a-b chord an endpoint-only sampler walks.
+    const bent = {
+      ...flesh, radius: 0.03, bend: [0.15, 0, 0] as Vec3, op: 'bone' as const,
+    };
+    const body = {
+      prims: [flesh], bonePrims: [bent],
+      clusters: [{ limb: 'legL', start: 0, count: 1, alive: true }],
+    } as unknown as Body;
+    // The Bezier mid lands at x=0.075; the bone's 0.03 radius reaches 0.105,
+    // past the flesh's 0.09. Probe a point inside the bone, outside the flesh.
+    expect(sdBody([0.095, 0.2, 0], body)).toBeGreaterThan(0);
     expect(checkBoneContainment(body).length).toBeGreaterThan(0);
   });
 });

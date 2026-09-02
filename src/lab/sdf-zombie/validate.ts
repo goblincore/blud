@@ -52,7 +52,17 @@ export interface ValidateOpts {
 }
 
 /** The minimal shape every field function needs: sorted prims + clusters. */
-export interface Body { prims: Primitive[]; clusters: ClusterInfo[] }
+export interface Body {
+  prims: Primitive[];
+  clusters: ClusterInfo[];
+  /**
+   * Bone primitives, OUTSIDE `prims` on purpose (wound pass r2): ~20 modules
+   * walk `prims` and only four should ever see bone. Optional so the many
+   * hand-built field fixtures keep compiling; a body without the field simply
+   * has no bone. See BuiltBody.bonePrims in types.ts for the full contract.
+   */
+  bonePrims?: Primitive[];
+}
 
 /** Distance from p to one primitive, matching the shader's ellipsoid capsule. */
 export function sdPrimitive(p: Vec3, prim: Primitive): number {
@@ -465,6 +475,20 @@ export const BONE_CONTAINMENT_MARGIN = 0.004;
  * Samples each bone prim's own surface rather than its bounding box: a capsule
  * shoved sideways can keep its radius and still breach, so radius alone is not
  * the test.
+ *
+ * Reads `body.bonePrims` — the dedicated bone array (wound pass r2) — NOT
+ * `body.prims`. Bone no longer lives among the flesh prims; a prim with
+ * `op: 'bone'` in `prims` folds nowhere (additive skip, carve skip) and is
+ * inert, so there is nothing left to contain there.
+ *
+ * The sampler is shape-aware, because sdPrimitive DIVIDES the sample point by
+ * prim.scale: a prim with scale.x = 1.45 reaches 1.45 x radius in x, so
+ * probing a plain sphere of radius r measures a shape the prim does not have
+ * and misses every breach along a widened axis (the ribcage is authored as
+ * exactly wide=1.45). It likewise follows radiusB (the taper) along the axis
+ * and the quadratic Bezier control point for bent prims — both of which
+ * deriveBones INHERITS from the flesh prim, so a derived bone is not the
+ * straight untapered capsule a two-endpoint sampler assumed.
  */
 export function checkBoneContainment(body: Body): string[] {
   const errs: string[] = [];
@@ -478,18 +502,33 @@ export function checkBoneContainment(body: Body): string[] {
     dirs.push([x / l, y / l, z / l]);
   }
 
-  body.prims.forEach((prim, i) => {
+  const STATIONS = 5;
+  (body.bonePrims ?? []).forEach((prim, i) => {
     if (prim.op !== 'bone' || prim.dead) return;
-    // Both endpoints, because a capsule can breach at either cap.
-    for (const end of [prim.a, prim.b]) {
+    const ctrl = prim.bend === undefined ? undefined : bendCtrl(prim.a, prim.b, prim.bend);
+    for (let s = 0; s <= STATIONS; s++) {
+      const t = s / STATIONS;
+      // Centre line: the straight chord, or the quadratic Bezier through the
+      // control point — the same curve sdPrimitive's bent branch evaluates.
+      const centre: Vec3 = [0, 1, 2].map(k => ctrl === undefined
+        ? prim.a[k]! + (prim.b[k]! - prim.a[k]!) * t
+        : (1 - t) * (1 - t) * prim.a[k]! + 2 * (1 - t) * t * ctrl[k]! + t * t * prim.b[k]!
+      ) as [number, number, number];
+      // Taper: radius runs linearly to radiusB across the SAME parameter the
+      // endpoints interpolate, matching sdRoundCone's lerp.
+      const r = prim.radiusB === undefined
+        ? prim.radius : prim.radius + (prim.radiusB - prim.radius) * t;
       for (const d of dirs) {
+        // SCALE IS LOAD-BEARING: sdPrimitive divides by prim.scale, so a prim
+        // with scale.x 1.45 reaches 1.45 * r in x. Sampling at r alone probes
+        // a sphere the prim does not have.
         const p: Vec3 = [
-          end[0] + d[0] * prim.radius,
-          end[1] + d[1] * prim.radius,
-          end[2] + d[2] * prim.radius,
+          centre[0] + d[0] * r * prim.scale[0],
+          centre[1] + d[1] * r * prim.scale[1],
+          centre[2] + d[2] * r * prim.scale[2],
         ];
-        // sdBody skips bone prims entirely (Task 1), so this is the FLESH
-        // field — exactly the surface the bone must stay inside.
+        // sdBody walks prims only, and bone is not in prims any more, so this
+        // is the FLESH field — exactly the surface the bone must stay inside.
         if (sdBody(p, body) > -BONE_CONTAINMENT_MARGIN) {
           errs.push(
             `bone prim ${i} (${prim.limb}) breaches the flesh surface at ` +
