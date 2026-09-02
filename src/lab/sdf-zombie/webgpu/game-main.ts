@@ -447,6 +447,11 @@ async function main() {
   // frame can fire against the hole.
   //
   // Goo OFF takes the original single-call path, so the toggle is exact.
+  // The render loop arms on the renderer BEFORE main() finishes, so this
+  // callback can fire while consts declared further down are still in their
+  // temporal dead zone — the chunk list therefore goes through this
+  // indirection, assigned once liveChunks exists. Empty until then.
+  let chunkObjects: () => THREE.Object3D[] = () => [];
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
     // Hand the march the same beam the meshes get. The SDF bodies shade
@@ -480,7 +485,7 @@ async function main() {
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this
     // frame's bodies and chunks. With the gate off the lists are not walked.
-    sdfLayer.setBodies(actors.map(a => a.view.object), liveChunks.map(c => c.view.object));
+    sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -903,6 +908,8 @@ async function main() {
   const chunkMaterial = createSharedChunkGpuMaterial(sdfLayer.prev);
   const chunkViews: ChunkGpuView[] = [];
   const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
+  // Now that the array exists, the frame draw can read it directly.
+  chunkObjects = () => liveChunks.map(c => c.view.object);
   let nextChunkId = 1;
   function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
     let best: Vec3 = [0, 1, 0];
