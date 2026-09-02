@@ -64,6 +64,15 @@ describe('blob-depth', () => {
       // is the contract, not a courtesy.
       for (let i = 1; i < v.bands.length; i++)
         expect(v.bands[i - 1]!.meanErr).toBeGreaterThanOrEqual(v.bands[i]!.meanErr);
+      // The WORST band is the one an agent acts on first, so it must carry
+      // its owning `.blob` line — schoolgirl's worst bands are all .blob-
+      // authored prims. (Written as its own hard pin rather than folded into
+      // the per-band `if (b.owner)` check below, because that guard makes a
+      // dropped owner PASS — the exact vacuity the mutation matrix exists
+      // for. Here the absence itself fails.)
+      expect(v.bands[0]!.samples).toBeGreaterThan(0);
+      expect(v.bands[0]!.owner).toBeDefined();
+      expect(v.bands[0]!.owner!.line).toBeGreaterThan(0);
       for (const b of v.bands) {
         expect(b.samples).toBeGreaterThanOrEqual(0);
         // An unsampled band carries no error and no owner; a sampled one
