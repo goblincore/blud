@@ -1856,8 +1856,8 @@ source ~/.claude/hooks/dualmem-env.sh
 
 ## Dispatch notes (owner: Kimi K3, not glm-5.3-flash)
 
-- `model: kimi-oai/kimi-k3:xhigh`, `harness: pi`, `status: pending` (never `queued`), `base_branch: claude/sdf-raymarching-performance-3aabd2` (this plan and the spec are committed there), `allowed_tools: Edit,Write,Bash,Read,Glob,Grep`.
-- **kimi-k3 is text-only.** Task 7 step 3 and Task 8 step 4 look at frames. The dispatched agent must use `python3 scripts/vision-ask.py <png> "<question>"` on `a-1.png`/`b-1.png` and quote the answers in the notes; it must not claim to have seen a frame. Questions to ask: "Is a humanoid figure fully visible with no holes or missing limbs?", "Compare A and B: list any region where the silhouette or the wound looks different."
+- `model: kimi/k3:high` (the anthropic-messages Kimi provider; it HAS vision per `~/.pi/agent/models.json`, unlike the stale note in the character template), `harness: pi`, `status: pending` (never `queued`), `base_branch: claude/sdf-raymarching-performance-3aabd2` (this plan and the spec are committed there), `allowed_tools: Edit,Write,Bash,Read,Glob,Grep`.
+- Task 7 step 3 and Task 8 step 4 look at frames. `kimi/k3` can `Read` a PNG directly; the agent must describe what it saw in one sentence, never paraphrase the expectation. If a different, text-only model is substituted, use `python3 scripts/vision-ask.py <png> "<question>"` instead. Questions to ask: "Is a humanoid figure fully visible with no holes or missing limbs?", "Compare A and B: list any region where the silhouette or the wound looks different."
 - Split as five dispatch tasks chained with `depends_on`, strictly serial — each depends on the previous one's exports: (1) Tasks 1–2, (2) Tasks 3–4, (3) Tasks 5–6, (4) Task 7, (5) Tasks 8–9. Each ends with `npx tsc --noEmit && npx vitest run src/lab` green and a commit on its branch. `max_runtime: 120m` each; dispatch (4) is the one likely to need a second run, since WGSL binding errors only surface at pipeline creation.
 
 ## Self-review against the spec

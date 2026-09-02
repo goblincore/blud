@@ -24,7 +24,7 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 surface-nets hull from the wounded posed field + fragment band refinement onto the
 true SDF surface; replaces the per-pixel march for bodies, restores early-Z. Look-first
 gate (owner reel: wounded close-up / walk / sever+gib, zombie only), cost reported
-after. Dispatch on `kimi-oai/kimi-k3:xhigh`. Tier-2 fallbacks (post-hit prim
+after. **Dispatched 2026-09-02** as `~/.claude/dispatch/plans/2026-09-02-sdf-hull-refine-phase0-task-{1..5}.md` on `kimi/k3:high`, serial chain, all `pending` — trigger task-1 in dispatch-ui (localhost:8090) to start. Tier-2 fallbacks (post-hit prim
 narrowing, rigid-cluster bake) recorded in dualmem as investigations.
 [spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md)
 
