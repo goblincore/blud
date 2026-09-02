@@ -64,7 +64,7 @@ import {
 } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import {
-  makeGutChain, pinGutChain, stepGutChain, detachGutChain, type GutChain,
+  makeGutChain, pinGutChain, stepGutChain, detachGutChain, GUT_TUNING, type GutChain,
 } from '../entrails';
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
@@ -733,6 +733,11 @@ async function main() {
   // overrides the seeded value and every later spawn honours it.
   woundTuning.gutSize = GUT_DROPLET_SIZE;
   woundTuning.spillChance = SPILL_CHANCE.slug;
+  // Same boot parity for the spring knobs (organs r3): the table's defaults
+  // say what the panel SHOWS; these say what the page DOES until a slider
+  // moves. One writer: the slider override below.
+  woundTuning.coilTightness = GUT_TUNING.coilTightness;
+  woundTuning.springiness = GUT_TUNING.springiness;
   /** The owner's explicit bone ratio; null = defer to the doc (absent →
    *  DEFAULT_BONE_RATIO inside buildBody, and a later authored `bones ratio`
    *  would win untouched). Once the owner MOVES the slider their value wins
@@ -755,6 +760,10 @@ async function main() {
     c.z = woundTuning.muscleDepth;
     c.w = woundTuning.visceraAmp;
     view.uniforms.visceraDepth.value = woundTuning.visceraDepth;
+    // organAmp rides the same re-apply (organs r3): applyMaterial stamps the
+    // preset default on every rebuild, so the panel's value must be
+    // re-stamped after it or a cast rebuild would silently reset the knob.
+    view.uniforms.organAmp.value = woundTuning.organAmp;
   }
 
   /** The applied tuning record plus body 1's live surfCfg3 — the shader
@@ -766,11 +775,11 @@ async function main() {
   }
 
   /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
-   *  The ramp trio and the viscera pair write uniforms live; gutSize and
-   *  spillChance take effect on the next spawn / next roll (gutSize only
-   *  shapes ropes spawned from now on — existing droplets keep their size,
-   *  they are MOVED, not resized, by the frame loop); boneRatio rebuilds
-   *  the cast. */
+   *  The ramp trio, the viscera pair and organAmp write uniforms live; gutSize,
+   *  spillChance, coilTightness and springiness take effect on the next spawn
+   *  / next roll (gutSize and the spring pair only shape ropes spawned from
+   *  now on — existing droplets keep their size, they are MOVED, not resized,
+   *  by the frame loop); boneRatio rebuilds the cast. */
   function applyWoundTuning(o: Partial<WoundTuningValues>): void {
     let ramp = false;
     if (o.woundDepthAmp !== undefined) { woundTuning.woundDepthAmp = o.woundDepthAmp; ramp = true; }
@@ -778,8 +787,13 @@ async function main() {
     if (o.muscleDepth !== undefined) { woundTuning.muscleDepth = o.muscleDepth; ramp = true; }
     if (o.visceraAmp !== undefined) { woundTuning.visceraAmp = o.visceraAmp; ramp = true; }
     if (o.visceraDepth !== undefined) { woundTuning.visceraDepth = o.visceraDepth; ramp = true; }
+    if (o.organAmp !== undefined) { woundTuning.organAmp = o.organAmp; ramp = true; }
     if (ramp) for (const a of actors) applyWoundRamp(a.view);
     if (o.gutSize !== undefined) woundTuning.gutSize = o.gutSize;
+    // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
+    // they shape every rope spawned from now on; existing ropes keep theirs.
+    if (o.coilTightness !== undefined) woundTuning.coilTightness = o.coilTightness;
+    if (o.springiness !== undefined) woundTuning.springiness = o.springiness;
     if (o.spillChance !== undefined) {
       woundTuning.spillChance = o.spillChance;
       // The roll reads the shared table (entrails-spawn.shouldSpill), so
@@ -1453,7 +1467,13 @@ async function main() {
       return;
     }
     const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound);
-    gutRopes.set(a.id, { chain: makeGutChain(anchor), wound, droplets: [] });
+    gutRopes.set(a.id, {
+      chain: makeGutChain(anchor, {
+        coilTightness: woundTuning.coilTightness,
+        springiness: woundTuning.springiness,
+      }),
+      wound, droplets: [],
+    });
   }
 
   /** Per-frame rope sim, BEFORE the bleed block (so stepBlood sees the same
@@ -2267,10 +2287,10 @@ async function main() {
      *  the panel's WOUND_KEYS — the table the COPY button emits from — so a
      *  pasted COPY always round-trips. Partial: only the keys present are
      *  applied (the panel's per-slider set() sends exactly one). The ramp
-     *  trio and the viscera pair are live uniform writes; gutSize and
-     *  spillChance govern ropes/rolls from now on; boneRatio rebuilds the
-     *  cast and drops on-body wounds (documented in rebuildCast and the
-     *  slider's tooltip).
+     *  trio, the viscera pair and organAmp are live uniform writes; gutSize,
+     *  spillChance and the spring pair govern ropes/rolls from now on;
+     *  boneRatio rebuilds the cast and drops on-body wounds (documented in
+     *  rebuildCast and the slider's tooltip).
      *  Returns the applied record PLUS the live surfCfg3 uniform from body
      *  1, so a caller can confirm the record actually reached the field —
      *  the verify-the-panel-drives-the-shader check, one call, no guessing. */

@@ -9,7 +9,10 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
-import { GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL } from './goo-layer';
+import {
+  GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL,
+  GOO_DENSITY_ALPHA_IS_GUT_MASK,
+} from './goo-layer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -396,5 +399,59 @@ describe('goo surface normals (world-oriented reconstruction)', () => {
 
   it('defaults to the surface normal', () => {
     expect(GOO_TUNING.surfaceNormals).toBe(true);
+  });
+});
+
+describe('gut tint (organs r3)', () => {
+  it('density writes the gut mask into the UNUSED alpha channel', () => {
+    // .r is density, .g/.b reconstruct view depth (c.g / max(c.b,1e-4)).
+    // .a was written as a constant 1 and never read — that is the free slot.
+    expect(GOO_DENSITY_ALPHA_IS_GUT_MASK).toBe(true);
+  });
+
+  it('the surface lerps toward the organ colour by the gut fraction', () => {
+    expect(GOO_SURFACE_WGSL).toContain('gutFrac');
+    // Blood NEAR a rope must stay blood — a disembowelled body bleeds heavily
+    // exactly there — so the lerp is per-pixel by ratio, not a global switch.
+    expect(GOO_SURFACE_WGSL).toMatch(/gutFrac\s*=\s*c\.a\s*\/\s*max\(c\.r/);
+  });
+
+  it('takes organColor as a parameter and mixes the base with it', () => {
+    // A plain fn parameter bound to one shared uniform node, the same shape
+    // as every other colour the pass takes (keyColor) — so both surface
+    // materials (raw/blurred) and both modes read one value.
+    expect(GOO_SURFACE_WGSL).toContain('organColor: vec3<f32>');
+    expect(GOO_SURFACE_WGSL)
+      .toMatch(/mix\(vec3<f32>\(0\.62, 0\.11, 0\.10\), organColor, gutFrac\)/);
+  });
+});
+
+describe('gut mask wiring (source tripwires — the two alpha traps)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('the density target clears with ALPHA 0, and the restore puts alpha back', () => {
+    // three's setClearColor defaults its alpha argument to 1. The explicit
+    // black clear that stops the scene background's red leaking into .r
+    // would therefore also paint alpha 1 across the empty field — and every
+    // pixel's gut accumulator would START at 1, so a/r clamps to 1 and the
+    // whole goo layer renders organ-pink. No unit test can execute the GPU
+    // path; this is the tripwire.
+    expect(src).toContain('renderer.setClearColor(0x000000, 0)');
+    expect(src).toContain('getClearAlpha()');
+  });
+
+  it('the blur passes alpha through — it must not overwrite it with 1', () => {
+    // The blur filters ALL four channels with the same weights (the test
+    // above pins that), so a/r stays the gut fraction after blur — but only
+    // if the blur material actually writes the filtered .w. It wrote a
+    // constant 1 pre-organs, which would repaint every blurred pixel as gut.
+    expect(src).toContain('vec4(blurred.xyz as never, blurred.w as never)');
+    expect(src).not.toMatch(/vec4\(blurred\.xyz as never, 1\.0\)/);
+  });
+
+  it('carries a per-droplet gut mask on an instanced attribute', () => {
+    expect(src).toContain("setAttribute('gutMask', gutAttr)");
+    expect(src).toContain("d.kind === 'gut' ? 1 : 0");
+    expect(src).toContain('gutAttr.needsUpdate = true');
   });
 });
