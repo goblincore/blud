@@ -2449,6 +2449,73 @@ async function main() {
     },
 
     /**
+     * Bone capsule evaluations per marched ray (gore r3 refinement 3).
+     *
+     * Debug mode 5, read back exactly like occupancy() above — including the
+     * 256-byte row alignment, which is not optional and has produced
+     * plausible-but-wrong numbers here before.
+     *
+     * This exists because the TIMING bench cannot see the bone fold at all:
+     * it measured +0.0% against a 4% within-run spread, which is not a
+     * measurement. A counter is not subject to machine noise, so it is what
+     * any bone-fold cull must be judged on. Wound some bodies first — with no
+     * wounds the nearWound gate means the honest answer is zero.
+     */
+    async boneEvals() {
+      const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      for (const a of actors) a.view.uniforms.debugCfg.value.x = 5;
+      try {
+        handle.setLoopRunning(false);
+        handle.step(1 / 60);
+        await handle.resolveGpu();
+        const t = sdfLayer.marchTarget;
+        const w = t.width;
+        const h = t.height;
+        const buf = new Float32Array(
+          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+        );
+        const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+        let rasterised = 0;
+        let hits = 0;
+        let bonesOnHit = 0;
+        let bonesTotal = 0;
+        let maxBones = 0;
+        let pixelsWithBone = 0;
+        for (let row = 0; row < h; row++) {
+          const base = row * floatsPerRow;
+          for (let col = 0; col < w; col++) {
+            const o = base + col * 4;
+            if (buf[o + 2]! < 0.5) continue;
+            rasterised++;
+            const b = buf[o]!;
+            bonesTotal += b;
+            if (b > 0) pixelsWithBone++;
+            if (b > maxBones) maxBones = b;
+            if (buf[o + 1]! > 0.5) { hits++; bonesOnHit += b; }
+          }
+        }
+        return {
+          rasterised, hits,
+          /** Total bone capsule evaluations across the whole marched frame. */
+          bonesTotal,
+          /** Mean over MARCHED pixels — the number a cull must move. */
+          meanPerRay: rasterised ? bonesTotal / rasterised : 0,
+          /** Mean over pixels that actually paid any bone cost. */
+          meanPerPayingRay: pixelsWithBone ? bonesTotal / pixelsWithBone : 0,
+          /** Share of marched pixels that touched the bone fold at all —
+           *  the nearWound gate's effectiveness, measured rather than argued. */
+          payingShare: rasterised ? pixelsWithBone / rasterised : 0,
+          meanOnHit: hits ? bonesOnHit / hits : 0,
+          maxBones,
+          bodiesOnScreen: bodiesOnScreen(),
+        };
+      } finally {
+        for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        handle.setLoopRunning(true);
+      }
+    },
+
+    /**
      * Run one bench leg.
      *
      * Parks the result on window.__gameBench as well as returning it: a
