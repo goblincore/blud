@@ -843,20 +843,38 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     }
     var sd = sdPrim(p, idx, data, r2, prof, cpos, band);
     if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }
-    // A SHELL (profile bit 2, value >= 4) thins the closed base field to a
+    // A SHELL (profile bit 2, value 4) thins the closed base field to a
     // sheet and clips it: abs(dBase) - thick, then a rounded-rim clip against
     // the shell plane. Only shell prims read the two extra rows, and only in
     // a shaped group, so additive prims pay nothing.
-    if (prof >= 4.0) {
+    //
+    // MUST be a mask, not a "prof >= 4" magnitude test: that only ever meant
+    // "shell" while bit 2 (shell) was the highest bit anyone set, so nothing
+    // outscored it. A BOX sets bit 3 (value 8) with bit 2 clear, and
+    // 8 >= 4 is true — a magnitude test would fold every box as a
+    // zero-thickness shell (primShell/primClip are all-zero for a box),
+    // instead of the plain body it actually is.
+    if ((i32(prof) & 4) != 0) {
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
       sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }
-    // Chamfer is profile bit 0; bend is +2, so the old "prof > 0.5" test
-    // would wrongly chamfer a plain-bent prim — bounded above now. A shell
-    // (prof >= 4) always folds round regardless of the profile's low bits.
-    if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
+    // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
+    // bit 2 (value 4). "& 7 == 1" means "bit 0 set, bits 1 and 2 clear" —
+    // exactly chamfer-and-nothing-else, which is what the OLD bounded-window
+    // test (prof strictly between one half and one and a half) meant back
+    // when prof topped out at 6.
+    //
+    // MUST be a mask, not that bounded window: a BOX sets bit 3 (value 8),
+    // so prof is no longer bounded above by 6, and a chamfered box (prof 9)
+    // falls outside that old window entirely — the author writes chamfer=,
+    // the row packs it (see pack.ts), and the crease silently never
+    // appears. "& 7" ignores bit 3 entirely, so box+chamfer (9 & 7 == 1)
+    // chamfers exactly as a non-box chamfered prim does, and every existing
+    // case (0,1,2,3,4,6) keeps its current answer — verified by
+    // enumeration, see pack.test.ts / the task 5 report.
+    if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
   }
   return d;
 }

@@ -329,7 +329,7 @@ describe('ported features reach the entry point', () => {
     expect(foldGroup).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos, band);');
     expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }');
     expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }');
-    expect(foldGroup).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+    expect(foldGroup).toContain('if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
     expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
@@ -832,11 +832,17 @@ describe('arc capsule — bent primitives', () => {
     }
   });
 
-  // Bend rides profile bit 1 (+2), so the old "prof > 0.5" chamfer test would
-  // wrongly chamfer a plain-bent round prim — the fold must bound it above.
-  it('bounds the chamfer test below the bend encoding in the fold', () => {
+  // Chamfer must be an EXACT bit-0-only match (`& 7 == 1`), not a magnitude
+  // window: a magnitude window ("prof > 0.5 && prof < 1.5") happened to also
+  // exclude bend (bit 1, +2) and shell (bit 2, +4) only because neither ever
+  // pushed prof outside (0.5, 1.5) on its own — true while prof topped out
+  // at 6. A BOX adds bit 3 (+8), so a chamfered box packs as 9, which a
+  // magnitude window puts OUTSIDE (0.5, 1.5) — silently folding it round.
+  // `& 7 == 1` isolates the low three bits and asks for exactly chamfer,
+  // which is immune to any bit above it, box included.
+  it('isolates chamfer with a low-bit mask, not a magnitude window (immune to bit 3)', () => {
     const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
-    expect(foldGroup).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+    expect(foldGroup).toContain('if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
   });
 
   // One NaN takes the entire body: the degenerate guard must sit before the
@@ -883,20 +889,51 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
     // landed — the cluster walk and the tile-list path share it, so pinning
     // mapBody here would pass while the shell silently vanished from BOTH.
     const fold = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
-    // A shell is profile bit 2 (value >= 4); the fold must read both shell rows
+    // A shell is profile bit 2 (value 4); the fold must read both shell rows
     // and pass them to sdShell, and a straight shell (prof 4) must NOT take the
-    // bend row (bit test, equivalent to prof > 1.5 on the 0-3 range).
+    // bend row (bit test, equivalent to prof > 1.5 on the 0-3 range). The gate
+    // itself must be a bit test too — a BOX (bit 3, value 8) has bit 2 clear,
+    // so "prof >= 4" would wrongly fold it as a shell (its shell/clip rows
+    // are all zero); "& 4 != 0" reads only bit 2.
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0)`);
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0)`);
-    expect(fold).toContain('if (prof >= 4.0) {');
+    expect(fold).toContain('if ((i32(prof) & 4) != 0) {');
     expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);');
-    const profGate = fold.indexOf('if (prof >= 4.0) {');
+    const profGate = fold.indexOf('if ((i32(prof) & 4) != 0) {');
     const bendGate = fold.indexOf('if ((i32(prof) & 2) != 0) {');
     // The shell wrap must come AFTER the base field is computed (sdPrim) and
     // the bend ctrl loaded; ordering is load-bearing for the fold.
     expect(profGate).toBeGreaterThan(fold.indexOf('var sd = sdPrim(p, idx, data, r2, prof, cpos, band);'));
     expect(bendGate).toBeGreaterThan(-1);
     expect(profGate).toBeGreaterThan(bendGate);
+  });
+});
+
+describe('BOX bit (prof +8) does not break the shell/chamfer readers (task 5 follow-up)', () => {
+  // pack.ts (task 5) gave a BOX primitive bit 3 (value 8) of prof. Two
+  // readers in foldGroup used to test prof by MAGNITUDE rather than by bit
+  // — correct only as long as bit 2 (shell, value 4) was the highest bit
+  // anyone ever set, which stopped being true the moment a box could set
+  // bit 3 on top. Both are pinned here as NEGATIVE literal checks (the old
+  // magnitude form must be gone, not just "a mask form also exists") so a
+  // future edit that reintroduces either magnitude test fails loudly.
+  const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
+
+  it('shell gate is a bit test, not "prof >= 4.0" — a lone box (prof 8) is not a shell', () => {
+    // 8 >= 4 is true, so the old magnitude test would have loaded
+    // ROW_PRIM_SHELL/ROW_PRIM_CLIP for a box (both all-zero — see pack.ts)
+    // and wrapped it as a zero-thickness shell instead of leaving it as the
+    // plain body sdPrim already computed.
+    expect(foldGroup).not.toContain('prof >= 4.0');
+    expect(foldGroup).toContain('if ((i32(prof) & 4) != 0) {');
+  });
+
+  it('chamfer gate is a bit test, not "prof > 0.5 && prof < 1.5" — a chamfered box (prof 9) still chamfers', () => {
+    // 9 falls outside (0.5, 1.5), so the old magnitude window would have
+    // silently folded a chamfered box round — the author writes `chamfer`,
+    // pack.ts packs bit 0, and the crease never appears.
+    expect(foldGroup).not.toContain('prof > 0.5 && prof < 1.5');
+    expect(foldGroup).toContain('if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
   });
 });
 
