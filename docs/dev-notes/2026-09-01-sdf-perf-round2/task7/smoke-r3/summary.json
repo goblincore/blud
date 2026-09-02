@@ -1,0 +1,126 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 732,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 3,
+  "onJs": "__sdfGame.setLevelShadow(true)",
+  "offJs": "__sdfGame.setLevelShadow(false)",
+  "preJs": "",
+  "outDir": "docs/dev-notes/2026-09-01-sdf-perf-round2/task7/smoke-r3",
+  "noiseFloor": {
+    "changed": 64,
+    "bigChanged": 41,
+    "meanD": 1.63,
+    "maxD": 691,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 18,
+      "bigChanged": 1,
+      "meanD": 1.83,
+      "maxD": 183,
+      "hotCells": []
+    },
+    "a-2 vs b-2": {
+      "changed": 5,
+      "bigChanged": 1,
+      "meanD": 1.03,
+      "maxD": 176,
+      "hotCells": []
+    },
+    "a-1 vs a-2": {
+      "changed": 54,
+      "bigChanged": 40,
+      "meanD": 0.91,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 58,
+      "bigChanged": 40,
+      "meanD": 0.44,
+      "maxD": 691,
+      "hotCells": []
+    }
+  },
+  "occupancy": {
+    "off": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 0,
+        "hits": 0,
+        "misses": 0,
+        "occupancy": 0,
+        "coverage": 0,
+        "meanStepsHit": 0,
+        "meanStepsMiss": 0,
+        "missStepShare": 0,
+        "bodiesOnScreen": 3
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 0,
+        "hits": 0,
+        "misses": 0,
+        "occupancy": 0,
+        "coverage": 0,
+        "meanStepsHit": 0,
+        "meanStepsMiss": 0,
+        "missStepShare": 0,
+        "bodiesOnScreen": 3
+      }
+    ],
+    "on": [
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 0,
+        "hits": 0,
+        "misses": 0,
+        "occupancy": 0,
+        "coverage": 0,
+        "meanStepsHit": 0,
+        "meanStepsMiss": 0,
+        "missStepShare": 0,
+        "bodiesOnScreen": 3
+      },
+      {
+        "targetW": 800,
+        "targetH": 600,
+        "screenPx": 480000,
+        "rasterised": 0,
+        "hits": 0,
+        "misses": 0,
+        "occupancy": 0,
+        "coverage": 0,
+        "meanStepsHit": 0,
+        "meanStepsMiss": 0,
+        "missStepShare": 0,
+        "bodiesOnScreen": 3
+      }
+    ]
+  }
+}
