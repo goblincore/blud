@@ -78,11 +78,11 @@ export const SHELL_TRACE = /* wgsl */ `fn shellTrace(
   for (var i = 0; i < 128; i = i + 1) {
     if (f32(i) >= maxSteps) { break; }
     let p = camPos + rd * t;
-    let d = mapBody(p, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip).x;
+    let d = mapBody(p, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, vec4<f32>(0.0)).x;
     if (d < 0.0015) {
       hit = 1.0;
       if (outMode > 0.5) { return vec4<f32>(steps, steps / 16.0, 0.0, 1.0); }
-      let n = calcNormal(p, data, counts, surfCfg.y, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip);
+      let n = calcNormal(p, data, counts, surfCfg.y, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, vec4<f32>(0.0));
       let ndl = max(dot(n, lightDir), 0.0);
       let key = ndl * lightCfg.x;
       let fill = lightCfg.y * max(dot(n, -rd), 0.0);

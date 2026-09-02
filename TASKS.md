@@ -50,7 +50,7 @@ base branch `claude/sdf-character-rendering-optimization-d0570b`): trigger
 task-1, tasks 2-8 chain; task-0 (baseline) and task-9 (bench sweep) are
 unchained — trigger them only on a quiet machine. Bench steps inside 1-8 are
 recorded DEFERRED while the wound-r2 chain runs; parity gates are not.
-**Progress 2026-09-02:** tasks 0, 1, 1b, 2 done. **Task 1b's parity gate
+**Progress 2026-09-02:** tasks 0, 1, 1b, 2, 1c done. **Task 1b's parity gate
 FAILED task 1 in room 3 (0.20%): the hull-exit `tMax` bound DELETES a
 background body seen past a foreground body's hull** while `hits` stay
 bit-identical — a hull-texture effect, most likely the shell EXIT target
@@ -78,11 +78,17 @@ with a per-body proxy-box `bodyEntry` but shipped `min(shellIn, bodyEntry)`,
 still inert, then timed out on flicker noise. Marked done (code green);
 **task 5b** (new, before 6) switches to `max(...)`, proves parity with a
 gate that bites, decides the default.
-**2026-09-02 afternoon:** 5b DONE — `max(shellIn, bodyEntry)`, parity PASS
-in the synthetic overlap scene and rooms 3/4 (hits identical, residual on
-already-occluded fringe), but the bench read the per-body pass structure as
-a net LOSS at 3-4 bodies (spreads unresolved) → `GAME_DEPTH_GATE` ships 0,
-seam kept, task 9 re-decides on a quiet machine at higher body counts.
+**2026-09-02 later:** task 5b done. `max(shellIn, bodyEntry)` is exact
+(larger of two lower bounds on the first possible hit) and provably bites:
+staged-overlap + rooms 3/4 parity all at/below the capture noise floor,
+residual = sub-pixel fringe on occluded silhouettes, no missing geometry;
+`hits`/`rasterised` bit-identical (mode-4 counters only record the depth
+winner — the instrument CANNOT see this gate). BUT the bench A/B measured
+the per-body PASS STRUCTURE as a ~6-7 ms/frame net loss at 3-4 bodies
+(each sub-pass: full-target blit + renderer.render scene walk; the run's
+two clean paired reps agree, spreads 82-89% otherwise formal-UNRESOLVED).
+`GAME_DEPTH_GATE` ships 0; bench leg renamed `depth-gate-on`; task 9
+re-takes the A/B on a quiet machine and re-decides the default.
 Task 6 DONE (AA on): strength-0 parity bit-identical both rooms; near 2 m
 and far 8 m visual gates pass (owner-independent read of the far pair:
 all nine bodies, crater survives, smoother silhouettes); hit-pixel steps
@@ -111,6 +117,20 @@ ships. Occupancy vs task 0: total march steps −41% r3 / −38% r4, hit steps
 every table carries its load and is judged by its own spread. Final branch
 `dispatch/2026-09-01-sdf-render-perf-r2-task-9` = the whole chain; merge
 order: chain → this plan branch → main, then gore, then elbow.
+**2026-09-02 later:** task 8 done — measured, NOT worth it. Ten uploads =
+p50 0.060 / max 0.090 ms/frame (room-4 idle, machine quiet), 3-5x under the
+0.3 ms gate; instrumentation removed, texture stays 128 wide, no Step 3.
+Chain's code tasks complete; **task 9** (bench sweep, unchained) waits for a
+quiet machine and a manual trigger.
+**2026-09-02 later:** task 9 DONE — BENCH_PRELUDE one-lever sweep on the
+finished chain (r3/r4 x3). Every ship default survives its lever-off re-run;
+depth gate re-decided OFF (on loses 4.6 ms at 6% spread); hull exit bound
+dead by census (deletes 4 of 9 bodies in r4); occupancy: omega 1.0 + AA cut
+mean march steps ~40% with coverage unchanged — the march is harvested,
+remaining cost is hit-pixel fill. Machine never fully quiet (user Slack/Xcode
+builds) — load recorded per row; CPU-saturating churn wrecks the bench,
+IO-wait does not (see notes §task 9). Perf r2 COMPLETE; owner still owes the
+task-7 pillar eyeball (`setLevelShadow`).
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
