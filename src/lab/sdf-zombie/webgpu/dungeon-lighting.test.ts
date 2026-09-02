@@ -64,4 +64,22 @@ describe('createFlashlight', () => {
     expect(spot.castShadow).toBe(true);
     expect(spot.color.b).toBeGreaterThanOrEqual(spot.color.r);
   });
+
+  it('ships a level-only shadow twin (perf round 2 task 7)', () => {
+    // The twin's map is what bodies sample to RECEIVE the level's shadows.
+    // It must NOT see the hull layers — a body sampling a map containing its
+    // own inflated hull self-shadows every flesh point — and it must light
+    // nothing (intensity 0; three still renders the map).
+    const { levelShadow, spot } = createFlashlight();
+    expect(levelShadow.intensity).toBe(0);
+    expect(levelShadow.castShadow).toBe(true);
+    expect(levelShadow.shadow.camera.layers.test(new THREE.Layers())).toBe(true); // layer 0
+    const hullLayer = new THREE.Layers();
+    hullLayer.set(OCCLUDER_LAYER);
+    expect(levelShadow.shadow.camera.layers.test(hullLayer)).toBe(false);
+    // Same cone as the spot, so the sampled shadow matches the beam that
+    // lights the mesh-side level.
+    expect(levelShadow.angle).toBe(spot.angle);
+    expect(levelShadow.distance).toBe(spot.distance);
+  });
 });

@@ -136,6 +136,10 @@ const ALL_LEGS = {
   // OFF costs — the ablation direction flipped with the default.
   'shell-off': { setShell: false },
   'occluder-off': { setOccluder: false },
+  // Perf round 2 task 5b: the accumulated-depth gate SHIPS OFF (measured as
+  // a net pass-structure loss at 3-4 bodies); this leg turns it ON — the
+  // ablation direction of 'cone-on', not 'shell-off'.
+  'depth-gate-on': { setDepthGate: true },
   'cone-on': { setCone: true },
   'fxaa-off': { setFxaa: false },
   'scale-0.7': { setSdfScale: 0.7 },
@@ -172,6 +176,15 @@ async function applyLeg(name) {
     __sdfGame.setShell(true);
     __sdfGame.setRelax(1.0);
     __sdfGame.setBleed(true);
+    // Perf round 2 task 5b: the depth gate DEFAULTS OFF (its pass structure
+    // measured as a net loss at 3-4 bodies — see game-main.ts). Pinned here
+    // so legs cannot inherit state; the 'depth-gate-on' leg is the A/B.
+    // Perf round 2 task 1's GAME_HULL_EXIT_BOUND = 1 FAILS render parity
+    // (task 1b: whole background bodies vanish past a foreground hull; see
+    // notes.md). Until the owner resolves that, benches measure the bound OFF
+    // — the state every baseline in these notes was taken in — and task 9's
+    // table keeps it OFF per the plan.
+    __sdfGame.setHullExitBound(false);
     return 1;
   })()`);
   for (const [fn, arg] of Object.entries(overrides)) {

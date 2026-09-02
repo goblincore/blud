@@ -286,6 +286,12 @@ async function main() {
   flashlight.spot.castShadow = new URLSearchParams(location.search).get('spotshadow') !== '0';
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
+  // The level-shadow twin (perf round 2 task 7) rides every shadow boot
+  // decision the spot makes: ?spotshadow=0 kills BOTH maps (a true ablation
+  // of the shadow cost), and the gallery rig shows neither.
+  flashlight.levelShadow.castShadow = flashlight.spot.castShadow;
+  scene.add(flashlight.levelShadow);
+  scene.add(flashlight.levelShadow.target);
 
   handle.renderer.shadowMap.enabled = true;
   handle.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -312,6 +318,7 @@ async function main() {
     }
     handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
     flashlight.spot.visible = rig === DUNGEON_RIG;
+    flashlight.levelShadow.visible = rig === DUNGEON_RIG;
   }
   applyRig(DUNGEON_RIG);
 
@@ -381,6 +388,12 @@ async function main() {
     sdfScale = Math.min(1, Math.max(0.2, v));
     sdfLayer.setScale(sdfScale);
     sizeSdfLayer();
+    // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
+    // a rung change moved that height, so refresh every live view (perf round
+    // 2 task 6). Only called post-boot (tickAdaptive / the setSdfScale seam),
+    // so `actors` below is always initialised here.
+    const k = sdfLayer.pixelConeK;
+    for (const a of actors) a.view.uniforms.aaCfg.value.x = k;
   }
 
   // -----------------------------------------------------------------------
@@ -447,6 +460,11 @@ async function main() {
   // frame can fire against the hole.
   //
   // Goo OFF takes the original single-call path, so the toggle is exact.
+  // The render loop arms on the renderer BEFORE main() finishes, so this
+  // callback can fire while consts declared further down are still in their
+  // temporal dead zone — the chunk list therefore goes through this
+  // indirection, assigned once liveChunks exists. Empty until then.
+  let chunkObjects: () => THREE.Object3D[] = () => [];
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
     // Hand the march the same beam the meshes get. The SDF bodies shade
@@ -463,12 +481,33 @@ async function main() {
       const spotOn = dungeonOn ? 1 : 0;
       const cosInner = Math.cos(flashlight.spot.angle * (1 - flashlight.spot.penumbra));
       const cosOuter = Math.cos(flashlight.spot.angle);
+      // LEVEL SHADOW twin (perf round 2 task 7): exact flashlight pose, then
+      // refresh its shadow matrix NOW — shadow.matrix is otherwise written
+      // during the render, i.e. after we read it. Same pose => same shadows
+      // on bodies as the meshes cast onto the floor.
+      const twin = flashlight.levelShadow;
+      twin.position.copy(flashlight.spot.position);
+      twin.target.position.copy(flashlight.spot.target.position);
+      twin.updateMatrixWorld();
+      twin.target.updateMatrixWorld();
+      twin.shadow.updateMatrices(twin);
+      // shadow.map is null until three has rendered the twin's shadow pass
+      // once (boot): until then the levelShadowTex binding stays on the 1×1
+      // fallback and the gate stays 0 — the march is bit-identical. After
+      // the first shadow pass the texture rebinds (same mechanism as
+      // setFaceTexture) and the gate tracks the seam AND the beam: no beam,
+      // no directional key, nothing for a level shadow to modulate.
+      const map = twin.shadow.map?.depthTexture ?? null;
+      const lvlOn = spotOn > 0 && twin.castShadow && map !== null && levelShadowEnabled ? 1 : 0;
       for (const a of actors) {
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
         a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
+        a.view.uniforms.levelShadowCfg.value.x = lvlOn;
+        if (map !== null) a.view.levelShadowTex.value = map;
       }
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
@@ -478,6 +517,9 @@ async function main() {
       const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
       f.light.intensity = f.base * (1 + w * 0.14);
     }
+    // Front-to-back per-body passes (perf round 2 task 5): register this
+    // frame's bodies and chunks. With the gate off the lists are not walked.
+    sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -536,6 +578,60 @@ async function main() {
    */
   const GAME_RELAX = 1.0;
 
+  /** Perf round 2, task 1: the hull exit bounds tMax on the un-relaxed march
+   *  (perfCfg.x). `__sdfGame.setHullExitBound()` flips it for A/B.
+   *  DEFAULT OFF (task 1b finding): at real-render parity the bound deletes a
+   *  whole background body's visible pixels (room 3: 2055 px, one
+   *  figure-shaped component) while the occupancy hit set stays bit-identical
+   *  — a cross-body hull-texture effect, not a per-ray loss. Do not raise
+   *  until task 1c's shell-exit diagnosis explains the deletion and both
+   *  rooms pass the parity gate with the bound on. */
+  const GAME_HULL_EXIT_BOUND = 0;
+
+  /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
+   *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
+   *  see the march.wgsl.ts reach comment; `__sdfGame.setWoundEarlyOut()`
+   *  flips it live for A/B. */
+  const GAME_WOUND_EARLY_OUT = 1;
+
+  /**
+   * Step multiplier for the game page's march (marchCfg.y). The lab ships
+   * 0.6 (under-relaxed) to survive the fbm shell displacement, which this
+   * page runs with amplitude 0. With a conservative field, 1.0 is plain
+   * sphere tracing: exact, fewer steps, and it never enters the omega > 1
+   * overshoot path that produced the 2026-08-31 box washes.
+   * `__sdfGame.setOmega()` flips it live for A/B.
+   */
+  const GAME_OMEGA = 1.0;
+
+  /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
+   *  march may accept a sample once the field is within the ray's projected
+   *  PIXEL footprint (t * aaCfg.x) instead of the 1.2 mm literal — fewer
+   *  steps at range, geometric aliasing prefiltered below Nyquist. The
+   *  epsilon divides by the dominant prim's GROUP DISTORTION factor
+   *  (gFoldBestDistort, up to 22x on the schoolgirl sole plate) so
+   *  high-distortion regions cannot stop a ray short — the exact defect that
+   *  kept this lever OFF when it first shipped (see march.wgsl.ts).
+   *  `__sdfGame.setAa(strength)` flips it live for A/B; 0 is the old
+   *  behaviour bit-for-bit (t * 0 / distort == t * 0 == 0). */
+  const GAME_AA = 1.0;
+
+  /** Perf round 2, task 7: bodies RECEIVE the level's shadows. The twin
+   *  light (dungeon-lighting.ts) renders a level-only depth map (layer 0 —
+   *  no body hulls, so no self-shadowing) from the flashlight's pose; the
+   *  march multiplies the KEY diffuse+specular by a 4-tap PCF lookup into
+   *  it. One texture load per hit pixel, zero extra field evaluations.
+   *  `__sdfGame.setLevelShadow(on)` flips it live; 0 is bit-for-bit the
+   *  pre-task-7 march. NOT a level-shadow ABLATION for the bench: the twin's
+   *  1024² map still renders — for the shadow-cost split use ?spotshadow=0,
+   *  which kills both maps at boot. */
+  const GAME_LEVEL_SHADOW = 1.0;
+  /** Live seam state for the setter/getter; read by the per-frame pose
+   *  block. Frames cannot fire mid-main (sync boot), so the let below is
+   *  initialised before any draw — the same reasoning the blob comment
+   *  above relies on. */
+  let levelShadowEnabled = GAME_LEVEL_SHADOW > 0.5;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -556,6 +652,25 @@ async function main() {
   // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
   // .setShell(false) is the kill switch.
   sdfLayer.setShellEnabled(true);
+
+  /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
+   *  by the depth nearer passes already recorded at each pixel.
+   *  Parity-proven by 5b (rooms 3/4 + staged overlap: a-vs-b at/below the
+   *  capture noise floor; residual = sub-pixel fringe on occluded
+   *  silhouettes) — the gate is CORRECT.
+   *
+   *  DEFAULT 0, not 1 (task 5b): the bench A/B measured the pass structure
+   *  itself as a net LOSS at 3-4 bodies — per-body sub-passes each pay a
+   *  full-target blit plus a renderer.render() scene walk (sdf-layer's pass-2
+   *  loop), ~6-7 ms/frame more than the single-pass march in the run's two
+   *  clean paired reps (r3 walk 9.09/8.59 off vs 15.80/15.84 on; r4 rep0
+   *  agrees), dwarfing the baseline legs' own 5% spread. The skipped
+   *  hidden-fragment marches are smaller than that overhead at these body
+   *  counts. Task 9 re-takes on a quiet machine; if it resolves positive at
+   *  higher body counts, flip back here. `__sdfGame.setDepthGate()` flips it
+   *  live for A/B. */
+  const GAME_DEPTH_GATE = 0;
+  sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -611,11 +726,34 @@ async function main() {
             exit: sdfLayer.shellExit.texture,
             uniforms: sdfLayer.shellEntry.uniforms,
           },
+          // The accumulated-depth gate (perf round 2 task 5). Unconditional
+          // like the shell: prevFetch's identities (gate off -> 1e9) make the
+          // march bit-identical while sdfLayer.depthGate is false.
+          prev: sdfLayer.prev,
+          // Level-only shadow twin (perf round 2 task 7). The binding exists
+          // from creation (1×1 fallback until three renders the twin once);
+          // the per-frame pose block owns the gate and the matrix.
+          levelShadow: { light: flashlight.levelShadow },
         });
       view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
       // Relaxation, explicit rather than inherited from the uniform default —
       // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
       view.uniforms.woundCfg2.value.y = GAME_RELAX;
+      // Hull-exit tMax bound (perf round 2 task 1) — see GAME_HULL_EXIT_BOUND.
+      view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
+      // Wound-loop early-out (perf round 2 task 3) — see GAME_WOUND_EARLY_OUT.
+      view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
+      // Plain sphere tracing (perf round 2 task 2) — see GAME_OMEGA.
+      view.uniforms.marchCfg.value.y = GAME_OMEGA;
+      // Footprint-AA strength + the one-pixel footprint at the CURRENT SDF
+      // pass height (perf round 2 task 6) — see GAME_AA. The footprint part
+      // is refreshed on adaptive-rung change inside applySdfScale.
+      view.uniforms.aaCfg.value.y = GAME_AA;
+      view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
+      // Level-shadow gate seed (perf round 2 task 7). The per-frame pose
+      // block overwrites x every frame (seam ∧ beam ∧ map-exists); this only
+      // makes the first frames read the intended default.
+      view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -853,9 +991,11 @@ async function main() {
   // SDF chunk path — the same pipeline the lab gibs with, capped and
   // recycled so a gore party cannot churn views unboundedly.
   const MAX_CHUNKS = 12;
-  const chunkMaterial = createSharedChunkGpuMaterial();
+  const chunkMaterial = createSharedChunkGpuMaterial(sdfLayer.prev);
   const chunkViews: ChunkGpuView[] = [];
   const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
+  // Now that the array exists, the frame draw can read it directly.
+  chunkObjects = () => liveChunks.map(c => c.view.object);
   let nextChunkId = 1;
   function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
     let best: Vec3 = [0, 1, 0];
@@ -1292,6 +1432,11 @@ async function main() {
             return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
           })
           : [],
+        // The pre-pass ships disabled and nothing consumes the occluder
+        // instances; skip their rebuild while it is off (perf r2 task 4).
+        // The shadow twin above always rebuilds. setOccluder(true) resumes
+        // the rebuild on the next frame, so the A/B seam still works.
+        { occluder: sdfLayer.occluderEnabled },
       );
     }
 
@@ -1855,6 +2000,10 @@ async function main() {
       sdfLayer.setShellEnabled(on);
       if (on) outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
     },
+    /** Perf round 2, task 5: the front-to-back per-body passes and their
+     *  accumulated-depth gate. OFF restores the single-pass march. */
+    setDepthGate(on: boolean) { sdfLayer.setDepthGate(on); },
+    get depthGate() { return sdfLayer.depthGate; },
     get shell() {
       return {
         enabled: sdfLayer.shellEnabled,
@@ -2038,6 +2187,37 @@ async function main() {
       for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
     },
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
+    setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
+    get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
+    /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
+    setWoundEarlyOut(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
+    get woundEarlyOut() { return (actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
+    /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
+    setOmega(v: number) {
+      const n = Math.max(0.1, Math.min(1.0, v));
+      for (const a of actors) a.view.uniforms.marchCfg.value.y = n;
+    },
+    get omega() { return actors[0]?.view.uniforms.marchCfg.value.y ?? 0; },
+    /** Footprint-AA strength (perf round 2 task 6, aaCfg.y). 0 = the old
+     *  march bit-for-bit; also refreshes the one-pixel footprint (aaCfg.x) so
+     *  a frozen-scene A/B at a pinned scale reads the intended pair. */
+    setAa(strength: number) {
+      const k = sdfLayer.pixelConeK;
+      for (const a of actors) {
+        a.view.uniforms.aaCfg.value.x = k;
+        a.view.uniforms.aaCfg.value.y = strength;
+      }
+    },
+    get aa() { return actors[0]?.view.uniforms.aaCfg.value.y ?? 0; },
+    /** Level shadows on bodies (perf round 2 task 7, levelShadowCfg.x).
+     *  0 = the pre-task-7 march bit-for-bit (the helper returns 1.0 before
+     *  sampling). The per-frame pose block ANDs this with the beam and map
+     *  existence, so a false here also survives ?spotshadow=0 boots. */
+    setLevelShadow(on: boolean) {
+      levelShadowEnabled = !!on;
+      for (const a of actors) a.view.uniforms.levelShadowCfg.value.x = on ? 1 : 0;
+    },
+    get levelShadow() { return (actors[0]?.view.uniforms.levelShadowCfg.value.x ?? 0) > 0.5; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },
@@ -2324,6 +2504,9 @@ async function main() {
             return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
           })
           : [],
+        // Same rule as the frame loop: only rebuild the occluder half when
+        // the pre-pass is on to consume it.
+        { occluder: sdfLayer.occluderEnabled },
       );
     },
     /** A/B seam: rebuild the SHADOW hull with spanning off (the pre-fix
