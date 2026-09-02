@@ -48,6 +48,19 @@ export interface RefSkin {
   total: number;
   /** Vertices dropped for a top weight at or below MIN_DOMINANT_WEIGHT. */
   dropped: number;
+  /**
+   * TEXCOORD_0 of each kept vertex, PARALLEL to `verts`; present only when
+   * the skinned primitive carries the attribute (absent = no paint to read).
+   *
+   * The draft's colour pass joins a vertex's paint to its geometry through
+   * this. No other join works: the kept set is whatever survived the
+   * MIN_DOMINANT_WEIGHT filter above, so matching texels to verts from the
+   * raw accessors would mean re-deriving that filter in a second module — a
+   * second implementation of a calibrated rule that could silently disagree
+   * (the plausible-and-undebuggable class of failure this file exists to
+   * prevent).
+   */
+  uv?: ReadonlyArray<readonly [number, number] | null>;
 }
 
 type Mat4 = number[]; // column-major, 16 entries, glTF convention
@@ -237,6 +250,10 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
   }
 
   const verts: RefVertex[] = [];
+  const uvRaw = prim.attributes.TEXCOORD_0 === undefined
+    ? null
+    : readAccessor(gltf, bin, prim.attributes.TEXCOORD_0);
+  const uv: Array<[number, number] | null> | undefined = uvRaw ? [] : undefined;
   let dropped = 0;
   const total = pos.length / 3;
   for (let i = 0; i < total; i++) {
@@ -266,6 +283,9 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
       }
     }
     verts.push({ joint: jointNames[bestJ] ?? `joint${bestJ}`, position: [px, py, pz] });
+    if (uv) uv.push([uvRaw![i * 2]!, uvRaw![i * 2 + 1]!]);
   }
-  return { verts, jointWorld, total, dropped };
+  return uv
+    ? { verts, jointWorld, total, dropped, uv }
+    : { verts, jointWorld, total, dropped };
 }

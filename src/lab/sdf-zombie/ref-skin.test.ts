@@ -26,6 +26,16 @@ function makeGlb(json: unknown, bin: Uint8Array): Uint8Array {
   return out;
 }
 
+/** Lay byte parts into one 4-byte-aligned binary chunk, returning their
+ *  offsets (for bufferViews) along with it. */
+function binChunk(parts: Uint8Array[]): { bin: Uint8Array; offs: number[] } {
+  let off = 0; const offs: number[] = [];
+  for (const p of parts) { offs.push(off); off += p.length + ((4 - (p.length % 4)) % 4); }
+  const bin = new Uint8Array(off);
+  parts.forEach((p, i) => bin.set(p, offs[i]!));
+  return { bin, offs };
+}
+
 /**
  * Two joints under a root scaled 2x. Three vertices: two clearly owned by
  * joint 0 and joint 1, and one split 0.5/0.5 which must be DROPPED.
@@ -140,6 +150,52 @@ describe('readRefSkin', () => {
   it('exposes the dominant-weight threshold it used', () => {
     // Calibrated against both real references; see the constant's own comment.
     expect(MIN_DOMINANT_WEIGHT).toBe(0.5);
+  });
+
+  it('carries TEXCOORD_0 parallel to the kept verts when present, and omits the field when not', () => {
+    // The draft's colour pass joins a vertex's paint to its geometry through
+    // this array. It must index the KEPT verts (the drop happens in the same
+    // loop), and it must be ABSENT — not an array of nulls — when the
+    // primitive has no uv, so "unpainted reference" stays distinguishable
+    // from "painted but this vertex has no uv".
+    const pos = new Float32Array([1, 0, 0,  0, 1, 0,  0, 0, 1]);
+    const joints = new Uint8Array([0,0,0,0,  1,0,0,0,  0,1,0,0]);
+    const weights = new Float32Array([1,0,0,0,  0.8,0.2,0,0,  0.5,0.5,0,0]);
+    const uv = new Float32Array([0.25, 0.75,  0.5, 0.25,  0.9, 0.9]);
+    const { bin, offs } = binChunk([
+      new Uint8Array(pos.buffer), joints, new Uint8Array(weights.buffer), new Uint8Array(uv.buffer),
+    ]);
+    const withUv = readRefSkin(makeGlb({
+      asset: { version: '2.0' },
+      scenes: [{ nodes: [0] }], scene: 0,
+      nodes: [
+        { name: 'Root', scale: [2, 2, 2], children: [1, 2, 3] },
+        { name: 'A', translation: [0, 0, 0] },
+        { name: 'B', translation: [0, 3, 0] },
+        { name: 'MeshNode', mesh: 0, skin: 0 },
+      ],
+      skins: [{ joints: [1, 2] }],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0, JOINTS_0: 1, WEIGHTS_0: 2, TEXCOORD_0: 3 } }] }],
+      buffers: [{ byteLength: bin.length }],
+      bufferViews: [
+        { buffer: 0, byteOffset: offs[0], byteLength: pos.byteLength },
+        { buffer: 0, byteOffset: offs[1], byteLength: joints.byteLength },
+        { buffer: 0, byteOffset: offs[2], byteLength: weights.byteLength },
+        { buffer: 0, byteOffset: offs[3], byteLength: uv.byteLength },
+      ],
+      accessors: [
+        { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+        { bufferView: 1, componentType: 5121, count: 3, type: 'VEC4' },
+        { bufferView: 2, componentType: 5126, count: 3, type: 'VEC4' },
+        { bufferView: 3, componentType: 5126, count: 3, type: 'VEC2' },
+      ],
+    }, bin));
+    // Vertex 2 (the 0.5/0.5 tie) is dropped; the two kept verts carry THEIR
+    // uvs, in order, with no gap left where the dropped one was.
+    expect(withUv.uv).toEqual([[0.25, 0.75], [0.5, 0.25]]);
+
+    const withoutUv = readRefSkin(twoJointGlb());
+    expect(withoutUv.uv).toBeUndefined();
   });
 
   it('requires a STRICT majority — an exact 0.5/0.5 tie is still dropped', () => {
