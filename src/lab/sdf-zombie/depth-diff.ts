@@ -105,15 +105,10 @@ export function resampleDepth(
           if (Number.isFinite(d)) { sum += d; cnt++; }
         }
       bits[y * outW + x] = n > 0 && on * 2 >= n ? 1 : 0;
-      // NaN where unoccupied, matching the invariant both source rasters
-      // uphold (depth NaN wherever the mask is 0): a background-majority box
-      // can still contain occupied corners, and their mean must not leak
-      // into pixels the mask says are background.
-      if (n > 0 && on * 2 >= n) {
-        if (cnt > 0) out[y * outW + x] = sum / cnt;
-      } else {
-        out[y * outW + x] = NaN;
-      }
+      // Depth stays NaN (the fill) wherever the output is unoccupied, and
+      // wherever it is occupied but no finite source fed the box — a
+      // kit-only box. Both are "no reading", which diffDepth skips.
+      if (n > 0 && on * 2 >= n && cnt > 0) out[y * outW + x] = sum / cnt;
     }
   }
   return { mask: { w: outW, h: outH, bits }, depth: out };
