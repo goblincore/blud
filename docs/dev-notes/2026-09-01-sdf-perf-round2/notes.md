@@ -451,3 +451,60 @@ the finished chain.
 **The first attempt's "the early-out eats the craters" was a confounded
 base-vs-branch comparison across two page loads; on one load the seam is
 pixel-identical in the body region.** Verdict: ships ON.
+
+## Task 4 — occluder hull split + specialiser retired (2026-09-02, branch dispatch/2026-09-01-sdf-render-perf-r2-task-4)
+
+Both halves are deletions of work nothing consumes; the shader is untouched,
+so GPU parity is exact by construction.
+
+**(a) Hull split.** `OccluderHull.update` gained `opts?: { occluder?: boolean }`
+(default ON, so every existing caller is unchanged): `occluder: false` skips
+the inner-hull `buildHullInstances` walk + `fillInstances` while the SHADOW
+twin always rebuilds (the shadow map is always live). `game-main.ts` passes
+`{ occluder: sdfLayer.occluderEnabled }` at BOTH call sites (frame loop and
+the `refreshHull` diagnostic seam) — `__sdfGame.setOccluder(true)` resumes
+the rebuild on the next frame, so the A/B seam still works.
+`syntheticSphereCheck` is unaffected (it writes via `setSpheres` directly).
+
+Plan deviation worth recording: the plan's Step-1 test snippet calls
+`hull.update([], { occluder: false })` — with the positional signature
+`(bodies, wounds, opts)` that binds the options object as WOUNDS and `opts`
+defaults to `{}`, so the occluder half still ran and the test failed with
+count 0 (which is also exactly what `tsc` would reject). The test passes
+`update([], [], { occluder: false })` instead.
+
+**(b) Specialiser retired** (owner call, per the plan's recommendation).
+Confirmed the bit-rot before deleting: `specialise.ts` emitted
+`sdPrim(p, ${i}, data)` — three arguments — against `SD_PRIM`'s current
+seven (`p, i, data, r2, prof, cpos, band`), so `?specialise=1` would have
+failed pipeline creation. Deleted `specialise.ts` + `specialise.test.ts`;
+removed from `zombie-gpu.ts` the `specialiseMapBody` import, the
+`specialise?: boolean` view option, and the ternary at the
+`createMarchMaterial` call (now plain `marchBody`); `buildMarchFn` lost its
+never-again-used swap parameter (the mapBody-slot-in-HELPERS note stays);
+`lab-main.ts` lost the `specialiseShaders` state and the
+`setSpecialise`/`get specialise` seam; `march.wgsl.test.ts` lost the import,
+the 'counts prims in the specialised fold too' heatmap-parity test and its
+`oneClusterBody` helper, and a comment referencing the mirrored signature.
+−439 lines net.
+
+**Tests:** new split test red-then-green in `occluder-hull.test.ts` (29/29);
+`npx tsc --noEmit` clean; `npx vitest run src/lab/sdf-zombie/` 102 files /
+1913 tests green.
+
+**Bench: DEFERRED (machine loaded).** One full run was attempted
+(BENCH_ROOMS=3,4 BENCH_REPEATS=3): repeatability spreads 34–161% (baseline
+room 3 legs 9.09 / 23.69 / 10.27 ms) — the dispatch board showed only this
+task running, but the user's Chrome was actively rendering through the run
+(WindowServer 24–32%, Chrome GPU/helper bursts, load avg 2.3–4.4). The
+expected delta is a small CPU-side win, far under that noise, so the run
+does not resolve it; task 9 re-takes it. The run still doubles as a boot /
+visual smoke under the new code: both rooms played the full walk/fire/gib
+protocol (census: room 3 bodies 8→8, room 4 9→9; wounds staged; gibs fired).
+
+**Direct CPU measurement of what the split removes** (micro-bench,
+`buildHullInstances` × 9 rest-pose zombies, 2000 reps, rest pose — the
+walk's cost is prim-count-bound): **p50 5.0 µs, p90 5.7, p99 11.6 per
+frame** (270 instances at rest; posed bodies emit the same count). ≈0.03%
+of the 16.7 ms frame — the win is honest, one walk per frame removed, and
+invisible to the frame bench by construction.

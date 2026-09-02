@@ -49,8 +49,16 @@ STAYS OFF (`GAME_HULL_EXIT_BOUND = 0`, commit ccbf1bb). Also learned:
 occupancy `hits` bit-identical is NOT evidence of an unchanged hit set —
 the debug frame's missed rays write depth before their discard and clobber
 far hits wherever proxy boxes overlap.** Task 2 (omega 1.0) PASSED: hits
-unchanged or up, steps −33..−45%. Task 3 timed out on wound staging;
-re-queued with its first attempt's commit and lessons.
+unchanged or up, steps −33..−45%. Task 3 (wound early-out) PASSED parity and
+ships ON (`GAME_WOUND_EARLY_OUT = 1`); its bench is deferred to task 9.
+Task 4 (2026-09-02) split the occluder hull — the inner-hull rebuild now
+runs only while the pre-pass is on (`{ occluder: sdfLayer.occluderEnabled }`
+at both game-main call sites; measured cost of the removed walk: 5.0 µs
+p50/frame at 9 bodies) — and retired the bit-rotted specialiser
+(specialise.ts emitted a 3-arg `sdPrim` against SD_PRIM's 7; deleted with
+its option, seam and parity test, −439 lines). Bench DEFERRED (machine
+loaded — spreads 34–161% under user Chrome load); shader untouched, parity
+exact by construction.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
