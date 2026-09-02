@@ -307,12 +307,39 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
   return best * minScale;
 }`;
 
+// Rounded box — the exact CPU mirror of sdRoundBox in validate.ts. `e` is the
+// half-extent BEFORE rounding; the caller insets it by `r` so total half-extent
+// is unchanged. Edit both in the same commit or click-to-shoot drifts from
+// what is drawn.
+export const SD_ROUND_BOX = /* wgsl */ `fn sdRoundBox(p: vec3<f32>, e: vec3<f32>, r: f32) -> f32 {
+  let q = abs(p) - e;
+  return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}`;
+
 export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture_2d<f32>, r2: f32, prof: f32, cpos: vec3<f32>, band: i32) -> f32 {
   let A = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_A} + band), 0);
   let B = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_B} + band), 0);
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE} + band), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
+  // BOX before BENT: bend= is rejected on a box at compile time, so the two
+  // never coexist; testing box first means the bend row is never fetched for
+  // one, which is what makes sharing primBend.w safe. The bend row is
+  // otherwise only fetched by the caller when prof & 2 (see applyCarves and
+  // foldGroup), so a box branch here must load ROW_PRIM_BEND itself.
+  if ((i32(prof) & 8) != 0) {
+    let qq = p * inv;
+    let a = A.xyz * inv;
+    let b = B.xyz * inv;
+    let ab = b - a;
+    let ap = qq - a;
+    let ab2 = dot(ab, ab);
+    let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
+    let closest = a + ab * t;
+    let round = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w;
+    let e = A.w * (1.0 - round);
+    return sdRoundBox(qq - closest, vec3<f32>(e), A.w * round) * minScale;
+  }
   // Bent above tapered above plain: prof's bit 1 (value 2) means the Bezier
   // path (0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent; 4/6 add shell on
   // top, whose bend flag is the same bit), so the bit test keeps every
@@ -373,6 +400,18 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   a = a * inv;
   b = b * inv;
   let minScale = min(S.x, min(S.y, S.z));
+  // BOX before BENT — same reasoning as sdPrim: bend= and box never coexist,
+  // so testing box first means the bend row is fetched only here, on demand.
+  if ((i32(prof) & 8) != 0) {
+    let ab = b - a;
+    let ap = qq - a;
+    let ab2 = dot(ab, ab);
+    let t = select(clamp(dot(ap, ab) / ab2, 0.0, 1.0), 0.0, ab2 == 0.0);
+    let closest = a + ab * t;
+    let round = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w;
+    let e = A.w * (1.0 - round);
+    return sdRoundBox(qq - closest, vec3<f32>(e), A.w * round) * minScale;
+  }
   if ((i32(prof) & 2) != 0) { return coneBend(qq, a, b, c * inv, A.w, r2, minScale); }
   return coneCap(qq, a, b, A.w, r2, minScale);
 }`;
@@ -2150,7 +2189,7 @@ export const HELPERS = [
   // ordering test below only checks what is IN the list, so an omitted helper
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
-  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_PRIM, SD_PRIM_ORIENTED,
+  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
   SD_SHELL,
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,

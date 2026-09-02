@@ -59,12 +59,8 @@ interface Body { prims: Primitive[]; clusters: ClusterInfo[] }
  * radius; the caller insets `e` by `r` so the total half-extent is
  * unchanged (`e + r === radius`).
  *
- * NO WGSL TWIN YET — Task 6 must add a matching `sdRoundBox` to
- * march.wgsl.ts, bit-for-bit, including the `* minScale` applied by the
- * caller. Until it does, a `box` prim renders as a plain CAPSULE on the
- * GPU while this function computes the box surface, so click-to-shoot
- * would disagree with what is drawn. Once the twin exists, this note
- * becomes the usual "edit both in the same commit" warning.
+ * Mirrors `sdRoundBox` in march.wgsl.ts exactly — edit both in the same
+ * commit or click-to-shoot drifts from what is drawn.
  */
 function sdRoundBox(p: Vec3, e: Vec3, r: number): number {
   const qx = Math.abs(p[0]) - e[0];

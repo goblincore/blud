@@ -23,7 +23,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
-  ROW_WOUND_CAP,
+  ROW_WOUND_CAP, SD_ROUND_BOX,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { specialiseMapBody } from './specialise';
@@ -934,6 +934,132 @@ describe('BOX bit (prof +8) does not break the shell/chamfer readers (task 5 fol
     // pack.ts packs bit 0, and the crease never appears.
     expect(foldGroup).not.toContain('prof > 0.5 && prof < 1.5');
     expect(foldGroup).toContain('if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
+  });
+});
+
+describe('sdRoundBox in WGSL (task 6 — the GPU field)', () => {
+  // String pins: these prove the branch EXISTS and is wired the way the CPU
+  // field requires. The numeric PARITY test below proves its MATHS agree
+  // with sdRoundBox/sdPrimitive's box branch in validate.ts — string
+  // containment alone cannot catch a transposed operand or a missing
+  // `* minScale`.
+  it('sdRoundBox is defined, mirroring validate.ts\'s sdRoundBox exactly', () => {
+    expect(declaredName(SD_ROUND_BOX)).toBe('sdRoundBox');
+    expect(SD_ROUND_BOX).toContain('let q = abs(p) - e;');
+    expect(SD_ROUND_BOX).toContain('length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0) - r');
+  });
+
+  it('registers sdRoundBox in HELPERS before sdPrim and sdPrimO, which call it', () => {
+    const names = HELPERS.map(declaredName);
+    const boxIdx = names.indexOf('sdRoundBox');
+    const primIdx = names.indexOf('sdPrim');
+    const primOIdx = names.indexOf('sdPrimO');
+    expect(boxIdx).toBeGreaterThan(-1);
+    expect(boxIdx).toBeLessThan(primIdx);
+    expect(boxIdx).toBeLessThan(primOIdx);
+  });
+
+  it('sdPrim and sdPrimO both branch on the box bit (& 8), and it appears before the bend bit (& 2)', () => {
+    for (const src of [SD_PRIM, SD_PRIM_ORIENTED]) {
+      const boxGate = src.indexOf('(i32(prof) & 8) != 0');
+      const bendGate = src.indexOf('(i32(prof) & 2) != 0');
+      expect(boxGate).toBeGreaterThan(-1);
+      expect(bendGate).toBeGreaterThan(-1);
+      expect(boxGate).toBeLessThan(bendGate);
+    }
+  });
+
+  it('the box branch calls sdRoundBox, reads round from ROW_PRIM_BEND.w, and applies minScale', () => {
+    // A box never sets the bend bit (bend= is rejected on a box at compile
+    // time — Task 2), so the caller's cpos/cpos-row fetch never runs for one;
+    // the box branch must fetch ROW_PRIM_BEND itself, which is what makes
+    // sharing that row's .w with a bent prim's .xyz safe.
+    for (const src of [SD_PRIM, SD_PRIM_ORIENTED]) {
+      expect(src).toContain('sdRoundBox(');
+      expect(src).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w`);
+      const boxBranch = src.slice(src.indexOf('(i32(prof) & 8) != 0'), src.indexOf('(i32(prof) & 2) != 0'));
+      expect(boxBranch).toContain('* minScale');
+    }
+  });
+
+  /**
+   * Line-for-line TS transcription of the box branch shared by sdPrim and
+   * sdPrimO — identical once p/a/b are in the prim's rotated, scale-divided
+   * frame, which the "PARITY: CPU sdPrimitive matches the WGSL math on
+   * random oriented prims" test above already proves sdPrimO's rotation
+   * prefix produces correctly. Mirrors sdPrimitive's `if (prim.box)` branch
+   * in validate.ts and sdRoundBox itself. Kept in sync BY HAND, like every
+   * other WGSL transcription in this file — this proves the WGSL MATHS agree
+   * with the CPU field's; it does NOT compile or execute WGSL, so it cannot
+   * catch a mistake shared identically by both transcriptions, and it says
+   * nothing about GPU-side texture layout, precision, or driver behaviour.
+   * `blob:render-check` is the real parity gate for those.
+   */
+  function sdBoxWgsl(p: Vec3, i: number, tex: Float32Array): number {
+    const load = (row: number): number[] => {
+      const o = (row * MAX_PRIMS + i) * 4;
+      return [tex[o]!, tex[o + 1]!, tex[o + 2]!, tex[o + 3]!];
+    };
+    const A = load(ROW_PRIM_A), B = load(ROW_PRIM_B), S = load(ROW_PRIM_SCALE);
+    const bendRow = load(ROW_PRIM_BEND);
+    const inv: Vec3 = [1 / S[0]!, 1 / S[1]!, 1 / S[2]!];
+    const qq: Vec3 = [p[0] * inv[0], p[1] * inv[1], p[2] * inv[2]];
+    const a: Vec3 = [A[0]! * inv[0], A[1]! * inv[1], A[2]! * inv[2]];
+    const b: Vec3 = [B[0]! * inv[0], B[1]! * inv[1], B[2]! * inv[2]];
+    const ab = sub(b, a);
+    const ap = sub(qq, a);
+    const ab2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    const t = ab2 === 0 ? 0
+      : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / ab2));
+    const closest: Vec3 = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t];
+    const minScale = Math.min(S[0]!, S[1]!, S[2]!);
+    const round = bendRow[3]!;
+    const e = A[3]! * (1 - round);
+    const r = A[3]! * round;
+    const rp: Vec3 = [qq[0] - closest[0], qq[1] - closest[1], qq[2] - closest[2]];
+    const qx = Math.abs(rp[0]) - e, qy = Math.abs(rp[1]) - e, qz = Math.abs(rp[2]) - e;
+    return (Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0))
+      + Math.min(Math.max(qx, Math.max(qy, qz)), 0) - r) * minScale;
+  }
+
+  it('PARITY: WGSL box branch matches sdPrimitive on random box prims, isotropic and anisotropic', () => {
+    let seed = 0xb0f5;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let trial = 0; trial < 40; trial++) {
+      const centre: Vec3 = [rnd() * 2 - 1, 1 + rnd(), rnd() * 2 - 1];
+      const span = rnd() * 0.12;
+      const round = rnd(); // 0 = sharp box, 1 = exactly the capsule
+      const prim: Primitive = {
+        a: [centre[0], centre[1] - span, centre[2]],
+        b: [centre[0], centre[1] + span, centre[2]],
+        radius: 0.03 + rnd() * 0.1,
+        // Anisotropic every trial: * minScale is invisible to a point ON the
+        // box surface (0 * anything === 0), so points below are NOT
+        // constrained to the surface — this is what makes the test sensitive
+        // to a missing or misplaced `* minScale`.
+        scale: [0.4 + rnd() * 1.4, 0.4 + rnd() * 1.4, 0.4 + rnd() * 1.4],
+        blendK: 0.02, limb: 'torso', cluster: 0,
+        box: { round },
+      } as unknown as Primitive;
+      const packed = packBody({
+        prims: [prim],
+        clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 10, alive: true }],
+        bones: new Map(),
+      });
+      const tex = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+      tex.set(packed.primA, ROW_PRIM_A * MAX_PRIMS * 4);
+      tex.set(packed.primB, ROW_PRIM_B * MAX_PRIMS * 4);
+      tex.set(packed.primScale, ROW_PRIM_SCALE * MAX_PRIMS * 4);
+      tex.set(packed.primBend, ROW_PRIM_BEND * MAX_PRIMS * 4);
+      for (let s = 0; s < 25; s++) {
+        const p: Vec3 = [
+          centre[0] + (rnd() - 0.5) * 0.8,
+          centre[1] + (rnd() - 0.5) * 0.8,
+          centre[2] + (rnd() - 0.5) * 0.8,
+        ];
+        expect(sdPrimitive(p, prim)).toBeCloseTo(sdBoxWgsl(p, 0, tex), 4);
+      }
+    }
   });
 });
 

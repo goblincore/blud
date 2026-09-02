@@ -196,6 +196,60 @@ describe('box packing', () => {
   });
 });
 
+describe('shaped bitflag gates box and shell (task 6)', () => {
+  // clusterRange.w and groupRange.w both pack (oriented?1:0) + (shaped?2:0).
+  // `shaped` gates whether the shader loads ROW_PRIM_SHAPE (where `prof`
+  // lives) and ROW_PRIM_BEND at all for that cluster/group — miss a
+  // property here and every prim carrying it arrives at the shader with
+  // prof = 0, indistinguishable from a plain capsule, regardless of what
+  // was authored.
+  const base = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'torso' as const, cluster: 0,
+  };
+  const SHAPED_BIT = 2;
+
+  it('sets the CLUSTER-level shaped bit when the only special prim is a box', () => {
+    const box = { ...base, box: { round: 0.2 } };
+    const p = packBody({
+      prims: [box],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map(),
+    });
+    expect(Math.floor(p.clusterRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+
+  it('sets the GROUP-level shaped bit when the only special prim is a box', () => {
+    const box = { ...base, box: { round: 0.2 } };
+    const p = packBody({
+      prims: [box],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map(),
+    }, undefined, { singleGroup: true });
+    expect(Math.floor(p.groupRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+
+  it('sets the GROUP-level shaped bit when the only special prim is a shell (pre-existing bug, owner-approved fix)', () => {
+    // Before this fix, the group-level `shaped` some() list omitted `shell`
+    // entirely (only the cluster-level list had it). foldGroup reads ONLY
+    // the group-level flag (grp.w, via ROW_GROUP_RANGE) — the cluster-level
+    // flag feeds applyCarves alone — so a shell whose group carried no
+    // OTHER shaped property arrived at the shader with prof = 0, never hit
+    // `(i32(prof) & 4) != 0`, and rendered as a solid capsule instead of a
+    // thin clipped sheet. schoolgirl-alt's cape (group 10) hit exactly this.
+    const shell = {
+      ...base,
+      shell: { thickness: 0.01, clipNormal: [0, 1, 0] as Vec3, clipOffset: 0, rim: 0.005 },
+    };
+    const p = packBody({
+      prims: [shell],
+      clusters: [{ id: 0, limb: 'torso', start: 0, count: 1, center: [0, 0, 0], radius: 0.1, alive: true }],
+      bones: new Map(),
+    }, undefined, { singleGroup: true });
+    expect(Math.floor(p.groupRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+});
+
 describe('primColor row', () => {
   it('packs flesh as all zeros, so pre-colour bodies are bit-identical', () => {
     const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);

@@ -224,7 +224,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-      || p.bend !== undefined || p.shell !== undefined);
+      || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -245,9 +245,16 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       groupBounds.set([g.center[0], g.center[1], g.center[2], g.radius], o);
       const gOwn = body.prims.slice(g.start, g.start + g.count);
       const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
+      // shell and box MUST be tested here too, same as the cluster-level
+      // `shaped` above. This is the flag foldGroup actually reads (the
+      // cluster-level one only feeds applyCarves), so a shell or box prim
+      // whose group carries no other shaped property arrives at the shader
+      // with prof = 0: ROW_PRIM_SHAPE/ROW_PRIM_BEND are never loaded, the
+      // shell/box bits never reach `(i32(prof) & ...) != 0`, and it draws as
+      // a plain closed capsule instead of a clipped sheet or a rounded box.
       const shaped = gOwn.some(p =>
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-        || p.bend !== undefined);
+        || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
       groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
       groupCount++;
     }
