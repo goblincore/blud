@@ -20,6 +20,14 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**HULL-REFINE RENDERER — SPEC APPROVED (2026-09-02), plan pending.** Per-frame GPU
+surface-nets hull from the wounded posed field + fragment band refinement onto the
+true SDF surface; replaces the per-pixel march for bodies, restores early-Z. Look-first
+gate (owner reel: wounded close-up / walk / sever+gib, zombie only), cost reported
+after. Dispatch on `kimi-oai/kimi-k3:xhigh`. Tier-2 fallbacks (post-hit prim
+narrowing, rigid-cluster bake) recorded in dualmem as investigations.
+[spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md)
+
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
 [docs/dev-notes/2026-09-02-gore-r3-refinements.md](docs/dev-notes/2026-09-02-gore-r3-refinements.md):
