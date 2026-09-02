@@ -744,3 +744,17 @@ Gates below.
 **Bench:** not run — **DEFERRED to task 9** (`setAa(0)` lever in the sweep). The step deltas above are the load-immune signal: −11% near, −18.6% far on hit pixels.
 
 **Default:** `GAME_AA = 1.0` ships. Verdict: PASS on all three gates.
+
+## Task 7 — bodies receive the level's shadows (2026-09-02, branch dispatch/2026-09-01-sdf-render-perf-r2-task-7)
+
+Written by the controller from the run's commits and its smoke capture; the run hit its cap while re-running that capture after a fix.
+
+**What landed (3 commits + auto-commit):** `LEVEL_SHADOW` helper (4-tap PCF on a `texture_depth_2d`, normal + depth bias in `levelShadowCfg`), gated into MARCH_BODY's key and specular terms only (`341ecf7`); a level-only twin `SpotLight` (intensity 0, shadow camera on layer 0, posed with the flashlight every frame) and the march binding of its `shadow.map.depthTexture` + `shadow.matrix` (`84457b7`); seam `__sdfGame.setLevelShadow()`, default `GAME_LEVEL_SHADOW = 1.0`. Suite green on the tip (693 webgpu tests), `tsc` clean.
+
+**A real bug found and fixed on the way (`a53161d`):** the first smoke run's pipeline failed to compile because the `texture_depth_2d` parameter was emitted as a `0.0` float literal. Cause: a colon pattern inside the wgslFn signature COMMENT was read by three's WGSL function parser as a phantom input, shifting every later binding by one — `levelShadowTex` landed on a `float(0)`. Fix: comment reworded, plus a regression test that runs three's real parser over the source. Same hazard class as the file header's "each source must begin with fn" and the backtick-in-template trap the run also hit once. Recorded as a warning in memory.
+
+**Smoke capture (room 3 default frozen view, `setLevelShadow(true/false)`, `task7/smoke-r3`):** noise floor 124 px; a-vs-b 519 / 461 px with one hot cell (19,14); same-state pairs 112 / 93 px. Controller's read of the enlarged pair (left ON, right OFF): the near body is pixel-identical — **no acne** — and the far body through the doorway takes a plausible partial shadow from the door frame; nothing missing, no halo. **The planned pillar-between-lamp-and-body staging did NOT run** (out of time), so the shadow-edge read is the owner's: `__sdfGame.setLevelShadow(true/false)` on the test page, standing so a pillar shadows a zombie. Bias knobs live in `levelShadowCfg` (normal bias 0.02 m, depth bias 0.0005).
+
+**Bench:** not run — **DEFERRED to task 9** (`setLevelShadow(false)` lever). Expected cost: one extra 1024² level-only depth pass per frame plus one shadow-map tap per hit pixel.
+
+**Default:** ships 1.0, seam kept. Verdict: landed and compiling; smoke clean; pillar gate pending owner eyeball.
