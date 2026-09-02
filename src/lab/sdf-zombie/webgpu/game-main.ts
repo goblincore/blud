@@ -478,6 +478,9 @@ async function main() {
       const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
       f.light.intensity = f.base * (1 + w * 0.14);
     }
+    // Front-to-back per-body passes (perf round 2 task 5): register this
+    // frame's bodies and chunks. With the gate off the lists are not walked.
+    sdfLayer.setBodies(actors.map(a => a.view.object), liveChunks.map(c => c.view.object));
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -536,6 +539,32 @@ async function main() {
    */
   const GAME_RELAX = 1.0;
 
+  /** Perf round 2, task 1: the hull exit bounds tMax on the un-relaxed march
+   *  (perfCfg.x). `__sdfGame.setHullExitBound()` flips it for A/B.
+   *  DEFAULT OFF (task 1b finding): at real-render parity the bound deletes a
+   *  whole background body's visible pixels (room 3: 2055 px, one
+   *  figure-shaped component) while the occupancy hit set stays bit-identical
+   *  — a cross-body hull-texture effect, not a per-ray loss. Do not raise
+   *  until task 1c's shell-exit diagnosis explains the deletion and both
+   *  rooms pass the parity gate with the bound on. */
+  const GAME_HULL_EXIT_BOUND = 0;
+
+  /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
+   *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
+   *  see the march.wgsl.ts reach comment; `__sdfGame.setWoundEarlyOut()`
+   *  flips it live for A/B. */
+  const GAME_WOUND_EARLY_OUT = 1;
+
+  /**
+   * Step multiplier for the game page's march (marchCfg.y). The lab ships
+   * 0.6 (under-relaxed) to survive the fbm shell displacement, which this
+   * page runs with amplitude 0. With a conservative field, 1.0 is plain
+   * sphere tracing: exact, fewer steps, and it never enters the omega > 1
+   * overshoot path that produced the 2026-08-31 box washes.
+   * `__sdfGame.setOmega()` flips it live for A/B.
+   */
+  const GAME_OMEGA = 1.0;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -556,6 +585,14 @@ async function main() {
   // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
   // .setShell(false) is the kill switch.
   sdfLayer.setShellEnabled(true);
+
+  /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
+   *  by the depth nearer passes already recorded at each pixel.
+   *  Exact-by-construction — the single-pass hardware depth test already
+   *  resolved these overlaps; the gate only stops paying for the fragments
+   *  it threw away. `__sdfGame.setDepthGate()` flips it live for A/B. */
+  const GAME_DEPTH_GATE = 1;
+  sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -611,11 +648,21 @@ async function main() {
             exit: sdfLayer.shellExit.texture,
             uniforms: sdfLayer.shellEntry.uniforms,
           },
+          // The accumulated-depth gate (perf round 2 task 5). Unconditional
+          // like the shell: prevFetch's identities (gate off -> 1e9) make the
+          // march bit-identical while sdfLayer.depthGate is false.
+          prev: sdfLayer.prev,
         });
       view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
       // Relaxation, explicit rather than inherited from the uniform default —
       // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
       view.uniforms.woundCfg2.value.y = GAME_RELAX;
+      // Hull-exit tMax bound (perf round 2 task 1) — see GAME_HULL_EXIT_BOUND.
+      view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
+      // Wound-loop early-out (perf round 2 task 3) — see GAME_WOUND_EARLY_OUT.
+      view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
+      // Plain sphere tracing (perf round 2 task 2) — see GAME_OMEGA.
+      view.uniforms.marchCfg.value.y = GAME_OMEGA;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -853,7 +900,7 @@ async function main() {
   // SDF chunk path — the same pipeline the lab gibs with, capped and
   // recycled so a gore party cannot churn views unboundedly.
   const MAX_CHUNKS = 12;
-  const chunkMaterial = createSharedChunkGpuMaterial();
+  const chunkMaterial = createSharedChunkGpuMaterial(sdfLayer.prev);
   const chunkViews: ChunkGpuView[] = [];
   const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
   let nextChunkId = 1;
@@ -1292,6 +1339,11 @@ async function main() {
             return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
           })
           : [],
+        // The pre-pass ships disabled and nothing consumes the occluder
+        // instances; skip their rebuild while it is off (perf r2 task 4).
+        // The shadow twin above always rebuilds. setOccluder(true) resumes
+        // the rebuild on the next frame, so the A/B seam still works.
+        { occluder: sdfLayer.occluderEnabled },
       );
     }
 
@@ -1855,6 +1907,10 @@ async function main() {
       sdfLayer.setShellEnabled(on);
       if (on) outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
     },
+    /** Perf round 2, task 5: the front-to-back per-body passes and their
+     *  accumulated-depth gate. OFF restores the single-pass march. */
+    setDepthGate(on: boolean) { sdfLayer.setDepthGate(on); },
+    get depthGate() { return sdfLayer.depthGate; },
     get shell() {
       return {
         enabled: sdfLayer.shellEnabled,
@@ -2038,6 +2094,17 @@ async function main() {
       for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
     },
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
+    setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
+    get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
+    /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
+    setWoundEarlyOut(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
+    get woundEarlyOut() { return (actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
+    /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
+    setOmega(v: number) {
+      const n = Math.max(0.1, Math.min(1.0, v));
+      for (const a of actors) a.view.uniforms.marchCfg.value.y = n;
+    },
+    get omega() { return actors[0]?.view.uniforms.marchCfg.value.y ?? 0; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },
@@ -2324,6 +2391,9 @@ async function main() {
             return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
           })
           : [],
+        // Same rule as the frame loop: only rebuild the occluder half when
+        // the pre-pass is on to consume it.
+        { occluder: sdfLayer.occluderEnabled },
       );
     },
     /** A/B seam: rebuild the SHADOW hull with spanning off (the pre-fix

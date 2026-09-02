@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createSdfLayer, isHoldFrame, SDF_LAYER } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER } from './sdf-layer';
+
+describe('sortFrontToBack', () => {
+  it('orders objects by distance from the camera, nearest first, without mutating the input', () => {
+    const mk = (x: number) => { const o = new THREE.Object3D(); o.position.set(x, 0, 0); return o; };
+    const far = mk(10), near = mk(1), mid = mk(5);
+    const input = [far, near, mid];
+    const out = sortFrontToBack(input, new THREE.Vector3(0, 0, 0));
+    expect(out).toEqual([near, mid, far]);
+    expect(input).toEqual([far, near, mid]);
+  });
+});
 
 describe('SDF-layer material precompile', () => {
   it('compiles in the real float-target context and restores renderer/camera state', async () => {

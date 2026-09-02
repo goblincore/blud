@@ -37,27 +37,28 @@ base branch `claude/sdf-character-rendering-optimization-d0570b`): trigger
 task-1, tasks 2-8 chain; task-0 (baseline) and task-9 (bench sweep) are
 unchained — trigger them only on a quiet machine. Bench steps inside 1-8 are
 recorded DEFERRED while the wound-r2 chain runs; parity gates are not.
-**Progress 2026-09-02:** tasks 0, 1, 1b, 2 done. **Task 1b's parity gate
+**Progress 2026-09-02:** tasks 0, 1, 1b, 2, 1c done. **Task 1b's parity gate
 FAILED task 1 in room 3 (0.20%): the hull-exit `tMax` bound DELETES a
 background body seen past a foreground body's hull** while `hits` stay
-bit-identical — a hull-texture effect, most likely the shell EXIT target
-holding the NEAREST back face instead of the farthest. Task 1c (new,
-queued before task 3) flips the default OFF, proves it by readback, fixes
-the exit pass or leaves it off. Task 2 (omega 1.0) PASSED: hits unchanged
-or up, steps −33..−45%. Task 3 timed out on wound staging; re-queued with
-its first attempt's commit and lessons.
-**2026-09-02 later:** Task 1c REFUTED the nearest-face hypothesis and found
-the real cause — the hull's WRITTEN DISTANCE decays with range (true 9 m
-stores 2.8 m; near field exact), the SAME unexplained three-r185 TSL
-phenomenon that killed the occluder pre-pass. Max semantics of the exit
-pass are correct. `GAME_HULL_EXIT_BOUND` STAYS 0 until someone root-causes
-the decay; the step win (missStepShare 0.54→0.41 r3) is untakeable until
-then. Also: occupancy `hits` "identical on/off" is NOT evidence of an
-unchanged hit set where proxy boxes overlap (near-box misses clobber far
-hits before readback). Task 3 (wound early-out) PASSED parity on one load
-(craters identical, HUD clock the only diff) + lab render-check; its second
-run timed out inside bench legs; controller wrote the notes, restored the
-seam default ON, marked done. Chain continues at task 4.
+bit-identical. **Task 1c readback RESOLVED it: the EXIT pass was never
+picking the nearest face — its distance ENCODING decays at range (true
+~9 m stores ~2.8 m, same open three-r185 TSL decay the occluder pre-pass
+documented), so the bound clamped far bodies' rays metres in front of
+their visible flesh. Fix would need the decay root-caused; the bound
+STAYS OFF (`GAME_HULL_EXIT_BOUND = 0`, commit ccbf1bb). Also learned:
+occupancy `hits` bit-identical is NOT evidence of an unchanged hit set —
+the debug frame's missed rays write depth before their discard and clobber
+far hits wherever proxy boxes overlap.** Task 2 (omega 1.0) PASSED: hits
+unchanged or up, steps −33..−45%. Task 3 (wound early-out) PASSED parity and
+ships ON (`GAME_WOUND_EARLY_OUT = 1`); its bench is deferred to task 9.
+Task 4 (2026-09-02) split the occluder hull — the inner-hull rebuild now
+runs only while the pre-pass is on (`{ occluder: sdfLayer.occluderEnabled }`
+at both game-main call sites; measured cost of the removed walk: 5.0 µs
+p50/frame at 9 bodies) — and retired the bit-rotted specialiser
+(specialise.ts emitted a 3-arg `sdPrim` against SD_PRIM's 7; deleted with
+its option, seam and parity test, −439 lines). Bench DEFERRED (machine
+loaded — spreads 34–161% under user Chrome load); shader untouched, parity
+exact by construction.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
