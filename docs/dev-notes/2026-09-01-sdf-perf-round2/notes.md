@@ -796,3 +796,131 @@ reason. If a future body ever carries ≫12 prims, re-measure before narrowing:
 `MAX_PRIMS` is the allocation width and the pack arrays' size, the shader is
 width-agnostic, and a three.js DataTexture cannot be resized in place — any
 narrowing must be decided once at view creation.
+
+## Task 9 — bench sweep on a quiet machine (2026-09-02, branch dispatch/2026-09-01-sdf-render-perf-r2-task-9)
+
+Attempt 1 (branch `…-task-9-attempt1`, commit `972522b`) added `BENCH_PRELUDE`
+to `scripts/sdf-game-bench.mjs` (one JS expression per invocation, applied
+AFTER the leg's ship-default pins, so a prelude always wins; recorded in
+results rows and meta) and verified it end to end, then burned its cap on the
+full 138-run static matrix. This run cherry-picked `972522b`, merged task 8
+(TASKS.md both-blocks conflict kept, as in the blobforge merge), and ran ONLY
+the targeted sweep: `BENCH_LEGS=baseline BENCH_ROOMS=3,4 BENCH_REPEATS=3`
+(6 runs + spike per invocation, ~90 s each), one lever per invocation via
+`BENCH_PRELUDE`, so every delta shares the session. Own servers 5297/9297.
+
+**Machine honesty.** NOT quiet in the task-0 sense. At start the stale
+headless Chromes/Vites were gone, but the 1-min load oscillated 4→23 through
+the sweep: Slack's startup burst (~40% combined) at inv2-3, then at 12:15 the
+user opened Xcode (fseventsd 122%, git scanner 65%) and ran LearnCard builds
+(`rollup -c` 190%, `tsc` 204%, `vite build` 145% — not dispatch tasks, user
+activity in another project). Load is recorded next to every row below; each
+table is judged by its OWN repeat spread per the standing rule.
+
+### The sweep (all on the finished chain, ship defaults unless stated)
+
+| inv | prelude | r3 p50 (reps) | r4 p50 (reps) | worst spread | load @start |
+| --- | --- | --- | --- | ---: | --- |
+| 1 | none — finished chain | **9.85** (9.85/10.29/9.73) | **7.85** (7.85/8.46/7.77) | 9% | 4.40 |
+| 2 | `setOmega(0.6)` (t2 lever OFF) | 10.55 (11.02/10.55/10.52) | 9.33 (9.70/9.24/9.33) | 5% | 23.47 |
+| 3 | `setWoundEarlyOut(false)` (t3 OFF) | 9.88 (9.88/9.94/9.51) | 7.90 (8.17/7.79/7.90) | 5% | 21.52 |
+| 4 | `setDepthGate(true)` (t5/5b ON) | 14.63 (14.64/14.63/14.55) | 12.48 (12.76/12.09/12.48) | 6% | 6.05 |
+| 5 | `setAa(0)` (t6 OFF) | 9.91 (9.85/9.91/11.84) | 8.47 (8.24/8.47/8.75) | 20% (inv5 r3 rep2 caught a burst) | 4.20 |
+| 6 | `setLevelShadow(false)` (t7 OFF) | **INVALID — 211% spread, re-run pending** | **INVALID** | 211% | 6.32 |
+| 7 | `setHullExitBound(true)` (t1 ON, for the record) | pending | pending | — | — |
+
+Census healthy in every kept run (r3: 8 bodies, 0→20 wounds; r4: 9→4 bodies,
+wounds + chunks) — the per-run reload is doing its job; no leg timed an empty
+room.
+
+### Verdicts so far
+
+- **inv2 (omega 0.6 vs ship 1.0): ship default CONFIRMED.** Turning plain
+  sphere tracing off costs +0.70 ms r3 / +1.48 ms r4 — every delta ≫ the 5%
+  spreads, and r4's is 2× the inv1 spread. Task 2's lever earns its default.
+- **inv3 (wound early-out off): ship default CONFIRMED.** +0.03 ms r3 /
+  +0.05 ms r4 — at 20 wounds the early-out is worth ~0 on this hardware, but
+  it is free, never loses, and its parity passed; ships on.
+- **inv4 (depth gate ON): ship-off CONFIRMED, decisively.** +4.78 ms r3 /
+  +4.63 ms r4 at 6% spread. Reproduces task 5b's ~6-7 ms pass-structure loss
+  almost exactly — the sub-pass blits + scene walks dominate any march-step
+  saving at 3-4 bodies. `GAME_DEPTH_GATE` stays 0; the decision rule ("flip
+  to 1 only if inv4 beats inv1 in r4 by more than the larger spread") does
+  not come close — inv4 LOSES by 4.63 ms against a 0.69 ms spread.
+- **inv5 (AA off): ships ON, cost ≈ noise-to-marginal.** r3 unresolved
+  (−0.06 ms under a 20% spread); r4 −0.62 ms is at/just over the clean-rep
+  spread (~6-9%). The in-march AA costs ≲0.6 ms/frame in the densest room
+  for footprint-correct silhouettes — the task-6 trade stands.
+
+### inv6 re-run (12:42, load 20 but IO-wait — CPU 80% idle) and inv7
+
+The first inv6 (12:15, spread 211%, 10.72→12.81→28.40 escalating across
+repeats) coincided with fseventsd at 122% + Xcode's git scanner — discarded.
+The re-run at load 20 came back CLEAN at 7% spread, confirming the 2026-08-31
+lesson: what poisons the bench is CPU-saturating churn (a build, fseventsd),
+not IO-wait load average.
+
+| inv | prelude | r3 p50 (reps) | r4 p50 (reps) | worst spread | load @start |
+| --- | --- | --- | --- | ---: | --- |
+| 6b | `setLevelShadow(false)` (t7 OFF) | 9.90 (9.90/10.37/9.70) | 8.55 (8.95/8.55/8.41) | 7% | 20.08 (IO-wait) |
+| 7 | `setHullExitBound(true)` (t1 ON, record only) | 10.07 (12.42/9.74/10.07) | 7.57 (7.57/7.50/7.80) | 28% (r3 rep0 caught the decay) | 7.15 |
+
+- **inv6b (level shadows off): ships ON; cost ≈ 0 r3, ~0.7 ms r4.** r3
+  +0.05 ms = nothing; r4 +0.70 ms is at the spread floor (inv1 r4 spread was
+  0.69 ms) — call it marginal. The twin-light depth pass + 4-tap PCF is
+  nearly free at these body counts. The owner's pillar eyeball gate is still
+  open; perf gives it no reason to revert.
+- **inv7 (hull exit bound): the census is the verdict, as in task 1c.**
+  Room 4 fire segment: bodies 9→4 — the exit bound DELETED four of nine
+  bodies mid-run, and room-3 wounds landed 16 vs baseline's 20 (bullets
+  whiffing against clipped bodies). The −0.28 ms r4 "win" is bought by
+  rendering half the room; the r3 delta is noise under a 28% spread. Never
+  ships; the perfCfg.x path stays for diagnostics only.
+
+### Occupancy counters on the finished chain (12:50, driver
+`/tmp/perf-r2-occupancy-task9.mjs` — attempt 1's update of the task-0
+driver: occluder read-back instead of pinned OFF, full round-2 state
+readback)
+
+State read back off the live seams: shell ON (732 instances, not
+overflowed), cone OFF, fxaa ON, relax 1.0 (omega 1.0 — read, not pinned:
+ship), woundEarlyOut ON, aa 1.0, levelShadow ON, depthGate OFF,
+hullExitBound OFF, halfRate OFF, scale pinned 1.0, adaptive pinned OFF,
+target 800x600, backend webgpu. **Occluder reads FALSE and that is ship
+truth:** the game page boots `sdfLayer.setOccluderEnabled(false)` (round 1
+killed the clamp; the pass is diagnostics-only), while the bench's applyLeg
+pins `setOccluder(true)` on every leg — a constant additive cost across all
+seven invocations, so every delta above is unaffected. The occupancy read
+itself follows the task-0 protocol (occluder OFF), so the rows below are
+comparable to task 0's table.
+
+| room | rasterised | hits | misses | occupancy | missStepShare | mean steps hit / miss | bodies | vs task 0 (omega 0.6) |
+|---|---:|---:|---:|---:|---:|---|---:|---|
+| 3 | 112035 | 74526 | 37509 | 66.5% | 56.9% | 5.9 / 15.4 | 3 | steps hit 10.6→5.9, miss 24.7→15.4; occ 66.0→66.5% |
+| 4 | 178216 | 87189 | 91027 | 48.9% | 38.3% | 5.9 / 3.5 | 4 | steps hit 10.4→5.9, miss 5.2→3.5; occ 46.4→48.9% |
+
+Both frozen-scene double reads bit-identical in both rooms (deterministic at
+a pinned state, as in task 0). Coverage is unchanged (same hulls, same
+wandered poses within noise) — what moved is STEPS: plain sphere tracing
+(task 2) plus the AA footprint exit (task 6) cut mean hit steps ~44% and
+miss steps 33-38%. Total march steps per frame: room 3 ≈1.01M vs 1.72M
+(−41%), room 4 ≈0.83M vs 1.34M (−38%). Miss share of steps rose a point or
+two (54.5→56.9%, 36.5→38.3%) only because hit steps fell even faster — the
+miss market the shell already shrank did not grow. No lever left on the
+table here matches the depth gate's fantasy: the remaining cost is hit-pixel
+march + fill, which is what the shell/AA work already minimized.
+
+### Sweep coverage of deferred benches
+
+Tasks 1-8's timed steps that this sweep now covers, one lever per
+invocation on the finished chain: task 1 (inv7, hull exit bound — confirms
+1c's rejection), task 2 (inv2, omega), task 3 (inv3, wound early-out),
+tasks 5/5b (inv4, depth gate — re-decided OFF), task 6 (inv5, AA), task 7
+(inv6b, level shadow). Task 8 needed no bench here (its own measurement was
+taken quiet: 0.06 ms/frame). Task 4's specialiser retirement changed no
+runtime default (build-time only) — nothing to re-bench. Task 1c's ship
+decision is untouched by inv7's confirmation.
+
+**Verdict: every ship default of the finished chain survives its lever-off
+re-run; the depth gate re-decision lands OFF (inv4 loses by 4.63 ms against
+a 0.69 ms spread); hull exit bound stays dead by census, not by timer.**
