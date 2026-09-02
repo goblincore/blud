@@ -96,6 +96,10 @@ export interface ZombieGpuView {
   /** This view's posed bound groups, as the binner consumes them. Reads the
    *  LAST uploaded pack — call after update(). */
   getTileGroups(): import('./tile-cull').TileGroupInput[];
+  /** The level-shadow TextureNode this view's material binds (perf round 2
+   *  task 7). Rebind `.value` to the twin light's real depthTexture once
+   *  three has rendered it — same mechanism as setFaceTexture. */
+  levelShadowTex: { value: THREE.Texture };
   dispose(): void;
 }
 
@@ -384,6 +388,15 @@ export function defaultUniforms(faceTex: THREE.Texture) {
  * DataTexture path.
  */
     tileCfg: uniform(new THREE.Vector4(0, 0, TILE_SIZE_PX, 0)),
+    /** Level-only shadow (perf round 2 task 7). The matrix is copied from
+     *  the twin light's `shadow.matrix` each frame by the owner; cfg =
+     *  (enabled, normalBias m, depthBias, spare) with enabled 0 — the
+     *  shader returns 1.0 before sampling, so every view (lab, hands, gibs)
+     *  rides inert until the game page's seam turns it on. normalBias
+     *  0.02 m keeps the body's own surface off the shadow plane; 0.05 is
+     *  the ceiling — past it the shadow visibly slides off the body. */
+    levelShadowMatrix: uniform(new THREE.Matrix4()),
+    levelShadowCfg: uniform(new THREE.Vector4(0, 0.02, 0.0005, 0)),
   };
 }
 
@@ -405,6 +418,28 @@ function fallbackTileBindings() {
     };
   }
   return fallbackTileNodes;
+}
+
+/**
+ * The no-map identity for the level-shadow binding (perf round 2 task 7).
+ *
+ * `light.shadow.map` is null until three has rendered the light once, and
+ * the lab/hand/gib materials never get a light at all — but MARCH_BODY's
+ * signature binds the depth-texture slot unconditionally, so EVERY material
+ * needs some `texture_depth_2d`. cfg.x = 0 (the uniform default) makes
+ * levelShadow() return 1.0 before its first textureLoad, so this texture is
+ * never actually read. depth16unorm (UnsignedShortType) rather than the
+ * DepthTexture default: a depth32float BINDING needs the 'depth32float'
+ * GPU feature; 16-bit needs nothing.
+ */
+let fallbackLevelShadow: THREE.DepthTexture | null = null;
+function fallbackLevelShadowTexture() {
+  if (!fallbackLevelShadow) {
+    const t = new THREE.DepthTexture(1, 1);
+    t.type = THREE.UnsignedShortType;
+    fallbackLevelShadow = t;
+  }
+  return fallbackLevelShadow;
 }
 
 /** A tiled view's binning surface: delegates to the owner's GPU binding and
@@ -437,6 +472,18 @@ export type MarchUniforms = ReturnType<typeof defaultUniforms>;
  * expect, rather than scattering `as any` at each call site.
  */
 type Swizzled = { xyz: unknown; w: unknown };
+
+/** The level-shadow TextureNode createMarchMaterial attaches to its material
+ *  (perf round 2 task 7). `.value` is rebound to the twin light's real
+ *  depthTexture once three has rendered it — the same live-rebind mechanism
+ *  as setFaceTexture. */
+interface MaterialWithLevelShadowTex {
+  levelShadowTex: { value: THREE.Texture };
+}
+/** The same handle, as the view exposes it. */
+export interface LevelShadowTexHandle {
+  value: THREE.Texture;
+}
 
 /**
  * Builds the marching material for one data texture + uniform set.
@@ -608,6 +655,7 @@ export function createMarchMaterial(
   tiles?: { header: unknown; entries: unknown },
   shell?: ShellSource,
   prev?: PrevSource,
+  levelShadow?: { light: THREE.SpotLight },
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -618,6 +666,17 @@ export function createMarchMaterial(
   // Hoisted above the march call: the accumulated-depth gate's cosRay reads
   // the same ray the march integrates.
   const rayDir = normalize(sub(positionWorld, cameraPosition));
+  // Level-only shadow map (perf round 2 task 7). The node rides the march's
+  // last three slots; its .value starts on the 1×1 fallback whenever the
+  // twin light has not rendered yet (shadow.map is null before three's
+  // first shadow pass) and is rebound to the real depthTexture per frame by
+  // the game page — same rebind-without-recompile mechanism as
+  // setFaceTexture below.
+  const levelShadowTexNode = texture(
+    levelShadow
+      ? (levelShadow.light.shadow.map?.depthTexture ?? fallbackLevelShadowTexture())
+      : fallbackLevelShadowTexture(),
+  );
   const marched = march({
     worldPos: positionWorld,
     camPos: cameraPosition,
@@ -735,10 +794,22 @@ export function createMarchMaterial(
     // gate — see MARCH_BODY's bodyEntry block.
     bodyCentre: mul(modelWorldMatrix, vec4(0.0, 0.0, 0.0, 1.0)).xyz,
     bodyHalf: u.bodyHalf,
+    // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
+    // MARCH_BODY's tail is bodyCentre, bodyHalf, levelShadow*, in this
+    // order (see the ORDER MATTERS note above; a slot swap here silently
+    // hands the shader the wrong uniform).
+    levelShadowTex: levelShadowTexNode,
+    levelShadowMatrix: u.levelShadowMatrix,
+    levelShadowCfg: u.levelShadowCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
   material.side = THREE.BackSide;
+
+  /** The level-shadow TextureNode this material binds, exposed for the
+   *  owner's per-frame rebind (see the comment at its creation). */
+  (material as unknown as MaterialWithLevelShadowTex).levelShadowTex =
+    levelShadowTexNode as unknown as { value: THREE.Texture };
 
   // Depth from the marched hit, so the body composites with real geometry.
   // WebGPU clip z is already [0,1] — no `* 0.5 + 0.5` remap, unlike the GLSL.
@@ -953,6 +1024,10 @@ export interface GpuViewOpts {
   /** Accumulated colour+depth for the front-to-back per-body passes (perf
    *  round 2 task 5). Omit for the ungated march — 1e9 is the identity. */
   prev?: PrevSource;
+  /** Level-only shadow light (perf round 2 task 7) — the twin of the
+   *  flashlight. Omit in the lab/hands: the binding falls back to a 1×1
+   *  depth texture and levelShadowCfg.x = 0 keeps the march inert. */
+  levelShadow?: { light: THREE.SpotLight };
   /**
    * The 3D texture bound to the volume slot (X1.26). Omitted, the view binds
    * its own 1-cubed fallback and disposes it in dispose(); pass one to share
@@ -1059,7 +1134,7 @@ export function createZombieGpuView(
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     marchBody,
-    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev);
+    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -1148,6 +1223,7 @@ export function createZombieGpuView(
     uniforms: u,
     volumeTexture: volumeTex,
     tiles: viewTiles,
+    levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
     update(next, rest) {
       const p = upload(next, rest);

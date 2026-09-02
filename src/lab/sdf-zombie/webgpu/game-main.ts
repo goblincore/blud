@@ -286,6 +286,12 @@ async function main() {
   flashlight.spot.castShadow = new URLSearchParams(location.search).get('spotshadow') !== '0';
   scene.add(flashlight.spot);
   scene.add(flashlight.spot.target);
+  // The level-shadow twin (perf round 2 task 7) rides every shadow boot
+  // decision the spot makes: ?spotshadow=0 kills BOTH maps (a true ablation
+  // of the shadow cost), and the gallery rig shows neither.
+  flashlight.levelShadow.castShadow = flashlight.spot.castShadow;
+  scene.add(flashlight.levelShadow);
+  scene.add(flashlight.levelShadow.target);
 
   handle.renderer.shadowMap.enabled = true;
   handle.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -312,6 +318,7 @@ async function main() {
     }
     handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
     flashlight.spot.visible = rig === DUNGEON_RIG;
+    flashlight.levelShadow.visible = rig === DUNGEON_RIG;
   }
   applyRig(DUNGEON_RIG);
 
@@ -474,12 +481,33 @@ async function main() {
       const spotOn = dungeonOn ? 1 : 0;
       const cosInner = Math.cos(flashlight.spot.angle * (1 - flashlight.spot.penumbra));
       const cosOuter = Math.cos(flashlight.spot.angle);
+      // LEVEL SHADOW twin (perf round 2 task 7): exact flashlight pose, then
+      // refresh its shadow matrix NOW — shadow.matrix is otherwise written
+      // during the render, i.e. after we read it. Same pose => same shadows
+      // on bodies as the meshes cast onto the floor.
+      const twin = flashlight.levelShadow;
+      twin.position.copy(flashlight.spot.position);
+      twin.target.position.copy(flashlight.spot.target.position);
+      twin.updateMatrixWorld();
+      twin.target.updateMatrixWorld();
+      twin.shadow.updateMatrices(twin);
+      // shadow.map is null until three has rendered the twin's shadow pass
+      // once (boot): until then the levelShadowTex binding stays on the 1×1
+      // fallback and the gate stays 0 — the march is bit-identical. After
+      // the first shadow pass the texture rebinds (same mechanism as
+      // setFaceTexture) and the gate tracks the seam AND the beam: no beam,
+      // no directional key, nothing for a level shadow to modulate.
+      const map = twin.shadow.map?.depthTexture ?? null;
+      const lvlOn = spotOn > 0 && twin.castShadow && map !== null && levelShadowEnabled ? 1 : 0;
       for (const a of actors) {
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
         a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
+        a.view.uniforms.levelShadowCfg.value.x = lvlOn;
+        if (map !== null) a.view.levelShadowTex.value = map;
       }
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
@@ -588,6 +616,22 @@ async function main() {
    *  behaviour bit-for-bit (t * 0 / distort == t * 0 == 0). */
   const GAME_AA = 1.0;
 
+  /** Perf round 2, task 7: bodies RECEIVE the level's shadows. The twin
+   *  light (dungeon-lighting.ts) renders a level-only depth map (layer 0 —
+   *  no body hulls, so no self-shadowing) from the flashlight's pose; the
+   *  march multiplies the KEY diffuse+specular by a 4-tap PCF lookup into
+   *  it. One texture load per hit pixel, zero extra field evaluations.
+   *  `__sdfGame.setLevelShadow(on)` flips it live; 0 is bit-for-bit the
+   *  pre-task-7 march. NOT a level-shadow ABLATION for the bench: the twin's
+   *  1024² map still renders — for the shadow-cost split use ?spotshadow=0,
+   *  which kills both maps at boot. */
+  const GAME_LEVEL_SHADOW = 1.0;
+  /** Live seam state for the setter/getter; read by the per-frame pose
+   *  block. Frames cannot fire mid-main (sync boot), so the let below is
+   *  initialised before any draw — the same reasoning the blob comment
+   *  above relies on. */
+  let levelShadowEnabled = GAME_LEVEL_SHADOW > 0.5;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -686,6 +730,10 @@ async function main() {
           // like the shell: prevFetch's identities (gate off -> 1e9) make the
           // march bit-identical while sdfLayer.depthGate is false.
           prev: sdfLayer.prev,
+          // Level-only shadow twin (perf round 2 task 7). The binding exists
+          // from creation (1×1 fallback until three renders the twin once);
+          // the per-frame pose block owns the gate and the matrix.
+          levelShadow: { light: flashlight.levelShadow },
         });
       view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
       // Relaxation, explicit rather than inherited from the uniform default —
@@ -702,6 +750,10 @@ async function main() {
       // is refreshed on adaptive-rung change inside applySdfScale.
       view.uniforms.aaCfg.value.y = GAME_AA;
       view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
+      // Level-shadow gate seed (perf round 2 task 7). The per-frame pose
+      // block overwrites x every frame (seam ∧ beam ∧ map-exists); this only
+      // makes the first frames read the intended default.
+      view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -2157,6 +2209,15 @@ async function main() {
       }
     },
     get aa() { return actors[0]?.view.uniforms.aaCfg.value.y ?? 0; },
+    /** Level shadows on bodies (perf round 2 task 7, levelShadowCfg.x).
+     *  0 = the pre-task-7 march bit-for-bit (the helper returns 1.0 before
+     *  sampling). The per-frame pose block ANDs this with the beam and map
+     *  existence, so a false here also survives ?spotshadow=0 boots. */
+    setLevelShadow(on: boolean) {
+      levelShadowEnabled = !!on;
+      for (const a of actors) a.view.uniforms.levelShadowCfg.value.x = on ? 1 : 0;
+    },
+    get levelShadow() { return (actors[0]?.view.uniforms.levelShadowCfg.value.x ?? 0) > 0.5; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },
