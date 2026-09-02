@@ -96,6 +96,21 @@ three's real parser). Its run hit the cap re-running the smoke; controller
 read the pair: no acne on the near body, plausible door-frame shadow on
 the far one. **Pillar-between-lamp-and-body eyeball is the owner's:**
 `__sdfGame.setLevelShadow(true/false)`. Next: task 8 (upload measure).
+**CHAIN COMPLETE (2026-09-02).** Task 8: per-body upload measured at
+0.06 ms/frame for all ten bodies (3-5× under the threshold) — not worth
+narrowing. Task 9 (second run, 90 m cap, targeted sweep rooms 3/4 ×3 with
+`BENCH_PRELUDE` per lever): **every ship default survives its lever-off
+re-run.** Finished chain r3 9.85 ms / r4 7.85 ms. Omega 0.6 costs +0.70/+1.48
+(t2 confirmed); wound early-out ≈0 but free (t3 on); **depth gate ON costs
++4.8/+4.6 ms at 6% spread — stays OFF** (pass-structure overhead beats the
+step saving at 3-4 bodies; the seam stays for higher counts); AA off saves
+≤0.6 ms (t6 stays on); level shadows cost ≈0 r3 / ~0.7 r4 (t7 stays on);
+hull exit bound "wins" −0.28 ms by DELETING 4 of 9 bodies (census) — never
+ships. Occupancy vs task 0: total march steps −41% r3 / −38% r4, hit steps
+−44%. Machine was NOT quiet (owner's Xcode/LearnCard builds mid-sweep);
+every table carries its load and is judged by its own spread. Final branch
+`dispatch/2026-09-01-sdf-render-perf-r2-task-9` = the whole chain; merge
+order: chain → this plan branch → main, then gore, then elbow.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
