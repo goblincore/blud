@@ -27,6 +27,14 @@ const W = Number(process.env.GAME_W ?? 1280);
 const H = Number(process.env.GAME_H ?? 800);
 const REPEATS = Number(process.env.BENCH_REPEATS ?? 3);
 const ROOM_IDS = (process.env.BENCH_ROOMS ?? '1,2,3,4').split(',').map(Number);
+// BENCH_PRELUDE — an optional JS expression evaluated in the page AFTER the
+// leg's ship-defaults + overrides, right before any timing, so it always
+// wins. One prelude per invocation; pair it with BENCH_LEGS to A/B a lever
+// the static leg table does not model, e.g. perf round 2 task 9's sweep:
+//   BENCH_LEGS=baseline BENCH_PRELUDE='__sdfGame.setOmega(0.6)' ...
+// Results rows and meta record it, so a stored bench.json is never ambiguous
+// about what state the page was in.
+const PRELUDE = process.env.BENCH_PRELUDE ?? '';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
@@ -81,7 +89,7 @@ await send('Emulation.setDeviceMetricsOverride', {
 });
 
 const url = `http://localhost:${VITE}/sdf-game.html`;
-console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')})`);
+console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''})`);
 
 /**
  * Load the page fresh.
@@ -207,6 +215,7 @@ async function runLeg(name, room, mode) {
   // which is the entire point.
   await bootPage(2500);
   await applyLeg(name);
+  if (PRELUDE) await evaluate(PRELUDE);
   const label = `${name}/room${room}/${mode}`;
   const opts = mode === 'spike'
     ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)} }`
@@ -230,7 +239,7 @@ for (let rep = 0; rep < REPEATS; rep++) {
   for (const leg of Object.keys(LEGS)) {
     for (const room of ROOM_IDS) {
       const r = await runLeg(leg, room, 'throughput');
-      results.push({ rep, leg, room, ...r });
+      results.push({ rep, leg, room, prelude: PRELUDE, ...r });
       process.stdout.write(`  rep${rep} ${leg} room${room}: median ${r.overall.p50.toFixed(2)} ms (max chunk ${r.overall.max.toFixed(2)})\n`);
     }
   }
@@ -266,12 +275,12 @@ for (const leg of Object.keys(LEGS)) {
 const spikes = [];
 for (const room of ROOM_IDS) {
   const r = await runLeg('baseline', room, 'spike');
-  spikes.push({ room, ...r });
+  spikes.push({ room, prelude: PRELUDE, ...r });
   process.stdout.write(`  spike room${room}: p50 ${r.overall.p50.toFixed(2)} max ${r.overall.max.toFixed(2)} ms\n`);
 }
 
 writeFileSync(`${OUT}/bench.json`, JSON.stringify({
-  meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, when: new Date().toISOString() },
+  meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, when: new Date().toISOString() },
   results, table, spikes,
 }, null, 2));
 
