@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Vec3 } from './types';
 import { basisFromAxis, dot, len, normalize, scale as vscale, sub } from './vec';
-import { medialLine } from './draft-fit';
+import { bandCloud, medialLine } from './draft-fit';
 
 // All clouds below are deterministic lattices — no RNG — so a failure is
 // reproducible by construction rather than by seed. Surface sampling (fixed
@@ -49,6 +49,79 @@ function bananaCloud(Rc: number, Phi: number, r: number): Vec3[] {
       const th = (2 * Math.PI * j) / nTheta;
       const rad = r * Math.cos(th), ax = r * Math.sin(th);
       pts.push([cx + rad * nx, cy + rad * ny, ax]);
+    }
+  }
+  return pts;
+}
+
+/** A dumbbell: tube radius Rfat except within ±waist of the mid-axis, where
+ *  it is Rthin — a straight JUMP in r(t), not a ramp, so the inflection the
+ *  bands must land on is as sharp as a lattice can make it. */
+function dumbbellCloud(axis: Vec3, L: number, Rfat: number, Rthin: number, waist: number): Vec3[] {
+  const nT = 41, nTheta = 12;
+  const { u, v, w } = basisFromAxis(axis);
+  const pts: Vec3[] = [];
+  for (let i = 0; i < nT; i++) {
+    const t = -L / 2 + (L * i) / (nT - 1);
+    const r = Math.abs(t) < waist ? Rthin : Rfat;
+    for (let j = 0; j < nTheta; j++) {
+      const th = (2 * Math.PI * j) / nTheta;
+      const ru = r * Math.cos(th), rv = r * Math.sin(th);
+      pts.push([
+        t * w[0] + ru * u[0] + rv * v[0],
+        t * w[1] + ru * u[1] + rv * v[1],
+        t * w[2] + ru * u[2] + rv * v[2],
+      ]);
+    }
+  }
+  return pts;
+}
+
+/** An elliptical tube: cross-section semi-axes A (on the bone basis's u) and
+ *  B (on v), rotated by `rot` about the bone axis. rot=0 is the ALIGNED case
+ *  — alignment by construction, since the cloud is built FROM basisFromAxis,
+ *  the same basis the fit resolves onto. */
+function ellipseCloud(axis: Vec3, L: number, A: number, B: number, rot: number): Vec3[] {
+  const nT = 25, nTheta = 12;
+  const { u, v, w } = basisFromAxis(axis);
+  const cf = Math.cos(rot), sf = Math.sin(rot);
+  const pts: Vec3[] = [];
+  for (let i = 0; i < nT; i++) {
+    const t = -L / 2 + (L * i) / (nT - 1);
+    for (let j = 0; j < nTheta; j++) {
+      const th = (2 * Math.PI * j) / nTheta;
+      const ex = A * Math.cos(th), ey = B * Math.sin(th);
+      const ru = ex * cf - ey * sf, rv = ex * sf + ey * cf;
+      pts.push([
+        t * w[0] + ru * u[0] + rv * v[0],
+        t * w[1] + ru * u[1] + rv * v[1],
+        t * w[2] + ru * u[2] + rv * v[2],
+      ]);
+    }
+  }
+  return pts;
+}
+
+/** tubeCloud plus `perStation` spur points per t-station at `spurR` — the
+ *  spec's blades-and-spurs surface. Exists because mean and median AGREE on
+ *  every clean lattice here; without spurs, `r`'s median choice would be
+ *  vacuously unpinned (a mean passes every clean-lattice test). */
+function spikyTube(axis: Vec3, L: number, R: number, spurR: number, perStation: number): Vec3[] {
+  const pts = tubeCloud(axis, L, R);
+  const { u, v, w } = basisFromAxis(axis);
+  const nT = 25;
+  for (let i = 0; i < nT; i++) {
+    const t = -L / 2 + (L * i) / (nT - 1);
+    for (let j = 0; j < perStation; j++) {
+      // Angles offset from the lattice grid so spurs do not stack onto an
+      // existing surface point.
+      const th = (2 * Math.PI * (j + 0.5)) / perStation;
+      const ru = spurR * Math.cos(th), rv = spurR * Math.sin(th);
+      pts.push([
+        t * w[0] + ru * u[0] + rv * v[0],
+        t * w[1] + ru * u[1] + rv * v[1],
+        t * w[2] + ru * u[2] + rv * v[2],
+      ]);
     }
   }
   return pts;
@@ -119,5 +192,105 @@ describe('medialLine', () => {
     const banana = medialLine(bananaCloud(1.0, 1.3, r));
     expect(straight.residual).toBeCloseTo(r, 2);
     expect(banana.residual).toBeGreaterThan(3 * straight.residual);
+  });
+});
+
+describe('bandCloud', () => {
+  it('emits ONE band for a uniform cylinder', () => {
+    // A flat r(t) profile is ONE band — the draft must not invent structure a
+    // straight limb does not have (the mirror defect of one-prim-per-bone:
+    // over-fragmentation burns the prim budget for nothing).
+    const D = normalize([1, 2, 3]);
+    const cloud = tubeCloud(D, 1.0, 0.1);
+    const bands = bandCloud(cloud, medialLine(cloud));
+
+    expect(bands.length).toBe(1);
+    const b = bands[0]!;
+    // Median radius IS the lattice radius, and the band spans the FULL
+    // extent — no stations dropped at the ends.
+    expect(b.r).toBeCloseTo(0.1, 2);
+    expect(b.t0).toBeCloseTo(-0.5, 3);
+    expect(b.t1).toBeCloseTo(0.5, 3);
+    // Circular: no 2θ content, so both axis ratios come back neutral.
+    expect(b.wide).toBeCloseTo(1, 2);
+    expect(b.deep).toBeCloseTo(1, 2);
+    expect(b.rotated).toBeLessThan(0.01);
+    // Every point of the cloud is accounted for by the one band.
+    expect(b.samples).toBe(cloud.length);
+  });
+
+  it('keeps r at the MEDIAN when the cloud carries spurs', () => {
+    // ~14% of points sit at 3.5x the radius — the spec's blades-and-spurs
+    // case. They must not move the ring: a mean here reads 0.136, not 0.1.
+    // They must not bend the profile either, or the band shatters.
+    const D = normalize([0, 1, 1]);
+    const cloud = spikyTube(D, 1.0, 0.1, 0.35, 2);
+    const bands = bandCloud(cloud, medialLine(cloud));
+    expect(bands.length).toBe(1);
+    expect(bands[0]!.r).toBeCloseTo(0.1, 2);
+  });
+
+  it('splits a dumbbell into bands at the waist', () => {
+    // Two fat ends and a thin middle. Band edges must land at the waist:
+    // >= 3 bands, the thinnest band IS the waist, the fattest the ends.
+    const D = normalize([0, 1, 0]);
+    const Rfat = 0.2, Rthin = 0.08;
+    const cloud = dumbbellCloud(D, 1.0, Rfat, Rthin, 0.15);
+    const bands = bandCloud(cloud, medialLine(cloud));
+
+    expect(bands.length).toBeGreaterThanOrEqual(3);
+    // Ordered and non-overlapping — the emitter consumes this array as-is,
+    // in this order.
+    for (let i = 1; i < bands.length; i++) {
+      expect(bands[i]!.t0).toBeGreaterThanOrEqual(bands[i - 1]!.t1 - 1e-9);
+    }
+    const thinnest = Math.min(...bands.map(x => x.r));
+    const fattest = Math.max(...bands.map(x => x.r));
+    expect(thinnest).toBeCloseTo(Rthin, 2);
+    expect(fattest).toBeCloseTo(Rfat, 2);
+    // No point lost between bands.
+    expect(bands.reduce((s, x) => s + x.samples, 0)).toBe(cloud.length);
+  });
+
+  it('resolves wide/deep onto the bone axes for an elliptical cloud', () => {
+    // A 2:1 cross-section ALIGNED to the bone's basis axes. Constant profile
+    // along t, so the whole cloud is one band.
+    const D = normalize([1, 1, 2]);
+    const cloud = ellipseCloud(D, 1.0, 0.2, 0.1, 0);
+    const bands = bandCloud(cloud, medialLine(cloud));
+    expect(bands.length).toBe(1);
+    const b = bands[0]!;
+
+    // Fat axis is the one the ellipse was built on; ratios are against d0,
+    // so neutral is 1.
+    expect(b.wide).toBeGreaterThan(1);
+    expect(b.deep).toBeLessThan(1);
+    // ~2:1 and not 2.0 exactly: d(θ) of an ellipse is NOT a pure cos-2θ (it
+    // carries cos-4θ and higher), so the truncated fit's amplitude comes out
+    // ~7% short. Pinned as a range so nobody "fixes" it to A/B later.
+    expect(b.wide / b.deep).toBeGreaterThan(1.7);
+    expect(b.wide / b.deep).toBeLessThan(2.3);
+    // Aligned means the sin-2θ coefficient vanishes: not rotated at all.
+    expect(b.rotated).toBeLessThan(0.25);
+  });
+
+  it('flags a ROTATED cross-section instead of reporting it as axis-aligned', () => {
+    // The spec's pinned decision, as a test. The same 2:1 ellipse turned 45°
+    // about the bone axis: .blob scales a prim's OWN axes and carries no
+    // cross-section rotation, so the only honest axis-aligned reading is
+    // "near-circular" plus a LOUD rotated flag — not confident 2:1 scales
+    // pointing the wrong way, and not the ellipse silently rotated into its
+    // own principal frame either.
+    const D = normalize([1, 1, 2]);
+    const cloud = ellipseCloud(D, 1.0, 0.2, 0.1, Math.PI / 4);
+    const bands = bandCloud(cloud, medialLine(cloud));
+    expect(bands.length).toBe(1);
+    const b = bands[0]!;
+
+    expect(b.rotated).toBeGreaterThan(3);
+    // Near 1:1 — the axis-aligned approximation of a rotated ellipse IS a
+    // circle-ish prim, with the debt owned by `rotated`.
+    expect(Math.abs(b.wide - 1)).toBeLessThan(0.05);
+    expect(Math.abs(b.deep - 1)).toBeLessThan(0.05);
   });
 });

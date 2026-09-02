@@ -11,7 +11,7 @@
 // Spec: docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md.
 
 import type { Vec3 } from './types';
-import { dot, normalize, scale as vscale, sub } from './vec';
+import { cross, dot, len, normalize, scale as vscale, sub } from './vec';
 
 export interface MedialLine {
   /**
@@ -91,4 +91,307 @@ export function medialLine(points: Vec3[]): MedialLine {
     sumSq += Math.max(0, dot(q, q) - t * t);
   }
   return { dir, origin, t0, t1, residual: Math.sqrt(sumSq / n) };
+}
+
+/**
+ * One radial band of a bone's cloud: the stretch of t where the median radius
+ * stays a straight line within tolerance. A band becomes ONE prim in the
+ * draft — splitting at radial inflections is what keeps a torso from drafting
+ * as a smooth tube, which is the exact featureless-blob defect that got the
+ * minotaur rejected. One prim per bone would GENERATE that bug (spec: "the
+ * first draft of this spec emitted one bar per bone. That is wrong").
+ */
+export interface Band {
+  /**
+   * Band extent along the medial line, in the same convention as
+   * {@link MedialLine.t0} — relative to the line's origin, along its dir.
+   * Taken from the MEMBER POINTS' extremes, not station centres, so bands
+   * tile the cloud exactly (first band's t0 is the cloud's own t0).
+   */
+  t0: number;
+  t1: number;
+  /**
+   * MEDIAN radial distance of the band's points, not a mean. The extremes are
+   * where blades and spurs live; a mean lets one spike move the ring (spec).
+   * The mirror image of MedialLine.residual's RMS-over-max choice: there one
+   * stray vertex must not scream "bend", here one must not fatten a prim.
+   */
+  r: number;
+  /**
+   * Cross-section shape resolved onto the BONE's own basis axes, as ratios of
+   * `r` (r·wide / r·deep are the semi-axes; 1,1 when circular). Deliberately
+   * NOT the ellipse's own principal frame: `.blob` scales a prim's own axes
+   * and carries no cross-section rotation, so a principal-frame answer would
+   * be confidently inexpressible. What is lost to that constraint surfaces in
+   * `rotated` instead, for the author to fix by hand.
+   */
+  wide: number;
+  deep: number;
+  /**
+   * |b| / |a| of the d(θ) ≈ d0 + a·cos2θ + b·sin2θ fit. Near 0 = the
+   * cross-section is aligned to the bone axes; large = genuinely rotated,
+   * which the format cannot say — the draft emits the axis-aligned
+   * approximation and flags the hand pass owed (spec: "emit and comment, don't
+   * rotate"). Denominator floored so a circular band (a ≈ b ≈ 0 to float
+   * precision) reads as "not rotated" rather than noise dividing noise.
+   */
+  rotated: number;
+  /** Points in this band. A band with few is not evidence. */
+  samples: number;
+}
+
+export interface BandOpts {
+  /**
+   * How far the median-radius profile may stray from a band's straight r(t),
+   * as a fraction of the cloud's overall median radius. This IS the
+   * inflection definition: a band ends exactly where keeping one slope would
+   * cost more than this. Smaller = more, shorter bands. 0.08 resolves a
+   * chest/waist contrast (tens of percent of radius) many times over while
+   * ignoring lattice-level noise.
+   */
+  tolerance?: number;
+  /** Profile stations along the axis. Default scales with the cloud.
+   */
+  stations?: number;
+}
+
+/**
+ * Split a bone's vertex cloud into radial bands at its profile's inflections.
+ *
+ * `line` must be the {@link medialLine} fit of the SAME cloud — the bands are
+ * measured about it, so a stale line bands the wrong thing.
+ */
+export function bandCloud(points: Vec3[], line: MedialLine, opts: BandOpts = {}): Band[] {
+  const n = points.length;
+  if (n === 0) return [];
+  const tolFrac = opts.tolerance ?? 0.08;
+  // ~one station per two 12-angle rings: enough resolution to catch a waist,
+  // not so much that a per-station MEDIAN is asked to be meaningful off a
+  // handful of points.
+  const nSt = opts.stations ?? Math.min(40, Math.max(8, Math.round(n / 24)));
+
+  // Project every point into the line's frame ONCE: t bands the cloud, and
+  // (d, θ) are the radial polar coordinates the 2θ fit regresses. θ is taken
+  // against the bone's own (u,v) basis — that choice is what "aligned" means
+  // for wide/deep. It is also invariant under the line direction's canonical
+  // sign flip (θ → π−θ only flips the sin-2θ term's sign, which `rotated`
+  // reads through |b|), so the fit does not churn with the eigenvector's sign.
+  const { u, v } = bandBasis(line.dir);
+  const ts = new Float64Array(n);
+  const ds = new Float64Array(n);
+  const c2 = new Float64Array(n);
+  const s2 = new Float64Array(n);
+  let tMin = Infinity, tMax = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const q = sub(points[i]!, line.origin);
+    const t = dot(q, line.dir);
+    const rad = sub(q, vscale(line.dir, t));
+    const d = len(rad);
+    ts[i] = t;
+    ds[i] = d;
+    // A point ON the axis has no angle; θ = 0 feeds only the fit's d0 term.
+    const th = d > 0 ? Math.atan2(dot(rad, v), dot(rad, u)) : 0;
+    c2[i] = Math.cos(2 * th);
+    s2[i] = Math.sin(2 * th);
+    if (t < tMin) tMin = t;
+    if (t > tMax) tMax = t;
+  }
+
+  // The yardstick every tolerance below is relative to — one number for the
+  // whole cloud, so a thin band is judged against the LIMB's radius, not its
+  // own (which would let a waist's bands creep ever thinner).
+  const tol = tolFrac * median(Array.from(ds));
+
+  // The radial PROFILE: per-station median of d over t. Median again, same
+  // reason as Band.r — a spur on one angle must not bend the profile any
+  // more than it may move a band's radius.
+  const width = tMax > tMin ? (tMax - tMin) / nSt : 1;
+  const station: number[][] = Array.from({ length: nSt }, () => []);
+  for (let i = 0; i < n; i++) {
+    const s = Math.min(nSt - 1, Math.floor((ts[i]! - tMin) / width));
+    station[s]!.push(i);
+  }
+  // Compact to occupied stations — an empty station has no points to hand to
+  // any band, so it must not become segmentation real estate.
+  const stOf: number[] = [];
+  const stMed: number[] = [];
+  for (let s = 0; s < nSt; s++) {
+    if (station[s]!.length === 0) continue;
+    stOf.push(s);
+    stMed.push(median(station[s]!.map(i => ds[i]!)));
+  }
+  const centre = (k: number) => tMin + (stOf[k]! + 0.5) * width;
+
+  // Walk left to right, extending the current segment while the profile stays
+  // straight within tol. Greedy first-fit, not global best-split: the bands
+  // only have to land on MATERIAL inflections, and first-fit is deterministic
+  // and cheap — a global optimum buys nothing the tolerance doesn't already
+  // decide.
+  const segs: Array<[number, number]> = [];
+  let k = 0;
+  while (k < stMed.length) {
+    let j = k;
+    while (j + 1 < stMed.length) {
+      // Two stations always fit a line EXACTLY (two points define one), which
+      // would let a straight DISCONTINUITY merge for free. A first extension
+      // pays the step instead: a smooth ramp passes, a jump cannot hide.
+      const cost = j === k
+        ? Math.abs(stMed[j + 1]! - stMed[k]!)
+        : profileMaxErr(centre, stMed, k, j + 1);
+      if (cost > tol) break;
+      j++;
+    }
+    segs.push([k, j]);
+    k = j + 1;
+  }
+
+  const bands: Band[] = [];
+  for (const [k0, k1] of segs) {
+    const members: number[] = [];
+    for (let s = stOf[k0]!; s <= stOf[k1]!; s++) {
+      for (const i of station[s]!) members.push(i);
+    }
+    let t0 = Infinity, t1 = -Infinity;
+    let sd = 0, sc = 0, ss = 0, scc = 0, sss = 0, scs = 0, sdc = 0, sds = 0;
+    for (const i of members) {
+      const d = ds[i]!, c = c2[i]!, s = s2[i]!;
+      if (ts[i]! < t0) t0 = ts[i]!;
+      if (ts[i]! > t1) t1 = ts[i]!;
+      sd += d; sc += c; ss += s;
+      scc += c * c; sss += s * s; scs += c * s;
+      sdc += d * c; sds += d * s;
+    }
+
+    // 2θ least squares d ≈ d0 + a·cos2θ + b·sin2θ by normal equations. The
+    // [1, cos2θ, sin2θ] columns are orthogonal only on a full uniform θ
+    // sweep, which a real cloud is not guaranteed to give — solve the 3x3
+    // rather than assuming the coefficients decouple.
+    const [d0, a, b] = solve3(
+      [members.length, sc, ss, sc, scc, scs, ss, scs, sss],
+      [sd, sdc, sds],
+      sd / members.length,
+    );
+
+    const d0abs = Math.abs(d0);
+    bands.push({
+      t0,
+      t1,
+      r: median(members.map(i => ds[i]!)),
+      wide: d0abs > 1e-12 ? (d0 + a) / d0 : 1,
+      deep: d0abs > 1e-12 ? (d0 - a) / d0 : 1,
+      rotated: Math.abs(b) / Math.max(Math.abs(a), 1e-9 * (d0abs || 1)),
+      samples: members.length,
+    });
+  }
+  return bands;
+}
+
+/**
+ * Orthonormal cross-section frame for a fitted medial line: `u`/`v` span the
+ * plane the 2θ fit's angle lives in.
+ *
+ * The construction is `basisFromAxis`'s — cross the least-aligned world axis
+ * with the direction — but the seed comparison is tie-SAFE, and that is the
+ * whole reason this is not just that function: the power iteration wobbles
+ * `line.dir` by ~1e-7 between refits, and `basisFromAxis`'s exact `<=` sits
+ * ON its tie for symmetric directions. Measured on normalize([1,1,2]): the
+ * wobble crossed the tie, the seed flipped, and `u` swung 101.5° — which
+ * turns an ALIGNED cross-section into a false `rotated` of 0.42, louder than
+ * the aligned bar. The 1e-6 tie band is ~10x the iteration's wobble, so a
+ * refit of the same cloud cannot straddle it; a genuinely off-tie direction
+ * decides exactly as before.
+ *
+ * Draft-local on purpose: vec.ts's basisFromAxis is shared with wound-frame
+ * consumers that don't need (and shouldn't silently inherit) this guarantee,
+ * and this file's numbers do. Task 9's emitter must use THIS function if it
+ * ever needs to know which world direction a band's fat axis points along.
+ */
+function bandBasis(dir: Vec3): { u: Vec3; v: Vec3 } {
+  const w = normalize(dir);
+  const ax = Math.abs(w[0]!), ay = Math.abs(w[1]!), az = Math.abs(w[2]!);
+  const eps = 1e-6;
+  const seed: Vec3 = ax <= ay + eps && ax <= az + eps ? [1, 0, 0]
+    : ay <= az + eps ? [0, 1, 0]
+    : [0, 0, 1];
+  const u = normalize(cross(seed, w));
+  return { u, v: cross(w, u) };
+}
+
+/**
+ * Max deviation of the station medians in [k0..k1] from their least-squares
+ * straight line — the cost a band extension pays against the tolerance.
+ */
+function profileMaxErr(
+  x: (k: number) => number,
+  y: number[],
+  k0: number,
+  k1: number,
+): number {
+  const m = k1 - k0 + 1;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let k = k0; k <= k1; k++) {
+    sx += x(k);
+    sy += y[k]!;
+    sxx += x(k) * x(k);
+    sxy += x(k) * y[k]!;
+  }
+  const varx = m * sxx - sx * sx;
+  // varx 0 (all centres equal — unreachable with distinct stations, but the
+  // guard is cheaper than trusting that): fall back to deviation from the
+  // mean, i.e. a horizontal line.
+  const slope = varx > 1e-12 ? (m * sxy - sx * sy) / varx : 0;
+  const icept = (sy - slope * sx) / m;
+  let err = 0;
+  for (let k = k0; k <= k1; k++) {
+    err = Math.max(err, Math.abs(y[k]! - (slope * x(k) + icept)));
+  }
+  return err;
+}
+
+/**
+ * Solve a 3x3 system by Gaussian elimination with partial pivoting. Returns
+ * `[fallback, 0, 0]` when the matrix is singular — the caller's honest answer
+ * for degenerate geometry (see bandCloud: no θ coverage means NO evidence of
+ * eccentricity, not a fit to trust).
+ */
+function solve3(
+  m: number[],
+  rhs: number[],
+  fallback: number,
+): [number, number, number] {
+  const a = [
+    [m[0]!, m[1]!, m[2]!, rhs[0]!],
+    [m[3]!, m[4]!, m[5]!, rhs[1]!],
+    [m[6]!, m[7]!, m[8]!, rhs[2]!],
+  ];
+  for (let col = 0; col < 3; col++) {
+    let piv = col;
+    for (let r = col + 1; r < 3; r++) {
+      if (Math.abs(a[r]![col]!) > Math.abs(a[piv]![col]!)) piv = r;
+    }
+    if (Math.abs(a[piv]![col]!) < 1e-12) return [fallback, 0, 0];
+    const tmp = a[col]!;
+    a[col] = a[piv]!;
+    a[piv] = tmp;
+    for (let r = col + 1; r < 3; r++) {
+      const f = a[r]![col]! / a[col]![col]!;
+      for (let c = col; c < 4; c++) a[r]![c]! -= f * a[col]![c]!;
+    }
+  }
+  const x = [0, 0, 0];
+  for (let col = 2; col >= 0; col--) {
+    let s = a[col]![3]!;
+    for (let c = col + 1; c < 3; c++) s -= a[col]![c]! * x[c]!;
+    x[col] = s / a[col]![col]!;
+  }
+  return [x[0]!, x[1]!, x[2]!];
+}
+
+/** Even-count median averages the two central values. */
+function median(xs: number[]): number {
+  const sorted = [...xs].sort((p, q) => p - q);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 1
+    ? sorted[mid]!
+    : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
