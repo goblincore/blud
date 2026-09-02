@@ -606,12 +606,74 @@ git commit -m "goblin skin: the hands take their colour from the .blob, and get 
 
 ---
 
-### Task 4: Swap the view-model in
+### Task 4: Swap the view-model in, and a gate that can see it
 
 **Files:**
+- Create: `scripts/sdf-game-shorty-gate.mjs`, `scripts/sdf-game-shorty-gate.sh`
 - Modify: `src/lab/sdf-zombie/webgpu/game-main.ts:1013-1065`
 
-- [ ] **Step 1: Replace the GLB constant and the gun pose**
+**You are running headless. There is no "open it and look".** Every runtime
+check in Tasks 4-8 goes through the driver built in Steps 1-2, which is the
+same CDP pattern the repo already uses for this page.
+
+- [ ] **Step 1: Write the headless gate driver**
+
+Create `scripts/sdf-game-shorty-gate.mjs`, following `scripts/sdf-game-grapeshot.mjs` **verbatim as the pattern** for its CDP plumbing — read that file first and copy its tab setup, `send`/`evaluate`/`withTimeout` helpers and `shot()` function; do not invent a different approach. Then replace its checks with:
+
+```javascript
+// 1. BOOT GATE — webgpu backend, no console errors, the gun actually loaded.
+const backend = await evaluate('__sdfGame.backend');
+if (backend !== 'webgpu') fail(`backend ${backend}, expected webgpu`);
+const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+if (errs.length) fail(`console errors at boot: ${JSON.stringify(errs.slice(0, 3))}`);
+
+// 2. THE GUN — a missing GLB must be loud. game-main throws if the named
+//    nodes are absent, so a clean boot already proves Barrels/Hinge exist.
+const gunOk = await evaluate(`
+  (() => {
+    const a = __sdfGame.viewModelAnchor;
+    const g = a && a.getObjectByName('grapeshot-k3') === null;
+    let barrels = null;
+    a.traverse((o) => { if (o.name === 'Barrels') barrels = o; });
+    return { hasAnchor: !!a, barrels: !!barrels, children: a ? a.children.length : 0 };
+  })()
+`);
+if (!gunOk.hasAnchor) fail('no viewModelAnchor');
+if (!gunOk.barrels) fail('Barrels node not present under the view-model anchor');
+
+await shot('fpv-rest');
+console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);
+```
+
+`__sdfGame.viewModelAnchor` is already exposed (`game-main.ts:3036`). If a check needs something that is not on `__sdfGame`, add it to that object rather than reaching into module internals.
+
+- [ ] **Step 2: Write the shell wrapper that owns its servers**
+
+Create `scripts/sdf-game-shorty-gate.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Headless gate for the sawed-off view-model. Owns its own vite + Chrome via
+# the shared lifecycle, on a port pair of its own so it can run while other
+# dispatch chains hold servers on theirs.
+#
+# NEVER kill a server you did not start (scripts/lab-servers.sh says why).
+# If 5281/9281 are taken by another worktree, export a free pair:
+#   LAB_VITE_PORT=5283 LAB_CDP_PORT=9283 scripts/sdf-game-shorty-gate.sh
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export LAB_VITE_PORT="${LAB_VITE_PORT:-5281}"
+export LAB_CDP_PORT="${LAB_CDP_PORT:-9281}"
+export GAME_OUT="${GAME_OUT:-docs/dev-notes/2026-09-02-fpv-weapon-shorty}"
+. "$(dirname "$0")/lab-servers.sh"
+trap lab_servers_down EXIT
+lab_servers_up
+node scripts/sdf-game-shorty-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"
+```
+
+Then `chmod +x scripts/sdf-game-shorty-gate.sh`.
+
+- [ ] **Step 3: Replace the GLB constant and the gun pose**
 
 Replace `const GUN_GLB = '/assets/lab/grapeshot-gun-k3.glb';` and the `MUZZLE_LOCAL` line with:
 
@@ -634,7 +696,7 @@ Replace the `gunGroup.position.set(...)` line with the owner-approved FPV pose f
     gunGroup.position.set(0.125, -0.115, -0.300);
 ```
 
-- [ ] **Step 2: Capture the barrel and hinge nodes for the reload**
+- [ ] **Step 4: Capture the barrel and hinge nodes for the reload**
 
 Immediately after `gunGroup.add(gltf.scene);` add:
 
@@ -669,7 +731,7 @@ And declare alongside `let gunGroup`:
   let hingePivot: THREE.Group | null = null;
 ```
 
-- [ ] **Step 3: Replace the green orbs with goblin-matched hands and forearms**
+- [ ] **Step 5: Replace the green orbs with goblin-matched hands and forearms**
 
 Replace the whole `// HANDS ARE GREEN ORBS` block (through `viewModelAnchor.add(gripHand, foreHand);`) with:
 
@@ -722,7 +784,7 @@ Declare alongside `let gunGroup`:
   let foreHandGroup: THREE.Group | null = null;
 ```
 
-- [ ] **Step 4: Raise the gun's env-map intensity (spec §2)**
+- [ ] **Step 6: Raise the gun's env-map intensity (spec §2)**
 
 In the `gltf.scene.traverse` block just above, change `std.envMapIntensity = 0.7;` to:
 
@@ -733,25 +795,26 @@ In the `gltf.scene.traverse` block just above, change `std.envMapIntensity = 0.7
           std.envMapIntensity = 1.1;
 ```
 
-- [ ] **Step 5: Add the imports at the top of the file**
+- [ ] **Step 7: Add the imports at the top of the file**
 
 ```typescript
 import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
 ```
 
-- [ ] **Step 6: Typecheck**
+- [ ] **Step 8: Typecheck**
 
 Run: `npx tsc --noEmit`
 Expected: no errors. If `CapsuleGeometry` is missing, the three version predates it — use `THREE.CylinderGeometry(GOBLIN_SKIN.forearmRadius, GOBLIN_SKIN.forearmElbowRadius, GOBLIN_SKIN.forearmLength * 0.6, 12)` instead and note the substitution in the commit body.
 
-- [ ] **Step 7: Confirm it renders**
+- [ ] **Step 9: Confirm it renders — headlessly**
 
-Run: `npm run dev`, open `http://localhost:5173/sdf-game.html`, and check the console has no `missing Barrels/Hinge` throw and no GLTF 404.
+Run: `scripts/sdf-game-shorty-gate.sh`
+Expected: exits 0, prints `gate: backend=webgpu ...`, and writes `fpv-rest.png` into `docs/dev-notes/2026-09-02-fpv-weapon-shorty/`. A `Barrels node not present` failure means Task 1's export lost its grouping — go back and re-run the model script, do not work around it here.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/lab/sdf-zombie/webgpu/game-main.ts
+git add src/lab/sdf-zombie/webgpu/game-main.ts scripts/sdf-game-shorty-gate.mjs scripts/sdf-game-shorty-gate.sh
 git commit -m "shorty: the new gun and goblin-matched hands replace the plank and the orbs"
 ```
 
@@ -833,7 +896,28 @@ Next to `recoilPitch *= Math.exp(-9 * dt);` (`game-main.ts:1726`):
 - [ ] **Step 5: Verify**
 
 Run: `npx tsc --noEmit` — expected: no errors.
-Then `npm run dev`, open `sdf-game.html`, click to fire: a warm flash appears at the muzzle for a fraction of a second and does not persist.
+
+Then extend `scripts/sdf-game-shorty-gate.mjs` with a flash check and re-run `scripts/sdf-game-shorty-gate.sh`:
+
+```javascript
+// 3. FLASH — fire, and prove the flash is visible on the shot frame and gone
+//    a beat later. Screenshots are the evidence; the booleans are the gate.
+await evaluate('__sdfGame.fire ? __sdfGame.fire(1) : null');
+const lit = await evaluate('__sdfGame.flashVisible');
+await shot('flash-on');
+await sleep(300);
+const dark = await evaluate('__sdfGame.flashVisible');
+await shot('flash-off');
+if (!lit) fail('no muzzle flash on the shot frame');
+if (dark) fail('muzzle flash still visible 300 ms later — envelope never closed');
+```
+
+This needs `fire` and `flashVisible` on `__sdfGame`. Add them to the object at `game-main.ts:3036`:
+
+```typescript
+    fire,
+    get flashVisible() { return flashGroup?.visible ?? false; },
+```
 
 - [ ] **Step 6: Commit**
 
@@ -915,9 +999,28 @@ Leave `spotPos` and `spotAxis` alone. The muzzle and the flashlight offset are b
 
 - [ ] **Step 4: Verify the bodies actually light**
 
-Run `npm run dev`, open `sdf-game.html`, stand in a dark room facing a zombie, and fire. The zombie must visibly brighten and warm for the flash frame, and the beam must return to normal immediately after.
+Add to the gate driver, and re-run `scripts/sdf-game-shorty-gate.sh`:
 
-If the walls brighten but the zombie does not, the bias was added after the `for (const a of actors)` loop instead of before it — the loop is what writes the uniforms.
+```javascript
+// 4. THE BODIES — read the uniform the march actually samples. A PointLight
+//    cannot touch this, so a rise here is the whole point of the task.
+const beam = await evaluate(`
+  (() => {
+    const a = __sdfGame.actors[0];
+    return a ? a.view.uniforms.spotCfg.value.x : null;
+  })()
+`);
+await evaluate('__sdfGame.fire(1)');
+const beamLit = await evaluate('__sdfGame.actors[0].view.uniforms.spotCfg.value.x');
+await shot('flash-zombie');
+if (beamLit === null) fail('no actor to test the beam on');
+if (!(beamLit > beam)) {
+  fail(`spotCfg.x did not rise on the flash frame (${beam} -> ${beamLit}); ` +
+       'the bias is probably AFTER the for-of loop instead of before it');
+}
+```
+
+If `spotCfg.x` does not rise, the bias was added after the `for (const a of actors)` loop rather than before it — that loop is what writes the uniforms, so anything computed later is discarded.
 
 - [ ] **Step 5: Commit**
 
@@ -1013,7 +1116,37 @@ Find `updateHud()` and add the shell count to its output string, e.g. `` `shells
 
 - [ ] **Step 6: Verify**
 
-Run `npx tsc --noEmit` (expected: no errors), then `npm run dev`. Fire twice: the gun breaks open, the barrels swing DOWN and away from the frame (not through it), the support hand dips and returns, it snaps shut and the HUD returns to `2/2`. Press `R` after one shot: the same sequence runs.
+Run `npx tsc --noEmit` (expected: no errors), then add the reload check to the gate driver and run `scripts/sdf-game-shorty-gate.sh`:
+
+```javascript
+// 5. RELOAD — two shots must empty it, the hinge must actually open, and the
+//    gun must come back to a shut, loaded rest state on its own.
+await evaluate('__sdfGame.fire(1)'); await evaluate('__sdfGame.fire(1)');
+const spent = await evaluate('__sdfGame.shells');
+if (spent !== 0) fail(`two shots left ${spent} shells, expected 0`);
+let maxOpen = 0;
+for (const ms of [120, 260, 400, 550, 740, 900]) {
+  await sleep(ms === 120 ? 120 : 140);
+  const open = await evaluate('__sdfGame.hingeOpenRad');
+  maxOpen = Math.max(maxOpen, open);
+  await shot(`reload-${ms}`);
+}
+if (maxOpen < 0.4) fail(`hinge only reached ${maxOpen} rad; the barrels never opened`);
+await sleep(400);
+const after = await evaluate('__sdfGame.shells');
+const shut = await evaluate('__sdfGame.hingeOpenRad');
+if (after !== 2) fail(`reload finished with ${after} shells, expected 2`);
+if (Math.abs(shut) > 1e-6) fail(`hinge left at ${shut} rad, expected shut`);
+```
+
+Expose these on `__sdfGame` at `game-main.ts:3036`:
+
+```typescript
+    get shells() { return shells; },
+    get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
+```
+
+The six `reload-*.png` frames this writes ARE the reload strip Task 8 needs — no separate capture pass.
 
 If the barrels swing UP through the frame instead of down, negate `RELOAD.openRad` at the call site — do not change the constant, which Task 2's tests pin. If they swing about the wrong point entirely, the pivot group in Task 4 Step 2 did not get the barrels reparented into it.
 
@@ -1042,14 +1175,12 @@ Expected: PASS. Record the total count in the notes. If anything unrelated fails
 Run: `npm run build`
 Expected: no TypeScript errors.
 
-- [ ] **Step 3: Capture the gates**
+- [ ] **Step 3: Run the full gate**
 
-Take four in-engine screenshots from `sdf-game.html` into `docs/dev-notes/2026-09-02-fpv-weapon-shorty/`:
+Run: `scripts/sdf-game-shorty-gate.sh`
+Expected: exits 0 with every check passing, having written into `docs/dev-notes/2026-09-02-fpv-weapon-shorty/`: `fpv-rest.png`, `flash-on.png`, `flash-off.png`, `flash-zombie.png`, and the six `reload-*.png` frames.
 
-1. `gate-fpv.png` — the gun at rest. **This is the look gate**, not the Blender FPV render.
-2. `gate-flash-zombie.png` — mid-flash with a zombie in frame, proving the marched body is lit. This is the one a `PointLight` alone cannot produce.
-3. `gate-reload-strip.png` — six frames at the beat boundaries (0.10, 0.26, 0.40, 0.55, 0.74, 0.90 s).
-4. `gate-hands.png` — a close view of the orbs showing the warty normal map.
+These are the gates; they were built incrementally across Tasks 4-7 rather than as a separate capture pass at the end. If the default ports are held by another dispatch chain, export a free pair — **do not kill servers you did not start.**
 
 - [ ] **Step 4: Write the notes**
 
