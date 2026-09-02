@@ -97,8 +97,12 @@ all nine bodies, crater survives, smoother silhouettes); hit-pixel steps
 level-only twin flashlight depth pass, 4-tap PCF, `GAME_LEVEL_SHADOW = 1.0`
 ships; smoke capture clean (no acne, plausible door-frame shadow). The
 planned pillar-between-lamp-and-body eyeball gate did NOT run — it is the
-owner's, via `__sdfGame.setLevelShadow(true/false)`. Next: task 8
-(measure the per-body upload).
+owner's, via `__sdfGame.setLevelShadow(true/false)`.
+**2026-09-02 later:** task 8 done — measured, NOT worth it. Ten uploads =
+p50 0.060 / max 0.090 ms/frame (room-4 idle, machine quiet), 3-5x under the
+0.3 ms gate; instrumentation removed, texture stays 128 wide, no Step 3.
+Chain's code tasks complete; **task 9** (bench sweep, unchained) waits for a
+quiet machine and a manual trigger.
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
