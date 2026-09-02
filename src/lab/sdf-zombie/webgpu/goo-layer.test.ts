@@ -445,18 +445,24 @@ describe('gut mask wiring (source tripwires)', () => {
     expect(GOO_SURFACE_WGSL).not.toMatch(/c\.g \/ max\(c\.b, 1e-4\)/);
   });
 
-  it('with no gut droplets every .a is 0, so baseCol is the original literal (task 6 gate 1)', () => {
-    // The inertness chain, pinned link by link: the density alpha term is
-    // fall MUL gutMask (so a 0 mask contributes exactly 0 under additive
-    // blending), the clear starts every pixel's accumulator at 0 (pinned
-    // above), gutArr is written 1 ONLY on kind 'gut' (pinned above) — so a
-    // sim of drop/scrap/mist alone reads c.a = 0 everywhere, gutFrac
-    // clamps to 0, and mix(literal, organColor, 0) returns the literal the
-    // pre-organs pass shipped.
-    expect(src).toMatch(/colorNode\s*=\s*vec4\(fall,\s*fall\.mul\(viewDepth\),\s*fall,\s*fall\.mul\(gutMask\)\)/);
+  it('with no gut droplets the blood colour is the original literal', () => {
+    // REWRITTEN. Task 6's version pinned "the inertness chain link by link"
+    // through the ALPHA channel and concluded the feature was inert. Every
+    // link was true AS SOURCE TEXT and the conclusion was false: three
+    // discards a node material's colorNode alpha (forced to `opacity`), so
+    // .a accumulated a constant 1 per quad and gutFrac came out >= 1 on
+    // BLOOD too — every blood pixel painted with the organ colour.
+    //
+    // That is the shape of the mistake worth remembering: a test can verify
+    // each step of a chain and still be wrong about the chain, when a step
+    // it cannot see silently drops the value. It was caught by comparing
+    // against main in a browser, not here.
+    //
+    // The mask now rides .b, which is genuinely free — .r and .b both held
+    // `fall`, so dividing depth by .r instead of .b costs nothing.
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+    expect(src).toMatch(/colorNode\s*=\s*vec4\(fall,\s*fall\.mul\(viewDepth\),\s*fall\.mul\(gutMask\),\s*1\)/);
     expect(GOO_SURFACE_WGSL).toMatch(/gutFrac = clamp\(gutFrac, 0\.0, 1\.0\)/);
-    // And the lerp's first argument is still the verbatim pre-organs blood
-    // literal — gutFrac 0 must reproduce it exactly.
     expect(GOO_SURFACE_WGSL).toContain('let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac)');
   });
 });
