@@ -1,6 +1,26 @@
 // src/lab/sdf-zombie/extent.ts
-import type { Primitive, Vec3 } from './types';
+import type { BoxParams, Primitive, Vec3 } from './types';
 import { bendCtrl, len, sub } from './vec';
+
+/**
+ * How far a primitive's surface reaches from its segment, in units of
+ * `radius`. A capsule reaches exactly `radius` in every direction, so 1; a
+ * rounded box reaches its CORNER, at `sqrt(3)*r*(1-round) + r*round` in the
+ * scale-divided frame.
+ *
+ * ONE function, used by every outer bound in the codebase (chunkExtent,
+ * assignClusters, fitSphere, shell-hull-outer), because four copies of this
+ * arithmetic is four chances to miss one — and an outer bound that
+ * under-covers a box does not draw a wrong shape, it CULLS, which presents as
+ * a round see-through hole and sends you hunting in webgpu/ for a bug that is
+ * here. Note this is the opposite risk from occluder-hull.ts, which builds an
+ * INNER hull and needs no change: a rounded box strictly contains the capsule
+ * of the same semi-axes.
+ */
+export function boxReach(box: BoxParams | undefined): number {
+  if (box === undefined) return 1;
+  return Math.sqrt(3) * (1 - box.round) + box.round;
+}
 
 /**
  * Furthest reach of a set of primitives from `origin` (same recipe as
@@ -17,7 +37,7 @@ export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   for (const p of prims) {
     if (p.op === 'sub') continue;
     const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    const rMax = Math.max(p.radius, p.radiusB ?? p.radius);
+    const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box);
     // A bent prim swings out to its ctrl — include it or the proxy box clips
     // the very horn that prompted the bend.
     const ends = p.bend === undefined

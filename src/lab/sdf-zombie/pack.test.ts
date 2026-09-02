@@ -1,13 +1,13 @@
 // src/lab/sdf-zombie/pack.test.ts
 import { describe, it, expect } from 'vitest';
-import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX } from './pack';
+import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, boundGroups } from './pack';
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
-import type { Vec3 } from './types';
+import type { Primitive, Vec3 } from './types';
 
 /** Packs into Float32Array, so expected values must be rounded to float32. */
 const f32 = (v: number) => Math.fround(v);
@@ -236,5 +236,17 @@ describe('bound groups (the fold cull unit)', () => {
       expect(p.groupRange[ci * 4 + 1]).toBe(c.count);
       expect(p.groupBounds[ci * 4 + 3]).toBeCloseTo(c.radius, 6);
     });
+  });
+
+  it("fitSphere (via boundGroups) covers a sharp box's corner, not just the capsule radius", () => {
+    // A lone dead-sharp box (round=0), radius 0.1, degenerate a===b so its
+    // own position is the group center. Corner reach = 0.1*sqrt(3) ~ 0.1732;
+    // a capsule of the same radius would only need 0.1.
+    const p: Primitive = {
+      a: [0, 0, 0], b: [0, 0, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0,
+      limb: 'torso', cluster: 0, box: { round: 0 },
+    };
+    const groups = boundGroups([p], 0, 1);
+    expect(groups[0]!.radius).toBeGreaterThanOrEqual(0.1 * Math.sqrt(3) - 1e-9);
   });
 });

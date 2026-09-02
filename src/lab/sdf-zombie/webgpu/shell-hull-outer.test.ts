@@ -142,6 +142,19 @@ describe('buildOuterHullInstances', () => {
     for (const c of b.clusters) c.alive = false;
     expect(buildOuterHullInstances([b])).toEqual([]);
   });
+
+  it('reaches a sharp box corner, not just the capsule radius', () => {
+    // radius 0.06, round 0 (dead-sharp): corner reach = sqrt(3)*0.06, vs a
+    // capsule's plain 0.06. blendK zeroed out so blendReach contributes
+    // nothing and the difference is attributable to the box term alone.
+    // Emitted sphere radius = reach * SPHERE_CHAIN_INFLATE.
+    const b = built([prim({ blendK: 0, box: { round: 0 } })]);
+    const hull = buildOuterHullInstances([b]);
+    const expectedReach = 0.06 * Math.sqrt(3);
+    expect(hull.length).toBeGreaterThan(0);
+    for (const s of hull)
+      expect(s.radius).toBeGreaterThanOrEqual(expectedReach * SPHERE_CHAIN_INFLATE - 1e-9);
+  });
 });
 
 describe('containment on the SHIPPED zombie', () => {

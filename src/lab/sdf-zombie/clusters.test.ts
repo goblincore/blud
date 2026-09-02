@@ -71,3 +71,17 @@ it('fits bounds to solid primitives only, ignoring carves', () => {
   // The carve still belongs to the cluster's contiguous run — fold order intact.
   expect(withCarve.clusters[0]!.count).toBe(2);
 });
+
+it('grows the cluster bounding sphere to cover a sharp box corner, not just the capsule radius', () => {
+  // A single dead-sharp box (round=0) at the origin: its corner sits at
+  // 0.1*sqrt(3) from its own center, which is also the cluster center for a
+  // single degenerate (a===b) prim. A capsule of the same radius would only
+  // need 0.1.
+  const boxPrim = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3,
+    radius: 0.1, scale: [1, 1, 1] as Vec3, blendK: 0, limb: 'head' as const,
+    box: { round: 0 },
+  };
+  const built = assignClusters([boxPrim]);
+  expect(built.clusters[0]!.radius).toBeGreaterThanOrEqual(0.1 * Math.sqrt(3) - 1e-9);
+});

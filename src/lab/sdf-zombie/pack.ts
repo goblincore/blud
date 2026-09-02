@@ -2,6 +2,7 @@
 import type { BuiltBody, Primitive } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
+import { boxReach } from './extent';
 
 export const PRIM_STRIDE = 4;    // vec4
 export const CLUSTER_STRIDE = 4; // vec4
@@ -304,7 +305,7 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
   const center: [number, number, number] = [sum[0] / pts, sum[1] / pts, sum[2] / pts];
   let radius = 0;
   for (const p of fitTo) {
-    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(p.scale[0], p.scale[1], p.scale[2])
+    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * Math.max(p.scale[0], p.scale[1], p.scale[2])
       + (p.shell ? p.shell.thickness : 0);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:
