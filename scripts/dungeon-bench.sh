@@ -14,6 +14,9 @@
 #
 #   LAB_VITE_PORT=5279 LAB_CDP_PORT=9279 scripts/dungeon-bench.sh
 #
+# BENCH_LEGS=dungeon|wounds (default dungeon — the original gate, invocation
+# unchanged). 'wounds' runs the wound-pass-r2 measurement legs: wounds-off /
+# wounds-no-bone / wounds-bone, spec §4 gate 7 — a MEASUREMENT, not a gate.
 # BENCH_REPEATS (default 3) tunes the repeat count; legs alternate across
 # repeats. Writes docs/dev-notes/2026-09-01-dungeon-relight/baselines.json
 # (+ bench.md) unless BENCH_OUT overrides. Keep the machine quiet.

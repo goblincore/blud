@@ -1682,7 +1682,19 @@ async function main() {
     const yaw0 = player.yaw;
     const pitch0 = player.pitch;
     for (const cand of candidates) {
-      player.yaw = Math.atan2(cand.c[0] - eye[0], cand.c[2] - eye[2]);
+      // YAW CONVENTION: the page's forward is (sin yaw, −cos yaw) — camera
+      // lookAt (below), aimDir and muzzleWorld all agree — so facing a target
+      // at offset (dx, dz) is atan2(dx, −dz). walkTo (above) already did this
+      // right; these two bench sites had the z sign flipped since cdba91f,
+      // which mirrored the aim across the player's z plane. It only ever
+      // "worked" while bodies happened to sit near that plane; with the group
+      // fully on one side the bench faced a wall, benched an empty frustum
+      // and fired every shot into it (measured 2026-09-02: census 0, 0
+      // wounds, p50 1.5 ms). NOTE the aim search is still needed even with
+      // the sign right: the predictor simulates SLUG GRAVITY, so dead-on
+      // yaw/pitch at the torso can still miss low — try candidates, keep the
+      // first the predictor confirms.
+      player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
       player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
       if (predictSlugHitNow().actorId >= 0) return true;
     }
@@ -2351,7 +2363,10 @@ async function main() {
                   const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
                   player.pos = [px, 0, pz];
                   player.vel = [0, 0, 0];
-                  player.yaw = Math.atan2(tx - px, tz - pz);
+                  // atan2(dx, −dz): the page's forward is (sin yaw, −cos
+                  // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
+                  // (z-mirrored) since cdba91f.
+                  player.yaw = Math.atan2(tx - px, -(tz - pz));
                   player.pitch = 0;
                   player.grounded = true;
                 }

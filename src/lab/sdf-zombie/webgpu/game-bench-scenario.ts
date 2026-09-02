@@ -31,6 +31,7 @@
 // toggling spot.castShadow live crashes three r185 WebGPU (disposed shadow
 // map) and shadow.intensity=0 still RENDERS the map — it only zeroes the
 // sampling term, which would measure the wrong split.
+import { DEFAULT_BONE_RATIO } from '../bone-derive';
 import { DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 
 /** One thing the harness asks the page to do, between frames. */
@@ -169,14 +170,72 @@ export const DUNGEON_SCENARIOS = [
 
 export type DungeonScenarioName = (typeof DUNGEON_SCENARIOS)[number];
 
+// ---------------------------------------------------------------------------
+// WOUND BENCH LEGS — same firefight, three feature states (wound pass r2,
+// spec §4 gate 7). NOT a gate: a measurement. The bone fold may cost less
+// than the bench's 5–11% within-run spread; if the delta lands under the
+// spread the honest report is UNRESOLVED, and the amplitude guards
+// (woundDepthAmp 0 / woundFibreAmp 0 / boneRatio 0 — each restores the
+// previous shading bit-for-bit) are what contain the cost instead.
+// ---------------------------------------------------------------------------
+
+/** The wound-feature state a bench run runs under. Same separation as
+ *  LightingLeg: pure data — the driver applies it through the page's
+ *  setWoundTuning seam, nothing here touches the page.
+ *
+ *  WHY THE PIN. The lighting runs carried 8 bodies through the fire segment
+ *  in one run and 5 in another, and cross-run absolute numbers drift ~45% on
+ *  machine state alone (see docs/dev-notes/2026-09-01-wound-r2/
+ *  bench-baseline.md). Either drift can exceed the effect being measured, so
+ *  the legs carry the workload they bench as data, and the test fails if a
+ *  leg drifts from the others. */
+export interface WoundLeg {
+  /** Wound-creating shots the script schedules (the buckshot re-aims plus
+   *  the slug). Counted from the built script, not hardcoded, so editing the
+   *  fire schedule moves the pin — and fails the leg test — rather than
+   *  silently benching a different workload. The REALISED wound count still
+   *  varies with where the wanderers stand when the shots land; the runner
+   *  reports that census per leg. */
+  woundCount: number;
+  /** Zombies the room spawns (room 4 = 4). The on-screen census runs higher
+   *  — the ring's sightlines — and varies with the wander; the pin is the
+   *  population the workload is defined by, the same number every other
+   *  bench row records as `bodies`. */
+  bodyCount: number;
+  /** Tissue-depth ramp amplitude. 0 = the pre-r2 flat lerp. */
+  woundDepthAmp: number;
+  /** Derived-bone ratio. 0 = no bone geometry, the fold never runs. */
+  boneRatio: number;
+}
+
+export interface WoundBenchScenario extends Scenario, WoundLeg {
+  name: WoundScenarioName;
+}
+
+export const WOUND_SCENARIOS = [
+  'wounds-off',
+  'wounds-no-bone',
+  'wounds-bone',
+] as const;
+
+export type WoundScenarioName = (typeof WOUND_SCENARIOS)[number];
+
 // Room 4 (four zombies) for every leg: the worst case is what a frame budget
 // is about, and a shared room keeps the three columns comparable.
 const LEG_ROOM = 4;
 
 /** The named lighting legs. Every call rebuilds the firefight so no leg can
  *  be mutated in place through the shared object. */
-export function scenarioByName(name: DungeonScenarioName): BenchScenario {
+export function scenarioByName(name: DungeonScenarioName): BenchScenario;
+export function scenarioByName(name: WoundScenarioName): WoundBenchScenario;
+export function scenarioByName(
+  name: DungeonScenarioName | WoundScenarioName,
+): BenchScenario | WoundBenchScenario {
   const base = buildFirefight({ room: LEG_ROOM });
+  // The wound legs' workload pin, counted from THIS script (see WoundLeg).
+  const woundShots = base.steps.filter(
+    s => s.action.kind === 'fire' || s.action.kind === 'fireSlug',
+  ).length;
   switch (name) {
     case 'dungeon-off':
       // Off-state parity: the gallery's own rig, no flashlight, no shadows.
@@ -188,6 +247,18 @@ export function scenarioByName(name: DungeonScenarioName): BenchScenario {
     case 'dungeon-shadow':
       // What ships.
       return { ...base, name, rig: DUNGEON_RIG, flashlight: true, castShadow: true };
+    case 'wounds-off':
+      // Pre-r2 state: every r2 amplitude at 0. The driver additionally
+      // zeroes woundFibreAmp on this leg — fibre never ran on standing
+      // bodies before r2, so the off leg must ablate it too.
+      return { ...base, name, woundCount: woundShots, bodyCount: LEG_ROOM, woundDepthAmp: 0, boneRatio: 0 };
+    case 'wounds-no-bone':
+      // Full r2 shading, bone geometry ablated — the baseline the fold's
+      // cost is measured against.
+      return { ...base, name, woundCount: woundShots, bodyCount: LEG_ROOM, woundDepthAmp: 1, boneRatio: 0 };
+    case 'wounds-bone':
+      // What ships: r2 shading plus derived bone at the doc's default ratio.
+      return { ...base, name, woundCount: woundShots, bodyCount: LEG_ROOM, woundDepthAmp: 1, boneRatio: DEFAULT_BONE_RATIO };
   }
 }
 
