@@ -402,30 +402,23 @@ export interface TriMaskOpts {
  * `maskFromBody` unions a kit with, exposed so a reference MESH (a .glb
  * through parseGlb + gltfTriangles) can be the thing a .blob is scored
  * against. Same axes as maskFromBody.
+ *
+ * Runs the coverage rasteriser fillTriangle has always been — NOT
+ * fillTriangleDepth. Every existing silhouette score reads this mask, and
+ * the bit-identical test pins depthFromTriangles to it; one shared raster
+ * would set that test comparing a raster with itself and prove nothing.
  */
-/** The mask, frame and depth of one triangle-soup raster — the triangle-side
- *  twin of bodyRaster. maskFromTriangles keeps only the mask;
- *  depthFromTriangles keeps mask and depth. Framing both from ONE raster is
- *  what makes their agreement structural rather than a coincidence of two
- *  implementations that could drift. */
-function triRaster(tris: Float32Array, opts: TriMaskOpts): { mask: Mask; frame: Frame; depth: Float32Array } | null {
+export function maskFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): Mask {
   const view = opts.view ?? 'front';
   const heightPx = opts.heightPx ?? 256;
   const pad = opts.pad ?? 0.02;
-  if (tris.length < 9) return null;
+  if (tris.length < 9) return { w: 1, h: 1, bits: new Uint8Array(1) };
   const box = emptyBox();
   growByTriangles(box, tris);
   const f = frameOf(box, view, pad, heightPx);
   const bits = new Uint8Array(f.w * f.h);
-  // The depth ride-along costs one NaN fill per raster, nothing against the
-  // triangle scan, and maskFromTriangles pays it too — see triRaster's doc.
-  const depth = new Float32Array(f.w * f.h).fill(NaN);
-  rasterTriangles(bits, tris, f, depth);
-  return { mask: { w: f.w, h: f.h, bits }, frame: f, depth };
-}
-
-export function maskFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): Mask {
-  return triRaster(tris, opts)?.mask ?? { w: 1, h: 1, bits: new Uint8Array(1) };
+  rasterTriangles(bits, tris, f);
+  return { w: f.w, h: f.h, bits };
 }
 
 export interface TriDepth { mask: Mask; depth: Float32Array }
@@ -434,16 +427,29 @@ export interface TriDepth { mask: Mask; depth: Float32Array }
  * Triangle-soup raster WITH the per-pixel depth the silhouette path discards.
  * `depth` is NaN wherever the mask is 0.
  *
- * Unlike the body march — whose first hit IS the depth, so recording `t` was
- * enough — triangles arrive in arbitrary order, so this needs a real
- * z-buffer: nearest wins per pixel (fillTriangleDepth).
+ * Unlike the body march — whose first hit IS the depth, so recording `t` cost
+ * nothing — triangles arrive in arbitrary order, so depth resolution is a
+ * real z-buffer (fillTriangleDepth): extra work per pixel that the
+ * coverage-only path must never pay. That split is also why this frames its
+ * own raster instead of riding along inside maskFromTriangles: the two agree
+ * on coverage BY TEST, not by construction.
  */
 export function depthFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): TriDepth {
-  const r = triRaster(tris, opts);
-  if (r) return { mask: r.mask, depth: r.depth };
-  // Same degenerate shape maskFromTriangles falls back to, extended with a
-  // NaN depth — no triangles, no surface, no depth anywhere.
-  return { mask: { w: 1, h: 1, bits: new Uint8Array(1) }, depth: new Float32Array(1).fill(NaN) };
+  const view = opts.view ?? 'front';
+  const heightPx = opts.heightPx ?? 256;
+  const pad = opts.pad ?? 0.02;
+  if (tris.length < 9) {
+    // Same degenerate shape maskFromTriangles falls back to, extended with a
+    // NaN depth — no triangles, no surface, no depth anywhere.
+    return { mask: { w: 1, h: 1, bits: new Uint8Array(1) }, depth: new Float32Array(1).fill(NaN) };
+  }
+  const box = emptyBox();
+  growByTriangles(box, tris);
+  const f = frameOf(box, view, pad, heightPx);
+  const bits = new Uint8Array(f.w * f.h);
+  const depth = new Float32Array(f.w * f.h).fill(NaN);
+  rasterTriangles(bits, tris, f, depth);
+  return { mask: { w: f.w, h: f.h, bits }, depth };
 }
 
 /** The mask, the frame it was taken in, AND the per-pixel hit depth.

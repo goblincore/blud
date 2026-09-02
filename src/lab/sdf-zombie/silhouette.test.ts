@@ -416,14 +416,19 @@ describe('depthFromTriangles', () => {
   });
 
   it('is NaN off the subject, finite on it', () => {
-    const { mask, depth } = depthFromTriangles(new Float32Array(quad(0.3)), { view: 'front', heightPx: 32, pad: 0 });
+    // DEFAULT pad, deliberately not 0: with pad 0 the frame IS the subject's
+    // bounding box, every pixel is covered, and the NaN half of this
+    // assertion never executes — a zero-filled buffer passes (caught by
+    // mutation M2). `checked` pins that the NaN branch actually ran.
+    const { mask, depth } = depthFromTriangles(new Float32Array(quad(0.3)), { view: 'front', heightPx: 32 });
     expect(depth.length).toBe(mask.w * mask.h);
-    let occupied = 0;
+    let occupied = 0, checked = 0;
     for (let i = 0; i < depth.length; i++) {
       if (mask.bits[i]) { occupied++; expect(Number.isFinite(depth[i]!)).toBe(true); }
-      else expect(Number.isNaN(depth[i]!)).toBe(true);
+      else { checked++; expect(Number.isNaN(depth[i]!)).toBe(true); }
     }
     expect(occupied).toBeGreaterThan(0);
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('leaves maskFromTriangles bit-identical', () => {
