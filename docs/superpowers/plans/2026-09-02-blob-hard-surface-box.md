@@ -25,6 +25,14 @@ It is frozen per owner decision and only `zombie.ts` consumes it; bent and
 oriented prims already diverge there, so a box joins a documented list rather
 than opening a new one. A box will simply not render on the old WebGL lab path.
 
+**Between Task 3 and Task 6 the field is deliberately INCONSISTENT.** Task 3
+lands the box in the CPU field; nothing packs or draws it on the GPU until
+Tasks 5-6. So a `box` prim authored in that window computes a box surface for
+click-to-shoot while drawing as a plain capsule. No shipped character uses
+`box`, so this is latent rather than active — but do not author one into a real
+character file until Task 6 is green, and do not "fix" the capsule rendering
+you see in between.
+
 **The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are FOUR outer-bound sites that must account for it. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
 
 **Fixture grammar, confirmed against `blob-parse.test.ts`'s own `SKEL` during
@@ -343,10 +351,21 @@ In `src/lab/sdf-zombie/validate.ts`, add above `sdPrimitive`:
 ```ts
 /**
  * Rounded box. `e` is the half-extent BEFORE rounding and `r` the corner
- * radius; the caller insets `e` by `r` so the total half-extent is unchanged.
- * Mirrors sdRoundBox in march.wgsl.ts exactly — edit both in the same commit
- * or click-to-shoot drifts from what is drawn.
+ * radius; the caller insets `e` by `r` so the total half-extent is unchanged
+ * (`e + r === radius`).
+ *
+ * NO WGSL TWIN YET — Task 6 owns adding a matching `sdRoundBox` to
+ * march.wgsl.ts, bit-for-bit, including the `* minScale` the caller applies.
+ * Until then a `box` prim draws as a plain CAPSULE on the GPU while this
+ * function computes the box surface, so click-to-shoot would disagree with
+ * what is drawn. When the twin lands, this becomes the usual "edit both in
+ * the same commit" warning.
  */
+
+DO NOT copy `sdShellWrap`'s "Mirrors ... exactly" wording here. It is true for
+the shell (its twin landed in the same commit) and FALSE for the box until
+Task 6. A comment that cannot distinguish "not built yet" from "already
+drifted" is worse than no comment — this cost a review round on 2026-09-02.
 function sdRoundBox(p: Vec3, e: Vec3, r: number): number {
   const qx = Math.abs(p[0]) - e[0];
   const qy = Math.abs(p[1]) - e[1];
@@ -696,7 +715,16 @@ In `sdPrim` (and `sdPrimO`, which shares the tail), insert the box branch immedi
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts -t "box in the shader"`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Run the whole suite**
+- [ ] **Step 5: Retire the "no WGSL twin yet" note**
+
+Task 3 left a deliberate note on `sdRoundBox` in `validate.ts` saying the twin
+does not exist and that a box draws as a capsule until this task lands. That is
+now false — rewrite it as the standard pairing warning the other twinned
+functions carry, e.g. "Mirrors `sdRoundBox` in march.wgsl.ts exactly — edit both
+in the same commit or click-to-shoot drifts from what is drawn." Leaving the
+stale note is how the next author concludes the GPU path is still missing.
+
+- [ ] **Step 6: Run the whole suite**
 
 Run: `npx vitest run src/lab/sdf-zombie/`
 Expected: PASS, no regressions.
@@ -704,10 +732,10 @@ Expected: PASS, no regressions.
 Run: `npx tsc --noEmit`
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts
+git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/validate.ts
 git commit -m "blob: sdRoundBox in the shader, mirroring the CPU field"
 ```
 
