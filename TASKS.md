@@ -50,12 +50,39 @@ wound pops, gait stop-motion).
   ribcage reads as "a big white central pillar" (it IS a slab — one `bar` on
   spine at `wide=1.45` plus per-prim derived twins; needs real rib prims and
   one-bone-per-RIG-BONE derivation instead of per-prim), and the skull is a
-  small round ball with no jaw. **Owner wants organs/entrails exposed on body
-  shots** — the ramp is a WALL model (right for a limb, wrong for a torso,
-  which is mostly cavity); needs its own brainstorm.
+  small round ball with no jaw. The "organs/entrails exposed on body shots"
+  ask is now its own feature — see `X1.entrails` (built on this branch).
   [spec](docs/superpowers/specs/2026-09-01-wound-pass-r2-design.md) ·
   [plan](docs/superpowers/plans/2026-09-01-wound-pass-r2.md) ·
   [note](docs/dev-notes/2026-09-01-wound-r2/notes.md)
+
+- `X1.entrails` [~] **Cavity viscera + gut ropes — BUILT, 8/8 dispatch tasks
+  done on `dispatch/2026-09-02-entrails-task-8`, awaiting owner playtest**
+  (2026-09-02, NOT merged). Torso slug/blast wounds open a CAVITY (per-wound
+  flag set at stamp time, new wound row `ROW_WOUND_FLAGS`) that gates a
+  torso-only viscera stop on the tissue ramp, and — rolled per hit
+  (`spillChance` slug 0.35 / blast pinned 1.0, seeded `bleedRng`) — spawn a
+  verlet gut rope (`entrails.ts`, 10 nodes / 0.55 m, one per body, pinned to
+  the wound's emit point so it rides the gait) drawn as `kind: 'gut'`
+  droplets through the existing goo metaball pass; second qualifying hit or
+  collapse tears it free, it falls, settles and freezes. Panel knobs:
+  viscera, cavity knee, gut thickness, spill chance. Gates 1–3 green
+  (off-state parity, determinism, rope cap — all mutation-checked); captures:
+  rope reads unmistakably at 2.4 m under the beam, tear+fall verified
+  (found+fixed: torn-from-rest ropes froze mid-air — settle metric summed
+  carried velocity only); **viscera tint itself NOT discernible at 1.8 m** on
+  the zombie — the bone plug claims the crater floor just past the viscera
+  knee, so look-strength (darker/shallower/deferred tint) is an owner call.
+  Bench UNRESOLVED (+0.8%, spread 4–10%) — and goo's first-ever baseline
+  exists: 10.21 ms p50, room-4 firefight. **Found+fixed en route: the slug
+  spill roll was DEAD CODE** — `shouldSpill` keyed on `wound.type` but slugs
+  stamp `type: 'blast'` (blast crater profile), so every torso slug spilled
+  at the blast pin; now a stamp-time `Wound.spillCalibre` marker. RULE: never
+  key slug-vs-blast behaviour on `wound.type`.
+  [spec](docs/superpowers/specs/2026-09-02-entrails-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-02-entrails.md) (branch
+  `claude/continue-previous-work-91055b`) ·
+  [note](docs/dev-notes/2026-09-02-entrails/notes.md)
 
 - `X1.zombie-behaviour` [ ] **Zombies never attack, and they clump/clip**
   (owner ask 2026-09-02, for a later session). Two halves: they should attack

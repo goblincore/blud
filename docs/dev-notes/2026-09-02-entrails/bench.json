@@ -1,0 +1,619 @@
+{
+  "baselines": {
+    "goo-base": {
+      "runs": 3,
+      "p50": 10.21,
+      "p95": 12.61,
+      "fireP50": 9.93,
+      "walkP50": 12.36,
+      "ropes": 0,
+      "gutDroplets": 0
+    },
+    "guts-all": {
+      "runs": 3,
+      "p50": 10.29,
+      "p95": 13.41,
+      "fireP50": 10.29,
+      "walkP50": 13.09,
+      "ropes": 4,
+      "gutDroplets": 40
+    }
+  },
+  "deltaPct": 0.8,
+  "spread": {
+    "goo-base": {
+      "lo": 10.1,
+      "hi": 10.51,
+      "pct": 4
+    },
+    "guts-all": {
+      "lo": 10.27,
+      "hi": 11.25,
+      "pct": 10
+    }
+  },
+  "verdict": "UNRESOLVED (delta under within-run spread)",
+  "room": 4,
+  "repeats": 3,
+  "results": [
+    {
+      "rep": 0,
+      "leg": "goo-base",
+      "mode": "throughput",
+      "label": "goo-base",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 10.210000002384186,
+        "p95": 12.729999995231628,
+        "p99": 32.47999999523163,
+        "max": 32.47999999523163,
+        "mean": 11.469166666269306
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 12.360000002384187,
+          "p95": 32.47999999523163,
+          "p99": 32.47999999523163,
+          "max": 32.47999999523163,
+          "mean": 14.023333332935968,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 9.92999999523163,
+          "p95": 12.129999995231628,
+          "p99": 12.129999995231628,
+          "max": 12.129999995231628,
+          "mean": 10.33249999980132,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 9,
+              "wounds": 14,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 9.879999995231628,
+          "p95": 11.4,
+          "p99": 11.4,
+          "max": 11.4,
+          "mean": 10.051666666070622,
+          "census": {
+            "first": {
+              "bodies": 9,
+              "wounds": 14,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 9,
+              "wounds": 15,
+              "chunks": 0
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 9,
+      "staged": {
+        "ropes": 0,
+        "droplets": 0,
+        "bodies": 0
+      },
+      "gutsAtEnd": {
+        "ropes": 0,
+        "attached": 0
+      }
+    },
+    {
+      "rep": 0,
+      "leg": "guts-all",
+      "mode": "throughput",
+      "label": "guts-all",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 10.270000004768372,
+        "p95": 13.180000007152557,
+        "p99": 13.229999995231628,
+        "max": 13.229999995231628,
+        "mean": 10.133888889021344
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 13.089999997615815,
+          "p95": 13.229999995231628,
+          "p99": 13.229999995231628,
+          "max": 13.229999995231628,
+          "mean": 12.999166667461395,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 6,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 6,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 10.270000004768372,
+          "p95": 13.180000007152557,
+          "p99": 13.180000007152557,
+          "max": 13.180000007152557,
+          "mean": 10.32166666686535,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 6,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 3,
+              "wounds": 25,
+              "chunks": 2
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 6.929999995231628,
+          "p95": 8.85,
+          "p99": 8.85,
+          "max": 8.85,
+          "mean": 7.080833332737286,
+          "census": {
+            "first": {
+              "bodies": 3,
+              "wounds": 25,
+              "chunks": 2
+            },
+            "last": {
+              "bodies": 3,
+              "wounds": 26,
+              "chunks": 2
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 7,
+      "staged": {
+        "ropes": 4,
+        "bodies": 4,
+        "droplets": 40,
+        "spillKeep": 0.35,
+        "limbStamps": 2,
+        "skipped": [],
+        "maxAttachedPerBody": 1,
+        "attachedTotal": 4
+      },
+      "gutsAtEnd": {
+        "ropes": 4,
+        "attached": 2
+      }
+    },
+    {
+      "rep": 1,
+      "leg": "goo-base",
+      "mode": "throughput",
+      "label": "goo-base",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 10.510000002384185,
+        "p95": 12.610000002384187,
+        "p99": 32.080000007152556,
+        "max": 32.080000007152556,
+        "mean": 11.417499999867545
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 12.15,
+          "p95": 32.080000007152556,
+          "p99": 32.080000007152556,
+          "max": 32.080000007152556,
+          "mean": 13.850833333532016,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 9.869999992847443,
+          "p95": 12.020000004768372,
+          "p99": 12.020000004768372,
+          "max": 12.020000004768372,
+          "mean": 10.236666666467986,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 9,
+              "wounds": 14,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 10.1,
+          "p95": 11.25,
+          "p99": 11.25,
+          "max": 11.25,
+          "mean": 10.164999999602637,
+          "census": {
+            "first": {
+              "bodies": 9,
+              "wounds": 14,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 9,
+              "wounds": 15,
+              "chunks": 0
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 9,
+      "staged": {
+        "ropes": 0,
+        "droplets": 0,
+        "bodies": 0
+      },
+      "gutsAtEnd": {
+        "ropes": 0,
+        "attached": 0
+      }
+    },
+    {
+      "rep": 1,
+      "leg": "guts-all",
+      "mode": "throughput",
+      "label": "guts-all",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 11.25,
+        "p95": 13.410000002384185,
+        "p99": 13.939999997615814,
+        "max": 13.939999997615814,
+        "mean": 9.924444444643127
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 13.089999997615815,
+          "p95": 13.410000002384185,
+          "p99": 13.410000002384185,
+          "max": 13.410000002384185,
+          "mean": 13.01416666607062,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 4,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 4,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 11.25,
+          "p95": 13.939999997615814,
+          "p99": 13.939999997615814,
+          "max": 13.939999997615814,
+          "mean": 10.519166667262713,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 4,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 3,
+              "wounds": 23,
+              "chunks": 2
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 6.009999990463257,
+          "p95": 8.65,
+          "p99": 8.65,
+          "max": 8.65,
+          "mean": 6.240000000596047,
+          "census": {
+            "first": {
+              "bodies": 3,
+              "wounds": 23,
+              "chunks": 2
+            },
+            "last": {
+              "bodies": 3,
+              "wounds": 24,
+              "chunks": 2
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 7,
+      "staged": {
+        "ropes": 4,
+        "bodies": 4,
+        "droplets": 40,
+        "spillKeep": 0.35,
+        "limbStamps": 0,
+        "skipped": [],
+        "maxAttachedPerBody": 1,
+        "attachedTotal": 4
+      },
+      "gutsAtEnd": {
+        "ropes": 4,
+        "attached": 2
+      }
+    },
+    {
+      "rep": 2,
+      "leg": "goo-base",
+      "mode": "throughput",
+      "label": "goo-base",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 10.1,
+        "p95": 12.569999992847443,
+        "p99": 31.85,
+        "max": 31.85,
+        "mean": 11.421666666865347
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 12.4,
+          "p95": 31.85,
+          "p99": 31.85,
+          "max": 31.85,
+          "mean": 13.911666667461395,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 9.92999999523163,
+          "p95": 12.159999990463257,
+          "p99": 12.159999990463257,
+          "max": 12.159999990463257,
+          "mean": 10.336666666467986,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 0,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 9,
+              "wounds": 14,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 9.92999999523163,
+          "p95": 11.310000002384186,
+          "p99": 11.310000002384186,
+          "max": 11.310000002384186,
+          "mean": 10.016666666666666,
+          "census": {
+            "first": {
+              "bodies": 9,
+              "wounds": 14,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 9,
+              "wounds": 15,
+              "chunks": 0
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 9,
+      "staged": {
+        "ropes": 0,
+        "droplets": 0,
+        "bodies": 0
+      },
+      "gutsAtEnd": {
+        "ropes": 0,
+        "attached": 0
+      }
+    },
+    {
+      "rep": 2,
+      "leg": "guts-all",
+      "mode": "throughput",
+      "label": "guts-all",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 10.289999997615814,
+        "p95": 13.5,
+        "p99": 13.710000002384186,
+        "max": 13.710000002384186,
+        "mean": 9.917500000198679
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 13.15,
+          "p95": 13.5,
+          "p99": 13.5,
+          "max": 13.5,
+          "mean": 13.14499999980132,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 4,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 4,
+              "chunks": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 10.289999997615814,
+          "p95": 13.710000002384186,
+          "p99": 13.710000002384186,
+          "max": 13.710000002384186,
+          "mean": 10.41083333392938,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 4,
+              "chunks": 0
+            },
+            "last": {
+              "bodies": 3,
+              "wounds": 23,
+              "chunks": 2
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 6.020000004768372,
+          "p95": 8.32000000476837,
+          "p99": 8.32000000476837,
+          "max": 8.32000000476837,
+          "mean": 6.196666666865348,
+          "census": {
+            "first": {
+              "bodies": 3,
+              "wounds": 23,
+              "chunks": 2
+            },
+            "last": {
+              "bodies": 3,
+              "wounds": 24,
+              "chunks": 2
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 7,
+      "staged": {
+        "ropes": 4,
+        "bodies": 4,
+        "droplets": 40,
+        "spillKeep": 0.35,
+        "limbStamps": 0,
+        "skipped": [],
+        "maxAttachedPerBody": 1,
+        "attachedTotal": 4
+      },
+      "gutsAtEnd": {
+        "ropes": 4,
+        "attached": 2
+      }
+    }
+  ]
+}

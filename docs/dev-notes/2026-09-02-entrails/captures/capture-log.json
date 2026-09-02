@@ -1,0 +1,666 @@
+{
+  "tuning0": {
+    "woundDepthAmp": 1,
+    "fatDepth": 0.004,
+    "muscleDepth": 0.014,
+    "boneRatio": 0.38,
+    "visceraAmp": 1,
+    "visceraDepth": 0.045,
+    "gutSize": 0.3,
+    "spillChance": 0.35,
+    "surfCfg3": [
+      1,
+      0.004,
+      0.014,
+      1
+    ]
+  },
+  "tuningStaged": 1,
+  "picked": {
+    "z": {
+      "id": 1,
+      "room": 1,
+      "pos": [
+        -3.8051223604622813,
+        0,
+        -3.6990195020225585
+      ]
+    },
+    "eye": {
+      "x": -3.8051223604622813,
+      "z": -1.2990195020225586,
+      "yaw": 0,
+      "pitch": -0.23317980064681645
+    },
+    "pred": {
+      "origin": [
+        -3.605122360462281,
+        1.5,
+        -0.7990195020225586
+      ],
+      "dir": [
+        -0.023628675379768715,
+        -0.20422021303175017,
+        -0.9786397653319959
+      ],
+      "actorId": 1,
+      "hit": [
+        -3.6737162820237317,
+        0.8814282140352168,
+        -3.6400056436992325
+      ]
+    }
+  },
+  "stamp": {
+    "actorId": 1,
+    "predicted": [
+      -3.6737162820237317,
+      0.8814282140352168,
+      -3.6400056436992325
+    ],
+    "stamped": [
+      -3.6733501606213634,
+      0.9103141348708214,
+      -3.6248418244186973
+    ],
+    "missCm": 3.2626245303050423
+  },
+  "guts0": [
+    {
+      "id": 1,
+      "room": 1,
+      "phase": "standing",
+      "none": false,
+      "attached": true,
+      "settled": false,
+      "nodes": 10,
+      "head": [
+        -3.6733501606213634,
+        0.9103141348708214,
+        -3.6248418244186973
+      ],
+      "tail": [
+        -3.6733501606213634,
+        0.07879011716501629,
+        -3.6248418244186973
+      ],
+      "droplets": 10,
+      "woundCavity": true
+    },
+    {
+      "id": 2,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 3,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 4,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 5,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 6,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 7,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 8,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 9,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 10,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    }
+  ],
+  "wound": [
+    {
+      "type": "blast",
+      "cavity": true,
+      "spillCalibre": "slug",
+      "radius": 0.16
+    }
+  ],
+  "gutsHang": [
+    {
+      "id": 1,
+      "room": 1,
+      "phase": "standing",
+      "none": false,
+      "attached": true,
+      "settled": false,
+      "nodes": 10,
+      "head": [
+        -3.6733501606213634,
+        0.9103141348708214,
+        -3.6248418244186973
+      ],
+      "tail": [
+        -3.6733501606213634,
+        0.4673345696852852,
+        -3.6248418244186973
+      ],
+      "droplets": 10,
+      "woundCavity": true
+    },
+    {
+      "id": 2,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 3,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 4,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 5,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 6,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 7,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 8,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 9,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 10,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    }
+  ],
+  "hang": {
+    "id": 1,
+    "room": 1,
+    "phase": "standing",
+    "none": false,
+    "attached": true,
+    "settled": false,
+    "nodes": 10,
+    "head": [
+      -3.6733501606213634,
+      0.9103141348708214,
+      -3.6248418244186973
+    ],
+    "tail": [
+      -3.6733501606213634,
+      0.4673345696852852,
+      -3.6248418244186973
+    ],
+    "droplets": 10,
+    "woundCavity": true,
+    "spanM": 0.44297956518553616
+  },
+  "tear": {
+    "stamped": [
+      -3.6733501606213634,
+      0.9103141348708214,
+      -3.6248418244186973
+    ]
+  },
+  "gutsTear": [
+    {
+      "id": 1,
+      "room": 1,
+      "phase": "standing",
+      "none": false,
+      "attached": false,
+      "settled": false,
+      "nodes": 10,
+      "head": [
+        -3.6733501606213634,
+        0.8834723869502928,
+        -3.6248418244186973
+      ],
+      "tail": [
+        -3.6733501606213634,
+        0.45829478844942517,
+        -3.6248418244186973
+      ],
+      "droplets": 10,
+      "woundCavity": true
+    },
+    {
+      "id": 2,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 3,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 4,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 5,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 6,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 7,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 8,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 9,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 10,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    }
+  ],
+  "gutsFallen": [
+    {
+      "id": 1,
+      "room": 1,
+      "phase": "standing",
+      "none": false,
+      "attached": false,
+      "settled": true,
+      "nodes": 10,
+      "head": [
+        -3.6733501606213634,
+        0.4716579078211458,
+        -3.6248418244186973
+      ],
+      "tail": [
+        -3.6733501606213634,
+        0.05784838792743863,
+        -3.6248418244186973
+      ],
+      "droplets": 10,
+      "woundCavity": true
+    },
+    {
+      "id": 2,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 3,
+      "room": 2,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 4,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 5,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 6,
+      "room": 3,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 7,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 8,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 9,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    },
+    {
+      "id": 10,
+      "room": 4,
+      "phase": "standing",
+      "none": true,
+      "attached": false,
+      "settled": false,
+      "nodes": 0,
+      "head": null,
+      "tail": null,
+      "droplets": 0,
+      "woundCavity": null
+    }
+  ],
+  "fallenSettled": true
+}
