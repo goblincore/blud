@@ -660,15 +660,23 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
 // The far-side white sheets the 2026-08-23 gates were chasing turned out to
 // be the tracer overshoot bug (fixed at the retract guard above): with rays
 // no longer landing inside the body, the ungated mask is safe again.
-export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec2<f32> {
+export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec3<f32> {
   var m = 0.0;
+  var cav = 0.0;
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
-    m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));
+    let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz));
+    m = max(m, contribution);
+    // Cavity-ness (entrails, 2026-09-02): the SAME radial footprint,
+    // accumulated only over wounds whose flags row says the hit opened a
+    // cavity. Deliberately NOT a second footprint — a second mask edge is
+    // how the 2026-08-23 halo happened.
+    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0);
+    if (flags.x > 0.5) { cav = max(cav, contribution); }
   }
-  return vec2<f32>(m, m);
+  return vec3<f32>(m, m, cav);
 }`
 
 // Tissue colour by depth beneath the ORIGINAL skin — the signal `carved`
@@ -681,7 +689,7 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
 //
 // The fat band is the load-bearing stop. It is the cue that says "opened"
 // rather than "stained", and a single base->deep lerp has no way to express it.
-export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3<f32>, fatColor: vec3<f32>, deepColor: vec3<f32>, fatDepth: f32, muscleDepth: f32) -> vec3<f32> {
+export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3<f32>, fatColor: vec3<f32>, deepColor: vec3<f32>, fatDepth: f32, muscleDepth: f32, cavity: f32, visceraColor: vec3<f32>, visceraDepth: f32) -> vec3<f32> {
   let dermis = mix(baseColor, deepColor, 0.5);
   let clot = deepColor * 0.45;
   let toFat = smoothstep(0.0, fatDepth, depth);
@@ -689,7 +697,11 @@ export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3
   let toClot = smoothstep(muscleDepth, muscleDepth * 2.5, depth);
   var c = mix(dermis, fatColor, toFat);
   c = mix(c, deepColor, toMuscle);
-  return mix(c, clot, toClot);
+  c = mix(c, clot, toClot);
+  // Cavity. Gated on 'cavity' (this pixel is inside a wound that opened one),
+  // NOT on depth alone — a deep limb wound is still a wall of meat.
+  let toViscera = smoothstep(muscleDepth, visceraDepth, depth) * cavity;
+  return mix(c, visceraColor, toViscera);
 }`;
 
 // 0 unburned, 1 fully charred.
@@ -1237,9 +1249,13 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //   surfCfg    x specIntensity, y specRoughness, z fresnelBoost, w translucency
 //   surfCfg2   x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale
 //   surfCfg3   x woundDepthAmp (0 = ramp off, shades as before), y fatDepth,
-//              z muscleDepth, w SPARE (was woundFibreAmp, cut 2026-09-02)
+//              z muscleDepth, w visceraAmp (0 = viscera stop off; was SPARE
+//              after the torn-fibre pass was cut 2026-09-02)
 //   mottleColor  the colour the mottle mixes toward (linear RGB)
 //   fatColor   subcutaneous fat for the wound tissue ramp (linear RGB)
+//   visceraColor  cavity interior for the viscera stop (linear RGB); darker
+//              than deepColor so it separates by VALUE — combat range
+//   visceraDepth  depth at which muscle gives way to cavity, metres
 //   faceCfg    x enabled, y strength, z forward (+1/-1), w relief
 //   faceCfg2   x projMode (0 planar, 1 spherical), y mean, z glowThreshold,
 //              w glowStrength
@@ -1313,6 +1329,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   mottleColor: vec3<f32>,
   fatColor: vec3<f32>,
   boneColor: vec3<f32>,
+  visceraColor: vec3<f32>,
+  visceraDepth: f32,
   faceCfg: vec4<f32>,
   faceCfg2: vec4<f32>,
   faceCfg3: vec4<f32>,
@@ -1778,6 +1796,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
+  let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
   let cm = charMask(p, data, woundCfg);
   // Tissue depth rides mapBody's .w (the PRE-wound field). The ramp chooses
   // WHICH colour the wounded end of the lerp reaches for; wm remains the
@@ -1785,7 +1804,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // makes the ramp halo-safe by construction: at wm = 0 nothing it computes
   // can reach the albedo, so it has no edge to disagree with the mask's.
   //
-  // surfCfg3 = (woundDepthAmp, fatDepth, muscleDepth, spare); the
+  // surfCfg3 = (woundDepthAmp, fatDepth, muscleDepth, visceraAmp); the
   // select is the amplitude gate — woundDepthAmp 0 shades bit-for-bit as
   // before the ramp existed.
   //
@@ -1793,8 +1812,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // one mask into three and cost two days to the resulting halo; the note above
   // WOUND_MASK is the record.
   let tissueDepth = max(0.0, -hitField.w) * surfCfg3.x;
+  // Viscera (entrails): low-frequency fbm over the rest-space anchor lumps
+  // the cavity colour so it reads as organs and not as noise. Amplitude-
+  // guarded by visceraAmp (surfCfg3.w) folding into the cavity gate below —
+  // 0 leaves the ramp shading bit-for-bit as before entrails.
+  let lump = fbm(anchor * 2.5) * 0.5 + 0.5;
+  let viscera = visceraColor * mix(0.75, 1.25, lump);
   let tissue = select(deepColor,
-    tissueRamp(tissueDepth, baseColor, fatColor, deepColor, surfCfg3.y, surfCfg3.z),
+    tissueRamp(tissueDepth, baseColor, fatColor, deepColor, surfCfg3.y, surfCfg3.z,
+      wmCav * surfCfg3.w, viscera, visceraDepth),
     surfCfg3.x > 0.0);
   var albedo = mix(baseColor, tissue, wm);
 

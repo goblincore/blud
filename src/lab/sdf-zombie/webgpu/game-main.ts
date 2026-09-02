@@ -613,14 +613,16 @@ async function main() {
 
   /** Push the panel's tissue ramp into one view's surfCfg3. Component order
    *  is pinned by zombie-gpu's uniform table (x depthAmp, y fat, z muscle,
-   *  w spare) — the same order applyMaterial writes the material defaults,
-   *  so this is a re-apply, not a second writer with its own opinion. */
+   *  w visceraAmp) — the same order applyMaterial writes the material
+   *  defaults, so this is a re-apply, not a second writer with its own
+   *  opinion. w (visceraAmp) stays where applyMaterial left it until the
+   *  panel grows its own viscera knob (entrails task 7) — stamping 0 here
+   *  would silently kill the cavity stop in-game. */
   function applyWoundRamp(view: ZombieGpuView): void {
     const c = view.uniforms.surfCfg3.value;
     c.x = woundTuning.woundDepthAmp;
     c.y = woundTuning.fatDepth;
     c.z = woundTuning.muscleDepth;
-    c.w = 0;   // spare — the torn-fibre pass was cut (2026-09-02)
   }
 
   /** The applied tuning record plus body 1's live surfCfg3 — the shader

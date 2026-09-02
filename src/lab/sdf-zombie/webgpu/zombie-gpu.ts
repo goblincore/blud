@@ -252,10 +252,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     surfCfg: uniform(new THREE.Vector4(0.95, 0.12, 0.85, 0.45)),
     /** x wetness, y surfaceNoiseAmp, z mottleAmp, w mottleScale */
     surfCfg2: uniform(new THREE.Vector4(1.0, 0.06, 0, 1.2)),
-    /** x woundDepthAmp, y fatDepth, z muscleDepth, w spare — the
+    /** x woundDepthAmp, y fatDepth, z muscleDepth, w visceraAmp — the
      *  wound tissue ramp (march.wgsl.ts TISSUE_RAMP). Defaults mirror
      *  henenlotter-latex; applyMaterial overwrites from the material. */
-    surfCfg3: uniform(new THREE.Vector4(1.0, 0.004, 0.014, 0.6)),
+    surfCfg3: uniform(new THREE.Vector4(1.0, 0.004, 0.014, 1.0)),
     /** The colour the albedo mottle mixes toward. Inert while surfCfg2.z is 0,
      *  which is every stock preset — see FleshMaterial.mottleAmp. */
     mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
@@ -264,6 +264,13 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     /** Exposed bone (wound pass r2), mixed toward deepColor at the flesh
      *  junction. Matches the FleshMaterial preset default. */
     boneColor: uniform(new THREE.Color(0.71, 0.53, 0.35)),
+    /** Cavity interior for the viscera stop (entrails, linear RGB). Darker
+     *  than deepColor so it separates by VALUE at combat range. Inert while
+     *  surfCfg3.w (visceraAmp) is 0. Matches the FleshMaterial preset default. */
+    visceraColor: uniform(new THREE.Color(0.28, 0.06, 0.10)),
+    /** Depth beneath the original skin at which muscle gives way to cavity,
+     *  metres (entrails). Matches the FleshMaterial preset default. */
+    visceraDepth: uniform(0.045),
     /** x enabled (1 multiplier sheet, 2 decal sheet), y strength, z forward (+1/-1), w relief */
     faceCfg: uniform(new THREE.Vector4(0, 0.85, 1, 1.4)),
     /** x projMode (0 planar, 1 spherical), y mean, z glowThreshold, w glowStrength */
@@ -627,6 +634,8 @@ export function createMarchMaterial(
     mottleColor: u.mottleColor,
     fatColor: u.fatColor,
     boneColor: u.boneColor,
+    visceraColor: u.visceraColor,
+    visceraDepth: u.visceraDepth,
     faceCfg: u.faceCfg,
     faceCfg2: u.faceCfg2,
     faceCfg3: u.faceCfg3,
@@ -1145,10 +1154,12 @@ export function createZombieGpuView(
       u.charColor.value.setRGB(...m.charColor);
       u.surfCfg.value.set(m.specIntensity, m.specRoughness, m.fresnelBoost, m.translucency);
       u.surfCfg2.value.set(m.wetness, m.surfaceNoiseAmp, m.mottleAmp, m.mottleScale);
-      u.surfCfg3.value.set(m.woundDepthAmp, m.fatDepth, m.muscleDepth, 0);
+      u.surfCfg3.value.set(m.woundDepthAmp, m.fatDepth, m.muscleDepth, m.visceraAmp);
       u.mottleColor.value.setRGB(...m.mottleColor);
       u.fatColor.value.setRGB(...m.fatColor);
       u.boneColor.value.setRGB(...m.boneColor);
+      u.visceraColor.value.setRGB(...m.visceraColor);
+      u.visceraDepth.value = m.visceraDepth;
       u.marchCfg.value.z = m.silhouetteNoiseAmp;
       u.lightDir.value.set(...light.keyDir);
       u.keyColor.value.setRGB(...light.keyColor);
@@ -1270,6 +1281,8 @@ export function createChunkGpuView(
     u.mottleColor.value.copy(template.mottleColor.value);
     u.fatColor.value.copy(template.fatColor.value);
     u.boneColor.value.copy(template.boneColor.value);
+    u.visceraColor.value.copy(template.visceraColor.value);
+    u.visceraDepth.value = template.visceraDepth.value;
     u.marchCfg.value.copy(template.marchCfg.value);
     u.woundCfg.value.copy(template.woundCfg.value);
     u.woundCfg2.value.copy(template.woundCfg2.value);

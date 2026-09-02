@@ -23,7 +23,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
-  ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS,
+  ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { specialiseMapBody } from './specialise';
@@ -1131,8 +1131,13 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     // edge coincides with its colour gradient, so it reads as wounded flesh,
     // not a ring. The far-side sheets those gates chased were the tracer
     // overshoot bug, fixed for real at the retract guard.
-    expect(WOUND_MASK).toContain('m = max(m, 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz)));');
-    expect(WOUND_MASK).toContain('return vec2<f32>(m, m);');
+    expect(WOUND_MASK).toContain('1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz))');
+    // Entrails (2026-09-02) retargeted the return pin from
+    // vec2<f32>(m, m): the mask now carries cavity-ness in .z, accumulated
+    // over the SAME per-wound footprint — the contribution expression above
+    // is computed once and maxed into both channels. Still one footprint,
+    // still no split overlays.
+    expect(WOUND_MASK).toContain('return vec3<f32>(m, m, cav);');
     expect(WOUND_MASK).not.toContain('smoothstep(-0.25, 0.15, face)');
     expect(WOUND_MASK).not.toContain('collar');
   });
@@ -1376,5 +1381,31 @@ describe('bone material (wound pass r2)', () => {
 
   it('identifies bone by the dominant prim material, not a radius guess', () => {
     expect(SHADE_BODY).toMatch(/isBone/);
+  });
+});
+
+describe('viscera ramp (entrails)', () => {
+  // The shading block lives inside marchBody — MARCH_BODY is the fragment
+  // source the plan calls SHADE_BODY.
+  const SHADE_BODY = MARCH_BODY;
+
+  it('woundMask reports cavity-ness as a third channel', () => {
+    expect(WOUND_MASK).toContain('vec3<f32>');
+    expect(WOUND_MASK).toContain(`${ROW_WOUND_FLAGS}`);
+  });
+
+  it('the viscera stop is gated on cavity-ness, not on depth alone', () => {
+    expect(TISSUE_RAMP).toContain('cavity');
+  });
+
+  it('is amplitude-guarded', () => {
+    expect(SHADE_BODY).toContain('visceraAmp');
+  });
+
+  it('still composes inside the single radial mask', () => {
+    // The 2026-08-23 halo came from splitting one mask into three. Viscera
+    // must ride the SAME mask — one woundMask call, one mix against wm.
+    expect(SHADE_BODY).toContain('mix(baseColor, tissue, wm)');
+    expect((SHADE_BODY.match(/woundMask\(/g) ?? []).length).toBe(1);
   });
 });

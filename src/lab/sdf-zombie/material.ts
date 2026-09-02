@@ -67,6 +67,15 @@ export interface FleshMaterial {
   muscleDepth: number;
   /** 0 disables the tissue ramp and shades bit-for-bit as before it existed. */
   woundDepthAmp: number;
+  /** Cavity interior, linear RGB. MUST be darker than `deepColor` — at combat
+   *  range only value separates, so a viscera that differs only in hue reads
+   *  as more muscle. See the spec's combat-range section. */
+  visceraColor: Vec3;
+  /** Depth beneath the original skin at which muscle gives way to cavity,
+   *  metres. Scaled by the model's height like the other knees. */
+  visceraDepth: number;
+  /** 0 disables the viscera stop and shades bit-for-bit as before. */
+  visceraAmp: number;
 }
 
 export type FleshPresetName = 'henenlotter-latex' | 'wet-meat' | 'clay';
@@ -88,6 +97,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1,
+    visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
   },
   // Rotten meat: darker, broader highlight, veiny, more scatter.
   'wet-meat': {
@@ -102,6 +112,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1,
+    visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
   },
   // Claymation: matte, waxy, thumb-smushed.
   clay: {
@@ -116,6 +127,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     boneColor: [0.71, 0.53, 0.35], fatColor: [0.83, 0.72, 0.42],
     fatDepth: 0.004, muscleDepth: 0.014,
     woundDepthAmp: 1,
+    visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
   },
 };
 

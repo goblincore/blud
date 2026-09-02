@@ -98,3 +98,24 @@ describe('wound tissue material (wound pass r2)', () => {
     }
   });
 });
+
+describe('viscera material (entrails)', () => {
+  // No `zombie` key exists in FLESH_PRESETS (see the wound-r2 block above);
+  // the plan's zombie-keyed luminance check runs over every preset instead —
+  // stronger, and all three are human-stature so the knees stay comparable.
+  it('every preset carries a viscera colour and depth', () => {
+    for (const [name, p] of Object.entries(FLESH_PRESETS)) {
+      expect(p.visceraColor, name).toHaveLength(3);
+      expect(p.visceraDepth, name).toBeGreaterThan(p.muscleDepth);
+    }
+  });
+
+  it('viscera is DARKER than muscle — it must read by value, not hue', () => {
+    // The rib lesson: at combat range only value separates. If viscera is
+    // merely a different red, the cavity reads as more meat.
+    const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+    for (const [name, p] of Object.entries(FLESH_PRESETS)) {
+      expect(lum(p.visceraColor!), name).toBeLessThan(lum(p.deepColor) * 0.7);
+    }
+  });
+});
