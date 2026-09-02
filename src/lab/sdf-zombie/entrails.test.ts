@@ -56,4 +56,22 @@ describe('gut chain', () => {
     const after = stepGutChain(moving, 1 / 60);
     expect(after.nodes[0]!.pos[0]).toBeGreaterThan(p0);
   });
+
+  it('a chain torn from REST falls — detaching a hanging rope must not freeze it mid-air', () => {
+    // The game's actual death case: the rope hangs at rest, then the body
+    // collapses and the rope is detached. This used to freeze on the spot:
+    // the settle metric counted only the CARRIED velocity (pos - prev), which
+    // is ~zero for a hanging-at-rest chain, so the first post-detach step saw
+    // moved < settleEps and set settled before gravity ever moved a node.
+    // Found by the task-8 capture: torn guts floated 0.47 m up for 4 s.
+    let c = makeGutChain([0, 2, 0]);
+    for (let i = 0; i < 240; i++) c = stepGutChain(pinGutChain(c, [0, 2, 0]), 1 / 60);
+    const torn = detachGutChain(c);
+    expect(stepGutChain(torn, 1 / 60).settled).toBe(false);
+    let fell = torn;
+    for (let i = 0; i < 240; i++) fell = stepGutChain(fell, 1 / 60);
+    const tail = fell.nodes[fell.nodes.length - 1]!.pos;
+    expect(tail[1]).toBeLessThan(0.2);   // actually reached the floor
+    expect(fell.settled).toBe(true);     // and then came to rest
+  });
 });

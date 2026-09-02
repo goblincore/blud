@@ -76,7 +76,6 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
   if (c.settled) return c;
   const t = GUT_TUNING;
   const nodes = c.nodes.map(n => ({ pos: [...n.pos] as Vec3, prev: [...n.prev] as Vec3 }));
-  let moved = 0;
 
   const first = c.attached ? 1 : 0;
   for (let i = first; i < nodes.length; i++) {
@@ -86,7 +85,6 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
     const vz = (n.pos[2] - n.prev[2]) * t.damping;
     n.prev = [...n.pos] as Vec3;
     n.pos = [n.pos[0] + vx, n.pos[1] + vy - t.gravity * dt * dt, n.pos[2] + vz];
-    moved += Math.abs(vx) + Math.abs(vy) + Math.abs(vz);
   }
 
   for (let k = 0; k < t.iterations; k++) {
@@ -128,6 +126,19 @@ export function stepGutChain(c: GutChain, dt: number): GutChain {
     for (const n of nodes) if (n.pos[1] < 0) n.pos = [n.pos[0], 0, n.pos[2]];
   }
 
+  // Settle metric: the ACTUAL displacement this step produced, measured after
+  // the constraint + floor passes against where the nodes entered the step.
+  // The old metric summed the carried velocity (pos - prev) during
+  // integration, which misses both gravity and the clamps — so a chain torn
+  // from rest (zero carried velocity, the game's every death) read as moved
+  // ~0 on its first free step and froze mid-air, while a chain at rest on the
+  // floor could never read settled because gravity kept INTENDING motion the
+  // clamp was cancelling. Actual displacement gets both right.
+  let moved = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    const p = nodes[i]!.pos, q = c.nodes[i]!.pos;
+    moved += Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  }
   const settled = !c.attached && moved < t.settleEps;
   return { ...c, nodes, settled };
 }
