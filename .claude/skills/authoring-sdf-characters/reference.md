@@ -1,8 +1,8 @@
 # `.blob` syntax reference
 
 The companion to `SKILL.md`. That file is the loop and the lessons; this one is
-the grammar for the four features that are pure syntax to look up. Everything
-here was true of the format on 2026-08-22.
+the grammar for the features that are pure syntax to look up. Everything here
+was true of the format on 2026-09-02.
 
 ## Sharp features: `r2=`, `tip=`, `chamfer`
 
