@@ -46,11 +46,18 @@ wound pops, gait stop-motion).
   a box with no change to the fitter. `round=` is a FRACTION of `r` (0..1,
   inset), not metres — the field evaluates in the scale-divided frame where an
   absolute length distorts anisotropically.
-  **6 of 9 tasks done**, suite 1930 -> 1975 green, tsc clean.
-  **NOT YET PROVEN: nobody has seen a box render.** Task 7 (the end-to-end
-  fixture + `blob:shot` frames) is the next thing and is where a real defect
-  would still surface. Then T8 (document it in the skill) and T9 (author the
-  minotaur).
+  **ALL 9 TASKS DONE**, suite 1930 -> 1982 green (104 files), tsc clean.
+  **Proven end to end:** `blob:render-check` exit 0 on a box fixture, and the
+  frames show flat faces with a crisp vertical edge at a 3/4 yaw — a capsule
+  cannot make that. Evidence in
+  [docs/dev-notes/2026-09-02-box-primitive/](docs/dev-notes/2026-09-02-box-primitive/).
+  **Next: the minotaur.** Its dispatch task is written and QUEUED at
+  `~/.claude/dispatch/plans/2026-09-02-minotaur-character.md` (`glm-5.3-flash`,
+  base_branch = this branch) — waiting on a dispatch-ui slot, two tasks running
+  as of 2026-09-02. In-repo copy:
+  [plan](docs/superpowers/plans/2026-09-02-minotaur-character.md).
+  **Watch for:** `blob:rings` is paint-blind and WILL ask for the prosthetic
+  plates to shrink — overrule it there, as bonewalker's spine ridge taught.
   **Two findings worth knowing independently of this work:**
   (1) the outer-bound survey went 4 -> 8 sites (`boxReach`); the plan claimed
   four, and the two hardest to find RECOMPUTE a bound instead of consuming one
