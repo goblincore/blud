@@ -381,6 +381,12 @@ async function main() {
     sdfScale = Math.min(1, Math.max(0.2, v));
     sdfLayer.setScale(sdfScale);
     sizeSdfLayer();
+    // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
+    // a rung change moved that height, so refresh every live view (perf round
+    // 2 task 6). Only called post-boot (tickAdaptive / the setSdfScale seam),
+    // so `actors` below is always initialised here.
+    const k = sdfLayer.pixelConeK;
+    for (const a of actors) a.view.uniforms.aaCfg.value.x = k;
   }
 
   // -----------------------------------------------------------------------
@@ -570,6 +576,18 @@ async function main() {
    */
   const GAME_OMEGA = 1.0;
 
+  /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
+   *  march may accept a sample once the field is within the ray's projected
+   *  PIXEL footprint (t * aaCfg.x) instead of the 1.2 mm literal — fewer
+   *  steps at range, geometric aliasing prefiltered below Nyquist. The
+   *  epsilon divides by the dominant prim's GROUP DISTORTION factor
+   *  (gFoldBestDistort, up to 22x on the schoolgirl sole plate) so
+   *  high-distortion regions cannot stop a ray short — the exact defect that
+   *  kept this lever OFF when it first shipped (see march.wgsl.ts).
+   *  `__sdfGame.setAa(strength)` flips it live for A/B; 0 is the old
+   *  behaviour bit-for-bit (t * 0 / distort == t * 0 == 0). */
+  const GAME_AA = 1.0;
+
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
@@ -679,6 +697,11 @@ async function main() {
       view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
       // Plain sphere tracing (perf round 2 task 2) — see GAME_OMEGA.
       view.uniforms.marchCfg.value.y = GAME_OMEGA;
+      // Footprint-AA strength + the one-pixel footprint at the CURRENT SDF
+      // pass height (perf round 2 task 6) — see GAME_AA. The footprint part
+      // is refreshed on adaptive-rung change inside applySdfScale.
+      view.uniforms.aaCfg.value.y = GAME_AA;
+      view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
       view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
       view.uniforms.faceCfg.value.x = 1;
       view.uniforms.faceCfg.value.y = 1.0;
@@ -2123,6 +2146,17 @@ async function main() {
       for (const a of actors) a.view.uniforms.marchCfg.value.y = n;
     },
     get omega() { return actors[0]?.view.uniforms.marchCfg.value.y ?? 0; },
+    /** Footprint-AA strength (perf round 2 task 6, aaCfg.y). 0 = the old
+     *  march bit-for-bit; also refreshes the one-pixel footprint (aaCfg.x) so
+     *  a frozen-scene A/B at a pinned scale reads the intended pair. */
+    setAa(strength: number) {
+      const k = sdfLayer.pixelConeK;
+      for (const a of actors) {
+        a.view.uniforms.aaCfg.value.x = k;
+        a.view.uniforms.aaCfg.value.y = strength;
+      }
+    },
+    get aa() { return actors[0]?.view.uniforms.aaCfg.value.y ?? 0; },
     setMarchSteps(n: number) {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },

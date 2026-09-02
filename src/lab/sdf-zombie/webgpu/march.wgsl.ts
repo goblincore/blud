@@ -863,7 +863,7 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
       sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);
     }
-    if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }
+    if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0; bend is +2, so the old "prof > 0.5" test
     // would wrongly chamfer a plain-bent prim — bounded above now. A shell
     // (prof >= 4) always folds round regardless of the profile's low bits.
@@ -882,6 +882,15 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
 // applies.
 var<private> gFoldBest: f32 = 1e9;
 var<private> gFoldBestIdx: f32 = -1.0;
+// The dominant prim's GROUP DISTORTION factor (grp.z), for MARCH_BODY's
+// footprint-AA epsilon (perf round 2 task 6): sdPrimitive under-reports
+// Euclid by up to this factor, so the epsilon divides by it. Rides a private
+// global rather than mapBody's .w return slot — that slot is owned by the
+// wound-pass-r2 chain — under the SAME per-invocation contract as the
+// argmin: mapBody resets, foldGroup writes at the argmin, MARCH_BODY reads
+// straight after its mapBody call. 1.0 default: groups without distortion
+// and the volume branch (which never folds) are exact no-ops.
+var<private> gFoldBestDistort: f32 = 1.0;
 var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
@@ -895,6 +904,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // must track its own dominant prim.
   gFoldBest = 1e9;
   gFoldBestIdx = -1.0;
+  gFoldBestDistort = 1.0;
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -1461,11 +1471,14 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   //
   // THREE THINGS TO KNOW BEFORE RAISING THE STRENGTH:
   //  1. mapBody UNDER-REPORTS Euclid distance by the group distortion factor
-  //     (up to 22x — the schoolgirl's sole plate). So d < eps can fire when
+  //     (up to 22x — the schoolgirl's sole plate), so d < eps can fire when
   //     the TRUE distance is many times eps, stopping the ray short and
   //     reading blobby/detached, non-uniformly, in high-distortion regions.
-  //     The fold cull multiplies its thresholds by the packed factor for this
-  //     reason; this epsilon does not, which is why it ships OFF.
+  //     CORRECTED (perf round 2 task 6): the fold's argmin carries the
+  //     dominant group's packed factor in the private global gFoldBestDistort
+  //     and the epsilon below divides by it — same per-sample state as the
+  //     argmin, so the correction is exact where the hit lands. This is why
+  //     the lever can now ship ON.
   //  2. Craters fill in at range as eps approaches wound depth. Arguably
   //     correct LOD, but it is the distance at which a player judges whether
   //     a shot landed — hence the floor, which never shrinks below 1.2 mm.
@@ -1563,6 +1576,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
     let dres = mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+    // The dominant prim's group distortion factor AS OF THIS SAMPLE (private
+    // globals are per-invocation — the argmin's contract, perf round 2 task
+    // 6). max(.., 1.0) keeps a hypothetical sub-1 factor from shrinking the
+    // epsilon below the true footprint.
+    let distort = max(gFoldBestDistort, 1.0);
     var d = dres.x;
     hitBest = i32(dres.y);
     // Shell displacement: inside a thin shell of the smooth surface, the
@@ -1607,7 +1625,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
-      let hitEps = max(hitEpsBase, t * aaK);
+      let hitEps = max(hitEpsBase, t * aaK / distort);
       if (d < hitEps) {
         // wound-halo r2: an over-relaxed step can cross the skin with
         // radius + prevRadius == stepLen EXACTLY — a perpendicular approach
@@ -1636,7 +1654,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
         // back-step to the interval actually travelled. This is the other half
         // of the wounded-ray non-reconvergence. Fixing it needs the packed
         // distortion factor threaded to this site — see the perf spec.
-        if (d < -max(hitEpsBase, t * aaK) && omega > 1.0 && !conservative) {
+        if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;
         } else {

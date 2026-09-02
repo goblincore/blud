@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, ROW_PRIM_COLOR, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
+  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS, SD_PRIM, SD_PRIM_ORIENTED, MAP_BODY, FOLD_GROUP, ROW_PRIM_COLOR, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   SAMPLE_VOLUME, APPLY_CARVES, APPLY_WOUNDS, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
@@ -343,7 +343,7 @@ describe('ported features reach the entry point', () => {
     const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
     expect(foldGroup).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos, band);');
     expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }');
-    expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); }');
+    expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }');
     expect(foldGroup).toContain('if (prof > 0.5 && prof < 1.5) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }');
     expect(mapBody).toContain('let anchor = restPoint(p, data, bestIdx, noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
@@ -354,6 +354,22 @@ describe('ported features reach the entry point', () => {
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
       'mapBody(camPos + rd * t, data, counts, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
+  });
+
+  it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
+    // Perf round 2, task 6. The footprint AA epsilon (t * aaK) assumed the
+    // field reports true Euclid distance; sdPrimitive under-reports it by the
+    // group's distortion factor (up to 22x — schoolgirl sole plate), so the
+    // epsilon could fire many times too early and stop a ray short. The fold
+    // already carries the factor per group (grp.z); it rides a PRIVATE GLOBAL
+    // beside the argmin because mapBody's .w return slot is owned by the
+    // wound-pass-r2 chain — never repurpose that slot for this.
+    expect(FOLD_GROUP).toContain('var<private> gFoldBestDistort: f32 = 1.0;');
+    expect(FOLD_GROUP).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }');
+    expect(MAP_BODY).toContain('gFoldBestDistort = 1.0;');
+    expect(MAP_BODY).not.toContain('nearWound, gFoldBestDistort');
+    expect(MARCH_BODY).toContain('let distort = max(gFoldBestDistort, 1.0);');
+    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK / distort);');
   });
 
   it('mottles ALBEDO from the rest-space anchor, guarded by its amplitude', () => {
@@ -412,7 +428,7 @@ describe('ported features reach the entry point', () => {
     // when AA is on), so the guard tests against the same expression the hit
     // does rather than a loop-invariant.
     expect(MARCH_BODY).toContain(
-      'if (d < -max(hitEpsBase, t * aaK) && omega > 1.0 && !conservative) {');
+      'if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0 && !conservative) {');
   });
 
   it('does NOT bound tMax by the occluder — the bound under-reports at range', () => {
@@ -678,11 +694,14 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // the shipping default (aaCfg.y = 0 => aaK = 0 => max(base, 0) = base), so
     // the primitive path stays bit-identical until someone moves the slider.
     expect(MARCH_BODY).toContain('let aaK = aaCfg.x * aaCfg.y;');
-    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK);');
+    // Perf round 2 task 6: the footprint term divides by the dominant group's
+    // distortion factor. At aaCfg.y = 0 the whole term is still exactly 0
+    // (t * 0 / distort = 0), so the primitive path stays bit-identical.
+    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK / distort);');
     // wound-halo r2 split the accept into the deep-crossing retract guard and
     // the literal hit test; the epsilon literal still gates both.
     expect(MARCH_BODY).toContain('hit = true;\n          break;');
-    expect(MARCH_BODY).toContain('if (d < -max(hitEpsBase, t * aaK) && omega > 1.0');
+    expect(MARCH_BODY).toContain('if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0');
     expect(MARCH_BODY).not.toContain('if (d < 0.0012)');
   });
 });

@@ -678,3 +678,57 @@ census can show.
 (`BENCH_LEGS=baseline,depth-gate-on`) and re-decides the default on clean
 numbers. Spike pass (baseline only, fenced): r3 p50 32.5 / max 396.8 ms,
 r4 p50 23.6 / max 527.1 — the fenced-max protocol, not a gate.
+
+## Task 6 — distortion-corrected footprint epsilon, in-march AA on (2026-09-02,
+### branch dispatch/2026-09-01-sdf-render-perf-r2-task-6)
+
+**Machine load:** dispatch board checked — only this task holds
+`status: running` (0–5b done, 7–9 pending; no other chain). Bench NOT
+deferred for load.
+
+**The change.** The fold's argmin already walks every prim of the dominant
+group; the packed distortion factor rides the SAME group row (`grp.z`) the
+cull multiplies its thresholds by. Three edits, all local:
+
+1. `FOLD_GROUP` tail: `var<private> gFoldBestDistort: f32 = 1.0;` beside
+   `gFoldBestIdx`, and the argmin store becomes
+   `... gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }`. Private
+   global rather than `mapBody`'s `.w` return slot — the wound-pass-r2 chain
+   owns that slot for the pre-wound field. Same per-invocation contract as
+   the argmin (mapBody resets, foldGroup writes at the argmin, MARCH_BODY
+   reads straight after its `mapBody` call).
+2. `MAP_BODY`: `gFoldBestDistort = 1.0;` beside the other two resets.
+   Returns untouched.
+3. `MARCH_BODY`: `let distort = max(gFoldBestDistort, 1.0);` right after the
+   loop's `let dres = mapBody(...)`; `let hitEps = max(hitEpsBase, t * aaK)`
+   → `... t * aaK / distort);` and the matching inner retract-guard
+   `-max(hitEpsBase, t * aaK)` → `-max(hitEpsBase, t * aaK / distort)`.
+
+At `aaCfg.y = 0` the whole term is `t * 0 / distort == t * 0 == +0`, so
+`hitEps == hitEpsBase` exactly — the plumbing is bit-invisible until the
+knob turns. The volume branch never folds and keeps the 1.0 default.
+
+**Page plumbing (was missing, found while wiring the seam):** the game page
+never assigned `aaCfg` at all — it rode the `Vector2(0.02, 0)` uniform
+default (lab-main and bench-main have their own per-frame assignment; the
+game page is bench-main-derived but that block is inside the aaStrength>0
+branch which never ran here). Now: view creation sets
+`aaCfg.y = GAME_AA (1.0)` and `aaCfg.x = sdfLayer.pixelConeK` (one-pixel
+footprint at the current SDF pass height); `applySdfScale` refreshes
+`aaCfg.x` on every view after a rung change re-sizes the pass — the
+"confirm that assignment runs on rung change" step found it absent, so it
+now does. `__sdfGame.setAa(strength)` / `get aa` seam beside `setOmega`
+sets `.y` (and re-pins `.x`) on every view.
+
+**TDD:** new source test in `march.wgsl.test.ts` (pins the private global,
+the argmin store, the MAP_BODY reset, the no-`.w`-repurpose tripwire, and
+both divide sites); three pre-existing string pins updated to the new
+epsilon text. Fast loop 132 pass; `tsc --noEmit` clean.
+
+**Schoolgirl note:** she is NOT on `sdf-game.html` (one compiled
+`zombie.blob`, ten bodies), so the 22x sole-plate case cannot be captured
+here; the mechanism (divide by the dominant group's `grp.z`) is exercised
+by whatever distortion the zombie's groups carry, and the lab owns the
+extreme-factor eyeball.
+
+Gates below.
