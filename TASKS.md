@@ -88,6 +88,14 @@ and far 8 m visual gates pass (owner-independent read of the far pair:
 all nine bodies, crater survives, smoother silhouettes); hit-pixel steps
 −11% near, −18.6% far; `GAME_AA = 1.0` ships. Its run hit the cap mid
 vision-read; controller closed the notes. Next: task 7 (level shadows).
+**2026-09-02 evening:** task 7 LANDED (twin level-only spotlight, 4-tap
+PCF in the march, `setLevelShadow` seam, ships ON) and fixed a real
+wgslFn-parser hazard (a colon pattern in a signature COMMENT parsed as a
+phantom input, shifting every later binding by one — regression test runs
+three's real parser). Its run hit the cap re-running the smoke; controller
+read the pair: no acne on the near body, plausible door-frame shadow on
+the far one. **Pillar-between-lamp-and-body eyeball is the owner's:**
+`__sdfGame.setLevelShadow(true/false)`. Next: task 8 (upload measure).
 [plan](docs/superpowers/plans/2026-09-01-sdf-render-perf-round2.md) ·
 review: Obsidian `Claude Notes/Blud/2026-09-01-sdf-render-and-blobforge-review.md`
 
