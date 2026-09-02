@@ -508,3 +508,128 @@ walk's cost is prim-count-bound): **p50 5.0 µs, p90 5.7, p99 11.6 per
 frame** (270 instances at rest; posed bodies emit the same count). ≈0.03%
 of the 16.7 ms frame — the win is honest, one walk per frame removed, and
 invisible to the frame bench by construction.
+
+## Task 5 (written by 5b — task 5 never wrote one) + Task 5b — the accumulated-depth gate, made to bite (2026-09-02)
+
+### The dead-gate finding (task 5)
+
+Task 5 landed the plumbing — per-body front-to-back passes with a `prev`
+target + blit, `prevT` fetched from the blit's alpha (zombie-gpu.ts ~529–538,
+~720–735), a `bodyEntry` ray/proxy-box entry (`march.wgsl.ts` ~1415–1440) —
+and shipped the discard as `if (min(shellIn, bodyEntry) > prevT)`. That form
+is structurally inert: `min(shellIn, bodyEntry) <= shellIn`, and `shellIn` is
+the SHARED nearest hull entry across ALL bodies (one instanced hull pass), so
+at any pixel where the gate should fire `shellIn` is the nearer body's own
+hull entry, which precedes its flesh — i.e. `shellIn <= prevT` almost
+everywhere, and the min() can never exceed `prevT`. Task 5's occupancy
+instrument proved it: counters bit-identical on/off in rooms 3 and 4 (its
+r3 gate: a-vs-b 25/2 px vs 66 px floor; r4: 97/54 px vs 54 px floor — parity
+PASS, but the gate did nothing). The −49 marched pixels it reported at one
+point came from the `tMax = min(tMaxSel, prevT)` clamp, not the discard.
+
+### The max fix (5b step 1)
+
+Both `shellIn` and `bodyEntry` are lower bounds on the first point at which
+THIS body could be hit; the larger of two lower bounds is still a lower
+bound (and the tighter of the two). The exact discard is therefore
+`if (max(shellIn, bodyEntry) > prevT) { discard; ... }` — it can never drop
+a fragment this body would have shaded, and it actually fires wherever the
+fragment's own proxy-box entry lies behind an already-accumulated hit.
+Comment block and the `march.wgsl.test.ts` string pin updated to say why.
+`tsc --noEmit` clean; march.wgsl.test.ts 126/126.
+
+### Why the occupancy counters CANNOT see this gate (instrument bias, both scenes)
+
+`__sdfGame.occupancy()` reads debug mode 4 counters from the march target,
+where **only the depth-winning fragment per pixel survives to write** (the
+mode-4 doc block says so itself). The gate deletes the work of fragments
+that were going to LOSE the depth test — the survivors' counters are
+unchanged, so `rasterised`, `hits` and (mostly) the step means are
+bit-identical on/off BY CONSTRUCTION. The win is fragment invocations the
+instrument is blind to; the honest occupancy expectation for this gate is
+"identical counters", and any counter movement is survivor bias (see room 4).
+Timed proof of the step win belongs to the bench below / task 9.
+
+### Step 2 — synthetic maximal-overlap scene (task5b/overlap/)
+
+Task 5's driver staged the camera behind one zombie looking through it at
+another 17 m away but timed out separating its 32k-px diff from the dungeon
+fire flicker (animates on `performance.now()` even frozen). 5b recreates the
+staging as a harness `--pre`: after freeze, pick the two farthest-apart
+zombies in room 4, teleport the camera 1.6 m behind the near one (shrunk to
+stay in-bounds), yaw colinear on the pair — so the noise floor itself is
+taken IN the staged scene. Staging realised as a ~1.6 m near torso filling
+the right foreground with the far body partly hidden behind it plus corridor
+figures (scene-a-mid.png; vision-ask: "no missing flesh chunks or holes —
+smooth shiny surfaces, frame-clipped edges, and occlusion").
+
+| pair | changed px | frac | maxD |
+|---|---|---|---|
+| noise floor (state-1 vs state-2) | 99 | 0.0206% | 691 |
+| a-1 vs b-1 (gate on vs off) | 200 | 0.0417% | 691 |
+| a-2 vs b-2 | 125 | 0.0260% | 691 |
+| a-1 vs a-2 (same-state) | 94 | 0.0196% | 691 |
+| b-1 vs b-2 (same-state) | 88 | 0.0183% | 691 |
+
+maxD 691 in EVERY pair including the floor = the fire flicker, present in
+all legs equally. The a/b residual above floor is small and NOT noise:
+overlay-ab-vs-floor.png separates pixels that differ only in the a/b pairs
+(86/54 px, 0.011%), and the same cell set repeats across the two independent
+A/B pairs — deterministic. vision-ask on the overlay: the a/b-only pixels
+"lie ON the dark zombie silhouette edges … border the outline of the zombie
+bodies, rather than in empty floor or wall space". Reading: at silhouette
+EDGE samples the OFF render let the hidden body's shaded fragment bleed into
+the per-sample resolve; the gate removes that fragment before it shades, so
+the occluded body's sub-pixel fringe resolves to the occluder's color. No
+geometry is missing (far body present in both states), no flesh over-
+discarded — `bodyEntry` is sound. Occupancy counters: bit-identical on/off
+(hits 76314, rasterised 141081) — expected, see the instrument-bias note.
+**Verdict: parity PASS** — a-vs-b at the same order as the same-state pairs,
+residual confined to hidden-body silhouette fringe.
+
+### Step 3 — rooms 3 and 4 parity with the gate biting (task5b/r3, task5b/r4)
+
+Standard room-centre frozen views, `--on "__sdfGame.setDepthGate(true)"`
+`--off "__sdfGame.setDepthGate(false)"`, occupancy after each state.
+
+Room 3 (3 bodies):
+
+| pair | changed px | frac | maxD |
+|---|---|---|---|
+| noise floor | 63 | 0.0062% | 691 |
+| a-1 vs b-1 | 97 | 0.0095% | 691 |
+| a-2 vs b-2 | 38 | 0.0037% | 691 |
+| a-1 vs a-2 | 4 | 0.0004% | 41 |
+| b-1 vs b-2 | 92 | 0.0090% | 691 |
+
+a-vs-b (97/38) sits inside the same-state spread (4–92) and at the floor's
+order; the 97-px leg's changed cells are the flicker cells the floor pair
+also catches plus one 51-px cell at the HUD corner that does not repeat in
+the second A/B pair. Occupancy: bit-identical (hits 77708, rasterised
+115134, means equal to 2 dp).
+
+Room 4 (4 bodies, ring sightlines):
+
+| pair | changed px | frac | maxD |
+|---|---|---|---|
+| noise floor | 120 | 0.0117% | 691 |
+| a-1 vs b-1 | 100 | 0.0098% | 691 |
+| a-2 vs b-2 | 66 | 0.0064% | 691 |
+| a-1 vs a-2 | 102 | 0.0100% | 691 |
+| b-1 vs b-2 | 90 | 0.0088% | 691 |
+
+a-vs-b BELOW the floor in both legs. Occupancy: `hits` 89644 and
+`rasterised` 166820 bit-identical; `meanStepsMiss` 3.19 (off) → 3.43 (on) —
+survivor bias, not a regression: where a NEAR box's mode-4 miss (writing its
+give-up depth) used to clobber a farther box's miss counters, the gated far
+fragment no longer marches and the nearer survivor's (larger) step count
+shows through. Counted miss STEPS are the wrong denominator for this gate;
+the deleted work is invisible to the instrument by construction.
+
+### Default
+
+`GAME_DEPTH_GATE` **stays 1**: steps 2 and 3 passed (a-vs-b at/below noise
+floor everywhere; hits identical; deterministic residual confined to
+sub-pixel fringe on already-occluded silhouettes).
+
+**Bench:** (appended below after the run)

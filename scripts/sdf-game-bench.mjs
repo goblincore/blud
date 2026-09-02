@@ -136,6 +136,9 @@ const ALL_LEGS = {
   // OFF costs — the ablation direction flipped with the default.
   'shell-off': { setShell: false },
   'occluder-off': { setOccluder: false },
+  // Perf round 2 task 5b: the accumulated-depth gate SHIPS ON, so baseline
+  // includes it; this leg measures the single-pass march it replaced.
+  'depth-gate-off': { setDepthGate: false },
   'cone-on': { setCone: true },
   'fxaa-off': { setFxaa: false },
   'scale-0.7': { setSdfScale: 0.7 },
