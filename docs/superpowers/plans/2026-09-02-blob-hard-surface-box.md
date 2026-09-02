@@ -33,18 +33,46 @@ click-to-shoot while drawing as a plain capsule. No shipped character uses
 character file until Task 6 is green, and do not "fix" the capsule rendering
 you see in between.
 
-**The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are **SEVEN** outer-bound sites that must account for it.
+**The single highest-risk item is Task 4.** A box's corner reaches further from its segment than a capsule's surface does. There are **EIGHT** outer-bound sites that must account for it.
 
-> **The plan originally said FOUR, and that was wrong.** A review on 2026-09-02
-> surveyed the codebase exhaustively instead of grepping for the pattern that
-> found the first four, and turned up three more — `validate.ts`'s own escape
-> check, and two in `webgpu/fpv-view.ts`, one of which feeds the GPU cluster
-> cull at `march.wgsl.ts:930`. The lesson generalises: **searching for the
-> pattern that found your known cases only rediscovers your known cases.**
-> If you extend this work, survey by asking "what must CONTAIN a primitive?"
-> rather than by grepping `Math.max(p.radius, p.radiusB ?? p.radius)`. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
+> **The plan said FOUR. It took three rounds to reach eight.** Recorded because
+> the shape of what got missed is the reusable lesson:
+>
+> | round | found | why the previous pass missed it |
+> | --- | --- | --- |
+> | as written | 4 | — |
+> | review survey | +3 (`validate.ts` escape check, `fpv-view.ts` ×2) | the plan grepped `Math.max(p.radius, p.radiusB ?? p.radius)`, which is how the first four were found, so it could only rediscover those four |
+> | found while working | +1 (`rig-bind.ts` `applyRig`) | declared complete at seven; turned up only because someone was reading the posed path for another reason |
+>
+> **Searching for the pattern that found your known cases only rediscovers your
+> known cases.** Survey by asking "what must CONTAIN a primitive?"
+>
+> And the sharper tell: **Sites 6 and 8 both RECOMPUTE a bound rather than
+> consuming one**, bypassing `assignClusters` with their own copy of the
+> formula. That is the shape to hunt. `rig-bind.ts` is the most consequential
+> of all eight — it refits the POSED body every frame, so it is on the live
+> path for every rigged character, where the rest are rest-space or a dormant
+> hand path. A deliberate ninth sweep aimed at that shape found nothing
+> further; the survey is closed at eight.
 
-**Two sites are deliberately left alone, and are a DIFFERENT bug class** — both
+**The eight sites, all now carrying `boxReach`:**
+
+| # | site | what it feeds |
+| --- | --- | --- |
+| 1 | `extent.ts:40` `chunkExtent` | gib/chunk extents |
+| 2 | `clusters.ts:57` | cluster bounding spheres |
+| 3 | `pack.ts:308` `fitSphere` | group bounds → tile cull |
+| 4 | `webgpu/shell-hull-outer.ts:154` | outer hull instances |
+| 5 | `validate.ts:518` | the escape check that catches undersized bounds |
+| 6 | `webgpu/fpv-view.ts:231` | hand `ClusterInfo` → `clusterBounds` → **the GPU cull at `march.wgsl.ts:930`** |
+| 7 | `webgpu/fpv-view.ts:362` | the hand's proxy-box mesh, the march's start volume |
+| 8 | `rig-bind.ts:195` `applyRig` | **the posed body's per-frame cluster bounds** |
+
+**Excluded as INNER bounds** (a rounded box strictly contains the capsule of the
+same semi-axes, so inscribed spheres stay inside): `webgpu/occluder-hull.ts`,
+and `hands.ts`'s grip-seat sink depth. Miss one and geometry is silently culled at some camera angles — which presents as the "perfectly ROUND see-through hole" row in the skill's failure-triage table, and will send you hunting in `webgpu/` for a bug that is actually here.
+
+**Three sites are deliberately left alone, and are a DIFFERENT bug class** — both
 under-estimate a box's reach, but neither culls, so neither belongs in this
 task. Recorded so nobody "fixes" them here or rediscovers them as new:
 
@@ -54,6 +82,11 @@ task. Recorded so nobody "fixes" them here or rediscovers them as new:
   lint, not a runtime cull.
 - `connectivity.ts:84` `endpointGirth` likewise under-estimates a box's girth,
   which makes severing MORE eager — the opposite direction from culling.
+- `headShape()`, duplicated verbatim in `lab-main.ts`, `webgpu/game-main.ts` and
+  `webgpu/bench-main.ts`, picks the head cluster's fattest prim to normalise the
+  face-sheet projection. Under a box it misplaces a face TEXTURE rather than
+  vanishing geometry. (That three-way duplication wants its own cleanup someday,
+  but not here.)
 
 **Transitively safe, verified, needing no change:** `zombie-gpu.ts`'s `fit()`,
 `silhouette.ts`'s box and `shell-spike-main.ts`'s hullBounds all build AABBs
