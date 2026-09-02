@@ -274,6 +274,38 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
         'bend= needs two distinct ends to curve BETWEEN: use it on a bar, or '
         + 'give the blob a tip=(x,y,z) so its far end sits somewhere else',
         p.src.line, p.src.indent + 1);
+    // A box is swept along its segment as a rounded BOX, and sdRoundBox has
+    // no bent, tapered or tip-displaced form. Each of these would otherwise
+    // be silently dropped in the field while the emitter echoed it back, so
+    // they fail here with the line rather than becoming a shape the author
+    // wrote and never got.
+    if (p.box && p.bend !== null)
+      throw new BlobError(
+        'bend= is not supported on a box — sdRoundBox has no bent form; use a '
+        + 'chain of boxes at the inflections, or drop `box`',
+        p.src.line, p.src.indent + 1);
+    if (p.box && p.radiusB !== null)
+      throw new BlobError(
+        'r2= is not supported on a box — a box does not taper; use two boxes, '
+        + 'or drop `box` for a round cone', p.src.line, p.src.indent + 1);
+    if (p.box && p.tip !== null)
+      throw new BlobError(
+        'tip= is not supported on a box — its far end is the segment end; move '
+        + 'the whole prim with offset=', p.src.line, p.src.indent + 1);
+    // A shell thins a CLOSED base field to a sheet; sdShellWrap takes that
+    // base from the capsule path. Boxing the base is a shape nobody has asked
+    // for and the spec puts out of scope, so it fails rather than silently
+    // producing a boxed sheet nobody designed.
+    if (p.box && p.kind === 'shell')
+      throw new BlobError(
+        'box is not supported on a shell — a shell thins a closed capsule; '
+        + 'drop one of the two', p.src.line, p.src.indent + 1);
+    // Deliberately NOT a clamp: above 1 the inset extent goes negative and the
+    // field inverts, and a silent clamp would hide a typo in a character file.
+    if (p.box && (p.round < 0 || p.round > 1))
+      throw new BlobError(
+        `round= must be between 0 and 1 (a fraction of r), got ${p.round}`,
+        p.src.line, p.src.indent + 1);
     return {
       bone: p.bone,
       src: p.src.line,
@@ -307,6 +339,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
             },
           }
         : {}),
+      ...(p.box ? { box: { round: p.round } } : {}),
     } satisfies PrimDef;
   });
 

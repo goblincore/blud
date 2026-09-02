@@ -144,6 +144,48 @@ body
   });
 });
 
+describe('box rejections', () => {
+  const compile = (line: string) =>
+    () => compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  ${line}\n`));
+
+  it('rejects bend= on a box', () => {
+    expect(compile('bar torso on spine from=0.1 to=0.9 r=0.05 box bend=(0.02,0,0)'))
+      .toThrow(/bend= is not supported on a box/);
+  });
+
+  it('rejects r2= on a box', () => {
+    expect(compile('bar torso on spine from=0.1 to=0.9 r=0.05 box r2=0.02'))
+      .toThrow(/r2= is not supported on a box/);
+  });
+
+  it('rejects tip= on a box', () => {
+    expect(compile('bar torso on spine from=0.1 to=0.9 r=0.05 box tip=(0,0,0.05)'))
+      .toThrow(/tip= is not supported on a box/);
+  });
+
+  it('rejects box on a shell', () => {
+    expect(compile('shell torso on spine at=0.5 r=0.05 box thick=0.01 clip=(0,1,0) clipd=0.1 rim=0.004'))
+      .toThrow(/box is not supported on a shell/);
+  });
+
+  it('rejects round= outside 0..1 rather than clamping', () => {
+    expect(compile('bar torso on spine from=0.1 to=0.9 r=0.05 box round=1.4'))
+      .toThrow(/round= must be between 0 and 1/);
+    expect(compile('bar torso on spine from=0.1 to=0.9 r=0.05 box round=-0.1'))
+      .toThrow(/round= must be between 0 and 1/);
+  });
+
+  it('carries box onto the compiled prim', () => {
+    const body = compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05 box round=0.2\n`));
+    expect(body.prims[0]!.box).toEqual({ round: 0.2 });
+  });
+
+  it('leaves box absent on an ordinary prim', () => {
+    const body = compileBlob(parseBlob(`model t\n  height 1.0\n\nskeleton\n  root pelvis at 0.5\n  bone spine parent=pelvis dir=up len=0.3\n\nbody\n  bar torso on spine from=0.1 to=0.9 r=0.05\n`));
+    expect(body.prims[0]!.box).toBeUndefined();
+  });
+});
+
 describe('compileFace', () => {
   // Line 6, col 3: "  headRadus 0.3" — indent 2, so the key starts at column 3.
   const TYPO_SRC = `model t
