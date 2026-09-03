@@ -67,6 +67,15 @@ both. Corners are pinned, so the mid-edges are pulled in and the outermost slive
 the rendered frame does not reach the screen. That is inherent, not a bug, and it is
 the real reason the render FOV goes up.
 
+**Measured after the fact (2026-09-03): the game runs at a 4:3 fixed cap
+(800x600), not 16:9.** The 16:9 table below is correct for that aspect but is
+not what the game shows; at 4:3 the numbers are 90 rendered -> **72.2** visible
+-> 60 at centre vertically, and 106.3 -> **97.0** -> 75.2 horizontally, against
+the old camera's 75 / 91.3. So the real change at the aspect that ships is
++5.7 deg horizontal and -2.8 deg vertical, with the centre magnified 1.73x —
+the visible extent barely moves and the bend is the whole effect. See
+[the capture notes](../../dev-notes/2026-09-03-fisheye/notes.md).
+
 At 16:9 with the defaults (`k = 0.176`, `rmax = 2.040`) the visible extents are:
 
 | | render | on screen | at the centre |

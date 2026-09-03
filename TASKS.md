@@ -20,6 +20,37 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**FISHEYE LENS — SHIPPED ON sdf-game, AWAITING PLAY VERDICT (2026-09-03).**
+The game view now renders WIDER than the player sees and the canvas blit
+squeezes it back: `renderFovDeg` 90 (up from 75), `centerFovDeg` 60, and the
+ratio between them is the bend. Straight lines are gone; the centre is
+magnified 1.73x. The map lives in `src/lab/sdf-zombie/webgpu/fisheye.ts` and is
+shared by the blit shader and the DOM reticle — they must not diverge. The warp
+is folded into post-aa's existing blit as a 4-tap rotated grid (NO new pass:
+that file's orientation invariant counts intermediate passes) and supersedes
+sharp upscale. `k = 0` is an exact identity, so lab/bench are untouched and the
+all-off parity gate still holds. Seams: `__sdfGame.setFisheye(centreDeg)` /
+`setRenderFov(deg)` / `.fisheye` (reports `visibleFovDeg` alongside
+`renderFovDeg` — the warp crops the mid-edges, so those differ). Measured at
+the game's 4:3 cap: 90 rendered, **72.2 visible**, 60 at centre; **+4 ms/frame**
+(35.9 -> 39.8 headless, a baseline already over the 30 fps budget).
+`setRenderFov(85)` buys most of that back.
+[spec](docs/superpowers/specs/2026-09-03-fisheye-lens-design.md) ·
+[plan](docs/superpowers/plans/2026-09-03-fisheye-lens.md) ·
+[notes](docs/dev-notes/2026-09-03-fisheye/notes.md)
+
+**[ ] F-aim.1 — free aim can point off-screen, and the crosshair goes with
+it.** Owner deferred 2026-09-03 ("leave it, I'll judge it in play"). A
+regression from the fisheye: free aim's clamp lives in the TRUE frustum while
+the lens only shows 72 of the 90 degrees rendered, so aim can address points
+outside the visible frame. There is no auto-recentring (`game-main.ts:1115`),
+and shoving the reticle past the dead zone is HOW you turn — so a player
+looking up parks the crosshair off the top of the screen and it stays there.
+Measured at 4:3: the crosshair leaves the frame above `aim.y 0.730` / `aim.x
+0.848`; the corner is the fixed point, so `aim (1,1)` is fine. Two costed
+fixes in the notes — reframe `aim` as screen space (preferred, touches firing
+maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
+
 **BONE TUBES — BUILT, AWAITING OWNER VERDICT (2026-09-02).** Skeleton out of the marched field: posed bone prims drawn as ONE instanced analytic tube mesh (interleaved 18-float instances, WGSL vertex sweep, march-parity lighting) in the polygonal pass; the composite depth test hides bone under flesh and reveals it in cavities. Organs stay in the field. `packBones` flag (default on = legacy layout) flips bone rows out of the inside-flesh array. Counter gate (12-slug recipe): bonesTotal 1,807,616 → 309,992 with tubes on = exactly the organ share (≈8 of ~46.7 prims/body); meanPerPayingRay 276.4 → 47.0 — bone evals deleted, organs remain by design. Reel captured (torso / head / armL chunk, `scripts/bone-tubes-reel.sh`): no bone through intact skin seen; a-vs-b diffs at/below noise floor. Seams `__sdfGame.setBoneMesh(on)` / `.boneMesh` / `.boneTubes()`; default **OFF** until the owner's look verdict. Branch `claude/bone-tubes`.
 [spec](docs/superpowers/specs/2026-09-02-bone-tubes-design.md) · [plan](docs/superpowers/plans/2026-09-02-bone-tubes.md) · [notes](docs/dev-notes/2026-09-02-bone-tubes/notes.md)
 
