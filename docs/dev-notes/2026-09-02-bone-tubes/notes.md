@@ -50,6 +50,13 @@ Agent inspection (a-1 vs b-1, full frame + wound zooms): no pale bone visible th
 
 Bone through intact skin anywhere: **none seen**.
 
+## Reviewer's own check (2026-09-03, headless game page via `scripts/hull-spike-drive.mjs` with `DRIVE_PAGE=/sdf-game.html DRIVE_SEAM=__sdfGame`)
+
+- Chain merged into `claude/bone-tubes`; `tsc` clean, `vitest run src/lab` 114 files / 2166 green.
+- `close-diag3/skeleton-crop.png`: every zombie's flesh hidden (`zombie(id).view.object.visible=false`) with tubes on — a complete posed skeleton (cranium, jaw, ribcage, spine, pelvis, limb bones), lit like the scene, 380 instances, no overflow. The instancer itself is right.
+- Tubes-on vs field frames at 1.2–2 m from a zombie, front and angled, with and without slugs: no bone through intact skin anywhere; frames indistinguishable.
+- NOT demonstrated by the reviewer: bone visible INSIDE a cavity on both paths — the headless shots never framed an open crater (slugs landed on the far side). The dispatch agent's reel reports cavities reading as dark red in both legs at capture distance. Owner to confirm in-tab: `__sdfGame.setBoneMesh(true)`, put two slugs in a chest at close range, toggle.
+
 ## Verdict
 
-_pending owner_
+_pending owner_ — ships OFF until then (`__sdfGame.setBoneMesh(true)` to try).

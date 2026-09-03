@@ -23,8 +23,10 @@ const evaluate = async (expression) => { const r = await send('Runtime.evaluate'
   if (r.result?.exceptionDetails) { console.log(`THREW: ${JSON.stringify(r.result.exceptionDetails).slice(0, 300)}`); return null; } return r.result?.result?.value; };
 await send('Runtime.enable'); await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-hull-spike.html` });
-for (let i = 0; i < 240; i++) { const ok = await evaluate(`(async () => { if (!window.__hullSpike?.resolveGpu) return false; try { await __hullSpike.resolveGpu(); return true; } catch { return false; } })()`); if (ok) break; await sleep(250); }
+const PAGE = process.env.DRIVE_PAGE ?? '/sdf-hull-spike.html';
+const SEAM = process.env.DRIVE_SEAM ?? '__hullSpike';
+await send('Page.navigate', { url: `http://localhost:${VITE}${PAGE}` });
+for (let i = 0; i < 240; i++) { const ok = await evaluate(`(async () => { const S = window[${JSON.stringify(SEAM)}]; if (!S?.resolveGpu) return false; try { await S.resolveGpu(); return true; } catch { return false; } })()`); if (ok) break; await sleep(250); }
 await sleep(1500);
 for (const s of steps) {
   const [kind, ...rest] = s.split(':'); const arg = rest.join(':');
