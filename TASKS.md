@@ -20,24 +20,64 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**FPV WEAPON OVERHAUL — GOBLIN SAWED-OFF — BUILT, 8/8 tasks done on
-`dispatch/2026-09-02-fpv-weapon-task-8`, awaiting owner playtest** (2026-09-02,
-NOT merged). `sdf-game.html` view-model swapped to the procedural break-action
-sawed-off (`shorty-double.glb`; code-driven hinge on the GLB's `Barrels`
-node), goblin-matched hands/forearms, muzzle flash lighting level + marched
-bodies, 2-shell six-beat reload — timing in pure, unit-tested
-`game-viewmodel.ts`. Gates green: suite 2757/2764 (7 = pre-existing
-`blob-measure.test.ts` environmental), tsc/build clean,
-`sdf-game-shorty-gate.sh` exit 0 (boot / gun / flash / bodies spotCfg 1→3.21
-/ reload maxOpen 0.610 rad), captures in
-[docs/dev-notes/2026-09-02-fpv-weapon-shorty/](docs/dev-notes/2026-09-02-fpv-weapon-shorty/).
+**FPV WEAPON OVERHAUL — GOBLIN SAWED-OFF — MERGED (2026-09-03).**
+`sdf-game.html`'s view-model is a procedural break-action sawed-off double
+(`shorty-double.glb` from `scripts/model_grapeshot_shorty.py`; the break is a
+code-driven rotation of the GLB's `Barrels` node about its `Hinge` locator, no
+baked animation). Built by an 8-task dispatch chain, then three owner look
+passes on top.
+
+Round 2 (`d2b1276`): the reload became a KEYFRAME table — the first pass drove
+the present with `sin(PI·t/total)`, peaking at mid-reload, so every beat
+smeared across every other; red-hull/brass-head cases eject and are shoved back
+in; the support hand crosses the body and visibly does the loading; recoil;
+muzzle flash rebuilt as a generated ragged star with smoke
+(`flash-sprite.ts` — it was untextured `PlaneGeometry`, hence "a rectangle").
+Round 3 (`1e99b54`): gun centred and both hands hung off the model's own
+`Grip_Hand`/`Fore_Hand` locators, so they cannot drift out of contact again.
+Round 4 (`b1f44d7`): **FREE AIM** — the Realms of the Haunting scheme. The
+mouse moves a reticle; the camera only turns once it passes a central dead
+zone; shots go through the reticle, not screen centre; distance-driven walk
+bob. `G` toggles it against classic mouse-look.
+
+Gates: suite 2807/2814 (the 7 are the pre-existing `blob-measure.test.ts`
+environmental failures), tsc/build clean, `scripts/sdf-game-shorty-gate.sh`
+exit 0. Measured in-engine, not asserted: flash `spotCfg.x 1 → 1.81`, reload
+`2 → 0 → 2` with the hinge `0 → 0.610 rad` by t=0.3 and shut by 0.9, and free
+aim turning the camera **0.000°** inside the dead zone against 137°/s at full
+edge push.
+
 **KNOWN TEMPORARY: the flash lights marched bodies by borrowing the
-flashlight's `spotCfg`/`spotColor` uniforms in the per-actor beam replay —
-pending a second march light slot, blocked on the perf-r2 `march.wgsl.ts`
-rewrite.** Owner look gate outstanding (FPV framing + reload strip).
+flashlight's `spotCfg`/`spotColor` uniforms inside the per-actor beam replay.**
+The real fix is a second light slot in the march; it cannot land while the
+perf-r2 chain is rewriting `march.wgsl.ts`, which is precisely why the borrow
+exists. Tracked under the spec's "Deferred".
+
+**OPEN (owner):** free-aim feel — the 0.45 dead zone and 1.9 rad/s turn rate
+are calibrated to be sane, not to match the reference; they are the character
+of the whole scheme. Knobs: `__sdfGame.setAimTuning({...})`,
+`__sdfGame.setGunTuning({...})`. Gun finish still reads slightly chrome under
+the dungeon rig.
 [spec](docs/superpowers/specs/2026-09-02-fpv-weapon-overhaul-design.md) ·
 [plan](docs/superpowers/plans/2026-09-02-fpv-weapon-overhaul.md) ·
-[note](docs/dev-notes/2026-09-02-fpv-weapon-shorty/notes.md)
+[note](docs/dev-notes/2026-09-02-fpv-weapon-shorty/notes.md) ·
+[blockout](docs/dev-notes/2026-09-02-fpv-weapon-blockout/notes.md)
+
+**HULL-REFINE RENDERER — PARKED (owner, 2026-09-02): "annoying visual glitches… doesn't seem to offer much benefit atm; maybe with crowds". Revisit = phase 2 early-Z on the crowd case.** Phase 0 built, look passes headless parity, cost a wash at one body. Per-frame GPU surface-nets hull + fragment band refinement through the SHIPPED march (`march.wgsl.ts` untouched). Dispatch chain (kimi/k3, 5 tasks) landed the code; six bugs then separated a green suite from a zombie on screen (relaxed stepMul, vec4-padded soup stride, chunk hulls never extracted, extraction before the wound upload, a 4M-eval/frame live test, a 70-eval vertex pull) — all fixed and pinned. Headless A/B (8 stepped poses, 6 live instants, crater on/off, the 3-item reel): hull ≡ march. Owner: "pretty impressive… slightly less jiggly… pretty close". Fenced bench, one body, close camera, machine load 15–110: march ~22–27 ms, hull ~25–27, hull draw-only ~22 — extraction ≈3–4 ms, no win without early-Z (phase 2). NOT the hull: torso-sphere wounds billboard on both renderers and in-game (`damage.ts frame()` vs `game-actor` yaw-0 contract) — spun off. Page: `sdf-hull-spike.html`, seams `__hullSpike.*`, driver `scripts/hull-spike-drive.mjs`, reel `scripts/hull-spike-reel.sh`.
+[notes](docs/dev-notes/2026-09-02-hull-refine-spike/notes.md) · [spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md) · [plan](docs/superpowers/plans/2026-09-02-sdf-hull-refine-phase0.md)
+
+**WOUND BILLBOARDING — FIXED (2026-09-02, `claude/serene-jemison-7c15a7`).**
+Owner: a crater on the zombie's back rotated round to the front as it turned
+(torso + legs; head fine). Root cause: torso blobs are axis-less spheres, so
+their wound frame is a fixed WORLD basis unless `bodyYaw` de-yaws it; the game
+actor stamped AND uploaded at yaw 0. Contract now: stamp(posed, yaw) /
+upload(posed, yaw) / sever-resolve(rest, 0) — one body frame, three views
+(`game-actor.ts refreshWounds` note). `cutLimbs`/`cutChains`/`ExplosionBody`
+take an optional `bodyYaw` for callers on POSED prims; every posed-prim
+consumer in `game-main.ts` + `bleed-registry.ts` quotes the live yaw. Gates:
+actor upload keeps its body-frame offset through a >1 rad turn; sever at
+yaw≠0; turned-body explosion == rest-body stamp. Not yet on the hull-spike
+branches (`sdf-hull-spike.html` lives there) — they get it on merge.
 
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in

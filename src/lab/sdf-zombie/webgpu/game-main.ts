@@ -964,7 +964,8 @@ async function main() {
       hullExclusionsEnabled
         ? actors.flatMap(a => {
           const prims = a.posed().prims;
-          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+          const yaw = a.pose().yaw;
+          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
         })
         : [],
     );
@@ -1863,7 +1864,7 @@ async function main() {
       if (entry) gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
       return;
     }
-    const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     gutRopes.set(a.id, {
       chain: makeGutChain(anchor, {
         coilTightness: woundTuning.coilTightness,
@@ -1891,7 +1892,7 @@ async function main() {
         gutRopes.set(a.id, entry);
       }
       if (entry.chain.attached) {
-        const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound);
+        const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw);
         entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
         gutRopes.set(a.id, entry);
       }
@@ -1946,7 +1947,7 @@ async function main() {
     // the sever path already funnel through this function, and two copies
     // would drift. Uses the SAME bleedRng, so setBleed(false) freezes gouts
     // and the trickle together and captures stay deterministic.
-    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     // The gout sprays back along the incoming shot; spawnImpactGout negates
     // what it is handed, and the wound normal already points OUT of the
     // body, so pass the inward direction.
@@ -2129,7 +2130,8 @@ async function main() {
         hullExclusionsEnabled
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+            const yaw = a.pose().yaw;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // The pre-pass ships disabled and nothing consumes the occluder
@@ -2384,7 +2386,7 @@ async function main() {
         for (const e of bleed.live(bleedClock)) {
           const a = actors.find(q => q.id === e.bodyId);
           if (!a) { bleed.evictForBody(e.bodyId); continue; }
-          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound);
+          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
             bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
           );
@@ -2605,16 +2607,18 @@ async function main() {
     },
     /** Where every wound of a body sits IN WORLD SPACE right now — the
      *  surface anchor (= the GPU carve sphere's centre) plus the depth-slab
-     *  cap, all at the yaw-0 contract. The placement gate diffs the surface
+     *  cap, mapped at the actor's live yaw (the body-frame wound contract,
+     *  game-actor refreshWounds). The placement gate diffs the surface
      *  against the fired ray's impact point; carveDepth is the punch-through
      *  guard (0.45 × measured local flesh). */
     debugWounds: (id: number) => {
       const a = actors.find(a => a.id === id);
       if (!a) return undefined;
       const prims = a.posed().prims;
+      const yaw = a.pose().yaw;
       return a.wounds().map(w => ({
-        surface: woundWorldPos(prims, w, 0),
-        carveNormal: woundCarveNormal(prims, w, 0),
+        surface: woundWorldPos(prims, w, yaw),
+        carveNormal: woundCarveNormal(prims, w, yaw),
         carveDepth: w.carveDepth,
         radius: w.radius,
         type: w.type,
@@ -3530,7 +3534,8 @@ async function main() {
         hullExclusionsEnabled
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+            const yaw = a.pose().yaw;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // Same rule as the frame loop: only rebuild the occluder half when
@@ -3619,9 +3624,10 @@ async function main() {
       // 'slug' carries the BLAST profile at 0.16 (see SLUG) — the blast-class
       // crater look without resolveExplosion's 16-wound kill-gib.
       const field = (q: Vec3) => sdBody(q, posed);
+      const yaw = a.pose().yaw;
       const w = kind === 'slug'
-        ? woundFromSlug(posed.prims, hit, field)
-        : woundFromPellet(posed.prims, hit, 0, field);
+        ? woundFromSlug(posed.prims, hit, field, yaw)
+        : woundFromPellet(posed.prims, hit, yaw, field);
       a.stampBlast([w]);
       // Capture twins must spill too — task 8 judges the rope from exactly
       // this seam. Rolls bleedRng deterministically: same command sequence,
@@ -3634,7 +3640,7 @@ async function main() {
      *  blast calibre — wounds only, no shove/sever/gib, so captures are not
      *  displaced by their own impact. Returns what it did. */
     explode: (x: number, y: number, z: number) => {
-      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed() }));
+      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw }));
       const fx = resolveExplosion([x, y, z], bodies);
       let totalWounds = 0;
       for (const pb of fx.perBody) {

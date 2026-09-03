@@ -199,8 +199,10 @@ export function woundFromSlug(
   prims: import('../types').Primitive[],
   hit: Vec3,
   field: (p: Vec3) => number,
+  /** The yaw `prims` are posed at — same contract as woundFromPellet. */
+  bodyYaw = 0,
 ): Wound {
-  const w = worldHitToWound(prims, hit, SLUG.woundRadius, 'blast', 0, field);
+  const w = worldHitToWound(prims, hit, SLUG.woundRadius, 'blast', bodyYaw, field);
   w.severRadius = SLUG.severRadius;
   // Entrails (2026-09-02): a slug over the TORSO opens a body cavity — the
   // flag rides the wound beside type/age and gates the viscera ramp stop and

@@ -18,6 +18,8 @@ import { COLLAPSE_TUNING } from './collapse';
 import { HAND_PRIMS } from './hands';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import { add } from './vec';
+import { rotateYaw } from './gait';
+import { woundWorldPos, worldHitToWound } from './damage';
 import {
   EXPLOSION_STANDARD, EXPLOSION_LAUNCH, EXPLOSION_VFX_HEIGHT_SCALE,
   GROUND_BURST_THRESHOLD_M, GIB_THRESHOLD,
@@ -380,5 +382,47 @@ describe('purity', () => {
       chunks: opts.chunks, hands: opts.hands.prims, eye: opts.eye,
     });
     expect(after).toBe(before);
+  });
+});
+
+describe('a turned body (bodyYaw) resolves the same blast as the rest body', () => {
+  // The game passes POSED bodies (world space, turned by the walk yaw) and
+  // pushes the wounds into the actor ring, where they are uploaded at the
+  // live yaw and connectivity resolves them on the rest body at yaw 0. The
+  // resolver must therefore stamp in the body frame: given the yaw, its
+  // wounds map back to the rotated impact points and its cuts match.
+  const YAW = -1.9;
+  const turn = (p: Vec3): Vec3 => rotateYaw(p, YAW);
+  const turned: BuildResult = {
+    ...zombie,
+    prims: zombie.prims.map(p => ({ ...p, a: turn(p.a), b: turn(p.b) })),
+    clusters: zombie.clusters.map(c => ({ ...c, center: turn(c.center) })),
+  };
+  const at: Vec3 = [3, 1.2, 0.5];
+
+  it('stamps in the body frame: each wound is the same wound the rest body would take at that point', () => {
+    const fx = resolveExplosion(turn(at), [{ id: 'z', body: turned, bodyYaw: YAW }]).perBody[0]!;
+    expect(fx.wounds.length).toBeGreaterThan(0);
+    // At least one wound must ride a SPHERE prim — the shape with no axis to
+    // carry the turn, which is where a missing yaw shows.
+    expect(fx.wounds.some(w => {
+      const p = turned.prims[w.primIdx]!;
+      return p.a[0] === p.b[0] && p.a[1] === p.b[1] && p.a[2] === p.b[2];
+    })).toBe(true);
+    for (const tw of fx.wounds) {
+      // Un-turn the wound's world anchor into rest space and stamp THERE on
+      // the rest body: same prim, same body-frame local.
+      const world = woundWorldPos(turned.prims, tw, YAW);
+      const restPt = rotateYaw(world, -YAW);
+      const rw = worldHitToWound(zombie.prims, restPt, tw.radius, 'blast');
+      expect(rw.primIdx).toBe(tw.primIdx);
+      for (let k = 0; k < 3; k++) expect(rw.local[k]).toBeCloseTo(tw.local[k]!, 6);
+    }
+    // And the game's contract holds: the SAME wounds resolved on the rest
+    // body at yaw 0 (what the actor's runSeverChecks does) give the cuts the
+    // resolver reported from the turned body at its yaw.
+    const torso = zombie.clusters.find(c => c.limb === 'torso')!;
+    expect(fx.severedLimbs).toEqual(cutLimbs(zombie, fx.wounds, torso.center));
+    expect(fx.chainCuts).toEqual(cutChains(zombie, fx.wounds));
   });
 });

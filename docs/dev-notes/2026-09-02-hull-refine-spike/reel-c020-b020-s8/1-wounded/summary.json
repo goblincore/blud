@@ -1,0 +1,69 @@
+{
+  "state": {
+    "shell": false,
+    "occluder": false,
+    "cone": false,
+    "fxaa": false,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "w": 960,
+      "h": 540
+    },
+    "backend": "webgpu"
+  },
+  "onJs": "__hullSpike.setKnobs({cell:0.02,band:0.02,steps:8}); __hullSpike.setRenderer('hull')",
+  "offJs": "__hullSpike.setRenderer('march')",
+  "preJs": "__hullSpike.pelletAt('torso'); __hullSpike.slugAt('torso')",
+  "outDir": "docs/dev-notes/2026-09-02-hull-refine-spike/reel-c020-b020-s8/1-wounded",
+  "noiseFloor": {
+    "changed": 148,
+    "bigChanged": 99,
+    "meanD": 0.04,
+    "maxD": 543,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 4425,
+      "bigChanged": 3244,
+      "meanD": 1.5,
+      "maxD": 735,
+      "hotCells": [
+        "1,1",
+        "4,1",
+        "5,1",
+        "19,11"
+      ]
+    },
+    "a-2 vs b-2": {
+      "changed": 2449,
+      "bigChanged": 1717,
+      "meanD": 0.84,
+      "maxD": 735,
+      "hotCells": [
+        "19,11"
+      ]
+    },
+    "a-1 vs a-2": {
+      "changed": 94,
+      "bigChanged": 63,
+      "meanD": 0.03,
+      "maxD": 543,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 2144,
+      "bigChanged": 1639,
+      "meanD": 0.71,
+      "maxD": 543,
+      "hotCells": [
+        "1,1",
+        "4,1",
+        "5,1"
+      ]
+    }
+  }
+}
