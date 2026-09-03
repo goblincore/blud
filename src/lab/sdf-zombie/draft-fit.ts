@@ -182,6 +182,44 @@ export function cloudAlongAxis(anchor: Vec3, axis: Vec3, points: Vec3[]): Medial
 }
 
 /**
+ * A cloud's banding line in the CHAIN's frame: the chain's direction through
+ * the cloud's own centroid, with the cloud's true extent along it.
+ *
+ * For a cloud whose principal axis is not a limb axis (past the fit's report
+ * bar: skirt, hair, bilateral mass, a prosthetic plate), bands measured along
+ * that axis cannot be placed on the bone — the emitter's frame transfer
+ * projects the band edges onto the statement line and collapses them by
+ * cos(angle); at the measured 88° of the minotaur's prosthetic shin that was
+ * a 0.045-fraction sliver with from > to, stacking the whole prosthetic at
+ * one knee. Banding HERE puts the stations where the flesh is ON THE BONE,
+ * and the band edges land in the statement frame so no transfer exists.
+ *
+ * The anchor is the CENTROID, not the rig joint, on purpose: radii measured
+ * about a joint-anchored axis inflate by √(r²+d²) once the flesh sits off
+ * the bone (the 9-13 cm trap — see cloudOffset), and the prim then
+ * double-counts the displacement (offset= shifts it out AND the radius
+ * already contains it). About the cloud's own parallel axis the radii stay
+ * honest tube radii and offset= keeps its meaning.
+ *
+ * ONE FRAME, as in rigLine: `points` and `chainDir` already scaled and in
+ * the same frame as `centroid`.
+ */
+export function cloudBandLine(centroid: Vec3, chainDir: Vec3, points: Vec3[]): MedialLine {
+  if (points.length === 0)
+    throw new Error('cloudBandLine: no points — a banding line needs a cloud to measure');
+  const dir = normalize(chainDir);
+  let t0 = Infinity, t1 = -Infinity, sumSq = 0;
+  for (const p of points) {
+    const q = sub(p, centroid);
+    const t = dot(q, dir);
+    if (t < t0) t0 = t;
+    if (t > t1) t1 = t;
+    sumSq += Math.max(0, dot(q, q) - t * t);
+  }
+  return { dir, origin: centroid, t0, t1, residual: Math.sqrt(sumSq / points.length) };
+}
+
+/**
  * How far a bone's cloud centroid sits OFF its rig axis, perpendicular only.
  *
  * This is the honest answer to rig joints sitting 9-13 cm from the skin: the

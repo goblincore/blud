@@ -19,7 +19,7 @@ import type { Vec3 } from './types';
 import type { RefSkin } from './ref-skin';
 import { refBones, type RigDef } from './ref-align';
 import {
-  bandCloud, cloudAlongAxis, cloudOffset, medialLine, rigLine, type MedialLine,
+  bandCloud, cloudAlongAxis, cloudBandLine, cloudOffset, medialLine, rigLine, type MedialLine,
 } from './draft-fit';
 import {
   bandColour, bodyPaint, inferStance, pairAsymmetry,
@@ -184,11 +184,23 @@ function fitSide(
   let axisDisagreeDeg: number | undefined;
   if (seg) {
     chain = rigLine(seg.head, seg.tail, g, data.positions);
-    line = orient(cloudFit, chain.dir);
-    offset = cloudOffset(data.positions, chain);
     // Sign-blind on purpose: an eigenvector's canonical flip is not a
     // disagreement, and both signs name the same surface behaviour.
-    axisDisagreeDeg = Math.acos(Math.min(1, Math.abs(dot(cloudFit.dir, chain.dir)))) * 180 / Math.PI;
+    const disagreeDeg = Math.acos(Math.min(1, Math.abs(dot(cloudFit.dir, chain.dir)))) * 180 / Math.PI;
+    // PAST THE REPORT BAR, the cloud's principal axis is not a limb axis
+    // (skirt, hair, bilateral mass, a prosthetic plate): bands measured
+    // along it reach bandRange as cloud-frame t and the projection onto the
+    // statement line collapses them by cos(angle) — the minotaur's
+    // prosthetic shin emitted its bulk as a 0.045-fraction sliver, several
+    // bands from > to. Band along the CHAIN's direction instead (the frame
+    // the statement places prims in), so the band edges need no transfer.
+    // At or under the bar the cloud axis IS a usable limb axis and today's
+    // banding must not move by a bit — most bones are this case.
+    line = disagreeDeg > AXIS_REPORT_DEG
+      ? cloudBandLine(cloudFit.origin, chain.dir, data.positions)
+      : orient(cloudFit, chain.dir);
+    offset = cloudOffset(data.positions, chain);
+    axisDisagreeDeg = disagreeDeg;
   } else if (leafAxis && leafAnchor) {
     // The hair trap: the skull cloud's principal axis is the HAIR's, not the
     // head's (schoolgirl's measured 75° off the neck). The parent rig
@@ -367,7 +379,8 @@ function fitPass(
     if (angle <= AXIS_REPORT_DEG) return;
     fit.axisDisagreeDeg = angle;
     notes.push(`${label}: cloud axis ${angle.toFixed(0)}° off the rig chain — reported, not corrected `
-      + '(the surface does not follow the bone: skirt, hair or bilateral mass; radii and offset still the cloud\'s)');
+      + '(the surface does not follow the bone: skirt, hair or bilateral mass; bands are measured '
+      + 'along the rig chain, radii about the cloud\'s own parallel axis, offset still the cloud\'s)');
   };
 
   // --- fit each spec ----------------------------------------------------------

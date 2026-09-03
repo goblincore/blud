@@ -277,14 +277,26 @@ function validateInput(input: DraftInput): void {
 }
 
 /**
- * Fraction of the STATEMENT bone a band's cloud-frame t lands at. Bands are
- * measured against the fit's own line (the cloud axis for mapped bones), but
- * the statement places them along the CHAIN segment — which can extend past
- * the cloud, because the branch rule spans a branch-extended thigh from the
- * pelvis joint to the knee while the flesh occupies its lower part. The
- * projection is the frame transfer: from/to are where the flesh IS on the
- * bone, not the cloud's own [0,1] stretched over the bone. Consecutive
- * bands share edges exactly (one projection, t1[i] == t0[i+1]).
+ * Fraction of the STATEMENT bone a band's t lands at. Two banding frames
+ * reach this, chosen in draft-skeleton's fitSide:
+ *
+ *  - At or under the report bar (AXIS_REPORT_DEG), bands are measured along
+ *    the cloud's own axis and the projection below is the frame transfer —
+ *    honest there (near-parallel frames transfer exactly) and bit-stable,
+ *    which is why it survives. The statement can extend past the cloud,
+ *    because the branch rule spans a branch-extended thigh from the pelvis
+ *    joint to the knee while the flesh occupies its lower part: from/to are
+ *    where the flesh IS on the bone, not the cloud's own [0,1] stretched
+ *    over it.
+ *  - Past the bar, the fit's line is already chain-frame (cloudBandLine:
+ *    the chain's direction through the cloud's centroid), so dir·dir = 1
+ *    and the projection below folds to the pure (t − t_head)/e fraction —
+ *    the transfer the pre-frame-fix code performed with the cloud axis in
+ *    it, which collapsed by cos(angle) and, on the minotaur's prosthetic
+ *    (88° off), ran BACKWARD (from > to). With a single direction frac is
+ *    monotone in t by construction — inversion is structurally gone.
+ *
+ * Consecutive bands share edges exactly (one projection, t1[i] == t0[i+1]).
  *
  * First and last bands stay PINNED to the bone's ends: they own the joints,
  * and the joints are where clusters fuse — an extended clavicle's flesh

@@ -544,7 +544,7 @@ const RIG_SKIN: RefSkin = (() => {
 const RIG = detectRig([...RIG_SKIN.jointWorld.keys()]);
 
 /** The drafted RIGLING: assemble → emit → parse → compile → build. */
-function draftedRigling() {
+export function draftedRigling() {
   const { input, g } = assembleDraft(RIG_SKIN, RIG, null, { name: RIG_NAME, height: 1.9 });
   const text = emitDraft(input);
   const body = buildBody(compileBlob(parseBlob(text), compileFace(parseBlob(text))));
@@ -645,3 +645,199 @@ describe('drafted chain closes', () => {
     expect(skull!).not.toContain('medial axis of the skull cloud');
   });
 });
+
+// ---------------------------------------------------------------------------
+// BANDING IS IN THE BONE'S FRAME (frame/face plan, Task 1).
+//
+// The defect, measured on the committed minotaur draft: the prosthetic
+// shin.r cloud's principal axis sits ~88° off the statement chain, and
+// `bandRange` transfers cloud-frame band edges onto the statement line by
+// projection — at 88° the axis itself projects to a ~0.045-wide fraction
+// sliver (artifact: bands 4-9 all inside [0.196, 0.233], four with
+// from > to), stacking the prosthetic's bulk at one knee. The same
+// compression stacks the fixture pelvis below into from=0 to=0 prims.
+// Past the fit's own report bar (AXIS_REPORT_DEG in draft-skeleton — the
+// same measured angle `# fit:` already reports), the cloud's principal axis
+// is not a limb axis, so the BANDING frame moves to the chain's; at or
+// under it banding must not move at all (most limb clouds are aligned,
+// which is what the snapshot guard pins).
+
+/** The `bar` prims of one bone (one `side=`) parsed to their from/to/r. */
+function barPrims(text: string, bone: string, side: 'l' | 'r'): { from: number; to: number; r: number }[] {
+  return text.split('\n')
+    .filter((l) => l.startsWith('  bar ') && l.includes(` on ${bone} `) && l.includes(` side=${side} `))
+    .map((l) => {
+      const from = Number(l.match(/from=([\d.]+)/)![1]);
+      const to = Number(l.match(/to=([\d.]+)/)![1]);
+      const r = Number(l.match(/ r=([\d.]+)/)![1]);
+      return { from, to, r };
+    });
+}
+
+/** Ellipsoid of points: semi-axes `across`/`along`/`thin` along the given
+ *  unit directions. Fibonacci sweep — deterministic, even coverage, no rng
+ *  (headBall's discipline). This is a PROSTHETIC PLATE: its principal axis
+ *  is the plate's width, not the leg's length. */
+function ellipsoidCloud(centre: Vec3, acrossDir: Vec3, alongDir: Vec3, across: number, along: number, thin: number, n: number): Vec3[] {
+  const third = normalize(cross(acrossDir, alongDir));
+  const out: Vec3[] = [];
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (2 * (i + 0.5)) / n;
+    const rad = Math.sqrt(Math.max(0, 1 - y * y));
+    const th = i * 2.399963;
+    const cx = across * rad * Math.cos(th) * acrossDir[0]!
+      + along * y * alongDir[0]! + thin * rad * Math.sin(th) * third[0]!;
+    const cy = across * rad * Math.cos(th) * acrossDir[1]!
+      + along * y * alongDir[1]! + thin * rad * Math.sin(th) * third[1]!;
+    const cz = across * rad * Math.cos(th) * acrossDir[2]!
+      + along * y * alongDir[2]! + thin * rad * Math.sin(th) * third[2]!;
+    out.push([centre[0]! + cx, centre[1]! + cy, centre[2]! + cz]);
+  }
+  return out;
+}
+
+/** The rigling with its right leg SPLAYED (a brawler stance — the real
+ *  minotaur's leg pair is 20° apart in 3D) and its right shin cloud replaced
+ *  by an oblique plate. The plate's mass spans ~65% of the segment's length
+ *  while its principal axis points across it at 82° — signed along the
+ *  rig's RIGHT segment by `orient`, yet past perpendicular against the LEFT
+ *  statement chain (their directions differ by the splay), which is exactly
+ *  the real prosthetic's geometry: reported 76° off, projecting onto the
+ *  statement line with a NEGATIVE slope, emitting from > to. The left shin
+ *  stays a tube, so the pair is honestly NOT mirrorable (count skew 0.667,
+ *  the real prosthetic's metric is 0.627) and emits per side. */
+export const OBLIQUE_SKIN: RefSkin = (() => {
+  const OBLIQUE_JOINTS = new Map(JOINTS);
+  OBLIQUE_JOINTS.set('RightLeg', [-0.16, 0.5, 0.06]);
+  OBLIQUE_JOINTS.set('RightFoot', [-0.22, 0.13, -0.02]);
+  const a = OBLIQUE_JOINTS.get('RightLeg')!, b = OBLIQUE_JOINTS.get('RightFoot')!;
+  const seg = sub(b, a), segLen = len(seg);
+  const segDir = vscale(seg, 1 / segLen);
+  // The statement chain is the LEFT segment (the .blob statement is shared;
+  // the mirror block flips it for the right copy).
+  const l = JOINTS.get('LeftLeg')!, lf = JOINTS.get('LeftFoot')!;
+  const leftDir = vscale(sub(lf, l), 1 / len(sub(lf, l)));
+  // The plate axis: 82° off the RIGHT segment (past the fit's report bar),
+  // in the plane of the two legs, on the side AWAY from the statement chain.
+  // Components vs the two directions: +cos82° along the right segment (so
+  // `orient`'s anatomical signing keeps it), and vs the statement chain
+  // cos82°·0.97 − sin82°·0.23 < 0 — the negative projection slope that made
+  // the pre-fix emitter run from/to backward.
+  const w = sub(leftDir, vscale(segDir, dot(leftDir, segDir)));
+  const away = vscale(normalize(w), -1);
+  const t = (82 * Math.PI) / 180;
+  const acrossDir = normalize([
+    segDir[0]! * Math.cos(t) + away[0]! * Math.sin(t),
+    segDir[1]! * Math.cos(t) + away[1]! * Math.sin(t),
+    segDir[2]! * Math.cos(t) + away[2]! * Math.sin(t),
+  ]);
+  const centre: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  // along = 0.12 of a 0.38 segment: the plate's honest footprint along the
+  // statement bone is ≈0.24/0.37 ≈ 0.65 of [0,1] — the number the span
+  // assertion is calibrated against.
+  const plate = ellipsoidCloud(centre, acrossDir, segDir, 0.20, 0.12, 0.05, 900);
+  const verts: RefVertex[] = [
+    ...RIG_SKIN.verts.filter((v) => v.joint !== 'RightLeg'),
+    ...plate.map((position) => ({ joint: 'RightLeg', position })),
+  ];
+  return { verts, jointWorld: OBLIQUE_JOINTS, total: verts.length, dropped: 0 };
+})();
+
+/** The drafted oblique variant: assemble → emit (the real pipeline, like
+ *  draftedRigling). */
+export function draftedOblique() {
+  const { input } = assembleDraft(OBLIQUE_SKIN, RIG, null, { name: RIG_NAME, height: 1.9 });
+  const text = emitDraft(input);
+  return { input, text };
+}
+
+describe('banding is in the bone frame', () => {
+  it('spans the bone for an OBLIQUE cloud', () => {
+    // The plate's honest footprint along the statement bone is ~0.65 of
+    // [0,1] (geometry above). The pre-fix pipeline measured band edges along
+    // the plate's own axis and projected: cos(80°) collapses that to a
+    // ~0.04 sliver (the real artifact measured 0.045 wide). Interior bands
+    // — excluding the first and last, which are PINNED to the bone ends for
+    // joint fusion and so say nothing about the frame transfer — must still
+    // tile at least 0.30 of the bone: half the honest footprint minus the
+    // end margins. The pre-fix sliver fails this by ~8×; a cloud under the
+    // report bar (≤45°, cos ≥ 0.7) passes it without moving.
+    const { text } = draftedOblique();
+    const prims = barPrims(text, 'shin', 'r');
+    // The scan must see a real per-side prosthetic, not an empty bone.
+    expect(prims.length).toBeGreaterThanOrEqual(4);
+    const interior = prims.slice(1, -1);
+    const lo = Math.min(...interior.map((p) => Math.min(p.from, p.to)));
+    const hi = Math.max(...interior.map((p) => Math.max(p.from, p.to)));
+    expect(hi - lo).toBeGreaterThanOrEqual(0.30);
+    // The radii, too, are surface statements ABOUT THE CLOUD: the plate's
+    // honest tube radius about its own centroid-parallel axis lands at a
+    // ~0.10-0.14 median (semi-axes 0.20/0.12/0.05). Anchoring the banding
+    // line at the rig JOINT instead — the plan-literal variant — inflates
+    // every radius by √(d²+r²) ≈ 0.17+ (the centroid sits ~0.125 off the
+    // joint axis) and then DOUBLE-COUNTS the displacement with offset=.
+    // The median bound kills that variant.
+    const rs = prims.map((p) => p.r).sort((a, b) => a - b);
+    const medianR = rs[rs.length >> 1]!;
+    expect(medianR).toBeGreaterThanOrEqual(0.09);
+    expect(medianR).toBeLessThanOrEqual(0.15);
+  });
+
+  it('never emits from > to', () => {
+    // The oblique case emitted INVERTED ranges (real artifact: shin.r bands
+    // 4, 5, 6, 8) because the cloud axis is signed along the RIG's right
+    // segment while the statement line is the LEFT one — past perpendicular
+    // the projection runs backward. `resolve` lerps so the numbers stay
+    // harmless, but the PLACEMENT is wrong. Ordering is asserted over every
+    // band of every bone of BOTH drafted bodies, so a fix that merely
+    // re-sorts the sliver cannot pass.
+    for (const { text } of [draftedRigling(), draftedOblique()]) {
+      const bars = text.split('\n').filter((l) => l.startsWith('  bar '));
+      // The scan must see both drafted bodies' prim sets.
+      expect(bars.length).toBeGreaterThanOrEqual(20);
+      for (const l of bars) {
+        const from = Number(l.match(/from=([\d.]+)/)![1]);
+        const to = Number(l.match(/to=([\d.]+)/)![1]);
+        expect(to, l).toBeGreaterThanOrEqual(from);
+      }
+    }
+  });
+
+  it('leaves an ALIGNED cloud unchanged', () => {
+    // The regression guard: the fixture's LIMB tubes are long and thin, so
+    // their principal axes ARE their rig segments — the case of most real
+    // bones. Where the axes agree, the banding-frame choice cannot matter,
+    // so the emitted numbers must be BIT-identical to the pre-fix pipeline
+    // — pinned here (comments stripped: prose may move, numbers may not).
+    // NOT pinned: the pelvis ball and the short-fat torso tubes — their
+    // principal axes are radial/eigenvector noise that MEASURES past the
+    // report bar (the spine tubes 89.9°), so they ride the chain-frame path
+    // by measurement, and their pre-fix output was the pinned-ends-plus-
+    // mid-sliver collapse this plan fixes. The hand band rides the budget
+    // trim boundary and moves with any bone's band count; it pins nothing.
+    const { text } = draftedRigling();
+    const words = text.split('\n')
+      .filter((l) => l.startsWith('  bar '))
+      .map((l) => l.split('  # ')[0]!);
+    const limbs = words.filter((l) =>
+      ['clavicle', 'upperarm', 'forearm', 'thigh', 'shin', 'foot'].some((b) => l.includes(` on ${b} `)));
+    // The scan must see the aligned limb set, not an empty filter.
+    expect(limbs.length).toBeGreaterThanOrEqual(10);
+    expect(limbs).toEqual(ALIGNED_RIGLING_BAR_WORDS);
+  });
+});
+
+const ALIGNED_RIGLING_BAR_WORDS: string[] = [
+    "  bar arm on clavicle from=0 to=1 r=0.0748 wide=1.0002 deep=0.9998 blend=0.006 offset=(-0.0001,0.0023,-0.0004) mirror core",
+    "  bar arm on upperarm from=0 to=1 r=0.0686 wide=1.0001 deep=0.9999 blend=0.0055 offset=(0,0,-0.0003) mirror",
+    "  bar arm on forearm from=0 to=1 r=0.0561 wide=1.0001 deep=0.9999 blend=0.0045 offset=(0,0,-0.0003) mirror",
+    "  bar leg on thigh from=0 to=1 r=0.0997 wide=1 deep=1 blend=0.008 offset=(0.0227,0.0031,0.0045) mirror core",
+    "  bar leg on shin from=0 to=1 r=0.0623 wide=1 deep=1 blend=0.005 offset=(0.0001,0,-0.0002) mirror",
+    "  bar leg on foot from=0 to=0 r=0.04 wide=0.8558 deep=1.1442 blend=0.004 offset=(-0,0.0065,0.0082) mirror",
+    "  bar leg on foot from=0.0773 to=0.1349 r=0.0568 wide=1.0007 deep=0.9993 blend=0.0045 offset=(-0,0.0065,0.0082) mirror",
+    "  bar leg on foot from=0.1455 to=0.1968 r=0.0619 wide=1.0575 deep=0.9425 blend=0.0049 offset=(-0,0.0065,0.0082) mirror",
+    "  bar leg on foot from=0.2018 to=0.886 r=0.0566 wide=1.0349 deep=0.9651 blend=0.0045 offset=(-0,0.0065,0.0082) mirror",
+    "  bar leg on foot from=0.8954 to=0.9525 r=0.0421 wide=0.8317 deep=1.1683 blend=0.004 offset=(-0,0.0065,0.0082) mirror",
+    "  bar leg on foot from=0.9543 to=1 r=0.0386 wide=1.0534 deep=0.9466 blend=0.004 offset=(-0,0.0065,0.0082) mirror",
+    "  bar leg on foot from=1 to=1 r=0.0205 wide=0.7134 deep=1.2866 blend=0.004 offset=(-0,0.0065,0.0082) mirror",
+];
