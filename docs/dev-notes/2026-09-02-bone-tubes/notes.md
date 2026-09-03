@@ -75,6 +75,19 @@ field bone, and "the ribcage structure seems way off… ribs aren't properly con
    wall albedo), wrapped diffuse, wet specular + fresnel with a blood-tinted highlight,
    and a 0.45 stain toward deepColor. Owner to re-judge in-tab.
 
+## Owner's second look (2026-09-03): "bones a bit too clean", "bone breaking seems off"
+
+3. **Bone sticking out of a stump.** `severDistal` killed the flesh beyond a mid-limb
+   cut but left every bone of the limb intact, so the upper-arm bone kept spanning to
+   the (now flesh-less) elbow and the tubes drew it in the air. The field had hidden it
+   inside the stump's wound zone. Fix: bones are split against the cut plane — wholly
+   proximal stays, wholly distal moves to the chunk (`chunk.bones`, so the flying piece
+   now carries its bone), a spanning bone is cut at the plane with the radius
+   interpolated and the bend dropped. Pinned in `sever-bones.test.ts`.
+4. **Too clean.** The stain/wet/spec/fresnel mix is now a live knob:
+   `__sdfGame.setBoneLook({ stain, wet, spec, fres })`, defaults 0.65 / 0.5 / 1.2 / 0.6
+   (up from stain 0.45, wet 0.35). Owner tunes; the chosen values become the default.
+
 ## Verdict
 
 _pending owner_ — ships OFF until then (`__sdfGame.setBoneMesh(true)` to try).

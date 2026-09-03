@@ -217,6 +217,42 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
   const distalSet = new Set(distalIdxs);
   const prims = body.prims.map((p, i) => (distalSet.has(i) ? { ...p, dead: true } : p));
 
+  // BONES ACROSS THE CUT (bone tubes, 2026-09-03). Flesh beyond the joint dies,
+  // so a bone left spanning it would stick out of the stump into the air —
+  // exactly what the tube renderer showed on a mid-arm slug (the field had
+  // hidden it inside the stump's wound zone). Split every bone of this cluster
+  // against the cut plane through `joint` (normal = toward the distal side):
+  // wholly proximal stays, wholly distal moves to the chunk, a spanning bone is
+  // cut at the plane — the body keeps the proximal piece, the chunk the distal
+  // one — with the radius interpolated at the cut and the bend dropped (a half
+  // bone is straight enough). Body bone count is conserved with the chunk.
+  const distalFirst = body.prims[distalIdxs[0]!]!;
+  const dc: Vec3 = [(distalFirst.a[0] + distalFirst.b[0]) / 2, (distalFirst.a[1] + distalFirst.b[1]) / 2, (distalFirst.a[2] + distalFirst.b[2]) / 2];
+  const nRaw = sub(dc, joint);
+  const nLen = len(nRaw) || 1;
+  const nrm: Vec3 = [nRaw[0] / nLen, nRaw[1] / nLen, nRaw[2] / nLen];
+  const clusterIdx = body.clusters.indexOf(cluster);
+  const bodyBones: Primitive[] = [];
+  const chunkBones: Primitive[] = [];
+  for (const b of body.bonePrims ?? []) {
+    if (b.cluster !== clusterIdx || b.dead) { bodyBones.push(b); continue; }
+    const da = dot(sub(b.a, joint), nrm), db = dot(sub(b.b, joint), nrm);
+    if (da <= 0 && db <= 0) { bodyBones.push(b); continue; }
+    if (da > 0 && db > 0) { bodyBones.push({ ...b, dead: true }); chunkBones.push({ ...b, dead: false }); continue; }
+    const t = da / (da - db);
+    const cutP = lerp(b.a, b.b, t);
+    const r1 = b.radius, r2 = b.radiusB ?? b.radius;
+    const rCut = r1 + (r2 - r1) * t;
+    const proxHalf: Primitive = da <= 0
+      ? { ...b, b: cutP, radiusB: rCut, bend: undefined }
+      : { ...b, a: cutP, radius: rCut, bend: undefined };
+    const distHalf: Primitive = da <= 0
+      ? { ...b, a: cutP, radius: rCut, bend: undefined, dead: false }
+      : { ...b, b: cutP, radiusB: rCut, bend: undefined, dead: false };
+    bodyBones.push(proxHalf);
+    chunkBones.push(distHalf);
+  }
+
   // Live copies for the chunk: on the body they are dead, but the chunk is
   // its own standalone piece and must still render (packBody writes w=2 for
   // dead prims — a dead-flagged copy would march as nothing).
@@ -239,9 +275,9 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
   };
 
   return {
-    body: { ...body, prims },
-    // Bone-free for the same reason as the empty case above.
-    chunk: { limb: cut.limb, prims: chunkPrims, bones: [], origin, tornAt: [joint] },
+    body: { ...body, prims, bonePrims: bodyBones },
+    // Distal bone pieces ride the chunk (split above); the body keeps the proximal halves.
+    chunk: { limb: cut.limb, prims: chunkPrims, bones: chunkBones, origin, tornAt: [joint] },
     stumpWound,
   };
 }

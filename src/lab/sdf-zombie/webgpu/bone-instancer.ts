@@ -107,7 +107,7 @@ export const BONE_VERTEX_WGSL = /* wgsl */ `fn boneVertex(t: f32, theta: f32, la
 
 /** Lambert key + flashlight cone, the march's own formula (march.wgsl.ts
  *  ~2253-2290) on the same uniform values, minus wetness/scatter. */
-export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
+export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
   var L = normalize(lightDir);
   var keyC = keyColor;
   var keyI = lightCfg.x;
@@ -130,13 +130,13 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
   let V = normalize(camPos - p);
   let ndl = max(dot(n, L), 0.0);
   let H = normalize(L + V);
+  // look = (stain toward deepColor, blood tint on the highlight, spec gain, fresnel gain)
   let shine = pow(max(dot(n, H), 0.0), 48.0);
-  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * 0.6;
-  let stain = 0.45;
-  let albedo = mix(boneColor, deepColor * 0.8, stain);
-  let wetTint = mix(vec3<f32>(1.0), deepColor, 0.35);
+  let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * look.w;
+  let albedo = mix(boneColor, deepColor * 0.8, look.x);
+  let wetTint = mix(vec3<f32>(1.0), deepColor, look.y);
   let diffuse = albedo * (ambient + keyI * keyC * (0.15 + 0.85 * ndl));
-  let specular = keyC * wetTint * (shine * 1.2 * keyI + fres * (0.5 + 0.5 * keyI));
+  let specular = keyC * wetTint * (shine * look.z * keyI + fres * (0.5 + 0.5 * keyI));
   return diffuse + specular;
 }`;
 
@@ -159,6 +159,8 @@ const boneInstancerUniforms = () => ({
   boneColor: uniform(new THREE.Color(0.93, 0.89, 0.80)),
     deepColor: uniform(new THREE.Color(0.45, 0.06, 0.05)),
     ambient: uniform(new THREE.Color(0.06, 0.06, 0.06)),
+    /** (stain, wetTint, specGain, fresGain) — __sdfGame.setBoneLook tunes it live. */
+    look: uniform(new THREE.Vector4(0.65, 0.5, 1.2, 0.6)),
   lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
   keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
   lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
@@ -205,7 +207,7 @@ export function createBoneInstancer(max = 256): BoneInstancer {
   material.normalNode = vert({ ...args, wantNormal: float(1) }) as never;
   material.colorNode = vec4(shade({
     p: positionWorld, n: material.normalNode, camPos: cameraPosition,
-    boneColor: u.boneColor, deepColor: u.deepColor, ambient: u.ambient, lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+    boneColor: u.boneColor, deepColor: u.deepColor, ambient: u.ambient, look: u.look, lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
   }) as never, 1.0);
   material.depthWrite = true;

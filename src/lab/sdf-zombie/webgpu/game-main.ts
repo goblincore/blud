@@ -2376,6 +2376,13 @@ async function main() {
      *  bones; ON draws every posed bone as an instanced polygonal tube and
      *  flips every view's packBones off so the field drops its bone rows. */
     setBoneMesh: (on: boolean) => applyBoneMesh(on),
+    /** Tube bone look: { stain 0..1 toward deepColor, wet 0..1 blood tint on highlights, spec gain, fres gain }. */
+    setBoneLook: (o: { stain?: number; wet?: number; spec?: number; fres?: number }) => {
+      const l = boneInstancer.uniforms.look.value;
+      if (o.stain !== undefined) l.x = o.stain; if (o.wet !== undefined) l.y = o.wet;
+      if (o.spec !== undefined) l.z = o.spec; if (o.fres !== undefined) l.w = o.fres;
+      return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
+    },
     get boneMesh() { return boneMesh; },
     boneTubes: () => ({ count: boneInstancer.count, overflowed: boneInstancer.overflowed }),
     setGooTuning(o: {
