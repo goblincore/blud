@@ -2947,6 +2947,10 @@ async function main() {
     walkCancel: () => { autopilot = null; },
     get walking() { return autopilot !== null; },
     frameMs: () => frameEma,
+    /** Frames actually PRESENTED. Under a frame cap the rAF loop still wakes
+     *  every vsync and skips most of them, so raw rAF gaps measure the display
+     *  rather than the cadence -- count this instead. */
+    presentCount: () => frameCount,
     bodiesOnScreen,
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
