@@ -128,6 +128,7 @@ import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
+import { applyMelt, meltInitBody, stepMelt, type MeltState } from '../melt';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
@@ -996,6 +997,26 @@ async function main() {
    *  wander target (the creepy variant the owner wants kept reachable). */
   let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
+
+  // ——— MELT (2026-09-03) ————————————————————————————————————————————————
+  // The zombie liquefies where it stands: flesh sags into a puddle and the
+  // skeleton falls out of it. Spec: docs/superpowers/specs/2026-09-03-zombie-melt-design.md
+  //
+  // NOTE this deliberately does NOT trigger the death collapse. Melting IS
+  // the death — a ragdoll underneath would topple the body, and the whole
+  // read is that it goes straight down like a candle.
+  let meltState: MeltState | null = null;
+  function startMelt() {
+    meltState = meltInitBody(current.prims, 0);
+  }
+  function stopMelt() {
+    meltState = null;
+  }
+  /** Jump straight to a progress value — the capture script's knob. */
+  function meltDirect(t: number) {
+    if (!meltState) startMelt();
+    meltState = { ...meltState!, t: Math.max(0, Math.min(1, t)) };
+  }
   // bindRig pins the lowest joint as a static anchor; walking releases it —
   // the rest pull + plants carry the body instead (and collapse wants the
   // pin gone anyway, so it lives in one place).
@@ -2098,6 +2119,10 @@ async function main() {
     if (ev.key === '[') { setCrowdCount(Math.max(0, crowd.length - 1)); return; }
     if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
     if (ev.key === 'k' || ev.key === 'K') { forcedCollapse = true; return; }
+    // MELT: 'm' starts it, 'M' (shift) clears it back to a solid body. Melting
+    // IS the death — no forcedCollapse here; a ragdoll would topple it.
+    if (ev.key === 'm') { startMelt(); return; }
+    if (ev.key === 'M') { stopMelt(); return; }
     const limb = SEVER_KEYS[ev.key];
     if (!limb) return;
     const { body: next, chunk, stumpWound } = severLimb(current, limb);
@@ -2470,13 +2495,24 @@ async function main() {
       };
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
     }
+    if (meltState) meltState = stepMelt(meltState, Math.min(dt, 1 / 30));
     const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked
     // into. Prim indices correspond 1:1 with the posed body (applyRig maps
     // prims without reordering; severing flips flags, never order).
-    view.update(posed, current);
+    // Melt transforms BOTH posed and rest. Rest rows anchor the surface
+    // noise; dragging them along is what makes the mottle flow WITH the goo
+    // instead of the skin appearing to slide over a ghost of the old body.
+    if (meltState) {
+      view.update(
+        { ...posed, prims: applyMelt(posed.prims, meltState) },
+        { ...current, prims: applyMelt(current.prims, meltState) },
+      );
+    } else {
+      view.update(posed, current);
+    }
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
     // keyed to it) stops advancing between two captures.
@@ -3379,6 +3415,17 @@ async function main() {
   (window as unknown as { __sdfLab: unknown }).__sdfLab = {
     /** Boot timeline in ms since navigation start. See main()'s comment. */
     boot,
+    // ——— MELT ————————————————————————————————————————————————————————————
+    //   m / M                  start / clear
+    //   __sdfLab.melt()        start from the console
+    //   __sdfLab.meltOff()     clear back to the solid body
+    //   __sdfLab.meltDirect(t) jump to a progress value — deterministic, so
+    //                          the capture script shoots the same frames twice
+    //   __sdfLab.meltState()
+    melt: () => startMelt(),
+    meltOff: () => stopMelt(),
+    meltDirect: (t: number) => meltDirect(t),
+    meltState: () => (meltState ? { t: meltState.t } : null),
     backend: handle.backend,
     /**
      * The renderer, scene and camera — enough to call
