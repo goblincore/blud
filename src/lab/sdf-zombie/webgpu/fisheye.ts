@@ -26,15 +26,45 @@
 // the DOM reticle (reticleNdc) must agree on the curve to the pixel, so they
 // import it rather than each spelling it out. If you edit one, edit the other
 // in the same commit — fisheye.test.ts and post-aa.test.ts both guard it.
+// The two centre guards below (JS 1e-9, WGSL 1.0e-6) are a deliberate
+// exception to that pairing, not a drift to fix — see FISHEYE_WGSL's doc.
+//
+// A SECOND radial warp lives at src/vfx/post-fx/barrel-pass.ts, for the
+// WebGL path (src/main.ts). That is not duplication to fold in here: it
+// belongs to a different renderer stack, and its map is strictly worse for
+// this job — it clamps out-of-range samples to black, which is exactly the
+// failure this module eliminates by construction (see the corner-pinning
+// property above).
 
-/** A lens resolved for one display aspect. `k = 0` is an exact identity. */
+/** A 2D point in normalised device coordinates, -1..1 on both axes. */
+export interface Ndc {
+  x: number;
+  y: number;
+}
+
+/**
+ * A lens resolved for one display aspect and one render FOV. `k = 0` is an
+ * exact identity.
+ */
 export interface Lens {
   /** Cubic coefficient of the radial map. 0 = off. */
   k: number;
   /** Corner radius in half-height units, sqrt(aspect^2 + 1). */
   rmax: number;
-  /** The display aspect (width / height) this lens was built for. */
+  /**
+   * The display aspect (width / height) this lens was built for. Must be
+   * strictly positive: 0 divides by zero in reticleNdc/warpUv, and a
+   * negative value mirrors the reticle.
+   */
   aspect: number;
+  /**
+   * The render FOV actually used to build this lens, in vertical degrees,
+   * AFTER makeLens's [1, 179] clamp — not the raw value the caller passed
+   * in. Carried on the lens (rather than left for the caller to remember
+   * and re-supply) so visibleFovDeg cannot be handed a stale or mismatched
+   * FOV by a seam that stores its own copy elsewhere.
+   */
+  renderFovDeg: number;
 }
 
 /** The owner-approved look: render 90 vertical, read 60 at screen centre. */
@@ -53,6 +83,13 @@ export function cornerRadius(aspect: number): number {
  * camera draws, `centerFovDeg` what the middle of the screen should read as.
  * A centre FOV that is not narrower than the render FOV yields k = 0 — the
  * off switch, and an exact identity rather than an approximate one.
+ *
+ * Both FOVs are clamped to [1, 179] before use — a runtime tuning seam can
+ * hand this a value with no upstream validation of its own, and 0/180
+ * degenerate the tangent. The clamp does NOT guard against NaN: `Math.max(1,
+ * NaN)` is `NaN`, so a NaN FOV flows straight through into `k` (and from
+ * there into `renderFovDeg`) unchanged. That is the caller's to avoid, not
+ * this function's.
  */
 export function makeLens(
   renderFovDeg: number, centerFovDeg: number, aspect: number,
@@ -61,9 +98,9 @@ export function makeLens(
   const clampFov = (d: number) => Math.min(179, Math.max(1, d));
   const rf = clampFov(renderFovDeg);
   const cf = clampFov(centerFovDeg);
-  if (cf >= rf) return { k: 0, rmax, aspect };
+  if (cf >= rf) return { k: 0, rmax, aspect, renderFovDeg: rf };
   const ratio = Math.tan((rf * Math.PI) / 360) / Math.tan((cf * Math.PI) / 360);
-  return { k: (ratio - 1) / (rmax * rmax), rmax, aspect };
+  return { k: (ratio - 1) / (rmax * rmax), rmax, aspect, renderFovDeg: rf };
 }
 
 /** Forward map: the source radius a screen radius samples from. */
@@ -78,7 +115,10 @@ export function sampleRadius(r: number, lens: Lens): number {
  *
  * Solves k*r^3 + r - C = 0 with C = s * (1 + k*rmax^2). The cubic is strictly
  * increasing and convex for k > 0, so Newton from r = C (always an
- * overestimate) converges monotonically in a handful of steps.
+ * overestimate) converges monotonically. The real exit is the `1e-13` step
+ * tolerance, reached in a handful of iterations for every case this module
+ * exercises; `24` is not the expected iteration count, it is an unreachable
+ * safety stop against a stalled loop.
  */
 export function screenRadius(s: number, lens: Lens): number {
   if (lens.k <= 0) return s;
@@ -97,9 +137,7 @@ export function screenRadius(s: number, lens: Lens): number {
  * -1..1 on both axes). The world moves under the crosshair when the lens is
  * on, so the crosshair has to move with it or it stops telling the truth.
  */
-export function reticleNdc(
-  aim: { x: number; y: number }, lens: Lens,
-): { x: number; y: number } {
+export function reticleNdc(aim: Ndc, lens: Lens): Ndc {
   if (lens.k <= 0) return { x: aim.x, y: aim.y };
   const qx = aim.x * lens.aspect;
   const qy = aim.y;
@@ -113,11 +151,33 @@ export function reticleNdc(
  * The vertical FOV actually VISIBLE on screen, degrees — smaller than the
  * render FOV, because the warp pulls the vertical mid-edge (radius 1) in.
  * Reported by the __sdfGame seam so the knob can be tuned against what the
- * player sees rather than what the camera draws.
+ * player sees rather than what the camera draws. Reads `renderFovDeg` off
+ * the lens itself, rather than taking it as a second argument, so this
+ * report cannot silently drift from the FOV the lens was actually built
+ * with.
  */
-export function visibleFovDeg(renderFovDeg: number, lens: Lens): number {
-  const tanR = Math.tan((renderFovDeg * Math.PI) / 360);
+export function visibleFovDeg(lens: Lens): number {
+  const tanR = Math.tan((lens.renderFovDeg * Math.PI) / 360);
   return (360 / Math.PI) * Math.atan(sampleRadius(1, lens) * tanR);
+}
+
+/**
+ * The JS half of the UV<->half-height conversion that wraps sampleRadius in
+ * FISHEYE_WGSL. This is the EXECUTABLE MIRROR of that shader function — it
+ * exists so the UV<->radius plumbing (not just the radial curve itself) has
+ * a test-covered JS twin, not because production code calls it; the blit
+ * calls the WGSL directly. `st` is a UV coordinate, 0..1 on both axes.
+ */
+export function warpUv(st: Ndc, lens: Lens): Ndc {
+  if (lens.k <= 0) return { x: st.x, y: st.y };
+  const qx = (st.x - 0.5) * 2 * lens.aspect;
+  const qy = (st.y - 0.5) * 2;
+  const r = Math.hypot(qx, qy);
+  if (r < 1e-6) return { x: st.x, y: st.y };
+  const scale = (1 + lens.k * r * r) / (1 + lens.k * lens.rmax * lens.rmax);
+  const wx = qx * scale;
+  const wy = qy * scale;
+  return { x: wx / (2 * lens.aspect) + 0.5, y: wy * 0.5 + 0.5 };
 }
 
 /**
@@ -127,10 +187,16 @@ export function visibleFovDeg(renderFovDeg: number, lens: Lens): number {
  * letterboxed and its dimensions are not the display aspect.
  *
  * Mirrors sampleRadius() exactly, as the ratio (1 + k*r^2)/(1 + k*rmax^2) so
- * no divide by r is needed at the centre.
+ * no divide by r is needed at the centre. Its own UV<->radius conversion is
+ * mirrored in JS by warpUv(), above.
+ *
+ * The centre guard here is `1.0e-6`, wider than the JS `1e-9` used
+ * elsewhere in this file (in reticleNdc). That is deliberate, not drift: f32
+ * loses precision far sooner than f64 does near the centre, so the shader
+ * needs a looser threshold to avoid an unstable divide. Edit the shader and
+ * its JS mirrors together; do not tighten this constant to match `1e-9`.
  */
-export const FISHEYE_WGSL = /* wgsl */ `
-fn fisheyeWarp(st: vec2<f32>, lens: vec3<f32>) -> vec2<f32> {
+export const FISHEYE_WGSL = /* wgsl */ `fn fisheyeWarp(st: vec2<f32>, lens: vec3<f32>) -> vec2<f32> {
   let k = lens.x;
   if (k <= 0.0) { return st; }
   let rmax = lens.y;

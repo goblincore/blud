@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FISHEYE_DEFAULTS, FISHEYE_WGSL, makeLens, cornerRadius, sampleRadius,
-  screenRadius, reticleNdc, visibleFovDeg,
+  screenRadius, reticleNdc, visibleFovDeg, warpUv,
 } from './fisheye';
 
 const ASPECT = 16 / 9;
@@ -93,13 +93,81 @@ describe('fisheye inverse', () => {
 describe('fisheye reporting', () => {
   it('reports the vertical FOV actually visible, not the one rendered', () => {
     // Mid-edges are cropped by the warp: 90 rendered reads as ~68.3 on screen.
-    expect(visibleFovDeg(90, DEF)).toBeCloseTo(68.3, 1);
-    expect(visibleFovDeg(90, makeLens(90, 90, ASPECT))).toBeCloseTo(90, 9);
+    expect(visibleFovDeg(DEF)).toBeCloseTo(68.3, 1);
+    expect(visibleFovDeg(makeLens(90, 90, ASPECT))).toBeCloseTo(90, 9);
+  });
+
+  it('reads its render FOV off the lens, not a caller-supplied echo', () => {
+    // makeLens stores what it actually used (post-clamp), so visibleFovDeg
+    // cannot be handed a stale or mismatched FOV by a forgetful caller.
+    const clamped = makeLens(400, 60, ASPECT);
+    expect(clamped.renderFovDeg).toBe(179);
+    const lens90 = makeLens(90, 60, ASPECT);
+    expect(lens90.renderFovDeg).toBe(90);
   });
 
   it('ships the owner-approved defaults', () => {
     expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(90);
     expect(FISHEYE_DEFAULTS.centerFovDeg).toBe(60);
+  });
+});
+
+describe('warpUv, the executable mirror of FISHEYE_WGSL', () => {
+  const L = DEF;
+
+  it('leaves the centre at the centre', () => {
+    expect(warpUv({ x: 0.5, y: 0.5 }, L)).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('pins all four corners', () => {
+    for (const st of [
+      { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 },
+    ]) {
+      const w = warpUv(st, L);
+      expect(w.x).toBeCloseTo(st.x, 9);
+      expect(w.y).toBeCloseTo(st.y, 9);
+    }
+  });
+
+  it('stays within [0, 1] on both axes, across a grid, at a non-square aspect', () => {
+    for (let i = 0; i <= 20; i++) {
+      for (let j = 0; j <= 20; j++) {
+        const w = warpUv({ x: i / 20, y: j / 20 }, L);
+        expect(w.x).toBeGreaterThanOrEqual(0);
+        expect(w.x).toBeLessThanOrEqual(1);
+        expect(w.y).toBeGreaterThanOrEqual(0);
+        expect(w.y).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('is circular on screen, not elliptical, at aspect != 1', () => {
+    // Two UV points equidistant from centre in half-height-radius terms, one
+    // horizontal and one vertical, must warp by the same radial factor.
+    const dx = 0.2 / L.aspect; // same half-height radius as dy below
+    const dy = 0.2;
+    const wx = warpUv({ x: 0.5 + dx, y: 0.5 }, L);
+    const wy = warpUv({ x: 0.5, y: 0.5 + dy }, L);
+    const outDx = (wx.x - 0.5) * L.aspect;
+    const outDy = wy.y - 0.5;
+    expect(outDx).toBeCloseTo(outDy, 9);
+  });
+
+  it('agrees with sampleRadius: warp a UV point, convert to half-height radius, compare', () => {
+    for (let i = 0; i <= 20; i++) {
+      for (let j = 0; j <= 20; j++) {
+        const st = { x: i / 20, y: j / 20 };
+        const qx = (st.x - 0.5) * 2 * L.aspect;
+        const qy = (st.y - 0.5) * 2;
+        const r = Math.hypot(qx, qy);
+        if (r < 1e-6) continue;
+        const w = warpUv(st, L);
+        const wx = (w.x - 0.5) * 2 * L.aspect;
+        const wy = (w.y - 0.5) * 2;
+        const s = Math.hypot(wx, wy);
+        expect(s).toBeCloseTo(sampleRadius(r, L), 9);
+      }
+    }
   });
 });
 
@@ -118,7 +186,7 @@ describe('fisheye shader/JS agreement', () => {
   });
 
   it('is exactly one helper fn, for appending to the blit', () => {
-    expect(FISHEYE_WGSL.trim().startsWith('fn fisheyeWarp(')).toBe(true);
+    expect(FISHEYE_WGSL.startsWith('fn fisheyeWarp(')).toBe(true);
     expect(FISHEYE_WGSL.match(/\bfn\s+\w+\s*\(/g)).toHaveLength(1);
   });
 });
