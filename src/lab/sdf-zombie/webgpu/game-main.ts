@@ -32,7 +32,7 @@ import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './d
 import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
-  BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, turnFromAim,
+  BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
   weaponAngles, type AimPoint,
 } from './free-aim';
 import {
@@ -2177,12 +2177,14 @@ async function main() {
     }
     if (aimRig) {
       const b = bobPose(bobDistance, bobAmount);
-      aimRig.position.set(b.x, b.y, 0);
-      aimRig.rotation.set(
-        THREE.MathUtils.degToRad(weaponPitchDeg),
-        THREE.MathUtils.degToRad(weaponYawDeg),
-        THREE.MathUtils.degToRad(b.rollDeg),
-      );
+      const yaw = THREE.MathUtils.degToRad(weaponYawDeg);
+      const pitch = THREE.MathUtils.degToRad(weaponPitchDeg);
+      // ROTATE ABOUT THE GRIP, not about the eye. Without this offset the rig
+      // pivots on the player's head and the weapon leaves the frame the moment
+      // it points anywhere near the edge of the viewport.
+      const o = pivotOffset(GUN_REST.pos, yaw, pitch);
+      aimRig.position.set(b.x + o.x, b.y + o.y, o.z);
+      aimRig.rotation.set(pitch, yaw, THREE.MathUtils.degToRad(b.rollDeg));
     }
     if (reticleEl) {
       reticleEl.style.display = freeAimOn ? 'block' : 'none';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
-  recentre, turnFromAim, weaponAngles,
+  pivotOffset, recentre, turnFromAim, weaponAngles,
 } from './free-aim';
 
 describe('moveAim', () => {
@@ -160,5 +160,35 @@ describe('approachBob', () => {
     let v = 1;
     for (let i = 0; i < 120; i++) v = approachBob(v, 0, 1 / 60);
     expect(v).toBeLessThan(0.01);
+  });
+});
+
+describe('pivotOffset', () => {
+  const GRIP = { x: 0.038, y: -0.115, z: -0.300 };
+
+  it('is nothing when the weapon is level', () => {
+    const o = pivotOffset(GRIP, 0, 0);
+    expect(o.x).toBeCloseTo(0, 9);
+    expect(o.y).toBeCloseTo(0, 9);
+    expect(o.z).toBeCloseTo(0, 9);
+  });
+  it('holds the pivot point still under yaw — that is its entire job', () => {
+    const yaw = 47.5 * Math.PI / 180;
+    const o = pivotOffset(GRIP, yaw, 0);
+    // Rotate the grip about the origin, then add the offset: back where it was.
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const rx = GRIP.x * c + GRIP.z * s;
+    const rz = -GRIP.x * s + GRIP.z * c;
+    expect(rx + o.x).toBeCloseTo(GRIP.x, 9);
+    expect(rz + o.z).toBeCloseTo(GRIP.z, 9);
+  });
+  it('holds it still under pitch too', () => {
+    const pitch = 20 * Math.PI / 180;
+    const o = pivotOffset(GRIP, 0, pitch);
+    const c = Math.cos(pitch), s = Math.sin(pitch);
+    const ry = GRIP.y * c - GRIP.z * s;
+    const rz = GRIP.y * s + GRIP.z * c;
+    expect(ry + o.y).toBeCloseTo(GRIP.y, 9);
+    expect(rz + o.z).toBeCloseTo(GRIP.z, 9);
   });
 });

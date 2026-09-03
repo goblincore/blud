@@ -110,6 +110,36 @@ export function approachAngle(current: number, target: number, dt: number): numb
   return current + (target - current) * k;
 }
 
+export interface V3 { x: number; y: number; z: number; }
+
+/**
+ * Translation that turns a rotation-about-the-origin into a
+ * rotation-about-`pivot`: `pivot - R * pivot`.
+ *
+ * The view-model rig's origin is the EYE, so rotating it swings the whole
+ * weapon around the player's head -- at the reticle's true 47.5 deg that puts
+ * the muzzle at screen-x 1.54, clean off the viewport, which is why the angle
+ * used to be capped at 15 instead. Pivoting at the GRIP puts it at 0.66 with
+ * the grip itself barely moving (0.12). An arm swings the barrel about the
+ * hands, not about the eyeball.
+ *
+ * Rotation order matches Three.js's default 'XYZ' Euler as applied by
+ * Object3D.rotation, i.e. R = Rx(pitch) then Ry(yaw) reading right-to-left.
+ */
+export function pivotOffset(pivot: V3, yawRad: number, pitchRad: number): V3 {
+  const cy = Math.cos(yawRad), sy = Math.sin(yawRad);
+  const cp = Math.cos(pitchRad), sp = Math.sin(pitchRad);
+  // Rx(pitch) applied to the pivot...
+  const px = pivot.x;
+  const py = pivot.y * cp - pivot.z * sp;
+  const pz = pivot.y * sp + pivot.z * cp;
+  // ...then Ry(yaw).
+  const rx = px * cy + pz * sy;
+  const ry = py;
+  const rz = -px * sy + pz * cy;
+  return { x: pivot.x - rx, y: pivot.y - ry, z: pivot.z - rz };
+}
+
 /** Optional drift of the reticle back toward centre. */
 export function recentre(aim: AimPoint, dt: number): AimPoint {
   if (FREE_AIM.recentreRate <= 0) return aim;
