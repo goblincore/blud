@@ -68,6 +68,22 @@ export interface DraftSideFit {
   bands: Band[];
   /** Indexed with `bands` (bandColour's contract). */
   paint: BandPaint[];
+  /**
+   * Perpendicular displacement of the cloud's centroid off the RIG axis —
+   * cloudOffset's answer to rig joints sitting 9-13 cm from the skin. The
+   * prim moves to the surface; the BONE stays on the chain, because moving
+   * the bone is what breaks len='s placement of every descendant. Absent for
+   * unmapped leaves (skull, hands): with no rig axis there is nothing to be
+   * off of. The emitter suppresses a measured zero — see bandRec.
+   */
+  offset?: Vec3;
+  /**
+   * Present when the cloud's own principal axis sat beyond the CLI's bar off
+   * the rig chain's direction. Reported in the bone statement's `# fit:`
+   * comment — a real signal (a skirt genuinely does not follow its bone) —
+   * and since chain drift it steers nothing.
+   */
+  axisDisagreeDeg?: number;
 }
 
 export interface DraftBone {
@@ -86,6 +102,15 @@ export interface DraftBone {
    *  For an asymmetric pair this is the shared skeleton — the sides' prims
    *  carry their own fits below. */
   line: MedialLine;
+  /**
+   * Present when `line` is the RIG's chain segment (joint-to-joint × the one
+   * global scale) rather than a cloud fit. `.blob`'s skeleton is a rigid
+   * chain — a bone's head is its parent's TAIL — so len= places every
+   * descendant, and overlapping vertex clouds (thigh and shin both own the
+   * knee) do not compose into one. Absent for the unmapped leaves (skull,
+   * hands), whose cloud lines place no descendants.
+   */
+  chain?: { rigBone: string; scale: number };
   /** One fit for both sides: unpaired bones and mirrorable pairs. */
   shared?: DraftSideFit;
   /** NOT-mirrorable pairs: per-side prims, emitted `side=l` / `side=r`. */
@@ -240,6 +265,13 @@ function bandRec(
 
   let words = `bar ${bone.limb} on ${bone.name} from=${fmt(from)} to=${fmt(to)} r=${fmt(band.r)}`
     + ` wide=${fmt(band.wide)} deep=${fmt(band.deep)} blend=${fmt(blend)}`;
+  // The prim sits where the SURFACE is, not where the joint is — the 9-13 cm
+  // joint-vs-skin offset lives HERE, never in the bone's placement (moving
+  // the bone is what breaks the chain). A displacement below print resolution
+  // is an unmeasured zero, not sub-micron precision: emit no arg rather than
+  // `offset=(0,0,0)` noise on every line.
+  if (f.offset && Math.max(Math.abs(f.offset[0]), Math.abs(f.offset[1]), Math.abs(f.offset[2])) >= 5e-5)
+    words += ` offset=(${fmt(f.offset[0])},${fmt(f.offset[1])},${fmt(f.offset[2])})`;
   if (mirror) words += ' mirror';
   if (side !== null) words += ` side=${side}`;
   if (paint.color) words += ` color=${hex(paint.color)}`;
@@ -392,16 +424,34 @@ function boneStatement(b: DraftBone): string {
     words += ` len=${fmt(e)}`;
   }
   const bits: string[] = [];
+  // The source phrase is the house rule made local: len=/dir= name what they
+  // came from. That changed with chain drift — the rig's segment for mapped
+  // bones, the cloud's axis only for the unmapped leaves.
+  const source = b.chain
+    ? `rig ${b.chain.rigBone} joint-to-joint × scale ${fmt(b.chain.scale)} (the chain: overlapping clouds do not compose, the rig does)`
+    : `medial axis of the ${b.name} cloud`;
   if (b.parent === null) {
-    bits.push(`fit: medial axis of the ${b.name} cloud, extent ${fmt(e)} m`);
+    bits.push(`fit: ${source}, extent ${fmt(e)} m`);
   } else {
     const d = inferDir(b.line.dir);
-    bits.push(`fit: medial axis of the ${b.name} cloud, extent ${fmt(e)} m, residual ${fmt(b.line.residual)} RMS`);
+    // On a rig line the residual is the cloud's spread about the RIG axis
+    // (rigLine's contract) — say so, or the number reads as a fit residual.
+    const residual = b.chain
+      ? `residual ${fmt(b.line.residual)} RMS of the cloud about the rig axis`
+      : `residual ${fmt(b.line.residual)} RMS`;
+    bits.push(`fit: ${source}, extent ${fmt(e)} m, ${residual}`);
     bits.push(d.derivable
       ? `dir err ${fmt(d.errDeg)}°`
       : `angles not expressible on a ${d.dir} base — the bare base errs ${fmt(d.errDeg)}°`);
     if (b.asym && !b.asym.mirrorable)
       bits.push(`pair NOT mirrored (asym ${fmt(b.asym.score)}) — prims emitted per side`);
+    // The old >45° handling substituted the axis and told nobody; now the
+    // axis IS the rig's and the disagreement is the report.
+    const dis: string[] = [];
+    if (b.shared?.axisDisagreeDeg !== undefined) dis.push(`${fmt(b.shared.axisDisagreeDeg)}°`);
+    if (b.l?.axisDisagreeDeg !== undefined) dis.push(`l ${fmt(b.l.axisDisagreeDeg)}°`);
+    if (b.r?.axisDisagreeDeg !== undefined) dis.push(`r ${fmt(b.r.axisDisagreeDeg)}°`);
+    if (dis.length > 0) bits.push(`cloud axis ${dis.join(', ')} off the rig chain — reported, not corrected`);
   }
   return `${words}  # ${bits.join('; ')}`;
 }

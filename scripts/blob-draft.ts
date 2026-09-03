@@ -37,8 +37,8 @@ import { compileBlob, compileFace } from '../src/lab/sdf-zombie/blob-compile';
 import { buildBody } from '../src/lab/sdf-zombie/build-body';
 import { validateBody } from '../src/lab/sdf-zombie/validate';
 import { readRefSkin } from '../src/lab/sdf-zombie/ref-skin';
-import { detectRig, type RigDef } from '../src/lab/sdf-zombie/ref-align';
-import { medialLine, bandCloud, type MedialLine } from '../src/lab/sdf-zombie/draft-fit';
+import { detectRig, refBones, type RigDef } from '../src/lab/sdf-zombie/ref-align';
+import { medialLine, bandCloud, rigLine, cloudOffset, type MedialLine } from '../src/lab/sdf-zombie/draft-fit';
 import {
   readRefImage, bandColour, bodyPaint, inferStance, pairAsymmetry,
   type PaintedPt, type RgbImage, type PairAsym,
@@ -119,7 +119,10 @@ function resolveMesh(name: string, glbFlag?: string): string {
  * joint's surface, oriented by the rig's neck bone's head->tail joints.
  * `hand` has no joint pair beyond the wrist (Meshy lumps the whole hand into
  * one joint — no fingers are derivable), so its axis is oriented away from
- * the forearm's tail joint instead.
+ * the forearm's tail joint instead. Both stay CLOUD-chained (no rig segment
+ * exists), which is legal ONLY because both are chain LEAVES — a cloud
+ * line's len= misplaces every descendant, and these place none. Asserted
+ * below rather than trusted, since SPECS is static and this is checkable.
  */
 interface DraftBoneSpec {
   name: string;
@@ -150,6 +153,15 @@ const SPECS: DraftBoneSpec[] = [
   { name: 'foot', parent: 'shin', limb: 'leg', cloud: { kind: 'rig', base: 'foot' }, orientBy: 'foot' },
 ];
 
+// The load-time check behind the skull/hand comment above: cloud-chained
+// bones are chain leaves, or their len= drifts every descendant (the exact
+// failure the rig-derived lines exist to prevent).
+for (const s of SPECS) {
+  if (s.parent === 'skull' || s.parent === 'hand')
+    fail(`SPECS: "${s.name}" hangs off "${s.parent}", which has no rig segment — a cloud-chained bone `
+      + 'with children drifts the chain; give it a rig mapping or re-parent it');
+}
+
 /** Below this a cloud is not a bone: fewer points than two of bandColour's
  *  paint minimum (8) cannot give bandCloud's 8-station floor even two points
  *  per station, so any "fit" would be noise wearing a prim. The bone is
@@ -164,29 +176,31 @@ const MIN_BONE_VERTS = 16;
 const THIN_BONE_VERTS = 128;
 
 /**
- * When a cloud's fitted axis sits more than this far from the rig's own
- * growth direction, the cloud is not a LIMB — it is a mass whose principal
- * axis is lateral or fore-aft (a skirt's cone, hair down the back, bilateral
- * hips wider than tall) — and its principal axis is not a bone axis. The
- * axis then falls back to the rig chain's direction, while extent, radii and
- * residual stay the cloud's, and the substitution is noted on stderr.
+ * When a cloud's fitted axis sits more than this far from the rig chain's
+ * direction, the surface genuinely does not follow its bone — it is a mass
+ * whose principal axis is lateral or fore-aft (a skirt's cone, hair down the
+ * back, bilateral hips wider than tall) — and the angle is REPORTED, on
+ * stderr and in the emitted `# fit:` comment.
+ *
+ * It decides NOTHING else. This threshold once STEERED: past it, the CLI
+ * substituted the rig chain's direction for the cloud axis, because a
+ * non-limb cloud could point a bone sideways and the draft would not build
+ * connected (schoolgirl's dress measured 86°). Chain drift removed the need:
+ * directions come from the rig now, so a skirt cannot steer a bone, and the
+ * measurement stays because it is a real signal the author should see
+ * (spec: "demote it from a source to a check").
  *
  * NOT TUNED TO LOOK RIGHT — measured on the two references this tool ships
  * with, where the angle-to-rig distribution has a wide gap:
  *
- *   schoolgirl  chest 41° (ribcage, keeps its cloud axis)
+ *   schoolgirl  chest 41° (ribcage, stays unremarked)
  *   schoolgirl  skull 75°, pelvis 82°, spine1 86°, spine2 88°, neck 89°
- *               (hair, skirt, hips — all fall back)
+ *               (hair, skirt, hips — all reported)
  *
  * Anything in [42°, 74°] classifies every measured bone identically; 45 is
- * its lower edge ("no more than half-turned"). The joint trap does not
- * apply to the SIGN/DIRECTION the rig encodes in its chain — the trap is
- * about joint POSITIONS sitting 9-13 cm off the skin, and no prim position
- * comes from a joint here. A cloud within the bar keeps its own axis, so
- * ordinary limbs never touch this path (T-pose arms included: their cloud
- * and rig directions agree).
+ * its lower edge ("no more than half-turned").
  */
-const AXIS_FALLBACK_DEG = 45;
+const AXIS_REPORT_DEG = 45;
 
 // --- small helpers ----------------------------------------------------------
 /**
@@ -213,50 +227,54 @@ const tailPoint = (l: MedialLine): Vec3 => add(l.origin, vscale(l.dir, l.t1));
  *  paints each side in place. */
 const mirrorPt = (p: PaintedPt): PaintedPt => ({ position: [-p.position[0], p.position[1], p.position[2]], uv: p.uv });
 
-/** A medial line through `positions` along a GIVEN direction — the fallback
- *  axis's line: same centroid, extent and RMS residual the cloud fit would
- *  report, measured along the substituted axis instead of the cloud's own. */
-function fitLineAlong(positions: Vec3[], dir: Vec3): MedialLine {
-  const origin = centroid(positions);
-  let t0 = Infinity, t1 = -Infinity, sumSq = 0;
-  for (const p of positions) {
-    const q = sub(p, origin);
-    const t = dot(q, dir);
-    if (t < t0) t0 = t;
-    if (t > t1) t1 = t;
-    sumSq += Math.max(0, dot(q, q) - t * t);
-  }
-  return { dir, origin, t0, t1, residual: Math.sqrt(sumSq / positions.length) };
-}
-
 /** One side's vertex data: paint-ready points, and the bare positions the
  *  fitters want (the same arrays, so the two can never disagree). */
 interface SideData { pts: PaintedPt[]; positions: Vec3[] }
 
-/** One side's axis, or null below the evidence floor — the cheap fit, for
- *  when only the line (a `side=` offset) is needed, not the bands. */
-function sideLine(data: SideData, anatomical: Vec3): MedialLine | null {
-  if (data.positions.length < MIN_BONE_VERTS) return null;
-  return orient(medialLine(data.positions), anatomical);
-}
-
-/** One side's fit, or null below the evidence floor, plus the diagnostics
- *  the caller turns into notes (this stays a pure function).
- *  `anatomical` is the rig's growth direction: the fitted axis's SIGN test,
- *  and — past AXIS_FALLBACK_DEG — its replacement. */
+/**
+ * One side's fit, or null below the evidence floor. The CHAIN and the
+ * SURFACE have different sources now (chain-drift spec):
+ *
+ *   chain   — `seg`, the rig bone's head->tail joints, × g through rigLine:
+ *             len=/dir= are chain quantities (a bone's head is its parent's
+ *             TAIL), and overlapping vertex clouds do not compose into a
+ *             chain — rig joint-to-joint distances do, by construction. A
+ *             null seg means the rig does not map the bone (skull, hands):
+ *             the signed cloud line stays the chain, safe only because those
+ *             bones are chain LEAVES (asserted against SPECS at load).
+ *   surface — the cloud's own medial line keeps feeding bandCloud (radii
+ *             about a centroid axis are the honest tube radii; about the rig
+ *             axis they would inflate by √(r²+d²)), re-signed so from=0 stays
+ *             at the bone head; and cloudOffset says how far the PRIM must
+ *             shift off the rig axis to sit on the surface — the 9-13 cm
+ *             joint-vs-skin trap's fix, which must never move the bone.
+ *
+ * `leafDir` is only read when seg is null: the growth sign that orients a
+ * leaf's cloud line (skull: the neck's head->tail; hand: away from the
+ * wrist). `axisDisagreeDeg` — the cloud axis vs the rig chain, sign-blind —
+ * is RETURNED, never acted on: where it exceeds AXIS_REPORT_DEG the caller
+ * reports it (a skirt genuinely does not follow its bone; the author's call,
+ * not the CLI's — the old substitution is gone with the steering role).
+ */
 function fitSide(
-  data: SideData, anatomical: Vec3, image: RgbImage | null,
-): { fit: DraftSideFit; degenerate: number; axisFromRig: boolean; axisAngleDeg: number } | null {
+  data: SideData, seg: { head: Vec3; tail: Vec3 } | null, leafDir: Vec3, image: RgbImage | null, g: number,
+): { fit: DraftSideFit; chain: MedialLine; degenerate: number; axisDisagreeDeg?: number } | null {
   if (data.positions.length < MIN_BONE_VERTS) return null;
-  const cloudLine = orient(medialLine(data.positions), anatomical);
-  const axisAngleDeg = Math.acos(Math.min(1, Math.max(-1, dot(cloudLine.dir, normalize(anatomical))))) * 180 / Math.PI;
+  const cloudFit = medialLine(data.positions);
+  let chain: MedialLine;
   let line: MedialLine;
-  let axisFromRig = false;
-  if (axisAngleDeg > AXIS_FALLBACK_DEG) {
-    line = fitLineAlong(data.positions, normalize(anatomical));
-    axisFromRig = true;
+  let offset: Vec3 | undefined;
+  let axisDisagreeDeg: number | undefined;
+  if (seg) {
+    chain = rigLine(seg.head, seg.tail, g, data.positions);
+    line = orient(cloudFit, chain.dir);
+    offset = cloudOffset(data.positions, chain);
+    // Sign-blind on purpose: an eigenvector's canonical flip is not a
+    // disagreement, and both signs name the same surface behaviour.
+    axisDisagreeDeg = Math.acos(Math.min(1, Math.abs(dot(cloudFit.dir, chain.dir)))) * 180 / Math.PI;
   } else {
-    line = cloudLine;
+    chain = orient(cloudFit, leafDir);
+    line = chain;
   }
   // bandColour gets the SAME bands object bandCloud returned — it assigns
   // points to bands by walking them in order, so a refitted copy risks a
@@ -283,7 +301,7 @@ function fitSide(
     } else degenerate++;
   }
   if (usableBands.length === 0) return null;
-  return { fit: { line, bands: usableBands, paint: usablePaint }, degenerate, axisFromRig, axisAngleDeg };
+  return { fit: { line, bands: usableBands, paint: usablePaint, offset }, chain, degenerate, axisDisagreeDeg };
 }
 
 function centroid(positions: Vec3[]): Vec3 {
@@ -364,12 +382,41 @@ function main(): void {
     return head && tail ? vscale(sub(tail, head), g) : null;
   };
 
+  /** The rig bone whose head->tail joints own a spec's CHAIN line, with the
+   *  segment itself — or null where the rig does not map the bone (the
+   *  unmapped leaves) or its joints are missing (the same gap that nulls
+   *  jointPairDir, which skips the bone below). Same key convention as
+   *  collect(): `base` unpaired, `base.l`/`.r` for a pair. */
+  const ref = refBones(skin.jointWorld, rig);
+  const rigChainOf = (spec2: DraftBoneSpec, side: 'l' | 'r' | null):
+    { key: string; seg: { head: Vec3; tail: Vec3 } } | null => {
+    if (spec2.cloud.kind !== 'rig') return null;
+    const key = side === null ? spec2.cloud.base : `${spec2.cloud.base}.${side}`;
+    const seg = ref.get(key);
+    return key && seg ? { key, seg } : null;
+  };
+
+  /** The cloud-axis-vs-rig-chain check: report past the bar, on stderr and
+   *  on the fit (the emitter carries it into the `# fit:` comment). Decides
+   *  nothing else — the substitution this once performed is gone. */
+  const reportDisagreement = (
+    label: string, angle: number, fit: DraftSideFit,
+  ): void => {
+    if (angle <= AXIS_REPORT_DEG) return;
+    fit.axisDisagreeDeg = angle;
+    notes.push(`${label}: cloud axis ${angle.toFixed(0)}° off the rig chain — reported, not corrected `
+      + '(the surface does not follow the bone: skirt, hair or bilateral mass; radii and offset still the cloud\'s)');
+  };
+
   // --- fit each spec ----------------------------------------------------------
   interface Built {
     spec: DraftBoneSpec;
-    /** The STATEMENT line: the bone's own (unpaired) or the pair's union
-     *  axis — what len=, side= children and the emitted statement carry. */
+    /** The STATEMENT line: the rig's chain segment for a mapped bone, the
+     *  signed cloud line for an unmapped leaf — what len=, side= children
+     *  and the emitted statement carry. */
     line: MedialLine;
+    /** Present when line is rig-derived (see DraftBone.chain in draft-emit). */
+    chain?: { rigBone: string; scale: number };
     shared?: DraftSideFit;
     l?: DraftSideFit;
     r?: DraftSideFit;
@@ -427,15 +474,20 @@ function main(): void {
         notes.push(`skipped ${spec.name}: ${data?.positions.length ?? 0} verts — no evidence`);
         continue;
       }
-      const fitted = fitSide(data, anatomical, image);
+      const rc = rigChainOf(spec, null);
+      const fitted = fitSide(data, rc?.seg ?? null, anatomical, image, g);
       if (!fitted) { notes.push(`skipped ${spec.name}: ${data.positions.length} verts — no evidence`); continue; }
-      if (fitted.axisFromRig)
-        notes.push(`${spec.name}: cloud axis ${fitted.axisAngleDeg.toFixed(0)}° off the rig's growth direction — the cloud is not a limb (skirt, hair or bilateral mass); axis taken from the rig chain, radii still the cloud's`);
+      if (fitted.axisDisagreeDeg !== undefined)
+        reportDisagreement(spec.name, fitted.axisDisagreeDeg, fitted.fit);
       if (fitted.degenerate > 0)
         notes.push(`${spec.name}: dropped ${fitted.degenerate} degenerate band(s) — cross-section fit pinched through the axis`);
       if (data.positions.length < THIN_BONE_VERTS)
         notes.push(`thin evidence: ${spec.name} carries only ${data.positions.length} verts — its bands are weak`);
-      built.set(spec.name, { spec, line: fitted.fit.line, shared: fitted.fit, kept: data.positions.length });
+      built.set(spec.name, {
+        spec, line: fitted.chain,
+        chain: rc ? { rigBone: rc.key, scale: g } : undefined,
+        shared: fitted.fit, kept: data.positions.length,
+      });
       continue;
     }
 
@@ -460,46 +512,58 @@ function main(): void {
     }
 
     const asym = pairAsymmetry(lData!.positions, rData!.positions);
-    // The union cloud, mirrored into one side, is what the SHARED prim must
-    // cover — fitting it is the honest shared fit (per-side fits would bake
-    // each side's quirks into a prim that exists twice). Its statement axis:
-    // the mean of the left direction and the MIRRORED right one — the sides'
-    // raw rig directions are mirror images, and averaging them unmirrored
-    // cancels the lateral component to ~zero, leaving normalize() to pick an
-    // arbitrary axis (measured: a T-posed pair's mean was [~0, …], and the
-    // fallback axis came out vertical for a horizontal arm).
-    const union: SideData = {
-      pts: [...lData!.pts, ...rData!.pts.map(mirrorPt)],
-      positions: [...lData!.positions, ...rData!.positions.map((p) => [-p[0], p[1], p[2]] as Vec3)],
-    };
-    const unionDir: Vec3 = [
-      (lDir[0] - rDir[0]) / 2, (lDir[1] + rDir[1]) / 2, (lDir[2] + rDir[2]) / 2,
-    ];
+    const rcL = rigChainOf(spec, 'l'), rcR = rigChainOf(spec, 'r');
 
     if (asym.mirrorable) {
-      const fitted = fitSide(union, unionDir, image);
+      // The union cloud, mirrored into one side, is what the SHARED prim must
+      // cover — fitting it is the honest shared fit (per-side fits would bake
+      // each side's quirks into a prim that exists twice). Its banding axis:
+      // the mean of the left direction and the MIRRORED right one — the
+      // sides' raw directions are mirror images, and averaging them
+      // unmirrored cancels the lateral component to ~zero, leaving
+      // normalize() to pick an arbitrary axis (measured: a T-posed pair's
+      // mean was [~0, …], and the leaf axis came out vertical for a
+      // horizontal arm). Only the LEAF path uses it; a mapped pair's bands
+      // sign against the left rig segment inside fitSide.
+      const union: SideData = {
+        pts: [...lData!.pts, ...rData!.pts.map(mirrorPt)],
+        positions: [...lData!.positions, ...rData!.positions.map((p) => [-p[0], p[1], p[2]] as Vec3)],
+      };
+      const unionDir: Vec3 = [
+        (lDir[0] - rDir[0]) / 2, (lDir[1] + rDir[1]) / 2, (lDir[2] + rDir[2]) / 2,
+      ];
+      const fitted = fitSide(union, rcL?.seg ?? null, unionDir, image, g);
       if (!fitted) { notes.push(`skipped ${spec.name}: union fit under evidentiary floor`); continue; }
-      if (fitted.axisFromRig)
-        notes.push(`${spec.name}: cloud axis ${fitted.axisAngleDeg.toFixed(0)}° off the rig's growth direction — axis taken from the rig chain, radii still the cloud's`);
+      if (fitted.axisDisagreeDeg !== undefined)
+        reportDisagreement(spec.name, fitted.axisDisagreeDeg, fitted.fit);
       if (fitted.degenerate > 0)
         notes.push(`${spec.name}: dropped ${fitted.degenerate} degenerate band(s) — cross-section fit pinched through the axis`);
       built.set(spec.name, {
-        spec, line: fitted.fit.line, shared: fitted.fit, asym,
-        pairSide: pairSideOf(sideLine(lData!, lDir), spec),
+        spec, line: fitted.chain,
+        chain: rcL ? { rigBone: rcL.key, scale: g } : undefined,
+        shared: fitted.fit, asym,
+        pairSide: pairSideOf(fitted.chain, spec),
         kept: nl + nr,
       });
     } else {
       // NOT mirrorable (the minotaur's prosthetic shin is the case): the
-      // skeleton stays one statement — the sides genuinely share a chain —
-      // but the prims are fitted and emitted per side.
-      const lf = fitSide(lData!, lDir, image), rf = fitSide(rData!, rDir, image);
+      // skeleton stays one statement — the sides genuinely share a chain,
+      // taken from the LEFT rig segment because the mirror block flips the
+      // statement's own dir for the right — but the prims are fitted and
+      // emitted per side.
+      const lf = fitSide(lData!, rcL?.seg ?? null, lDir, image, g);
+      const rf = fitSide(rData!, rcR?.seg ?? null, rDir, image, g);
       if (!lf || !rf) { notes.push(`skipped ${spec.name}: a side fell under the evidentiary floor`); continue; }
-      if (lf.axisFromRig || rf.axisFromRig)
-        notes.push(`${spec.name}: a side's cloud axis sat >${AXIS_FALLBACK_DEG}° off the rig's growth direction — that side's axis taken from the rig chain, radii still the cloud's`);
+      if (lf.axisDisagreeDeg !== undefined) reportDisagreement(`${spec.name}.l`, lf.axisDisagreeDeg, lf.fit);
+      if (rf.axisDisagreeDeg !== undefined) reportDisagreement(`${spec.name}.r`, rf.axisDisagreeDeg, rf.fit);
       if (lf.degenerate + rf.degenerate > 0)
         notes.push(`${spec.name}: dropped ${lf.degenerate + rf.degenerate} degenerate band(s) — cross-section fit pinched through the axis`);
-      const unionLine = orient(medialLine(union.positions), unionDir);
-      built.set(spec.name, { spec, line: unionLine, l: lf.fit, r: rf.fit, asym, pairSide: pairSideOf(lf.fit.line, spec), kept: nl + nr });
+      built.set(spec.name, {
+        spec, line: lf.chain,
+        chain: rcL ? { rigBone: rcL.key, scale: g } : undefined,
+        l: lf.fit, r: rf.fit, asym,
+        pairSide: pairSideOf(lf.chain, spec), kept: nl + nr,
+      });
     }
     if (asym.score >= 0.5)
       notes.push(`${spec.name}: NOT mirrored (asym ${asym.score.toFixed(3)}) — prims emitted per side`);
@@ -537,8 +601,9 @@ function main(): void {
     const parent = nearestKeptAncestor(b.spec.parent);
     bones.push({
       name: b.spec.name, parent, limb: b.spec.limb, line: b.line,
+      ...(b.chain ? { chain: b.chain } : {}),
       ...(b.spec.name === 'pelvis'
-        ? { at: headPoint(b.line)[1] } // the root hangs from where its cloud starts; x/z are the parser's [0, at, 0]
+        ? { at: headPoint(b.line)[1] } // the root hangs from its rig head joint; x/z are the parser's [0, at, 0]
         : {}),
       ...(b.pairSide !== undefined ? { pairSide: b.pairSide } : {}),
       ...(b.shared ? { shared: b.shared } : {}),

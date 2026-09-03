@@ -247,3 +247,58 @@ describe('emitDraft', () => {
     expect(text).toContain(`# run: npm run blob:face-bake -- ${NAME}`);
   });
 });
+
+// The chain-drift emitter surface: the cloud keeps the bands and answers for
+// where the SURFACE sits (offset=), while len=/dir= move to the rig; a cloud
+// axis that disagrees with the rig chain is REPORTED, never substituted
+// (the old >45° steering). Spec:
+// docs/superpowers/specs/2026-09-02-blob-draft-chain-drift-design.md.
+describe('emitDraft offsets', () => {
+  it('emits offset= on a prim whose fit carries one', () => {
+    // The 9-13 cm joint-vs-skin trap's fix: the prim moves to the surface,
+    // the bone stays on the rig chain. The offset is a world-axis vector
+    // (placePrims adds it after lerping along the bone), so it must round-trip
+    // through the grammar — asserted by BUILDING the body, not just grepping.
+    const f = makeFit();
+    const spine = f.bones.find((b) => b.name === 'spine')!;
+    spine.shared!.offset = [0.03, 0, -0.02];
+    const text = emitDraft(f);
+    const spinePrims = text.split('\n').filter((l) => l.includes(' on spine '));
+    expect(spinePrims.length).toBeGreaterThan(0);
+    for (const l of spinePrims) expect(l).toContain('offset=(0.03,0,-0.02)');
+    expect(build(text).errors).toEqual([]);
+  });
+
+  it('emits NO offset= when the fit has none', () => {
+    // A zero offset must not appear as `offset=(0,0,0)` noise: an absent arg
+    // and a measured-zero displacement are the same statement about the
+    // surface, and the extra arg would sit on every prim line forever.
+    const text = emitDraft(makeFit());
+    expect(text).not.toContain('offset=');
+    // An explicitly measured-zero fit is the absent case, not a special one.
+    const f = makeFit();
+    f.bones.find((b) => b.name === 'spine')!.shared!.offset = [0, 0, 0];
+    expect(emitDraft(f)).not.toContain('offset=');
+  });
+
+  it('notes a cloud/rig axis disagreement in the # fit: comment', () => {
+    // The >45-degree case is now a REPORTED CHECK, not a silent correction:
+    // the schoolgirl dress cloud measured 86° off its bone, and the old CLI
+    // silently steered the axis. The author must see the disagreement where
+    // the numbers are.
+    const f = makeFit();
+    const spine = f.bones.find((b) => b.name === 'spine')!;
+    spine.chain = { rigBone: 'spine1', scale: 1.23 };
+    spine.shared!.axisDisagreeDeg = 86;
+    const text = emitDraft(f);
+    const spineStatement = text.split('\n').find((l) => l.trim().startsWith('bone spine '));
+    expect(spineStatement).toBeDefined();
+    expect(spineStatement!).toContain('86°');
+    expect(spineStatement!).toMatch(/off the rig chain/);
+    // And the statement's len= names its new source: the rig segment times
+    // the one global scale, not the cloud extent it used to be.
+    expect(spineStatement!).toContain('rig spine1');
+    expect(spineStatement!).toContain('1.23');
+    expect(build(text).errors).toEqual([]);
+  });
+});
