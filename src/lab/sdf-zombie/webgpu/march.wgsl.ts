@@ -1954,7 +1954,32 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+  // PER-PRIMITIVE MATERIAL READ — hoisted above the noise (hard-surface
+  // task 1). gloss must be known BEFORE the shading normal exists: both
+  // flesh-noise paths below scale by (1 - gloss), because a polished prim
+  // has no pores. This is the SAME single texel the per-prim colour block
+  // below used to read (hitBest row, ROW_PRIM_COLOR) — hoisted, not
+  // repeated, so no hit pixel pays for it twice. hitBest is -1 on the
+  // baked-volume path; there gloss stays 0 and every noise term runs at
+  // full flesh amplitude exactly as before.
+  var gloss = 0.0;
+  var painted = 0.0;
+  var primAlbedo = vec3<f32>(0.0);
+  if (hitBest >= 0) {
+    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
+    if (PC.w > 0.0) {
+      primAlbedo = PC.xyz;
+      gloss = clamp(PC.w - 1.0, 0.0, 1.0);
+      painted = 1.0;
+    }
+  }
+  // Silhouette noise into the normal, scaled by (1 - gloss) at the point of
+  // application: a polished prim has no pits. The AO and scatter probes
+  // below keep the FULL marchCfg.z — they probe the real displaced field
+  // (fbm at frequency 3, features ~0.2 m), not surface detail, and the
+  // march loop runs the field smooth regardless. At gloss 0 this argument
+  // is exactly what it always was.
+  var n = calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - gloss), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -1963,10 +1988,16 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
   // Micro-detail perturbs the normal only — costs no march safety. Three more
   // fbm calls though, so it is guarded: once per hit pixel rather than per
-  // step, but still six noise lookups a body does not always need.
-  if (surfCfg2.y > 0.0) {
+  // step, but still six noise lookups a body does not always need. The
+  // guard wraps the CALL (entrails post-mortem: skip the work, not just the
+  // output) and now also folds the gloss kill — a full-gloss prim skips the
+  // six lookups outright instead of computing them and multiplying to 0.
+  // At gloss 0 the product is exactly surfCfg2.y, so flesh shades
+  // bit-for-bit as before.
+  let detailAmp = surfCfg2.y * (1.0 - gloss);
+  if (detailAmp > 0.0) {
     n = normalize(n + vec3<f32>(
-      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * surfCfg2.y);
+      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * detailAmp);
   }
 
   let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
@@ -2217,19 +2248,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
   // the hit (hitBest, the noise anchor); a painted one replaces the flesh
   // albedo outright, mottle and face sheet included — a lens is not tinted
-  // skin. Char still wins below, because burnt is burnt. The eye glow is
-  // zeroed on paint for the same reason the sheet is: the painted eyes sit
-  // exactly where a pair of sunglasses goes, and they must not shine
-  // through the lenses.
-  var gloss = 0.0;
-  var painted = 0.0;
-  if (hitBest >= 0) {
-    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
-    if (PC.w > 0.0) {
-      albedo = PC.xyz;
-      gloss = clamp(PC.w - 1.0, 0.0, 1.0);
-      painted = 1.0;
-    }
+  // skin. The gloss/painted VALUES were resolved — and the row read, once —
+  // up above calcNormal, where the noise suppression needs them; the
+  // OVERWRITE itself stays HERE, after the face pass, because a painted
+  // prim replaces everything the flesh passes laid down. Char still wins
+  // below, because burnt is burnt. The eye glow is zeroed on paint for the
+  // same reason the sheet is: the painted eyes sit exactly where a pair of
+  // sunglasses goes, and they must not shine through the lenses.
+  if (painted > 0.0) {
+    albedo = primAlbedo;
   }
   faceGlow = faceGlow * (1.0 - painted);
 
