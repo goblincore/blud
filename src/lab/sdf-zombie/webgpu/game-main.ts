@@ -30,7 +30,11 @@ import {
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
-import { FLASH, MAGAZINE_CAPACITY, RELOAD, flashEnvelope, hingeOpenFraction, magazineAfterFire, reloadPhaseAt } from './game-viewmodel';
+import { flashPixels, smokePixels } from './flash-sprite';
+import {
+  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
+  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
+} from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
@@ -381,6 +385,7 @@ async function main() {
    *  the room and not another piece of UI. __sdfGame.woundPanel(true) opens
    *  it; that seam is guarded typeof-style in capture scripts like gooPanel. */
   let woundPanel: WoundPanel | null = null;
+  let panelsHidden = false;
   // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
@@ -529,7 +534,10 @@ async function main() {
       // march, which cannot land while sdf-render-perf-r2 is rewriting
       // march.wgsl.ts. Tracked under the spec's "Deferred".
       const fv = flashEnvelope(flashAge);
-      const flashGate  = spotOn + 6 * fv;
+      // 6x blew a nearby body to a featureless white silhouette. 2.2 still
+      // reads unmistakably as a flash without destroying the wound detail
+      // that is the entire point of looking at these creatures.
+      const flashGate  = spotOn + 2.2 * fv;
       const flashInner = Math.max(-1, cosInner - 0.45 * fv);
       const flashOuter = Math.max(-1, cosOuter - 0.45 * fv);
       for (const a of actors) {
@@ -999,6 +1007,14 @@ async function main() {
       else pushProbeWeight(parked);
     }
     if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
+    // H hides/shows BOTH tuning panels together. They cover most of the
+    // viewport, and until now the only way to dismiss them was to know the
+    // console API -- which is no use to someone doing a look pass.
+    if (e.code === 'KeyH') {
+      panelsHidden = !panelsHidden;
+      woundPanel?.setVisible(!panelsHidden);
+      gooPanel?.setVisible(!panelsHidden);
+    }
     if (e.code === 'KeyR' && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
       reloadAge = 0;
     }
@@ -1051,6 +1067,32 @@ async function main() {
   let flashGroup: THREE.Group | null = null;
   let flashMaterial: THREE.MeshBasicMaterial | null = null;
   let flashLight: THREE.PointLight | null = null;
+  let handMaterial: THREE.MeshStandardMaterial | null = null;
+  /** Gun body materials, kept so the finish is tunable at runtime. */
+  const gunMaterials: THREE.MeshStandardMaterial[] = [];
+  const FLASH_VARIANTS = 4;
+  const flashTextures: THREE.DataTexture[] = [];
+  const SMOKE_COUNT = 7;
+  const smokePuffs: { mesh: THREE.Mesh; age: number; vel: THREE.Vector3; roll: number }[] = [];
+  const ejectedShells: THREE.Group[] = [];
+  const loadShells: THREE.Group[] = [];
+  /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
+   *  DELTA from here, so nothing has to remember where "home" was. */
+  const GUN_REST = {
+    pos: new THREE.Vector3(0.125, -0.115, -0.300),
+    rollDeg: -4.5,
+    pitchDeg: 2.5,
+  } as const;
+  const FORE_HAND_REST = new THREE.Vector3(-0.055, -0.165, -0.365);
+  /** The muzzle in VIEW space, read off the GLB's own Muzzle_L/Muzzle_R
+   *  locators rather than guessed. The first pass put the flash at
+   *  (0.085, -0.060, -0.560) -- 4 cm left, 4.5 cm high and 3 cm SHORT of the
+   *  real muzzle -- so it burned halfway down the barrel instead of at the
+   *  bores, which is a good part of why it read wrong. */
+  const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
+  /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
+  let fireAge = Infinity;
+  let fireBarrels: 1 | 2 = 1;
   /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
   let flashAge = Infinity;
   let gunReady = false;
@@ -1073,6 +1115,7 @@ async function main() {
           // dark dungeon. 0.7 against its private RoomEnvironment was tuned for
           // the old near-black metal.
           std.envMapIntensity = 1.1;
+          gunMaterials.push(std);
           std.needsUpdate = true;
         }
       }
@@ -1123,59 +1166,143 @@ async function main() {
     );
     skinTex.wrapS = skinTex.wrapT = THREE.RepeatWrapping;
     skinTex.needsUpdate = true;
+    // HAND BRIGHTNESS. The goblin's own palette is a pale olive that is correct
+    // in daylight and nearly invisible under the dungeon rig at this exposure
+    // (the owner's report). Rather than lie about the creature's colour, the
+    // hands carry a small self-lit term so they read in the dark; it is a
+    // tuning knob, not a constant, because the right amount depends on the
+    // final lighting pass. setGunTuning() moves it live.
     const orbMat = new THREE.MeshStandardMaterial({
       color: goblinSkinSrgbHex(),
       roughness: GOBLIN_SKIN.roughness,
       normalMap: skinTex,
       normalScale: new THREE.Vector2(0.8, 0.8),
+      emissive: new THREE.Color(goblinSkinSrgbHex()),
+      emissiveIntensity: 0.30,
     });
+    handMaterial = orbMat;
     const orbGeo = new THREE.SphereGeometry(GOBLIN_SKIN.handRadius, 20, 14);
-    const armGeo = new THREE.CapsuleGeometry(
-      GOBLIN_SKIN.forearmRadius, GOBLIN_SKIN.forearmLength * 0.6, 4, 12,
-    );
 
-    function makeHand(hand: THREE.Vector3, elbowBack: number): THREE.Group {
+    /** One hand: an orb plus a forearm running back along `armDir` (view
+     *  space, pointing from the hand toward the elbow). */
+    function makeHand(hand: THREE.Vector3, armDir: THREE.Vector3, armLen: number): THREE.Group {
       const g = new THREE.Group();
       const orb = new THREE.Mesh(orbGeo, orbMat);
-      // SphereGeometry's UVs pinch at the poles, so aim the pole away from the
-      // camera -- into the gun -- where the pinch cannot be seen.
+      // SphereGeometry's UVs pinch at the poles, so aim the pole into the gun.
       orb.rotation.x = Math.PI / 2;
+      const armGeo = new THREE.CapsuleGeometry(
+        GOBLIN_SKIN.forearmRadius, armLen, 4, 12,
+      );
       const arm = new THREE.Mesh(armGeo, orbMat);
-      arm.position.set(0, -0.02, elbowBack);
-      arm.rotation.x = Math.PI / 2.6;
+      const dir = armDir.clone().normalize();
+      arm.position.copy(dir).multiplyScalar(armLen * 0.5 + GOBLIN_SKIN.handRadius * 0.4);
+      // CapsuleGeometry runs along +Y; swing it onto the arm direction.
+      arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
       g.add(orb, arm);
       g.position.copy(hand);
       return g;
     }
 
-    gripHandGroup = makeHand(new THREE.Vector3(0.150, -0.150, -0.250), 0.115);
-    foreHandGroup = makeHand(new THREE.Vector3(0.105, -0.150, -0.395), 0.115);
+    // THE TWO HANDS SIT ON OPPOSITE SIDES OF THE BODY.
+    // The right hand is on the grip, low-right, mostly hidden behind the gun --
+    // correct, and the owner is happy with it. The support hand was 4.5 cm left
+    // of it, so both read as being side by side on the right of the screen. A
+    // support hand CROSSES THE BODY: it enters from far left with a good length
+    // of forearm in shot, which is also what makes the reload legible.
+    gripHandGroup = makeHand(
+      new THREE.Vector3(0.150, -0.150, -0.250),
+      new THREE.Vector3(0.28, -0.85, 0.44), 0.150,
+    );
+    foreHandGroup = makeHand(
+      new THREE.Vector3(-0.055, -0.165, -0.365),
+      new THREE.Vector3(-0.62, -0.62, 0.48), 0.260,
+    );
     viewModelAnchor.add(gripHandGroup, foreHandGroup);
 
-    // MUZZLE FLASH -- geometry half. Two additive cross-billboard quads plus a
-    // crown ring, parked invisible. Built ONCE: a flash that allocates on the
-    // trigger pull would stutter the first shot of every session.
+    // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
+    // Four meshes, all built now: two thrown out of the breech on the eject
+    // beat, two carried up by the support hand and seated on the load beat.
+    const hullGeo = new THREE.CylinderGeometry(0.0165, 0.0165, 0.049, 12);
+    const headGeo = new THREE.CylinderGeometry(0.0172, 0.0172, 0.021, 12);
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0xa8231d, roughness: 0.55 });
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xb08d3a, roughness: 0.35, metalness: 0.9 });
+    function makeShell(): THREE.Group {
+      const g = new THREE.Group();
+      const hull = new THREE.Mesh(hullGeo, hullMat);
+      hull.position.y = 0.0105;
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.y = -0.0245;
+      g.add(hull, head);
+      // Cases lie along the bore, which is -Z in view space.
+      g.rotation.x = Math.PI / 2;
+      g.visible = false;
+      return g;
+    }
+    for (let i = 0; i < 2; i++) {
+      const e = makeShell(); ejectedShells.push(e); viewModelAnchor.add(e);
+      const l = makeShell(); loadShells.push(l); viewModelAnchor.add(l);
+    }
+
+    // MUZZLE FLASH -- geometry half. Textured, not flat quads: the first pass
+    // used untextured PlaneGeometry and read as a bright RECTANGLE (the owner's
+    // report). flash-sprite.ts generates a ragged star with real alpha, and a
+    // few seeds are pre-baked so repeat fire does not strobe one silhouette.
+    for (let i = 0; i < FLASH_VARIANTS; i++) {
+      const tex = new THREE.DataTexture(flashPixels(128, 17 + i * 31), 128, 128, THREE.RGBAFormat);
+      tex.needsUpdate = true;
+      flashTextures.push(tex);
+    }
     const flashMat = new THREE.MeshBasicMaterial({
-      color: 0xffd9a0, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      map: flashTextures[0], color: 0xffe6bf, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+      side: THREE.DoubleSide,
     });
     flashGroup = new THREE.Group();
     flashGroup.visible = false;
-    for (const roll of [0, Math.PI / 2]) {
-      const q = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.30), flashMat);
+    // Two crossed cards so the star has volume from off-axis, plus a wider,
+    // fainter one for the outer glow.
+    for (const [roll, scale] of [[0, 1], [Math.PI / 2, 1], [Math.PI / 4, 1.7]] as const) {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), flashMat);
       q.rotation.z = roll;
+      q.scale.setScalar(scale);
       flashGroup.add(q);
     }
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.035, 0.115, 18), flashMat);
-    flashGroup.add(ring);
-    flashGroup.position.set(0.085, -0.060, -0.560);
+    // Just CLEAR of the bores: centred exactly on them, half the card sits
+    // inside the barrel volume. And depthTest:false does not control draw
+    // ORDER -- without a renderOrder the gun still paints over the flash.
+    flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
+    flashGroup.renderOrder = 999;
+    for (const c of flashGroup.children) c.renderOrder = 999;
     viewModelAnchor.add(flashGroup);
     flashMaterial = flashMat;
+
+    // SMOKE. A small pool of soft puffs released at the muzzle, drifting up and
+    // out while they expand and fade. No particle system exists on this page;
+    // this is the same billboard-pool fallback fpv-view.ts uses for bursts.
+    const smokeTex = new THREE.DataTexture(smokePixels(128), 128, 128, THREE.RGBAFormat);
+    smokeTex.needsUpdate = true;
+    for (let i = 0; i < SMOKE_COUNT; i++) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.16, 0.16),
+        new THREE.MeshBasicMaterial({
+          map: smokeTex, transparent: true, opacity: 0, depthWrite: false,
+          color: 0x9a938c,
+        }),
+      );
+      m.visible = false;
+      smokePuffs.push({ mesh: m, age: Infinity, vel: new THREE.Vector3(), roll: 0 });
+      viewModelAnchor.add(m);
+    }
+
     // MUZZLE FLASH -- level half. Allocated ONCE at intensity 0 and only ever
     // modulated: adding or removing a light at runtime forces a TSL shader
-    // recompile, which would hitch on every trigger pull.
-    flashLight = new THREE.PointLight(0xffd0a0, 0, 9, 2);
-    flashLight.position.copy(flashGroup.position);
+    // recompile, which would hitch on every trigger pull. Range and power are
+    // both up from the first pass, which the owner reported as barely lighting
+    // its surroundings.
+    flashLight = new THREE.PointLight(0xffcf95, 0, 16, 1.7);
+    // A little AHEAD of the bores, so it throws light down the room instead of
+    // mostly onto the gun's own barrels.
+    flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
     viewModelAnchor.add(flashLight);
     gunReady = true;
   } catch (err) {
@@ -1250,9 +1377,37 @@ async function main() {
     if (shells <= 0) reloadAge = 0;
     updateHud();
     flashAge = 0;
-    if (flashGroup) {
-      // Fresh roll per shot so repeat fire does not strobe an identical shape.
+    fireAge = 0;
+    fireBarrels = barrels;
+    if (flashGroup && flashMaterial) {
+      // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
+      // identical silhouette.
       flashGroup.rotation.z = Math.random() * Math.PI * 2;
+      const tex = flashTextures[Math.floor(Math.random() * flashTextures.length)];
+      if (tex) { flashMaterial.map = tex; flashMaterial.needsUpdate = true; }
+    }
+    // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
+    {
+      let released = 0;
+      const want = barrels === 2 ? 5 : 3;
+      for (const puff of smokePuffs) {
+        if (released >= want) break;
+        if (puff.age !== Infinity) continue;
+        puff.age = 0;
+        puff.roll = Math.random() * Math.PI * 2;
+        puff.mesh.position.set(
+          MUZZLE_VIEW.x + (Math.random() - 0.5) * 0.03,
+          MUZZLE_VIEW.y + (Math.random() - 0.5) * 0.03,
+          MUZZLE_VIEW.z - 0.02 - Math.random() * 0.05,
+        );
+        puff.vel.set(
+          (Math.random() - 0.5) * 0.25,
+          0.10 + Math.random() * 0.18,
+          -0.55 - Math.random() * 0.35,
+        );
+        puff.mesh.rotation.z = puff.roll;
+        released++;
+      }
     }
     if (slugMode) {
       // One lump down one known ray instead of a pellet volley.
@@ -1858,40 +2013,99 @@ async function main() {
     cooldown = Math.max(0, cooldown - dt);
     recoilPitch *= Math.exp(-9 * dt);
     flashAge += dt;
+    fireAge += dt;
     const flashV = flashEnvelope(flashAge);
     if (flashGroup && flashMaterial) {
       flashGroup.visible = flashV > 0;
       flashMaterial.opacity = flashV;
-      const s = 0.7 + 0.5 * flashV;
-      flashGroup.scale.setScalar(s);
+      // Expand as it dies rather than shrinking -- burning gas pushes outward.
+      flashGroup.scale.setScalar(0.85 + 0.75 * (1 - flashV));
     }
-    if (flashLight) flashLight.intensity = 26 * flashV;
-    if (reloadAge <= RELOAD.totalSec) {
-      reloadAge += dt;
-      const phase = reloadPhaseAt(reloadAge);
-      // BREAK: the pivot group built at load time is already parked on the
-      // hinge, so this one rotation is the whole thing.
-      if (hingePivot) hingePivot.rotation.x = hingeOpenFraction(reloadAge) * RELOAD.openRad;
-      // PRESENT: roll the gun up and toward the camera so the breech is visible.
-      if (gunGroup) {
-        const present = Math.sin(Math.PI * Math.min(1, reloadAge / RELOAD.totalSec));
-        gunGroup.rotation.z = THREE.MathUtils.degToRad(-4.5 - 16 * present);
-        gunGroup.position.y = -0.115 + 0.055 * present;
-      }
-      // LOAD: the support hand dips out of frame and returns with the shells.
+    if (flashLight) flashLight.intensity = 55 * flashV;
+
+    // SMOKE. Each live puff drifts, expands and fades; dead ones stay hidden.
+    for (const p of smokePuffs) {
+      if (p.age === Infinity) continue;
+      p.age += dt;
+      const life = 0.9;
+      if (p.age >= life) { p.age = Infinity; p.mesh.visible = false; continue; }
+      const u = p.age / life;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.vel.multiplyScalar(1 - 1.6 * dt);      // drag
+      p.vel.y += 0.28 * dt;                    // it rises as it cools
+      p.mesh.scale.setScalar(0.6 + 2.4 * u);
+      p.mesh.rotation.z = p.roll + u * 0.8;
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - u) * (1 - u * 0.3);
+      p.mesh.visible = true;
+    }
+
+    // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
+    // a reload during recoil reads as both rather than one clobbering the other.
+    const reloading = reloadAge <= RELOAD.totalSec;
+    if (reloading) reloadAge += dt;
+    const rp = reloading ? reloadPose(reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
+    const rc = fireRecoil(fireAge, fireBarrels);
+    if (gunGroup) {
+      gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
+      gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
+      gunGroup.position.set(
+        GUN_REST.pos.x,
+        GUN_REST.pos.y + rp.dy + rc.dy,
+        GUN_REST.pos.z + rp.dz + rc.dz,
+      );
+    }
+    if (hingePivot) hingePivot.rotation.x = rp.hinge * RELOAD.openRad;
+
+    if (reloading) {
+      // THE SUPPORT HAND leaves the fore-end, drops out of frame low-left, and
+      // comes back up carrying the fresh cases -- so the reload actually SHOWS
+      // a hand doing the loading instead of shells appearing by themselves.
+      const sh = supportHandPose(reloadAge);
       if (foreHandGroup) {
-        const dip = phase === 'load' ? 1 : 0;
-        foreHandGroup.position.y = -0.150 - 0.13 * dip;
+        foreHandGroup.position.set(
+          FORE_HAND_REST.x + sh.dx,
+          FORE_HAND_REST.y + sh.dy,
+          FORE_HAND_REST.z + sh.dz,
+        );
       }
-      if (phase === 'done') {
+      // SPENT CASES thrown up and back out of the open breech.
+      const breech = new THREE.Vector3(0.105, -0.075, -0.360);
+      for (let i = 0; i < ejectedShells.length; i++) {
+        const m = ejectedShells[i];
+        if (!m) continue;
+        const e = ejectedShell(reloadAge, i === 0 ? 0 : 1);
+        if (!e) { m.visible = false; continue; }
+        m.visible = true;
+        m.position.set(breech.x + e.x, breech.y + e.y, breech.z + e.z);
+        m.rotation.set(Math.PI / 2 + e.spin, e.spin * 0.6, 0);
+      }
+      // FRESH CASES riding up with the hand and seating in the chambers.
+      const travel = loadShellTravel(reloadAge);
+      for (let i = 0; i < loadShells.length; i++) {
+        const m = loadShells[i];
+        if (!m) continue;
+        if (travel === null) { m.visible = false; continue; }
+        m.visible = true;
+        const side = i === 0 ? -0.024 : 0.024;
+        // From under the frame, in the support hand, to the chamber mouths.
+        const from = new THREE.Vector3(FORE_HAND_REST.x + sh.dx + side, FORE_HAND_REST.y + sh.dy + 0.03, FORE_HAND_REST.z + sh.dz);
+        const to = new THREE.Vector3(breech.x + side, breech.y + 0.005, breech.z - 0.020);
+        m.position.lerpVectors(from, to, travel);
+        m.rotation.set(Math.PI / 2, 0, 0);
+      }
+
+      if (reloadPhaseAt(reloadAge) === 'done') {
         shells = MAGAZINE_CAPACITY;
         reloadAge = Infinity;
         if (hingePivot) hingePivot.rotation.x = 0;
         if (gunGroup) {
-          gunGroup.rotation.z = THREE.MathUtils.degToRad(-4.5);
-          gunGroup.position.y = -0.115;
+          gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
+          gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
+          gunGroup.position.copy(GUN_REST.pos);
         }
-        if (foreHandGroup) foreHandGroup.position.y = -0.150;
+        if (foreHandGroup) foreHandGroup.position.copy(FORE_HAND_REST);
+        for (const m of ejectedShells) m.visible = false;
+        for (const m of loadShells) m.visible = false;
         updateHud();
       }
     }
@@ -2260,6 +2474,35 @@ async function main() {
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
     get flashVisible() { return flashGroup?.visible ?? false; },
+    /** Live finish knobs. The owner's look pass: the gun reads a touch too
+     *  shiny under the dungeon rig and the hands are hard to see at this
+     *  exposure. Both are judgement calls that depend on the final lighting,
+     *  so they are knobs rather than new constants:
+     *    __sdfGame.setGunTuning({ roughness: 0.30, envMapIntensity: 0.85 })
+     *    __sdfGame.setGunTuning({ handEmissive: 0.45 })
+     */
+    setGunTuning(t: {
+      roughness?: number; envMapIntensity?: number; metalness?: number;
+      handEmissive?: number; handRoughness?: number;
+    }) {
+      for (const m of gunMaterials) {
+        if (t.roughness !== undefined) m.roughness = t.roughness;
+        if (t.envMapIntensity !== undefined) m.envMapIntensity = t.envMapIntensity;
+        if (t.metalness !== undefined) m.metalness = t.metalness;
+        m.needsUpdate = true;
+      }
+      if (handMaterial) {
+        if (t.handEmissive !== undefined) handMaterial.emissiveIntensity = t.handEmissive;
+        if (t.handRoughness !== undefined) handMaterial.roughness = t.handRoughness;
+        handMaterial.needsUpdate = true;
+      }
+      return {
+        roughness: gunMaterials[0]?.roughness ?? null,
+        envMapIntensity: gunMaterials[0]?.envMapIntensity ?? null,
+        metalness: gunMaterials[0]?.metalness ?? null,
+        handEmissive: handMaterial?.emissiveIntensity ?? null,
+      };
+    },
     get shells() { return shells; },
     get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
     get gunReady() { return gunReady; },

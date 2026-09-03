@@ -116,10 +116,24 @@ export function createWoundPanel(opts: {
   el.setAttribute('style', PANEL_CSS);
   el.style.display = 'none';
 
+  // Title bar with a CLOSE button. The panel had a setVisible() seam and a
+  // console toggle but nothing clickable, so the only way to get it off the
+  // screen was to know the API -- and it covers most of the viewport, which
+  // made every capture of the weapon useless until it was dismissed.
   const title = document.createElement('div');
-  title.textContent = 'WOUND TUNING';
   title.setAttribute('style',
-    'font-size:10px; letter-spacing:.12em; color:#9a8b86; margin-bottom:7px;');
+    'display:flex; align-items:center; justify-content:space-between; gap:8px;'
+    + ' font-size:10px; letter-spacing:.12em; color:#9a8b86; margin-bottom:7px;');
+  const titleText = document.createElement('span');
+  titleText.textContent = 'WOUND TUNING';
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '\u2715';
+  closeBtn.title = 'hide (H toggles both panels)';
+  closeBtn.setAttribute('style',
+    'background:none; border:0; color:#9a8b86; cursor:pointer; font-size:12px;'
+    + ' line-height:1; padding:0 2px;');
+  closeBtn.addEventListener('click', () => { el.style.display = 'none'; });
+  title.append(titleText, closeBtn);
   el.appendChild(title);
 
   const rows: { k: WoundKey; input: HTMLInputElement; out: HTMLSpanElement }[] = [];

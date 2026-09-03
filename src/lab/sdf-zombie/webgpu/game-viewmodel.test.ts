@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/webgpu/game-viewmodel.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  RELOAD, flashEnvelope, hingeOpenFraction, magazineAfterFire, reloadPhaseAt,
+  RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope, hingeOpenFraction,
+  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
 } from './game-viewmodel';
 
 describe('flashEnvelope', () => {
@@ -72,5 +73,148 @@ describe('hingeOpenFraction', () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+
+describe('reloadPose', () => {
+  it('is at rest at both ends, so the reload cannot leave the gun crooked', () => {
+    for (const t of [0, RELOAD.totalSec, RELOAD.totalSec + 0.5]) {
+      const p = reloadPose(t);
+      expect(p.roll).toBeCloseTo(0, 6);
+      expect(p.pitch).toBeCloseTo(0, 6);
+      expect(p.dy).toBeCloseTo(0, 6);
+      expect(p.hinge).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('presents DURING the present beat, not across the whole reload', () => {
+    // The bug this replaced drove the roll with sin(PI*t/total), peaking at
+    // 0.475 s -- the middle. The presentation must be essentially complete by
+    // the time the hinge starts opening.
+    const atPresentEnd = reloadPose(RELOAD.presentSec);
+    const peak = Math.min(...[0, 0.05, 0.1, 0.14, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+      .map((t) => reloadPose(t).roll));
+    expect(atPresentEnd.roll).toBeLessThan(-10);
+    // the deepest roll must NOT be at mid-reload
+    expect(reloadPose(0.475).roll).toBeGreaterThan(peak - 1e-6);
+  });
+
+  it('holds the hinge fully open across eject and load', () => {
+    for (const t of [0.34, 0.44, 0.55, 0.70]) {
+      expect(reloadPose(t).hinge).toBeGreaterThan(0.97);
+    }
+  });
+
+  it('shuts faster than it opens — the snap', () => {
+    const openSpan = RELOAD.breakEndSec - RELOAD.presentSec;
+    const shutSpan = RELOAD.snapEndSec - RELOAD.loadEndSec;
+    expect(shutSpan).toBeLessThan(openSpan);
+  });
+
+  it('never leaves the hinge outside the unit range', () => {
+    for (let t = -0.2; t < RELOAD.totalSec + 0.3; t += 0.005) {
+      const h = reloadPose(t).hinge;
+      expect(h).toBeGreaterThanOrEqual(-1e-9);
+      expect(h).toBeLessThanOrEqual(1 + 1e-9);
+    }
+  });
+});
+
+describe('ejectedShell', () => {
+  it('throws nothing before the eject beat — a shut gun cannot eject', () => {
+    expect(ejectedShell(0, 0)).toBeNull();
+    expect(ejectedShell(RELOAD.ejectAtSec - 0.01, 0)).toBeNull();
+  });
+  it('leaves the breech going UP and toward the camera', () => {
+    const s = ejectedShell(RELOAD.ejectAtSec + 0.05, 0);
+    expect(s).not.toBeNull();
+    expect(s!.y).toBeGreaterThan(0);
+    expect(s!.z).toBeGreaterThan(0);
+  });
+  it('arcs — rises then falls back below the breech', () => {
+    const ys = [0.05, 0.15, 0.25, 0.45, 0.7].map((d) => ejectedShell(RELOAD.ejectAtSec + d, 0)!.y);
+    expect(Math.max(...ys)).toBeGreaterThan(ys[0]!);
+    expect(ys[ys.length - 1]!).toBeLessThan(Math.max(...ys));
+  });
+  it('throws the two cases apart, not on top of each other', () => {
+    const a = ejectedShell(RELOAD.ejectAtSec + 0.1, 0)!;
+    const b = ejectedShell(RELOAD.ejectAtSec + 0.1, 1)!;
+    expect(Math.abs(a.x - b.x)).toBeGreaterThan(0.02);
+    expect(a.spin).not.toBeCloseTo(b.spin, 3);
+  });
+  it('stops being drawn eventually', () => {
+    expect(ejectedShell(RELOAD.ejectAtSec + 1.2, 0)).toBeNull();
+  });
+});
+
+describe('loadShellTravel', () => {
+  it('is absent outside the load window', () => {
+    expect(loadShellTravel(0)).toBeNull();
+    expect(loadShellTravel(RELOAD.loadStartSec - 0.01)).toBeNull();
+    expect(loadShellTravel(RELOAD.totalSec)).toBeNull();
+  });
+  it('runs 0 -> 1 and is seated before the gun snaps shut', () => {
+    expect(loadShellTravel(RELOAD.loadStartSec)).toBeCloseTo(0, 5);
+    expect(loadShellTravel(RELOAD.loadSeatSec)).toBe(1);
+    // seated strictly before the snap finishes, or the gun closes on a case
+    // that is still visibly outside it
+    expect(RELOAD.loadSeatSec).toBeLessThan(RELOAD.snapEndSec);
+  });
+  it('advances monotonically', () => {
+    let prev = -1;
+    for (let t = RELOAD.loadStartSec; t <= RELOAD.loadSeatSec; t += 0.01) {
+      const v = loadShellTravel(t)!;
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+  });
+});
+
+describe('fireRecoil', () => {
+  it('is nothing before the shot and nothing once it has settled', () => {
+    expect(fireRecoil(-0.01).dz).toBe(0);
+    expect(fireRecoil(RECOIL.durationSec).dz).toBe(0);
+  });
+  it('kicks back and up, muzzle rising', () => {
+    const r = fireRecoil(0.02);
+    expect(r.dz).toBeGreaterThan(0);
+    expect(r.dy).toBeGreaterThan(0);
+    expect(r.pitch).toBeLessThan(0);
+  });
+  it('hits both barrels harder than one', () => {
+    expect(Math.abs(fireRecoil(0.03, 2).dz)).toBeGreaterThan(Math.abs(fireRecoil(0.03, 1).dz));
+  });
+  it('undershoots past rest before settling — it is a mechanism, not a lerp', () => {
+    let sawNegative = false;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.005) {
+      if (fireRecoil(t).dz < -1e-4) { sawNegative = true; break; }
+    }
+    expect(sawNegative).toBe(true);
+  });
+});
+
+describe('supportHandPose', () => {
+  it('rests on the fore-end at both ends of the reload', () => {
+    for (const t of [0, RELOAD.totalSec, RELOAD.totalSec + 1]) {
+      const p = supportHandPose(t);
+      expect(p.dx).toBeCloseTo(0, 6);
+      expect(p.dy).toBeCloseTo(0, 6);
+      expect(p.carrying).toBe(false);
+    }
+  });
+  it('leaves the frame low and left before it comes back with the cases', () => {
+    const away = supportHandPose(RELOAD.breakEndSec);
+    expect(away.dy).toBeLessThan(-0.12);
+    expect(away.dx).toBeLessThan(0);
+  });
+  it('carries only between first appearing and seating', () => {
+    expect(supportHandPose(RELOAD.loadStartSec + 0.01).carrying).toBe(true);
+    expect(supportHandPose(RELOAD.loadSeatSec + 0.01).carrying).toBe(false);
+    expect(supportHandPose(0.2).carrying).toBe(false);
+  });
+  it('arrives at the breech by the time the cases seat', () => {
+    const seat = supportHandPose(RELOAD.loadSeatSec);
+    expect(seat.dy).toBeGreaterThan(-0.02);
   });
 });

@@ -130,20 +130,26 @@ await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);
 
 // 3. FLASH — fire, and prove the flash is visible on the shot frame and gone
-//    a beat later. Screenshots are the evidence; the booleans are the gate.
-//    fire() only stamps flashAge = 0; visibility flips in the TICK, so a read
-//    issued straight back races the next rAF frame (up to 16.7 ms away) and
-//    samples last-frame state. Settle 40 ms — mid-envelope, the window is
-//    70 ms — so `lit` reads a frame that actually carried the flash.
-await evaluate('__sdfGame.fire ? __sdfGame.fire(1) : null');
-await sleep(40);
+//    a beat later.
+//
+//    DETERMINISTIC, not wall-clock. This first used `fire(); sleep(40)` against
+//    a 70 ms envelope, which passed until the frame got heavier (smoke puffs
+//    and shell meshes) and then failed intermittently because the read landed
+//    past the window. A gate whose result depends on machine load is not a
+//    gate. Pause the loop and step exactly one frame instead — the same
+//    technique the reload check below already uses.
+await evaluate('__sdfGame.setLoopRunning(false)');
+await evaluate('__sdfGame.fire(1)');
+await evaluate('__sdfGame.step(1, 1 / 60)');
 const lit = await evaluate('__sdfGame.flashVisible');
 await shot('flash-on');
-await sleep(300);
+// Step past the whole 70 ms envelope: 8 frames at 1/60 is 133 ms.
+await evaluate('__sdfGame.step(8, 1 / 60)');
 const dark = await evaluate('__sdfGame.flashVisible');
 await shot('flash-off');
+await evaluate('__sdfGame.setLoopRunning(true)');
 if (!lit) fail('no muzzle flash on the shot frame');
-if (dark) fail('muzzle flash still visible 300 ms later — envelope never closed');
+if (dark) fail('muzzle flash still visible past the envelope — it never closed');
 
 // 4. THE BODIES — read the uniform the march actually samples. A PointLight
 //    cannot touch this, so a rise here is the whole point of the task.
@@ -154,7 +160,12 @@ if (dark) fail('muzzle flash still visible 300 ms later — envelope never close
 //    So fire, then HAND-STEP one 1/60 s frame: step() runs tick+drawFn
 //    synchronously and parks the rAF loop, making the read deterministic
 //    (flashAge = 1/60, fv = e^-1, gate = spotOn + 6/e).
-await sleep(200); // clear check 3's fireCooldownSec — a rejected fire stamps nothing
+// Clear check 3's fireCooldownSec. Stepped, not slept: check 3 now advances
+// simulated time rather than wall-clock time, so a real-world sleep would not
+// move the cooldown at all. 0.45 s of cooldown is 27 frames at 1/60; 34 with
+// margin.
+await evaluate('__sdfGame.setLoopRunning(false)');
+await evaluate('__sdfGame.step(34, 1 / 60)');
 const beamZid = await evaluate('__sdfGame.zombies()[0]?.id ?? null');
 const beamRead = (zid) => `(() => { const a = __sdfGame.zombie(${zid}); return a ? a.view.uniforms.spotCfg.value.x : null; })()`;
 const beam = await evaluate(beamRead(beamZid));
