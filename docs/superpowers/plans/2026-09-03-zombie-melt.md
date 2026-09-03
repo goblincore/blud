@@ -799,9 +799,13 @@ melt gate (pixels):
 
 Same thresholds as Gate A, measured through the renderer instead of the field — so a DISAGREEMENT between the two gates is itself the finding: the geometry melted and the picture did not, which is the `c52b05b` failure exactly.
 
+- [ ] **Step 4b: Add a runner script**
+
+Create `scripts/melt-shot.sh` as a near-copy of `scripts/blob-shot.sh` — it sources `scripts/lab-servers.sh`, brings up Vite and Chrome only if they are not already listening, runs `melt-capture.mjs`, and stops only what it started. Add an `npm run melt:shot` entry beside `blob:shot` in `package.json`. Do not hand-roll server management; `lab-servers.sh` already owns the ports, the reuse rule and the WebGPU health probe.
+
 - [ ] **Step 5: Run it**
 
-Run the capture against the lab. **Read the captured frames yourself** and say what you see at each progress value, then report the gate table.
+Run `npm run melt:shot` against the lab. **Read the captured frames yourself** and say what you see at each progress value, then report the gate table.
 
 **This is the moment the feature is real or not.** If the gate fails, tune `MELT_TUNING_BODY` (`crush`, `spread`, `poolHeight`) and re-run — those three knobs map directly onto the three checks. If the gate passes but the frames look wrong, say so plainly; the numbers are a floor, not a verdict.
 
