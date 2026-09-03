@@ -20,13 +20,8 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**HULL-REFINE RENDERER — SPEC APPROVED (2026-09-02), plan pending.** Per-frame GPU
-surface-nets hull from the wounded posed field + fragment band refinement onto the
-true SDF surface; replaces the per-pixel march for bodies, restores early-Z. Look-first
-gate (owner reel: wounded close-up / walk / sever+gib, zombie only), cost reported
-after. **Dispatched 2026-09-02** as `~/.claude/dispatch/plans/2026-09-02-sdf-hull-refine-phase0-task-{1..5}.md` on `kimi/k3:high`, serial chain, all `pending` — trigger task-1 in dispatch-ui (localhost:8090) to start. Tier-2 fallbacks (post-hit prim
-narrowing, rigid-cluster bake) recorded in dualmem as investigations.
-[spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md)
+**HULL-REFINE RENDERER — PHASE 0 BUILT, LOOK PASSES HEADLESS PARITY, COST IS A WASH AT ONE BODY (2026-09-02).** Per-frame GPU surface-nets hull + fragment band refinement through the SHIPPED march (`march.wgsl.ts` untouched). Dispatch chain (kimi/k3, 5 tasks) landed the code; six bugs then separated a green suite from a zombie on screen (relaxed stepMul, vec4-padded soup stride, chunk hulls never extracted, extraction before the wound upload, a 4M-eval/frame live test, a 70-eval vertex pull) — all fixed and pinned. Headless A/B (8 stepped poses, 6 live instants, crater on/off, the 3-item reel): hull ≡ march. Owner: "pretty impressive… slightly less jiggly… pretty close". Fenced bench, one body, close camera, machine load 15–110: march ~22–27 ms, hull ~25–27, hull draw-only ~22 — extraction ≈3–4 ms, no win without early-Z (phase 2). NOT the hull: torso-sphere wounds billboard on both renderers and in-game (`damage.ts frame()` vs `game-actor` yaw-0 contract) — spun off. Page: `sdf-hull-spike.html`, seams `__hullSpike.*`, driver `scripts/hull-spike-drive.mjs`, reel `scripts/hull-spike-reel.sh`.
+[notes](docs/dev-notes/2026-09-02-hull-refine-spike/notes.md) · [spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md) · [plan](docs/superpowers/plans/2026-09-02-sdf-hull-refine-phase0.md)
 
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in

@@ -2,84 +2,106 @@
 
 **Date:** 2026-09-02 · **Spec:** [../../superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md](../../superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md)
 **Plan:** [../../superpowers/plans/2026-09-02-sdf-hull-refine-phase0.md](../../superpowers/plans/2026-09-02-sdf-hull-refine-phase0.md)
-**Branch:** `claude/sdf-raymarching-performance-3aabd2` (dispatch chain `dispatch/2026-09-02-sdf-hull-refine-phase0-task-{1..5}` merged in)
+**Branch:** `claude/sdf-raymarching-performance-3aabd2` (dispatch chain `dispatch/2026-09-02-sdf-hull-refine-phase0-task-{1..5}` merged, then eight fix commits)
 
 ## What was built
 
 Per-frame GPU surface-nets hull of the wounded, posed field (`surface-nets.wgsl.ts`,
 `surface-nets-compute.ts`), drawn front-faced through the SHIPPED march material with
 a per-fragment ray override (`createMarchMaterial(..., rays)`: start = hull point,
-far bound = hull point + 2·band, a separate steps uniform), wrapped as a
-`HullRefineView` that keeps the inner `ZombieGpuView` interface so `createZombieActor`
-drives it unchanged. Spike page `sdf-hull-spike.html` / `hull-spike-main.ts`: one
-walking, shootable, severable zombie; chunks get their own hulls; toggle + knobs +
-seams on `window.__hullSpike`. `march.wgsl.ts`, `lab-main.ts`, `game-main.ts` untouched.
+far bound = hull point + 2·band, its own steps uniform), wrapped as a `HullRefineView`
+so `createZombieActor` drives it unchanged. Spike page `sdf-hull-spike.html`: one
+walking, shootable, severable zombie with the game's flesh + light presets; chunks get
+their own hulls; toggle, knobs and seams on `window.__hullSpike` (`setRenderer`,
+`setKnobs`, `slugAt/pelletAt/severLimb`, `setCam`, `freeze`, `stepOnce`, `stats`,
+`checkParity`, `bench`, `setDebugOcc`). `scripts/hull-spike-drive.mjs` scripts a
+headless-Chrome session (js / shot / sleep steps) — every capture below came from it.
+`march.wgsl.ts`, `lab-main.ts`, `game-main.ts` untouched.
 
-Plan deviations exercised: occupancy is the kernel prologue (per-thread live test —
-Tint rejects a barrier behind a workgroup-memory branch, so the broadcast form died);
-triangle soup + `drawIndirect`; no vertex normals; 4³ blocks; atomics via
-`storage(...).toAtomic()` worked first time.
+## Bugs between "green suite" and "a zombie on screen" — all invisible to vitest
 
-## The three bugs between "green tests" and "a zombie on screen"
+1. **Tint rejections** (task 4): `meta` is reserved; a barrier behind a branch on a
+   `var<workgroup>` read is non-uniform control flow. Pinned.
+2. **Relaxed step multiplier**: the hull copied the inner view's lab default 0.6; a
+   4-step walk from +band at 0.6 stops 1.28 mm short of the 1.2 mm hit epsilon and
+   EVERY fragment discarded (task 5 burned 35 min on "FrontSide culls"). Now 1.0
+   (GAME_OMEGA), pinned.
+3. **Soup stride**: three pads itemSize-3 storage attributes to vec4 on upload and
+   mutates the attribute; the kernel wrote xyz-packed; the draw was garbage triangles
+   (the "blob"). `SOUP_STRIDE = 4`, pinned.
+4. **Chunk hulls never extracted** (frozen sever showed legs on the march, nothing on
+   the hull): extraction only ran inside `update`; chunks now extract on spawn and in
+   the frozen branch.
+5. **Extraction order**: the actor uploads wounds + head rotation AFTER `view.update`,
+   so hulls carried last frame's craters. `autoExtract=false` + `view.extract()` once
+   after `actor.step`.
+6. **Extraction cost** (the reason the owner felt "no faster"): task 4's per-thread
+   live test = 64 field evals per block, and the nets kernel was dispatched at the
+   64 000-block CAPACITY → ~4M field evals/frame deciding emptiness, more than the
+   march spends drawing. Now one eval per block broadcast via `workgroupUniformLoad`
+   (the builtin that makes the branch provably uniform), dispatch = this frame's
+   block/cell counts. Then task 1's vertex pull: 10 iterations × 7 evals (central
+   differences) per surface cell = up to 620k evals/frame; now the cell's free
+   corner gradient × 4 iterations × 1 eval.
 
-Every one was invisible to the unit suite and only appeared on the page.
+## Steps knob
 
-1. **Tint rejections at pipeline creation** (dispatch task 4): `meta` is a reserved
-   WGSL identifier; `workgroupBarrier()` after a branch on a `var<workgroup>` read is
-   non-uniform control flow. Both pinned in `surface-nets.wgsl.test.ts`.
-2. **Relaxed step multiplier.** The hull's `marchCfg.y` copied the inner view's lab
-   default 0.6. A 4-step walk from +band at 0.6 stops 0.4⁴·band = 1.28 mm short of the
-   1.2 mm hit epsilon: EVERY fragment missed and discarded. Task 5 spent 35 min on
-   "FrontSide culls the near wall" before it was stopped. Now 1.0 (plain sphere
-   tracing, the game's GAME_OMEGA), pinned in `hull-refine-view.test.ts`.
-3. **Soup stride.** three pads a `StorageBufferAttribute` of itemSize 3 to vec4 on
-   upload (`WebGPUAttributeUtils.js`: "WGSL does not support packed vec3 data in
-   storage buffers") and mutates the attribute to itemSize 4. The kernel wrote
-   xyzxyz; the vertex stage read a 16-byte stride; the draw was garbage triangles
-   spanning the bbox — the "blob" that hid the torso, and task 5's "garbage streaks"
-   under a plain material. Diagnosed from the readback (soup y-range 0.18–1.76 m =
-   the whole body) against the occupancy view (rasterised fragments a squat blob).
-   Now `SOUP_STRIDE = 4`, pinned.
+At 4 steps the hull has gaps at neck/shoulder/wrist (smooth-min blend zones
+under-report distance, gradient ≈0.55) and beside craters (the wound zone steps at
+0.6·d by design). **8 closes them**; 12/20 indistinguishable. Default 8.
 
-## GPU/CPU parity (unwounded, on the page, `__hullSpike.checkParity()`)
+## Parity and look evidence (all A/B on the same page, headless, 1280×800)
 
-| cellVerts | bad | badFrac | dropped | overflow | grid | blocks |
-| --- | --- | --- | --- | --- | --- | --- |
-| 8827 | 0 | 0 | 0 | false | 92x112x88 | — |
+- `checkParity()` unwounded: cellVerts 8827, bad 0, dropped 0, overflow false.
+- `reel-c020-b020-s8/` (harness A/B/A/B, wounded close-up, walk ×4 phases, sever+gib):
+  a-vs-b changed pixels 0.4–0.5 %, hot cells = the HUD text + the crater rim; hull
+  repeat pairs at the noise floor (0.01 %).
+- `step-diag/sheet.png`: eight stepped poses, hull vs march — match.
+- `live-diag/sheet.png`: six live-loop instants, last live hull vs re-extracted — match
+  (rules out a loop-timing mismatch).
+- `wound-diag/sheet.png`: rest pose without / with a torso crater + occupancy — match,
+  occupancy all hits.
+- `bench/hull-after-pull.png` vs `march-after-pull.png`: the "stubby arms" are the
+  pose (bent arms, fists up, foreshortened) — identical on the march.
 
-(dispatch task 4, before the stride fix — cell positions were always right, only the
-soup copy was misread.)
+Owner (manual, own tab, 2026-09-02): "pretty impressive… slightly less jiggly… pretty
+close". Also reported gaps at 20 steps that no headless capture reproduced after fix
+5 — needs a re-check on a hard-reloaded tab.
 
-## Steps knob — the blend-zone finding
+**Not the hull:** wounds on torso SPHERE prims stay viewer-fixed when the body yaws
+("billboarding") on BOTH renderers and in the game — a pre-existing `damage.ts
+frame()` / `game-actor refreshWounds` yaw-0 contract conflict. Spun off as its own task.
 
-At steps 4 the hull renders with GAPS at the neck, shoulder and wrist: the smooth-min
-blend zones, where the field under-reports distance (task 1 measured a gradient
-magnitude ≈0.55 there). From +band the true distance is up to band/0.55 ≈ 36 mm and
-four sphere-trace steps do not converge. Steps 8 closes every gap at this camera;
-12 is indistinguishable from 8. **Default is now 8.** The 2·band far cap (40 mm) was
-NOT the limiter at band 0.02 — it still bounds the walk to the band.
+## Cost — reported, not gated. ONE body, close camera, fenced bench
 
-## The reel (owner judges)
+`__hullSpike.bench(90, 15, 3)`: hand-stepped frames, GPU fence per 15, alternating
+legs. **Machine load during every run was 15–110** (other agents, Chrome, vitest) —
+per the 2026-08-31 warning these deltas are within their own spread. Treat as
+indicative only.
 
-`scripts/hull-spike-reel.sh docs/dev-notes/2026-09-02-hull-refine-spike/reel-c020-b020-s8 0.02 0.02 8`
-— hull (`a-*.png`) vs march (`b-*.png`) on the same frozen scene, via
-`perf-r2-parity.mjs --url /sdf-hull-spike.html --seam __hullSpike`.
+| build | march ms/frame | hull ms/frame |
+| --- | --- | --- |
+| before fix 6 | 32.4 / 28.8 / 29.6 | 41.2 / 41.4 / 40.8 |
+| after live-test + dispatch fix | 25.7 / 24.9 / 25.7 | 36.0 / 30.8 / 32.7 |
+| after pull rework | 27.6 / 22.3 / 21.8 | 25.4 / 25.4 / 26.8 |
+| hull, extraction OFF (draw only) | — | 22.1 / 22.2 |
 
-| item | dir | changed px (a-1 vs b-1) | noise floor (state-1 vs state-2) |
-| --- | --- | --- | --- |
-| 1 wounded close-up | `reel-c020-b020-s8/1-wounded` | | |
-| 2 walk phase 0..3 | `reel-c020-b020-s8/2-walk-{0..3}` | | |
-| 3 sever + gib | `reel-c020-b020-s8/3-gib` | | |
-
-Pixel diffs are a SIGNAL only; the owner's eye is the gate.
+Reading: at one body the hull is now a WASH — extraction ≈3–4 ms, and the hull draw
+costs about what the march costs, because the shipped march already has shell
+bounds + omega 1.0 (few miss pixels, ~6 steps/hit) and the post-hit shading (calcNormal,
+AO, scatter, wound shadow) is identical on both paths. The spec's crowd win needs
+early-Z, which phase 0 deliberately does not claim (shipped `depthNode` + `discard`
+kept), and the per-hit shading reduction (tier-2 post-hit prim narrowing) helps both
+renderers equally.
 
 ## Verdict
 
-_pending owner_
+_pending owner_ — the look gate is theirs; the cost picture above is the honest input.
 
-## Cost — reported, not gated
+## If it continues (phase 2 candidates, in order of expected value)
 
-The HUD `frameMs` is rAF wall clock and vsync-pinned; it cannot see below 16.7 ms and
-is not a bench. The honest number needs the chunked+fenced bench legs on the game
-page (phase 2). Phase 0 has only the single-body page and no comparable figure.
-Early-Z is deliberately NOT claimed: the shipped `depthNode` + `discard` are kept.
+1. **Early-Z**: write the hull's raster depth, no frag_depth, and turn misses into a
+   band-slack fill instead of `discard` — the only route to the crowd occlusion win.
+2. **Amortised extraction**: skip re-extraction for bodies whose pose + wounds are
+   unchanged (statues, far crowd).
+3. **Post-hit prim narrowing** (tier 2) — helps both paths.

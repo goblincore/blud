@@ -19,19 +19,17 @@
   "preJs": "__hullSpike.freeze(false); await new Promise(r=>setTimeout(r, 300 + 350)); __hullSpike.freeze(true)",
   "outDir": "docs/dev-notes/2026-09-02-hull-refine-spike/reel-c020-b020-s8/2-walk-3",
   "noiseFloor": {
-    "changed": 307,
-    "bigChanged": 245,
-    "meanD": 0.1,
+    "changed": 127,
+    "bigChanged": 82,
+    "meanD": 0.03,
     "maxD": 543,
-    "hotCells": [
-      "4,0"
-    ]
+    "hotCells": []
   },
   "pairs": {
     "a-1 vs b-1": {
-      "changed": 4254,
-      "bigChanged": 3366,
-      "meanD": 1.59,
+      "changed": 4270,
+      "bigChanged": 3407,
+      "meanD": 1.6,
       "maxD": 700,
       "hotCells": [
         "1,1",
@@ -42,9 +40,9 @@
       ]
     },
     "a-2 vs b-2": {
-      "changed": 2211,
-      "bigChanged": 1786,
-      "meanD": 0.91,
+      "changed": 2221,
+      "bigChanged": 1846,
+      "meanD": 0.92,
       "maxD": 700,
       "hotCells": [
         "20,9",
@@ -52,16 +50,16 @@
       ]
     },
     "a-1 vs a-2": {
-      "changed": 120,
-      "bigChanged": 73,
+      "changed": 131,
+      "bigChanged": 75,
       "meanD": 0.03,
       "maxD": 543,
       "hotCells": []
     },
     "b-1 vs b-2": {
-      "changed": 2194,
-      "bigChanged": 1667,
-      "meanD": 0.72,
+      "changed": 2162,
+      "bigChanged": 1654,
+      "meanD": 0.71,
       "maxD": 543,
       "hotCells": [
         "1,1",
