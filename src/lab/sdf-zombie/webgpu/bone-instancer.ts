@@ -14,7 +14,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  wgslFn, uniform, attribute, positionWorld, cameraPosition, vec4, float,
+  wgslFn, uniform, attribute, positionWorld, cameraPosition, vec4, float, texture,
 } from 'three/tsl';
 import type { Primitive } from '../types';
 import { boneInstanceOf, buildTubeGeometry } from './bone-tube-geom';
@@ -107,7 +107,7 @@ export const BONE_VERTEX_WGSL = /* wgsl */ `fn boneVertex(t: f32, theta: f32, la
 
 /** Lambert key + flashlight cone, the march's own formula (march.wgsl.ts
  *  ~2253-2290) on the same uniform values, minus wetness/scatter. */
-export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
+export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, woundTex: texture_2d<f32>, woundCount: f32, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
   var L = normalize(lightDir);
   var keyC = keyColor;
   var keyI = lightCfg.x;
@@ -130,13 +130,26 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
   let V = normalize(camPos - p);
   let ndl = max(dot(n, L), 0.0);
   let H = normalize(L + V);
+  // EXPOSURE from the wounds (the field's tissue-depth stain + cavity AO, faked):
+  // bone under a crater's centre is exposed — pale, dry, lit; bone toward the
+  // rim sits under blood and flesh — stained, dark, glossy. Nearest crater wins.
+  var expo = 0.0;
+  for (var i = 0; i < 64; i = i + 1) {
+    if (f32(i) >= woundCount) { break; }
+    let w = textureLoad(woundTex, vec2<i32>(i, 0), 0);
+    let dist = length(p - w.xyz);
+    expo = max(expo, clamp(1.0 - dist / max(w.w * 1.15, 1e-3), 0.0, 1.0));
+  }
+  expo = smoothstep(0.0, 1.0, expo);
   // look = (stain toward deepColor, blood tint on the highlight, spec gain, fresnel gain)
   let shine = pow(max(dot(n, H), 0.0), 48.0);
   let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * look.w;
-  let albedo = mix(boneColor, deepColor * 0.8, look.x);
-  let wetTint = mix(vec3<f32>(1.0), deepColor, look.y);
-  let diffuse = albedo * (ambient + keyI * keyC * (0.15 + 0.85 * ndl));
-  let specular = keyC * wetTint * (shine * look.z * keyI + fres * (0.5 + 0.5 * keyI));
+  let stain = mix(look.x, look.x * 0.2, expo);
+  let albedo = mix(boneColor, deepColor * 0.8, stain);
+  let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * (1.0 - 0.6 * expo));
+  let ao = mix(0.45, 1.0, expo);
+  let diffuse = albedo * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao;
+  let specular = keyC * wetTint * (shine * look.z * keyI * mix(1.3, 0.7, expo) + fres * (0.5 + 0.5 * keyI));
   return diffuse + specular;
 }`;
 
@@ -146,6 +159,8 @@ export interface BoneInstancer {
   /** Replace this frame's bone set. Each entry is a posed prim list + its
    *  cluster-alive table (undefined for chunks). */
   update(sources: ReadonlyArray<{ prims: readonly Primitive[]; alive?: readonly boolean[] }>): void;
+  /** This frame's craters (world centre + radius) for the exposure gradient. */
+  setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
   readonly count: number;
   readonly overflowed: boolean;
   dispose(): void;
@@ -161,6 +176,7 @@ const boneInstancerUniforms = () => ({
     ambient: uniform(new THREE.Color(0.06, 0.06, 0.06)),
     /** (stain, wetTint, specGain, fresGain) — __sdfGame.setBoneLook tunes it live. */
     look: uniform(new THREE.Vector4(0.65, 0.5, 1.2, 0.6)),
+    woundCount: uniform(0),
   lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
   keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
   lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
@@ -189,6 +205,12 @@ export function createBoneInstancer(max = 256): BoneInstancer {
   geo.instanceCount = 0;
 
   const u = boneInstancerUniforms();
+  /** Up to 64 craters (xyz world, w radius) for the exposure gradient. */
+  const MAX_WOUNDS_TEX = 64;
+  const woundData = new Float32Array(MAX_WOUNDS_TEX * 4);
+  const woundTex = new THREE.DataTexture(woundData, MAX_WOUNDS_TEX, 1, THREE.RGBAFormat, THREE.FloatType);
+  woundTex.minFilter = THREE.NearestFilter; woundTex.magFilter = THREE.NearestFilter; woundTex.generateMipmaps = false;
+  woundTex.needsUpdate = true;
 
   // Dependency-ordered includes via the repo's reduce idiom (zombie-gpu.ts
   // buildMarchFn): qRotB declared before boneVertex, as WGSL requires.
@@ -207,7 +229,7 @@ export function createBoneInstancer(max = 256): BoneInstancer {
   material.normalNode = vert({ ...args, wantNormal: float(1) }) as never;
   material.colorNode = vec4(shade({
     p: positionWorld, n: material.normalNode, camPos: cameraPosition,
-    boneColor: u.boneColor, deepColor: u.deepColor, ambient: u.ambient, look: u.look, lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+    boneColor: u.boneColor, deepColor: u.deepColor, ambient: u.ambient, look: u.look, woundTex: texture(woundTex), woundCount: u.woundCount, lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
   }) as never, 1.0);
   material.depthWrite = true;
@@ -237,8 +259,14 @@ export function createBoneInstancer(max = 256): BoneInstancer {
       ib.needsUpdate = true;
       mesh.visible = n > 0;
     },
+    setWounds(wounds) {
+      const n = Math.min(wounds.length, MAX_WOUNDS_TEX);
+      for (let i = 0; i < n; i++) { const w = wounds[i]!; woundData.set([w.pos[0], w.pos[1], w.pos[2], w.radius], i * 4); }
+      u.woundCount.value = n;
+      woundTex.needsUpdate = true;
+    },
     get count() { return count; },
     get overflowed() { return arrays.overflowed; },
-    dispose() { geo.dispose(); base.dispose(); material.dispose(); },
+    dispose() { geo.dispose(); base.dispose(); material.dispose(); woundTex.dispose(); },
   };
 }

@@ -547,6 +547,14 @@ async function main() {
     // ahead of this draw; chunks repacked world-space there too — posed()
     // and posedBones() are always current).
     if (boneMesh) {
+      {
+        const craters: { pos: Vec3; radius: number }[] = [];
+        for (const a of actors) {
+          const prims = a.posed().prims;
+          for (const w of a.wounds()) craters.push({ pos: woundWorldPos(prims, w, 0), radius: w.radius });
+        }
+        boneInstancer.setWounds(craters);
+      }
       boneInstancer.update([
         ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
         ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
