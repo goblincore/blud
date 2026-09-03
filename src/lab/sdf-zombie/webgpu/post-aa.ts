@@ -65,7 +65,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
-import { FISHEYE_WGSL } from './fisheye';
+import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -335,6 +335,15 @@ export interface PostAa {
   setSharpUpscale(on: boolean): void;
   /** Console escape hatch for the canvas-boundary flip — see sdf-layer. */
   setBlitFlipY(on: boolean): void;
+  /**
+   * The fisheye. Both arguments are VERTICAL degrees: what the camera renders,
+   * and what the middle of the screen should read as. A centre FOV that is not
+   * narrower than the render FOV turns the lens off exactly (k = 0), and the
+   * all-off parity path then still applies.
+   */
+  setLens(renderFovDeg: number, centerFovDeg: number): void;
+  /** The lens resolved against the live content aspect. `k = 0` = off. */
+  readonly lens: Lens;
   readonly fxaa: boolean;
   readonly smear: number;
   readonly sharpUpscale: boolean;
@@ -384,13 +393,20 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   // so this is correct for every toggle combination at 1.
   const uFlipY = uniform(1);
   const uSmear = uniform(POST_AA_DEFAULTS.smear);
+  // The lens, held as the two FOVs it was asked for: `k` depends on the
+  // display aspect, so it is re-resolved on every refit rather than cached
+  // from whatever the window happened to be at boot.
+  let lensRenderFov = 0;
+  let lensCenterFov = 0;
+  let lens: Lens = makeLens(0, 0, 1);
   // x = effective smear, y = current frame arrives display-encoded.
   const uBlendCfg = uniform(new THREE.Vector2(0, 0));
   // x = flipY, y = src is display-space, z = sharp mode, w = spare.
   const uBlitCfg = uniform(new THREE.Vector4(1, 0, 0, 0));
   const uBlitDst = uniform(new THREE.Vector2(1, 1));
-  // (k, rmax, aspect) — see fisheye.ts. Stays all-zero (k = 0, lens off, an
-  // exact identity in the blit) until setLens() arrives with the interface.
+  // (k, rmax, aspect) — see fisheye.ts. Starts all-zero (k = 0, lens off, an
+  // exact identity in the blit); recomputeLens() keeps it in sync with
+  // setLens() and every refit thereafter.
   const uLens = uniform(new THREE.Vector3(0, 0, 0));
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
@@ -464,6 +480,12 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const emptyScene = new THREE.Scene();
   const drawSize = new THREE.Vector2();
 
+  function recomputeLens() {
+    const c = computeRenderSize(window.innerWidth, window.innerHeight);
+    lens = makeLens(lensRenderFov, lensCenterFov, c.width / c.height);
+    uLens.value.set(lens.k, lens.rmax, lens.aspect);
+  }
+
   function refit() {
     const winW = window.innerWidth;
     const winH = window.innerHeight;
@@ -499,6 +521,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     // old history is the wrong size besides.
     targetsNeedInit = true;
     historyValid = false;
+    recomputeLens();
   }
   refit();
   // Registered AFTER lab-renderer's own resize listener (this is created
@@ -508,7 +531,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   return {
     render(chain) {
       const smear = uSmear.value;
-      const active = fxaaOn || smear > 0 || sharpOn;
+      // A narrowing lens is an effect like any other: it needs the capture
+      // redirect, because the blit has to sample a texture rather than be one.
+      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
         if (redirected) {
@@ -594,6 +619,12 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     setFxaa(on) { fxaaOn = on; },
     setSmear(v) { uSmear.value = Math.max(0, Math.min(POST_AA_SMEAR_MAX, v)); },
+    setLens(renderFovDeg, centerFovDeg) {
+      lensRenderFov = renderFovDeg;
+      lensCenterFov = centerFovDeg;
+      recomputeLens();
+    },
+    get lens() { return lens; },
     setSharpUpscale(on) {
       if (on === sharpOn) return;
       sharpOn = on;

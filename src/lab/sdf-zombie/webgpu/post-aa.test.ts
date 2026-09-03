@@ -281,6 +281,57 @@ describe('post-aa all-off parity (the hard gate)', () => {
     post.setSmear(-1);
     expect(post.smear).toBe(0);
   });
+
+  it('a lens is off by default, and off is an exact identity', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    expect(post.lens.k).toBe(0);
+  });
+
+  it('all-off parity survives a lens that is set but not narrowing', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setLens(90, 90); // centre not narrower than render -> k = 0
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(post.lens.k).toBe(0);
+    expect(chainCalls).toBe(1);
+    expect(calls.setRenderTarget).toBe(0);
+    expect(calls.render).toBe(0);
+  });
+
+  it('a narrowing lens is an active effect: it redirects and runs the passes', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setLens(90, 60);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(post.lens.k).toBeGreaterThan(0);
+    expect(chainCalls).toBe(1);
+    expect(sink.target).not.toBeNull();
+    expect(calls.render).toBeGreaterThan(0);
+  });
+
+  it('resolves the lens against the CONTENT aspect, not the window', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setLens(90, 60);
+    const c = post.contentSize;
+    expect(post.lens.aspect).toBeCloseTo(c.width / c.height, 9);
+    expect(post.lens.rmax).toBeCloseTo(Math.hypot(post.lens.aspect, 1), 9);
+  });
 });
 
 describe('post-aa fisheye in the blit', () => {
