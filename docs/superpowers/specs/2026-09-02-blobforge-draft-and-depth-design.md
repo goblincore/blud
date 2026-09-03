@@ -60,6 +60,17 @@ axis of the cloud). `len` is that line's extent, not the joint-to-joint
 distance. The rig is still used to *group* vertices — that part is exact by
 construction, being skin weights — but never to place geometry.
 
+> **CORRECTED 2026-09-02 — the sentence above about `len` is WRONG.** See
+> [`2026-09-02-blob-draft-chain-drift-design.md`](2026-09-02-blob-draft-chain-drift-design.md).
+> `.blob`'s skeleton is a rigid kinematic chain, so `len=` places every
+> descendant of a bone rather than merely describing it. Overlapping clouds do
+> not compose into a chain and the error accumulates — the drafted minotaur
+> stood with its soles ~0.3 m off the floor and a torso chain ~8% too tall.
+> Lengths and directions must come from the RIG (joint-to-joint × one global
+> scale); the cloud keeps radii, bands, colour, and supplies `offset=` where
+> the surface is not centred on its bone. That last part is also the correct
+> answer to the 9-13 cm trap: offset the PRIMS, never relocate the BONE.
+
 ### One prim per bone would GENERATE the bug Tool B detects
 
 The first draft of this spec emitted one `bar` per bone. That is wrong, and
