@@ -14,7 +14,7 @@
 
 ## Ground rules for every task
 
-1. **Run the full suite before committing.** `npx vitest run` must be green and `npx tsc --noEmit` clean. The suite is ~2299 tests across ~121 files; a red suite is a failed task.
+1. **Run the full suite before committing.** `npx vitest run` must be green and `npx tsc --noEmit` clean. The suite is 2929 tests across 180 files (measured 2026-09-03 by melt-task-1); a red suite is a failed task.
 2. **`melt.ts` is pure.** No `Date.now`, no `Math.random`, no imports from `webgpu/`. Same `(state, dt)` in, same state out, always. The capture gate depends on this.
 3. **Never touch bone prims in `applyMelt`.** Bones live in `BuildResult.bonePrims`, flesh in `BuildResult.prims`. `applyMelt` reads and writes `prims` only.
 4. **TRAP — do not "fix" bone containment.** `validate.ts`'s `checkBoneContainment` enforces a 4 mm flesh-over-bone margin. Melt violates it deliberately — bones breaching flesh IS the effect. Never run that check on melted prims, and never adjust the melt to satisfy it. If you see containment errors on a melted body, that is the feature working.
