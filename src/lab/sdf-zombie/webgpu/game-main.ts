@@ -999,6 +999,9 @@ async function main() {
       else pushProbeWeight(parked);
     }
     if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
+    if (e.code === 'KeyR' && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
+      reloadAge = 0;
+    }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   let parked = DEFAULT_PROBE_WEIGHT;
@@ -1224,6 +1227,11 @@ async function main() {
 
   let nextSeed = 0x5df1;
   let cooldown = 0;
+  /** Shells in the gun. The reload animation only means something if running
+   *  dry is a state the player can be in. */
+  let shells = MAGAZINE_CAPACITY;
+  /** Seconds into the reload, or Infinity when not reloading. */
+  let reloadAge = Infinity;
   let recoilPitch = 0;
 
   /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
@@ -1234,8 +1242,13 @@ async function main() {
 
   function fire(barrels: 1 | 2): boolean {
     if (!gunReady || cooldown > 0) return false;
+    if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
+    if (shells <= 0) { reloadAge = 0; return false; } // click -> start reloading
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
+    shells = magazineAfterFire(shells, barrels);
+    if (shells <= 0) reloadAge = 0;
+    updateHud();
     flashAge = 0;
     if (flashGroup) {
       // Fresh roll per shot so repeat fire does not strobe an identical shape.
@@ -1720,6 +1733,7 @@ async function main() {
     hudEl.textContent =
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
+      ` · shells ${shells}/${MAGAZINE_CAPACITY}` +
       (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
       (sdfLayer.halfRate
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
@@ -1852,6 +1866,35 @@ async function main() {
       flashGroup.scale.setScalar(s);
     }
     if (flashLight) flashLight.intensity = 26 * flashV;
+    if (reloadAge <= RELOAD.totalSec) {
+      reloadAge += dt;
+      const phase = reloadPhaseAt(reloadAge);
+      // BREAK: the pivot group built at load time is already parked on the
+      // hinge, so this one rotation is the whole thing.
+      if (hingePivot) hingePivot.rotation.x = hingeOpenFraction(reloadAge) * RELOAD.openRad;
+      // PRESENT: roll the gun up and toward the camera so the breech is visible.
+      if (gunGroup) {
+        const present = Math.sin(Math.PI * Math.min(1, reloadAge / RELOAD.totalSec));
+        gunGroup.rotation.z = THREE.MathUtils.degToRad(-4.5 - 16 * present);
+        gunGroup.position.y = -0.115 + 0.055 * present;
+      }
+      // LOAD: the support hand dips out of frame and returns with the shells.
+      if (foreHandGroup) {
+        const dip = phase === 'load' ? 1 : 0;
+        foreHandGroup.position.y = -0.150 - 0.13 * dip;
+      }
+      if (phase === 'done') {
+        shells = MAGAZINE_CAPACITY;
+        reloadAge = Infinity;
+        if (hingePivot) hingePivot.rotation.x = 0;
+        if (gunGroup) {
+          gunGroup.rotation.z = THREE.MathUtils.degToRad(-4.5);
+          gunGroup.position.y = -0.115;
+        }
+        if (foreHandGroup) foreHandGroup.position.y = -0.150;
+        updateHud();
+      }
+    }
     {
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
@@ -2217,6 +2260,8 @@ async function main() {
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
     get flashVisible() { return flashGroup?.visible ?? false; },
+    get shells() { return shells; },
+    get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
     // SLUG MODE surface + HUD-truthful flag.

@@ -6,6 +6,7 @@
 //   2. THE GUN: the k3 GLB is gone, shorty-double.glb's Barrels node is in.
 //   3. FLASH: the sprite is visible on the shot frame, gone a beat later.
 //   4. THE BODIES: the marched bodies' spotCfg.x rises on the flash frame.
+//   5. RELOAD: two shots empty it, the hinge opens, it returns shut and loaded.
 //
 // Usage: LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 node scripts/sdf-game-shorty-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -161,6 +162,56 @@ if (!(beamLit > beam)) {
        'the bias is probably AFTER the for-of loop instead of before it');
 }
 console.log(`beam: spotCfg.x ${beam} -> ${beamLit} on the flash frame`);
+
+// 5. RELOAD — two shots must empty it, the hinge must actually open, and the
+//    gun must come back to a shut, loaded rest state on its own.
+//    fire() rejects SILENTLY: on the 0.45 s cooldown, mid-reload, and a dry
+//    gun. Checks 3-4 already spent both shells (the second fire auto-starts
+//    the reload), so this sequence first waits out the game's OWN return to a
+//    full shut rest — the same auto-return the check exists to prove — then
+//    asserts every fire's return value before reading shells.
+const ready = await evaluate(`
+  (async () => {
+    const t0 = performance.now();
+    while (performance.now() - t0 < 4000) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (__sdfGame.shells === 2 && Math.abs(__sdfGame.hingeOpenRad) < 1e-6) return true;
+    }
+    return { shells: __sdfGame.shells, open: __sdfGame.hingeOpenRad };
+  })()
+`);
+if (ready !== true) fail(`gun never returned to full shut rest: ${JSON.stringify(ready)}`);
+let maxOpen = 0;
+if ((await evaluate('__sdfGame.fire(1)')) !== true) fail('reload fire 1 rejected');
+// Clear fireCooldownSec (0.45 s) in GAME time, not wall time: headless rAF is
+// slow enough that dt clamps to 1/20 s and 500 ms of wall clock can be under
+// 0.45 s of game clock (observed: fire 2 rejected after a 500 ms sleep).
+// 30 × 1/60 s hand-steps = 0.5 s of tick time, deterministically.
+await evaluate('__sdfGame.step(30, 1 / 60)');
+if ((await evaluate('__sdfGame.fire(1)')) !== true) fail('reload fire 2 rejected');
+const spent = await evaluate('__sdfGame.shells');
+if (spent !== 0) fail(`two shots left ${spent} shells, expected 0`);
+// The loop stays parked (step() parked it): the reload beats are stepped in
+// GAME time too, so each reload-*.png frame is exactly the beat it names —
+// this strip is Task 8's evidence, and wall-clock sampling would race it.
+let ticks = 0;
+for (const ms of [120, 260, 400, 550, 740, 900]) {
+  const target = Math.round((ms / 1000) / (1 / 60));
+  await evaluate(`__sdfGame.step(${target - ticks}, 1 / 60)`);
+  ticks = target;
+  const open = await evaluate('__sdfGame.hingeOpenRad');
+  maxOpen = Math.max(maxOpen, open);
+  await shot(`reload-${ms}`);
+}
+if (maxOpen < 0.4) fail(`hinge only reached ${maxOpen} rad; the barrels never opened`);
+await evaluate(`__sdfGame.step(${57 - ticks + 6}, 1 / 60)`); // past RELOAD.totalSec (0.95 s = 57 ticks)
+await evaluate('__sdfGame.setLoopRunning(true)');
+const after = await evaluate('__sdfGame.shells');
+const shut = await evaluate('__sdfGame.hingeOpenRad');
+if (after !== 2) fail(`reload finished with ${after} shells, expected 2`);
+if (Math.abs(shut) > 1e-6) fail(`hinge left at ${shut} rad, expected shut`);
+console.log(`reload: shells 2 -> 0 -> 2, maxOpen ${maxOpen.toFixed(3)} rad, shut again`);
+
 console.log(`done — ${shotCount} shots in ${OUT}`);
 // An open CDP WebSocket keeps node's event loop alive forever — without this
 // the gate prints its PASS lines and then hangs, the shell wrapper never
