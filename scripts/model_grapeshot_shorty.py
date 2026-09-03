@@ -408,39 +408,93 @@ put(loft(fe, lambda y: 0.0335, round_frac=0.42, sections=12, name='fe'),
     'foreend','Wood',bevel=0.0028,segs=3,smooth='auto')
 put(box(0.074,0.013,0.024),'fe_cap','Steel',loc=(0,-0.076,-0.028),bevel=0.0035,segs=3)
 
+# ---- shells, seated in the chambers ----------------------------------------
+# Parented under BARREL_NODE so they inherit the break rotation for free. That
+# is the whole trick: the runtime slides them along their own LOCAL bore axis
+# and they come out of the tilted tubes correctly without anyone anywhere
+# computing a rotated basis.
+MATS['Hull'] = M('Hull', (0.66, 0.075, 0.06, 1), 0.0, 0.55)
+MATS['Head'] = M('Head', (0.62, 0.44, 0.16, 1), 0.9, 0.35)
+SHELL_HEAD = 0.021           # brass head length
+SHELL_LEN  = CHAMBER_DEPTH   # 0.070 -- a shell exactly fills the chamber
+for i, x in enumerate((-XSEP, XSEP)):
+    tag = 'L' if i == 0 else 'R'
+    # Hull runs forward from the head to the chamber floor. segs=12, not cyl()'s
+    # default 32: at this diameter (RCH*0.985 ~= 20mm) the default put the whole
+    # script 714 tris over the 14000 cap the FIRST time shells were added; a
+    # 5mm-radius part reads just as round at 12 segments.
+    hull_len = SHELL_LEN - SHELL_HEAD
+    put(cyl(RCH*0.985, hull_len, segs=12), f'shell_hull_{tag}', 'Hull',
+        loc=(x, CY1 - SHELL_HEAD - hull_len/2, 0), rot=(RY,0,0), bevel=0, smooth=True)
+    # Brass head, rim flush with the breech face.
+    put(cyl(RCH*1.02, SHELL_HEAD, segs=12), f'shell_head_{tag}', 'Head',
+        loc=(x, CY1 - SHELL_HEAD/2, 0), rot=(RY,0,0), bevel=0.0008, smooth=True)
+
 # ---- two rigid groups + locator empties. Placed here: after every put()
 # call, before any render. The GLB carries NO animation -- the hinge is a
 # code-driven rotation at runtime, so it only has to name things.
 def group_and_locate():
-    """Two rigid groups plus locators. The hinge is a code-driven rotation at
-    runtime, so the GLB carries NO animation -- it only has to name things."""
+    """Rigid groups, driven nodes and locators. The GLB carries NO animation --
+    every moving part is a code-driven transform at runtime, so this only has to
+    name things. A name the runtime cannot find is a reload that plays and moves
+    nothing, so the gate below treats a missing name as fatal."""
     root    = bpy.data.objects.new("GunRoot", None); col.objects.link(root)
     barrels = bpy.data.objects.new(BARREL_NODE, None); col.objects.link(barrels)
     frame   = bpy.data.objects.new(FRAME_NODE, None); col.objects.link(frame)
     barrels.parent = root
     frame.parent = root
 
+    # Driven nodes. Each owns exactly the meshes the runtime moves as a unit.
+    driven = {}
+    for name, parent, loc in (
+        ("Shell_L",   barrels, (-XSEP, 0.0,    0.0)),
+        ("Shell_R",   barrels, ( XSEP, 0.0,    0.0)),
+        ("Extractor", barrels, ( 0.0,  CY1,    0.0)),
+        ("TopLever",  frame,   ( 0.0,  0.026,  0.0228)),
+    ):
+        e = bpy.data.objects.new(name, None); col.objects.link(e)
+        e.location = loc; e.empty_display_size = 0.01; e.parent = parent
+        driven[name] = e
+    bpy.context.view_layer.update()
+
     # Everything forward of the hinge pin swings; everything else is the frame.
-    swing = ("barrel", "crown", "bore", "rib_top", "bead",
-             "chamber", "mouth", "extractor", "foreend", "fe_cap")
+    swing = ("barrel", "crown", "cone", "bore", "rib_top", "bead",
+             "chamber", "mouth", "foreend", "fe_cap")
     for o in list(col.objects):
         if o.type != 'MESH' or o.parent is not None:
             continue
-        o.parent = frame if not o.name.startswith(swing) else barrels
+        base = o.name.split('.')[0]
+        if base.startswith("shell_") and base.endswith("_L"):
+            o.parent = driven["Shell_L"]
+        elif base.startswith("shell_") and base.endswith("_R"):
+            o.parent = driven["Shell_R"]
+        elif base == "extractor":
+            o.parent = driven["Extractor"]
+        elif base == "toplever":
+            o.parent = driven["TopLever"]
+        else:
+            o.parent = frame if not base.startswith(swing) else barrels
+        # Parenting in bpy does not re-seat the child, so its world position is
+        # already right; only the driven empties need their offset removed.
+        o.matrix_parent_inverse = o.parent.matrix_world.inverted()
 
-    # Locators. HINGE sits on the hinge-pin axis; the barrels rotate about its X.
-    for name, loc in (
-        (HINGE_NODE,  (0.0,     -0.070, -0.016)),
-        ("Muzzle_L",  (-XSEP,   BMID - BLEN / 2, 0.0)),
-        ("Muzzle_R",  ( XSEP,   BMID - BLEN / 2, 0.0)),
-        ("Grip_Hand", (0.0,      0.074, -0.074)),
-        ("Fore_Hand", (0.0,     -0.155, -0.045)),
+    # Locators. HINGE is the axis the barrels rotate about. Breech_L/R are the
+    # chamber mouths, read EVERY FRAME by the runtime so the eject origin and
+    # the load destination follow the hinge instead of being guessed once.
+    for name, loc, parent in (
+        (HINGE_NODE,  (0.0,     -0.070,     -0.016), frame),
+        ("Muzzle_L",  (-XSEP,   BY_MUZZLE,   0.0),   barrels),
+        ("Muzzle_R",  ( XSEP,   BY_MUZZLE,   0.0),   barrels),
+        ("Breech_L",  (-XSEP,   CY1,         0.0),   barrels),
+        ("Breech_R",  ( XSEP,   CY1,         0.0),   barrels),
+        ("Grip_Hand", (0.0,      0.074,     -0.074), frame),
+        ("Fore_Hand", (0.0,     -0.155,     -0.045), frame),
     ):
         e = bpy.data.objects.new(name, None)
         col.objects.link(e)
         e.location = loc
         e.empty_display_size = 0.01
-        e.parent = barrels if name.startswith("Muzzle") or name == "Fore_Hand" else frame
+        e.parent = parent
     bpy.context.view_layer.update()
     return root
 
@@ -545,7 +599,9 @@ def verify_glb(path):
             o.data.calc_loop_triangles()
             tris += len(o.data.loop_triangles)
     required = {BARREL_NODE, FRAME_NODE, HINGE_NODE,
-                "Muzzle_L", "Muzzle_R", "Grip_Hand", "Fore_Hand"}
+                "Muzzle_L", "Muzzle_R", "Grip_Hand", "Fore_Hand",
+                "Breech_L", "Breech_R", "Shell_L", "Shell_R",
+                "Extractor", "TopLever"}
     missing = sorted(required - names)
     barrel_kids = 0
     for o in new:
@@ -555,12 +611,24 @@ def verify_glb(path):
                 barrel_kids += 1
                 break
             p = p.parent
+    # WHICH subtree each driven node landed in. The whole mechanism rests on
+    # these riding the hinge, so "it exists" is not the question.
+    must_swing = {"Shell_L", "Shell_R", "Breech_L", "Breech_R", "Extractor"}
+    swinging = set()
+    for o in new:
+        p = o
+        while p is not None:
+            if p.name.split('.')[0] == BARREL_NODE:
+                swinging.add(o.name.split('.')[0]); break
+            p = p.parent
+    stranded = sorted(must_swing - swinging)
     for o in list(new):
         try:
             bpy.data.objects.remove(o, do_unlink=True)
         except ReferenceError:
             pass
-    return {"tris": tris, "missing_nodes": missing, "barrel_descendants": barrel_kids}
+    return {"tris": tris, "missing_nodes": missing, "barrel_descendants": barrel_kids,
+            "stranded": stranded}
 
 
 def verify_bores_hollow():
@@ -620,6 +688,9 @@ if info["missing_nodes"]:
 if info["barrel_descendants"] < 8:
     print(f"[shorty] FAIL: only {info['barrel_descendants']} meshes under "
           f"{BARREL_NODE}; the hinge would move nothing", file=sys.stderr); ok = False
+if info["stranded"]:
+    print(f"[shorty] FAIL: {info['stranded']} are not under {BARREL_NODE}; they "
+          f"would hang in mid-air while the barrels drop", file=sys.stderr); ok = False
 blocked = verify_bores_hollow()
 if blocked:
     print(f"[shorty] FAIL: bore not hollow -- ray stopped short at {blocked}; "
