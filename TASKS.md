@@ -268,6 +268,33 @@ wound pops, gait stop-motion).
   the fixed face block is the worst side-view band at -367 mm.
   [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
 
+- `P1.blob-frame-face` [x] **The two exposed placement defects FIXED, plan
+  judged** — branch `dispatch/framefix-task-3`, 2185 -> **2188** green (112
+  files), tsc clean. Task 1: bands past the fit's own 45 deg report bar are
+  banded along the CHAIN's direction through the cloud's centroid
+  (`cloudBandLine`) - stations land in the statement frame (no
+  bandRange transfer), radii stay cloud-parallel (no sqrt(r2+d2) inflation,
+  no offset= double-count); at-or-under-bar bones band bit-identically
+  (pinned). Mechanism correction on record: at ~90 deg the cloud AXIS
+  projects to a point, so the whole flesh footprint rode the radius - the
+  prosthetic's 9 bands (4 from>to) collapsed to [0.196, 0.233]. Task 2
+  (dispatch/framefix-task-2, 5f34bb0): the face block rides headRise/headLead
+  measured against a real build; horn-inflated-headRadius hypothesis REFUTED
+  (neck-carry angle, both characters). **Task 3 re-draft: prosthetic shin.r
+  5 bands, 0 inverted, full span (was 4 inverted in a 0.04 sliver); depth
+  side mean 142 -> 95.4 mm (unflagged, beats round 1's flagged 193.7), front
+  88 -> 70.3 mm (still pose-flagged); chain properties hold at the artifact's
+  formatting noise.** The eye: the grey ball at one knee is GONE - the leg
+  reads as a connected limb with grey on its upper half; round 1 still owns
+  the plate read (sub-band scale, fenced off). Third honest NO on likeness
+  (T-pose + identity), but the plan's owed deliverable - a leg, not a ball -
+  is delivered. Face band still worst side band (-272.7 mm): it measures
+  T-pose ARM mass (Task 2 measured -4 mm of it on genuine face pixels); the
+  Done-when gate is miscalibrated until the reference is posed. NOTE: Task 1
+  was recorded done by dispatch with ZERO commits - implemented here;
+  reports are not commits. Mutations 4/4 killed. Full verdict + numbers +
+  matrix: [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
+
 - `P1.blobforge-tools` [x] **`blob:depth` + `blob:draft` — BOTH LANDED, one ready**
   — branch `claude/blob-side-grammar`, 2121 -> **2170** green (112 files), tsc
   clean. Ten tasks; task 1 inline, 2-10 as a dispatch chain on glm-5.3-flash.

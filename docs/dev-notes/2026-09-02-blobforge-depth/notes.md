@@ -423,3 +423,195 @@ green through the re-draft — they are mutation-covered in that task's history.
 - Frames: `/tmp/blob-shot/minotaur-redraft{,-close}` (8+8), A/B:
   `/tmp/blob-shot/minotaur-r1-again` (8). Schoolgirl's draft intentionally NOT
   authored — her hand-authored `.blob` is the converged control.
+
+---
+
+# blob:draft — banding moved into the bone's frame; the plan's Task 1 had to be implemented here; re-drafted and re-judged
+
+**Date:** 2026-09-03 · **Tasks 1-3 of** [blob draft frame and face](../../superpowers/plans/2026-09-03-blob-draft-frame-and-face.md) · **Branch:** `dispatch/framefix-task-3`
+
+## First finding: Task 1 had never landed
+
+The dispatch chain recorded Task 1 (`dispatch/framefix-task-1`) as **done,
+exit 0** — but its branch carried **zero commits after the plan** ("no changes
+to commit in worktree"). Its agent spent its whole 27-minute run reading code
+and verifying the defect against the committed artifact, then died before
+writing a line; the harness recorded the run as a success. Task 2's face fix
+(5f34bb0) is genuinely on the branch; Task 1's banding fix is **nowhere**. So
+this task implemented Task 1 first (tests, fix, mutations — below), then ran
+Task 3 verbatim on top of it. Lesson for the dispatch harness, same as the
+time-limit lesson already on record: a report is not a commit; only a commit
+is a commit.
+
+## Task 1 as implemented — one deviation, forced by the plan's own test 3
+
+The plan says "band against the RIG line, not the cloud line — pass the
+bone's rig line", unconditionally. Implemented instead: **band along the
+chain's direction only where the cloud's principal axis measures past the
+fit's own report bar** (`AXIS_REPORT_DEG`, 45° — the same measured angle the
+`# fit:` comment already reports); at or under the bar, today's path is kept
+to the bit. Two reasons, both measured:
+
+1. **The plan's third test demands aligned clouds band BIT-identically.** A
+   re-band along the exact chain direction changes the direction vector by
+   the eigenvector's fp wobble, and mutation M2 (unconditional switch) really
+   does flip formatted digits — the guard catches it, so the plan's own test
+   falsifies the plan's own unconditional wording.
+2. **Radii about the rig axis through the JOINT inflate by √(r²+d²)** once
+   flesh sits off the bone (the 9-13 cm trap the chain-drift work
+   documented), and would then double-count with `offset=`'s prim
+   displacement. So the chain-frame banding line (`cloudBandLine`,
+   draft-fit.ts) takes the chain's DIRECTION through the cloud's CENTROID:
+   stations land in the statement frame (no transfer), radii stay honest tube
+   radii, `offset=` keeps its meaning. `bandRange`'s projection SURVIVES for
+   the at-or-under-bar path — honest there, and bit-stability requires the
+   same computation — and degenerates to the pure `(t − t_head)/e` fraction
+   for chain-frame bands, where it is monotone in t by construction: **from>to
+   is structurally gone, not re-sorted.**
+
+The measured defect, refined from the plan's account: the plan said "76° off
+the rig chain, cos 76° ≈ 0.24". Two corrections. First, 76.25° is the angle
+fitSide reports — measured against a PHANTOM segment: the branch rule extends
+the r-side fit's frame from the LEFT knee to the RIGHT foot (the .blob
+parent's chain tail is the left joint in a one-sided rig map). Against the
+statement line the banding actually uses, the prosthetic's axis sits ~88-95°.
+Second, and worse than cosine shortening: at ~90° **the axis itself projects
+to a point**, so every band edge lands on one fraction and the whole flesh
+footprint rides the "radius" — the emitted 9 bands (3 degenerate-dropped)
+crammed into [0.196, 0.233] with four from>to inversions, the mid-shin gap,
+the grey ball at one knee. The same collapse stacks the fixture pelvis into
+`from=0 to=0` prims — this was never prosthetic-specific; it hits any cloud
+whose axis is not a limb axis.
+
+## Task 3 — the numbers
+
+**Chain-drift properties, unchanged** (the fix must not cost them; both
+re-drafts build + validate clean, render-check 0 holes):
+
+| property | minotaur | schoolgirl | chain-drift pins |
+| --- | --- | --- | --- |
+| soles vs floor | **−0.0001 m** | **0.0000 m** | −0.0001 / 0.0000 |
+| extent vs height line | **+0.01%** (1.2169 vs 1.2168) | **+0.01%** | +0.02% / +0.01% |
+| worst mapped `len=` dev | **0.00005 m** (chest) | **0.00003 m** (thigh) | 0.00004 / 0.00003 |
+
+All three sit at the artifact's own 4-decimal formatting noise (±5e-5 m) —
+the minotaur's len= dev moved 4e-5 → 5e-5 and shin → chest, i.e. a different
+bone at the same noise floor. Not a regression.
+
+**The prosthetic's emitted statement** (shin.r, per side, unmirrored — asym
+0.627 preserved): was 9 bands fit / 6 emitted / 4 inverted / span
+[0.196, 0.233]; now **5 bands, 0 inverted, span [0.000, 1.000]**, interior
+spread 0.424, radii 0.021-0.106 about the cloud-parallel axis (the
+joint-anchored variant would emit ~0.17+ and double-count `offset=`).
+
+**`blob:depth -- minotaur`** (re-drafted artifact committed):
+
+| instrument | round 1 | chain-drift re-draft | THIS re-draft |
+| --- | --- | --- | --- |
+| front mean | 54.1 mm (0.8× pose) | 88.0 mm (1.5× POSE) | **70.3 mm** (1.5× POSE) |
+| side mean | 193.7 mm (1.5× POSE) | 142.0 mm (unflagged) | **95.4 mm** (1.07×, unflagged) |
+
+Side mean improved 142.0 → 95.4 mm (−33%) and now beats round 1's side by 2×,
+with a better pose ratio (1.07× vs r1's flagged 1.5×). Front improved
+88.0 → 70.3 mm but stays pose-flagged and behind round 1's front — the arms
+own the front view's z-buffer (caveat 2 from the first run, unchanged).
+Schoolgirl control re-measured identical (32.9 / 270.1 mm — her committed
+hand-authored blob; her draft re-drafted to /tmp only, properties above).
+
+**The face band** (Task 2's gate): still the worst side band, now −272.7 mm
+at y 0.188-0.250 (was −367/−376). Task 2's finding stands and strengthens:
+the band measures T-pose ARM mass at those heights — the arms' own prims
+moved under the banding fix (upperarm axis 57° off) and the band moved with
+them, while Task 2 measured that genuinely-compared face pixels contribute
+−4 mm of it. No face-block placement can clear this gate; the gate itself is
+miscalibrated while the reference is T-posed.
+
+## The eye (BLOB_DIST=3.0 and 1.8 turntables, r1 re-shot same-session)
+
+Pre-fix close frames (`/tmp/blob-shot/minotaur-redraft-close`): the
+prosthetic is **a grey ball at one knee** — the mass stacked at [0.2] of the
+shin, bare below. Post-fix (`/tmp/blob-shot/minotaur-framefix-close`), same
+framing: **the ball is gone** — grey material now runs knee → upper shin
+(bands [0.017, 0.44], radii ~0.10) and a thin band continues to the boot; the
+leg reads as one connected bowed limb with a grey covering on its upper half,
+from both 3/4 angles. Round 1 in the same frames still owns the PLATE read —
+boxy slab hip-to-ground, unmistakably a prosthetic.
+
+**Verdict on the plan's question: YES at the level this plan owes — the
+prosthetic reads as a leg, not as a grey ball at one knee.** The ball was the
+frame transfer's output; it is structurally impossible now (monotone bands,
+full span). Overall likeness: a third honest **no** — the T-pose, the strap
+torso, and the missing horn/plate identity are the same fenced-off gaps as
+before (sub-band scale + pose), and this plan does not owe them. The depth
+instruments agree with the eye this time: side mean −33% at a better pose
+ratio, torso bands −127…−36 mm unchanged-good, the worst side band is now the
+T-pose arm artifact, not the figure.
+
+## Task 1's tests and the mutation matrix (4 mutations, 4 killed, none vacuous)
+
+Three tests in `draft-emit.test.ts`, all end-to-end on the synthetic rigling
+fixture (real pipeline: detectRig → assembleDraft → emitDraft), plus an
+oblique variant whose right shin cloud is a prosthetic plate (900-vert
+ellipsoid, long axis across the bone; legs splayed like the brawler stance;
+count skew 0.667 vs the real 0.627 so the pair is honestly NOT mirrorable):
+
+- `spans the bone for an OBLIQUE cloud` — interior bands must tile ≥ 0.30 of
+  the bone (the plate's honest footprint is ~0.65; the pre-fix sliver
+  measured 0.022); plus the median band radius bounded [0.09, 0.15] (kills
+  the joint-anchored variant that inflates by √(r²+d²) and double-counts
+  `offset=`).
+- `never emits from > to` — every band of every bone of BOTH drafted bodies;
+  fails pre-fix on the fixture's inverted bands (`from=0.4732 to=0.4726`),
+  reproducing the committed artifact's failure band-for-band.
+- `leaves an ALIGNED cloud unchanged` — the fixture's limb tubes (long, thin:
+  their principal axes ARE their rig segments) pinned to the pre-fix numbers
+  VERBATIM, bit-identical. Deliberately NOT pinned: the pelvis ball and the
+  short-fat torso tubes — their axes are radial noise that MEASURES past the
+  bar (89.9°), so they ride the chain-frame path by measurement, and their
+  pre-fix output was the pinned-ends-plus-mid-sliver collapse this plan
+  fixes; and the hand band, which rides the budget-trim boundary.
+
+| mutation | killed by |
+| --- | --- |
+| M1: conditional removed — always cloud-axis banding (pre-fix behaviour) | T1 (span 0.022 < 0.30) + T2 (from>to returns) |
+| M2: unconditional chain-frame banding (the plan's literal wording) | T3 (aligned pin — bit-identity breaks) |
+| M3: banding line anchored at the rig JOINT, not the centroid | T1 (median radius inflates past 0.15) |
+| M4: end-pin perturbed (first band from=0.001) | T3 (aligned pin) + T2 |
+
+Full suite **2185 → 2188 green** (112 files; +3 tests), tsc clean, both
+before and after re-authoring `characters/minotaur.blob`. TDD order held:
+T1+T2 watched failing for the right reasons (sliver 0.022; the inverted band
+line quoted in the failure), T3 watched passing, before the fix existed.
+
+## Plan corrections on record
+
+1. "Pass the bone's rig line" (unconditional) contradicts the plan's own
+   bit-identical guard — implemented as conditional at the fit's existing
+   report bar; the guard mutation-kills the unconditional variant (M2).
+2. The 76° provenance: that angle is measured against the branch rule's
+   PHANTOM r-side segment (left knee → right foot), not against the
+   statement line the transfer projects onto (~88-95°, negative slope — which
+   is what runs from/to BACKWARD). The collapse at ~90° is the axis
+   projecting to a point, not cosine shortening to 0.24.
+3. "Most bones are this case [aligned]" is false for both real characters —
+   of the minotaur's mapped bones only four measure under the bar
+   (forearm.l/r 6-8°, shin.l 29°, foot.r 42°); every other bone sits 47-89°
+   off its chain. The fixture had to be built to contain genuinely aligned
+   bones (the long thin limb tubes) for the guard to mean anything.
+4. (Carried from Task 2's commit, restated for the Done-when list:) "the face
+   block is no longer the worst side-view band" is not meetable by any
+   face-block placement while the reference is T-posed — the band measures
+   arm mass. The gate should be re-worded or the pose deferred item done.
+
+## Commit provenance
+
+- 6539a01 — Task 1: conditional chain-frame banding + `cloudBandLine` +
+  the three tests + the oblique fixture (tests written and watched failing
+  before the fix; mutations applied against the committed state).
+- this commit — the re-drafted `characters/minotaur.blob`, notes (this
+  section), TASKS.md. Schoolgirl's draft stays unauthored (her hand-authored
+  `.blob` is the converged control; her re-draft lives at
+  `/tmp/schoolgirl-redraft2.blob`).
+- Frames: `/tmp/blob-shot/minotaur-framefix{,-close}` (8+8), A/B
+  `/tmp/blob-shot/minotaur-r1-framefix{,-close}` (8+8); the pre-fix
+  before-frames are the chain-drift task's `/tmp/blob-shot/minotaur-redraft-close`.
