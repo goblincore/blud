@@ -72,7 +72,7 @@ export function createGooPanel(
   } = {},
 ): GooPanel {
   const shell = createPanelShell('GOO TUNING');
-  const el = shell.body;
+  const body = shell.body;
 
   const toggleRow = document.createElement('div');
   toggleRow.setAttribute('style', 'display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;');
@@ -83,7 +83,7 @@ export function createGooPanel(
     toggleRow.appendChild(btn);
     toggleBtns.push({ def: t, btn });
   }
-  if (toggleBtns.length) el.appendChild(toggleRow);
+  if (toggleBtns.length) body.appendChild(toggleRow);
   function refreshToggles(): void {
     for (const t of toggleBtns) t.btn.textContent = t.def.label();
   }
@@ -124,7 +124,7 @@ export function createGooPanel(
     });
 
     row.append(name, input, out);
-    el.appendChild(row);
+    body.appendChild(row);
     rows.push({ knob, input, out });
   }
 
@@ -159,12 +159,12 @@ export function createGooPanel(
     opts.onCopy?.(text);
   }));
 
-  el.appendChild(btnRow);
+  body.appendChild(btnRow);
 
   const note = document.createElement('div');
   note.textContent = 'copy → clipboard + console';
   note.setAttribute('style', 'color:#6f625e; margin-top:6px; font-size:10px;');
-  el.appendChild(note);
+  body.appendChild(note);
 
   shell.onReveal(refresh);
   return {

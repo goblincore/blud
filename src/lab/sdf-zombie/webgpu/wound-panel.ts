@@ -115,7 +115,7 @@ export function createWoundPanel(opts: {
   // default right:8) rather than stacked on top of it -- both title bars stay
   // visible and clickable at once while collapsed.
   const shell = createPanelShell('WOUND TUNING', { right: 266 });
-  const el = shell.body;
+  const body = shell.body;
 
   const rows: { k: WoundKey; input: HTMLInputElement; out: HTMLSpanElement }[] = [];
 
@@ -154,7 +154,7 @@ export function createWoundPanel(opts: {
     input.addEventListener('commit' in k ? k.commit : 'input', apply);
 
     row.append(name, input, out);
-    el.appendChild(row);
+    body.appendChild(row);
     rows.push({ k, input, out });
   }
 
@@ -186,12 +186,12 @@ export function createWoundPanel(opts: {
     opts.onCopy?.(text);
   }));
 
-  el.appendChild(btnRow);
+  body.appendChild(btnRow);
 
   const note = document.createElement('div');
   note.textContent = 'copy → clipboard + console · bone ratio rebuilds the cast';
   note.setAttribute('style', 'color:#6f625e; margin-top:6px; font-size:10px;');
-  el.appendChild(note);
+  body.appendChild(note);
 
   shell.onReveal(refresh);
   return {

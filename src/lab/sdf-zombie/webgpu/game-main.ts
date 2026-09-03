@@ -384,11 +384,15 @@ async function main() {
   // __sdfGame at all). Assigned once the actors give it a light rig.
   let gooLayer: GooLayer | null = null;
   let gooPanel: GooPanel | null = null;
-  /** The wound panel (wound-panel.ts). Ships HIDDEN — unlike the goo panel,
-   *  which ships visible because the goo layer ships on — so every existing
-   *  look-capture script (gallery-look, shadow-ab, the canary) keeps framing
-   *  the room and not another piece of UI. __sdfGame.woundPanel(true) opens
-   *  it; that seam is guarded typeof-style in capture scripts like gooPanel. */
+  /** The wound panel (wound-panel.ts). Ships VISIBLE, like the goo panel, but
+   *  COLLAPSED (panel-chrome.ts) — only its title bar shows, so it stays
+   *  findable without covering the frame the way both panels did fully
+   *  expanded (see c6bffc7). Every existing look-capture script
+   *  (gallery-look, shadow-ab, the canary) keeps framing the room undisturbed
+   *  as a result. __sdfGame.woundPanelCollapsed(false) expands it; that seam
+   *  is guarded typeof-style in capture scripts like gooPanel. Not persisted
+   *  across reloads — a remembered state would make a capture reproduce
+   *  differently machine to machine. */
   let woundPanel: WoundPanel | null = null;
   let panelsHidden = false;
   // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
@@ -2950,9 +2954,9 @@ async function main() {
       gooPanel?.setVisible(on);
       return gooPanel?.visible ?? false;
     },
-    /** Show/hide the WOUND tuning panel (ships hidden; see woundPanel's
-     *  declaration). Same shape as gooPanel so capture scripts can guard it
-     *  the same typeof way. */
+    /** Show/hide the WOUND tuning panel (ships visible but collapsed; see
+     *  woundPanel's declaration). Same shape as gooPanel so capture scripts
+     *  can guard it the same typeof way. */
     woundPanel(on: boolean) {
       woundPanel?.setVisible(on);
       return woundPanel?.visible ?? false;

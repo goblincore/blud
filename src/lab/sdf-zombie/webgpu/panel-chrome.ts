@@ -40,7 +40,7 @@ export interface PanelShell {
   readonly collapsed: boolean;
   setVisible(on: boolean): void;
   setCollapsed(on: boolean): void;
-  /** Called whenever the panel becomes visible AND expanded. */
+  /** Called on every state change while visible and expanded. */
   onReveal(fn: () => void): void;
   dispose(): void;
 }
@@ -52,6 +52,9 @@ export function createPanelShell(
   const el = document.createElement('div');
   el.setAttribute('style', panelCss(opts.right ?? 8));
   el.style.display = 'none';
+  // Stable hook for capture scripts. textContent now leads with the caret
+  // glyph, so matching panels by their visible text is no longer reliable.
+  el.dataset.panel = titleLabel;
 
   const title = document.createElement('div');
   title.setAttribute('style',

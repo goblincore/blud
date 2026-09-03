@@ -39,4 +39,11 @@ describe('createPanelShell', () => {
     expect(p.collapsed).toBe(false);
     p.dispose();
   });
+  it('the close button clears visible, not just the display', () => {
+    const p = createPanelShell('TEST TUNING');
+    p.setVisible(true);
+    p.el.querySelectorAll('button')[1]!.click();   // ✕
+    expect(p.visible).toBe(false);
+    p.dispose();
+  });
 });

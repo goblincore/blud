@@ -47,9 +47,13 @@ if(!(await ev('typeof window.__sdfGame === "object"'))){console.error('never boo
 await ev('typeof window.__sdfGame.gooPanel === "function" && window.__sdfGame.gooPanel(false)');
 
 // ---- 1. The panel exists in the DOM: 5 sliders, preset + copy buttons ----
+// Panels ship VISIBLE but COLLAPSED (panel-chrome.ts) — only the title bar
+// shows until expanded, so the sliders and the capture below both need the
+// panel opened first, not just made visible.
 await ev('window.__sdfGame.woundPanel(true)');
+await ev('window.__sdfGame.woundPanelCollapsed(false)');
 const ui=await ev(`(() => {
-  const panels=[...document.querySelectorAll('div')].filter(d=>d.textContent.startsWith('WOUND TUNING')&&d.querySelector('input[type=range]'));
+  const panels=[...document.querySelectorAll('[data-panel="WOUND TUNING"]')].filter(d=>d.querySelector('input[type=range]'));
   const p=panels[panels.length-1];
   if(!p) return null;
   return {
@@ -61,6 +65,7 @@ const ui=await ev(`(() => {
 console.log('panel UI:', JSON.stringify(ui));
 if(!ui||ui.sliders!==5) fail('panel does not show 5 sliders');
 if(!ui||!ui.buttons.includes('copy')) fail('panel has no copy button');
+await ev('window.__sdfGame.woundPanelCollapsed(false)'); // stays expanded for the shot
 await shot('panel-open');
 await ev('window.__sdfGame.woundPanel(false)');
 
@@ -80,7 +85,7 @@ console.log('PASS: slider write reached body-1 surfCfg3.y');
 
 // ---- 3. The owner's COPY flow: click the button, paste what it logs ----
 const copied=await ev(`(() => {
-  const panels=[...document.querySelectorAll('div')].filter(d=>d.textContent.startsWith('WOUND TUNING')&&d.querySelector('input[type=range]'));
+  const panels=[...document.querySelectorAll('[data-panel="WOUND TUNING"]')].filter(d=>d.querySelector('input[type=range]'));
   const p=panels[panels.length-1];
   const btn=[...p.querySelectorAll('button')].find(b=>b.textContent==='copy');
   btn.click();
