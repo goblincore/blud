@@ -1,5 +1,7 @@
 // draft-fit — measurements that turn a bone's VERTEX CLOUD into numbers a
-// .blob draft can carry. Everything here reads the cloud and only the cloud.
+// .blob draft can carry, plus the two rig-facing exceptions the chain-drift
+// amendment added: rigLine (the CHAIN line, from the rig's joint-to-joint
+// segment) and cloudOffset (how far the surface sits off it).
 //
 // THE JOINT TRAP. A Meshy rig's joints sit 9-13 cm off the skin (measured on
 // the mouse's shoulder and collar joints). A draft that takes bone axes from
@@ -8,7 +10,13 @@
 // of GROUPING vertices (exact by construction — those are the skin weights),
 // but never of placing geometry: the axis below is the cloud's own principal
 // axis, and every measurement is taken about it.
-// Spec: docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md.
+// Spec: docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md,
+// amended by docs/superpowers/specs/2026-09-02-blob-draft-chain-drift-design.md:
+// the CHAIN (at=/len=/dir=) moves to the rig — `.blob`'s skeleton is a rigid
+// kinematic chain, so len= places every descendant, and overlapping clouds do
+// not compose into one — while the cloud keeps radii, bands, colour, and
+// answers for the surface offset. The trap's resolution lives in rigLine's
+// and cloudOffset's doc comments below.
 
 import type { Vec3 } from './types';
 import { dirVector } from './blob-compile';
@@ -92,6 +100,76 @@ export function medialLine(points: Vec3[]): MedialLine {
     sumSq += Math.max(0, dot(q, q) - t * t);
   }
   return { dir, origin, t0, t1, residual: Math.sqrt(sumSq / n) };
+}
+
+/**
+ * A bone's chain line, taken from the RIG rather than from its vertex cloud.
+ *
+ * `.blob`'s skeleton is a rigid chain — a bone's head is its parent's TAIL —
+ * so `len=` places every descendant rather than describing one bone. Adjacent
+ * clouds OVERLAP (thigh and shin both own the knee), so summed cloud extents
+ * overshoot and the error accumulates: the first drafted minotaur stood with
+ * its soles ~0.3 m off the floor. Rig joint-to-joint distances compose by
+ * construction, being the chain that produced the skin. Bonewalker took every
+ * len= this way and never printed a BONE LENGTH IS OFF block.
+ *
+ * Convention matches what the emitter already consumes (headPoint/tailPoint):
+ * the line grows FROM the scaled head — `origin`, with `t0` = 0 — to the
+ * scaled tail at `origin + dir·t1`. One scale, applied here: per-bone scaling
+ * would reintroduce exactly the chain inconsistency this function removes.
+ *
+ * `points`, when supplied, contribute ONLY the residual — the cloud's RMS
+ * spread about the RIG axis, a check on how far the surface sits from its
+ * bone, never an input to dir/origin/extent. ONE FRAME: points are in the
+ * same frame as the returned line, i.e. already scaled. (Not frame-invariant:
+ * scaling moves the axis — the line through scale·head is parallel to the
+ * one through head, not the same line — so an unscaled cloud measured about
+ * a scaled axis reads a huge phantom offset.) See cloudOffset for where the
+ * surface's actual answer goes.
+ */
+export function rigLine(head: Vec3, tail: Vec3, scale: number, points?: Vec3[]): MedialLine {
+  const seg = sub(tail, head);
+  const segLen = len(seg);
+  // A zero-length rig segment has no direction and needs none: the tail lands
+  // at head + dir·0 = head for ANY dir, so the stub 'up' below cannot
+  // misplace a descendant. A NaN dir (normalize of zero) OTOH would poison
+  // every downstream number silently.
+  const dir: Vec3 = segLen > 0 ? vscale(seg, 1 / segLen) : [0, 1, 0];
+  const origin = vscale(head, scale);
+
+  let residual = 0;
+  if (points && points.length > 0) {
+    let sumSq = 0;
+    for (const p of points) {
+      const q = sub(p, origin);
+      const t = dot(q, dir);
+      sumSq += Math.max(0, dot(q, q) - t * t);
+    }
+    residual = Math.sqrt(sumSq / points.length);
+  }
+  return { dir, origin, t0: 0, t1: segLen * scale, residual };
+}
+
+/**
+ * How far a bone's cloud centroid sits OFF its rig axis, perpendicular only.
+ *
+ * This is the honest answer to rig joints sitting 9-13 cm from the skin: the
+ * surface is not where the joint is, so offset the PRIMS. Relocating the bone
+ * instead is what breaks the chain — see rigLine.
+ *
+ * The along-axis component is deliberately dropped: sliding a prim along its
+ * own bone is `at=`'s job, and a segment-centred cloud's centroid sits at the
+ * segment MIDPOINT — half a length of along-axis displacement that must not
+ * leak into an offset. ONE FRAME, as in rigLine: `points` and `line` in the
+ * same frame, the result in that frame's units.
+ */
+export function cloudOffset(points: Vec3[], line: MedialLine): Vec3 {
+  let sx = 0, sy = 0, sz = 0;
+  for (const p of points) { sx += p[0]; sy += p[1]; sz += p[2]; }
+  const n = points.length || 1;
+  const q = sub([sx / n, sy / n, sz / n], line.origin);
+  const along = dot(q, line.dir);
+  return sub(q, vscale(line.dir, along));
 }
 
 /**

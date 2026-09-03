@@ -1,9 +1,9 @@
 // src/lab/sdf-zombie/draft-fit.test.ts
 import { describe, it, expect } from 'vitest';
 import type { Vec3 } from './types';
-import { basisFromAxis, dot, len, normalize, scale as vscale, sub } from './vec';
+import { add, basisFromAxis, cross, dot, len, normalize, scale as vscale, sub } from './vec';
 import { dirVector } from './blob-compile';
-import { bandCloud, inferDir, medialLine } from './draft-fit';
+import { bandCloud, cloudOffset, inferDir, medialLine, rigLine } from './draft-fit';
 
 // All clouds below are deterministic lattices — no RNG — so a failure is
 // reproducible by construction rather than by seed. Surface sampling (fixed
@@ -367,5 +367,146 @@ describe('inferDir', () => {
     expect(fwd.derivable).toBe(false);
     expect(fwd.pitchDeg).toBeUndefined();
     expect(fwd.tiltDeg).toBeUndefined();
+  });
+});
+
+// rigLine/cloudOffset are the chain-drift amendment: the CHAIN (len=/dir=) is
+// a rig quantity — joint-to-joint segments × one global scale — because
+// `.blob`'s skeleton is a rigid kinematic chain and overlapping vertex clouds
+// do not compose into one. The cloud keeps radii/bands/colour and answers for
+// the SURFACE via cloudOffset. Spec:
+// docs/superpowers/specs/2026-09-02-blob-draft-chain-drift-design.md.
+describe('rigLine', () => {
+  it('returns the rig segment scaled by one global scale', () => {
+    // head [0,1,0] -> tail [0,0.6,0], scale 2: joint-to-joint 0.4, scaled
+    // length 0.8, direction -y.
+    const line = rigLine([0, 1, 0], [0, 0.6, 0], 2);
+
+    expect(line.dir[1]).toBeCloseTo(-1, 9);
+    expect(line.dir[0]).toBeCloseTo(0, 9);
+    expect(line.dir[2]).toBeCloseTo(0, 9);
+    expect(line.t1 - line.t0).toBeCloseTo(0.8, 10);
+    // Chain placement convention — what the emitter's headPoint/tailPoint
+    // already consume: the line grows FROM the scaled head (t0 = 0 there) to
+    // the scaled tail. A child bone's head is exactly this tail, which is
+    // what makes len= place descendants instead of describing one bone.
+    const headPt = add(line.origin, vscale(line.dir, line.t0));
+    const tailPt = add(line.origin, vscale(line.dir, line.t1));
+    expect(headPt[0]).toBeCloseTo(0, 10);
+    expect(headPt[1]).toBeCloseTo(2, 10);
+    expect(headPt[2]).toBeCloseTo(0, 10);
+    expect(tailPt[0]).toBeCloseTo(0, 10);
+    expect(tailPt[1]).toBeCloseTo(1.2, 10);
+    expect(tailPt[2]).toBeCloseTo(0, 10);
+  });
+
+  it('composes: a chain of rigLines sums to the scaled chain length', () => {
+    // THE PROPERTY THE CLOUD VERSION LACKS. Three bones head-to-tail in the
+    // rig — collinear here, so "sum of lengths" and "first head to last tail"
+    // name the same number (for a BENT chain the sum is the path length and
+    // strictly exceeds the endpoint distance; the plan's sentence is a
+    // collinear-only identity). Also asserted per bone: each line's tail
+    // lands exactly on its child's head — placement, not just arithmetic, is
+    // what stops the drift.
+    const joints: Vec3[] = [[0, 1.7, 0], [0, 1.1, 0], [0, 0.55, 0], [0, 0.1, 0]];
+    const scale = 1.7;
+    const lines = [];
+    for (let i = 0; i < 3; i++) lines.push(rigLine(joints[i]!, joints[i + 1]!, scale));
+
+    const sum = lines.reduce((s, l) => s + (l.t1 - l.t0), 0);
+    const endToEnd = len(sub(joints[3]!, joints[0]!)) * scale;
+    expect(sum).toBeCloseTo(endToEnd, 10);
+
+    for (let i = 0; i < 2; i++) {
+      const tail = add(lines[i]!.origin, vscale(lines[i]!.dir, lines[i]!.t1));
+      const nextHead = add(lines[i + 1]!.origin, vscale(lines[i + 1]!.dir, lines[i + 1]!.t0));
+      for (let k = 0; k < 3; k++) {
+        expect(tail[k]).toBeCloseTo(joints[i + 1]![k]! * scale, 10);
+        expect(nextHead[k]).toBeCloseTo(tail[k]!, 10);
+      }
+    }
+  });
+
+  it('is unaffected by where the SURFACE sits', () => {
+    // Same rig segment, two very different clouds around it: one centred on
+    // the rig axis, one displaced 0.12 laterally (the 9-13 cm trap, made
+    // explicit). The returned line is IDENTICAL — exact equality, because the
+    // function must not read the cloud for dir/origin/extent at all. Only the
+    // residual may differ, and it MUST: it is the check that says the offset
+    // cloud's surface sits off its bone.
+    const D = normalize([1, 2, 3]);
+    const head: Vec3 = [0.3, 1.1, -0.2];
+    const tail = add(head, vscale(D, 0.4));
+    const mid = vscale(add(head, tail), 0.5);
+    const s: Vec3 = [0.31, 0.17, 0.91];
+    const perp = normalize([
+      D[1] * s[2] - D[2] * s[1],
+      D[2] * s[0] - D[0] * s[2],
+      D[0] * s[1] - D[1] * s[0],
+    ]);
+    // Clouds go in SCALED — rigLine's one-frame contract: points live in the
+    // same frame as the returned line (the global scale applied), otherwise
+    // the residual measures against a parallel-but-shifted axis.
+    const centred = tubeCloud(D, 0.4, 0.06, mid).map(p => vscale(p, 1.7));
+    const shoved = tubeCloud(D, 0.4, 0.06, add(mid, vscale(perp, 0.12))).map(p => vscale(p, 1.7));
+
+    const a = rigLine(head, tail, 1.7, centred);
+    const b = rigLine(head, tail, 1.7, shoved);
+
+    expect(b.dir).toEqual(a.dir);
+    expect(b.origin).toEqual(a.origin);
+    expect(b.t0).toBe(a.t0);
+    expect(b.t1).toBe(a.t1);
+    // residual is the cloud's RMS spread about the RIG axis: exactly the
+    // (scaled) radius for a tube centred on it, louder once the cloud is
+    // shoved off.
+    expect(a.residual).toBeCloseTo(0.06 * 1.7, 2);
+    expect(b.residual).toBeGreaterThan(a.residual);
+  });
+});
+
+describe('cloudOffset', () => {
+  // Both tests run against the RIG line (origin at the scaled head, extent
+  // t0=0..t1=len) — the way Task 2's CLI will call it — not against some
+  // centroid-origin line that would make the along-axis discard vacuous.
+  it('is zero for a cloud centred on its rig segment', () => {
+    // Tube axis == rig axis. The centroid sits at the segment MIDPOINT, so
+    // the raw centroid-to-origin vector carries half a segment of ALONG-axis
+    // displacement; only the perpendicular component may come back, and it
+    // is exactly zero here (symmetric lattice, float noise only). Cloud
+    // scaled: one frame with the line, per rigLine's contract.
+    const D = normalize([1, 2, 3]);
+    const head: Vec3 = [0.3, 1.1, -0.2];
+    const tail = add(head, vscale(D, 0.5));
+    const mid = vscale(add(head, tail), 0.5);
+    const cloud = tubeCloud(D, 0.5, 0.07, mid).map(p => vscale(p, 1.7));
+
+    const off = cloudOffset(cloud, rigLine(head, tail, 1.7, cloud));
+    for (let k = 0; k < 3; k++) expect(off[k]).toBeCloseTo(0, 9);
+  });
+
+  it('measures the lateral displacement of an offset cloud', () => {
+    // Cloud centroid 0.12 off the rig axis: offset ~= that 0.12 (scaled by
+    // the global scale — the cloud goes in scaled), along the direction it
+    // was displaced in. The ALONG-axis component is discarded (that is
+    // `at=`'s job, not `offset=`'s) — dot with the bone axis stays 0 even
+    // though the centroid is also half a segment along it.
+    const D = normalize([2, 1, -1]);
+    const head: Vec3 = [-0.1, 0.9, 0.4];
+    const tail = add(head, vscale(D, 0.45));
+    const mid = vscale(add(head, tail), 0.5);
+    const s: Vec3 = [0.23, 0.71, 0.13];
+    const perp = normalize([
+      D[1] * s[2] - D[2] * s[1],
+      D[2] * s[0] - D[0] * s[2],
+      D[0] * s[1] - D[1] * s[0],
+    ]);
+    const scale = 1.7;
+    const cloud = tubeCloud(D, 0.45, 0.06, add(mid, vscale(perp, 0.12))).map(p => vscale(p, scale));
+
+    const line = rigLine(head, tail, scale, cloud);
+    const off = cloudOffset(cloud, line);
+    for (let k = 0; k < 3; k++) expect(off[k]).toBeCloseTo(perp[k]! * 0.12 * scale, 9);
+    expect(dot(off, line.dir)).toBeCloseTo(0, 9);
   });
 });
