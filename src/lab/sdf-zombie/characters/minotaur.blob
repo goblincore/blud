@@ -139,18 +139,37 @@ body
   # near-black bands (texture median there sRGB ~(30,25,25)). Two prims per
   # horn: a skin-covered base blob, then the wrapped sweep.
   # ============================================================
-  # Base: skin-covered horn root (painted flesh), at the cranium's SIDES —
-  # render round 2 had them springing from the crown. hs (±0.9, -0.3, 0).
-  blob head on skull at=0.375 offset=(0.113,0.0,0.030) r=0.055 wide=1.0 tall=0.85 deep=1.0 blend=0.005 both color=6e4426
-  # Wrapped sweep: one bent tapered bar out-and-up to x ±0.258 / y 1.90
-  # (mesh horn reach xhalf 0.165, top 1.217), chamfer so the wrap reads as
-  # bands rather than a smeared rope.
-  # Wrapped sweep: one bent tapered bar — the mesh horns sweep OUT nearly
-  # horizontally (base y 1.06-1.10 mesh, reach x 0.165 by y 1.15-1.19)
-  # before the tips curl up; render round 3 had them pointing straight up.
-  # Horizontal sweep: the skull bone runs UP, so the far end needs a NEGATIVE
-  # y tip to cancel the bone's own rise — out first, up only at the curl.
-  bar  head on skull from=0.36 to=0.55 offset=(0.113,0.005,0.030) tip=(0.160,-0.055,0.030) bend=(0.060,0.020,0.0) r=0.050 r2=0.013 blend=0.004 chamfer both color=221a1a gloss=0.45
+  # Base: skin-covered horn root at the cranium's TOP-sides. Round 4: at=0.375
+  # put the roots at y 1.702, which is 34% up a cranium spanning 1.571-1.959 —
+  # ear height, so the horns read as tusks off the jaw hinge. at=0.58 ->
+  # y 1.873, which is 78% up: the temple/crown corner a bull's horns spring
+  # from. The cranium's own x-halfwidth there is 0.104 (0.125 x sqrt(1 -
+  # ((1.873-1.765)/0.194)^2)), so a root centred at x 0.098 with r 0.055 sits
+  # ON the surface and proud of it by 0.05 — a root bump, not a growth.
+  blob head on skull at=0.58 offset=(0.098,0.0,0.020) r=0.055 wide=1.0 tall=0.85 deep=1.0 blend=0.005 both color=6e4426
+  # Wrapped sweep: one bent tapered bar. Raised with the root (round 4) — the
+  # old tips topped out at y 1.849, BELOW the cranium's own crown at 1.959, so
+  # the head was taller than its horns and they vanished into the silhouette.
+  # Now: root (0.098, 1.873, 0.029) -> tip (0.260, 2.020, 0.024), clearing the
+  # crown by 0.06 and reading against the sky from every yaw. Endpoint arith:
+  # b = boneAt(to) + offset + tip, boneAt(t).y = 1.386 + 0.84t.
+  # `bend` is the control point's displacement from the MIDPOINT, so
+  # (+0.048, -0.042, 0) pulls the curve OUT and DOWN of the chord — the horn
+  # leaves the skull sideways and only hooks up at the tip, which is the bull
+  # silhouette. A straight chord here reads as a spike.
+  # AGAINST THE REFERENCE, honestly: the mesh's horn tips reach the model's own
+  # top, 1.217 mesh = 1.900 authored — i.e. in the mesh the HORNS are the
+  # topmost feature. Here they were not: an earlier round enlarged the cranium
+  # to stop the head sinking into the traps, which put the crown at 1.959,
+  # 0.11 ABOVE the old tips. So part of this is a real correction (restore the
+  # mesh's own ordering) and part is an art call (the tips now sit at 2.021,
+  # 0.12 above the mesh-equivalent 1.900) — a taller horn than the reference
+  # carries, chosen for the read at gameplay distance. `blob:depth` scores
+  # this as a regression in the two crown bands and it is right to; the
+  # deviation is deliberate and this comment is where it is recorded.
+  # topY is now 2.033, above the declared `height 1.90`. Fine — `height` is
+  # documentation, nothing scales by it (grep: only head-profile.ts reads it).
+  bar  head on skull from=0.575 to=0.70 offset=(0.098,0.0,0.020) tip=(0.162,0.046,-0.005) bend=(0.048,-0.042,0.0) r=0.050 r2=0.013 blend=0.004 chamfer both color=221a1a gloss=0.45
 
   # ============================================================
   # ARMS — huge (mesh upperarm rho p50 0.085-0.096 = 0.13-0.15 authored,
@@ -203,6 +222,18 @@ body
   # The mesh's metal is a smooth slab with panel lines PAINTED on — no
   # modelled bolts — so: `box` plates at round=0.05-0.12 (machined), metal
   # paint + gloss for the read, grooves for seams (added after first render),
+  # ROUND 4 — POLISHED, not painted. The plates read as matte grey card at
+  # gloss 0.70. `gloss` is the only metal lever the shader has, and it drives
+  # four terms at once (march.wgsl.ts): the specular exponent
+  # mix(mix(128,4,roughness), 220, gloss), the specular weight
+  # mix(surfCfg.x, 1.5, gloss), the fresnel rim mix(1, 2.5, gloss), and `wet`
+  # toward 1. At 0.70 all four sit mid-scale, which is exactly "plastic".
+  # At 0.90-0.95 the highlight goes tight and hot and the rim lights up.
+  # The albedo comes DOWN with it (848a91 -> 6a7078, roughly -35% linear):
+  # metal's diffuse is dark and its brightness is the highlight — a light
+  # albedo plus a hot spec reads as white plastic, which is what round 3 was.
+  # These are still PAINT values, not a metallic BRDF; there is no metalness
+  # channel in this shader and this is the honest approximation of one.
   # one cable run as a plain bent capsule. Mesh .r radii: thigh cowl p50
   # 0.104-0.114 UNIFORM (a slab, not a taper) = 0.16-0.18 authored, p75 to
   # 0.17 (0.26 authored — the cowl's outer flare); shin plates 0.110-0.131
@@ -214,17 +245,17 @@ body
   # Thigh cowl: one slab hip->mid-thigh, proud of the flesh on the outer face.
   # Render round 1: the flesh hip ball poked out above the cowl — extended
   # down to the bone head and thickened. Paint darkened (9aa0a6 read white).
-  bar  leg on thigh from=-0.05 to=0.68 offset=(-0.033,0.008,0.012) r=0.162 wide=1.28 tall=1.20 deep=1.18 box round=0.10 color=848a91 gloss=0.70 blend=0.010 side=r
+  bar  leg on thigh from=-0.05 to=0.68 offset=(-0.033,0.008,0.012) r=0.162 wide=1.28 tall=1.20 deep=1.18 box round=0.10 color=6a7078 gloss=0.95 blend=0.010 side=r
   # Knee block: the mesh's dark square knee panel.
-  blob leg on shin  at=0.04 offset=(-0.010,-0.010,0.015) r=0.135 wide=1.15 tall=1.10 deep=1.10 box round=0.18 color=6f747a gloss=0.70 blend=0.009 side=r
+  blob leg on shin  at=0.04 offset=(-0.010,-0.010,0.015) r=0.135 wide=1.15 tall=1.10 deep=1.10 box round=0.18 color=4e545c gloss=0.93 blend=0.009 side=r
   # Stacked shin greave: two OVERLAPPING slabs so the silhouette steps without
   # gapping; deepened per rings' deep-hint (the mesh prosthetic is deeper
   # front-to-back than a first pass).
-  bar  leg on shin  from=0.06 to=0.55 offset=(-0.024,0.005,0.018) r=0.128 wide=1.25 tall=1.15 deep=1.35 box round=0.07 color=848a91 gloss=0.70 blend=0.008 side=r
-  bar  leg on shin  from=0.50 to=0.92 offset=(-0.018,0.000,0.000) r=0.115 wide=1.20 tall=1.10 deep=1.45 box round=0.07 color=7d838a gloss=0.70 blend=0.007 side=r
+  bar  leg on shin  from=0.06 to=0.55 offset=(-0.024,0.005,0.018) r=0.128 wide=1.25 tall=1.15 deep=1.35 box round=0.07 color=6a7078 gloss=0.95 blend=0.008 side=r
+  bar  leg on shin  from=0.50 to=0.92 offset=(-0.018,0.000,0.000) r=0.115 wide=1.20 tall=1.10 deep=1.45 box round=0.07 color=5d636b gloss=0.94 blend=0.007 side=r
   # Flat boot: deep slab, top overlapping the greave's bottom (the ankle slot
   # render round 3), sole planted (bottom just under y 0).
-  bar  leg on foot  from=0.10 to=0.70 offset=(-0.010,-0.090,0.045) r=0.100 wide=1.25 tall=1.50 deep=1.60 box round=0.10 color=5f6367 gloss=0.55 blend=0.008 side=r
+  bar  leg on foot  from=0.10 to=0.70 offset=(-0.010,-0.090,0.045) r=0.100 wide=1.25 tall=1.50 deep=1.60 box round=0.10 color=44494f gloss=0.90 blend=0.008 side=r
   # Red cable run down the greave's outer FACE (rides the plate surface:
   # plate outer face ~0.194 from the axis, cable at 0.194+0.016).
   bar  leg on shin  from=0.12 to=0.52 offset=(-0.210,0.020,-0.020) bend=(-0.020,0.020,0.010) r=0.016 r2=0.012 blend=0.004 color=cc2a1a gloss=0.85 side=r
@@ -285,22 +316,38 @@ sheet
   projCentreX 0.5
   projCentreY 0.555
 
-# Palette measured off the embedded texture (2048², per-bone-loop median
-# 2026-09-02): flesh sRGB (66-74, 49-55, 31-35) mid / (98-108, 69-77, 46-52)
-# lit — a warm mid brown -> linear (0.115, 0.055, 0.025) lifted for the lab's
-# strong key, mottle in a different HUE (dusty grey-gold) so the mass reads
-# as hide, not one flat tone. Wound interior stays red.
+# Palette. ROUND 4 — the mesh's own texture is a warm mid brown and the
+# measured values below rendered as a dark chocolate mass with no read at all
+# under the lab's key. Retargeted to the ZOMBIE's flesh, which is the
+# `henenlotter-latex` preset (material.ts) and is what every character gets by
+# default: baseColor 0.82 0.44 0.46, a foam-latex pink under a hard key.
+# So the numbers here are now the PRESET's, deviating only where this
+# character needs it:
+#   - baseColor lifted 0.82 -> 0.86 to pay for the mottle. material.ts is
+#     explicit that average albedo lands near mix(base, mottle, amp x 0.5), so
+#     with amp 0.22 and mottle 0.62 0.28 0.30 the body averages
+#     (0.834, 0.449, 0.460) — the preset's colour, arrived at WITH the mottle
+#     rather than before it.
+#   - the mottle stays (this is hide, not skin) but moves into the pink
+#     family; the old dusty grey-gold 0.16 0.10 0.06 was half of what made
+#     the body read brown.
+#   - surfaceNoiseAmp 0.16 and silhouetteNoiseAmp 0.014: coarser than the
+#     preset's 0.06/0.016 because a bull's hide is not latex, finer than the
+#     0.22 it carried.
+# The measured brown (baseColor 0.115 0.055 0.025, mottle 0.16 0.10 0.06) is
+# the REFERENCE's colour, kept in this comment and in git — it is not the
+# colour this character should be in this game.
 palette
-  baseColor     0.115 0.055 0.025
-  deepColor     0.28 0.05 0.05
-  charColor     0.16 0.08 0.04
-  specIntensity 0.66
-  specRoughness 0.42
-  fresnelBoost  0.45
-  translucency  0.18
-  surfaceNoiseAmp    0.22
-  silhouetteNoiseAmp 0.0
-  wetness       0.25
-  mottleAmp     0.35
+  baseColor     0.86 0.47 0.48
+  deepColor     0.74 0.06 0.10
+  charColor     0.10 0.07 0.08
+  specIntensity 0.95
+  specRoughness 0.16
+  fresnelBoost  0.75
+  translucency  0.45
+  surfaceNoiseAmp    0.16
+  silhouetteNoiseAmp 0.014
+  wetness       0.85
+  mottleAmp     0.22
   mottleScale   1.6
-  mottleColor   0.16 0.10 0.06
+  mottleColor   0.62 0.28 0.30

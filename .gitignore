@@ -31,3 +31,6 @@ public/assets/audio-placeholder
 
 # Dispatch worktree artifacts (see CLAUDE.md — .claude lives outside the repo)
 .claude
+
+# Local scratch — throwaway probe scripts, never shipped
+.scratch/
