@@ -72,7 +72,7 @@ At 16:9 with the defaults (`k = 0.176`, `rmax = 2.040`) the visible extents are:
 | | render | on screen | at the centre |
 | --- | --- | --- | --- |
 | vertical | 90° | **68.3°** | 60° |
-| horizontal | 117.6° | **115.9°** | ~95° |
+| horizontal | 121.3° | **115.9°** | 91.5° |
 
 Against today's undistorted 75° camera (107.5° horizontal), that is a slightly
 narrower vertical view and a visibly wider horizontal one, with the middle magnified
