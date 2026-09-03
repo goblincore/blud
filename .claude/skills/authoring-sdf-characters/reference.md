@@ -38,11 +38,35 @@ subtracted solid:
 groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
 ```
 
-`depth`/`width` are metres and both must be above zero — a groove missing
-either cuts nothing at all while still costing a slot in the fold. Make the
-primitive FLAT in the direction you want the line to run (`tall` right down for
-a horizontal seam): the channel follows its zero-set. Grooves run in the carve
-pass, after the whole additive fold, so they cut the finished surface.
+Both must be above zero — a groove missing either cuts nothing at all while
+still costing a slot in the fold. Make the primitive FLAT in the direction you
+want the line to run (`tall` right down for a horizontal seam): the channel
+follows its zero-set. Grooves run in the carve pass, after the whole additive
+fold, so they cut the finished surface.
+
+**`depth` is metres. `width` IS NOT, and this is the trap.** `depth` is added
+to the body's own field directly, so `depth=0.004` cuts 4 mm. `width` is
+compared against the groove primitive's distance, and `sdPrimitive` reports a
+SCALED distance — it divides by the prim's scale and multiplies by the
+smallest component. So the channel's real half-width in metres is
+
+    width / min(wide, tall, deep)
+
+and the flatter you make the prim — which is exactly what a crisp line needs —
+the more it multiplies. A plate at `tall=0.05` turns `width=0.010` into a
+**200 mm** band: not a line, a shrink of the whole panel. Author it backwards
+from the band you want:
+
+    width = (half-width you want) x min(wide, tall, deep)
+
+A 20 mm line on a `tall=0.05` plate is `width=0.0010`. Measured on the
+minotaur's torso 2026-09-03, where the naive values cut 40 mm trenches the
+whole height of the body.
+
+**Every groove authored before 2026-09-03 was a silent no-op** (`placePrims`
+dropped `depth`/`width` while keeping `op`), so no existing `.blob`'s groove
+numbers were ever validated by eye — including the ones in this file. Treat
+them as untested starting points, not as known-good.
 
 **REACH IS THE WHOLE GAME, and it is easy to under-do.** A sharp point still
 reads as a bump if it stops inside the mass it grows from. The goblin's cranium

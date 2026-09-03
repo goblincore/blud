@@ -398,6 +398,11 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // so a horn or a hook is ONE primitive instead of a chain of straight
     // ones whose round bases read as lumps.
     bend: parseVec3Arg(l, 'bend', strArg(l, 'bend')),
+    // `depth` is METRES — sdGroove adds it to the body's own field. `width`
+    // is NOT: it is compared against sdPrimitive's SCALED distance, so the
+    // channel's real half-width is `width / min(wide, tall, deep)`. A groove
+    // plate at tall=0.05 turns width=0.010 into a 200 mm band. See the
+    // authoring skill's reference.md for the arithmetic and the measurement.
     grooveDepth: numArg(l, 'depth', 0),
     grooveWidth: numArg(l, 'width', 0),
     // `shell` — a thin clipped sheet. A shell is a BLOB-like base (at=, with

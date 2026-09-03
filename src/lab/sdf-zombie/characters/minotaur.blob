@@ -140,7 +140,7 @@ body
   # STERNUM DIP — the mesh has an 18mm hollow between the pecs at y 1.405,
   # narrowing to a 5mm linea alba at 1.171. That is muscle relief, not
   # cross-section, and it is the next pass.
-  bar  torso on chest   from=0.30 to=2.50 r=0.150 wide=1.700 deep=1.620 blend=0.013 offset=(0,0.005,0.010)
+  bar  torso on chest   from=0.30 to=2.50 r=0.150 wide=1.700 deep=1.430 blend=0.013 offset=(0,0.005,0.010)
   # TRAP SHELF on the neck bone (the rig's spine2/neck is buried under this
   # mass — surface shoulder line 1.5675, traps top to 1.64 authored): fills
   # the neck->deltoid gap so the shoulder balls stop reading as detached
@@ -152,6 +152,62 @@ body
   # Traps sit either side of a neck. The unbounded search wanted 0.322,
   # which is out over the deltoids and is half of what made the mushroom.
   blob torso on neck    at=0.90 r=0.190 wide=1.90 tall=1.50 deep=1.30 blend=0.011 both offset=(0.162,0.040,-0.010)
+
+  # ============================================================
+  # MUSCLE RELIEF (round 6). Every number below is a target read off
+  #   npm run blob:relief -- minotaur --y 0.92:1.51 --x 0.24
+  # after the round-5 cross-section pass, which is the ONLY tool that sees
+  # any of it (rings averages the ring, measure sees the outline, depth
+  # takes a band median ACROSS x — and a pec split is a dip at x=0 between
+  # two crowns, which a median over x erases by construction).
+  #
+  # What the map asked for, in its own numbers:
+  #   y 1.363-1.504  centreline +27..+55mm proud, flanks only +9..+31
+  #                  -> a RIDGE where the mesh has an 18mm sternum hollow
+  #   y 1.222-1.316  BEHIND everywhere, -4..-27mm, worst at x +/-0.09..0.19
+  #                  -> the lower-pec/upper-ab shelf is simply missing
+  #   y 0.940-1.128  right flank -19..-35mm at x +0.19..0.23
+  #                  -> the oblique/hip flare
+  # Result: 15.3mm -> 12.3mm mean |diff| over the same 143 cells. Numbers
+  # tuned by bounded coordinate descent against that map, then looked at:
+  # NOTHING sits pinned at a bound this time (the cross-section pass had two
+  # pinned), so the optimum is interior and judgement is not fighting it.
+  # (The +51..+64mm at x -0.23 low down is NOT torso: that column is the
+  # prosthetic thigh cowl. Verified against the prim dump.)
+  # ============================================================
+  # GROOVE WIDTHS BELOW LOOK ABSURDLY SMALL. They are not. `depth` is metres
+  # but `width` is compared against sdPrimitive's SCALED distance, so the
+  # channel's real half-width is `width / min(wide, tall, deep)` — and a
+  # groove plate is FLAT by definition, which is what multiplies it. At
+  # tall=0.05, width=0.010 is a 200mm band: measured here as a 40mm trench
+  # down the whole body, not a line. width=0.0010 is the 20mm line intended.
+  # Nobody could have known this before 2026-09-03: every groove in every
+  # character was a silent no-op (placePrims dropped depth/width while
+  # keeping op), so no authored groove number had ever been seen.
+  #
+  # PECS. A pair, not one mass, so the centreline can fall BETWEEN them —
+  # that is the whole construction. The chest bar's depth comes down to pay
+  # for them (round 5 left it carrying the centre alone, which is what made
+  # the ridge). neck at=0.72 -> y 1.397, the mesh's pec crown height.
+  blob torso on neck   at=0.72 offset=(0.098,0,0.128) r=0.108 wide=1.30 tall=1.15 deep=0.62 blend=0.006 both
+  # Lower-pec shelf: the line that makes a pec read as a PLATE rather than a
+  # bulge. neck at=0.30 -> y 1.352.
+  groove torso on neck at=0.30 offset=(0.090,0,0.150) r=0.115 wide=1.39 tall=0.05 depth=0.0023 width=0.0015 both
+  # Sternum. The mesh's own hollow is 18mm at y 1.405 (relief --abs: z 0.235
+  # at x 0 against 0.255 at x +/-0.05). The pair above does most of it; this
+  # cuts the remainder.
+  groove torso on neck at=0.60 offset=(0,0,0.170) r=0.100 wide=0.05 tall=1.50 depth=0.0163 width=0.0020
+  # Upper-ab / lower-chest mass. chest from=0.85 to=1.75 -> y 1.219-1.328,
+  # exactly the band the map reports 13-25mm behind.
+  bar  torso on chest  from=0.85 to=1.75 r=0.150 wide=1.79 deep=1.66 blend=0.010 offset=(0,0,0.020)
+  # Linea alba: 5mm at y 1.171, shallower than the sternum by measurement,
+  # not by taste.
+  groove torso on spine1 at=1.10 offset=(0,0,0.190) r=0.090 wide=0.05 tall=1.60 depth=0.005 width=0.0010
+  # Ab cross-lines.
+  groove torso on spine1 at=1.35 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.006 width=0.0015
+  groove torso on spine1 at=0.95 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.006 width=0.0015
+  # Obliques / hip flare: the map's -19..-35mm at the right flank low down.
+  blob torso on spine1 at=0.10 offset=(0.161,0,0.070) r=0.101 wide=0.95 tall=1.39 deep=1.10 blend=0.008 both
 
   # Neck: nearly invisible (mesh neck cloud is a 100-vert stub, rho ~0.03
   # mesh); a short bar swallowed by the traps, fusing head->torso.
@@ -357,9 +413,13 @@ sheet
 #   - the mottle stays (this is hide, not skin) but moves into the pink
 #     family; the old dusty grey-gold 0.16 0.10 0.06 was half of what made
 #     the body read brown.
-#   - surfaceNoiseAmp 0.16 and silhouetteNoiseAmp 0.014: coarser than the
-#     preset's 0.06/0.016 because a bull's hide is not latex, finer than the
-#     0.22 it carried.
+#   - surfaceNoiseAmp 0.09 and silhouetteNoiseAmp 0.014. ROUND 6 halved the
+#     noise and the mottle (0.16 -> 0.09, amp 0.22 -> 0.11): with muscle
+#     relief finally in the geometry, the mottle's blotches sit at roughly
+#     the same spatial frequency as a pec and were the LOUDER signal. Both
+#     move toward the preset, which carries mottleAmp 0 — so this is closer
+#     to the zombie, not further from it. Honest scale of the win: modest.
+#     The mottle is still the loudest thing on the chest at close range.
 # The measured brown (baseColor 0.115 0.055 0.025, mottle 0.16 0.10 0.06) is
 # the REFERENCE's colour, kept in this comment and in git — it is not the
 # colour this character should be in this game.
@@ -371,9 +431,9 @@ palette
   specRoughness 0.16
   fresnelBoost  0.75
   translucency  0.45
-  surfaceNoiseAmp    0.16
+  surfaceNoiseAmp    0.09
   silhouetteNoiseAmp 0.014
   wetness       0.85
-  mottleAmp     0.22
+  mottleAmp     0.11
   mottleScale   1.6
   mottleColor   0.62 0.28 0.30
