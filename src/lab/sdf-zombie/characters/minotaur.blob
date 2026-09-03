@@ -106,26 +106,52 @@ body
   # Block 4 (mean 44.4mm): r 0.1397, deep 1.47 (halfdepth 0.205 = the
   # measured pelvis z -0.11..+0.153 mesh), centre back z -0.064.
   blob torso on pelvis  at=0.50 r=0.1397 wide=1.392 tall=1.30 deep=1.470 blend=0.012 offset=(-0.018,0,-0.114) core
-  # Waist -> belly (spine1 0.991-1.111): measured front wall z +0.24 at this
-  # height (mesh slab y 0.70: z -0.113..+0.154). Bar spans the waist.
-  bar  torso on spine1  from=0.00 to=1.50 r=0.155 wide=1.45 deep=1.35 blend=0.012 offset=(0,0,0.030)
-  # Abs/ribcage drum (chest 1.112-1.232, prim reaches 1.148-1.412): the mesh
-  # front wall runs a near-CONSTANT z +0.24..+0.28 from y 1.1 to 1.5 (slabs
-  # y 0.75-0.90) — a drum, not an egg. Block 1's r 0.1655/deep 1.208 kept;
-  # its -z offset RETREATED the wall and the render lost the pec shelf —
-  # restored forward to the measured wall (+0.025 + r x deep = 0.265).
-  # Compromise after three rounds: the fit keeps asking r 0.13/deep 1.33/
-  # z -0.146 — its aligned cloud sits ~7cm behind my wall (the rig's chest
-  # segment rides +0.07 forward of my spine bone), so swallowed interior
-  # points dominate its residual; applying it wholesale visibly killed the
-  # pec shelf (render round 1). Taking the halfwidth to the cloud's own
-  # (wide 1.40 -> halfwidth 0.21) without retreating the measured wall.
-  bar  torso on chest   from=0.30 to=2.50 r=0.150 wide=1.40 deep=1.70 blend=0.013 offset=(0,0.005,0.010)
+  # Waist -> belly (spine1 0.991-1.111). ROUND 5: deep 1.35 -> 1.210 and
+  # wide 1.45 -> 1.490. The relief map's V-taper finding — at the flanks
+  # (x -0.23) the mesh runs 0.24 deep at the chest and 0.14 at the belly, a
+  # 100mm fall, while this body was NEARLY CONSTANT 0.19-0.23 and slightly
+  # deeper at the bottom. An INVERTED taper. Pulling the belly's depth in
+  # while keeping its width is what restores it.
+  bar  torso on spine1  from=0.00 to=1.50 r=0.155 wide=1.490 deep=1.210 blend=0.012 offset=(0,0,0.030)
+  # Abs/ribcage. ROUND 5 — CROSS-SECTION PASS, fitted against a FRONT-WALL
+  # RELIEF MAP (ref mesh vs this body, per (x,y) cell; see
+  # docs/dev-notes/2026-09-03-torso-relief/notes.md). That map is the only
+  # instrument that sees any of this: blob:rings fits a radial AVERAGE,
+  # blob:measure scores a SILHOUETTE, and blob:depth reports a band median
+  # ACROSS x — all three score a dome and a slab identically.
+  #
+  # What it showed: every height band was the same arch, most proud at the
+  # centreline and behind at the flanks. The mesh is a broad flat-fronted
+  # slab; this was a narrow dome. wide 1.40 -> 1.700 (halfwidth 0.210 ->
+  # 0.255) and deep 1.70 -> 1.620 carries the mass out to where the mesh
+  # actually has it. Mean |diff| over 143 torso cells: 21.2mm -> 14.9mm.
+  #
+  # NOT the unbounded optimum. A free search wanted wide 2.08 (halfwidth
+  # 0.312) and scored 14.2mm; it rendered as a MUSHROOM — a flat cap with
+  # the arms hanging beneath it. The front wall is one view and cannot see
+  # that, so the search runs inside bounds set by judgement and `wide` sits
+  # pinned at its ceiling. The score still wants more. It cannot have it.
+  #
+  # A `box` was tried here and REJECTED, by hand and then by the search from
+  # every start: an ellipse beats a rounded box on this wall once width is
+  # free. A box's corners add ~27% more area than the ellipse of the same
+  #half-extents (4ab vs pi*ab), which lands as volume where the mesh has none.
+  # The remaining centreline error (+26 to +48mm at y 1.358-1.499) is the
+  # STERNUM DIP — the mesh has an 18mm hollow between the pecs at y 1.405,
+  # narrowing to a 5mm linea alba at 1.171. That is muscle relief, not
+  # cross-section, and it is the next pass.
+  bar  torso on chest   from=0.30 to=2.50 r=0.150 wide=1.700 deep=1.620 blend=0.013 offset=(0,0.005,0.010)
   # TRAP SHELF on the neck bone (the rig's spine2/neck is buried under this
   # mass — surface shoulder line 1.5675, traps top to 1.64 authored): fills
   # the neck->deltoid gap so the shoulder balls stop reading as detached
   # spheres (render round 1).
-  blob torso on neck    at=0.90 r=0.190 wide=1.90 tall=1.50 deep=1.30 blend=0.011 both offset=(0.052,0.040,-0.010)
+  # ROUND 5: offset x 0.052 -> 0.162, moving the pair OUTBOARD. At 0.052 the
+  # two halves (halfwidth 0.361 each) overlapped into one mass that filled
+  # the THROAT: the mesh's centreline at y 1.499 is z 0.184, a hollow, and
+  # this body had 0.257 there — +73mm, the single worst cell on the map.
+  # Traps sit either side of a neck. The unbounded search wanted 0.322,
+  # which is out over the deltoids and is half of what made the mushroom.
+  blob torso on neck    at=0.90 r=0.190 wide=1.90 tall=1.50 deep=1.30 blend=0.011 both offset=(0.162,0.040,-0.010)
 
   # Neck: nearly invisible (mesh neck cloud is a 100-vert stub, rho ~0.03
   # mesh); a short bar swallowed by the traps, fusing head->torso.
