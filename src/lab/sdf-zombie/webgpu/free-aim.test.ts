@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
   pivotOffset, recentre, turnFromAim, weaponAngles,
@@ -93,7 +94,24 @@ describe('weaponAngles', () => {
     const full = Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg);
     FREE_AIM.weaponYawFrac = 0.5;
     expect(Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg)).toBeCloseTo(full * 0.5, 6);
+  });
+  it('clamps a tuning value pushed above 1, so setAimTuning cannot reopen the mismatch', () => {
+    const full = Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg);
+    FREE_AIM.weaponYawFrac = 3;
+    expect(Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg)).toBeCloseTo(full, 6);
+  });
+  it('clamps a tuning value pushed below 0', () => {
+    FREE_AIM.weaponYawFrac = -1;
+    expect(weaponAngles({ x: 1, y: 0 }, F).yawDeg).toBeCloseTo(0, 9);
+  });
+
+  afterEach(() => {
+    // Unconditional restore -- a bare trailing assignment never runs if the
+    // preceding expect() throws, which leaks a mutated fraction into every
+    // test that runs after this file (FREE_AIM is a shared, mutable module
+    // singleton).
     FREE_AIM.weaponYawFrac = 1.0;
+    FREE_AIM.weaponPitchFrac = 1.0;
   });
 });
 
@@ -166,29 +184,70 @@ describe('approachBob', () => {
 describe('pivotOffset', () => {
   const GRIP = { x: 0.038, y: -0.115, z: -0.300 };
 
+  /**
+   * Drives a REAL THREE.Object3D posed exactly as game-main.ts poses aimRig
+   * (position = pivotOffset's result, rotation.set(pitch, yaw, roll)), then
+   * reads back where the pivot point actually ended up in world space.
+   *
+   * This is deliberately not a hand-rolled matrix multiply: the previous
+   * version of this test re-derived the rotation inline using the same
+   * arithmetic as the implementation, which asserts
+   * `pivot - f(pivot) + f(pivot) === pivot` for whatever `f` the
+   * implementation happens to use -- a tautology that passes for ANY
+   * rotation convention, including a wrong one. Driving Three.js's own
+   * Euler/matrix code is the only way to pin the actual convention
+   * (`'XYZ'` composes as R = Rx*Ry*Rz, i.e. roll first, then yaw, then pitch).
+   */
+  function drift(pitch: number, yaw: number, roll: number): { x: number; y: number; z: number } {
+    const o = pivotOffset(GRIP, pitch, yaw, roll);
+    const rig = new THREE.Object3D();
+    rig.position.set(o.x, o.y, o.z);
+    rig.rotation.set(pitch, yaw, roll); // exactly game-main.ts's aimRig.rotation.set(...)
+    rig.updateMatrixWorld(true);
+    const p = new THREE.Vector3(GRIP.x, GRIP.y, GRIP.z).applyMatrix4(rig.matrixWorld);
+    return { x: p.x - GRIP.x, y: p.y - GRIP.y, z: p.z - GRIP.z };
+  }
+
   it('is nothing when the weapon is level', () => {
-    const o = pivotOffset(GRIP, 0, 0);
-    expect(o.x).toBeCloseTo(0, 9);
-    expect(o.y).toBeCloseTo(0, 9);
-    expect(o.z).toBeCloseTo(0, 9);
+    const d = drift(0, 0, 0);
+    expect(d.x).toBeCloseTo(0, 9);
+    expect(d.y).toBeCloseTo(0, 9);
+    expect(d.z).toBeCloseTo(0, 9);
   });
-  it('holds the pivot point still under yaw — that is its entire job', () => {
-    const yaw = 47.5 * Math.PI / 180;
-    const o = pivotOffset(GRIP, yaw, 0);
-    // Rotate the grip about the origin, then add the offset: back where it was.
-    const c = Math.cos(yaw), s = Math.sin(yaw);
-    const rx = GRIP.x * c + GRIP.z * s;
-    const rz = -GRIP.x * s + GRIP.z * c;
-    expect(rx + o.x).toBeCloseTo(GRIP.x, 9);
-    expect(rz + o.z).toBeCloseTo(GRIP.z, 9);
+  it('holds the grip still under pure yaw', () => {
+    const d = drift(0, 47.5 * Math.PI / 180, 0);
+    expect(d.x).toBeCloseTo(0, 9);
+    expect(d.y).toBeCloseTo(0, 9);
+    expect(d.z).toBeCloseTo(0, 9);
   });
-  it('holds it still under pitch too', () => {
-    const pitch = 20 * Math.PI / 180;
-    const o = pivotOffset(GRIP, 0, pitch);
-    const c = Math.cos(pitch), s = Math.sin(pitch);
-    const ry = GRIP.y * c - GRIP.z * s;
-    const rz = GRIP.y * s + GRIP.z * c;
-    expect(ry + o.y).toBeCloseTo(GRIP.y, 9);
-    expect(rz + o.z).toBeCloseTo(GRIP.z, 9);
+  it('holds the grip still under pure pitch', () => {
+    const d = drift(20 * Math.PI / 180, 0, 0);
+    expect(d.x).toBeCloseTo(0, 9);
+    expect(d.y).toBeCloseTo(0, 9);
+    expect(d.z).toBeCloseTo(0, 9);
+  });
+  it('holds the grip still under pure roll (walk bob, reticle centred)', () => {
+    const d = drift(0, 0, 1.4 * Math.PI / 180);
+    expect(d.x).toBeCloseTo(0, 9);
+    expect(d.y).toBeCloseTo(0, 9);
+    expect(d.z).toBeCloseTo(0, 9);
+  });
+  it('holds the grip still under COMBINED yaw+pitch(+roll) -- pure-axis cases cannot catch an Euler-order bug', () => {
+    // Rx*Ry === Ry*Rx whenever one of the two angles is zero, so only a
+    // combined pose can distinguish the correct order from its reverse.
+    // These are the corner poses (plus a walking-with-recoil pose) that
+    // measured real drift against the previous (Ry then Rx) implementation.
+    const poses: Array<[number, number, number]> = [
+      [20 * Math.PI / 180, 47.5 * Math.PI / 180, 0],
+      [-30 * Math.PI / 180, -47.5 * Math.PI / 180, 0],
+      [-37.5 * Math.PI / 180, -47.5 * Math.PI / 180, 0],
+      [0.35, -0.83, 0.024],
+    ];
+    for (const [pitch, yaw, roll] of poses) {
+      const d = drift(pitch, yaw, roll);
+      expect(d.x).toBeCloseTo(0, 9);
+      expect(d.y).toBeCloseTo(0, 9);
+      expect(d.z).toBeCloseTo(0, 9);
+    }
   });
 });

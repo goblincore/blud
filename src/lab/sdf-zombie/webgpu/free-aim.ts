@@ -98,9 +98,15 @@ export interface Frustum { tanH: number; tanV: number; }
  */
 export function weaponAngles(aim: AimPoint, f: Frustum): { yawDeg: number; pitchDeg: number } {
   const deg = 180 / Math.PI;
+  // Clamped so a runtime tuning call (__sdfGame.setAimTuning) cannot push the
+  // fraction above 1 and reintroduce the original mismatch -- FREE_AIM's
+  // fields have no validation of their own, so this function has to hold the
+  // promise its own doc comment makes.
+  const yawFrac = Math.min(1, Math.max(0, FREE_AIM.weaponYawFrac));
+  const pitchFrac = Math.min(1, Math.max(0, FREE_AIM.weaponPitchFrac));
   return {
-    yawDeg: -Math.atan(aim.x * f.tanH) * deg * FREE_AIM.weaponYawFrac,
-    pitchDeg: Math.atan(aim.y * f.tanV) * deg * FREE_AIM.weaponPitchFrac,
+    yawDeg: -Math.atan(aim.x * f.tanH) * deg * yawFrac,
+    pitchDeg: Math.atan(aim.y * f.tanV) * deg * pitchFrac,
   };
 }
 
@@ -123,21 +129,31 @@ export interface V3 { x: number; y: number; z: number; }
  * the grip itself barely moving (0.12). An arm swings the barrel about the
  * hands, not about the eyeball.
  *
- * Rotation order matches Three.js's default 'XYZ' Euler as applied by
- * Object3D.rotation, i.e. R = Rx(pitch) then Ry(yaw) reading right-to-left.
+ * Three.js's default Euler order is 'XYZ', which composes as R = Rx * Ry * Rz
+ * -- so applied to a vector, Rz (roll) happens FIRST, then Ry (yaw), then
+ * Rx (pitch) LAST. Getting this backwards (Rx then Ry, ignoring roll) is
+ * invisible under a pure yaw or a pure pitch, where the two conventions
+ * coincide, and only shows up as grip drift once yaw, pitch and roll (the
+ * walk bob) are combined -- see pivotOffset's test for the corner case that
+ * actually catches it.
+ *
+ * Argument order mirrors the call site's `rotation.set(pitch, yaw, roll)`.
  */
-export function pivotOffset(pivot: V3, yawRad: number, pitchRad: number): V3 {
+export function pivotOffset(pivot: V3, pitchRad: number, yawRad: number, rollRad = 0): V3 {
   const cy = Math.cos(yawRad), sy = Math.sin(yawRad);
   const cp = Math.cos(pitchRad), sp = Math.sin(pitchRad);
-  // Rx(pitch) applied to the pivot...
-  const px = pivot.x;
-  const py = pivot.y * cp - pivot.z * sp;
-  const pz = pivot.y * sp + pivot.z * cp;
-  // ...then Ry(yaw).
-  const rx = px * cy + pz * sy;
-  const ry = py;
-  const rz = -px * sy + pz * cy;
-  return { x: pivot.x - rx, y: pivot.y - ry, z: pivot.z - rz };
+  const cr = Math.cos(rollRad), sr = Math.sin(rollRad);
+  // Rz (roll) applied to the pivot first...
+  let x = pivot.x * cr - pivot.y * sr;
+  let y = pivot.x * sr + pivot.y * cr;
+  let z = pivot.z;
+  // ...then Ry (yaw)...
+  const x2 = x * cy + z * sy, z2 = -x * sy + z * cy;
+  x = x2; z = z2;
+  // ...then Rx (pitch) last.
+  const y3 = y * cp - z * sp, z3 = y * sp + z * cp;
+  y = y3; z = z3;
+  return { x: pivot.x - x, y: pivot.y - y, z: pivot.z - z };
 }
 
 /** Optional drift of the reticle back toward centre. */

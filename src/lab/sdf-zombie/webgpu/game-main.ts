@@ -33,7 +33,7 @@ import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-ski
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
-  weaponAngles, type AimPoint,
+  weaponAngles, type AimPoint, type Frustum,
 } from './free-aim';
 import {
   FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
@@ -1407,6 +1407,20 @@ async function main() {
       eye[2] + right[2] * 0.2 + cy * 0.5,
     ];
   }
+  /** The live frustum half-angle tangents. ONE definition: the barrel angle
+   *  (weaponAngles, in the frame loop) and the shot ray (aimDir, right below)
+   *  must not be able to disagree about where the reticle is -- that
+   *  disagreement is exactly the class of bug this whole pass exists to fix,
+   *  and duplicating this formula is how it would come back the first time
+   *  someone tweens camera.fov for ADS or recoil.
+   *
+   *  Named aimFrustum, not frustum -- that name is already the module-scope
+   *  THREE.Frustum used for on-screen-body culling, a different concept
+   *  entirely (a view volume for culling vs. these bare half-angle tangents). */
+  function aimFrustum(): Frustum {
+    const tanV = Math.tan((camera.fov * Math.PI) / 360);
+    return { tanV, tanH: tanV * camera.aspect };
+  }
   function aimDir(): Vec3 {
     const cp = Math.cos(player.pitch);
     const fwd: Vec3 = [
@@ -1418,8 +1432,7 @@ async function main() {
     // happens to be FACING rather than where they are AIMING -- the one thing
     // this scheme exists to separate. Offset the ray by the reticle's angular
     // position inside the frustum.
-    const tanV = Math.tan((camera.fov * Math.PI) / 360);
-    const tanH = tanV * camera.aspect;
+    const { tanV, tanH } = aimFrustum();
     const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
     // up = right x fwd, for a right-handed basis
     const up: Vec3 = [
@@ -2158,10 +2171,7 @@ async function main() {
         Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
     }
     {
-      const tanV = Math.tan((camera.fov * Math.PI) / 360);
-      const w = freeAimOn
-        ? weaponAngles(aim, { tanV, tanH: tanV * camera.aspect })
-        : { yawDeg: 0, pitchDeg: 0 };
+      const w = freeAimOn ? weaponAngles(aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
       weaponYawDeg = approachAngle(weaponYawDeg, w.yawDeg, dt);
       weaponPitchDeg = approachAngle(weaponPitchDeg, w.pitchDeg, dt);
     }
@@ -2179,12 +2189,15 @@ async function main() {
       const b = bobPose(bobDistance, bobAmount);
       const yaw = THREE.MathUtils.degToRad(weaponYawDeg);
       const pitch = THREE.MathUtils.degToRad(weaponPitchDeg);
+      const roll = THREE.MathUtils.degToRad(b.rollDeg);
       // ROTATE ABOUT THE GRIP, not about the eye. Without this offset the rig
       // pivots on the player's head and the weapon leaves the frame the moment
-      // it points anywhere near the edge of the viewport.
-      const o = pivotOffset(GUN_REST.pos, yaw, pitch);
+      // it points anywhere near the edge of the viewport. Roll (the walk bob)
+      // has to be passed too -- it is small alone but combines with yaw/pitch
+      // under Three.js's 'XYZ' Euler order in a way pivotOffset must match.
+      const o = pivotOffset(GUN_REST.pos, pitch, yaw, roll);
       aimRig.position.set(b.x + o.x, b.y + o.y, o.z);
-      aimRig.rotation.set(pitch, yaw, THREE.MathUtils.degToRad(b.rollDeg));
+      aimRig.rotation.set(pitch, yaw, roll);
     }
     if (reticleEl) {
       reticleEl.style.display = freeAimOn ? 'block' : 'none';
