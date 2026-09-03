@@ -273,6 +273,31 @@ wound pops, gait stop-motion).
   [spec](docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md) ·
   [plan](docs/superpowers/plans/2026-09-02-blobforge-draft-and-depth.md)
 
+- `P1.chain-drift` [~] **`blob:draft` chain closes — tasks 1-3 DONE, task 4
+  (re-draft + judge) open** — plan
+  [2026-09-02-blob-draft-chain-drift](docs/superpowers/plans/2026-09-02-blob-draft-chain-drift.md),
+  suite 2170 -> **2182** green (112 files), tsc clean. len=/dir= now come
+  from the RIG chain (joint-to-joint × one global scale; the >45° cloud
+  steering demoted to a REPORTED check — schoolgirl builds connected without
+  it), a branch rule extends a mapped bone up to its .blob parent's tail
+  joint so the rig TREE chains into .blob's chain (the Hips stubs were the
+  residual +0.25 m sole error), and offsets carry the surface. Task 3 made
+  the three acceptance properties TESTS (soles on floor; height line; every
+  mapped len= == rig × scale — end to end on a synthetic rig through the
+  real pipeline) and the CLI prints the numbers on stderr + in the header.
+  The height property then caught the CROWN overshoot: +0.1006 m on a 1.9 m
+  fixture — the scale came from the VERTEX extent, but the built surface
+  adds the end bands' radii (grounding absorbed the sole side, so it all
+  showed at the crown; top prim = the skull band ball, radius 0.1199).
+  Fix: ONE corrective ratio, exact because every fit is linear in the scale
+  — `calibrated()` re-fits at g · height / builtExtent. Measured after:
+  minotaur +0.02%, schoolgirl +0.01%, minotaur@--height 1.9 −0.01%; soles
+  0.0000; worst len= dev ≤ 5e-5 m (print rounding). Also fixed en route:
+  the skull statement now names its true source (axisFromParent was set on
+  the assembler's Built record but dropped in assembly, so the fit comment
+  claimed a principal-axis fit). Remaining: task 4 — re-draft both
+  characters, render-check frames, LOOK, append the verdict to notes.
+
 - `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
   `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was
   a capsule or round cone, so the format could not make a FLAT FACE; the next
