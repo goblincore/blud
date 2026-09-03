@@ -98,3 +98,104 @@ export function clamp01(x: number): number {
 export function smoothstep(x: number): number {
   return x * x * (3 - 2 * x);
 }
+
+// ——— THE PRIM TRANSFORM (task 2) ————————————————————————————————————————
+
+import type { Primitive, Vec3 } from './types';
+
+export interface MeltBodyTuning {
+  /** Y the pooled goo settles at. A puddle has depth; zero reads as a decal. */
+  poolHeight: number;
+  /** yScale at full melt. 0.25 is a disc that still has a top surface. */
+  crush: number;
+  /** Metres pushed outward from the body's vertical axis at full melt. */
+  spread: number;
+  /**
+   * blendK at full melt. The authored flesh runs 0.007–0.02; 0.11 is well
+   * past the point where neighbouring limbs stop being separable, which is
+   * what makes the puddle ONE surface instead of a heap of sausages.
+   */
+  fuseK: number;
+}
+
+export const MELT_TUNING_BODY: MeltBodyTuning = {
+  poolHeight: 0.085,
+  crush: 0.25,
+  spread: 0.16,
+  fuseK: 0.11,
+};
+
+/** Endpoint Y in the canonical order: prim i contributes 2i (a), 2i+1 (b). */
+export function endpointHeights(prims: readonly Primitive[]): number[] {
+  const out: number[] = [];
+  for (const p of prims) { out.push(p.a[1]); out.push(p.b[1]); }
+  return out;
+}
+
+/** meltInit for a real body — canonical endpoint order comes from the prims. */
+export function meltInitBody(
+  prims: readonly Primitive[],
+  floorY: number,
+  tuning: MeltTuning = MELT_TUNING,
+): MeltState {
+  return meltInit(endpointHeights(prims), floorY, tuning);
+}
+
+/**
+ * Rest flesh prims in, melted flesh prims out. Never mutates the input, never
+ * reorders (the fold order is load-bearing — see BuiltBody.prims), and never
+ * sees a bone prim: bones live in BuiltBody.bonePrims and are handled by
+ * melt-bones.ts.
+ *
+ * Scalar quantities (radius, scale, blendK) use the prim's MEAN endpoint
+ * progress, while positions use each endpoint's OWN progress. That split is
+ * what produces the stretch: a prim whose lower end has melted and whose
+ * upper end has not gets pulled long while it is still only half-fused.
+ */
+export function applyMelt(
+  prims: readonly Primitive[],
+  s: MeltState,
+  body: MeltBodyTuning = MELT_TUNING_BODY,
+): Primitive[] {
+  if (s.t <= 0) return prims.map(p => p);
+  return prims.map((p, i) => {
+    const ua = endpointProgress(s, i * 2);
+    const ub = endpointProgress(s, i * 2 + 1);
+    const u = (ua + ub) / 2;
+    const yScale = lerp(p.scale[1], p.scale[1] * body.crush, u);
+    // r ∝ 1/sqrt(yScale) keeps r² · yScale constant — the crushed disc gets
+    // wider by exactly what it lost in height. This is the whole reason the
+    // puddle ends up broader than the body: the volume has to go somewhere.
+    const shrink = yScale / (p.scale[1] || 1);
+    return {
+      ...p,
+      a: meltPoint(p.a, ua, body),
+      b: meltPoint(p.b, ub, body),
+      radius: p.radius / Math.sqrt(shrink || 1),
+      ...(p.radiusB !== undefined ? { radiusB: p.radiusB / Math.sqrt(shrink || 1) } : {}),
+      scale: [p.scale[0], yScale, p.scale[2]] as Vec3,
+      blendK: lerp(p.blendK, body.fuseK, u),
+    };
+  });
+}
+
+/**
+ * Drop one endpoint toward the pool and push it out from the body axis.
+ *
+ * The descent is CLAMPED to never rise: an endpoint already below poolHeight
+ * (a foot resting under the puddle surface) stays where it stood rather than
+ * being lifted up to the pool plane. Goo does not climb out of the floor.
+ */
+function meltPoint(p: Vec3, u: number, body: MeltBodyTuning): Vec3 {
+  const y = Math.min(p[1], lerp(p[1], body.poolHeight, u));
+  // Outward from the vertical axis through the origin (the body's own root).
+  // A point exactly on the axis has no direction to go, so it stays — which
+  // is correct: the spine should pool where it stood.
+  const r = Math.hypot(p[0], p[2]);
+  const push = r > 1e-6 ? (body.spread * u) / r : 0;
+  return [p[0] * (1 + push), y, p[2] * (1 + push)];
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
