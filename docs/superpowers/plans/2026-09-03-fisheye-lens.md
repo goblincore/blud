@@ -46,8 +46,8 @@ Create `src/lab/sdf-zombie/webgpu/fisheye.test.ts`:
 
 import { describe, it, expect } from 'vitest';
 import {
-  FISHEYE_DEFAULTS, makeLens, cornerRadius, sampleRadius, screenRadius,
-  reticleNdc, visibleFovDeg,
+  FISHEYE_DEFAULTS, FISHEYE_WGSL, makeLens, cornerRadius, sampleRadius,
+  screenRadius, reticleNdc, visibleFovDeg,
 } from './fisheye';
 
 const ASPECT = 16 / 9;
@@ -139,6 +139,26 @@ describe('fisheye reporting', () => {
   it('ships the owner-approved defaults', () => {
     expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(90);
     expect(FISHEYE_DEFAULTS.centerFovDeg).toBe(60);
+  });
+});
+
+describe('fisheye shader/JS agreement', () => {
+  // JS and WGSL cannot literally share an expression, so this is a tripwire
+  // instead: edit one side of the map and this fails until the other side
+  // matches. A silent divergence here puts the crosshair off the shot.
+  it('the WGSL scale mirrors sampleRadius', () => {
+    expect(FISHEYE_WGSL).toContain(
+      'let scale = (1.0 + k * r * r) / (1.0 + k * rmax * rmax);',
+    );
+  });
+
+  it('the WGSL takes the same off switch', () => {
+    expect(FISHEYE_WGSL).toContain('if (k <= 0.0) { return st; }');
+  });
+
+  it('is exactly one helper fn, for appending to the blit', () => {
+    expect(FISHEYE_WGSL.trim().startsWith('fn fisheyeWarp(')).toBe(true);
+    expect(FISHEYE_WGSL.match(/\bfn\s+\w+\s*\(/g)).toHaveLength(1);
   });
 });
 ```
@@ -308,7 +328,7 @@ fn fisheyeWarp(st: vec2<f32>, lens: vec3<f32>) -> vec2<f32> {
 npx vitest run src/lab/sdf-zombie/webgpu/fisheye.test.ts
 ```
 
-Expected: PASS, 11 tests.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -731,7 +751,7 @@ In the `__sdfGame` object, directly after `setSmear: (v: number) => postAa.setSm
 npx tsc --noEmit
 ```
 
-Expected: no errors. (`reticleNdc` is imported but unused until Task 5 — if the project's TS config flags unused imports, add the reticle change from Task 5 in the same commit rather than suppressing it.)
+Expected: no errors. `reticleNdc` is imported here but not used until Task 5; `tsconfig.json` does not set `noUnusedLocals`, so that is not an error — it is used two tasks later.
 
 - [ ] **Step 5: Commit**
 
