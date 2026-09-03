@@ -1,10 +1,15 @@
 // src/lab/sdf-zombie/webgpu/wound-panel.ts
 //
+// See panel-chrome.ts for the shared shell (title bar, collapse caret, close
+// button) both tuning panels sit in.
+//
 // ONE key table drives the sliders, the setter and the COPY text. That is not
 // tidiness: a panel emitting keys the setter ignores has shipped twice in this
 // project (the beam panel's setBeam keys, and the goo panel before it), and
 // both times the symptom was a tuning that looked applied and was not. Deriving
 // all three from this array makes the drift impossible rather than unlikely.
+
+import { createPanelShell } from './panel-chrome';
 
 export interface WoundKey<K extends string = string> {
   key: K;
@@ -85,18 +90,12 @@ export function copyText(values: Record<string, number>): string {
 // consumes it, which is the anti-drift point of the whole file.
 // ---------------------------------------------------------------------------
 
-const PANEL_CSS = `
-  position:fixed; top:8px; right:266px; width:250px; z-index:40;
-  background:rgba(20,16,15,0.93); color:#e8ddd8; border:1px solid #3a2f2d;
-  border-radius:3px; padding:9px 10px 10px;
-  font:11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-  max-height:calc(100vh - 16px); overflow-y:auto;
-`;
-
 export interface WoundPanel {
   readonly el: HTMLElement;
   readonly visible: boolean;
+  readonly collapsed: boolean;
   setVisible(on: boolean): void;
+  setCollapsed(on: boolean): void;
   /** Pull every slider back into line with the live values (after a preset). */
   refresh(): void;
   dispose(): void;
@@ -112,15 +111,11 @@ export function createWoundPanel(opts: {
   presets?: { label: string; values: Partial<WoundTuningValues> }[];
   onCopy?: (text: string) => void;
 }): WoundPanel {
-  const el = document.createElement('div');
-  el.setAttribute('style', PANEL_CSS);
-  el.style.display = 'none';
-
-  const title = document.createElement('div');
-  title.textContent = 'WOUND TUNING';
-  title.setAttribute('style',
-    'font-size:10px; letter-spacing:.12em; color:#9a8b86; margin-bottom:7px;');
-  el.appendChild(title);
+  // right:266 keeps this beside the GOO panel (which sits at the shell's
+  // default right:8) rather than stacked on top of it -- both title bars stay
+  // visible and clickable at once while collapsed.
+  const shell = createPanelShell('WOUND TUNING', { right: 266 });
+  const body = shell.body;
 
   const rows: { k: WoundKey; input: HTMLInputElement; out: HTMLSpanElement }[] = [];
 
@@ -159,7 +154,7 @@ export function createWoundPanel(opts: {
     input.addEventListener('commit' in k ? k.commit : 'input', apply);
 
     row.append(name, input, out);
-    el.appendChild(row);
+    body.appendChild(row);
     rows.push({ k, input, out });
   }
 
@@ -191,26 +186,22 @@ export function createWoundPanel(opts: {
     opts.onCopy?.(text);
   }));
 
-  el.appendChild(btnRow);
+  body.appendChild(btnRow);
 
   const note = document.createElement('div');
   note.textContent = 'copy → clipboard + console · bone ratio rebuilds the cast';
   note.setAttribute('style', 'color:#6f625e; margin-top:6px; font-size:10px;');
-  el.appendChild(note);
+  body.appendChild(note);
 
-  document.body.appendChild(el);
-
-  let visible = false;
+  shell.onReveal(refresh);
   return {
-    el,
-    get visible() { return visible; },
-    setVisible(on) {
-      visible = on;
-      el.style.display = on ? 'block' : 'none';
-      if (on) refresh();
-    },
+    el: shell.el,
+    get visible() { return shell.visible; },
+    get collapsed() { return shell.collapsed; },
+    setVisible(on) { shell.setVisible(on); },
+    setCollapsed(on) { shell.setCollapsed(on); },
     refresh,
-    dispose() { el.remove(); },
+    dispose() { shell.dispose(); },
   };
 }
 

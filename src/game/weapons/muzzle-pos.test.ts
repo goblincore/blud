@@ -83,4 +83,19 @@ describe('muzzleWorldPosition', () => {
     const b = muzzleWorldPosition(eye, basis, LATERAL, VERTICAL, FORWARD, { x: 0, y: 0 });
     expect(a).toEqual(b);
   });
+
+  it('puts the muzzle IN FRONT of the eye — the sdf-game sign regression', () => {
+    // game-main's inline version used -forward*0.5, which spawned every
+    // projectile half a metre BEHIND the player's head while the visible
+    // muzzle sat 0.6 m in front of it.
+    const fwd = { x: 0, y: 0, z: -1 };
+    const m = muzzleWorldPosition(
+      { x: 0, y: 1.6, z: 0 },
+      { right: { x: 1, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, forward: fwd },
+      0.2, -0.12, 0.5,
+    );
+    const along = (m.x - 0) * fwd.x + (m.y - 1.6) * fwd.y + (m.z - 0) * fwd.z;
+    expect(along).toBeGreaterThan(0);
+    expect(along).toBeCloseTo(0.5, 6);
+  });
 });

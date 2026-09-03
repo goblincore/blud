@@ -120,3 +120,51 @@ imported, opened or measured.
 - **The downloaded original is not redistributed.** It stays at a path outside
   the repository and is only read by the authoring script; only the derived
   GLB above (with modified scale, transforms and texture sizes) is committed.
+
+---
+
+## sawnoffs Animated — DJMaesen / bumstrum (CC-BY-4.0)
+
+**Required credit (verbatim, as the model's glTF `asset.extras` specifies):**
+
+> This work is based on "sawnoffs Animated"
+> (https://sketchfab.com/3d-models/sawnoffs-animated-001bec4277414a62bb8ad9b2a1a7abcb)
+> by DJMaesen (https://sketchfab.com/bumstrum) licensed under CC-BY-4.0
+> (http://creativecommons.org/licenses/by/4.0/)
+
+- **Licence:** [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/) —
+  attribution required, derivatives allowed, commercial use allowed.
+- **Author:** DJMaesen — https://sketchfab.com/bumstrum
+- **Source:** https://sketchfab.com/3d-models/sawnoffs-animated-001bec4277414a62bb8ad9b2a1a7abcb
+
+### What in this repo derives from it
+
+Used as a **mechanism and timing reference** for the break-open reload, read by
+decoding its animation channels rather than by importing its geometry.
+
+1. **`src/lab/sdf-zombie/webgpu/game-viewmodel.ts`** — the reload beat sheet.
+   Its `release`/`front`/`slug*`/`unloader` channels establish the order and
+   proportions the constants encode: the top lever throws before the barrels
+   move, the action opens to 45° over 0.33 s and shuts in 0.14 s, and the eject
+   is two-stage (a pure axial extraction, then a free tumble).
+2. **`scripts/model_grapeshot_shorty.py`** — the *arrangement* of the breech:
+   shells parented inside the swinging barrel group so they inherit the break
+   rotation, and an extractor that rides out with them and holds.
+
+Timings and part relationships are facts about a mechanism rather than
+copyrightable expression, so this section is provenance honesty as much as
+licence compliance.
+
+### What does NOT derive from it
+
+- **No geometry, mesh, texture, material or UV is copied.** The unmodified
+  original is committed at `docs/dev-notes/refs/sawnoffs_animated.glb`
+  (sha256 `410820c8…`) as a development reference, which CC-BY-4.0 permits given
+  the credit above. It is read only by inspection scripts, is not required to
+  build or run the game, and is not part of the shipped asset set — nothing
+  under `public/assets/` derives from its geometry.
+- **No dimensions are taken from it.** The reference is a dimensionally
+  accurate 12-gauge; Blud's sawed-off is deliberately ~1.8× heavier in section,
+  a fantasy silhouette that predates this reference and is unchanged by it.
+- Its rigged arms, hand skeleton and dual-wield arrangement are unused; Blud's
+  weapon is single, held in two goblin hands built from `characters/goblin.blob`.
