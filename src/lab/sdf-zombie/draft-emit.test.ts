@@ -530,4 +530,16 @@ describe('drafted chain closes', () => {
     // prove nothing.
     expect(checked).toBe(11);
   });
+
+  it('says where the skull line came from — the parent rig axis, not a principal axis', () => {
+    // axisFromParent was set on the assembler's internal Built record but
+    // dropped in assembly, so the statement claimed "medial axis of the
+    // skull cloud" for the very number that carries the crown extent — a lie
+    // about the source, which is the one thing a # fit: comment may not be.
+    const { text } = draftedRigling();
+    const skull = text.split('\n').find((l) => l.trim().startsWith('bone skull '));
+    expect(skull).toBeDefined();
+    expect(skull!).toContain("parent's rig axis");
+    expect(skull!).not.toContain('medial axis of the skull cloud');
+  });
 });

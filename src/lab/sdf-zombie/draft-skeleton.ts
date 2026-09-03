@@ -382,6 +382,12 @@ function fitPass(
      *  chain continues from `tail`, and the emitter names them in the `#
      *  fit:` comment so the artifact carries its own source. */
     chain?: { rigBone: string; scale: number; head: string; tail: string };
+    /** True for the skull leaf (SPECS.leafAxis): line is cloudAlongAxis down
+     *  the PARENT's rig direction, not a principal-axis fit. Carried into the
+     *  DraftBone so the emitter's `# fit:` source phrase tells the truth — a
+     *  spread property TypeScript does not check would otherwise vanish here
+     *  and the statement would claim "medial axis of the skull cloud". */
+    axisFromParent?: boolean;
     shared?: DraftSideFit;
     l?: DraftSideFit;
     r?: DraftSideFit;
@@ -639,6 +645,7 @@ function fitPass(
     bones.push({
       name: b.spec.name, parent, limb: b.spec.limb, line: b.line,
       ...(b.chain ? { chain: b.chain } : {}),
+      ...(b.axisFromParent ? { axisFromParent: true } : {}),
       ...(b.spec.name === 'pelvis'
         ? { at: headPoint(b.line)[1] } // the root hangs from its rig head joint; x/z are the parser's [0, at, 0]
         : {}),
