@@ -115,3 +115,49 @@ abs to this torso would produce a lumpier wrong drum. Order:
 
 Re-measure with the relief map at each step; it is the only instrument that
 sees any of this.
+
+## The tool
+
+Promoted out of a scratch probe, because the numbers above are quoted in
+`minotaur.blob`'s comments and a number nobody can reproduce is not a source:
+
+```bash
+npm run blob:relief -- minotaur --y 0.92:1.51 --x 0.24
+```
+
+`--abs` prints ref/body absolute z instead of the diff. It derives its scale
+from `globalScale` over the mapped bones — 1.56191 on the minotaur, which
+independently confirms that file's hand-computed 1.56122 to 0.04%.
+
+**It compares ABSOLUTE positions**, unlike `blob:depth`, which re-zeroes each
+subject to its own bounding box. That is the point — "the wall is 40 mm too
+far forward" is actionable and a normalised number is not — but it means the
+tool is only meaningful where the two subjects agree in pose. Every reference
+is T-posed and every `.blob` stands in some rest of its own, so in practice
+that is the TRUNK. Without a `--y` window it says so out loud rather than
+letting a −170 mm shin read as a sculpting error.
+
+## Round 5, and what it cost to learn
+
+| | mean \|diff\| over 143 torso cells |
+| --- | --- |
+| before | 21.6 mm |
+| **shipped** | **15.3 mm** |
+| unbounded optimum (rejected) | 14.2 mm |
+
+The unbounded fit wanted chest `wide` 2.08 (halfwidth 0.312) and traps at
+x ±0.322. It scored better and rendered as a **mushroom** — a flat cap with
+the arms hanging beneath it. The front wall is one view and cannot see that,
+so the search now runs inside bounds set by judgement; `wide` and trap `x`
+both sit pinned at their ceilings and the score still wants more.
+
+**A `box` does not help here.** I reached for one by hand assuming a rounded
+box would make a plateau an ellipse cannot. It scored worse, and the search
+then drove the knob to 0 from every start. A box's corners add ~27% more area
+than the ellipse of the same half-extents (4ab vs πab), which lands as volume
+where the mesh has none. Knob removed.
+
+Three lines moved: chest `wide` 1.40 → 1.700 and `deep` 1.70 → 1.620; waist
+`deep` 1.35 → 1.210 and `wide` 1.45 → 1.490; traps `offset` x 0.052 → 0.162.
+The traps mattered most — at 0.052 the two halves (halfwidth 0.361 each)
+overlapped into one mass filling the **throat**, where the mesh has a hollow.

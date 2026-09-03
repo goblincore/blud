@@ -124,10 +124,10 @@ body
   # centreline and behind at the flanks. The mesh is a broad flat-fronted
   # slab; this was a narrow dome. wide 1.40 -> 1.700 (halfwidth 0.210 ->
   # 0.255) and deep 1.70 -> 1.620 carries the mass out to where the mesh
-  # actually has it. Mean |diff| over 143 torso cells: 21.2mm -> 14.9mm.
+  # actually has it. Mean |diff| over 143 torso cells: 21.6mm -> 15.3mm.
   #
   # NOT the unbounded optimum. A free search wanted wide 2.08 (halfwidth
-  # 0.312) and scored 14.2mm; it rendered as a MUSHROOM — a flat cap with
+  # 0.312) and traps at x 0.322, and it rendered as a MUSHROOM — a flat cap with
   # the arms hanging beneath it. The front wall is one view and cannot see
   # that, so the search runs inside bounds set by judgement and `wide` sits
   # pinned at its ceiling. The score still wants more. It cannot have it.
@@ -136,7 +136,7 @@ body
   # every start: an ellipse beats a rounded box on this wall once width is
   # free. A box's corners add ~27% more area than the ellipse of the same
   #half-extents (4ab vs pi*ab), which lands as volume where the mesh has none.
-  # The remaining centreline error (+26 to +48mm at y 1.358-1.499) is the
+  # The remaining centreline error (+27 to +55mm at y 1.363-1.504) is the
   # STERNUM DIP — the mesh has an 18mm hollow between the pecs at y 1.405,
   # narrowing to a 5mm linea alba at 1.171. That is muscle relief, not
   # cross-section, and it is the next pass.
