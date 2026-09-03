@@ -328,7 +328,7 @@ fn fisheyeWarp(st: vec2<f32>, lens: vec3<f32>) -> vec2<f32> {
 npx vitest run src/lab/sdf-zombie/webgpu/fisheye.test.ts
 ```
 
-Expected: PASS, 14 tests.
+Expected: PASS, 15 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -732,12 +732,15 @@ In the `__sdfGame` object, directly after `setSmear: (v: number) => postAa.setSm
     },
     /** renderFovDeg is what is drawn, visibleFovDeg what reaches the
      *  screen (the warp crops the mid-edges), centerFovDeg what the
-     *  middle reads as. Tune against `visible`, not `render`. */
+     *  middle reads as. Tune against `visible`, not `render`.
+     *  Read the render FOV off the LENS, not off the camera: the lens
+     *  is what the blit actually applied, and the two could otherwise
+     *  drift through separate seams. */
     get fisheye() {
       return {
-        renderFovDeg: camera.fov,
+        renderFovDeg: postAa.lens.renderFovDeg,
         centerFovDeg,
-        visibleFovDeg: visibleFovDeg(camera.fov, postAa.lens),
+        visibleFovDeg: visibleFovDeg(postAa.lens),
         k: postAa.lens.k,
       };
     },
