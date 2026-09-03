@@ -658,6 +658,94 @@ The task that decides whether any of this actually happened. **Two gates**, beca
 - Create: `src/lab/sdf-zombie/melt-gate.test.ts`
 - Create: `scripts/melt-capture.mjs` (salvaged, then extended)
 
+#### Step 0 — fix what Task 3's captured frames revealed
+
+Task 3 wired the melt in and it IS visible — which is already more than the
+previous attempt ever achieved. But its frames show a giant flat-topped
+cylinder several metres across, not a puddle. Two causes, both real, and BOTH
+must be fixed before either gate means anything.
+
+**0a. `MELT_TUNING_BODY.fuseK` is far too large.** `march.wgsl.ts:878` records
+that `smin` scales k by 4 internally — "a cluster still bends the surface from
+4x the authored blendK away". Authored flesh blendK runs 0.007–0.02, so the
+plan's `fuseK: 0.11` gives ~0.44 m of blend support on every prim and the union
+balloons. Drop it to **0.045** as the new starting point (~0.18 m of support,
+still several times the authored values, which is what fuses limbs) and tune
+from captures.
+
+**0b. `applyMelt` leaves `clusters` stale — this is the flat-topped box.**
+`ClusterInfo` (`types.ts:299`) carries `center` and `radius`, and they feed two
+things: `fit()` (`zombie-gpu.ts:1270`) sizes the render proxy box from the
+cluster spheres, and the march culls prims against them. The Task 3 wiring
+passes `{...posed, prims: applyMelt(...)}`, so the prims melt while the
+clusters still describe a STANDING zombie. The result is the melted field
+clipped by the standing body's bounding box: flat top, straight sides,
+polygonal outline. It is not a shading artefact and it will not tune away.
+
+Add to `melt.ts`:
+
+```ts
+import type { ClusterInfo } from './types';
+
+/**
+ * Re-fit each cluster's bounding sphere to the MELTED prims it owns.
+ *
+ * Clusters are not decoration: fit() sizes the render proxy box from these
+ * spheres and the march culls prims against them, so a melted body carrying
+ * rest-pose clusters is marched inside a box shaped like the body it used to
+ * be — which is exactly the flat-topped cylinder Task 3 captured. id, limb,
+ * start, count and alive are carried through untouched; only the sphere moves.
+ */
+export function remeltClusters(
+  clusters: readonly ClusterInfo[],
+  prims: readonly Primitive[],
+): ClusterInfo[] {
+  return clusters.map(c => {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity;
+    let x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const p = prims[i];
+      if (!p) continue;
+      const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+      for (const e of [p.a, p.b]) {
+        x0 = Math.min(x0, e[0] - r); x1 = Math.max(x1, e[0] + r);
+        y0 = Math.min(y0, e[1] - r); y1 = Math.max(y1, e[1] + r);
+        z0 = Math.min(z0, e[2] - r); z1 = Math.max(z1, e[2] + r);
+      }
+    }
+    if (x1 < x0) return c; // empty cluster — leave it exactly as it was
+    const centre: Vec3 = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
+    // The sphere must CONTAIN the box, so it is the half-diagonal, not the
+    // half-width: a half-width sphere leaves the box corners outside it and
+    // the march culls the very prims that moved furthest.
+    const radius = Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2;
+    return { ...c, center: centre, radius };
+  });
+}
+```
+
+Tests for it: the sphere contains every melted endpoint of its own cluster;
+`id`/`limb`/`start`/`count`/`alive` survive unchanged; an empty cluster is
+returned untouched.
+
+Then change the Task 3 wiring in `lab-main.ts` so both bodies carry re-fitted
+clusters:
+
+```ts
+    if (meltState) {
+      const pp = applyMelt(posed.prims, meltState);
+      const cp = applyMelt(current.prims, meltState);
+      view.update(
+        { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp) },
+        { ...current, prims: cp, clusters: remeltClusters(current.clusters, cp) },
+      );
+    } else {
+      view.update(posed, current);
+    }
+```
+
+Re-capture after 0a and 0b before touching either gate. Report what changed.
+
 #### Gate A — geometric, in the suite
 
 - [ ] **Step A1: Write the gate test against the REAL zombie**
@@ -716,6 +804,11 @@ describe('MELT GATE — the end state must be shorter, wider and lower', () => {
 
     expect(h).toBeLessThanOrEqual(0.40);
     expect(w).toBeGreaterThanOrEqual(1.50);
+    // UPPER bound too. Task 3's frames showed a melt that passed every
+    // lower bound by turning the zombie into a flat disc several metres
+    // across — "wider" is only right up to a point, and a gate with no
+    // ceiling calls that a success.
+    expect(w).toBeLessThanOrEqual(3.00);
     expect(c).toBeLessThanOrEqual(0.25);
   });
 
@@ -793,7 +886,7 @@ Compare progress 1.0 against progress 0, print each ratio against its threshold,
 ```
 melt gate (pixels):
   height   0.31 x  (<= 0.40)  PASS
-  width    1.72 x  (>= 1.50)  PASS
+  width    1.72 x  (1.50 - 3.00)  PASS
   centroid 0.19 x  (<= 0.25)  PASS
 ```
 
