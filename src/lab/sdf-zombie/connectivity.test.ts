@@ -5,6 +5,7 @@ import { ZOMBIE } from './body';
 import { worldHitToWound, woundWorldPos } from './damage';
 import type { Wound } from './damage';
 import type { Vec3 } from './types';
+import { rotateYaw } from './gait';
 
 const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
 const torso = body.clusters.find(c => c.limb === 'torso')!;
@@ -150,7 +151,7 @@ describe('cutChains', () => {
 import {
   chainOrder, DISC_RING_SAMPLES, endpointGirth, JOINT_EPS, jointPoint,
 } from './connectivity';
-import { add, basisFromAxis, scale, sub } from './vec';
+import { add, basisFromAxis, normalize, scale, sub } from './vec';
 
 describe('hanging-arm anatomy regressions', () => {
   const arm = body.clusters.find(c => c.limb === 'armL')!;
@@ -290,5 +291,62 @@ describe('union-of-wounds severing', () => {
     expect(cutLimbs(body, [wA], torso.center)).not.toContain('armL');
     expect(cutLimbs(body, [wB], torso.center)).not.toContain('armL');
     expect(cutLimbs(body, [wA, wB], torso.center)).toContain('armL');
+  });
+});
+
+describe('severing at a nonzero body yaw (wound frames ride the turn, 2026-09-02)', () => {
+  // The heading rotation turns every posed prim rigidly about y. A wound
+  // stamped on that turned body carries the yaw (damage.ts de-yaws the
+  // basis), so connectivity must resolve its carve spheres with the SAME yaw
+  // when it runs on the turned prims — and with yaw 0 when it runs on the
+  // rest body, which IS the body frame. Both must sever.
+  const YAW = 2.4;
+  const turn = (p: Vec3): Vec3 => rotateYaw(p, YAW);
+  const turned = {
+    ...body,
+    prims: body.prims.map(p => ({ ...p, a: turn(p.a), b: turn(p.b) })),
+    clusters: body.clusters.map(c => ({ ...c, center: turn(c.center) })),
+  };
+  const turnedTorso = turned.clusters.find(c => c.limb === 'torso')!;
+  const root = turn(armRoot());
+  // The shoulder ball is a SPHERE — the prim shape whose frame is world-locked
+  // without the yaw. Stamp OFF its centre (7 cm along the neck toward the
+  // torso) so a wrong yaw actually moves the carve sphere: the blast still
+  // covers the root disc (0.07 + girth ~0.06 < 0.14) when placed right.
+  const toTorso = normalize(sub(turnedTorso.center, root));
+  const hit = add(root, scale(toTorso, 0.07));
+  const wound = worldHitToWound(turned.prims, hit, 0.14, 'blast', YAW);
+  const owner = turned.prims[wound.primIdx]!;
+
+  it('fixture: the wound rides a sphere prim', () => {
+    expect(owner.a).toEqual(owner.b);
+  });
+
+  it('the stamp round-trips on the turned body at the stamp yaw', () => {
+    const back = woundWorldPos(turned.prims, wound, YAW);
+    expect(Math.hypot(back[0] - hit[0], back[1] - hit[1], back[2] - hit[2])).toBeLessThan(1e-9);
+  });
+
+  it('cutLimbs on the TURNED body severs when told the yaw — and NOT at the wrong yaw', () => {
+    expect(cutLimbs(turned, [wound], turnedTorso.center, YAW)).toContain('armL');
+    // The frame mismatch the old game-actor note measured: the carve sphere
+    // swings about the shoulder ball's centre by the yaw and misses the neck.
+    expect(cutLimbs(turned, [wound], turnedTorso.center)).not.toContain('armL');
+  });
+
+  it('cutLimbs on the REST body (yaw 0 = the body frame) severs from the same wound', () => {
+    expect(cutLimbs(body, [wound], torso.center)).toContain('armL');
+  });
+
+  it('cutChains at the yaw agrees with cutChains on the rest body (engulfing elbow blast)', () => {
+    // An engulfing blast, so the single-sphere fast path decides and the
+    // 8-sample ring's basis choice (which rotates with the body) cannot.
+    const arm = body.clusters.find(c => c.limb === 'armL')!;
+    const order = chainOrder(body, arm);
+    const elbow = turn(jointPoint(body.prims[order[1]!]!, body.prims[order[2]!]!));
+    const w = worldHitToWound(turned.prims, elbow, 0.2, 'blast', YAW);
+    const rest = cutChains(body, [w]);
+    expect(rest.length).toBeGreaterThan(0);
+    expect(cutChains(turned, [w], YAW)).toEqual(rest);
   });
 });

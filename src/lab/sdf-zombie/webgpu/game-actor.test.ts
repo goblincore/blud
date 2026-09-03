@@ -20,6 +20,7 @@ import { createZombieActor } from './game-actor';
 import { ROOMS, FURNITURE, wanderBounds, spawnPoints } from './game-level';
 import { sdBody } from '../validate';
 import { woundWorldPos } from '../damage';
+import { rotateYaw } from '../gait';
 import { mulberry32 } from './game-weapon';
 import type { Vec3 } from '../types';
 
@@ -193,9 +194,10 @@ describe('pellet hits flow through the existing damage pipeline', () => {
     // (After the impulse shove the pose moves ~5 cm and the anchor rides it
     // — that is the wound staying ON the flesh, working as designed.)
     const w = actor.wounds()[0]!;
-    // Yaw 0 — the actor stamps on posed (world-space) prims; see game-actor's
-    // refreshWounds note. Passing the walk yaw here would double-rotate.
-    const back = woundWorldPos(before.prims, w, 0);
+    // The STAMP yaw: the actor stamps on posed (world-space) prims with the
+    // body's applied yaw — damage.ts only uses it to de-yaw the basis (the
+    // frame is still world), so stamp and upload must quote the same yaw.
+    const back = woundWorldPos(before.prims, w, yaw);
     expect(Math.hypot(back[0] - hit![0], back[1] - hit![1], back[2] - hit![2]))
       .toBeLessThan(1e-6);
     // And it RIDES the body: after a second of walking, the anchor moves with
@@ -392,5 +394,147 @@ describe('heavy-hit choreography (slug vs pellet)', () => {
       expect(a[0]).toBe(b[0]);
       expect(a[2]).toBe(b[2]);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wounds ride the body yaw (the billboarding regression, owner 2026-09-02).
+// A crater stamped on the zombie's BACK rotated round to the FRONT as the
+// zombie turned; head wounds behaved, torso and leg wounds did not. Every
+// torso blob is an axis-less SPHERE, so its wound frame is a fixed WORLD basis
+// unless the body yaw de-yaws it at stamp and re-yaws it at upload
+// (damage.ts frame()). The actor stamped AND uploaded at yaw 0, so the frame
+// never turned with the flesh. These gates read what refreshWounds actually
+// uploads — the shader's sphere centres — not the actor's intent.
+// ---------------------------------------------------------------------------
+describe('wounds ride the body yaw (billboarding regression)', () => {
+  function makeActor(id: number) {
+    const doc = parseBlob(zombieBlobSrc);
+    const face = compileFace(doc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const built = buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS, {});
+    const placed = translateBody(built, start);
+    const uploads: Vec3[][] = [];
+    const severs: string[] = [];
+    const view = {
+      ...stubView(),
+      setWounds: (worldPositions: Vec3[]) => { uploads.push(worldPositions.map(p => [...p] as Vec3)); },
+    };
+    const actor = createZombieActor({
+      id, room: room.id, body: placed, view: view as never,
+      start, seed: 1337 + (id + 1) * 101,
+      bounds: wanderBounds(room), furniture: [],
+      onSever: piece => severs.push(piece.limb),
+    });
+    for (let f = 0; f < 60; f++) actor.step(1 / 60); // settle into a walk
+    return { actor, uploads, severs };
+  }
+
+  /** March the posed field from `o` along `d` (lab-main's raycast). */
+  function raycast(actor: ReturnType<typeof makeActor>['actor'], o: Vec3, d: Vec3): Vec3 {
+    let t = 0;
+    for (let i = 0; i < 128 && t < 20; i++) {
+      const p: Vec3 = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+      const s = sdBody(p, actor.posed());
+      if (s < 0.002) return p;
+      t += Math.max(s, 0.002);
+    }
+    throw new Error('raycast missed the body');
+  }
+
+  /** The BODY's facing: the zombie is authored facing +z (its face prims sit
+   *  at +z) and the motion pipeline turns it by rotateYaw(·, bodyYaw). NOT
+   *  the player camera's (sin yaw, -cos yaw) — that convention is mirrored
+   *  in x relative to this one. */
+  const facing = (yaw: number): Vec3 => rotateYaw([0, 0, 1], yaw);
+
+  /** A hit on a TORSO SPHERE — the prim shape that billboarded. */
+  function torsoSphereHit(actor: ReturnType<typeof makeActor>['actor']): Vec3 {
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    // Approach from BEHIND the body so the hit lands on the back, chest
+    // height (1.2 m) — a real predictor-style surface hit.
+    const fwd = facing(actor.pose().yaw);
+    const o: Vec3 = [torso[0] - fwd[0] * 4, 1.2, torso[2] - fwd[2] * 4];
+    return raycast(actor, o, fwd);
+  }
+
+  it('the uploaded carve centre keeps its BODY-FRAME offset through a turn, and the world offset turns', () => {
+    const { actor, uploads } = makeActor(1);
+    const hit = torsoSphereHit(actor);
+    actor.hit(hit, [0, 0, -1]);
+    const w = actor.wounds()[0]!;
+    const owner0 = actor.posed().prims[w.primIdx]!;
+    expect(owner0.limb, 'fixture: the hit must bind to the torso').toBe('torso');
+    expect(owner0.a, 'fixture: the torso prim must be an axis-less sphere').toEqual(owner0.b);
+    expect(uploads.length).toBeGreaterThan(0);
+    const c0 = uploads[uploads.length - 1]![0]!;
+    const yaw0 = actor.pose().yaw;
+    // Body-frame offset of the uploaded sphere centre from its owning prim.
+    const off0 = rotateYaw([c0[0] - owner0.a[0], c0[1] - owner0.a[1], c0[2] - owner0.a[2]], -yaw0);
+
+    // Walk until the body has turned by more than a radian (up to 40 s).
+    let yaw1 = yaw0;
+    for (let f = 0; f < 60 * 40; f++) {
+      actor.step(1 / 60);
+      yaw1 = actor.pose().yaw;
+      if (Math.abs(Math.atan2(Math.sin(yaw1 - yaw0), Math.cos(yaw1 - yaw0))) > 1) break;
+    }
+    const dYaw = Math.atan2(Math.sin(yaw1 - yaw0), Math.cos(yaw1 - yaw0));
+    expect(Math.abs(dYaw), 'fixture: the wanderer must actually turn').toBeGreaterThan(1);
+
+    const owner1 = actor.posed().prims[w.primIdx]!;
+    const c1 = uploads[uploads.length - 1]![0]!;
+    const off1 = rotateYaw([c1[0] - owner1.a[0], c1[1] - owner1.a[1], c1[2] - owner1.a[2]], -yaw1);
+    // ON THE FLESH: the body-frame offset is exactly what was stamped.
+    expect(Math.hypot(off1[0] - off0[0], off1[1] - off0[1], off1[2] - off0[2])).toBeLessThan(1e-6);
+    // NOT BILLBOARDED: the world offset rotated with the body (a viewer-fixed
+    // crater would keep the same world offset from its sphere centre).
+    const wd0: Vec3 = [c0[0] - owner0.a[0], c0[2] - owner0.a[2], 0];
+    const wd1: Vec3 = [c1[0] - owner1.a[0], c1[2] - owner1.a[2], 0];
+    expect(Math.hypot(wd1[0] - wd0[0], wd1[1] - wd0[1])).toBeGreaterThan(0.05);
+  });
+
+  it('a wound stamped on the back stays on the back: the upload sits behind the torso, never in front', () => {
+    const { actor, uploads } = makeActor(2);
+    const hit = torsoSphereHit(actor);
+    actor.hit(hit, [0, 0, -1]);
+    const w = actor.wounds()[0]!;
+    for (let f = 0; f < 60 * 40; f++) {
+      actor.step(1 / 60);
+      const fwd = facing(actor.pose().yaw);
+      const owner = actor.posed().prims[w.primIdx]!;
+      const c = uploads[uploads.length - 1]![0]!;
+      // Behind = against the facing direction. The stamp was a back hit.
+      const along = (c[0] - owner.a[0]) * fwd[0] + (c[2] - owner.a[2]) * fwd[2];
+      expect(along, `frame ${f}: the back crater surfaced in front`).toBeLessThan(0);
+    }
+  });
+
+  it('a pellet storm still takes the arm off while the body is turned (yaw != 0)', () => {
+    // The old yaw-0 contract was defended by a measured failure ("worst
+    // neck-section sample stuck at 0.084 m > 0.055 m sphere radius") — a
+    // wound stamped at the walk yaw but resolved against the REST body with
+    // that same yaw. Stamp at the live yaw, resolve rest at yaw 0: severs.
+    const { actor, severs } = makeActor(1);
+    expect(Math.abs(actor.pose().yaw), 'fixture: the body must be turned').toBeGreaterThan(0.5);
+    const rng = mulberry32(20260902);
+    let fired = 0;
+    while (actor.posed().clusters.find(c => c.limb === 'armL')!.alive && fired < 40) {
+      const cl = actor.posed().clusters.find(c => c.limb === 'armL')!;
+      let top: Vec3 = [0, -Infinity, 0];
+      for (let i = cl.start; i < cl.start + cl.count; i++) {
+        const p = actor.posed().prims[i]!;
+        if (p.op === 'sub' || p.dead) continue;
+        for (const e of [p.a, p.b]) if (e[1] > top[1]) top = [...e] as Vec3;
+      }
+      actor.hit([
+        top[0] + (rng() - 0.5) * 2 * 0.09,
+        top[1] + (rng() - 0.5) * 2 * 0.09,
+        top[2] + (rng() - 0.5) * 2 * 0.09,
+      ], [0, -0.1, -1]);
+      fired++;
+    }
+    expect(severs, `arm still attached after ${fired} pellets at yaw ${actor.pose().yaw.toFixed(2)}`).toContain('armL');
   });
 });

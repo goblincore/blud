@@ -94,9 +94,15 @@ early-Z, which phase 0 deliberately does not claim (shipped `depthNode` + `disca
 kept), and the per-hit shading reduction (tier-2 post-hit prim narrowing) helps both
 renderers equally.
 
-## Verdict
+## Verdict — PARKED (owner, 2026-09-02)
 
-_pending owner_ — the look gate is theirs; the cost picture above is the honest input.
+"The hull still has annoying visual glitches so I think we might have to park it for
+now since it doesn't seem to offer much benefit at the moment. Maybe with crowds yes…
+we can wrap up for now and revisit later." The one-body bench is a wash and the
+owner's own tab still showed glitches the headless captures did not; nothing here
+justifies phase 2 work today. Everything stays on the branch behind the page toggle
+(`march` default) — the renderer, kernels, seams, driver and reel are ready if the
+crowd case (early-Z) is ever worth building.
 
 ## If it continues (phase 2 candidates, in order of expected value)
 

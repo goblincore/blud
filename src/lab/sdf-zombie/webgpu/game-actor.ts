@@ -234,25 +234,38 @@ export function createZombieActor(opts: {
    *  + max depth), which clips the sphere's reach so a crater on thin flesh
    *  floors before it perforates. Skipped entirely while there are no wounds
    *  (the common case), and tolerant of stub views without the method.
-   *  YAW 0, ALWAYS: the game page stamps wounds on APPLYRIG OUTPUT, whose
-   *  prim axes are already world space. frame() would rotate the basis a
-   *  SECOND time by bodyYaw, and connectivity.ts resolves carve spheres at
-   *  yaw 0 — any other value displaces every carve sphere by the whole walk
-   *  yaw and silently disarms severing (measured: worst neck-section sample
-   *  stuck at 0.084 m > the 0.055 m sphere radius no matter how many pellets
-   *  landed). Stamp/upload/resolve must agree on ONE frame; here that is
-   *  posed-prims-at-yaw-0. */
+   *
+   *  THE WOUND FRAME IS THE BODY FRAME (2026-09-02, the billboarding fix).
+   *  Wounds are stamped on APPLYRIG OUTPUT (posed, world-space prims) WITH
+   *  the live bodyYaw, and uploaded from the posed prims WITH the live
+   *  bodyYaw. damage.ts does not rotate a world basis by the yaw — it uses
+   *  the yaw to pick a canonical BODY-FRAME basis (de-yaw the prim axis,
+   *  build the basis, re-yaw), so `local` comes out in the body frame and
+   *  the frame turns with the flesh. Without it, every SPHERE prim (all four
+   *  torso blobs, the shoulder balls) has no axis to carry the turn and its
+   *  crater stayed viewer-fixed while the body rotated under it — the
+   *  owner's back-wound-rotates-to-the-front report; head wounds ride the
+   *  orient quat and were fine, limb capsules carry it in their axis.
+   *
+   *  SEVERING STAYS AT YAW 0 ON PURPOSE: runSeverChecks resolves the carve
+   *  spheres against `current`, the REST body, which IS the body frame —
+   *  yaw 0 there is the same frame as yaw θ on the posed prims. The old
+   *  yaw-0-everywhere rule was defended by a measured failure ("worst
+   *  neck-section sample stuck at 0.084 m > 0.055 m") that came from quoting
+   *  the walk yaw against the REST body — a frame mismatch, not a reason to
+   *  stamp at 0. Stamp(posed, θ) / upload(posed, θ) / resolve(rest, 0): one
+   *  frame, three views of it. Same wiring as webgpu/lab-main's hero. */
   function refreshWounds() {
     if (wounds.length === 0 || typeof opts.view.setWounds !== 'function') return;
     opts.view.setWounds(
-      wounds.map(w => woundWorldPos(posed.prims, w, 0)),
+      wounds.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
       wounds.map(w => w.ageSec),
       wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
       wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
       wounds.map(w => {
-        const n = woundCarveNormal(posed.prims, w, 0);
+        const n = woundCarveNormal(posed.prims, w, bodyYaw);
         return n ? { n, depth: w.carveDepth ?? 0 } : null;
       }),
     );
@@ -435,20 +448,21 @@ export function createZombieActor(opts: {
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
-    // Yaw 0 — see refreshWounds: posed prims are already world space.
+    // Stamped at the live yaw `posed` was built with — see refreshWounds.
     const field = posed;
-    return applyProjectileHit(woundFromPellet(field.prims, hitWorld, 0, p => sdBody(p, field)), hitWorld, dirWorld);
+    return applyProjectileHit(woundFromPellet(field.prims, hitWorld, bodyYaw, p => sdBody(p, field)), hitWorld, dirWorld);
   }
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
     const field = posed;
-    return applyProjectileHit(woundFromSlug(field.prims, hitWorld, p => sdBody(p, field)), hitWorld, dirWorld);
+    return applyProjectileHit(woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw), hitWorld, dirWorld);
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
     for (const w of blastWounds) {
-      // Yaw 0 — resolveExplosion stamped these in posed-prims-at-yaw-0 space,
-      // the same single frame every other stamper here uses.
+      // The caller must have resolved these with this actor's pose().yaw
+      // (ExplosionBody.bodyYaw) so they sit in the body frame like every
+      // other wound in the ring — see refreshWounds.
       wounds = pushWound(wounds, w, MAX_WOUNDS);
       pendingWounds.push(w);
     }

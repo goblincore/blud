@@ -41,12 +41,16 @@ interface CarveSphere {
   radius: number;
 }
 
-/** All cutting wounds of a wound list, resolved to world space, once per call. */
-function carveSpheres(prims: Primitive[], wounds: Wound[]): CarveSphere[] {
+/** All cutting wounds of a wound list, resolved to world space, once per call.
+ *  `bodyYaw` is the yaw the prims are POSED at (damage.ts woundWorldPos): the
+ *  REST body is the body frame, yaw 0 — the actor resolves there — while a
+ *  posed, turned body (resolveExplosion runs on one) must quote its yaw or
+ *  every sphere-bound carve sphere lands rotated about its prim centre. */
+function carveSpheres(prims: Primitive[], wounds: Wound[], bodyYaw = 0): CarveSphere[] {
   const out: CarveSphere[] = [];
   for (const w of wounds) {
     if (w.type === 'burn') continue;
-    out.push({ centre: woundWorldPos(prims, w), radius: w.severRadius ?? w.radius });
+    out.push({ centre: woundWorldPos(prims, w, bodyYaw), radius: w.severRadius ?? w.radius });
   }
   return out;
 }
@@ -137,8 +141,10 @@ export function chainOrder(
  */
 export function cutLimbs(
   body: BuildResult, wounds: Wound[], torsoCentre: Vec3,
+  /** The yaw `body` is posed at — 0 for the rest body (see carveSpheres). */
+  bodyYaw = 0,
 ): LimbId[] {
-  const spheres = carveSpheres(body.prims, wounds);
+  const spheres = carveSpheres(body.prims, wounds, bodyYaw);
   if (spheres.length === 0) return [];
   const out: LimbId[] = [];
 
@@ -193,8 +199,8 @@ export interface ChainCut {
  * does the head: the head stays whole (face carves + the intact bouncing
  * head are Blood signatures, gore-feel spec §1).
  */
-export function cutChains(body: BuildResult, wounds: Wound[]): ChainCut[] {
-  const spheres = carveSpheres(body.prims, wounds);
+export function cutChains(body: BuildResult, wounds: Wound[], bodyYaw = 0): ChainCut[] {
+  const spheres = carveSpheres(body.prims, wounds, bodyYaw);
   if (spheres.length === 0) return [];
   const torso = body.clusters.find(c => c.limb === 'torso');
   if (!torso) return [];

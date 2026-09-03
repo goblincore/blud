@@ -82,9 +82,13 @@ export class BleedRegistry {
  */
 export function woundEmitAnchorAndNormal(
   prims: Primitive[], wound: Wound,
+  /** The yaw `prims` are posed at — the actor's live pose().yaw. Sphere-bound
+   *  wounds (every torso blob) have no axis to carry the turn, so without it
+   *  the anchor stays viewer-fixed while the flesh turns (2026-09-02). */
+  bodyYaw = 0,
 ): { anchor: Vec3; normal: Vec3 } {
-  const anchor = woundWorldPos(prims, wound, 0);
-  const inward = woundCarveNormal(prims, wound, 0);
+  const anchor = woundWorldPos(prims, wound, bodyYaw);
+  const inward = woundCarveNormal(prims, wound, bodyYaw);
   if (inward) return { anchor, normal: scale(inward, -1) };
   const prim = prims[wound.primIdx]!;
   const axis: Vec3 = sub(prim.b, prim.a);
