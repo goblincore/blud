@@ -20,6 +20,32 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[ ] F-eject.1 — spent cases clip through the frame, and every reload throws
+them identically.** Owner, 2026-09-03, after the breech merge: "the shells
+eject but seem to clip through the gun frame so there needs to be some tweaking
+there. also they always eject the same animation would be better to have some
+randomness but not a blocker." Two separate things. The clip is a collision the
+hand-off does not test for — `ejectedShell()` is a pure ballistic arc from the
+breech with no awareness of the receiver it passes over, and the gate only
+checks where a case STARTS (within 5 cm of a chamber mouth), not where it
+travels. The sameness is `ejectedShell()` being deterministic by design
+(`game-viewmodel.ts`: "same reload, same arc, every time") — which was the right
+call for gating and the wrong one for feel. Randomising it means the eject gate
+needs a seed it can pin, or it becomes flaky.
+
+**[ ] F-eject.2 — fresh shells still appear from nowhere.** Owner: "new shells
+magically appear to load. this is a gap in the spec." Correct, and the spec
+names it: the load beat carries the cases up with the support hand but never
+shows them being *inserted*. The Doom reload the tempo was taken from has the
+left hand jamming two shells into the barrels. Owner's read on difficulty, which
+matches mine: the hand is a blobby orb so the ANIMATION is not the hard part —
+the timing against the 1.30 s beat sheet and keeping the fresh cases from
+clipping the barrels on the way in are. Note the reference GLB
+(`docs/dev-notes/refs/sawnoffs_animated.glb`) does NOT solve this: its slugs
+simply reappear seated at t=1.933, which is why our support hand was kept over
+its approach in the first place. So this one has no reference to decode — it
+has to be authored.
+
 **SHORTY BREECH MECHANISM — DONE (2026-09-03), all 8 tasks** —
 [plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·
 [spec](docs/superpowers/specs/2026-09-03-shorty-breech-mechanism-design.md).
