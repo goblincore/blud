@@ -26,11 +26,17 @@ export const FREE_AIM = {
   turnRateY: 1.25,
   /** Reticle travel per mouse pixel, in half-viewport units. */
   sensitivity: 0.0042,
-  /** How far the weapon swings when the reticle is at the edge, degrees. Less
-   *  than the reticle's own excursion: the gun leans toward the target, it does
-   *  not literally point at it, or the model leaves the frame. */
-  weaponYawDeg: 15,
-  weaponPitchDeg: 10,
+  /** How much of the reticle's TRUE angle the weapon takes up, 0..1. 1 = the
+   *  barrel points exactly at the reticle.
+   *
+   *  These were absolute degree caps (15 and 10). A cap cannot track a reticle
+   *  whose own excursion depends on the aspect ratio: at 790x555 the reticle
+   *  reaches 47.5 deg off-axis, so the gun was pointing 32.5 deg away from
+   *  where the player was aiming, worst exactly at the edges. As a FRACTION
+   *  the knob still tunes the feel but can no longer reintroduce a mismatch --
+   *  1.0 is "aimed", and there is nothing above it. */
+  weaponYawFrac: 1.0,
+  weaponPitchFrac: 1.0,
   /** How fast the weapon catches up to the reticle, 1/seconds. Lag is the
    *  point -- an instant weapon reads as a cursor with a gun sprite glued on. */
   weaponLag: 9.0,
@@ -76,11 +82,25 @@ export function turnFromAim(aim: AimPoint, dt: number): { yaw: number; pitch: nu
   };
 }
 
-/** Where the weapon should be pointing for a given reticle, degrees. */
-export function weaponAngles(aim: AimPoint): { yawDeg: number; pitchDeg: number } {
+/** Half-angle tangents of the live camera frustum. tanV = tan(fovY/2),
+ *  tanH = tanV * aspect. The caller owns the camera, so it passes these in
+ *  rather than this module importing Three.js. */
+export interface Frustum { tanH: number; tanV: number; }
+
+/**
+ * Where the weapon must point to be aimed AT the reticle, degrees.
+ *
+ * The reticle is a SCREEN position, so its angle off the view axis is
+ * atan(normalised * tan(halfFov)) -- not a linear fraction of some fixed
+ * maximum. That distinction is the whole bug: a linear 15 deg cap and a
+ * genuinely 47.5 deg reticle disagree most exactly where the player is
+ * looking hardest.
+ */
+export function weaponAngles(aim: AimPoint, f: Frustum): { yawDeg: number; pitchDeg: number } {
+  const deg = 180 / Math.PI;
   return {
-    yawDeg: -aim.x * FREE_AIM.weaponYawDeg,
-    pitchDeg: aim.y * FREE_AIM.weaponPitchDeg,
+    yawDeg: -Math.atan(aim.x * f.tanH) * deg * FREE_AIM.weaponYawFrac,
+    pitchDeg: Math.atan(aim.y * f.tanV) * deg * FREE_AIM.weaponPitchFrac,
   };
 }
 

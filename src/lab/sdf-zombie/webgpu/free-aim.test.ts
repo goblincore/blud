@@ -65,17 +65,35 @@ describe('turnFromAim', () => {
 });
 
 describe('weaponAngles', () => {
-  it('leans the weapon toward the reticle', () => {
-    expect(weaponAngles({ x: 1, y: 0 }).yawDeg).toBeLessThan(0);
-    expect(weaponAngles({ x: -1, y: 0 }).yawDeg).toBeGreaterThan(0);
-    expect(weaponAngles({ x: 0, y: 1 }).pitchDeg).toBeGreaterThan(0);
+  // 790x555 canvas at a 75 deg VERTICAL fov -- the capture in fpvbugs.mov.
+  const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
+
+  it('leans away from the reticle side, so the gun swings toward it', () => {
+    expect(weaponAngles({ x: 1, y: 0 }, F).yawDeg).toBeLessThan(0);
+    expect(weaponAngles({ x: -1, y: 0 }, F).yawDeg).toBeGreaterThan(0);
+    expect(weaponAngles({ x: 0, y: 1 }, F).pitchDeg).toBeGreaterThan(0);
   });
-  it('is centred when the reticle is centred', () => {
-    expect(weaponAngles({ x: 0, y: 0 })).toEqual({ yawDeg: -0, pitchDeg: 0 });
+  it('is level with the reticle centred', () => {
+    const w = weaponAngles({ x: 0, y: 0 }, F);
+    expect(w.yawDeg).toBeCloseTo(0, 9);
+    expect(w.pitchDeg).toBeCloseTo(0, 9);
   });
-  it('swings LESS than the reticle travels, so the gun stays in frame', () => {
-    expect(FREE_AIM.weaponYawDeg).toBeLessThan(45);
-    expect(Math.abs(weaponAngles({ x: 1, y: 0 }).yawDeg)).toBe(FREE_AIM.weaponYawDeg);
+  it('POINTS AT the reticle at the edge -- 47.5 deg, not the old 15 deg cap', () => {
+    const yaw = Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg);
+    expect(yaw).toBeCloseTo(Math.atan(F.tanH) * 180 / Math.PI, 4);
+    expect(yaw).toBeGreaterThan(45);
+  });
+  it('tracks the reticle exactly at every position, not just the edge', () => {
+    for (const x of [0.2, 0.5, 0.8, 1.0]) {
+      const want = Math.atan(x * F.tanH) * 180 / Math.PI;
+      expect(Math.abs(weaponAngles({ x, y: 0 }, F).yawDeg)).toBeCloseTo(want, 6);
+    }
+  });
+  it('scales by the tuning fraction, which cannot exceed pointing exactly', () => {
+    const full = Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg);
+    FREE_AIM.weaponYawFrac = 0.5;
+    expect(Math.abs(weaponAngles({ x: 1, y: 0 }, F).yawDeg)).toBeCloseTo(full * 0.5, 6);
+    FREE_AIM.weaponYawFrac = 1.0;
   });
 });
 

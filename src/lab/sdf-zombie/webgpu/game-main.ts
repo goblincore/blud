@@ -2158,7 +2158,10 @@ async function main() {
         Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
     }
     {
-      const w = freeAimOn ? weaponAngles(aim) : { yawDeg: 0, pitchDeg: 0 };
+      const tanV = Math.tan((camera.fov * Math.PI) / 360);
+      const w = freeAimOn
+        ? weaponAngles(aim, { tanV, tanH: tanV * camera.aspect })
+        : { yawDeg: 0, pitchDeg: 0 };
       weaponYawDeg = approachAngle(weaponYawDeg, w.yawDeg, dt);
       weaponPitchDeg = approachAngle(weaponPitchDeg, w.pitchDeg, dt);
     }
