@@ -57,6 +57,24 @@ Bone through intact skin anywhere: **none seen**.
 - Tubes-on vs field frames at 1.2–2 m from a zombie, front and angled, with and without slugs: no bone through intact skin anywhere; frames indistinguishable.
 - NOT demonstrated by the reviewer: bone visible INSIDE a cavity on both paths — the headless shots never framed an open crater (slugs landed on the far side). The dispatch agent's reel reports cavities reading as dark red in both legs at capture distance. Owner to confirm in-tab: `__sdfGame.setBoneMesh(true)`, put two slugs in a chest at close range, toggle.
 
+## Owner's first look (2026-09-03) and the two fixes it drove
+
+Owner: functionally fine (nothing through skin) but the cavity looked WORSE than the
+field bone, and "the ribcage structure seems way off… ribs aren't properly connected".
+
+1. **Ribs were not rigid.** `rig-bind.ts` bound each bone endpoint to its own nearest
+   joint; on the zombie six torso bones (the rib pairs, sternum sides) spanned a spine
+   joint and a hip/shoulder joint, so their tips swung with the gait and the cage
+   pulled apart. Field shading inside cavities hid it; tubes showed it. Fix: torso and
+   head bones bind BOTH ends to the joint nearest their midpoint (rigid with the spine
+   segment); limb bones keep the two-joint span. Pinned in `rig-bind-bones.test.ts`.
+   `rib-diag/sheet.png`: skeleton mid-walk from both sides, cage intact.
+2. **Cavity shading.** The tube shader was Lambert + 0.06 ambient — near black in a
+   cavity beside flesh that gets the enclosure ambient, wet specular, fresnel and the
+   blood stain. Now: ambient fill from the enclosure (fill·key + bounce-weighted mean
+   wall albedo), wrapped diffuse, wet specular + fresnel with a blood-tinted highlight,
+   and a 0.45 stain toward deepColor. Owner to re-judge in-tab.
+
 ## Verdict
 
 _pending owner_ — ships OFF until then (`__sdfGame.setBoneMesh(true)` to try).

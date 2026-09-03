@@ -144,7 +144,19 @@ export function bindRig(body: BuildResult): BoundRig {
   return {
     rig,
     binding: body.prims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })),
-    boneBinding: body.bonePrims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })),
+    // BONE prims: torso and head bones bind BOTH ends to the ONE joint nearest
+    // the bone's midpoint, so a rib is rigid with its spine segment. Per-end
+    // nearest-joint binding put a rib's tip on a hip or shoulder joint (zombie:
+    // six torso bones spanned two joints) and the ribcage sheared apart under
+    // the gait — invisible while bone was field-shaded inside cavities, obvious
+    // once bone tubes drew it (owner, 2026-09-03). Limb bones legitimately span
+    // two joints (upper arm: shoulder -> elbow) and keep the per-end bind.
+    boneBinding: body.bonePrims.map(p => {
+      if (p.limb !== 'torso' && p.limb !== 'head') return { a: bindEnd(p.a), b: bindEnd(p.b) };
+      const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+      const j = bindEnd(mid).point;
+      return { a: { point: j, offset: sub(p.a, positions[j]!) }, b: { point: j, offset: sub(p.b, positions[j]!) } };
+    }),
     head,
   };
 }

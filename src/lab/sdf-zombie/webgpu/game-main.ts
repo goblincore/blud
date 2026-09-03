@@ -949,6 +949,18 @@ async function main() {
     boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
     boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
     boneInstancer.uniforms.boneColor.value.copy(v.boneColor.value);
+    boneInstancer.uniforms.deepColor.value.copy(v.deepColor.value);
+    // Ambient fill: the enclosure's mean wall albedo weighted by the bounce
+    // probe weight, on top of the preset's fill — a cheap stand-in for the
+    // march's ambientAt probe so cavity bone sits in the same light as flesh.
+    {
+      const walls = [v.wallNegX, v.wallPosX, v.wallNegY, v.wallPosY, v.wallNegZ, v.wallPosZ].map(w => w.value);
+      let mr = 0, mg = 0, mb = 0;
+      for (const c of walls) { mr += c.r / 6; mg += c.g / 6; mb += c.b / 6; }
+      const fill = v.lightCfg.value.y, key = v.keyColor.value, pw = v.bounceCfg.value.x;
+      boneInstancer.uniforms.ambient.value.setRGB(
+        fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
+    }
   }
 
   /** The wound panel's boneRatio lever (applyWoundTuning calls this). Bones
