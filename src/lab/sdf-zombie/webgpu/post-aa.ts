@@ -63,6 +63,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
+import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -212,14 +213,33 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
   srcTex: texture_2d<f32>,
   texCoord: vec2<f32>,
   cfg: vec4<f32>,
-  dstSize: vec2<f32>
+  dstSize: vec2<f32>,
+  lens: vec3<f32>
 ) -> vec4<f32> {
   var st = texCoord;
   if (cfg.x > 0.5) { st.y = 1.0 - st.y; }
   let srcDims = vec2<f32>(textureDimensions(srcTex, 0));
   let maxP = vec2<i32>(srcDims) - vec2<i32>(1, 1);
   var c: vec3<f32>;
-  if (cfg.z > 0.5) {
+  if (lens.x > 0.0) {
+    // FISHEYE. Four rotated-grid taps a quarter of a DESTINATION pixel apart,
+    // each warped independently: where the lens minifies, the warp itself
+    // spreads the taps further apart in the source, so the average is a
+    // prefilter that costs no Jacobian maths. Supersedes sharp mode (cfg.z),
+    // whose fractional ramp assumes an axis-aligned uniform magnification the
+    // warp does not provide.
+    var offs: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
+      vec2<f32>( 0.125,  0.375), vec2<f32>( 0.375, -0.125),
+      vec2<f32>(-0.125, -0.375), vec2<f32>(-0.375,  0.125));
+    let texel = vec2<f32>(1.0, 1.0) / dstSize;
+    var acc = vec3<f32>(0.0, 0.0, 0.0);
+    for (var i: i32 = 0; i < 4; i = i + 1) {
+      let warped = fisheyeWarp(st + offs[i] * texel, lens);
+      let wp = clamp(vec2<i32>(floor(warped * srcDims)), vec2<i32>(0, 0), maxP);
+      acc = acc + postAaFetch(srcTex, wp, cfg.y, maxP);
+    }
+    c = acc * 0.25;
+  } else if (cfg.z > 0.5) {
     let dstPx = floor(st * dstSize);
     let g = (dstPx + vec2<f32>(0.5, 0.5)) * (srcDims / dstSize);
     let ratio = dstSize / srcDims;
@@ -268,7 +288,9 @@ fn postAaFetch(srcTex: texture_2d<f32>, idx: vec2<i32>, isDisplay: f32, maxP: ve
   let c = textureLoad(srcTex, clamp(idx, vec2<i32>(0, 0), maxP), 0).rgb;
   if (isDisplay > 0.5) { return c; }
   return postAaOetf(c);
-}`;
+}
+
+` + FISHEYE_WGSL;
 
 /** three 0.185 types wgslFn's result as a plain Node; this keeps the swizzles honest. */
 type Swizzled = { xyz: unknown };

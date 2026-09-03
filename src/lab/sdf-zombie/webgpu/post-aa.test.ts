@@ -252,3 +252,34 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(post.smear).toBe(0);
   });
 });
+
+describe('post-aa fisheye in the blit', () => {
+  it('the blit takes a lens parameter', () => {
+    expect(POST_AA_BLIT_WGSL).toMatch(/lens\s*:\s*vec3<f32>/);
+  });
+
+  it('carries the fisheye helper, and still starts with its own main fn', () => {
+    // three anchors the wgslFn parse to ^, so the helper must be APPENDED.
+    expect(/^fn\s+postAaBlit\s*\(/.test(POST_AA_BLIT_WGSL)).toBe(true);
+    expect(POST_AA_BLIT_WGSL).toContain('fn fisheyeWarp(');
+    expect(POST_AA_BLIT_WGSL.indexOf('fn fisheyeWarp('))
+      .toBeGreaterThan(POST_AA_BLIT_WGSL.indexOf('fn postAaBlit('));
+  });
+
+  it('supersedes sharp mode rather than stacking with it', () => {
+    // The warped branch is taken FIRST; sharp's fractional ramp assumes an
+    // axis-aligned magnification the warp does not provide.
+    const warpAt = POST_AA_BLIT_WGSL.indexOf('if (lens.x > 0.0)');
+    const sharpAt = POST_AA_BLIT_WGSL.indexOf('} else if (cfg.z > 0.5)');
+    expect(warpAt).toBeGreaterThan(-1);
+    expect(sharpAt).toBeGreaterThan(warpAt);
+  });
+
+  it('prefilters the warped fetch with four taps', () => {
+    // Pinning the corner minifies the periphery ~2x; a single point fetch
+    // there shimmers. Four rotated-grid taps, warped independently, spread
+    // themselves by the local Jacobian for free.
+    expect(POST_AA_BLIT_WGSL).toContain('var offs: array<vec2<f32>, 4>');
+    expect(POST_AA_BLIT_WGSL).toContain('acc * 0.25');
+  });
+});
