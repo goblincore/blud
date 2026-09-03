@@ -36,8 +36,9 @@ import {
   weaponAngles, weaponSlide, type AimPoint, type Frustum,
 } from './free-aim';
 import {
-  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
-  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
+  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, CHAMBER_DEPTH_M, ejectedShell,
+  extractStage, extractorOffset, fireRecoil, flashEnvelope, loadShellTravel,
+  magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose, topLeverAngle,
 } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
@@ -1094,6 +1095,16 @@ async function main() {
   /** The GLB's own muzzle locators, kept so muzzleWorld() can read their LIVE
    *  world position each shot rather than a position sampled once at load. */
   let muzzleNodes: THREE.Object3D[] = [];
+  /** Driven GLB nodes. Shells and the extractor live INSIDE Barrels, so they
+   *  inherit the break rotation and the runtime only ever writes their LOCAL
+   *  position -- no rotated basis is computed anywhere. */
+  let shellNodes: THREE.Object3D[] = [];
+  let breechNodes: THREE.Object3D[] = [];
+  let extractorNode: THREE.Object3D | null = null;
+  let topLeverNode: THREE.Object3D | null = null;
+  /** Each shell's seated local position, so the extract slide is a delta. */
+  const shellRestZ: number[] = [];
+  let extractorRestZ = 0;
   let gripHandGroup: THREE.Group | null = null;
   let foreHandGroup: THREE.Group | null = null;
   let gunGroup: THREE.Group | null = null;
@@ -1139,6 +1150,21 @@ async function main() {
     if (!found) return false;
     viewModelAnchor.updateMatrixWorld(true);
     out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
+    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    return true;
+  }
+  /** A breech locator's position in aim-rig space RIGHT NOW. Unlike
+   *  locatorInView this is called every frame, so it assumes the caller has
+   *  already refreshed the view-model's matrices this frame.
+   *
+   *  This is what replaces the hardcoded breech vector. That constant was both
+   *  4 cm right of the real chambers (it predated the gun being centred) and
+   *  static, so it could not follow the barrels through their swing -- which is
+   *  the whole of "the shells don't come out of the right location". */
+  function breechInRig(i: 0 | 1, out: THREE.Vector3): boolean {
+    const n = breechNodes[i];
+    if (!n) return false;
+    n.getWorldPosition(out);
     (aimRig ?? viewModelAnchor).worldToLocal(out);
     return true;
   }
@@ -1204,6 +1230,20 @@ async function main() {
     if (!barrels || !hingeNode) {
       throw new Error('[sdf-game] shorty-double.glb is missing Barrels/Hinge nodes');
     }
+    // Every moving part is a named node. A missing one must be LOUD: silently
+    // skipping it presents as a reload that animates and moves nothing, which
+    // is precisely the class of bug this whole change exists to remove.
+    const need = (n: string): THREE.Object3D => {
+      const o = gltf.scene.getObjectByName(n);
+      if (!o) throw new Error(`[sdf-game] shorty-double.glb is missing the ${n} node`);
+      return o;
+    };
+    shellNodes = [need('Shell_L'), need('Shell_R')];
+    breechNodes = [need('Breech_L'), need('Breech_R')];
+    extractorNode = need('Extractor');
+    topLeverNode = need('TopLever');
+    for (const s of shellNodes) shellRestZ.push(s.position.z);
+    extractorRestZ = extractorNode.position.z;
     // Rotate about the HINGE, not about the barrel node's own origin -- the
     // latter would swing the barrels through the frame. Standard fix: a pivot
     // group parked at the hinge, with the barrels offset back by the same
