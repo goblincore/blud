@@ -1823,22 +1823,29 @@ describe('metal modifier (hard-surface task 2)', () => {
 
   it('suppresses the whole diffuse family to a floor, not to zero', () => {
     // A pure-metal term in a shader with no environment map goes black
-    // wherever the highlight is not, and the lab has one key. 0.25 is the
-    // floor the render A/B settled on (see the task 2 report): the plate
-    // keeps its form under the key's falloff while the specular clearly
-    // dominates. Multiplying the whole `albedo * (amb + diff...)` family —
+    // wherever the highlight is not, and the lab has one key. Rendered
+    // curve (12-frame turntable, 2026-09-03): 0.25 went BLACK at the front
+    // yaw; 0.35 kept slab forms but the front still read near-black; 0.45
+    // keeps the greave's specular gradient AND a readable front face, so
+    // 0.45 ships. Multiplying the whole `albedo * (amb + diff...)` family —
     // ambient bounce included — because bounce IS diffuse.
     expect(SHADE_BODY).toContain(
-      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.25, metal)');
+      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)');
   });
 
-  it('tints the specular AND the fresnel rim by the prim albedo', () => {
+  it('tints the specular AND the fresnel rim by the prim albedo, at steel F0', () => {
     // The single change that makes metal read as metal: the highlight takes
     // the prim's colour instead of the light's, so steel differs from white
-    // plastic under the same key. The tint multiplies BOTH the tight
-    // specular and the fresnel rim — metals tint their grazing reflection
-    // too — and never the wound/gore wet or scatter terms.
+    // plastic under the same key. The tint is NOT the raw albedo — that
+    // rendered the plates black (0.17 linear luminance killed the
+    // highlight; frame-00 A/B) — it is the albedo hue with luminance
+    // renormalised to polished steel's ~56% normal-incidence reflectance.
+    // The tint multiplies BOTH the tight specular and the fresnel rim —
+    // metals tint their grazing reflection too — and never the wound/gore
+    // wet or scatter terms.
     expect(SHADE_BODY).toContain(
-      'mix(vec3<f32>(1.0), primAlbedo, metal) * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
+      'let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));');
+    expect(SHADE_BODY).toContain(
+      'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
   });
 });

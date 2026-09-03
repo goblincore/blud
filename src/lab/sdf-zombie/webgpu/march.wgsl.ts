@@ -2439,8 +2439,37 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // At metal 0 both factors are exactly 1.0 — bit-identical to the old sum
   // (multiplication by 1.0 is exact), so every non-metal character shades
   // byte-for-byte as before.
-  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.25, metal)
-               + mix(vec3<f32>(1.0), primAlbedo, metal) * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  //
+  // METAL (hard-surface task 2), at metal 1:
+  //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
+  //    0.45 floor — bounce IS diffuse, and leaving it full would keep the
+  //    plate reading as paint. NOT zero: with no environment map the lab
+  //    has one key, and a true-zero diffuse goes black wherever the
+  //    highlight is not. Rendered curve, 2026-09-03 (12-frame turntable,
+  //    front and plate-bearing yaws): 0.25 went BLACK at the front yaw;
+  //    0.35 kept the slab forms but the front still read near-black; 0.45
+  //    keeps the greave's specular gradient AND a readable front face. 0.45
+  //    ships; the owner can pull it darker now that the word exists.
+  //  - the specular AND the fresnel rim are tinted by the prim's own
+  //    albedo instead of shining the light's colour — the single change
+  //    that makes steel differ from white plastic under the same light.
+  //    The tint is the albedo's HUE with its luminance renormalised to
+  //    steel's F0: multiplying by the RAW albedo (this line's first
+  //    version) rendered the minotaur's plates BLACK — 0.17 linear
+  //    luminance times the highlight is no highlight (frame-00 A/B,
+  //    2026-09-03). Polished steel reflects ~56% at normal incidence
+  //    however dark its paint reads (iron F0 = 0.56, standard metals
+  //    table), so the scale renormalises luminance, and the min() caps the
+  //    blow-up on near-black paint (dark chrome should stay dark).
+  //  - wet, scatter and the wound terms are untouched: scope discipline,
+  //    and the floor above keeps the plate readable without them.
+  // At metal 0 both factors are exactly 1.0 — bit-identical to the old sum
+  // (multiplication by 1.0 is exact), so every non-metal character shades
+  // byte-for-byte as before.
+  let metalTintLum = max(dot(primAlbedo, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
+  let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));
+  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
+               + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
