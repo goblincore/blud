@@ -147,6 +147,21 @@ describe('readRefSkin', () => {
     expect(skin.jointWorld.get('B')).toEqual([0, 6, 0]);
   });
 
+  it('minDominantWeight 0 keeps the vertices the default filter drops', () => {
+    // The fixture's third vertex is an exact 0.5/0.5 split, which the default
+    // rejects as a tie. That tie is not an edge case on a real reference: on
+    // minotaur.glb the shared-influence vertices are 16% of the mesh and they
+    // are CONCENTRATED at the chest, leaving a 0.047 m height band with ZERO
+    // vertices between bands holding hundreds. A caller measuring the surface
+    // rather than per-bone clouds needs them back.
+    const all = readRefSkin(twoJointGlb(), { minDominantWeight: 0 });
+    expect(all.total).toBe(3);
+    expect(all.dropped).toBe(0);
+    expect(all.verts).toHaveLength(3);
+    // The default is untouched by the option existing.
+    expect(readRefSkin(twoJointGlb()).verts).toHaveLength(2);
+  });
+
   it('exposes the dominant-weight threshold it used', () => {
     // Calibrated against both real references; see the constant's own comment.
     expect(MIN_DOMINANT_WEIGHT).toBe(0.5);

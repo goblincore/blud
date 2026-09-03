@@ -158,7 +158,37 @@ function readAccessor(gltf: any, bin: Uint8Array, index: number): number[] {
   return out;
 }
 
-export function readRefSkin(bytes: Uint8Array): RefSkin {
+export interface RefSkinOpts {
+  /**
+   * Override MIN_DOMINANT_WEIGHT. Pass 0 to keep EVERY vertex.
+   *
+   * The default filter exists so a vertex can be attributed to ONE bone, and
+   * for that it is right. It is wrong whenever the caller wants the SURFACE
+   * rather than a per-bone cloud, because the vertices it discards are not
+   * scattered — they are exactly the ones where several bones share
+   * influence, i.e. the joints and the broad blended areas between them.
+   *
+   * Measured on minotaur.glb (2026-09-03): 21,657 of 135,942 vertices are
+   * dropped, 16%, and the loss is CONCENTRATED. In 0.047 m height bands
+   * across the trunk the band at authored y 1.312 keeps ZERO vertices and its
+   * neighbours at 1.265 and 1.358 keep 29 and 1,040, while every band below
+   * 1.22 keeps 1,500-2,300 and every band above 1.40 keeps 5,000-7,500. That
+   * hole is the chest, where Spine01 and both Shoulders share weight and no
+   * single joint clears 0.5.
+   *
+   * So anything that measured this character's chest against this cloud was
+   * measuring a hole. A caller that only needs geometry — a front-wall relief
+   * map, a silhouette, a depth image — should pass 0.
+   *
+   * A caller that needs bone attribution must NOT: below the threshold the
+   * `joint` field is the largest of several comparable weights, which is the
+   * mis-attribution the default prevents.
+   */
+  minDominantWeight?: number;
+}
+
+export function readRefSkin(bytes: Uint8Array, opts: RefSkinOpts = {}): RefSkin {
+  const minWeight = opts.minDominantWeight ?? MIN_DOMINANT_WEIGHT;
   const { json, bin } = parseGlb(bytes);
   const gltf = json as any;
   if (!bin) throw new Error('GLB has no BIN chunk');
@@ -266,7 +296,7 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
     }
     // `<=`, not `<`: an exact 0.5/0.5 split is a tie, not a majority, and the
     // tie-break would be whichever weight the exporter happened to write first.
-    if (bestW <= MIN_DOMINANT_WEIGHT) { dropped++; continue; }
+    if (bestW <= minWeight) { dropped++; continue; }
     // The full weighted blend, not just the dominant joint's matrix. At an
     // exact bind pose the two agree (every `globalTransform * IBM` is the
     // identity there), but a reference exported mid-pose has them disagreeing
