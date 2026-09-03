@@ -20,6 +20,166 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**NEXT ACTION: the shorty's breech mechanism.** Plan written and ready, 8
+tasks, not started —
+[plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·
+[spec](docs/superpowers/specs/2026-09-03-shorty-breech-mechanism-design.md).
+Three defects, one of them not in the owner's report:
+* `chamber{i}` is built with `cyl()`, which caps both ends — breaking the
+  action open shows two solid domed knobs where the mouths should be
+  ([before-open45.png](docs/dev-notes/2026-09-03-shorty-breech/before-open45.png)).
+* Every piece of breech-face detail (`mouth{i}`, `extractor`) sits at
+  y ≈ −0.066 — the chamber's FRONT, 35 mm from the actual breech face at
+  y = −0.031, buried in the frame beside the hinge pin.
+* The eject origin is a stale constant whose x predates `1e99b54` centring the
+  gun, and which cannot follow the barrels through their swing.
+Fix comes off `docs/dev-notes/refs/sawnoffs_animated.glb` (DJMaesen, CC-BY-4.0,
+credited in ATTRIBUTIONS.md), decoded channel by channel: its slugs are
+CHILDREN of the swinging barrel node so they inherit the break rotation, and
+its eject is TWO-STAGE — an axial slide out of the bore, then a free tumble.
+Retimed to its tempo at the owner's call (45° over 0.33 s, shut in 0.14, 1.30 s
+total). NOT taken from it: dimensions. Owner: "we dont need to be completly
+realistic, its in a fantasy world anyways".
+**Before running it:** audit the plan's verification steps — it leans on
+"render it and look", which fails the same way Task 2's visual check did (it
+pushed the reticle left/right, both pure yaw, the one case the bug did not show
+in). Make each step state what would have to break for it to fail.
+
+**FPV WEAPON OVERHAUL — GOBLIN SAWED-OFF — MERGED (2026-09-03).**
+`sdf-game.html`'s view-model is a procedural break-action sawed-off double
+(`shorty-double.glb` from `scripts/model_grapeshot_shorty.py`; the break is a
+code-driven rotation of the GLB's `Barrels` node about its `Hinge` locator, no
+baked animation). Built by an 8-task dispatch chain, then three owner look
+passes on top.
+
+Round 2 (`d2b1276`): the reload became a KEYFRAME table — the first pass drove
+the present with `sin(PI·t/total)`, peaking at mid-reload, so every beat
+smeared across every other; red-hull/brass-head cases eject and are shoved back
+in; the support hand crosses the body and visibly does the loading; recoil;
+muzzle flash rebuilt as a generated ragged star with smoke
+(`flash-sprite.ts` — it was untextured `PlaneGeometry`, hence "a rectangle").
+Round 3 (`1e99b54`): gun centred and both hands hung off the model's own
+`Grip_Hand`/`Fore_Hand` locators, so they cannot drift out of contact again.
+Round 4 (`b1f44d7`): **FREE AIM** — the Realms of the Haunting scheme. The
+mouse moves a reticle; the camera only turns once it passes a central dead
+zone; shots go through the reticle, not screen centre; distance-driven walk
+bob. `G` toggles it against classic mouse-look.
+
+Gates: suite 2807/2814 (the 7 are the pre-existing `blob-measure.test.ts`
+environmental failures), tsc/build clean, `scripts/sdf-game-shorty-gate.sh`
+exit 0. Measured in-engine, not asserted: flash `spotCfg.x 1 → 1.81`, reload
+`2 → 0 → 2` with the hinge `0 → 0.610 rad` by t=0.3 and shut by 0.9, and free
+aim turning the camera **0.000°** inside the dead zone against 137°/s at full
+edge push.
+
+**KNOWN TEMPORARY: the flash lights marched bodies by borrowing the
+flashlight's `spotCfg`/`spotColor` uniforms inside the per-actor beam replay.**
+The real fix is a second light slot in the march; it cannot land while the
+perf-r2 chain is rewriting `march.wgsl.ts`, which is precisely why the borrow
+exists. Tracked under the spec's "Deferred".
+
+**FREE-AIM DEFECTS + PANELS — MERGED to main (2026-09-03, 6 commits).** Three
+owner reports off `fpvbugs.mov`, all measured before being fixed:
+* **The gun pointed 32.5° away from the reticle.** `weaponYawDeg` was a flat
+  15° cap, but a reticle at x=±1 is 47.5° off-axis at 790×555. The cap became
+  a 0..1 FRACTION of the true `atan` angle, so the mismatch is now
+  inexpressible rather than merely retuned (`weaponYawFrac`, clamped).
+* **Pointing it fully swung the gun off-screen**, because `aimRig` rotated
+  about the EYE (muzzle at screen-x 1.54). `pivotOffset()` rotates about the
+  GRIP instead → 0.66, in frame. Its first version had the Euler factors
+  REVERSED (`Ry·Rx` where three.js `'XYZ'` applies `Rx·Ry·Rz`) and ignored the
+  bob roll — up to 124.8 mm of grip drift under combined yaw+pitch, invisible
+  to tests that held one angle at zero. Fixed in `92aacef`; a 5000-pose fuzz
+  is now 1.7e-13 mm.
+* **Shots spawned 0.5 m BEHIND the eye** — `muzzleWorld()` subtracted forward
+  where it should have added, so every projectile was born 1.1 m behind the
+  barrel and flew through the player's head. Wrong in BOTH aim modes since it
+  was written; only slug mode drew something slow enough to see. Now reads the
+  GLB's live `Muzzle_L/R`, falling back to `muzzle-pos.ts` (the tested helper
+  the page had reimplemented with the sign flipped).
+* **Weapon now CROSSES the frame** (`dd1cd08`), not just nods: pivoting about
+  the grip pins it at screen-x 0.12 by definition. `weaponSlide()` is linear
+  in the reticle (the angles are `atan` of it — projection vs framing).
+* **Tuning panels ship COLLAPSED** (`panel-chrome.ts`): title bar visible so
+  they stay findable, body closed so captures show the game. Not persisted —
+  a remembered state is how two machines stop capturing the same frame.
+
+**PROCESS NOTE, worth more than any of the above:** four defects in this pass,
+and NOT ONE was caught by a test going red. Tests that re-derived the
+implementation's own arithmetic; a plan step naming the wrong gate; a gate
+measuring a crater after the engine had shoved it 18 cm; a gate outside
+`npm test` that nobody ran. Green is not evidence unless the check could have
+failed — mutation-test the check before trusting it.
+
+**OPEN (owner):** free-aim feel — the 0.45 dead zone and 1.9 rad/s turn rate
+are calibrated to be sane, not to match the reference; they are the character
+of the whole scheme. Slide defaults (0.10/0.045 m) accepted as fine for now.
+Knobs: `__sdfGame.setAimTuning({...})`, `__sdfGame.setGunTuning({...})`. Gun
+finish still reads slightly chrome under the dungeon rig.
+[spec](docs/superpowers/specs/2026-09-03-freeaim-and-panels-design.md) ·
+[plan](docs/superpowers/plans/2026-09-03-freeaim-and-panels.md)
+
+**[ ] P-gates.1 — the slug placement gate is unsound in BOTH builds.**
+`sdf-game-slug-gate.mjs` stamps a crater, then `applyProjectileHit` shoves the
+struck rig point by `IMPULSE.blast = 0.18` m with NO falloff, then the gate
+measures the crater's displaced anchor and calls the delta a placement error.
+Subtracting the shove the slug lands 0.48 cm from prediction. It passed before
+only because its single fixed target happened to strike a prim the shove does
+not carry — sweep all ten bodies and the OLD code fails z10 at 14.54 cm. Fix:
+expose the stamped impact point (`__sdfGame.lastImpact`) and assert against
+that; sweep several bodies.
+
+**[ ] P-gates.2 — `wound-panel-verify.mjs` asserts a schema that no longer
+exists** (wants 5 sliders against 14; checks `woundFibreAmp`, 0 occurrences in
+`src/`, 15 in `scripts/`). Stale since `b6474d8`. It also never closes its CDP
+socket, so the process hangs after printing `done.` — needs a `timeout`
+wrapper until fixed.
+
+**[ ] P-gates.3 — `muzzleWorld()`'s two branches disagree by 24 cm.** Live
+locator sits at eye + `(−0.038, −0.290, +0.566)`; the headless fallback
+constants put it at `(−0.2, −0.12, +0.5)`. Spec claimed the fallback "keeps
+the headless contract" — it does not, and nothing compares them. Re-derive the
+constants from the GLB and pin with a test.
+
+**[ ] P-panels.1 — `button()`, the copy-button block and the `note` styling
+are still byte-identical** in `goo-panel.ts` / `wound-panel.ts`. The
+`panel-chrome.ts` extraction took the shell only; the copy button is the part
+with real behaviour in it.
+
+**[x] P-env.1 — `tsx` was not installed, and its shim was a SELF-POINTING
+symlink.** `node_modules/.bin/tsx -> /Users/donny/Projects/blud/node_modules/.bin/tsx`
+(dated 2026-08-31), and `node_modules/tsx/` does not exist, though `tsx` is in
+`devDependencies`. This is the whole of the "7 pre-existing environmental
+failures" quoted all over this file: `scripts/blob-measure.test.ts` shells out
+to it and gets `ELOOP` in the main checkout, `ENOENT` in a worktree (which has
+no `node_modules` at all). So the suite has been 7 red for days for a reason
+nobody diagnosed — it was repeatedly waved through as "environmental", which is
+true but was never the same as "understood". **FIXED 2026-09-03:** removed the self-link, `npm install` — `tsx v4.23.12`
+resolves via `../tsx/dist/cli.mjs` and `blob-measure.test.ts` is **7/7 green**.
+The suite is clean for the first time in days. Note a worktree still fails
+these: the test resolves `tsx` from its own repo root and worktrees carry no
+`node_modules`, so run this file from the main checkout.
+[spec](docs/superpowers/specs/2026-09-02-fpv-weapon-overhaul-design.md) ·
+[plan](docs/superpowers/plans/2026-09-02-fpv-weapon-overhaul.md) ·
+[note](docs/dev-notes/2026-09-02-fpv-weapon-shorty/notes.md) ·
+[blockout](docs/dev-notes/2026-09-02-fpv-weapon-blockout/notes.md)
+
+**HULL-REFINE RENDERER — PARKED (owner, 2026-09-02): "annoying visual glitches… doesn't seem to offer much benefit atm; maybe with crowds". Revisit = phase 2 early-Z on the crowd case.** Phase 0 built, look passes headless parity, cost a wash at one body. Per-frame GPU surface-nets hull + fragment band refinement through the SHIPPED march (`march.wgsl.ts` untouched). Dispatch chain (kimi/k3, 5 tasks) landed the code; six bugs then separated a green suite from a zombie on screen (relaxed stepMul, vec4-padded soup stride, chunk hulls never extracted, extraction before the wound upload, a 4M-eval/frame live test, a 70-eval vertex pull) — all fixed and pinned. Headless A/B (8 stepped poses, 6 live instants, crater on/off, the 3-item reel): hull ≡ march. Owner: "pretty impressive… slightly less jiggly… pretty close". Fenced bench, one body, close camera, machine load 15–110: march ~22–27 ms, hull ~25–27, hull draw-only ~22 — extraction ≈3–4 ms, no win without early-Z (phase 2). NOT the hull: torso-sphere wounds billboard on both renderers and in-game (`damage.ts frame()` vs `game-actor` yaw-0 contract) — spun off. Page: `sdf-hull-spike.html`, seams `__hullSpike.*`, driver `scripts/hull-spike-drive.mjs`, reel `scripts/hull-spike-reel.sh`.
+[notes](docs/dev-notes/2026-09-02-hull-refine-spike/notes.md) · [spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md) · [plan](docs/superpowers/plans/2026-09-02-sdf-hull-refine-phase0.md)
+
+**WOUND BILLBOARDING — FIXED (2026-09-02, `claude/serene-jemison-7c15a7`).**
+Owner: a crater on the zombie's back rotated round to the front as it turned
+(torso + legs; head fine). Root cause: torso blobs are axis-less spheres, so
+their wound frame is a fixed WORLD basis unless `bodyYaw` de-yaws it; the game
+actor stamped AND uploaded at yaw 0. Contract now: stamp(posed, yaw) /
+upload(posed, yaw) / sever-resolve(rest, 0) — one body frame, three views
+(`game-actor.ts refreshWounds` note). `cutLimbs`/`cutChains`/`ExplosionBody`
+take an optional `bodyYaw` for callers on POSED prims; every posed-prim
+consumer in `game-main.ts` + `bleed-registry.ts` quotes the live yaw. Gates:
+actor upload keeps its body-frame offset through a >1 rad turn; sever at
+yaw≠0; turned-body explosion == rest-body stamp. Not yet on the hull-spike
+branches (`sdf-hull-spike.html` lives there) — they get it on merge.
+
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
 [docs/dev-notes/2026-09-02-gore-r3-refinements.md](docs/dev-notes/2026-09-02-gore-r3-refinements.md):

@@ -29,6 +29,16 @@ import {
 } from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
+import { flashPixels, smokePixels } from './flash-sprite';
+import {
+  BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
+  weaponAngles, weaponSlide, type AimPoint, type Frustum,
+} from './free-aim';
+import {
+  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
+  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
+} from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
@@ -80,6 +90,7 @@ import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } f
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Primitive } from '../types';
+import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -373,12 +384,17 @@ async function main() {
   // __sdfGame at all). Assigned once the actors give it a light rig.
   let gooLayer: GooLayer | null = null;
   let gooPanel: GooPanel | null = null;
-  /** The wound panel (wound-panel.ts). Ships HIDDEN — unlike the goo panel,
-   *  which ships visible because the goo layer ships on — so every existing
-   *  look-capture script (gallery-look, shadow-ab, the canary) keeps framing
-   *  the room and not another piece of UI. __sdfGame.woundPanel(true) opens
-   *  it; that seam is guarded typeof-style in capture scripts like gooPanel. */
+  /** The wound panel (wound-panel.ts). Ships VISIBLE, like the goo panel, but
+   *  COLLAPSED (panel-chrome.ts) — only its title bar shows, so it stays
+   *  findable without covering the frame the way both panels did fully
+   *  expanded (see c6bffc7). Every existing look-capture script
+   *  (gallery-look, shadow-ab, the canary) keeps framing the room undisturbed
+   *  as a result. __sdfGame.woundPanelCollapsed(false) expands it; that seam
+   *  is guarded typeof-style in capture scripts like gooPanel. Not persisted
+   *  across reloads — a remembered state would make a capture reproduce
+   *  differently machine to machine. */
   let woundPanel: WoundPanel | null = null;
+  let panelsHidden = false;
   // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
@@ -514,11 +530,35 @@ async function main() {
       // no directional key, nothing for a level shadow to modulate.
       const map = twin.shadow.map?.depthTexture ?? null;
       const lvlOn = spotOn > 0 && twin.castShadow && map !== null && levelShadowEnabled ? 1 : 0;
+      // MUZZLE FLASH -- the marched bodies. They cannot see the PointLight
+      // above, so the flash rides the beam that is already replayed here.
+      // Nothing is saved or restored: these uniforms are rewritten from the
+      // flashlight every frame, so biasing this frame's values IS the effect.
+      //
+      // Added to spotOn rather than multiplied, so the flash still lights
+      // bodies in the gallery rig where the flashlight gate is 0.
+      // A WIDER cone is a SMALLER cosine, hence the subtraction.
+      //
+      // DELIBERATELY TEMPORARY: the right fix is a second light slot in the
+      // march, which cannot land while sdf-render-perf-r2 is rewriting
+      // march.wgsl.ts. Tracked under the spec's "Deferred".
+      const fv = flashEnvelope(flashAge);
+      // 6x blew a nearby body to a featureless white silhouette. 2.2 still
+      // reads unmistakably as a flash without destroying the wound detail
+      // that is the entire point of looking at these creatures.
+      const flashGate  = spotOn + 2.2 * fv;
+      const flashInner = Math.max(-1, cosInner - 0.45 * fv);
+      const flashOuter = Math.max(-1, cosOuter - 0.45 * fv);
       for (const a of actors) {
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
-        a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+        if (fv > 0) {
+          // Push warm. The flash is burning powder, not the flashlight's white.
+          const c = a.view.uniforms.spotColor.value;
+          c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
+        }
         a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
@@ -929,7 +969,8 @@ async function main() {
       hullExclusionsEnabled
         ? actors.flatMap(a => {
           const prims = a.posed().prims;
-          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+          const yaw = a.pose().yaw;
+          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
         })
         : [],
     );
@@ -963,9 +1004,15 @@ async function main() {
   });
   document.addEventListener('mousemove', (e) => {
     if (document.pointerLockElement !== canvas) return;
-    player.yaw += e.movementX * 0.0022;
-    player.pitch = Math.min(PLAYER.pitchLimit,
-      Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+    if (freeAimOn) {
+      // The mouse moves the RETICLE, not the camera. Turning is a consequence
+      // of shoving the reticle past the dead zone, handled in the tick.
+      aim = moveAim(aim, e.movementX, e.movementY);
+    } else {
+      player.yaw += e.movementX * 0.0022;
+      player.pitch = Math.min(PLAYER.pitchLimit,
+        Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+    }
   });
   window.addEventListener('keydown', (e) => {
     keys.add(e.code);
@@ -976,6 +1023,23 @@ async function main() {
       else pushProbeWeight(parked);
     }
     if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
+    // H hides/shows BOTH tuning panels together. They cover most of the
+    // viewport, and until now the only way to dismiss them was to know the
+    // console API -- which is no use to someone doing a look pass.
+    // G toggles free aim, so the two schemes can be A/B'd back to back.
+    if (e.code === 'KeyG') {
+      freeAimOn = !freeAimOn;
+      aim = { x: 0, y: 0 };
+      updateHud();
+    }
+    if (e.code === 'KeyH') {
+      panelsHidden = !panelsHidden;
+      woundPanel?.setVisible(!panelsHidden);
+      gooPanel?.setVisible(!panelsHidden);
+    }
+    if (e.code === 'KeyR' && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
+      reloadAge = 0;
+    }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   let parked = DEFAULT_PROBE_WEIGHT;
@@ -1000,6 +1064,14 @@ async function main() {
   // that chose this model — stay fully in frame; −10 cm starts to sink the
   // grip out of the bottom edge. −5 cm is the shipped height.
   viewModelAnchor.position.y = -0.05;
+  /** Everything that leans and bobs together: gun, hands, flash, smoke, cases. */
+  let aimRig: THREE.Group | null = null;
+  // One rig for the whole view model, so the free-aim lean and the walk bob are
+  // a single transform instead of being applied to the gun, both hands, the
+  // flash, the smoke and the cases separately (and inevitably inconsistently).
+  aimRig = new THREE.Group();
+  aimRig.name = 'aim-rig';
+  viewModelAnchor.add(aimRig);
   camera.add(viewModelAnchor);
   scene.add(camera);
 
@@ -1010,12 +1082,91 @@ async function main() {
   // the dispatch brief: click = one barrel, right-click = both, cooldown +
   // camera kick in; break-open reload animation and muzzle smoke are not.
   // -----------------------------------------------------------------------
-  const GUN_GLB = '/assets/lab/grapeshot-gun-k3.glb';
-  /** Grip-point origin, muzzles down -Y. Muzzle sits ~0.515 m down-barrel
-   *  from the grip centre (model script: natural muzzle Y≈-0.44 minus the
-   *  GRIP_NATURAL shift). */
-  const MUZZLE_LOCAL: [number, number, number] = [0, -0.515, 0];
+  const GUN_GLB = '/assets/lab/shorty-double.glb';
+  /** Grip-point origin, muzzles down -Y in BLENDER space. The muzzle sits
+   *  0.318 m down-barrel of the grip (model script: BMID - BLEN/2). */
+  const MUZZLE_LOCAL: [number, number, number] = [0, -0.318, 0];
+  /** Pivot parked at the hinge; rotating it about X breaks the action open.
+   *  Blender's "muzzles down -Y" becomes +Z after the glTF y-up conversion, so
+   *  a POSITIVE x-rotation swings the muzzles DOWN, which is the way a break
+   *  action opens. */
+  let hingePivot: THREE.Group | null = null;
+  /** The GLB's own muzzle locators, kept so muzzleWorld() can read their LIVE
+   *  world position each shot rather than a position sampled once at load. */
+  let muzzleNodes: THREE.Object3D[] = [];
+  let gripHandGroup: THREE.Group | null = null;
+  let foreHandGroup: THREE.Group | null = null;
   let gunGroup: THREE.Group | null = null;
+  let flashGroup: THREE.Group | null = null;
+  let flashMaterial: THREE.MeshBasicMaterial | null = null;
+  let flashLight: THREE.PointLight | null = null;
+  let handMaterial: THREE.MeshStandardMaterial | null = null;
+  /** Gun body materials, kept so the finish is tunable at runtime. */
+  const gunMaterials: THREE.MeshStandardMaterial[] = [];
+  const FLASH_VARIANTS = 4;
+  const flashTextures: THREE.DataTexture[] = [];
+  const SMOKE_COUNT = 7;
+  const smokePuffs: { mesh: THREE.Mesh; age: number; vel: THREE.Vector3; roll: number }[] = [];
+  const ejectedShells: THREE.Group[] = [];
+  const loadShells: THREE.Group[] = [];
+  /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
+   *  DELTA from here, so nothing has to remember where "home" was. */
+  const GUN_REST = {
+    // TOWARD THE CENTRE. At x = 0.125 the gun sat well right of screen centre,
+    // which pushed the support hand out to the left edge as a disconnected blob
+    // instead of wrapping the fore-end. Centring the weapon is also the
+    // classic-FPS placement the Realms-of-the-Haunting reference uses.
+    pos: new THREE.Vector3(0.038, -0.115, -0.300),
+    rollDeg: -4.5,
+    pitchDeg: 2.5,
+  } as const;
+  /** Hand rest positions in VIEW space, read from the GLB's Grip_Hand and
+   *  Fore_Hand locators at load. Hand-placed constants drifted out of contact
+   *  with the weapon the moment the gun pose moved -- which is exactly what
+   *  left the support hand floating unattached. These cannot drift. */
+  const GRIP_HAND_REST = new THREE.Vector3();
+  const FORE_HAND_REST = new THREE.Vector3();
+  /** The muzzle in VIEW space, read off the GLB's own Muzzle_L/Muzzle_R
+   *  locators rather than guessed. The first pass put the flash at
+   *  (0.085, -0.060, -0.560) -- 4 cm left, 4.5 cm high and 3 cm SHORT of the
+   *  real muzzle -- so it burned halfway down the barrel instead of at the
+   *  bores, which is a good part of why it read wrong. */
+  const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
+  /** Fill a VIEW-space vector from a named locator inside the loaded GLB. */
+  function locatorInView(root: THREE.Object3D, name: string, out: THREE.Vector3): boolean {
+    let found: THREE.Object3D | null = null;
+    root.traverse((o) => { if (o.name === name) found = o; });
+    if (!found) return false;
+    viewModelAnchor.updateMatrixWorld(true);
+    out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
+    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    return true;
+  }
+  /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
+  let fireAge = Infinity;
+  let fireBarrels: 1 | 2 = 1;
+
+  // ——— FREE AIM (Realms of the Haunting scheme) ———————————————————————
+  // The mouse drives a RETICLE around the viewport; the camera only turns once
+  // that reticle pushes past a large central dead zone, and the weapon leans to
+  // follow it. Shots go through the reticle, not through screen centre.
+  let freeAimOn = true;
+  let aim: AimPoint = { x: 0, y: 0 };
+  let weaponYawDeg = 0;
+  let weaponPitchDeg = 0;
+  /** Lateral/vertical travel of the whole view model, METRES in camera space.
+   *  Smoothed on the same lag as the angles so the gun arrives as one motion
+   *  rather than sliding and turning at different rates. */
+  let weaponSlideXm = 0;
+  let weaponSlideYm = 0;
+  /** Metres walked, and the smoothed 0..1 speed envelope. Bob is driven by
+   *  DISTANCE so it stays locked to footfalls at any speed. */
+  let bobDistance = 0;
+  let bobAmount = 0;
+  let prevPlayerPos: Vec3 = [0, 0, 0];
+  let reticleEl: HTMLDivElement | null = null;
+  /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
+  let flashAge = Infinity;
   let gunReady = false;
   try {
     const gltf = await new GLTFLoader().loadAsync(GUN_GLB);
@@ -1032,7 +1183,11 @@ async function main() {
         const std = mat as THREE.MeshStandardMaterial;
         if (std.isMeshStandardMaterial) {
           std.envMap = env;
-          std.envMapIntensity = 0.7;
+          // The whole point of the new palette is a gun that catches light in a
+          // dark dungeon. 0.7 against its private RoomEnvironment was tuned for
+          // the old near-black metal.
+          std.envMapIntensity = 1.1;
+          gunMaterials.push(std);
           std.needsUpdate = true;
         }
       }
@@ -1040,46 +1195,301 @@ async function main() {
     gunGroup = new THREE.Group();
     gunGroup.name = 'grapeshot-k3';
     gunGroup.add(gltf.scene);
+    // The break is a code-driven rotation of this node about the hinge locator
+    // -- the GLB carries no animation. A null here means the export lost its
+    // grouping, which must be loud: a silent null would present as a reload
+    // animation that plays and moves nothing.
+    const barrels = gltf.scene.getObjectByName('Barrels') ?? null;
+    const hingeNode = gltf.scene.getObjectByName('Hinge') ?? null;
+    if (!barrels || !hingeNode) {
+      throw new Error('[sdf-game] shorty-double.glb is missing Barrels/Hinge nodes');
+    }
+    // Rotate about the HINGE, not about the barrel node's own origin -- the
+    // latter would swing the barrels through the frame. Standard fix: a pivot
+    // group parked at the hinge, with the barrels offset back by the same
+    // amount, so the group's rotation IS the break.
+    hingePivot = new THREE.Group();
+    hingePivot.position.copy(hingeNode.position);
+    (barrels.parent ?? gltf.scene).add(hingePivot);
+    hingePivot.add(barrels);
+    barrels.position.sub(hingeNode.position);
     // AXIS NOTE: the model script's "muzzles down -Y" is BLENDER space;
     // Blender's Z-up -> glTF Y-up conversion (x,z,-y) lands them at +Z in
     // GLB space, up stays +Y. rotation.y = PI aims +Z down the camera's -Z
     // (forward) with the hammers still on top. (rotation.x = PI/2 pointed
     // the gun at the sky — first live capture caught it.)
+    // FPV pose, carried over from the model script's preview constants so the
+    // Blender FPV render and the game agree. Yaw cants the barrels toward
+    // screen centre so BOTH bores read; pitch lifts the muzzle off the floor.
     gunGroup.rotation.y = Math.PI;
-    gunGroup.position.set(0.17, -0.2, -0.32);
-    viewModelAnchor.add(gunGroup);
+    gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
+    gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
+    gunGroup.position.copy(GUN_REST.pos);
+    (aimRig ?? viewModelAnchor).add(gunGroup);
 
-    // HANDS ARE GREEN ORBS — deliberate, per the owner: the player is the
-    // goblin and its hands were never detailed. One on the grip, one braced
-    // under the fore-end. Anchored in VIEW space (not gun space) so the
-    // axis convention of the GLB cannot move them.
-    const orbGeo = new THREE.SphereGeometry(0.055, 20, 14);
-    const orbMat = new THREE.MeshStandardMaterial({ color: 0x5a8f3c, roughness: 0.85 });
-    const gripHand = new THREE.Mesh(orbGeo, orbMat);
-    gripHand.position.set(0.17, -0.26, -0.30);
-    const foreHand = new THREE.Mesh(orbGeo, orbMat);
-    foreHand.position.set(0.17, -0.24, -0.62);
-    viewModelAnchor.add(gripHand, foreHand);
+    // Anchor points come off the GLB itself, so they cannot drift from the
+    // weapon when its pose changes -- which is what left the support hand
+    // floating unattached instead of gripping the fore-end.
+    viewModelAnchor.updateMatrixWorld(true);
+    {
+      const mL = new THREE.Vector3(), mR = new THREE.Vector3();
+      if (locatorInView(gltf.scene, 'Muzzle_L', mL) && locatorInView(gltf.scene, 'Muzzle_R', mR)) {
+        MUZZLE_VIEW.copy(mL).add(mR).multiplyScalar(0.5);
+      }
+      const nL = gltf.scene.getObjectByName('Muzzle_L');
+      const nR = gltf.scene.getObjectByName('Muzzle_R');
+      if (nL && nR) muzzleNodes = [nL, nR];
+      if (!locatorInView(gltf.scene, 'Grip_Hand', GRIP_HAND_REST)) {
+        GRIP_HAND_REST.set(GUN_REST.pos.x + 0.02, GUN_REST.pos.y - 0.04, GUN_REST.pos.z + 0.05);
+      }
+      if (!locatorInView(gltf.scene, 'Fore_Hand', FORE_HAND_REST)) {
+        FORE_HAND_REST.set(GUN_REST.pos.x, GUN_REST.pos.y - 0.05, GUN_REST.pos.z - 0.15);
+      }
+      // Sit each hand just off its locator so the orb WRAPS the wood rather
+      // than intersecting the middle of it. The support hand also shifts to the
+      // gun's left flank: directly underneath, it hid behind the fore-end and
+      // read as a sliver, which is not "holding the handrail".
+      GRIP_HAND_REST.y -= 0.014;
+      FORE_HAND_REST.x -= 0.042;
+      FORE_HAND_REST.y -= 0.014;
+    }
+    // HANDS ARE GREEN ORBS -- deliberate, per the owner: the player is the
+    // goblin and its hands were never detailed. Colour, radius and roughness
+    // now come from characters/goblin.blob instead of being picked by eye, and
+    // each orb gains a FOREARM because the reload swings the support arm into
+    // frame. Anchored in VIEW space so the GLB's axis convention cannot move
+    // them.
+    const skinTex = new THREE.DataTexture(
+      goblinNormalPixels(256), 256, 256, THREE.RGBAFormat,
+    );
+    skinTex.wrapS = skinTex.wrapT = THREE.RepeatWrapping;
+    skinTex.needsUpdate = true;
+    // HAND BRIGHTNESS. The goblin's own palette is a pale olive that is correct
+    // in daylight and nearly invisible under the dungeon rig at this exposure
+    // (the owner's report). Rather than lie about the creature's colour, the
+    // hands carry a small self-lit term so they read in the dark; it is a
+    // tuning knob, not a constant, because the right amount depends on the
+    // final lighting pass. setGunTuning() moves it live.
+    const orbMat = new THREE.MeshStandardMaterial({
+      color: goblinSkinSrgbHex(),
+      roughness: GOBLIN_SKIN.roughness,
+      normalMap: skinTex,
+      normalScale: new THREE.Vector2(0.8, 0.8),
+      emissive: new THREE.Color(goblinSkinSrgbHex()),
+      emissiveIntensity: 0.30,
+    });
+    handMaterial = orbMat;
+    const orbGeo = new THREE.SphereGeometry(GOBLIN_SKIN.handRadius, 20, 14);
+
+    /** One hand: an orb plus a forearm running back along `armDir` (view
+     *  space, pointing from the hand toward the elbow). */
+    function makeHand(hand: THREE.Vector3, armDir: THREE.Vector3, armLen: number): THREE.Group {
+      const g = new THREE.Group();
+      const orb = new THREE.Mesh(orbGeo, orbMat);
+      // SphereGeometry's UVs pinch at the poles, so aim the pole into the gun.
+      orb.rotation.x = Math.PI / 2;
+      const armGeo = new THREE.CapsuleGeometry(
+        GOBLIN_SKIN.forearmRadius, armLen, 4, 12,
+      );
+      const arm = new THREE.Mesh(armGeo, orbMat);
+      const dir = armDir.clone().normalize();
+      arm.position.copy(dir).multiplyScalar(armLen * 0.5 + GOBLIN_SKIN.handRadius * 0.4);
+      // CapsuleGeometry runs along +Y; swing it onto the arm direction.
+      arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      g.add(orb, arm);
+      g.position.copy(hand);
+      return g;
+    }
+
+    // THE TWO HANDS SIT ON OPPOSITE SIDES OF THE BODY.
+    // The right hand is on the grip, low-right, mostly hidden behind the gun --
+    // correct, and the owner is happy with it. The support hand was 4.5 cm left
+    // of it, so both read as being side by side on the right of the screen. A
+    // support hand CROSSES THE BODY: it enters from far left with a good length
+    // of forearm in shot, which is also what makes the reload legible.
+    // The right hand sits on the grip; the left wraps the FORE-END, both taken
+    // from the model's own locators. The arms still run to opposite sides of
+    // the body -- right arm back and down-right, left arm crossing the body
+    // down-left -- so the support arm reads as an arm, not a floating lump.
+    gripHandGroup = makeHand(
+      GRIP_HAND_REST.clone(),
+      new THREE.Vector3(0.30, -0.84, 0.45), 0.150,
+    );
+    foreHandGroup = makeHand(
+      FORE_HAND_REST.clone(),
+      new THREE.Vector3(-0.66, -0.60, 0.45), 0.260,
+    );
+    (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
+
+    // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
+    // Four meshes, all built now: two thrown out of the breech on the eject
+    // beat, two carried up by the support hand and seated on the load beat.
+    const hullGeo = new THREE.CylinderGeometry(0.0165, 0.0165, 0.049, 12);
+    const headGeo = new THREE.CylinderGeometry(0.0172, 0.0172, 0.021, 12);
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0xa8231d, roughness: 0.55 });
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xb08d3a, roughness: 0.35, metalness: 0.9 });
+    function makeShell(): THREE.Group {
+      const g = new THREE.Group();
+      const hull = new THREE.Mesh(hullGeo, hullMat);
+      hull.position.y = 0.0105;
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.y = -0.0245;
+      g.add(hull, head);
+      // Cases lie along the bore, which is -Z in view space.
+      g.rotation.x = Math.PI / 2;
+      g.visible = false;
+      return g;
+    }
+    for (let i = 0; i < 2; i++) {
+      const e = makeShell(); ejectedShells.push(e); (aimRig ?? viewModelAnchor).add(e);
+      const l = makeShell(); loadShells.push(l); (aimRig ?? viewModelAnchor).add(l);
+    }
+
+    // MUZZLE FLASH -- geometry half. Textured, not flat quads: the first pass
+    // used untextured PlaneGeometry and read as a bright RECTANGLE (the owner's
+    // report). flash-sprite.ts generates a ragged star with real alpha, and a
+    // few seeds are pre-baked so repeat fire does not strobe one silhouette.
+    for (let i = 0; i < FLASH_VARIANTS; i++) {
+      const tex = new THREE.DataTexture(flashPixels(128, 17 + i * 31), 128, 128, THREE.RGBAFormat);
+      tex.needsUpdate = true;
+      flashTextures.push(tex);
+    }
+    const flashMat = new THREE.MeshBasicMaterial({
+      map: flashTextures[0], color: 0xffe6bf, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    flashGroup = new THREE.Group();
+    flashGroup.visible = false;
+    // Two crossed cards so the star has volume from off-axis, plus a wider,
+    // fainter one for the outer glow.
+    for (const [roll, scale] of [[0, 1], [Math.PI / 2, 1], [Math.PI / 4, 1.7]] as const) {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), flashMat);
+      q.rotation.z = roll;
+      q.scale.setScalar(scale);
+      flashGroup.add(q);
+    }
+    // Just CLEAR of the bores: centred exactly on them, half the card sits
+    // inside the barrel volume. And depthTest:false does not control draw
+    // ORDER -- without a renderOrder the gun still paints over the flash.
+    flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
+    flashGroup.renderOrder = 999;
+    for (const c of flashGroup.children) c.renderOrder = 999;
+    (aimRig ?? viewModelAnchor).add(flashGroup);
+    flashMaterial = flashMat;
+
+    // SMOKE. A small pool of soft puffs released at the muzzle, drifting up and
+    // out while they expand and fade. No particle system exists on this page;
+    // this is the same billboard-pool fallback fpv-view.ts uses for bursts.
+    const smokeTex = new THREE.DataTexture(smokePixels(128), 128, 128, THREE.RGBAFormat);
+    smokeTex.needsUpdate = true;
+    for (let i = 0; i < SMOKE_COUNT; i++) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.16, 0.16),
+        new THREE.MeshBasicMaterial({
+          map: smokeTex, transparent: true, opacity: 0, depthWrite: false,
+          color: 0x9a938c,
+        }),
+      );
+      m.visible = false;
+      smokePuffs.push({ mesh: m, age: Infinity, vel: new THREE.Vector3(), roll: 0 });
+      (aimRig ?? viewModelAnchor).add(m);
+    }
+
+    // MUZZLE FLASH -- level half. Allocated ONCE at intensity 0 and only ever
+    // modulated: adding or removing a light at runtime forces a TSL shader
+    // recompile, which would hitch on every trigger pull. Range and power are
+    // both up from the first pass, which the owner reported as barely lighting
+    // its surroundings.
+    flashLight = new THREE.PointLight(0xffcf95, 0, 16, 1.7);
+    // A little AHEAD of the bores, so it throws light down the room instead of
+    // mostly onto the gun's own barrels.
+    flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
+    (aimRig ?? viewModelAnchor).add(flashLight);
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
   }
 
-  /** Muzzle world position from the current camera pose (independent of the
-   *  gun mesh's matrix state — fires identically headless). */
+  /** Scratch, so the per-shot path allocates nothing. */
+  const _muzA = new THREE.Vector3(), _muzB = new THREE.Vector3();
+  /**
+   * World-space muzzle. Reads the GLB's OWN Muzzle_L/R locators when the gun is
+   * loaded, so it follows the weapon's real heading -- including the free-aim
+   * swing -- instead of being a second description of where the gun is that can
+   * drift from the first. It did drift: the previous inline version put the
+   * spawn point at forward -0.500 from the eye while the visible muzzle sits at
+   * forward +0.600, so every projectile was born 1.1 m BEHIND the barrel and
+   * flew through the player's head.
+   *
+   * The fallback keeps the headless contract: predictSlugHitNow() and the CDP
+   * gates fire with no GLB loaded, which is why an eye-relative formula exists
+   * at all. It now goes through muzzle-pos.ts's tested helper rather than
+   * re-deriving the basis by hand with the sign wrong.
+   */
   function muzzleWorld(): Vec3 {
     const eye = eyeOf(player);
-    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-    const right: Vec3 = [cy, 0, sy];
-    return [
-      eye[0] + right[0] * 0.2 - sy * 0.5,
-      eye[1] - 0.12,
-      eye[2] + right[2] * 0.2 + cy * 0.5,
-    ];
+    if (gunReady && muzzleNodes.length === 2) {
+      muzzleNodes[0]!.getWorldPosition(_muzA);
+      muzzleNodes[1]!.getWorldPosition(_muzB);
+      _muzA.add(_muzB).multiplyScalar(0.5);
+      return [_muzA.x, _muzA.y, _muzA.z];
+    }
+    const cp = Math.cos(player.pitch);
+    const fwd = { x: Math.sin(player.yaw) * cp, y: Math.sin(player.pitch), z: -Math.cos(player.yaw) * cp };
+    const right = { x: Math.cos(player.yaw), y: 0, z: Math.sin(player.yaw) };
+    const up = {
+      x: right.y * fwd.z - right.z * fwd.y,
+      y: right.z * fwd.x - right.x * fwd.z,
+      z: right.x * fwd.y - right.y * fwd.x,
+    };
+    const m = muzzleWorldPosition(
+      { x: eye[0], y: eye[1], z: eye[2] }, { right, up, forward: fwd },
+      0.2, -0.12, 0.5,
+    );
+    return [m.x, m.y, m.z];
+  }
+  /** The live frustum half-angle tangents. ONE definition: the barrel angle
+   *  (weaponAngles, in the frame loop) and the shot ray (aimDir, right below)
+   *  must not be able to disagree about where the reticle is -- that
+   *  disagreement is exactly the class of bug this whole pass exists to fix,
+   *  and duplicating this formula is how it would come back the first time
+   *  someone tweens camera.fov for ADS or recoil.
+   *
+   *  Named aimFrustum, not frustum -- that name is already the module-scope
+   *  THREE.Frustum used for on-screen-body culling, a different concept
+   *  entirely (a view volume for culling vs. these bare half-angle tangents). */
+  function aimFrustum(): Frustum {
+    const tanV = Math.tan((camera.fov * Math.PI) / 360);
+    return { tanV, tanH: tanV * camera.aspect };
   }
   function aimDir(): Vec3 {
     const cp = Math.cos(player.pitch);
-    return [Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp];
+    const fwd: Vec3 = [
+      Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp,
+    ];
+    if (!freeAimOn) return fwd;
+    // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
+    // a shot down the camera's forward axis would land wherever the player
+    // happens to be FACING rather than where they are AIMING -- the one thing
+    // this scheme exists to separate. Offset the ray by the reticle's angular
+    // position inside the frustum.
+    const { tanV, tanH } = aimFrustum();
+    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    // up = right x fwd, for a right-handed basis
+    const up: Vec3 = [
+      right[1] * fwd[2] - right[2] * fwd[1],
+      right[2] * fwd[0] - right[0] * fwd[2],
+      right[0] * fwd[1] - right[1] * fwd[0],
+    ];
+    const cx = aim.x * tanH, cy = aim.y * tanV;
+    const d: Vec3 = [
+      fwd[0] + right[0] * cx + up[0] * cy,
+      fwd[1] + right[1] * cx + up[1] * cy,
+      fwd[2] + right[2] * cx + up[2] * cy,
+    ];
+    const l = Math.hypot(d[0], d[1], d[2]) || 1;
+    return [d[0] / l, d[1] / l, d[2] / l];
   }
   /** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
    *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
@@ -1110,6 +1520,11 @@ async function main() {
 
   let nextSeed = 0x5df1;
   let cooldown = 0;
+  /** Shells in the gun. The reload animation only means something if running
+   *  dry is a state the player can be in. */
+  let shells = MAGAZINE_CAPACITY;
+  /** Seconds into the reload, or Infinity when not reloading. */
+  let reloadAge = Infinity;
   let recoilPitch = 0;
 
   /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
@@ -1120,8 +1535,46 @@ async function main() {
 
   function fire(barrels: 1 | 2): boolean {
     if (!gunReady || cooldown > 0) return false;
+    if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
+    if (shells <= 0) { reloadAge = 0; return false; } // click -> start reloading
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
+    shells = magazineAfterFire(shells, barrels);
+    if (shells <= 0) reloadAge = 0;
+    updateHud();
+    flashAge = 0;
+    fireAge = 0;
+    fireBarrels = barrels;
+    if (flashGroup && flashMaterial) {
+      // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
+      // identical silhouette.
+      flashGroup.rotation.z = Math.random() * Math.PI * 2;
+      const tex = flashTextures[Math.floor(Math.random() * flashTextures.length)];
+      if (tex) { flashMaterial.map = tex; flashMaterial.needsUpdate = true; }
+    }
+    // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
+    {
+      let released = 0;
+      const want = barrels === 2 ? 5 : 3;
+      for (const puff of smokePuffs) {
+        if (released >= want) break;
+        if (puff.age !== Infinity) continue;
+        puff.age = 0;
+        puff.roll = Math.random() * Math.PI * 2;
+        puff.mesh.position.set(
+          MUZZLE_VIEW.x + (Math.random() - 0.5) * 0.03,
+          MUZZLE_VIEW.y + (Math.random() - 0.5) * 0.03,
+          MUZZLE_VIEW.z - 0.02 - Math.random() * 0.05,
+        );
+        puff.vel.set(
+          (Math.random() - 0.5) * 0.25,
+          0.10 + Math.random() * 0.18,
+          -0.55 - Math.random() * 0.35,
+        );
+        puff.mesh.rotation.z = puff.roll;
+        released++;
+      }
+    }
     if (slugMode) {
       // One lump down one known ray instead of a pellet volley.
       pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
@@ -1466,7 +1919,7 @@ async function main() {
       if (entry) gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
       return;
     }
-    const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     gutRopes.set(a.id, {
       chain: makeGutChain(anchor, {
         coilTightness: woundTuning.coilTightness,
@@ -1494,7 +1947,7 @@ async function main() {
         gutRopes.set(a.id, entry);
       }
       if (entry.chain.attached) {
-        const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound);
+        const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw);
         entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
         gutRopes.set(a.id, entry);
       }
@@ -1549,7 +2002,7 @@ async function main() {
     // the sever path already funnel through this function, and two copies
     // would drift. Uses the SAME bleedRng, so setBleed(false) freezes gouts
     // and the trickle together and captures stay deterministic.
-    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound);
+    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     // The gout sprays back along the incoming shot; spawnImpactGout negates
     // what it is handed, and the wound normal already points OUT of the
     // body, so pass the inward direction.
@@ -1574,6 +2027,29 @@ async function main() {
   // -----------------------------------------------------------------------
   // HUD: frame time, bodies on screen, probeWeight, where you are.
   // -----------------------------------------------------------------------
+  // THE RETICLE. A target graphic rather than a bare dot, per the owner: outer
+  // ring, four ticks and a centre pip, drawn as one inline SVG so it stays crisp
+  // at any size and costs no asset. It is the aim point in free-aim mode.
+  {
+    reticleEl = document.createElement('div');
+    reticleEl.setAttribute('style',
+      'position:fixed; left:50%; top:50%; width:34px; height:34px; z-index:35;'
+      + ' margin:-17px 0 0 -17px; pointer-events:none;'
+      + ' filter:drop-shadow(0 0 2px rgba(0,0,0,0.9));');
+    reticleEl.innerHTML =
+      '<svg viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">'
+      + '<circle cx="17" cy="17" r="10.5" fill="none" stroke="#ffd98a"'
+      + ' stroke-width="1.4" opacity="0.85"/>'
+      + '<circle cx="17" cy="17" r="1.6" fill="#ffd98a" opacity="0.95"/>'
+      + '<g stroke="#ffd98a" stroke-width="1.4" opacity="0.9">'
+      + '<line x1="17" y1="1.5" x2="17" y2="6.5"/>'
+      + '<line x1="17" y1="27.5" x2="17" y2="32.5"/>'
+      + '<line x1="1.5" y1="17" x2="6.5" y2="17"/>'
+      + '<line x1="27.5" y1="17" x2="32.5" y2="17"/>'
+      + '</g></svg>';
+    document.body.appendChild(reticleEl);
+  }
+
   const hudEl = document.getElementById('hud');
   const hud = { lockHint: true };
   let frameEma = 0;
@@ -1601,10 +2077,12 @@ async function main() {
     hudEl.textContent =
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
+      ` · shells ${shells}/${MAGAZINE_CAPACITY}` +
       (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
       (sdfLayer.halfRate
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
+      (freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -1707,7 +2185,8 @@ async function main() {
         hullExclusionsEnabled
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+            const yaw = a.pose().yaw;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // The pre-pass ships disabled and nothing consumes the occluder
@@ -1724,6 +2203,170 @@ async function main() {
     // ---------------------------------------------------------------
     cooldown = Math.max(0, cooldown - dt);
     recoilPitch *= Math.exp(-9 * dt);
+    // ——— FREE AIM ————————————————————————————————————————————————————
+    // The reticle only turns the camera once it is shoved past the dead zone;
+    // inside it, aiming is free and the world stays put.
+    if (freeAimOn) {
+      const turn = turnFromAim(aim, dt);
+      player.yaw += turn.yaw;
+      player.pitch = Math.min(PLAYER.pitchLimit,
+        Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
+    }
+    {
+      const w = freeAimOn ? weaponAngles(aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
+      weaponYawDeg = approachAngle(weaponYawDeg, w.yawDeg, dt);
+      weaponPitchDeg = approachAngle(weaponPitchDeg, w.pitchDeg, dt);
+      // ...and the weapon CARRIES across the frame as well as turning. Rotation
+      // alone pins the grip near screen centre at every reticle position --
+      // that is what pivoting about the grip means -- so the gun read as bolted
+      // to the camera with a hinged barrel (owner report). approachAngle is a
+      // plain exponential catch-up, so it smooths metres as happily as degrees.
+      const s = freeAimOn ? weaponSlide(aim) : { x: 0, y: 0 };
+      weaponSlideXm = approachAngle(weaponSlideXm, s.x, dt);
+      weaponSlideYm = approachAngle(weaponSlideYm, s.y, dt);
+    }
+    // WALK BOB, driven by distance rather than time so it stays locked to the
+    // stride when the player speeds up, slows down or stops.
+    {
+      const pos = player.pos;
+      const step = Math.hypot(pos[0] - prevPlayerPos[0], pos[2] - prevPlayerPos[2]);
+      prevPlayerPos = [pos[0], pos[1], pos[2]];
+      bobDistance += step;
+      const speed01 = dt > 0 ? Math.min(1, step / dt / PLAYER.walkSpeed) : 0;
+      bobAmount = approachBob(bobAmount, speed01, dt);
+    }
+    if (aimRig) {
+      const b = bobPose(bobDistance, bobAmount);
+      const yaw = THREE.MathUtils.degToRad(weaponYawDeg);
+      const pitch = THREE.MathUtils.degToRad(weaponPitchDeg);
+      const roll = THREE.MathUtils.degToRad(b.rollDeg);
+      // ROTATE ABOUT THE GRIP, not about the eye. Without this offset the rig
+      // pivots on the player's head and the weapon leaves the frame the moment
+      // it points anywhere near the edge of the viewport. Roll (the walk bob)
+      // has to be passed too -- it is small alone but combines with yaw/pitch
+      // under Three.js's 'XYZ' Euler order in a way pivotOffset must match.
+      const o = pivotOffset(GUN_REST.pos, pitch, yaw, roll);
+      // Bob + pivot correction + the aim slide. Order does not matter (they are
+      // all translations) but the roles do: `o` holds the grip STILL under the
+      // rotation, and the slide is what then carries that held grip across the
+      // frame. Without the slide the two cancel to a gun that only ever nods.
+      aimRig.position.set(
+        b.x + o.x + weaponSlideXm,
+        b.y + o.y + weaponSlideYm,
+        o.z,
+      );
+      aimRig.rotation.set(pitch, yaw, roll);
+    }
+    if (reticleEl) {
+      reticleEl.style.display = freeAimOn ? 'block' : 'none';
+      if (freeAimOn) {
+        // Position against the CANVAS, not the window. Percent-of-viewport put
+        // the reticle outside the render area whenever the canvas did not fill
+        // the page -- so the thing marking where you are aiming sat somewhere
+        // you could not shoot.
+        const r = canvas.getBoundingClientRect();
+        reticleEl.style.left = `${r.left + r.width * (0.5 + aim.x * 0.5)}px`;
+        reticleEl.style.top = `${r.top + r.height * (0.5 - aim.y * 0.5)}px`;
+      }
+    }
+
+    flashAge += dt;
+    fireAge += dt;
+    const flashV = flashEnvelope(flashAge);
+    if (flashGroup && flashMaterial) {
+      flashGroup.visible = flashV > 0;
+      flashMaterial.opacity = flashV;
+      // Expand as it dies rather than shrinking -- burning gas pushes outward.
+      flashGroup.scale.setScalar(0.85 + 0.75 * (1 - flashV));
+    }
+    if (flashLight) flashLight.intensity = 55 * flashV;
+
+    // SMOKE. Each live puff drifts, expands and fades; dead ones stay hidden.
+    for (const p of smokePuffs) {
+      if (p.age === Infinity) continue;
+      p.age += dt;
+      const life = 0.9;
+      if (p.age >= life) { p.age = Infinity; p.mesh.visible = false; continue; }
+      const u = p.age / life;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.vel.multiplyScalar(1 - 1.6 * dt);      // drag
+      p.vel.y += 0.28 * dt;                    // it rises as it cools
+      p.mesh.scale.setScalar(0.6 + 2.4 * u);
+      p.mesh.rotation.z = p.roll + u * 0.8;
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - u) * (1 - u * 0.3);
+      p.mesh.visible = true;
+    }
+
+    // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
+    // a reload during recoil reads as both rather than one clobbering the other.
+    const reloading = reloadAge <= RELOAD.totalSec;
+    if (reloading) reloadAge += dt;
+    const rp = reloading ? reloadPose(reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
+    const rc = fireRecoil(fireAge, fireBarrels);
+    if (gunGroup) {
+      gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
+      gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
+      gunGroup.position.set(
+        GUN_REST.pos.x,
+        GUN_REST.pos.y + rp.dy + rc.dy,
+        GUN_REST.pos.z + rp.dz + rc.dz,
+      );
+    }
+    if (hingePivot) hingePivot.rotation.x = rp.hinge * RELOAD.openRad;
+
+    if (reloading) {
+      // THE SUPPORT HAND leaves the fore-end, drops out of frame low-left, and
+      // comes back up carrying the fresh cases -- so the reload actually SHOWS
+      // a hand doing the loading instead of shells appearing by themselves.
+      const sh = supportHandPose(reloadAge);
+      if (foreHandGroup) {
+        foreHandGroup.position.set(
+          FORE_HAND_REST.x + sh.dx,
+          FORE_HAND_REST.y + sh.dy,
+          FORE_HAND_REST.z + sh.dz,
+        );
+      }
+      // SPENT CASES thrown up and back out of the open breech.
+      const breech = new THREE.Vector3(0.105, -0.075, -0.360);
+      for (let i = 0; i < ejectedShells.length; i++) {
+        const m = ejectedShells[i];
+        if (!m) continue;
+        const e = ejectedShell(reloadAge, i === 0 ? 0 : 1);
+        if (!e) { m.visible = false; continue; }
+        m.visible = true;
+        m.position.set(breech.x + e.x, breech.y + e.y, breech.z + e.z);
+        m.rotation.set(Math.PI / 2 + e.spin, e.spin * 0.6, 0);
+      }
+      // FRESH CASES riding up with the hand and seating in the chambers.
+      const travel = loadShellTravel(reloadAge);
+      for (let i = 0; i < loadShells.length; i++) {
+        const m = loadShells[i];
+        if (!m) continue;
+        if (travel === null) { m.visible = false; continue; }
+        m.visible = true;
+        const side = i === 0 ? -0.024 : 0.024;
+        // From under the frame, in the support hand, to the chamber mouths.
+        const from = new THREE.Vector3(FORE_HAND_REST.x + sh.dx + side, FORE_HAND_REST.y + sh.dy + 0.03, FORE_HAND_REST.z + sh.dz);
+        const to = new THREE.Vector3(breech.x + side, breech.y + 0.005, breech.z - 0.020);
+        m.position.lerpVectors(from, to, travel);
+        m.rotation.set(Math.PI / 2, 0, 0);
+      }
+
+      if (reloadPhaseAt(reloadAge) === 'done') {
+        shells = MAGAZINE_CAPACITY;
+        reloadAge = Infinity;
+        if (hingePivot) hingePivot.rotation.x = 0;
+        if (gunGroup) {
+          gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
+          gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
+          gunGroup.position.copy(GUN_REST.pos);
+        }
+        if (foreHandGroup) foreHandGroup.position.copy(FORE_HAND_REST);
+        for (const m of ejectedShells) m.visible = false;
+        for (const m of loadShells) m.visible = false;
+        updateHud();
+      }
+    }
     {
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
@@ -1819,7 +2462,7 @@ async function main() {
         for (const e of bleed.live(bleedClock)) {
           const a = actors.find(q => q.id === e.bodyId);
           if (!a) { bleed.evictForBody(e.bodyId); continue; }
-          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound);
+          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
             bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
           );
@@ -2040,16 +2683,18 @@ async function main() {
     },
     /** Where every wound of a body sits IN WORLD SPACE right now — the
      *  surface anchor (= the GPU carve sphere's centre) plus the depth-slab
-     *  cap, all at the yaw-0 contract. The placement gate diffs the surface
+     *  cap, mapped at the actor's live yaw (the body-frame wound contract,
+     *  game-actor refreshWounds). The placement gate diffs the surface
      *  against the fired ray's impact point; carveDepth is the punch-through
      *  guard (0.45 × measured local flesh). */
     debugWounds: (id: number) => {
       const a = actors.find(a => a.id === id);
       if (!a) return undefined;
       const prims = a.posed().prims;
+      const yaw = a.pose().yaw;
       return a.wounds().map(w => ({
-        surface: woundWorldPos(prims, w, 0),
-        carveNormal: woundCarveNormal(prims, w, 0),
+        surface: woundWorldPos(prims, w, yaw),
+        carveNormal: woundCarveNormal(prims, w, yaw),
         carveDepth: w.carveDepth,
         radius: w.radius,
         type: w.type,
@@ -2088,6 +2733,61 @@ async function main() {
     // the headless driver can shoot; aim with setPose(yaw, pitch).
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
+    get flashVisible() { return flashGroup?.visible ?? false; },
+    /** Free-aim seam, for the gate and for A/B by hand. */
+    get freeAim() { return freeAimOn; },
+    setFreeAim(on: boolean) { freeAimOn = on; aim = { x: 0, y: 0 }; updateHud(); return freeAimOn; },
+    get aimPoint() { return { x: aim.x, y: aim.y }; },
+    setAimPoint(x: number, y: number) {
+      aim = { x: Math.min(1, Math.max(-1, x)), y: Math.min(1, Math.max(-1, y)) };
+      return { x: aim.x, y: aim.y };
+    },
+    get weaponLeanDeg() { return { yaw: weaponYawDeg, pitch: weaponPitchDeg }; },
+    /** Live free-aim / bob knobs. Every one of these is a feel number that has
+     *  to be played rather than reasoned about:
+     *    __sdfGame.setAimTuning({ deadzoneX: 0.5, turnRateX: 1.4 })
+     *    __sdfGame.setAimTuning({ amountX: 0.03, amountY: 0.02 })   // bob
+     */
+    setAimTuning(t: Partial<Record<string, number>>) {
+      for (const [k, v] of Object.entries(t)) {
+        if (v === undefined) continue;
+        if (k in FREE_AIM) (FREE_AIM as unknown as Record<string, number>)[k] = v;
+        else if (k in BOB) (BOB as unknown as Record<string, number>)[k] = v;
+      }
+      return { ...FREE_AIM, bob: { ...BOB } };
+    },
+    get bob() { return { distance: bobDistance, amount: bobAmount }; },
+    /** Live finish knobs. The owner's look pass: the gun reads a touch too
+     *  shiny under the dungeon rig and the hands are hard to see at this
+     *  exposure. Both are judgement calls that depend on the final lighting,
+     *  so they are knobs rather than new constants:
+     *    __sdfGame.setGunTuning({ roughness: 0.30, envMapIntensity: 0.85 })
+     *    __sdfGame.setGunTuning({ handEmissive: 0.45 })
+     */
+    setGunTuning(t: {
+      roughness?: number; envMapIntensity?: number; metalness?: number;
+      handEmissive?: number; handRoughness?: number;
+    }) {
+      for (const m of gunMaterials) {
+        if (t.roughness !== undefined) m.roughness = t.roughness;
+        if (t.envMapIntensity !== undefined) m.envMapIntensity = t.envMapIntensity;
+        if (t.metalness !== undefined) m.metalness = t.metalness;
+        m.needsUpdate = true;
+      }
+      if (handMaterial) {
+        if (t.handEmissive !== undefined) handMaterial.emissiveIntensity = t.handEmissive;
+        if (t.handRoughness !== undefined) handMaterial.roughness = t.handRoughness;
+        handMaterial.needsUpdate = true;
+      }
+      return {
+        roughness: gunMaterials[0]?.roughness ?? null,
+        envMapIntensity: gunMaterials[0]?.envMapIntensity ?? null,
+        metalness: gunMaterials[0]?.metalness ?? null,
+        handEmissive: handMaterial?.emissiveIntensity ?? null,
+      };
+    },
+    get shells() { return shells; },
+    get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
     // SLUG MODE surface + HUD-truthful flag.
@@ -2275,12 +2975,23 @@ async function main() {
       gooPanel?.setVisible(on);
       return gooPanel?.visible ?? false;
     },
-    /** Show/hide the WOUND tuning panel (ships hidden; see woundPanel's
-     *  declaration). Same shape as gooPanel so capture scripts can guard it
-     *  the same typeof way. */
+    /** Show/hide the WOUND tuning panel (ships visible but collapsed; see
+     *  woundPanel's declaration). Same shape as gooPanel so capture scripts
+     *  can guard it the same typeof way. */
     woundPanel(on: boolean) {
       woundPanel?.setVisible(on);
       return woundPanel?.visible ?? false;
+    },
+    /** Expand or re-collapse the GOO panel. Panels ship COLLAPSED so they stop
+     *  covering the frame; a capture script that actually wants to photograph
+     *  the sliders opens it with this. */
+    gooPanelCollapsed(on: boolean) {
+      gooPanel?.setCollapsed(on);
+      return gooPanel?.collapsed ?? true;
+    },
+    woundPanelCollapsed(on: boolean) {
+      woundPanel?.setCollapsed(on);
+      return woundPanel?.collapsed ?? true;
     },
 
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
@@ -2910,7 +3621,8 @@ async function main() {
         hullExclusionsEnabled
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, 0), radius: w.radius }));
+            const yaw = a.pose().yaw;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // Same rule as the frame loop: only rebuild the occluder half when
@@ -2999,9 +3711,10 @@ async function main() {
       // 'slug' carries the BLAST profile at 0.16 (see SLUG) — the blast-class
       // crater look without resolveExplosion's 16-wound kill-gib.
       const field = (q: Vec3) => sdBody(q, posed);
+      const yaw = a.pose().yaw;
       const w = kind === 'slug'
-        ? woundFromSlug(posed.prims, hit, field)
-        : woundFromPellet(posed.prims, hit, 0, field);
+        ? woundFromSlug(posed.prims, hit, field, yaw)
+        : woundFromPellet(posed.prims, hit, yaw, field);
       a.stampBlast([w]);
       // Capture twins must spill too — task 8 judges the rope from exactly
       // this seam. Rolls bleedRng deterministically: same command sequence,
@@ -3014,7 +3727,7 @@ async function main() {
      *  blast calibre — wounds only, no shove/sever/gib, so captures are not
      *  displaced by their own impact. Returns what it did. */
     explode: (x: number, y: number, z: number) => {
-      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed() }));
+      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw }));
       const fx = resolveExplosion([x, y, z], bodies);
       let totalWounds = 0;
       for (const pb of fx.perBody) {

@@ -25,6 +25,7 @@ export default defineConfig({
         sdfLabWebgpuBench: resolve(__dirname, 'sdf-lab-webgpu-bench.html'),
         sdfBench: resolve(__dirname, 'sdf-bench.html'),
         humanoidSdfSpike: resolve(__dirname, 'humanoid-sdf-spike.html'),
+        sdfHullSpike: resolve(__dirname, 'sdf-hull-spike.html'),
         sdfGame: resolve(__dirname, 'sdf-game.html'),
       },
     },

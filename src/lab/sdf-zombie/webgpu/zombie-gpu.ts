@@ -48,6 +48,9 @@ export interface ZombieGpuView {
    *  1-cubed fallback while the volume branch stays disabled; a view that
    *  created its own fallback disposes it in dispose(). */
   volumeTexture: THREE.Texture;
+  /** The packed prim DataTexture this view uploads to — the hull extraction
+   *  kernel reads the same texture the march does. */
+  dataTexture: THREE.Texture;
   /**
    * Re-upload after the body changes (sever, override edit, rig step).
    * `rest` is the same body in its authored rest pose (motion-polish task 6 —
@@ -666,6 +669,19 @@ export interface ConeSource {
   uniforms: ConeUniforms;
 }
 
+/** Hull-refine (phase 0): per-fragment ray overrides so the SHIPPED march
+ *  does a short band walk from a rasterised hull instead of a proxy-box
+ *  march. `worldPos` feeds tMaxBox = length(worldPos - camPos) — pass the
+ *  hull point pushed 2*band along the ray to bound the walk; `startT` is
+ *  the hull point's own distance; `marchCfg` a separate steps uniform so
+ *  the inner view's 96 stays untouched; `side` FrontSide for a hull. */
+export interface MarchRayOverride {
+  worldPos: unknown;
+  startT: unknown;
+  marchCfg: unknown;
+  side: THREE.Side;
+}
+
 /** Builds the march material (depth-writing proxy-box shader). Exported for
  *  the hands view — one material builder, one look.
  *
@@ -683,6 +699,7 @@ export function createMarchMaterial(
   shell?: ShellSource,
   prev?: PrevSource,
   levelShadow?: { light: THREE.SpotLight },
+  rays?: MarchRayOverride,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -705,7 +722,7 @@ export function createMarchMaterial(
       : fallbackLevelShadowTexture(),
   );
   const marched = march({
-    worldPos: positionWorld,
+    worldPos: (rays?.worldPos ?? positionWorld) as never,
     camPos: cameraPosition,
     data: dataNode,
     volumeTex: volumeNode,
@@ -718,7 +735,7 @@ export function createMarchMaterial(
     volumeClip: u.volumeClip,
     counts: u.counts,
     counts2: u.counts2,
-    marchCfg: u.marchCfg,
+    marchCfg: (rays?.marchCfg ?? u.marchCfg) as never,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
     baseColor: u.baseColor,
@@ -774,13 +791,15 @@ export function createMarchMaterial(
     tileEnt: (tiles?.entries ?? fallbackTileBindings().entries) as never,
     tileCfg: u.tileCfg,
     screenUV: screenUV,
-    startT: cone
-      ? coneFetch({
-          coneTex: texture(cone.texture),
-          screenUV: screenUV,
-          enabled: cone.uniforms.enabled,
-        })
-      : float(0),
+    startT: rays
+      ? (rays.startT as never)
+      : cone
+        ? coneFetch({
+            coneTex: texture(cone.texture),
+            screenUV: screenUV,
+            enabled: cone.uniforms.enabled,
+          })
+        : float(0),
     occT: occluder
       ? occFetchNode({
           occTex: texture(occluder.texture),
@@ -839,7 +858,7 @@ export function createMarchMaterial(
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
-  material.side = THREE.BackSide;
+  material.side = rays?.side ?? THREE.BackSide;
 
   /** The level-shadow TextureNode this material binds, exposed for the
    *  owner's per-frame rebind (see the comment at its creation). */
@@ -1267,6 +1286,7 @@ export function createZombieGpuView(
     coneObject: coneMesh,
     uniforms: u,
     volumeTexture: volumeTex,
+    dataTexture: dataTex,
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
@@ -1347,6 +1367,9 @@ export interface ChunkGpuView {
   /** The 3D texture bound to the volume slot (X1.26) — the shared fallback;
    *  self-created ones are disposed with the view. */
   volumeTexture: THREE.Texture;
+  /** The packed prim DataTexture this view uploads to — the hull extraction
+   *  kernel reads the same texture the march does. */
+  dataTexture: THREE.Texture;
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
   update(chunk: Chunk): void;
@@ -1601,6 +1624,7 @@ export function createChunkGpuView(
     object: mesh,
     uniforms: u,
     volumeTexture: volTex,
+    dataTexture: dataTex,
     reset,
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
