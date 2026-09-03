@@ -2957,6 +2957,17 @@ async function main() {
       woundPanel?.setVisible(on);
       return woundPanel?.visible ?? false;
     },
+    /** Expand or re-collapse the GOO panel. Panels ship COLLAPSED so they stop
+     *  covering the frame; a capture script that actually wants to photograph
+     *  the sliders opens it with this. */
+    gooPanelCollapsed(on: boolean) {
+      gooPanel?.setCollapsed(on);
+      return gooPanel?.collapsed ?? true;
+    },
+    woundPanelCollapsed(on: boolean) {
+      woundPanel?.setCollapsed(on);
+      return woundPanel?.collapsed ?? true;
+    },
 
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
      *  the panel's WOUND_KEYS — the table the COPY button emits from — so a

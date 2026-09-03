@@ -1,5 +1,8 @@
 // src/lab/sdf-zombie/webgpu/goo-panel.ts
 //
+// See panel-chrome.ts for the shared shell (title bar, collapse caret, close
+// button) both tuning panels sit in.
+//
 // A live tuning panel for the goo layer on the GAME page.
 //
 // WHY THIS EXISTS: the lab has had sliders since X1.21, but the game page has
@@ -17,6 +20,8 @@
 // The COPY button is the point of the whole thing: it emits the current state
 // as the exact console calls that reproduce it, so a look the owner likes
 // leaves the browser as something pasteable rather than as a memory.
+
+import { createPanelShell } from './panel-chrome';
 
 /** One slider: a labelled range bound to a getter/setter pair. */
 export interface GooPanelKnob {
@@ -36,7 +41,9 @@ export interface GooPanelKnob {
 export interface GooPanel {
   readonly el: HTMLElement;
   readonly visible: boolean;
+  readonly collapsed: boolean;
   setVisible(on: boolean): void;
+  setCollapsed(on: boolean): void;
   /** Pull every slider back into line with the live values (after a preset). */
   refresh(): void;
   dispose(): void;
@@ -56,14 +63,6 @@ export interface GooPanelPreset {
   values: Record<string, number>;
 }
 
-const PANEL_CSS = `
-  position:fixed; top:8px; right:8px; width:250px; z-index:40;
-  background:rgba(20,16,15,0.93); color:#e8ddd8; border:1px solid #3a2f2d;
-  border-radius:3px; padding:9px 10px 10px;
-  font:11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-  max-height:calc(100vh - 16px); overflow-y:auto;
-`;
-
 export function createGooPanel(
   knobs: GooPanelKnob[],
   opts: {
@@ -72,29 +71,8 @@ export function createGooPanel(
     onCopy?: (text: string) => void;
   } = {},
 ): GooPanel {
-  const el = document.createElement('div');
-  el.setAttribute('style', PANEL_CSS);
-  el.style.display = 'none';
-
-  // Title bar with a CLOSE button. The panel had a setVisible() seam and a
-  // console toggle but nothing clickable, so the only way to get it off the
-  // screen was to know the API -- and it covers most of the viewport, which
-  // made every capture of the weapon useless until it was dismissed.
-  const title = document.createElement('div');
-  title.setAttribute('style',
-    'display:flex; align-items:center; justify-content:space-between; gap:8px;'
-    + ' font-size:10px; letter-spacing:.12em; color:#9a8b86; margin-bottom:7px;');
-  const titleText = document.createElement('span');
-  titleText.textContent = 'GOO TUNING';
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '\u2715';
-  closeBtn.title = 'hide (H toggles both panels)';
-  closeBtn.setAttribute('style',
-    'background:none; border:0; color:#9a8b86; cursor:pointer; font-size:12px;'
-    + ' line-height:1; padding:0 2px;');
-  closeBtn.addEventListener('click', () => { el.style.display = 'none'; });
-  title.append(titleText, closeBtn);
-  el.appendChild(title);
+  const shell = createPanelShell('GOO TUNING');
+  const el = shell.body;
 
   const toggleRow = document.createElement('div');
   toggleRow.setAttribute('style', 'display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;');
@@ -188,19 +166,15 @@ export function createGooPanel(
   note.setAttribute('style', 'color:#6f625e; margin-top:6px; font-size:10px;');
   el.appendChild(note);
 
-  document.body.appendChild(el);
-
-  let visible = false;
+  shell.onReveal(refresh);
   return {
-    el,
-    get visible() { return visible; },
-    setVisible(on) {
-      visible = on;
-      el.style.display = on ? 'block' : 'none';
-      if (on) refresh();
-    },
+    el: shell.el,
+    get visible() { return shell.visible; },
+    get collapsed() { return shell.collapsed; },
+    setVisible(on) { shell.setVisible(on); },
+    setCollapsed(on) { shell.setCollapsed(on); },
     refresh,
-    dispose() { el.remove(); },
+    dispose() { shell.dispose(); },
   };
 }
 
