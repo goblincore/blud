@@ -1,0 +1,228 @@
+// src/lab/sdf-zombie/webgpu/bone-instancer.ts
+//
+// Bones as instanced tubes (spec 2026-09-02-bone-tubes-design.md). One unit
+// tube (bone-tube-geom.ts) drawn once per posed bone prim, in the POLYGONAL
+// pass on the default layer with depth write on. The SDF composite's depth
+// test then hides bone under flesh and reveals it in cavities — no gate, no
+// mask. The vertex program is the twin of tubePoint(); keep them in step.
+//
+// wgslFn constraints (same as humanoid.wgsl.ts's header): each source string
+// begins with `fn` — no leading comment — and helpers go through `includes`
+// in DEPENDENCY order, because WGSL requires declaration before use. That is
+// why qRotB is its own string (BONE_QROT_WGSL) rather than a second fn at the
+// bottom of BONE_VERTEX_WGSL.
+import * as THREE from 'three/webgpu';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import {
+  wgslFn, uniform, attribute, positionWorld, cameraPosition, vec4, float,
+} from 'three/tsl';
+import type { Primitive } from '../types';
+import { boneInstanceOf, buildTubeGeometry } from './bone-tube-geom';
+
+export const INSTANCE_FLOATS = 18;
+
+export interface BoneInstanceArrays {
+  ab: Float32Array;           // INSTANCE_FLOATS per instance
+  overflowed: boolean;
+}
+export function boneInstanceArrays(max: number): BoneInstanceArrays {
+  return { ab: new Float32Array(max * INSTANCE_FLOATS), overflowed: false };
+}
+
+/**
+ * Pack posed bone prims into the instance array. `alive` is the body's
+ * cluster-alive table (undefined for chunk lists, whose bones are all live).
+ * Same filter as packBody's bone rows: op 'bone' only, not dead, cluster alive.
+ */
+export function packBoneInstances(
+  prims: readonly Primitive[], alive: readonly boolean[] | undefined,
+  out: BoneInstanceArrays, max: number,
+): number {
+  let n = 0;
+  out.overflowed = false;
+  for (const p of prims) {
+    if (p.op !== 'bone' || p.dead) continue;
+    if (alive && !alive[p.cluster]) continue;
+    if (n >= max) { out.overflowed = true; break; }
+    const s = boneInstanceOf(p);
+    const o = n * INSTANCE_FLOATS;
+    out.ab.set(s.a, o); out.ab.set(s.b, o + 3); out.ab.set(s.c, o + 6);
+    out.ab[o + 9] = s.r1; out.ab[o + 10] = s.r2;
+    out.ab.set(s.scale, o + 11); out.ab.set(s.orient, o + 14);
+    n++;
+  }
+  return n;
+}
+
+/** Quaternion rotation, shared by the vertex sweep. Separate source because
+ *  WGSL requires declaration before use and wgslFn emits includes in order. */
+export const BONE_QROT_WGSL = /* wgsl */ `fn qRotB(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
+  let t = 2.0 * cross(q.xyz, v);
+  return v + q.w * t + cross(q.xyz, t);
+}`;
+
+/** Vertex sweep — the WGSL twin of tubePoint(). Returns world position in
+ *  xyz; the normal is recomputed from the same inputs with wantNormal = 1. */
+export const BONE_VERTEX_WGSL = /* wgsl */ `fn boneVertex(t: f32, theta: f32, lat: f32, iA: vec3<f32>, iB: vec3<f32>, iC: vec3<f32>, iR: vec2<f32>, iScale: vec3<f32>, iQ: vec4<f32>, wantNormal: f32) -> vec3<f32> {
+  let inv = 1.0 / iScale;
+  let mid = (iA + iB) * 0.5;
+  let A = qRotB(iQ, iA - mid) * inv + mid * inv;
+  let B = qRotB(iQ, iB - mid) * inv + mid * inv;
+  let C = qRotB(iQ, iC - mid) * inv + mid * inv;
+  let sphere = dot(B - A, B - A) < 1e-18;
+  let w0 = (1.0 - t) * (1.0 - t);
+  let w1 = 2.0 * t * (1.0 - t);
+  let w2 = t * t;
+  let centre = A * w0 + C * w1 + B * w2;
+  var tan = vec3<f32>(0.0, 1.0, 0.0);
+  if (!sphere) {
+    tan = normalize(2.0 * (1.0 - t) * (C - A) + 2.0 * t * (B - C));
+  }
+  let ref = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(tan.y) < 0.9);
+  let u = normalize(cross(ref, tan));
+  let v = cross(tan, u);
+  let r = mix(iR.x, iR.y, t);
+  var q = vec3<f32>(0.0);
+  var nrm = vec3<f32>(0.0);
+  if (lat < 0.0) {
+    let ring = u * cos(theta) + v * sin(theta);
+    q = centre + ring * r;
+    nrm = ring;
+  } else {
+    let outDir = select(tan, -tan, t < 0.5);
+    let ringW = cos(lat * 1.5707963);
+    let rise = sin(lat * 1.5707963);
+    let dir = (u * cos(theta) + v * sin(theta)) * ringW + outDir * rise;
+    q = centre + dir * r;
+    nrm = dir;
+  }
+  if (wantNormal > 0.5) {
+    // normal of a scaled surface: n' = normalize(n / scale)
+    return normalize(nrm * inv);
+  }
+  return q * iScale;
+}`;
+
+/** Lambert key + flashlight cone, the march's own formula (march.wgsl.ts
+ *  ~2253-2290) on the same uniform values, minus wetness/scatter. */
+export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
+  var L = normalize(lightDir);
+  var keyC = keyColor;
+  var keyI = lightCfg.x;
+  if (spotCfg.x > 0.0) {
+    let toLamp = spotPos - p;
+    let dist = length(toLamp);
+    let Ls = toLamp / max(dist, 1e-4);
+    let cone = dot(-Ls, normalize(spotAxis));
+    let coneFall = clamp((cone - spotCfg.z) / max(spotCfg.y - spotCfg.z, 1e-4), 0.0, 1.0);
+    let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
+    let beam = coneFall * coneFall * distFall * distFall * spotCfg.x;
+    L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
+    keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
+    keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
+  }
+  let V = normalize(camPos - p);
+  let ndl = max(dot(n, L), 0.0);
+  let H = normalize(L + V);
+  let spec = pow(max(dot(n, H), 0.0), 24.0) * 0.12;
+  let amb = lightCfg.y * keyColor;
+  return boneColor * (amb + keyI * keyC * ndl) + keyC * keyI * spec;
+}`;
+
+export interface BoneInstancer {
+  object: THREE.Mesh;
+  uniforms: {
+    boneColor: ReturnType<typeof uniform>; lightDir: ReturnType<typeof uniform>;
+    keyColor: ReturnType<typeof uniform>; lightCfg: ReturnType<typeof uniform>;
+    spotPos: ReturnType<typeof uniform>; spotAxis: ReturnType<typeof uniform>;
+    spotCfg: ReturnType<typeof uniform>; spotCfg2: ReturnType<typeof uniform>;
+    spotColor: ReturnType<typeof uniform>;
+  };
+  /** Replace this frame's bone set. Each entry is a posed prim list + its
+   *  cluster-alive table (undefined for chunks). */
+  update(sources: ReadonlyArray<{ prims: readonly Primitive[]; alive?: readonly boolean[] }>): void;
+  readonly count: number;
+  readonly overflowed: boolean;
+  dispose(): void;
+}
+
+export function createBoneInstancer(max = 256): BoneInstancer {
+  const base = buildTubeGeometry();
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setIndex(base.getIndex());
+  for (const name of ['position', 'tubeT', 'tubeTheta', 'tubeLat']) geo.setAttribute(name, base.getAttribute(name));
+  const arrays = boneInstanceArrays(max);
+  const ib = new THREE.InstancedInterleavedBuffer(arrays.ab, INSTANCE_FLOATS, 1);
+  ib.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('iA', new THREE.InterleavedBufferAttribute(ib, 3, 0));
+  geo.setAttribute('iB', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+  geo.setAttribute('iC', new THREE.InterleavedBufferAttribute(ib, 3, 6));
+  geo.setAttribute('iR', new THREE.InterleavedBufferAttribute(ib, 2, 9));
+  geo.setAttribute('iScale', new THREE.InterleavedBufferAttribute(ib, 3, 11));
+  geo.setAttribute('iQ', new THREE.InterleavedBufferAttribute(ib, 4, 14));
+  geo.instanceCount = 0;
+
+  const u = {
+    boneColor: uniform(new THREE.Color(0.93, 0.89, 0.80)),
+    lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
+    keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
+    lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
+    spotPos: uniform(new THREE.Vector3()),
+    spotAxis: uniform(new THREE.Vector3(0, 0, -1)),
+    spotCfg: uniform(new THREE.Vector4(0, 0.93, 0.80, 16)),
+    spotCfg2: uniform(new THREE.Vector4(4, 0.35, 0, 0)),
+    spotColor: uniform(new THREE.Color(0.94, 0.96, 1.0)),
+  };
+
+  // Dependency-ordered includes via the repo's reduce idiom (zombie-gpu.ts
+  // buildMarchFn): qRotB declared before boneVertex, as WGSL requires.
+  const [qrot, vert] = [BONE_QROT_WGSL, BONE_VERTEX_WGSL].reduce<ReturnType<typeof wgslFn>[]>(
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+  );
+  void qrot;
+  const shade = wgslFn(BONE_SHADE_WGSL);
+  const args = {
+    t: attribute('tubeT', 'float'), theta: attribute('tubeTheta', 'float'), lat: attribute('tubeLat', 'float'),
+    iA: attribute('iA', 'vec3'), iB: attribute('iB', 'vec3'), iC: attribute('iC', 'vec3'),
+    iR: attribute('iR', 'vec2'), iScale: attribute('iScale', 'vec3'), iQ: attribute('iQ', 'vec4'),
+  };
+  const material = new MeshBasicNodeMaterial();
+  material.positionNode = vert({ ...args, wantNormal: float(0) }) as never;
+  material.normalNode = vert({ ...args, wantNormal: float(1) }) as never;
+  material.colorNode = vec4(shade({
+    p: positionWorld, n: material.normalNode, camPos: cameraPosition,
+    boneColor: u.boneColor, lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+    spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
+  }) as never, 1.0);
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.side = THREE.FrontSide;
+
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.frustumCulled = false;   // instances are in world space; the mesh sits at the origin
+  let count = 0;
+
+  return {
+    object: mesh,
+    uniforms: u,
+    update(sources) {
+      let n = 0;
+      arrays.overflowed = false;
+      for (const s of sources) {
+        const room = max - n;
+        if (room <= 0) { arrays.overflowed = true; break; }
+        const sub = boneInstanceArrays(0);
+        sub.ab = arrays.ab.subarray(n * INSTANCE_FLOATS);
+        n += packBoneInstances(s.prims, s.alive, sub, room);
+        if (sub.overflowed) arrays.overflowed = true;
+      }
+      count = n;
+      geo.instanceCount = n;
+      ib.needsUpdate = true;
+      mesh.visible = n > 0;
+    },
+    get count() { return count; },
+    get overflowed() { return arrays.overflowed; },
+    dispose() { geo.dispose(); base.dispose(); material.dispose(); },
+  };
+}
