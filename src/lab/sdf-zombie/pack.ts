@@ -31,8 +31,10 @@ export interface PackedBody {
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
   primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
   /** x = radius at endpoint B, NEGATIVE when untapered; y = fold profile
-   *  (0 round, 1 chamfer, 2 round+BENT, 3 chamfer+BENT); zw spare (groove
-   *  depth/width). Negative is the sentinel rather than "equal to radius"
+   *  BITFIELD: bit 0 (1) chamfer, bit 1 (2) bent, bit 2 (4) shell,
+   *  bit 3 (8) box, bit 4 (16) metal (SHADING-ONLY — every fold read of
+   *  prof is a bit mask, so the bit never changes geometry); zw spare
+   *  (groove depth/width). Negative is the sentinel rather than "equal to radius"
    *  because 0 is a LEGITIMATE taper target — a true point is the whole
    *  reason the taper exists. */
   primShape: Float32Array;
@@ -185,10 +187,12 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const bent = p.bend !== undefined ? 2 : 0;
     // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
     // a SHELL adds bit 2 (value 4) so straight=4, bent=6; a BOX adds bit 3
-    // (value 8). The shader folds any prof >= 4 as a shell and reads the shell
-    // rows; the low bits still mean chamfer/bend for the non-shell range and
-    // are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0);
+    // (value 8); METAL adds bit 4 (value 16) — a shading-only bit, safe
+    // because every fold read of prof is a bit mask ((& 2), (& 4), (& 8),
+    // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
+    // as a shell ONLY through the (& 4) mask; the low bits still mean
+    // chamfer/bend for the non-shell range and are ignored on a shell.
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0);
     // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
     // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
     // box is rejected at compile time, so a box never sets that bit and the
@@ -281,7 +285,8 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-      || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
+      || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
+      || p.metal !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -303,15 +308,20 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       const gOwn = body.prims.slice(g.start, g.start + g.count);
       const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
       // shell and box MUST be tested here too, same as the cluster-level
-      // `shaped` above. This is the flag foldGroup actually reads (the
-      // cluster-level one only feeds applyCarves), so a shell or box prim
-      // whose group carries no other shaped property arrives at the shader
-      // with prof = 0: ROW_PRIM_SHAPE/ROW_PRIM_BEND are never loaded, the
-      // shell/box bits never reach `(i32(prof) & ...) != 0`, and it draws as
-      // a plain closed capsule instead of a clipped sheet or a rounded box.
+      // `shaped` above — and METAL joins them (hard-surface task 2): a
+      // metal-ONLY prim (no taper, chamfer, bend, shell or box) is exactly
+      // the fixture that caught the shell omission, and one on `box metal`
+      // would have passed any test that did not isolate it. This is the
+      // flag foldGroup actually reads (the cluster-level one only feeds
+      // applyCarves), so a prim whose group carries no other shaped
+      // property arrives at the shader with prof = 0: ROW_PRIM_SHAPE and
+      // ROW_PRIM_BEND are never loaded, no bit reaches
+      // `(i32(prof) & ...) != 0`, and the prim draws as a plain closed
+      // capsule with its material silently dropped.
       const shaped = gOwn.some(p =>
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-        || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
+        || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
+        || p.metal !== undefined);
       groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
       groupCount++;
     }

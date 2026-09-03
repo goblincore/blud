@@ -169,10 +169,13 @@ CORNER, from a 3/4 yaw: two flat faces meeting at a crisp vertical edge is the
 tell. `docs/dev-notes/2026-09-02-box-primitive/` has reference frames.
 
 Still missing, and known: **`carve` is head-only**, so you cannot bore a socket
-or cut a vent slot into a plate. And `gloss=` pulls toward a WET highlight,
-which is a flesh cue — there is no metalness, so grey plates read as wet plastic
-rather than brushed metal. Both are deliberate gaps left for evidence from a
-real character; raise them rather than routing around them.
+or cut a vent slot into a plate. (`metal` has since landed — 2026-09-03 — as a
+shading word; see its section under Paint. The FIELD-level gaps below remain.)
+And `gloss=` pulls toward a WET highlight,
+which is a flesh cue — the `metal` word is the answer for plates, but there is
+still no roughness, so one plate cannot be brushed and another polished. Both
+are deliberate gaps left for evidence from a real character; raise them rather
+than routing around them.
 
 ## Colour is the biggest lever you have
 
@@ -257,6 +260,44 @@ Rules that fell out of the first painted character (the mouse):
 - **An untapered BENT prim renders now.** `coneBend` had no `r2 < 0` branch
   until the lens: every earlier bent prim happened to be tapered. If a bent
   part shows as a lone sphere at one end, that class of bug is where to look.
+
+## Metal: the bare word `metal` on a painted prim (added 2026-09-03)
+
+`gloss=` alone made the minotaur's plates SHINIER PLASTIC, never metal: the
+shader gave every painted prim a full diffuse plus an untinted white
+highlight, which is the recipe for polished plastic. The bare word `metal`
+(beside `box`/`chamfer`, gated on `color=` exactly as `gloss=` is) is the
+shading half of hard surface:
+
+```
+bar  leg on thigh from=-0.05 to=0.68 r=0.162 wide=1.28 tall=1.20 deep=1.18 box round=0.10 color=6a7078 metal gloss=0.95 side=r
+```
+
+What it does at shading time (`march.wgsl.ts`, the composite):
+
+- **Suppresses the diffuse family to a floor of 0.25** — ambient bounce
+  included, because bounce IS diffuse. NOT zero: with no environment map the
+  lab has one key, and a true-zero diffuse goes black wherever the highlight
+  is not.
+- **Tints the specular AND the fresnel rim by the prim's own `color=`**
+  instead of shining the light's colour. This is the single change that makes
+  steel differ from white plastic under the same light.
+- **Implies gloss's noise suppression with NO `gloss=` set** — a machined
+  surface has no pores either. An author writing `metal` alone gets the
+  polished look, not bull-hide pitting.
+
+- **`gloss` and `metal` are SEPARATE axes on purpose.** A glass lens is
+  glossy and emphatically not metal; folding one into the other turns the
+  cyclops' eye into a ball bearing. Keep `gloss=` on the line to keep the
+  tight hot highlight; `metal` alone keeps the preset's own highlight shape.
+- **This is a PAINT APPROXIMATION, not a metallic BRDF.** There is no
+  environment map and no roughness-driven reflection; the tint is flat, not
+  view-dependent beyond the existing fresnel. Do not go looking for a
+  metalness workflow that is not here, and do not expect metal to reflect the
+  room.
+- Keep the albedo DARK (the plates' 848a91 -> 6a7078, roughly -35% linear):
+  metal's diffuse is dark and its brightness is the highlight. A light albedo
+  plus a hot spec still reads as white plastic.
 
 ## Face decal: `sheet image` + `decal 1` (added 2026-08-23)
 

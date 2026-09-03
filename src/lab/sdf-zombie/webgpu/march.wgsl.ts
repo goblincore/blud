@@ -963,7 +963,11 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
-    // bit 2 (value 4). "& 7 == 1" means "bit 0 set, bits 1 and 2 clear" —
+    // bit 2 (value 4); box is bit 3 (value 8); METAL is bit 4 (value 16),
+    // packed by pack.ts and read ONLY in the shading block (it is a
+    // material, not a shape — the fold must treat a metal prim exactly like
+    // the same prim without it, and every mask here does: 16 & 7 == 0 and
+    // 16 & 8 == 0). "& 7 == 1" means "bit 0 set, bits 1 and 2 clear" —
     // exactly chamfer-and-nothing-else, which is what the OLD bounded-window
     // test (prof strictly between one half and one and a half) meant back
     // when prof topped out at 6.
@@ -1962,8 +1966,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // repeated, so no hit pixel pays for it twice. hitBest is -1 on the
   // baked-volume path; there gloss stays 0 and every noise term runs at
   // full flesh amplitude exactly as before.
+  // METAL (task 2) rides the same hoist: prof bit 4 (16), read off
+  // ROW_PRIM_SHAPE only inside the painted branch (metal is parse-gated on
+  // color=, so an unpainted pixel can never change the answer — one extra
+  // texel load on painted hit pixels only). metal implies the same noise
+  // suppression with no gloss set: a machined surface has no pores either,
+  // so both sites below take (1 - max(gloss, metal)).
   var gloss = 0.0;
   var painted = 0.0;
+  var metal = 0.0;
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
     let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
@@ -1971,15 +1982,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       primAlbedo = PC.xyz;
       gloss = clamp(PC.w - 1.0, 0.0, 1.0);
       painted = 1.0;
+      let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0);
+      if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
     }
   }
-  // Silhouette noise into the normal, scaled by (1 - gloss) at the point of
-  // application: a polished prim has no pits. The AO and scatter probes
-  // below keep the FULL marchCfg.z — they probe the real displaced field
-  // (fbm at frequency 3, features ~0.2 m), not surface detail, and the
-  // march loop runs the field smooth regardless. At gloss 0 this argument
-  // is exactly what it always was.
-  var n = calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - gloss), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+  // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
+  // the point of application: a polished or machined prim has no pits. The
+  // AO and scatter probes below keep the FULL marchCfg.z — they probe the
+  // real displaced field (fbm at frequency 3, features ~0.2 m), not surface
+  // detail, and the march loop runs the field smooth regardless. At
+  // gloss 0 / metal 0 this argument is exactly what it always was.
+  var n = calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - max(gloss, metal)), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -1990,11 +2003,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // fbm calls though, so it is guarded: once per hit pixel rather than per
   // step, but still six noise lookups a body does not always need. The
   // guard wraps the CALL (entrails post-mortem: skip the work, not just the
-  // output) and now also folds the gloss kill — a full-gloss prim skips the
-  // six lookups outright instead of computing them and multiplying to 0.
-  // At gloss 0 the product is exactly surfCfg2.y, so flesh shades
-  // bit-for-bit as before.
-  let detailAmp = surfCfg2.y * (1.0 - gloss);
+  // output) and now also folds the gloss/metal kill — a full-gloss or metal
+  // prim skips the six lookups outright instead of computing them and
+  // multiplying to 0. At gloss 0 / metal 0 the product is exactly
+  // surfCfg2.y, so flesh shades bit-for-bit as before.
+  let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
   if (detailAmp > 0.0) {
     n = normalize(n + vec3<f32>(
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * detailAmp);
@@ -2410,8 +2423,24 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   //
   // Gated on the beam existing at all, so the lab and every stock preset keep
   // their old arithmetic bit-for-bit.
-  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao
-               + keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  //
+  // METAL (hard-surface task 2), at metal 1:
+  //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
+  //    0.25 floor — bounce IS diffuse, and leaving it full would keep the
+  //    plate reading as paint. NOT zero: with no environment map the lab
+  //    has one key, and a true-zero diffuse goes black wherever the
+  //    highlight is not. 0.25 is what the render A/B settled on (task 2
+  //    report).
+  //  - the specular AND the fresnel rim are tinted by the prim's own
+  //    albedo instead of shining the light's colour — the single change
+  //    that makes steel differ from white plastic under the same light.
+  //  - wet, scatter and the wound terms are untouched: scope discipline,
+  //    and the floor above keeps the plate readable without them.
+  // At metal 0 both factors are exactly 1.0 — bit-identical to the old sum
+  // (multiplication by 1.0 is exact), so every non-metal character shades
+  // byte-for-byte as before.
+  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.25, metal)
+               + mix(vec3<f32>(1.0), primAlbedo, metal) * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its

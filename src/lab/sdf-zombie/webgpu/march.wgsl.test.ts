@@ -335,8 +335,10 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
     // (hard-surface task 1: the noiseAmp argument now carries the gloss
     // kill, `* (1.0 - gloss)` — a polished prim's normal is not rippled.
-    // Pinned in detail by the dedicated gloss-suppression describe below.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - gloss), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
+    // Pinned in detail by the dedicated gloss-suppression describe below.
+    // Task 2 generalises the kill to max(gloss, metal): metal implies the
+    // suppression with no gloss set.)
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - max(gloss, metal)), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -1750,21 +1752,24 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
       .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
   });
 
-  it('scales the silhouette noise reaching calcNormal by (1 - gloss)', () => {
+  it('scales the silhouette noise reaching calcNormal by (1 - max(gloss, metal))', () => {
     // calcNormal's noiseAmp is the ONLY path silhouetteNoiseAmp has into the
     // shading normal (the march loop runs the field smooth; the AO/scatter
     // probes are field probes, not surface detail, and keep full amp).
+    // hard-surface task 2: `metal` implies the same suppression with no
+    // gloss= — a machined surface has no pores either — so the factor is
+    // the max of both levers (each is 0..1).
     expect(SHADE_BODY).toContain(
-      'calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - gloss), woundCfg');
+      'calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - max(gloss, metal)), woundCfg');
   });
 
-  it('scales the micro-detail perturbation by (1 - gloss), still inside its amplitude guard', () => {
+  it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
     // The guard must wrap the NOISE CALL, not just its result (entrails
     // post-mortem, 2026-09-02): a polished prim skips the six lookups
     // outright, it does not compute them and multiply them away — so the
     // gloss kill folds into the guarded amplitude itself, not into the
     // fbm result.
-    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - gloss);');
+    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
     expect(SHADE_BODY).toMatch(
       /if \(detailAmp > 0\.0\) \{[\s\S]{0,200}fbm\(anchor \* 22\.0\)[\s\S]{0,120}\* detailAmp\)/);
   });
@@ -1779,5 +1784,61 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     expect(faceAt).toBeGreaterThan(-1);
     expect(paintAt).toBeGreaterThan(faceAt);
     expect(charAt).toBeGreaterThan(paintAt);
+  });
+});
+
+describe('metal modifier (hard-surface task 2)', () => {
+  // A painted prim gets full diffuse + untinted white highlight — polished
+  // plastic. `metal` (prof bit 4, packed by pack.ts) suppresses the diffuse
+  // to a floor and tints the specular by the prim's own albedo. There is no
+  // GPU in CI, so these are structural pins: where the bit is read, what it
+  // scales, and what stays bit-identical at metal 0. The LOOK — whether the
+  // plates read as steel — is the render's job, not this suite's.
+  const SHADE_BODY = MARCH_BODY;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0)`;
+
+  it('reads the metal bit inside the ONE hoisted painted read, above calcNormal', () => {
+    // Same hoist discipline as gloss (task 1): the value is needed by the
+    // noise-suppression sites BEFORE the shading normal exists, and the
+    // extra texel load is paid only inside the painted branch — metal is
+    // parse-gated on color=, so an unpainted pixel can never change the
+    // answer. One load, not a repeat.
+    expect(SHADE_BODY).toContain('var metal = 0.0;');
+    expect((SHADE_BODY.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
+    expect(SHADE_BODY.indexOf('var metal = 0.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY.indexOf(SHAPE_LOAD))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY).toContain('if ((i32(PS.y) & 16) != 0)');
+  });
+
+  it('implies task 1 noise suppression with NO gloss set: both sites use max(gloss, metal)', () => {
+    // Pinned in the gloss describe above with the same strings; this test
+    // makes the METAL half of the max explicit, so dropping metal from
+    // either application site fails HERE as well as there.
+    expect(SHADE_BODY).toContain('marchCfg.z * (1.0 - max(gloss, metal))');
+    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
+  });
+
+  it('suppresses the whole diffuse family to a floor, not to zero', () => {
+    // A pure-metal term in a shader with no environment map goes black
+    // wherever the highlight is not, and the lab has one key. 0.25 is the
+    // floor the render A/B settled on (see the task 2 report): the plate
+    // keeps its form under the key's falloff while the specular clearly
+    // dominates. Multiplying the whole `albedo * (amb + diff...)` family —
+    // ambient bounce included — because bounce IS diffuse.
+    expect(SHADE_BODY).toContain(
+      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.25, metal)');
+  });
+
+  it('tints the specular AND the fresnel rim by the prim albedo', () => {
+    // The single change that makes metal read as metal: the highlight takes
+    // the prim's colour instead of the light's, so steel differs from white
+    // plastic under the same key. The tint multiplies BOTH the tight
+    // specular and the fresnel rim — metals tint their grazing reflection
+    // too — and never the wound/gore wet or scatter terms.
+    expect(SHADE_BODY).toContain(
+      'mix(vec3<f32>(1.0), primAlbedo, metal) * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
   });
 });

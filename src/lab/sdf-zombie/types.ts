@@ -185,6 +185,19 @@ export interface PrimDef {
    */
   gloss?: number;
   /**
+   * Marks this painted primitive as METAL: shading suppresses the diffuse
+   * to a small floor and tints the specular by `color` instead of the light
+   * colour. A paint approximation, not a BRDF — there is no environment map
+   * and no roughness-driven reflection, say so in the grammar docs. Implies
+   * gloss's noise suppression with or without `gloss=` set (a machined
+   * surface has no pores). `gloss` and `metal` stay SEPARATE axes on
+   * purpose: a glass lens is glossy and emphatically not metal, and folding
+   * one into the other turns the cyclops' eye into a ball bearing. Only
+   * read when `color` is set (enforced at parse time). Packed as prof
+   * bit 4 (16) — see pack.ts.
+   */
+  metal?: boolean;
+  /**
    * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
    * (clusterCore). Without it the fattest prim in the cluster is taken,
    * which is wrong as soon as a shoe or a sleeve is fatter than the bone it
@@ -308,6 +321,8 @@ export interface Primitive {
   color?: Vec3;
   /** See PrimDef.gloss. */
   gloss?: number;
+  /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
+  metal?: boolean;
   /** See PrimDef.core. */
   core?: boolean;
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */

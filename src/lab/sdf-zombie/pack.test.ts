@@ -11,6 +11,13 @@ import { severLimb } from './sever';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
 import type { BuiltBody, Primitive, Vec3 } from './types';
 
+// Every shipped character, keyed by file basename (the prof snapshot below
+// names these). Eager glob so a character ADDED later without a snapshot row
+// fails the >= count guard and the lookup, not silently nothing.
+const CHARACTERS_RAW = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const CHARACTERS: Record<string, string> = Object.fromEntries(
+  Object.entries(CHARACTERS_RAW).map(([k, v]) => [k.split('/').pop()!, v]));
+
 /** Packs into Float32Array, so expected values must be rounded to float32. */
 const f32 = (v: number) => Math.fround(v);
 
@@ -253,6 +260,103 @@ describe('shaped bitflag gates box and shell (task 6)', () => {
       bones: new Map(), bonePrims: [],
     }, undefined, { singleGroup: true });
     expect(Math.floor(p.groupRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+});
+
+describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
+  // `metal` is a SHADING-ONLY bit: it must not change the fold. That is why
+  // it is safe to give it the next free bit — every read of prof in
+  // march.wgsl.ts is a mask (`& 2`, `& 4`, `& 8`, `(& 7) == 1`), all of
+  // which leave bit 4 clear — and why this test pins the exact VALUE, not
+  // just the masked bit: an accidental collision with bits 0-3 would change
+  // the fold of every metal prim.
+  const base = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 0] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'torso' as const, cluster: 0,
+  };
+  const SHAPED_BIT = 2;
+  const METAL_BIT = 16;
+  const cluster = () =>
+    ({ id: 0, limb: 'torso' as const, start: 0, count: 1, center: [0, 0, 0] as Vec3, radius: 0.1, alive: true });
+
+  it('packs a metal-ONLY prim as prof EXACTLY 16 — no other bit set', () => {
+    const p = packBody({ prims: [{ ...base, metal: true }], clusters: [cluster()], bones: new Map(), bonePrims: [] });
+    expect(p.primShape[1]).toBe(METAL_BIT);
+  });
+
+  it('keeps prof masked-clean for a metal box: 8 + 16, low bits untouched', () => {
+    // The combination the minotaur's plates actually author. Asserting the
+    // exact value pins that metal neither collides with nor perturbs the
+    // box/chamfer/bend bits.
+    const p = packBody({
+      prims: [{ ...base, metal: true, box: { round: 0.1 }, blendProfile: 'chamfer' as const }],
+      clusters: [cluster()], bones: new Map(), bonePrims: [],
+    });
+    expect(p.primShape[1]).toBe(1 + 8 + 16);
+  });
+
+  it('sets the CLUSTER-level shaped bit when the only special prim is metal', () => {
+    // A prim that is ONLY metal — no taper, chamfer, bend, shell or box —
+    // is the whole point of this test: one on `box metal` would pass with
+    // the flag missing and prove nothing. A missing flag means the shape row
+    // is never loaded for that run, so the prim arrives at the shader with
+    // prof = 0 and silently loses its specialness (the schoolgirl-alt cape
+    // bug, found in these same two lists).
+    const p = packBody({ prims: [{ ...base, metal: true }], clusters: [cluster()], bones: new Map(), bonePrims: [] });
+    expect(Math.floor(p.clusterRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+
+  it('sets the GROUP-level shaped bit when the only special prim is metal', () => {
+    // This is the flag foldGroup actually reads; the cluster-level one
+    // feeds applyCarves alone. Each level needs its own assertion.
+    const p = packBody({ prims: [{ ...base, metal: true }], clusters: [cluster()], bones: new Map(), bonePrims: [] }, undefined, { singleGroup: true });
+    expect(Math.floor(p.groupRange[0 * CLUSTER_STRIDE + 3]!) & SHAPED_BIT).toBe(SHAPED_BIT);
+  });
+
+  it('every shipped character packs the SAME prof values as before metal existed', () => {
+    // Byte-identical pin (task 2 step 1d), taken 2026-09-03 from the
+    // pre-metal pack of every .blob in characters/ (sorted primShape.y
+    // multisets). Any change to these arrays — apart from a CONSCIOUS
+    // re-pin when a character deliberately authors `metal` — means the
+    // metal bit leaked into packing arithmetic existing characters were
+    // relying on. minotaur.blob is the ONE row re-pinned by this task (its
+    // five prosthetic plates now carry metal: 8 + 16 = 24).
+    const packedProf = (name: string): number[] => {
+      const src = CHARACTERS[name];
+      if (src === undefined) throw new Error(`no character file keyed ${name} — the glob changed under the snapshot`);
+      const built = buildBody(compileBlob(parseBlob(src)), DEFAULT_BUILD_OPTS);
+      const p = packBody(built);
+      const profs: number[] = [];
+      for (let i = 0; i < built.prims.length; i++) profs.push(p.primShape[i * PRIM_STRIDE + 1]!);
+      return profs.sort((a, b) => a - b);
+    };
+    expect(Object.keys(CHARACTERS).length).toBeGreaterThanOrEqual(12);
+    expect(packedProf('bonewalker.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,3,3]);
+    expect(packedProf('box-fixture.blob')).toEqual([0,0,0,0,8,8]);
+    expect(packedProf('clown-alt.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1]);
+    expect(packedProf('clown.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1]);
+    expect(packedProf('cyclops.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2]);
+    expect(packedProf('dragon.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3]);
+    expect(packedProf('goblin.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
+    // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
+    // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
+    // plates were authored `metal` — every other value is pre-metal.
+    expect(packedProf('minotaur.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,3,3,24,24,24,24,24]);
+    expect(packedProf('mouse.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2]);
+    expect(packedProf('schoolgirl-alt.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
+    expect(packedProf('schoolgirl.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
+    expect(packedProf('zombie.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
   });
 });
 
