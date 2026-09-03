@@ -90,6 +90,7 @@ import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } f
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Primitive } from '../types';
+import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -1086,6 +1087,9 @@ async function main() {
    *  a POSITIVE x-rotation swings the muzzles DOWN, which is the way a break
    *  action opens. */
   let hingePivot: THREE.Group | null = null;
+  /** The GLB's own muzzle locators, kept so muzzleWorld() can read their LIVE
+   *  world position each shot rather than a position sampled once at load. */
+  let muzzleNodes: THREE.Object3D[] = [];
   let gripHandGroup: THREE.Group | null = null;
   let foreHandGroup: THREE.Group | null = null;
   let gunGroup: THREE.Group | null = null;
@@ -1223,6 +1227,9 @@ async function main() {
       if (locatorInView(gltf.scene, 'Muzzle_L', mL) && locatorInView(gltf.scene, 'Muzzle_R', mR)) {
         MUZZLE_VIEW.copy(mL).add(mR).multiplyScalar(0.5);
       }
+      const nL = gltf.scene.getObjectByName('Muzzle_L');
+      const nR = gltf.scene.getObjectByName('Muzzle_R');
+      if (nL && nR) muzzleNodes = [nL, nR];
       if (!locatorInView(gltf.scene, 'Grip_Hand', GRIP_HAND_REST)) {
         GRIP_HAND_REST.set(GUN_REST.pos.x + 0.02, GUN_REST.pos.y - 0.04, GUN_REST.pos.z + 0.05);
       }
@@ -1395,17 +1402,43 @@ async function main() {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
   }
 
-  /** Muzzle world position from the current camera pose (independent of the
-   *  gun mesh's matrix state — fires identically headless). */
+  /** Scratch, so the per-shot path allocates nothing. */
+  const _muzA = new THREE.Vector3(), _muzB = new THREE.Vector3();
+  /**
+   * World-space muzzle. Reads the GLB's OWN Muzzle_L/R locators when the gun is
+   * loaded, so it follows the weapon's real heading -- including the free-aim
+   * swing -- instead of being a second description of where the gun is that can
+   * drift from the first. It did drift: the previous inline version put the
+   * spawn point at forward -0.500 from the eye while the visible muzzle sits at
+   * forward +0.600, so every projectile was born 1.1 m BEHIND the barrel and
+   * flew through the player's head.
+   *
+   * The fallback keeps the headless contract: predictSlugHitNow() and the CDP
+   * gates fire with no GLB loaded, which is why an eye-relative formula exists
+   * at all. It now goes through muzzle-pos.ts's tested helper rather than
+   * re-deriving the basis by hand with the sign wrong.
+   */
   function muzzleWorld(): Vec3 {
     const eye = eyeOf(player);
-    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
-    const right: Vec3 = [cy, 0, sy];
-    return [
-      eye[0] + right[0] * 0.2 - sy * 0.5,
-      eye[1] - 0.12,
-      eye[2] + right[2] * 0.2 + cy * 0.5,
-    ];
+    if (gunReady && muzzleNodes.length === 2) {
+      muzzleNodes[0]!.getWorldPosition(_muzA);
+      muzzleNodes[1]!.getWorldPosition(_muzB);
+      _muzA.add(_muzB).multiplyScalar(0.5);
+      return [_muzA.x, _muzA.y, _muzA.z];
+    }
+    const cp = Math.cos(player.pitch);
+    const fwd = { x: Math.sin(player.yaw) * cp, y: Math.sin(player.pitch), z: -Math.cos(player.yaw) * cp };
+    const right = { x: Math.cos(player.yaw), y: 0, z: Math.sin(player.yaw) };
+    const up = {
+      x: right.y * fwd.z - right.z * fwd.y,
+      y: right.z * fwd.x - right.x * fwd.z,
+      z: right.x * fwd.y - right.y * fwd.x,
+    };
+    const m = muzzleWorldPosition(
+      { x: eye[0], y: eye[1], z: eye[2] }, { right, up, forward: fwd },
+      0.2, -0.12, 0.5,
+    );
+    return [m.x, m.y, m.z];
   }
   /** The live frustum half-angle tangents. ONE definition: the barrel angle
    *  (weaponAngles, in the frame loop) and the shot ray (aimDir, right below)
