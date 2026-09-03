@@ -248,48 +248,7 @@ wound pops, gait stop-motion).
   demand — PARKED, retest after collision lands). Reuse the existing pure
   modules — `wander.ts`, `gait.ts`, `motion.ts`, `ik.ts`, `stagger.ts`,
   `collapse.ts` — this is a retarget, not a new rig.
-- `P1.blobforge-frame-face` [x] **Band in the bone's frame — the prosthetic
-  reads as a limb** — `claude/blob-side-grammar`, **2188** green (112 files),
-  tsc clean. `bandRange` was rebuilding a world point along the CLOUD axis and
-  projecting it onto the RIG line; near-perpendicular that projects to a POINT,
-  so bands collapsed to a 0.022 sliver with `from > to` and the prosthetic drew
-  as a grey ball at one knee. Now banded in the bone's frame (conditionally, at
-  the fit's existing report bar — unconditional breaks the aligned bit-identity
-  guard). **The ball is structurally impossible now**: monotone bands, full
-  span; grey runs knee -> shin and the leg reads as one connected limb.
-  `blob:depth` agrees — side mean **-33%**, and the worst side band is now the
-  T-pose arm artifact rather than the figure.
-  **Three plan corrections worth keeping:** (1) OBLIQUITY IS THE NORM — only 4
-  of the minotaur's mapped bones sit under the report bar, every other is
-  47-89 deg off, so "most bones are aligned" was false and a fixture had to be
-  BUILT with aligned bones for the guard to mean anything. (2) The 76 deg in my
-  diagnosis was measured against a PHANTOM branch segment, not the statement
-  line — the real angle is ~88-95 deg, so the collapse is projection-to-a-point,
-  not cosine shortening. (3) The face-block gate was UNMEETABLE by any
-  placement while the reference is T-posed: that band measures arm mass.
-  Overall likeness: a third honest **no** — T-pose and sub-band identity
-  (horns, plates) remain, both fenced off by design.
-  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
 
-- `P1.blobforge-chain-drift` [x] **Chain drift FIXED — the draft now stands** —
-  `claude/blob-side-grammar`, 2182 green (112 files), tsc clean. len= and dir=
-  now come from the RIG (joint-to-joint x one global scale); the cloud keeps
-  radii, bands, colour and supplies `offset=`. Measured: soles **-0.0001 m**
-  (was ~0.3 m above), extent **+0.02%** vs the height line (was ~8%), worst
-  len= deviation **0.00004 m**. Schoolgirl builds connected with the
-  cloud-steering fallback REMOVED — her 80-87 deg dress/pelvis axes are now
-  reported, not corrected. `blob:depth` agrees: side mean 142 mm vs the
-  round-1 hand scaffold's 194 mm, and the +340 mm torso drum is GONE.
-  **Verdict is STILL "no" vs hand-authoring, for DIFFERENT reasons** — which
-  is the point. Two are architectural: the T-POSE (deferred; this is the
-  "pose the reference" roadmap item) and IDENTITY LIVING AT SUB-BAND SCALE
-  (horns, hooves, plates are exactly what band medians discard — structural to
-  a band-median draft, not a bug). Two are NEW contained defects the fix
-  EXPOSED: (a) `bandRange` projects cloud-frame band edges onto the rig-chain
-  line, so an oblique cloud (prosthetic shin.r at 76 deg) collapses its bands
-  into a 0.19-0.23 sliver and leaves a mid-shin gap; (b) with the drum gone
-  the fixed face block is the worst side-view band at -367 mm.
-  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
 
 - `P1.blob-frame-face` [x] **The two exposed placement defects FIXED, plan
   judged** — branch `dispatch/framefix-task-3`, 2185 -> **2188** green (112
@@ -318,30 +277,6 @@ wound pops, gait stop-motion).
   reports are not commits. Mutations 4/4 killed. Full verdict + numbers +
   matrix: [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
 
-- `P1.blobforge-tools` [x] **`blob:depth` + `blob:draft` — BOTH LANDED, one ready**
-  — branch `claude/blob-side-grammar`, 2121 -> **2170** green (112 files), tsc
-  clean. Ten tasks; task 1 inline, 2-10 as a dispatch chain on glm-5.3-flash.
-  **`blob:depth` WORKS, acceptance passed decisively.** On the rejected round-1
-  minotaur its side view's worst three bands are all TORSO lines (340 / 312 /
-  253 mm) against the schoolgirl control's worst of 56.5 mm — while
-  `blob:measure` blamed the ARMS (102 mm forearm) and `blob:rings` reported a
-  size rather than a shape. That contrast is exactly the blindness it was built
-  for: a radial average and a silhouette both score a smooth drum and a muscled
-  torso the same.
-  **`blob:draft` works but is NOT yet better than hand-authoring** — Task 10
-  said so plainly instead of reporting a green board. Structural, not tuning,
-  and **the flaw is in the SPEC**: the emitter chains bones head-to-tail while
-  `len=` comes from the cloud's own extent, and clouds overlap, so the draft
-  stands with soles ~0.3 m off the floor and a torso chain ~8% too tall. Fix
-  `at=`/`len=` reconciliation against the rig chain before trusting a draft.
-  Two more findings: non-limb clouds have non-vertical principal axes
-  (schoolgirl's dress measured 86 deg) and need the >45 deg rig-direction
-  fallback the CLI now carries, or the draft will not build connected; and
-  `parseBlob` accepts arbitrary non-comment garbage as leading trivia.
-  Still open from the vault list: pose the reference, `--apply`.
-  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md) ·
-  [spec](docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md) ·
-  [plan](docs/superpowers/plans/2026-09-02-blobforge-draft-and-depth.md)
 
 - `P1.chain-drift` [x] **`blob:draft` chain closes — ALL 4 TASKS DONE; verdict on the re-draft: still NO vs hand-authoring, for NEW reasons** — plan
   [2026-09-02-blob-draft-chain-drift](docs/superpowers/plans/2026-09-02-blob-draft-chain-drift.md),
@@ -380,6 +315,38 @@ wound pops, gait stop-motion).
   [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md). Next for the
   toolchain, unchanged: LBS-pose the reference, `--apply`, and now the two
   new placement defects.
+
+- `P1.blobforge-2026-09` [x] **Blobforge session: `blob:depth` ships, `blob:draft`
+  is parked** — merged to main. Suite **2137** green (109 files), tsc clean.
+  **SHIPPED:** `blob:depth` (front/side depth-map diff — the instrument that
+  sees INSIDE the outline); `side=l|r` single-sided limb prims; the `box`
+  primitive; `face.ts` `headRise`/`headLead` (defaults 0, existing characters
+  untouched).
+  **`blob:depth` earned it.** On the rejected round-1 minotaur its worst three
+  side bands were all TORSO lines (340/312/253 mm) against a schoolgirl control
+  of 56.5 mm — while `blob:measure` blamed the ARMS and `blob:rings` reported a
+  size, not a shape. That blindness is structural: a radial average and a
+  silhouette both score a smooth drum and a muscled torso identically.
+  **`blob:draft` PARKED** after three fix rounds, code removed from main (lives
+  at 8d75076). Each round fixed a real defect and exposed the next flaw in the
+  spec: chain drift -> frame transfer -> unbounded prim aspect. The owner
+  rejected it in the lab as worse-FORMED than the hand-authored r1 — 65:1 prim
+  aspect against a shipped norm of 1.8, and half bonewalker's blend.
+  **OPEN, and worth doing:** nothing in the toolchain measures **prim
+  degeneracy** — `validateBody` returned 0 errors and `blob:render-check`
+  exited 0 on a body full of 65:1 fins. Also open: `parseBlob` accepts
+  arbitrary garbage as leading trivia; and the vault roadmap's pose-the-
+  reference and `--apply` items.
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
+
+- `M?.minotaur` [ ] **Author the minotaur from r1, by hand** — `minotaur.blob`
+  is now r1's content (smooth, correctly formed, unmistakably the character).
+  Three known failures to fix: the prosthetic must FUSE at the hip and read as
+  a limb (**call `daylightOf` — it exists and round 1 never did**; ~2% of
+  standing height is where separation reads), the torso needs muscle relief,
+  and the face bake wants checking. **`blob:depth` in the loop** — it is the
+  one instrument that would have caught the original rejection.
+  [ref](docs/dev-notes/refs/minotaur-mesh/minotaur.glb)
 
 - `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
   `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was
