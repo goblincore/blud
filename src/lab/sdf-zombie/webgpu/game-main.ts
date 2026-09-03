@@ -32,6 +32,10 @@ import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './d
 import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
+  BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, turnFromAim,
+  weaponAngles, type AimPoint,
+} from './free-aim';
+import {
   FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
   loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
 } from './game-viewmodel';
@@ -994,9 +998,15 @@ async function main() {
   });
   document.addEventListener('mousemove', (e) => {
     if (document.pointerLockElement !== canvas) return;
-    player.yaw += e.movementX * 0.0022;
-    player.pitch = Math.min(PLAYER.pitchLimit,
-      Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+    if (freeAimOn) {
+      // The mouse moves the RETICLE, not the camera. Turning is a consequence
+      // of shoving the reticle past the dead zone, handled in the tick.
+      aim = moveAim(aim, e.movementX, e.movementY);
+    } else {
+      player.yaw += e.movementX * 0.0022;
+      player.pitch = Math.min(PLAYER.pitchLimit,
+        Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+    }
   });
   window.addEventListener('keydown', (e) => {
     keys.add(e.code);
@@ -1010,6 +1020,12 @@ async function main() {
     // H hides/shows BOTH tuning panels together. They cover most of the
     // viewport, and until now the only way to dismiss them was to know the
     // console API -- which is no use to someone doing a look pass.
+    // G toggles free aim, so the two schemes can be A/B'd back to back.
+    if (e.code === 'KeyG') {
+      freeAimOn = !freeAimOn;
+      aim = { x: 0, y: 0 };
+      updateHud();
+    }
     if (e.code === 'KeyH') {
       panelsHidden = !panelsHidden;
       woundPanel?.setVisible(!panelsHidden);
@@ -1042,6 +1058,14 @@ async function main() {
   // that chose this model — stay fully in frame; −10 cm starts to sink the
   // grip out of the bottom edge. −5 cm is the shipped height.
   viewModelAnchor.position.y = -0.05;
+  /** Everything that leans and bobs together: gun, hands, flash, smoke, cases. */
+  let aimRig: THREE.Group | null = null;
+  // One rig for the whole view model, so the free-aim lean and the walk bob are
+  // a single transform instead of being applied to the gun, both hands, the
+  // flash, the smoke and the cases separately (and inevitably inconsistently).
+  aimRig = new THREE.Group();
+  aimRig.name = 'aim-rig';
+  viewModelAnchor.add(aimRig);
   camera.add(viewModelAnchor);
   scene.add(camera);
 
@@ -1106,12 +1130,27 @@ async function main() {
     if (!found) return false;
     viewModelAnchor.updateMatrixWorld(true);
     out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
-    viewModelAnchor.worldToLocal(out);
+    (aimRig ?? viewModelAnchor).worldToLocal(out);
     return true;
   }
   /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
   let fireAge = Infinity;
   let fireBarrels: 1 | 2 = 1;
+
+  // ——— FREE AIM (Realms of the Haunting scheme) ———————————————————————
+  // The mouse drives a RETICLE around the viewport; the camera only turns once
+  // that reticle pushes past a large central dead zone, and the weapon leans to
+  // follow it. Shots go through the reticle, not through screen centre.
+  let freeAimOn = true;
+  let aim: AimPoint = { x: 0, y: 0 };
+  let weaponYawDeg = 0;
+  let weaponPitchDeg = 0;
+  /** Metres walked, and the smoothed 0..1 speed envelope. Bob is driven by
+   *  DISTANCE so it stays locked to footfalls at any speed. */
+  let bobDistance = 0;
+  let bobAmount = 0;
+  let prevPlayerPos: Vec3 = [0, 0, 0];
+  let reticleEl: HTMLDivElement | null = null;
   /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
   let flashAge = Infinity;
   let gunReady = false;
@@ -1172,7 +1211,7 @@ async function main() {
     gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
     gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
     gunGroup.position.copy(GUN_REST.pos);
-    viewModelAnchor.add(gunGroup);
+    (aimRig ?? viewModelAnchor).add(gunGroup);
 
     // Anchor points come off the GLB itself, so they cannot drift from the
     // weapon when its pose changes -- which is what left the support hand
@@ -1263,7 +1302,7 @@ async function main() {
       FORE_HAND_REST.clone(),
       new THREE.Vector3(-0.66, -0.60, 0.45), 0.260,
     );
-    viewModelAnchor.add(gripHandGroup, foreHandGroup);
+    (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
     // Four meshes, all built now: two thrown out of the breech on the eject
@@ -1285,8 +1324,8 @@ async function main() {
       return g;
     }
     for (let i = 0; i < 2; i++) {
-      const e = makeShell(); ejectedShells.push(e); viewModelAnchor.add(e);
-      const l = makeShell(); loadShells.push(l); viewModelAnchor.add(l);
+      const e = makeShell(); ejectedShells.push(e); (aimRig ?? viewModelAnchor).add(e);
+      const l = makeShell(); loadShells.push(l); (aimRig ?? viewModelAnchor).add(l);
     }
 
     // MUZZLE FLASH -- geometry half. Textured, not flat quads: the first pass
@@ -1319,7 +1358,7 @@ async function main() {
     flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
     flashGroup.renderOrder = 999;
     for (const c of flashGroup.children) c.renderOrder = 999;
-    viewModelAnchor.add(flashGroup);
+    (aimRig ?? viewModelAnchor).add(flashGroup);
     flashMaterial = flashMat;
 
     // SMOKE. A small pool of soft puffs released at the muzzle, drifting up and
@@ -1337,7 +1376,7 @@ async function main() {
       );
       m.visible = false;
       smokePuffs.push({ mesh: m, age: Infinity, vel: new THREE.Vector3(), roll: 0 });
-      viewModelAnchor.add(m);
+      (aimRig ?? viewModelAnchor).add(m);
     }
 
     // MUZZLE FLASH -- level half. Allocated ONCE at intensity 0 and only ever
@@ -1349,7 +1388,7 @@ async function main() {
     // A little AHEAD of the bores, so it throws light down the room instead of
     // mostly onto the gun's own barrels.
     flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
-    viewModelAnchor.add(flashLight);
+    (aimRig ?? viewModelAnchor).add(flashLight);
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
@@ -1369,7 +1408,32 @@ async function main() {
   }
   function aimDir(): Vec3 {
     const cp = Math.cos(player.pitch);
-    return [Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp];
+    const fwd: Vec3 = [
+      Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp,
+    ];
+    if (!freeAimOn) return fwd;
+    // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
+    // a shot down the camera's forward axis would land wherever the player
+    // happens to be FACING rather than where they are AIMING -- the one thing
+    // this scheme exists to separate. Offset the ray by the reticle's angular
+    // position inside the frustum.
+    const tanV = Math.tan((camera.fov * Math.PI) / 360);
+    const tanH = tanV * camera.aspect;
+    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    // up = right x fwd, for a right-handed basis
+    const up: Vec3 = [
+      right[1] * fwd[2] - right[2] * fwd[1],
+      right[2] * fwd[0] - right[0] * fwd[2],
+      right[0] * fwd[1] - right[1] * fwd[0],
+    ];
+    const cx = aim.x * tanH, cy = aim.y * tanV;
+    const d: Vec3 = [
+      fwd[0] + right[0] * cx + up[0] * cy,
+      fwd[1] + right[1] * cx + up[1] * cy,
+      fwd[2] + right[2] * cx + up[2] * cy,
+    ];
+    const l = Math.hypot(d[0], d[1], d[2]) || 1;
+    return [d[0] / l, d[1] / l, d[2] / l];
   }
   /** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
    *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
@@ -1907,6 +1971,29 @@ async function main() {
   // -----------------------------------------------------------------------
   // HUD: frame time, bodies on screen, probeWeight, where you are.
   // -----------------------------------------------------------------------
+  // THE RETICLE. A target graphic rather than a bare dot, per the owner: outer
+  // ring, four ticks and a centre pip, drawn as one inline SVG so it stays crisp
+  // at any size and costs no asset. It is the aim point in free-aim mode.
+  {
+    reticleEl = document.createElement('div');
+    reticleEl.setAttribute('style',
+      'position:fixed; left:50%; top:50%; width:34px; height:34px; z-index:35;'
+      + ' margin:-17px 0 0 -17px; pointer-events:none;'
+      + ' filter:drop-shadow(0 0 2px rgba(0,0,0,0.9));');
+    reticleEl.innerHTML =
+      '<svg viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">'
+      + '<circle cx="17" cy="17" r="10.5" fill="none" stroke="#ffd98a"'
+      + ' stroke-width="1.4" opacity="0.85"/>'
+      + '<circle cx="17" cy="17" r="1.6" fill="#ffd98a" opacity="0.95"/>'
+      + '<g stroke="#ffd98a" stroke-width="1.4" opacity="0.9">'
+      + '<line x1="17" y1="1.5" x2="17" y2="6.5"/>'
+      + '<line x1="17" y1="27.5" x2="17" y2="32.5"/>'
+      + '<line x1="1.5" y1="17" x2="6.5" y2="17"/>'
+      + '<line x1="27.5" y1="17" x2="32.5" y2="17"/>'
+      + '</g></svg>';
+    document.body.appendChild(reticleEl);
+  }
+
   const hudEl = document.getElementById('hud');
   const hud = { lockHint: true };
   let frameEma = 0;
@@ -1939,6 +2026,7 @@ async function main() {
       (sdfLayer.halfRate
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
+      (freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -2058,6 +2146,52 @@ async function main() {
     // ---------------------------------------------------------------
     cooldown = Math.max(0, cooldown - dt);
     recoilPitch *= Math.exp(-9 * dt);
+    // ——— FREE AIM ————————————————————————————————————————————————————
+    // The reticle only turns the camera once it is shoved past the dead zone;
+    // inside it, aiming is free and the world stays put.
+    if (freeAimOn) {
+      const turn = turnFromAim(aim, dt);
+      player.yaw += turn.yaw;
+      player.pitch = Math.min(PLAYER.pitchLimit,
+        Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
+    }
+    {
+      const w = freeAimOn ? weaponAngles(aim) : { yawDeg: 0, pitchDeg: 0 };
+      weaponYawDeg = approachAngle(weaponYawDeg, w.yawDeg, dt);
+      weaponPitchDeg = approachAngle(weaponPitchDeg, w.pitchDeg, dt);
+    }
+    // WALK BOB, driven by distance rather than time so it stays locked to the
+    // stride when the player speeds up, slows down or stops.
+    {
+      const pos = player.pos;
+      const step = Math.hypot(pos[0] - prevPlayerPos[0], pos[2] - prevPlayerPos[2]);
+      prevPlayerPos = [pos[0], pos[1], pos[2]];
+      bobDistance += step;
+      const speed01 = dt > 0 ? Math.min(1, step / dt / PLAYER.walkSpeed) : 0;
+      bobAmount = approachBob(bobAmount, speed01, dt);
+    }
+    if (aimRig) {
+      const b = bobPose(bobDistance, bobAmount);
+      aimRig.position.set(b.x, b.y, 0);
+      aimRig.rotation.set(
+        THREE.MathUtils.degToRad(weaponPitchDeg),
+        THREE.MathUtils.degToRad(weaponYawDeg),
+        THREE.MathUtils.degToRad(b.rollDeg),
+      );
+    }
+    if (reticleEl) {
+      reticleEl.style.display = freeAimOn ? 'block' : 'none';
+      if (freeAimOn) {
+        // Position against the CANVAS, not the window. Percent-of-viewport put
+        // the reticle outside the render area whenever the canvas did not fill
+        // the page -- so the thing marking where you are aiming sat somewhere
+        // you could not shoot.
+        const r = canvas.getBoundingClientRect();
+        reticleEl.style.left = `${r.left + r.width * (0.5 + aim.x * 0.5)}px`;
+        reticleEl.style.top = `${r.top + r.height * (0.5 - aim.y * 0.5)}px`;
+      }
+    }
+
     flashAge += dt;
     fireAge += dt;
     const flashV = flashEnvelope(flashAge);
@@ -2520,6 +2654,29 @@ async function main() {
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
     get flashVisible() { return flashGroup?.visible ?? false; },
+    /** Free-aim seam, for the gate and for A/B by hand. */
+    get freeAim() { return freeAimOn; },
+    setFreeAim(on: boolean) { freeAimOn = on; aim = { x: 0, y: 0 }; updateHud(); return freeAimOn; },
+    get aimPoint() { return { x: aim.x, y: aim.y }; },
+    setAimPoint(x: number, y: number) {
+      aim = { x: Math.min(1, Math.max(-1, x)), y: Math.min(1, Math.max(-1, y)) };
+      return { x: aim.x, y: aim.y };
+    },
+    get weaponLeanDeg() { return { yaw: weaponYawDeg, pitch: weaponPitchDeg }; },
+    /** Live free-aim / bob knobs. Every one of these is a feel number that has
+     *  to be played rather than reasoned about:
+     *    __sdfGame.setAimTuning({ deadzoneX: 0.5, turnRateX: 1.4 })
+     *    __sdfGame.setAimTuning({ amountX: 0.03, amountY: 0.02 })   // bob
+     */
+    setAimTuning(t: Partial<Record<string, number>>) {
+      for (const [k, v] of Object.entries(t)) {
+        if (v === undefined) continue;
+        if (k in FREE_AIM) (FREE_AIM as unknown as Record<string, number>)[k] = v;
+        else if (k in BOB) (BOB as unknown as Record<string, number>)[k] = v;
+      }
+      return { ...FREE_AIM, bob: { ...BOB } };
+    },
+    get bob() { return { distance: bobDistance, amount: bobAmount }; },
     /** Live finish knobs. The owner's look pass: the gun reads a touch too
      *  shiny under the dungeon rig and the hands are hard to see at this
      *  exposure. Both are judgement calls that depend on the final lighting,
