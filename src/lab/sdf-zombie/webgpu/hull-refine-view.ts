@@ -10,12 +10,16 @@ import { createMarchMaterial, marchBody, type MarchUniforms } from './zombie-gpu
 import { createSurfaceNetsCompute, type SurfaceNetsCompute, type HullExtractStats } from './surface-nets-compute';
 
 export type HullRenderer = 'march' | 'hull';
-export interface HullKnobs { cell: number; band: number; steps: number }
+/** capMul: far bound = hull point + capMul*band along the ray. 2 (the spec) cuts
+ *  GRAZING rays — a limb pointing at the camera needs band/sin(theta) of travel —
+ *  and reads as a missing forearm (owner screenshot 2026-09-02). 6 is cheap: the
+ *  walk still converges in a few steps, the cap only stops true misses. */
+export interface HullKnobs { cell: number; band: number; steps: number; capMul: number }
 /** steps 8, not the spec's 4: smooth-min blend zones under-report distance
  *  (gradient ~0.55) and the wound zone steps at 0.6*d by design, so a 4-step
  *  walk from +band leaves gaps at neck/shoulder/wrist and beside craters.
  *  8 closes them at 2 cm band; 12 is indistinguishable (2026-09-02 notes). */
-export const DEFAULT_HULL_KNOBS: HullKnobs = { cell: 0.02, band: 0.02, steps: 8 };
+export const DEFAULT_HULL_KNOBS: HullKnobs = { cell: 0.02, band: 0.02, steps: 8, capMul: 6 };
 
 /** The subset of ZombieGpuView / ChunkGpuView the wrapper relies on. */
 export interface HullInnerView {
@@ -31,7 +35,7 @@ export interface HullInnerView {
 export interface HullRefineDeps {
   renderer: THREE.WebGPURenderer;
   makeCompute?: (inner: HullInnerView) => SurfaceNetsCompute;
-  makeMaterial?: (inner: HullInnerView, hullMarchCfg: ReturnType<typeof uniform>, band: ReturnType<typeof uniform>) => THREE.Material;
+  makeMaterial?: (inner: HullInnerView, hullMarchCfg: ReturnType<typeof uniform>, cap: ReturnType<typeof uniform>) => THREE.Material;
 }
 
 export interface HullRefineView<Inner extends HullInnerView = HullInnerView> {
@@ -57,12 +61,12 @@ export interface HullRefineView<Inner extends HullInnerView = HullInnerView> {
   dispose(): void;
 }
 
-function defaultMaterial(inner: HullInnerView, hullMarchCfg: ReturnType<typeof uniform>, band: ReturnType<typeof uniform>) {
+function defaultMaterial(inner: HullInnerView, hullMarchCfg: ReturnType<typeof uniform>, cap: ReturnType<typeof uniform>) {
   const rayDir = normalize(sub(positionWorld, cameraPosition));
   const hullT = length(sub(positionWorld, cameraPosition));
   // tMaxBox = length(worldPos - camPos) inside marchBody, so a point pushed
   // 2*band down the ray bounds the walk to the band (spec §5).
-  const farPoint = add(positionWorld, mul(rayDir, mul(band as never, float(2.0))));
+  const farPoint = add(positionWorld, mul(rayDir, cap as never));
   return createMarchMaterial(
     inner.dataTexture, inner.volumeTexture, inner.uniforms, marchBody,
     undefined, undefined, undefined, undefined, undefined, undefined,
@@ -81,9 +85,9 @@ export function wrapHullRefine<Inner extends HullInnerView>(
   // fragment missed and discarded (dispatch task 5, 2026-09-02). The game
   // page runs 1.0 for the same reason (GAME_OMEGA, perf r2 task 2).
   const hullMarchCfg = uniform(new THREE.Vector3(knobs.steps, 1.0, src.z));
-  const uBand = uniform(knobs.band);
+  const uCap = uniform(knobs.band * knobs.capMul);
   const compute = (deps.makeCompute ?? ((i) => createSurfaceNetsCompute(i.dataTexture, i.volumeTexture, i.uniforms)))(inner);
-  const material = (deps.makeMaterial ?? defaultMaterial)(inner, hullMarchCfg, uBand);
+  const material = (deps.makeMaterial ?? defaultMaterial)(inner, hullMarchCfg, uCap);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', compute.soupAttribute);
@@ -122,7 +126,7 @@ export function wrapHullRefine<Inner extends HullInnerView>(
     setKnobs(k) {
       Object.assign(knobs, k);
       hullMarchCfg.value.x = knobs.steps;
-      uBand.value = knobs.band;
+      uCap.value = knobs.band * knobs.capMul;
       if ('distort' in k) distort = (k as { distort: number }).distort;
     },
     autoExtract: true,

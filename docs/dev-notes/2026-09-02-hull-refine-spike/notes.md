@@ -94,6 +94,18 @@ early-Z, which phase 0 deliberately does not claim (shipped `depthNode` + `disca
 kept), and the per-hit shading reduction (tier-2 post-hit prim narrowing) helps both
 renderers equally.
 
+## The glitch the owner sees — grazing limbs and the far cap
+
+Owner screenshot (own tab, steps 20): the forearm pointing AT the camera is missing
+between elbow and fist; the march twin has it. That is the failure the spec named and
+phase 0 never tested: along a limb aligned with the view ray the hull face is grazed,
+the walk needs band/sin(theta) of travel to reach flesh, and the far bound
+hull + 2·band ends it — steps cannot help, only the cap. `capMul` knob added (far bound
+= hull + capMul·band), default **6**; cost lands only on true misses since hits still
+break in a few steps. Headless captures (`cap-diag*/sheet.png`, side and follow cameras,
+ten instants) never landed the exact arm-forward pose, so the fix is reasoned, not
+proven against the owner's frame. Re-check it first if this is ever revived.
+
 ## Verdict — PARKED (owner, 2026-09-02)
 
 "The hull still has annoying visual glitches so I think we might have to park it for

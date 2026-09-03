@@ -79,7 +79,7 @@ describe('wrapHullRefine', () => {
     v.setWounds([] as never, [] as never, [] as never, [] as never);
     expect(inner.setWounds).toHaveBeenCalledTimes(1);
     v.setKnobs({ steps: 8, band: 0.03, cell: 0.015 });
-    expect(v.knobs()).toEqual({ steps: 8, band: 0.03, cell: 0.015 });
+    expect(v.knobs()).toEqual({ steps: 8, band: 0.03, cell: 0.015, capMul: 6 });
     expect(v.hullMarchCfg.value.x).toBe(8);
     // plain sphere tracing, never the inner view's relaxed 0.6 (see the wrapper)
     expect(v.hullMarchCfg.value.y).toBe(1);
