@@ -100,6 +100,10 @@ const pick = await evaluate(`(() => {
     const yaw = Math.atan2(dx, -dz);
     const pitch = Math.atan2((z.pos[1] ?? 0) + AIM_Y - eyeH, Math.hypot(dx, dz));
     __sdfGame.setPose(ex, ez, yaw, pitch, 0);
+    // The predictor fires from the MUZZLE (free-aim, main 2026-09-03), and
+    // the viewmodel's transform is one frame behind setPose — without a step
+    // the ray leaves from wherever the gun was last drawn.
+    __sdfGame.step(1);
     const p = __sdfGame.predictSlugHit();
     return p.actorId === z.id ? { x: ex, z: ez, yaw, pitch } : null;
   };
