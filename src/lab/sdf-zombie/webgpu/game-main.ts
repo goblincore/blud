@@ -2009,11 +2009,11 @@ async function main() {
    * connected would be measuring something the scenario never described.
    */
   const MIN_STANDOFF = 1.5;
-  function aimAtNearestSurface(): boolean {
+  function aimAtNearestSurface(limb?: string): boolean {
     const eye = eyeOf(player);
     const candidates = actors
       .map((a) => {
-        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso'))?.center;
         return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
       })
       .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
@@ -2216,8 +2216,11 @@ async function main() {
     setHalfRateMode: (n: number) => sdfLayer.setHalfRateMode(n),
     get halfRateMode() { return sdfLayer.halfRateMode; },
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
-     *  shot the same way the bench scenario does. */
-    aimSurface: () => aimAtNearestSurface(),
+     *  shot the same way the bench scenario does. Optional `limb` aims at
+     *  that cluster's centre instead of the torso (same confirm gate). */
+    aimSurface: (limb?: string) => aimAtNearestSurface(limb),
+    /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
+    aimHead: () => aimAtNearestSurface('head'),
 
     /**
      * Screen-space metaball blood (X1.bleed-look round 2). ON suppresses the

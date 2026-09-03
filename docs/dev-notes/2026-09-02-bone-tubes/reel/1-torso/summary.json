@@ -1,0 +1,68 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 731,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 3,
+  "onJs": "__sdfGame.setBoneMesh(true)",
+  "offJs": "__sdfGame.setBoneMesh(false)",
+  "preJs": "__sdfGame.aimSurface(); __sdfGame.fireSlug()",
+  "outDir": "docs/dev-notes/2026-09-02-bone-tubes/reel/1-torso",
+  "noiseFloor": {
+    "changed": 1213,
+    "bigChanged": 77,
+    "meanD": 0.74,
+    "maxD": 688,
+    "hotCells": [
+      "21,19",
+      "22,19",
+      "26,23"
+    ]
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 75,
+      "bigChanged": 40,
+      "meanD": 0.81,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-2 vs b-2": {
+      "changed": 104,
+      "bigChanged": 77,
+      "meanD": 0.67,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-1 vs a-2": {
+      "changed": 71,
+      "bigChanged": 40,
+      "meanD": 0.78,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 107,
+      "bigChanged": 77,
+      "meanD": 0.63,
+      "maxD": 691,
+      "hotCells": []
+    }
+  }
+}
