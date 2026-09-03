@@ -248,6 +248,31 @@ wound pops, gait stop-motion).
   demand — PARKED, retest after collision lands). Reuse the existing pure
   modules — `wander.ts`, `gait.ts`, `motion.ts`, `ik.ts`, `stagger.ts`,
   `collapse.ts` — this is a retarget, not a new rig.
+- `P1.blobforge-tools` [x] **`blob:depth` + `blob:draft` — BOTH LANDED, one ready**
+  — branch `claude/blob-side-grammar`, 2121 -> **2170** green (112 files), tsc
+  clean. Ten tasks; task 1 inline, 2-10 as a dispatch chain on glm-5.3-flash.
+  **`blob:depth` WORKS, acceptance passed decisively.** On the rejected round-1
+  minotaur its side view's worst three bands are all TORSO lines (340 / 312 /
+  253 mm) against the schoolgirl control's worst of 56.5 mm — while
+  `blob:measure` blamed the ARMS (102 mm forearm) and `blob:rings` reported a
+  size rather than a shape. That contrast is exactly the blindness it was built
+  for: a radial average and a silhouette both score a smooth drum and a muscled
+  torso the same.
+  **`blob:draft` works but is NOT yet better than hand-authoring** — Task 10
+  said so plainly instead of reporting a green board. Structural, not tuning,
+  and **the flaw is in the SPEC**: the emitter chains bones head-to-tail while
+  `len=` comes from the cloud's own extent, and clouds overlap, so the draft
+  stands with soles ~0.3 m off the floor and a torso chain ~8% too tall. Fix
+  `at=`/`len=` reconciliation against the rig chain before trusting a draft.
+  Two more findings: non-limb clouds have non-vertical principal axes
+  (schoolgirl's dress measured 86 deg) and need the >45 deg rig-direction
+  fallback the CLI now carries, or the draft will not build connected; and
+  `parseBlob` accepts arbitrary non-comment garbage as leading trivia.
+  Still open from the vault list: pose the reference, `--apply`.
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md) ·
+  [spec](docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-02-blobforge-draft-and-depth.md)
+
 - `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
   `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was
   a capsule or round cone, so the format could not make a FLAT FACE; the next
