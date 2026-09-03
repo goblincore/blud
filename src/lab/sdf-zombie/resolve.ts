@@ -84,6 +84,16 @@ export function placePrims(
         ? {} : { blendProfile: p.blendProfile }),
       limb: p.limb as LimbId,
       op: p.op ?? 'add',
+      // The groove's channel geometry. Dropping these while KEEPING `op`
+      // produced the worst kind of bug: `sdGroove(d, sd, 0, 0)` computes
+      // `inBand = 0 - |b|`, which is never positive, so it returns the field
+      // untouched. Every authored groove in every character was a silent
+      // no-op -- in the CPU field AND in the shader, since pack.ts reads the
+      // same two fields. No error, no warning, just a feature that did
+      // nothing. `sdGroove` itself was well tested; the only test that named
+      // these fields hand-built a Primitive and never came through here.
+      ...(p.grooveDepth === undefined ? {} : { grooveDepth: p.grooveDepth }),
+      ...(p.grooveWidth === undefined ? {} : { grooveWidth: p.grooveWidth }),
       // The bend is MID-RELATIVE, so it needs no resolving here — it is
       // defined against the midpoint of a/b wherever they end up, which is
       // what lets rigging and translation move the prim without touching it.

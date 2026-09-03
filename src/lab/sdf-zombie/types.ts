@@ -129,6 +129,20 @@ export interface PrimDef {
    */
   op?: 'add' | 'sub' | 'groove' | 'bone' | 'organ';
   /**
+   * Groove depth and width, in metres. Only read when `op` is 'groove'.
+   *
+   * DECLARED HERE as well as on Primitive, and the omission was the bug: the
+   * `op` lived on the def while its two parameters lived only on the placed
+   * prim, so `placePrims` had nothing to copy and every authored groove
+   * arrived with `op: 'groove'` and no channel. `sdGroove(d, sd, 0, 0)`
+   * computes `inBand = 0 - |b|`, never positive, and returns the field
+   * untouched — a silent no-op in the CPU field and, through pack.ts reading
+   * the same two fields, in the shader too. An operator and its arguments
+   * belong on the same interface.
+   */
+  grooveDepth?: number;
+  grooveWidth?: number;
+  /**
    * Displacement from the bone-relative placement, in world axes. The body is
    * authored in a rest pose with no rotations, so world and bone axes coincide
    * at authoring time.
