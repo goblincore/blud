@@ -45,19 +45,40 @@ Mapping, in half-height units (`q = (ndc.x * aspect, ndc.y)`, `r = |q|`,
 `rmax = sqrt(aspect² + 1)` = the corner):
 
 ```
-f(r)      = r * (1 + k*r²)
-sampleR   = rmax * f(r) / f(rmax)
-k         = (tan(renderFov/2) / tan(centerFov/2) - 1) / rmax²
+sampleR(r) = r * (1 + k*r²) / (1 + k*rmax²)
+k          = (tan(renderFov/2) / tan(centerFov/2) - 1) / rmax²
 ```
 
 Properties this buys, each of which is a test:
 
+* `sampleR(r) <= r` everywhere for `k >= 0` — every sample lands inside the source
+  rect, so **no black corners, at any aspect, by construction.**
 * `sampleR(0) = 0` and `sampleR(rmax) = rmax` — **corners pin to corners at every
-  aspect**, so there are no black corners and nothing is cropped.
+  aspect.** Pinning at the corner is what maximises the field retained (see below).
 * `sampleR'(0) = tan(centerFov/2) / tan(renderFov/2)` — the centre magnification is
   exactly the FOV ratio, which is what makes the knob honest.
 * Monotonic in `r` for `k >= 0`, so the inverse is well defined.
 * `centerFovDeg >= renderFovDeg` ⇒ `k = 0` ⇒ exact identity. This is the off switch.
+
+### What you actually see
+
+A radial magnifying warp on a rectangle cannot keep the mid-edges and the corners
+both. Corners are pinned, so the mid-edges are pulled in and the outermost sliver of
+the rendered frame does not reach the screen. That is inherent, not a bug, and it is
+the real reason the render FOV goes up.
+
+At 16:9 with the defaults (`k = 0.176`, `rmax = 2.040`) the visible extents are:
+
+| | render | on screen | at the centre |
+| --- | --- | --- | --- |
+| vertical | 90° | **68.3°** | 60° |
+| horizontal | 117.6° | **115.9°** | ~95° |
+
+Against today's undistorted 75° camera (107.5° horizontal), that is a slightly
+narrower vertical view and a visibly wider horizontal one, with the middle magnified
+1.73×. Choosing `renderFovDeg = 90` is what makes the vertical land back near where
+it is today; dropping it lower makes the frame genuinely tighter, which is the trade
+the knob exists to let the owner make by eye.
 
 `k` is recomputed per frame from the **live** aspect, so the apparent centre FOV
 holds steady across a window resize instead of drifting with it.
@@ -109,8 +130,10 @@ absorbs what is left. If it still crawls, that is a tuning conversation (more ta
 or a mip chain on the source), not a redesign — and the knob switches the fisheye off
 in the meantime.
 
-Sharp-upscale mode is unaffected in kind: the warp composes with it, since both are
-a UV computation ahead of the same fetch.
+**Sharp upscale and fisheye do not stack.** Sharp mode's fractional re-ramp assumes
+an axis-aligned uniform magnification, which the warp breaks. With `k > 0` the blit
+takes the 4-tap path regardless of the sharp flag — the 4-tap already does the
+border softening sharp mode was there for. `k = 0` restores sharp mode exactly.
 
 ## What else has to move
 
