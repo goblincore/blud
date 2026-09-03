@@ -16,14 +16,18 @@ import { describe, it, expect } from 'vitest';
 import type { Vec3 } from './types';
 import type { MedialLine, Band } from './draft-fit';
 import type { BandPaint } from './draft-paint';
+import type { RefSkin, RefVertex } from './ref-skin';
+import { detectRig } from './ref-align';
+import { assembleDraft } from './draft-skeleton';
 import {
   emitDraft, DRAFT_BUDGET_TOTAL, DRAFT_BUDGET_CLUSTER,
   type DraftInput, type DraftBone, type DraftSideFit,
 } from './draft-emit';
 import { parseBlob } from './blob-parse';
-import { compileBlob } from './blob-compile';
+import { compileBlob, compileFace } from './blob-compile';
 import { buildBody } from './build-body';
 import { MAX_PRIMS } from './validate';
+import { cross, dot, len, normalize, scale as vscale, sub } from './vec';
 
 const NAME = 'draftling';
 
@@ -300,5 +304,219 @@ describe('emitDraft offsets', () => {
     expect(spineStatement!).toContain('rig spine1');
     expect(spineStatement!).toContain('1.23');
     expect(build(text).errors).toEqual([]);
+  });
+});
+
+// The chain-drift acceptance properties, end to end on a SYNTHETIC RIG: the
+// pipeline under test is the real one — detectRig → assembleDraft (grouping,
+// fits, chain assembly) → emitDraft → parse → compile → build — because the
+// properties are properties of the EMITTED DOCUMENT's built geometry, not of
+// any one fit function. The rig mirrors the two real references' failure
+// modes on purpose:
+//   - the legs and the spine BRANCH at Hips (a rig is a tree; `.blob` is a
+//     chain — the unmodelled branch stubs were the residual sole/height drift
+//     after chain drift: schoolgirl's soles +0.25 m);
+//   - the head cloud is a HAIR blob whose principal axis is ~60° off
+//     vertical (schoolgirl's measured 75°) — a skull bone that leans
+//     sideways steals the crown extent the height line checks;
+//   - nothing grounds the figure: the raw rig anchor is not y = 0.
+// Determinism: every cloud is generated from golden-angle/fibonacci sweeps,
+// no rng — the same fixture builds the same body every run.
+const RIG_NAME = 'rigling';
+
+/** Joint positions in mesh units — a 1.5-ish standing biped, soles at y≈0. */
+const JOINTS = new Map<string, Vec3>([
+  ['Hips', [0, 0.99, 0.02]], ['Spine02', [0, 1.1, 0.02]], ['Spine01', [0, 1.21, 0.01]],
+  ['Spine', [0, 1.32, 0]], ['neck', [0, 1.38, 0]], ['Head', [0, 1.435, 0.005]],
+  ['LeftShoulder', [0.06, 1.385, 0]], ['LeftArm', [0.23, 1.385, 0]],
+  ['LeftForeArm', [0.44, 1.385, 0]], ['LeftHand', [0.62, 1.385, 0]],
+  ['RightShoulder', [-0.06, 1.385, 0]], ['RightArm', [-0.23, 1.385, 0]],
+  ['RightForeArm', [-0.44, 1.385, 0]], ['RightHand', [-0.62, 1.385, 0]],
+  ['LeftUpLeg', [0.065, 0.9, 0.02]], ['LeftLeg', [0.085, 0.5, 0]],
+  ['LeftFoot', [0.1, 0.13, -0.03]], ['LeftToeBase', [0.1, 0.03, 0.05]],
+  ['RightUpLeg', [-0.065, 0.9, 0.02]], ['RightLeg', [-0.085, 0.5, 0]],
+  ['RightFoot', [-0.1, 0.13, -0.03]], ['RightToeBase', [-0.1, 0.03, 0.05]],
+]);
+
+/** Orthonormal frame across `dir`, seeded from the least-aligned world axis
+ *  (fixed inputs, so draft-fit's tie-safety concern does not arise here). */
+function frame(dir: Vec3): { u: Vec3; v: Vec3 } {
+  const w = normalize(dir);
+  const seed: Vec3 = Math.abs(w[0]!) <= Math.abs(w[1]!) && Math.abs(w[0]!) <= Math.abs(w[2]!)
+    ? [1, 0, 0]
+    : Math.abs(w[1]!) <= Math.abs(w[2]!) ? [0, 1, 0] : [0, 0, 1];
+  const u = normalize(cross(seed, w));
+  return { u, v: cross(w, u) };
+}
+
+/** Straight tube of points around a->b: the limb cloud a Meshy mesh yields. */
+function tube(a: Vec3, b: Vec3, r: number, n: number): Vec3[] {
+  const axis = sub(b, a), alen = len(axis), dir = vscale(axis, 1 / alen);
+  const { u, v } = frame(dir);
+  const out: Vec3[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = alen * (i + 0.5) / n, th = i * 2.399963;
+    out.push([
+      a[0] + dir[0]! * t + r * (Math.cos(th) * u[0]! + Math.sin(th) * v[0]!),
+      a[1] + dir[1]! * t + r * (Math.cos(th) * u[1]! + Math.sin(th) * v[1]!),
+      a[2] + dir[2]! * t + r * (Math.cos(th) * u[2]! + Math.sin(th) * v[2]!),
+    ]);
+  }
+  return out;
+}
+
+/** Fibonacci ball. */
+function ballAt(centre: Vec3, r: number, n: number): Vec3[] {
+  return headBall(centre, r, n);
+}
+
+/** Ellipsoid with a LONG axis deliberately off-vertical — the hair blob.
+ *  Its principal axis is `tiltDeg` from +y in the x-y plane, which is what
+ *  the pre-fix skull leaf (principal-axis line, rig-signed) inherits. */
+function hairBlob(centre: Vec3, tiltDeg: number, aLong: number, rPerp: number, n: number): Vec3[] {
+  const t = tiltDeg * Math.PI / 180;
+  const { u, v } = frame([Math.sin(t), Math.cos(t), 0]);
+  const d: Vec3 = [Math.sin(t), Math.cos(t), 0];
+  const out: Vec3[] = [];
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (2 * (i + 0.5)) / n;
+    const s = Math.sqrt(Math.max(0, 1 - y * y));
+    const th = i * 2.399963;
+    const radial: Vec3 = [
+      s * (Math.cos(th) * u[0]! + Math.sin(th) * v[0]!),
+      s * (Math.cos(th) * u[1]! + Math.sin(th) * v[1]!),
+      s * (Math.cos(th) * u[2]! + Math.sin(th) * v[2]!),
+    ];
+    out.push([
+      centre[0] + aLong * y * d[0]! + rPerp * radial[0]!,
+      centre[1] + aLong * y * d[1]! + rPerp * radial[1]!,
+      centre[2] + aLong * y * d[2]! + rPerp * radial[2]!,
+    ]);
+  }
+  return out;
+}
+
+function vertsOf(joint: string, pts: Vec3[]): RefVertex[] {
+  return pts.map((position) => ({ joint, position }));
+}
+
+/** The mirrored pair of a left cloud, x-flipped (the fixture's right side). */
+const flipX = (pts: Vec3[]): Vec3[] => pts.map((p) => [-p[0]!, p[1]!, p[2]!] as Vec3);
+
+const RIG_SKIN: RefSkin = (() => {
+  const lThigh = tube(JOINTS.get('LeftUpLeg')!, JOINTS.get('LeftLeg')!, 0.08, 300);
+  const lShin = tube(JOINTS.get('LeftLeg')!, JOINTS.get('LeftFoot')!, 0.05, 300);
+  const lFoot = tube(JOINTS.get('LeftFoot')!, JOINTS.get('LeftToeBase')!, 0.045, 200);
+  const lUpper = tube(JOINTS.get('LeftArm')!, JOINTS.get('LeftForeArm')!, 0.055, 200);
+  const lFore = tube(JOINTS.get('LeftForeArm')!, JOINTS.get('LeftHand')!, 0.045, 200);
+  const verts: RefVertex[] = [
+    ...vertsOf('Hips', ballAt([0, 1.0, 0.02], 0.13, 400)),
+    ...vertsOf('Spine02', tube(JOINTS.get('Spine02')!, JOINTS.get('Spine01')!, 0.11, 200)),
+    ...vertsOf('Spine01', tube(JOINTS.get('Spine01')!, JOINTS.get('Spine')!, 0.12, 200)),
+    ...vertsOf('Spine', tube(JOINTS.get('Spine')!, JOINTS.get('neck')!, 0.1, 200)),
+    ...vertsOf('neck', tube(JOINTS.get('neck')!, JOINTS.get('Head')!, 0.045, 200)),
+    // THE HAIR TRAP: principal axis 60° off the neck's vertical.
+    ...vertsOf('Head', hairBlob([0, 1.36, 0.005], 60, 0.13, 0.075, 400)),
+    ...vertsOf('LeftShoulder', tube(JOINTS.get('LeftShoulder')!, JOINTS.get('LeftArm')!, 0.06, 200)),
+    ...vertsOf('LeftArm', lUpper),
+    ...vertsOf('LeftForeArm', lFore),
+    ...vertsOf('LeftHand', ballAt(JOINTS.get('LeftHand')!, 0.06, 200)),
+    ...vertsOf('LeftUpLeg', lThigh),
+    ...vertsOf('LeftLeg', lShin),
+    ...vertsOf('LeftFoot', lFoot),
+    ...vertsOf('LeftToeBase', tube(JOINTS.get('LeftToeBase')!, [0.1, 0.025, 0.12], 0.03, 100)),
+    ...vertsOf('RightShoulder', flipX(tube(JOINTS.get('LeftShoulder')!, JOINTS.get('LeftArm')!, 0.06, 200))),
+    ...vertsOf('RightArm', flipX(lUpper)),
+    ...vertsOf('RightForeArm', flipX(lFore)),
+    ...vertsOf('RightHand', flipX(ballAt(JOINTS.get('LeftHand')!, 0.06, 200))),
+    ...vertsOf('RightUpLeg', flipX(lThigh)),
+    ...vertsOf('RightLeg', flipX(lShin)),
+    ...vertsOf('RightFoot', flipX(lFoot)),
+    ...vertsOf('RightToeBase', flipX(tube(JOINTS.get('LeftToeBase')!, [0.1, 0.025, 0.12], 0.03, 100))),
+  ];
+  return { verts, jointWorld: JOINTS, total: verts.length, dropped: 0 };
+})();
+
+const RIG = detectRig([...RIG_SKIN.jointWorld.keys()]);
+
+/** The drafted RIGLING: assemble → emit → parse → compile → build. */
+function draftedRigling() {
+  const { input, g } = assembleDraft(RIG_SKIN, RIG, null, { name: RIG_NAME, height: 1.9 });
+  const text = emitDraft(input);
+  const body = buildBody(compileBlob(parseBlob(text), compileFace(parseBlob(text))));
+  return { input, text, body, g };
+}
+
+/** The built body's lowest and highest SURFACE point (capsule caps, taper
+ *  aware) — what "soles on the floor" and "crown" physically mean. */
+function surfaceExtent(body: ReturnType<typeof buildBody>): { min: number; max: number } {
+  let min = Infinity, max = -Infinity;
+  for (const p of body.prims) {
+    const r = Math.max(p.radius, p.radiusB ?? p.radius);
+    min = Math.min(min, p.a[1] - r, p.b[1] - r);
+    max = Math.max(max, p.a[1] + r, p.b[1] + r);
+  }
+  return { min, max };
+}
+
+// THE ACCEPTANCE PROPERTIES (chain-drift spec): both are properties of the
+// emitted draft, checkable without an eye. The pre-fix numbers on this
+// fixture: soles ~+0.36 m (the Hips branch stubs), extent ~19% short.
+describe('drafted chain closes', () => {
+  it('lands the soles on the floor', () => {
+    // Build the whole pipeline and assert the body's lowest point sits at
+    // y = 0 within 2 cm of a 1.9 m figure — 0.1%: float/format noise only,
+    // the grounding is derived from the same build the test measures.
+    const { body } = draftedRigling();
+    expect(body.errors).toEqual([]);
+    const { min } = surfaceExtent(body);
+    expect(Math.abs(min)).toBeLessThanOrEqual(0.02);
+  });
+
+  it('matches its own height line', () => {
+    // Crown-to-sole extent within tolerance of the requested height. The
+    // tolerance must absorb what a capsule-surface body CANNOT match: the
+    // end caps add ~one crown radius above the skeleton (the sole side is
+    // grounded away), a few % on a figure this size — while the pre-fix
+    // failures this exists to catch were 8% and 19% SHORT.
+    const { body } = draftedRigling();
+    const { min, max } = surfaceExtent(body);
+    expect(Math.abs(max - min - 1.9)).toBeLessThanOrEqual(0.05 * 1.9);
+  });
+
+  it('emits len= equal to the rig distance times the global scale', () => {
+    // For every mapped bone, read off the ARTIFACT (parse what was emitted)
+    // and compare against the rig's own joint-to-joint distance — the
+    // property bonewalker had by construction and the first draft did not.
+    // The declared joints come from the assembler's chain metadata and are
+    // resolved against the FIXTURE's joint table, so the check is against
+    // the rig, not against the pipeline's own arithmetic.
+    const { input, text, g } = draftedRigling();
+    const doc = parseBlob(text);
+    const byName = new Map(doc.bones.map((b) => [b.name, b]));
+    const docLen = (name: string): number =>
+      name === doc.rootBone ? doc.rootLen : byName.get(name)!.len;
+    let checked = 0;
+    for (const db of input.bones) {
+      if (!db.chain) {
+        // Unmapped leaves (skull, hands) carry no rig chain — there is no
+        // rig distance for them, which is why they must be chain leaves.
+        continue;
+      }
+      const entry = RIG.boneMap[db.chain.rigBone];
+      if (!entry) throw new Error(`assembler declared chain for unmapped bone ${db.chain.rigBone}`);
+      const head = RIG_SKIN.jointWorld.get(entry.head)!;
+      const tail = RIG_SKIN.jointWorld.get(entry.tail)!;
+      // 3 decimals, not 6: the artifact formats numbers to 4 decimal places
+      // (emitDraft's fmt), so the tightest honest bound is the format's own
+      // rounding — 5e-4 m is still 100x tighter than the drift class this
+      // exists to catch.
+      expect(docLen(db.name)).toBeCloseTo(len(sub(tail, head)) * g, 3);
+      checked++;
+    }
+    // Guard against the vacuous pass: the rig maps 11 bones (pelvis, four
+    // spine bones, and three limb pairs); a scan that checked nothing would
+    // prove nothing.
+    expect(checked).toBe(11);
   });
 });
