@@ -222,7 +222,15 @@ for (const ms of [120, 260, 400, 550, 740, 900]) {
   await shot(`reload-${ms}`);
 }
 if (maxOpen < 0.4) fail(`hinge only reached ${maxOpen} rad; the barrels never opened`);
-await evaluate(`__sdfGame.step(${57 - ticks + 6}, 1 / 60)`); // past RELOAD.totalSec (0.95 s = 57 ticks)
+// Step past the END of the reload, DERIVED from the page rather than hardcoded.
+// This line used to read `57 - ticks + 6` against a comment claiming 0.95 s;
+// the reload then became 1.05 s and the number was never revisited, and when it
+// became 1.30 s the gate failed a perfectly correct build and sent someone
+// hunting a phantom eject bug. Ask the game how long its own reload is.
+const totalSec = await evaluate('__sdfGame.reloadTotalSec');
+if (typeof totalSec !== 'number') fail('__sdfGame.reloadTotalSec missing — cannot size the reload wait');
+const endTick = Math.ceil(totalSec * 60) + 6;   // +6 frames of slack past the last beat
+await evaluate(`__sdfGame.step(${endTick - ticks}, 1 / 60)`);
 await evaluate('__sdfGame.setLoopRunning(true)');
 const after = await evaluate('__sdfGame.shells');
 const shut = await evaluate('__sdfGame.hingeOpenRad');

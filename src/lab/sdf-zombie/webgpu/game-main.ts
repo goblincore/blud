@@ -2880,6 +2880,13 @@ async function main() {
     },
     get shells() { return shells; },
     get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
+    /** The reload's total length, seconds. Exposed so hand-stepping gates can
+     *  DERIVE their wait budget instead of hardcoding a tick count: the shorty
+     *  gate carried `57 ticks` against a 0.95 s reload, was still carrying it
+     *  when the reload became 1.05 s, and failed a correct build the moment it
+     *  became 1.30 s. A gate that has to be edited every time a constant moves
+     *  will eventually be edited wrongly, or not at all. */
+    get reloadTotalSec() { return RELOAD.totalSec; },
     /** The two chamber mouths in WORLD space, right now. The eject origin is
      *  supposed to track these through the swing; nothing proved it did. */
     breechWorld: () => breechNodes.map((n) => {
