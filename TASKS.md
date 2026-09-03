@@ -273,8 +273,7 @@ wound pops, gait stop-motion).
   [spec](docs/superpowers/specs/2026-09-02-blobforge-draft-and-depth-design.md) ·
   [plan](docs/superpowers/plans/2026-09-02-blobforge-draft-and-depth.md)
 
-- `P1.chain-drift` [~] **`blob:draft` chain closes — tasks 1-3 DONE, task 4
-  (re-draft + judge) open** — plan
+- `P1.chain-drift` [x] **`blob:draft` chain closes — ALL 4 TASKS DONE; verdict on the re-draft: still NO vs hand-authoring, for NEW reasons** — plan
   [2026-09-02-blob-draft-chain-drift](docs/superpowers/plans/2026-09-02-blob-draft-chain-drift.md),
   suite 2170 -> **2182** green (112 files), tsc clean. len=/dir= now come
   from the RIG chain (joint-to-joint × one global scale; the >45° cloud
@@ -295,8 +294,22 @@ wound pops, gait stop-motion).
   0.0000; worst len= dev ≤ 5e-5 m (print rounding). Also fixed en route:
   the skull statement now names its true source (axisFromParent was set on
   the assembler's Built record but dropped in assembly, so the fit comment
-  claimed a principal-axis fit). Remaining: task 4 — re-draft both
-  characters, render-check frames, LOOK, append the verdict to notes.
+  claimed a principal-axis fit).
+  **Task 4 (2026-09-03): both characters re-drafted and judged.** Minotaur
+  soles −0.0001 m / +0.02% / len= dev 4e-5; schoolgirl 0.0000 / +0.01% /
+  3e-5, and she builds connected with NO cloud steering (dress axes 80-87°
+  reported, not obeyed). Budget 72/80; prosthetic unmirrored (asym 0.627).
+  Depth: side mean 340 -> 142 mm, front 164 -> 88 mm, the +340 mm torso
+  drum bulge GONE. **Verdict: still round 1 for this character — but the
+  old failures (0.3 m float, 8% tall) no longer exist.** New defects, both
+  different: `bandRange`'s frame transfer collapses an oblique cloud's
+  bands (prosthetic shin.r, 76° off-axis -> 0.19-0.23 slivers, some
+  from>to, mid-shin gap); the TS-authored face block is the worst
+  side-view band (−367 mm) now the drum is gone. Also fixed: the emitted
+  header still claimed the pre-fix source story. Full verdict + numbers:
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md). Next for the
+  toolchain, unchanged: LBS-pose the reference, `--apply`, and now the two
+  new placement defects.
 
 - `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
   `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was

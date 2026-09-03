@@ -285,3 +285,141 @@ are LESS pose-contaminated than round-1's — and still 3× worse.
 - Untracked working-tree state left for review: `characters/minotaur.blob`
   (the draft), `characters/minotaur-r1.blob` (round 1, model line renamed),
   and the `webgpu/lab-main.ts` registry lines that make both shootable.
+
+---
+
+# blob:draft — re-drafted on rig-chain lines, re-judged
+
+**Date:** 2026-09-03 · **Task 4 of** [blob draft chain drift](../../superpowers/plans/2026-09-02-blob-draft-chain-drift.md) · **Branch:** `dispatch/chaindrift-task-4`
+
+Tasks 1-3 moved `len=`/`dir=` from the vertex cloud to the rig's joint-to-joint
+segments × one global scale (the chain), demoted the `>45°` cloud-steering
+fallback to a REPORTED check, grounded the root, calibrated the scale to the
+SURFACE, and made all three acceptance properties tests. This task re-drafted
+both characters and answered Task 10's question again.
+
+## Acceptance — both characters, all three properties
+
+| property | minotaur | schoolgirl | Task-10 draft (before) |
+| --- | --- | --- | --- |
+| soles vs floor | **−0.0001 m** | **0.0000 m** | ~0.3 m above |
+| extent vs height line | **+0.02%** (1.2170 vs 1.2168) | **+0.01%** (1.7002 vs 1.7000) | ~8% tall |
+| worst mapped `len=` dev | **0.00004 m** (shin) | **0.00003 m** (thigh) | not a property then |
+| build | 0 error(s) | 0 error(s) | 0, but floating |
+
+Both drafts printed the numbers in the CLI header and on stderr — no eye
+involved. The chain closes.
+
+**Schoolgirl builds connected with NO cloud steering** — the case the fallback
+was added for. Her dress/pelvis clouds measure 80-87° off the rig chain and are
+now reported (`cloud axis NN° off the rig chain — reported, not corrected` on
+nine bones) while her bones take the rig's directions; `buildDraft` +
+`validateBody` (bone containment is what disconnection trips) stay clean. The
+fallback's steering role is dead code gone, and she no longer needs it.
+
+**Regression — the parts that worked still work.** Minotaur: 72/80 prims
+(68 authored + 4 face), worst cluster inside the per-cluster ceiling, and the
+prosthetic stays UNMIRRORED — `shin: NOT mirrored (asym 0.627) — prims emitted
+per side`; the emitted `shin.l` prims are browns with `mirror`, the `shin.r`
+prims greys with `side=r` (5 vs 9 bands, different radii and offsets). The
+asymmetry detection is doing exactly what `side=l|r` exists for.
+
+## The instruments, before and after
+
+| instrument | round-1 scaffold | Task-10 draft | THIS re-draft |
+| --- | --- | --- | --- |
+| `blob:depth` front mean | 54.1 mm | 164.2 mm | **88.0 mm** (POSE-DOMINATED 1.5×) |
+| `blob:depth` side mean | 193.7 mm (1.5× pose) | 339.6 mm (0.8×) | **142.0 mm** (unflagged) |
+| torso, side worst | +340 mm drum bulge | (same family) | **gone** — chest/pelvis bands now −127…−36 mm |
+
+The signed errors flipped from Task 10's mostly-negative-drum to
+mostly-negative-everywhere: the body no longer claims volume it lacks, and the
+one region that bulged wrongly (the torso drum) now reads as honest missing
+relief. The depth win over round 1's side mean (142 vs 194, and unflagged
+against r1's pose-dominated 1.5×) is NEW — Task 10's draft lost every depth
+measure by 3×.
+
+## The eye (BLOB_DIST=3.0 and 1.8 turntables, r1 re-shot same-session for the A/B)
+
+The re-draft still reads as a scarecrow mannequin painted like the minotaur:
+T-posed (deferred by design), narrow strap torso, long thin arms, bowed
+crouched legs, no horn read, no prosthetic-plate read — the prosthetic
+distinguishes itself only as a grey ball at one knee. Round 1 in the same
+frames: brown hulk, huge traps, horns, boxy prosthetic — flawed sculpt, but
+unmistakably the character.
+
+## Verdict: **no** — round 1 remains the better starting point for THIS character.
+
+A second honest no, and the reasons are DIFFERENT, which is the point:
+
+1. **Task 10's structural reasons are FIXED.** The skeleton stands on the
+   floor at its own height line with rig-exact lengths — the ~0.3 m and ~8%
+   failures no longer exist, and no fallback steers anything. What the spec
+   promised (a skeleton that stands) is delivered and measured.
+2. **The T-pose** (unchanged, deferred by design): the author's first hour is
+   still re-posing arms the draft refuses to angle.
+3. **Identity still lives at sub-band scale** (unchanged): horns, hooves and
+   prosthetic plates are exactly what band medians discard and the budget trim
+   drops first.
+4. **NEW — the frame transfer on oblique clouds.** `bandRange` projects
+   cloud-frame band edges onto the rig-chain statement line. The prosthetic's
+   shin.r cloud axis sits 76° off the rig chain, so bands measured along the
+   cloud axis project into a 0.19-0.23 sliver of the bone — several with
+   `from>to` (harmless: `resolve` lerps the two endpoints, order-free — but
+   the PLACEMENT is wrong), and the trim then leaves a mid-shin gap. Depth
+   blames `legR` at −75…−92 mm; the eye sees the grey knee-ball. The old
+   pipeline never hit this because it placed bands in the cloud's own frame —
+   the chain drift fix is what EXPOSED it, honestly.
+5. **NEW — the face block is now the worst side-view band** (−367 mm at
+   y 0.188-0.250, "no .blob line — a TS-authored prim owns this height"): with
+   the drum gone, the fixed face block's placement vs the drafted
+   hair-heavy skull is visible in the numbers.
+
+The likeness gap is the spec's own fenced-off territory ("this spec is about a
+skeleton that stands on the floor, not about a character that reads") — and
+what is left is exactly that layer, plus the two new placement defects above.
+
+## Defects found and fixed en route (this task's commits)
+
+1. **FIXED (d8f2ec8): the emitted header still told the pre-fix story** —
+   "Bone axes are cloud medial lines, never rig joints" — contradicting the
+   per-line `# fit:` comments beneath it. Tasks 1-3 changed the code and the
+   fit comments but missed the header prose.
+2. **FIXED (32308a4, same commit as the re-draft): `emits NO offset=` scanned
+   the WHOLE emitted text**, so the corrected header's prose mentioning the
+   grammar's own `offset=` argument tripped it. The pin now reads prim lines
+   only — its stated intent ("no `offset=(0,0,0)` noise" is a statement about
+   prim lines). Mutation-verified: removing the 5e-5 zero-threshold in the
+   emitter still fails it.
+3. **Reported, not fixed (not this task's files):** the band frame transfer
+   (verdict item 4) and the face-block placement (item 5).
+
+Also worth recording: the plan's verbatim command (`npm run blob:draft --
+minotaur > /tmp/...`) still embeds npm's stdout banner in the artifact — Task
+10's notes already corrected this (`npx tsx scripts/blob-draft.ts` for any
+file that will be parsed); the plan text was never updated. And the plan's
+baseline figure (2170) was the pre-tasks-1-3 count; this branch's baseline
+entering task 4 was 2182 / 112 files, green, tsc clean — recorded before any
+edit.
+
+## Mutation matrix (this task's only test change)
+
+| mutation | result |
+| --- | --- |
+| emitter's `offset=` zero-threshold removed (emit `offset=(0,0,0)` noise) | KILLED — `emits NO offset= when the fit has none` fails |
+| restored (`git checkout`), suite re-run | 2182/112 green, `git diff` clean |
+
+The acceptance properties themselves were already pinned as tests by Task 3
+(`drafted chain closes`: soles, height line, `len=` == rig × scale) and stayed
+green through the re-draft — they are mutation-covered in that task's history.
+
+## Commit provenance
+
+- d8f2ec8 — header names the true source; suite green.
+- 32308a4 — re-drafted `characters/minotaur.blob` (the committed Task-10 draft
+  replaced; the old one lives in that task's history), plus the
+  prim-lines-only offset pin.
+- this commit — notes (this section) and the TASKS.md status flip.
+- Frames: `/tmp/blob-shot/minotaur-redraft{,-close}` (8+8), A/B:
+  `/tmp/blob-shot/minotaur-r1-again` (8). Schoolgirl's draft intentionally NOT
+  authored — her hand-authored `.blob` is the converged control.
