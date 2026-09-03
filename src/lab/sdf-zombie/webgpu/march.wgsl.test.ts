@@ -339,7 +339,13 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
+    // (hard-surface task 1: the noiseAmp argument now carries the gloss
+    // kill, `* (1.0 - max(gloss, metal))` — a polished or machined prim's
+    // normal is not rippled. Pinned in detail by the dedicated
+    // gloss-suppression describe below. Task 3's merge resolves main's melt:
+    // calcNormal's amp is a vec4 now, and only .x (silhouette) is scaled —
+    // y/z/w are the melt components and pass through untouched.)
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -1727,5 +1733,132 @@ describe('viscera ramp (entrails)', () => {
     // must ride the SAME mask — one woundMask call, one mix against wm.
     expect(SHADE_BODY).toContain('mix(baseColor, tissue, wm)');
     expect((SHADE_BODY.match(/woundMask\(/g) ?? []).length).toBe(1);
+  });
+});
+
+describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
+  // Milled steel was getting bull-hide pores: surfaceNoiseAmp (surfCfg2.y)
+  // perturbs the shading normal and silhouetteNoiseAmp (marchCfg.z) ripples
+  // the field calcNormal samples — both body-wide, both applied before the
+  // shader learns the hit prim is painted. The fix scales BOTH by
+  // (1 - gloss) at the point of application. There is no GPU in CI, so the
+  // assertions are structural: the factor must sit at BOTH application
+  // sites, inside the existing amplitude guard, resolved off ONE hoisted
+  // prim-colour read that happens before the normal exists. The numeric
+  // claim — losing pitting improves a lens — is a prediction only the
+  // render A/B can carry; this suite pins the mechanism, the frames pin
+  // the look.
+  const SHADE_BODY = MARCH_BODY;
+  // The one ROW_PRIM_COLOR read (pack.ts writes w = 1 + gloss, w = 0 flesh).
+  const LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0)`;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  it('resolves gloss BEFORE the shading normal exists, off ONE load', () => {
+    // The read was hoisted up from the per-prim colour block; it must be a
+    // hoist, not a repeat — a second load of the same texel on every hit
+    // pixel is exactly the kind of cost this file's other gates exist to
+    // stop (cf. the wm-gated hitMat read).
+    expect((SHADE_BODY.match(new RegExp(esc(LOAD), 'g')) ?? []).length).toBe(1);
+    expect(SHADE_BODY.indexOf('var gloss = 0.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY.indexOf(LOAD))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+  });
+
+  it('scales the silhouette noise reaching calcNormal by (1 - max(gloss, metal))', () => {
+    // calcNormal's noiseAmp is the ONLY path silhouetteNoiseAmp has into the
+    // shading normal (the march loop runs the field smooth; the AO/scatter
+    // probes are field probes, not surface detail, and keep full amp).
+    // hard-surface task 2: `metal` implies the same suppression with no
+    // gloss= — a machined surface has no pores either — so the factor is
+    // the max of both levers (each is 0..1).
+    expect(SHADE_BODY).toContain(
+      'calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - max(gloss, metal)), woundCfg');
+  });
+
+  it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
+    // The guard must wrap the NOISE CALL, not just its result (entrails
+    // post-mortem, 2026-09-02): a polished prim skips the six lookups
+    // outright, it does not compute them and multiply them away — so the
+    // gloss kill folds into the guarded amplitude itself, not into the
+    // fbm result.
+    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
+    expect(SHADE_BODY).toMatch(
+      /if \(detailAmp > 0\.0\) \{[\s\S]{0,200}fbm\(anchor \* 22\.0\)[\s\S]{0,120}\* detailAmp\)/);
+  });
+
+  it('still paints the prim albedo after the face pass; char still wins', () => {
+    // Hoisting the READ must not hoist the OVERWRITE: a painted prim
+    // replaces the flesh albedo (mottle and face sheet included) exactly
+    // where it always did, and burnt is still burnt on top of it.
+    const faceAt = SHADE_BODY.indexOf('if (faceCfg.x > 0.5) {');
+    const paintAt = SHADE_BODY.indexOf('if (painted > 0.0) {');
+    const charAt = SHADE_BODY.indexOf('albedo = mix(albedo, charColor, cm);');
+    expect(faceAt).toBeGreaterThan(-1);
+    expect(paintAt).toBeGreaterThan(faceAt);
+    expect(charAt).toBeGreaterThan(paintAt);
+  });
+});
+
+describe('metal modifier (hard-surface task 2)', () => {
+  // A painted prim gets full diffuse + untinted white highlight — polished
+  // plastic. `metal` (prof bit 4, packed by pack.ts) suppresses the diffuse
+  // to a floor and tints the specular by the prim's own albedo. There is no
+  // GPU in CI, so these are structural pins: where the bit is read, what it
+  // scales, and what stays bit-identical at metal 0. The LOOK — whether the
+  // plates read as steel — is the render's job, not this suite's.
+  const SHADE_BODY = MARCH_BODY;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0)`;
+
+  it('reads the metal bit inside the ONE hoisted painted read, above calcNormal', () => {
+    // Same hoist discipline as gloss (task 1): the value is needed by the
+    // noise-suppression sites BEFORE the shading normal exists, and the
+    // extra texel load is paid only inside the painted branch — metal is
+    // parse-gated on color=, so an unpainted pixel can never change the
+    // answer. One load, not a repeat.
+    expect(SHADE_BODY).toContain('var metal = 0.0;');
+    expect((SHADE_BODY.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
+    expect(SHADE_BODY.indexOf('var metal = 0.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY.indexOf(SHAPE_LOAD))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY).toContain('if ((i32(PS.y) & 16) != 0)');
+  });
+
+  it('implies task 1 noise suppression with NO gloss set: both sites use max(gloss, metal)', () => {
+    // Pinned in the gloss describe above with the same strings; this test
+    // makes the METAL half of the max explicit, so dropping metal from
+    // either application site fails HERE as well as there.
+    expect(SHADE_BODY).toContain('marchCfg.z * (1.0 - max(gloss, metal))');
+    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
+  });
+
+  it('suppresses the whole diffuse family to a floor, not to zero', () => {
+    // A pure-metal term in a shader with no environment map goes black
+    // wherever the highlight is not, and the lab has one key. Rendered
+    // curve (12-frame turntable, 2026-09-03): 0.25 went BLACK at the front
+    // yaw; 0.35 kept slab forms but the front still read near-black; 0.45
+    // keeps the greave's specular gradient AND a readable front face, so
+    // 0.45 ships. Multiplying the whole `albedo * (amb + diff...)` family —
+    // ambient bounce included — because bounce IS diffuse.
+    expect(SHADE_BODY).toContain(
+      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)');
+  });
+
+  it('tints the specular AND the fresnel rim by the prim albedo, at steel F0', () => {
+    // The single change that makes metal read as metal: the highlight takes
+    // the prim's colour instead of the light's, so steel differs from white
+    // plastic under the same key. The tint is NOT the raw albedo — that
+    // rendered the plates black (0.17 linear luminance killed the
+    // highlight; frame-00 A/B) — it is the albedo hue with luminance
+    // renormalised to polished steel's ~56% normal-incidence reflectance.
+    // The tint multiplies BOTH the tight specular and the fresnel rim —
+    // metals tint their grazing reflection too — and never the wound/gore
+    // wet or scatter terms.
+    expect(SHADE_BODY).toContain(
+      'let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));');
+    expect(SHADE_BODY).toContain(
+      'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
   });
 });

@@ -528,10 +528,20 @@ wound pops, gait stop-motion).
   glowing red eyes — the last is blocked on `glow=`, see below).
   **`blob:depth` in the loop.** [ref](docs/dev-notes/refs/minotaur-mesh/minotaur.glb)
 
-- `X2.hard-surface-material` [ ] **Teach the SHADER about hard surfaces** —
+- `X2.hard-surface-material` [~] **Teach the SHADER about hard surfaces** —
   four dispatch tasks QUEUED (`status: pending`, so task 1 has a Run button) at
   `~/.claude/dispatch/plans/2026-09-03-hardsurf-task-{1..4}.md`, serial chain,
-  `glm-5.3-flash` on `pi`, base `claude/blob-side-grammar`. **Trigger task 1.**
+  `glm-5.3-flash` on `pi`, base `claude/blob-side-grammar`. **Task 1 DONE
+  2026-09-03** (branch `dispatch/hardsurf-task-1`, f2368cb): `gloss` now scales
+  BOTH flesh-noise paths by `(1 - gloss)` at the point of application —
+  micro-detail folded into its amplitude guard (`detailAmp`, so full-gloss
+  prims skip the six fbm lookups outright) and `marchCfg.z` into calcNormal's
+  noiseAmp; the `ROW_PRIM_COLOR` read hoisted above calcNormal (ONE load, not
+  two) with the albedo OVERWRITE kept after the face pass. 2271 tests green
+  (4 new, all mutation-verified); render A/B: cyclops lens pitting visibly
+  gone (improved), minotaur plates smoother, mouse is a NO-OP (its preset has
+  both noise amps at 0 — nothing to suppress), flesh byte-identical.
+  **Tasks 2-4 still to run.**
   `box` taught the FIELD about hard surfaces; nothing taught the shader, so a
   machined plate is textured and wobbled as though it were skin.
   (A) `gloss` suppresses `surfaceNoiseAmp`/`silhouetteNoiseAmp` — both are

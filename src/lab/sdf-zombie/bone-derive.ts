@@ -34,6 +34,7 @@ type BoneSource = {
   core?: boolean;
   color?: Vec3;
   gloss?: number;
+  metal?: boolean;
 };
 
 /**
@@ -79,9 +80,13 @@ export function deriveBones<T extends BoneSource>(prims: T[], ratio: number): T[
       // Hard-edged: bone meeting bone should crease, not smear.
       blendK: 0,
       // Colour and gloss belong to the flesh prim that carried them (a shoe, a
-      // lens). Bone has its own material and must not inherit them.
+      // lens). Bone has its own material and must not inherit them — and
+      // neither must `metal`: a bone plug surfacing inside a prosthetic wound
+      // must not pick up the plate's metal shading (its albedo is zeroed here,
+      // so a metal-tinted specular would go black on it).
       color: undefined,
       gloss: undefined,
+      metal: undefined,
       // Never the cluster's structural core — that is the flesh's job, and a
       // bone winning the fuse probe would change severing behaviour.
       core: false,

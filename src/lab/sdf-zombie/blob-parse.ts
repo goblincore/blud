@@ -169,6 +169,15 @@ function parseGlossArg(l: BlobLine, painted: boolean): number | null {
   return g;
 }
 
+/** The bare word `metal`, and only beside a `color=` — same gate and same
+ *  reasoning as gloss: the shader keys both off the painted-prim row, so on
+ *  flesh the word would shade nothing. */
+function parseMetalArg(l: BlobLine, painted: boolean): boolean {
+  if (!l.words.includes('metal')) return false;
+  if (!painted) throw new BlobError('metal only means something on a coloured primitive; add color=rrggbb', l.line, l.indent + 1);
+  return true;
+}
+
 const LIMBS = ['head', 'torso', 'arm', 'leg'] as const;
 type LimbName = (typeof LIMBS)[number];
 
@@ -420,6 +429,13 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // stored linear because that is what the shader mixes in.
     color: parseColorArg(l, strArg(l, 'color')),
     gloss: parseGlossArg(l, strArg(l, 'color') !== null),
+    // `metal` — a bare word like `chamfer`/`box`, gated on paint exactly as
+    // `gloss=` is. Marks the painted surface as METAL at shading time: the
+    // shader suppresses its diffuse to a small floor and tints the specular
+    // by this prim's own albedo. Implies gloss's noise suppression even
+    // with no `gloss=` (say so on the grammar line — an author writing
+    // `metal` alone reasonably expects the polished look, not pores).
+    metal: parseMetalArg(l, strArg(l, 'color') !== null),
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
     // `organ`: a bones-block line opting into viscera (organs r3). Same bare-
