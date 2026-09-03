@@ -20,6 +20,25 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**FPV WEAPON OVERHAUL — GOBLIN SAWED-OFF — BUILT, 8/8 tasks done on
+`dispatch/2026-09-02-fpv-weapon-task-8`, awaiting owner playtest** (2026-09-02,
+NOT merged). `sdf-game.html` view-model swapped to the procedural break-action
+sawed-off (`shorty-double.glb`; code-driven hinge on the GLB's `Barrels`
+node), goblin-matched hands/forearms, muzzle flash lighting level + marched
+bodies, 2-shell six-beat reload — timing in pure, unit-tested
+`game-viewmodel.ts`. Gates green: suite 2757/2764 (7 = pre-existing
+`blob-measure.test.ts` environmental), tsc/build clean,
+`sdf-game-shorty-gate.sh` exit 0 (boot / gun / flash / bodies spotCfg 1→3.21
+/ reload maxOpen 0.610 rad), captures in
+[docs/dev-notes/2026-09-02-fpv-weapon-shorty/](docs/dev-notes/2026-09-02-fpv-weapon-shorty/).
+**KNOWN TEMPORARY: the flash lights marched bodies by borrowing the
+flashlight's `spotCfg`/`spotColor` uniforms in the per-actor beam replay —
+pending a second march light slot, blocked on the perf-r2 `march.wgsl.ts`
+rewrite.** Owner look gate outstanding (FPV framing + reload strip).
+[spec](docs/superpowers/specs/2026-09-02-fpv-weapon-overhaul-design.md) ·
+[plan](docs/superpowers/plans/2026-09-02-fpv-weapon-overhaul.md) ·
+[note](docs/dev-notes/2026-09-02-fpv-weapon-shorty/notes.md)
+
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
 [docs/dev-notes/2026-09-02-gore-r3-refinements.md](docs/dev-notes/2026-09-02-gore-r3-refinements.md):
