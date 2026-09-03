@@ -8,22 +8,30 @@
 // Beat sheet per the spec's §5 (Doom-SSG rhythm).
 
 export const RELOAD = {
-  presentSec:  0.14,
-  breakEndSec: 0.32,
-  ejectEndSec: 0.44,
-  loadEndSec:  0.72,
-  snapEndSec:  0.86,
-  totalSec:    1.05,
-  /** How far the barrels swing off the frame, radians (~35 deg). */
-  openRad: 0.61,
-  /** When the spent cases leave the breech. Inside the eject beat, a beat
-   *  after the hinge is fully open -- they cannot clear a shut gun. */
-  ejectAtSec: 0.34,
+  /** Gun rolled into view AND the top lever thrown. The reference has no
+   *  present beat at all -- it is a fixed camera -- so ours is folded INTO the
+   *  lever throw rather than added in front of it, which is what keeps the
+   *  whole reload at the reference's 1.30 s instead of 1.46 s. */
+  presentSec:  0.18,
+  /** Barrels at full 45 deg. 0.33 s of travel, straight off the reference. */
+  breakEndSec: 0.51,
+  ejectEndSec: 0.65,
+  loadEndSec:  1.11,
+  snapEndSec:  1.16,
+  totalSec:    1.30,
+  /** How far the barrels swing off the frame, radians (45 deg). The reference
+   *  opens this wide; our old 35 deg barely showed the breech. */
+  openRad: Math.PI / 4,
+  /** When the spent cases start their AXIAL slide out of the bore -- a beat
+   *  before the hinge finishes, exactly as the reference does it. */
+  extractAtSec: 0.45,
+  /** When they clear the mouth and the free tumble takes over. */
+  ejectAtSec: 0.51,
   /** When fresh cases first appear coming up from under the frame, and when
-   *  they seat. Seating a hair before the snap so the gun never closes on a
+   *  they seat. Seating well before the snap so the gun never closes on a
    *  shell that is still visibly outside it. */
-  loadStartSec: 0.46,
-  loadSeatSec:  0.70,
+  loadStartSec: 0.74,
+  loadSeatSec:  1.11,
 } as const;
 
 /**
@@ -60,14 +68,14 @@ const RELOAD_KEYS: readonly (ReloadPose & { t: number })[] = [
   // at roll -19 / dy 0.055 the action opened off the bottom-right of the screen
   // and the break was invisible, which defeats the point of the animation.
   { t: 0.00, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
-  { t: 0.14, roll: -22, pitch: 11, dy: 0.085, dz: 0.055, hinge: 0 },
-  { t: 0.32, roll: -30, pitch: 21, dy: 0.115, dz: 0.080, hinge: 1 },
-  { t: 0.44, roll: -30, pitch: 22, dy: 0.118, dz: 0.082, hinge: 1 },
-  { t: 0.72, roll: -27, pitch: 19, dy: 0.108, dz: 0.074, hinge: 1 },
-  // The snap. 0.14 s to shut against 0.18 s to open, so it closes harder than
-  // it opened -- that asymmetry IS the "clack".
-  { t: 0.86, roll:  -9, pitch:  3, dy: 0.022, dz: 0.012, hinge: 0 },
-  { t: 1.05, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
+  { t: 0.18, roll: -22, pitch: 11, dy: 0.085, dz: 0.055, hinge: 0 },
+  { t: 0.51, roll: -30, pitch: 21, dy: 0.115, dz: 0.080, hinge: 1 },
+  { t: 0.65, roll: -30, pitch: 22, dy: 0.118, dz: 0.082, hinge: 1 },
+  { t: 1.11, roll: -27, pitch: 19, dy: 0.108, dz: 0.074, hinge: 1 },
+  // The snap. 0.14 s to shut against 0.33 s to open, so it closes far harder
+  // than it opened -- that asymmetry IS the "clack".
+  { t: 1.16, roll:  -9, pitch:  3, dy: 0.022, dz: 0.012, hinge: 0 },
+  { t: 1.30, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
 ];
 
 export const FLASH = {
@@ -245,12 +253,12 @@ export interface SupportHandPose {
  */
 const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.00, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
-  { t: 0.14, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
-  { t: 0.32, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
-  { t: 0.46, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
-  { t: 0.70, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },
-  { t: 0.86, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
-  { t: 1.05, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
+  { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
+  { t: 0.51, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
+  { t: 0.74, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
+  { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },
+  { t: 1.16, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
+  { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
 ];
 
 export function supportHandPose(t: number): SupportHandPose {

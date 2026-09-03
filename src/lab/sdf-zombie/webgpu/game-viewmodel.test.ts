@@ -39,11 +39,11 @@ describe('magazineAfterFire', () => {
 describe('reloadPhaseAt', () => {
   it('walks the six beats in order', () => {
     expect(reloadPhaseAt(0.00)).toBe('present');
-    expect(reloadPhaseAt(0.25)).toBe('break');
-    expect(reloadPhaseAt(0.40)).toBe('eject');
-    expect(reloadPhaseAt(0.55)).toBe('load');
-    expect(reloadPhaseAt(0.75)).toBe('snap');
-    expect(reloadPhaseAt(0.90)).toBe('settle');
+    expect(reloadPhaseAt(0.40)).toBe('break');
+    expect(reloadPhaseAt(0.60)).toBe('eject');
+    expect(reloadPhaseAt(0.90)).toBe('load');
+    expect(reloadPhaseAt(1.13)).toBe('snap');
+    expect(reloadPhaseAt(1.25)).toBe('settle');
   });
   it('is done past the total', () => {
     expect(reloadPhaseAt(RELOAD.totalSec + 0.01)).toBe('done');
@@ -56,8 +56,8 @@ describe('hingeOpenFraction', () => {
     expect(hingeOpenFraction(RELOAD.totalSec)).toBeCloseTo(0, 6);
   });
   it('is fully open across eject and load', () => {
-    expect(hingeOpenFraction(0.40)).toBeCloseTo(1, 6);
-    expect(hingeOpenFraction(0.55)).toBeCloseTo(1, 6);
+    expect(hingeOpenFraction(0.60)).toBeCloseTo(1, 6);
+    expect(hingeOpenFraction(0.90)).toBeCloseTo(1, 6);
   });
   it('opens monotonically through the break beat', () => {
     let prev = -Infinity;
@@ -101,7 +101,15 @@ describe('reloadPose', () => {
   });
 
   it('holds the hinge fully open across eject and load', () => {
-    for (const t of [0.34, 0.44, 0.55, 0.70]) {
+    // Tied to RELOAD.* rather than hardcoded absolute times: this test held
+    // stale 1.05s-timeline numbers (0.34/0.44/0.55/0.70) straight through the
+    // Task 4 retime and went quietly wrong -- at the new tempo 0.34s lands
+    // mid-break (hinge ~0.48), not fully open. Anchoring to the beat sheet is
+    // what keeps this from happening again.
+    for (const t of [
+      RELOAD.breakEndSec + 0.04, RELOAD.ejectEndSec,
+      (RELOAD.ejectEndSec + RELOAD.loadEndSec) / 2, RELOAD.loadSeatSec,
+    ]) {
       expect(reloadPose(t).hinge).toBeGreaterThan(0.97);
     }
   });
@@ -191,6 +199,31 @@ describe('fireRecoil', () => {
       if (fireRecoil(t).dz < -1e-4) { sawNegative = true; break; }
     }
     expect(sawNegative).toBe(true);
+  });
+});
+
+describe('the retimed beat sheet', () => {
+  it('runs 1.30 s, the reference tempo', () => {
+    expect(RELOAD.totalSec).toBeCloseTo(1.30, 3);
+  });
+  it('orders every beat', () => {
+    const beats = [
+      RELOAD.presentSec, RELOAD.extractAtSec, RELOAD.breakEndSec,
+      RELOAD.ejectEndSec, RELOAD.loadStartSec, RELOAD.loadSeatSec,
+      RELOAD.snapEndSec, RELOAD.totalSec,
+    ];
+    for (let i = 1; i < beats.length; i++) {
+      expect(beats[i]!).toBeGreaterThan(beats[i - 1]!);
+    }
+  });
+  it('opens to 45 degrees', () => {
+    expect(RELOAD.openRad).toBeCloseTo(Math.PI / 4, 3);
+  });
+  it('shuts harder than it opens — the asymmetry IS the clack', () => {
+    const open = RELOAD.breakEndSec - RELOAD.presentSec;
+    const shut = RELOAD.totalSec - RELOAD.snapEndSec;
+    expect(shut).toBeLessThan(open);
+    expect(open / shut).toBeGreaterThan(1.8);
   });
 });
 
