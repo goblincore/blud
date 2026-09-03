@@ -104,25 +104,34 @@ export function smoothstep(x: number): number {
 import type { Primitive, Vec3 } from './types';
 
 export interface MeltBodyTuning {
-  /** Y the pooled goo settles at. A puddle has depth; zero reads as a decal. */
+  /** Y the pooled goo settles at. A puddle has depth; zero reads as a decal.
+   *  0.09 rather than 0.085: the largest pooled radius×crushed-scaleY reaches
+   *  ~0.069 (the head blob), and the pool plane must sit above that or pooled
+   *  bottoms dip below the floor and the AABB transiently grows mid-ramp. */
   poolHeight: number;
-  /** yScale at full melt. 0.25 is a disc that still has a top surface. */
+  /** yScale at full melt. 0.22 is a disc that still has a top surface; it was
+   *  0.25 until the pixel gate's centroid ratio landed at 0.24-0.25 against a
+   *  0.25 threshold — one verlet-settle wobble from red. */
   crush: number;
   /** Metres pushed outward from the body's vertical axis at full melt. */
   spread: number;
   /**
-   * blendK at full melt. The authored flesh runs 0.007–0.02; 0.11 is well
-   * past the point where neighbouring limbs stop being separable, which is
-   * what makes the puddle ONE surface instead of a heap of sausages.
+   * blendK at full melt. The authored flesh runs 0.007–0.02, and the march's
+   * smin scales k by 4 internally (march.wgsl.ts:878 — "a cluster still
+   * bends the surface from 4x the authored blendK away"). The plan's first
+   * guess of 0.11 was therefore ~0.44 m of blend support per prim and the
+   * union ballooned into one blob metres wide (Task 3's captures). 0.045 is
+   * ~0.18 m of support — still several times the authored values, which is
+   * what fuses limbs into ONE surface instead of a heap of sausages.
    */
   fuseK: number;
 }
 
 export const MELT_TUNING_BODY: MeltBodyTuning = {
-  poolHeight: 0.085,
+  poolHeight: 0.09,
   crush: 0.25,
   spread: 0.16,
-  fuseK: 0.11,
+  fuseK: 0.045,
 };
 
 /** Endpoint Y in the canonical order: prim i contributes 2i (a), 2i+1 (b). */
@@ -198,4 +207,44 @@ function meltPoint(p: Vec3, u: number, body: MeltBodyTuning): Vec3 {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+// ——— CLUSTERS (task 4, step 0b) ————————————————————————————————————————
+
+import type { ClusterInfo } from './types';
+
+/**
+ * Re-fit each cluster's bounding sphere to the MELTED prims it owns.
+ *
+ * Clusters are not decoration: fit() sizes the render proxy box from these
+ * spheres and the march culls prims against them, so a melted body carrying
+ * rest-pose clusters is marched inside a box shaped like the body it used to
+ * be — which is exactly the flat-topped cylinder Task 3 captured. id, limb,
+ * start, count and alive are carried through untouched; only the sphere moves.
+ */
+export function remeltClusters(
+  clusters: readonly ClusterInfo[],
+  prims: readonly Primitive[],
+): ClusterInfo[] {
+  return clusters.map(c => {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity;
+    let x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const p = prims[i];
+      if (!p) continue;
+      const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+      for (const e of [p.a, p.b]) {
+        x0 = Math.min(x0, e[0] - r); x1 = Math.max(x1, e[0] + r);
+        y0 = Math.min(y0, e[1] - r); y1 = Math.max(y1, e[1] + r);
+        z0 = Math.min(z0, e[2] - r); z1 = Math.max(z1, e[2] + r);
+      }
+    }
+    if (x1 < x0) return c; // empty cluster — leave it exactly as it was
+    const centre: Vec3 = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
+    // The sphere must CONTAIN the box, so it is the half-diagonal, not the
+    // half-width: a half-width sphere leaves the box corners outside it and
+    // the march culls the very prims that moved furthest.
+    const radius = Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2;
+    return { ...c, center: centre, radius };
+  });
 }

@@ -128,7 +128,7 @@ import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
-import { applyMelt, meltInitBody, stepMelt, type MeltState } from '../melt';
+import { applyMelt, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
@@ -1006,15 +1006,24 @@ async function main() {
   // the death — a ragdoll underneath would topple the body, and the whole
   // read is that it goes straight down like a candle.
   let meltState: MeltState | null = null;
+  // meltDirect HOLDS the progress it was given: the per-frame stepMelt would
+  // otherwise advance t by ~0.02 within two frames, and the capture gate
+  // compares runs at fixed progress values (a 450ms capture sleep after
+  // meltDirect(0) would otherwise shoot t≈0.28, not 0). Key/'m' starts a
+  // LIVE melt, which is why startMelt clears the hold.
+  let meltHeld = false;
   function startMelt() {
+    meltHeld = false;
     meltState = meltInitBody(current.prims, 0);
   }
   function stopMelt() {
+    meltHeld = false;
     meltState = null;
   }
-  /** Jump straight to a progress value — the capture script's knob. */
+  /** Jump straight to a progress value — the capture script's knob. HELD. */
   function meltDirect(t: number) {
-    if (!meltState) startMelt();
+    if (!meltState) meltState = meltInitBody(current.prims, 0);
+    meltHeld = true;
     meltState = { ...meltState!, t: Math.max(0, Math.min(1, t)) };
   }
   // bindRig pins the lowest joint as a static anchor; walking releases it —
@@ -2495,7 +2504,7 @@ async function main() {
       };
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
     }
-    if (meltState) meltState = stepMelt(meltState, Math.min(dt, 1 / 30));
+    if (meltState && !meltHeld) meltState = stepMelt(meltState, Math.min(dt, 1 / 30));
     const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
     // Rest-space noise anchor (motion-polish task 6): `current` is the
@@ -2506,9 +2515,15 @@ async function main() {
     // noise; dragging them along is what makes the mottle flow WITH the goo
     // instead of the skin appearing to slide over a ghost of the old body.
     if (meltState) {
+      const pp = applyMelt(posed.prims, meltState);
+      const cp = applyMelt(current.prims, meltState);
+      // Clusters feed the render proxy box AND the march's culling, so they
+      // must follow the prims — a melted body in rest-pose clusters is
+      // marched inside a standing-zombie box (the flat top and straight
+      // sides of the first captures).
       view.update(
-        { ...posed, prims: applyMelt(posed.prims, meltState) },
-        { ...current, prims: applyMelt(current.prims, meltState) },
+        { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp) },
+        { ...current, prims: cp, clusters: remeltClusters(current.clusters, cp) },
       );
     } else {
       view.update(posed, current);

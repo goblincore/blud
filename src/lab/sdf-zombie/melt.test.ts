@@ -8,8 +8,9 @@ import {
   endpointProgress,
   applyMelt,
   endpointHeights,
+  remeltClusters,
 } from './melt';
-import type { Primitive } from './types';
+import type { ClusterInfo, Primitive } from './types';
 
 const REST_Y = [0.02, 0.45, 0.95, 1.55]; // foot, knee, chest, crown
 
@@ -182,5 +183,48 @@ describe('endpointHeights', () => {
     expect(h).toHaveLength(BODY.length * 2);
     expect(h[0]).toBe(BODY[0]!.a[1]);
     expect(h[1]).toBe(BODY[0]!.b[1]);
+  });
+});
+
+describe('remeltClusters', () => {
+  const CLUSTERS: ClusterInfo[] = [
+    { id: 0, limb: 'legL', start: 0, count: 2, center: [0.1, 0.5, 0], radius: 0.6, alive: true },
+    { id: 1, limb: 'torso', start: 2, count: 2, center: [0, 1.2, 0], radius: 0.5, alive: true },
+  ];
+
+  it('contains every melted endpoint of its own cluster, radius included', () => {
+    const melted = meltedAt(1);
+    const out = remeltClusters(CLUSTERS, melted);
+    for (const c of out) {
+      for (let i = c.start; i < c.start + c.count; i++) {
+        const p = melted[i]!;
+        const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+        for (const e of [p.a, p.b]) {
+          const d = Math.hypot(e[0] - c.center[0], e[1] - c.center[1], e[2] - c.center[2]);
+          expect(d + r).toBeLessThanOrEqual(c.radius + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('carries id, limb, start, count and alive through unchanged', () => {
+    const out = remeltClusters(CLUSTERS, meltedAt(0.7));
+    for (let i = 0; i < CLUSTERS.length; i++) {
+      expect(out[i]!.id).toBe(CLUSTERS[i]!.id);
+      expect(out[i]!.limb).toBe(CLUSTERS[i]!.limb);
+      expect(out[i]!.start).toBe(CLUSTERS[i]!.start);
+      expect(out[i]!.count).toBe(CLUSTERS[i]!.count);
+      expect(out[i]!.alive).toBe(CLUSTERS[i]!.alive);
+    }
+  });
+
+  it('moves the sphere — a melted cluster is not where it stood', () => {
+    const out = remeltClusters(CLUSTERS, meltedAt(1));
+    expect(out[0]!.center[1]).toBeLessThan(CLUSTERS[0]!.center[1]);
+  });
+
+  it('returns an empty cluster untouched', () => {
+    const empty: ClusterInfo = { id: 9, limb: 'head', start: 4, count: 0, center: [1, 2, 3], radius: 0.4, alive: true };
+    expect(remeltClusters([empty], BODY)[0]).toBe(empty);
   });
 });
