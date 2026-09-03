@@ -65,6 +65,26 @@ const RESIDUAL_BAR = 0.03;
  *  the real thing rather than a magic constant, so the two cannot drift. */
 const FACE_PRIMS = facePrims(DEFAULT_FACE).length;
 
+/**
+ * A built body's lowest and highest SURFACE point: capsule endpoints ± the
+ * prim's end radius. This is what "soles on the floor", "crown", and a
+ * reference mesh's own height all physically mean — a mesh's height is read
+ * off its skin, not its joints. One definition, shared by the grounding
+ * shift, the scale calibration (draft-skeleton) and the acceptance tests,
+ * because three measurers of the same quantity must not drift apart.
+ */
+export function builtSurfaceY(prims: { a: Vec3; b: Vec3; radius: number; radiusB?: number }[]): {
+  min: number; max: number;
+} {
+  let min = Infinity, max = -Infinity;
+  for (const p of prims) {
+    const r = Math.max(p.radius, p.radiusB ?? p.radius);
+    min = Math.min(min, p.a[1] - r, p.b[1] - r);
+    max = Math.max(max, p.a[1] + r, p.b[1] + r);
+  }
+  return { min, max };
+}
+
 /** One bone side's prim fit: the line the bands were banded against, the
  *  bands (one authored prim each), and each band's paint. */
 export interface DraftSideFit {
@@ -586,15 +606,10 @@ export function emitDraft(input: DraftInput): string {
       const first = renderDoc({ ...input }, kept, trimmedN, over, at0, { soleShift: 0, extent: NaN });
       const doc = parseBlob(first);
       const body = buildBody(compileBlob(doc, compileFace(doc)));
-      let minY = Infinity, maxY = -Infinity;
-      for (const p of body.prims) {
-        const r = Math.max(p.radius, p.radiusB ?? p.radius);
-        minY = Math.min(minY, p.a[1] - r, p.b[1] - r);
-        maxY = Math.max(maxY, p.a[1] + r, p.b[1] + r);
-      }
-      if (Number.isFinite(minY)) {
-        soleShift = -minY; // the root shift that lands the sole at 0
-        extent = maxY - minY; // shift-invariant, so the first build's value stands
+      const { min, max } = builtSurfaceY(body.prims);
+      if (Number.isFinite(min)) {
+        soleShift = -min; // the root shift that lands the sole at 0
+        extent = max - min; // shift-invariant, so the first build's value stands
       }
     } catch { /* unbuildable draft: emitted ungrounded, header says so */ }
   }
