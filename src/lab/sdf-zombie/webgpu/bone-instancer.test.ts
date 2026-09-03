@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/bone-instancer.test.ts
 import { describe, expect, it } from 'vitest';
 import type { Primitive } from '../types';
-import { packBoneInstances, INSTANCE_FLOATS, BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SHADE_WGSL, boneInstanceArrays } from './bone-instancer';
+import { packBoneInstances, INSTANCE_FLOATS, BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL, boneInstanceArrays } from './bone-instancer';
 
 const bone = (over: Partial<Primitive>): Primitive => ({
   a: [0, 0, 0], b: [0, 0.2, 0], radius: 0.02, scale: [1, 1, 1], blendK: 0,
@@ -48,9 +48,13 @@ describe('packBoneInstances', () => {
 });
 
 describe('WGSL parse contract', () => {
-  for (const [name, src] of Object.entries({ BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SHADE_WGSL })) {
+  for (const [name, src] of Object.entries({ BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL })) {
     it(`${name} starts with fn and has no colon-in-comment in its signature`, () => {
       expect(src.startsWith('fn ')).toBe(true);
+      // ONE fn per string: wgslFn reads a second fn's parameters as the
+      // node's inputs (a boneHash inside the shade string asked for an input
+      // 'q' and the pipeline never built — 2026-09-03).
+      expect((src.match(/^fn /gm) ?? []).length, `${name} declares more than one fn`).toBe(1);
       const sig = src.slice(src.indexOf('('), src.indexOf(') ->') + 1);
       for (const line of sig.split('\n')) {
         const c = line.indexOf('//');

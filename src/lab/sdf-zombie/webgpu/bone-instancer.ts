@@ -107,6 +107,25 @@ export const BONE_VERTEX_WGSL = /* wgsl */ `fn boneVertex(t: f32, theta: f32, la
 
 /** Lambert key + flashlight cone, the march's own formula (march.wgsl.ts
  *  ~2253-2290) on the same uniform values, minus wetness/scatter. */
+/** Value-noise helpers for the mottle in boneShade. Separate strings: wgslFn
+ *  takes ONE fn per source and reads a second fn's params as inputs (a
+ *  boneHash inside BONE_SHADE_WGSL made TSL ask for an input 'q', and the
+ *  pipeline failed to build — first boot, 2026-09-03). */
+export const BONE_HASH_WGSL = /* wgsl */ `fn boneHash(q: vec3<f32>) -> f32 {
+  var p3 = fract(q * 0.1031);
+  p3 = p3 + dot(p3, p3.zyx + vec3<f32>(31.32));
+  return fract((p3.x + p3.y) * p3.z);
+}`;
+export const BONE_NOISE_WGSL = /* wgsl */ `fn boneNoise(q: vec3<f32>) -> f32 {
+  let i = floor(q);
+  let f = fract(q);
+  let u = f * f * (3.0 - 2.0 * f);
+  let a = mix(boneHash(i), boneHash(i + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+  let b = mix(boneHash(i + vec3<f32>(0.0, 1.0, 0.0)), boneHash(i + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+  let c = mix(boneHash(i + vec3<f32>(0.0, 0.0, 1.0)), boneHash(i + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+  let d = mix(boneHash(i + vec3<f32>(0.0, 1.0, 1.0)), boneHash(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}`;
 export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, woundTex: texture_2d<f32>, woundCount: f32, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
   var L = normalize(lightDir);
   var keyC = keyColor;
@@ -144,8 +163,17 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
   // look = (stain toward deepColor, blood tint on the highlight, spec gain, fresnel gain)
   let shine = pow(max(dot(n, H), 0.0), 48.0);
   let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * look.w;
-  let stain = mix(look.x, look.x * 0.2, expo);
-  let albedo = mix(boneColor, deepColor * 0.8, stain);
+  // MOTTLE (owner, 2026-09-03: "uniform colour... should have random red
+  // bits like the non-mesh bones"). The field's bone inherited the flesh
+  // shader's noise; the tubes had none. Two octaves of value noise on world
+  // position: a broad tissue-stain wash plus tight blood flecks where the
+  // noise peaks. Stronger under blood (rim of a crater), fainter where a
+  // crater's centre has scoured the bone.
+  let nz = boneNoise(p * 55.0) * 0.65 + boneNoise(p * 140.0 + vec3<f32>(7.1, 3.3, 9.7)) * 0.35;
+  let flecks = smoothstep(0.62, 0.80, boneNoise(p * 210.0 + vec3<f32>(2.0, 5.0, 1.0)));
+  let mottle = clamp(nz * 0.6 + flecks * 0.9, 0.0, 1.0) * (1.0 - 0.5 * expo);
+  let stain = clamp(mix(look.x, look.x * 0.2, expo) + mottle * 0.55, 0.0, 1.0);
+  let albedo = mix(boneColor, deepColor * 0.8, stain) * (1.0 - 0.25 * flecks);
   let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * (1.0 - 0.6 * expo));
   let ao = mix(0.45, 1.0, expo);
   let diffuse = albedo * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao;
@@ -218,7 +246,10 @@ export function createBoneInstancer(max = 256): BoneInstancer {
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
   void qrot;
-  const shade = wgslFn(BONE_SHADE_WGSL);
+  // Same idiom for the fragment side: boneHash -> boneNoise -> boneShade.
+  const [, , shade] = [BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL].reduce<ReturnType<typeof wgslFn>[]>(
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+  );
   const args = {
     t: attribute('tubeT', 'float'), theta: attribute('tubeTheta', 'float'), lat: attribute('tubeLat', 'float'),
     iA: attribute('iA', 'vec3'), iB: attribute('iB', 'vec3'), iC: attribute('iC', 'vec3'),

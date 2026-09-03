@@ -66,73 +66,100 @@ bones
   # face reads as two bones meeting rather than one smooth helmet.
   blob head on skull at=0.30 offset=(0,-0.028,0.030) r=0.050 wide=0.82 tall=0.58 deep=0.96
 
-  # RIBCAGE — real ribs, not a plate.
+  # TORSO SKELETON — ribcage, spine, clavicles, pelvis (re-authored 2026-09-03).
   #
-  # The plate this replaces (`bar torso on spine ... wide=1.45 deep=0.55`) is
-  # what the owner saw as "a big white central pillar running through the
-  # torso" — because that is what it was. A slab cannot read as a ribcage no
-  # matter how it is coloured; the shape has to carry it, and a wound only ever
-  # opens a small window onto the bone, so the STRUCTURE inside that window is
-  # the whole read.
+  # Every line from here to GUT COIL is EMITTED by scripts/zombie-skeleton-gen.ts
+  # (`npx tsx scripts/zombie-skeleton-gen.ts --check --write`), which holds the
+  # anatomical parametrisation and checks each prim with the same boneBreach
+  # sampler buildBody runs and rewrites the lines below the marker. Edit the
+  # table there; the reasoning for every number lives in that file, and the
+  # per-line comments below are its summary.
   #
-  # Each rib is a short bar whose far end is thrown out, down and forward by
-  # `tip` (its bone runs vertically, the rib does not) and curved by `bend`.
-  # `both` emits the mirrored pair — `mirror` is unavailable here because the
-  # spine is not itself a mirrored bone.
+  # What this replaced, and why (owner, bone-tubes review 2026-09-03: "the
+  # ribcage structure seems way off"): six rib pairs spanning y 1.12-1.32 —
+  # 20 cm of cage in a 34 cm spine — and ~12 cm across inside a torso 38 cm
+  # wide. Each rib was ONE quadratic from spine to sternum with a 7 cm chord
+  # and an 8 cm bulge, so it read as a rod radiating from the spine rather
+  # than a hoop. No clavicles. The pelvis was two 7 cm blades and a basin.
   #
-  # Kept well inside the torso flesh (half-width ~0.19, half-depth ~0.117 at
-  # the chest): checkBoneContainment fails the build otherwise, and the
-  # nearWound gate stops being an identity if a rib breaches.
-  # Six pairs, and the CURVE is the whole point. The first version used
-  # bend displacements of ~0.015 against a ~0.10 span, which is nearly
-  # straight — the owner read them as "horizontal sticks" rather than a cage,
-  # correctly, because that is what they were. A rib leaves the spine going
-  # sideways and BACK, arcs out to its widest at the flank, then sweeps
-  # forward and down to meet the sternum. That lateral arc is what reads as a
-  # cage from inside a wound; without it you get louvres.
+  # What is here now, per the owner's reference (a standard human torso):
+  #  - SIX rib pairs (owner's second look: twelve read as too many; half,
+  #    thicker), heads y 1.375 down to 1.165 at 4.2 cm pitch. Each rib is TWO
+  #    bars meeting at the flank — back half vertebra -> rib angle -> flank,
+  #    front half flank -> sternum (costal margin for 5-6) — because a bar is
+  #    one quadratic Bezier and a hoop needs two. Upper ribs short and flat,
+  #    4 widest (half-width 0.160 against a chest half-width of ~0.19), lower
+  #    ribs shorter and angled down. r ~0.011 x tall=1.3: a fat band.
+  #  - The spine is a kyphotic curve at the BACK (apex z -0.080, back skin is
+  #    -0.134), not a rod up the rig axis: lumbar on the pelvis bone, thoracic
+  #    split at its apex so each half is rigid with the joint its ribs bind to.
+  #  - Sternum through the sternal ends of ribs 1-7; clavicles manubrium ->
+  #    acromion, written `both` on the spine so they are TORSO bones.
+  #  - Pelvis as a SOLID MASS (owner's second look: the fan of thin bars read
+  #    as "doodly lines"): fat sacrum wedge; per side a thick iliac blade
+  #    (r 0.030, flattened front-to-back) from the acetabular hub to the crest
+  #    apex at x 0.128 y 1.100, a thick crest rim, and a fat pubic ring. The
+  #    rig's hip joints sit at y 1.06, higher than a person's, so the wings
+  #    flare only 4 cm above them — the cage/crest gap is what the rig allows.
   #
-  # Geometry per rib: a short vertical base segment on the spine, moved to the
-  # spine's surface by `offset`, its far end thrown to the sternum by `tip`,
-  # and bowed outward by `bend` (a control-point displacement from the chord
-  # midpoint — the curve reaches midpoint + bend/2, so a 0.16 bend bulges
-  # ~80 mm past the chord).
+  # Idioms: `from=t to=t` puts both ends on ONE rig point, `offset=` moves the
+  # start to where the bone actually is, `tip=` is the far end relative to the
+  # start, `bend=` bows the chord (curve midpoint = chord midpoint + bend/2).
   #
-  # Containment: the chest flesh is ~0.17 half-width, 0.12 half-depth. Widest
-  # curve point lands near 0.12 including radius, so checkBoneContainment
-  # passes with room. Upper ribs are shorter and flatter, middle ribs widest,
-  # lower ribs shorter again and angled down — that taper is most of what
-  # separates a ribcage from a stack of hoops.
-  bar torso on spine from=0.78 to=0.80 offset=(0.014,0,-0.018) tip=(0.030,-0.020,0.070) bend=(0.105,0,-0.012) r=0.0085 both
-  bar torso on spine from=0.68 to=0.70 offset=(0.015,0,-0.020) tip=(0.038,-0.026,0.082) bend=(0.140,0,-0.014) r=0.0090 both
-  bar torso on spine from=0.58 to=0.60 offset=(0.015,0,-0.021) tip=(0.042,-0.030,0.086) bend=(0.160,0,-0.015) r=0.0090 both
-  bar torso on spine from=0.48 to=0.50 offset=(0.015,0,-0.021) tip=(0.044,-0.034,0.086) bend=(0.162,0,-0.015) r=0.0090 both
-  bar torso on spine from=0.38 to=0.40 offset=(0.014,0,-0.020) tip=(0.042,-0.038,0.078) bend=(0.146,0,-0.013) r=0.0085 both
-  bar torso on spine from=0.28 to=0.30 offset=(0.013,0,-0.018) tip=(0.036,-0.040,0.066) bend=(0.118,0,-0.011) r=0.0080 both
-  # Sternum — the front plate the ribs reach toward. Thin, so it reads as a
-  # bone edge rather than a second pillar.
-  bar torso on spine from=0.34 to=0.74 offset=(0,0,0.062) r=0.016 wide=1.5 deep=0.45
-  # PELVIS — a landmark, not a lump (owner, 2026-09-02: "we need to add a
-  # pelvic bone tbh, that's a major landmark").
-  #
-  # The previous version was ONE squashed blob, which is why it never read:
-  # a pelvis is recognisable by its SHAPE — two blades flaring up and out from
-  # a narrow centre, over a lower ring — and a single ellipsoid has none of
-  # that. Same lesson the ribcage taught when it was a slab.
-  #
-  # Blades: wide, thin, tilted outward, mirrored with `both` (the pelvis bone
-  # is not itself mirrored). Kept inside the hip flesh — the torso blob on
-  # pelvis is r 0.145 at wide 1.10 / deep 0.92, so roughly 0.16 half-width.
-  bar torso on pelvis from=0.34 to=0.52 offset=(0.030,0.004,0.004) tip=(0.062,0.030,-0.004) bend=(0.030,0.010,0.004) r=0.020 wide=1.15 deep=0.55 both
-  # Ilium crest — the flare you actually see at the top of a hip.
-  blob torso on pelvis at=0.54 offset=(0.070,0.026,0.000) r=0.024 wide=0.85 tall=0.60 deep=1.05 both
-  # The basin floor, joining the two sides low and narrow.
-  bar torso on pelvis from=0.16 to=0.30 offset=(0,-0.006,0.004) r=0.026 wide=1.30 tall=0.75 deep=0.80
-  # Ischium masses — the sit bones, low and to each side.
-  blob torso on pelvis at=0.14 offset=(0.036,-0.014,-0.006) r=0.021 wide=0.90 tall=0.80 deep=0.90 both
-
-  # Spine rod — the column behind the ribs. Narrow on purpose: the pillar
-  # complaint was a WIDE central mass, and a spine genuinely is a thin rod.
-  bar torso on spine from=0.10 to=0.98 offset=(0,0,-0.030) r=0.019 wide=0.9 deep=0.8
+  # Constraints that shaped the numbers:
+  #  - checkBoneContainment, 4 mm: the cage's back is FLATTER than anatomy
+  #    (rib-angle offset 0.012, half-depths trimmed on ribs 4-10) because the
+  #    zombie's back is a blended ellipsoid, rounder than a person's, and the
+  #    back-flank corner of ribs 6-10 was the first thing to breach.
+  #  - rig-bind.ts poses torso bones as ONE rigid frame per axial segment
+  #    (spine / pelvis): rotation + translation from the segment's two rig
+  #    points. Point-binding carried no rotation, so the cage sheared into an
+  #    upper and a lower half whenever the spine tilted (owner's second look).
+  #  - MAX_PRIMS 128 counts flesh + bone. The bone instancer cap went
+  #    512 -> 1024 for the cast.
+  # ---- generated by scripts/zombie-skeleton-gen.ts; edit the table there, not these lines ----
+  # Thoracic column, lower half (T12 -> apex of the kyphosis at y 1.245, z -0.08).
+  bar torso on spine from=0.1 to=0.1 offset=(0,-0.0038,-0.0641) tip=(0,0.155,-0.02) bend=(0,0,-0.032) r=0.018 deep=0.85
+  # Thoracic column, upper half (apex -> C7 at (0,1.40,0.028), meeting the derived neck bone).
+  bar torso on spine from=0.9 to=0.9 offset=(0,-0.1192,-0.1169) tip=(0,0.155,0.108) bend=(0,0,-0.032) r=0.018 deep=0.85
+  # Lumbar column: sacral promontory (0,1.00,-0.047) up to T12, bowed 1 cm forward (lordosis).
+  bar torso on pelvis from=0.6 to=0.6 offset=(0,-0.004,-0.047) tip=(0,0.09,-0.013) bend=(0,0,0.02) r=0.018 deep=0.85
+  # Rib 1: head y 1.375, cage half-width 0.075 / half-depth 0.05, descends 0.02 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.932 to=0.932 offset=(0.017,0,-0.0363) tip=(0.058,-0.0104,0.038) bend=(0.0255,0,-0.0105) r=0.0095 tall=1.3 both
+  bar torso on spine from=0.932 to=0.932 offset=(0.075,-0.0104,0.0017) tip=(-0.051,-0.0096,0.0474) bend=(0.0229,0,0.0109) r=0.0095 r2=0.0078 tall=1.3 both
+  # Rib 2: head y 1.333, cage half-width 0.125 / half-depth 0.082, descends 0.036 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.8077 to=0.8077 offset=(0.017,0,-0.0675) tip=(0.108,-0.0184,0.07) bend=(0.0464,0,-0.0141) r=0.0105 tall=1.3 both
+  bar torso on spine from=0.8077 to=0.8077 offset=(0.125,-0.0184,0.0025) tip=(-0.101,-0.0176,0.0805) bend=(0.044,0,0.0238) r=0.0105 r2=0.0086 tall=1.3 both
+  # Rib 3: head y 1.291, cage half-width 0.155 / half-depth 0.092, descends 0.05 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.6834 to=0.6834 offset=(0.017,0,-0.0893) tip=(0.138,-0.0254,0.08) bend=(0.0589,0,-0.0158) r=0.011 tall=1.3 both
+  bar torso on spine from=0.6834 to=0.6834 offset=(0.155,-0.0254,-0.0093) tip=(-0.131,-0.0246,0.0909) bend=(0.0566,0,0.0287) r=0.011 r2=0.009 tall=1.3 both
+  # Rib 4: head y 1.249, cage half-width 0.16 / half-depth 0.09, descends 0.058 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.5592 to=0.5592 offset=(0.017,0,-0.1017) tip=(0.143,-0.0294,0.078) bend=(0.061,0,-0.0159) r=0.011 tall=1.3 both
+  bar torso on spine from=0.5592 to=0.5592 offset=(0.16,-0.0294,-0.0237) tip=(-0.136,-0.0286,0.089) bend=(0.0587,0,0.0284) r=0.011 r2=0.009 tall=1.3 both
+  # Rib 5: head y 1.207, cage half-width 0.145 / half-depth 0.077, descends 0.06 to the costal margin. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.4349 to=0.4349 offset=(0.017,0,-0.1048) tip=(0.128,-0.0326,0.065) bend=(0.0547,0,-0.0148) r=0.0105 tall=1.3 both
+  bar torso on spine from=0.4349 to=0.4349 offset=(0.145,-0.0326,-0.0398) tip=(-0.095,-0.0274,0.0723) bend=(0.0428,0,0.0159) r=0.0105 r2=0.0086 tall=1.3 both
+  # Rib 6: head y 1.165, cage half-width 0.12 / half-depth 0.074, descends 0.052 to the costal margin. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.3107 to=0.3107 offset=(0.017,0,-0.0984) tip=(0.103,-0.0327,0.062) bend=(0.0443,0,-0.0136) r=0.0095 tall=1.3 both
+  bar torso on spine from=0.3107 to=0.3107 offset=(0.12,-0.0327,-0.0364) tip=(-0.04,-0.0193,0.0552) bend=(0.0191,0,0.0053) r=0.0095 r2=0.0078 tall=1.3 both
+  # Sternum: manubrium at y 1.372 down to the xiphoid at y 1.181, riding the ribs' sternal ends in z.
+  bar torso on spine from=0.75 to=0.75 offset=(0,0.0585,0.0565) tip=(0,-0.191,0.0009) bend=(0,0,0.052) r=0.01 wide=2.4 deep=0.6
+  # Clavicle: manubrium -> acromion, bowed forward through (0.105,1.392,0.052).
+  bar torso on spine from=1 to=1 offset=(0.026,-0.026,0.0463) tip=(0.159,0.03,-0.0523) bend=(-0.001,0.01,-0.0183) r=0.0075 both
+  # Sacrum: promontory (0,1.005,-0.047) curving back to z -0.070 then forward to the coccyx. Fat wedge, 48 mm across at the top.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0,0.015,-0.047) tip=(0,-0.08,0.011) bend=(0,0,-0.057) r=0.032 r2=0.016 wide=1.5 deep=0.7
+  # Iliac blade: acetabular hub (0.078,1.045,-0.006) up and out to the crest apex (0.128,1.100,-0.014); r 0.030, flattened front-to-back.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(0.05,0.055,-0.008) r=0.03 deep=0.6 tall=1.1 both
+  # Iliac crest: PSIS -> apex -> ASIS, the thick rim over the blade.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.04,0.065,-0.07) tip=(0.078,0.015,0.12) bend=(0.098,0.075,-0.008) r=0.018 deep=0.8 both
+  # Ilium back to the sacro-iliac joint.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(-0.038,0.01,-0.064) r=0.022 both
+  # Pubic ring: superior ramus hub -> symphysis (0.014,0.935,0.056),
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(-0.064,-0.11,0.062) r=0.018 both
+  # ischium hub -> sit bone (0.056,0.905,-0.026), the fat lower mass,
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(-0.022,-0.14,-0.02) r=0.022 both
+  # ischiopubic ramus closing the ring underneath.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.056,-0.085,-0.026) tip=(-0.042,0.03,0.082) r=0.015 both
 
   # GUT COIL (organs r3). Suggestive of the classic intestine look, not
   # anatomical — owner: "doesn't need to be anatomically correct, just

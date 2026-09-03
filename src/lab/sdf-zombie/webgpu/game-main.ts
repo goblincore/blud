@@ -702,7 +702,9 @@ async function main() {
   // cast packs 380 live bones — 46 bonePrims per zombie (23 authored × mirror
   // expansion), 38 in live clusters × 10 zombies — plus up to 12 flying
   // chunks. 256 overflowed on the first frame.
-  const boneInstancer = createBoneInstancer(512);
+  // 2026-09-03 skeleton re-author: 67 drawn bones per zombie (12 rib pairs as
+  // hoops, clavicles, a 15-piece pelvis), x10 bodies = 670 > 512.
+  const boneInstancer = createBoneInstancer(1024);
   boneInstancer.object.layers.set(0);
   boneInstancer.object.visible = false;
   scene.add(boneInstancer.object);

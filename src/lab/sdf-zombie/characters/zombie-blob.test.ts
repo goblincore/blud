@@ -95,6 +95,74 @@ describe('zombie.blob authors its shot-magnet bones', () => {
   });
 });
 
+// 2026-09-03 skeleton re-author: the owner's reference is a standard human
+// torso skeleton. Pins the STRUCTURE the previous cage lacked — twelve pairs
+// spanning the chest, as wide as the torso, closed at the flank into hoops,
+// clavicles, and a pelvis whose wings flare wide — not the exact numbers,
+// which scripts/zombie-skeleton-gen.ts owns.
+describe('zombie.blob authors a full torso skeleton', () => {
+  const torsoBones = () => fromBlob().bonePrims
+    .filter(p => p.op === 'bone' && p.cluster === CLUSTER_ORDER.indexOf('torso'));
+  const midY = (p: Primitive) => (p.a[1] + p.b[1]) / 2;
+  const reachX = (p: Primitive) => Math.max(Math.abs(p.a[0]), Math.abs(p.b[0]));
+  // A rib: a mirrored, bent torso bone in the chest band with its far end off
+  // the midline. Sternum (x 0) and spine (x 0) are excluded by the reach test;
+  // the clavicles by the collar band (above y 1.36 AND out to the shoulder).
+  const isClavicle = (p: Primitive) => midY(p) > 1.36 && reachX(p) > 0.17;
+  const ribs = () => torsoBones().filter(p => p.mirrored && p.bend !== undefined && midY(p) > 1.12 && reachX(p) > 0.03 && !isClavicle(p));
+
+  it('has six rib pairs, each in two halves (24 rib prims)', () => {
+    // Owner (2026-09-03, second look): twelve read as too many; six, thicker.
+    expect(ribs().length).toBeGreaterThanOrEqual(24);
+  });
+
+  it('the cage spans the chest — at least 20 cm of spine, not 20 cm of stubs', () => {
+    const ys = ribs().map(midY);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.20);
+  });
+
+  it('the cage is as wide as the torso — the flank reaches past x 0.15', () => {
+    // Chest flesh half-width is ~0.19; the old cage stopped at ~0.06.
+    expect(Math.max(...ribs().map(reachX))).toBeGreaterThan(0.15);
+    expect(Math.min(...ribs().map(p => Math.min(p.a[0], p.b[0])))).toBeLessThan(-0.15);
+  });
+
+  it('ribs close into hoops — two halves meet at the flank', () => {
+    // For every rib prim whose start is at the spine, some other rib prim
+    // starts where this one ends (within 1 mm): that is the flank join.
+    const rs = ribs();
+    const backs = rs.filter(p => Math.abs(p.a[0]) < 0.03 && Math.abs(p.b[0]) > 0.05);
+    expect(backs.length).toBeGreaterThanOrEqual(12);
+    for (const b of backs) {
+      const joined = rs.some(q => q !== b && Math.hypot(q.a[0] - b.b[0], q.a[1] - b.b[1], q.a[2] - b.b[2]) < 1e-3);
+      const floating = midY(b) < 1.17; // ribs 11-12 have no front half
+      expect(joined || floating, `rib half ending at ${b.b.map(v => v.toFixed(3))} has no front half`).toBe(true);
+    }
+  });
+
+  it('has clavicles reaching the shoulder', () => {
+    // A torso bone in the collar band whose far end is near the shoulder joint (0.2, 1.398).
+    const collar = torsoBones().filter(isClavicle);
+    expect(collar.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('has a pelvis with wide iliac wings and a closed ring below, as a solid mass', () => {
+    const pelvis = torsoBones().filter(p => midY(p) < 1.12 && reachX(p) > 0.02);
+    expect(pelvis.length).toBeGreaterThanOrEqual(10);
+    // "A big solid mass, not doodly lines" (owner): the blades are fat.
+    expect(Math.max(...pelvis.map(p => p.radius))).toBeGreaterThanOrEqual(0.028);
+    // The crest flares out past x 0.12 (the old blades stopped at ~0.09).
+    expect(Math.max(...pelvis.map(reachX))).toBeGreaterThan(0.12);
+    // Something reaches down to the sit bones / symphysis, below y 0.94.
+    expect(Math.min(...pelvis.map(p => Math.min(p.a[1], p.b[1])))).toBeLessThan(0.94);
+  });
+
+  it('stays under the shader ceiling with room: flesh + bone <= 120 of 128', () => {
+    const b = fromBlob();
+    expect(b.prims.length + b.bonePrims.length).toBeLessThanOrEqual(120);
+  });
+});
+
 describe('zombie.blob authors a gut coil (organs r3)', () => {
   const organs = () => fromBlob().bonePrims.filter(p => p.op === 'organ');
 

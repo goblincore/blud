@@ -48,11 +48,32 @@ export interface HeadRigid {
   bones: Map<number, { a: Vec3; b: Vec3 }>;
 }
 
+/**
+ * A torso/head BONE prim's rigid frame: the axial rig segment (pelvis, spine,
+ * neck) it belongs to, and its rest endpoints relative to that segment's head.
+ * Posed as ONE rotation + translation derived from the segment's two rig
+ * points, so the whole ribcage turns with the spine instead of each rib
+ * translating with whichever joint it was nearest (owner, 2026-09-03: "the
+ * ribcage has a top and bottom half and they shear" — a point-bind carries no
+ * rotation, so the moment the spine tilted, ribs bound to the chest point and
+ * ribs bound to the hips point slid past each other).
+ */
+export interface BoneFrame {
+  head: number;
+  tail: number;
+  /** Bind-time unit direction head→tail. */
+  restDir: Vec3;
+  restA: Vec3;
+  restB: Vec3;
+}
+
 export interface BoundRig {
   rig: RigState;
   binding: PrimBind[];
   /** Parallel to body.bonePrims — the same nearest-joint machinery. */
   boneBinding: PrimBind[];
+  /** Torso/head bone prims keyed by index: posed rigidly from an axial segment. */
+  boneFrames: Map<number, BoneFrame>;
   /** Null when the body has no `skull` bone or no skull-owned spheres. */
   head: HeadRigid | null;
 }
@@ -103,6 +124,44 @@ export function bindRig(body: BuildResult): BoundRig {
     constraints,
   );
 
+  // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
+  // Mirrored bones expand to `name.l` / `name.r` (mirror.ts), so the suffix is
+  // the honest marker. Falls back to every joint when a body has none.
+  const axialJoints: number[] = [];
+  for (const [name, bone] of body.bones) {
+    if (/\.[lr]$/.test(name)) continue;
+    for (const j of [indexOf(bone.head), indexOf(bone.tail)])
+      if (!axialJoints.includes(j)) axialJoints.push(j);
+  }
+  // Axial SEGMENTS (head/tail joint pairs of the unmirrored bones) for the
+  // rigid torso-bone frames below.
+  const axialSegs: { head: number; tail: number }[] = [];
+  for (const [name, bone] of body.bones) {
+    if (/\.[lr]$/.test(name)) continue;
+    const h = indexOf(bone.head), t = indexOf(bone.tail);
+    if (h !== t) axialSegs.push({ head: h, tail: t });
+  }
+  const nearestSeg = (p: Vec3): { head: number; tail: number } | null => {
+    let best: { head: number; tail: number } | null = null;
+    let bestD = Infinity;
+    for (const s of axialSegs) {
+      const a = positions[s.head]!, b = positions[s.tail]!;
+      const ab = sub(b, a), ap = sub(p, a);
+      const l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / l2));
+      const d = len(sub(p, add(a, vscale(ab, t))));
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best;
+  };
+  const bindAxial = (p: Vec3): number => {
+    const pool = axialJoints.length > 0 ? axialJoints : positions.map((_, i) => i);
+    let best = pool[0]!;
+    let bestD = Infinity;
+    for (const i of pool) { const d = len(sub(p, positions[i]!)); if (d < bestD) { bestD = d; best = i; } }
+    return best;
+  };
+
   const bindEnd = (p: Vec3): EndpointBind => {
     let best = 0;
     let bestD = Infinity;
@@ -151,12 +210,39 @@ export function bindRig(body: BuildResult): BoundRig {
     // the gait — invisible while bone was field-shaded inside cavities, obvious
     // once bone tubes drew it (owner, 2026-09-03). Limb bones legitimately span
     // two joints (upper arm: shoulder -> elbow) and keep the per-end bind.
+    //
+    // And the joint is the nearest AXIAL one — a joint of an unmirrored bone
+    // (pelvis, spine, neck, skull), never a hip or shoulder. A real rib hoop
+    // has its chord midpoint out at the flank (x ~0.08-0.15), which is nearer
+    // the hip or shoulder joint than any spine joint; hips, shoulders and the
+    // spine each take their own gait offsets (gait.ts hip drop, shoulder
+    // sway/droop), so a rib bound there would shear off the cage exactly as
+    // the per-end bind did. A rib belongs to a vertebra (2026-09-03 skeleton
+    // re-author, which is what made hoops wide enough to need this).
     boneBinding: body.bonePrims.map(p => {
       if (p.limb !== 'torso' && p.limb !== 'head') return { a: bindEnd(p.a), b: bindEnd(p.b) };
       const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
-      const j = bindEnd(mid).point;
+      const j = bindAxial(mid);
       return { a: { point: j, offset: sub(p.a, positions[j]!) }, b: { point: j, offset: sub(p.b, positions[j]!) } };
     }),
+    boneFrames: (() => {
+      const frames = new Map<number, BoneFrame>();
+      body.bonePrims.forEach((p, i) => {
+        if (p.limb !== 'torso' && p.limb !== 'head') return;
+        // Skull-owned spheres ride the rigid head instead.
+        if (p.limb === 'head' && len(sub(p.a, p.b)) < KEY_EPS && skull) return;
+        const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+        const seg = nearestSeg(mid);
+        if (!seg) return;
+        const h = positions[seg.head]!;
+        frames.set(i, {
+          head: seg.head, tail: seg.tail,
+          restDir: normalize(sub(positions[seg.tail]!, h)),
+          restA: sub(p.a, h), restB: sub(p.b, h),
+        });
+      });
+      return frames;
+    })(),
     head,
   };
 }
@@ -211,10 +297,22 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
   // would float while its limb moves. Skull-owned bones take the rigid-head
   // branch exactly as the face prims do.
+  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
   const bonePrims: Primitive[] = body.bonePrims.map((p, i) => {
     const face = rigid?.bones.get(i);
     if (face && rigid) {
       return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
+    }
+    const frame = bound.boneFrames.get(i);
+    if (frame) {
+      // Same composition as headTransform: the known body yaw first (the
+      // segment is near-vertical, so a bare shortest-arc rotation between rest
+      // and current direction would drop the azimuth), then the residual tilt.
+      const h = pos[frame.head]!.pos;
+      const dir = normalize(sub(pos[frame.tail]!.pos, h));
+      const rest = bodyYaw === 0 ? frame.restDir : rotateYaw(frame.restDir, bodyYaw);
+      const q = qMul(qFromTo(rest, dir), qYaw);
+      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q };
     }
     const bind = bound.boneBinding[i]!;
     const pa = pos[bind.a.point]!;
