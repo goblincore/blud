@@ -1040,6 +1040,57 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `src/lab/sdf-zombie/webgpu/lab-main.ts`
 - Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
 
+- [ ] **Step 0: Give the bones time to fall — a flaw in the capture design**
+
+Task 5's frames pass both gates and are still wrong: at progress 0.85 the skull
+HOVERS in mid-air above the puddle, and at 1.0 there are no bones in the puddle
+at all (`height` collapses from 264 px to 63 px between those two frames, which
+is the skull leaving frame rather than landing).
+
+The cause is `meltDirect(t)`, which this plan introduced to make capture
+reproducible. It jumps melt PROGRESS instantly, but a released bone group is a
+rigid body that needs wall-clock time to fall — and the capture shoots two
+frames later. So every bone is photographed at the instant it was released.
+Determinism was bought by freezing out the physics.
+
+Neither gate noticed, because both measure only silhouette height, width and
+centroid — a puddle with no skeleton in it passes all six bounds.
+
+**Add a deterministic settle** rather than reverting to wall-clock capture.
+In `lab-main.ts`, beside the other melt seams:
+
+```ts
+  /** Advance ONLY the released bone chunks, at a fixed dt, without moving melt
+   *  progress. This is what lets a capture jump to a progress value and still
+   *  photograph bones that have FALLEN: meltDirect sets the pose, meltSettle
+   *  runs the physics that pose implies. Fixed dt and the seeded rng from Task
+   *  5 keep it reproducible. */
+  function meltSettle(frames: number) {
+    for (let i = 0; i < Math.max(0, Math.min(600, frames | 0)); i++) {
+      stepMeltChunks(1 / 60);
+    }
+  }
+```
+
+expose it on `__sdfLab`, and call it from `melt-capture.mjs` after each
+`meltDirect(t)` with the number of frames that progress would actually have
+taken:
+
+```js
+  const settleFrames = Math.round((t / MELT_RATE) * 60); // MELT_RATE = 0.625
+```
+
+At t = 1.0 that is 96 frames — the 1.6 s the melt really lasts — so the bones
+land where they would have landed.
+
+- [ ] **Step 0b: A gate that can see the skeleton**
+
+Both gates were blind to this, so add the missing check to Gate A: at progress
+1.0, with the chunks settled, **at least 8 of the 11 bone groups must have come
+to rest inside the puddle** — within its XZ radius and below `poolHeight * 3`.
+A melt whose skeleton flew away, sank through the floor or never released is
+not a passing melt, and until now nothing said so.
+
 - [ ] **Step 1: Add the uniform**
 
 Add `meltCfg: vec4<f32>` to the uniform block in `march.wgsl.ts` — `x` = melt progress 0..1, `yzw` spare. Follow the existing uniform-declaration comment style (see the `woundCfg` / `counts2` block comments around `:1350`), which documents each channel.
