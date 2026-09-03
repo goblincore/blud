@@ -292,7 +292,7 @@ describe('emitDraft offsets', () => {
     // the numbers are.
     const f = makeFit();
     const spine = f.bones.find((b) => b.name === 'spine')!;
-    spine.chain = { rigBone: 'spine1', scale: 1.23 };
+    spine.chain = { rigBone: 'spine1', scale: 1.23, head: 'Spine02', tail: 'Spine01' };
     spine.shared!.axisDisagreeDeg = 86;
     const text = emitDraft(f);
     const spineStatement = text.split('\n').find((l) => l.trim().startsWith('bone spine '));
@@ -300,8 +300,10 @@ describe('emitDraft offsets', () => {
     expect(spineStatement!).toContain('86°');
     expect(spineStatement!).toMatch(/off the rig chain/);
     // And the statement's len= names its new source: the rig segment times
-    // the one global scale, not the cloud extent it used to be.
+    // the one global scale, with the rig JOINTS the span runs between so the
+    // artifact carries its own source.
     expect(spineStatement!).toContain('rig spine1');
+    expect(spineStatement!).toContain('Spine02->Spine01');
     expect(spineStatement!).toContain('1.23');
     expect(build(text).errors).toEqual([]);
   });
@@ -496,6 +498,16 @@ describe('drafted chain closes', () => {
     const byName = new Map(doc.bones.map((b) => [b.name, b]));
     const docLen = (name: string): number =>
       name === doc.rootBone ? doc.rootLen : byName.get(name)!.len;
+    // The chain must also COMPOSE: a mapped child's declared span starts
+    // exactly where its .blob parent's declared span ends — that identity is
+    // what makes each len= a chain quantity rather than a per-bone one.
+    const chainOf = new Map(input.bones.map((b) => [b.name, b.chain]));
+    for (const db of input.bones) {
+      if (db.chain && db.parent !== null) {
+        const parentChain = chainOf.get(db.parent);
+        if (parentChain) expect(db.chain.head).toBe(parentChain.tail);
+      }
+    }
     let checked = 0;
     for (const db of input.bones) {
       if (!db.chain) {
@@ -503,10 +515,9 @@ describe('drafted chain closes', () => {
         // rig distance for them, which is why they must be chain leaves.
         continue;
       }
-      const entry = RIG.boneMap[db.chain.rigBone];
-      if (!entry) throw new Error(`assembler declared chain for unmapped bone ${db.chain.rigBone}`);
-      const head = RIG_SKIN.jointWorld.get(entry.head)!;
-      const tail = RIG_SKIN.jointWorld.get(entry.tail)!;
+      const head = RIG_SKIN.jointWorld.get(db.chain.head);
+      const tail = RIG_SKIN.jointWorld.get(db.chain.tail);
+      if (!head || !tail) throw new Error(`declared chain joints missing from the rig: ${db.chain.head}->${db.chain.tail}`);
       // 3 decimals, not 6: the artifact formats numbers to 4 decimal places
       // (emitDraft's fmt), so the tightest honest bound is the format's own
       // rounding — 5e-4 m is still 100x tighter than the drift class this

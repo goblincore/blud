@@ -19,7 +19,7 @@ import type { Vec3 } from './types';
 import type { RefSkin } from './ref-skin';
 import { refBones, type RigDef } from './ref-align';
 import {
-  bandCloud, cloudOffset, medialLine, rigLine, type MedialLine,
+  bandCloud, cloudAlongAxis, cloudOffset, medialLine, rigLine, type MedialLine,
 } from './draft-fit';
 import {
   bandColour, bodyPaint, inferStance, pairAsymmetry,
@@ -62,6 +62,14 @@ interface DraftBoneSpec {
     | { kind: 'unmappedHands' };           // LeftHand / RightHand, one mitten mass each
   /** rig.boneMap entry whose head->tail joints give the axis its SIGN. */
   orientBy?: string;
+  /**
+   * Measure this leaf's cloud along its PARENT's rig direction instead of
+   * the cloud's own principal axis. Set on the skull: the head cloud is
+   * dominated by hair, whose axis is not the head's (schoolgirl's measured
+   * 75° off the neck), and the crown end of the height line rides on this
+   * bone.
+   */
+  leafAxis?: 'parent-rig';
 }
 
 const SPECS: DraftBoneSpec[] = [
@@ -70,7 +78,7 @@ const SPECS: DraftBoneSpec[] = [
   { name: 'chest', parent: 'spine1', limb: 'torso', cloud: { kind: 'rig', base: 'chest' }, orientBy: 'chest' },
   { name: 'spine2', parent: 'chest', limb: 'torso', cloud: { kind: 'rig', base: 'spine2' }, orientBy: 'spine2' },
   { name: 'neck', parent: 'spine2', limb: 'torso', cloud: { kind: 'rig', base: 'neck' }, orientBy: 'neck' },
-  { name: 'skull', parent: 'neck', limb: 'head', cloud: { kind: 'unmapped', joint: 'Head' }, orientBy: 'neck' },
+  { name: 'skull', parent: 'neck', limb: 'head', cloud: { kind: 'unmapped', joint: 'Head' }, orientBy: 'neck', leafAxis: 'parent-rig' },
   { name: 'clavicle', parent: 'spine2', limb: 'arm', cloud: { kind: 'rig', base: 'clavicle' }, orientBy: 'clavicle' },
   { name: 'upperarm', parent: 'clavicle', limb: 'arm', cloud: { kind: 'rig', base: 'upperarm' }, orientBy: 'upperarm' },
   { name: 'forearm', parent: 'upperarm', limb: 'arm', cloud: { kind: 'rig', base: 'forearm' }, orientBy: 'forearm' },
@@ -162,6 +170,7 @@ const AXIS_REPORT_DEG = 45;
  */
 function fitSide(
   data: SideData, seg: { head: Vec3; tail: Vec3 } | null, leafDir: Vec3, image: RgbImage | null, g: number,
+  leafAxis = false, leafAnchor?: Vec3,
 ): { fit: DraftSideFit; chain: MedialLine; degenerate: number; axisDisagreeDeg?: number } | null {
   if (data.positions.length < MIN_BONE_VERTS) return null;
   const cloudFit = medialLine(data.positions);
@@ -176,6 +185,16 @@ function fitSide(
     // Sign-blind on purpose: an eigenvector's canonical flip is not a
     // disagreement, and both signs name the same surface behaviour.
     axisDisagreeDeg = Math.acos(Math.min(1, Math.abs(dot(cloudFit.dir, chain.dir)))) * 180 / Math.PI;
+  } else if (leafAxis && leafAnchor) {
+    // The hair trap: the skull cloud's principal axis is the HAIR's, not the
+    // head's (schoolgirl's measured 75° off the neck). The parent rig
+    // direction is the honest axis, anchored where the grammar will pin the
+    // bone's head — the parent chain's tail — because a child bone cannot
+    // float. The leaf line IS the statement line here, so the head's extent
+    // lands on the chain.
+    chain = cloudAlongAxis(leafAnchor, leafDir, data.positions);
+    line = chain;
+    offset = cloudOffset(data.positions, chain);
   } else {
     chain = orient(cloudFit, leafDir);
     line = chain;
@@ -336,8 +355,11 @@ export function assembleDraft(
      *  signed cloud line for an unmapped leaf — what len=, side= children
      *  and the emitted statement carry. */
     line: MedialLine;
-    /** Present when line is rig-derived (see DraftBone.chain in draft-emit). */
-    chain?: { rigBone: string; scale: number };
+    /** Present when line is rig-derived (see DraftBone.chain in draft-emit).
+     *  `head`/`tail` are the rig JOINT NAMES the span runs between — a child
+     *  chain continues from `tail`, and the emitter names them in the `#
+     *  fit:` comment so the artifact carries its own source. */
+    chain?: { rigBone: string; scale: number; head: string; tail: string };
     shared?: DraftSideFit;
     l?: DraftSideFit;
     r?: DraftSideFit;
@@ -406,7 +428,18 @@ export function assembleDraft(
         continue;
       }
       const rc = rigChainOf(spec, null);
-      const fitted = fitSide(data, rc?.seg ?? null, anatomical, image, g);
+      // The leaf-axis anchor is where the grammar pins the bone head: the
+      // nearest kept ancestor's chain tail (the skull's own parent — neck —
+      // is skipped on the minotaur, so the anchor rides the chain down to
+      // spine2's tail). pelvis is SPECS-first and required, so a kept
+      // ancestor always exists by the time a leaf fits.
+      let leafAnchor: Vec3 | undefined;
+      if (spec.leafAxis === 'parent-rig') {
+        const ancestor = nearestKeptAncestor(spec.parent!);
+        const parentLine = ancestor ? built.get(ancestor)?.line : undefined;
+        if (parentLine) leafAnchor = tailPoint(parentLine);
+      }
+      const fitted = fitSide(data, rc?.seg ?? null, anatomical, image, g, spec.leafAxis === 'parent-rig', leafAnchor);
       if (!fitted) { notes.push(`skipped ${spec.name}: ${data.positions.length} verts — no evidence`); continue; }
       if (fitted.axisDisagreeDeg !== undefined)
         reportDisagreement(spec.name, fitted.axisDisagreeDeg, fitted.fit, notes);
@@ -416,7 +449,8 @@ export function assembleDraft(
         notes.push(`thin evidence: ${spec.name} carries only ${data.positions.length} verts — its bands are weak`);
       built.set(spec.name, {
         spec, line: fitted.chain,
-        chain: rc ? { rigBone: rc.key, scale: g } : undefined,
+        chain: rc ? { rigBone: rc.key, scale: g, head: rc.head, tail: rc.tail } : undefined,
+        ...(spec.leafAxis === 'parent-rig' ? { axisFromParent: true } : {}),
         shared: fitted.fit, kept: data.positions.length,
       });
       continue;
@@ -471,7 +505,7 @@ export function assembleDraft(
         notes.push(`${spec.name}: dropped ${fitted.degenerate} degenerate band(s) — cross-section fit pinched through the axis`);
       built.set(spec.name, {
         spec, line: fitted.chain,
-        chain: rcL ? { rigBone: rcL.key, scale: g } : undefined,
+        chain: rcL ? { rigBone: rcL.key, scale: g, head: rcL.head, tail: rcL.tail } : undefined,
         shared: fitted.fit, asym,
         pairSide: pairSideOf(fitted.chain, spec),
         kept: nl + nr,
@@ -491,7 +525,7 @@ export function assembleDraft(
         notes.push(`${spec.name}: dropped ${lf.degenerate + rf.degenerate} degenerate band(s) — cross-section fit pinched through the axis`);
       built.set(spec.name, {
         spec, line: lf.chain,
-        chain: rcL ? { rigBone: rcL.key, scale: g } : undefined,
+        chain: rcL ? { rigBone: rcL.key, scale: g, head: rcL.head, tail: rcL.tail } : undefined,
         l: lf.fit, r: rf.fit, asym,
         pairSide: pairSideOf(lf.chain, spec), kept: nl + nr,
       });
@@ -505,12 +539,45 @@ export function assembleDraft(
    *  unmapped leaves) or its joints are missing (the same gap that nulls
    *  jointPairDir, which skips the bone below). Same key convention as
    *  collect(): `base` unpaired, `base.l`/`.r` for a pair. */
+  /**
+   * The chain segment a mapped spec's .blob bone spans, with the rig JOINT
+   * NAMES at its ends — or null where the rig does not map the bone.
+   *
+   * THE BRANCH RULE. `.blob` is a strict chain (a child's head sits at its
+   * parent's TAIL) but a rig is a TREE: the legs and the spine both branch
+   * at Hips, so the first leg bone's rig head joint sits BELOW its .blob
+   * parent's tail. Transcribing each rig bone verbatim leaves the branch
+   * stubs unmodelled — the whole leg chain hung one stub too high, which
+   * after chain drift was THE residual sole/height error (schoolgirl's
+   * soles +0.25 m = Hips→Spine02 + Hips→UpLeg). So a mapped bone whose rig
+   * head is not its .blob parent's chain-tail joint EXTENDS: its segment
+   * runs from that parent tail joint to its own rig tail joint. The span's
+   * endpoints are still rig joints, so len= stays a rig joint-to-joint
+   * distance × the one global scale — the acceptance property holds by
+   * construction — and the chain lands every JOINT at its rig position (the
+   * leg chain reaches the rig's ankle exactly). The spine needs no
+   * extension: each spine bone's rig head IS the previous tail. The skull
+   * and hand are unmapped leaves and never reach here.
+   */
   function rigChainOf(spec2: DraftBoneSpec, side: 'l' | 'r' | null):
-    { key: string; seg: { head: Vec3; tail: Vec3 } } | null {
+    { key: string; seg: { head: Vec3; tail: Vec3 }; head: string; tail: string } | null {
     if (spec2.cloud.kind !== 'rig') return null;
     const key = side === null ? spec2.cloud.base : `${spec2.cloud.base}.${side}`;
-    const seg = ref.get(key);
-    return key && seg ? { key, seg } : null;
+    const entry = rig.boneMap[key];
+    const seg0 = ref.get(key);
+    if (!entry || !seg0) return null;
+    // The .blob parent's chain-tail joint: the nearest KEPT mapped ancestor
+    // (skipped bones splice out of the .blob chain entirely); the ROOT has
+    // none and keeps its own head.
+    const parentName = nearestKeptAncestor(spec2.parent);
+    const parentChain = parentName ? built.get(parentName)?.chain : undefined;
+    const headJoint = parentChain ? parentChain.tail : entry.head;
+    if (headJoint === entry.head) return { key, seg: seg0, head: entry.head, tail: entry.tail };
+    const head = skin.jointWorld.get(headJoint);
+    // A missing parent-tail joint cannot be spanned honestly — no chain, the
+    // same gap that nulls refBones and falls back to the cloud line.
+    if (!head) return null;
+    return { key, seg: { head, tail: seg0.tail }, head: headJoint, tail: entry.tail };
   }
 
   /** `side=` from the measured lateral offset of the pair's head point past

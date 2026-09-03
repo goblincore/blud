@@ -29,6 +29,10 @@ import { DEFAULT_FACE, facePrims } from './face';
 import { MAX_PRIMS } from './validate';
 import { inferDir, type MedialLine, type Band } from './draft-fit';
 import type { BandPaint, BodyPaint, PairAsym, StanceFit, Rgb } from './draft-paint';
+import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
+import { buildBody } from './build-body';
+import { add, dot, scale as vscale, sub } from './vec';
 
 /**
  * The draft's prim ceilings — half the shader's hard ones (128 total, 64 per
@@ -107,10 +111,22 @@ export interface DraftBone {
    * global scale) rather than a cloud fit. `.blob`'s skeleton is a rigid
    * chain — a bone's head is its parent's TAIL — so len= places every
    * descendant, and overlapping vertex clouds (thigh and shin both own the
-   * knee) do not compose into one. Absent for the unmapped leaves (skull,
+   * knee) do not compose into one. `head`/`tail` are the rig JOINT NAMES the
+   * span runs between: a child chain continues from `tail` (the branch rule
+   * in draft-skeleton can move `head` up to the parent's tail joint when the
+   * rig branches), and the emitted `# fit:` comment names them so the
+   * artifact carries its own source. Absent for the unmapped leaves (skull,
    * hands), whose cloud lines place no descendants.
    */
-  chain?: { rigBone: string; scale: number };
+  chain?: { rigBone: string; scale: number; head: string; tail: string };
+  /**
+   * True for the skull leaf: its line is the CLOUD measured along the
+   * PARENT's rig axis (cloudAlongAxis), not the cloud's own principal axis —
+   * the head cloud is dominated by hair, whose axis is not the head's
+   * (schoolgirl's measured 75° off the neck), and a skull bone leaning
+   * sideways steals the crown extent the height line checks.
+   */
+  axisFromParent?: boolean;
   /** One fit for both sides: unpaired bones and mirrorable pairs. */
   shared?: DraftSideFit;
   /** NOT-mirrorable pairs: per-side prims, emitted `side=l` / `side=r`. */
@@ -240,12 +256,34 @@ function validateInput(input: DraftInput): void {
   extent(root.line, root.name);
 }
 
-/** Fraction of the bone a band's t covers, through the line the bands were
- *  banded against. First/last bands pin to 0/1 exactly — bands tile the
- *  cloud, so anything else would leave sub-millimetre gaps between prims. */
-function bandRange(f: DraftSideFit, i: number, n: number): { from: number; to: number } {
-  const e = extent(f.line, 'band');
-  const frac = (t: number) => Math.min(1, Math.max(0, (t - f.line.t0) / e));
+/**
+ * Fraction of the STATEMENT bone a band's cloud-frame t lands at. Bands are
+ * measured against the fit's own line (the cloud axis for mapped bones), but
+ * the statement places them along the CHAIN segment — which can extend past
+ * the cloud, because the branch rule spans a branch-extended thigh from the
+ * pelvis joint to the knee while the flesh occupies its lower part. The
+ * projection is the frame transfer: from/to are where the flesh IS on the
+ * bone, not the cloud's own [0,1] stretched over the bone. Consecutive
+ * bands share edges exactly (one projection, t1[i] == t0[i+1]).
+ *
+ * First and last bands stay PINNED to the bone's ends: they own the joints,
+ * and the joints are where clusters fuse — an extended clavicle's flesh
+ * starts well out from the neck joint it now grows from, and without the pin
+ * nothing bridges torso↔arm (the schoolgirl's spine2 sliver bands can't).
+ * The pin places a joint-sized sphere of end-band flesh at the joint, which
+ * is the format's own convention (hand-authored files end bones with joint
+ * prims the same way); interior bands stay projected, honestly placed.
+ */
+function bandRange(bone: DraftBone, f: DraftSideFit, i: number, n: number): { from: number; to: number } {
+  const e = extent(bone.line, bone.name);
+  // lerp(head, tail, f) = origin + dir·(t0 + f·e), so the fraction of a
+  // point at axis distance t is (t − t0)/e — the t0 matters on lines whose
+  // origin is NOT the bone head (the skull's cloud line is centred on the
+  // cloud, t0 < 0), and is 0 on rigLine's.
+  const frac = (t: number): number => {
+    const p = add(f.line.origin, vscale(f.line.dir, t));
+    return Math.min(1, Math.max(0, (dot(sub(p, bone.line.origin), bone.line.dir) - bone.line.t0) / e));
+  };
   return { from: i === 0 ? 0 : frac(f.bands[i]!.t0), to: i === n - 1 ? 1 : frac(f.bands[i]!.t1) };
 }
 
@@ -255,7 +293,7 @@ function bandRec(
   bone: DraftBone, f: DraftSideFit, side: 'l' | 'r' | null, i: number, band: Band, paint: BandPaint,
 ): Rec {
   const n = f.bands.length;
-  const { from, to } = bandRange(f, i, n);
+  const { from, to } = bandRange(bone, f, i, n);
   // Blend: a fixed fraction of the band radius, clamped to the range every
   // shipped character uses (0.003-0.013). Not measured — a smoothing constant
   // has no measurement — so the comment owns that it is a convention.
@@ -428,8 +466,10 @@ function boneStatement(b: DraftBone): string {
   // came from. That changed with chain drift — the rig's segment for mapped
   // bones, the cloud's axis only for the unmapped leaves.
   const source = b.chain
-    ? `rig ${b.chain.rigBone} joint-to-joint × scale ${fmt(b.chain.scale)} (the chain: overlapping clouds do not compose, the rig does)`
-    : `medial axis of the ${b.name} cloud`;
+    ? `rig ${b.chain.rigBone} (${b.chain.head}->${b.chain.tail}) joint-to-joint × scale ${fmt(b.chain.scale)} (the chain: overlapping clouds do not compose, the rig does)`
+    : b.axisFromParent
+      ? `the ${b.name} cloud measured along its parent's rig axis (the hair's principal axis is not the head's)`
+      : `medial axis of the ${b.name} cloud`;
   if (b.parent === null) {
     bits.push(`fit: ${source}, extent ${fmt(e)} m`);
   } else {
@@ -438,7 +478,9 @@ function boneStatement(b: DraftBone): string {
     // (rigLine's contract) — say so, or the number reads as a fit residual.
     const residual = b.chain
       ? `residual ${fmt(b.line.residual)} RMS of the cloud about the rig axis`
-      : `residual ${fmt(b.line.residual)} RMS`;
+      : b.axisFromParent
+        ? `residual ${fmt(b.line.residual)} RMS of the cloud about the parent rig axis`
+        : `residual ${fmt(b.line.residual)} RMS`;
     bits.push(`fit: ${source}, extent ${fmt(e)} m, ${residual}`);
     bits.push(d.derivable
       ? `dir err ${fmt(d.errDeg)}°`
@@ -526,8 +568,58 @@ export function emitDraft(input: DraftInput): string {
   const { kept, trimmedN, over } = trimToBudget(recs);
   markCores(kept);
 
+  // —— GROUNDING: the chain's one free placement (chain-drift spec, the `root
+  // —— ... at` row) — derived so the sole lands at y = 0. Render once with
+  // —— the raw rig anchor, BUILD it (the real pipeline, not a re-derivation),
+  // —— measure the built body's lowest surface point, and shift the root by
+  // —— exactly that error: a root shift moves every prim rigidly (placement
+  // —— is parent-relative all the way down), so the grounded body's sole is
+  // —— 0 to float precision. A draft whose build fails cannot be measured —
+  // —— emit ungrounded and say so; the CLI's own build report names the
+  // —— errors, and an unmeasured grounding must never masquerade as a
+  // —— measured one.
+  const at0 = input.bones[0]!.at;
+  let soleShift = 0;
+  let extent = NaN;
+  if (typeof at0 === 'number') {
+    try {
+      const first = renderDoc({ ...input }, kept, trimmedN, over, at0, { soleShift: 0, extent: NaN });
+      const doc = parseBlob(first);
+      const body = buildBody(compileBlob(doc, compileFace(doc)));
+      let minY = Infinity, maxY = -Infinity;
+      for (const p of body.prims) {
+        const r = Math.max(p.radius, p.radiusB ?? p.radius);
+        minY = Math.min(minY, p.a[1] - r, p.b[1] - r);
+        maxY = Math.max(maxY, p.a[1] + r, p.b[1] + r);
+      }
+      if (Number.isFinite(minY)) {
+        soleShift = -minY; // the root shift that lands the sole at 0
+        extent = maxY - minY; // shift-invariant, so the first build's value stands
+      }
+    } catch { /* unbuildable draft: emitted ungrounded, header says so */ }
+  }
+
+  return renderDoc(
+    input, kept, trimmedN, over,
+    typeof at0 === 'number' ? at0 + soleShift : at0,
+    { soleShift, extent },
+  );
+}
+
+function renderDoc(
+  input: DraftInput, kept: Rec[], trimmedN: number, over: boolean,
+  rootAt: number | undefined,
+  chain: { soleShift: number; extent: number },
+): string {
+
   // —— header: what this is, what it did not attempt, the budget, the debts ——
   const head: string[] = [];
+  // The root statement reads `at` off bones[0]; thread the (possibly
+  // grounded) height through a copy rather than mutating the caller's input.
+  const bones: DraftBone[] = rootAt === undefined
+    ? input.bones
+    : input.bones.map((b, i) => (i === 0 ? { ...b, at: rootAt } : b));
+  input = { ...input, bones };
   head.push('# ' + '='.repeat(76));
   head.push(`# ${input.name} — FIRST-DRAFT .blob generated from the reference mesh's vertex`);
   head.push('# clouds. Every number is measured; its line\'s `# fit:` comment names the');
@@ -562,6 +654,20 @@ export function emitDraft(input: DraftInput): string {
     head.push('# WARNING: the fit could not be brought inside budget even trimming every');
     head.push('# expendable band — delete bands BY HAND before building, or geometry will be');
     head.push('# lost silently at the fold.');
+  }
+  head.push('#');
+  // The acceptance numbers, on the artifact itself: the chain closed, and a
+  // reader can see it without running a test (chain-drift plan, task 3).
+  // `soleShift` 0 with a finite extent means the raw anchor already landed
+  // the soles at 0 — reported as measured, not suppressed.
+  if (Number.isFinite(chain.extent)) {
+    const pct = (chain.extent / input.height - 1) * 100;
+    head.push(`# Chain: grounded — the root shifted ${fmt(chain.soleShift)} m so the built body's`);
+    head.push(`# lowest surface sits at y = 0; built extent ${fmt(chain.extent)} m against the`);
+    head.push(`# ${fmt(input.height)} m height line (${pct >= 0 ? '+' : ''}${fmt(pct)}%).`);
+  } else {
+    head.push('# Chain: NOT grounded — the draft did not build, so the sole could not be');
+    head.push('# measured; at= is the raw rig anchor. See the build report below/at the CLI.');
   }
   head.push('#');
 
