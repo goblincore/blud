@@ -527,8 +527,8 @@ export function checkBoneContainment(body: Body): string[] {
       errs.push(
         `bone/organ prim ${i} (${prim.limb}) breaches the flesh surface at ` +
         `[${first.map(v => v.toFixed(3)).join(', ')}] — bone must sit at least ` +
-        `${BONE_CONTAINMENT_MARGIN}m inside the flesh, or the shader's ` +
-        `nearWound gate stops being an identity and the bone pops`);
+        `${BONE_CONTAINMENT_MARGIN}m inside the flesh — bone tubes are hidden by the ` +
+        `flesh DEPTH alone, so a breaching bone shows through intact skin`);
     }
   });
   return errs;

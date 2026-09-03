@@ -1020,18 +1020,20 @@ var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;`;
 // the containment validator is ever weakened, this gate stops being sound
 // and bone fragments will pop in and out as the gate flips.
 //
-// The loop is BOUNDED, never filtered: bones are the contiguous rows
-// [counts.x, counts.x + boneCount) — pack.ts appends them after the flesh
-// and outside every cluster/group run, which is also why foldGroup and
-// applyCarves cannot see a bone even by accident, and no existing consumer
-// had to learn about them. boneCount itself rides counts2.x, a uniform added
-// for the purpose: counts was already full and woundCfg2.w is the volume
-// hit-epsilon override, NOT spare.
+// The loop is BOUNDED, never filtered: it walks the inside-flesh array —
+// ORGANS, plus bones only when packBones is on (the shipped default until
+// bone tubes ship) — the contiguous rows [counts.x, counts.x + boneCount).
+// pack.ts appends them after the flesh and outside every cluster/group run,
+// which is also why foldGroup and applyCarves cannot see a row in this range
+// even by accident, and no existing consumer had to learn about them.
+// boneCount itself rides counts2.x, a uniform added for the purpose: counts
+// was already full and woundCfg2.w is the volume hit-epsilon override, NOT
+// spare.
 //
-// Winning the min also claims gFoldBestIdx, which is how shading knows this
-// pixel is bone: it reads the dominant prim's primScale.w and compares to
-// W_BONE (4). foldGroup skips bone entirely, so nothing else can have
-// claimed a row in this range.
+// Winning the min also claims gFoldBestIdx: shading reads the dominant
+// prim's primScale.w and compares to W_ORGAN (5) for the viscera tint.
+// foldGroup and applyCarves skip this range entirely, so nothing else can
+// have claimed a row in it.
 //
 // Lives between FOLD_GROUP and MAP_BODY, not next to APPLY_WOUNDS as first
 // drafted: it assigns gFoldBestIdx, which is declared at FOLD_GROUP's tail,
@@ -1153,10 +1155,12 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg);
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
-  // Bone, gated on nearWound (see APPLY_BONES). Outside a wound the call is
-  // provably a no-op — bone is contained inside flesh — so skipping it is
-  // exact, not an approximation. counts2.x carries boneCount: counts was
-  // already full and woundCfg2.w is the volume hitEps override, not spare.
+  // Inside-flesh rows, gated on nearWound (see APPLY_BONES): ORGANS, plus
+  // bones only when packBones is on (the shipped default until bone tubes
+  // ship). Outside a wound the call is provably a no-op — the inside-flesh
+  // rows are contained inside flesh — so skipping it is exact, not an
+  // approximation. counts2.x carries boneCount: counts was already full and
+  // woundCfg2.w is the volume hitEps override, not spare.
   if (nearWound > 0.5 && counts2.x > 0.0) {
     dmg = applyBones(dmg, p, data, counts, counts2.x, 0);
   }
@@ -2015,38 +2019,29 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // knob invites someone to turn it back on and re-litigate this.
   // surfCfg3.w is consequently SPARE; the row map above says so.
 
-  // Bone material (wound pass r2). The dominant prim carries the material
-  // code in primScale.w — W_BONE is 4, and only applyBones can claim bestIdx
-  // for a bone prim because foldGroup and applyCarves skip material 4
-  // entirely — so this is an identity read, not a guess from depth or
-  // radius. hitBest is -1 on the baked-volume path (no dominant prim), so
-  // clamp the row index and gate on it, like the painted-prim read below.
-  // Gated on wm (gore r3 refinement 5): bone can only ever be the dominant
-  // prim INSIDE a wound — applyBones runs only where nearWound is set — so on
-  // an unwounded pixel this texel load can never change the answer. It ran on
+  // Inside-flesh material (organs r3). The dominant prim carries the
+  // material code in primScale.w — W_ORGAN is 5, and only applyBones can
+  // claim bestIdx for an inside-flesh row because foldGroup and applyCarves
+  // skip the range entirely — so this is an identity read, not a guess from
+  // depth or radius. (Bone tubes: op 'bone' prims no longer reach the field
+  // when packBones is off — the bone ALBEDO branch this used to feed is
+  // deleted with them; a packed bone row still wins the fold identically
+  // under the default packBones-on layout, it just shades as plain meat.)
+  // hitBest is -1 on the baked-volume path (no dominant prim), so clamp the
+  // row index and gate on it, like the painted-prim read below. Gated on wm
+  // (gore r3 refinement 5): an inside-flesh prim can only ever be dominant
+  // INSIDE a wound — applyBones runs only where nearWound is set — so on an
+  // unwounded pixel this texel load can never change the answer. It ran on
   // every hit pixel of every body before the gate.
   var hitMat = 0.0;
   if (wm > 0.0 && hitBest >= 0) {
     hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE}), 0).w;
   }
-  let isBone = hitMat > 3.5 && hitMat < 4.5;
-  if (isBone) {
-    // Stained toward the meat at the junction. A clean plate popping out of
-    // red flesh reads as a decal; blood in the transition is what seats it.
-    // tissueDepth is the PRE-wound flesh field, so on a bone pixel it measures
-    // how deeply this bone sits beneath the original skin: bone just under
-    // the muscle line is near the wall flesh and stains, a deep plate stays
-    // clean.
-    let boneStain = 1.0 - smoothstep(0.0, 0.012, tissueDepth - surfCfg3.z);
-    albedo = mix(boneColor, deepColor * 0.8, clamp(boneStain, 0.0, 1.0) * 0.55);
-  }
-  // Organs share the load and the gate; only the code differs (organs r3).
   let isOrgan = hitMat > 4.5 && hitMat < 5.5;
   if (isOrgan) {
-    // Pale, wet, and NOT stained toward the meat the way bone is: bone is a
-    // dry plate that needs blood to seat it, viscera is already wet and
-    // already the same family of colour as the flesh around it. organAmp 0
-    // falls through to the bone treatment, which is the off-state.
+    // Pale, wet, and NOT stained toward the meat: viscera is already wet
+    // and already the same family of colour as the flesh around it. organAmp
+    // 0 leaves albedo untouched, which is the off-state.
     albedo = mix(albedo, organColor, organAmp);
   }
 
@@ -2305,7 +2300,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // polished.
   let lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
   let wetWound = max(wm * lip, gore);
-  let wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan), 1.0, gloss);
+  let wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);
   let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound
