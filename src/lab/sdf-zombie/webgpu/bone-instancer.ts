@@ -78,8 +78,10 @@ export const BONE_VERTEX_WGSL = /* wgsl */ `fn boneVertex(t: f32, theta: f32, la
   if (!sphere) {
     tan = normalize(2.0 * (1.0 - t) * (C - A) + 2.0 * t * (B - C));
   }
-  let ref = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(tan.y) < 0.9);
-  let u = normalize(cross(ref, tan));
+  // 'ref' is a RESERVED WGSL keyword (real-device parse error, task 5 boot)
+  // — the CPU mirror's refAxis name is used here too.
+  let refAxis = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(tan.y) < 0.9);
+  let u = normalize(cross(refAxis, tan));
   let v = cross(tan, u);
   let r = mix(iR.x, iR.y, t);
   var q = vec3<f32>(0.0);
@@ -131,13 +133,7 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
 
 export interface BoneInstancer {
   object: THREE.Mesh;
-  uniforms: {
-    boneColor: ReturnType<typeof uniform>; lightDir: ReturnType<typeof uniform>;
-    keyColor: ReturnType<typeof uniform>; lightCfg: ReturnType<typeof uniform>;
-    spotPos: ReturnType<typeof uniform>; spotAxis: ReturnType<typeof uniform>;
-    spotCfg: ReturnType<typeof uniform>; spotCfg2: ReturnType<typeof uniform>;
-    spotColor: ReturnType<typeof uniform>;
-  };
+  uniforms: BoneInstancerUniforms;
   /** Replace this frame's bone set. Each entry is a posed prim list + its
    *  cluster-alive table (undefined for chunks). */
   update(sources: ReadonlyArray<{ prims: readonly Primitive[]; alive?: readonly boolean[] }>): void;
@@ -145,6 +141,23 @@ export interface BoneInstancer {
   readonly overflowed: boolean;
   dispose(): void;
 }
+
+/** The instancer's uniform set, in a factory so the interface can keep the
+ *  CONCRETE value types (ReturnType-of-literal, the zombie-gpu defaultUniforms
+ *  idiom) — a hand-written ReturnType<typeof uniform> erases .value to
+ *  unknown and the game wiring could not copy into it. */
+const boneInstancerUniforms = () => ({
+  boneColor: uniform(new THREE.Color(0.93, 0.89, 0.80)),
+  lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
+  keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
+  lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
+  spotPos: uniform(new THREE.Vector3()),
+  spotAxis: uniform(new THREE.Vector3(0, 0, -1)),
+  spotCfg: uniform(new THREE.Vector4(0, 0.93, 0.80, 16)),
+  spotCfg2: uniform(new THREE.Vector4(4, 0.35, 0, 0)),
+  spotColor: uniform(new THREE.Color(0.94, 0.96, 1.0)),
+});
+export type BoneInstancerUniforms = ReturnType<typeof boneInstancerUniforms>;
 
 export function createBoneInstancer(max = 256): BoneInstancer {
   const base = buildTubeGeometry();
@@ -162,17 +175,7 @@ export function createBoneInstancer(max = 256): BoneInstancer {
   geo.setAttribute('iQ', new THREE.InterleavedBufferAttribute(ib, 4, 14));
   geo.instanceCount = 0;
 
-  const u = {
-    boneColor: uniform(new THREE.Color(0.93, 0.89, 0.80)),
-    lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
-    keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
-    lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
-    spotPos: uniform(new THREE.Vector3()),
-    spotAxis: uniform(new THREE.Vector3(0, 0, -1)),
-    spotCfg: uniform(new THREE.Vector4(0, 0.93, 0.80, 16)),
-    spotCfg2: uniform(new THREE.Vector4(4, 0.35, 0, 0)),
-    spotColor: uniform(new THREE.Color(0.94, 0.96, 1.0)),
-  };
+  const u = boneInstancerUniforms();
 
   // Dependency-ordered includes via the repo's reduce idiom (zombie-gpu.ts
   // buildMarchFn): qRotB declared before boneVertex, as WGSL requires.

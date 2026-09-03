@@ -31,6 +31,7 @@ import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYE
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
+import { createBoneInstancer } from './bone-instancer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
@@ -524,6 +525,13 @@ async function main() {
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
       }
+      // Bone tubes take the SAME beam (bone-instancer's boneShade is the
+      // march's own cone formula on these exact values).
+      boneInstancer.uniforms.spotPos.value.copy(flashlight.spot.position);
+      boneInstancer.uniforms.spotAxis.value.copy(sAxis);
+      boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+      boneInstancer.uniforms.spotColor.value.copy(flashlight.spot.color);
+      boneInstancer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
     // two-rate wobble reads as flame; white noise reads as a broken light.
@@ -535,6 +543,15 @@ async function main() {
     // Front-to-back per-body passes (perf round 2 task 5): register this
     // frame's bodies and chunks. With the gate off the lists are not walked.
     sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
+    // Bone tubes: feed this frame's posed bones (actors stepped in tick
+    // ahead of this draw; chunks repacked world-space there too — posed()
+    // and posedBones() are always current).
+    if (boneMesh) {
+      boneInstancer.update([
+        ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
+        ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
+      ]);
+    }
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -667,6 +684,27 @@ async function main() {
   // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
   // .setShell(false) is the kill switch.
   sdfLayer.setShellEnabled(true);
+
+  // BONE TUBES (2026-09-02-bone-tubes plan, task 5): every posed bone prim
+  // drawn as one instanced analytic tube in the POLYGONAL pass (layer 0),
+  // hidden under flesh and revealed in cavities by the composite depth test.
+  // Ships OFF until the owner's gate — applyBoneMesh also flips every view's
+  // packBones layout so the field stops carrying the bones it no longer draws.
+  // Cap 512, not the plan's 256: measured on the live page (task 5 boot) the
+  // cast packs 380 live bones — 46 bonePrims per zombie (23 authored × mirror
+  // expansion), 38 in live clusters × 10 zombies — plus up to 12 flying
+  // chunks. 256 overflowed on the first frame.
+  const boneInstancer = createBoneInstancer(512);
+  boneInstancer.object.layers.set(0);
+  boneInstancer.object.visible = false;
+  scene.add(boneInstancer.object);
+  let boneMesh = false;
+  function applyBoneMesh(on: boolean): void {
+    boneMesh = on;
+    boneInstancer.object.visible = on;
+    for (const a of actors) a.view.setPackBones(!on);
+    for (const c of liveChunks) c.view.setPackBones(!on);
+  }
 
   /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
    *  by the depth nearer passes already recorded at each pixel.
@@ -842,6 +880,8 @@ async function main() {
         prev: sdfLayer.prev,
         levelShadow: { light: flashlight.levelShadow },
       });
+    // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
+    view.setPackBones(!boneMesh);
     view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
@@ -899,6 +939,16 @@ async function main() {
   spawnAll(errors);
   if (errors.length > 0) {
     console.error('[sdf-game] body errors:', errors.join(' | '));
+  }
+  // Bone tubes (task 5): the instancer owns its own light set — seed it once
+  // from body 1's view, which just took the LIGHT_PRESETS apply above, so
+  // the tube pass cannot drift from the march's key.
+  {
+    const v = actors[0]!.view.uniforms;
+    boneInstancer.uniforms.lightDir.value.copy(v.lightDir.value);
+    boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
+    boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
+    boneInstancer.uniforms.boneColor.value.copy(v.boneColor.value);
   }
 
   /** The wound panel's boneRatio lever (applyWoundTuning calls this). Bones
@@ -1177,6 +1227,7 @@ async function main() {
     if (oldest) {
       oldest.view.reset(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
+      oldest.view.setPackBones(!boneMesh);
       liveChunks.push({ id: nextChunkId++, state, view: oldest.view });
     } else {
       const view = createChunkGpuView(
@@ -1184,6 +1235,7 @@ async function main() {
         piece.tornAt.length ? piece.tornAt : undefined,
         template.volumeTexture, chunkMaterial, piece.bones,
       );
+      view.setPackBones(!boneMesh);
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
       chunkViews.push(view);
@@ -2305,6 +2357,12 @@ async function main() {
     get woundTuning() {
       return woundTuningNow();
     },
+    /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
+     *  bones; ON draws every posed bone as an instanced polygonal tube and
+     *  flips every view's packBones off so the field drops its bone rows. */
+    setBoneMesh: (on: boolean) => applyBoneMesh(on),
+    get boneMesh() { return boneMesh; },
+    boneTubes: () => ({ count: boneInstancer.count, overflowed: boneInstancer.overflowed }),
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
       mode?: 'overlay' | 'depth';
