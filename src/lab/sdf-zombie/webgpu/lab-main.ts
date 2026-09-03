@@ -1001,6 +1001,55 @@ async function main() {
    *  wander target (the creepy variant the owner wants kept reachable). */
   let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
+
+  // ——— MELT (experiment, 2026-09-03) —————————————————————————————————————
+  // Owner's brief: "when shot the whole zombie melts, the flesh basically
+  // turns into a pile of goo and bones."
+  //
+  // Two existing systems doing the work together rather than one new one:
+  // the COLLAPSE that already runs on death drops the body into a pile, and
+  // a RIDGED field displacement (view.setMelt) turns its surface into running
+  // folds on the way down. Neither knows about the other; `m` starts both.
+  //
+  // meltT is 0..1 progress, not seconds, so the ramp rate is one knob and the
+  // peak is another. Re-pressing restarts rather than stacking.
+  let meltT = 0;
+  let meltActive = false;
+  const meltTuning = {
+    /** Metres of ridged displacement at full melt. Above ~0.05 the march
+     *  tears even at the reduced step multiplier setMelt buys. */
+    peak: 0.030,
+    /** Ridge frequency. 3.0 matches the silhouette noise it sits beside;
+     *  lower makes fewer, larger folds and below ~1.5 they grow bigger than
+     *  the body and vanish (measured). */
+    freq: 3.0,
+    /** Progress per second. 0.35 is ~3s to full. */
+    rate: 0.35,
+    /** Whether `m` also triggers the death collapse. Off makes it a pure
+     *  material effect, which is the useful A/B. */
+    collapse: true,
+  };
+  function startMelt() {
+    meltT = 0;
+    meltActive = true;
+    if (meltTuning.collapse) forcedCollapse = true;
+  }
+  function stopMelt() {
+    meltActive = false;
+    meltT = 0;
+    for (const x of [view, ...crowd]) x.setMelt(0, meltTuning.freq);
+  }
+  /** Advance the ramp and push it to every view. Called once per frame. */
+  let meltTicks = 0;
+  function stepMelt(dt: number) {
+    meltTicks++;
+    if (!meltActive) return;
+    meltT = Math.min(1, meltT + dt * meltTuning.rate);
+    // Ease-in: a linear ramp reads as the whole body inflating before it
+    // melts, because the ridges arrive everywhere at once.
+    const amp = meltTuning.peak * meltT * meltT;
+    for (const x of [view, ...crowd]) x.setMelt(amp, meltTuning.freq);
+  }
   // bindRig pins the lowest joint as a static anchor; walking releases it —
   // the rest pull + plants carry the body instead (and collapse wants the
   // pin gone anyway, so it lives in one place).
@@ -1061,6 +1110,9 @@ async function main() {
     pendingWounds.length = 0;
     pendingSevered.length = 0;
     forcedCollapse = false;
+    meltActive = false;
+    meltT = 0;
+    for (const x of [view, ...crowd]) x.setMelt(0, meltTuning.freq);
   }
 
   /** Full-limb severance map from cluster alive flags (mid-limb distal cuts
@@ -2103,6 +2155,9 @@ async function main() {
     if (ev.key === '[') { setCrowdCount(Math.max(0, crowd.length - 1)); return; }
     if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
     if (ev.key === 'k' || ev.key === 'K') { forcedCollapse = true; return; }
+    // MELT: 'm' starts it, 'M' (shift) clears it back to a solid body.
+    if (ev.key === 'm') { startMelt(); return; }
+    if (ev.key === 'M') { stopMelt(); return; }
     const limb = SEVER_KEYS[ev.key];
     if (!limb) return;
     const { body: next, chunk, stumpWound } = severLimb(current, limb);
@@ -2486,6 +2541,9 @@ async function main() {
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
     // keyed to it) stops advancing between two captures.
     if (!cosmeticsFrozen) view.setTime(performance.now() / 1000);
+    // Melt ramp. Beside setTime because the folds flow off the same clock and
+    // a frozen cosmetic pass should freeze both.
+    if (!cosmeticsFrozen) stepMelt(dt);
     // Re-derive the skull's sphere from the POSED primitives so the face
     // projection tracks the head through the jiggle — and hand it the rigid
     // head rotation so the PAINTED face rotates with the skull masses
@@ -3384,6 +3442,26 @@ async function main() {
   (window as unknown as { __sdfLab: unknown }).__sdfLab = {
     /** Boot timeline in ms since navigation start. See main()'s comment. */
     boot,
+    // ——— MELT (experiment) ——————————————————————————————————————————————
+    //   m / M            start / clear
+    //   __sdfLab.melt()  start from the console
+    //   __sdfLab.setMeltTuning({ peak: 0.04, freq: 2.2, rate: 0.2 })
+    //   __sdfLab.setMeltTuning({ collapse: false })   material effect only
+    //   __sdfLab.meltState()
+    // peak is METRES of ridged displacement; above ~0.05 the march tears even
+    // at the reduced step multiplier setMelt buys, and a torn surface
+    // disagrees with the CPU field behind click-to-shoot.
+    melt: () => startMelt(),
+    meltOff: () => stopMelt(),
+    setMeltTuning: (t: Partial<typeof meltTuning>) => { Object.assign(meltTuning, t); },
+    meltState: () => ({ ...meltTuning, active: meltActive, t: meltT, ticks: meltTicks }),
+    /** Set the melt amplitude DIRECTLY, bypassing the ramp. For capture: a
+     *  wall-clock ramp makes a frame series depend on render speed, which is
+     *  the reproducibility trap blob-turntable.mjs's header documents. */
+    meltDirect: (amp: number) => {
+      meltActive = false;
+      for (const x of [view, ...crowd]) x.setMelt(amp, meltTuning.freq);
+    },
     backend: handle.backend,
     /**
      * The renderer, scene and camera — enough to call

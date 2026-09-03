@@ -13,7 +13,7 @@
 /** The band-shifted tracer field: mapBody at noiseAmp 0 (the march loop's
  *  own field — march.wgsl.ts ~1801 passes 0.0 too), minus band. */
 export const HULL_FIELD = /* wgsl */ `fn hullField(p: vec3<f32>, band: f32, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> f32 {
-  return mapBody(p, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x - band;
+  return mapBody(p, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x - band;
 }`;
 
 /**

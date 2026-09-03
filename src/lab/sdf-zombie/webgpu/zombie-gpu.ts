@@ -73,6 +73,13 @@ export interface ZombieGpuView {
   /** Drives the eye-glow flicker. Seconds. */
   setTime(seconds: number): void;
   /**
+   * MELT (experiment): `amp` metres of ridged field displacement, 0 = off.
+   * ALSO lowers the march's step multiplier, because the displacement breaks
+   * the field's Lipschitz bound and the smaller step is what pays for it.
+   * See the implementation for the measured budget.
+   */
+  setMelt(amp: number, freq?: number): void;
+  /**
    * Anchors the surface/gore/silhouette noise to the body's root translation
    * (motion-polish): every fbm in the march samples at p - (x, 0, z), so the
    * texture rides the flesh while the body walks instead of the body sliding
@@ -190,6 +197,22 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** x steps, y stepMul, z silhouetteNoiseAmp */
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0.016)),
+    /**
+     * MELT (experiment): x amplitude in metres, y ridge frequency, z the time
+     * the folds flow by, w spare. All zero is off, which is every character
+     * and every page today -- the shader's own guard is `noiseCfg.y > 0`.
+     *
+     * Assembled with marchCfg.z into the `noiseCfg` vec4 that mapBody now
+     * takes in place of the bare silhouette amplitude, because melt and
+     * silhouette noise are the same mechanism (a displacement of the REAL
+     * field) differing only in content.
+     *
+     * WHY IT IS NOT ON A CHARACTER. A melt is a transient EFFECT, not a look:
+     * it needs several times the march's gradient budget, and the price is
+     * paid in stepMultiplier (see setMelt). Leaving it on would tax every
+     * frame for something meant to last a second.
+     */
+    meltCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** x count, y blendK, z rimSplay, w rimOffset */
     woundCfg: uniform(new THREE.Vector4(0, 0.015, 0.55, 1.15)),
     /**
@@ -1218,6 +1241,7 @@ export function createZombieGpuView(
     counts: u.counts,
     counts2: u.counts2,
     marchCfg: u.marchCfg,
+    meltCfg: u.meltCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
     coneK: opts.cone ? opts.cone.uniforms.k : float(0.02),
@@ -1311,7 +1335,36 @@ export function createZombieGpuView(
       u.headAxes.value.set(...axes);
     },
     setHeadRotation(q) { u.headQuat.value.set(q[0], q[1], q[2], q[3]); },
-    setTime(seconds) { u.faceCfg3.value.y = seconds; },
+    setTime(seconds) {
+      u.faceCfg3.value.y = seconds;
+      // The melt's folds flow off the same clock. Kept here rather than in
+      // setMelt so a paused melt is a frozen melt, not a stale one.
+      u.meltCfg.value.z = seconds;
+    },
+    /**
+     * MELT (experiment). `amp` is metres of ridged displacement; 0 is off.
+     *
+     * THE STEP MULTIPLIER IS THE PRICE, AND IT IS NOT OPTIONAL. Displacing
+     * mapBody breaks its Lipschitz bound, and the march only stays honest if
+     * it takes smaller steps to compensate. Measured: the shipped baseline
+     * spends gain x maxFreq x amp = 1.0 x 3.0 x 0.014 = 0.042, and a melt
+     * that READS needs several times that -- every attempt to get the look
+     * back inside the budget by trading one factor for another lost the look
+     * instead (at frequency 1.1 a fold is a metre across and the body renders
+     * smooth). Overspend WITHOUT lowering the step and the surface tears into
+     * black streaks that flicker in motion and, worse, disagree with the CPU
+     * field that backs click-to-shoot.
+     *
+     * So the multiplier falls from the resting 0.6 toward 0.28 as the melt
+     * comes up. That is a real per-frame cost, which is exactly why melt is
+     * an effect you switch on rather than a look you leave on.
+     */
+    setMelt(amp, freq = 3.0) {
+      u.meltCfg.value.x = amp;
+      u.meltCfg.value.y = freq;
+      const t = Math.min(1, Math.max(0, amp / 0.030));
+      u.marchCfg.value.y = 0.6 + (0.28 - 0.6) * t;
+    },
     setRootShift(x, z, bodyYaw = 0) {
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).

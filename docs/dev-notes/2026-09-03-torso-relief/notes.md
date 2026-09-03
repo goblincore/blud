@@ -377,3 +377,63 @@ step-multiplier drop as part of switching it on.
 
 Not spec'd. Recorded here so the finding is not lost, and because it shares
 the gradient-budget arithmetic with the body sheet.
+
+## Round 11: the melt experiment, and a correction to round 7
+
+Built the melt as a lab experiment (`m` / `M`, `__sdfLab.melt()`,
+`setMeltTuning`, `meltDirect`), and finding out why it did not show corrected
+something I had asserted twice in this file.
+
+### The correction
+
+**The main march calls `mapBody` at noise amplitude ZERO, on purpose.**
+`march.wgsl.ts`, in the march loop:
+
+> *"0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm
+> still reaches the normal only via calcNormal — but inside a thin shell of
+> the surface the same fbm is added to the REAL stepped distance just below,
+> which is where the silhouette gets its bumps back without paying fbm at
+> every step of the empty approach."*
+
+So a displacement written inside `mapBody` reaches **`calcNormal` and nothing
+else** — it warps the normal and never moves the surface. The only site where
+a displacement touches geometry is the **shell** block, gated on
+`woundCfg2.z`, and in the lab that is **OFF by default** (bench-gated,
+`setShellDisplace` turns it on).
+
+Two things I said earlier are therefore wrong and are corrected here:
+
+- **Round 7's "the black streaking is Lipschitz overshoot".** It cannot have
+  been: the main march never saw those spikes' displacement. They were
+  `calcNormal`'s tetrahedron differences returning garbage on a
+  high-frequency field — a normal artefact, not a march failure. The
+  practical remedy (lower the frequency) is unchanged; the diagnosis was not.
+- **"gain x maxFreq x amp is what the march pays for".** In the shipped
+  configuration the march pays nothing, because it marches the smooth field.
+  The product still predicts when normals fall apart, which is why it
+  predicted the artefacts correctly — but calling it the march's budget was
+  wrong, and it matters, because the body-sheet plan leans on it.
+
+**This also lands on the body sheet spec.** A sheet written into `mapBody`
+alone would be a normal map with extra steps — exactly what that spec says
+not to build. It has to go in the shell block, and the shell has to be ON.
+
+### Status of the experiment
+
+Plumbing is in and tested (2286 green): a `meltCfg` uniform, `noiseCfg`
+carrying silhouette and melt together into `mapBody`, the ridged term at both
+the normal site and the shell site, `setMelt` lowering `stepMultiplier` as the
+amplitude rises, lab keys and console seams, and `scripts/melt-capture.mjs`
+for frame-by-frame capture.
+
+**It is not visible yet.** At amplitudes up to 0.20 — far past sane — captured
+frames are unchanged. The uniform is confirmed set on the JS side
+(`__sdfLab.uniforms.meltCfg` reads `[0.2, 3, 0, 0]`, and `marchCfg.y` drops
+0.6 → 0.28 as designed), so the break is between the uniform and the shader.
+
+**The next diagnostic, not yet run:** turn the shell on
+(`__sdfLab.setShellDisplace(true)`) and capture with melt at zero. If the
+silhouette noise visibly changes the body, the shell path works and the melt
+branch inside it is at fault; if it does not, the shell path itself is inert
+in this configuration and that is the bug. That single test separates the two
+and should come before any more tuning.

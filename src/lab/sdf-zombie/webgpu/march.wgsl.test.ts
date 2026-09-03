@@ -317,11 +317,17 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let dres = mapBody(');
     expect(MARCH_BODY).toContain('var d = dres.x;');
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
-    expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
+    // The band is now max(shellAmp, meltAmp) * 4.0 — the melt experiment
+    // (2026-09-03) rides the SAME shell, because this is the only site where
+    // a displacement reaches the geometry rather than just the normal. With
+    // meltAmp 0 the band is shellAmp * 4.0 exactly as before.
+    expect(MARCH_BODY).toMatch(/let band = max\(shellAmp, meltAmp\) \* 4\.0;/);
+    expect(MARCH_BODY).toMatch(/if \(band > 0\.0 && abs\(d\) < band\)/);
     // The shell's fbm samples the dominant prim's REST frame (task 6) — the
     // displaced silhouette rides the same flesh as the normal-warped skin.
     expect(MARCH_BODY)
-      .toMatch(/d = d \+ fbm\(restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\)\) \* 3\.0\) \* shellAmp;/);
+      .toMatch(/let ra = restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\)\);/);
+    expect(MARCH_BODY).toMatch(/if \(shellAmp > 0\.0\) \{ d = d \+ fbm\(ra \* 3\.0\) \* shellAmp; \}/);
   });
 
   it('anchors every noise site in REST space, so texture rides every limb (task 6)', () => {
@@ -333,7 +339,7 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -354,14 +360,19 @@ describe('ported features reach the entry point', () => {
     // the bone fold so a bone prim can win the argmin, so the cast is needed
     // here where main's version had already narrowed it.
     expect(mapBody).toContain('let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));');
-    expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
+    expect(mapBody).toContain('fbm(anchor * 3.0) * noiseCfg.x');
+    // The MELT term (experiment, 2026-09-03) rides the SAME rest-space
+    // anchor, for the same reason: a world-frame melt would slide through a
+    // limb as it moves. Its time drift is applied to the anchor, not to p.
+    expect(mapBody).toContain('let flow = anchor - vec3<f32>(0.0, noiseCfg.w * 0.06, 0.0);');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
-    // independent of the motion plumbing — zero shift, dead noise term. The
+    // independent of the motion plumbing — zero shift, dead noise term (the
+    // whole vec4, so the melt experiment's term is dead in the cone too). The
     // volume block still rides along: the cone must see the same field the
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
+      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
   });
 
   it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
@@ -555,7 +566,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
     expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
     // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).
-    expect(WOUND_SHADOW).toContain('counts2, 0.0, woundCfg, woundCfg2');
+    expect(WOUND_SHADOW).toContain('counts2, vec4<f32>(0.0), woundCfg, woundCfg2');
   });
   it('darkens ONLY the key diffuse + specular; fill/ambient/scatter stay lit', () => {
     // Multiply the whole lit sum and craters go pitch black — the fill and
@@ -613,9 +624,10 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     const parsed = new WGSLNodeFunction(MARCH_BODY);
     const names = parsed.inputs.map((i: { name: string }) => i.name);
     // 66 on the perf round-2 chain; +8 from the wound-pass-r2 merge (counts2,
-    // surfCfg3, fatColor, boneColor and the viscera/gut slots). Re-pin when a
-    // slot is added ON PURPOSE — a silent change here is the phantom-input bug.
-    expect(names.length).toBe(74);
+    // surfCfg3, fatColor, boneColor and the viscera/gut slots); +1 for
+    // meltCfg (the melt experiment, 2026-09-03). Re-pin when a slot is added
+    // ON PURPOSE — a silent change here is the phantom-input bug.
+    expect(names.length).toBe(75);
     expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
   });
 });

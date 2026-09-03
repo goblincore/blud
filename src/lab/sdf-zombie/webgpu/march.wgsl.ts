@@ -1073,7 +1073,18 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
   return d;
 }`;
 
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec4<f32> {
+/** Ridge sharpness: how many zero crossings the melt noise makes, hence how
+ *  DENSE the folds are. 2.6 is the value the owner picked out of the spike
+ *  sweep as reading like melted flesh; below ~1.5 the creases are too sparse
+ *  to read as folds and above ~3 it shreds. Fixed rather than exposed because
+ *  it multiplies the gradient budget, and a live knob on it is a live knob on
+ *  tearing the surface. */
+const MELT_GAIN = 2.6;
+/** Centres the ridge term so a melt neither inflates nor shrinks the body on
+ *  average: fbm concentrates near zero, so `abs(fbm * 2.6)` averages ~0.30. */
+const MELT_BIAS = 0.30;
+
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
   // Argmin tracking now lives in private globals shared with foldGroup
   // (above); reset per call — calcNormal calls mapBody four times and each
@@ -1178,7 +1189,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // The guard stays and now matters more than ever, since the march relies on
   // this call costing nothing: fbm is two 3D value-noise lookups, sixteen
   // hash13 calls, and without the branch a zero amplitude still pays in full.
-  if (noiseAmp <= 0.0) { return vec4<f32>(dmg, bestIdx, nearWound, carved); }
+  if (noiseCfg.x <= 0.0 && noiseCfg.y <= 0.0) { return vec4<f32>(dmg, bestIdx, nearWound, carved); }
   // NOISE ANCHOR (motion-polish task 6): the fbm samples the DOMINANT prim's
   // REST frame — the texture is baked into the model, so gait bob, arm raises
   // and jiggle carry their skin instead of sliding through the world-frame
@@ -1187,20 +1198,45 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));
   // Hoisted so the return carries no nested parens — the ramp test lexes the
   // return site for the word 'carved' and a paren would truncate the match.
-  let detail = fbm(anchor * 3.0) * noiseAmp;
+  var detail = fbm(anchor * 3.0) * noiseCfg.x;
+  // MELT (experiment, 2026-09-03). A RIDGED displacement on top of the plain
+  // fbm: abs() puts a sharp V-valley at every zero crossing, so the field
+  // gains running CREASES rather than lumps, and creases at this amplitude
+  // read as molten folds. Stretched 0.45x vertically so the folds run DOWN
+  // the body, and drifting -y over time so they flow.
+  //
+  // THE GRADIENT BUDGET IS THE WHOLE STORY HERE. mapBody is a sphere-tracing
+  // distance field, so displacing it breaks the Lipschitz bound and the march
+  // pays; the cost is gain x maxFrequency x amplitude, and the shipped
+  // baseline is 1.0 x 3.0 x 0.014 = 0.042. A melt that READS needs several
+  // times that -- measured: dropping any one of the three factors to get back
+  // inside budget loses the look entirely (at frequency 1.1 a fold is a metre
+  // across and the body renders smooth). Overspend without paying and the
+  // march tears into black streaks that flicker in motion and desync from the
+  // CPU field that backs click-to-shoot.
+  //
+  // So the caller BUYS the headroom by lowering stepMultiplier, and
+  // meltStepMul in zombie-gpu.ts is where that price is set. This is why
+  // melt is a transient EFFECT and not a look to leave on.
+  if (noiseCfg.y > 0.0) {
+    let flow = anchor - vec3<f32>(0.0, noiseCfg.w * 0.06, 0.0);
+    let f = noiseCfg.z;
+    let g = fbm(flow * vec3<f32>(f, f * 0.45, f)) * ${MELT_GAIN};
+    detail = detail + (${MELT_BIAS} - abs(g)) * noiseCfg.y;
+  }
   return vec4<f32>(dmg + detail, bestIdx, nearWound, carved);
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec3<f32> {
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
-    e.yyx * mapBody(p + e.yyx, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
-    e.yxy * mapBody(p + e.yxy, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x);
+    e.xyy * mapBody(p + e.xyy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.yyx * mapBody(p + e.yyx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.yxy * mapBody(p + e.yxy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.xxx * mapBody(p + e.xxx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -1307,7 +1343,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // the zero vector keeps this pass independent of the motion plumbing.
     // The volume block rides along for the same reason (X1.26): a cone that
     // ignored an enabled volume would certify empty space inside the hand.
-    let d = mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    let d = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -1419,6 +1455,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   counts: vec4<f32>,
   counts2: vec4<f32>,
   marchCfg: vec3<f32>,
+  meltCfg: vec4<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
   baseColor: vec3<f32>,
@@ -1717,6 +1754,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // survives ONLY as restPoint's fallback for bodies without rest rows and
   // for the no-live-prim case. Zero = the pre-motion behaviour there.
   let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);
+  // Silhouette noise and melt are the same mechanism -- a displacement of the
+  // REAL field -- differing only in content, so mapBody takes them as one
+  // config. x silhouette amp, y melt amp, z melt frequency, w melt time.
+  let noiseCfg = vec4<f32>(marchCfg.z, meltCfg.x, meltCfg.y, meltCfg.z);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).
   //
@@ -1798,7 +1839,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    let dres = mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+    let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
     let distort = max(gFoldBestDistort, 1.0);
     var d = dres.x;
     hitBest = i32(dres.y);
@@ -1810,9 +1851,24 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // samples the dominant prim's REST frame (task 6), glued to the flesh;
     // restPoint's loads are paid only inside the shell band.
     let shellAmp = woundCfg2.z;
+    // MELT rides the SAME shell, for the same reason. This is the only site
+    // where a displacement reaches the GEOMETRY: mapBody above is called at
+    // amplitude zero on purpose, so anything added there moves the normal via
+    // calcNormal and nothing else. A melt that only shaded would be a
+    // normal map, and the whole point of doing it in the field is that it
+    // breaks the silhouette.
+    let meltAmp = noiseCfg.y;
+    let band = max(shellAmp, meltAmp) * 4.0;
     var conservative = false;
-    if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm(restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift)) * 3.0) * shellAmp;
+    if (band > 0.0 && abs(d) < band) {
+      let ra = restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift));
+      if (shellAmp > 0.0) { d = d + fbm(ra * 3.0) * shellAmp; }
+      if (meltAmp > 0.0) {
+        let flow = ra - vec3<f32>(0.0, noiseCfg.w * 0.06, 0.0);
+        let f = noiseCfg.z;
+        let mg = fbm(flow * vec3<f32>(f, f * 0.45, f)) * ${MELT_GAIN};
+        d = d + (${MELT_BIAS} - abs(mg)) * meltAmp;
+      }
       conservative = true;
     }
     // Near a wound (mapBody.z) the field is not a distance bound — see
@@ -1954,7 +2010,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+  var n = calcNormal(p, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -2320,7 +2376,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -2331,7 +2387,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x / 0.06, 0.35, 1.0);
   }
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
@@ -2512,7 +2568,7 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   var res = 1.0;
   var t = 0.02;
   for (var i = 0; i < 14; i = i + 1) {
-    let h = mapBody(p + L * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    let h = mapBody(p + L * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
     res = min(res, k * h / t);
     if (res < 0.02 || t > 0.4) { break; }
     t = t + clamp(h, 0.01, 0.06);
