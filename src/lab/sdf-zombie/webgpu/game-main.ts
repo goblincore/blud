@@ -30,6 +30,7 @@ import {
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
+import { FLASH, MAGAZINE_CAPACITY, RELOAD, flashEnvelope, hingeOpenFraction, magazineAfterFire, reloadPhaseAt } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createPostAa } from './post-aa';
@@ -1023,6 +1024,10 @@ async function main() {
   let gripHandGroup: THREE.Group | null = null;
   let foreHandGroup: THREE.Group | null = null;
   let gunGroup: THREE.Group | null = null;
+  let flashGroup: THREE.Group | null = null;
+  let flashMaterial: THREE.MeshBasicMaterial | null = null;
+  /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
+  let flashAge = Infinity;
   let gunReady = false;
   try {
     const gltf = await new GLTFLoader().loadAsync(GUN_GLB);
@@ -1121,6 +1126,26 @@ async function main() {
     gripHandGroup = makeHand(new THREE.Vector3(0.150, -0.150, -0.250), 0.115);
     foreHandGroup = makeHand(new THREE.Vector3(0.105, -0.150, -0.395), 0.115);
     viewModelAnchor.add(gripHandGroup, foreHandGroup);
+
+    // MUZZLE FLASH -- geometry half. Two additive cross-billboard quads plus a
+    // crown ring, parked invisible. Built ONCE: a flash that allocates on the
+    // trigger pull would stutter the first shot of every session.
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: 0xffd9a0, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    flashGroup = new THREE.Group();
+    flashGroup.visible = false;
+    for (const roll of [0, Math.PI / 2]) {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.30), flashMat);
+      q.rotation.z = roll;
+      flashGroup.add(q);
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.035, 0.115, 18), flashMat);
+    flashGroup.add(ring);
+    flashGroup.position.set(0.085, -0.060, -0.560);
+    viewModelAnchor.add(flashGroup);
+    flashMaterial = flashMat;
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
@@ -1183,6 +1208,11 @@ async function main() {
     if (!gunReady || cooldown > 0) return false;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
+    flashAge = 0;
+    if (flashGroup) {
+      // Fresh roll per shot so repeat fire does not strobe an identical shape.
+      flashGroup.rotation.z = Math.random() * Math.PI * 2;
+    }
     if (slugMode) {
       // One lump down one known ray instead of a pellet volley.
       pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
@@ -1785,6 +1815,14 @@ async function main() {
     // ---------------------------------------------------------------
     cooldown = Math.max(0, cooldown - dt);
     recoilPitch *= Math.exp(-9 * dt);
+    flashAge += dt;
+    const flashV = flashEnvelope(flashAge);
+    if (flashGroup && flashMaterial) {
+      flashGroup.visible = flashV > 0;
+      flashMaterial.opacity = flashV;
+      const s = 0.7 + 0.5 * flashV;
+      flashGroup.scale.setScalar(s);
+    }
     {
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
@@ -2149,6 +2187,7 @@ async function main() {
     // the headless driver can shoot; aim with setPose(yaw, pitch).
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
+    get flashVisible() { return flashGroup?.visible ?? false; },
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
     // SLUG MODE surface + HUD-truthful flag.

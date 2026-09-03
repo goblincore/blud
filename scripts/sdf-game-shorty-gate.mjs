@@ -119,6 +119,22 @@ if (!gunOk.barrels) fail('Barrels node not present under the view-model anchor')
 await sleep(2000);
 await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);
+
+// 3. FLASH — fire, and prove the flash is visible on the shot frame and gone
+//    a beat later. Screenshots are the evidence; the booleans are the gate.
+//    fire() only stamps flashAge = 0; visibility flips in the TICK, so a read
+//    issued straight back races the next rAF frame (up to 16.7 ms away) and
+//    samples last-frame state. Settle 40 ms — mid-envelope, the window is
+//    70 ms — so `lit` reads a frame that actually carried the flash.
+await evaluate('__sdfGame.fire ? __sdfGame.fire(1) : null');
+await sleep(40);
+const lit = await evaluate('__sdfGame.flashVisible');
+await shot('flash-on');
+await sleep(300);
+const dark = await evaluate('__sdfGame.flashVisible');
+await shot('flash-off');
+if (!lit) fail('no muzzle flash on the shot frame');
+if (dark) fail('muzzle flash still visible 300 ms later — envelope never closed');
 console.log(`done — ${shotCount} shots in ${OUT}`);
 // An open CDP WebSocket keeps node's event loop alive forever — without this
 // the gate prints its PASS lines and then hangs, the shell wrapper never
