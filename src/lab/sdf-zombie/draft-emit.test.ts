@@ -277,12 +277,16 @@ describe('emitDraft offsets', () => {
     // A zero offset must not appear as `offset=(0,0,0)` noise: an absent arg
     // and a measured-zero displacement are the same statement about the
     // surface, and the extra arg would sit on every prim line forever.
+    // Prim lines only: the HEADER may name the grammar's own arguments in
+    // prose, and did once the header described the rig/cloud split.
+    const primLines = (t: string): string =>
+      t.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#')).join('\n');
     const text = emitDraft(makeFit());
-    expect(text).not.toContain('offset=');
+    expect(primLines(text)).not.toContain('offset=');
     // An explicitly measured-zero fit is the absent case, not a special one.
     const f = makeFit();
     f.bones.find((b) => b.name === 'spine')!.shared!.offset = [0, 0, 0];
-    expect(emitDraft(f)).not.toContain('offset=');
+    expect(primLines(emitDraft(f))).not.toContain('offset=');
   });
 
   it('notes a cloud/rig axis disagreement in the # fit: comment', () => {

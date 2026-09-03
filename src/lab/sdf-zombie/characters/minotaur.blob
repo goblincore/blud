@@ -1,63 +1,66 @@
 # ============================================================================
 # minotaur — FIRST-DRAFT .blob generated from the reference mesh's vertex
 # clouds. Every number is measured; its line's `# fit:` comment names the
-# source. Bone axes are cloud medial lines, never rig joints (they sit 9-13
-# cm off the skin); bands split at radial-profile inflections; radii are band
-# medians; angles exist only where dirVector is invertible.
+# source. len=/dir= come from the RIG chain — joint-to-joint x one scale —
+# because a bone's head is its parent's TAIL and overlapping vertex clouds
+# do not compose into a chain (the first draft stood ~0.3 m off the floor
+# on summed cloud extents). The cloud owns the SURFACE: bands split at
+# radial-profile inflections, radii are band medians, and offset= carries a
+# surface that sits off its bone (rig joints sit 9-13 cm from the skin —
+# offset the PRIMS, never relocate the bone). Angles exist only where
+# dirVector is invertible.
 #
 # NOT attempted — not derivable from a Meshy reference; add by hand:
 #   fingers (the rig lumps each hand into one joint), bend= on any bone,
 #   angles on side/fwd bones, mottle colour, jaw/nose/brow shaping.
 #
-# Budget: 67/80 prims (63 authored + 4 face),
-# worst cluster armL at 16/40. The shader's hard ceilings are
+# Budget: 72/80 prims (68 authored + 4 face),
+# worst cluster legR at 15/40. The shader's hard ceilings are
 # 128 prims total — which derived wound bones SHARE — and 64 per cluster,
 # where the fold SILENTLY stops; half of each is left for refinement.
-# TRIMMED 25 least-evidenced band(s) to stay inside. Re-run the draft after
+# TRIMMED 52 least-evidenced band(s) to stay inside. Re-run the draft after
 # refining so any cut you undo is re-measured, not silently restored.
 #
+# Chain: grounded — the root shifted 0.0526 m so the built body's
+# lowest surface sits at y = 0; built extent 1.217 m against the
+# 1.2168 m height line (+0.02%).
+#
 # Hand pass owed:
-#   pelvis: cloud residual 0.1478 m RMS about its axis — wants a bend=
-#   chest: cloud residual 0.0321 m RMS about its axis — wants a bend=
-#   skull: cloud residual 0.0905 m RMS about its axis — wants a bend=
-#   clavicle: cloud residual 0.0998 m RMS about its axis — wants a bend=
-#   upperarm: cloud residual 0.0834 m RMS about its axis — wants a bend=
-#   forearm: cloud residual 0.0652 m RMS about its axis — wants a bend=
-#   hand: cloud residual 0.0548 m RMS about its axis — wants a bend=
-#   thigh: cloud residual 0.1174 m RMS about its axis — wants a bend=
-#   shin: cloud residual 0.1026 m RMS about its axis — wants a bend=
-#   foot: cloud residual 0.0918 m RMS about its axis — wants a bend=
+#   pelvis: cloud residual 0.1345 m RMS about its axis — wants a bend=
+#   chest: cloud residual 0.0905 m RMS about its axis — wants a bend=
+#   spine2: cloud residual 0.0448 m RMS about its axis — wants a bend=
+#   skull: cloud residual 0.0914 m RMS about its axis — wants a bend=
+#   clavicle: cloud residual 0.1041 m RMS about its axis — wants a bend=
+#   upperarm: cloud residual 0.0759 m RMS about its axis — wants a bend=
+#   forearm: cloud residual 0.0591 m RMS about its axis — wants a bend=
+#   hand: cloud residual 0.0492 m RMS about its axis — wants a bend=
+#   thigh: cloud residual 0.1097 m RMS about its axis — wants a bend=
+#   shin: cloud residual 0.0793 m RMS about its axis — wants a bend=
+#   foot: cloud residual 0.0921 m RMS about its axis — wants a bend=
 #   pelvis band 1: rotated cross-section — the axes cannot say it
-#   pelvis band 1: paint splits mid-band — colour boundary owed
 #   pelvis band 2: rotated cross-section — the axes cannot say it
 #   pelvis band 2: paint splits mid-band — colour boundary owed
+#   pelvis band 7: rotated cross-section — the axes cannot say it
+#   pelvis band 7: paint splits mid-band — colour boundary owed
+#   pelvis band 8: paint splits mid-band — colour boundary owed
+#   pelvis band 10: rotated cross-section — the axes cannot say it
 #   chest band 1: rotated cross-section — the axes cannot say it
 #   chest band 1: paint splits mid-band — colour boundary owed
 #   chest band 9: rotated cross-section — the axes cannot say it
-#   skull band 1: rotated cross-section — the axes cannot say it
+#   chest band 9: paint splits mid-band — colour boundary owed
 #   skull band 1: paint splits mid-band — colour boundary owed
-#   skull band 3: rotated cross-section — the axes cannot say it
-#   skull band 3: paint splits mid-band — colour boundary owed
 #   skull band 4: rotated cross-section — the axes cannot say it
 #   skull band 4: paint splits mid-band — colour boundary owed
+#   skull band 5: rotated cross-section — the axes cannot say it
 #   skull band 5: paint splits mid-band — colour boundary owed
-#   skull band 8: rotated cross-section — the axes cannot say it
 #   clavicle band 1: rotated cross-section — the axes cannot say it
-#   clavicle band 1: paint splits mid-band — colour boundary owed
-#   clavicle band 2: rotated cross-section — the axes cannot say it
-#   clavicle band 2: paint splits mid-band — colour boundary owed
-#   clavicle band 3: rotated cross-section — the axes cannot say it
-#   clavicle band 3: paint splits mid-band — colour boundary owed
-#   clavicle band 4: rotated cross-section — the axes cannot say it
-#   clavicle band 4: paint splits mid-band — colour boundary owed
 #   clavicle band 10: rotated cross-section — the axes cannot say it
 #   clavicle band 10: paint splits mid-band — colour boundary owed
+#   clavicle band 15: rotated cross-section — the axes cannot say it
 #   upperarm band 1: rotated cross-section — the axes cannot say it
 #   upperarm band 1: paint splits mid-band — colour boundary owed
-#   upperarm band 2: rotated cross-section — the axes cannot say it
-#   upperarm band 2: paint splits mid-band — colour boundary owed
-#   upperarm band 3: rotated cross-section — the axes cannot say it
-#   upperarm band 3: paint splits mid-band — colour boundary owed
+#   upperarm band 7: rotated cross-section — the axes cannot say it
+#   upperarm band 7: paint splits mid-band — colour boundary owed
 #   forearm band 1: rotated cross-section — the axes cannot say it
 #   forearm band 1: paint splits mid-band — colour boundary owed
 #   forearm band 2: rotated cross-section — the axes cannot say it
@@ -65,15 +68,14 @@
 #   forearm band 3: rotated cross-section — the axes cannot say it
 #   forearm band 3: paint splits mid-band — colour boundary owed
 #   hand band 1: paint splits mid-band — colour boundary owed
-#   hand band 4: rotated cross-section — the axes cannot say it
-#   hand band 4: paint splits mid-band — colour boundary owed
 #   hand band 8: paint splits mid-band — colour boundary owed
 #   hand band 9: paint splits mid-band — colour boundary owed
 #   hand band 12: rotated cross-section — the axes cannot say it
 #   hand band 12: paint splits mid-band — colour boundary owed
-#   thigh band 1: paint splits mid-band — colour boundary owed
+#   thigh band 1: rotated cross-section — the axes cannot say it
 #   thigh band 2: rotated cross-section — the axes cannot say it
-#   thigh band 2: paint splits mid-band — colour boundary owed
+#   thigh band 3: rotated cross-section — the axes cannot say it
+#   thigh band 3: paint splits mid-band — colour boundary owed
 #   thigh band 4: rotated cross-section — the axes cannot say it
 #   thigh band 4: paint splits mid-band — colour boundary owed
 #   shin.l band 1: paint splits mid-band — colour boundary owed
@@ -82,14 +84,23 @@
 #   shin.l band 3: paint splits mid-band — colour boundary owed
 #   shin.l band 5: rotated cross-section — the axes cannot say it
 #   shin.r band 1: rotated cross-section — the axes cannot say it
-#   shin.r band 1: paint splits mid-band — colour boundary owed
-#   shin.r band 2: rotated cross-section — the axes cannot say it
-#   shin.r band 2: paint splits mid-band — colour boundary owed
-#   shin.r band 3: rotated cross-section — the axes cannot say it
-#   foot band 1: rotated cross-section — the axes cannot say it
-#   foot band 1: paint splits mid-band — colour boundary owed
-#   foot band 2: rotated cross-section — the axes cannot say it
-#   foot band 2: paint splits mid-band — colour boundary owed
+#   shin.r band 4: rotated cross-section — the axes cannot say it
+#   shin.r band 4: paint splits mid-band — colour boundary owed
+#   shin.r band 5: rotated cross-section — the axes cannot say it
+#   shin.r band 5: paint splits mid-band — colour boundary owed
+#   shin.r band 6: rotated cross-section — the axes cannot say it
+#   shin.r band 6: paint splits mid-band — colour boundary owed
+#   shin.r band 8: rotated cross-section — the axes cannot say it
+#   shin.r band 8: paint splits mid-band — colour boundary owed
+#   shin.r band 9: rotated cross-section — the axes cannot say it
+#   shin.r band 9: paint splits mid-band — colour boundary owed
+#   foot band 3: rotated cross-section — the axes cannot say it
+#   foot band 3: paint splits mid-band — colour boundary owed
+#   foot band 4: rotated cross-section — the axes cannot say it
+#   foot band 4: paint splits mid-band — colour boundary owed
+#   foot band 5: paint splits mid-band — colour boundary owed
+#   foot band 6: rotated cross-section — the axes cannot say it
+#   foot band 6: paint splits mid-band — colour boundary owed
 #
 # Then bake the face:  # run: npm run blob:face-bake -- minotaur
 # Refine with npm run blob:rings -- minotaur; judge with blob:measure and
@@ -98,69 +109,73 @@
 
 model minotaur
   height 1.2168  # fit: requested authored height
-  stance humanoid  # fit: knee 0.0681 m forward of the hip-ankle line
+  stance humanoid  # fit: knee 0.061 m forward of the hip-ankle line
 
 skeleton
-  root pelvis at 0.5809 len=0.2117  # fit: medial axis of the pelvis cloud, extent 0.2117 m
-  bone chest parent=pelvis dir=up pitch=2.52 len=0.0784  # fit: medial axis of the chest cloud, extent 0.0784 m, residual 0.0321 RMS; dir err 0°
-  bone spine2 parent=chest dir=up pitch=2.52 len=0.0171  # fit: medial axis of the spine2 cloud, extent 0.0171 m, residual 0.0079 RMS; dir err 0°
-  bone skull parent=spine2 dir=up pitch=2.52 len=0.2307  # fit: medial axis of the skull cloud, extent 0.2307 m, residual 0.0905 RMS; dir err 0°
+  root pelvis at 0.675 len=0.0691  # fit: rig pelvis (Hips->Spine02) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.0691 m
+  bone chest parent=pelvis dir=up pitch=2.52 len=0.1382  # fit: rig chest (Spine02->Spine) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.1382 m, residual 0.0905 RMS of the cloud about the rig axis; dir err 0°; cloud axis 70.2667° off the rig chain — reported, not corrected
+  bone spine2 parent=chest dir=up pitch=2.52 len=0.0278  # fit: rig spine2 (Spine->neck) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.0278 m, residual 0.0448 RMS of the cloud about the rig axis; dir err 0°; cloud axis 57.7196° off the rig chain — reported, not corrected
+  bone skull parent=spine2 dir=up pitch=2.52 len=0.2326  # fit: the skull cloud measured along its parent's rig axis (the hair's principal axis is not the head's), extent 0.2326 m, residual 0.0914 RMS of the cloud about the parent rig axis; dir err 0°
   mirror
-    bone clavicle parent=spine2 side=0.1598 dir=side len=0.2168  # fit: medial axis of the clavicle cloud, extent 0.2168 m, residual 0.0998 RMS; angles not expressible on a side base — the bare base errs 2.8439°
-    bone upperarm parent=clavicle side=0.109 dir=side len=0.2705  # fit: medial axis of the upperarm cloud, extent 0.2705 m, residual 0.0834 RMS; angles not expressible on a side base — the bare base errs 22.1209°
-    bone forearm parent=upperarm side=0.0384 dir=side len=0.2558  # fit: medial axis of the forearm cloud, extent 0.2558 m, residual 0.0652 RMS; angles not expressible on a side base — the bare base errs 2.6189°
-    bone hand parent=forearm side=0.0133 dir=side len=0.2241  # fit: medial axis of the hand cloud, extent 0.2241 m, residual 0.0548 RMS; angles not expressible on a side base — the bare base errs 25.0511°
-    bone thigh parent=pelvis side=0.1413 dir=down pitch=5.7886 tilt=14.9106 len=0.3187  # fit: medial axis of the thigh cloud, extent 0.3187 m, residual 0.1174 RMS; dir err 0°
-    bone shin parent=thigh side=0.0195 dir=up pitch=-77.0734 tilt=-58.9307 len=0.3694  # fit: medial axis of the shin cloud, extent 0.3694 m, residual 0.1026 RMS; dir err 0°; pair NOT mirrored (asym 0.6271) — prims emitted per side
-    bone foot parent=shin side=0.0931 dir=down pitch=36.1567 tilt=3.2839 len=0.2672  # fit: medial axis of the foot cloud, extent 0.2672 m, residual 0.0918 RMS; dir err 0°
+    bone clavicle parent=spine2 side=0 dir=side len=0.2219  # fit: rig clavicle.l (neck->LeftArm) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.2219 m, residual 0.1041 RMS of the cloud about the rig axis; angles not expressible on a side base — the bare base errs 12.1072°; cloud axis 83.6807° off the rig chain — reported, not corrected
+    bone upperarm parent=clavicle dir=side len=0.1779  # fit: rig upperarm.l (LeftArm->LeftForeArm) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.1779 m, residual 0.0759 RMS of the cloud about the rig axis; angles not expressible on a side base — the bare base errs 22.5063°; cloud axis 56.8776° off the rig chain — reported, not corrected
+    bone forearm parent=upperarm dir=side len=0.1948  # fit: rig forearm.l (LeftForeArm->LeftHand) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.1948 m, residual 0.0591 RMS of the cloud about the rig axis; angles not expressible on a side base — the bare base errs 5.5282°
+    bone hand parent=forearm side=0.0094 dir=side len=0.2009  # fit: medial axis of the hand cloud, extent 0.2009 m, residual 0.0492 RMS; angles not expressible on a side base — the bare base errs 25.0511°
+    bone thigh parent=pelvis side=0 dir=down pitch=3.6644 tilt=23.6804 len=0.369  # fit: rig thigh.l (Spine02->LeftLeg) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.369 m, residual 0.1097 RMS of the cloud about the rig axis; dir err 0°; cloud axis 63.3083° off the rig chain — reported, not corrected
+    bone shin parent=thigh side=0 dir=down pitch=-24.75 tilt=13.0559 len=0.2564  # fit: rig shin.l (LeftLeg->LeftFoot) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.2564 m, residual 0.0793 RMS of the cloud about the rig axis; dir err 0°; pair NOT mirrored (asym 0.6271) — prims emitted per side; cloud axis r 76.2539° off the rig chain — reported, not corrected
+    bone foot parent=shin side=0 dir=down pitch=34.9185 tilt=-0.2507 len=0.1144  # fit: rig foot.l (LeftFoot->LeftToeBase) joint-to-joint × scale 0.8963 (the chain: overlapping clouds do not compose, the rig does), extent 0.1144 m, residual 0.0921 RMS of the cloud about the rig axis; dir err 0°; cloud axis 46.7541° off the rig chain — reported, not corrected
   end
 
 body
-  bar torso on pelvis from=0 to=0.8 r=0.1356 wide=0.8965 deep=1.1035 blend=0.0108 color=372919 core  # fit: band 1/2 of the pelvis cloud, 8078 verts — median r, t -0.1283..0.0411, blend 8% of r, rot 0.3136; ROTATED 0.3136 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4085) — colour boundary owed
-  bar torso on pelvis from=0.8001 to=1 r=0.1646 wide=0.9293 deep=1.0707 blend=0.0132 color=382a19  # fit: band 2/2 of the pelvis cloud, 2435 verts — median r, t 0.0411..0.0834, blend 8% of r, rot 0.3325; ROTATED 0.3325 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.2657) — colour boundary owed
-  bar torso on chest from=0 to=0.0547 r=0.0237 wide=0.8105 deep=1.1895 blend=0.004 color=574028  # fit: band 1/9 of the chest cloud, 10 verts — median r, t -0.0393..-0.035, blend 8% of r, rot 1.8351; ROTATED 1.8351 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6) — colour boundary owed
-  bar torso on chest from=0.948 to=1 r=0.039 wide=1.2778 deep=0.7222 blend=0.004 color=9a6945  # fit: band 9/9 of the chest cloud, 20 verts — median r, t 0.035..0.0391, blend 8% of r, rot 2.2837; ROTATED 2.2837 — cross-section turned vs the bone axes; hand pass owed
-  bar torso on spine2 from=0 to=0.0519 r=0.0131 wide=1 deep=1 blend=0.004 color=362819  # fit: band 1/6 of the spine2 cloud, 4 verts — median r, t -0.0094..-0.0085, blend 8% of r, rot 0
-  bar torso on spine2 from=0.6309 to=1 r=0.0059 wide=1.9445 deep=0.0555 blend=0.004 color=3e2a17  # fit: band 6/6 of the spine2 cloud, 12 verts — median r, t 0.0014..0.0031, blend 8% of r, rot 0.0242
-  bar head on skull from=0 to=0.0748 r=0.0493 wide=1.3824 deep=0.6176 blend=0.004 color=352818 core  # fit: band 1/8 of the skull cloud, 334 verts — median r, t -0.1346..-0.1173, blend 8% of r, rot 0.324; ROTATED 0.324 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6018) — colour boundary owed
-  bar head on skull from=0.1004 to=0.4498 r=0.0738 wide=1.0451 deep=0.9549 blend=0.0059 color=372919  # fit: band 3/8 of the skull cloud, 2271 verts — median r, t -0.1114..-0.0308, blend 8% of r, rot 1.5176; ROTATED 1.5176 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.583) — colour boundary owed
-  bar head on skull from=0.4501 to=0.775 r=0.0809 wide=1.0571 deep=0.9429 blend=0.0065 color=372818  # fit: band 4/8 of the skull cloud, 2309 verts — median r, t -0.0307..0.0442, blend 8% of r, rot 0.5651; ROTATED 0.5651 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6081) — colour boundary owed
-  bar head on skull from=0.7752 to=0.8999 r=0.1125 wide=1.1437 deep=0.8563 blend=0.009 color=976a48  # fit: band 5/8 of the skull cloud, 996 verts — median r, t 0.0443..0.0731, blend 8% of r, rot 0.14; PAINT SPLITS mid-band (split 0.5151) — colour boundary owed
-  bar head on skull from=0.9002 to=0.9499 r=0.1181 wide=1.2767 deep=0.7233 blend=0.0095 color=a97754  # fit: band 6/8 of the skull cloud, 584 verts — median r, t 0.0731..0.0846, blend 8% of r, rot 0.2214
-  bar head on skull from=0.95 to=0.975 r=0.1003 wide=1.2613 deep=0.7387 blend=0.008 color=aa7856  # fit: band 7/8 of the skull cloud, 303 verts — median r, t 0.0846..0.0904, blend 8% of r, rot 0.0924
-  bar head on skull from=0.975 to=1 r=0.0789 wide=1.0557 deep=0.9443 blend=0.0063 color=b27d5a  # fit: band 8/8 of the skull cloud, 481 verts — median r, t 0.0904..0.0962, blend 8% of r, rot 0.9639; ROTATED 0.9639 — cross-section turned vs the bone axes; hand pass owed
-  bar arm on clavicle from=0 to=0.275 r=0.0724 wide=1.3211 deep=0.6789 blend=0.0058 mirror color=795539 core  # fit: band 1/10 of the clavicle cloud, 1898 verts — median r, t -0.1102..-0.0506, blend 8% of r, rot 0.346; ROTATED 0.346 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5416) — colour boundary owed
-  bar arm on clavicle from=0.2755 to=0.625 r=0.091 wide=1.1032 deep=0.8968 blend=0.0073 mirror color=785538  # fit: band 2/10 of the clavicle cloud, 4714 verts — median r, t -0.0505..0.0253, blend 8% of r, rot 1.467; ROTATED 1.467 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5076) — colour boundary owed
-  bar arm on clavicle from=0.625 to=0.825 r=0.1061 wide=0.8609 deep=1.1391 blend=0.0085 mirror color=795538  # fit: band 3/10 of the clavicle cloud, 2704 verts — median r, t 0.0253..0.0686, blend 8% of r, rot 0.3159; ROTATED 0.3159 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5828) — colour boundary owed
-  bar arm on clavicle from=0.8252 to=0.85 r=0.0878 wide=0.7519 deep=1.2481 blend=0.007 mirror color=372919  # fit: band 4/10 of the clavicle cloud, 297 verts — median r, t 0.0687..0.0741, blend 8% of r, rot 1.2406; ROTATED 1.2406 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.633) — colour boundary owed
-  bar arm on clavicle from=0.9757 to=1 r=0.1124 wide=1.0159 deep=0.9841 blend=0.009 mirror color=372818  # fit: band 10/10 of the clavicle cloud, 18 verts — median r, t 0.1013..0.1066, blend 8% of r, rot 94.4599; ROTATED 94.4599 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5556) — colour boundary owed
-  bar arm on upperarm from=0 to=0.3998 r=0.0745 wide=1.0554 deep=0.9446 blend=0.006 mirror color=352718  # fit: band 1/3 of the upperarm cloud, 3605 verts — median r, t -0.1351..-0.0269, blend 8% of r, rot 0.4489; ROTATED 0.4489 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6829) — colour boundary owed
-  bar arm on upperarm from=0.4 to=0.4249 r=0.0928 wide=1.0884 deep=0.9116 blend=0.0074 mirror color=362818  # fit: band 2/3 of the upperarm cloud, 460 verts — median r, t -0.0269..-0.0202, blend 8% of r, rot 1.461; ROTATED 1.461 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.537) — colour boundary owed
-  bar arm on upperarm from=0.4252 to=1 r=0.0807 wide=1.1201 deep=0.8799 blend=0.0065 mirror color=352819  # fit: band 3/3 of the upperarm cloud, 6653 verts — median r, t -0.0201..0.1354, blend 8% of r, rot 0.3153; ROTATED 0.3153 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6532) — colour boundary owed
-  bar arm on forearm from=0 to=0.0245 r=0.0626 wide=1.2103 deep=0.7897 blend=0.005 mirror color=342719  # fit: band 1/3 of the forearm cloud, 41 verts — median r, t -0.1241..-0.1178, blend 8% of r, rot 0.5733; ROTATED 0.5733 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3171) — colour boundary owed
-  bar arm on forearm from=0.0251 to=0.875 r=0.0645 wide=1.0446 deep=0.9554 blend=0.0052 mirror color=35281a  # fit: band 2/3 of the forearm cloud, 8817 verts — median r, t -0.1176..0.0997, blend 8% of r, rot 1.4068; ROTATED 1.4068 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.613) — colour boundary owed
-  bar arm on forearm from=0.875 to=1 r=0.0447 wide=1.1093 deep=0.8907 blend=0.004 mirror color=35281a  # fit: band 3/3 of the forearm cloud, 533 verts — median r, t 0.0997..0.1317, blend 8% of r, rot 0.6051; ROTATED 0.6051 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6886) — colour boundary owed
-  bar arm on hand from=0 to=0.0247 r=0.0154 wide=0.6358 deep=1.3642 blend=0.004 mirror color=36291a  # fit: band 1/12 of the hand cloud, 25 verts — median r, t -0.1227..-0.1172, blend 8% of r, rot 0.1478; PAINT SPLITS mid-band (split 0.36) — colour boundary owed
-  bar arm on hand from=0.0753 to=0.2249 r=0.0476 wide=1.2789 deep=0.7211 blend=0.004 mirror color=37291a  # fit: band 4/12 of the hand cloud, 1034 verts — median r, t -0.1058..-0.0723, blend 8% of r, rot 0.8479; ROTATED 0.8479 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5068) — colour boundary owed
-  bar arm on hand from=0.3 to=0.5498 r=0.0527 wide=1.3831 deep=0.6169 blend=0.0042 mirror color=35281a  # fit: band 8/12 of the hand cloud, 1819 verts — median r, t -0.0555..0.0005, blend 8% of r, rot 0.2307; PAINT SPLITS mid-band (split 0.5179) — colour boundary owed
-  bar arm on hand from=0.55 to=0.7499 r=0.0509 wide=1.5725 deep=0.4275 blend=0.0041 mirror color=35281a  # fit: band 9/12 of the hand cloud, 2104 verts — median r, t 0.0006..0.0454, blend 8% of r, rot 0.0172; PAINT SPLITS mid-band (split 0.5048) — colour boundary owed
-  bar arm on hand from=0.8001 to=1 r=0.0323 wide=1.5361 deep=0.4639 blend=0.004 mirror color=382a1b  # fit: band 12/12 of the hand cloud, 1829 verts — median r, t 0.0566..0.1014, blend 8% of r, rot 0.3738; ROTATED 0.3738 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.2531) — colour boundary owed
-  bar leg on thigh from=0 to=0.375 r=0.0958 wide=0.7274 deep=1.2726 blend=0.0077 mirror color=543c26 core  # fit: band 1/4 of the thigh cloud, 5191 verts — median r, t -0.1654..-0.0459, blend 8% of r, rot 0.0052; PAINT SPLITS mid-band (split 0.3003) — colour boundary owed
-  bar leg on thigh from=0.3751 to=0.9247 r=0.1136 wide=0.9304 deep=1.0696 blend=0.0091 mirror color=37291a  # fit: band 2/4 of the thigh cloud, 12117 verts — median r, t -0.0458..0.1294, blend 8% of r, rot 0.6574; ROTATED 0.6574 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4952) — colour boundary owed
-  bar leg on thigh from=0.9502 to=1 r=0.1347 wide=0.8029 deep=1.1971 blend=0.0108 mirror color=272726  # fit: band 4/4 of the thigh cloud, 118 verts — median r, t 0.1375..0.1534, blend 8% of r, rot 0.5251; ROTATED 0.5251 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4831) — colour boundary owed
-  bar leg on shin from=0 to=0.0997 r=0.0352 wide=0.6989 deep=1.3011 blend=0.004 side=l color=342719  # fit: band 1/5 of the shin.l cloud, 354 verts — median r, t -0.1889..-0.1521, blend 8% of r, rot 0.0361; PAINT SPLITS mid-band (split 0.2655) — colour boundary owed
-  bar leg on shin from=0.1002 to=0.4244 r=0.0653 wide=1.037 deep=0.963 blend=0.0052 side=l color=35281a  # fit: band 2/5 of the shin.l cloud, 2181 verts — median r, t -0.1519..-0.0323, blend 8% of r, rot 2.2126; ROTATED 2.2126 — cross-section turned vs the bone axes; hand pass owed
-  bar leg on shin from=0.4251 to=0.7998 r=0.0792 wide=1.0125 deep=0.9875 blend=0.0063 side=l color=362819  # fit: band 3/5 of the shin.l cloud, 3160 verts — median r, t -0.032..0.1063, blend 8% of r, rot 6.508; ROTATED 6.508 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.406) — colour boundary owed
-  bar leg on shin from=0.8001 to=0.975 r=0.0609 wide=0.9544 deep=1.0456 blend=0.0049 side=l color=493623  # fit: band 4/5 of the shin.l cloud, 994 verts — median r, t 0.1064..0.1709, blend 8% of r, rot 0.017
-  bar leg on shin from=0.9759 to=1 r=0.0359 wide=0.6813 deep=1.3187 blend=0.004 side=l color=4b3824  # fit: band 5/5 of the shin.l cloud, 35 verts — median r, t 0.1713..0.1802, blend 8% of r, rot 0.8076; ROTATED 0.8076 — cross-section turned vs the bone axes; hand pass owed
-  bar leg on shin from=0 to=0.4249 r=0.1202 wide=1.0885 deep=0.9115 blend=0.0096 side=r color=484948  # fit: band 1/3 of the shin.r cloud, 7979 verts — median r, t -0.1759..-0.0203, blend 8% of r, rot 0.7441; ROTATED 0.7441 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3764) — colour boundary owed
-  bar leg on shin from=0.4251 to=0.8498 r=0.1158 wide=1.117 deep=0.883 blend=0.0093 side=r color=575857  # fit: band 2/3 of the shin.r cloud, 9253 verts — median r, t -0.0202..0.1353, blend 8% of r, rot 0.9533; ROTATED 0.9533 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4097) — colour boundary owed
-  bar leg on shin from=0.8501 to=1 r=0.0907 wide=1.0446 deep=0.9554 blend=0.0073 side=r color=575857  # fit: band 3/3 of the shin.r cloud, 800 verts — median r, t 0.1354..0.1904, blend 8% of r, rot 2.0651; ROTATED 2.0651 — cross-section turned vs the bone axes; hand pass owed
-  bar leg on foot from=0 to=0.5999 r=0.0952 wide=1.0825 deep=0.9175 blend=0.0076 mirror color=36291a  # fit: band 1/2 of the foot cloud, 9155 verts — median r, t -0.1327..0.0208, blend 8% of r, rot 0.2833; ROTATED 0.2833 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4056) — colour boundary owed
-  bar leg on foot from=0.6002 to=1 r=0.0903 wide=1.0009 deep=0.9991 blend=0.0072 mirror color=231e15  # fit: band 2/2 of the foot cloud, 5878 verts — median r, t 0.0208..0.1277, blend 8% of r, rot 51.2663; ROTATED 51.2663 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.2737) — colour boundary owed
+  bar torso on pelvis from=0 to=0.1325 r=0.0602 wide=0.8199 deep=1.1801 blend=0.0048 offset=(-0.0182,0.0007,-0.0153) color=392919 core  # fit: band 1/11 of the pelvis cloud, 45 verts — median r, t -0.1489..-0.1402, blend 8% of r, rot 2.5556; ROTATED 2.5556 — cross-section turned vs the bone axes; hand pass owed
+  bar torso on pelvis from=0.1325 to=0.1471 r=0.0471 wide=1.3141 deep=0.6859 blend=0.004 offset=(-0.0182,0.0007,-0.0153) color=392a19  # fit: band 2/11 of the pelvis cloud, 2611 verts — median r, t -0.1401..-0.0966, blend 8% of r, rot 0.4262; ROTATED 0.4262 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4408) — colour boundary owed
+  bar torso on pelvis from=0.1588 to=0.188 r=0.1244 wide=0.8545 deep=1.1455 blend=0.0099 offset=(-0.0182,0.0007,-0.0153) color=352718  # fit: band 7/11 of the pelvis cloud, 2064 verts — median r, t -0.0617..0.0254, blend 8% of r, rot 0.4854; ROTATED 0.4854 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3731) — colour boundary owed
+  bar torso on pelvis from=0.1881 to=0.2173 r=0.1138 wide=0.7019 deep=1.2981 blend=0.0091 offset=(-0.0182,0.0007,-0.0153) color=352819  # fit: band 8/11 of the pelvis cloud, 2436 verts — median r, t 0.0255..0.1127, blend 8% of r, rot 0.0999; PAINT SPLITS mid-band (split 0.3658) — colour boundary owed
+  bar torso on pelvis from=0.2203 to=0.2378 r=0.0671 wide=1.2295 deep=0.7705 blend=0.0054 offset=(-0.0182,0.0007,-0.0153) color=483523  # fit: band 10/11 of the pelvis cloud, 1615 verts — median r, t 0.1215..0.1737, blend 8% of r, rot 0.4264; ROTATED 0.4264 — cross-section turned vs the bone axes; hand pass owed
+  bar torso on pelvis from=0.2378 to=1 r=0.0565 wide=1.4421 deep=0.5579 blend=0.0045 offset=(-0.0182,0.0007,-0.0153) color=473522  # fit: band 11/11 of the pelvis cloud, 189 verts — median r, t 0.1738..0.1999, blend 8% of r, rot 0.0679
+  bar torso on chest from=0 to=0.8688 r=0.0143 wide=1.2225 deep=0.7775 blend=0.004 offset=(0.0169,-0.0037,0.0841) color=795536  # fit: band 1/9 of the chest cloud, 92 verts — median r, t -0.058..-0.0267, blend 8% of r, rot 0.4677; ROTATED 0.4677 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5217) — colour boundary owed
+  bar torso on chest from=1 to=1 r=0.012 wide=0.3096 deep=1.6904 blend=0.004 offset=(0.0169,-0.0037,0.0841) color=a7744f  # fit: band 9/9 of the chest cloud, 10 verts — median r, t 0.0509..0.0571, blend 8% of r, rot 2.0694; ROTATED 2.0694 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.2) — colour boundary owed
+  bar torso on spine2 from=0 to=1 r=0.0021 wide=1 deep=1 blend=0.004 offset=(-0.0382,-0.001,0.0224) color=372a19  # fit: band 1/6 of the spine2 cloud, 4 verts — median r, t -0.0155..-0.0126, blend 8% of r, rot 0
+  bar torso on spine2 from=1 to=1 r=0.0004 wide=1 deep=1 blend=0.004 offset=(-0.0382,-0.001,0.0224) color=291f12  # fit: band 6/6 of the spine2 cloud, 3 verts — median r, t 0.0128..0.0128, blend 8% of r, rot 0
+  bar head on skull from=0 to=0.1775 r=0.0818 wide=1.9698 deep=0.0302 blend=0.0065 offset=(-0.001,-0.0018,0.042) color=352818 core  # fit: band 1/6 of the skull cloud, 334 verts — median r, t 0.0258..0.0413, blend 8% of r, rot 0.231; PAINT SPLITS mid-band (split 0.6018) — colour boundary owed
+  bar head on skull from=0.3113 to=0.5329 r=0.0934 wide=1.2266 deep=0.7734 blend=0.0075 offset=(-0.001,-0.0018,0.042) color=372919  # fit: band 4/6 of the skull cloud, 2140 verts — median r, t 0.0724..0.124, blend 8% of r, rot 0.4413; ROTATED 0.4413 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5818) — colour boundary owed
+  bar head on skull from=0.5334 to=0.911 r=0.0971 wide=1.0014 deep=0.9986 blend=0.0078 offset=(-0.001,-0.0018,0.042) color=785538  # fit: band 5/6 of the skull cloud, 3039 verts — median r, t 0.1241..0.2119, blend 8% of r, rot 32.0921; ROTATED 32.0921 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6677) — colour boundary owed
+  bar head on skull from=0.9113 to=1 r=0.0665 wide=0.8049 deep=1.1951 blend=0.0053 offset=(-0.001,-0.0018,0.042) color=aa7855  # fit: band 6/6 of the skull cloud, 1368 verts — median r, t 0.212..0.2326, blend 8% of r, rot 0.0899
+  bar arm on clavicle from=0 to=0.5911 r=0.0777 wide=1.1755 deep=0.8245 blend=0.0062 offset=(-0.0104,0.0386,-0.0325) mirror color=79553a core  # fit: band 1/15 of the clavicle cloud, 145 verts — median r, t -0.1144..-0.1076, blend 8% of r, rot 1.4202; ROTATED 1.4202 — cross-section turned vs the bone axes; hand pass owed
+  bar arm on clavicle from=0.6214 to=0.6517 r=0.0625 wide=1.2092 deep=0.7908 blend=0.005 offset=(-0.0104,0.0386,-0.0325) mirror color=262726  # fit: band 10/15 of the clavicle cloud, 2610 verts — median r, t -0.0465..0.0145, blend 8% of r, rot 0.6946; ROTATED 0.6946 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5544) — colour boundary owed
+  bar arm on clavicle from=0.719 to=1 r=0.0522 wide=0.8933 deep=1.1067 blend=0.0042 offset=(-0.0104,0.0386,-0.0325) mirror color=553b23  # fit: band 15/15 of the clavicle cloud, 45 verts — median r, t 0.1502..0.157, blend 8% of r, rot 2.6846; ROTATED 2.6846 — cross-section turned vs the bone axes; hand pass owed
+  bar arm on upperarm from=0 to=0.1298 r=0.0214 wide=0.3897 deep=1.6103 blend=0.004 offset=(-0.005,-0.0067,-0.0104) mirror color=292929  # fit: band 1/12 of the upperarm cloud, 73 verts — median r, t -0.1215..-0.1161, blend 8% of r, rot 0.7143; ROTATED 0.7143 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.7397) — colour boundary owed
+  bar arm on upperarm from=0.3654 to=0.6712 r=0.0788 wide=0.8463 deep=1.1537 blend=0.0063 offset=(-0.005,-0.0067,-0.0104) mirror color=352719  # fit: band 7/12 of the upperarm cloud, 5040 verts — median r, t -0.0393..0.0602, blend 8% of r, rot 1.1074; ROTATED 1.1074 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6431) — colour boundary owed
+  bar arm on upperarm from=0.8157 to=1 r=0.0687 wide=1.4567 deep=0.5433 blend=0.0055 offset=(-0.005,-0.0067,-0.0104) mirror color=4a3622  # fit: band 12/12 of the upperarm cloud, 24 verts — median r, t 0.1072..0.1131, blend 8% of r, rot 0.0845
+  bar arm on forearm from=0 to=0 r=0.0561 wide=1.2103 deep=0.7897 blend=0.0045 offset=(0.0003,-0.0048,-0.0036) mirror color=342719  # fit: band 1/3 of the forearm cloud, 41 verts — median r, t -0.1112..-0.1056, blend 8% of r, rot 0.5733; ROTATED 0.5733 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3171) — colour boundary owed
+  bar arm on forearm from=0 to=0.8899 r=0.0578 wide=1.0446 deep=0.9554 blend=0.0046 offset=(0.0003,-0.0048,-0.0036) mirror color=35281a  # fit: band 2/3 of the forearm cloud, 8817 verts — median r, t -0.1054..0.0894, blend 8% of r, rot 1.4068; ROTATED 1.4068 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.613) — colour boundary owed
+  bar arm on forearm from=0.89 to=1 r=0.0401 wide=1.1093 deep=0.8907 blend=0.004 offset=(0.0003,-0.0048,-0.0036) mirror color=35281a  # fit: band 3/3 of the forearm cloud, 533 verts — median r, t 0.0894..0.118, blend 8% of r, rot 0.6051; ROTATED 0.6051 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.6886) — colour boundary owed
+  bar arm on hand from=0 to=0.0247 r=0.0138 wide=0.6358 deep=1.3642 blend=0.004 mirror color=36291a  # fit: band 1/12 of the hand cloud, 25 verts — median r, t -0.11..-0.105, blend 8% of r, rot 0.1478; PAINT SPLITS mid-band (split 0.36) — colour boundary owed
+  bar arm on hand from=0.3 to=0.5498 r=0.0473 wide=1.3831 deep=0.6169 blend=0.004 mirror color=35281a  # fit: band 8/12 of the hand cloud, 1819 verts — median r, t -0.0497..0.0005, blend 8% of r, rot 0.2307; PAINT SPLITS mid-band (split 0.5179) — colour boundary owed
+  bar arm on hand from=0.55 to=0.7499 r=0.0456 wide=1.5725 deep=0.4275 blend=0.004 mirror color=35281a  # fit: band 9/12 of the hand cloud, 2104 verts — median r, t 0.0005..0.0407, blend 8% of r, rot 0.0172; PAINT SPLITS mid-band (split 0.5048) — colour boundary owed
+  bar arm on hand from=0.8001 to=1 r=0.029 wide=1.5361 deep=0.4639 blend=0.004 mirror color=382a1b  # fit: band 12/12 of the hand cloud, 1829 verts — median r, t 0.0507..0.0909, blend 8% of r, rot 0.3738; ROTATED 0.3738 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.2531) — colour boundary owed
+  bar leg on thigh from=0 to=0.5896 r=0.049 wide=1.0033 deep=0.9967 blend=0.004 offset=(0.0121,0.0037,-0.0232) mirror color=553c27 core  # fit: band 1/4 of the thigh cloud, 1679 verts — median r, t -0.1895..-0.1351, blend 8% of r, rot 92.8195; ROTATED 92.8195 — cross-section turned vs the bone axes; hand pass owed
+  bar leg on thigh from=0.5897 to=0.7443 r=0.0978 wide=1.1084 deep=0.8916 blend=0.0078 offset=(0.0121,0.0037,-0.0232) mirror color=493623  # fit: band 2/4 of the thigh cloud, 5771 verts — median r, t -0.135..-0.008, blend 8% of r, rot 0.4659; ROTATED 0.4659 — cross-section turned vs the bone axes; hand pass owed
+  bar leg on thigh from=0.7445 to=0.888 r=0.0924 wide=1.0608 deep=0.9392 blend=0.0074 offset=(0.0121,0.0037,-0.0232) mirror color=352819  # fit: band 3/4 of the thigh cloud, 8092 verts — median r, t -0.0079..0.11, blend 8% of r, rot 0.4706; ROTATED 0.4706 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.5215) — colour boundary owed
+  bar leg on thigh from=0.888 to=1 r=0.0533 wide=1.0015 deep=0.9985 blend=0.0043 offset=(0.0121,0.0037,-0.0232) mirror color=484847  # fit: band 4/4 of the thigh cloud, 2074 verts — median r, t 0.11..0.1736, blend 8% of r, rot 36.5345; ROTATED 36.5345 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4667) — colour boundary owed
+  bar leg on shin from=0 to=0.0605 r=0.0316 wide=0.6989 deep=1.3011 blend=0.004 offset=(-0.0223,0.0036,-0.0185) side=l color=342719  # fit: band 1/5 of the shin.l cloud, 354 verts — median r, t -0.1693..-0.1363, blend 8% of r, rot 0.0361; PAINT SPLITS mid-band (split 0.2655) — colour boundary owed
+  bar leg on shin from=0.061 to=0.426 r=0.0585 wide=1.037 deep=0.963 blend=0.0047 offset=(-0.0223,0.0036,-0.0185) side=l color=35281a  # fit: band 2/5 of the shin.l cloud, 2181 verts — median r, t -0.1362..-0.0289, blend 8% of r, rot 2.2126; ROTATED 2.2126 — cross-section turned vs the bone axes; hand pass owed
+  bar leg on shin from=0.4267 to=0.8485 r=0.0709 wide=1.0125 deep=0.9875 blend=0.0057 offset=(-0.0223,0.0036,-0.0185) side=l color=362819  # fit: band 3/5 of the shin.l cloud, 3160 verts — median r, t -0.0287..0.0952, blend 8% of r, rot 6.508; ROTATED 6.508 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.406) — colour boundary owed
+  bar leg on shin from=1 to=1 r=0.0322 wide=0.6813 deep=1.3187 blend=0.004 offset=(-0.0223,0.0036,-0.0185) side=l color=4b3824  # fit: band 5/5 of the shin.l cloud, 35 verts — median r, t 0.1535..0.1615, blend 8% of r, rot 0.8076; ROTATED 0.8076 — cross-section turned vs the bone axes; hand pass owed
+  bar leg on shin from=0 to=0.2347 r=0.0204 wide=1.4346 deep=0.5654 blend=0.004 offset=(-0.058,0.0813,0.0133) side=r color=565655  # fit: band 1/9 of the shin.r cloud, 152 verts — median r, t -0.1458..-0.1383, blend 8% of r, rot 0.3676; ROTATED 0.3676 — cross-section turned vs the bone axes; hand pass owed
+  bar leg on shin from=0.2324 to=0.2256 r=0.0677 wide=1.3073 deep=0.6927 blend=0.0054 offset=(-0.058,0.0813,0.0133) side=r color=494948  # fit: band 4/9 of the shin.r cloud, 4895 verts — median r, t -0.1233..-0.0783, blend 8% of r, rot 0.3272; ROTATED 0.3272 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3555) — colour boundary owed
+  bar leg on shin from=0.2256 to=0.2166 r=0.096 wide=1.2305 deep=0.7695 blend=0.0077 offset=(-0.058,0.0813,0.0133) side=r color=575857  # fit: band 5/9 of the shin.r cloud, 2611 verts — median r, t -0.0783..-0.0183, blend 8% of r, rot 0.676; ROTATED 0.676 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4209) — colour boundary owed
+  bar leg on shin from=0.2166 to=0.203 r=0.1059 wide=1.187 deep=0.813 blend=0.0085 offset=(-0.058,0.0813,0.0133) side=r color=575857  # fit: band 6/9 of the shin.r cloud, 4211 verts — median r, t -0.0182..0.0716, blend 8% of r, rot 0.7677; ROTATED 0.7677 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.4391) — colour boundary owed
+  bar leg on shin from=0.2019 to=0.1963 r=0.0715 wide=1.2298 deep=0.7702 blend=0.0057 offset=(-0.058,0.0813,0.0133) side=r color=565756  # fit: band 8/9 of the shin.r cloud, 3620 verts — median r, t 0.0792..0.1166, blend 8% of r, rot 0.955; ROTATED 0.955 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3715) — colour boundary owed
+  bar leg on shin from=0.1963 to=1 r=0.106 wide=1.1267 deep=0.8733 blend=0.0085 offset=(-0.058,0.0813,0.0133) side=r color=575857  # fit: band 9/9 of the shin.r cloud, 1389 verts — median r, t 0.1166..0.1541, blend 8% of r, rot 0.3871; ROTATED 0.3871 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3477) — colour boundary owed
+  bar leg on foot from=0 to=0 r=0.0191 wide=0.6857 deep=1.3143 blend=0.004 offset=(0.001,-0.0233,-0.0334) mirror color=555656  # fit: band 1/6 of the foot cloud, 63 verts — median r, t -0.1373..-0.1308, blend 8% of r, rot 0.2101
+  bar leg on foot from=0 to=0.1048 r=0.0576 wide=0.9413 deep=1.0587 blend=0.0046 offset=(0.001,-0.0233,-0.0334) mirror color=34281a  # fit: band 3/6 of the foot cloud, 2951 verts — median r, t -0.1103..-0.0701, blend 8% of r, rot 1.6148; ROTATED 1.6148 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3721) — colour boundary owed
+  bar leg on foot from=0.1049 to=0.788 r=0.0821 wide=0.9123 deep=1.0877 blend=0.0066 offset=(0.001,-0.0233,-0.0334) mirror color=37291a  # fit: band 4/6 of the foot cloud, 7017 verts — median r, t -0.0701..0.0439, blend 8% of r, rot 0.2508; ROTATED 0.2508 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.2973) — colour boundary owed
+  bar leg on foot from=0.7885 to=1 r=0.063 wide=0.8189 deep=1.1811 blend=0.005 offset=(0.001,-0.0233,-0.0334) mirror color=36291a  # fit: band 5/6 of the foot cloud, 4292 verts — median r, t 0.044..0.1179, blend 8% of r, rot 0.0692; PAINT SPLITS mid-band (split 0.3073) — colour boundary owed
+  bar leg on foot from=1 to=1 r=0.0273 wide=0.9672 deep=1.0328 blend=0.004 offset=(0.001,-0.0233,-0.0334) mirror color=373737  # fit: band 6/6 of the foot cloud, 445 verts — median r, t 0.118..0.1313, blend 8% of r, rot 0.3087; ROTATED 0.3087 — cross-section turned vs the bone axes; hand pass owed; PAINT SPLITS mid-band (split 0.3843) — colour boundary owed
 
 face
-  headRadius 0.1006  # fit: median radial distance of the Head cloud (7354 verts)
+  headRadius 0.0902  # fit: median radial distance of the Head cloud (7354 verts)
   headWidth 1.194  # fit: p98 half-extent along world x / median radius
   headHeight 1.2256  # fit: p98 half-extent along world y / median radius
   headDepth 1.5357  # fit: p98 half-extent along world z / median radius
