@@ -656,11 +656,33 @@ def verify_bores_hollow():
     check asks about the CHAMBER's steel, not about an unrelated part that
     happens to sit in the sample ray's path. No landmark (CY1, extractor's own
     position) changed.
+
+    CAST ONLY AGAINST GEOMETRY THAT SWINGS. The first version of this check
+    cast against the whole scene and could never pass, on any geometry: the
+    origin sits 5 mm REARWARD of the breech face, and in a shut break-action
+    the space behind the breech face is the standing breech -- solid receiver.
+    The ray started inside `body` and reported the bore blocked at 0.051 m,
+    which is the distance to the receiver's front face at y=-0.078, not a fact
+    about the bore at all.
+
+    The receiver is legitimately behind the chamber and is not part of it, so
+    it must not answer for it. Hiding the frame is therefore the narrow, honest
+    fix; hiding `body` from a whole-scene cast would have been the fudge.
     """
+    def swings(o):
+        p = o
+        while p is not None:
+            if p.name.split('.')[0] == BARREL_NODE:
+                return True
+            p = p.parent
+        return False
+
     hidden = []
     for o in bpy.data.objects:
-        if o.type == 'MESH' and (o.name.split('.')[0].startswith('shell')
-                                  or o.name.split('.')[0] == 'extractor'):
+        if o.type != 'MESH':
+            continue
+        base = o.name.split('.')[0]
+        if (not swings(o)) or base.startswith('shell') or base == 'extractor':
             hidden.append((o, o.hide_viewport))
             o.hide_viewport = True
     bpy.context.view_layer.update()
