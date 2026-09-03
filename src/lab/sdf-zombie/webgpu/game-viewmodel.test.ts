@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/webgpu/game-viewmodel.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope, hingeOpenFraction,
-  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
+  CHAMBER_DEPTH_M, RECOIL, RELOAD, ejectedShell, extractStage, extractorOffset,
+  fireRecoil, flashEnvelope, hingeOpenFraction, loadShellTravel, magazineAfterFire,
+  reloadPhaseAt, reloadPose, supportHandPose, topLeverAngle,
 } from './game-viewmodel';
 
 describe('flashEnvelope', () => {
@@ -249,5 +250,57 @@ describe('supportHandPose', () => {
   it('arrives at the breech by the time the cases seat', () => {
     const seat = supportHandPose(RELOAD.loadSeatSec);
     expect(seat.dy).toBeGreaterThan(-0.02);
+  });
+});
+
+describe('topLeverAngle', () => {
+  it('is home at rest and home again at the end', () => {
+    expect(topLeverAngle(0)).toBeCloseTo(0, 6);
+    expect(topLeverAngle(RELOAD.totalSec)).toBeCloseTo(0, 6);
+  });
+  it('LEADS the break — fully thrown while the hinge is still shut', () => {
+    const t = RELOAD.presentSec * 0.9;
+    expect(topLeverAngle(t)).toBeGreaterThan(0.6);
+    expect(hingeOpenFraction(t)).toBeCloseTo(0, 6);
+  });
+  it('reaches the reference throw of 40 degrees', () => {
+    const peak = Math.max(...Array.from({ length: 131 }, (_, k) => topLeverAngle(k / 100)));
+    expect(peak).toBeCloseTo(Math.PI * 40 / 180, 2);
+  });
+});
+
+describe('extractStage', () => {
+  it('is absent before the extract beat and after the hand-off', () => {
+    expect(extractStage(0)).toBeNull();
+    expect(extractStage(RELOAD.extractAtSec - 0.01)).toBeNull();
+    expect(extractStage(RELOAD.ejectAtSec + 0.01)).toBeNull();
+  });
+  it('runs 0 -> 1 monotonically across the extract window', () => {
+    expect(extractStage(RELOAD.extractAtSec)).toBeCloseTo(0, 5);
+    let prev = -1;
+    for (let t = RELOAD.extractAtSec; t <= RELOAD.ejectAtSec; t += 0.005) {
+      const v = extractStage(t)!;
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+    expect(prev).toBeCloseTo(1, 5);
+  });
+  it('has fully cleared the chamber by the hand-off, or the case would be reparented mid-steel', () => {
+    expect(extractStage(RELOAD.ejectAtSec)! * CHAMBER_DEPTH_M)
+      .toBeGreaterThanOrEqual(CHAMBER_DEPTH_M - 1e-6);
+  });
+});
+
+describe('extractorOffset', () => {
+  it('is home at rest and home once the fresh cases are seated', () => {
+    expect(extractorOffset(0)).toBeCloseTo(0, 6);
+    expect(extractorOffset(RELOAD.totalSec)).toBeCloseTo(0, 6);
+  });
+  it('is thrown out while the breech is empty', () => {
+    expect(extractorOffset(RELOAD.ejectAtSec)).toBeGreaterThan(0.005);
+    expect(extractorOffset(RELOAD.loadStartSec)).toBeGreaterThan(0.005);
+  });
+  it('retracts as the fresh cases seat, not after', () => {
+    expect(extractorOffset(RELOAD.loadSeatSec)).toBeCloseTo(0, 4);
   });
 });

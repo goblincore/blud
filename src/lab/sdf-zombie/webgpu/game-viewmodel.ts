@@ -180,6 +180,62 @@ export function loadShellTravel(t: number): number | null {
   return smoothstep(RELOAD.loadStartSec, RELOAD.loadSeatSec, t);
 }
 
+/** Chamber depth in metres, mirroring CHAMBER_DEPTH in the model script. A
+ *  shell has cleared the mouth once it has travelled this far. */
+export const CHAMBER_DEPTH_M = 0.070;
+
+/** Extractor throw in metres. Proportional to the reference's, which pushes
+ *  its slugs about 65% of a case length clear of the mouth. */
+export const EXTRACTOR_THROW_M = 0.009;
+
+const LEVER_THROW_RAD = Math.PI * 40 / 180;
+
+/**
+ * Top-lever yaw at `t`, radians. Thrown open across the present beat, held
+ * while the action is open, home again as it snaps shut.
+ *
+ * It has to LEAD the break: on a real break-action the lever unlocks the bolt
+ * before the barrels can drop, and the reference animates exactly that (its
+ * `release` is at full throw a sixth of a second before `front` starts to
+ * move). A lever that swings WITH the barrels reads as decoration.
+ */
+export function topLeverAngle(t: number): number {
+  if (t <= 0 || t >= RELOAD.totalSec) return 0;
+  if (t < RELOAD.presentSec) {
+    return LEVER_THROW_RAD * smoothstep(0, RELOAD.presentSec, t);
+  }
+  if (t < RELOAD.snapEndSec) return LEVER_THROW_RAD;
+  return LEVER_THROW_RAD * (1 - smoothstep(RELOAD.snapEndSec, RELOAD.totalSec, t));
+}
+
+/**
+ * Normalised 0..1 axial travel of a seated case, or `null` outside the extract
+ * window. Multiply by CHAMBER_DEPTH_M for metres.
+ *
+ * This is stage one of a TWO-STAGE eject, which is the thing that makes cases
+ * leave a tilted gun correctly. The case is a child of the barrel group, so
+ * this slide happens in the barrels' own frame and needs no rotated basis;
+ * `ejectedShell` then takes over for the free tumble.
+ */
+export function extractStage(t: number): number | null {
+  if (t < RELOAD.extractAtSec || t > RELOAD.ejectAtSec) return null;
+  return smoothstep(RELOAD.extractAtSec, RELOAD.ejectAtSec, t);
+}
+
+/**
+ * Extractor throw in metres at `t`. Rides out with the cases, HOLDS while the
+ * breech is empty, and retracts as the fresh ones seat -- the reference's
+ * `unloader` channel exactly.
+ */
+export function extractorOffset(t: number): number {
+  if (t < RELOAD.extractAtSec || t >= RELOAD.loadSeatSec) return 0;
+  if (t < RELOAD.ejectAtSec) {
+    return EXTRACTOR_THROW_M * smoothstep(RELOAD.extractAtSec, RELOAD.ejectAtSec, t);
+  }
+  if (t < RELOAD.loadStartSec) return EXTRACTOR_THROW_M;
+  return EXTRACTOR_THROW_M * (1 - smoothstep(RELOAD.loadStartSec, RELOAD.loadSeatSec, t));
+}
+
 /** Flash brightness at `t` seconds since the shot: instant attack, exponential
  *  decay, hard zero outside the window so nothing lingers a frame too long. */
 export function flashEnvelope(t: number): number {
