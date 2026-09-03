@@ -20,30 +20,56 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**NEXT ACTION: the shorty's breech mechanism.** Plan written and ready, 8
-tasks, not started —
+**SHORTY BREECH MECHANISM — DONE (2026-09-03), all 8 tasks** —
 [plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·
 [spec](docs/superpowers/specs/2026-09-03-shorty-breech-mechanism-design.md).
-Three defects, one of them not in the owner's report:
-* `chamber{i}` is built with `cyl()`, which caps both ends — breaking the
-  action open shows two solid domed knobs where the mouths should be
-  ([before-open45.png](docs/dev-notes/2026-09-03-shorty-breech/before-open45.png)).
-* Every piece of breech-face detail (`mouth{i}`, `extractor`) sits at
-  y ≈ −0.066 — the chamber's FRONT, 35 mm from the actual breech face at
-  y = −0.031, buried in the frame beside the hinge pin.
-* The eject origin is a stale constant whose x predates `1e99b54` centring the
-  gun, and which cannot follow the barrels through their swing.
-Fix comes off `docs/dev-notes/refs/sawnoffs_animated.glb` (DJMaesen, CC-BY-4.0,
-credited in ATTRIBUTIONS.md), decoded channel by channel: its slugs are
-CHILDREN of the swinging barrel node so they inherit the break rotation, and
-its eject is TWO-STAGE — an axial slide out of the bore, then a free tumble.
-Retimed to its tempo at the owner's call (45° over 0.33 s, shut in 0.14, 1.30 s
-total). NOT taken from it: dimensions. Owner: "we dont need to be completly
-realistic, its in a fantasy world anyways".
-**Before running it:** audit the plan's verification steps — it leans on
-"render it and look", which fails the same way Task 2's visual check did (it
-pushed the reticle left/right, both pure yaw, the one case the bug did not show
-in). Make each step state what would have to break for it to fail.
+Fixed three defects, one of them not in the owner's report ("the tube is
+solid, not hollow... the ejected shells dont come out of the right
+location"):
+* `chamber{i}` was built with `cyl()`, which caps both ends — breaking the
+  action open showed two solid domed knobs where the mouths should be.
+  Rebuilt with `tube()` + a `taper_tube()` forcing cone; a raycast down each
+  bore is now part of the model gate (`[shorty] OK`), proven to FAIL when the
+  chamber is reverted to `cyl()`.
+* Breech-face detail (`mouth{i}`, `extractor`) sat at the chamber's FRONT,
+  35 mm from the real breech face — moved to y = −0.031, with a widened
+  standing breech (Task 3) that now carries its own barrels instead of
+  overhanging the frame.
+* The eject origin was a stale hardcoded constant that could not follow the
+  barrels through their swing. Cases now extract along their own local bore
+  axis as children of `Barrels`, then hand off to a free tumble spawned at
+  the LIVE `Breech_L/R` world position, read every frame via `breechInRig()`
+  (exposed for gating as `__sdfGame.breechWorld()` / `.lastEjectOrigin`).
+  **Task 7 Step 5b's gate was landed late, during Task 8:** the runtime
+  plumbing shipped in `a5c7f7e` but the assertion the audit actually asked
+  for — sample `lastEjectOrigin` at the eject beat, assert within 5 cm of
+  `breechWorld()` — had no driver anywhere in the repo (`git log` / grep for
+  `breechWorld` outside `game-main.ts` came up empty). Added to
+  `sdf-game-shorty-gate.mjs` at the 510 ms beat (== `RELOAD.ejectAtSec`, the
+  first frame the tumble owns the position, before it drifts downrange):
+  passes at 1.18 cm on the real build, proven to FAIL at 16.8 cm when `breech`
+  is hardcoded back to the old `(0.105, -0.075, -0.360)` constant.
+Reload retimed to the reference's tempo (45° over 0.33 s, shut in 0.14 s,
+1.30 s total — up from 1.05 s); `scripts/sdf-game-shorty-gate.mjs` derives its
+wait from `__sdfGame.reloadTotalSec` rather than a hardcoded frame count, and
+its reload strip now samples the actual beats (present/break/eject/load/snap)
+instead of a stale timing left over from the shorter reload.
+**Verification (Task 8):** three render angles, not one — FPV, a straight-on
+rear view, and a three-quarter — in
+[docs/dev-notes/2026-09-03-shorty-breech/](docs/dev-notes/2026-09-03-shorty-breech/)
+(`before-open45.png` vs `after-open45{,-rear,-threequarter}.png`). The
+three-quarter is the angle that actually proves hollowness by eye (a dark bore
+reads all the way from muzzle to breech); the straight-on rear view, looking
+near the bore axis, would look the same whether the chamber were solid or
+hollow, so it's read for FRAME FIT (mouths seated within the widened receiver,
+not overhanging it) rather than hollowness — the raycast gate is what proves
+hollowness, per the render-vs-raycast audit below. In-game reload captured
+headlessly (`__sdfGame.step`/`setLoopRunning(false)`, `ingame-reload/`)
+confirms by eye: the top lever is at full throw while the hinge is still shut
+(180 ms vs 350 ms), cases tumble up and away after sliding out the tilted
+bores, the extractor sits visibly proud between two genuinely dark, empty
+mouths mid-reload (650/900 ms), and the fresh cases seat and the action snaps
+shut (1110/1180 ms).
 
 **FPV WEAPON OVERHAUL — GOBLIN SAWED-OFF — MERGED (2026-09-03).**
 `sdf-game.html`'s view-model is a procedural break-action sawed-off double

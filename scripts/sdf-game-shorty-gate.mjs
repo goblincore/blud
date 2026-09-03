@@ -234,6 +234,25 @@ for (const ms of [180, 350, 510, 650, 900, 1110, 1180]) {
   const open = await evaluate('__sdfGame.hingeOpenRad');
   maxOpen = Math.max(maxOpen, open);
   await shot(`reload-${ms}`);
+  // 5b. THE EJECT ORIGIN — the owner's actual complaint ("the ejected shells
+  // dont come out of the right location"). 510 ms IS RELOAD.ejectAtSec (0.51 s):
+  // the first frame the free tumble takes over from the axial extract, so
+  // lastEjectOrigin is still (near) the chamber mouth rather than having
+  // drifted downrange with the shell's own ballistic arc. Sampling any later
+  // beat would fail a CORRECT build for the wrong reason -- the shell is
+  // supposed to have moved on by then.
+  if (ms === 510) {
+    const eject = await evaluate(
+      '({ o: __sdfGame.lastEjectOrigin, b: __sdfGame.breechWorld() })');
+    if (!eject.o) fail('lastEjectOrigin still null at the eject beat');
+    const dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const d = Math.min(...eject.b.map((p) => dist3(p, eject.o)));
+    if (d > 0.05) {
+      fail(`case left ${(d * 100).toFixed(1)} cm from the nearest chamber mouth ` +
+           `at the eject beat -- eject origin has drifted off the live breech`);
+    }
+    console.log(`eject origin: ${(d * 100).toFixed(2)} cm from the nearest breech mouth`);
+  }
 }
 if (maxOpen < 0.4) fail(`hinge only reached ${maxOpen} rad; the barrels never opened`);
 // Step past the END of the reload, DERIVED from the page rather than hardcoded.
