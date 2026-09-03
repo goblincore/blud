@@ -499,14 +499,48 @@ wound pops, gait stop-motion).
   reference and `--apply` items.
   [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
 
-- `M?.minotaur` [ ] **Author the minotaur from r1, by hand** — `minotaur.blob`
-  is now r1's content (smooth, correctly formed, unmistakably the character).
-  Three known failures to fix: the prosthetic must FUSE at the hip and read as
-  a limb (**call `daylightOf` — it exists and round 1 never did**; ~2% of
-  standing height is where separation reads), the torso needs muscle relief,
-  and the face bake wants checking. **`blob:depth` in the loop** — it is the
-  one instrument that would have caught the original rejection.
-  [ref](docs/dev-notes/refs/minotaur-mesh/minotaur.glb)
+- `M?.minotaur` [~] **Author the minotaur from r1, by hand** — `minotaur.blob`
+  is r1's content. **Round 4 done** (`6190370`): horns raised from ear height
+  (y 1.702, 34% up the cranium) to the crown (roots 1.873, tips 2.021, clearing
+  the cranium's own 1.959 — they had been dying 0.11 BELOW it); flesh
+  retargeted from the reference texture's measured brown to the zombie's
+  `henenlotter-latex` pink, which also revealed abs and pecs the brown was
+  hiding; plate gloss 0.70 → 0.90-0.95 with the albedo brought down ~35%.
+  Owner: much better, but **the plates still don't read metallic and the
+  pitting hurts** → `X2.hard-surface-material`.
+  Still owed: the prosthetic must FUSE at the hip and read as a limb
+  (**call `daylightOf` — it exists and no round has called it**; ~2% of
+  standing height is where separation reads), torso muscle relief, and a face
+  re-bake + re-solve (owner wants sharp teeth, cybernetic plating, wires and
+  glowing red eyes — the last is blocked on `glow=`, see below).
+  **`blob:depth` in the loop.** [ref](docs/dev-notes/refs/minotaur-mesh/minotaur.glb)
+
+- `X2.hard-surface-material` [ ] **Teach the SHADER about hard surfaces** —
+  four dispatch tasks QUEUED (`status: pending`, so task 1 has a Run button) at
+  `~/.claude/dispatch/plans/2026-09-03-hardsurf-task-{1..4}.md`, serial chain,
+  `glm-5.3-flash` on `pi`, base `claude/blob-side-grammar`. **Trigger task 1.**
+  `box` taught the FIELD about hard surfaces; nothing taught the shader, so a
+  machined plate is textured and wobbled as though it were skin.
+  (A) `gloss` suppresses `surfaceNoiseAmp`/`silhouetteNoiseAmp` — both are
+  body-wide and applied ~260 lines before the shader knows a prim is painted;
+  (B) a `metal` modifier (`prof` bit 4) — there is NO metalness in the shader
+  at all, so a painted prim gets full diffuse + untinted white highlight, i.e.
+  polished plastic, which is why raising gloss produced shinier plastic;
+  (C) per-prim `glow=0..1` — nothing on a character can glow today, since
+  `faceGlow` is × `(1 - decal)` at `march.wgsl.ts:2179` and the minotaur uses
+  `decal 1`. **(C) is what blocks the cybernetic head.**
+  Loudest trap, in the plan: `pack.ts`'s cluster/group `shaped` flags gate
+  whether the shader reads `ROW_PRIM_SHAPE` at all, so a metal-ONLY prim would
+  have its bit silently dropped — the exact bug found in those same two lines
+  this session (omitted `p.shell`, schoolgirl-alt's cape a solid blob for
+  weeks).
+  [design](docs/superpowers/specs/2026-09-03-hard-surface-material-design.md) · [plan](docs/superpowers/plans/2026-09-03-hard-surface-material.md)
+
+- `X3.metal-damage` [ ] **Wounds and gibs on metal** — the OTHER half of the
+  owner's "hard surface parts shouldn't deform like the flesh". Shooting the
+  prosthetic today opens a wet red crater in it and severing tears it like
+  meat. Lives in `damage.ts` / `gib-chunks.ts` / `humanoid-sever.ts` rather
+  than in shading, so it is deliberately NOT in `X2`. Not spec'd.
 
 - `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
   `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was
