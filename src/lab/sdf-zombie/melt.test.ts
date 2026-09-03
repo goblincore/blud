@@ -1,0 +1,186 @@
+import { describe, it, expect } from 'vitest';
+import {
+  MELT_TUNING,
+  MELT_TUNING_BODY,
+  meltInit,
+  meltInitBody,
+  stepMelt,
+  endpointProgress,
+  applyMelt,
+  endpointHeights,
+} from './melt';
+import type { Primitive } from './types';
+
+const REST_Y = [0.02, 0.45, 0.95, 1.55]; // foot, knee, chest, crown
+
+describe('melt state machine', () => {
+  it('starts at zero progress with nothing melted', () => {
+    const s = meltInit(REST_Y, 0);
+    expect(s.t).toBe(0);
+    for (let i = 0; i < REST_Y.length; i++) {
+      expect(endpointProgress(s, i)).toBe(0);
+    }
+  });
+
+  it('advances progress at the tuned rate', () => {
+    const s = stepMelt(meltInit(REST_Y, 0), 1);
+    expect(s.t).toBeCloseTo(MELT_TUNING.rate, 6);
+  });
+
+  it('freezes at 1 and is idempotent past it', () => {
+    let s = meltInit(REST_Y, 0);
+    for (let i = 0; i < 600; i++) s = stepMelt(s, 1 / 60);
+    expect(s.t).toBe(1);
+    const frozen = stepMelt(s, 1 / 60);
+    expect(frozen.t).toBe(1);
+    expect(frozen).toEqual(s);
+  });
+
+  it('melts low endpoints before high ones', () => {
+    let s = meltInit(REST_Y, 0);
+    for (let i = 0; i < 20; i++) s = stepMelt(s, 1 / 60);
+    const u = REST_Y.map((_, i) => endpointProgress(s, i));
+    for (let i = 1; i < u.length; i++) expect(u[i]!).toBeLessThanOrEqual(u[i - 1]!);
+    expect(u[0]!).toBeGreaterThan(u[3]!); // foot strictly ahead of crown
+  });
+
+  it('brings every endpoint to full melt by progress 1', () => {
+    let s = meltInit(REST_Y, 0);
+    for (let i = 0; i < 600; i++) s = stepMelt(s, 1 / 60);
+    for (let i = 0; i < REST_Y.length; i++) {
+      expect(endpointProgress(s, i)).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('endpoint progress never decreases', () => {
+    let s = meltInit(REST_Y, 0);
+    let prev = REST_Y.map((_, i) => endpointProgress(s, i));
+    for (let f = 0; f < 200; f++) {
+      s = stepMelt(s, 1 / 60);
+      const now = REST_Y.map((_, i) => endpointProgress(s, i));
+      for (let i = 0; i < now.length; i++) expect(now[i]!).toBeGreaterThanOrEqual(prev[i]!);
+      prev = now;
+    }
+  });
+
+  it('is deterministic — identical dt sequences give identical states', () => {
+    const run = () => {
+      let s = meltInit(REST_Y, 0);
+      for (let i = 0; i < 100; i++) s = stepMelt(s, 1 / 60);
+      return s;
+    };
+    expect(run()).toEqual(run());
+  });
+});
+
+function prim(a: [number, number, number], b: [number, number, number]): Primitive {
+  return {
+    a, b, radius: 0.08, scale: [1, 1, 1], blendK: 0.02, limb: 'legL', cluster: 0,
+  } as Primitive;
+}
+
+const BODY: Primitive[] = [
+  prim([0.1, 0.02, 0], [0.1, 0.45, 0]),   // shin
+  prim([0.1, 0.45, 0], [0.1, 0.90, 0]),   // thigh
+  prim([0, 0.90, 0], [0, 1.35, 0]),       // torso
+  prim([0, 1.35, 0], [0, 1.55, 0]),       // head
+];
+
+function meltedAt(t: number): Primitive[] {
+  let s = meltInitBody(BODY, 0);
+  const step = 1 / 240;
+  while (s.t < t - 1e-9) s = stepMelt(s, step);
+  return applyMelt(BODY, s);
+}
+
+describe('applyMelt', () => {
+  it('is the identity at progress zero', () => {
+    const out = applyMelt(BODY, meltInitBody(BODY, 0));
+    expect(out).toEqual(BODY);
+  });
+
+  it('never raises an endpoint', () => {
+    let prev = BODY;
+    for (let i = 1; i <= 20; i++) {
+      const now = meltedAt(i / 20);
+      for (let p = 0; p < now.length; p++) {
+        expect(now[p]!.a[1]).toBeLessThanOrEqual(prev[p]!.a[1] + 1e-9);
+        expect(now[p]!.b[1]).toBeLessThanOrEqual(prev[p]!.b[1] + 1e-9);
+      }
+      prev = now;
+    }
+  });
+
+  it('conserves r^2 * yScale within 25% — volume goes sideways, not away', () => {
+    for (let i = 0; i <= 10; i++) {
+      const out = meltedAt(i / 10);
+      for (let p = 0; p < out.length; p++) {
+        const rest = BODY[p]!;
+        const now = out[p]!;
+        const v0 = rest.radius ** 2 * rest.scale[1];
+        const v1 = now.radius ** 2 * now.scale[1];
+        expect(v1 / v0).toBeGreaterThan(0.75);
+        expect(v1 / v0).toBeLessThan(1.25);
+      }
+    }
+  });
+
+  it('crushes yScale and grows radius as it melts', () => {
+    const end = meltedAt(1)[0]!;
+    expect(end.scale[1]).toBeLessThan(0.3);
+    expect(end.radius).toBeGreaterThan(BODY[0]!.radius * 1.5);
+  });
+
+  it('ramps blendK monotonically up to the fuse value', () => {
+    let prev = -1;
+    for (let i = 0; i <= 20; i++) {
+      const k = meltedAt(i / 20)[0]!.blendK;
+      expect(k).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = k;
+    }
+    expect(prev).toBeCloseTo(MELT_TUNING_BODY.fuseK, 3);
+  });
+
+  it('stretches capsules — the head prim gets longer before it pools', () => {
+    // 0.75 is chosen, not arbitrary: the head prim spans normalised heights
+    // 0.87..1.0, and the front (t * frontLead) has to sit BETWEEN those two
+    // endpoints' softness bands for the capsule to be mid-stretch. At 0.75 the
+    // lower end is ~0.72 melted and the upper end ~0.28 — maximum draw.
+    const len = (p: Primitive) => Math.abs(p.b[1] - p.a[1]);
+    const rest = len(BODY[3]!);
+    const mid = len(meltedAt(0.75)[3]!);
+    expect(mid).toBeGreaterThan(rest * 2);
+  });
+
+  it('ends with everything within the pool height', () => {
+    const out = meltedAt(1);
+    for (const p of out) {
+      expect(p.a[1]).toBeLessThan(MELT_TUNING_BODY.poolHeight + 1e-6);
+      expect(p.b[1]).toBeLessThan(MELT_TUNING_BODY.poolHeight + 1e-6);
+    }
+  });
+
+  it('spreads outward — the puddle is wider than the body was', () => {
+    const width = (ps: Primitive[]) => {
+      let w = 0;
+      for (const p of ps) w = Math.max(w, Math.abs(p.a[0]), Math.abs(p.b[0]));
+      return w;
+    };
+    expect(width(meltedAt(1))).toBeGreaterThan(width(BODY) * 1.5);
+  });
+
+  it('does not mutate the input prims', () => {
+    const copy = JSON.parse(JSON.stringify(BODY));
+    meltedAt(0.7);
+    expect(BODY).toEqual(copy);
+  });
+});
+
+describe('endpointHeights', () => {
+  it('emits two entries per prim, a then b', () => {
+    const h = endpointHeights(BODY);
+    expect(h).toHaveLength(BODY.length * 2);
+    expect(h[0]).toBe(BODY[0]!.a[1]);
+    expect(h[1]).toBe(BODY[0]!.b[1]);
+  });
+});
