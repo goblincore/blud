@@ -1772,8 +1772,10 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // hard-surface task 2: `metal` implies the same suppression with no
     // gloss= — a machined surface has no pores either — so the factor is
     // the max of both levers (each is 0..1).
+    // task-3 merge: calcNormal's amp is melt's vec4 (x silhouette, y/z/w
+    // melt) — the kill applies to .x only, melt passes through untouched.
     expect(SHADE_BODY).toContain(
-      'calcNormal(p, data, counts, counts2, marchCfg.z * (1.0 - max(gloss, metal)), woundCfg');
+      'calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w), woundCfg');
   });
 
   it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
