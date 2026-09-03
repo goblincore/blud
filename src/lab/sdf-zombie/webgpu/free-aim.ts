@@ -37,6 +37,25 @@ export const FREE_AIM = {
    *  1.0 is "aimed", and there is nothing above it. */
   weaponYawFrac: 1.0,
   weaponPitchFrac: 1.0,
+  /** How far the weapon SLIDES across the frame at full reticle deflection,
+   *  metres in camera space.
+   *
+   *  Rotation alone is not the reference's motion. Pivoting about the grip
+   *  keeps that grip nailed at screen-x 0.12 however far the reticle goes, so
+   *  the weapon reads as bolted to the centre of the screen with only the
+   *  barrel free -- the owner's report. Realms of the Haunting carries the
+   *  whole weapon across the frame and angles it, so the gun travels toward
+   *  what you are aiming at rather than merely nodding at it.
+   *
+   *  Linear in the reticle, unlike the ANGLES, which are atan of it: the slide
+   *  is a screen-space follow, not a projection of anything, so the gun should
+   *  track the cursor's position rather than its angle off the view axis.
+   *
+   *  0.10 m at z = -0.300 is ~0.33 of a half-viewport, which carries the grip
+   *  from screen-x 0.12 out to ~0.45. Y is deliberately smaller: vertical
+   *  travel reads as the weapon sinking rather than leading. */
+  weaponSlideX: 0.10,
+  weaponSlideY: 0.045,
   /** How fast the weapon catches up to the reticle, 1/seconds. Lag is the
    *  point -- an instant weapon reads as a cursor with a gun sprite glued on. */
   weaponLag: 9.0,
@@ -107,6 +126,27 @@ export function weaponAngles(aim: AimPoint, f: Frustum): { yawDeg: number; pitch
   return {
     yawDeg: -Math.atan(aim.x * f.tanH) * deg * yawFrac,
     pitchDeg: Math.atan(aim.y * f.tanV) * deg * pitchFrac,
+  };
+}
+
+/**
+ * How far the weapon slides across the frame for a given reticle, METRES in
+ * camera space (x right, y up).
+ *
+ * This is the other half of "the gun points where you aim". `weaponAngles`
+ * turns the barrel; this carries the weapon. With only the rotation the grip
+ * stays pinned near screen centre at every reticle position, which reads as a
+ * gun bolted to the camera with a hinged barrel rather than a weapon being
+ * swung across the body.
+ *
+ * Deliberately LINEAR in the reticle rather than atan of it: the angles are a
+ * projection question (where must the barrel point to be aimed at that pixel),
+ * the slide is a framing one (how far across the frame should the gun ride).
+ */
+export function weaponSlide(aim: AimPoint): { x: number; y: number } {
+  return {
+    x: aim.x * FREE_AIM.weaponSlideX,
+    y: aim.y * FREE_AIM.weaponSlideY,
   };
 }
 

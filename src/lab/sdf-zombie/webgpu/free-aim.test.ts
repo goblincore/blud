@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
-  pivotOffset, recentre, turnFromAim, weaponAngles,
+  pivotOffset, recentre, turnFromAim, weaponAngles, weaponSlide,
 } from './free-aim';
 
 describe('moveAim', () => {
@@ -248,6 +248,86 @@ describe('pivotOffset', () => {
       expect(d.x).toBeCloseTo(0, 9);
       expect(d.y).toBeCloseTo(0, 9);
       expect(d.z).toBeCloseTo(0, 9);
+    }
+  });
+});
+
+// Captured from what SHIPS, not hardcoded. A literal restore here would
+// overwrite the shipped default on the first afterEach and mask any change to
+// it -- which is exactly what made the first draft of these tests decoration:
+// zeroing weaponSlideX (the reported bug) passed all 38.
+const SHIPPED_SLIDE_X = FREE_AIM.weaponSlideX;
+const SHIPPED_SLIDE_Y = FREE_AIM.weaponSlideY;
+
+describe('weaponSlide', () => {
+  afterEach(() => { FREE_AIM.weaponSlideX = SHIPPED_SLIDE_X; FREE_AIM.weaponSlideY = SHIPPED_SLIDE_Y; });
+
+  it('sits still with the reticle centred', () => {
+    const s = weaponSlide({ x: 0, y: 0 });
+    expect(s.x).toBeCloseTo(0, 9);
+    expect(s.y).toBeCloseTo(0, 9);
+  });
+  it('carries the weapon TOWARD the reticle, not away from it', () => {
+    expect(weaponSlide({ x: 1, y: 0 }).x).toBeGreaterThan(0);
+    expect(weaponSlide({ x: -1, y: 0 }).x).toBeLessThan(0);
+    expect(weaponSlide({ x: 0, y: 1 }).y).toBeGreaterThan(0);
+  });
+  it('is LINEAR in the reticle — half the deflection, half the travel', () => {
+    const full = weaponSlide({ x: 1, y: 0 }).x;
+    expect(weaponSlide({ x: 0.5, y: 0 }).x).toBeCloseTo(full * 0.5, 9);
+    expect(weaponSlide({ x: 0.25, y: 0 }).x).toBeCloseTo(full * 0.25, 9);
+  });
+  it('travels less vertically than laterally — vertical reads as sinking', () => {
+    expect(Math.abs(weaponSlide({ x: 0, y: 1 }).y))
+      .toBeLessThan(Math.abs(weaponSlide({ x: 1, y: 0 }).x));
+  });
+  it('is driven by the knobs, so the feel stays tunable', () => {
+    FREE_AIM.weaponSlideX = 0.25;
+    expect(weaponSlide({ x: 1, y: 0 }).x).toBeCloseTo(0.25, 9);
+    expect(0.25).not.toBeCloseTo(SHIPPED_SLIDE_X, 9);   // the knob really moved
+  });
+});
+
+describe('the weapon actually crosses the frame (owner report)', () => {
+  afterEach(() => { FREE_AIM.weaponSlideX = SHIPPED_SLIDE_X; FREE_AIM.weaponSlideY = SHIPPED_SLIDE_Y; });
+
+  // GUN_REST.pos, and the frustum from the reported 790x555 capture.
+  const GRIP = { x: 0.038, y: -0.115, z: -0.300 };
+  const tanV = Math.tan(75 * Math.PI / 360);
+  const F = { tanV, tanH: tanV * (790 / 555) };
+
+  /** Where the grip lands on screen for a given reticle, as the rig poses it.
+   *  -1..1 across the viewport. Drives a real Object3D so the composition of
+   *  slide + pivot + rotation is checked, not just the slide in isolation. */
+  function gripScreenX(aimX: number): number {
+    const w = weaponAngles({ x: aimX, y: 0 }, F);
+    const yaw = w.yawDeg * Math.PI / 180;
+    const s = weaponSlide({ x: aimX, y: 0 });
+    const o = pivotOffset(GRIP, 0, yaw, 0);
+    const rig = new THREE.Object3D();
+    rig.position.set(o.x + s.x, o.y + s.y, o.z);
+    rig.rotation.set(0, yaw, 0);
+    rig.updateMatrixWorld(true);
+    const p = new THREE.Vector3(GRIP.x, GRIP.y, GRIP.z).applyMatrix4(rig.matrixWorld);
+    return p.x / (-p.z * F.tanH);
+  }
+
+  it('moves the grip a long way across the frame, not a nudge', () => {
+    // THE REPORT: "the weapon always is center and then pivots". With rotation
+    // alone the grip sits at ~0.12 at EVERY reticle position, because that is
+    // exactly what pivoting about it means. This is the assertion that fails
+    // if the slide is ever removed or zeroed.
+    const centre = gripScreenX(0);
+    const edge = gripScreenX(1);
+    expect(Math.abs(edge - centre)).toBeGreaterThan(0.25);
+  });
+  it('carries the grip toward the side the reticle is on', () => {
+    expect(gripScreenX(1)).toBeGreaterThan(gripScreenX(0));
+    expect(gripScreenX(-1)).toBeLessThan(gripScreenX(0));
+  });
+  it('keeps the whole weapon inside the viewport at full deflection', () => {
+    for (const x of [-1, -0.5, 0, 0.5, 1]) {
+      expect(Math.abs(gripScreenX(x))).toBeLessThan(1);
     }
   });
 });

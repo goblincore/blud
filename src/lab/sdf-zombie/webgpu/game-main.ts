@@ -33,7 +33,7 @@ import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-ski
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
-  weaponAngles, type AimPoint, type Frustum,
+  weaponAngles, weaponSlide, type AimPoint, type Frustum,
 } from './free-aim';
 import {
   FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
@@ -1154,6 +1154,11 @@ async function main() {
   let aim: AimPoint = { x: 0, y: 0 };
   let weaponYawDeg = 0;
   let weaponPitchDeg = 0;
+  /** Lateral/vertical travel of the whole view model, METRES in camera space.
+   *  Smoothed on the same lag as the angles so the gun arrives as one motion
+   *  rather than sliding and turning at different rates. */
+  let weaponSlideXm = 0;
+  let weaponSlideYm = 0;
   /** Metres walked, and the smoothed 0..1 speed envelope. Bob is driven by
    *  DISTANCE so it stays locked to footfalls at any speed. */
   let bobDistance = 0;
@@ -2211,6 +2216,14 @@ async function main() {
       const w = freeAimOn ? weaponAngles(aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
       weaponYawDeg = approachAngle(weaponYawDeg, w.yawDeg, dt);
       weaponPitchDeg = approachAngle(weaponPitchDeg, w.pitchDeg, dt);
+      // ...and the weapon CARRIES across the frame as well as turning. Rotation
+      // alone pins the grip near screen centre at every reticle position --
+      // that is what pivoting about the grip means -- so the gun read as bolted
+      // to the camera with a hinged barrel (owner report). approachAngle is a
+      // plain exponential catch-up, so it smooths metres as happily as degrees.
+      const s = freeAimOn ? weaponSlide(aim) : { x: 0, y: 0 };
+      weaponSlideXm = approachAngle(weaponSlideXm, s.x, dt);
+      weaponSlideYm = approachAngle(weaponSlideYm, s.y, dt);
     }
     // WALK BOB, driven by distance rather than time so it stays locked to the
     // stride when the player speeds up, slows down or stops.
@@ -2233,7 +2246,15 @@ async function main() {
       // has to be passed too -- it is small alone but combines with yaw/pitch
       // under Three.js's 'XYZ' Euler order in a way pivotOffset must match.
       const o = pivotOffset(GUN_REST.pos, pitch, yaw, roll);
-      aimRig.position.set(b.x + o.x, b.y + o.y, o.z);
+      // Bob + pivot correction + the aim slide. Order does not matter (they are
+      // all translations) but the roles do: `o` holds the grip STILL under the
+      // rotation, and the slide is what then carries that held grip across the
+      // frame. Without the slide the two cancel to a gun that only ever nods.
+      aimRig.position.set(
+        b.x + o.x + weaponSlideXm,
+        b.y + o.y + weaponSlideYm,
+        o.z,
+      );
       aimRig.rotation.set(pitch, yaw, roll);
     }
     if (reticleEl) {
