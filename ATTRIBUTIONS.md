@@ -157,10 +157,12 @@ licence compliance.
 
 ### What does NOT derive from it
 
-- **No geometry, mesh, texture, material or UV is copied.** The original sits at
-  `docs/dev-notes/refs/sawnoffs_animated.glb` as a development reference; it is
-  read only by inspection scripts and is not required to build or run the game,
-  and nothing derived from its geometry is shipped.
+- **No geometry, mesh, texture, material or UV is copied.** The unmodified
+  original is committed at `docs/dev-notes/refs/sawnoffs_animated.glb`
+  (sha256 `410820c8…`) as a development reference, which CC-BY-4.0 permits given
+  the credit above. It is read only by inspection scripts, is not required to
+  build or run the game, and is not part of the shipped asset set — nothing
+  under `public/assets/` derives from its geometry.
 - **No dimensions are taken from it.** The reference is a dimensionally
   accurate 12-gauge; Blud's sawed-off is deliberately ~1.8× heavier in section,
   a fantasy silhouette that predates this reference and is unchanged by it.
