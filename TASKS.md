@@ -508,6 +508,19 @@ wound pops, gait stop-motion).
   hiding; plate gloss 0.70 → 0.90-0.95 with the albedo brought down ~35%.
   Owner: much better, but **the plates still don't read metallic and the
   pitting hurts** → `X2.hard-surface-material`.
+  **Round 5 — cross-section** (`feb53d7`): the relief map showed every height
+  band as the same arch, proud at the centreline and behind at the flanks —
+  a dome where the mesh is a broad slab. chest `wide` 1.40→1.700, waist `deep`
+  1.35→1.210 (an INVERTED taper), traps `offset` x 0.052→0.162 (they had
+  overlapped into one mass filling the throat, the worst cell on the map).
+  21.6mm → 15.3mm.
+  **Round 6 — muscle** (`ebf23a8`, `89e102e`): pec pair, sternum groove,
+  lower-pec shelf, ab bar, linea alba, cross-lines, obliques. 15.3mm →
+  12.8mm and **rejected on sight** — owner: *"i dont see any muscles just
+  the mass and the normal bumpy texture."* Diagnosed rather than re-tuned;
+  see `X4.body-sheet`. The masses were kept (a real improvement to the form);
+  the creases stay narrow rather than wide, because 12.3mm was available with
+  200mm-wide "lines" and that score comes from shaving proud material.
   Still owed: the prosthetic must FUSE at the hip and read as a limb
   (**call `daylightOf` — it exists and no round has called it**; ~2% of
   standing height is where separation reads), torso muscle relief, and a face
@@ -535,6 +548,55 @@ wound pops, gait stop-motion).
   this session (omitted `p.shell`, schoolgirl-alt's cape a solid blob for
   weeks).
   [design](docs/superpowers/specs/2026-09-03-hard-surface-material-design.md) · [plan](docs/superpowers/plans/2026-09-03-hard-surface-material.md)
+
+- `X4.body-sheet` [~] **Paint muscle onto the field** — four dispatch tasks
+  QUEUED at `~/.claude/dispatch/plans/2026-09-03-bodysheet-task-{1..4}.md`
+  (priority 2, behind hardsurf); **task 1 was running at session end**.
+  Three rounds of measured, rejected torso work converge on one conclusion:
+  the DISPLACEMENT mechanism is right and only its CONTENT is wrong.
+  Geometry cannot carry muscle (AO is a single tap at 0.06m, self-shadowing
+  was cut, so authored grooves scored 12.8mm and were invisible at every
+  yaw); procedural structure cannot either (ridged/anisotropic noise makes
+  convincing TEXTURE, but creases land in RANDOM places and a pec split has
+  to be where the pec split is); but displacement DOES read. So: an authored
+  greyscale plate, projected, displacing the field.
+  **The plate may not need painting** — `blob:relief` already computes
+  reference-minus-body front-wall depth per cell, which IS a displacement
+  map; `--emit-map` is task 1.
+  **CORRECTION carried into this from `X5`:** it must go in the SHELL block,
+  not `mapBody` — a sheet in `mapBody` alone is a normal map with extra
+  steps. The spec predates that finding; fix it before task 3.
+  [design](docs/superpowers/specs/2026-09-03-body-sheet-design.md) · [plan](docs/superpowers/plans/2026-09-03-body-sheet.md) · [evidence](docs/dev-notes/2026-09-03-torso-relief/notes.md)
+
+- `X5.melt` [~] **Melting-flesh effect — PICK UP HERE NEXT SESSION** — owner's
+  brief: *"when shot the whole zombie melts, the flesh basically turns into a
+  pile of goo and bones."* Plumbing is IN and tested (`c52b05b`, suite 2286
+  green) and **NOT visible yet — do not assume it works.**
+  Shipped so far: a `meltCfg` uniform; `mapBody`'s `noiseAmp: f32` widened to
+  a `noiseCfg: vec4` (silhouette amp, melt amp, melt freq, melt time) because
+  the two are one mechanism differing in content; a ridged displacement term
+  at both the normal site and the shell site; `setMelt` lowering
+  `stepMultiplier` 0.6→0.28 as amplitude rises; lab keys `m` / `M`; console
+  seams `__sdfLab.melt / meltOff / setMeltTuning / meltDirect / meltState`;
+  and `scripts/melt-capture.mjs` for frame-by-frame capture.
+  **State:** at amplitude 0.20 — far past sane — captured frames are
+  UNCHANGED. The uniform is confirmed set JS-side (`meltCfg` reads
+  `[0.2,3,0,0]`, `marchCfg.y` drops to 0.28), so the break is between the
+  uniform and the shader.
+  **THE NEXT DIAGNOSTIC, not yet run — do this first, before any tuning:**
+  turn the shell on (`__sdfLab.setShellDisplace(true)`) and capture with melt
+  at ZERO. If the silhouette noise visibly changes the body, the shell path
+  works and the melt branch inside it is at fault; if it does not, the shell
+  path is inert in this configuration and that is the bug. One test separates
+  the two.
+  **Why it matters beyond the effect:** finding this corrected two claims made
+  earlier the same day — the "Lipschitz overshoot" diagnosis (the march never
+  saw those spikes' displacement; the artefacts were `calcNormal`'s
+  tetrahedron differences) and "gain × maxFreq × amp is the march's budget"
+  (the march marches the SMOOTH field and pays nothing). Both are corrected in
+  the note. Melt remains a transient EFFECT, not a look: it needs gradient the
+  budget does not cover, bought with `stepMultiplier`.
+  [notes](docs/dev-notes/2026-09-03-torso-relief/notes.md)
 
 - `X3.metal-damage` [ ] **Wounds and gibs on metal** — the OTHER half of the
   owner's "hard surface parts shouldn't deform like the flesh". Shooting the
