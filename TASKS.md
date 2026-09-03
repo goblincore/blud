@@ -248,6 +248,29 @@ wound pops, gait stop-motion).
   demand — PARKED, retest after collision lands). Reuse the existing pure
   modules — `wander.ts`, `gait.ts`, `motion.ts`, `ik.ts`, `stagger.ts`,
   `collapse.ts` — this is a retarget, not a new rig.
+- `P1.blobforge-frame-face` [x] **Band in the bone's frame — the prosthetic
+  reads as a limb** — `claude/blob-side-grammar`, **2188** green (112 files),
+  tsc clean. `bandRange` was rebuilding a world point along the CLOUD axis and
+  projecting it onto the RIG line; near-perpendicular that projects to a POINT,
+  so bands collapsed to a 0.022 sliver with `from > to` and the prosthetic drew
+  as a grey ball at one knee. Now banded in the bone's frame (conditionally, at
+  the fit's existing report bar — unconditional breaks the aligned bit-identity
+  guard). **The ball is structurally impossible now**: monotone bands, full
+  span; grey runs knee -> shin and the leg reads as one connected limb.
+  `blob:depth` agrees — side mean **-33%**, and the worst side band is now the
+  T-pose arm artifact rather than the figure.
+  **Three plan corrections worth keeping:** (1) OBLIQUITY IS THE NORM — only 4
+  of the minotaur's mapped bones sit under the report bar, every other is
+  47-89 deg off, so "most bones are aligned" was false and a fixture had to be
+  BUILT with aligned bones for the guard to mean anything. (2) The 76 deg in my
+  diagnosis was measured against a PHANTOM branch segment, not the statement
+  line — the real angle is ~88-95 deg, so the collapse is projection-to-a-point,
+  not cosine shortening. (3) The face-block gate was UNMEETABLE by any
+  placement while the reference is T-posed: that band measures arm mass.
+  Overall likeness: a third honest **no** — T-pose and sub-band identity
+  (horns, plates) remain, both fenced off by design.
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
+
 - `P1.blobforge-chain-drift` [x] **Chain drift FIXED — the draft now stands** —
   `claude/blob-side-grammar`, 2182 green (112 files), tsc clean. len= and dir=
   now come from the RIG (joint-to-joint x one global scale); the cloud keeps
