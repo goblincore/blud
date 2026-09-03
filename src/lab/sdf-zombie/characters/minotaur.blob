@@ -168,13 +168,31 @@ body
   #                  -> the lower-pec/upper-ab shelf is simply missing
   #   y 0.940-1.128  right flank -19..-35mm at x +0.19..0.23
   #                  -> the oblique/hip flare
-  # Result: 15.3mm -> 12.3mm mean |diff| over the same 143 cells. Numbers
+  # Result: 15.3mm -> 12.8mm mean |diff| over the same 143 cells (12.3mm
+  # with wider grooves, deliberately not taken: a 200mm-wide 'line' scores
+  # by shaving proud material, which is a depth edit wearing a crease's name). Numbers
   # tuned by bounded coordinate descent against that map, then looked at:
   # NOTHING sits pinned at a bound this time (the cross-section pass had two
   # pinned), so the optimum is interior and judgement is not fighting it.
   # (The +51..+64mm at x -0.23 low down is NOT torso: that column is the
   # prosthetic thigh cowl. Verified against the prim dump.)
   # ============================================================
+  # OWNER VERDICT ON THIS WHOLE PASS: "i dont see any muscles just the mass
+  # and the normal bumpy texture." Correct, and the numbers below did NOT
+  # earn their render. Diagnosed rather than re-tuned — see
+  # docs/dev-notes/2026-09-03-torso-relief/notes.md. The short version is
+  # that geometry cannot carry muscle in this renderer today: the AO term
+  # is a single field tap at 0.06 m, so nothing shallower than ~60mm casts
+  # any darkening at all; self-shadowing was deliberately cut; and a crease
+  # crisp enough to be sharp is a few pixels wide at gameplay distance while
+  # one wide enough to see is a gentle dish with no contrast. A spike adding
+  # a second AO tap at 0.015 m made these same grooves visible — modestly,
+  # but visibly. That is where the fix lives, not in these numbers.
+  #
+  # Kept anyway because the MASSES are a measured improvement to the form
+  # (15.3mm -> 12.8mm) and the grooves are nearly free and will read the day
+  # a cavity term lands.
+  #
   # GROOVE WIDTHS BELOW LOOK ABSURDLY SMALL. They are not. `depth` is metres
   # but `width` is compared against sdPrimitive's SCALED distance, so the
   # channel's real half-width is `width / min(wide, tall, deep)` — and a
@@ -192,20 +210,20 @@ body
   blob torso on neck   at=0.72 offset=(0.098,0,0.128) r=0.108 wide=1.30 tall=1.15 deep=0.62 blend=0.006 both
   # Lower-pec shelf: the line that makes a pec read as a PLATE rather than a
   # bulge. neck at=0.30 -> y 1.352.
-  groove torso on neck at=0.30 offset=(0.090,0,0.150) r=0.115 wide=1.39 tall=0.05 depth=0.0023 width=0.0015 both
+  groove torso on neck at=0.30 offset=(0.090,0,0.150) r=0.115 wide=1.39 tall=0.05 depth=0.0150 width=0.00035 both
   # Sternum. The mesh's own hollow is 18mm at y 1.405 (relief --abs: z 0.235
   # at x 0 against 0.255 at x +/-0.05). The pair above does most of it; this
   # cuts the remainder.
-  groove torso on neck at=0.60 offset=(0,0,0.170) r=0.100 wide=0.05 tall=1.50 depth=0.0163 width=0.0020
+  groove torso on neck at=0.60 offset=(0,0,0.170) r=0.100 wide=0.05 tall=1.50 depth=0.0220 width=0.0003
   # Upper-ab / lower-chest mass. chest from=0.85 to=1.75 -> y 1.219-1.328,
   # exactly the band the map reports 13-25mm behind.
   bar  torso on chest  from=0.85 to=1.75 r=0.150 wide=1.79 deep=1.66 blend=0.010 offset=(0,0,0.020)
   # Linea alba: 5mm at y 1.171, shallower than the sternum by measurement,
   # not by taste.
-  groove torso on spine1 at=1.10 offset=(0,0,0.190) r=0.090 wide=0.05 tall=1.60 depth=0.005 width=0.0010
+  groove torso on spine1 at=1.10 offset=(0,0,0.190) r=0.090 wide=0.05 tall=1.60 depth=0.0120 width=0.00025
   # Ab cross-lines.
-  groove torso on spine1 at=1.35 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.006 width=0.0015
-  groove torso on spine1 at=0.95 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.006 width=0.0015
+  groove torso on spine1 at=1.35 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.0130 width=0.00030
+  groove torso on spine1 at=0.95 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.0130 width=0.00030
   # Obliques / hip flare: the map's -19..-35mm at the right flank low down.
   blob torso on spine1 at=0.10 offset=(0.161,0,0.070) r=0.101 wide=0.95 tall=1.39 deep=1.10 blend=0.008 both
 

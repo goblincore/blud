@@ -161,3 +161,53 @@ Three lines moved: chest `wide` 1.40 → 1.700 and `deep` 1.70 → 1.620; waist
 `deep` 1.35 → 1.210 and `wide` 1.45 → 1.490; traps `offset` x 0.052 → 0.162.
 The traps mattered most — at 0.052 the two halves (halfwidth 0.361 each)
 overlapped into one mass filling the **throat**, where the mesh has a hollow.
+
+## Round 6: the muscle pass, and why it does not read
+
+Owner, on the result: *"i dont see any muscles just the mass and the normal
+bumpy texture."* Correct. The measurement improved (15.3 → 12.8 mm) and the
+render did not. **Third time this session that a score moved and the picture
+did not**, and this time the pattern is the finding rather than the bug.
+
+Diagnosed instead of re-tuned, by subtraction — each step is one render:
+
+| test | result |
+| --- | --- |
+| `mottleAmp` 0 **and** `surfaceNoiseAmp` 0 | blotches **survive** |
+| also `silhouetteNoiseAmp` 0 | body goes completely smooth |
+| smooth body, six yaws | **no muscle visible at any angle** |
+| creases re-cut narrow and deep | faint pec boundary, still weak |
+| spike: second AO tap at 0.015 m | **visibly better**, still modest |
+
+Three conclusions, in order of usefulness.
+
+**1. The "bumpy texture" is `silhouetteNoiseAmp`, and it is GEOMETRY.** It
+displaces the real field, which is why it survives turning off both the mottle
+and the surface-normal noise. At 0.014 it is the loudest thing on the body —
+louder in amplitude than every muscle feature authored here. No material knob
+can quiet it; only the number itself.
+
+**2. Geometry cannot carry muscle in this renderer today.** The AO term is a
+single field tap at **0.06 m** clamped to [0.35, 1.0] (`march.wgsl.ts:2334`),
+so nothing shallower than ~60 mm produces any darkening at all. Self-shadowing
+was deliberately cut. That leaves `dot(n, L)` under a broad key as the only
+cue, and there the geometry is caught between two failures: a crease crisp
+enough to be sharp is a few pixels wide at gameplay distance, and one wide
+enough to see is a gentle dish with no contrast.
+
+**A second AO tap at a muscle-sized radius made these exact grooves visible.**
+That spike is where the fix lives — it belongs with the queued hard-surface
+shader work, not in more authoring.
+
+**3. `blob:relief` has the same blindness one level down.** It compares a
+per-cell depth, and its cells are 47 mm — wider than a muscle line. A smooth
+ramp and a crisp crease through the same cell depths score identically. I
+built the instrument that sees inside the outline, optimised against it, and
+it still cannot see whether the surface has *structure*. Every tool in this
+chain has now been caught measuring something adjacent to what a character
+needs, including the one built this session to fix that.
+
+The masses were kept (they are a real improvement to the form) and the grooves
+were kept narrow rather than wide: 12.3 mm was available with 200 mm-wide
+"lines", and that score comes from shaving proud material — a depth edit
+wearing a crease's name. 12.8 mm with honest creases is the better file.
