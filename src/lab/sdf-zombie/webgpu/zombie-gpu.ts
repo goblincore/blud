@@ -16,13 +16,13 @@ import {
   storage,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
-import { packBody, PRIM_STRIDE, W_BONE } from '../pack';
+import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
-import { sub as vsub } from '../vec';
+import { bendCtrl, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
@@ -99,6 +99,12 @@ export interface ZombieGpuView {
   /** This view's posed bound groups, as the binner consumes them. Reads the
    *  LAST uploaded pack — call after update(). */
   getTileGroups(): import('./tile-cull').TileGroupInput[];
+  /**
+   * Flip the packBones layout (bone tubes). Default TRUE — bone rows in the
+   * field. FALSE takes effect on the NEXT update(): bones leave the marched
+   * field for the instanced-tube renderer and counts2.x counts organs only.
+   */
+  setPackBones(on: boolean): void;
   /** The level-shadow TextureNode this view's material binds (perf round 2
    *  task 7). Rebind `.value` to the twin light's real depthTexture once
    *  three has rendered it — same mechanism as setFaceTexture. */
@@ -1105,6 +1111,13 @@ export interface GpuViewOpts {
    * facade through .tiles.
    */
   tiles?: ComputeTileBinding;
+  /**
+   * Pack bone rows (op 'bone') into the inside-flesh array. Default TRUE —
+   * the shipped layout. The bone-tubes renderer sets it FALSE via
+   * setPackBones: bones draw as instanced tubes, so the wound-zone fold sees
+   * ORGANS only and counts2.x becomes the organ count.
+   */
+  packBones?: boolean;
 }
 
 /** Wires an externally-owned GPU binding into a view: the material gets the
@@ -1146,8 +1159,12 @@ export function createZombieGpuView(
   // Posed bound groups of the LAST upload (perf task 5): the binner's input.
   let lastGroups: import('./tile-cull').TileGroupInput[] = [];
 
+  // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
+  // pack then writes ORGANS only and counts2.x counts organs.
+  let packBones = opts.packBones ?? true;
+
   function upload(next: BuildResult, rest?: BuildResult) {
-    const p = packBody(next, rest);
+    const p = packBody(next, rest, { packBones });
     lastGroups = [];
     for (let g = 0; g < p.groupCount; g++) {
       const o = g * 4;
@@ -1290,6 +1307,7 @@ export function createZombieGpuView(
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
+    setPackBones(on) { packBones = on; },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -1373,6 +1391,12 @@ export interface ChunkGpuView {
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
   update(chunk: Chunk): void;
+  /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
+   *  Re-packs immediately from the last reset() args. */
+  setPackBones(on: boolean): void;
+  /** This frame's bone prims in WORLD space with the chunk's rotation + squash
+   *  applied — what the bone instancer draws (bone-tubes spec §7). */
+  posedBones(): Primitive[];
   dispose(): void;
 }
 
@@ -1432,6 +1456,15 @@ export function createChunkGpuView(
    *  refinement 6). Chunks shipped bone-free — the safe default of the
    *  separate-array design — so a torn-off forearm was solid meat. */
   let localBones: Primitive[] = [];
+  /** The chunk state the view last received in update()/reset() — posedBones
+   *  poses against it. */
+  let current: Chunk = chunk;
+  /** Bone tubes: FALSE once the instanced-tube renderer owns the bones —
+   *  reset() packs ORGANS only and update() skips the bone rows. */
+  let packBones = true;
+  /** The last reset() args, so setPackBones can re-pack without the caller
+   *  re-supplying them. */
+  let lastReset: { c: Chunk; prims: Primitive[]; tornAt?: Vec3[]; bones?: Primitive[] } | undefined;
   let extent = 0;
   let tornLocals: Vec3[] = [];
   let tornRadii: number[] = [];
@@ -1490,6 +1523,7 @@ export function createChunkGpuView(
 
   /** Writes the local prims into the world-space data rows for state `c`. */
   function apply(c: Chunk): { sx: number; sy: number; sz: number } {
+    current = c;
     const { sx, sy, sz } = squashFactors(c);
     local.forEach((p, i) => {
       const o = i * PRIM_STRIDE;
@@ -1507,12 +1541,19 @@ export function createChunkGpuView(
     // space while the meat moved, so a thrown forearm would trail its own
     // bone across the room. W_BONE is re-asserted here rather than copied
     // from packBody's row, because this loop overwrites primScale wholesale.
-    localBones.forEach((p, i) => {
-      const o = (local.length + i) * PRIM_STRIDE;
+    // Bone tubes: with packBones OFF, op 'bone' rows are skipped exactly as
+    // packBody skipped them — organs still rewritten — and a running row
+    // counter keeps the surviving rows compacted onto packBody's indices.
+    let boneRow = 0;
+    localBones.forEach((p) => {
+      if (!packBones && p.op === 'bone') return;
+      const o = (local.length + boneRow) * PRIM_STRIDE;
+      boneRow++;
       packed.primA.set(chunkPoint(c, p.a, sx, sy, sz), o);
       packed.primB.set(chunkPoint(c, p.b, sx, sy, sz), o);
       packed.primScale.set(
-        [p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz, W_BONE], o);
+        [p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
+        p.op === 'organ' ? W_ORGAN : W_BONE], o);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
     // The chunk's one bound group IS its cluster (singleGroup above): same
@@ -1552,6 +1593,7 @@ export function createChunkGpuView(
   function reset(
     c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[],
   ) {
+    lastReset = { c, prims: nextPrims, tornAt: nextTornAt, bones: nextBones };
     copyTemplateLook();
 
     // c.pos is the cluster centre at sever time, so this recentres the
@@ -1582,7 +1624,7 @@ export function createChunkGpuView(
         center: [0, 0, 0], radius: extent, alive: true,
       }],
       bones: new Map(), bonePrims: localBones,
-    }, undefined, { singleGroup: true });
+    }, undefined, { singleGroup: true, packBones });
 
     // Full-width copies intentionally zero any rows left by the previous
     // occupant of this slot.
@@ -1626,6 +1668,25 @@ export function createChunkGpuView(
     volumeTexture: volTex,
     dataTexture: dataTex,
     reset,
+    setPackBones(on: boolean) {
+      if (on === packBones) return;
+      packBones = on;
+      // Re-pack from the stored reset() args so counts2.x and the packed
+      // rows flip NOW, not on the next sever.
+      if (lastReset) reset(lastReset.c, lastReset.prims, lastReset.tornAt, lastReset.bones);
+    },
+    posedBones(): Primitive[] {
+      const { sx, sy, sz } = squashFactors(current);
+      return localBones.filter(p => p.op === 'bone').map(p => ({
+        ...p,
+        a: chunkPoint(current, p.a, sx, sy, sz),
+        b: chunkPoint(current, p.b, sx, sy, sz),
+        scale: [p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz] as Vec3,
+        // bend rides the endpoints: recompute its control displacement in world
+        bend: p.bend ? vsub(chunkPoint(current, bendCtrl(p.a, p.b, p.bend), sx, sy, sz),
+          bendCtrl(chunkPoint(current, p.a, sx, sy, sz), chunkPoint(current, p.b, sx, sy, sz))) : undefined,
+      }));
+    },
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
