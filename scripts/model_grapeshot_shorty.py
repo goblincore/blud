@@ -142,6 +142,39 @@ def tube(ro,ri,d,segs=32):
     bmesh.ops.remove_doubles(bm,verts=bm.verts,dist=1e-6)
     me=bpy.data.meshes.new('t'); bm.to_mesh(me); bm.free(); return me
 
+def taper_tube(ro, ri_front, ri_back, d, segs=32):
+    """Tube of constant OUTER radius whose INNER radius differs end to end.
+
+    This is the forcing cone: the chamber's mouth is wider than the bore, and a
+    real barrel tapers between them rather than presenting a flat shoulder.
+
+    Local axis is Z. Placed with rot=(RY,0,0), local +Z points down -Y in world
+    space -- i.e. toward the MUZZLE -- so `ri_front` is the radius at +d/2.
+    """
+    bm = bmesh.new()
+    def ri_at(z):
+        t = (z + d/2) / d              # 0 at the back, 1 at the front
+        return ri_back + (ri_front - ri_back) * t
+    for i in range(segs):
+        a0 = 2*math.pi*i/segs; a1 = 2*math.pi*(i+1)/segs
+        zb, zf = -d/2, d/2
+        rb, rf = ri_at(zb), ri_at(zf)
+        # outer wall
+        bm.faces.new([bm.verts.new((ro*math.cos(a), ro*math.sin(a), z))
+                      for a, z in ((a0, zb), (a1, zb), (a1, zf), (a0, zf))])
+        # inner wall, wound the other way so it faces into the bore
+        bm.faces.new([bm.verts.new((r*math.cos(a), r*math.sin(a), z))
+                      for a, z, r in ((a0, zb, rb), (a1, zb, rb),
+                                      (a1, zf, rf), (a0, zf, rf))][::-1])
+        # annular end caps
+        for z, r, flip in ((zb, rb, False), (zf, rf, True)):
+            v = [bm.verts.new((rr*math.cos(a), rr*math.sin(a), z))
+                 for rr, a in ((ro, a0), (ro, a1), (r, a1), (r, a0))]
+            bm.faces.new(v[::-1] if flip else v)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new('tt'); bm.to_mesh(me); bm.free(); return me
+
 def outline_normals(pts):
     """Outward 2D normals for a CCW closed outline in the YZ plane."""
     n=len(pts); out=[]
@@ -234,15 +267,34 @@ def arc(c,r,a0,a1,n,flat=1.0):
 RY = math.pi/2
 
 # ---------------- barrels ----------------
-BLEN, RO, RI, XSEP = 0.258, 0.0225, 0.0166, 0.0234
-BMID = -0.060 - BLEN/2
+# The chamber is a real, hollow, 70 mm sleeve because our shell is 70 mm long.
+# The previous build used cyl() -- capped at both ends -- so breaking the action
+# open showed two solid domed knobs where the mouths should be.
+RO, RI, XSEP = 0.0225, 0.0166, 0.0234
+RCH  = RI * 1.10             # chamber bore, wider than the barrel bore
+CY1  = -0.031                # THE BREECH FACE. Everything breech-y lives here.
+CHAMBER_DEPTH = 0.070        # set by our shell length, not by realism
+CY0  = CY1 - CHAMBER_DEPTH   # -0.101, chamber floor
+CONE_LEN  = 0.008
+BY_BACK   = CY0 - CONE_LEN   # -0.109, barrel tube's rear end
+BY_MUZZLE = -0.318           # unchanged: game-main's MUZZLE_LOCAL depends on it
+BLEN = BY_BACK - BY_MUZZLE   # 0.209
+BMID = (BY_MUZZLE + BY_BACK) / 2
 for i,x in enumerate((-XSEP,XSEP)):
     put(tube(RO,RI,BLEN),f'barrel{i}','Blue',loc=(x,BMID,0),rot=(RY,0,0),bevel=0.0012,smooth=True)
-    put(tube(RO*1.09,RI,0.012),f'crown{i}','Steel',loc=(x,BMID-BLEN/2+0.006,0),rot=(RY,0,0),
+    put(tube(RO*1.09,RI,0.012),f'crown{i}','Steel',loc=(x,BY_MUZZLE+0.006,0),rot=(RY,0,0),
         bevel=0.0016,smooth=True)
-    put(cyl(RI*0.99,0.11),f'bore{i}','Bore',loc=(x,BMID+0.03,0),rot=(RY,0,0),bevel=0,smooth=True)
-put(box(XSEP*2.0,BLEN*0.94,0.010),'rib_top','Blue',loc=(0,BMID+0.004,RO*0.62),bevel=0.0016,segs=2)
-put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BMID-BLEN/2+0.010,RO*0.62+0.006),bevel=0,smooth=True)
+    # Forcing cone: chamber mouth (RCH) tapering down to the bore (RI).
+    put(taper_tube(RO,RI,RCH,CONE_LEN),f'cone{i}','Bore',
+        loc=(x,(BY_BACK+CY0)/2,0),rot=(RY,0,0),bevel=0,smooth=True)
+    # Dark plug. Starts at the cone's front so the open breech reads as DEPTH
+    # rather than a lit tube wall, and stops short of the muzzle so looking down
+    # the bores from the front still has somewhere to look into.
+    put(cyl(RI*0.99,0.121),f'bore{i}','Bore',loc=(x,-0.1695,0),rot=(RY,0,0),bevel=0,smooth=True)
+# The rib runs the full barrel assembly, breech to muzzle.
+put(box(XSEP*2.0,(CY1-BY_MUZZLE)*0.94,0.010),'rib_top','Blue',
+    loc=(0,(BY_MUZZLE+CY1)/2,RO*0.62),bevel=0.0016,segs=2)
+put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,RO*0.62+0.006),bevel=0,smooth=True)
 
 # --------- THE LOFTED BODY: breech -> top strap -> rounded back -> grip --------
 # Half-width taper. Wide enough at the breech to carry both barrels, narrowing
@@ -285,11 +337,17 @@ body = [
 put(loft(body, HW, round_frac=0.30, sections=16, name='body'), 'body', 'Steel',
     bevel=0.0016, segs=2, smooth='auto')
 
-# breech face: chamber mouths + extractor rim (what the reload actually shows)
+# THE BREECH FACE, at y = CY1. The previous build put the mouths and the
+# extractor at y ~ -0.066 -- the chamber's FRONT, 35 mm away, buried inside the
+# frame beside the hinge pin, where they were never once visible.
 for i,x in enumerate((-XSEP,XSEP)):
-    put(cyl(RO*1.07,0.034),f'chamber{i}','Steel',loc=(x,-0.048,0),rot=(RY,0,0),bevel=0.0022,smooth=True)
-    put(tube(RO*0.99,RI*1.02,0.006),f'mouth{i}','Bore',loc=(x,-0.0655,0),rot=(RY,0,0),bevel=0,smooth=True)
-put(box(0.052,0.007,0.016),'extractor','Steel',loc=(0,-0.066,0),bevel=0.0018)
+    put(tube(RO*1.07,RCH,CHAMBER_DEPTH),f'chamber{i}','Steel',
+        loc=(x,(CY0+CY1)/2,0),rot=(RY,0,0),bevel=0.0022,smooth=True)
+    # A machined rim at the mouth. Steel, not 'Bore': the darkness now comes
+    # from the real hole behind it rather than from painting a disc black.
+    put(tube(RO*1.07,RCH,0.004),f'mouth{i}','Steel',
+        loc=(x,CY1-0.002,0),rot=(RY,0,0),bevel=0,smooth=True)
+put(box(0.052,0.007,0.016),'extractor','Steel',loc=(0,CY1+0.0035,0),bevel=0.0018)
 for sx in (-1,1):
     put(cyl(0.0092,0.009,20),'hinge','Brass',loc=(sx*0.040,-0.070,-0.016),rot=(0,RY,0),
         bevel=0.0014,smooth=True)
@@ -505,6 +563,48 @@ def verify_glb(path):
     return {"tris": tris, "missing_nodes": missing, "barrel_descendants": barrel_kids}
 
 
+def verify_bores_hollow():
+    """Cast a ray down each bore from just behind the breech face.
+
+    A solid chamber stops the ray within a couple of millimetres. A hollow one
+    lets it run at least the chamber's depth before the forcing cone or the
+    dark plug catches it. Shells are hidden for the cast -- we are asking about
+    the STEEL, not about what is loaded into it.
+
+    DEVIATION FROM PLAN: `extractor` is ALSO hidden here, which the plan text
+    did not call for. Measured after the first run of this function: `extractor`
+    (loc y=CY1+0.0035, full 52mm width, +-8mm tall in z) sits from y=CY1 to
+    y=CY1+0.007 -- i.e. it starts exactly AT the breech face and bridges both
+    bores at bore-CENTRE height. The origin below (CY1+0.005, on-axis) lands
+    inside it, so the ray hit its front face at dist=0.005 on every run,
+    reporting "not hollow" unconditionally -- even with a correctly hollow
+    chamber. Hiding it here matches the existing shells rationale exactly: this
+    check asks about the CHAMBER's steel, not about an unrelated part that
+    happens to sit in the sample ray's path. No landmark (CY1, extractor's own
+    position) changed.
+    """
+    hidden = []
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and (o.name.split('.')[0].startswith('shell')
+                                  or o.name.split('.')[0] == 'extractor'):
+            hidden.append((o, o.hide_viewport))
+            o.hide_viewport = True
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    bad = []
+    for x in (-XSEP, XSEP):
+        origin = Vector((x, CY1 + 0.005, 0.0))
+        hit, loc, _n, _idx, obj, _m = bpy.context.scene.ray_cast(
+            dg, origin, Vector((0.0, -1.0, 0.0)))
+        dist = (loc - origin).length if hit else float('inf')
+        if dist < CHAMBER_DEPTH:
+            bad.append((x, round(dist, 5), obj.name if obj else None))
+    for o, v in hidden:
+        o.hide_viewport = v
+    bpy.context.view_layer.update()
+    return bad
+
+
 size = export_glb(OUT_GLB)
 info = verify_glb(OUT_GLB)
 print(f"[shorty] exported {OUT_GLB} ({size} bytes)")
@@ -520,6 +620,11 @@ if info["missing_nodes"]:
 if info["barrel_descendants"] < 8:
     print(f"[shorty] FAIL: only {info['barrel_descendants']} meshes under "
           f"{BARREL_NODE}; the hinge would move nothing", file=sys.stderr); ok = False
+blocked = verify_bores_hollow()
+if blocked:
+    print(f"[shorty] FAIL: bore not hollow -- ray stopped short at {blocked}; "
+          f"a chamber built with cyl() instead of tube() looks like a solid knob "
+          f"the moment the action opens", file=sys.stderr); ok = False
 if not ok:
     sys.exit(1)
 print("[shorty] OK")
