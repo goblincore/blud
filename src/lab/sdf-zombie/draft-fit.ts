@@ -151,6 +151,34 @@ export function rigLine(head: Vec3, tail: Vec3, scale: number, points?: Vec3[]):
 }
 
 /**
+ * A leaf bone's line measured along a GIVEN axis rather than the cloud's own
+ * principal axis: centroid origin, extent projected on `axis`, RMS spread
+ * about it. For the skull — whose cloud is dominated by HAIR, so its
+ * principal axis is the hair's (schoolgirl's measured 75° off the neck) and
+ * a bone leaning sideways steals the crown extent the height line checks —
+ * the honest axis is the parent rig segment's direction, and every
+ * measurement (extent, residual, bands) is taken about it. This is rigLine's
+ * frame discipline with no segment to scale: `axis` is a direction only.
+ */
+export function cloudAlongAxis(axis: Vec3, points: Vec3[]): MedialLine {
+  if (points.length === 0)
+    throw new Error('cloudAlongAxis: no points — a leaf line needs a cloud to measure');
+  const dir = normalize(axis);
+  let sx = 0, sy = 0, sz = 0;
+  for (const p of points) { sx += p[0]; sy += p[1]; sz += p[2]; }
+  const origin: Vec3 = [sx / points.length, sy / points.length, sz / points.length];
+  let t0 = Infinity, t1 = -Infinity, sumSq = 0;
+  for (const p of points) {
+    const q = sub(p, origin);
+    const t = dot(q, dir);
+    if (t < t0) t0 = t;
+    if (t > t1) t1 = t;
+    sumSq += Math.max(0, dot(q, q) - t * t);
+  }
+  return { dir, origin, t0, t1, residual: Math.sqrt(sumSq / points.length) };
+}
+
+/**
  * How far a bone's cloud centroid sits OFF its rig axis, perpendicular only.
  *
  * This is the honest answer to rig joints sitting 9-13 cm from the skin: the
