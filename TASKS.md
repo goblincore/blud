@@ -248,6 +248,26 @@ wound pops, gait stop-motion).
   demand — PARKED, retest after collision lands). Reuse the existing pure
   modules — `wander.ts`, `gait.ts`, `motion.ts`, `ik.ts`, `stagger.ts`,
   `collapse.ts` — this is a retarget, not a new rig.
+- `P1.blobforge-chain-drift` [x] **Chain drift FIXED — the draft now stands** —
+  `claude/blob-side-grammar`, 2182 green (112 files), tsc clean. len= and dir=
+  now come from the RIG (joint-to-joint x one global scale); the cloud keeps
+  radii, bands, colour and supplies `offset=`. Measured: soles **-0.0001 m**
+  (was ~0.3 m above), extent **+0.02%** vs the height line (was ~8%), worst
+  len= deviation **0.00004 m**. Schoolgirl builds connected with the
+  cloud-steering fallback REMOVED — her 80-87 deg dress/pelvis axes are now
+  reported, not corrected. `blob:depth` agrees: side mean 142 mm vs the
+  round-1 hand scaffold's 194 mm, and the +340 mm torso drum is GONE.
+  **Verdict is STILL "no" vs hand-authoring, for DIFFERENT reasons** — which
+  is the point. Two are architectural: the T-POSE (deferred; this is the
+  "pose the reference" roadmap item) and IDENTITY LIVING AT SUB-BAND SCALE
+  (horns, hooves, plates are exactly what band medians discard — structural to
+  a band-median draft, not a bug). Two are NEW contained defects the fix
+  EXPOSED: (a) `bandRange` projects cloud-frame band edges onto the rig-chain
+  line, so an oblique cloud (prosthetic shin.r at 76 deg) collapses its bands
+  into a 0.19-0.23 sliver and leaves a mid-shin gap; (b) with the drum gone
+  the fixed face block is the worst side-view band at -367 mm.
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
+
 - `P1.blobforge-tools` [x] **`blob:depth` + `blob:draft` — BOTH LANDED, one ready**
   — branch `claude/blob-side-grammar`, 2121 -> **2170** green (112 files), tsc
   clean. Ten tasks; task 1 inline, 2-10 as a dispatch chain on glm-5.3-flash.
