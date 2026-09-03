@@ -378,6 +378,39 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
+- `X5.melt` [~] **Melting death — flesh sags into goo, the skeleton falls out**
+  — branch `claude/zombie-melting-death-519db8`. Owner's brief with a Fallout 2
+  reference clip: *"the whole flesh would distort and fall away like stretchy
+  gooey dough and the bones fall out onto the ground in a fleshy puddle."*
+  LAB ONLY — no weapon gate, no game wiring.
+  **MECHANISM CHANGED from the earlier `c52b05b` attempt** (branch
+  `claude/blob-side-grammar`), which displaced the field with ridged noise
+  inside `mapBody` and was never visible at any amplitude. That commit's own
+  finding says why — the march marches a SMOOTH field, so a displacement there
+  warps the normal and never moves the surface — but the deeper problem is that
+  noise makes a surface WOBBLE and cannot make a body shorter or wider, which
+  is the entire signature of the reference. Superseded rather than debugged.
+  **What ships instead:** CPU animation of the prim table. Sag is per-ENDPOINT
+  so capsules stretch into strands; descent is paced by the melt front rising
+  through the body so it reads as a candle rather than a lift; radius grows by
+  `1/sqrt(yScale)` so volume goes sideways and the puddle is wider than the
+  body was tall; `blendK` fuses by depth so only the pooled part goes blobby.
+  Bone exposure then falls out of the existing hard `min` for free. Bones
+  release as ELEVEN rigid groups (skull, cage, pelvis, eight long bones), not
+  45 loose tubes.
+  **TWO GATES, and they are the point.** `c52b05b` shipped green and tested and
+  changed zero pixels. Gate A is an in-suite AABB test on the real
+  `zombie.blob` — height ≤40%, width ≥150%, centroid ≤25%. Gate B is the same
+  three ratios measured through the renderer. A disagreement between them IS
+  the finding.
+  **TRAP:** `checkBoneContainment`'s 4 mm margin is violated on purpose —
+  bones breaching flesh IS the effect. "Fixing" it deletes the feature.
+  **Status:** spec + plan committed; 7 dispatch tasks queued on kimi-k3
+  (`2026-09-03-melt-task-{1..7}`, serial `depends_on`), task 1 running from
+  2026-09-03 21:12Z.
+  [design](docs/superpowers/specs/2026-09-03-zombie-melt-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-03-zombie-melt.md)
+
 - `X1.wound-r2` [~] **Bone through wounds + tissue-depth shading** — branch
   `claude/continue-previous-work-91055b`, **NOT merged**. 11 dispatch tasks,
   suite green (2620/162). Bone is `op:'bone'` in its own `body.bonePrims`
