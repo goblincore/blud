@@ -117,7 +117,19 @@ justifies phase 2 work today. Everything stays on the branch behind the page tog
 (`march` default) — the renderer, kernels, seams, driver and reel are ready if the
 crowd case (early-Z) is ever worth building.
 
-## If it continues (phase 2 candidates, in order of expected value)
+## If it continues — the owner's revival path (2026-09-02)
+
+Static-field bodies, where extraction amortises to zero and no band walk is needed:
+
+- **Corpses**: extract once on death, draw the hull with a baked normal + flesh
+  shading (no per-pixel field evals), re-enable the walk only if shot again. The
+  win is the PILE (corpses accumulate = the crowd), not a single corpse at your feet.
+- **Gib chunks**: a chunk's field is rigid after spawn; squash is already three scale
+  factors about the chunk axis. Extract once in chunk space, draw with a matrix
+  (pos, quat, squash scale), drop the per-frame repack/upload. Dozens of marched
+  fields become dozens of tiny meshes. Keep the bounded pool + prewarmed material.
+
+Phase 2 candidates for LIVE bodies, in order of expected value:
 
 1. **Early-Z**: write the hull's raster depth, no frag_depth, and turn misses into a
    band-slack fill instead of `discard` — the only route to the crowd occlusion win.
