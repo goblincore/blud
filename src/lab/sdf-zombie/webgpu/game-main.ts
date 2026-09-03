@@ -1079,17 +1079,36 @@ async function main() {
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
-    pos: new THREE.Vector3(0.125, -0.115, -0.300),
+    // TOWARD THE CENTRE. At x = 0.125 the gun sat well right of screen centre,
+    // which pushed the support hand out to the left edge as a disconnected blob
+    // instead of wrapping the fore-end. Centring the weapon is also the
+    // classic-FPS placement the Realms-of-the-Haunting reference uses.
+    pos: new THREE.Vector3(0.038, -0.115, -0.300),
     rollDeg: -4.5,
     pitchDeg: 2.5,
   } as const;
-  const FORE_HAND_REST = new THREE.Vector3(-0.055, -0.165, -0.365);
+  /** Hand rest positions in VIEW space, read from the GLB's Grip_Hand and
+   *  Fore_Hand locators at load. Hand-placed constants drifted out of contact
+   *  with the weapon the moment the gun pose moved -- which is exactly what
+   *  left the support hand floating unattached. These cannot drift. */
+  const GRIP_HAND_REST = new THREE.Vector3();
+  const FORE_HAND_REST = new THREE.Vector3();
   /** The muzzle in VIEW space, read off the GLB's own Muzzle_L/Muzzle_R
    *  locators rather than guessed. The first pass put the flash at
    *  (0.085, -0.060, -0.560) -- 4 cm left, 4.5 cm high and 3 cm SHORT of the
    *  real muzzle -- so it burned halfway down the barrel instead of at the
    *  bores, which is a good part of why it read wrong. */
   const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
+  /** Fill a VIEW-space vector from a named locator inside the loaded GLB. */
+  function locatorInView(root: THREE.Object3D, name: string, out: THREE.Vector3): boolean {
+    let found: THREE.Object3D | null = null;
+    root.traverse((o) => { if (o.name === name) found = o; });
+    if (!found) return false;
+    viewModelAnchor.updateMatrixWorld(true);
+    out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
+    viewModelAnchor.worldToLocal(out);
+    return true;
+  }
   /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
   let fireAge = Infinity;
   let fireBarrels: 1 | 2 = 1;
@@ -1150,11 +1169,34 @@ async function main() {
     // Blender FPV render and the game agree. Yaw cants the barrels toward
     // screen centre so BOTH bores read; pitch lifts the muzzle off the floor.
     gunGroup.rotation.y = Math.PI;
-    gunGroup.rotation.z = THREE.MathUtils.degToRad(-4.5);
-    gunGroup.rotation.x = THREE.MathUtils.degToRad(2.5);
-    gunGroup.position.set(0.125, -0.115, -0.300);
+    gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
+    gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
+    gunGroup.position.copy(GUN_REST.pos);
     viewModelAnchor.add(gunGroup);
 
+    // Anchor points come off the GLB itself, so they cannot drift from the
+    // weapon when its pose changes -- which is what left the support hand
+    // floating unattached instead of gripping the fore-end.
+    viewModelAnchor.updateMatrixWorld(true);
+    {
+      const mL = new THREE.Vector3(), mR = new THREE.Vector3();
+      if (locatorInView(gltf.scene, 'Muzzle_L', mL) && locatorInView(gltf.scene, 'Muzzle_R', mR)) {
+        MUZZLE_VIEW.copy(mL).add(mR).multiplyScalar(0.5);
+      }
+      if (!locatorInView(gltf.scene, 'Grip_Hand', GRIP_HAND_REST)) {
+        GRIP_HAND_REST.set(GUN_REST.pos.x + 0.02, GUN_REST.pos.y - 0.04, GUN_REST.pos.z + 0.05);
+      }
+      if (!locatorInView(gltf.scene, 'Fore_Hand', FORE_HAND_REST)) {
+        FORE_HAND_REST.set(GUN_REST.pos.x, GUN_REST.pos.y - 0.05, GUN_REST.pos.z - 0.15);
+      }
+      // Sit each hand just off its locator so the orb WRAPS the wood rather
+      // than intersecting the middle of it. The support hand also shifts to the
+      // gun's left flank: directly underneath, it hid behind the fore-end and
+      // read as a sliver, which is not "holding the handrail".
+      GRIP_HAND_REST.y -= 0.014;
+      FORE_HAND_REST.x -= 0.042;
+      FORE_HAND_REST.y -= 0.014;
+    }
     // HANDS ARE GREEN ORBS -- deliberate, per the owner: the player is the
     // goblin and its hands were never detailed. Colour, radius and roughness
     // now come from characters/goblin.blob instead of being picked by eye, and
@@ -1209,13 +1251,17 @@ async function main() {
     // of it, so both read as being side by side on the right of the screen. A
     // support hand CROSSES THE BODY: it enters from far left with a good length
     // of forearm in shot, which is also what makes the reload legible.
+    // The right hand sits on the grip; the left wraps the FORE-END, both taken
+    // from the model's own locators. The arms still run to opposite sides of
+    // the body -- right arm back and down-right, left arm crossing the body
+    // down-left -- so the support arm reads as an arm, not a floating lump.
     gripHandGroup = makeHand(
-      new THREE.Vector3(0.150, -0.150, -0.250),
-      new THREE.Vector3(0.28, -0.85, 0.44), 0.150,
+      GRIP_HAND_REST.clone(),
+      new THREE.Vector3(0.30, -0.84, 0.45), 0.150,
     );
     foreHandGroup = makeHand(
-      new THREE.Vector3(-0.055, -0.165, -0.365),
-      new THREE.Vector3(-0.62, -0.62, 0.48), 0.260,
+      FORE_HAND_REST.clone(),
+      new THREE.Vector3(-0.66, -0.60, 0.45), 0.260,
     );
     viewModelAnchor.add(gripHandGroup, foreHandGroup);
 
