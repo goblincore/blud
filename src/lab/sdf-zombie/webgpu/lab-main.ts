@@ -50,6 +50,11 @@ import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
 import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 import dragonBlobSrc from '../characters/dragon.blob?raw';
 import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
+// The blob:draft first pass and the round-1 hand-authored scaffold it is
+// judged against (dispatch/blobforge-task-10 A/B; minotaur-r1 is untracked
+// and may come and go with the comparison).
+import minotaurBlobSrc from '../characters/minotaur.blob?raw';
+import minotaurR1BlobSrc from '../characters/minotaur-r1.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -71,6 +76,8 @@ const CHARACTERS: Record<string, string> = {
   bonewalker: bonewalkerBlobSrc,
   dragon: dragonBlobSrc,
   'box-fixture': boxFixtureBlobSrc,
+  minotaur: minotaurBlobSrc,
+  'minotaur-r1': minotaurR1BlobSrc,
 };
 
 /**
