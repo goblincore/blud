@@ -519,30 +519,67 @@ function boneStatement(b: DraftBone): string {
 }
 
 /**
- * Face block from the unmapped Head cloud: the cranium's size is the cloud's
- * median radial distance, and the per-axis scales put the p98 half-extent of
- * the cloud along each WORLD axis — the face ellipsoid is world-axis-aligned
- * at a point on the skull bone, so its axes are world axes, not the medial
- * line's. Only these four are derivable; jaw/nose/brow keep the defaults and
- * the header says the author owns them.
+ * Face block from the unmapped Head cloud. Everything here is measured in the
+ * cloud's SPAN frame — centre at the per-axis midspan, half-extent at the
+ * per-axis half-span — because the block's placement and its size must come
+ * from ONE frame. The previous statistic (p98 half-extent about the centroid)
+ * sized the block in the cloud's frame but placed it at the skull bone's
+ * fixed at=0.45 point, and on the first real character through here
+ * (the minotaur) those frames disagreed by 84 mm: the block sat behind its
+ * own head, back pole outside the cloud's back surface, with a depth param
+ * driven by the beard's back vertex stack (p98 0.1385 vs the front extent
+ * 0.081). The span is vertex-density-robust — both extremes are real surface
+ * no matter where the mesh piles vertices.
+ *
+ * headRadius stays the median radial distance: it feeds the jaw/nose/brow
+ * offset arithmetic, and the median is robust to the hair/horn outliers
+ * that pull p98/mean radii outward (measured minotaur p50 0.090 vs p98
+ * 0.151).
+ *
+ * Only these are derivable; jaw/nose/brow keep the defaults and the header
+ * says the author owns them. There is no lateral knob: the grammar folds the
+ * head on the mirror plane, and a lopsided head mass wants a hand pass.
  */
-function faceLines(cloud: Vec3[]): string[] {
+function faceLines(cloud: Vec3[], skullLine: MedialLine | null, correct: Vec3): string[] {
   if (cloud.length < 8) return [];
   const n = cloud.length;
+  const mins: number[] = [Infinity, Infinity, Infinity];
+  const maxs: number[] = [-Infinity, -Infinity, -Infinity];
   let sx = 0, sy = 0, sz = 0;
-  for (const p of cloud) { sx += p[0]!; sy += p[1]!; sz += p[2]!; }
+  for (const p of cloud) {
+    sx += p[0]!; sy += p[1]!; sz += p[2]!;
+    for (const k of [0, 1, 2] as const) {
+      if (p[k]! < mins[k]!) mins[k] = p[k]!;
+      if (p[k]! > maxs[k]!) maxs[k] = p[k]!;
+    }
+  }
   const c: Vec3 = [sx / n, sy / n, sz / n];
   const R = median(cloud.map((p) => Math.hypot(p[0]! - c[0]!, p[1]! - c[1]!, p[2]! - c[2]!)));
   if (!(R > 1e-6)) return [];
-  const p98 = (k: 0 | 1 | 2): number => {
-    const ds = cloud.map((p) => Math.abs(p[k]! - c[k]!)).sort((a, b) => a - b);
-    return ds[Math.floor(0.98 * (n - 1))]!;
-  };
+  const mid: Vec3 = [(mins[0]! + maxs[0]!) / 2, (mins[1]! + maxs[1]!) / 2, (mins[2]! + maxs[2]!) / 2];
+  const half: Vec3 = [(maxs[0]! - mins[0]!) / 2, (maxs[1]! - mins[1]!) / 2, (maxs[2]! - mins[2]!) / 2];
+  // Where the grammar's fixed at=0.45 puts the block before this measurement:
+  // the bone's head point plus 0.45 of its length along its own axis. The
+  // rise/lead carry the block from that rig-frame point to the cloud's own
+  // centre — the same cloud the sizes above are measured from. Because the
+  // fit's line and the emitted bone do not share an origin (fit anchors at
+  // the parent's cloud tail, the grammar at its rig tail), `correct` folds
+  // in the residual measured on a real build by faceResidual. World axes:
+  // prim offsets are world-axis (rest pose), +z is the face's forward.
+  const at045: Vec3 = skullLine
+    ? [
+      skullLine.origin[0]! + skullLine.dir[0]! * (skullLine.t0 + 0.45 * (skullLine.t1 - skullLine.t0)),
+      skullLine.origin[1]! + skullLine.dir[1]! * (skullLine.t0 + 0.45 * (skullLine.t1 - skullLine.t0)),
+      skullLine.origin[2]! + skullLine.dir[2]! * (skullLine.t0 + 0.45 * (skullLine.t1 - skullLine.t0)),
+    ]
+    : mid; // no skull line to measure from: the defaults already ride the bone
   return [
     `  headRadius ${fmt(R)}  # fit: median radial distance of the Head cloud (${n} verts)`,
-    `  headWidth ${fmt(p98(0) / R)}  # fit: p98 half-extent along world x / median radius`,
-    `  headHeight ${fmt(p98(1) / R)}  # fit: p98 half-extent along world y / median radius`,
-    `  headDepth ${fmt(p98(2) / R)}  # fit: p98 half-extent along world z / median radius`,
+    `  headWidth ${fmt(half[0]! / R)}  # fit: half-span along world x / median radius`,
+    `  headHeight ${fmt(half[1]! / R)}  # fit: half-span along world y / median radius`,
+    `  headDepth ${fmt(half[2]! / R)}  # fit: half-span along world z / median radius`,
+    `  headRise ${fmt(mid[1]! - at045[1]! + correct[1])}  # fit: Head cloud midspan y minus skull bone's at=0.45 point`,
+    `  headLead ${fmt(mid[2]! - at045[2]! + correct[2])}  # fit: Head cloud midspan z minus skull bone's at=0.45 point (forward +)`,
   ];
 }
 
@@ -601,15 +638,33 @@ export function emitDraft(input: DraftInput): string {
   const at0 = input.bones[0]!.at;
   let soleShift = 0;
   let extent = NaN;
+  // The face block's placement correction, measured on a real build — see
+  // faceResidual. [0,0,0] until (and unless) that build succeeds.
+  let faceCorrect: Vec3 = [0, 0, 0];
   if (typeof at0 === 'number') {
     try {
-      const first = renderDoc({ ...input }, kept, trimmedN, over, at0, { soleShift: 0, extent: NaN });
+      // Pass 1 builds the draft as measured and asks two questions of the
+      // REAL pipeline (never a re-derivation): where did the sole land, and
+      // where did the emitted bone frame actually put the face block? The
+      // second matters because the grammar hangs the skull at its parent's
+      // RIG tail, while the skull's fit line is anchored on the parent's
+      // CLOUD tail — measured on the minotaur, those anchors sit 5.3 cm
+      // apart in y and 4.0 cm in z, and a face offset computed purely in
+      // the fit's frame inherits that gap.
+      const first = renderDoc({ ...input }, kept, trimmedN, over, at0, { soleShift: 0, extent: NaN }, faceCorrect);
       const doc = parseBlob(first);
       const body = buildBody(compileBlob(doc, compileFace(doc)));
-      const { min, max } = builtSurfaceY(body.prims);
+      faceCorrect = faceResidual(input, body);
+      // Pass 2 carries the corrected face block. Its movement can move the
+      // CROWN (the block rides the skull), so grounding and the extent are
+      // measured on the corrected body — the artifact that ships.
+      const second = renderDoc({ ...input }, kept, trimmedN, over, at0, { soleShift: 0, extent: NaN }, faceCorrect);
+      const doc2 = parseBlob(second);
+      const body2 = buildBody(compileBlob(doc2, compileFace(doc2)));
+      const { min, max } = builtSurfaceY(body2.prims);
       if (Number.isFinite(min)) {
         soleShift = -min; // the root shift that lands the sole at 0
-        extent = max - min; // shift-invariant, so the first build's value stands
+        extent = max - min; // shift-invariant, so this build's value stands
       }
     } catch { /* unbuildable draft: emitted ungrounded, header says so */ }
   }
@@ -618,13 +673,51 @@ export function emitDraft(input: DraftInput): string {
     input, kept, trimmedN, over,
     typeof at0 === 'number' ? at0 + soleShift : at0,
     { soleShift, extent },
+    faceCorrect,
   );
+}
+
+/**
+ * How far the built face block sits from its head cloud's own centre, in
+ * the built body's frame — the correction to add to headRise/headLead so
+ * the block lands ON the cloud it was measured from.
+ *
+ * Measured on a BUILD because the fit's skull line and the emitted skull
+ * bone do not share an origin: the fit anchors the leaf at its parent's
+ * fitted chain tail (a cloud point), the grammar hangs it at the parent's
+ * RIG tail (a joint). y/x are all a face block can be corrected in — the
+ * grammar folds the head on the mirror plane, so a lateral residual (the
+ * minotaur's is 8.4 mm) has no knob and is accepted, not hidden: it is
+ * named here because the emit's fit comment carries it as measurement
+ * noise on the same order as the print resolution.
+ */
+function faceResidual(input: DraftInput, body: ReturnType<typeof buildBody>): Vec3 {
+  const cloud = input.headCloud;
+  if (!cloud || cloud.length < 8) return [0, 0, 0];
+  const mins: number[] = [Infinity, Infinity, Infinity];
+  const maxs: number[] = [-Infinity, -Infinity, -Infinity];
+  for (const p of cloud)
+    for (const k of [0, 1, 2] as const) {
+      if (p[k]! < mins[k]!) mins[k] = p[k]!;
+      if (p[k]! > maxs[k]!) maxs[k] = p[k]!;
+    }
+  // The block the build actually placed: the fattest of compileBlob's
+  // TS-authored face prims (the cranium — every authored prim carries src).
+  const face = body.prims.filter((p) => p.src === undefined);
+  if (face.length === 0) return [0, 0, 0];
+  const c = face.reduce((a, p) => (p.radius > a.radius ? p : a), face[0]!);
+  return [
+    0,
+    (mins[1]! + maxs[1]!) / 2 - (c.a[1] + c.b[1]) / 2,
+    (mins[2]! + maxs[2]!) / 2 - (c.a[2] + c.b[2]) / 2,
+  ];
 }
 
 function renderDoc(
   input: DraftInput, kept: Rec[], trimmedN: number, over: boolean,
   rootAt: number | undefined,
   chain: { soleShift: number; extent: number },
+  faceCorrect: Vec3 = [0, 0, 0],
 ): string {
 
   // —— header: what this is, what it did not attempt, the budget, the debts ——
@@ -740,7 +833,8 @@ function renderDoc(
     out.push(`  ${r.words}${r.core ? ' core' : ''}${r.comment ? '  # ' + r.comment : ''}`);
   }
 
-  const face = faceLines(input.headCloud ?? []);
+  const skullBone = input.bones.find((b) => b.name === 'skull');
+  const face = faceLines(input.headCloud ?? [], skullBone?.line ?? null, faceCorrect);
   if (face.length > 0) out.push('', 'face', ...face);
 
   // The draft never paints a face (three dispatches proved agents cannot);

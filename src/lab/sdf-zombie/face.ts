@@ -93,6 +93,20 @@ export interface FaceParams {
    * its jaw entirely.
    */
   headBlend: number;
+  /**
+   * Where the whole face block rides relative to its skull bone, in world
+   * axes. The bone is the rig's statement about the head; the SURFACE (the
+   * head's actual mass) is routinely carried off it — forward of the spine
+   * on any animal muzzle, behind on a back-swept skull. Defaults are 0, so
+   * every hand-authored file keeps the placement it always had; blob:draft
+   * measures both from the head cloud and emits them.
+   *
+   * There is deliberately no lateral (x) knob: the body grammar folds the
+   * head on the mirror plane, and a character whose head mass is lopsided
+   * wants a hand pass, not a slipplane fudge.
+   */
+  headRise: number;
+  headLead: number;
 }
 
 /** A clean oval, a little taller than wide. */
@@ -114,6 +128,8 @@ export const DEFAULT_FACE: FaceParams = {
   browHeavy: 0.008,
   browRise: 0.045,
   headBlend: 0.006,
+  headRise: 0,
+  headLead: 0,
 };
 
 /**
@@ -151,6 +167,8 @@ export const FACE_PRESETS: Record<string, FaceParams> = {
     browHeavy: 0.011,
     browRise: 0.044,
     headBlend: 0.004,
+    headRise: 0,
+    headLead: 0,
   },
 };
 
@@ -178,12 +196,19 @@ export interface FacePrim extends PrimDef {
 
 export function facePrims(f: FaceParams): FacePrim[] {
   const HEAD = { bone: 'skull', limb: 'head', at: HEAD_AT } as const;
+  // The whole block rides the head's measured position: jaw, brow and nose
+  // are positioned RELATIVE to the head centre, so the base offset goes on
+  // every prim, not just the cranium.
+  const rise = f.headRise;
+  const lead = f.headLead * FACE_FORWARD;
+  const base: Vec3 = [0, rise, lead];
   return [
     {
       ...HEAD, tag: 'head',
       radius: f.headRadius,
       scale: [f.headWidth, f.headHeight, f.headDepth],
       blendK: f.headBlend,
+      offset: base,
     },
     {
       ...HEAD, tag: 'jaw',
@@ -194,7 +219,7 @@ export function facePrims(f: FaceParams): FacePrim[] {
       radius: f.headRadius * 0.78,
       scale: [f.jawWidth, f.jawHeight, f.headDepth * 0.96],
       blendK: f.headBlend,
-      offset: [0, -f.jawDrop, f.jawJut * FACE_FORWARD],
+      offset: [base[0], base[1] - f.jawDrop, base[2] + f.jawJut * FACE_FORWARD],
     },
     // Brow ridge. Wide and shallow — a ledge over the eyes, not a second
     // forehead. Second silhouette break on the skull after the nose.
@@ -204,9 +229,9 @@ export function facePrims(f: FaceParams): FacePrim[] {
       scale: [1.55, 0.42, 0.80] as Vec3,
       blendK: f.headBlend * 1.3,
       offset: [
-        0,
-        f.browRise,
-        (f.headRadius * f.headDepth * 0.72 + f.browHeavy) * FACE_FORWARD,
+        base[0],
+        base[1] + f.browRise,
+        base[2] + (f.headRadius * f.headDepth * 0.72 + f.browHeavy) * FACE_FORWARD,
       ] as Vec3,
     }] : []),
     // The nose. Blended softly, because it is a large smooth form that should
@@ -217,9 +242,9 @@ export function facePrims(f: FaceParams): FacePrim[] {
       scale: [f.noseWidth, 0.85, 1.45] as Vec3,
       blendK: f.headBlend * 1.2,
       offset: [
-        0,
-        -f.noseDrop,
-        (f.headRadius * f.headDepth * 0.80 + f.noseLength) * FACE_FORWARD,
+        base[0],
+        base[1] - f.noseDrop,
+        base[2] + (f.headRadius * f.headDepth * 0.80 + f.noseLength) * FACE_FORWARD,
       ] as Vec3,
     }] : []),
   ];

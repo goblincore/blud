@@ -26,6 +26,7 @@ import {
 import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
 import { buildBody } from './build-body';
+import { DEFAULT_FACE, facePrims } from './face';
 import { MAX_PRIMS } from './validate';
 import { cross, dot, len, normalize, scale as vscale, sub } from './vec';
 
@@ -249,6 +250,103 @@ describe('emitDraft', () => {
     expect(text).toMatch(new RegExp(`^  image ${NAME}-face\\.png`, 'm'));
     expect(text).toMatch(/^  decal 1 /m);
     expect(text).toContain(`# run: npm run blob:face-bake -- ${NAME}`);
+  });
+
+  // The face block is the one surface statement whose PLACEMENT never
+  // consulted its own cloud: it rode the skull bone's fixed at=0.45 point
+  // (the rig chain's frame) while its size params were measured about the
+  // head cloud's centre. Measured on the first real character through here
+  // (the minotaur, 2026-09-03): the block's centre sat 84 mm behind the
+  // cloud's centre and its back pole protruded 78 mm outside the cloud's
+  // own back surface — the block was not even on the head it belongs to.
+  // These pins hold it to the principle the bands already follow
+  // (chain-drift: the rig supplies the frame, the cloud supplies the surface).
+  describe('the face block sits in its head cloud’s frame', () => {
+    /** The fixture's skull bone spans y 1.64..1.86, so at=0.45 puts the
+     *  block at [0, 1.759, 0]; a head carried forward of that (every animal
+     *  muzzle, the minotaur's whole head) lands nowhere near its cloud. */
+    const HEAD_CENTRE: Vec3 = [0, 1.78, 0.09];
+
+    /** The built body's cranium prim — the fattest of the face prims
+     *  compileBlob appends (they carry no .blob source line). */
+    function craniumOf(b: ReturnType<typeof build>) {
+      const face = b.prims.filter((p) => p.src === undefined);
+      expect(face.length).toBeGreaterThan(0);
+      return face.reduce((a, p) => (p.radius > a.radius ? p : a), face[0]!);
+    }
+
+    it('places the block at its head cloud, not at the bone', () => {
+      const f = makeFit();
+      f.headCloud = headBall(HEAD_CENTRE, 0.11);
+      const built = build(emitDraft(f));
+      const c = craniumOf(built);
+      // The build GROUNDS the body (a rigid root shift), so the assertion
+      // is relative to the same body's skull bone — both sides of the
+      // comparison move together, and what must hold is the block's offset
+      // FROM its bone, equal to the cloud's offset from the fit's bone.
+      const skull = built.bones.get('skull');
+      expect(skull).toBeDefined();
+      const bone045: Vec3 = [
+        skull!.head[0]! + 0.45 * (skull!.tail[0]! - skull!.head[0]!),
+        skull!.head[1]! + 0.45 * (skull!.tail[1]! - skull!.head[1]!),
+        skull!.head[2]! + 0.45 * (skull!.tail[2]! - skull!.head[2]!),
+      ];
+      const centre: Vec3 = [(c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2, (c.a[2] + c.b[2]) / 2];
+      // The fixture's bone@0.45 is [0, 1.739, 0] (origin 1.75, t0 -0.11,
+      // t1 0.11), so the cloud rides [0, +0.041, +0.09] off it — the
+      // rise/lead the block must carry.
+      expect(centre[0] - bone045[0]).toBeCloseTo(0, 3);
+      expect(centre[1] - bone045[1]).toBeCloseTo(0.041, 3);
+      expect(centre[2] - bone045[2]).toBeCloseTo(0.09, 3);
+    });
+
+    it('the block spans its head cloud even when the cloud is SKEWED', () => {
+      // A muzzle: the +z half of the sphere stretched 2.5x. A symmetric
+      // block cannot fill an asymmetric span from the centroid frame — the
+      // p98 basis reads the stack on the fat side and the block overshoots
+      // there (the minotaur's depth param was beard-driven: p98 half-extent
+      // 0.1385 against a front extent of 0.081). The span frame — centre at
+      // the per-axis midspan, half-extent at the per-axis half-span — fits.
+      const cloud = headBall(HEAD_CENTRE, 0.11).map(
+        (p): Vec3 => p[2]! > HEAD_CENTRE[2]!
+          ? [p[0], p[1], HEAD_CENTRE[2]! + (p[2]! - HEAD_CENTRE[2]!) * 2.5]
+          : p,
+      );
+      const f = makeFit();
+      f.headCloud = cloud;
+      const zs = cloud.map((p) => p[2]).sort((a, b) => a - b);
+      const zLo = zs[0]!, zHi = zs[zs.length - 1]!;
+      const c = craniumOf(build(emitDraft(f)));
+      const halfDepth = Math.max(c.radius, c.radiusB ?? c.radius) * c.scale[2];
+      expect((c.a[2] + c.b[2]) / 2 - halfDepth).toBeGreaterThanOrEqual(zLo - 2e-3);
+      expect((c.a[2] + c.b[2]) / 2 + halfDepth).toBeLessThanOrEqual(zHi + 2e-3);
+      // ...and centred on the span, not on the vertex-weighted centroid
+      // (which the skew drags toward the muzzle).
+      expect((c.a[2] + c.b[2]) / 2).toBeCloseTo((zLo + zHi) / 2, 3);
+    });
+
+    it('headRise/headLead default to zero and move the whole block', () => {
+      // The grammar's defaults must leave every hand-authored file bit-
+      // identical (the schoolgirl's skull bone was hand-positioned on the
+      // assumption of no face offset), and when set, ALL FOUR face prims
+      // ride the shift — jaw, brow and nose are positioned relative to the
+      // head centre, so they must follow it.
+      const base = facePrims(DEFAULT_FACE);
+      const zero = facePrims({ ...DEFAULT_FACE, headRise: 0, headLead: 0 });
+      expect(zero).toEqual(base);
+      const moved = facePrims({ ...DEFAULT_FACE, headRise: 0.02, headLead: 0.05 });
+      expect(moved.length).toBe(base.length);
+      for (let i = 0; i < moved.length; i++) {
+        // PrimDefs carry placement as bone+at+offset (a/b come later, from
+        // buildBody), so the shift IS the offset delta — the bone point is
+        // identical between the two calls.
+        const bo = base[i]!.offset ?? [0, 0, 0];
+        const mo = moved[i]!.offset ?? [0, 0, 0];
+        expect(mo[0]! - bo[0]!).toBeCloseTo(0, 6);
+        expect(mo[1]! - bo[1]!).toBeCloseTo(0.02, 6);
+        expect(mo[2]! - bo[2]!).toBeCloseTo(0.05, 6);
+      }
+    });
   });
 });
 
