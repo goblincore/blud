@@ -498,3 +498,37 @@ describe('organ prims (organs r3)', () => {
     expect(boneRows.boneCount).toBe(organRows.boneCount);
   });
 });
+
+describe('packBones (bone tubes)', () => {
+  // Same fixture shape the organ tests above use: a couple of flesh prims,
+  // bone AND organ rows in bonePrims, one alive cluster.
+  const bodyWithBonesAndOrgans = () => ({
+    prims: [
+      { a: [0, 0, 0], b: [0, 0.3, 0], radius: 0.05, scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, op: 'add' },
+    ],
+    bonePrims: [
+      { a: [0, 0, 0], b: [0, 0.2, 0], radius: 0.02, scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, op: 'bone' },
+      { a: [0, 0.05, 0], b: [0, 0.1, 0], radius: 0.03, scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, op: 'organ' },
+      { a: [0, 0.1, 0], b: [0, 0.15, 0], radius: 0.02, scale: [1, 1, 1], blendK: 0, limb: 'torso', cluster: 0, op: 'bone' },
+    ],
+    clusters: [{ limb: 'torso', start: 0, count: 1, center: [0, 0.15, 0], radius: 0.2, alive: true }],
+  } as unknown as BuiltBody);
+
+  it('default packs bones and organs exactly as before', () => {
+    const body = bodyWithBonesAndOrgans();
+    const a = packBody(body);
+    const b = packBody(body, undefined, { packBones: true });
+    expect(a.boneCount).toBe(b.boneCount);
+    expect(Array.from(a.primScale)).toEqual(Array.from(b.primScale));
+  });
+
+  it('packBones:false skips bone rows, keeps organs, and boneCount counts organs', () => {
+    const body = bodyWithBonesAndOrgans();
+    const organs = (body.bonePrims ?? []).filter(p => p.op === 'organ' && body.clusters[p.cluster]?.alive).length;
+    const p = packBody(body, undefined, { packBones: false });
+    expect(p.boneCount).toBe(organs);
+    for (let i = body.prims.length; i < body.prims.length + p.boneCount; i++) {
+      expect(p.primScale[i * PRIM_STRIDE + 3]).toBe(W_ORGAN);
+    }
+  });
+});

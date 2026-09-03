@@ -1651,13 +1651,15 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('woundFibre');
   });
 
-  it('stains bone toward deepColor where it meets flesh', () => {
-    expect(SHADE_BODY).toContain('boneColor');
-    expect(SHADE_BODY).toMatch(/boneStain|dmg - dBone|fleshGap/);
+  it('no longer stains bone toward deepColor — the branch is GONE (bone tubes)', () => {
+    // Bone tubes (2026-09-02 plan task 3): op 'bone' prims leave the marched
+    // field for instanced analytic tubes, so the bone albedo branch was
+    // deleted, not orphaned. Asserted as ABSENCE so it cannot quietly return.
+    expect(SHADE_BODY).not.toContain('boneStain');
   });
 
-  it('identifies bone by the dominant prim material, not a radius guess', () => {
-    expect(SHADE_BODY).toMatch(/isBone/);
+  it('no longer identifies bone by material code — isBone is GONE (bone tubes)', () => {
+    expect(SHADE_BODY).not.toMatch(/isBone/);
   });
 });
 
@@ -1666,7 +1668,7 @@ describe('organ shading (organs r3)', () => {
   // source the plan calls SHADE_BODY.
   const SHADE_BODY = MARCH_BODY;
 
-  it('reads the organ code from the SAME hitMat load as bone', () => {
+  it('reads the organ code from the SAME hitMat load bone used to use', () => {
     // One texel load serves both; a second load would undo refinement 5.
     expect((SHADE_BODY.match(/textureLoad\(data, vec2<i32>\(hitBest, \d+\), 0\)\.w/g) ?? []))
       .toHaveLength(1);
