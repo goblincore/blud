@@ -20,10 +20,9 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-<<<<<<< HEAD
 **HULL-REFINE RENDERER — PARKED (owner, 2026-09-02): "annoying visual glitches… doesn't seem to offer much benefit atm; maybe with crowds". Revisit = phase 2 early-Z on the crowd case.** Phase 0 built, look passes headless parity, cost a wash at one body. Per-frame GPU surface-nets hull + fragment band refinement through the SHIPPED march (`march.wgsl.ts` untouched). Dispatch chain (kimi/k3, 5 tasks) landed the code; six bugs then separated a green suite from a zombie on screen (relaxed stepMul, vec4-padded soup stride, chunk hulls never extracted, extraction before the wound upload, a 4M-eval/frame live test, a 70-eval vertex pull) — all fixed and pinned. Headless A/B (8 stepped poses, 6 live instants, crater on/off, the 3-item reel): hull ≡ march. Owner: "pretty impressive… slightly less jiggly… pretty close". Fenced bench, one body, close camera, machine load 15–110: march ~22–27 ms, hull ~25–27, hull draw-only ~22 — extraction ≈3–4 ms, no win without early-Z (phase 2). NOT the hull: torso-sphere wounds billboard on both renderers and in-game (`damage.ts frame()` vs `game-actor` yaw-0 contract) — spun off. Page: `sdf-hull-spike.html`, seams `__hullSpike.*`, driver `scripts/hull-spike-drive.mjs`, reel `scripts/hull-spike-reel.sh`.
 [notes](docs/dev-notes/2026-09-02-hull-refine-spike/notes.md) · [spec](docs/superpowers/specs/2026-09-02-sdf-hull-refine-renderer-design.md) · [plan](docs/superpowers/plans/2026-09-02-sdf-hull-refine-phase0.md)
-=======
+
 **WOUND BILLBOARDING — FIXED (2026-09-02, `claude/serene-jemison-7c15a7`).**
 Owner: a crater on the zombie's back rotated round to the front as it turned
 (torso + legs; head fine). Root cause: torso blobs are axis-less spheres, so
@@ -36,7 +35,6 @@ consumer in `game-main.ts` + `bleed-registry.ts` quotes the live yaw. Gates:
 actor upload keeps its body-frame offset through a >1 rad turn; sever at
 yaw≠0; turned-body explosion == rest-body stamp. Not yet on the hull-spike
 branches (`sdf-hull-spike.html` lives there) — they get it on merge.
->>>>>>> main
 
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
