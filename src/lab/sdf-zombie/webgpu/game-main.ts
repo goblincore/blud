@@ -160,6 +160,23 @@ async function main() {
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
 
+  // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
+  // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
+  // vsync slots -- 33, 50, 33, 50 -- whose MEAN reads a healthy 38 ms while the
+  // hand feels a stagger, which is exactly the "wonky but the readings look
+  // fine" the owner reported (2026-09-03).
+  //
+  // 30 is not arbitrary: `adaptiveBudgetMs` below is already 1000/30, so the
+  // resolution ladder has been aiming at a 33.3 ms budget all along. This makes
+  // the PRESENTATION agree with the budget the rest of the page is tuned for,
+  // and gives the ladder a deadline it owns rather than one it has to infer
+  // from a display refresh nobody measured.
+  //
+  // A seam, not a constant -- __sdfGame.setFrameCap(60) or (0) to compare by
+  // eye. Off everywhere else: the bench times its own render callback and a cap
+  // would flatten every reading to the cadence.
+  handle.setFrameCap(30);
+
   // -----------------------------------------------------------------------
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
@@ -3064,6 +3081,20 @@ async function main() {
     // duplicated here — the driver calls those.
     setCone: (on: boolean) => sdfLayer.setConeEnabled(on),
     get cone() { return sdfLayer.coneEnabled; },
+    // ---------------------------------------------------------------
+    // FRAME PACING. setFrameCap(fps) presents on a fixed cadence; 0
+    // uncaps and restores the raw rAF behaviour. Default 30, matching
+    // adaptiveBudgetMs. `refreshMs` is MEASURED from raw tick gaps
+    // (the loop still wakes every vsync under a cap, so the skipped
+    // ticks measure the display for free) -- check it before trusting
+    // any arithmetic that assumes 60 Hz.
+    // ---------------------------------------------------------------
+    setFrameCap: (fps: number) => {
+      handle.setFrameCap(fps);
+      return { frameCap: handle.frameCap, refreshMs: handle.refreshMs };
+    },
+    get frameCap() { return handle.frameCap; },
+    get refreshMs() { return handle.refreshMs; },
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
