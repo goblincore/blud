@@ -698,8 +698,10 @@ No test in this task — it is wiring between two tested units, and the game pag
 In the import block of `src/lab/sdf-zombie/webgpu/game-main.ts`, add:
 
 ```ts
-import { FISHEYE_DEFAULTS, reticleNdc, visibleFovDeg } from './fisheye';
+import { FISHEYE_DEFAULTS, visibleFovDeg } from './fisheye';
 ```
+
+`reticleNdc` is deliberately not imported yet — Task 5 widens this line when it uses it. Each commit should justify its own imports.
 
 - [ ] **Step 2: Widen the camera and hand post-aa the lens**
 
@@ -765,7 +767,7 @@ In the `__sdfGame` object, directly after `setSmear: (v: number) => postAa.setSm
 npx tsc --noEmit
 ```
 
-Expected: no errors. `reticleNdc` is imported here but not used until Task 5; `tsconfig.json` does not set `noUnusedLocals`, so that is not an error — it is used two tasks later.
+Expected: no errors.
 
 - [ ] **Step 5: Commit**
 
@@ -790,7 +792,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 This is correctness, not polish. The reticle is a DOM element placed linearly from the free-aim point; once the world warps underneath it, at any off-centre aim it marks a spot the shot does not go to. Firing is unaffected — `free-aim.ts` keeps working in the true frustum — so only the drawn position moves.
 
-- [ ] **Step 1: Replace the placement**
+- [ ] **Step 1: Widen the fisheye import**
+
+```ts
+import { FISHEYE_DEFAULTS, reticleNdc, visibleFovDeg } from './fisheye';
+```
+
+- [ ] **Step 2: Replace the placement**
 
 Change:
 
@@ -813,7 +821,7 @@ to:
         reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
 ```
 
-- [ ] **Step 2: Typecheck and run the whole suite**
+- [ ] **Step 3: Typecheck and run the whole suite**
 
 ```bash
 npx tsc --noEmit && npx vitest run
@@ -821,7 +829,7 @@ npx tsc --noEmit && npx vitest run
 
 Expected: no type errors; every test passes.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/game-main.ts
