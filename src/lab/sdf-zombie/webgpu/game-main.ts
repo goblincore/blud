@@ -516,11 +516,32 @@ async function main() {
       // no directional key, nothing for a level shadow to modulate.
       const map = twin.shadow.map?.depthTexture ?? null;
       const lvlOn = spotOn > 0 && twin.castShadow && map !== null && levelShadowEnabled ? 1 : 0;
+      // MUZZLE FLASH -- the marched bodies. They cannot see the PointLight
+      // above, so the flash rides the beam that is already replayed here.
+      // Nothing is saved or restored: these uniforms are rewritten from the
+      // flashlight every frame, so biasing this frame's values IS the effect.
+      //
+      // Added to spotOn rather than multiplied, so the flash still lights
+      // bodies in the gallery rig where the flashlight gate is 0.
+      // A WIDER cone is a SMALLER cosine, hence the subtraction.
+      //
+      // DELIBERATELY TEMPORARY: the right fix is a second light slot in the
+      // march, which cannot land while sdf-render-perf-r2 is rewriting
+      // march.wgsl.ts. Tracked under the spec's "Deferred".
+      const fv = flashEnvelope(flashAge);
+      const flashGate  = spotOn + 6 * fv;
+      const flashInner = Math.max(-1, cosInner - 0.45 * fv);
+      const flashOuter = Math.max(-1, cosOuter - 0.45 * fv);
       for (const a of actors) {
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
-        a.view.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+        if (fv > 0) {
+          // Push warm. The flash is burning powder, not the flashlight's white.
+          const c = a.view.uniforms.spotColor.value;
+          c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
+        }
         a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
@@ -1026,6 +1047,7 @@ async function main() {
   let gunGroup: THREE.Group | null = null;
   let flashGroup: THREE.Group | null = null;
   let flashMaterial: THREE.MeshBasicMaterial | null = null;
+  let flashLight: THREE.PointLight | null = null;
   /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
   let flashAge = Infinity;
   let gunReady = false;
@@ -1146,6 +1168,12 @@ async function main() {
     flashGroup.position.set(0.085, -0.060, -0.560);
     viewModelAnchor.add(flashGroup);
     flashMaterial = flashMat;
+    // MUZZLE FLASH -- level half. Allocated ONCE at intensity 0 and only ever
+    // modulated: adding or removing a light at runtime forces a TSL shader
+    // recompile, which would hitch on every trigger pull.
+    flashLight = new THREE.PointLight(0xffd0a0, 0, 9, 2);
+    flashLight.position.copy(flashGroup.position);
+    viewModelAnchor.add(flashLight);
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
@@ -1823,6 +1851,7 @@ async function main() {
       const s = 0.7 + 0.5 * flashV;
       flashGroup.scale.setScalar(s);
     }
+    if (flashLight) flashLight.intensity = 26 * flashV;
     {
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);

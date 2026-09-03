@@ -4,7 +4,8 @@
 //
 //   1. BOOT GATE: backend === 'webgpu', no console errors, the gun loaded.
 //   2. THE GUN: the k3 GLB is gone, shorty-double.glb's Barrels node is in.
-//   3. FPV REST capture: fpv-rest.png into GAME_OUT for the owner look.
+//   3. FLASH: the sprite is visible on the shot frame, gone a beat later.
+//   4. THE BODIES: the marched bodies' spotCfg.x rises on the flash frame.
 //
 // Usage: LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 node scripts/sdf-game-shorty-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -135,6 +136,31 @@ const dark = await evaluate('__sdfGame.flashVisible');
 await shot('flash-off');
 if (!lit) fail('no muzzle flash on the shot frame');
 if (dark) fail('muzzle flash still visible 300 ms later — envelope never closed');
+
+// 4. THE BODIES — read the uniform the march actually samples. A PointLight
+//    cannot touch this, so a rise here is the whole point of the task.
+//    Actors are exposed through zombie(id) (the weapon seam); zombies()[0]
+//    IS actors[0]. Timing: a live-rAF read RACES the flash — headless ticks
+//    clamp dt to 1/20 s while the window is 70 ms, so the lit uniform exists
+//    for ONE rendered frame (probe: x=1.30 at ~+32 ms, back to 1 by +48 ms).
+//    So fire, then HAND-STEP one 1/60 s frame: step() runs tick+drawFn
+//    synchronously and parks the rAF loop, making the read deterministic
+//    (flashAge = 1/60, fv = e^-1, gate = spotOn + 6/e).
+await sleep(200); // clear check 3's fireCooldownSec — a rejected fire stamps nothing
+const beamZid = await evaluate('__sdfGame.zombies()[0]?.id ?? null');
+const beamRead = (zid) => `(() => { const a = __sdfGame.zombie(${zid}); return a ? a.view.uniforms.spotCfg.value.x : null; })()`;
+const beam = await evaluate(beamRead(beamZid));
+if ((await evaluate('__sdfGame.fire(1)')) !== true) fail('fire() rejected — check 3 cooldown had not cleared');
+await evaluate('__sdfGame.step(1, 1 / 60)');
+const beamLit = await evaluate(beamRead(beamZid));
+await shot('flash-zombie');
+await evaluate('__sdfGame.setLoopRunning(true)');
+if (beamLit === null) fail('no actor to test the beam on');
+if (!(beamLit > beam)) {
+  fail(`spotCfg.x did not rise on the flash frame (${beam} -> ${beamLit}); ` +
+       'the bias is probably AFTER the for-of loop instead of before it');
+}
+console.log(`beam: spotCfg.x ${beam} -> ${beamLit} on the flash frame`);
 console.log(`done — ${shotCount} shots in ${OUT}`);
 // An open CDP WebSocket keeps node's event loop alive forever — without this
 // the gate prints its PASS lines and then hangs, the shell wrapper never
