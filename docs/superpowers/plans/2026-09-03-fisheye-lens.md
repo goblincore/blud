@@ -403,8 +403,10 @@ Expected: FAIL — 4 failures, the first on `lens : vec3<f32>` not matching.
 At the top of `src/lab/sdf-zombie/webgpu/post-aa.ts`, after the existing `lab-renderer` import, add:
 
 ```ts
-import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
+import { FISHEYE_WGSL } from './fisheye';
 ```
+
+Only `FISHEYE_WGSL` — Task 3 widens this line when it needs the rest. An import that is dead at its own commit reads as an oversight rather than as staging.
 
 Then change the `POST_AA_BLIT_WGSL` signature from:
 
@@ -477,7 +479,23 @@ The blit constant's last helper is `postAaFetch`, whose closing brace is immedia
 
 The **blank line before the closing backtick matters**: `FISHEYE_WGSL` now begins directly with `fn fisheyeWarp(` (no leading newline, matching `humanoid.wgsl.ts`), so without a separator the concatenation would read `}fn fisheyeWarp(`. Leave every other line of the string exactly as it is.
 
-- [ ] **Step 6: Run the tests and watch them pass**
+- [ ] **Step 6: Bind the uniform, so the commit leaves the blit callable**
+
+The shader header now declares five parameters. three resolves `wgslFn` arguments by NAME against that header, so until the call site supplies `lens` the blit is broken for every page that uses post-aa. A commit must not leave the renderer dead, even briefly.
+
+Next to the other uniforms in `createPostAa`:
+
+```ts
+  // (k, rmax, aspect) — see fisheye.ts. Stays all-zero (k = 0, lens off, an
+  // exact identity in the blit) until setLens() arrives with the interface.
+  const uLens = uniform(new THREE.Vector3(0, 0, 0));
+```
+
+and add `lens: uLens,` to the `blitOut` wgslFn call. Nothing else — `setLens`, the interface, `refit` and the `active` predicate all stay in Task 3.
+
+Then add the guard that catches this class of bug, in the shape the file's other wiring guards already use (`readFileSync` over its own source): parse the declared parameter names out of each WGSL constant's header and assert the matching `wgslFn(CONST)({ ... })` call supplies exactly that set — for all three passes, not just the blit. **Verify it fails before the binding and passes after**; a guard whose failure you never saw is not yet a guard.
+
+- [ ] **Step 7: Run the tests and watch them pass**
 
 ```bash
 npx vitest run src/lab/sdf-zombie/webgpu/post-aa.test.ts
@@ -485,7 +503,7 @@ npx vitest run src/lab/sdf-zombie/webgpu/post-aa.test.ts
 
 Expected: PASS, including the pre-existing WGSL parse-contract and reserved-word guards (the new names — `lens`, `k`, `rmax`, `aspect`, `q`, `r`, `scale`, `w`, `offs`, `texel`, `acc`, `i`, `warped`, `wp` — are all clear of the reserved list).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/post-aa.ts src/lab/sdf-zombie/webgpu/post-aa.test.ts
@@ -598,9 +616,9 @@ Next to `const uSmear = ...` in `createPostAa`, add:
   let lensRenderFov = 0;
   let lensCenterFov = 0;
   let lens: Lens = makeLens(0, 0, 1);
-  // (k, rmax, aspect) — see fisheye.ts. All zero until setLens is called.
-  const uLens = uniform(new THREE.Vector3(0, 0, 0));
 ```
+
+`uLens` already exists and is already bound to the blit — Task 2 added it so that commit would not leave the shader uncallable. Widen Task 2's import to `import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';`.
 
 Add the resolver just above the existing `function refit()`:
 
@@ -614,19 +632,9 @@ Add the resolver just above the existing `function refit()`:
 
 Add `recomputeLens();` as the last statement inside `refit()` — after the target `setSize` calls — so a window resize re-resolves the lens on the same listener that resizes everything else.
 
-- [ ] **Step 5: Feed the uniform to the blit and the gate**
+- [ ] **Step 5: Put the lens in the active gate**
 
-In the `blitOut` wiring, add the parameter:
-
-```ts
-  const blitOut = wgslFn(POST_AA_BLIT_WGSL)({
-    srcTex: blitSrcTex,
-    texCoord: uv(),
-    cfg: uBlitCfg,
-    dstSize: uBlitDst,
-    lens: uLens,
-  }) as unknown as Swizzled;
-```
+`render()` drops the capture redirect and hands the canvas straight to the chain when nothing is on — and then the blit never runs at all, so a lens set on an otherwise-default page would silently do nothing.
 
 In `render(chain)`, change the `active` line from:
 
