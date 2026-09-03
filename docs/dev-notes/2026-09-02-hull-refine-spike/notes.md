@@ -103,8 +103,9 @@ the walk needs band/sin(theta) of travel to reach flesh, and the far bound
 hull + 2·band ends it — steps cannot help, only the cap. `capMul` knob added (far bound
 = hull + capMul·band), default **6**; cost lands only on true misses since hits still
 break in a few steps. Headless captures (`cap-diag*/sheet.png`, side and follow cameras,
-ten instants) never landed the exact arm-forward pose, so the fix is reasoned, not
-proven against the owner's frame. Re-check it first if this is ever revived.
+ten instants) never landed the exact arm-forward pose. **Owner confirmed on their own
+tab (2026-09-02): fixed at capMul 6, and "clean such that I don't notice" needs
+steps 16.** Defaults are now capMul 6 / steps 16.
 
 ## Verdict — PARKED (owner, 2026-09-02)
 

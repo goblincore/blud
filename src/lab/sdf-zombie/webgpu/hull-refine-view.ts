@@ -19,7 +19,10 @@ export interface HullKnobs { cell: number; band: number; steps: number; capMul: 
  *  (gradient ~0.55) and the wound zone steps at 0.6*d by design, so a 4-step
  *  walk from +band leaves gaps at neck/shoulder/wrist and beside craters.
  *  8 closes them at 2 cm band; 12 is indistinguishable (2026-09-02 notes). */
-export const DEFAULT_HULL_KNOBS: HullKnobs = { cell: 0.02, band: 0.02, steps: 8, capMul: 6 };
+// steps 16 (owner, own tab, 2026-09-02: "have to bump steps to 16 to make it
+// clean such that I don't notice"); hits still break in 2-3 evals, so the budget
+// is paid only by grazing and blend-zone pixels.
+export const DEFAULT_HULL_KNOBS: HullKnobs = { cell: 0.02, band: 0.02, steps: 16, capMul: 6 };
 
 /** The subset of ZombieGpuView / ChunkGpuView the wrapper relies on. */
 export interface HullInnerView {
