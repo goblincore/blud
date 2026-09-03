@@ -64,6 +64,7 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
+import { FISHEYE_DEFAULTS, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
@@ -375,6 +376,14 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  // THE FISHEYE. The camera renders WIDER than the player sees and the blit
+  // squeezes it back, which is what buys the bulge without losing the frame
+  // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
+  // camera.fov is what pays for it. Both live on __sdfGame.
+  let centerFovDeg: number = FISHEYE_DEFAULTS.centerFovDeg;
+  camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
+  camera.updateProjectionMatrix();
+  postAa.setLens(camera.fov, centerFovDeg);
   const sdfLayer = createSdfLayer(handle.renderer);
   postAa.addSink(sdfLayer);
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
@@ -3030,6 +3039,38 @@ async function main() {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    // ---------------------------------------------------------------
+    // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
+    // screen CENTRE; setRenderFov(deg) sets what the camera actually
+    // draws. The bend is the ratio between them, so raising the render
+    // FOV at a fixed centre FOV bends harder AND shows more world —
+    // at the cost of more of it being marched. setFisheye(camera.fov)
+    // (or anything wider) turns the lens off exactly.
+    // ---------------------------------------------------------------
+    setFisheye: (deg: number) => {
+      centerFovDeg = deg;
+      postAa.setLens(camera.fov, centerFovDeg);
+    },
+    setRenderFov: (deg: number) => {
+      camera.fov = deg;
+      camera.updateProjectionMatrix();
+      postAa.setLens(camera.fov, centerFovDeg);
+      sizeSdfLayer();
+    },
+    /** renderFovDeg is what is drawn, visibleFovDeg what reaches the
+     *  screen (the warp crops the mid-edges), centerFovDeg what the
+     *  middle reads as. Tune against `visible`, not `render`.
+     *  Read the render FOV off the LENS, not off the camera: the lens
+     *  is what the blit actually applied, and the two could otherwise
+     *  drift through separate seams. */
+    get fisheye() {
+      return {
+        renderFovDeg: postAa.lens.renderFovDeg,
+        centerFovDeg,
+        visibleFovDeg: visibleFovDeg(postAa.lens),
+        k: postAa.lens.k,
+      };
+    },
     // ---------------------------------------------------------------
     // C2 HALF-RATE — march every other frame, reproject the held march
     // in between (sdf-layer.ts header). Default OFF; the look verdict is
