@@ -11,6 +11,7 @@
     "blob:measure": "tsx scripts/blob-measure.ts",
     "blob:rings": "tsx scripts/blob-rings.ts",
     "blob:shot": "scripts/blob-shot.sh",
+    "melt:shot": "scripts/melt-shot.sh",
     "blob:render-check": "scripts/blob-render-check.sh",
     "test:watch": "vitest",
     "blob:face-bake": "python3 scripts/blob-face-bake.py",
