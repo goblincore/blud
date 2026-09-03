@@ -64,7 +64,7 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
-import { FISHEYE_DEFAULTS, visibleFovDeg } from './fisheye';
+import { FISHEYE_DEFAULTS, clampFovDeg, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
@@ -380,10 +380,33 @@ async function main() {
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
   // camera.fov is what pays for it. Both live on __sdfGame.
+  // CO-INVARIANT: camera.fov and postAa's lens must never disagree about the
+  // render FOV. Right now the only writers are the two seams below, which
+  // keep that promise by construction. If anything else ever moves
+  // camera.fov directly (aimFrustum's own comment already anticipates a
+  // future ADS/recoil tween), it must re-call
+  // `postAa.setLens(camera.fov, centerFovDeg)` in the same breath, or the
+  // blit's squeeze silently stops matching the frustum that drew the frame
+  // — see post-aa.ts's own setRenderCap note for the same class of hazard.
   let centerFovDeg: number = FISHEYE_DEFAULTS.centerFovDeg;
   camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
   camera.updateProjectionMatrix();
   postAa.setLens(camera.fov, centerFovDeg);
+  /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
+   *  A shared function rather than three copies of the same object literal
+   *  — and the setters' own return value, not just the getter, because an
+   *  object-literal method can't write `return this.fisheye` and a shared
+   *  local is the way around that. Reads renderFovDeg/k off the LENS, not
+   *  the camera: the lens is what the blit actually applied, so this is
+   *  what tells a console user their setRenderFov(500) landed on 179. */
+  function fisheyeReport() {
+    return {
+      renderFovDeg: postAa.lens.renderFovDeg,
+      centerFovDeg,
+      visibleFovDeg: visibleFovDeg(postAa.lens),
+      k: postAa.lens.k,
+    };
+  }
   const sdfLayer = createSdfLayer(handle.renderer);
   postAa.addSink(sdfLayer);
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
@@ -3046,30 +3069,38 @@ async function main() {
     // FOV at a fixed centre FOV bends harder AND shows more world —
     // at the cost of more of it being marched. setFisheye(camera.fov)
     // (or anything wider) turns the lens off exactly.
+    //
+    // Both setters clamp with clampFovDeg — the same clamp makeLens applies
+    // internally — so camera.fov and the lens can never disagree about the
+    // render FOV (a stray setRenderFov(500) would otherwise squeeze the
+    // frame with a lens clamped to 179 while the frustum drew at 500). Both
+    // reject non-finite input as a no-op rather than feeding a NaN into
+    // camera.updateProjectionMatrix() (a dead frame) or into makeLens (whose
+    // clamp does not catch NaN either — see fisheye.ts). Both return the
+    // report that .fisheye also returns, so the console shows what actually
+    // landed, not what was typed.
     // ---------------------------------------------------------------
     setFisheye: (deg: number) => {
-      centerFovDeg = deg;
-      postAa.setLens(camera.fov, centerFovDeg);
+      if (Number.isFinite(deg)) {
+        centerFovDeg = clampFovDeg(deg);
+        postAa.setLens(camera.fov, centerFovDeg);
+      }
+      return fisheyeReport();
     },
     setRenderFov: (deg: number) => {
-      camera.fov = deg;
-      camera.updateProjectionMatrix();
-      postAa.setLens(camera.fov, centerFovDeg);
-      sizeSdfLayer();
+      if (Number.isFinite(deg)) {
+        camera.fov = clampFovDeg(deg);
+        camera.updateProjectionMatrix();
+        postAa.setLens(camera.fov, centerFovDeg);
+        sizeSdfLayer();
+      }
+      return fisheyeReport();
     },
     /** renderFovDeg is what is drawn, visibleFovDeg what reaches the
      *  screen (the warp crops the mid-edges), centerFovDeg what the
-     *  middle reads as. Tune against `visible`, not `render`.
-     *  Read the render FOV off the LENS, not off the camera: the lens
-     *  is what the blit actually applied, and the two could otherwise
-     *  drift through separate seams. */
+     *  middle reads as. Tune against `visible`, not `render`. */
     get fisheye() {
-      return {
-        renderFovDeg: postAa.lens.renderFovDeg,
-        centerFovDeg,
-        visibleFovDeg: visibleFovDeg(postAa.lens),
-        k: postAa.lens.k,
-      };
+      return fisheyeReport();
     },
     // ---------------------------------------------------------------
     // C2 HALF-RATE — march every other frame, reproject the held march

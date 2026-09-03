@@ -79,25 +79,31 @@ export function cornerRadius(aspect: number): number {
 }
 
 /**
+ * Clamp a FOV in degrees to [1, 179] — 0/180 degenerate the tangent. Does
+ * NOT guard against NaN: `Math.max(1, NaN)` is `NaN`, so a NaN FOV passes
+ * straight through unchanged. That is the caller's to avoid, not this
+ * function's — see makeLens below and the call sites in game-main.ts.
+ */
+export function clampFovDeg(deg: number): number {
+  return Math.min(179, Math.max(1, deg));
+}
+
+/**
  * Build the lens. Both FOVs are VERTICAL degrees: `renderFovDeg` is what the
  * camera draws, `centerFovDeg` what the middle of the screen should read as.
  * A centre FOV that is not narrower than the render FOV yields k = 0 — the
  * off switch, and an exact identity rather than an approximate one.
  *
- * Both FOVs are clamped to [1, 179] before use — a runtime tuning seam can
- * hand this a value with no upstream validation of its own, and 0/180
- * degenerate the tangent. The clamp does NOT guard against NaN: `Math.max(1,
- * NaN)` is `NaN`, so a NaN FOV flows straight through into `k` (and from
- * there into `renderFovDeg`) unchanged. That is the caller's to avoid, not
- * this function's.
+ * Both FOVs are clamped (clampFovDeg) before use — a runtime tuning seam can
+ * hand this a value with no upstream validation of its own. See
+ * clampFovDeg's own doc for the NaN caveat, which applies here unchanged.
  */
 export function makeLens(
   renderFovDeg: number, centerFovDeg: number, aspect: number,
 ): Lens {
   const rmax = cornerRadius(aspect);
-  const clampFov = (d: number) => Math.min(179, Math.max(1, d));
-  const rf = clampFov(renderFovDeg);
-  const cf = clampFov(centerFovDeg);
+  const rf = clampFovDeg(renderFovDeg);
+  const cf = clampFovDeg(centerFovDeg);
   if (cf >= rf) return { k: 0, rmax, aspect, renderFovDeg: rf };
   const ratio = Math.tan((rf * Math.PI) / 360) / Math.tan((cf * Math.PI) / 360);
   return { k: (ratio - 1) / (rmax * rmax), rmax, aspect, renderFovDeg: rf };

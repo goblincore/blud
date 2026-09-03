@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FISHEYE_DEFAULTS, FISHEYE_WGSL, makeLens, cornerRadius, sampleRadius,
-  screenRadius, reticleNdc, visibleFovDeg, warpUv,
+  screenRadius, reticleNdc, visibleFovDeg, warpUv, clampFovDeg,
 } from './fisheye';
 
 const ASPECT = 16 / 9;
@@ -109,6 +109,20 @@ describe('fisheye reporting', () => {
   it('ships the owner-approved defaults', () => {
     expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(90);
     expect(FISHEYE_DEFAULTS.centerFovDeg).toBe(60);
+  });
+
+  it('makeLens lands on exactly what clampFovDeg would, for any raw input', () => {
+    // The real guarantee this pins: a caller that pre-clamps a FOV with
+    // clampFovDeg (game-main.ts's seams do) can never end up with a camera
+    // and a lens that disagree about the render FOV, because makeLens's own
+    // internal clamp lands on the exact same number for the RAW, un-clamped
+    // input. Calling makeLens directly with the raw value (not pre-clamped)
+    // is what makes this exercise makeLens's own clamp rather than being a
+    // no-op identity check — feeding it an already-clamped value would pass
+    // even with no internal clamp at all.
+    for (const deg of [500, -5, 0, 179, 1, 90, 180, 1e6]) {
+      expect(makeLens(deg, 60, ASPECT).renderFovDeg).toBe(clampFovDeg(deg));
+    }
   });
 });
 
