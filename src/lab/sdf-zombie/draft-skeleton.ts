@@ -26,6 +26,10 @@ import {
   type PaintedPt, type RgbImage, type PairAsym,
 } from './draft-paint';
 import type { DraftBone, DraftInput, DraftSideFit } from './draft-emit';
+import { builtSurfaceY, emitDraft } from './draft-emit';
+import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
+import { buildBody } from './build-body';
 import { add, dot, scale as vscale, sub } from './vec';
 
 /**
@@ -280,6 +284,11 @@ export interface AssembledDraft {
  * emitter consumes. Throws (never exits) when there is no root/head surface
  * to hang a body from or a pair is one-sided — the CLI turns that into its
  * exit-2 contract.
+ *
+ * The returned `g` is the SURFACE-calibrated scale ({@link calibrated}), not
+ * the raw height/meshExtent ratio — every fit in `input` was made at it, so
+ * the artifact's numbers and its `chain.scale` provenance agree with it by
+ * construction.
  */
 export function assembleDraft(
   skin: RefSkin, rig: RigDef, image: RgbImage | null, opts: { name: string; height?: number },
@@ -295,7 +304,20 @@ export function assembleDraft(
   }
   const meshExtent = maxY - minY;
   const height = opts.height ?? meshExtent;
-  const g = height / meshExtent;
+  return calibrated(skin, rig, image, opts, meshExtent, height);
+}
+
+/**
+ * One full fit pass at global scale `g`: the grouping walk, per-bone fits
+ * and chain assembly. Positions are scaled into authored metres up front, so
+ * EVERY measurement below — lengths, radii, offsets, residuals, the root
+ * anchor — is linear in `g`. That homogeneity is what makes the calibration
+ * in {@link calibrated} exact in one step rather than iterative.
+ */
+function fitPass(
+  skin: RefSkin, rig: RigDef, image: RgbImage | null, opts: { name: string; height?: number },
+  meshExtent: number, height: number, g: number,
+): AssembledDraft {
 
   // --- the one grouping walk --------------------------------------------------
   // skin.verts are already dominant-weight-filtered (the calibrated rule
@@ -648,4 +670,63 @@ export function assembleDraft(
     height,
     g,
   };
+}
+
+/**
+ * The one scale, corrected to the SURFACE.
+ *
+ * A reference mesh's height is a SURFACE measurement — the crown is skin,
+ * not the Head joint — so the draft's height line is one too. But fitPass
+ * scales the VERTEX extent to `height`, and the built body is capsules, not
+ * vertices: the outermost band at each end adds its radius past the last
+ * cloud point (measured on the acceptance fixture: ~4 cm at the sole, ~12 cm
+ * at the crown, on a 1.9 m figure — the +5.3% the height acceptance read).
+ * The grounding already absorbs the sole side, which is precisely why the
+ * whole excess showed up at the crown.
+ *
+ * Every length and radius in a pass is linear in the one global scale, so
+ * ONE corrective ratio is exact, not iterative: re-fit at
+ * g · height / builtExtent and the crown and the re-derived grounding both
+ * land. The rule is general on purpose — the SURFACE is the requested
+ * height, whatever made it stick out — so a horned or hatted character
+ * corrects the same way; special-casing the head prim would not.
+ *
+ * A first pass that does not build cannot be measured; the draft is then
+ * emitted at the vertex-extent scale and says so in its notes (the same
+ * honesty rule as the emitter's ungrounded case).
+ */
+function calibrated(
+  skin: RefSkin, rig: RigDef, image: RgbImage | null, opts: { name: string; height?: number },
+  meshExtent: number, height: number,
+): AssembledDraft {
+  const first = fitPass(skin, rig, image, opts, meshExtent, height, height / meshExtent);
+  let g2: number | null = null;
+  try {
+    const text = emitDraft(first.input);
+    const doc = parseBlob(text);
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    const { min, max } = builtSurfaceY(body.prims);
+    const extent = max - min;
+    if (Number.isFinite(extent) && extent > 0) {
+      const corrected = (height / meshExtent) * (height / extent);
+      // Within epsilon of a no-op correction, skip the second pass: the
+      // numbers would come out the same, and the returned notes then describe
+      // exactly the fits being returned.
+      if (Math.abs(corrected / first.g - 1) > 1e-6) g2 = corrected;
+    } else {
+      first.notes.push('built surface unmeasurable — scale left uncalibrated (vertex-extent scale)');
+    }
+  } catch {
+    first.notes.push('first pass did not build — scale left uncalibrated (vertex-extent scale)');
+  }
+  if (g2 === null) return first;
+  try {
+    return fitPass(skin, rig, image, opts, meshExtent, height, g2);
+  } catch (e) {
+    // The pass differs from the first only by scale; if it still throws,
+    // keeping the measured-but-uncorrected draft beats aborting a fit that
+    // built fine (the CLI's build report will name the real problem).
+    first.notes.push(`calibration pass failed (${(e as Error).message}) — kept the vertex-extent scale`);
+    return first;
+  }
 }
