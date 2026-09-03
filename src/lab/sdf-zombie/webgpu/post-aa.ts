@@ -395,18 +395,23 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uSmear = uniform(POST_AA_DEFAULTS.smear);
   // The lens, held as the two FOVs it was asked for: `k` depends on the
   // display aspect, so it is re-resolved on every refit rather than cached
-  // from whatever the window happened to be at boot.
+  // from whatever the window happened to be at boot. `k = 0` is the real off
+  // flag — the FOVs default to 0 (clamped to 1° by makeLens) and are only
+  // meaningful once setLens() has actually run, so a HUD reading
+  // lens.renderFovDeg before that must check lens.k first.
   let lensRenderFov = 0;
   let lensCenterFov = 0;
+  // Placeholder; the construction-time refit() below overwrites it (via
+  // recomputeLens) before the first frame.
   let lens: Lens = makeLens(0, 0, 1);
   // x = effective smear, y = current frame arrives display-encoded.
   const uBlendCfg = uniform(new THREE.Vector2(0, 0));
   // x = flipY, y = src is display-space, z = sharp mode, w = spare.
   const uBlitCfg = uniform(new THREE.Vector4(1, 0, 0, 0));
   const uBlitDst = uniform(new THREE.Vector2(1, 1));
-  // (k, rmax, aspect) — see fisheye.ts. Starts all-zero (k = 0, lens off, an
-  // exact identity in the blit); recomputeLens() keeps it in sync with
-  // setLens() and every refit thereafter.
+  // (k, rmax, aspect) — see fisheye.ts. Owned by recomputeLens() from the
+  // construction-time refit() onward; k = 0 is the off switch (an exact
+  // identity in the blit) whatever rmax and aspect happen to be.
   const uLens = uniform(new THREE.Vector3(0, 0, 0));
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
@@ -480,9 +485,23 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const emptyScene = new THREE.Scene();
   const drawSize = new THREE.Vector2();
 
+  /**
+   * The ONLY writer of `lens` and `uLens`. Must run after anything that can
+   * move the content size — it is called from setLens() and from the tail of
+   * refit(), and there is no other path that keeps them in sync. NOTE: a
+   * future runtime setRenderCap() switch fires no resize event, so a caller
+   * that adds one must call refit() itself or the lens and contentSize will
+   * silently disagree about the aspect.
+   */
   function recomputeLens() {
     const c = computeRenderSize(window.innerWidth, window.innerHeight);
-    lens = makeLens(lensRenderFov, lensCenterFov, c.width / c.height);
+    const next = makeLens(lensRenderFov, lensCenterFov, c.width / c.height);
+    // makeLens's clamp does not catch NaN (see fisheye.ts), and the JS gate
+    // (k > 0) and the WGSL gate (k <= 0.0) disagree about it: JS reads NaN as
+    // off, WGSL as on, so the frame would warp on every UV while the API
+    // reports the lens as off. Resolve it here, once, at the seam that takes
+    // the input, rather than leaving two disagreeing gates downstream.
+    lens = Number.isFinite(next.k) ? next : makeLens(0, 0, c.width / c.height);
     uLens.value.set(lens.k, lens.rmax, lens.aspect);
   }
 

@@ -17,6 +17,7 @@ import {
   POST_AA_FXAA_WGSL, POST_AA_BLEND_WGSL, POST_AA_BLIT_WGSL,
   createPostAa,
 } from './post-aa';
+import { getRenderCap, setRenderCap } from './lab-renderer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -325,12 +326,72 @@ describe('post-aa all-off parity (the hard gate)', () => {
   });
 
   it('resolves the lens against the CONTENT aspect, not the window', () => {
-    const { renderer } = stubRenderer();
+    // Under the default 'fit' cap, computeRenderSize preserves the window's
+    // aspect by construction (see lab-renderer.ts), so no window size can
+    // ever separate content aspect from window aspect there. Only a 'fixed'
+    // cap decouples them — set one whose aspect (2:1) differs from
+    // happy-dom's 4:3 window, so this test can actually fail.
+    const priorCap = getRenderCap();
+    try {
+      setRenderCap({ mode: 'fixed', width: 800, height: 400 });
+      const { renderer } = stubRenderer();
+      const post = createPostAa(renderer);
+      post.setLens(90, 60);
+      const windowAspect = window.innerWidth / window.innerHeight;
+      expect(post.lens.aspect).toBeCloseTo(2, 9);
+      expect(post.lens.aspect).not.toBeCloseTo(windowAspect, 1);
+    } finally {
+      setRenderCap(priorCap);
+    }
+  });
+
+  it('re-resolves the lens on resize', () => {
+    // 'fit' keeps content aspect == window aspect, so changing the window's
+    // aspect and dispatching resize is a discriminating probe: if refit()
+    // ever drops (or reorders before setSize) its recomputeLens() call, this
+    // is the test that notices — every other current test would still pass.
+    const priorW = window.innerWidth;
+    const priorH = window.innerHeight;
+    try {
+      const { renderer } = stubRenderer();
+      const post = createPostAa(renderer);
+      post.setLens(90, 60);
+      const before = post.lens.aspect;
+
+      Object.defineProperty(window, 'innerWidth', { value: 400, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true });
+      window.dispatchEvent(new Event('resize'));
+
+      const after = post.lens.aspect;
+      expect(after).not.toBeCloseTo(before, 1);
+      expect(after).toBeCloseTo(post.contentSize.width / post.contentSize.height, 9);
+      // k is aspect-dependent, which is the entire reason the FOVs are
+      // stored rather than a single precomputed k.
+      expect(post.lens.k).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: priorW, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: priorH, configurable: true });
+    }
+  });
+
+  it('a NaN FOV resolves to the lens being off, not a silent warp', () => {
+    const { renderer, calls } = stubRenderer();
     const post = createPostAa(renderer);
-    post.setLens(90, 60);
-    const c = post.contentSize;
-    expect(post.lens.aspect).toBeCloseTo(c.width / c.height, 9);
-    expect(post.lens.rmax).toBeCloseTo(Math.hypot(post.lens.aspect, 1), 9);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setLens(NaN, 60);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    expect(post.lens.k).toBe(0);
+    expect(Number.isFinite(post.lens.k)).toBe(true);
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(chainCalls).toBe(1);
+    expect(calls.setRenderTarget).toBe(0);
+    expect(calls.render).toBe(0);
   });
 });
 
