@@ -106,8 +106,8 @@ shimmers, and this renderer's low internal resolution makes that worse, not bett
 Mitigation, in the warped path only: a **4-tap rotated-grid sample** whose spread is
 the local Jacobian of the map, which is analytic here. The existing 0.25 smear
 absorbs what is left. If it still crawls, that is a tuning conversation (more taps,
-or a mip chain on the source), not a redesign — and the fisheye can be switched off
-at the knob while it is had.
+or a mip chain on the source), not a redesign — and the knob switches the fisheye off
+in the meantime.
 
 Sharp-upscale mode is unaffected in kind: the warp composes with it, since both are
 a UV computation ahead of the same fetch.
@@ -122,9 +122,9 @@ something other than what the shot hits.
 
 The fix: draw it at `warp⁻¹(aim)`. The blit samples source radius `g(r)` for screen
 radius `r`, so content living at source radius `s` appears at screen radius
-`g⁻¹(s)` — **pushed outward**, since the centre is magnified. `g⁻¹` is a cubic
-(`k·r³ + r − C = 0`, monotonic), solved by Newton from `r = C`; a handful of
-iterations for one point per frame.
+`g⁻¹(s)` — **pushed outward**, since the centre is magnified. Writing
+`C = s · f(rmax) / rmax`, the inverse is the monotonic cubic `k·r³ + r − C = 0`,
+solved by Newton from `r = C`; a handful of iterations for one point per frame.
 
 Firing is untouched: `free-aim.ts`'s `weaponAngles` and the fire ray keep working in
 the true frustum. Only the drawn position of the crosshair changes.
