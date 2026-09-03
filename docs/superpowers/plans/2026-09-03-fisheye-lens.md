@@ -16,7 +16,7 @@
 
 | File | Responsibility |
 | --- | --- |
-| `src/lab/sdf-zombie/webgpu/fisheye.ts` (**create**) | The lens, and nothing else: `Lens`, `makeLens`, `sampleRadius` (forward), `screenRadius` (inverse), `reticleNdc`, `visibleFovDeg`, and `FISHEYE_WGSL` — the single definition the shader and the reticle both use. |
+| `src/lab/sdf-zombie/webgpu/fisheye.ts` (**create**) | The lens, and nothing else: `Lens`, `makeLens`, `sampleRadius` (forward), `screenRadius` (inverse), `reticleNdc`, `visibleFovDeg`, `warpUv`, `clampFovDeg`, and `FISHEYE_WGSL` — the single definition the shader and the reticle both use. (`Lens` carries `renderFovDeg`, so `visibleFovDeg` takes only the lens — see the Task 1 review follow-ups.) |
 | `src/lab/sdf-zombie/webgpu/fisheye.test.ts` (**create**) | Pure maths tests. |
 | `src/lab/sdf-zombie/webgpu/post-aa.ts` (**modify**) | Blit grows a `lens` parameter and a 4-tap warped path; `setLens` / `lens` on the interface; the lens joins the `active` gate. |
 | `src/lab/sdf-zombie/webgpu/post-aa.test.ts` (**modify**) | Parity with the lens off; redirect with it on; WGSL text guards cover the new helper. |
@@ -132,8 +132,8 @@ describe('fisheye inverse', () => {
 describe('fisheye reporting', () => {
   it('reports the vertical FOV actually visible, not the one rendered', () => {
     // Mid-edges are cropped by the warp: 90 rendered reads as ~68.3 on screen.
-    expect(visibleFovDeg(90, DEF)).toBeCloseTo(68.3, 1);
-    expect(visibleFovDeg(90, makeLens(90, 90, ASPECT))).toBeCloseTo(90, 9);
+    expect(visibleFovDeg(DEF)).toBeCloseTo(68.3, 1);
+    expect(visibleFovDeg(makeLens(90, 90, ASPECT))).toBeCloseTo(90, 9);
   });
 
   it('ships the owner-approved defaults', () => {
@@ -293,8 +293,8 @@ export function reticleNdc(
  * Reported by the __sdfGame seam so the knob can be tuned against what the
  * player sees rather than what the camera draws.
  */
-export function visibleFovDeg(renderFovDeg: number, lens: Lens): number {
-  const tanR = Math.tan((renderFovDeg * Math.PI) / 360);
+export function visibleFovDeg(lens: Lens): number {
+  const tanR = Math.tan((lens.renderFovDeg * Math.PI) / 360);
   return (360 / Math.PI) * Math.atan(sampleRadius(1, lens) * tanR);
 }
 

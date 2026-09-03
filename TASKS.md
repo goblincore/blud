@@ -47,7 +47,12 @@ outside the visible frame. There is no auto-recentring (`game-main.ts:1115`),
 and shoving the reticle past the dead zone is HOW you turn — so a player
 looking up parks the crosshair off the top of the screen and it stays there.
 Measured at 4:3: the crosshair leaves the frame above `aim.y 0.730` / `aim.x
-0.848`; the corner is the fixed point, so `aim (1,1)` is fine. Two costed
+0.848`; the corner is the fixed point, so `aim (1,1)` is fine. Weight it heavier than an edge
+case: `deadzoneY` is 0.38, so the crosshair leaves the frame over the top ~45%
+of the deflection you need to look up — any firm upward flick gets there.
+CHEAPEST PROBE FIRST: `FREE_AIM.recentreRate` already exists (`free-aim.ts:64`)
+and ships at 0.0; a small non-zero rate would not fix the clamp but would stop
+the crosshair PARKING off-screen, which is the actual complaint. Two fuller
 fixes in the notes — reframe `aim` as screen space (preferred, touches firing
 maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
 

@@ -92,7 +92,18 @@ turn, a player looking up parks the crosshair off the top of the screen and it
 stays there. This is a regression introduced by this work: before the lens,
 full deflection landed exactly on the frame edge.
 
-Two fixes were costed if it does turn out to bother:
+**Weight it heavier than "an edge case."** `deadzoneY` is 0.38, so the upward
+turn range is `[0.38, 1.0]` and the crosshair leaves the frame at 0.730 — the
+top ~45% of the deflection you must use to look up. Any firm upward flick gets
+there; it is not reachable only by abuse.
+
+**Cheapest first probe, not in the two fixes below:** `FREE_AIM.recentreRate`
+already exists and ships at `0.0`. A small non-zero rate would not fix the
+clamp — aim could still momentarily address off-screen points — but it would
+stop the crosshair PARKING off-screen, which is the actual complaint. One line
+to try, at the cost of the "keeps it where you put it" feel the reference has.
+
+Two fuller fixes, if the probe is not enough:
 
 1. **Reframe `aim` as SCREEN space** (preferred). Convert through the forward
    map when computing weapon angles and the fire ray. "You can only aim where
@@ -120,6 +131,16 @@ Two fixes were costed if it does turn out to bother:
   (`src/main.ts`). Untouched, and not duplication to consolidate — different
   renderer stack, and its map clamps out-of-range samples to black, which is
   the exact failure this one eliminates by construction.
+* **Central-crop capture numbers on the game page have a discontinuity at this
+  commit.** `scripts/wound-redness-capture.mjs` and friends measure a fraction
+  over a fixed 30-70% central crop; with the centre magnified 1.73x that crop
+  now covers a much smaller solid angle. Nothing GATES on those values (they are
+  logged, and the slug/shorty gates are world-space and unaffected), but
+  historical numbers are not comparable across this commit.
+* **Adaptive resolution reads differently now.** `applySdfScale` drops the SDF
+  march resolution under load and the lens then magnifies the centre of that
+  reduced march 1.73x, so a dropped rung is more visible than it used to be.
+  Not a defect — but the static captures will understate it.
 * This worktree has an empty `node_modules/`, so imports resolve up to the main
   repo but path-relative binaries do not: `scripts/blob-measure.test.ts` fails
   here with `node_modules/.bin/tsx ENOENT`. Pre-existing, unrelated.

@@ -1,7 +1,9 @@
 # Fisheye lens — design
 
 **Date:** 2026-09-03
-**Status:** approved, awaiting plan
+**Status:** SHIPPED 2026-09-03. Amended in place where the work proved a claim
+wrong; see [the capture notes](../../dev-notes/2026-09-03-fisheye/notes.md) for
+what was actually measured.
 **Scope:** the sdf-game view (`sdf-game.html` → `src/lab/sdf-zombie/webgpu/game-main.ts`).
 The WebGL path (`src/main.ts` + `src/vfx/post-fx/`) is **out of scope** and keeps its
 existing `BarrelEffect`, which is unrelated code.
@@ -89,8 +91,10 @@ narrower vertical view and a visibly wider horizontal one, with the middle magni
 it is today; dropping it lower makes the frame genuinely tighter, which is the trade
 the knob exists to let the owner make by eye.
 
-`k` is recomputed per frame from the **live** aspect, so the apparent centre FOV
-holds steady across a window resize instead of drifting with it.
+`k` is recomputed on every **refit** — construction and each resize — from the
+live content aspect, so the apparent centre FOV holds steady across a window
+resize instead of drifting with it. (Per refit, not per frame: nothing about it
+changes between resizes.)
 
 ## Where the warp lives
 
@@ -112,8 +116,8 @@ exporting the WGSL snippet, the JS forward map and the JS inverse. The reticle n
 the same curve as the shader and the two must not be able to disagree — one
 definition, one set of tests.
 
-Wiring: `POST_AA_BLIT_WGSL` grows a `lens: vec2<f32>` parameter (`x = k`,
-`y = rmax`). `k = 0` takes an early-out branch that is the byte-for-byte current
+Wiring: `POST_AA_BLIT_WGSL` grows a `lens: vec3<f32>` parameter (`x = k`,
+`y = rmax`, `z = aspect`). `k = 0` takes an early-out branch that is the byte-for-byte current
 path. `rmax` is passed rather than derived from `textureDimensions`, because under a
 'fixed' cap the content target is letterboxed and its dimensions are not the display
 aspect.
@@ -133,8 +137,10 @@ Pinning the corners means the periphery is **minified ~2×**, and the blit curre
 point-fetches (`postAaFetch` → `textureLoad`). Point-sampling a 2× minification
 shimmers, and this renderer's low internal resolution makes that worse, not better.
 
-Mitigation, in the warped path only: a **4-tap rotated-grid sample** whose spread is
-the local Jacobian of the map, which is analytic here. The existing 0.25 smear
+Mitigation, in the warped path only: a **4-tap rotated-grid sample**, each tap
+warped independently so that where the lens minifies, the map itself spreads the
+taps further apart in the source. That gets the Jacobian-proportional spread for
+free, with no Jacobian arithmetic. The existing 0.25 smear
 absorbs what is left. If it still crawls, that is a tuning conversation (more taps,
 or a mip chain on the source), not a redesign — and the knob switches the fisheye off
 in the meantime.
@@ -177,12 +183,21 @@ DOM panel (the game has none; panels are lab-side):
 
 * `__sdfGame.setFisheye(centerFovDeg)`
 * `__sdfGame.setRenderFov(deg)`
-* `__sdfGame.fisheye` → `{ renderFovDeg, centerFovDeg, k }` readback
+* `__sdfGame.fisheye` → `{ renderFovDeg, centerFovDeg, visibleFovDeg, k }` readback
+  (both setters return the same report, so the console prints what actually
+  landed after clamping)
 
 ### What needs nothing
 
 `sdfLayer.setConeGeometry`, tile culling, LOD footprints and the free-aim weapon
 angles all read `camera.fov` already and follow the wider render for free.
+
+> **Amended 2026-09-03 — this section was half wrong.** Following the wider
+> render "for free" is exactly what produced **F-aim.1**: free aim's clamp lives
+> in the true frustum, so widening it let aim address points outside the visible
+> frame and the crosshair slides off-screen. The weapon angles and the fire ray
+> are fine; the *clamp* was not. See the
+> [capture notes](../../dev-notes/2026-09-03-fisheye/notes.md) and `TASKS.md`.
 
 ## Testing
 

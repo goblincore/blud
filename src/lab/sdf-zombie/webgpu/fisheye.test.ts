@@ -199,6 +199,22 @@ describe('fisheye shader/JS agreement', () => {
     expect(FISHEYE_WGSL).toContain('if (k <= 0.0) { return st; }');
   });
 
+  // The UV<->half-height conversion is the half of the shader with no JS
+  // mirror at all -- sampleRadius works in radii and never touches UV, and
+  // warpUv is a hand-written COPY of these two lines, so it cannot notice if
+  // they change. Drop the `aspect` from the first or the `2.0 *` from the
+  // second and the frame warps elliptically or off-centre while every other
+  // test in this file still passes. These two assertions are the only thing
+  // standing between that and a green suite.
+  it('the WGSL frames UV in half-height units, and un-frames it the same way', () => {
+    expect(FISHEYE_WGSL).toContain(
+      'let q = (st - vec2<f32>(0.5, 0.5)) * vec2<f32>(2.0 * aspect, 2.0);',
+    );
+    expect(FISHEYE_WGSL).toContain(
+      'return vec2<f32>(w.x / (2.0 * aspect), w.y * 0.5) + vec2<f32>(0.5, 0.5);',
+    );
+  });
+
   it('is exactly one helper fn, for appending to the blit', () => {
     expect(FISHEYE_WGSL.startsWith('fn fisheyeWarp(')).toBe(true);
     expect(FISHEYE_WGSL.match(/\bfn\s+\w+\s*\(/g)).toHaveLength(1);
