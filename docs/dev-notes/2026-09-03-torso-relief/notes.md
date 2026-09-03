@@ -280,3 +280,63 @@ hardcoded constant — the mouse should not grow bull striation — and the AO
 tap needs a perf measurement it has not had. Both belong with the queued
 hard-surface shader work: same file, same kind of change, and the noise
 guard needs its frequency term before `k` is exposed to authors.
+
+## Round 8: where procedural structure runs out
+
+Owner's refinement: don't replace `silhouetteNoiseAmp`, **add a second pass on
+top of it** — additive and opt-in, so every existing character stays
+bit-identical. Right shape, and it frees the new term to be something other
+than noise. Three more spikes:
+
+| spike | result |
+| --- | --- |
+| additive anisotropic `fbm` | elongated forms, but muddied by the isotropic term still underneath |
+| **ridged** — `(c - abs(fbm·gain))`, creases instead of lumps, gain 2.6 | shredded, and tore the march again |
+| ridged at a **gradient budget** (gain 1.05 × maxFreq 3.0 × amp 0.011 ≈ baseline's 1.0 × 3.0 × 0.014) + cavity tap | clean, more definition than baseline, but reads as **knobbly hide** |
+
+The gradient budget is the reusable part: **gain × maxFreq × amp** is what the
+march actually pays for, and holding that product at the baseline's value kept
+every artefact away while changing the character of the noise freely.
+
+But the third render is the honest verdict on the whole procedural route:
+
+> **Procedural creases land in random places.** A pec split has to be where
+> the pec split is. No amount of tuning random noise produces anatomy — it
+> produces texture, which is what `silhouetteNoiseAmp` already gives us.
+
+## Round 9: the structure has to be authored — and the machinery exists
+
+Owner: *"structured could be like how a normal map works, just project a 2D
+black and white texture of sorts, like painting the muscles."*
+
+That is the answer, and almost all of it is already built for the FACE:
+
+- **`sheet`** projects a 2D image onto the head with `projScaleX/Y` and
+  `projCentreX/Y` (`blob-face-sheet.ts`), and drives a **bump** from it —
+  `n = normalize(n + bump * faceCfg.w * ...)` at `march.wgsl.ts:2212`. That is
+  already "project a 2D texture, paint detail onto the surface".
+- **`blob:face-bake`** already bakes such an image from the reference mesh.
+- **`anchor`**, the dominant prim's rest-frame point, already exists and is
+  already what every fbm samples — so a projection built on it is stable
+  through gait and jiggle for free.
+
+Two things it must do differently from a normal map, both learned above:
+
+1. **Sample it inside `mapBody` and add to `detail`, displacing the REAL
+   field** — not just perturbing `n`. That is the whole lesson of round 6: a
+   normal-only feature runs into the same weak-contrast wall the grooves did,
+   because AO cannot see it and there is no self-shadowing. Displacement
+   breaks the silhouette AND feeds the cavity tap.
+2. **Respect the gradient budget.** A painted map's Lipschitz constant is
+   `amp / pixel_size`, so a sharp black line in the image is a cliff in the
+   field. It needs blurring or clamping, and `validateBody`'s noise guard
+   cannot see it — the guard is amplitude-only (see round 7).
+
+### And the map may not need painting at all
+
+`blob:relief` already computes reference-minus-body front-wall depth per cell.
+**That difference IS a displacement map.** Emitting it as a PNG gives an
+anatomically correct muscle plate derived from the reference we are already
+measuring against, rather than one painted by hand — and it closes the loop
+the whole session has been circling: the tool that MEASURES the missing relief
+would also SUPPLY it.
