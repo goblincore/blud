@@ -145,7 +145,12 @@ export function createSurfaceNetsCompute(
       // Counters reset by upload: cheapest correct thing for 16 bytes.
       countersZero.fill(0);
       countersAttr.needsUpdate = true;
-      renderer.compute([netsNode, quadsNode, argsNode]);
+      // Dispatch THIS frame's grid, not the capacity: blocks for the nets
+      // kernel (one workgroup each), cells/64 for the quads kernel. The
+      // capacity dispatch cost ~4M invocations a frame of pure early-outs.
+      renderer.compute(netsNode, [g.blockCount, 1, 1] as never);
+      renderer.compute(quadsNode, [Math.ceil(g.cellCount / 64), 1, 1] as never);
+      renderer.compute(argsNode);
       last = { cellVerts: -1, soupVerts: -1, overflow: false, dropped: -1,
                blockCount: g.blockCount, cellCount: g.cellCount, grid };
       return last;

@@ -37,7 +37,7 @@ export const EDGE_Z_CROSS = 16, EDGE_Z_IN2OUT = 32;
  *  Shared with the WGSL kernel — change both in the same commit. */
 export const VERT_PULL_TARGET = 0.6;
 /** Max Newton iterations for the pull. */
-export const VERT_PULL_ITERS = 10;
+export const VERT_PULL_ITERS = 4;
 
 export interface HullGrid {
   /** World-space corner (0,0,0). */
@@ -216,11 +216,20 @@ export function extractHullSoup(
         base[1] + (sy / n) * grid.cell,
         base[2] + (sz / n) * grid.cell,
       ];
+      // Direction = the CELL's corner gradient (free — the 8 corners are
+      // already evaluated); only the field VALUE is re-sampled per step.
+      // Was 7 evals/iteration x 10 iterations (central differences): up to
+      // 70 field evals per surface cell, more than the march spends per
+      // pixel. Now 1 eval/iteration x 4.
+      const gcx = (v[1]! - v[0]!) + (v[3]! - v[2]!) + (v[5]! - v[4]!) + (v[7]! - v[6]!);
+      const gcy = (v[2]! - v[0]!) + (v[3]! - v[1]!) + (v[6]! - v[4]!) + (v[7]! - v[5]!);
+      const gcz = (v[4]! - v[0]!) + (v[5]! - v[1]!) + (v[6]! - v[2]!) + (v[7]! - v[3]!);
+      const gl = Math.hypot(gcx, gcy, gcz) || 1;
+      const dir: Vec3 = [gcx / gl, gcy / gl, gcz / gl];
       for (let it = 0; it < VERT_PULL_ITERS; it++) {
         const fp = field(p);
         const err = fp - band * VERT_PULL_TARGET;
         if (err <= 1e-4) break;
-        const dir = gradientOf(field, p, 1e-3);
         const step = Math.min(err, grid.cell / 2);
         p = [p[0] - dir[0] * step, p[1] - dir[1] * step, p[2] - dir[2] * step];
       }

@@ -74,10 +74,13 @@ describe('surface-nets WGSL parse contract', () => {
     // 'meta' is a RESERVED KEYWORD in WGSL — using it as a parameter name
     // fails shader-module creation.
     expect(signature(K_HULL_ARGS)).not.toMatch(/\bmeta\b/);
-    // A barrier reached after a branch on a workgroup-storage READ is
-    // non-uniform control flow to Tint. The live test is recomputed per
-    // thread; there is no broadcast variable.
-    expect(K_HULL_NETS).not.toContain('gBlockLive');
+    // A barrier reached after a branch on a plain workgroup-storage READ is
+    // non-uniform control flow to Tint. The live flag is broadcast ONCE per
+    // block and read ONLY through workgroupUniformLoad, which makes it
+    // provably uniform (and costs one field eval per block, not 64).
+    expect(K_HULL_NETS).toContain('workgroupUniformLoad(&gBlockLive)');
+    expect(K_HULL_NETS).not.toMatch(/gBlockLive\s*[=!]=/);
+    expect((K_HULL_NETS.match(/hullField\(/g) ?? []).length).toBe(3); // live test + tile fill + pull
     const barrierIdx = K_HULL_NETS.indexOf('workgroupBarrier');
     expect(barrierIdx).toBeGreaterThan(-1);
     // every barrier sits at statement depth inside the fn body, not nested

@@ -59,47 +59,50 @@ export const K_HULL_NETS = /* wgsl */ `fn kHullNets(
   let dims = vec3<i32>(i32(gridDims.x), i32(gridDims.y), i32(gridDims.z));
   let blockCount = blocksX * blocksY * u32(dims.z / BLOCK);
   let b = wid.x;
+  let lin = lid.x + lid.y * u32(BLOCK) + lid.z * u32(BLOCK) * u32(BLOCK);
+  // Past the live grid: the whole workgroup leaves together (b is uniform).
   if (b >= blockCount) { return; }
   let bx = i32(b % blocksX);
   let by = i32((b / blocksX) % blocksY);
   let bz = i32(b / (blocksX * blocksY));
   let blockOrigin = gridMin + vec3<f32>(f32(bx), f32(by), f32(bz)) * (f32(BLOCK) * cell);
-  let lin = lid.x + lid.y * u32(BLOCK) + lid.z * u32(BLOCK) * u32(BLOCK);
 
-  // Live test per thread — see the header note. Depends only on wid +
-  // uniforms, hence uniform across the workgroup.
-  let halfDiag = sqrt(3.0) * f32(BLOCK) * cell * 0.5;
-  let blockC = blockOrigin + vec3<f32>(f32(BLOCK) * cell * 0.5);
-  let fv = hullField(blockC, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-  let live = abs(fv) <= halfDiag * distort + cell;
+  // Block-live test ONCE per block (thread 0), broadcast through workgroup
+  // memory with workgroupUniformLoad — the builtin that makes the value
+  // provably uniform (it carries its own barrier), so the branch below is
+  // uniform control flow and Tint accepts the barrier after the tile fill.
+  // The earlier per-thread form was 64 field evals per block, 4M per frame
+  // at the worst-case dispatch: MORE than the march spends drawing the body.
+  if (lin == 0u) {
+    let halfDiag = sqrt(3.0) * f32(BLOCK) * cell * 0.5;
+    let blockC = blockOrigin + vec3<f32>(f32(BLOCK) * cell * 0.5);
+    let fv = hullField(blockC, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+    gBlockLive = select(0u, 1u, abs(fv) <= halfDiag * distort + cell);
+  }
+  let live = workgroupUniformLoad(&gBlockLive);
 
   let i = bx * BLOCK + i32(lid.x);
   let j = by * BLOCK + i32(lid.y);
   let k = bz * BLOCK + i32(lid.z);
   let ci = u32((k * dims.y + j) * dims.x + i);
-
-  // 125 corners, two per thread (64 threads cover 128 slots). Dead blocks
-  // skip the fill but MUST still reach the barrier below (uniform control
-  // flow), then zero their edge bits and return.
-  if (live) {
-    for (var s = 0u; s < 2u; s = s + 1u) {
-      let cidx = lin + s * 64u;
-      if (cidx < 125u) {
-        let cx = i32(cidx % 5u);
-        let cy = i32((cidx / 5u) % 5u);
-        let cz = i32(cidx / 25u);
-        let p = blockOrigin + vec3<f32>(f32(cx), f32(cy), f32(cz)) * cell;
-        gTile[cidx] = hullField(p, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-      }
-    }
-  }
-  workgroupBarrier();
-  if (!live) {
+  if (live == 0u) {
     (*cellEdge)[ci] = 0u;
     (*cellVert)[ci] = NO_VERT;
     return;
   }
 
+  // 125 corners, two per thread (64 threads cover 128 slots).
+  for (var s = 0u; s < 2u; s = s + 1u) {
+    let cidx = lin + s * 64u;
+    if (cidx < 125u) {
+      let cx = i32(cidx % 5u);
+      let cy = i32((cidx / 5u) % 5u);
+      let cz = i32(cidx / 25u);
+      let p = blockOrigin + vec3<f32>(f32(cx), f32(cy), f32(cz)) * cell;
+      gTile[cidx] = hullField(p, band, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+    }
+  }
+  workgroupBarrier();
   let lx = i32(lid.x); let ly = i32(lid.y); let lz = i32(lid.z);
   var v: array<f32, 8>;
   for (var c = 0; c < 8; c = c + 1) {
@@ -153,19 +156,18 @@ export const K_HULL_NETS = /* wgsl */ `fn kHullNets(
   // flesh in anisotropic smin fillets and the 2*band fragment walk cannot
   // reach the surface. hullField at band*VERT_PULL_TARGET IS the error term;
   // the constant shift leaves the gradient unchanged.
+  // Direction = the cell's corner gradient (free); one field eval per step.
+  let gcx = (v[1] - v[0]) + (v[3] - v[2]) + (v[5] - v[4]) + (v[7] - v[6]);
+  let gcy = (v[2] - v[0]) + (v[3] - v[1]) + (v[6] - v[4]) + (v[7] - v[5]);
+  let gcz = (v[4] - v[0]) + (v[5] - v[1]) + (v[6] - v[2]) + (v[7] - v[3]);
+  var gl = sqrt(gcx * gcx + gcy * gcy + gcz * gcz);
+  if (gl == 0.0) { gl = 1.0; }
+  let dir = vec3<f32>(gcx, gcy, gcz) / gl;
   for (var it = 0; it < VERT_PULL_ITERS; it = it + 1) {
     let err = hullField(p, band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
     if (err <= 1e-4) { break; }
-    let gx = hullField(p + vec3<f32>(1e-3, 0.0, 0.0), band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)
-      - hullField(p - vec3<f32>(1e-3, 0.0, 0.0), band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-    let gy = hullField(p + vec3<f32>(0.0, 1e-3, 0.0), band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)
-      - hullField(p - vec3<f32>(0.0, 1e-3, 0.0), band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-    let gz = hullField(p + vec3<f32>(0.0, 0.0, 1e-3), band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)
-      - hullField(p - vec3<f32>(0.0, 0.0, 1e-3), band * VERT_PULL_TARGET, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-    var gl = sqrt(gx * gx + gy * gy + gz * gz);
-    if (gl == 0.0) { gl = 1.0; }
     let stepLen = min(err, cell * 0.5);
-    p = p - vec3<f32>(gx, gy, gz) * (stepLen / gl);
+    p = p - dir * stepLen;
   }
   let pr = p - origin;
   (*cellPos)[id * 3u] = pr.x;
@@ -183,7 +185,8 @@ const EDGE_Y_IN2OUT: u32 = 8u;
 const EDGE_Z_CROSS: u32 = 16u;
 const EDGE_Z_IN2OUT: u32 = 32u;
 const VERT_PULL_TARGET: f32 = 0.6;
-const VERT_PULL_ITERS: i32 = 10;
+const VERT_PULL_ITERS: i32 = 4;
+var<workgroup> gBlockLive: u32;
 var<workgroup> gTile: array<f32, 125>;`;
 
 /** Pass-2 helpers, each its own chained source (the wgslFn parser is

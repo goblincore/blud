@@ -47,6 +47,9 @@ async function main() {
   innerView.applyMaterial(compilePalette(doc) ?? { ...FLESH_PRESETS['henenlotter-latex'] }, LIGHT_PRESETS['practical-hard-key']);
   innerView.uniforms.marchCfg.value.y = 1.0;
   const view: HullRefineView<ZombieGpuView> = wrapHullRefine(innerView, { renderer });
+  // The actor uploads wounds + head rotation AFTER view.update (game-actor
+  // step order), so extract once per frame after actor.step instead.
+  view.autoExtract = false;
   scene.add(innerView.object);
   scene.add(view.hullObject);
 
@@ -147,6 +150,8 @@ async function main() {
 
   // ---- knobs + keys -----------------------------------------------------
   let frozen = false;
+  /** Bench decomposition: false = keep the last hull, skip extraction. */
+  let extractWhileFrozen = true;
   function setRenderer(r: HullRenderer) { view.setRenderer(r); for (const c of live) c.view.setRenderer(r); }
   function setKnobs(k: Partial<HullKnobs>) { view.setKnobs(k); for (const c of live) c.view.setKnobs(k); }
   window.addEventListener('keydown', e => {
@@ -178,12 +183,14 @@ async function main() {
     if (cam.follow) placeCam();
     if (!frozen) {
       actor.step(dt);
+      view.extract();
       for (const c of live) { c.state = stepChunk(c.state, dt); c.view.update(c.state); }
     } else if (view.renderer === 'hull') {
       // Frozen: still re-extract so knob changes show without motion — the
       // chunks too, or a frozen sever shows its pieces on the march and
       // nothing on the hull (chunk extraction only runs inside update).
       view.update(actor.posed(), actor.body);
+      if (extractWhileFrozen) view.extract();
       for (const c of live) c.view.update(c.state);
     }
     const k = view.knobs();
@@ -214,6 +221,33 @@ async function main() {
       placeCam();
     },
     aimSurface: () => aimWorld(0, 0.15),
+    setExtract: (on: boolean) => { extractWhileFrozen = on; },
+    /** Advance the actor by n fixed steps while frozen (pose-vs-timing diagnosis). */
+    stepOnce: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { actor.step(dt); for (const c of live) { c.state = stepChunk(c.state, dt); c.view.update(c.state); } } view.extract(); return actor.pose(); },
+    /** Fenced A/B: hand-stepped frames with a GPU completion fence per chunk
+     *  (the lab bench's pattern — NOT vsync-pinned rAF wall clock). Alternates
+     *  march/hull legs to cancel thermal drift. Returns ms/frame per leg. */
+    async bench(frames = 120, chunk = 20, legs = 3) {
+      handle.setLoopRunning(false);
+      const wasFrozen = frozen;
+      const run = async (r: HullRenderer) => {
+        setRenderer(r);
+        for (let w = 0; w < 10; w++) handle.step(1 / 60);
+        await handle.resolveGpu();
+        const t0 = performance.now();
+        for (let f = 0; f < frames; f++) {
+          handle.step(1 / 60);
+          if ((f + 1) % chunk === 0) await handle.resolveGpu();
+        }
+        await handle.resolveGpu();
+        return +((performance.now() - t0) / frames).toFixed(2);
+      };
+      const out: { march: number[]; hull: number[] } = { march: [], hull: [] };
+      for (let i = 0; i < legs; i++) { out.march.push(await run('march')); out.hull.push(await run('hull')); }
+      frozen = wasFrozen;
+      handle.setLoopRunning(true);
+      return out;
+    },
     /** Shots that land: aim at a posed cluster centre. */
     slugAt: (limb = 'torso') => { const c = limbCentre(limb); const a = c && aimAt(c); if (a) actor.hitSlug(a.hit, a.dir); return !!a; },
     pelletAt: (limb = 'torso') => { const c = limbCentre(limb); const a = c && aimAt(c); if (a) actor.hit(a.hit, a.dir); return !!a; },

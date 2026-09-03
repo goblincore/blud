@@ -42,8 +42,15 @@ export interface HullRefineView<Inner extends HullInnerView = HullInnerView> {
   setRenderer(r: HullRenderer): void;
   knobs(): HullKnobs;
   setKnobs(k: Partial<HullKnobs>): void;
-  /** Delegates to inner.update, then (hull on) extracts this frame's hull. */
+  /** Delegates to inner.update, then (hull on, autoExtract on) extracts. */
   update(...args: Parameters<NonNullable<Inner['update']>>): void;
+  /** Extract now from whatever the inner view has uploaded. Owners that
+   *  upload MORE after update (the actor: wounds, head rotation — see
+   *  game-actor.ts step order) set autoExtract=false and call this once
+   *  per frame after their whole step, or the hull carries last frame's
+   *  craters and disagrees with the field on every fast-moving part. */
+  extract(): void;
+  autoExtract: boolean;
   setWounds(...args: Parameters<NonNullable<Inner['setWounds']>>): void;
   lastExtract(): HullExtractStats | null;
   compute: SurfaceNetsCompute;
@@ -118,10 +125,12 @@ export function wrapHullRefine<Inner extends HullInnerView>(
       uBand.value = knobs.band;
       if ('distort' in k) distort = (k as { distort: number }).distort;
     },
+    autoExtract: true,
     update(...args) {
       inner.update?.(...(args as never[]));
-      if (renderer === 'hull') extractNow();
+      if (renderer === 'hull' && this.autoExtract) extractNow();
     },
+    extract() { if (renderer === 'hull') extractNow(); },
     setWounds(...args) { inner.setWounds?.(...(args as never[])); },
     lastExtract() { return last; },
     compute,
