@@ -1133,6 +1133,111 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+### Task 8: The melting face
+
+**Files:**
+- Modify: `src/lab/sdf-zombie/webgpu/lab-main.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts`
+
+The face is not a texture on geometry — it is a UV PROJECTION. `march.wgsl.ts:2126`
+takes the surface point into head-local space, divides by `headAxes` (the
+skull's semi-axes), and samples the face sheet at those coordinates.
+`headShape` (`lab-main.ts:954`) derives that centre and those axes from the
+largest head-cluster prim, every frame, so the face tracks the head as it moves.
+
+- [ ] **Step 1: Fix the anchoring bug — this is a defect, not a feature**
+
+`lab-main.ts:2489` calls `headShape(posed)` and `:2492` calls
+`uploadWounds(posed.prims)` — both on the UNMELTED body. During a melt the face
+projection and every wound therefore stay pinned to where the standing zombie
+was, while the zombie liquefies out from under them. This is the same class of
+mistake as the stale clusters in Task 4's Step 0.
+
+Hoist the melted prims so the whole frame uses one body:
+
+```ts
+    const meltedPosed = meltState
+      ? { ...posed, prims: applyMelt(posed.prims, meltState),
+          clusters: remeltClusters(posed.clusters, applyMelt(posed.prims, meltState)) }
+      : posed;
+```
+
+Compute `applyMelt(posed.prims, meltState)` ONCE into a local and reuse it —
+the expression above is written out for clarity, not to be pasted twice per
+frame. Then feed `meltedPosed` to `view.update`, to `headShape`, and to
+`uploadWounds`, replacing the three separate uses of `posed`.
+
+**Level one of the melting face falls out of this for free.** The projection
+normalises by `headAxes`, so a head crushed to 0.25 in Y automatically stretches
+the face over the flatter shape. Capture before going further — that alone may
+be most of the effect.
+
+- [ ] **Step 2: Sag the projection**
+
+In the face block, offset and stretch the UV by `meltCfg.x` (the uniform Task 6
+added) so features slide DOWN the front of the skull as the flesh drips:
+
+```wgsl
+    // Melt drips the face off the skull. The V offset alone would slide a
+    // rigid face downward like a sticker; the paired stretch is what makes
+    // the features ELONGATE on the way, which is the part that reads as
+    // melting rather than sliding.
+    let meltSag = meltCfg.x;
+    var uv = raw * faceProj.xy + faceProj.zw;
+    uv.y = uv.y - meltSag * FACE_MELT_SAG + (uv.y - faceProj.w) * meltSag * FACE_MELT_STRETCH;
+```
+
+Start at `FACE_MELT_SAG = 0.25`, `FACE_MELT_STRETCH = 0.6` and tune from
+captures. Both are shader constants — name them, do not inline the numbers.
+
+- [ ] **Step 3: Widen the facing fade as it melts**
+
+The projection fades out by `smoothstep(0.28, 0.66, dot(n, hfr))` so it does not
+smear a second face around the skull. A melted head is much flatter, so its
+surface turns away from the head's forward axis far sooner and the face fades
+out early — the features vanish before they have finished dripping. Widen the
+lower bound toward 0 as `meltCfg.x` rises so the face survives onto the
+sagging surface, and say in the capture report whether it smears round the
+back; if it does, the fade was widened too far.
+
+- [ ] **Step 4: Add a shader test**
+
+Assert the emitted WGSL references `meltCfg` inside the face block, the same way
+Task 6 asserts it in the flesh branch. A face-melt uniform that is declared and
+never read is the failure this whole plan keeps guarding against.
+
+- [ ] **Step 5: Capture and judge**
+
+Run `npm run melt:shot`. Read the frames. The face must sag and elongate over
+the melting skull rather than sliding down it rigidly or vanishing early, and
+the skull underneath must be visible through it by the late frames.
+
+Both gates must still pass — the face is shading, so it must not move the
+silhouette numbers at all. **If Gate A or B changes, something in Step 1 altered
+geometry and that is a bug**, not a tuning question.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lab/sdf-zombie/webgpu/
+git commit -m "melt: the face drips off the skull
+
+The projection was anchored to the UNMELTED body — headShape(posed) and
+uploadWounds(posed.prims) both pinned the face and every wound to where the
+standing zombie was while the zombie liquefied out from under them. Same class
+of bug as the stale clusters. One melted body now feeds the whole frame.
+
+That alone stretches the face over the flattened skull, because the projection
+normalises by headAxes. On top of it, meltCfg sags the V and stretches it: the
+offset alone would slide a rigid face down like a sticker, and the elongation
+is the half that reads as melting.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
 ## Definition of done
 
 - `npx vitest run` green, `npx tsc --noEmit` clean
@@ -1140,4 +1245,5 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Frames read as: red while standing → straight-down sag with stretch → skeleton emerging → wide wet puddle with bones in it
 - The body never topples
 - `TASKS.md` `X5.melt` closed with the mechanism change recorded
+- The face sags and elongates over the melting skull (Task 8), and the gates are unchanged by it
 - Notes in `docs/dev-notes/2026-09-03-zombie-melt/notes.md` with frames
