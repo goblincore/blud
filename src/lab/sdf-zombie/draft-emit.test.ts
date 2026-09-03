@@ -23,6 +23,7 @@ import {
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import { buildBody } from './build-body';
+import { MAX_PRIMS } from './validate';
 
 const NAME = 'draftling';
 
@@ -180,6 +181,15 @@ describe('emitDraft', () => {
     expect(built.prims.length).toBeLessThanOrEqual(DRAFT_BUDGET_TOTAL);
     expect(built.prims.length).toBeGreaterThanOrEqual(50);
     for (const c of built.clusters) expect(c.count).toBeLessThanOrEqual(DRAFT_BUDGET_CLUSTER);
+    // The budget arithmetic's real subject is FLESH PLUS DERIVED BONES
+    // against the shader's hard 128. This fixture sits exactly on that line —
+    // its equal-radius bands make every band derive, so the derived-bone
+    // constraint binds before the 80-total line — which is what gives this
+    // pin teeth on the estimate's composition: it caught the face block's
+    // own derivable prims (they ride `skull` as mass) being left out, which
+    // let a real character emit at 130 while the header claimed inside-budget.
+    const boneN = built.bonePrims?.length ?? 0;
+    expect(built.prims.length + boneN).toBeLessThanOrEqual(MAX_PRIMS);
     // The trim is reported, not silent — the header says what was dropped.
     expect(text).toMatch(/trim/i);
   });

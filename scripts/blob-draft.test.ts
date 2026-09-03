@@ -162,5 +162,14 @@ describe('blob-draft', () => {
     const bodyLines = stdout.split('\n').filter((l) => l.trim().startsWith('bar '));
     expect(bodyLines.some((l) => / on shin .*side=l/.test(l))).toBe(true);
     expect(bodyLines.some((l) => / on shin .*side=r/.test(l))).toBe(true);
+    // And the draft BUILDs clean — the real character through the whole
+    // pipeline (parse → compile → build → validate), not just a synthetic
+    // fit. This is the pin that caught the derived-bone estimate omitting
+    // the face block's own derivable prims: the minotaur emitted at 130
+    // prims+flesh+bones against the shader's hard 128 while its header
+    // claimed inside-budget. A quality ratchet like the schoolgirl pin:
+    // if a fit change breaks this, the run says so on the first character.
+    const { stderr } = run('minotaur');
+    expect(stderr).toContain('=== draft build: 0 error(s)');
   }, 240_000);
 });

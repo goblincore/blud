@@ -294,12 +294,25 @@ function hex(c: Rgb): string {
  * evaluated on the kept bands gives the exact upper bound of what derivation
  * will add — exact because the containment filter only ever DROPS bones.
  * A mirrored band exists on both sides, so it counts twice.
+ *
+ * The FACE prims ride `skull` too and are flesh like any other: they take
+ * part in skull's mass yardstick and each can derive a bone of its own.
+ * Leaving them out kept this estimate below the truth — measured on the
+ * first real character through the emitter (the minotaur): its face prims
+ * 0.118/0.092 both cleared half of skull's fattest, +2 bones the band-only
+ * arithmetic never saw, and the build landed at 130 > 128 while the header
+ * claimed inside-budget. facePrims' radii are fixed (they come from
+ * DEFAULT_FACE — the draft never tunes them), so reading them here cannot
+ * drift from what compileBlob adds.
  */
 function derivedEstimate(recs: Rec[]): number {
   const fattest = new Map<string, number>();
   for (const r of recs) fattest.set(r.boneKey, Math.max(fattest.get(r.boneKey) ?? 0, r.r));
+  const faceRadii = facePrims(DEFAULT_FACE).map((p) => p.radius);
+  fattest.set('skull', Math.max(fattest.get('skull') ?? 0, ...faceRadii));
   let n = 0;
   for (const r of recs) if (r.r >= (fattest.get(r.boneKey) ?? 0) * 0.5) n += r.clusters.length;
+  for (const fr of faceRadii) if (fr >= (fattest.get('skull') ?? 0) * 0.5) n++;
   return n;
 }
 
