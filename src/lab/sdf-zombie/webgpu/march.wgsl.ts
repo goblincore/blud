@@ -1160,8 +1160,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // ship). Outside a wound the call is provably a no-op — the inside-flesh
   // rows are contained inside flesh — so skipping it is exact, not an
   // approximation. counts2.x carries boneCount: counts was already full and
-  // woundCfg2.w is the volume hitEps override, not spare.
-  if (nearWound > 0.5 && counts2.x > 0.0) {
+  // woundCfg2.w is the volume hitEps override, not spare. counts2.y is the
+  // BARE-BONES bypass (melt task 5): the gate's proof ("bones are contained
+  // in flesh") stops holding the moment flesh moves without a wound — a
+  // melting body sags off its own skeleton, and a bone-only chunk (a
+  // released skeleton group) has no flesh and no wound to be near, so gated
+  // it would march an EMPTY field.
+  if ((nearWound > 0.5 || counts2.y > 0.5) && counts2.x > 0.0) {
     dmg = applyBones(dmg, p, data, counts, counts2.x, 0);
   }
   // bestIdx is read AFTER the bone fold so a bone that won the min is the
@@ -1347,8 +1352,10 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //               exact v1 sample); the shared fallback binds [0,0,0,1]; a
 //               v2 clip binds frameDepth and drives x/y/z per frame.
 //   counts     x primCount, y clusterCount, z carveCount, w maxBlendK
-//   counts2    x boneCount, yzw spare (wound pass r2; counts was already
-//              full and woundCfg2.w is the volume hitEps override, not spare)
+//   counts2    x boneCount, y bareBones (melt task 5: fold inside-flesh
+//              rows WITHOUT a wound - see mapBody), zw spare (wound pass r2;
+//              counts was already full and woundCfg2.w is the volume hitEps
+//              override, not spare)
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
 //   woundCfg2  x rimWidth, y relaxation factor, z shellAmp (silhouette shell)

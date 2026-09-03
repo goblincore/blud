@@ -1601,7 +1601,11 @@ describe('bone fold (wound pass r2)', () => {
   // spare) instead. These tests keep it there.
   it('carries boneCount on counts2.x, never on the taken woundCfg2.w', () => {
     expect(MAP_BODY).toContain('counts2.x > 0.0');
-    expect(MAP_BODY).toMatch(/nearWound > 0\.5 && counts2\.x > 0\.0/);
+    // The nearWound gate, plus the melt's BARE-BONES bypass (counts2.y):
+    // bone-only chunks and melting bodies fold the inside-flesh rows
+    // without a wound. The bypass must never REPLACE the gate — an intact
+    // body still skips the bone fold exactly.
+    expect(MAP_BODY).toMatch(/\(nearWound > 0\.5 \|\| counts2\.y > 0\.5\) && counts2\.x > 0\.0/);
     expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0)');
     expect(MARCH_BODY).toContain('counts2: vec4<f32>');
     expect(MARCH_BODY).not.toMatch(/woundCfg2\.w[^;]*applyBones/);

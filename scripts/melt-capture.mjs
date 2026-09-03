@@ -336,6 +336,15 @@ for (const t of PROGRESS) {
   if (!held || Math.abs(held.t - t) > 1e-6) {
     fail(`meltDirect(${t}) did not hold — lab reports meltState ${JSON.stringify(held)}`);
   }
+  // The FINAL frame is the end state — and the end state includes the
+  // skeleton having LANDED. Bone groups release as chunks as the front
+  // passes them (task 5) and the sweep holds each progress value only two
+  // rAF ticks, so without a settle wait the t=1.0 frame catches the skull
+  // mid-fall above the puddle and the height metric measures a falling
+  // bone, not the puddle. The tumble is seeded (identical every run); only
+  // the step count varies with frame rate, and every variation ends on the
+  // floor.
+  if (t === PROGRESS[PROGRESS.length - 1]) await sleep(2500);
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   const buf = Buffer.from(shot.result.data, 'base64');
   const name = `melt-${String(Math.round(t * 100)).padStart(3, '0')}.png`;

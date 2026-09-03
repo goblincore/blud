@@ -128,7 +128,11 @@ import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
-import { applyMelt, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
+import { applyMelt, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
+import {
+  groupCentroid, groupOf, groupReleaseProgress, limbOfGroup, mulberry32,
+  partitionBones, releaseOrder, type BoneGroup,
+} from '../melt-bones';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
@@ -141,8 +145,8 @@ import {
 } from '../actor';
 import { GAIT_TUNING, type ArmStyle } from '../gait';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
-import { add } from '../vec';
-import { makeChunk, stepChunk, type Chunk } from '../gib-chunks';
+import { add, sub } from '../vec';
+import { makeChunk, stepChunk, type Chunk, type ChunkKind } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
 import { CIG_EMBER_HOT, STICK_IN_HAND, buildHandPrims } from '../hands';
@@ -177,7 +181,7 @@ import {
   LOD_LEVELS, LOD_LEVERS, pickLodSticky, screenHeightPx,
   type LodLevel, type LodLever,
 } from '../lod';
-import type { BodyDef, LimbId, Vec3 } from '../types';
+import type { BodyDef, LimbId, Primitive, Vec3 } from '../types';
 import {
   addButton, addSection, addSelect, addSlider, applyDebugPanelVisibility, clearOverride,
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
@@ -1012,19 +1016,120 @@ async function main() {
   // meltDirect(0) would otherwise shoot t≈0.28, not 0). Key/'m' starts a
   // LIVE melt, which is why startMelt clears the hold.
   let meltHeld = false;
+  // ——— MELT BONES (task 5) ———————————————————————————————————————————————
+  // The skeleton falls out of the goo as ELEVEN rigid groups (melt-bones.ts:
+  // a ribcage does not disassemble into individual ribs), released into the
+  // SAME chunk machinery severed limbs use. A group drops when the melt
+  // front — the identical number that sags the flesh — has passed its
+  // centroid, so legs go first and the skull last because that is where they
+  // are. The rng is SEEDED: makeChunk defaults to Math.random and a random
+  // tumble destroys the capture gate's run-to-run reproducibility.
+  const MELT_BONE_SEED = 20260903;
+  let meltBones: {
+    parts: Map<BoneGroup, Primitive[]>;
+    order: BoneGroup[];
+    released: Set<BoneGroup>;
+    /** Ids of the chunks this melt spawned, so a reset can take them back. */
+    chunkIds: number[];
+    /** meltInitBody's normalisation: top flesh endpoint Y above the floor. */
+    span: number;
+    rng: () => number;
+  } | null = null;
+  function resetMeltBones() {
+    if (meltBones) {
+      for (const id of meltBones.chunkIds) removeChunk(id);
+    }
+    const parts = partitionBones(current.bonePrims);
+    meltBones = {
+      parts,
+      order: releaseOrder(parts),
+      released: new Set(),
+      chunkIds: [],
+      span: Math.max(0, ...endpointHeights(current.prims)),
+      rng: mulberry32(MELT_BONE_SEED),
+    };
+  }
   function startMelt() {
     meltHeld = false;
     meltState = meltInitBody(current.prims, 0);
+    resetMeltBones();
+    // The melting body sags off its own skeleton ON PURPOSE, so the march's
+    // nearWound gate ("bones are contained in flesh") must lift: bare bones
+    // fold without a wound and the skeleton EMERGES through the thinning
+    // flesh instead of popping into existence at release.
+    view.setBonesBare(true);
   }
   function stopMelt() {
     meltHeld = false;
     meltState = null;
+    view.setBonesBare(false);
+    if (meltBones) {
+      for (const id of meltBones.chunkIds) removeChunk(id);
+      meltBones = null;
+    }
   }
   /** Jump straight to a progress value — the capture script's knob. HELD. */
   function meltDirect(t: number) {
-    if (!meltState) meltState = meltInitBody(current.prims, 0);
+    const tt = Math.max(0, Math.min(1, t));
+    // A backward jump (or a fresh melt) re-seeds the bone release from
+    // scratch, so the captured bone state at a held t does not depend on the
+    // sweep's history. A forward jump keeps it: bones already dropped stay
+    // dropped, which is what a melt that only ever advances looks like.
+    if (!meltState || tt < meltState.t) {
+      meltState = meltInitBody(current.prims, 0);
+      resetMeltBones();
+      view.setBonesBare(true);
+    }
     meltHeld = true;
-    meltState = { ...meltState!, t: Math.max(0, Math.min(1, t)) };
+    meltState = { ...meltState, t: tt };
+  }
+  /**
+   * Drop every bone group whose support has liquefied. The check is the
+   * melt front at the group's centroid — the SAME number that sags the
+   * flesh — so a group lets go when the flesh holding it has gone, not on a
+   * scripted timer. Bones go to spawnChunk in rest space exactly like a
+   * severed limb (it adds the root shift itself); the seeded rng is what
+   * makes two capture runs shoot the same tumble.
+   */
+  const MELT_BONE_RELEASE_U = 0.6;
+  function releaseMeltBones(posedBody: BuildResult) {
+    if (!meltState || !meltBones) return;
+    for (const g of meltBones.order) {
+      if (meltBones.released.has(g)) continue;
+      const restPrims = meltBones.parts.get(g)!;
+      // The front CHECK stays rest-space: meltState's normalisation was
+      // built from the rest flesh endpoints, so the release threshold and
+      // the sag run on the same numbers.
+      const restCentroid = groupCentroid(restPrims);
+      if (groupReleaseProgress(meltState, restCentroid[1], meltBones.span)
+          <= MELT_BONE_RELEASE_U) continue;
+      meltBones.released.add(g);
+      // ...but SPAWN where the skeleton actually is: the POSED bone prims.
+      // Rest prims + heroMotion.lastRootShift is the sever precedent, and it
+      // is wrong here — in statue mode the rig settles back toward the
+      // origin while lastRootShift keeps the last wander offset, and the
+      // chunk spawned a metre away from the body it fell out of. spawnChunk
+      // re-adds lastRootShift to whatever origin it is handed, so
+      // pre-subtract it: our prims are already world-space.
+      const prims = posedBody.bonePrims.filter(
+        p => p.op === 'bone' && groupOf(p.bone) === g);
+      if (prims.length === 0) continue;
+      const centroid = groupCentroid(prims);
+      // Clatter gently OUTWARD off the body's vertical axis — gravity does
+      // the drop; this just keeps the pile from stacking on its own centre.
+      const rng = meltBones.rng;
+      const r = Math.hypot(centroid[0], centroid[2]);
+      const dir: Vec3 = r > 1e-3
+        ? [centroid[0] / r, 0, centroid[2] / r]
+        : [rng() - 0.5, 0, rng() - 0.5];
+      const push = 0.3 + rng() * 0.4;
+      const id = spawnChunk(
+        limbOfGroup(g), sub(centroid, heroMotion.lastRootShift), [],
+        [dir[0] * push, -0.1, dir[2] * push],
+        undefined, 'bone', prims, rng,
+      );
+      if (id !== null) meltBones.chunkIds.push(id);
+    }
   }
   // bindRig pins the lowest joint as a static anchor; walking releases it —
   // the rest pull + plants carry the body instead (and collapse wants the
@@ -1133,7 +1238,7 @@ async function main() {
    */
   let cosmeticsFrozen = false;
 
-  const chunks: { id: number; state: Chunk; view: ChunkGpuView }[] = [];
+  const chunks: { id: number; state: Chunk; view: ChunkGpuView; boneOnly?: boolean }[] = [];
   // Blood: the deterministic droplet/splat sim, plus its instanced renderer.
   const bloodSim = createBloodSim();
   const bloodView = createBloodView();
@@ -1490,9 +1595,10 @@ async function main() {
 
   function spawnChunk(
     limb: LimbId, origin: Vec3, prims: typeof current.prims,
-    vel?: Vec3, tornAt?: Vec3[], kind: 'limb' | 'gob' = 'limb',
-  ) {
-    if (prims.length === 0) return;
+    vel?: Vec3, tornAt?: Vec3[], kind: ChunkKind = 'limb',
+    bones?: Primitive[], rng: () => number = Math.random,
+  ): number | null {
+    if (prims.length === 0 && (!bones || bones.length === 0)) return null;
     // The sever results are authored rest-space; chunks live in world space.
     // With the hero wandering (or lying somewhere), spawn the piece where the
     // body actually is — chunk.pos is the recentring origin for the piece's
@@ -1506,29 +1612,57 @@ async function main() {
     ];
     // Collision radius = the limb's real visual extent; chunk.radius's 0.14 is
     // smaller than any limb and would bury it half-way into the floor.
-    const state = makeChunk(limb, origin, v, chunkExtent(prims, origin), primsLongAxis(prims, origin), Math.random, kind);
+    // BONE-ONLY chunks (the melt's released skeleton groups) are the
+    // exception: a bounding-sphere extent is dominated by the bone's LENGTH,
+    // so a shin would come to rest floating half its length above the floor.
+    // Bones are thin; the resting radius is the tube radius with margin, and
+    // the topple lays the long axis flat against it.
+    const extentSource = prims.length > 0 ? prims : bones!;
+    const radius = prims.length > 0
+      ? chunkExtent(prims, origin)
+      : bones!.reduce((r, p) => Math.max(r,
+          Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(...p.scale)), 0) * 1.6;
+    const state = makeChunk(limb, origin, v, radius, primsLongAxis(extentSource, origin), rng, kind);
     const oldest = chunks.length >= MAX_CHUNKS ? chunks.shift() : undefined;
+    let id: number;
     if (oldest) {
       // Keep the same mesh/material pair. Three keys its RenderObject cache by
       // object identity and does not evict it when geometry alone is disposed;
       // recycling at the existing cap keeps that cache bounded at 40.
-      oldest.view.reset(state, prims, tornAt);
-      chunks.push({ id: nextChunkId++, state, view: oldest.view });
+      oldest.view.reset(state, prims, tornAt, bones);
+      id = nextChunkId++;
+      chunks.push({ id, state, view: oldest.view, boneOnly: prims.length === 0 });
     } else {
       const chunkView = spareChunkView ?? createChunkGpuView(
-        state, prims, u, tornAt, view.volumeTexture, chunkMaterial,
+        state, prims, u, tornAt, view.volumeTexture, chunkMaterial, bones,
       );
       if (spareChunkView) {
         spareChunkView = null;
-        chunkView.reset(state, prims, tornAt);
+        chunkView.reset(state, prims, tornAt, bones);
       }
       chunkView.object.layers.set(SDF_LAYER);
       scene.add(chunkView.object);
-      chunks.push({ id: nextChunkId++, state, view: chunkView });
+      id = nextChunkId++;
+      chunks.push({ id, state, view: chunkView, boneOnly: prims.length === 0 });
     }
-    // Goo at the tear: a droplet burst where the piece ripped away.
-    burst(bloodSim, origin, Math.random);
+    // Goo at the tear: a droplet burst where the piece ripped away. FLESH
+    // only — a bone-only chunk (a melt skeleton group letting go) has no
+    // tear; bursting one sprays red across the whole set and the capture
+    // gate's redness keyer measures the spray, not the melt.
+    if (prims.length > 0) burst(bloodSim, origin, Math.random);
+    return id;
 
+  }
+
+  /** Take a chunk back out of the world (melt reset re-absorbing its
+   *  released bone groups). The id may already be gone — recycled at the
+   *  MAX_CHUNKS cap — in which case there is nothing to do. */
+  function removeChunk(id: number) {
+    const i = chunks.findIndex(c => c.id === id);
+    if (i < 0) return;
+    const [c] = chunks.splice(i, 1);
+    scene.remove(c!.view.object);
+    c!.view.dispose();
   }
 
   let lastGibWorstFrameMs: number | null = null;
@@ -2422,7 +2556,11 @@ async function main() {
     if (!cosmeticsFrozen) {
       emitTrails(
         bloodSim,
-        chunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+        // Bone-only chunks (the melt's released skeleton groups) do not
+        // bleed: a falling femur trailing blood droplets reads as more goo,
+        // and the droplets spray red pixels across the capture gate's set.
+        chunks.filter(c => !c.boneOnly)
+          .map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
         bdt, Math.random);
       stepBlood(bloodSim, bdt, Math.random);
     }
@@ -2515,15 +2653,34 @@ async function main() {
     // noise; dragging them along is what makes the mottle flow WITH the goo
     // instead of the skin appearing to slide over a ghost of the old body.
     if (meltState) {
+      // Bones fall out FIRST: a group released this frame must not also be
+      // uploaded in the body's bone rows, or it renders twice.
+      releaseMeltBones(posed);
       const pp = applyMelt(posed.prims, meltState);
       const cp = applyMelt(current.prims, meltState);
+      // Released groups leave the body's bone rows (they are chunks now).
+      // Organs (op 'organ') are never released — they are soft and melt
+      // with the flesh (task 7). Bone fold is a hard min, so filtering
+      // cannot disturb the surviving rows' fold.
+      const meltBoneRows = (bps: Primitive[]) =>
+        bps.filter(p =>
+          // Organs ride the bonePrims array but are SOFT: with the flesh
+          // melted away and the nearWound gate lifted, an un-melted organ
+          // hangs in the air where the torso was — a floating red blob
+          // above the puddle. Task 7 melts them at half rate so they slop
+          // out of the draining torso; until then they go with the flesh
+          // they lived inside.
+          p.op !== 'organ'
+          && (p.op !== 'bone' || !meltBones?.released.has(groupOf(p.bone))));
       // Clusters feed the render proxy box AND the march's culling, so they
       // must follow the prims — a melted body in rest-pose clusters is
       // marched inside a standing-zombie box (the flat top and straight
       // sides of the first captures).
       view.update(
-        { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp) },
-        { ...current, prims: cp, clusters: remeltClusters(current.clusters, cp) },
+        { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp),
+          bonePrims: meltBoneRows(posed.bonePrims) },
+        { ...current, prims: cp, clusters: remeltClusters(current.clusters, cp),
+          bonePrims: meltBoneRows(current.bonePrims) },
       );
     } else {
       view.update(posed, current);
@@ -3441,6 +3598,9 @@ async function main() {
     meltOff: () => stopMelt(),
     meltDirect: (t: number) => meltDirect(t),
     meltState: () => (meltState ? { t: meltState.t } : null),
+    meltBones: () => (meltBones
+      ? { released: [...meltBones.released], chunks: meltBones.chunkIds.length }
+      : null),
     backend: handle.backend,
     /**
      * The renderer, scene and camera — enough to call
