@@ -64,7 +64,7 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
-import { FISHEYE_DEFAULTS, clampFovDeg, visibleFovDeg } from './fisheye';
+import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
@@ -2416,8 +2416,13 @@ async function main() {
         // the page -- so the thing marking where you are aiming sat somewhere
         // you could not shoot.
         const r = canvas.getBoundingClientRect();
-        reticleEl.style.left = `${r.left + r.width * (0.5 + aim.x * 0.5)}px`;
-        reticleEl.style.top = `${r.top + r.height * (0.5 - aim.y * 0.5)}px`;
+        // Through the LENS. The fisheye moves the world under the crosshair,
+        // so the crosshair rides the inverse map or it stops marking where
+        // the shot lands. Pushed outward, because the centre is magnified.
+        // Lens off (k = 0) returns `aim` unchanged — this is the old line.
+        const p = reticleNdc(aim, postAa.lens);
+        reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
+        reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
       }
     }
 
