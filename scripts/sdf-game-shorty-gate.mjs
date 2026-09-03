@@ -118,6 +118,13 @@ if (!gunOk.hasAnchor) fail('no viewModelAnchor');
 if (!gunOk.barrels) fail('Barrels node not present under the view-model anchor');
 
 // Give the first frames a beat to settle, then capture the rest pose.
+// Dismiss the tuning panels BEFORE any screenshot. game-main.ts:380 says this
+// seam exists for exactly this reason ("guarded typeof-style in capture
+// scripts"), and without it the WOUND and GOO panels cover most of the frame:
+// the first run of this gate produced ten shots in which the weapon is a
+// sliver in the corner, which passes every boolean and shows the owner nothing.
+await evaluate('typeof __sdfGame.woundPanel === "function" ? (__sdfGame.woundPanel(false), 1) : 0');
+await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(false), 1) : 0');
 await sleep(2000);
 await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);
