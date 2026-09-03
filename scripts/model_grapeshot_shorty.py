@@ -301,10 +301,16 @@ put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,RO*0.62+0.006),b
 # to a comfortable OVAL at the grip -- v3's grip was 38 mm of flat slab, which
 # is what "painful to hold" meant. This is 52 mm across and round in section.
 def HW(y):
-    if y <= -0.020: return 0.039
+    # THE STANDING BREECH MUST CARRY ITS BARRELS. At 0.039 the receiver was
+    # +-0.0389 against a barrel cluster of +-0.0475, so the barrels overhung the
+    # frame by 8.6 mm a side -- which is both backwards for a break action (the
+    # barrels seat AGAINST this face) and the reason the open action read as
+    # misaligned even though every part is centred on 0.00000 exactly.
+    # 0.050 clears the cluster by 2.5 mm. The grip end is untouched.
+    if y <= -0.020: return 0.050
     if y >=  0.058: return 0.026
     t = (y + 0.020) / 0.078
-    return 0.039 + (0.026-0.039) * (t*t*(3-2*t))     # smoothstep, no crease
+    return 0.050 + (0.026-0.050) * (t*t*(3-2*t))     # smoothstep, no crease
 
 # Hand-placed to the landmark table above. +y is REARWARD.
 #   belly/receiver floor  z = -0.0262, running back to y = +0.048
