@@ -340,3 +340,40 @@ anatomically correct muscle plate derived from the reference we are already
 measuring against, rather than one painted by hand — and it closes the loop
 the whole session has been circling: the tool that MEASURES the missing relief
 would also SUPPLY it.
+
+## Round 10: melt is a cost, not a bug
+
+The overdriven ridged spike — gain 2.6, unbudgeted — was judged by the owner
+as *"pretty cool, like a melted fleshy being"*, with the thought that animating
+it would give melting flesh. It would, and it is worth chasing. Two honest
+caveats first, one of which I tested and got wrong.
+
+**The black streaking in that image is the RENDERER FAILING**, not a look. It
+is Lipschitz overshoot: the march steps past the surface and the normal
+calculation returns garbage. It cannot ship as an aesthetic, because it tears
+differently with distance and step count (so it flickers in motion) and the CPU
+field has no matching failure — the surface you see would not be the surface
+click-to-shoot hits.
+
+**I predicted the look was reachable inside the budget by trading frequency for
+amplitude. It is not.** Spiked at gain 2.6, frequency 1.1, amp 0.015 — product
+0.043, right at the baseline's 0.042 — the render came back essentially
+smooth. At that frequency a single ridge feature is about a metre across, so
+the whole body sits inside one or two of them and there is nothing to see. The
+melt's richness came from high gain AND high frequency AND high amplitude
+together; drop any one and it is gone.
+
+**So the budget has to be bought, not dodged.** The Lipschitz bound is
+`(1 - stepMultiplier) * 0.5`, and `stepMultiplier` is a live shader uniform
+(`marchCfg.y`, `march.wgsl.ts:1323`), currently 0.6 (`build-body.ts:15`).
+Lowering it takes smaller march steps: more gradient headroom, paid for in
+steps per pixel.
+
+That reframes the whole idea, and favourably. **A melt is transient** — a
+death, a gib, an acid hit lasting a second or two. Paying more march steps for
+a second is completely reasonable, and the LOD machinery to vary it already
+exists. Melt is not a look to leave on; it is an effect to switch on, with a
+step-multiplier drop as part of switching it on.
+
+Not spec'd. Recorded here so the finding is not lost, and because it shares
+the gradient-budget arithmetic with the body sheet.
