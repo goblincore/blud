@@ -298,7 +298,10 @@ function main(): void {
   const flags = parseFlags(process.argv.slice(2));
   const glbPath = resolveMesh(flags.name, flags.glb);
 
-  const bytes = new Uint8Array(readFileSync(glbPath));
+  const bytes = new Uint8Array((() => {
+    try { return readFileSync(glbPath); }
+    catch (e) { fail(`${glbPath}: ${(e as Error).message}`); }
+  })());
   // fail() returns never, so these narrow without mutable bindings.
   const skin = (() => {
     try { return readRefSkin(bytes); }

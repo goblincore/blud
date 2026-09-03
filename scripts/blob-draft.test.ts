@@ -85,6 +85,12 @@ describe('blob-draft', () => {
     // past 64 — the draft must sit under its self-declared 40 with room for
     // refinement, which this is the only place that is actually checked.
     expect(errors).toEqual([]);
+    // No prim may carry a NEGATIVE scale: a band whose 2θ fit pinched through
+    // the axis emits wide/deep < 0, which compiles fine, passes every build
+    // and validity check, and renders inside-out. The CLI drops such bands
+    // (fitSide's degenerate filter); this scans the artifact for any that
+    // slipped through, because nothing downstream would ever notice.
+    expect(stdout).not.toMatch(/ (?:wide|deep)=-/);
   }, 240_000);
 
   it('carries a # fit: source on every numeric line', () => {
