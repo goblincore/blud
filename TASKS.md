@@ -146,7 +146,7 @@ are still byte-identical** in `goo-panel.ts` / `wound-panel.ts`. The
 `panel-chrome.ts` extraction took the shell only; the copy button is the part
 with real behaviour in it.
 
-**[!] P-env.1 — `tsx` is not installed, and its shim is a SELF-POINTING
+**[x] P-env.1 — `tsx` was not installed, and its shim was a SELF-POINTING
 symlink.** `node_modules/.bin/tsx -> /Users/donny/Projects/blud/node_modules/.bin/tsx`
 (dated 2026-08-31), and `node_modules/tsx/` does not exist, though `tsx` is in
 `devDependencies`. This is the whole of the "7 pre-existing environmental
@@ -154,9 +154,11 @@ failures" quoted all over this file: `scripts/blob-measure.test.ts` shells out
 to it and gets `ELOOP` in the main checkout, `ENOENT` in a worktree (which has
 no `node_modules` at all). So the suite has been 7 red for days for a reason
 nobody diagnosed — it was repeatedly waved through as "environmental", which is
-true but was never the same as "understood". Fix is `npm install`; left alone
-because it mutates install state. Anything using `npm run blob:*` is dead until
-then.
+true but was never the same as "understood". **FIXED 2026-09-03:** removed the self-link, `npm install` — `tsx v4.23.12`
+resolves via `../tsx/dist/cli.mjs` and `blob-measure.test.ts` is **7/7 green**.
+The suite is clean for the first time in days. Note a worktree still fails
+these: the test resolves `tsx` from its own repo root and worktrees carry no
+`node_modules`, so run this file from the main checkout.
 [spec](docs/superpowers/specs/2026-09-02-fpv-weapon-overhaul-design.md) ·
 [plan](docs/superpowers/plans/2026-09-02-fpv-weapon-overhaul.md) ·
 [note](docs/dev-notes/2026-09-02-fpv-weapon-shorty/notes.md) ·

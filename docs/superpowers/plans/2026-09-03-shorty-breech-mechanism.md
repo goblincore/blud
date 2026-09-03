@@ -344,6 +344,40 @@ Expected: `[shorty] OK`, with `missing_nodes: []` in the verify line and `barrel
 
 If any of `Breech_L`, `Shell_R`, `Extractor`, `TopLever` shows up in `missing_nodes`, the glTF exporter dropped an empty with no children — confirm the corresponding meshes actually re-parented in Step 2.
 
+- [ ] **Step 3b: Assert the new nodes actually SWING — names are not enough**
+
+The name check above proves the nodes exist, **not that they are inside
+`Barrels`**. A `Shell_L` accidentally parented to the frame passes
+`missing_nodes: []` and then sits in mid-air while the barrels drop — the exact
+defect this task exists to prevent, sailing through its own gate.
+
+Add to `verify_glb`, after the `barrel_descendants` count:
+
+```python
+    # WHICH subtree each driven node landed in. The whole mechanism rests on
+    # these riding the hinge, so "it exists" is not the question.
+    must_swing = {"Shell_L", "Shell_R", "Breech_L", "Breech_R", "Extractor"}
+    swinging = set()
+    for o in new:
+        p = o
+        while p is not None:
+            if p.name.split('.')[0] == BARREL_NODE:
+                swinging.add(o.name.split('.')[0]); break
+            p = p.parent
+    stranded = sorted(must_swing - swinging)
+```
+
+return it as `"stranded": stranded`, and gate on it beside the others:
+
+```python
+if info["stranded"]:
+    print(f"[shorty] FAIL: {info['stranded']} are not under {BARREL_NODE}; they "
+          f"would hang in mid-air while the barrels drop", file=sys.stderr); ok = False
+```
+
+**Prove it bites:** temporarily parent `Shell_L` to `frame` instead of
+`barrels`, re-run, confirm the gate FAILS naming `Shell_L`, then put it back.
+
 - [ ] **Step 5: Render the open breech and eyeball it**
 
 ```bash
@@ -353,6 +387,18 @@ blender -b -noaudio -P /tmp/shorty-open.py -- /tmp/after-open45.png "$PWD/public
 Write `/tmp/shorty-open.py` as a copy of the diagnostic used to produce `docs/dev-notes/2026-09-03-shorty-breech/before-open45.png`: import the GLB, park a pivot at `Hinge`, re-parent `Barrels` to it, set `rotation_euler = (radians(45), 0, 0)`, then render from an FPV camera at Blender `(0.125, 0.300, 0.115)` looking down −Y with a 75° vertical FOV at 820×820.
 
 Expected: **two open holes with brass shell heads seated in them.** Not two domed knobs. Compare side by side against the before-render.
+
+**Render THREE angles, not one** — the FPV camera at 45° open, plus a
+straight-on rear view of the breech face, plus a three-quarter. A single
+viewpoint is exactly how the last pass shipped a bug: its visual check pushed
+the reticle left and right, both pure yaw, the one case the defect could not
+appear in. A camera that happens to look down the barrel axis will show a
+convincing dark disc whether the chamber is bored or solid.
+
+**And do not rely on the render alone.** Before eyeballing anything, re-run the
+Task 1 raycast with the shells hidden and confirm it still reports clear bores;
+the picture is the confirmation, the raycast is the proof. If the two disagree,
+the raycast is right.
 
 - [ ] **Step 6: Commit**
 
@@ -403,10 +449,21 @@ def HW(y):
 - [ ] **Step 2: Rebuild and confirm the receiver now clears the barrels**
 
 Run: `blender -b -noaudio -P scripts/model_grapeshot_shorty.py`
-Expected: `[shorty] OK`, and the printed `BLOCKOUT7 ... gripwidth<=` line unchanged at
-`0.099` (the barrels, not the body, set the gun's overall width — so this number
-staying put is the confirmation that the body grew *into* the existing envelope
-rather than past it).
+Expected: `[shorty] OK`, and the printed `BLOCKOUT7 ... gripwidth<=` line reading
+**`0.100`, up from `0.099`.**
+
+It MUST change, and an unchanged `0.099` means the edit did not take. The muzzle
+crowns currently set the gun's widest point at ±0.04953; a receiver at ±0.050
+overtakes them by half a millimetre, so the widest point moves from the muzzle
+to the standing breech — which is the intended outcome, since the breech is
+what has to carry the barrels.
+
+(An earlier draft of this step asserted the number stayed at `0.099` "because
+the barrels set the overall width". That was arithmetic done in the wrong
+order: it compared the new receiver against the barrel CLUSTER at ±0.0475 and
+forgot the crowns at ±0.04953. Stated as the confirmation that the change
+worked, it would have had you report a false failure — or "fix" a correct
+model.)
 
 - [ ] **Step 3: Verify the overhang is gone, with numbers not eyes**
 
@@ -935,10 +992,55 @@ Expected: tsc clean; vitest all green.
 
 - [ ] **Step 5: Run the headless in-game gate**
 
-Run: `LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 node scripts/sdf-game-shorty-gate.mjs`
+Use the wrapper, which owns its own vite + Chrome — the bare `.mjs` expects
+them already running and dies with `ECONNREFUSED`:
+
+```bash
+LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 scripts/sdf-game-shorty-gate.sh
+```
+
 Expected: all five gates pass, including `5. RELOAD`.
 
-The gate asserts the hinge returns shut and the magazine refills. If it times out, the reload is now 1.30 s rather than 1.05 s — check whether the gate's wait window needs widening rather than assuming a logic failure.
+If it times out, the reload is now 1.30 s rather than 1.05 s — widen the gate's
+wait window rather than assuming a logic failure. Note the gate overwrites
+tracked PNGs under `docs/dev-notes/2026-09-02-fpv-weapon-shorty/`;
+`git checkout --` that directory before committing.
+
+- [ ] **Step 5b: Gate the thing this task is actually about**
+
+**The shorty gate does not check where cases come from.** It checks boot, the
+gun model, the flash, and `shells 2 → 0 → 2` with the hinge opening and
+shutting. Every one of those passes just as happily with cases erupting from
+the player's elbow. Running it and calling this task verified would repeat the
+previous pass's mistake exactly: that task's plan named a gate that could not
+see the change, the implementer ran what was asked, it passed, and the defect
+shipped until they flagged the mismatch themselves.
+
+So add the missing assertion. Expose the live breech in `game-main.ts`'s
+`__sdfGame`:
+
+```ts
+    /** The two chamber mouths in WORLD space, right now. The eject origin is
+     *  supposed to track these through the swing; nothing proved it did. */
+    breechWorld: () => breechNodes.map((n) => {
+      const v = new THREE.Vector3(); n.getWorldPosition(v);
+      return [v.x, v.y, v.z] as Vec3;
+    }),
+    /** Where the last case was when it was handed to the tumble. */
+    get lastEjectOrigin() { return lastEjectOrigin; },
+```
+
+recording `lastEjectOrigin` in the rig space→world conversion at the hand-off.
+Then, in a short driver, start a reload, sample at the eject beat, and assert:
+
+```js
+const d = dist3(g.lastEjectOrigin, nearest(g.breechWorld(), g.lastEjectOrigin));
+if (d > 0.05) fail(`case left ${(d*100).toFixed(1)} cm from the nearest chamber mouth`);
+```
+
+**Prove it bites:** hardcode the old constant `(0.105, -0.075, -0.360)` as the
+eject origin, confirm the assertion FAILS, then restore. That constant is the
+original defect, so a check that cannot detect it is not a check.
 
 - [ ] **Step 6: Commit**
 
@@ -997,6 +1099,26 @@ git commit -m "shorty: the after-renders, and the breech that finally reads as a
 ```
 
 ---
+
+## Verification audit (2026-09-03, after the free-aim pass)
+
+The free-aim pass produced four defects and **not one was caught by a check
+going red**. This plan was audited against that record before it ran. What the
+audit changed:
+
+| step | was | now |
+| --- | --- | --- |
+| Task 3 Step 2 | asserted the width stays `0.099` — **arithmetic error**, it becomes `0.100` | asserts `0.100`, and says an unchanged `0.099` means the edit did not take |
+| Task 2 Step 3b | *(did not exist)* — the gate checked node NAMES, so a shell parented to the frame passed | asserts each driven node is a `Barrels` DESCENDANT, with a break-it-first check |
+| Task 2 Step 5 / Task 8 | one camera angle, "compare side by side" | three angles, and the raycast is the proof while the render is the confirmation |
+| Task 7 Step 5b | *(did not exist)* — the shorty gate cannot see where cases come from | asserts the eject origin is within 5 cm of a real chamber mouth, proved against the old constant |
+
+**The rule every step here now follows:** state what would have to break for
+this check to fail. If the answer is "nothing realistic", it is decoration.
+Four steps in this plan (Task 1 Step 6, Task 2 Step 3b, Task 5 Step 2, Task 7
+Step 5b) require you to break the thing first and watch the check fail before
+trusting it. Do not skip those — they are the only steps that establish the
+others mean anything.
 
 ## Self-review notes
 
