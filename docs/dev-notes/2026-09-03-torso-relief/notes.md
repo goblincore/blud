@@ -211,3 +211,72 @@ The masses were kept (they are a real improvement to the form) and the grooves
 were kept narrow rather than wide: 12.3 mm was available with 200 mm-wide
 "lines", and that score comes from shaving proud material — a depth edit
 wearing a crease's name. 12.8 mm with honest creases is the better file.
+
+## Round 7: the owner's answer — structure the noise, don't fight it
+
+Owner, on the diagnosis: *"silhouetteNoiseAmp is important as it adds texture
+and detail otherwise it just looks like a smooth blob... maybe instead its to
+tweak noise amp or use the same technique to create details like muscles."*
+
+That is the right read, and the code backs it exactly. `march.wgsl.ts:1190`:
+
+```wgsl
+let detail = fbm(anchor * 3.0) * noiseAmp;
+```
+
+- `anchor` is already the dominant prim's **REST-frame** point, so the
+  displacement rides the limb through gait and jiggle.
+- scale `3.0` puts one noise cell at ~33 cm — **pec-sized**.
+- `noiseAmp` 0.014 is **±14 mm of real geometry**.
+
+So the mechanism already produces muscle-scale, muscle-amplitude, limb-riding
+geometry. It is the one thing on the body that reads clearly. It is simply
+**isotropic random instead of structured.**
+
+### Two spikes, two renders
+
+**Spike 1 — anisotropy.** `fbm(anchor * vec3(7.0, 2.2, 7.0))`: clear
+directional striation, and the idea is proven. But it reads as **fur**, not
+muscle, and carries black streaking artefacts.
+
+Those artefacts are a Lipschitz overshoot, and they expose a real gap:
+
+> **`validateBody`'s noise guard is amplitude-only and cannot see frequency.**
+> `silhouetteNoiseAmp > (1 - stepMultiplier) * 0.5` — at the default
+> `stepMultiplier` 0.6 that permits up to **0.20**. But the Lipschitz constant
+> of `fbm(anchor·k)·amp` scales with **k·amp**, and `k` is not in the check.
+> The 7.0 spike ran at amp 0.014, a fourteenth of the permitted bound, and
+> visibly tore the march. Latent today because `k` is a hardcoded 3.0. A live
+> footgun the moment `k` becomes authorable — which is exactly what this
+> proposal does.
+
+**Spike 2 — stretch, don't sharpen.** `fbm(anchor * vec3(3.0, 0.9, 3.0))`:
+the **maximum** frequency stays 3.0, so the gradient is unchanged from
+baseline and the artefacts vanish. The forms elongate along the body into
+longitudinal bellies. Reads as muscle and sinew rather than blobs.
+
+**Spike 3 — plus the cavity tap.** Stretched noise, `silhouetteNoiseAmp`
+0.014 → 0.020, and the second AO tap at 0.015 m from the round-6 diagnosis.
+The tap darkens the valleys *between* the striations, and the two multiply:
+pecs read as separate masses with shadow between them, arms and thighs carry
+visible longitudinal muscle. This is the first render in three rounds where
+the character reads as muscled.
+
+`blob:render-check`: 0 hole clusters at amp 0.020 with the anisotropy.
+
+### The proposal, and why it is not committed
+
+Three changes, all reverted pending an owner call, because each one changes
+**every character**, not just this one:
+
+| change | scope |
+| --- | --- |
+| anisotropic noise scale | one line, body-wide look change |
+| second AO tap at 0.015 m | three lines, plus a whole `mapBody` per hit pixel |
+| `silhouetteNoiseAmp` 0.014 → 0.020 | per-character, safe (bound is 0.20) |
+
+The noise scale wants to become a **per-palette vec3** rather than a
+hardcoded constant — the mouse should not grow bull striation — and the AO
+tap needs a perf measurement it has not had. Both belong with the queued
+hard-surface shader work: same file, same kind of change, and the noise
+guard needs its frequency term before `k` is exposed to authors.
