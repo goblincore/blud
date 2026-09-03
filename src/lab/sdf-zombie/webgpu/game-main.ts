@@ -1120,6 +1120,11 @@ async function main() {
   const smokePuffs: { mesh: THREE.Mesh; age: number; vel: THREE.Vector3; roll: number }[] = [];
   const ejectedShells: THREE.Group[] = [];
   const loadShells: THREE.Group[] = [];
+  /** Where the last spent case was placed, in WORLD space, the moment it was
+   *  handed from the extraction slide to the free tumble. Step 5b's proof
+   *  that the eject origin is a real chamber mouth: this is asserted against
+   *  breechWorld() rather than trusted by construction. */
+  let lastEjectOrigin: Vec3 | null = null;
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -2353,6 +2358,11 @@ async function main() {
       );
     }
     if (hingePivot) hingePivot.rotation.x = rp.hinge * RELOAD.openRad;
+    // The breech locators are read below in RIG space, and they hang off the
+    // hinge pivot that was just rotated. Without this the eject would trail the
+    // barrels by exactly one frame.
+    if (gunGroup) viewModelAnchor.updateMatrixWorld(true);
+    if (topLeverNode) topLeverNode.rotation.y = topLeverAngle(reloading ? reloadAge : 0);
 
     if (reloading) {
       // THE SUPPORT HAND leaves the fore-end, drops out of frame low-left, and
@@ -2366,29 +2376,62 @@ async function main() {
           FORE_HAND_REST.z + sh.dz,
         );
       }
-      // SPENT CASES thrown up and back out of the open breech.
-      const breech = new THREE.Vector3(0.105, -0.075, -0.360);
+      // ——— STAGE 1: EXTRACTION ———————————————————————————————————————
+      // The seated cases are children of Barrels, so they are already carrying
+      // the 45 deg tilt. Sliding them along their own LOCAL -Z walks them
+      // straight back out of the bores. Larger z is toward the muzzle.
+      const ex = extractStage(reloadAge);
+      for (let i = 0; i < shellNodes.length; i++) {
+        const s = shellNodes[i];
+        const restZ = shellRestZ[i];
+        if (!s || restZ === undefined) continue;
+        if (ex === null) {
+          // Seated before the extract beat, gone after the hand-off.
+          const seated = reloadAge < RELOAD.extractAtSec;
+          s.visible = seated || reloadAge >= RELOAD.loadSeatSec;
+          s.position.z = restZ;
+        } else {
+          s.visible = true;
+          s.position.z = restZ - ex * CHAMBER_DEPTH_M;
+        }
+      }
+      if (extractorNode) {
+        extractorNode.position.z = extractorRestZ - extractorOffset(reloadAge);
+      }
+
+      // ——— STAGE 2: THE TUMBLE ———————————————————————————————————————
+      // Handed off at the moment the case clears the mouth, from the breech
+      // locator's CURRENT world position -- so it starts exactly where stage
+      // one left it, on a gun that may be at any point in its swing.
+      const breech = new THREE.Vector3();
       for (let i = 0; i < ejectedShells.length; i++) {
         const m = ejectedShells[i];
         if (!m) continue;
         const e = ejectedShell(reloadAge, i === 0 ? 0 : 1);
-        if (!e) { m.visible = false; continue; }
+        if (!e || !breechInRig(i === 0 ? 0 : 1, breech)) { m.visible = false; continue; }
         m.visible = true;
         m.position.set(breech.x + e.x, breech.y + e.y, breech.z + e.z);
         m.rotation.set(Math.PI / 2 + e.spin, e.spin * 0.6, 0);
+        const originWorld = (aimRig ?? viewModelAnchor).localToWorld(m.position.clone());
+        lastEjectOrigin = [originWorld.x, originWorld.y, originWorld.z];
       }
+
       // FRESH CASES riding up with the hand and seating in the chambers.
       const travel = loadShellTravel(reloadAge);
       for (let i = 0; i < loadShells.length; i++) {
         const m = loadShells[i];
         if (!m) continue;
-        if (travel === null) { m.visible = false; continue; }
+        if (travel === null || !breechInRig(i === 0 ? 0 : 1, breech)) {
+          m.visible = false; continue;
+        }
         m.visible = true;
-        const side = i === 0 ? -0.024 : 0.024;
-        // From under the frame, in the support hand, to the chamber mouths.
-        const from = new THREE.Vector3(FORE_HAND_REST.x + sh.dx + side, FORE_HAND_REST.y + sh.dy + 0.03, FORE_HAND_REST.z + sh.dz);
-        const to = new THREE.Vector3(breech.x + side, breech.y + 0.005, breech.z - 0.020);
-        m.position.lerpVectors(from, to, travel);
+        // From under the frame, in the support hand, to the real chamber mouth.
+        const from = new THREE.Vector3(
+          FORE_HAND_REST.x + sh.dx + (i === 0 ? -0.024 : 0.024),
+          FORE_HAND_REST.y + sh.dy + 0.03,
+          FORE_HAND_REST.z + sh.dz,
+        );
+        m.position.lerpVectors(from, breech, travel);
         m.rotation.set(Math.PI / 2, 0, 0);
       }
 
@@ -2396,6 +2439,15 @@ async function main() {
         shells = MAGAZINE_CAPACITY;
         reloadAge = Infinity;
         if (hingePivot) hingePivot.rotation.x = 0;
+        if (topLeverNode) topLeverNode.rotation.y = 0;
+        if (extractorNode) extractorNode.position.z = extractorRestZ;
+        for (let i = 0; i < shellNodes.length; i++) {
+          const s = shellNodes[i];
+          const restZ = shellRestZ[i];
+          if (!s || restZ === undefined) continue;
+          s.visible = true;              // loaded gun: two heads at the breech
+          s.position.z = restZ;
+        }
         if (gunGroup) {
           gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
           gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
@@ -2828,6 +2880,14 @@ async function main() {
     },
     get shells() { return shells; },
     get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
+    /** The two chamber mouths in WORLD space, right now. The eject origin is
+     *  supposed to track these through the swing; nothing proved it did. */
+    breechWorld: () => breechNodes.map((n) => {
+      const v = new THREE.Vector3(); n.getWorldPosition(v);
+      return [v.x, v.y, v.z] as Vec3;
+    }),
+    /** Where the last case was when it was handed to the tumble. */
+    get lastEjectOrigin() { return lastEjectOrigin; },
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
     // SLUG MODE surface + HUD-truthful flag.
