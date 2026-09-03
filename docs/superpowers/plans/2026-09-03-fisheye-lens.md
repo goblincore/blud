@@ -465,14 +465,17 @@ Leave the sharp branch and the final `else` (the plain nearest fetch) exactly as
 
 - [ ] **Step 5: Append the helper to the string**
 
-The blit constant currently ends with the `postAaEotf` body and a closing backtick. Change that closing backtick to append the shared helper:
+The blit constant's last helper is `postAaFetch`, whose closing brace is immediately followed by the terminating backtick and a semicolon (`post-aa.ts:271`). Only that terminator changes:
 
 ```ts
-  return select(hi, lo, cc <= vec3<f32>(0.04045, 0.04045, 0.04045));
-}` + FISHEYE_WGSL;
+  if (isDisplay > 0.5) { return c; }
+  return postAaOetf(c);
+}
+
+` + FISHEYE_WGSL;
 ```
 
-(Keep whatever the existing final line of `postAaEotf` is — only the terminating `` ` `` gains `+ FISHEYE_WGSL`.)
+The **blank line before the closing backtick matters**: `FISHEYE_WGSL` now begins directly with `fn fisheyeWarp(` (no leading newline, matching `humanoid.wgsl.ts`), so without a separator the concatenation would read `}fn fisheyeWarp(`. Leave every other line of the string exactly as it is.
 
 - [ ] **Step 6: Run the tests and watch them pass**
 
