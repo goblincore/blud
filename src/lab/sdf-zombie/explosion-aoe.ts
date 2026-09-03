@@ -98,6 +98,12 @@ export interface ExplosionBody {
   /** Stable identity for the wiring to route the effects back. */
   id: string;
   body: BuildResult;
+  /** The yaw `body` is POSED at (the game's actors hand in applyRig output,
+   *  turned by the walk). Wounds are stamped in the body frame — de-yawed
+   *  by this — so the actor can upload them at its live yaw and resolve
+   *  severing on the rest body at yaw 0. Omit (0) for a body in its own
+   *  frame: the rest body, the hero hands. */
+  bodyYaw?: number;
 }
 
 /** A live flying chunk near the blast (a severed limb/piece). */
@@ -306,6 +312,7 @@ export function resolveExplosion(
   const perBody: BodyExplosionEffect[] = [];
   for (const entry of bodies) {
     const body = entry.body;
+    const bodyYaw = entry.bodyYaw ?? 0;
 
     // One trace per live additive prim toward its midpoint; each hit is a
     // candidate wound site at its own falloff-scaled distance.
@@ -340,7 +347,7 @@ export function resolveExplosion(
     const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map(h =>
       worldHitToWound(
         body.prims, h.point,
-        WOUND_PROFILES.blast.radius * h.falloff, 'blast', 0,
+        WOUND_PROFILES.blast.radius * h.falloff, 'blast', bodyYaw,
         p => sdBody(p, body),
       ));
     // Entrails (2026-09-02): a blast over the TORSO opens a body cavity —
@@ -370,8 +377,8 @@ export function resolveExplosion(
     let chainCuts: ChainCut[] = [];
     if (!gibbed && wounds.length > 0) {
       const torso = body.clusters.find(c => c.limb === 'torso');
-      if (torso) severedLimbs = cutLimbs(body, wounds, torso.center);
-      chainCuts = cutChains(body, wounds);
+      if (torso) severedLimbs = cutLimbs(body, wounds, torso.center, bodyYaw);
+      chainCuts = cutChains(body, wounds, bodyYaw);
     }
 
     perBody.push({

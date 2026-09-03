@@ -20,6 +20,19 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**WOUND BILLBOARDING — FIXED (2026-09-02, `claude/serene-jemison-7c15a7`).**
+Owner: a crater on the zombie's back rotated round to the front as it turned
+(torso + legs; head fine). Root cause: torso blobs are axis-less spheres, so
+their wound frame is a fixed WORLD basis unless `bodyYaw` de-yaws it; the game
+actor stamped AND uploaded at yaw 0. Contract now: stamp(posed, yaw) /
+upload(posed, yaw) / sever-resolve(rest, 0) — one body frame, three views
+(`game-actor.ts refreshWounds` note). `cutLimbs`/`cutChains`/`ExplosionBody`
+take an optional `bodyYaw` for callers on POSED prims; every posed-prim
+consumer in `game-main.ts` + `bleed-registry.ts` quotes the live yaw. Gates:
+actor upload keeps its body-frame offset through a >1 rad turn; sever at
+yaw≠0; turned-body explosion == rest-body stamp. Not yet on the hull-spike
+branches (`sdf-hull-spike.html` lives there) — they get it on merge.
+
 **GORE R3 REFINEMENTS — QUEUED (2026-09-02), from the review of
 `claude/continue-previous-work-91055b` (wound r2, unmerged).** Ordered list in
 [docs/dev-notes/2026-09-02-gore-r3-refinements.md](docs/dev-notes/2026-09-02-gore-r3-refinements.md):
