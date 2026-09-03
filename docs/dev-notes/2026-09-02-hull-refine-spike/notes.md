@@ -129,6 +129,12 @@ Static-field bodies, where extraction amortises to zero and no band walk is need
   (pos, quat, squash scale), drop the per-frame repack/upload. Dozens of marched
   fields become dozens of tiny meshes. Keep the bounded pool + prewarmed material.
 
+- **Bones, on the LIVE body**: rigid per rig bone -> one hull (or capsule mesh) per
+  bone at load, drawn with the bone transform after the flesh with a plain depth
+  test — hidden inside intact flesh, visible exactly in cavities, no nearWound gate.
+  Deletes applyBones from the field (the 1.2M capsule evals/frame gore r3 item 2
+  wanted to cull). Bone needs its own small shader; cavity rays march to the far wall.
+
 Phase 2 candidates for LIVE bodies, in order of expected value:
 
 1. **Early-Z**: write the hull's raster depth, no frag_depth, and turn misses into a
