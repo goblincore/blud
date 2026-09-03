@@ -638,9 +638,14 @@ function renderDoc(
   head.push('# ' + '='.repeat(76));
   head.push(`# ${input.name} — FIRST-DRAFT .blob generated from the reference mesh's vertex`);
   head.push('# clouds. Every number is measured; its line\'s `# fit:` comment names the');
-  head.push('# source. Bone axes are cloud medial lines, never rig joints (they sit 9-13');
-  head.push('# cm off the skin); bands split at radial-profile inflections; radii are band');
-  head.push('# medians; angles exist only where dirVector is invertible.');
+  head.push('# source. len=/dir= come from the RIG chain — joint-to-joint x one scale —');
+  head.push('# because a bone\'s head is its parent\'s TAIL and overlapping vertex clouds');
+  head.push('# do not compose into a chain (the first draft stood ~0.3 m off the floor');
+  head.push('# on summed cloud extents). The cloud owns the SURFACE: bands split at');
+  head.push('# radial-profile inflections, radii are band medians, and offset= carries a');
+  head.push('# surface that sits off its bone (rig joints sit 9-13 cm from the skin —');
+  head.push('# offset the PRIMS, never relocate the bone). Angles exist only where');
+  head.push('# dirVector is invertible.');
   head.push('#');
   head.push('# NOT attempted — not derivable from a Meshy reference; add by hand:');
   head.push('#   fingers (the rig lumps each hand into one joint), bend= on any bone,');
