@@ -112,6 +112,9 @@ export interface ZombieGpuView {
    * NEXT update(). Only the melt sets this.
    */
   setBonesBare(on: boolean): void;
+  /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
+   *  melting body (and its released bone chunks) ever set this non-zero. */
+  setMelt(progress: number): void;
   /** The level-shadow TextureNode this view's material binds (perf round 2
    *  task 7). Rebind `.value` to the twin light's real depthTexture once
    *  three has rendered it — same mechanism as setFaceTexture. */
@@ -201,6 +204,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  counts was already full and woundCfg2.w is the volume hitEps
      *  override — NOT spare (see the woundShadowCfg note below). */
     counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** x melt progress 0..1 (zombie melt task 6), yzw spare. Drives the
+     *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
+     *  while still standing, before it visibly sags. 0 everywhere except a
+     *  melting body (and the bone chunks it releases), so every other view
+     *  shades bit-identical to before the slot existed. */
+    meltCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** x steps, y stepMul, z silhouetteNoiseAmp */
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0.016)),
     /** x count, y blendK, z rimSplay, w rimOffset */
@@ -861,9 +870,13 @@ export function createMarchMaterial(
     // gate — see MARCH_BODY's bodyEntry block.
     bodyCentre: mul(modelWorldMatrix, vec4(0.0, 0.0, 0.0, 1.0)).xyz,
     bodyHalf: u.bodyHalf,
+    // Melt progress (zombie melt task 6). Bound between bodyHalf and the
+    // level-shadow slots, matching MARCH_BODY's signature — positional, see
+    // the ORDER MATTERS note above.
+    meltCfg: u.meltCfg,
     // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
-    // MARCH_BODY's tail is bodyCentre, bodyHalf, levelShadow*, in this
-    // order (see the ORDER MATTERS note above; a slot swap here silently
+    // MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg, levelShadow*, in
+    // this order (see the ORDER MATTERS note above; a slot swap here silently
     // hands the shader the wrong uniform).
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
@@ -1322,6 +1335,7 @@ export function createZombieGpuView(
     getTileGroups() { return lastGroups; },
     setPackBones(on) { packBones = on; },
     setBonesBare(on) { bareBones = on; },
+    setMelt(progress) { u.meltCfg.value.x = progress; },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);

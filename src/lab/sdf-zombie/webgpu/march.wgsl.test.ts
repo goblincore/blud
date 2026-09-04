@@ -613,10 +613,42 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     const parsed = new WGSLNodeFunction(MARCH_BODY);
     const names = parsed.inputs.map((i: { name: string }) => i.name);
     // 66 on the perf round-2 chain; +8 from the wound-pass-r2 merge (counts2,
-    // surfCfg3, fatColor, boneColor and the viscera/gut slots). Re-pin when a
-    // slot is added ON PURPOSE — a silent change here is the phantom-input bug.
-    expect(names.length).toBe(74);
+    // surfCfg3, fatColor, boneColor and the viscera/gut slots); +1 from the
+    // melt task-6 meltCfg slot. Re-pin when a slot is added ON PURPOSE — a
+    // silent change here is the phantom-input bug.
+    expect(names.length).toBe(75);
     expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
+    // meltCfg sits between bodyHalf and the level-shadow tail, matching the
+    // JS binding object in createMarchMaterial (positional — a swap silently
+    // hands the shader the wrong uniform).
+    expect(names.indexOf('meltCfg')).toBe(names.indexOf('bodyHalf') + 1);
+  });
+});
+
+describe('melt wet-red ramp (zombie melt task 6)', () => {
+  // c52b05b declared meltCfg and never READ it: green tests, zero pixels.
+  // These assert the uniform is declared, bound and CONSUMED in the flesh
+  // shading branch — and that the consumption is gated flesh-vs-bone, since
+  // pale matte bone against wet red flesh is the whole look.
+  it('declares the meltCfg slot in the signature', () => {
+    expect(MARCH_BODY).toContain('meltCfg: vec4<f32>,');
+  });
+  it('READS meltCfg in the flesh shading branch — colour leads the sag', () => {
+    // smoothstep(clamp(meltCfg.x * 2)) — the ramp completes by half progress,
+    // so the body is clearly red while still standing, before it shortens.
+    expect(MARCH_BODY).toContain(
+      'let meltU = smoothstep(0.0, 1.0, clamp(meltCfg.x * 2.0, 0.0, 1.0));');
+    // Flesh reddens; bone goes PALE instead — the contrast is the effect.
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, meltU * 0.9)');
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, deepColor * 0.8, meltU * 0.8)');
+    // Wetness ramps on flesh ONLY — bone stays matte.
+    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), meltU)');
+  });
+  it('identifies an exposed bone row — the wm gate alone cannot see one', () => {
+    // The melt's skeleton emerges with NO wound (bareBones bypass), so the
+    // primScale.w material read must also run when meltCfg.x > 0.
+    expect(MARCH_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
+    expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
   });
 });
 
@@ -1662,8 +1694,31 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('boneStain');
   });
 
-  it('no longer identifies bone by material code — isBone is GONE (bone tubes)', () => {
-    expect(SHADE_BODY).not.toMatch(/isBone/);
+  it('identifies bone by material code ONLY for the melt ramp (task 6)', () => {
+    // Bone tubes deleted the old always-on bone albedo branch, and it stays
+    // deleted: bone is identified again, but the ONLY consumer is the melt's
+    // pale-vs-wet-red split (march.wgsl.ts, zombie melt task 6) — the melt's
+    // skeleton emerges through thinning flesh with no wound to key on, and
+    // without the material read an exposed bone would take the red flesh
+    // ramp and shade as meat. The read is gated on meltCfg.x, so a
+    // non-melting body pays and shades exactly as the bone-tubes deletion
+    // left it.
+    expect(SHADE_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
+    expect(SHADE_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
+    // And bone still does not get its old always-on shading back — the
+    // isBone read is consumed ONLY inside the meltU-gated block (the one
+    // bare `if (isBone)` line is nested directly inside `if (meltU > 0.0)`).
+    const uses = SHADE_BODY.split('\n').filter((l: string) => l.includes('isBone'));
+    for (const l of uses) {
+      if (l.includes('let isBone') || l.trim() === 'if (isBone) {') continue;
+      expect(l).toMatch(/meltU|meltCfg/);
+    }
+    // Prove the nesting claimed above: the bare branch sits inside the meltU
+    // gate, not loose in the shading flow.
+    const gate = SHADE_BODY.indexOf('if (meltU > 0.0) {');
+    const branch = SHADE_BODY.indexOf('if (isBone) {');
+    expect(branch).toBeGreaterThan(gate);
+    expect(branch - gate).toBeLessThan(200);
   });
 });
 

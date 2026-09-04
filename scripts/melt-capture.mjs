@@ -18,10 +18,10 @@
 // mechanism (a noise amplitude ramp) was wrong.
 //
 // DETERMINISM: progress is driven by __sdfLab.meltDirect(t), which HOLDS the
-// value (the render loop's per-frame stepMelt is suspended), and we capture
-// two animation frames later. A wall-clock ramp would make the series depend
-// on how fast this machine renders — exactly the reproducibility trap the
-// turntable header warns about. What meltDirect does NOT pin is the verlet
+// value (the render loop's per-frame stepMelt is suspended), and the released
+// bone chunks are advanced ONLY by __sdfLab.meltSettle(frames) at a fixed
+// 1/60 (cosmetics are frozen, so the wall-clock rAF step is off) — see the
+// MELT_RATE note at the sweep. What meltDirect does NOT pin is the verlet
 // statue: with motion frozen it still settles to a slightly different arm
 // pose each boot, which moves the t=0 bounds by ~±10 px and the ratios by a
 // few hundredths run to run. The gate margins above absorb this; if a future
@@ -193,6 +193,10 @@ await evaluate(`(() => {
   // Dynamic resolution would change the SDF pixel count between frames and
   // runs; frames are judged by eye, so pin it.
   if (window.__sdfLab.setAdaptive) window.__sdfLab.setAdaptive(false);
+  // Chunk physics too: the melt's released bone groups must move ONLY under
+  // meltSettle's fixed-dt steps below, never under wall-clock rAF deltas —
+  // that is what makes the photographed pile reproducible (melt task 6).
+  window.__sdfLab.freezeCosmetics(true);
   window.__sdfLab.focusBody();
   return true;
 })()`);
@@ -321,6 +325,26 @@ const TARGET_Y = Number(process.env.BLOB_TARGET_Y ?? 0.4);
 const MIN_STD = 5;
 const frames = [];
 
+// DETERMINISTIC BONE SETTLE (melt task 6, step 0). meltDirect jumps melt
+// PROGRESS instantly, but a released bone group is a rigid body that needs
+// wall-clock time to FALL — and this sweep holds each progress value for two
+// rAF ticks, so without an explicit settle every bone is photographed at the
+// instant it was released, mid-air (Task 5's t=0.85 skull hovered above the
+// puddle; its t=1.0 had no bones in it at all). meltSettle steps ONLY the
+// melt's bone chunks, at a fixed 1/60, on top of the seeded spawn tumble —
+// so the pile is reproducible frame for frame. The frame COUNT is the number
+// the melt would actually have taken to reach t at MELT_TUNING.rate
+// (0.625/s), handed over incrementally: a group released at t gets exactly
+// the fall time a live melt would have given it by the time the sweep
+// photographs a later t.
+const MELT_RATE = 0.625; // melt.ts MELT_TUNING.rate — progress per second
+// The melt freezes at t = 1 but the bones do not: the cage and skull release
+// at t ≈ 0.8 with under half a second of ramp left, so the END frame needs a
+// tail past 96 for the last groups to land — Gate A's bone-settle test
+// asserts them AT REST, and this frame is what that looks like.
+const SETTLE_TAIL = 90;
+let settledFrames = 0;
+
 await evaluate(`(() => { window.__sdfLab.setCam(0.5, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
 await sleep(600);
 
@@ -336,15 +360,16 @@ for (const t of PROGRESS) {
   if (!held || Math.abs(held.t - t) > 1e-6) {
     fail(`meltDirect(${t}) did not hold — lab reports meltState ${JSON.stringify(held)}`);
   }
-  // The FINAL frame is the end state — and the end state includes the
-  // skeleton having LANDED. Bone groups release as chunks as the front
-  // passes them (task 5) and the sweep holds each progress value only two
-  // rAF ticks, so without a settle wait the t=1.0 frame catches the skull
-  // mid-fall above the puddle and the height metric measures a falling
-  // bone, not the puddle. The tumble is seeded (identical every run); only
-  // the step count varies with frame rate, and every variation ends on the
-  // floor.
-  if (t === PROGRESS[PROGRESS.length - 1]) await sleep(2500);
+  // Settle the released bone chunks to where a live melt would have them at
+  // this progress (see the MELT_RATE note above). Incremental: chunks
+  // released earlier in the sweep keep the fall time they already banked.
+  const target = Math.round((t / MELT_RATE) * 60) + (t >= 1 ? SETTLE_TAIL : 0);
+  if (target > settledFrames) {
+    await evaluate(`(() => { window.__sdfLab.meltSettle(${target - settledFrames}); return true; })()`);
+    settledFrames = target;
+    // Let the settled chunk states reach the marched rows before shooting.
+    await evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))');
+  }
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   const buf = Buffer.from(shot.result.data, 'base64');
   const name = `melt-${String(Math.round(t * 100)).padStart(3, '0')}.png`;

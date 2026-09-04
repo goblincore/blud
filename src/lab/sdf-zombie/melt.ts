@@ -120,9 +120,15 @@ export interface MeltBodyTuning {
    * smin scales k by 4 internally (march.wgsl.ts:878 — "a cluster still
    * bends the surface from 4x the authored blendK away"). The plan's first
    * guess of 0.11 was therefore ~0.44 m of blend support per prim and the
-   * union ballooned into one blob metres wide (Task 3's captures). 0.045 is
-   * ~0.18 m of support — still several times the authored values, which is
-   * what fuses limbs into ONE surface instead of a heap of sausages.
+   * union ballooned into one blob metres wide (Task 3's captures).
+   *
+   * 0.035, not 0.045 (task 6): with every prim crushed onto ONE plane and
+   * radius-doubled, the chained smin bulge COMPOUNDS — at 0.045 the CPU
+   * field mirror (validate.sdBody) measured the pooled surface at ±1.04 m
+   * where the prim AABB ends at ±0.58 m, and the pixel gate read 3.04x
+   * against its 3.00 ceiling. 0.035 puts the field at ±0.89 m (≈2.5x) —
+   * still ~0.3 m of bulge past the prim edge, which is what keeps the
+   * puddle ONE fused surface instead of a heap of sausages.
    */
   fuseK: number;
 }
@@ -131,7 +137,7 @@ export const MELT_TUNING_BODY: MeltBodyTuning = {
   poolHeight: 0.09,
   crush: 0.25,
   spread: 0.16,
-  fuseK: 0.045,
+  fuseK: 0.035,
 };
 
 /** Endpoint Y in the canonical order: prim i contributes 2i (a), 2i+1 (b). */

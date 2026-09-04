@@ -130,7 +130,8 @@ import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
 import {
-  groupCentroid, groupOf, groupReleaseProgress, limbOfGroup, mulberry32,
+  boneChunkRadius, groupCentroid, groupOf, groupReleaseProgress, limbOfGroup,
+  MELT_BONE_RELEASE_U, meltBoneSpawnVel, mulberry32,
   partitionBones, releaseOrder, type BoneGroup,
 } from '../melt-bones';
 import {
@@ -1091,7 +1092,8 @@ async function main() {
    * severed limb (it adds the root shift itself); the seeded rng is what
    * makes two capture runs shoot the same tumble.
    */
-  const MELT_BONE_RELEASE_U = 0.6;
+  // MELT_BONE_RELEASE_U lives in melt-bones.ts so the Gate A settle test
+  // reads the SAME threshold — two copies would drift.
   function releaseMeltBones(posedBody: BuildResult) {
     if (!meltState || !meltBones) return;
     for (const g of meltBones.order) {
@@ -1117,18 +1119,41 @@ async function main() {
       const centroid = groupCentroid(prims);
       // Clatter gently OUTWARD off the body's vertical axis — gravity does
       // the drop; this just keeps the pile from stacking on its own centre.
-      const rng = meltBones.rng;
-      const r = Math.hypot(centroid[0], centroid[2]);
-      const dir: Vec3 = r > 1e-3
-        ? [centroid[0] / r, 0, centroid[2] / r]
-        : [rng() - 0.5, 0, rng() - 0.5];
-      const push = 0.3 + rng() * 0.4;
+      // meltBoneSpawnVel is shared with the Gate A settle test
+      // (melt-bones.ts): the gate asserts where these groups COME TO REST,
+      // so the spawn formula must be one copy, not two that drift.
+      const vel = meltBoneSpawnVel(centroid, meltBones.rng);
       const id = spawnChunk(
         limbOfGroup(g), sub(centroid, heroMotion.lastRootShift), [],
-        [dir[0] * push, -0.1, dir[2] * push],
-        undefined, 'bone', prims, rng,
+        vel,
+        undefined, 'bone', prims, meltBones.rng,
       );
       if (id !== null) meltBones.chunkIds.push(id);
+    }
+  }
+  /**
+   * Advance ONLY the melt's released bone chunks, at the caller's fixed dt,
+   * touching nothing else — not melt progress, not the flesh, not other
+   * chunks. This is what lets a capture jump to a progress value with
+   * meltDirect and still photograph bones that have FALLEN: meltDirect sets
+   * the pose, meltSettle runs the physics that pose implies. The seeded rng
+   * was consumed at spawn; stepping is pure integration, so a fixed frame
+   * count reproduces exactly.
+   */
+  function stepMeltChunks(dt: number) {
+    if (!meltBones) return;
+    for (const c of chunks) {
+      if (!meltBones.chunkIds.includes(c.id)) continue;
+      c.state = stepChunk(c.state, dt);
+      c.view.update(c.state);
+    }
+  }
+  /** The capture seam: step the released bone chunks `frames` times at
+   *  1/60, without moving melt progress. Capped like a dt clamp — a typo'd
+   *  argument must not hang the page. */
+  function meltSettle(frames: number) {
+    for (let i = 0; i < Math.max(0, Math.min(600, frames | 0)); i++) {
+      stepMeltChunks(1 / 60);
     }
   }
   // bindRig pins the lowest joint as a static anchor; walking releases it —
@@ -1615,13 +1640,13 @@ async function main() {
     // BONE-ONLY chunks (the melt's released skeleton groups) are the
     // exception: a bounding-sphere extent is dominated by the bone's LENGTH,
     // so a shin would come to rest floating half its length above the floor.
-    // Bones are thin; the resting radius is the tube radius with margin, and
-    // the topple lays the long axis flat against it.
+    // boneChunkRadius (melt-bones.ts) is the resting radius — the tube
+    // radius with margin; the topple lays the long axis flat against it.
+    // Shared with the Gate A settle test, which asserts the resting pose.
     const extentSource = prims.length > 0 ? prims : bones!;
     const radius = prims.length > 0
       ? chunkExtent(prims, origin)
-      : bones!.reduce((r, p) => Math.max(r,
-          Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(...p.scale)), 0) * 1.6;
+      : boneChunkRadius(bones!);
     const state = makeChunk(limb, origin, v, radius, primsLongAxis(extentSource, origin), rng, kind);
     const oldest = chunks.length >= MAX_CHUNKS ? chunks.shift() : undefined;
     let id: number;
@@ -1645,6 +1670,13 @@ async function main() {
       id = nextChunkId++;
       chunks.push({ id, state, view: chunkView, boneOnly: prims.length === 0 });
     }
+    // A melt-released bone group shades through the SAME meltCfg path as the
+    // body's emerged bones (march.wgsl.ts, task 6): pale and matte against
+    // the wet red goo. Set on EVERY spawn, not just bone ones — chunk views
+    // are recycled at the MAX_CHUNKS cap, and a reused view must not keep a
+    // stale meltCfg from a previous melt occupant.
+    chunks[chunks.length - 1]!.view.uniforms.meltCfg.value.x =
+      kind === 'bone' ? 1 : 0;
     // Goo at the tear: a droplet burst where the piece ripped away. FLESH
     // only — a bone-only chunk (a melt skeleton group letting go) has no
     // tear; bursting one sprays red across the whole set and the capture
@@ -2643,6 +2675,10 @@ async function main() {
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
     }
     if (meltState && !meltHeld) meltState = stepMelt(meltState, Math.min(dt, 1 / 30));
+    // The wet-red material ramp (melt task 6): meltCfg.x tracks progress so
+    // the flesh reddens on the SAME number that sags it — and at twice the
+    // rate, so the colour leads the collapse.
+    view.setMelt(meltState ? meltState.t : 0);
     const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
     // Rest-space noise anchor (motion-polish task 6): `current` is the
@@ -3593,10 +3629,18 @@ async function main() {
     //   __sdfLab.meltOff()     clear back to the solid body
     //   __sdfLab.meltDirect(t) jump to a progress value — deterministic, so
     //                          the capture script shoots the same frames twice
+    //   __sdfLab.meltSettle(frames)
+    //                          step ONLY the released bone chunks, frames
+    //                          times at 1/60, without moving melt progress —
+    //                          meltDirect sets the pose, meltSettle runs the
+    //                          physics that pose implies (melt task 6: a
+    //                          jumped-to bone was being photographed at the
+    //                          instant it was released, mid-air)
     //   __sdfLab.meltState()
     melt: () => startMelt(),
     meltOff: () => stopMelt(),
     meltDirect: (t: number) => meltDirect(t),
+    meltSettle: (frames: number) => meltSettle(frames),
     meltState: () => (meltState ? { t: meltState.t } : null),
     meltBones: () => (meltBones
       ? { released: [...meltBones.released], chunks: meltBones.chunkIds.length }

@@ -104,6 +104,41 @@ export function groupReleaseProgress(
   return endpointProgress({ ...s, heights: [h] }, 0);
 }
 
+/** A group lets go once the front is this far past its centroid. Exported so
+ *  the lab wiring and the Gate A bone-settle test (melt-gate.test.ts) read
+ *  the SAME threshold — two copies would drift. */
+export const MELT_BONE_RELEASE_U = 0.6;
+
+/**
+ * The spawn velocity of a released group: a gentle clatter OUTWARD off the
+ * body's vertical axis — gravity does the drop; this just keeps the pile
+ * from stacking on its own centre. Pure (the caller's rng is the seeded one)
+ * and shared between lab-main's releaseMeltBones and the Gate A settle test,
+ * because the test asserts where these groups COME TO REST — a second copy
+ * of the formula would let the lab drift out from under the gate.
+ */
+export function meltBoneSpawnVel(centroid: Vec3, rng: () => number): Vec3 {
+  const r = Math.hypot(centroid[0], centroid[2]);
+  const dir: Vec3 = r > 1e-3
+    ? [centroid[0] / r, 0, centroid[2] / r]
+    : [rng() - 0.5, 0, rng() - 0.5];
+  const push = 0.3 + rng() * 0.4;
+  return [dir[0] * push, -0.1, dir[2] * push];
+}
+
+/**
+ * The chunk's collision radius for a bone-only group. A bounding-sphere
+ * extent is dominated by the bone's LENGTH, so a shin would come to rest
+ * floating half its length above the floor. Bones are thin; the resting
+ * radius is the tube radius with margin, and the topple lays the long axis
+ * flat against it. Shared with lab-main's spawnChunk for the same reason as
+ * meltBoneSpawnVel.
+ */
+export function boneChunkRadius(bones: readonly Primitive[]): number {
+  return bones.reduce((r, p) => Math.max(r,
+    Math.max(p.radius, p.radiusB ?? p.radius) * Math.max(...p.scale)), 0) * 1.6;
+}
+
 /**
  * The chunk's LimbId. The skull maps to TORSO, not 'head': the chunk view
  * switches its face projection on for 'head' chunks
