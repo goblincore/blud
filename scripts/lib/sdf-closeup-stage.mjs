@@ -23,6 +23,7 @@
 //   import { connectGame, applyShipDefaults, stageCloseUp, stampFacingWounds,
 //            bootCloseupPage, runInterleaved } from './lib/sdf-closeup-stage.mjs';
 import { execFileSync } from 'node:child_process';
+import { loadavg } from 'node:os';
 
 export class StageFail extends Error {
   constructor(msg) { super(msg); this.name = 'StageFail'; }
@@ -240,58 +241,139 @@ export async function stampFacingWounds(evaluate, opts = {}, fail = failHard) {
  * legs: { name: { wounds: boolean, flat: boolean } } — the leg table.
  * opts:
  *   url          full page URL (e.g. .../sdf-game.html?frozen=1)
+ *   send/evaluate  an EXISTING connection (plain mode; no crash retry)
  *   benchArgs    object handed to __sdfGame.bench({ ...opts, label: leg })
  *   onRow(row)   called per completed run; return value ignored. Throw to
  *                abort.
  *   settleFrames sim frames let to come to rest after wounding (default 600)
- * Returns { rows, stagingRecords }.
+ *
+ * STABILITY MODE (task 1b Step 2) — pass instead of send/evaluate:
+ *   vite, cdp, width, height
+ *     runInterleaved owns the connection and can RE-BUILD it, which is what
+ *     makes a crashed page survivable. A silent retry is how a bad table
+ *     looks clean, so every recovery is counted:
+ *   crashRetries   in-place re-connect + reload + re-stage per leg run
+ *                  (default 0 = plain mode: a crash is fatal, as before)
+ *   loadGate       { maxRise, maxAbs } on the 1-minute load average (node's
+ *                  os.loadavg, quoted per row as `load1`). A row whose load1
+ *                  ROSE more than maxRise above its own leg-start sample, or
+ *                  whose load1 exceeds maxAbs, is rejected — not averaged
+ *                  through. Rejected rows are re-run in makeup reps after
+ *                  the main loop, until each leg holds minKept rows or
+ *                  makeupCap makeup reps have run. Both counts are reported
+ *                  in the returned block; neither is silent.
+ * Returns { rows, stagingRecords, crashRetries, loadRejected, makeupReps }.
  */
-export async function runInterleaved(legs, reps, opts, fail = failHard) {
-  const { url, benchArgs, onRow } = opts;
-  const settleFrames = opts.settleFrames ?? 600;
+export async function runInterleaved(legs, reps, opts, failParam = failHard) {
+  const stable = !opts.evaluate;
+  const maxCrashRetries = opts.crashRetries ?? 0;
+  const gate = opts.loadGate ?? null;
+  const minKept = opts.minKept ?? reps;
+  const makeupCap = opts.makeupCap ?? 3;
+
+  let conn = stable
+    ? await connectGame({
+        vite: opts.vite, cdp: opts.cdp, width: opts.width ?? 1280, height: opts.height ?? 800,
+        // In stable mode a page exception is a RETRYABLE failure, not a
+        // process exit — otherwise the crash-retry below could never fire.
+        onFail: (msg) => { throw new StageFail(msg); },
+      })
+    : opts;
+  const evaluate = () => conn.evaluate;
+  // Same rule for the three loud assertions and boot timeouts inside a leg:
+  // rethrow (retryable) in stable mode, hard-fail (as before) in plain mode.
+  const fail = stable ? (msg) => { throw new StageFail(msg); } : failParam;
+
   const rows = [];
   const stagingRecords = [];
+  let crashRetries = 0;
+  let loadRejected = 0;
+  let makeupReps = 0;
+  const names = Object.keys(legs);
   // Rotate the starting leg each rep so a thermal ramp cannot alias onto one
   // leg (interleave discipline, inherited).
-  const names = Object.keys(legs);
   const order = (rep) => names.map((_, i) => names[(i + rep) % names.length]);
 
-  for (let rep = 0; rep < reps; rep++) {
-    for (const leg of order(rep)) {
-      const L = legs[leg];
-      await bootCloseupPage({ ...opts, url, fail });
-      await applyShipDefaults(opts.evaluate);
-      const staging = await stageCloseUp(opts.evaluate, opts.stage, fail);
-      stagingRecords.push({ rep, leg, ...staging });
-      let woundInfo = null;
-      if (L.wounds) {
-        woundInfo = await stampFacingWounds(opts.evaluate, opts.wounds, fail);
-        // Let viscera ropes and any settle-state physics come to rest BEFORE
-        // the timing starts, or their settling drift lands inside the bench
-        // chunks as cost drift (the 38% spread the first run showed).
-        await opts.evaluate(`__sdfGame.step(${settleFrames})`);
-      }
-      await opts.evaluate(`__sdfGame.setFlatAlbedo(${L.flat})`);
-      await opts.evaluate('__sdfGame.step(2)');
-      const occ = await opts.evaluate('__sdfGame.occupancy()');
-      await opts.evaluate(`__sdfGame.bench({ kind: 'closeup', mode: 'throughput', warmup: 120, chunkFrames: 10, closeupFrames: 240, label: ${JSON.stringify(leg)}, ...${JSON.stringify(benchArgs ?? {})} })`);
-      const r = JSON.parse(await opts.evaluate('JSON.stringify(window.__gameBench)'));
-      if (!r.valid) fail(`${leg} rep${rep}: ${r.hiddenSteps} hidden frames — INVALID`);
-      const seg = r.segments.find((s) => s.name === 'closeup');
-      const census = seg?.census?.last ?? seg?.census?.first ?? null;
-      const row = {
-        rep, leg,
-        p50: seg.p50, p95: seg.p95, mean: seg.mean, max: seg.max,
-        coverage: occ.hits / (occ.targetW * occ.targetH),
-        dist: staging.d,
-        wounds: woundInfo?.wounds ?? 0,
-        bodies: census?.bodies ?? occ.bodiesOnScreen,
-        meanStepsHit: occ.meanStepsHit, missStepShare: occ.missStepShare,
-        uptime: await opts.evaluate('__sdfGame.uptime()'),
-      };
-      rows.push(row);
-      if (onRow) await onRow(row, { staging, woundInfo });
+  const runLeg = async (leg, rep) => {
+    const L = legs[leg];
+    const ev = evaluate();
+    const loadStart = loadavg()[0];
+    await bootCloseupPage({ send: conn.send, evaluate: ev, url: opts.url, fail });
+    await applyShipDefaults(ev);
+    const staging = await stageCloseUp(ev, opts.stage, fail);
+    stagingRecords.push({ rep, leg, ...staging });
+    let woundInfo = null;
+    if (L.wounds) {
+      woundInfo = await stampFacingWounds(ev, opts.wounds, fail);
+      // Let viscera ropes and any settle-state physics come to rest BEFORE
+      // the timing starts, or their settling drift lands inside the bench
+      // chunks as cost drift (the 38% spread the first run showed).
+      await ev(`__sdfGame.step(${opts.settleFrames ?? 600})`);
     }
+    await ev(`__sdfGame.setFlatAlbedo(${L.flat})`);
+    await ev('__sdfGame.step(2)');
+    const occ = await ev('__sdfGame.occupancy()');
+    await ev(`__sdfGame.bench({ kind: 'closeup', mode: 'throughput', warmup: 120, chunkFrames: 10, closeupFrames: 240, label: ${JSON.stringify(leg)}, ...${JSON.stringify(opts.benchArgs ?? {})} })`);
+    const r = JSON.parse(await ev('JSON.stringify(window.__gameBench)'));
+    if (!r.valid) fail(`${leg} rep${rep}: ${r.hiddenSteps} hidden frames — INVALID`);
+    const seg = r.segments.find((s) => s.name === 'closeup');
+    const census = seg?.census?.last ?? seg?.census?.first ?? null;
+    const row = {
+      rep, leg,
+      p50: seg.p50, p95: seg.p95, mean: seg.mean, max: seg.max,
+      coverage: occ.hits / (occ.targetW * occ.targetH),
+      dist: staging.d,
+      wounds: woundInfo?.wounds ?? 0,
+      bodies: census?.bodies ?? occ.bodiesOnScreen,
+      meanStepsHit: occ.meanStepsHit, missStepShare: occ.missStepShare,
+      uptime: await ev('__sdfGame.uptime()'),
+      load1: loadavg()[0],
+      load1Start: loadStart,
+    };
+    if (opts.onRow) await opts.onRow(row, { staging, woundInfo });
+    return row;
+  };
+
+  const attemptLeg = async (leg, rep) => {
+    // Crash retry: a page crash must not kill the rep silently, and a
+    // retried row must not masquerade as a first-try row. Cap it.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await runLeg(leg, rep);
+      } catch (e) {
+        if (!stable || attempt >= maxCrashRetries) throw e;
+        crashRetries++;
+        console.warn(`  [retry ${crashRetries}] ${leg} rep${rep} failed (${String(e).slice(0, 120)}) — re-connecting and re-staging`);
+        conn = await connectGame({ vite: opts.vite, cdp: opts.cdp, width: opts.width ?? 1280, height: opts.height ?? 800, onFail: fail });
+      }
+    }
+  };
+
+  const keep = (row) => {
+    if (!gate) return true;
+    const rise = row.load1 - row.load1Start;
+    if (rise > gate.maxRise) { loadRejected++; console.warn(`  [load-reject] ${row.leg} rep${row.rep}: load1 rose ${rise.toFixed(1)} > ${gate.maxRise} during the leg`); return false; }
+    if (row.load1 > gate.maxAbs) { loadRejected++; console.warn(`  [load-reject] ${row.leg} rep${row.rep}: load1 ${row.load1.toFixed(1)} > ${gate.maxAbs}`); return false; }
+    return true;
+  };
+
+  const runRep = async (legsToRun, rep) => {
+    for (const leg of legsToRun) {
+      const row = await attemptLeg(leg, rep);
+      if (keep(row)) rows.push(row);
+    }
+  };
+
+  for (let rep = 0; rep < reps; rep++) await runRep(order(rep), rep);
+
+  // Makeup reps: only the legs still short of minKept, still in rotation.
+  const keptOf = (leg) => rows.filter((r) => r.leg === leg).length;
+  while (makeupReps < makeupCap && names.some((l) => keptOf(l) < minKept)) {
+    const deficient = order(makeupReps).filter((l) => keptOf(l) < minKept);
+    await runRep(deficient, reps + makeupReps);
+    makeupReps++;
   }
-  return { rows, stagingRecords };
+
+  return { rows, stagingRecords, crashRetries, loadRejected, makeupReps,
+    kept: Object.fromEntries(names.map((l) => [l, keptOf(l)])) };
 }

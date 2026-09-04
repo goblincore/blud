@@ -33,10 +33,7 @@
 //
 // Usage: LAB_VITE_PORT=5377 LAB_CDP_PORT=9377 node scripts/sdf-game-closeup-bench.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
-import {
-  connectGame, bootCloseupPage, applyShipDefaults, stageCloseUp,
-  stampFacingWounds, runInterleaved,
-} from './lib/sdf-closeup-stage.mjs';
+import { runInterleaved } from './lib/sdf-closeup-stage.mjs';
 
 const VITE = Number(process.argv[2] ?? 5377);
 const CDP = Number(process.argv[3] ?? 9377);
@@ -47,14 +44,13 @@ const TARGET_COVERAGE = Number(process.env.COVERAGE_MIN ?? 0.5);
 const WOUND_COUNT = Number(process.env.WOUNDS ?? 5);
 
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
-setTimeout(() => { console.error('FAIL: watchdog (25 min)'); process.exit(3); }, 1_500_000).unref();
+const WATCHDOG_MIN = Number(process.env.BENCH_WATCHDOG_MIN ?? (REPEATS + 3) * 6 + 5);
+setTimeout(() => { console.error(`FAIL: watchdog (${WATCHDOG_MIN} min)`); process.exit(3); }, WATCHDOG_MIN * 60_000).unref();
 
 mkdirSync(OUT, { recursive: true });
 
 const url = `http://localhost:${VITE}/sdf-game.html?frozen=1`;
 console.log(`closeup-bench ${url}  (${W}x${H}, repeats=${REPEATS}, wounds=${WOUND_COUNT})`);
-
-const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: W, height: H, onFail: fail });
 
 const LEGS = {
   normal:   { wounds: true,  flat: false },
@@ -63,22 +59,41 @@ const LEGS = {
   flat0:    { wounds: false, flat: true },
 };
 
-const { rows: results, stagingRecords } = await runInterleaved(LEGS, REPEATS, {
-  url,
-  send,
-  evaluate,
-  benchArgs: { closeupFrames: 240 },
-  wounds: { minStamped: 3 },  // the original's loud floor (WOUNDS only labels meta)
-  onRow: async (row) => {
-    process.stdout.write(`  rep${row.rep} ${row.leg}: p50 ${row.p50.toFixed(2)} ms  cov ${(row.coverage * 100).toFixed(0)}%  wounds ${row.wounds}  dist ${row.dist}  uptime ${row.uptime.toFixed(0)}s\n`);
-  },
-});
+// STABILITY (task 1b step 2): runInterleaved owns the connection in stable
+// mode. LOAD GATE, stated: a row is REJECTED (re-run in a makeup rep, never
+// averaged through) when the 1-minute load average rose more than 8.0 above
+// its own leg-start sample during the leg, or exceeds 24 absolute (3× this
+// machine's 8 cores). Crash retry: a crashed/hung page is re-connected,
+// reloaded and re-staged up to 3 times per leg; every retry and every
+// rejection is counted and reported below — a silent retry is how a bad
+// table looks clean.
+let out;
+try {
+  out = await runInterleaved(LEGS, REPEATS, {
+    url,
+    vite: VITE, cdp: CDP, width: W, height: H,
+    benchArgs: { closeupFrames: 240 },
+    wounds: { minStamped: 3 },  // the original's loud floor (WOUNDS only labels meta)
+    crashRetries: 3,
+    loadGate: { maxRise: 8.0, maxAbs: 24.0 },
+    minKept: REPEATS,
+    makeupCap: 3,
+    onRow: async (row) => {
+      process.stdout.write(`  rep${row.rep} ${row.leg}: p50 ${row.p50.toFixed(2)} ms  cov ${(row.coverage * 100).toFixed(0)}%  wounds ${row.wounds}  dist ${row.dist}  uptime ${row.uptime.toFixed(0)}s  load ${row.load1Start.toFixed(1)}→${row.load1.toFixed(1)}\n`);
+    },
+  });
+} catch (e) {
+  fail(e instanceof Error ? e.message : String(e));
+}
+const { rows: results, stagingRecords, crashRetries, loadRejected, makeupReps, kept } = out;
+console.log(`\nstability: kept ${JSON.stringify(kept)}  crashRetries ${crashRetries}  loadRejected ${loadRejected}  makeupReps ${makeupReps}`);
 
 // ---- summarise -------------------------------------------------------------
 const med = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[s.length >> 1]; };
 const summary = {};
 for (const leg of Object.keys(LEGS)) {
   const rs = results.filter((r) => r.leg === leg);
+  if (rs.length === 0) fail(`leg ${leg}: zero rows survived the load gate — no split is defensible`);
   const vals = rs.map((r) => r.p50);
   summary[leg] = {
     p50: med(vals), min: Math.min(...vals), max: Math.max(...vals),
@@ -87,6 +102,7 @@ for (const leg of Object.keys(LEGS)) {
     dist: med(rs.map((r) => r.dist)),
     wounds: rs[0].wounds,
     meanStepsHit: med(rs.map((r) => r.meanStepsHit)),
+    load1: med(rs.map((r) => r.load1)),
   };
 }
 const N = summary.normal.p50;
@@ -104,12 +120,12 @@ const split = {
 
 writeFileSync(`${OUT}/closeup-bench.json`, JSON.stringify({
   meta: { url, W, H, repeats: REPEATS, targetCoverage: TARGET_COVERAGE, wounds: WOUND_COUNT, when: new Date().toISOString() },
-  results, stagingRecords, summary, split,
+  results, stagingRecords, stability: { kept, crashRetries, loadRejected, makeupReps, loadGate: { maxRise: 8.0, maxAbs: 24.0 } }, summary, split,
 }, null, 2));
 
 console.log('\n## Close-up split (p50 of chunk means, median of reps)');
 for (const [leg, s] of Object.entries(summary)) {
-  console.log(`  ${leg.padEnd(8)} p50 ${s.p50.toFixed(2)} ms  [${s.min.toFixed(2)}..${s.max.toFixed(2)}]  spread ${s.spreadPct.toFixed(1)}%  cov ${(s.coverage * 100).toFixed(0)}%  dist ${s.dist}m  wounds ${s.wounds}  steps/hit ${s.meanStepsHit.toFixed(1)}`);
+  console.log(`  ${leg.padEnd(8)} p50 ${s.p50.toFixed(2)} ms  [${s.min.toFixed(2)}..${s.max.toFixed(2)}]  spread ${s.spreadPct.toFixed(1)}%  cov ${(s.coverage * 100).toFixed(0)}%  dist ${s.dist}m  wounds ${s.wounds}  steps/hit ${s.meanStepsHit.toFixed(1)}  load ${s.load1.toFixed(1)}`);
 }
 console.log('\n## Split, % of the wounded close-up frame');
 for (const [k, v] of Object.entries(split)) console.log(`  ${k.padEnd(24)} ${v}%`);
