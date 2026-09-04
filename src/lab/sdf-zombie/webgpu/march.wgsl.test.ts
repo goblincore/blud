@@ -1963,9 +1963,33 @@ describe('metal modifier (hard-surface task 2)', () => {
     // metals tint their grazing reflection too — and never the wound/gore
     // wet or scatter terms.
     expect(SHADE_BODY).toContain(
-      'let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));');
+      'min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5))');
     expect(SHADE_BODY).toContain(
       'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
+  });
+
+  it('collapses to an EXACTLY white tint at metal 0 — flesh keeps its highlight', () => {
+    // THE REGRESSION THIS EXISTS FOR (found 2026-09-04, on main, in the lab).
+    // metalTint shipped UNGATED:
+    //     let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));
+    // primAlbedo is vec3(0) on every UNPAINTED pixel — flesh never enters the
+    // painted branch (PC.w > 0.0) that fills it — so metalTintLum clamped to
+    // its 1e-3 floor, the tint evaluated to vec3(0), and it multiplied the
+    // WHOLE specular + fresnel term to nothing. Every zombie lost its
+    // highlight AND its rim at once, everywhere, lab and game.
+    //
+    // The tell: the specular slider did nothing. surfCfg.x sits INSIDE those
+    // parentheses, so once the common factor is zero the knob cannot move the
+    // pixel. Anything that kills shine and fres TOGETHER is a common factor,
+    // not the shine term.
+    //
+    // The diffuse half of this same feature got its gate right —
+    // `mix(1.0, 0.45, metal)`, pinned above — and this is the missing other
+    // half. mix() to exactly 1.0 is an exact multiply, so at metal 0 flesh
+    // shades bit-identically to the pre-metal shader; at metal 1 the steel
+    // tint is untouched.
+    expect(SHADE_BODY).toContain(
+      'let metalTint = mix(vec3<f32>(1.0), min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5)), metal);');
   });
 });
 

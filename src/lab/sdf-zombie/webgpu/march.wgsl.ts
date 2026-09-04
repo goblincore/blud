@@ -2621,8 +2621,23 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // byte-for-byte as before.
   // (Task 3's merge removed a STALE duplicate of this block left by task 2's
   // tuning pass — it claimed the 0.25 floor this curve superseded.)
+  //
+  // THE mix() IS LEAD, NOT TRIM (regression fixed 2026-09-04). The sentence
+  // above was the INTENT; for one merge the tint below did not implement it.
+  // It shipped as the bare min(), and primAlbedo is vec3(0) on every
+  // UNPAINTED pixel — flesh never enters the 'PC.w > 0.0' branch that fills
+  // it. So metalTintLum sat on its 1e-3 floor, the tint evaluated to vec3(0),
+  // and it multiplied the ENTIRE specular + fresnel line to nothing: every
+  // zombie lost its highlight and its rim at once, in the lab and in the
+  // game. The diagnostic tell is that the specular slider went dead — surfCfg.x
+  // lives inside those parentheses, so nothing it does survives a zero
+  // common factor.
+  //
+  // Gate it the same way the diffuse floor beside it is gated. A PAINTED
+  // non-metal wants the untinted white highlight too (polished plastic, not
+  // coloured chrome), which 'metal' - not 'painted' - is exactly the flag for.
   let metalTintLum = max(dot(primAlbedo, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
-  let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));
+  let metalTint = mix(vec3<f32>(1.0), min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5)), metal);
   var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
