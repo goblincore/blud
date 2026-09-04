@@ -26,9 +26,9 @@ import {
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
-// @ts-expect-error — raw source import: the row-table docstrings are TS
-// comments, invisible to every exported WGSL string, and the Done-when
-// "docstring no longer lies" check needs the file's actual text.
+// Raw source import: the row-table docstrings are TS comments, invisible to
+// every exported WGSL string, and the Done-when "docstring no longer lies"
+// check needs the file's actual text.
 import moduleSource from './march.wgsl?raw';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (see the comment below).

@@ -348,7 +348,7 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.
     expect(packedProf('minotaur.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,3,3,24,24,24,24,24]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,3,3,24,24,24,24,24]);
     expect(packedProf('mouse.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2]);
     expect(packedProf('schoolgirl-alt.blob')).toEqual(
@@ -428,17 +428,24 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     expect(Array.from(p.primClip.slice(0, 4))).toEqual([0, 0, 0, 0]);
   });
 
-  it('every shipped character still packs primClip.w as all zeros (nobody authors glow yet)', () => {
-    // The Done-when for this task is that EXISTING characters are untouched:
-    // glow= is opt-in per prim, and until the minotaur's eyes are authored
-    // every row must pack exactly as before.
+  it('every shipped character packs primClip.w all-zero EXCEPT the minotaur, which authors exactly two glowing eyes', () => {
+    // glow= is opt-in per prim: characters that do not author it must pack
+    // byte-identically to before the lane existed, and the minotaur — the
+    // task-3 acceptance character — must carry EXACTLY the two authored eye
+    // prims (one per side; mirror expansion doubles the authored line), so
+    // an accidental glow= somewhere else is caught here.
     for (const [name, raw] of Object.entries(CHARACTERS)) {
       const built = buildBody(compileBlob(parseBlob(raw)), DEFAULT_BUILD_OPTS);
       const packed = packBody(built);
-      let sum = 0;
-      for (let i = 0; i < packed.primClip.length; i += PRIM_STRIDE) sum += Math.abs(packed.primClip[i + 3]!);
-      if (sum !== 0) throw new Error(`${name}: primClip.w is nonzero but no prim authors glow=`);
-      expect(sum).toBe(0);
+      let glowing = 0;
+      for (let i = 0; i < built.prims.length; i++) {
+        if (Math.abs(packed.primClip[i * PRIM_STRIDE + 3]!) > 0) glowing++;
+      }
+      if (name === 'minotaur.blob') {
+        expect(glowing).toBe(2);
+      } else {
+        expect(glowing).toBe(0);
+      }
     }
   });
 });

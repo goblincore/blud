@@ -272,6 +272,20 @@ body
   bar  head on skull from=0.575 to=0.70 offset=(0.098,0.0,0.020) tip=(0.162,0.046,-0.005) bend=(0.048,-0.042,0.0) r=0.050 r2=0.013 blend=0.004 chamfer both color=221a1a gloss=0.45
 
   # ============================================================
+  # EYES — glowing (hard-surface task 3 acceptance: per-prim glow=). The
+  # first emissive prims in any character; the decal bake already paints red
+  # eyes at this spot, and these prims light them. Placement from the face
+  # block's own solve (comment at the decal, below): the bake's EYE row sits
+  # at authored y 1.73, x +/-0.035 (the mesh's eye spacing), ON the cranium
+  # ellipsoid (centre (0,1.764,0.009), semi-axes 0.125x0.194x0.188) whose
+  # surface at that (x,y) is z = 0.009 + 0.188*sqrt(1-(0.176/0.194)^2 -
+  # (0.035/0.125)^2) = 0.068. at=0.41: boneAt(t).y = 1.386 + 0.84t -> 1.730.
+  # r=0.012: 24mm beads, small against the 250mm-wide muzzle so they read as
+  # eyes, not headlamps. `both` mirrors the offset x like every facial pair.
+  # ============================================================
+  blob head on skull at=0.41 offset=(0.035,0.0,0.068) r=0.012 blend=0.004 both color=ff2200 glow=0.9
+
+  # ============================================================
   # ARMS — huge (mesh upperarm rho p50 0.085-0.096 = 0.13-0.15 authored,
   # forearm tapering 0.11 -> 0.075). Deltoid ball at the clavicle tail is the
   # arm's core (house pattern — the fuse probe must not pick an accessory).
