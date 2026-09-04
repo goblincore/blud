@@ -61,6 +61,7 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
@@ -1057,6 +1058,20 @@ async function main() {
     for (const a of actors) a.view.uniforms.bounceCfg.value.x = probeWeight;
   }
 
+  /** Ground radius the crowd separates zombies at — the same 0.35 m the
+   *  player's soft-obstacle boxes already use, so the two agree. */
+  const ZOMBIE_RADIUS = 0.35;
+  const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
+  /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
+   *  a player who shares their room. */
+  function playerRoomId(): number {
+    return ROOM_ID_BY_NAME.get(enclosureKeyAt(player.pos[0], player.pos[2])) ?? -1;
+  }
+  /** Set when the weapon fires; consumed by the next tick to turn heads in
+   *  the player's room. Sticky rather than instantaneous because a shot lands
+   *  in an event handler, not in the frame callback. */
+  let shotAlert = false;
+
   // -----------------------------------------------------------------------
   // Player: pointer lock + WASD + gravity + capsule-vs-AABB.
   // -----------------------------------------------------------------------
@@ -1654,6 +1669,10 @@ async function main() {
     if (!gunReady || cooldown > 0) return false;
     if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
     if (shells <= 0) { reloadAge = 0; return false; } // click -> start reloading
+    // Gunfire in a room turns every head in it, cone or no cone. Placed after
+    // the guards on purpose: a dry click or a shot during a reload must not
+    // alert anything, or the flag fires on inputs that made no noise.
+    shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
     shells = magazineAfterFire(shells, barrels);
@@ -2278,6 +2297,29 @@ async function main() {
     stepPlayer(player, input, dt, [...colliders, ...zombieBoxes]);
 
     if (!wanderFrozen) {
+      // --- brain input + crowd separation, BEFORE the actors step ----------
+      // Order matters: separating first means this frame's step() and its
+      // view.update() render the corrected positions, so a resolved overlap
+      // is never a frame late on screen.
+      const pRoom = playerRoomId();
+      const pInfo = pRoom > 0
+        ? { x: player.pos[0], z: player.pos[2], room: pRoom }
+        : null;
+      const alertRoom = shotAlert ? pRoom : -1;
+      shotAlert = false;
+      for (const a of actors) a.setBrainInput(pInfo, a.room === alertRoom);
+
+      const agents: CrowdAgent[] = actors.map(a => {
+        const p = a.pose().pos;
+        return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
+      });
+      // The player is an ANCHOR: zombies slide off him rather than shove him.
+      // His own capsule already resolves against the per-frame zombie boxes
+      // above (stepPlayer), which is the other half of the same contact.
+      agents.push({ x: player.pos[0], z: player.pos[2], r: PLAYER.radius, mobile: false });
+      const push = separate(agents);
+      actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
+
       for (const a of actors) a.step(dt);
       const now = performance.now() / 1000;
       for (const a of actors) {
@@ -2837,6 +2879,22 @@ async function main() {
     get probeWeight() { return probeWeight; },
     /** Every zombie: id, room, live ground pose. */
     zombies: () => actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
+    /** Per-actor brain readout — the crowd/AI capture driver's oracle. */
+    brains: () => actors.map(a => {
+      const b = a.brain();
+      const p = a.pose().pos;
+      return {
+        id: a.id, room: a.room, mode: b.mode, alert: b.alert,
+        engaged: b.engaged, swingT: b.swingT,
+        dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
+      };
+    }),
+    /** Smallest centre-to-centre distance between any two zombies (m).
+     *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
+    crowdMinDist: () => minPairDistance(actors.map(a => {
+      const p = a.pose().pos;
+      return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
+    })),
     /** One zombie's internals — the weapon seam: view (uniforms/wounds),
      *  posed() (raycast target), boundRig() (impulse/recoil entry). */
     zombie: (id: number) => {
