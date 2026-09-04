@@ -715,6 +715,38 @@ wound pops, gait stop-motion).
   spend the hours on shape.
   Needs: a reference mesh in `docs/dev-notes/refs/mancubus-mesh/`.
 
+- `X7.origin-merge` [ ] **MERGE `origin/main` — DO THIS FIRST, BEFORE ANY
+  PUSH.** Local `main` (71ca0af) and `origin/main` (edcf4cb) have DIVERGED:
+  **85 ahead, 52 behind.** The remote merged the zombie melt (PR #2); none of
+  our work is on the remote. Both must be merged before anything is pushed.
+  **The auto-merge is a TRAP.** `march.wgsl.ts` and `zombie-gpu.ts` merge
+  TEXTUALLY CLEAN and are semantically broken: both sides independently added
+  a uniform called `meltCfg` and a `setMelt`, so the merged tree has **two
+  `meltCfg` shader params, two uniform declarations, two `meltCfg: u.meltCfg`
+  bindings**. A clean `git merge` output here means nothing — check for
+  duplicates by hand.
+  **Only three files actually conflict**, and the resolution for each is
+  known:
+  * `scripts/melt-capture.mjs` (9, add/add) — **take THEIRS**
+  * `lab-main.ts` (4; the big one is ~180 lines of melt block) — **take
+    THEIRS**; theirs deliberately does NOT trigger the death collapse
+    ("melting IS the death — a ragdoll underneath would topple the body")
+  * `march.wgsl.test.ts` (1) — comment only; both say "+1 for meltCfg", so
+    the pinned input count is unchanged. Merge the wording.
+  **The real work is the two files that DIDN'T conflict.** Principle: THEIR
+  melt wins everywhere (it is a complete 8-task feature — face drips off the
+  skull, organs, head fuse, cage release, skin sloughs, the puddle stops
+  walking, with its own spec at
+  `docs/superpowers/specs/2026-09-03-zombie-melt-design.md`). OUR melt was a
+  spike. But it is not a straight "take theirs", because:
+  * hard-surface's gloss/metal kill WRAPS our `noiseCfg` vec4 —
+    `vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w)`
+  * theirs has **zero** `noiseCfg` — it kept `noiseAmp: f32`
+  So: keep ONE `meltCfg` (theirs), keep `noiseCfg` (ours, hardsurf needs it),
+  and source `noiseCfg`'s melt lanes FROM their `meltCfg`. Then delete our
+  `setMelt`, our uniform, and our lab melt block.
+  Suite is the gate: 2990 green / 182 files on `71ca0af` before this merge.
+
 - `X6b.bodysheet-merge` [ ] **Merge `dispatch/bodysheet-task-4` — a real 3-way
   integration, not a resolve.** The hardsurf chain and main are IN main as of
   `bb6a55b`; the body sheet is the one thing left out, deliberately. It
