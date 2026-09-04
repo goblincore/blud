@@ -105,6 +105,16 @@ export interface ZombieGpuView {
    * field for the instanced-tube renderer and counts2.x counts organs only.
    */
   setPackBones(on: boolean): void;
+  /**
+   * Lift the march's nearWound gate on the inside-flesh rows (counts2.y) —
+   * the melt's skeleton must fold WITHOUT a wound, because the melt sags
+   * the flesh off the bones on purpose. Default FALSE; takes effect on the
+   * NEXT update(). Only the melt sets this.
+   */
+  setBonesBare(on: boolean): void;
+  /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
+   *  melting body (and its released bone chunks) ever set this non-zero. */
+  setMelt(progress: number): void;
   /** The level-shadow TextureNode this view's material binds (perf round 2
    *  task 7). Rebind `.value` to the twin light's real depthTexture once
    *  three has rendered it — same mechanism as setFaceTexture. */
@@ -194,6 +204,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  counts was already full and woundCfg2.w is the volume hitEps
      *  override — NOT spare (see the woundShadowCfg note below). */
     counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** x melt progress 0..1 (zombie melt task 6), yzw spare. Drives the
+     *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
+     *  while still standing, before it visibly sags. 0 everywhere except a
+     *  melting body (and the bone chunks it releases), so every other view
+     *  shades bit-identical to before the slot existed. */
+    meltCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** x steps, y stepMul, z silhouetteNoiseAmp */
     marchCfg: uniform(new THREE.Vector3(96, 0.6, 0.016)),
     /** x count, y blendK, z rimSplay, w rimOffset */
@@ -854,9 +870,13 @@ export function createMarchMaterial(
     // gate — see MARCH_BODY's bodyEntry block.
     bodyCentre: mul(modelWorldMatrix, vec4(0.0, 0.0, 0.0, 1.0)).xyz,
     bodyHalf: u.bodyHalf,
+    // Melt progress (zombie melt task 6). Bound between bodyHalf and the
+    // level-shadow slots, matching MARCH_BODY's signature — positional, see
+    // the ORDER MATTERS note above.
+    meltCfg: u.meltCfg,
     // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
-    // MARCH_BODY's tail is bodyCentre, bodyHalf, levelShadow*, in this
-    // order (see the ORDER MATTERS note above; a slot swap here silently
+    // MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg, levelShadow*, in
+    // this order (see the ORDER MATTERS note above; a slot swap here silently
     // hands the shader the wrong uniform).
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
@@ -1162,6 +1182,12 @@ export function createZombieGpuView(
   // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
   // pack then writes ORGANS only and counts2.x counts organs.
   let packBones = opts.packBones ?? true;
+  // BARE BONES (melt task 5): TRUE lifts the march's nearWound gate on the
+  // inside-flesh rows (counts2.y), so the skeleton folds WITHOUT a wound.
+  // Only the melt sets this: it sags the flesh off the bones on purpose, and
+  // the gate's "bones are contained in flesh" proof is exactly what the melt
+  // violates.
+  let bareBones = false;
 
   function upload(next: BuildResult, rest?: BuildResult) {
     const p = packBody(next, rest, { packBones });
@@ -1199,7 +1225,7 @@ export function createZombieGpuView(
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     dataTex.needsUpdate = true;
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
-    u.counts2.value.set(p.boneCount, 0, 0, 0);
+    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, 0, 0);
     return p;
   }
 
@@ -1308,6 +1334,8 @@ export function createZombieGpuView(
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
     setPackBones(on) { packBones = on; },
+    setBonesBare(on) { bareBones = on; },
+    setMelt(progress) { u.meltCfg.value.x = progress; },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -1521,6 +1549,32 @@ export function createChunkGpuView(
     u.faceGlowColor.value.copy(template.faceGlowColor.value);
   }
 
+  /**
+   * Transform a bent prim's Bezier control point by the chunk's own transform.
+   *
+   * WITHOUT THIS A BENT BAR STRAIGHTENS AS THE CHUNK TURNS. `apply` rewrites
+   * primA/primB into world space every frame, but ROW_PRIM_BEND was written
+   * ONCE by `reset` in local space and never again — so the endpoints rotated
+   * with the chunk while the control point stayed where the chunk was born.
+   * On the melt's released ribcage that is the whole defect the owner saw: the
+   * ribs are two BENT bars per hoop, and a hoop whose control point no longer
+   * matches its endpoints collapses into a straight rod. Twelve of those is
+   * "a linear bundle of sticks" rather than a ribcage.
+   *
+   * The row stores the ABSOLUTE control point (pack.ts), so this is exactly
+   * the transform the endpoints get — not a displacement that needs rotating.
+   * `posedBones()` already knew this and did it for its own read path; the
+   * render path simply never got the same treatment.
+   *
+   * Prims with no bend are left alone: their row carries a BOX's corner
+   * rounding in .w, which this must not clobber.
+   */
+  function writeBend(p: Primitive, o: number, sx: number, sy: number, sz: number): void {
+    if (p.bend === undefined) return;
+    packed.primBend.set(
+      [...chunkPoint(current, bendCtrl(p.a, p.b, p.bend), sx, sy, sz), 0], o);
+  }
+
   /** Writes the local prims into the world-space data rows for state `c`. */
   function apply(c: Chunk): { sx: number; sy: number; sz: number } {
     current = c;
@@ -1535,6 +1589,7 @@ export function createChunkGpuView(
       // never shows.
       packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
         p.op === 'sub' ? 1 : 0], o);
+      writeBend(p, o, sx, sy, sz);
     });
     // Bones ride the same squash and transform, written at the rows packBody
     // put them on — AFTER the flesh. Missing this would leave them in local
@@ -1554,6 +1609,7 @@ export function createChunkGpuView(
       packed.primScale.set(
         [p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
         p.op === 'organ' ? W_ORGAN : W_BONE], o);
+      writeBend(p, o, sx, sy, sz);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
     // The chunk's one bound group IS its cluster (singleGroup above): same
@@ -1563,6 +1619,7 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
+    writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
     writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, 1);
 
@@ -1612,7 +1669,11 @@ export function createChunkGpuView(
       a: vsub(p.a, c.pos),
       b: vsub(p.b, c.pos),
     }));
-    extent = chunkExtent(nextPrims, c.pos);
+    // Extent sizes the proxy box AND the cluster sphere. A BONE-ONLY chunk
+    // (the melt's released skeleton groups) has no flesh to measure — take
+    // the bones, or the box comes out 5 cm and culls the very bones it
+    // exists to show.
+    extent = chunkExtent(nextPrims.length > 0 ? nextPrims : (nextBones ?? []), c.pos);
     tornLocals = (nextTornAt ?? []).map(t => vsub(t, c.pos));
     // Girth at the tear, not the length-dominated proxy extent (X1.16).
     tornRadii = tornLocals.map(t => tornEndRadius(local, t));
@@ -1644,9 +1705,15 @@ export function createChunkGpuView(
     writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
 
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
-    u.counts2.value.set(packed.boneCount, 0, 0, 0);
+    // counts2.y is the BARE-BONES bypass: a bone-only chunk (the melt's
+    // released skeleton groups) has no wound to be near, and the nearWound
+    // gate would march an empty field — the chunk would be invisible.
+    u.counts2.value.set(packed.boneCount, nextPrims.length === 0 ? 1 : 0, 0, 0);
     u.marchCfg.value.x = 48; // chunks are small; fewer steps
-    u.lodCfg.value.w = 1;    // torn-meat gore mask
+    // Torn-meat gore mask — for FLESH chunks. A bone-only chunk (the melt's
+    // released skeleton groups) is not torn meat; the mask would paint bare
+    // bone red and the puddle's pale bits would read as more goo.
+    u.lodCfg.value.w = nextPrims.length > 0 ? 1 : 0;
     u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;
     u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
     u.headAxes.value.set(extent, extent, extent);

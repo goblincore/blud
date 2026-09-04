@@ -41,14 +41,19 @@ export const CHUNK_TUNING = {
   /** Extra grounded spin kill per contact frame, multiplied with
    *  floorFriction for angVel only — a sliding chunk stops rolling fast. */
   angularFloorDamp: 0.55,
+  /** BONE restitution (kind 'bone'): bones thud where flesh chunks skip. */
+  boneRestitution: 0.2,
   /** Below this speed a grounded chunk starts easing flat. */
   toppleSpeed: 0.6,
   /** Radians/sec the long axis eases toward horizontal (~90deg in 0.4s). */
   toppleRate: 4.0,
 } as const;
 
-/** What the chunk IS — limbs tumble heavy, gobs chaotic (CHUNK_TUNING). */
-export type ChunkKind = 'limb' | 'gob';
+/** What the chunk IS — limbs tumble heavy, gobs chaotic (CHUNK_TUNING),
+ *  bones THUD (the melt's released skeleton groups: dense, no bounce, no
+ *  squash — a skull that squashes on impact reads as goo, and a 0.55
+ *  restitution bounce keeps it airborne for seconds). */
+export type ChunkKind = 'limb' | 'gob' | 'bone';
 
 const GRAVITY = CHUNK_TUNING.gravity;
 const RESTITUTION = CHUNK_TUNING.restitution;
@@ -121,9 +126,13 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
     y = c.radius;
     grounded = true;
     if (vy < 0) {
-      // Squash scales with impact speed — this is what sells wetness.
-      squash = Math.min(1, squash + Math.min(Math.abs(vy) * 0.16, 0.9));
-      vy = -vy * RESTITUTION;
+      // Squash scales with impact speed — this is what sells wetness. BONES
+      // do not squash: they are the rigid thing inside the wet thing.
+      if (c.kind !== 'bone') {
+        squash = Math.min(1, squash + Math.min(Math.abs(vy) * 0.16, 0.9));
+      }
+      const rest = c.kind === 'bone' ? CHUNK_TUNING.boneRestitution : RESTITUTION;
+      vy = -vy * rest;
       if (Math.abs(vy) < 0.35) vy = 0;
     }
     vx *= FLOOR_FRICTION; vz *= FLOOR_FRICTION;
