@@ -1476,6 +1476,66 @@ export const MELT_SKIN_KEEP = 1.30;
  * had no pink left at all).
  */
 export const MELT_SKIN_CONTRAST = 2.8;
+
+/**
+ * Sphere-trace step multiplier inside applyWounds' nearWound zone.
+ *
+ * The wounded field is NOT a distance bound — the smax fillet overstates, the
+ * lip understates, and `rimLocal` ties the lip's amplitude to the pre-wound
+ * field so the two move together — and a step of `mul * d` only stays outside
+ * the surface while `mul <= 1 / max|grad d|`. Measured (march-step-soundness
+ * test, planar flesh, shipped rim constants): a single stock blast wound
+ * reaches |grad| 2.06 and a single pellet 2.09, so the largest sound
+ * multiplier is ~0.48 — for ONE wound. Overlapping craters compound through
+ * the sequential per-wound loop: a blast plus a six-pellet spread measured
+ * 3.92, i.e. 0.26.
+ *
+ * IT STAYS AT 0.6, WHICH IS ABOVE THAT BOUND, AND THAT IS A DECISION — not an
+ * oversight, which is what it was until 2026-09-04, when it shared the literal
+ * with the shell's under-relaxation and had never been checked against a
+ * crater. The owner A/B'd 0.6 against 0.4 on screen (`setWoundStep`, below)
+ * and could not tell them apart, so the frame budget wins. Everything below is
+ * what that costs, so the next person can re-take the decision with the
+ * numbers instead of re-deriving them.
+ *
+ * WHAT 0.6 LOOKS LIKE, counted over every pixel of a real frame on a torso
+ * carrying a blast + a six-pellet spread (game settings: omega 1.0, AA 1.0,
+ * outer-hull start, cone off):
+ *
+ *            mis-shaded px   of hits   normals > 45 deg wrong
+ *   1.5 m        10731        4.32%
+ *   2.5 m         2903        2.16%            686
+ *   4.0 m          649        0.97%
+ *
+ * "Mis-shaded" = the march accepted a sample further behind the first
+ * crossing than the hit epsilon, so the pixel takes its normal from inside
+ * the carve blend and its tissue-ramp depth from up to 13.7 mm too deep —
+ * far enough to shift a patch a whole band down fat -> muscle -> clot. They
+ * are CONTIGUOUS (99% have an affected 4-neighbour), and STABLE: turning the
+ * camera 0.23 degrees keeps 2892 of 2903. A stable wrong patch inside a
+ * crater reads as "that is what the crater looks like", which is why this sat
+ * unreported for as long as it did.
+ *
+ * ONE WOUND IS FINE at any of these values — a single stock blast produced
+ * zero mis-shaded pixels at every range. This is a STACKING artifact; it
+ * needs a body someone emptied a shotgun into.
+ *
+ * WHAT FIXING IT WOULD COST. The zone is large (r < 2 * wound radius), so the
+ * ray pays over its whole approach, not just at the lip. Marched pixels only,
+ * on that same shotgunned body, against 0.6:
+ *
+ *          extra march steps (2 m / 4 m / 8 m)   what it removes
+ *   0.4          +23% / +18% / +16%              every > 45 deg error, 92% of the pixels
+ *   0.3          +45% / +36% / +32%              all of them, at both ranges measured
+ *
+ * Unwounded bodies are untouched at any value — nothing raises nearWound —
+ * and hit counts are unchanged, so nothing drops out of the image. Flip it
+ * live with `__sdfGame.setWoundStep(0.4)` / `__sdfLab.setWoundStep(0.4)`
+ * (perfCfg.z, see the marchBody loop; 0 = this constant). If it is ever worth
+ * paying for, the cheap direction is a SMALLER zone or a per-sample count of
+ * overlapping wounds — not a longer step.
+ */
+export const WOUND_STEP_MUL = 0.6;
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -1854,6 +1914,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // smooth field until it is inside a thin shell of the surface, and only
   // there does the fbm displace the stepped distance — see the loop body.
   var omega = select(marchCfg.y, woundCfg2.y, relax);
+  // Near-wound step multiplier, with a live override on perfCfg.z for A/B
+  // (__sdfGame.setWoundStep). ZERO IS THE IDENTITY: every view that never
+  // writes the lane gets the compiled constant, bit for bit. The lane is on
+  // perfCfg and not counts2 because counts2 is re-set on every pack — an
+  // override parked there would evaporate on the next body rebuild.
+  let woundMul = select(${WOUND_STEP_MUL}, perfCfg.z, perfCfg.z > 0.0);
   // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
   // never push the ray straight out the back of the proxy box.
@@ -1974,7 +2040,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
           break;
         }
       } else {
-        stepLen = d * select(omega, 0.6, conservative || nearWound);
+        // TWO INDEPENDENT REASONS TO UNDER-RELAX, and the stricter one wins.
+        // The shell's 0.6 pays for the fbm; the wound zone's own multiplier
+        // pays for a field that is not a distance bound (WOUND_STEP_MUL).
+        // They used to share the 0.6 literal, which is how the wound side
+        // went unexamined for as long as it did — the shell's figure was
+        // never measured against a crater.
+        //
+        // At WOUND_STEP_MUL 0.6 this is the old select() exactly, for every
+        // omega the pages ship (all >= 0.6). It differs only BELOW 0.6, where
+        // the old form LENGTHENED the step to 0.6 in the very zones that
+        // wanted it shortest; min() keeps omega there instead.
+        stepLen = d * min(select(omega, 0.6, conservative), select(omega, woundMul, nearWound));
       }
     }
     prevRadius = radius;

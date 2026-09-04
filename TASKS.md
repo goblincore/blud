@@ -2017,6 +2017,33 @@ Key reference docs (open these before touching their area):
   wounds exposed hull spheres inside craters (fixed by wound exclusion in
   `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
   march to the clamp through interpenetrating fields; fold into `X1.10`.
+- `X1.29` [x] **Near-wound step multiplier — MEASURED, DELIBERATELY LEFT AT
+  0.6.** Owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
+  could not tell them apart, so the frame budget won. Everything below is why
+  it is a decision now rather than an oversight, so it can be re-taken without
+  re-deriving. The wounded field is not a distance bound and nobody had
+  measured how badly: max |grad| is 2.06 for ONE stock blast (sound
+  multiplier 0.48) and 3.92 for a blast + six-pellet spread (0.26), against a
+  0.6 inherited from the shell's fbm under-relaxation. What 0.6 looks like,
+  counted over every pixel of a real frame on a shotgunned torso: **4.32% of
+  that body's hit pixels at 1.5 m** (2.16% at 2.5 m, 0.97% at 4 m) shaded from
+  inside the meat — contiguous patches, not speckle, 686 of them at 2.5 m with
+  normals >45° wrong, tissue-ramp depth up to 13.7 mm too deep. STABLE across
+  camera motion (2892 of 2903 pixels persist over 0.23°), which is why it read
+  as gore rather than as a bug. A single wound is clean at any value — this is
+  a STACKING artifact. 0.4 removes every >45° error and 92% of the pixels for
+  **+23% / +18% / +16% march steps at 2 / 4 / 8 m** on a wounded body (0.3
+  removes the sub-threshold remainder for +45/+36/+32%); unwounded bodies and
+  hit counts unchanged. Re-take it live with `__sdfGame.setWoundStep(0.4)` /
+  `__sdfLab.setWoundStep(0.4)` (perfCfg.z; 0 = the compiled constant), one
+  constant to make it permanent. Characterised by
+  `webgpu/march-step-soundness.test.ts` — the measured gradient, and one
+  recorded ray pinned BOTH ways (shades 11 mm inside at 0.6, stops in front of
+  the wall at 0.4), so the file stays honest whichever value ships. Related,
+  NOT
+  fixed: `coneMarch` steps `(d - r) * marchCfg.y` with no wound term at all,
+  so an enabled cone pre-pass can certify a crater's interior as empty (cone
+  ships OFF).
 - `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
   and the surrounding articles/code. Deferred, not urgent.
 
