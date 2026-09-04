@@ -7,6 +7,9 @@
 //   2. THE CHASE: every zombie in the player's room notices him (alert).
 //   3. THE SWING: the nearest body reaches melee range and swings.
 //   4. NEGATIVE CONTROL: with the player out of every room, all go calm.
+//   5. THE MELEE RING: at most `tokens` bodies engaged, holders >= 90 deg
+//      apart, and no arm interpenetration between the bodies fighting over
+//      the player (the owner's 2026-09-04 screenshot, as a number).
 //
 // Usage: LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 node scripts/sdf-game-crowd-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -162,7 +165,9 @@ for (let i = 0; i < 40 && !swung; i++) {
   const d = await evaluate('__sdfGame.crowdMinDist()');
   if (typeof d === 'number' && d < worst) worst = d;
   const bs = await evaluate('__sdfGame.brains()');
-  const mid = bs.find((b) => b.mode === 'attack' && b.swingT > 0);
+  // (b.mode, from the 2026-09-04 three-mode brain, is b.state since the
+  //  2026-09-05 seven-state machine — same read: mid-swing, progress > 0.)
+  const mid = bs.find((b) => b.state === 'attack' && b.swingT > 0);
   swung = !!mid;
   if (mid) {
     // SHOOT THE SWING WHERE IT HAPPENS. The first version of this gate took
@@ -185,10 +190,10 @@ for (let i = 0; i < 40 && !swung; i++) {
       await shot('fpv-swing');
       const still = await evaluate('__sdfGame.brains()');
       const s2 = still.find((b) => b.id === mid.id);
-      console.log(`swing frame: zombie ${mid.id} mode=${s2?.mode} swingT=${s2?.swingT?.toFixed(3)}`);
-      if (!(s2 && s2.mode === 'attack' && s2.swingT > 0)) {
+      console.log(`swing frame: zombie ${mid.id} state=${s2?.state} swingT=${s2?.swingT?.toFixed(3)}`);
+      if (!(s2 && s2.state === 'attack' && s2.swingT > 0)) {
         fail(`the swing frame was captured after zombie ${mid.id} finished swinging ` +
-             `(mode=${s2?.mode}, swingT=${s2?.swingT}) -- the picture does not show what it claims`);
+             `(state=${s2?.state}, swingT=${s2?.swingT}) -- the picture does not show what it claims`);
       }
       await evaluate(FPV);
     }
@@ -261,6 +266,114 @@ if (calm.some((b) => b.alert)) {
   fail(`zombies stayed alert with the player out of the room: ${JSON.stringify(calm.filter((b) => b.alert))}`);
 }
 console.log('lock: everything went calm once the player left the room');
+
+// --- 5. THE MELEE RING. Three claims, one per line of the 2026-09-05 spec.
+//     Walk back into room 4 and let the pack settle into the ring.
+await evaluate(FPV);
+// WAKE THE WHOLE ROOM FIRST. Only 2 of room 4's 4 bodies notice the player on
+// their own (the other two are outside the facing cone when he walks in), and
+// a ring check that only ever sees two claimants cannot exercise the token
+// cap -- it would pass trivially. A shot bypasses the cone for every body in
+// the room, which is what puts four claimants on a two-token ring.
+await evaluate('__sdfGame.fire(1)');
+await evaluate('__sdfGame.step(240, 1 / 60)');
+const awake = (await evaluate('__sdfGame.brains()')).filter((b) => b.room === 4 && b.alert);
+if (awake.length < 3) {
+  fail(`only ${awake.length} room-4 bodies woke after a shot in the room; the ring ` +
+       'check needs at least 3 claimants to mean anything');
+}
+const ring = await evaluate('__sdfGame.ringTuning()');
+const ATTACK_STATES = ['engage', 'attack', 'recover'];
+
+let worstGap = Infinity;
+let maxSwinging = 0;
+let worstSpread = Math.PI;
+// 5a's measure, computed over RING-RELEVANT pairs only (at least one body of
+// the pair in an attack state), because minHandGap()'s all-bodies aperture
+// measures bodies this claim is not about: on every run it went negative for
+// exactly one pair -- z5+z6, two IDLE bodies parked shoulder-to-shoulder in
+// room 3, 10+ m from the fight, whose hanging arm prims graze around zero as
+// soft separation settles idle neighbours near touch distance. Measured on
+// the wired build: every pair with a body engaged stayed >= 0.18 m clear, the
+// cap held at 2 and the spread at 147 deg, so neither of the plan's two
+// diagnoses (minSlotAngle too small / arbitration not reaching the actors)
+// held -- the instrument, not the ring, was wrong. The ARITHMETIC is
+// unchanged from the minHandGap() seam (endpoint-to-endpoint minus both
+// radii, a conservative under-estimate: it can cry wolf, it cannot miss a
+// clip); only the subset is narrowed to the bodies the ring governs. The
+// mutation below (every body forced to hold a token) still fails this: four
+// claimants pack the ring with nothing spreading their bearings, and all
+// four read as an attack state, tripping 5b as well.
+const RING_GAP = `(() => {
+  const ATTACK = ['engage', 'attack', 'recover'];
+  const ids = __sdfGame.brains().filter((b) => ATTACK.includes(b.state)).map((b) => b.id);
+  const arms = ids.map((id) => {
+    const pts = [];
+    for (const prim of __sdfGame.zombie(id).posed().prims) {
+      if (prim.limb !== 'armL' && prim.limb !== 'armR') continue;
+      pts.push({ p: prim.a, r: prim.radius }, { p: prim.b, r: prim.radius });
+    }
+    return pts;
+  });
+  let best = Infinity;
+  for (let i = 0; i < arms.length; i++) {
+    for (let j = i + 1; j < arms.length; j++) {
+      for (const u of arms[i]) {
+        for (const v of arms[j]) {
+          const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2]) - u.r - v.r;
+          if (g < best) best = g;
+        }
+      }
+    }
+  }
+  return best;
+})()`;
+for (let i = 0; i < 30; i++) {
+  await evaluate('__sdfGame.step(6, 1 / 60)');
+  const bs = await evaluate('__sdfGame.brains()');
+  const gap = await evaluate(RING_GAP);
+  if (typeof gap === 'number' && Number.isFinite(gap) && gap < worstGap) worstGap = gap;
+
+  const swinging = bs.filter((b) => ATTACK_STATES.includes(b.state));
+  if (swinging.length > maxSwinging) maxSwinging = swinging.length;
+
+  // Every pair of token holders must clear minSlotAngle.
+  const holders = bs.filter((b) => b.hasToken);
+  for (let a = 0; a < holders.length; a++) {
+    for (let c = a + 1; c < holders.length; c++) {
+      let d = holders[a].bearing - holders[c].bearing;
+      while (d <= -Math.PI) d += 2 * Math.PI;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      if (Math.abs(d) < worstSpread) worstSpread = Math.abs(d);
+    }
+  }
+}
+await shot('melee-ring');
+console.log(
+  `ring: worst arm gap ${worstGap.toFixed(3)} m · most engaged at once ${maxSwinging}` +
+  ` · tightest holder spread ${((worstSpread * 180) / Math.PI).toFixed(1)} deg`,
+);
+
+// 5a. THE OWNER'S DEFECT, AS A NUMBER. Arms on different bodies must not
+//     interpenetrate. The measure is conservative (endpoint-to-endpoint minus
+//     both radii, an under-estimate of the true capsule gap), so a pass here
+//     is a real pass; a small negative could in principle be a false alarm,
+//     which is why the floor is 0 and not a padded value.
+if (!(worstGap > 0)) {
+  fail(`arms interpenetrating: closest arm-prim gap between two bodies was ` +
+       `${worstGap.toFixed(3)} m. Ring arbitration is not limiting who engages, ` +
+       'or minSlotAngle is too small for the arm reach.');
+}
+// 5b. The token cap.
+if (maxSwinging > ring.tokens) {
+  fail(`${maxSwinging} bodies were in an attack state at once, cap is ${ring.tokens}`);
+}
+// 5c. Angular spacing between holders.
+if (worstSpread < ring.minSlotAngle - 1e-3) {
+  fail(`two token holders were only ${((worstSpread * 180) / Math.PI).toFixed(1)} deg apart, ` +
+       `minimum is ${((ring.minSlotAngle * 180) / Math.PI).toFixed(1)} deg`);
+}
+console.log('ring: cap and spacing hold, no arm interpenetration');
 
 await evaluate('__sdfGame.setLoopRunning(true)');
 const errs2 = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
