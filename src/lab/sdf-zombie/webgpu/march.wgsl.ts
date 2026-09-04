@@ -2116,6 +2116,30 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     return vec4<f32>(gDebugBones, select(0.0, 1.0, hit), 1.0, t);
   }
   if (!hit) { discard; }
+  // FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). Returns the
+  // body's base albedo AT THE HIT and skips the entire post-hit chain —
+  // calcNormal (4 field evals), the anchor, the micro-detail fbm, wound/char
+  // masks, the tissue ramp, organ/mottle/gore/face albedo, the analytic
+  // flashlight, spec/fresnel, the scatter and AO probes, the wound soft
+  // shadow, the level shadow and the ambient compose. Nothing about the WALK
+  // changes: the loop above ran to the same t with the same stepping, and
+  // hitBest/hitNearWound/hitField were still maintained because the tracer
+  // itself consumes them.
+  //
+  // debugCfg.y is the seam's gate because debugCfg.y was the one spare
+  // channel on a uniform every march variant already binds — a new input in
+  // MARCH_BODY's signature would have to be threaded through the entry
+  // literal AND every variant literal in signature order (the meltCfg
+  // incident), for a diagnostic that must stay inert. Default 0 = the
+  // guarded return never fires and the fragment below is bit-identical to
+  // the pre-seam shader; a test pins this file to exactly one debugCfg.y
+  // occurrence, placed here.
+  //
+  // Precedence note: with debugCfg.x ALSO in a heatmap mode (1/2/3) the flat
+  // return wins — those modes returned after shading, and this seam exists to
+  // skip shading. Modes 4/5 (occupancy/bone counters) still win over it:
+  // they return above, before the hit test.
+  if (debugCfg.y > 0.5) { return vec4<f32>(baseColor, t); }
   // Snapshot the counters BEFORE the post-hit probes: calcNormal folds
   // four more mapBody calls and the wound shadow up to fourteen, and the
   // heatmap is about RAY cost, not shading cost.

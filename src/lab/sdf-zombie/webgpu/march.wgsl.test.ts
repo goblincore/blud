@@ -2076,3 +2076,56 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     expect((moduleSource.match(/primGlow =/g) ?? []).length).toBe(2);
   });
 });
+
+
+describe('flat-albedo seam (close-up diagnostics task 1)', () => {
+  // The seam is the instrument the 2026-09-04 close-up investigation needs:
+  // a gate that returns the base albedo at the hit and skips the whole
+  // post-hit chain, so frame(A) - frame(flat) is the shading share of the
+  // close-up frame. Its ENTIRE value depends on being inert when off — a
+  // seam that perturbs the walk measures nothing. These pins hold the
+  // inertness contract from text, the same way the wgslFn parse pins do.
+
+  it('gates on debugCfg.y and that channel appears EXACTLY once in the file', () => {
+    // debugCfg.y was chosen because it was the one spare channel on a
+    // uniform every march variant already binds. If a second use appears,
+    // the seam is no longer independently toggleable and the legs share
+    // state — the exact defect the melt-literal incident warns about.
+    // (Comment text is stripped first so this comment itself cannot trip
+    // the count — same rule as the wgslFn parser, comments included.)
+    const code = MARCH_BODY.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+    expect((code.match(/debugCfg\.y/g) ?? []).length).toBe(1);
+    expect(CONE_MARCH).not.toContain('debugCfg'); // cone keeps its own contract
+  });
+
+  it('sits between the hit-discard and calcNormal, so off == bit-identical', () => {
+    const hit = MARCH_BODY.indexOf('if (!hit) { discard; }');
+    const seam = MARCH_BODY.indexOf('debugCfg.y > 0.5');
+    const normals = MARCH_BODY.indexOf('calcNormal(p,');
+    expect(hit).toBeGreaterThan(-1);
+    expect(seam).toBeGreaterThan(hit);
+    expect(normals).toBeGreaterThan(seam);
+  });
+
+  it('returns the base albedo with no field call in the guarded block', () => {
+    // Slice from the guard to its return: the flat path must not evaluate
+    // the field, or "flat" would measure walk + some shading, not walk.
+    const seam = MARCH_BODY.indexOf('if (debugCfg.y > 0.5)');
+    const block = MARCH_BODY.slice(seam, seam + 120);
+    expect(block).toContain('return vec4<f32>(baseColor, t)');
+    expect(block).not.toMatch(/mapBody|calcNormal|woundShadow|woundMask|fbm\(/);
+  });
+
+  it('leaves the post-hit chain below the seam intact', () => {
+    // The seam is a skip, not a deletion: with it off, every post-hit stage
+    // must still be present in the source (scatter probe, AO probe, wound
+    // shadow, level shadow, ambient).
+    const seam = MARCH_BODY.indexOf('debugCfg.y > 0.5');
+    const rest = MARCH_BODY.slice(seam);
+    expect(rest).toContain('woundShadow(p, L,');
+    expect(rest).toContain('levelShadow(p, n,');
+    expect(rest).toContain('ambientAt(p, n,');
+    expect(rest).toContain('calcNormal(p,');
+    expect((rest.match(/mapBody\(p \+/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+});

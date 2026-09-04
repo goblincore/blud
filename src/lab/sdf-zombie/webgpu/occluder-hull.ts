@@ -43,7 +43,7 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { positionWorld, cameraPosition, vec4, length, sub } from 'three/tsl';
+import { positionWorld, cameraPosition, vec4, length, sub, uniform, mix } from 'three/tsl';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
 import type { BuiltBody, Vec3 } from '../types';
 
@@ -303,6 +303,10 @@ export interface OccluderHull {
    */
   setShadowSpan(on: boolean, inflate?: number): void;
   readonly instanceCount: number;
+  /** DIAGNOSTIC (2026-09-04): the uDebugWorld uniform node — set .value 1
+   *  to make the hull write its world position instead of the camera
+   *  distance. Pair with __sdfGame.occluderWorldCheck, which restores it. */
+  debugWorld: { value: number };
   dispose(): void;
 }
 
@@ -330,12 +334,21 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   // compares against. Writing depth instead would need the projection undone
   // per marched pixel to get back to a distance.
   const dist = length(sub(positionWorld, cameraPosition));
-  // DIAGNOSTIC CHANNEL (2026-09-01). uDebugWorld 1 writes the fragment's WORLD
-  // POSITION instead of the distance, so a readback can be compared against
-  // the sphere the instance matrix says was drawn. A uniform rather than a
-  // second material: swapping colorNode would rebuild the pipeline mid-frame,
-  // which is exactly the trap shell-hull-outer.ts documents.
-  material.colorNode = vec4(dist, dist, dist, 1);
+  // DIAGNOSTIC CHANNEL (comment 2026-09-01, implemented 2026-09-04).
+  // uDebugWorld 1 writes the fragment's WORLD POSITION instead of the
+  // distance, so a readback can be compared against the sphere the instance
+  // matrix says was drawn. A uniform rather than a second material: swapping
+  // colorNode would rebuild the pipeline mid-frame, which is exactly the trap
+  // shell-hull-outer.ts documents. Driven by
+  // __sdfGame.occluderWorldCheck (tex-roundtrip driver, question B).
+  const uDebugWorld = uniform(0);
+  material.colorNode = vec4(mix(vec4(dist, dist, dist, 1).xyz, positionWorld, uDebugWorld), 1);
+  // FOG MUST BE OFF HERE — see shell-hull-outer.ts makeMaterial. The lab
+  // scene's fog (dungeon rig: near 2.5, far 13) was smoothstep-mixed into
+  // this material's written distance, which WAS the distance decay that
+  // killed the occluder pre-pass (close-up diagnostics task 1, 2026-09-04:
+  // the measured ladder fit the fog curve to four decimals).
+  material.fog = false;
   // Ordinary hardware depth — no depthNode override, so early-Z works here
   // even though it cannot in the march. Nearest hull surface wins.
   material.depthWrite = true;
@@ -398,6 +411,7 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     object: mesh,
     shadowObject: shadowMesh,
     update,
+    debugWorld: uDebugWorld,
     /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
     setSpheres(list: HullInstance[]) {
       count = Math.min(list.length, maxInstances);

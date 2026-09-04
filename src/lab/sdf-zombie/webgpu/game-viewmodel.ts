@@ -7,6 +7,8 @@
 //
 // Beat sheet per the spec's §5 (Doom-SSG rhythm).
 
+import type { Vec3 } from '../types';
+
 export const RELOAD = {
   /** Gun rolled into view AND the top lever thrown. The reference has no
    *  present beat at all -- it is a fixed camera -- so ours is folded INTO the
@@ -31,6 +33,14 @@ export const RELOAD = {
    *  they seat. Seating well before the snap so the gun never closes on a
    *  shell that is still visibly outside it. */
   loadStartSec: 0.74,
+  /** When the fresh cases arrive STAGED: tips a gap behind the mouths, lying
+   *  on the bore axis, still in the hand. From here to loadSeatSec they slide
+   *  straight in along the bore -- the extract in reverse. Before this the
+   *  hand is carrying them up from below in rig space. Two stages, because a
+   *  straight line from under the frame to the mouth passes THROUGH the
+   *  barrels, and because a case that is not on the bore axis when it meets
+   *  the mouth cannot be pushed in without clipping. */
+  loadStageSec: 0.96,
   loadSeatSec:  1.11,
 } as const;
 
@@ -64,17 +74,25 @@ export interface ReloadPose {
 }
 
 const RELOAD_KEYS: readonly (ReloadPose & { t: number })[] = [
-  // The present has to bring the BREECH into frame, not merely tilt the gun:
-  // at roll -19 / dy 0.055 the action opened off the bottom-right of the screen
-  // and the break was invisible, which defeats the point of the animation.
+  // LOW, not centred. The first table lifted the gun 11.5 cm and rolled it
+  // 30 deg so the breech filled the centre of the frame -- where the fisheye
+  // magnifies 1.73x -- and the owner's read was that the reload blocked the
+  // view and distracted. The owner asked for the gun LOWERED instead; tried
+  // at dy -0.055 the whole reload left the bottom of the frame, because at
+  // rest the breech already sits ON the bottom edge (19 deg below the
+  // horizon at z -0.33). So: the smallest lift that keeps the open mouths in
+  // the lower third (4 cm), pitched muzzle-down so they are seen from above
+  // and behind, only enough roll to read the breech, and less travel toward
+  // the eye than before so it stays small. Doom's super shotgun reloads at
+  // the bottom of the screen the same way.
   { t: 0.00, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
-  { t: 0.18, roll: -22, pitch: 11, dy: 0.085, dz: 0.055, hinge: 0 },
-  { t: 0.51, roll: -30, pitch: 21, dy: 0.115, dz: 0.080, hinge: 1 },
-  { t: 0.65, roll: -30, pitch: 22, dy: 0.118, dz: 0.082, hinge: 1 },
-  { t: 1.11, roll: -27, pitch: 19, dy: 0.108, dz: 0.074, hinge: 1 },
+  { t: 0.18, roll: -12, pitch: 10, dy: 0.025, dz: 0.020, hinge: 0 },
+  { t: 0.51, roll: -16, pitch: 16, dy: 0.040, dz: 0.030, hinge: 1 },
+  { t: 0.65, roll: -16, pitch: 17, dy: 0.042, dz: 0.031, hinge: 1 },
+  { t: 1.11, roll: -14, pitch: 15, dy: 0.037, dz: 0.027, hinge: 1 },
   // The snap. 0.14 s to shut against 0.33 s to open, so it closes far harder
   // than it opened -- that asymmetry IS the "clack".
-  { t: 1.16, roll:  -9, pitch:  3, dy: 0.022, dz: 0.012, hinge: 0 },
+  { t: 1.16, roll:  -4, pitch:  3, dy: 0.010, dz: 0.006, hinge: 0 },
   { t: 1.30, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
 ];
 
@@ -146,43 +164,158 @@ export function hingeOpenFraction(t: number): number {
   return Math.min(1, Math.max(0, reloadPose(t).hinge));
 }
 
-/** Where a spent case is at `t`, relative to the breech, or null when it has
- *  not been thrown yet or has fallen out of interest. Ballistic and
- *  deterministic: same reload, same arc, every time.
+/** The bore's basis in rig space, read off the live locators each frame:
+ *  `out` is the unit vector from the muzzle to the breech (the direction a
+ *  case leaves the chamber), `side` runs from the left chamber to the right.
+ *  Up is rig +Y. */
+export interface BoreFrame {
+  out: readonly [number, number, number];
+  side: readonly [number, number, number];
+}
+
+/** Deterministic -1..1 jitter from a reload seed. Seed 0 is the reference
+ *  arc with no jitter at all, so tests and gates can pin it. */
+function jitter(seed: number, i: number, n: number): number {
+  if (seed === 0) return 0;
+  const x = Math.sin(seed * 12.9898 + i * 78.233 + n * 37.719) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
+
+/** How long the free tumble is drawn at most, seconds. */
+const EJECT_LIFE_SEC = 0.85;
+/** Once past the apex, a case this close to breech height is dropped rather
+ *  than drawn falling back through the frame past the camera. */
+const EJECT_DROP_BELOW_M = 0.10;
+
+/** Where a spent case is at `t`, as a DISPLACEMENT from where the hand-off
+ *  left it, or null when it has not been thrown yet or is out of interest.
  *
- *  Doom throws them UP and back over the shoulder, which is the read we want --
- *  cases that merely drop are invisible against a dark floor. */
-export function ejectedShell(t: number, i: 0 | 1): { x: number; y: number; z: number; spin: number } | null {
+ *  The tumble starts along the BORE. The first pass threw the case straight
+ *  up in rig space from the chamber mouth, on a shell that was snapped to the
+ *  rig's -Z: its rear half was still inside the tube and its rise cut through
+ *  the chamber wall and the standing breech -- the owner's "clip through the
+ *  gun frame". Now the velocity has a component along `frame.out`, so the
+ *  case keeps leaving the bore while gravity bends it up and over.
+ *
+ *  Doom throws them UP and back over the shoulder, which is the read we want
+ *  -- cases that merely drop are invisible against a dark floor -- and they
+ *  never come back down into frame. Ours don't either: see EJECT_DROP_BELOW_M.
+ *
+ *  `seed` varies the arc per reload (owner: "always eject the same animation");
+ *  0 is the reference arc. Whatever the seed, `t === ejectAtSec` is the
+ *  origin, which is what the shorty gate pins against the live breech. */
+export function ejectedShell(
+  t: number, i: 0 | 1, frame: BoreFrame, seed = 0,
+): { x: number; y: number; z: number; spin: number } | null {
   const dt = t - RELOAD.ejectAtSec;
-  if (dt < 0 || dt > 0.85) return null;
-  const side = i === 0 ? -1 : 1;
-  // MOSTLY SIDEWAYS, barely toward the eye. The first pass used vz = 0.95,
-  // which carried a case from the breech to within ~8 cm of the camera in a
-  // third of a second -- a 7 cm shell that close fills a quarter of the frame.
-  // Up and out past the shoulder reads as ejection; at the face reads as a bug.
-  const vx = 0.62 * side + 0.46;
-  const vy = 1.42;                 // up hard
-  const vz = 0.12;                 // a hair toward the camera, no more
+  if (dt < 0 || dt > EJECT_LIFE_SEC) return null;
+  const sign = i === 0 ? -1 : 1;
+  // Along the bore: fast enough that the case keeps clearing the tube, slow
+  // enough that the toward-camera share of `out` on an open gun (~0.4) does
+  // not carry it to the eye. Up: hard, so the apex sits well above the frame.
+  const vOut  = 0.55 * (1 + 0.20 * jitter(seed, i, 0));
+  const vUp   = 2.05 * (1 + 0.12 * jitter(seed, i, 1));
+  // Both drift toward the right shoulder, the right case more so.
+  const vSide = (0.34 * sign + 0.30) + 0.14 * jitter(seed, i, 2);
   const g = -6.2;                  // exaggerated, to match the pellet gravity
+  const y = vUp * dt + 0.5 * g * dt * dt;
+  const rising = dt < vUp / -g;
+  if (!rising && y < EJECT_DROP_BELOW_M) return null;
+  const { out, side } = frame;
+  const a = vOut * dt, b = vSide * dt;
   return {
-    x: vx * dt,
-    y: vy * dt + 0.5 * g * dt * dt,
-    z: vz * dt,
-    spin: dt * (11 + 4 * side),
+    x: out[0] * a + side[0] * b,
+    y: out[1] * a + side[1] * b + y,
+    z: out[2] * a + side[2] * b,
+    spin: dt * (11 + 4 * sign) * (1 + 0.25 * jitter(seed, i, 3)),
   };
 }
 
-/** 0..1 travel of the fresh cases from below the frame into the chambers, or
- *  null outside the load beat. 1 = seated. */
-export function loadShellTravel(t: number): number | null {
-  if (t < RELOAD.loadStartSec || t > RELOAD.snapEndSec) return null;
-  if (t >= RELOAD.loadSeatSec) return 1;
-  return smoothstep(RELOAD.loadStartSec, RELOAD.loadSeatSec, t);
+/** 0..1 of the rig-space CARRY: the fresh cases riding in the support hand
+ *  from below the frame to their staged position behind the mouths. Null
+ *  outside the window. */
+export function loadCarry(t: number): number | null {
+  if (t < RELOAD.loadStartSec || t > RELOAD.loadStageSec) return null;
+  return smoothstep(RELOAD.loadStartSec, RELOAD.loadStageSec, t);
+}
+
+/** 0..1 of the barrel-local INSERT: staged (0) to seated (1). The mirror of
+ *  extractStage, and driven the same way -- the seated Shell_L/R nodes slide
+ *  along their own local bore axis, so a tilted gun needs no rotated basis.
+ *  Null outside the window. */
+export function insertStage(t: number): number | null {
+  if (t < RELOAD.loadStageSec || t > RELOAD.loadSeatSec) return null;
+  return smoothstep(RELOAD.loadStageSec, RELOAD.loadSeatSec, t);
 }
 
 /** Chamber depth in metres, mirroring CHAMBER_DEPTH in the model script. A
  *  shell has cleared the mouth once it has travelled this far. */
 export const CHAMBER_DEPTH_M = 0.070;
+
+/** Case length, metres. The model script sets SHELL_LEN = CHAMBER_DEPTH: a
+ *  case exactly fills its chamber, head rim flush with the breech face. */
+export const SHELL_LEN_M = CHAMBER_DEPTH_M;
+
+/** How far behind the mouth a fresh case's TIP is staged before the push in,
+ *  metres. Small: it only has to be visibly outside the gun for a frame. */
+export const LOAD_STAGE_GAP_M = 0.015;
+
+/** The staged centre of a fresh case, rig space: the case lies on the bore
+ *  axis with its tip LOAD_STAGE_GAP_M behind the mouth. This is exactly where
+ *  the seated Shell node's centre is when its local z is pulled back by
+ *  CHAMBER_DEPTH_M + LOAD_STAGE_GAP_M, which is what makes the rig-space
+ *  carry and the barrel-local insert meet without a visible jump. */
+export function stagedShellCenter(mouth: Vec3, out: Vec3): Vec3 {
+  const d = SHELL_LEN_M / 2 + LOAD_STAGE_GAP_M;
+  return [mouth[0] + out[0] * d, mouth[1] + out[1] * d, mouth[2] + out[2] * d];
+}
+
+/** Chamber centre-to-centre half spacing, metres: XSEP in the model script. */
+export const CHAMBER_HALF_SEP_M = 0.0234;
+/** Case radius, metres (the tumble/carry meshes; the GLB's is RCH*0.985). */
+export const SHELL_RADIUS_M = 0.0172;
+
+/**
+ * Where the support hand's orb sits while it loads, rig space, given the
+ * midpoint between the two mouths, the bore's `out` and `side`, and the orb's
+ * radius.
+ *
+ * BESIDE the cases, not behind them. The first placement put the orb behind
+ * the heads along `out`, pushing them like a thumb -- and on the presented
+ * gun `out` points largely AT the camera, so the orb landed between the eye
+ * and the breech and hid the entire load (the 960/1040 ms captures were a
+ * green disc with a red sliver). Off to the left of the pair, level with the
+ * heads, the orb reads as the fist the cases stick out of and leaves both of
+ * them and both mouths in view.
+ *
+ * `stage`: beside the staged cases' rear halves.
+ * `seat`: the hand follows the cases down the bore and stops with the orb's
+ * centre a radius short of the mouth plane, beside the left chamber, so it
+ * never enters the standing breech. The cases finish seating under their own
+ * momentum, which is also how the reference reads it.
+ */
+export function loadHold(
+  mouthMid: Vec3, out: Vec3, _side: Vec3, handRadius: number,
+): { stage: Vec3; seat: Vec3 } {
+  const staged = stagedShellCenter(mouthMid, out);
+  // A FIST, centred on the pair, just behind their heads: the cases stick out
+  // of it toward the mouths, and as it pushes it covers the heads and then
+  // the mouths. The owner's read of the beside-the-pair placement was "the
+  // hand holds one shell and the other is floating"; two cases jammed in
+  // together ARE mostly hidden by the hand doing it. This only works because
+  // the gun is now LOWERED for the reload (RELOAD_KEYS): on the raised,
+  // presented pose the same fist sat between the eye and the breech and hid
+  // the whole load.
+  const at = (o: Vec3, alongOut: number): Vec3 => [
+    o[0] + out[0] * alongOut,
+    o[1] + out[1] * alongOut,
+    o[2] + out[2] * alongOut,
+  ];
+  return {
+    stage: at(staged, SHELL_LEN_M / 2 + handRadius * 0.35),
+    seat: at(mouthMid, handRadius * 0.95),
+  };
+}
 
 /** Extractor throw in metres. Proportional to the reference's, which pushes
  *  its slugs about 65% of a case length clear of the mouth. */
@@ -297,6 +430,12 @@ export interface SupportHandPose {
   carrying: boolean;
 }
 
+export interface HandDelta { dx: number; dy: number; dz: number; }
+
+/** The two load-beat keys the caller DERIVES from the live breech (see
+ *  loadHold), as deltas from the hand's rest. */
+export interface HandHold { stage: HandDelta; seat: HandDelta; }
+
 /**
  * Where the left hand is through the reload, as a delta from its resting place
  * on the fore-end.
@@ -306,25 +445,41 @@ export interface SupportHandPose {
  * shows the hand doing anything. Here it falls away as the gun presents, drops
  * out of frame low and left, then rises carrying two cases, seats them, and
  * withdraws to the fore-end.
+ *
+ * The two keys at loadStageSec and loadSeatSec are AUTHORED FALLBACKS only.
+ * The hand's job on those beats is to be at the breech, and the breech is
+ * wherever the open barrels put it this frame -- so game-main passes a `hold`
+ * read off the live locators and these two keys are replaced by it. The
+ * 1110 ms capture of the authored table had the hand at the bottom of the
+ * frame while the cases seated by themselves; that is the failure mode.
  */
 const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.00, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
   { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
   { t: 0.51, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
   { t: 0.74, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
-  { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },
+  { t: 0.96, dx:  0.010, dy:  0.010, dz: 0.140, carrying: true  },  // hold.stage
+  { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },  // hold.seat
   { t: 1.16, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
   { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
 ];
 
-export function supportHandPose(t: number): SupportHandPose {
+export function supportHandPose(t: number, hold?: HandHold): SupportHandPose {
   const REST: SupportHandPose = { dx: 0, dy: 0, dz: 0, carrying: false };
+  const key = (k: SupportHandPose & { t: number }): SupportHandPose & { t: number } => {
+    if (!hold) return k;
+    if (k.t === RELOAD.loadStageSec) return { ...k, ...hold.stage };
+    if (k.t === RELOAD.loadSeatSec) return { ...k, ...hold.seat };
+    return k;
+  };
   let a = SUPPORT_KEYS[0];
   if (a === undefined) return REST;
   if (t <= a.t) return { dx: a.dx, dy: a.dy, dz: a.dz, carrying: a.carrying };
+  a = key(a);
   for (let i = 1; i < SUPPORT_KEYS.length; i++) {
-    const b = SUPPORT_KEYS[i];
-    if (b === undefined) break;
+    const raw = SUPPORT_KEYS[i];
+    if (raw === undefined) break;
+    const b = key(raw);
     if (t < b.t) {
       const k = smoothstep(a.t, b.t, t);
       const mix = (x: number, y: number) => x + (y - x) * k;

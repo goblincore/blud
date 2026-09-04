@@ -36,9 +36,11 @@ import {
   weaponAngles, weaponSlide, type AimPoint, type Frustum,
 } from './free-aim';
 import {
-  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, CHAMBER_DEPTH_M, ejectedShell,
-  extractStage, extractorOffset, fireRecoil, flashEnvelope, loadShellTravel,
-  magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose, topLeverAngle,
+  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M,
+  SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil,
+  flashEnvelope, insertStage, loadCarry, loadHold, magazineAfterFire,
+  reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle,
+  type HandDelta, type HandHold,
 } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
@@ -61,7 +63,13 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
-import { buildFirefight, validateScenario } from './game-bench-scenario';
+import { buildFirefight, buildCloseup, validateScenario } from './game-bench-scenario';
+// TSL nodes for the texRoundTrip diagnostic (close-up task 1, question B).
+// Named with a Tsl suffix where the name collides with anything in this file.
+import {
+  wgslFn, texture as tslTexture, screenUV as tslScreenUV, vec4 as tslVec4,
+  length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
+} from 'three/tsl';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
@@ -429,6 +437,21 @@ async function main() {
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
   let sdfScale = 1.0;
+  // Texture round-trip probe rig (texRoundTrip below) — built lazily on the
+  // first call, page-lifetime, never rendered by the frame loop. A diagnostic
+  // of the 2026-09-04 close-up task; nothing outside texRoundTrip touches it.
+  let texProbe: null | {
+    scene: THREE.Scene;
+    quad: THREE.Mesh;
+    ortho: THREE.OrthographicCamera;
+    writes: {
+      uniform: { m: THREE.MeshBasicNodeMaterial; u: { value: number } };
+      dist: { m: THREE.MeshBasicNodeMaterial };
+      'dist-small': { m: THREE.MeshBasicNodeMaterial };
+    };
+    fetchNode: ReturnType<typeof wgslFn>;
+    targets: Record<string, [THREE.RenderTarget, THREE.RenderTarget]>;
+  } = null;
   // Declared AHEAD of sizeSdfLayer because that function reads it and runs
   // during init — a `let` further down is a temporal dead zone and the page
   // dies before __sdfGame exists (caught immediately: headless boot found no
@@ -1160,7 +1183,11 @@ async function main() {
       gooPanel?.setVisible(!panelsHidden);
     }
     if (e.code === 'KeyR' && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
-      reloadAge = 0;
+      startReload();
+    }
+    if (e.code === 'KeyT') {
+      reloadSpeed = reloadSpeed === 1 ? 0.25 : reloadSpeed === 0.25 ? 0.1 : 1;
+      updateHud();
     }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1246,6 +1273,32 @@ async function main() {
    *  that the eject origin is a real chamber mouth: this is asserted against
    *  breechWorld() rather than trusted by construction. */
   let lastEjectOrigin: Vec3 | null = null;
+  const Y_UP = new THREE.Vector3(0, 1, 0);
+  const _tmpV = new THREE.Vector3();
+  /** The two elbows, rig space. See makeHand / aimForearm. */
+  const ELBOW_L = new THREE.Vector3(-0.45, -0.60, 0.05);
+  const ELBOW_R = new THREE.Vector3(0.24, -0.67, 0.04);
+  /** Forearm capsule length. Runs well past the elbow, which sits behind
+   *  the camera, so the far end is never in frame. At 0.15 / 0.26 it was:
+   *  the rounded stump came into view on a hard look down (the aim rig
+   *  pitches the whole view-model about the grip, which swings anything
+   *  below and behind the hand UP) -- the owner's detached arm. */
+  const FOREARM_LEN = 0.90;
+  /** Point a hand's forearm from wherever the hand is NOW at its elbow. The
+   *  elbow is a fixed point in rig space -- the body does not move when the
+   *  hand does -- so a hand that rises to the breech gets a forearm that
+   *  runs down and away to the body, instead of one that keeps its resting
+   *  direction and, from a hand near the eye, points straight at the camera
+   *  and fills the frame. */
+  function aimForearm(g: THREE.Group, elbow: THREE.Vector3): void {
+    const arm = g.getObjectByName('forearm');
+    if (!arm) return;
+    const dir = _tmpV.copy(elbow).sub(g.position).normalize();
+    // CapsuleGeometry runs along +Y; swing it onto the arm direction.
+    arm.quaternion.setFromUnitVectors(Y_UP, dir);
+    arm.position.copy(dir).multiplyScalar(FOREARM_LEN * 0.5 + GOBLIN_SKIN.handRadius * 0.4);
+  }
+
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -1292,6 +1345,28 @@ async function main() {
     if (!n) return false;
     n.getWorldPosition(out);
     (aimRig ?? viewModelAnchor).worldToLocal(out);
+    return true;
+  }
+  /** The bore's basis in RIG space this frame: `out` runs from the muzzles to
+   *  the breeches (the way a case leaves a chamber), `side` from the left
+   *  chamber to the right. Read off the same live locators as breechInRig, so
+   *  it follows the barrels through their swing. Everything that leaves or
+   *  enters a chamber is expressed in this basis: a case thrown in rig +Y from
+   *  a bore tilted 66 degrees off it goes through the chamber wall. */
+  const _bfA = new THREE.Vector3(), _bfB = new THREE.Vector3();
+  function boreFrameInRig(out: THREE.Vector3, side: THREE.Vector3): boolean {
+    const mL = muzzleNodes[0], mR = muzzleNodes[1];
+    const bL = breechNodes[0], bR = breechNodes[1];
+    if (!mL || !mR || !bL || !bR) return false;
+    const rig = aimRig ?? viewModelAnchor;
+    rig.worldToLocal(bL.getWorldPosition(_bfA));
+    rig.worldToLocal(bR.getWorldPosition(_bfB));
+    out.copy(_bfA).add(_bfB).multiplyScalar(0.5);
+    side.copy(_bfB).sub(_bfA).normalize();
+    rig.worldToLocal(mL.getWorldPosition(_bfA));
+    rig.worldToLocal(mR.getWorldPosition(_bfB));
+    _bfA.add(_bfB).multiplyScalar(0.5);
+    out.sub(_bfA).normalize();
     return true;
   }
   /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
@@ -1449,24 +1524,21 @@ async function main() {
 
     /** One hand: an orb plus a forearm running back along `armDir` (view
      *  space, pointing from the hand toward the elbow). */
-    function makeHand(hand: THREE.Vector3, armDir: THREE.Vector3, armLen: number): THREE.Group {
+    function makeHand(hand: THREE.Vector3, elbow: THREE.Vector3): THREE.Group {
       const g = new THREE.Group();
       const orb = new THREE.Mesh(orbGeo, orbMat);
       // SphereGeometry's UVs pinch at the poles, so aim the pole into the gun.
       orb.rotation.x = Math.PI / 2;
       const armGeo = new THREE.CapsuleGeometry(
-        GOBLIN_SKIN.forearmRadius, armLen, 4, 12,
+        GOBLIN_SKIN.forearmRadius, FOREARM_LEN, 4, 12,
       );
       const arm = new THREE.Mesh(armGeo, orbMat);
-      const dir = armDir.clone().normalize();
-      arm.position.copy(dir).multiplyScalar(armLen * 0.5 + GOBLIN_SKIN.handRadius * 0.4);
-      // CapsuleGeometry runs along +Y; swing it onto the arm direction.
-      arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      arm.name = 'forearm';
       g.add(orb, arm);
       g.position.copy(hand);
+      aimForearm(g, elbow);
       return g;
     }
-
     // THE TWO HANDS SIT ON OPPOSITE SIDES OF THE BODY.
     // The right hand is on the grip, low-right, mostly hidden behind the gun --
     // correct, and the owner is happy with it. The support hand was 4.5 cm left
@@ -1477,14 +1549,12 @@ async function main() {
     // from the model's own locators. The arms still run to opposite sides of
     // the body -- right arm back and down-right, left arm crossing the body
     // down-left -- so the support arm reads as an arm, not a floating lump.
-    gripHandGroup = makeHand(
-      GRIP_HAND_REST.clone(),
-      new THREE.Vector3(0.30, -0.84, 0.45), 0.150,
-    );
-    foreHandGroup = makeHand(
-      FORE_HAND_REST.clone(),
-      new THREE.Vector3(-0.66, -0.60, 0.45), 0.260,
-    );
+    // Elbows: fixed in rig space, below and behind the camera on opposite
+    // sides of the body. Chosen so the RESTING forearms keep the directions the
+    // owner approved -- right arm back and down-right, left arm crossing the
+    // body down-left -- and the load beat gets a forearm that follows.
+    gripHandGroup = makeHand(GRIP_HAND_REST.clone(), ELBOW_R);
+    foreHandGroup = makeHand(FORE_HAND_REST.clone(), ELBOW_L);
     (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
@@ -1501,8 +1571,8 @@ async function main() {
       const head = new THREE.Mesh(headGeo, headMat);
       head.position.y = -0.0245;
       g.add(hull, head);
-      // Cases lie along the bore, which is -Z in view space.
-      g.rotation.x = Math.PI / 2;
+      // Orientation is written every frame from the live bore basis (hull +Y
+      // onto -out); nothing here is a resting pose.
       g.visible = false;
       return g;
     }
@@ -1691,6 +1761,18 @@ async function main() {
   let shells = MAGAZINE_CAPACITY;
   /** Seconds into the reload, or Infinity when not reloading. */
   let reloadAge = Infinity;
+  /** Varies the eject arc per reload (owner: "they always eject the same").
+   *  0 is the reference arc; pinReloadSeed() holds one for a gate. */
+  let reloadSeed = 0;
+  let pinnedReloadSeed: number | null = null;
+  /** Reload time scale. 1 = real; KeyT cycles 1 -> 0.25 -> 0.1 so the owner
+   *  can watch a case leave the bore frame by frame ("could slow it down to
+   *  make it easier to see"). Inspection only: nothing else keys off it. */
+  let reloadSpeed = 1;
+  function startReload(): void {
+    reloadAge = 0;
+    reloadSeed = pinnedReloadSeed ?? 1 + Math.floor(Math.random() * 1e6);
+  }
   let recoilPitch = 0;
 
   /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
@@ -1702,11 +1784,11 @@ async function main() {
   function fire(barrels: 1 | 2): boolean {
     if (!gunReady || cooldown > 0) return false;
     if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
-    if (shells <= 0) { reloadAge = 0; return false; } // click -> start reloading
+    if (shells <= 0) { startReload(); return false; } // click -> start reloading
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
     shells = magazineAfterFire(shells, barrels);
-    if (shells <= 0) reloadAge = 0;
+    if (shells <= 0) startReload();
     updateHud();
     flashAge = 0;
     fireAge = 0;
@@ -2251,6 +2333,7 @@ async function main() {
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
       (freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
+      (reloadSpeed !== 1 ? ` · RELOAD x${reloadSpeed} (T)` : '') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
   }
@@ -2258,7 +2341,15 @@ async function main() {
   // -----------------------------------------------------------------------
   // Frame loop.
   // -----------------------------------------------------------------------
-  let wanderFrozen = false;
+  // ?frozen=1 — boot with the wanderers frozen from frame 0. The boot loop
+  // starts stepping the moment the page loads, so a driver that freezes via
+  // the seam has already inherited a non-deterministic amount of wander;
+  // captures that must be reproducible across boots (pixel parity, staged
+  // benches) need the freeze to predate the first frame. Default unchanged.
+  let wanderFrozen = new URLSearchParams(location.search).has('frozen');
+  /** Whether the hulls have been built for the CURRENT frozen stretch — see
+   *  the frozen-from-boot hull build in tick. */
+  let frozenHullBuilt = false;
   let frameCount = 0;
   /** The __sdfGame.placeMarker debug sphere. */
   let marker: THREE.Mesh | null = null;
@@ -2327,6 +2418,7 @@ async function main() {
     stepPlayer(player, input, dt, [...colliders, ...zombieBoxes]);
 
     if (!wanderFrozen) {
+      frozenHullBuilt = false;
       for (const a of actors) a.step(dt);
       const now = performance.now() / 1000;
       for (const a of actors) {
@@ -2363,6 +2455,32 @@ async function main() {
         // the rebuild on the next frame, so the A/B seam still works.
         { occluder: sdfLayer.occluderEnabled },
       );
+    } else if (!frozenHullBuilt) {
+      // FROZEN-FROM-BOOT HULL BUILD (closeup task 1, 2026-09-04). A body
+      // frozen via ?frozen=1 never runs the branch above, so the outer hull
+      // never builds, the shell entry/exit targets stay cleared to zero, and
+      // shellFetch reads shellOut = 0 — which the march treats as "no hull
+      // covers this pixel" is FALSE, it reads it as shellOut <= 0 and
+      // DISCARDS EVERY FRAGMENT: the entire march layer is invisible while
+      // everything else (CPU field, predictor, polygonal world) works. The
+      // freeze() SEAM never hit this because it freezes after frames have
+      // run. Nothing can move once frozen, so both hulls build exactly once;
+      // unfreezing clears the flag and the normal per-frame path resumes.
+      if (sdfLayer.shellEnabled) {
+        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      }
+      occluderHull.update(
+        actors.map(a => a.posed()),
+        hullExclusionsEnabled
+          ? actors.flatMap(a => {
+            const prims = a.posed().prims;
+            const yaw = a.pose().yaw;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+          })
+          : [],
+        { occluder: sdfLayer.occluderEnabled },
+      );
+      frozenHullBuilt = true;
     }
 
     // ---------------------------------------------------------------
@@ -2473,7 +2591,7 @@ async function main() {
     // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
     // a reload during recoil reads as both rather than one clobbering the other.
     const reloading = reloadAge <= RELOAD.totalSec;
-    if (reloading) reloadAge += dt;
+    if (reloading) reloadAge += dt * reloadSpeed;
     const rp = reloading ? reloadPose(reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
     const rc = fireRecoil(fireAge, fireBarrels);
     if (gunGroup) {
@@ -2493,34 +2611,69 @@ async function main() {
     if (topLeverNode) topLeverNode.rotation.y = topLeverAngle(reloading ? reloadAge : 0);
 
     if (reloading) {
+      // THE BORE BASIS, this frame, in rig space. The cases leave along it,
+      // the fresh ones are staged on it, and the hand's two breech keys are
+      // derived from it -- all from the same live locators, so nothing here
+      // can disagree with where the open barrels actually are.
+      const out = new THREE.Vector3(), side = new THREE.Vector3();
+      const breech = new THREE.Vector3();
+      const haveBore = boreFrameInRig(out, side);
+      const outV: Vec3 = [out.x, out.y, out.z];
+      const frame = { out: outV, side: [side.x, side.y, side.z] as Vec3 };
+      // Shell meshes run hull +Y / head -Y; the hull points down the bore.
+      const qBore = new THREE.Quaternion().setFromUnitVectors(
+        Y_UP, _tmpV.copy(out).negate(),
+      );
+
       // THE SUPPORT HAND leaves the fore-end, drops out of frame low-left, and
       // comes back up carrying the fresh cases -- so the reload actually SHOWS
       // a hand doing the loading instead of shells appearing by themselves.
-      const sh = supportHandPose(reloadAge);
-      if (foreHandGroup) {
-        foreHandGroup.position.set(
-          FORE_HAND_REST.x + sh.dx,
-          FORE_HAND_REST.y + sh.dy,
-          FORE_HAND_REST.z + sh.dz,
-        );
+      // Its two keys at the breech are read off the live mouths (loadHold):
+      // the authored table put the hand at the bottom of the frame at the seat
+      // beat while the cases seated by themselves, which is "magically appear".
+      let hold: HandHold | undefined;
+      if (haveBore) {
+        const mL = new THREE.Vector3(), mR = new THREE.Vector3();
+        breechInRig(0, mL); breechInRig(1, mR);
+        const mid: Vec3 = [(mL.x + mR.x) / 2, (mL.y + mR.y) / 2, (mL.z + mR.z) / 2];
+        const h = loadHold(mid, outV, frame.side, GOBLIN_SKIN.handRadius);
+        const asDelta = (p: Vec3): HandDelta => ({
+          dx: p[0] - FORE_HAND_REST.x, dy: p[1] - FORE_HAND_REST.y, dz: p[2] - FORE_HAND_REST.z,
+        });
+        hold = { stage: asDelta(h.stage), seat: asDelta(h.seat) };
       }
-      // ——— STAGE 1: EXTRACTION ———————————————————————————————————————
+      const sh = supportHandPose(reloadAge, hold);
+      const handNow = new THREE.Vector3(
+        FORE_HAND_REST.x + sh.dx,
+        FORE_HAND_REST.y + sh.dy,
+        FORE_HAND_REST.z + sh.dz,
+      );
+      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimForearm(foreHandGroup, ELBOW_L); }
+
+      // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
       // The seated cases are children of Barrels, so they are already carrying
       // the 45 deg tilt. Sliding them along their own LOCAL -Z walks them
-      // straight back out of the bores. Larger z is toward the muzzle.
+      // straight back out of the bores; sliding them the other way seats the
+      // fresh ones. Larger z is toward the muzzle. Same nodes for both: a
+      // fresh case IS the seated case, arriving.
       const ex = extractStage(reloadAge);
+      const ins = insertStage(reloadAge);
       for (let i = 0; i < shellNodes.length; i++) {
         const s = shellNodes[i];
         const restZ = shellRestZ[i];
         if (!s || restZ === undefined) continue;
-        if (ex === null) {
-          // Seated before the extract beat, gone after the hand-off.
-          const seated = reloadAge < RELOAD.extractAtSec;
-          s.visible = seated || reloadAge >= RELOAD.loadSeatSec;
-          s.position.z = restZ;
-        } else {
+        if (ex !== null) {
           s.visible = true;
           s.position.z = restZ - ex * CHAMBER_DEPTH_M;
+        } else if (ins !== null) {
+          // From staged (tip a gap behind the mouth) to seated.
+          s.visible = true;
+          s.position.z = restZ - (1 - ins) * (CHAMBER_DEPTH_M + LOAD_STAGE_GAP_M);
+        } else {
+          // Seated before the extract beat, gone after the hand-off, back
+          // once the insert has seated them.
+          s.visible = reloadAge < RELOAD.extractAtSec || reloadAge >= RELOAD.loadSeatSec;
+          s.position.z = restZ;
         }
       }
       if (extractorNode) {
@@ -2528,39 +2681,48 @@ async function main() {
       }
 
       // ——— STAGE 2: THE TUMBLE ———————————————————————————————————————
-      // Handed off at the moment the case clears the mouth, from the breech
-      // locator's CURRENT world position -- so it starts exactly where stage
-      // one left it, on a gun that may be at any point in its swing.
-      const breech = new THREE.Vector3();
+      // Handed off where stage one LEFT the case: its centre half a case
+      // length out of the mouth along the bore, on a gun that may be at any
+      // point in its swing, and bore-aligned -- not snapped to the rig's -Z
+      // with its rear half still inside the tube, which is what clipped.
       for (let i = 0; i < ejectedShells.length; i++) {
         const m = ejectedShells[i];
         if (!m) continue;
-        const e = ejectedShell(reloadAge, i === 0 ? 0 : 1);
-        if (!e || !breechInRig(i === 0 ? 0 : 1, breech)) { m.visible = false; continue; }
+        const k: 0 | 1 = i === 0 ? 0 : 1;
+        const e = ejectedShell(reloadAge, k, frame, reloadSeed);
+        if (!e || !haveBore || !breechInRig(k, breech)) { m.visible = false; continue; }
         m.visible = true;
-        m.position.set(breech.x + e.x, breech.y + e.y, breech.z + e.z);
-        m.rotation.set(Math.PI / 2 + e.spin, e.spin * 0.6, 0);
-        const originWorld = (aimRig ?? viewModelAnchor).localToWorld(m.position.clone());
+        const origin = breech.clone().addScaledVector(out, SHELL_LEN_M / 2);
+        m.position.set(origin.x + e.x, origin.y + e.y, origin.z + e.z);
+        // End over end about the side axis, from the bore-aligned start.
+        m.quaternion.setFromAxisAngle(side, e.spin).multiply(qBore);
+        const originWorld = (aimRig ?? viewModelAnchor).localToWorld(origin);
         lastEjectOrigin = [originWorld.x, originWorld.y, originWorld.z];
       }
 
-      // FRESH CASES riding up with the hand and seating in the chambers.
-      const travel = loadShellTravel(reloadAge);
+      // FRESH CASES: the rig-space CARRY. They ride rigidly in the hand from
+      // wherever it is to their staged spot on the bore axis, and the hand's
+      // stage key IS the place that puts them there -- so at the end of the
+      // carry each case sits exactly where the barrel-local insert picks it
+      // up, and the two stages meet without a jump. Held tips-up at first,
+      // rolling onto the bore axis as they arrive.
+      const carry = loadCarry(reloadAge);
       for (let i = 0; i < loadShells.length; i++) {
         const m = loadShells[i];
         if (!m) continue;
-        if (travel === null || !breechInRig(i === 0 ? 0 : 1, breech)) {
+        const k: 0 | 1 = i === 0 ? 0 : 1;
+        if (carry === null || !haveBore || !hold || !breechInRig(k, breech)) {
           m.visible = false; continue;
         }
         m.visible = true;
-        // From under the frame, in the support hand, to the real chamber mouth.
-        const from = new THREE.Vector3(
-          FORE_HAND_REST.x + sh.dx + (i === 0 ? -0.024 : 0.024),
-          FORE_HAND_REST.y + sh.dy + 0.03,
-          FORE_HAND_REST.z + sh.dz,
+        const staged = stagedShellCenter([breech.x, breech.y, breech.z], outV);
+        m.position.set(
+          handNow.x + staged[0] - (FORE_HAND_REST.x + hold.stage.dx),
+          handNow.y + staged[1] - (FORE_HAND_REST.y + hold.stage.dy),
+          handNow.z + staged[2] - (FORE_HAND_REST.z + hold.stage.dz),
         );
-        m.position.lerpVectors(from, breech, travel);
-        m.rotation.set(Math.PI / 2, 0, 0);
+        const qHeld = new THREE.Quaternion().setFromAxisAngle(side, -0.7).multiply(qBore);
+        m.quaternion.copy(qHeld).slerp(qBore, carry);
       }
 
       if (reloadPhaseAt(reloadAge) === 'done') {
@@ -2581,7 +2743,7 @@ async function main() {
           gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
           gunGroup.position.copy(GUN_REST.pos);
         }
-        if (foreHandGroup) foreHandGroup.position.copy(FORE_HAND_REST);
+        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimForearm(foreHandGroup, ELBOW_L); }
         for (const m of ejectedShells) m.visible = false;
         for (const m of loadShells) m.visible = false;
         updateHud();
@@ -3027,6 +3189,13 @@ async function main() {
     }),
     /** Where the last case was when it was handed to the tumble. */
     get lastEjectOrigin() { return lastEjectOrigin; },
+    /** The eject arc's seed for the current/last reload; 0 = reference arc. */
+    get reloadSeed() { return reloadSeed; },
+    get reloadSpeed() { return reloadSpeed; },
+    setReloadSpeed(x: number) { reloadSpeed = Math.max(0.01, x); updateHud(); },
+    /** Hold one seed for every reload from now on (null releases it), so a
+     *  gate can capture the same arc twice. */
+    pinReloadSeed(seed: number | null) { pinnedReloadSeed = seed; },
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
     // SLUG MODE surface + HUD-truthful flag.
@@ -3546,6 +3715,21 @@ async function main() {
       for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
     },
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
+    /** FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). 1 = the
+     *  march fragment returns the body's base albedo at the hit and skips
+     *  the whole post-hit chain (see the seam block in MARCH_BODY); 0 =
+     *  bit-identical to the pre-seam shader (pinned by test). Rides the
+     *  spare debugCfg.y channel, so no march signature or literal changes.
+     *  Chunk views own COPIED uniform sets ("Its VALUES are copied, not the
+     *  nodes" — createChunkGpuView), so they are looped too: a gib-frame A/B
+     *  with flying chunks must not read chunks shaded by a different rule
+     *  than the bodies. */
+    setFlatAlbedo(on: boolean) {
+      const v = on ? 1 : 0;
+      for (const a of actors) a.view.uniforms.debugCfg.value.y = v;
+      for (const c of chunkViews) c.uniforms.debugCfg.value.y = v;
+    },
+    get flatAlbedo() { return (actors[0]?.view.uniforms.debugCfg.value.y ?? 0) > 0.5; },
     setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
     get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
     /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
@@ -3749,10 +3933,17 @@ async function main() {
      */
     async bench(o: {
       room?: number; mode?: 'throughput' | 'spike';
+      /** 'closeup' — the static frozen-frame scenario (buildCloseup): no
+       *  teleport, no shots; the DRIVER stages camera + wounds before
+       *  calling. Default 'firefight' — the scripted walk/fire/gib. */
+      kind?: 'firefight' | 'closeup';
+      closeupFrames?: number;
       walkFrames?: number; fireFrames?: number; gibFrames?: number;
       chunkFrames?: number; warmup?: number; label?: string;
     } = {}) {
-      const scenario = buildFirefight({
+      const scenario = o.kind === 'closeup'
+        ? buildCloseup({ frames: o.closeupFrames })
+        : buildFirefight({
         room: o.room ?? 4,
         walkFrames: o.walkFrames,
         fireFrames: o.fireFrames,
@@ -3937,6 +4128,303 @@ async function main() {
         handle.setLoopRunning(true);
       }
     },
+
+    /**
+     * OCCLUDER WORLD-POSITION CHECK (close-up diagnostics task 1, question
+     * B). Renders the synthetic sphere TWICE — once writing the camera
+     * distance (the shipping encoding), once with uDebugWorld=1 writing the
+     * fragment's WORLD POSITION — and compares both against the analytic
+     * sphere the instance matrix claims was drawn.
+     *
+     * The attribution this buys: if the written POSITION is right but the
+     * written DISTANCE is wrong, the defect is in the material's
+     * length(positionWorld - cameraPosition) evaluation; if the POSITION is
+     * itself wrong at range, the defect is upstream in the instance/vertex
+     * path. Either way the texture round-trip is already exonerated (the
+     * quad probes in texRoundTrip).
+     */
+    async occluderWorldCheck(dist = 5, radius = 0.2) {
+      const wasOn = sdfLayer.occluderEnabled;
+      try {
+        handle.setLoopRunning(false);
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        const c = camera.position.clone().addScaledVector(fwd, dist);
+        occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
+        sdfLayer.setOccluderEnabled(true);
+        const readFrame = async () => {
+          handle.step(1 / 60);
+          await handle.resolveGpu();
+          const t = sdfLayer.occluderTarget;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height),
+          );
+          return { buf, w: t.width, h: t.height };
+        };
+        occluderHull.debugWorld.value = 0;
+        const d0 = await readFrame();
+        occluderHull.debugWorld.value = 1;
+        const d1 = await readFrame();
+        occluderHull.debugWorld.value = 0;
+        const fpr = (w: number) => Math.ceil((w * 16) / 256) * 256 / 4;
+        const ndc = c.clone().project(camera);
+        const col = Math.round(((ndc.x + 1) / 2) * d0.w - 0.5);
+        const rowTop = Math.round(((1 - ndc.y) / 2) * d0.h - 0.5);
+        const cell = (d: { buf: Float32Array; w: number }, r: number, cc: number, ch: number) =>
+          d.buf[r * fpr(d.w) + cc * 4 + ch] ?? NaN;
+        const r1 = Math.min(d0.h - 1 - rowTop, d0.h - 1);
+        const writtenDist = cell(d0, r1, col, 0);
+        const wPos = new THREE.Vector3(cell(d1, r1, col, 0), cell(d1, r1, col, 1), cell(d1, r1, col, 2));
+        const dir = c.clone().sub(camera.position).normalize();
+        const tHit = camera.position.distanceTo(c) - radius;
+        const expectedPos = camera.position.clone().addScaledVector(dir, tHit);
+        return {
+          sphereCentreDistFromCam: +camera.position.distanceTo(c).toFixed(4),
+          analyticCentrePixel: +tHit.toFixed(4),
+          writtenDist: +writtenDist.toFixed(4),
+          expectedPos: expectedPos.toArray().map(v => +v.toFixed(4)),
+          writtenPos: wPos.toArray().map(v => +v.toFixed(4)),
+          posErr: +wPos.distanceTo(expectedPos).toFixed(4),
+          distFromWrittenPos: +wPos.distanceTo(camera.position).toFixed(4),
+        };
+      } finally {
+        sdfLayer.setOccluderEnabled(wasOn);
+        handle.setLoopRunning(true);
+      }
+    },
+
+    /** Parity/bench instrumentation (close-up diagnostics task 1): installs
+     *  window.__sdfGameDebug with a padded-row march-target readback + FNV
+     *  hash, computed IN-PAGE (a 2.3M-float readback must not cross CDP as
+     *  a returnByValue object). Outside every timing path; only the parity
+     *  gate calls it. */
+    installDebugProbe: () => {
+      (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
+        async hashMarchTarget() {
+          const t = sdfLayer.marchTarget;
+          const w = t.width, h = t.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          let hash = 0x811c9dc5;
+          let nonZero = 0;
+          let rSum = 0;
+          for (let row = 0; row < h; row++) {
+            const base = row * floatsPerRow;
+            for (let col = 0; col < w; col++) {
+              const o = base + col * 4;
+              const r = buf[o]!, g = buf[o + 1]!, b = buf[o + 2]!;
+              hash = Math.imul(hash ^ (r | 0), 0x01000193);
+              hash = Math.imul(hash ^ (g | 0), 0x01000193);
+              hash = Math.imul(hash ^ (b | 0), 0x01000193);
+              if (r !== 0 || g !== 0 || b !== 0) nonZero++;
+              rSum += r;
+            }
+          }
+          return { w, h, hash: (hash >>> 0).toString(16), nonZero, rSum: +rSum.toFixed(3) };
+        },
+      };
+      return 1;
+    },
+
+    /**
+     * TEXTURE ROUND-TRIP PROBE (close-up diagnostics task 1, question B).
+     *
+     * Writes a KNOWN ray parameter into render targets in the shapes the
+     * quarter-res depth prepass (and the parked hull exit bound) would use,
+     * and reads it back through BOTH consumption paths — the CPU readback
+     * and the WGSL textureLoad fetch the march actually binds — at a range
+     * ladder. Purpose: decide whether a written t survives the round-trip
+     * (the prepass may proceed) or decays with range (the phenomenon that
+     * killed the occluder pre-pass and holds GAME_HULL_EXIT_BOUND at 0).
+     *
+     * Three write paths, so a decay can be attributed:
+     *   mode 'uniform' — colorNode = vec4(uT), uT set from the CPU. No
+     *     geometry involvement at all: isolates the TEXTURE itself.
+     *   mode 'dist' — the exact shipped expression,
+     *     colorNode = vec4(length(positionWorld - cameraPosition)), on a
+     *     quad perpendicular to the camera's forward at `dist`. Isolates
+     *     the TSL distance expression under rasterisation: every fragment
+     *     of a forward-facing plane at that distance should read dist
+     *     exactly.
+     *   (mode 'mesh' — the occluder's instanced-sphere path — is the
+     *     existing syntheticSphereCheck; the driver runs both and merges
+     *     the table.)
+     *
+     * Targets: RGBA32F and R32F (the occluder's and the outer hull's
+     * formats), each at FULL march-target scale and QUARTER scale (the
+     * depth prepass's scale). All NearestFilter, depth-tested like the
+     * shipped pre-passes. Quarter dims are ceil, matching how a prepass
+     * would allocate.
+     *
+     * The WGSL read is the occFetch/shellFetch body verbatim (clamp to
+     * dims, floor(screenUV * dims), textureLoad .x) rendered through a
+     * second material into a second target set — so the validated operator
+     * is the one the march would bind, not a lookalike.
+     *
+     * Self-contained and idle by default: builds its scene/targets lazily
+     * on first call, parks the loop, restores everything it touched.
+     */
+    async texRoundTrip(o: { dist: number; mode?: 'uniform' | 'dist' | 'dist-small' }) {
+      const dist = o.dist;
+      const mode = o.mode ?? 'uniform';
+      // ---- lazily-built probe rig ----------------------------------------
+      if (!texProbe) {
+        const QuadFetchWGSL = /* wgsl */ `fn quadFetch(
+  srcTex: texture_2d<f32>,
+  suv: vec2<f32>
+) -> f32 {
+  let dims = vec2<f32>(textureDimensions(srcTex, 0));
+  let c = clamp(vec2<i32>(floor(suv * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  return textureLoad(srcTex, c, 0).x;
+}`;
+        const mkWriteTarget = (fmt: 'rgba' | 'red', quarter: boolean): THREE.RenderTarget => new THREE.RenderTarget(
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.width / 4)) : sdfLayer.marchTarget.width,
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.height / 4)) : sdfLayer.marchTarget.height,
+          {
+            depthBuffer: true,
+            type: THREE.FloatType,
+            ...(fmt === 'red' ? { format: THREE.RedFormat } : {}),
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+          },
+        );
+        // Read targets are ALWAYS RGBA32F at the write target's scale: the
+        // production consumers never CPU-read a RedFormat target either —
+        // they textureLoad it in-shader — so the validated chain is
+        // write(fmt) -> textureLoad -> rgba32f -> CPU, and the r32f CPU
+        // readback (which this renderer's helper does not support) never
+        // enters the picture.
+        const mkReadTarget = (quarter: boolean): THREE.RenderTarget => new THREE.RenderTarget(
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.width / 4)) : sdfLayer.marchTarget.width,
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.height / 4)) : sdfLayer.marchTarget.height,
+          {
+            depthBuffer: false,
+            type: THREE.FloatType,
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+          },
+        );
+        const scene = new THREE.Scene();
+        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+        quad.frustumCulled = false;
+        scene.add(quad);
+        const uniformMat = new THREE.MeshBasicNodeMaterial();
+        const u = tslUniform(0);
+        uniformMat.colorNode = tslVec4(u, u, u, 1);
+        const distMat = new THREE.MeshBasicNodeMaterial();
+        const dNode = tslLength(tslSub(positionWorld, cameraPosition));
+        distMat.colorNode = tslVec4(dNode, dNode, dNode, 1);
+        // The read pass quad faces +z from z = 0 toward an ortho camera at
+        // z = 5 looking down -z: a fixed full-screen blit shape, so the
+        // fetch operator's screenUV maps 1:1 onto the write target's texels.
+        const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+        ortho.position.set(0, 0, 5);
+        ortho.lookAt(0, 0, 0);
+        texProbe = {
+          scene, quad, ortho,
+          writes: { uniform: { m: uniformMat, u }, dist: { m: distMat }, 'dist-small': { m: distMat } },
+          fetchNode: wgslFn(QuadFetchWGSL),
+          targets: {
+            'rgba-full': [mkWriteTarget('rgba', false), mkReadTarget(false)],
+            'rgba-quarter': [mkWriteTarget('rgba', true), mkReadTarget(true)],
+            'red-full': [mkWriteTarget('red', false), mkReadTarget(false)],
+            'red-quarter': [mkWriteTarget('red', true), mkReadTarget(true)],
+          },
+        };
+      }
+      const probe = texProbe;
+      try {
+        handle.setLoopRunning(false);
+        // One step so the camera's world matrix reflects any pose the driver
+        // set just before this call.
+        handle.step(1 / 60);
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        // Near-plane guard: a quad closer than the near plane clips, which
+        // must read as a staging fault, never as decay.
+        if (dist <= camera.near * 1.2) {
+          return { error: `dist ${dist} <= near ${camera.near} — stage further out` };
+        }
+        // The value every covered fragment should carry.
+        const expected = mode === 'uniform'
+          ? (probe.writes.uniform.u.value = dist, dist)
+          : dist;
+        // 'dist-small': the SAME per-fragment distance expression on a quad
+        // only 0.4 m tall — the synthetic sphere's projected size class. If
+        // THIS decays with range, the defect is projected-size-dependent
+        // (rasteriser/precision), not mesh-specific; if it is exact, the
+        // occluder's instanced-geometry path owns the fault alone.
+        const smallQuad = mode === 'dist-small';
+        probe.quad.material = probe.writes[mode].m;
+        // Where the WRITE pass needs the quad: perpendicular to the view
+        // axis at `dist`, sized to overflow the frustum there, so the centre
+        // pixel and its neighbours are all covered by the quad itself.
+        const writePos = camera.position.clone().addScaledVector(fwd, dist);
+        const writeQuat = new THREE.Quaternion().setFromRotationMatrix(
+          new THREE.Matrix4().lookAt(camera.position, writePos, camera.up),
+        );
+        const writeScale = smallQuad
+          ? 0.4
+          : Math.max(1, 2.5 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+        const rows: { target: string; cpu: number; wgsl: number; relErr: number; neighbourSpread: string }[] = [];
+        for (const [name, [writeT, readT]] of Object.entries(probe.targets)) {
+          // ---- write pass (main camera; renderer autoClears) ----
+          probe.quad.position.copy(writePos);
+          probe.quad.quaternion.copy(writeQuat);
+          probe.quad.scale.setScalar(writeScale);
+          handle.renderer.setRenderTarget(writeT);
+          handle.renderer.render(probe.scene, camera);
+          await handle.resolveGpu();
+          // ---- CPU read of the WRITE target (RGBA only — see mkReadTarget):
+          // centre pixel + neighbours, so a partial-coverage write shows up
+          // as spread rather than silently aliasing into the centre value ----
+          const w = writeT.width, ht = writeT.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(writeT, 0, 0, w, ht),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          const cx = Math.floor(w / 2), cy = Math.floor(ht / 2);
+          const at = (x: number, y: number) => buf[y * floatsPerRow + x * 4] ?? NaN;
+          const cpu = at(cx, cy);
+          const spread = [at(cx - 1, cy), at(cx + 1, cy), at(cx, cy - 1), at(cx, cy + 1)];
+          // ---- WGSL read: the occFetch/shellFetch operator rendered into
+          // the paired RGBA target through the fixed ortho blit, then
+          // CPU-read at the same centre texel ----
+          const mat = new THREE.MeshBasicNodeMaterial();
+          const fetched = probe.fetchNode({ srcTex: tslTexture(writeT.texture), suv: tslScreenUV });
+          mat.outputNode = tslVec4(fetched, fetched, fetched, 1);
+          mat.depthTest = false;
+          mat.depthWrite = false;
+          const savedMat: THREE.Material = probe.quad.material as THREE.Material;
+          probe.quad.material = mat;
+          probe.quad.position.set(0, 0, 0);
+          probe.quad.quaternion.identity();
+          probe.quad.scale.set(1, 1, 1);
+          handle.renderer.setRenderTarget(readT);
+          handle.renderer.render(probe.scene, probe.ortho);
+          await handle.resolveGpu();
+          const buf2 = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(readT, 0, 0, w, ht),
+          );
+          const wgsl = buf2[cy * floatsPerRow + cx * 4] ?? NaN;
+          rows.push({
+            target: name,
+            cpu: +cpu.toFixed(5), wgsl: +wgsl.toFixed(5),
+            relErr: expected !== 0 ? +Math.abs((cpu - expected) / expected).toFixed(5) : 0,
+            neighbourSpread: spread.map(v => +v.toFixed(4)).join(','),
+          });
+          probe.quad.material = savedMat;
+          mat.dispose();
+        }
+        return { dist, mode, expected, near: camera.near, far: camera.far, rows };
+      } finally {
+        handle.renderer.setRenderTarget(null);
+        handle.setLoopRunning(true);
+      }
+    },
+
     /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
      *  so frozen captures would otherwise shoot through a stale hull). No
      *  simulation steps, so a stamped body stays exactly where it was put. */
