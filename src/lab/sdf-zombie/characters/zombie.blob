@@ -60,11 +60,30 @@ bones
   # ellipsoid has semi-axes ~(0.090, 0.137, 0.105), and a 0.072 sphere at 0.88/
   # 0.95/0.86 sits ~(0.063, 0.068, 0.062) — barely half the head it lives in,
   # so a headshot exposed a marble.
-  blob head on skull at=0.56 r=0.086 wide=0.94 tall=1.06 deep=0.92
+  # r=0.086 was still not enough — owner, 2026-09-03, looking at the skeleton
+  # frames: "the skull seems a tad small and the jaw is definitely way too
+  # small". Re-measured rather than nudged. The flesh head ellipsoid is
+  # semi (0.0897, 0.1370, 0.1055) centred y 1.6195 z 0.1061, and the cranium
+  # bone sat at semi (0.0808, 0.0912, 0.0791) centred y 1.6368 z 0.1092 —
+  # leaving 28 mm of unused headroom in y and 23 mm in z while x had only 9.
+  # It was also SPHERICAL (79 mm deep against 81 mm wide) where a braincase is
+  # visibly longer front-to-back than across. So the growth goes into depth and
+  # height, which is both where the room is and where the anatomy wants it.
+  # New semi (0.0836, 0.1007, 0.0969): 6.1 mm clear in x, 5.5 mm at the brow.
+  blob head on skull at=0.56 r=0.095 wide=0.88 tall=1.06 deep=1.02
   # Jaw — dropped and jutted to follow the face block's own jaw (jawDrop 0.076,
   # jawJut 0.04). Separate from the cranium and hard-folded, so a blown-open
   # face reads as two bones meeting rather than one smooth helmet.
-  blob head on skull at=0.30 offset=(0,-0.028,0.030) r=0.050 wide=0.82 tall=0.58 deep=0.96
+  #
+  # It did not read as a jaw at all, and the measurement says why: at semi
+  # (0.0410, 0.0290, 0.0480) it filled a third of the FLESH jaw around it
+  # (semi 0.0688, 0.0792, 0.0790 at y 1.5435) and sat 24 mm ABOVE that mass's
+  # centre — so the cranium swallowed it and the skull rendered as one egg.
+  # Now sized to the flesh jaw it lives in and dropped onto its centre: semi
+  # (0.0616, 0.0546, 0.0700), bottom at y 1.4912 so it hangs 45 mm BELOW the
+  # cranium, front at z 0.2169 so it juts 11 mm PAST it. Those two clearances
+  # are the whole reason it reads as a mandible rather than a chin bulge.
+  blob head on skull at=0.30 offset=(0,-0.050,0.045) r=0.070 wide=0.88 tall=0.78 deep=1.00
 
   # TORSO SKELETON — ribcage, spine, clavicles, pelvis (re-authored 2026-09-03).
   #
