@@ -205,6 +205,37 @@ lab_servers_up() {
   fi
 }
 
+# Remove the --user-data-dir of a Chrome WE started, once it is actually gone.
+#
+# WHY THIS EXISTS: every run gets a profile keyed by port, and until 2026-09-03
+# nothing ever removed one. Sixty-six of them had accumulated in /tmp on the
+# owner's machine — ports 9223 through 9411, 5.3 GB — because each run that
+# picks a fresh port leaves a fresh profile behind. Captures are about to get
+# more frequent (the melt ramp shoots seven frames a run), so this had to stop
+# growing.
+#
+# THE TWO ORDER CONSTRAINTS, both learned from the failure modes above:
+#   1. Only ever our own. The reuse rule means the Chrome on this port may be
+#      the owner's own lab session; deleting a running browser's profile is how
+#      you get a browser that silently refuses to start next time.
+#   2. Only AFTER the port is confirmed closed. lab__kill_group delivers the
+#      signal and reaps, but the file comment above records that being reaped
+#      is still not the same as being finished — pulling the profile out from
+#      under a browser mid-shutdown gets you crash-restore state at best.
+#
+# The path guard is not paranoia theatre: an empty LAB_CDP_PORT would make this
+# `rm -rf /tmp/chrome-lab-`, and a typo'd one would delete a profile that is
+# not ours. Refuse anything that is not a plain port number.
+lab__clean_profile() {
+  local port="$1" dir
+  case "$port" in
+    '' | *[!0-9]* ) return 0 ;;
+  esac
+  dir="/tmp/chrome-lab-$port"
+  [ -d "$dir" ] || return 0
+  rm -rf "$dir"
+}
+
 # Only ever stop, and only ever wait on, the servers WE started. One someone
 # else owns is supposed to still be answering when we leave.
 lab_servers_down() {
@@ -216,6 +247,7 @@ lab_servers_down() {
   fi
   if [ -n "$lab_started_chrome" ]; then
     lab__wait_port_closed "http://localhost:$LAB_CDP_PORT/json/version"
+    lab__clean_profile "$LAB_CDP_PORT"
   fi
   lab_started_vite=""; lab_started_chrome=""
   return $rc

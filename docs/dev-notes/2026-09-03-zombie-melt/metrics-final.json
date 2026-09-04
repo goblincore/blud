@@ -1,0 +1,89 @@
+{
+  "camera": {
+    "yaw": 0.5,
+    "pitch": 0.02,
+    "dist": 3.6,
+    "targetY": 0.4
+  },
+  "progress": [
+    0,
+    0.15,
+    0.3,
+    0.5,
+    0.7,
+    0.85,
+    1
+  ],
+  "frames": {
+    "0": {
+      "t": 0,
+      "file": "melt-000.png",
+      "bytes": 32571,
+      "std": 14.57,
+      "width": 114,
+      "height": 237,
+      "area": 11352,
+      "centroid": 114.2
+    },
+    "1": {
+      "t": 1,
+      "file": "melt-100.png",
+      "bytes": 25875,
+      "std": 14.05,
+      "width": 264,
+      "height": 48,
+      "area": 7048,
+      "centroid": 20.7
+    },
+    "0.15": {
+      "t": 0.15,
+      "file": "melt-015.png",
+      "bytes": 32756,
+      "std": 13.93,
+      "width": 100,
+      "height": 242,
+      "area": 12278,
+      "centroid": 118.7
+    },
+    "0.3": {
+      "t": 0.3,
+      "file": "melt-030.png",
+      "bytes": 36083,
+      "std": 12.33,
+      "width": 101,
+      "height": 274,
+      "area": 14065,
+      "centroid": 140.2
+    },
+    "0.5": {
+      "t": 0.5,
+      "file": "melt-050.png",
+      "bytes": 44075,
+      "std": 12.71,
+      "width": 157,
+      "height": 271,
+      "area": 20067,
+      "centroid": 113.4
+    },
+    "0.7": {
+      "t": 0.7,
+      "file": "melt-070.png",
+      "bytes": 38854,
+      "std": 14.1,
+      "width": 196,
+      "height": 202,
+      "area": 14499,
+      "centroid": 69.1
+    },
+    "0.85": {
+      "t": 0.85,
+      "file": "melt-085.png",
+      "bytes": 28026,
+      "std": 12.54,
+      "width": 261,
+      "height": 68,
+      "area": 8288,
+      "centroid": 27.7
+    }
+  }
+}

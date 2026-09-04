@@ -20,6 +20,42 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**FISHEYE LENS — SHIPPED ON sdf-game, AWAITING PLAY VERDICT (2026-09-03).**
+The game view now renders WIDER than the player sees and the canvas blit
+squeezes it back: `renderFovDeg` 90 (up from 75), `centerFovDeg` 60, and the
+ratio between them is the bend. Straight lines are gone; the centre is
+magnified 1.73x. The map lives in `src/lab/sdf-zombie/webgpu/fisheye.ts` and is
+shared by the blit shader and the DOM reticle — they must not diverge. The warp
+is folded into post-aa's existing blit as a 4-tap rotated grid (NO new pass:
+that file's orientation invariant counts intermediate passes) and supersedes
+sharp upscale. `k = 0` is an exact identity, so lab/bench are untouched and the
+all-off parity gate still holds. Seams: `__sdfGame.setFisheye(centreDeg)` /
+`setRenderFov(deg)` / `.fisheye` (reports `visibleFovDeg` alongside
+`renderFovDeg` — the warp crops the mid-edges, so those differ). Measured at
+the game's 4:3 cap: 90 rendered, **72.2 visible**, 60 at centre; **+4 ms/frame**
+(35.9 -> 39.8 headless, a baseline already over the 30 fps budget).
+`setRenderFov(85)` buys most of that back.
+[spec](docs/superpowers/specs/2026-09-03-fisheye-lens-design.md) ·
+[plan](docs/superpowers/plans/2026-09-03-fisheye-lens.md) ·
+[notes](docs/dev-notes/2026-09-03-fisheye/notes.md)
+
+**[ ] F-aim.1 — free aim can point off-screen, and the crosshair goes with
+it.** Owner deferred 2026-09-03 ("leave it, I'll judge it in play"). A
+regression from the fisheye: free aim's clamp lives in the TRUE frustum while
+the lens only shows 72 of the 90 degrees rendered, so aim can address points
+outside the visible frame. There is no auto-recentring (`game-main.ts:1115`),
+and shoving the reticle past the dead zone is HOW you turn — so a player
+looking up parks the crosshair off the top of the screen and it stays there.
+Measured at 4:3: the crosshair leaves the frame above `aim.y 0.730` / `aim.x
+0.848`; the corner is the fixed point, so `aim (1,1)` is fine. Weight it heavier than an edge
+case: `deadzoneY` is 0.38, so the crosshair leaves the frame over the top ~45%
+of the deflection you need to look up — any firm upward flick gets there.
+CHEAPEST PROBE FIRST: `FREE_AIM.recentreRate` already exists (`free-aim.ts:64`)
+and ships at 0.0; a small non-zero rate would not fix the clamp but would stop
+the crosshair PARKING off-screen, which is the actual complaint. Two fuller
+fixes in the notes — reframe `aim` as screen space (preferred, touches firing
+maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
+
 **BONE TUBES — BUILT, AWAITING OWNER VERDICT (2026-09-02).** Skeleton out of the marched field: posed bone prims drawn as ONE instanced analytic tube mesh (interleaved 18-float instances, WGSL vertex sweep, march-parity lighting) in the polygonal pass; the composite depth test hides bone under flesh and reveals it in cavities. Organs stay in the field. `packBones` flag (default on = legacy layout) flips bone rows out of the inside-flesh array. Counter gate (12-slug recipe): bonesTotal 1,807,616 → 309,992 with tubes on = exactly the organ share (≈8 of ~46.7 prims/body); meanPerPayingRay 276.4 → 47.0 — bone evals deleted, organs remain by design. Reel captured (torso / head / armL chunk, `scripts/bone-tubes-reel.sh`): no bone through intact skin seen; a-vs-b diffs at/below noise floor. Seams `__sdfGame.setBoneMesh(on)` / `.boneMesh` / `.boneTubes()`; default **OFF** until the owner's look verdict. Branch `claude/bone-tubes`.
 [spec](docs/superpowers/specs/2026-09-02-bone-tubes-design.md) · [plan](docs/superpowers/plans/2026-09-02-bone-tubes.md) · [notes](docs/dev-notes/2026-09-02-bone-tubes/notes.md)
 
@@ -404,6 +440,51 @@ retune). Artifacts catalogued honestly in its note (edge streaks, 1/30 s late
 wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
+
+- `X5.melt` [x] **Melting death — flesh sags into goo, the skeleton falls out**
+  — DONE (lab) 2026-09-03, all 7 dispatch tasks. Owner's brief with a Fallout 2
+  reference clip: *"the whole flesh would distort and fall away like stretchy
+  gooey dough and the bones fall out onto the ground in a fleshy puddle."*
+  LAB ONLY — no weapon gate, no game wiring.
+  **MECHANISM CHANGED from the earlier `c52b05b` attempt** (branch
+  `claude/blob-side-grammar`), which displaced the field with ridged noise
+  inside `mapBody` and was never visible at any amplitude. That commit's own
+  finding says why — the march marches a SMOOTH field, so a displacement there
+  warps the normal and never moves the surface — but the deeper problem is that
+  noise makes a surface WOBBLE and cannot make a body shorter or wider, which
+  is the entire signature of the reference. Superseded rather than debugged.
+  **What ships instead:** CPU animation of the prim table. Sag is per-ENDPOINT
+  so capsules stretch into strands; descent is paced by the melt front rising
+  through the body so it reads as a candle rather than a lift; radius grows by
+  `1/sqrt(yScale)` so volume goes sideways and the puddle is wider than the
+  body was tall; `blendK` fuses by depth so only the pooled part goes blobby.
+  Bone exposure then falls out of the existing hard `min` for free. Bones
+  release as ELEVEN rigid groups (skull, cage, pelvis, eight long bones), not
+  45 loose tubes.
+  **SHIPPED MECHANISM (supersedes the `c52b05b` ridged-noise attempt, which
+  warped a normal and never moved a surface):** pure CPU prim-table animation
+  in `src/lab/sdf-zombie/melt.ts` — per-ENDPOINT sag on a melt front rising
+  through the body (`softness 0.65`, `frontLead 1.75`), volume-conserving
+  crush (`r ∝ 1/√yScale`), `blendK` fuse, clusters re-fit per frame; bones
+  release as 11 rigid groups into the chunk stepper (`MELT_BONE_RELEASE_U
+  0.4`) and land in the puddle; organs melt at half rate on a catch-up
+  schedule; `meltCfg` ramps flesh to wet dark red at twice the sag rate.
+  **TWO GATES, both PASSING.** `c52b05b` shipped green and tested and
+  changed zero pixels. Gate A (in-suite AABB on the real `zombie.blob`):
+  height 0.10x, width 1.60x, centroid 0.08x, 10/11 bone groups at rest in
+  the puddle. Gate B (fixed-camera pixels via `npm run melt:shot`): height
+  0.20x, width 2.32x, centroid 0.18x. The final tuning pass (task 7) barely
+  moved the ratios — it killed a mid-ramp totem-pole and a floating skull
+  that only the FRAMES showed.
+  **TRAP:** `checkBoneContainment`'s 4 mm margin is violated on purpose —
+  bones breaching flesh IS the effect. "Fixing" it deletes the feature.
+  **Known and accepted:** the render loop still re-uploads the frozen
+  puddle's rows per frame (state and geometry are frozen, uploads are not —
+  noted honestly in the notes, elision is arena-work); a transient dark gap
+  in the draining torso at t≈0.5 reads as a hole at a glance.
+  [design](docs/superpowers/specs/2026-09-03-zombie-melt-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-03-zombie-melt.md) ·
+  [notes](docs/dev-notes/2026-09-03-zombie-melt/notes.md)
 
 - `X1.wound-r2` [~] **Bone through wounds + tissue-depth shading** — branch
   `claude/continue-previous-work-91055b`, **NOT merged**. 11 dispatch tasks,

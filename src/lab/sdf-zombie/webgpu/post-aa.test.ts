@@ -17,6 +17,7 @@ import {
   POST_AA_FXAA_WGSL, POST_AA_BLEND_WGSL, POST_AA_BLIT_WGSL,
   createPostAa,
 } from './post-aa';
+import { getRenderCap, setRenderCap } from './lab-renderer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -189,6 +190,36 @@ describe('post-aa module wiring', () => {
     // polygonal pass left — without depth the flesh paints over the floor.
     expect(src).toMatch(/const sceneTarget = new THREE\.RenderTarget\(1, 1, \{\s*depthBuffer: true/);
   });
+
+  it('every declared WGSL parameter is supplied at the call site', () => {
+    // fa57506 shipped a blit whose header declared `lens` that the wgslFn
+    // call never bound: green tests, dead renderer (three resolves
+    // wgslFn(...)({...}) keys against the parsed header by name, so a
+    // missing key is silently unbound rather than a build error). Parse
+    // both sides and diff them instead of trusting the two stay in sync.
+    const headerParams = (wgsl: string): string[] => {
+      const header = wgsl.match(/^fn\s+\w+\(([\s\S]*?)\)\s*->/);
+      expect(header).not.toBeNull();
+      return header![1]!
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.split(':')[0]!.trim())
+        .sort();
+    };
+    const callSiteKeys = (constName: string): string[] => {
+      const re = new RegExp(String.raw`wgslFn\(${constName}\)\(\{([\s\S]*?)\}\)`);
+      const m = src.match(re);
+      expect(m).not.toBeNull();
+      return [...m![1]!.matchAll(/([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g)]
+        .map(x => x[1]!)
+        .sort();
+    };
+    for (const [name, wgsl] of Object.entries(ALL_WGSL)) {
+      const constName = `POST_AA_${name.toUpperCase()}_WGSL`;
+      expect(callSiteKeys(constName)).toEqual(headerParams(wgsl));
+    }
+  });
 });
 
 /** A renderer stand-in: the all-off path must not touch it at all. */
@@ -250,5 +281,187 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(post.smear).toBe(POST_AA_SMEAR_MAX);
     post.setSmear(-1);
     expect(post.smear).toBe(0);
+  });
+
+  it('a lens is off by default, and off is an exact identity', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    expect(post.lens.k).toBe(0);
+  });
+
+  it('all-off parity survives a lens that is set but not narrowing', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setLens(90, 90); // centre not narrower than render -> k = 0
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(post.lens.k).toBe(0);
+    expect(chainCalls).toBe(1);
+    expect(calls.setRenderTarget).toBe(0);
+    expect(calls.render).toBe(0);
+  });
+
+  it('a narrowing lens is an active effect: it redirects and runs the passes', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setLens(90, 60);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(post.lens.k).toBeGreaterThan(0);
+    expect(chainCalls).toBe(1);
+    expect(sink.target).not.toBeNull();
+    expect(calls.render).toBeGreaterThan(0);
+  });
+
+  it('resolves the lens against the CONTENT aspect, not the window', () => {
+    // Under the default 'fit' cap, computeRenderSize preserves the window's
+    // aspect by construction (see lab-renderer.ts), so no window size can
+    // ever separate content aspect from window aspect there. Only a 'fixed'
+    // cap decouples them — set one whose aspect (2:1) differs from
+    // happy-dom's 4:3 window, so this test can actually fail.
+    const priorCap = getRenderCap();
+    try {
+      setRenderCap({ mode: 'fixed', width: 800, height: 400 });
+      const { renderer } = stubRenderer();
+      const post = createPostAa(renderer);
+      post.setLens(90, 60);
+      const windowAspect = window.innerWidth / window.innerHeight;
+      expect(post.lens.aspect).toBeCloseTo(2, 9);
+      expect(post.lens.aspect).not.toBeCloseTo(windowAspect, 1);
+    } finally {
+      setRenderCap(priorCap);
+    }
+  });
+
+  it('re-resolves the lens on resize', () => {
+    // 'fit' keeps content aspect == window aspect, so changing the window's
+    // aspect and dispatching resize is a discriminating probe: if refit()
+    // ever drops (or reorders before setSize) its recomputeLens() call, this
+    // is the test that notices — every other current test would still pass.
+    const priorW = window.innerWidth;
+    const priorH = window.innerHeight;
+    try {
+      const { renderer } = stubRenderer();
+      const post = createPostAa(renderer);
+      post.setLens(90, 60);
+      const before = post.lens.aspect;
+
+      Object.defineProperty(window, 'innerWidth', { value: 400, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true });
+      window.dispatchEvent(new Event('resize'));
+
+      const after = post.lens.aspect;
+      expect(after).not.toBeCloseTo(before, 1);
+      expect(after).toBeCloseTo(post.contentSize.width / post.contentSize.height, 9);
+      // k is aspect-dependent, which is the entire reason the FOVs are
+      // stored rather than a single precomputed k.
+      expect(post.lens.k).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: priorW, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: priorH, configurable: true });
+    }
+  });
+
+  it('a NaN FOV resolves to the lens being off, not a silent warp', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setLens(NaN, 60);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    expect(post.lens.k).toBe(0);
+    expect(Number.isFinite(post.lens.k)).toBe(true);
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(chainCalls).toBe(1);
+    expect(calls.setRenderTarget).toBe(0);
+    expect(calls.render).toBe(0);
+  });
+});
+
+describe('post-aa fisheye in the blit', () => {
+  it('the blit takes a lens parameter', () => {
+    expect(POST_AA_BLIT_WGSL).toMatch(/lens\s*:\s*vec3<f32>/);
+  });
+
+  it('carries the fisheye helper, and still starts with its own main fn', () => {
+    // three anchors the wgslFn parse to ^, so the helper must be APPENDED.
+    expect(/^fn\s+postAaBlit\s*\(/.test(POST_AA_BLIT_WGSL)).toBe(true);
+    expect(POST_AA_BLIT_WGSL).toContain('fn fisheyeWarp(');
+    expect(POST_AA_BLIT_WGSL.indexOf('fn fisheyeWarp('))
+      .toBeGreaterThan(POST_AA_BLIT_WGSL.indexOf('fn postAaBlit('));
+  });
+
+  it('supersedes sharp mode rather than stacking with it', () => {
+    // The warped branch is taken FIRST; sharp's fractional ramp assumes an
+    // axis-aligned magnification the warp does not provide.
+    const warpAt = POST_AA_BLIT_WGSL.indexOf('if (lens.x > 0.0)');
+    const sharpAt = POST_AA_BLIT_WGSL.indexOf('} else if (cfg.z > 0.5)');
+    expect(warpAt).toBeGreaterThan(-1);
+    expect(sharpAt).toBeGreaterThan(warpAt);
+  });
+
+  it('prefilters the warped fetch with four taps', () => {
+    // Pinning the corner minifies the periphery ~2x; a single point fetch
+    // there shimmers. Four rotated-grid taps, warped independently, spread
+    // themselves by the local Jacobian for free.
+    expect(POST_AA_BLIT_WGSL).toContain('acc * 0.25');
+
+    // fisheyeWarp appears exactly twice: its declaration, and the one call
+    // site inside the tap loop. A tidy-up that hoists the warp out of the
+    // loop and fetches four neighbours of a single warped point would keep
+    // this string containing "fisheyeWarp(" once for the call — this guards
+    // against exactly that, which destroys the Jacobian-spread argument the
+    // comment above makes.
+    const warpCalls = POST_AA_BLIT_WGSL.match(/fisheyeWarp\(/g) ?? [];
+    expect(warpCalls.length).toBe(2);
+
+    // The per-tap offset must be added to st BEFORE the warp call, not
+    // applied to an already-warped point.
+    expect(POST_AA_BLIT_WGSL).toMatch(/fisheyeWarp\(st \+ offs\[i\] \* \w+, lens\)/);
+
+    // Tap spacing must be sized in DESTINATION pixels. Sizing by srcDims
+    // instead would give the wrong prefilter width whenever the destination
+    // is larger than the source (sharp mode's case) — invisible until sharp
+    // mode is also on.
+    expect(POST_AA_BLIT_WGSL).toMatch(/vec2<f32>\(1\.0, 1\.0\) \/ dstSize/);
+
+    // Extract the offsets from the array<vec2<f32>, 4>(...) initializer
+    // specifically, not by slicing the first four vec2<f32>(...) literals
+    // in the whole string — the sharp branch and fisheyeWarp itself contain
+    // other such literals, so a positional slice would be fragile.
+    const arrayMatch = POST_AA_BLIT_WGSL.match(/array<vec2<f32>, 4>\(([\s\S]*?)\);/);
+    expect(arrayMatch).not.toBeNull();
+    const offsets = [...arrayMatch![1]!.matchAll(
+      /vec2<f32>\(\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\)/g,
+    )].map(m => [Number(m[1]), Number(m[2])] as const);
+    expect(offsets).toHaveLength(4);
+
+    // A rotated grid, not a box: four distinct x values and four distinct y
+    // values, so no two taps share a row or column. A "tidier" 0.25-spaced
+    // box (±0.125, ±0.125 combinations) would collapse this to two distinct
+    // values per axis.
+    expect(new Set(offsets.map(([x]) => x)).size).toBe(4);
+    expect(new Set(offsets.map(([, y]) => y)).size).toBe(4);
+
+    // Centred on the pixel: the four taps sum to zero on both axes.
+    expect(offsets.reduce((sum, [x]) => sum + x, 0)).toBeCloseTo(0);
+    expect(offsets.reduce((sum, [, y]) => sum + y, 0)).toBeCloseTo(0);
   });
 });

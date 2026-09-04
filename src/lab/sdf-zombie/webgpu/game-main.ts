@@ -64,6 +64,7 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
+import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
@@ -158,6 +159,23 @@ async function main() {
   const resKey = resRungFromUrl();
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
+
+  // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
+  // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
+  // vsync slots -- 33, 50, 33, 50 -- whose MEAN reads a healthy 38 ms while the
+  // hand feels a stagger, which is exactly the "wonky but the readings look
+  // fine" the owner reported (2026-09-03).
+  //
+  // 30 is not arbitrary: `adaptiveBudgetMs` below is already 1000/30, so the
+  // resolution ladder has been aiming at a 33.3 ms budget all along. This makes
+  // the PRESENTATION agree with the budget the rest of the page is tuned for,
+  // and gives the ladder a deadline it owns rather than one it has to infer
+  // from a display refresh nobody measured.
+  //
+  // A seam, not a constant -- __sdfGame.setFrameCap(60) or (0) to compare by
+  // eye. Off everywhere else: the bench times its own render callback and a cap
+  // would flatten every reading to the cadence.
+  handle.setFrameCap(30);
 
   // -----------------------------------------------------------------------
   // The world: grey-box meshes from the same layout that feeds collision.
@@ -375,6 +393,37 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  // THE FISHEYE. The camera renders WIDER than the player sees and the blit
+  // squeezes it back, which is what buys the bulge without losing the frame
+  // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
+  // camera.fov is what pays for it. Both live on __sdfGame.
+  // CO-INVARIANT: camera.fov and postAa's lens must never disagree about the
+  // render FOV. Right now the only writers are the two seams below, which
+  // keep that promise by construction. If anything else ever moves
+  // camera.fov directly (aimFrustum's own comment already anticipates a
+  // future ADS/recoil tween), it must re-call
+  // `postAa.setLens(camera.fov, centerFovDeg)` in the same breath, or the
+  // blit's squeeze silently stops matching the frustum that drew the frame
+  // — see post-aa.ts's own setRenderCap note for the same class of hazard.
+  let centerFovDeg: number = FISHEYE_DEFAULTS.centerFovDeg;
+  camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
+  camera.updateProjectionMatrix();
+  postAa.setLens(camera.fov, centerFovDeg);
+  /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
+   *  A shared function rather than three copies of the same object literal
+   *  — and the setters' own return value, not just the getter, because an
+   *  object-literal method can't write `return this.fisheye` and a shared
+   *  local is the way around that. Reads renderFovDeg/k off the LENS, not
+   *  the camera: the lens is what the blit actually applied, so this is
+   *  what tells a console user their setRenderFov(500) landed on 179. */
+  function fisheyeReport() {
+    return {
+      renderFovDeg: postAa.lens.renderFovDeg,
+      centerFovDeg,
+      visibleFovDeg: visibleFovDeg(postAa.lens),
+      k: postAa.lens.k,
+    };
+  }
   const sdfLayer = createSdfLayer(handle.renderer);
   postAa.addSink(sdfLayer);
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
@@ -2384,8 +2433,13 @@ async function main() {
         // the page -- so the thing marking where you are aiming sat somewhere
         // you could not shoot.
         const r = canvas.getBoundingClientRect();
-        reticleEl.style.left = `${r.left + r.width * (0.5 + aim.x * 0.5)}px`;
-        reticleEl.style.top = `${r.top + r.height * (0.5 - aim.y * 0.5)}px`;
+        // Through the LENS. The fisheye moves the world under the crosshair,
+        // so the crosshair rides the inverse map or it stops marking where
+        // the shot lands. Pushed outward, because the centre is magnified.
+        // Lens off (k = 0) returns `aim` unchanged — this is the old line.
+        const p = reticleNdc(aim, postAa.lens);
+        reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
+        reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
       }
     }
 
@@ -2893,6 +2947,10 @@ async function main() {
     walkCancel: () => { autopilot = null; },
     get walking() { return autopilot !== null; },
     frameMs: () => frameEma,
+    /** Frames actually PRESENTED. Under a frame cap the rAF loop still wakes
+     *  every vsync and skips most of them, so raw rAF gaps measure the display
+     *  rather than the cadence -- count this instead. */
+    presentCount: () => frameCount,
     bodiesOnScreen,
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
@@ -3027,9 +3085,63 @@ async function main() {
     // duplicated here — the driver calls those.
     setCone: (on: boolean) => sdfLayer.setConeEnabled(on),
     get cone() { return sdfLayer.coneEnabled; },
+    // ---------------------------------------------------------------
+    // FRAME PACING. setFrameCap(fps) presents on a fixed cadence; 0
+    // uncaps and restores the raw rAF behaviour. Default 30, matching
+    // adaptiveBudgetMs. `refreshMs` is MEASURED from raw tick gaps
+    // (the loop still wakes every vsync under a cap, so the skipped
+    // ticks measure the display for free) -- check it before trusting
+    // any arithmetic that assumes 60 Hz.
+    // ---------------------------------------------------------------
+    setFrameCap: (fps: number) => {
+      handle.setFrameCap(fps);
+      return { frameCap: handle.frameCap, refreshMs: handle.refreshMs };
+    },
+    get frameCap() { return handle.frameCap; },
+    get refreshMs() { return handle.refreshMs; },
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    // ---------------------------------------------------------------
+    // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
+    // screen CENTRE; setRenderFov(deg) sets what the camera actually
+    // draws. The bend is the ratio between them, so raising the render
+    // FOV at a fixed centre FOV bends harder AND shows more world —
+    // at the cost of more of it being marched. setFisheye(camera.fov)
+    // (or anything wider) turns the lens off exactly.
+    //
+    // Both setters clamp with clampFovDeg — the same clamp makeLens applies
+    // internally — so camera.fov and the lens can never disagree about the
+    // render FOV (a stray setRenderFov(500) would otherwise squeeze the
+    // frame with a lens clamped to 179 while the frustum drew at 500). Both
+    // reject non-finite input as a no-op rather than feeding a NaN into
+    // camera.updateProjectionMatrix() (a dead frame) or into makeLens (whose
+    // clamp does not catch NaN either — see fisheye.ts). Both return the
+    // report that .fisheye also returns, so the console shows what actually
+    // landed, not what was typed.
+    // ---------------------------------------------------------------
+    setFisheye: (deg: number) => {
+      if (Number.isFinite(deg)) {
+        centerFovDeg = clampFovDeg(deg);
+        postAa.setLens(camera.fov, centerFovDeg);
+      }
+      return fisheyeReport();
+    },
+    setRenderFov: (deg: number) => {
+      if (Number.isFinite(deg)) {
+        camera.fov = clampFovDeg(deg);
+        camera.updateProjectionMatrix();
+        postAa.setLens(camera.fov, centerFovDeg);
+        sizeSdfLayer();
+      }
+      return fisheyeReport();
+    },
+    /** renderFovDeg is what is drawn, visibleFovDeg what reaches the
+     *  screen (the warp crops the mid-edges), centerFovDeg what the
+     *  middle reads as. Tune against `visible`, not `render`. */
+    get fisheye() {
+      return fisheyeReport();
+    },
     // ---------------------------------------------------------------
     // C2 HALF-RATE — march every other frame, reproject the held march
     // in between (sdf-layer.ts header). Default OFF; the look verdict is

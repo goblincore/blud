@@ -24,6 +24,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
+  FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 // Raw source import: the row-table docstrings are TS comments, invisible to
@@ -321,17 +322,15 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let dres = mapBody(');
     expect(MARCH_BODY).toContain('var d = dres.x;');
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
-    // The band is now max(shellAmp, meltAmp) * 4.0 — the melt experiment
-    // (2026-09-03) rides the SAME shell, because this is the only site where
-    // a displacement reaches the geometry rather than just the normal. With
-    // meltAmp 0 the band is shellAmp * 4.0 exactly as before.
-    expect(MARCH_BODY).toMatch(/let band = max\(shellAmp, meltAmp\) \* 4\.0;/);
-    expect(MARCH_BODY).toMatch(/if \(band > 0\.0 && abs\(d\) < band\)/);
+    // Restored to the shellAmp-only form in the 2026-09-04 merge: the melt
+    // spike that had widened this band to max(shellAmp, meltAmp) is gone,
+    // superseded by the shipped zombie melt, which sags the body through the
+    // rig rather than by displacing the marched field here.
+    expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
     // The shell's fbm samples the dominant prim's REST frame (task 6) — the
     // displaced silhouette rides the same flesh as the normal-warped skin.
     expect(MARCH_BODY)
-      .toMatch(/let ra = restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\)\);/);
-    expect(MARCH_BODY).toMatch(/if \(shellAmp > 0\.0\) \{ d = d \+ fbm\(ra \* 3\.0\) \* shellAmp; \}/);
+      .toMatch(/d = d \+ fbm\(restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\)\) \* 3\.0\) \* shellAmp;/);
   });
 
   it('anchors every noise site in REST space, so texture rides every limb (task 6)', () => {
@@ -346,10 +345,11 @@ describe('ported features reach the entry point', () => {
     // (hard-surface task 1: the noiseAmp argument now carries the gloss
     // kill, `* (1.0 - max(gloss, metal))` — a polished or machined prim's
     // normal is not rippled. Pinned in detail by the dedicated
-    // gloss-suppression describe below. Task 3's merge resolves main's melt:
-    // calcNormal's amp is a vec4 now, and only .x (silhouette) is scaled —
-    // y/z/w are the melt components and pass through untouched.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
+    // gloss-suppression describe below. The amp is a vec4 and only .x
+    // carries anything: y/z/w were the parked melt spike's lanes and are
+    // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
+    // kill this pins is unchanged.)
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -371,10 +371,6 @@ describe('ported features reach the entry point', () => {
     // here where main's version had already narrowed it.
     expect(mapBody).toContain('let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseCfg.x');
-    // The MELT term (experiment, 2026-09-03) rides the SAME rest-space
-    // anchor, for the same reason: a world-frame melt would slide through a
-    // limb as it moves. Its time drift is applied to the anchor, not to p.
-    expect(mapBody).toContain('let flow = anchor - vec3<f32>(0.0, noiseCfg.w * 0.06, 0.0);');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
     // independent of the motion plumbing — zero shift, dead noise term (the
     // whole vec4, so the melt experiment's term is dead in the cone too). The
@@ -634,11 +630,82 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     const parsed = new WGSLNodeFunction(MARCH_BODY);
     const names = parsed.inputs.map((i: { name: string }) => i.name);
     // 66 on the perf round-2 chain; +8 from the wound-pass-r2 merge (counts2,
-    // surfCfg3, fatColor, boneColor and the viscera/gut slots); +1 for
-    // meltCfg (the melt experiment, 2026-09-03). Re-pin when a slot is added
-    // ON PURPOSE — a silent change here is the phantom-input bug.
+    // surfCfg3, fatColor, boneColor and the viscera/gut slots); +1 from the
+    // melt task-6 meltCfg slot. BOTH sides of the 2026-09-04 merge added a
+    // uniform named meltCfg independently — the zombie melt's progress slot
+    // (kept) and the parked melt spike's amp/freq/time slot (removed) — so
+    // this count is +1, not +2. That collision is exactly what this pin is
+    // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
+    // the phantom-input bug.
     expect(names.length).toBe(75);
     expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
+    // meltCfg sits between bodyHalf and the level-shadow tail, matching the
+    // JS binding object in createMarchMaterial (positional — a swap silently
+    // hands the shader the wrong uniform).
+    expect(names.indexOf('meltCfg')).toBe(names.indexOf('bodyHalf') + 1);
+  });
+});
+
+describe('melt wet-red ramp (zombie melt task 6)', () => {
+  // c52b05b declared meltCfg and never READ it: green tests, zero pixels.
+  // These assert the uniform is declared, bound and CONSUMED in the flesh
+  // shading branch — and that the consumption is gated flesh-vs-bone, since
+  // pale matte bone against wet red flesh is the whole look.
+  it('declares the meltCfg slot in the signature', () => {
+    expect(MARCH_BODY).toContain('meltCfg: vec4<f32>,');
+  });
+  it('READS meltCfg in the flesh shading branch — colour leads the sag', () => {
+    // smoothstep(clamp(meltCfg.x * 2)) — the ramp completes by half progress,
+    // so the body is clearly red while still standing, before it shortens.
+    expect(MARCH_BODY).toContain(
+      'let meltU = smoothstep(0.0, 1.0, clamp(meltCfg.x * 2.0, 0.0, 1.0));');
+    // Flesh reddens; bone goes PALE instead — the contrast is the effect.
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, meltU * 0.9)');
+    // Flesh mixes toward the deep red — but through the PER-PATCH `local`,
+    // not meltU directly. Skin sloughs in pieces (owner review 2026-09-03):
+    // each point crosses at its own progress off the rest-space anchor, and
+    // patches scaled past 1.0 by MELT_SKIN_KEEP never cross at all, so pink
+    // survives on the finished puddle. Pinning the intent — reddening driven
+    // by a patch threshold that reads meltU — rather than the exact spelling,
+    // which is a tuning surface.
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, deepColor * 0.8, local * 0.8)');
+    expect(MARCH_BODY).toContain('let thresh = skinPatch * ');
+    expect(MARCH_BODY).toMatch(/let local = smoothstep\(thresh - [\d.]+, thresh \+ [\d.]+, meltU\)/);
+    // `patch` is a RESERVED WORD in WGSL: naming it that compiles in TS and
+    // fails the shader at runtime, rendering the body invisible. Guard it.
+    expect(MARCH_BODY).not.toMatch(/\blet patch\b/);
+    // Wetness ramps on flesh ONLY — bone stays matte.
+    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), meltU)');
+  });
+  it('identifies an exposed bone row — the wm gate alone cannot see one', () => {
+    // The melt's skeleton emerges with NO wound (bareBones bypass), so the
+    // primScale.w material read must also run when meltCfg.x > 0.
+    expect(MARCH_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
+    expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
+  });
+});
+
+describe('melt face drip (zombie melt task 8)', () => {
+  // Same failure this whole plan guards against: a uniform that is declared
+  // and never READ. Task 6 pinned the flesh branch; this pins the FACE block
+  // — a whole-file check would pass with meltCfg read only in the torso.
+  const FACE = MARCH_BODY.slice(
+    MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'),
+    MARCH_BODY.indexOf('// PER-PRIMITIVE COLOUR'),
+  );
+  it('found the face block inside MARCH_BODY', () => {
+    expect(FACE.length).toBeGreaterThan(500);
+  });
+  it('READS meltCfg in the face block — the face drips off the skull', () => {
+    expect(FACE).toContain('let meltSag = meltCfg.x;');
+    // Sag + paired stretch on the V coordinate: the offset alone slides a
+    // rigid face like a sticker; the stretch is the elongation.
+    expect(FACE).toContain(
+      `uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};`);
+  });
+  it('widens the facing fade as the head flattens', () => {
+    expect(FACE).toContain(
+      `var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, meltCfg.x), 0.66, dot(n, hfr));`);
   });
 });
 
@@ -1623,7 +1690,11 @@ describe('bone fold (wound pass r2)', () => {
   // spare) instead. These tests keep it there.
   it('carries boneCount on counts2.x, never on the taken woundCfg2.w', () => {
     expect(MAP_BODY).toContain('counts2.x > 0.0');
-    expect(MAP_BODY).toMatch(/nearWound > 0\.5 && counts2\.x > 0\.0/);
+    // The nearWound gate, plus the melt's BARE-BONES bypass (counts2.y):
+    // bone-only chunks and melting bodies fold the inside-flesh rows
+    // without a wound. The bypass must never REPLACE the gate — an intact
+    // body still skips the bone fold exactly.
+    expect(MAP_BODY).toMatch(/\(nearWound > 0\.5 \|\| counts2\.y > 0\.5\) && counts2\.x > 0\.0/);
     expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0)');
     expect(MARCH_BODY).toContain('counts2: vec4<f32>');
     expect(MARCH_BODY).not.toMatch(/woundCfg2\.w[^;]*applyBones/);
@@ -1680,8 +1751,31 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('boneStain');
   });
 
-  it('no longer identifies bone by material code — isBone is GONE (bone tubes)', () => {
-    expect(SHADE_BODY).not.toMatch(/isBone/);
+  it('identifies bone by material code ONLY for the melt ramp (task 6)', () => {
+    // Bone tubes deleted the old always-on bone albedo branch, and it stays
+    // deleted: bone is identified again, but the ONLY consumer is the melt's
+    // pale-vs-wet-red split (march.wgsl.ts, zombie melt task 6) — the melt's
+    // skeleton emerges through thinning flesh with no wound to key on, and
+    // without the material read an exposed bone would take the red flesh
+    // ramp and shade as meat. The read is gated on meltCfg.x, so a
+    // non-melting body pays and shades exactly as the bone-tubes deletion
+    // left it.
+    expect(SHADE_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
+    expect(SHADE_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
+    // And bone still does not get its old always-on shading back — the
+    // isBone read is consumed ONLY inside the meltU-gated block (the one
+    // bare `if (isBone)` line is nested directly inside `if (meltU > 0.0)`).
+    const uses = SHADE_BODY.split('\n').filter((l: string) => l.includes('isBone'));
+    for (const l of uses) {
+      if (l.includes('let isBone') || l.trim() === 'if (isBone) {') continue;
+      expect(l).toMatch(/meltU|meltCfg/);
+    }
+    // Prove the nesting claimed above: the bare branch sits inside the meltU
+    // gate, not loose in the shading flow.
+    const gate = SHADE_BODY.indexOf('if (meltU > 0.0) {');
+    const branch = SHADE_BODY.indexOf('if (isBone) {');
+    expect(branch).toBeGreaterThan(gate);
+    expect(branch - gate).toBeLessThan(200);
   });
 });
 
@@ -1785,7 +1879,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // task-3 merge: calcNormal's amp is melt's vec4 (x silhouette, y/z/w
     // melt) — the kill applies to .x only, melt passes through untouched.
     expect(SHADE_BODY).toContain(
-      'calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w), woundCfg');
+      'calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg');
   });
 
   it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
