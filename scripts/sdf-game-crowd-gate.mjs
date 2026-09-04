@@ -162,7 +162,37 @@ for (let i = 0; i < 40 && !swung; i++) {
   const d = await evaluate('__sdfGame.crowdMinDist()');
   if (typeof d === 'number' && d < worst) worst = d;
   const bs = await evaluate('__sdfGame.brains()');
-  swung = bs.some((b) => b.mode === 'attack' && b.swingT > 0);
+  const mid = bs.find((b) => b.mode === 'attack' && b.swingT > 0);
+  swung = !!mid;
+  if (mid) {
+    // SHOOT THE SWING WHERE IT HAPPENS. The first version of this gate took
+    // its swing frame after the 3.3 s ring-settle loop below, from the
+    // doorway -- by then the swing was long over and the frame showed a
+    // zombie standing several metres down a tunnel. The assertion (brains()
+    // state) was right and the picture was of something else entirely.
+    // Place the camera 1.6 m from THIS zombie, looking at it, and take the
+    // frame on the next step while the swing is still in flight.
+    const zs = await evaluate('__sdfGame.zombies()');
+    const me = zs.find((z) => z.id === mid.id);
+    if (me) {
+      // Stand off along -x/-z from the body and face it. Player forward is
+      // [sin yaw, 0, -cos yaw] (game-player.ts), so yaw = atan2(dx, -dz).
+      const cx = me.pos[0] - 1.6;
+      const cz = me.pos[2] - 1.6;
+      const yaw = Math.atan2(me.pos[0] - cx, -(me.pos[2] - cz));
+      await evaluate(`__sdfGame.setPose(${cx}, ${cz}, ${yaw}, -0.12, 0)`);
+      await evaluate('__sdfGame.step(1, 1 / 60)');
+      await shot('fpv-swing');
+      const still = await evaluate('__sdfGame.brains()');
+      const s2 = still.find((b) => b.id === mid.id);
+      console.log(`swing frame: zombie ${mid.id} mode=${s2?.mode} swingT=${s2?.swingT?.toFixed(3)}`);
+      if (!(s2 && s2.mode === 'attack' && s2.swingT > 0)) {
+        fail(`the swing frame was captured after zombie ${mid.id} finished swinging ` +
+             `(mode=${s2?.mode}, swingT=${s2?.swingT}) -- the picture does not show what it claims`);
+      }
+      await evaluate(FPV);
+    }
+  }
 }
 // After the first swing, give the rest of the alert pack ~3.3 s to arrive,
 // so the pair distances measured here are melee-ring distances, not approach
@@ -172,7 +202,7 @@ for (let i = 0; i < 20; i++) {
   const d = await evaluate('__sdfGame.crowdMinDist()');
   if (typeof d === 'number' && d < worst) worst = d;
 }
-await shot('fpv-swing');
+await shot('room4-melee-ring');
 if (!swung) fail('no zombie ever reached melee range and swung');
 console.log('swing: a zombie reached melee range and swung');
 
