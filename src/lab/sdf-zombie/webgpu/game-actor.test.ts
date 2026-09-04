@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
+import { makeZombie } from '../body';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { translateBody } from '../translate';
@@ -536,5 +537,97 @@ describe('wounds ride the body yaw (billboarding regression)', () => {
       fired++;
     }
     expect(severs, `arm still attached after ${fired} pellets at yaw ${actor.pose().yaw.toFixed(2)}`).toContain('armL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The brain and the crowd (zombie-crowd task 5). The actor is the WIRING for
+// brain.ts (notice/chase/attack) and crowd.ts (separation nudges): the brain
+// steps inside the sub-step loop and its standoff target overrides the
+// wander's; a nudge re-applies the room clamp and the furniture rejection so
+// separation can never shove a body into a crate. Same offline recipe as
+// every describe above — real motion pipeline, stub view.
+// ---------------------------------------------------------------------------
+describe('createZombieActor — the brain and the crowd', () => {
+  /** A real zombie + actor at `start` (default the origin), following the
+   *  file's build recipe: makeZombie -> buildBody -> translateBody to the
+   *  spawn, so the flesh sits where motion's wander.pos says it is. */
+  function makeTestActor(over: Partial<Parameters<typeof createZombieActor>[0]> = {}) {
+    const start = over.start ?? [0, 0, 0];
+    const placed = translateBody(buildBody(makeZombie()), start);
+    return createZombieActor({
+      id: 1, room: 1, body: placed, view: stubView() as never,
+      start, seed: 7,
+      bounds: { minX: -8, maxX: 8, minZ: -8, maxZ: 8 }, furniture: [],
+      ...over,
+    });
+  }
+
+  it('wanders when no player has been supplied', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.step(1 / 60);
+    expect(a.brain().mode).toBe('wander');
+    expect(a.brain().alert).toBe(false);
+  });
+
+  it('notices a player in front and walks toward him', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    // Face +z (the authored facing) and put the player straight ahead.
+    a.setBrainInput({ x: 0, z: 3, room: 3 }, false);
+    a.step(1 / 60);
+    expect(a.brain().alert).toBe(true);
+    const before = a.pose().pos;
+    // Two seconds: the body has to finish its damped turn (headingFollowRate
+    // 1.7 rad/s) before it can accelerate, so one second is not enough margin.
+    for (let i = 0; i < 120; i++) {
+      a.setBrainInput({ x: 0, z: 3, room: 3 }, false);
+      a.step(1 / 60);
+    }
+    const after = a.pose().pos;
+    expect(after[2]).toBeGreaterThan(before[2]);   // closed the distance
+  });
+
+  it('a shot in the room alerts it even from behind', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    a.setBrainInput({ x: 0, z: -3, room: 3 }, true);
+    a.step(1 / 60);
+    expect(a.brain().alert).toBe(true);
+  });
+
+  it('nudge moves the body on the ground plane', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    const before = a.pose().pos;
+    a.nudge(0.1, -0.2);
+    const after = a.pose().pos;
+    expect(after[0]).toBeCloseTo(before[0] + 0.1, 9);
+    expect(after[2]).toBeCloseTo(before[2] - 0.2, 9);
+  });
+
+  it('nudge stays inside the wander bounds', () => {
+    const a = makeTestActor({ start: [0, 0, 0], bounds: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 } });
+    a.nudge(50, 50);
+    const p = a.pose().pos;
+    expect(p[0]).toBeLessThanOrEqual(1);
+    expect(p[2]).toBeLessThanOrEqual(1);
+  });
+
+  it('nudge refuses to push the body into furniture', () => {
+    const a = makeTestActor({
+      start: [0, 0, 0],
+      furniture: [{ min: [0.4, 0, -1], max: [2, 2, 1] }],
+    });
+    const before = a.pose().pos;
+    a.nudge(0.5, 0);        // straight into the crate + its margin
+    expect(a.pose().pos).toEqual(before);
+  });
+
+  it('reports the swing through debug()', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    for (let i = 0; i < 8; i++) {
+      a.setBrainInput({ x: 0, z: 0.5, room: 3 }, true);
+      a.step(1 / 60);
+    }
+    expect(a.debug().mode).toBe('attack');
+    expect(a.debug().swingT).toBeGreaterThan(0);
   });
 });

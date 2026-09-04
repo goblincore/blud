@@ -38,6 +38,9 @@ import {
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
+import {
+  makeBrainState, stepBrain, type BrainPlayer, type BrainState,
+} from '../brain';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import type { Aabb } from './game-level';
@@ -110,6 +113,15 @@ export interface ZombieActor {
   readonly boundRig: () => BoundRig;
   /** Current ground position + facing. */
   readonly pose: () => { pos: Vec3; yaw: number };
+  /** Ground-plane shove from crowd separation (crowd.ts), bounds- and
+   *  furniture-clamped. */
+  nudge(dx: number, dz: number): void;
+  /** The per-frame brain input from game-main: where the player is (null when
+   *  he is in a tunnel or the void) and whether a shot just went off in this
+   *  actor's room. Set BEFORE step(). */
+  setBrainInput(player: BrainPlayer | null, alerted: boolean): void;
+  /** Live brain state — the debug seam and the capture driver's oracle. */
+  brain(): BrainState;
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
@@ -126,6 +138,9 @@ export interface ZombieActor {
     staggerKind: string | null;
     target: Vec3 | null;
     idle: number;
+    mode: string;
+    alert: boolean;
+    swingT: number;
   };
   /**
    * One pellet lands at `hitWorld`, travelling along `dirWorld`.
@@ -211,6 +226,15 @@ export function createZombieActor(opts: {
   let holdSecs = 0;
   let knockV = 0;
   let knockDir: Vec3 = [0, 0, 0];
+
+  // ---- brain state --------------------------------------------------------
+  // The decision layer (brain.ts) runs INSIDE the sub-step loop so a chase
+  // target is refreshed at the same cadence the locomotion integrates at.
+  // Its target overrides wander.target; its halt joins the blast hold in the
+  // single cfg.wander gate; its swing phase becomes cfg.attack.
+  let brain: BrainState = makeBrainState();
+  let brainPlayer: BrainPlayer | null = null;
+  let brainAlerted = false;
 
   function woundedLimbs() {
     const w = { armL: false, armR: false, legL: false, legR: false };
@@ -384,10 +408,37 @@ export function createZombieActor(opts: {
         }
         : { ...CALM, dt: sdt };
       firstSub = false;
+      // Decide before locomotion integrates, so the target this sub-step walks
+      // toward is this sub-step's target.
+      const think = stepBrain(brain, {
+        dt: sdt,
+        self: {
+          x: state.wander.pos[0], z: state.wander.pos[2],
+          yaw: bodyYaw, room: opts.room,
+        },
+        player: brainPlayer,
+        alerted: brainAlerted,
+      });
+      brain = think.state;
+      brainAlerted = false;   // one-shot: the first sub-step consumes it
+      if (think.target) {
+        // idle 0 as well: a chaser must never take a wander pause mid-pursuit.
+        state = {
+          ...state,
+          wander: { ...state.wander, target: think.target, idle: 0 },
+        };
+      }
       const prevPos: Vec3 = [...state.wander.pos] as Vec3;
       const stepR = stepMotion(
         state, joints,
-        { enabled: true, wander: holdSecs <= 0 },
+        {
+          enabled: true,
+          // The blast hold and the melee halt are the same gate.
+          wander: holdSecs <= 0 && !think.halt,
+          // Spread, not `attack: think.attack ?? undefined`: motion.ts's
+          // bit-identity contract is about the key being ABSENT.
+          ...(think.attack !== null ? { attack: think.attack } : {}),
+        },
         signals,
         bound.rig.points, opts.bounds, rng,
       );
@@ -444,7 +495,25 @@ export function createZombieActor(opts: {
       staggerKind: d.staggerKind,
       target: state.wander.target ? [...state.wander.target] as Vec3 : null,
       idle: state.wander.idle,
+      mode: brain.mode,
+      alert: brain.alert,
+      swingT: brain.swingT,
     };
+  }
+
+  /** Ground-plane displacement from crowd separation, clamped exactly like a
+   *  wander step: room bounds, then the furniture rejection. Separation must
+   *  never be able to push a body into a crate or through a wall. */
+  function nudge(dx: number, dz: number) {
+    if (dx === 0 && dz === 0) return;
+    const w = state.wander;
+    const next: Vec3 = [
+      Math.min(Math.max(w.pos[0] + dx, opts.bounds.minX), opts.bounds.maxX),
+      0,
+      Math.min(Math.max(w.pos[2] + dz, opts.bounds.minZ), opts.bounds.maxZ),
+    ];
+    if (insideFurniture(next)) return;
+    state = { ...state, wander: { ...w, pos: next } };
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
@@ -527,11 +596,19 @@ export function createZombieActor(opts: {
     posed: () => posed,
     boundRig: () => bound,
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
+    nudge,
+    setBrainInput: (p: BrainPlayer | null, alerted: boolean) => {
+      brainPlayer = p;
+      // Sticky until a step consumes it: the shot may land between frames.
+      if (alerted) brainAlerted = true;
+    },
+    brain: () => brain,
     step,
     wounds: () => wounds,
     debug: () => lastDebug ?? {
       holdSecs, knockV, phase: 'standing', meter: 0, blend: 0, speed: 0,
       staggerKind: null, target: null, idle: 0,
+      mode: brain.mode, alert: brain.alert, swingT: brain.swingT,
     },
     hit,
     hitSlug,
