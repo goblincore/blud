@@ -34,16 +34,27 @@ export interface MeltTuning {
   frontLead: number;
   /**
    * Height band, in normalised body heights, over which an endpoint goes from
-   * untouched to fully melted. Wide (0.45) fuses neighbours into one flowing
-   * mass; narrow reads as a hard scan line moving up the body.
+   * untouched to fully melted. Wide fuses neighbours into one flowing mass;
+   * narrow reads as a hard scan line moving up the body.
+   *
+   * 0.65, not 0.45 (task 7 tuning pass): at 0.45 the transition band was
+   * barely one prim tall, so the mid-ramp body read as a STACK OF DISCRETE
+   * BLOBS — a totem of meatballs standing on the puddle — and the crown did
+   * not begin to move until t≈0.65, so the head sat intact on top of a
+   * dissolving body. At 0.65 the band covers ~2 prim heights: neighbours
+   * flow together and the crown starts descending at t≈0.57, which is what
+   * makes the silhouette shorten like a candle instead of unstacking.
    */
   softness: number;
 }
 
 export const MELT_TUNING: MeltTuning = {
   rate: 0.625,
-  frontLead: 1.55,
-  softness: 0.45,
+  // 1.75 = 1 + softness + 0.1: the front must clear the crown by a full
+  // band or the head never finishes, and the small margin keeps the last
+  // 5% of the ramp from being a head-only crawl.
+  frontLead: 1.75,
+  softness: 0.65,
 };
 
 export interface MeltState {
@@ -51,6 +62,13 @@ export interface MeltState {
   t: number;
   /** Normalised rest height (0 = floor, 1 = tallest endpoint) per endpoint. */
   heights: readonly number[];
+  /** The normalisation itself, kept so LATECOMERS can be measured on the
+   *  same scale: organs (task 7) are not in the flesh prim array, but the
+   *  melt front must reach them at the same ABSOLUTE time it reaches the
+   *  torso they live in — normalising them by their own span would melt
+   *  them on their own clock, ahead of the flesh around them. */
+  floorY: number;
+  span: number;
   tuning: MeltTuning;
 }
 
@@ -72,6 +90,8 @@ export function meltInit(
   return {
     t: 0,
     heights: restY.map(y => (y - floorY) / span),
+    floorY,
+    span,
     tuning,
   };
 }
@@ -213,6 +233,42 @@ function meltPoint(p: Vec3, u: number, body: MeltBodyTuning): Vec3 {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+// ——— ORGANS (task 7) ———————————————————————————————————————————————————
+
+/**
+ * Organs melt WITH the flesh but at roughly HALF the sag rate, so they slop
+ * out of the draining torso and are briefly visible as distinct shapes
+ * before the goo takes them (spec: "the alternative — treating them as
+ * ordinary flesh — means they are never seen at all"). They live in
+ * BuiltBody.bonePrims beside the bones, but are soft: applyMelt never sees
+ * them, and melt-bones.ts never releases them.
+ *
+ * THE LAG SCHEDULE. An organ state is the flesh state with its progress
+ * remapped through t' = t · (rate + (1 − rate) · t): the melt front rises at
+ * `rateScale`× the flesh rate at the start and catches up smoothly, so both
+ * finish TOGETHER at t = 1. A flat half-rate clock would leave the organs
+ * stranded at t = 0.5 forever — half-melted blobs hovering over the puddle.
+ *
+ * Heights are normalised against the FLESH body's span and floor (kept on
+ * MeltState for exactly this), not the organs' own — the front must reach an
+ * organ when it reaches the torso around it.
+ */
+export function applyMeltOrgans(
+  prims: readonly Primitive[],
+  s: MeltState,
+  rateScale = 0.5,
+  body: MeltBodyTuning = MELT_TUNING_BODY,
+): Primitive[] {
+  if (s.t <= 0) return prims.map(p => p);
+  const tOrg = s.t * (rateScale + (1 - rateScale) * s.t);
+  const organState: MeltState = {
+    ...s,
+    t: tOrg,
+    heights: endpointHeights(prims).map(y => (y - s.floorY) / s.span),
+  };
+  return applyMelt(prims, organState, body);
 }
 
 // ——— CLUSTERS (task 4, step 0b) ————————————————————————————————————————

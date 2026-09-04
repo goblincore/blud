@@ -128,7 +128,7 @@ import { cutChains, cutLimbs } from '../connectivity';
 import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
-import { applyMelt, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
+import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
 import {
   boneChunkRadius, groupCentroid, groupOf, groupReleaseProgress, limbOfGroup,
   MELT_BONE_RELEASE_U, meltBoneSpawnVel, mulberry32,
@@ -2699,15 +2699,21 @@ async function main() {
       // with the flesh (task 7). Bone fold is a hard min, so filtering
       // cannot disturb the surviving rows' fold.
       const meltBoneRows = (bps: Primitive[]) =>
-        bps.filter(p =>
+        bps.flatMap(p => {
           // Organs ride the bonePrims array but are SOFT: with the flesh
           // melted away and the nearWound gate lifted, an un-melted organ
           // hangs in the air where the torso was — a floating red blob
-          // above the puddle. Task 7 melts them at half rate so they slop
-          // out of the draining torso; until then they go with the flesh
-          // they lived inside.
-          p.op !== 'organ'
-          && (p.op !== 'bone' || !meltBones?.released.has(groupOf(p.bone))));
+          // above the puddle. Task 7 melts them at HALF rate so they slop
+          // out of the draining torso and are briefly distinct before the
+          // goo takes them. One prim at a time, in place: bonePrims order
+          // is preserved.
+          if (p.op === 'organ') return applyMeltOrgans([p], meltState!);
+          // Released groups leave the body's bone rows (they are chunks
+          // now). Bone fold is a hard min, so dropping released rows
+          // cannot disturb the survivors' fold.
+          if (p.op === 'bone' && meltBones?.released.has(groupOf(p.bone))) return [];
+          return [p];
+        });
       // Clusters feed the render proxy box AND the march's culling, so they
       // must follow the prims — a melted body in rest-pose clusters is
       // marched inside a standing-zombie box (the flat top and straight

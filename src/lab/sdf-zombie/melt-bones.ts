@@ -106,8 +106,16 @@ export function groupReleaseProgress(
 
 /** A group lets go once the front is this far past its centroid. Exported so
  *  the lab wiring and the Gate A bone-settle test (melt-gate.test.ts) read
- *  the SAME threshold — two copies would drift. */
-export const MELT_BONE_RELEASE_U = 0.6;
+ *  the SAME threshold — two copies would drift.
+ *
+ *  0.4, not 0.6 (task 7 tuning pass): a released group FREE-FALLS from its
+ *  rest height, and the skull's fall from ~1.4 m takes ~0.5 s of settle — at
+ *  0.6 the skull let go at t≈0.75 and the captures photographed it hovering
+ *  over the finished puddle at t=0.85. 0.4 lets go while the supporting
+ *  flesh is only half gone, which is early enough for the bones to LAND
+ *  before the ramp ends, and still late enough that they do not punch
+ *  through flesh that has barely started to sag. */
+export const MELT_BONE_RELEASE_U = 0.4;
 
 /**
  * The spawn velocity of a released group: a gentle clatter OUTWARD off the

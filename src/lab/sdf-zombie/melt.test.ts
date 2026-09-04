@@ -7,6 +7,7 @@ import {
   stepMelt,
   endpointProgress,
   applyMelt,
+  applyMeltOrgans,
   endpointHeights,
   remeltClusters,
 } from './melt';
@@ -174,6 +175,88 @@ describe('applyMelt', () => {
     const copy = JSON.parse(JSON.stringify(BODY));
     meltedAt(0.7);
     expect(BODY).toEqual(copy);
+  });
+});
+
+// Organs sit inside the torso: they ride bonePrims but are soft, so they
+// melt — at roughly half the flesh rate, so they slop out of the draining
+// torso and are briefly distinct before the goo takes them (spec, task 7).
+const ORGANS: Primitive[] = [
+  prim([-0.045, 0.95, 0.03], [0.09, 0.96, 0.036]),  // gut coil, torso height
+  prim([0.042, 1.02, 0.03], [-0.086, 1.01, 0.022]), // second coil, just above
+];
+
+function organsAt(t: number, rateScale = 0.5): Primitive[] {
+  let s = meltInitBody(BODY, 0);
+  const step = 1 / 240;
+  while (s.t < t - 1e-9) s = stepMelt(s, step);
+  return applyMeltOrgans(ORGANS, s, rateScale);
+}
+
+describe('applyMeltOrgans', () => {
+  it('is the identity at progress zero', () => {
+    expect(applyMeltOrgans(ORGANS, meltInitBody(BODY, 0))).toEqual(ORGANS);
+  });
+
+  it('lags the flesh at the same progress', () => {
+    const t = 0.5;
+    const flesh = meltedAt(t)[2]!; // the torso prim the organs live inside
+    const organs = organsAt(t);
+    for (const o of organs) {
+      // Less melted = higher. Every organ endpoint is still above where the
+      // surrounding flesh has already sagged to.
+      expect(o.a[1]).toBeGreaterThan(flesh.a[1]);
+      expect(o.b[1]).toBeGreaterThan(flesh.a[1]);
+    }
+    // ...and it is a REAL lag, not a rounding difference: the organ centroid
+    // sits measurably above its rest-vs-pool midpoint while the flesh
+    // centroid is below its own.
+    const organMid = organs.reduce((s, o) => s + (o.a[1] + o.b[1]) / 2, 0) / organs.length;
+    expect(organMid).toBeGreaterThan((0.95 + MELT_TUNING_BODY.poolHeight) / 2);
+  });
+
+  it('still reaches the pool by progress 1 — the goo takes them in the end', () => {
+    const end = organsAt(1);
+    for (const o of end) {
+      expect(o.a[1]).toBeLessThan(MELT_TUNING_BODY.poolHeight + 1e-6);
+      expect(o.b[1]).toBeLessThan(MELT_TUNING_BODY.poolHeight + 1e-6);
+    }
+  });
+
+  it('at rateScale 1 organs melt exactly like flesh at the same height', () => {
+    // An organ and a flesh prim with identical geometry must transform
+    // identically when the lag is switched off — the lag is the ONLY
+    // difference between the two paths.
+    const geom: Primitive[] = [prim([0, 0.9, 0], [0, 1.35, 0])];
+    let s = meltInitBody(geom, 0);
+    const step = 1 / 240;
+    while (s.t < 0.6) s = stepMelt(s, step);
+    expect(applyMeltOrgans(geom, s, 1)).toEqual(applyMelt(geom, s));
+  });
+
+  it('does not mutate the input prims', () => {
+    const copy = JSON.parse(JSON.stringify(ORGANS));
+    organsAt(0.7);
+    expect(ORGANS).toEqual(copy);
+  });
+});
+
+describe('freeze is geometric, not just a stopped scalar', () => {
+  it('applyMelt is a fixed point once the melt is done', () => {
+    let s = meltInitBody(BODY, 0);
+    for (let i = 0; i < 600; i++) s = stepMelt(s, 1 / 60);
+    const end = applyMelt(BODY, s);
+    // Stepping a frozen melt returns the same state, and the transform of
+    // that state is the same GEOMETRY — the puddle does not creep.
+    expect(applyMelt(BODY, stepMelt(s, 1 / 60))).toEqual(end);
+    expect(applyMelt(BODY, stepMelt(stepMelt(s, 1), 1))).toEqual(end);
+  });
+
+  it('organs freeze with the flesh', () => {
+    let s = meltInitBody(BODY, 0);
+    for (let i = 0; i < 600; i++) s = stepMelt(s, 1 / 60);
+    const end = applyMeltOrgans(ORGANS, s);
+    expect(applyMeltOrgans(ORGANS, stepMelt(s, 1 / 60))).toEqual(end);
   });
 });
 
