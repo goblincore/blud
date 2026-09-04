@@ -1419,6 +1419,22 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 // lodCfg.x because "no ambient occlusion" has no amplitude to turn down;
 // the gore mask took the spare lodCfg.w for the same reason — "no gore"
 // has no colour amplitude to fade to.
+// ——— Face melt (zombie melt task 8) ————————————————————————————————————
+// meltCfg.x drives all three. Interpolated into MARCH_BODY below, so a WGSL
+// reader sees numbers and a tuner sees these names. SAG slides the SAMPLED
+// sheet V upward, which drags the features DOWN the skull: shader-sheet v
+// increases up the face (the upload flip in lab-main keeps the face upright
+// with a positive faceProj.y), so a surface point must sample HIGHER v to
+// show what used to be above it. STRETCH narrows the sampled V window about
+// the projection centre, so each feature covers MORE surface as it goes —
+// the elongation is what reads as dripping rather than a sticker sliding.
+// FADE_LO is where the facing fade's lower bound moves at full melt: a
+// flattened head's surface turns away from the forward axis far sooner, and
+// the standing-zombie 0.28 cutoff fades the face out before it has finished
+// dripping.
+export const FACE_MELT_SAG = 0.25;
+export const FACE_MELT_STRETCH = 0.6;
+export const FACE_MELT_FADE_LO = 0.05;
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -2158,16 +2174,27 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
         atan2(dir.x * forward, dir.z * forward) / 3.14159265,
         asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
     }
-    let uv = raw * faceProj.xy + faceProj.zw;
+    let uv0 = raw * faceProj.xy + faceProj.zw;
+    // Melt drips the face off the skull (task 8): sag drags features DOWN
+    // (see the FACE_MELT_SAG comment at the constants for why positive is
+    // down), the stretch elongates them as they go. The offset alone would
+    // slide a rigid face downward like a sticker.
+    let meltSag = meltCfg.x;
+    var uv = uv0;
+    uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};
     // Fade by how squarely this surface faces the front, so the projection does
     // not smear a second face down the sides and back of the skull. A planar
     // projection derives uv from x/y alone, so as the surface turns away it
     // repeats the same uv column and STREAKS; fading out well before edge-on
     // hides that.
     // The facing axis is the head's rotated forward, not world +z.
+    // The lower bound widens toward FACE_MELT_FADE_LO as the melt flattens
+    // the head: a squashed skull's surface turns away from the forward axis
+    // far sooner than a round one's, and the un-widened cutoff faded the
+    // face out before it had finished dripping.
     let hfw = vec3<f32>(0.0, 0.0, forward);
     let hfr = hfw + 2.0 * cross(headQuat.xyz, cross(headQuat.xyz, hfw) + headQuat.w * hfw);
-    var facing = smoothstep(0.28, 0.66, dot(n, hfr));
+    var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, meltCfg.x), 0.66, dot(n, hfr));
     // Confine it to the HEAD. Generous, because the surface now sits at
     // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
     // against wrapping onto the neck.

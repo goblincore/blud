@@ -24,6 +24,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
+  FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
@@ -649,6 +650,30 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     // primScale.w material read must also run when meltCfg.x > 0.
     expect(MARCH_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
     expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
+  });
+});
+
+describe('melt face drip (zombie melt task 8)', () => {
+  // Same failure this whole plan guards against: a uniform that is declared
+  // and never READ. Task 6 pinned the flesh branch; this pins the FACE block
+  // — a whole-file check would pass with meltCfg read only in the torso.
+  const FACE = MARCH_BODY.slice(
+    MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'),
+    MARCH_BODY.indexOf('// PER-PRIMITIVE COLOUR'),
+  );
+  it('found the face block inside MARCH_BODY', () => {
+    expect(FACE.length).toBeGreaterThan(500);
+  });
+  it('READS meltCfg in the face block — the face drips off the skull', () => {
+    expect(FACE).toContain('let meltSag = meltCfg.x;');
+    // Sag + paired stretch on the V coordinate: the offset alone slides a
+    // rigid face like a sticker; the stretch is the elongation.
+    expect(FACE).toContain(
+      `uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};`);
+  });
+  it('widens the facing fade as the head flattens', () => {
+    expect(FACE).toContain(
+      `var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, meltCfg.x), 0.66, dot(n, hfr));`);
   });
 });
 

@@ -151,3 +151,67 @@ re-uploads frozen rows (above). Neither blocks the lab feature.
   none).
 - `npx tsc --noEmit` — clean.
 - `npm run melt:shot` — gate table above; frames in this directory.
+
+---
+
+# Task 8 addendum — the melting face (2026-09-03, branch dispatch/melt-task-8)
+
+## The anchoring bug (Step 1) was real and is fixed
+
+`headShape(posed)` and `uploadWounds(posed.prims)` both ran on the UNMELTED
+body: during a melt the face projection and every wound stayed pinned to
+where the standing zombie was. Same class of mistake as Task 4 Step 0's
+stale clusters. The frame now computes the melted prims ONCE into
+`frameBody` and feeds it to `view.update`, `headShape` and `uploadWounds`
+(`lab-main.ts`). Proof it is live: the capture camera re-aims at the
+uniform-read-back head centre each progress value, and it now descends
+1.617 → 0.090 across the ramp (before the fix it would have stayed at
+~1.6).
+
+Level one fell out as predicted: the projection normalises by `headAxes`,
+so the crushed head stretches the face over the flatter shape with no
+shader change (`face-step1only-080.png` — the eye glow already spread wide
+across the flattened skull).
+
+## The drip (Steps 2–3), and a sign correction to the plan
+
+The plan's formula subtracted the sag from `uv.y`. In THIS shader the
+sheet's v increases UP the face (rows are flipped at upload — lab-main.ts
+"the flip lives here"), so subtracting slides features UP the skull. The
+shipped term adds:
+
+```
+uv.y = uv0.y + meltSag * FACE_MELT_SAG - (uv0.y - faceProj.w) * meltSag * FACE_MELT_STRETCH;
+```
+
+The stretch sign is also deliberate: NARROWING the sampled window
+(k = 1 − t·0.6) makes each feature cover MORE surface — that is the
+elongation. Widening the window (the literal reading of "stretch the UV")
+compresses features toward the centre line instead. Constants are
+`FACE_MELT_SAG = 0.25`, `FACE_MELT_STRETCH = 0.6`,
+`FACE_MELT_FADE_LO = 0.05` in `march.wgsl.ts`.
+
+Judgement from the close-up frames (`face-drip-*.png`, camera re-aimed at
+the live head centre per t): at t = 0.65 the eyes have visibly dragged
+down onto the lower half of the descending head and drawn out, vs
+step-1-only where they still sat mid-head; at t = 0.80 the features ride
+low on the flattened skull as it sinks into the puddle. It reads as
+dripping, not as a sliding sticker. **No smear around the back** at
+FACE_MELT_FADE_LO = 0.05 — the widened fade keeps the face on the front of
+the sagging mass, and the face survives onto the sagging surface instead of
+vanishing early. By t = 0.9 the head is fully pooled and the skull lump
+emerges through the goo, face gone — the intended end state.
+
+## Gates did not move
+
+Gate B re-run after Steps 2–3: height 0.22x, width 2.63x, centroid 0.21x —
+all PASS, within the documented boot-to-boot statue noise of the Step-1 run
+(0.24x / 2.35x / 0.23x). The face is shading; the silhouette numbers not
+moving is the expected outcome, not a lucky one. Suite: 2973 tests / 182
+files green (the 3 new face-drip shader tests included), `tsc --noEmit`
+clean.
+
+Tooling note: `melt-capture.mjs`'s camera yaw is now `BLOB_YAW`
+(default 0.5, the gate framing is unchanged) so close-up judgement runs can
+face the zombie (the zombie's face is on the far side at the gate yaw;
+BLOB_YAW ≈ 3.55 faces it).

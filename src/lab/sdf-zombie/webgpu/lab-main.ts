@@ -2688,6 +2688,16 @@ async function main() {
     // Melt transforms BOTH posed and rest. Rest rows anchor the surface
     // noise; dragging them along is what makes the mottle flow WITH the goo
     // instead of the skin appearing to slide over a ghost of the old body.
+    // MELT ANCHORING (melt task 8): ONE melted body feeds the whole frame.
+    // The task-3 wiring uploaded melted prims to the field but still derived
+    // the face projection (headShape) and the wounds (uploadWounds) from the
+    // UNMELTED posed body — during a melt the face and every wound stayed
+    // pinned to where the standing zombie was while the zombie liquefied out
+    // from under them. Same class of bug as the stale clusters (task 4 step
+    // 0). The melted prims are computed ONCE here and frameBody is what the
+    // upload, the face projection and the wounds all read; do not call
+    // applyMelt again further down.
+    let frameBody = posed;
     if (meltState) {
       // Bones fall out FIRST: a group released this frame must not also be
       // uploaded in the body's bone rows, or it renders twice.
@@ -2718,9 +2728,10 @@ async function main() {
       // must follow the prims — a melted body in rest-pose clusters is
       // marched inside a standing-zombie box (the flat top and straight
       // sides of the first captures).
+      frameBody = { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp),
+        bonePrims: meltBoneRows(posed.bonePrims) };
       view.update(
-        { ...posed, prims: pp, clusters: remeltClusters(posed.clusters, pp),
-          bonePrims: meltBoneRows(posed.bonePrims) },
+        frameBody,
         { ...current, prims: cp, clusters: remeltClusters(current.clusters, cp),
           bonePrims: meltBoneRows(current.bonePrims) },
       );
@@ -2731,15 +2742,19 @@ async function main() {
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
     // keyed to it) stops advancing between two captures.
     if (!cosmeticsFrozen) view.setTime(performance.now() / 1000);
-    // Re-derive the skull's sphere from the POSED primitives so the face
-    // projection tracks the head through the jiggle — and hand it the rigid
-    // head rotation so the PAINTED face rotates with the skull masses
+    // Re-derive the skull's sphere from the FRAME primitives — the MELTED
+    // posed body while a melt runs (see frameBody above), the posed body
+    // otherwise — so the face projection rides the skull as it sags and
+    // flattens instead of staying pinned where the standing zombie was. The
+    // projection normalises by headAxes, so a crushed head stretches the
+    // face over the flatter shape for free. Also handed the rigid head
+    // rotation so the PAINTED face rotates with the skull masses
     // instead of staying camera-front (owner playtest: eyes/brow sliding,
     // nose mass out the ear).
-    const skull = headShape(posed);
+    const skull = headShape(frameBody);
     if (skull) view.setHeadShape(skull.centre, skull.axes);
     view.setHeadRotation(headQuatOf(heroMotion.bound, heroMotion.lastBodyYaw) ?? [0, 0, 0, 1]);
-    uploadWounds(posed.prims);
+    uploadWounds(frameBody.prims);
 
     // — Crowd step: every body rigs and poses per frame, through the SAME
     //    stepActorMotion pipeline as body zero. Differences are policy, not

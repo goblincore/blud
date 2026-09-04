@@ -319,6 +319,7 @@ function silhouetteMetrics(buf) {
 // own example numbers (0.31x height at 1.72x width) are unreachable from a
 // down-looking camera, so this is the intended framing, not gate-gaming: the
 // frames still show everything, and are still read by eye below.
+const YAW = Number(process.env.BLOB_YAW ?? 0.5); // gate default 0.5; override for close-ups
 const PITCH = Number(process.env.BLOB_PITCH ?? 0.02);
 const DIST = Number(process.env.BLOB_DIST ?? 3.6);
 const TARGET_Y = Number(process.env.BLOB_TARGET_Y ?? 0.4);
@@ -345,7 +346,7 @@ const MELT_RATE = 0.625; // melt.ts MELT_TUNING.rate — progress per second
 const SETTLE_TAIL = 90;
 let settledFrames = 0;
 
-await evaluate(`(() => { window.__sdfLab.setCam(0.5, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
+await evaluate(`(() => { window.__sdfLab.setCam(${YAW}, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
 await sleep(600);
 
 for (const t of PROGRESS) {
@@ -394,7 +395,7 @@ if (frames.some((f) => f.empty)) {
 }
 
 writeFileSync(`${OUT}/metrics.json`, JSON.stringify({
-  camera: { yaw: 0.5, pitch: PITCH, dist: DIST, targetY: TARGET_Y },
+  camera: { yaw: YAW, pitch: PITCH, dist: DIST, targetY: TARGET_Y },
   progress: PROGRESS,
   frames: Object.fromEntries(frames.map((f) => [f.t, f])),
 }, null, 2));
