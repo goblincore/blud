@@ -275,10 +275,12 @@ bar  leg on thigh from=-0.05 to=0.68 r=0.162 wide=1.28 tall=1.20 deep=1.18 box r
 
 What it does at shading time (`march.wgsl.ts`, the composite):
 
-- **Suppresses the diffuse family to a floor of 0.25** — ambient bounce
+- **Suppresses the diffuse family to a floor of 0.45** — ambient bounce
   included, because bounce IS diffuse. NOT zero: with no environment map the
   lab has one key, and a true-zero diffuse goes black wherever the highlight
-  is not.
+  is not. (Rendered curve, 2026-09-03: 0.25 went black at the front yaw; 0.45
+  keeps the greave's specular gradient and a readable front face. The owner
+  can pull it darker now that the word exists.)
 - **Tints the specular AND the fresnel rim by the prim's own `color=`**
   instead of shining the light's colour. This is the single change that makes
   steel differ from white plastic under the same light.
@@ -298,6 +300,33 @@ What it does at shading time (`march.wgsl.ts`, the composite):
 - Keep the albedo DARK (the plates' 848a91 -> 6a7078, roughly -35% linear):
   metal's diffuse is dark and its brightness is the highlight. A light albedo
   plus a hot spec still reads as white plastic.
+
+## Glow: `glow=0..1` on a painted prim (added 2026-09-03)
+
+Nothing on a character could emit — `faceGlow` is the baked sheet's own
+emissive and it is deliberately zeroed on painted prims, so a `decal 1`
+character (the minotaur) could never have lit eyes. `glow=` is per-prim
+AUTHORED emission:
+
+```
+blob head on skull at=0.41 offset=(0.035,0.0,0.183) r=0.012 blend=0.004 both color=ff2200 glow=0.9
+```
+
+- **The glow COLOUR is the prim's own `color=`.** No new colour field: a prim
+  with `color=ff2200 glow=0.9` glows red because it IS red. One number, and
+  the intent reads on the line.
+- **Gated on `color=` exactly as `gloss=`/`metal` are** — on flesh it would
+  have nothing to emit, and that is a parse error, not a silent no-op.
+- **It survives paint on purpose.** The face sheet's glow is suppressed under
+  a painted prim (a bake must not self-illuminate through sunglasses);
+  per-prim glow is authored ON the prim and is a separate term. A painted visor
+  may glow; the baked eyes under it may not.
+- **Char wins.** A charred (burnt) prim stops glowing, same as the face glow.
+- **Emissive, not a light.** It brightens the prim's own pixels; it does not
+  cast onto neighbours (no light is added to the scene).
+- Where it rides: `primClip.w` — the row lane that was documented spare before
+  this. A glowing SHELL (cloth) glows like any other prim; both pack branches
+  carry it.
 
 ## Face decal: `sheet image` + `decal 1` (added 2026-08-23)
 

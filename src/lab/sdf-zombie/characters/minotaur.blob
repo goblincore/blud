@@ -274,16 +274,19 @@ body
   # ============================================================
   # EYES — glowing (hard-surface task 3 acceptance: per-prim glow=). The
   # first emissive prims in any character; the decal bake already paints red
-  # eyes at this spot, and these prims light them. Placement from the face
-  # block's own solve (comment at the decal, below): the bake's EYE row sits
-  # at authored y 1.73, x +/-0.035 (the mesh's eye spacing), ON the cranium
-  # ellipsoid (centre (0,1.764,0.009), semi-axes 0.125x0.194x0.188) whose
-  # surface at that (x,y) is z = 0.009 + 0.188*sqrt(1-(0.176/0.194)^2 -
-  # (0.035/0.125)^2) = 0.068. at=0.41: boneAt(t).y = 1.386 + 0.84t -> 1.730.
-  # r=0.012: 24mm beads, small against the 250mm-wide muzzle so they read as
-  # eyes, not headlamps. `both` mirrors the offset x like every facial pair.
+  # eyes at this spot, and these prims light them. at=0.41: boneAt(t).y =
+  # 1.386 + 0.84t -> 1.730, the decal solve's own EYE row. x +/-0.035 is the
+  # mesh's eye spacing (decal comment below). z: the FIRST attempt solved
+  # 0.068 off the decal comment's ellipsoid — but it read hs.y (a head-space
+  # RATIO) as metres and buried the beads 11 cm inside the skull (frames
+  # showed nothing; the CPU field probe scripts/tmp/eye-surface.ts puts the
+  # real front surface at z 0.188 for y 1.70-1.82, agreeing with the
+  # corrected ellipsoid arithmetic 0.188 at the eye row). Centre sits at
+  # 0.183: a bead sunk to ~60% depth, ~6 mm proud — an eye in a socket, not
+  # a headlamp. r=0.012: 24 mm, small against the 250 mm muzzle. `both`
+  # mirrors the offset x like every facial pair.
   # ============================================================
-  blob head on skull at=0.41 offset=(0.035,0.0,0.068) r=0.012 blend=0.004 both color=ff2200 glow=0.9
+  blob head on skull at=0.41 offset=(0.035,0.0,0.183) r=0.012 blend=0.004 both color=ff2200 glow=0.9
 
   # ============================================================
   # ARMS — huge (mesh upperarm rho p50 0.085-0.096 = 0.13-0.15 authored,
