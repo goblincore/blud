@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildFirefight, actionsAt, segmentAt, validateScenario, scenarioByName,
+  buildFirefight, buildCloseup, actionsAt, segmentAt, validateScenario, scenarioByName,
   DUNGEON_SCENARIOS, WOUND_SCENARIOS,
 } from './game-bench-scenario';
 import { DUNGEON_RIG, GALLERY_RIG } from './dungeon-lighting';
@@ -137,5 +137,27 @@ describe('wound bench legs (wound pass r2)', () => {
     expect(noBone!.woundDepthAmp).toBe(1);
     expect(noBone!.boneRatio).toBe(0);
     expect(bone!.boneRatio).toBeGreaterThan(0);
+  });
+});
+
+describe('buildCloseup', () => {
+  it('covers every frame with one segment and validates clean', () => {
+    const s = buildCloseup({ frames: 120 });
+    expect(s.segments).toEqual([{ name: 'closeup', from: 0, to: 120 }]);
+    expect(s.frames).toBe(120);
+    for (let f = 0; f < s.frames; f++) {
+      expect(segmentAt(s, f), `frame ${f}`).not.toBeNull();
+    }
+    expect(validateScenario(s)).toEqual([]);
+  });
+
+  it('freezes on frame 0 and never fires, aims or teleports', () => {
+    // The driver stages pose + wounds BEFORE the bench; a teleport here
+    // would override the staged camera and an aim/fire would change the
+    // wound set mid-run. Freeze is the only action a static frame allows.
+    const s = buildCloseup();
+    const kinds = s.steps.map(x => x.action.kind);
+    expect(kinds).toEqual(['freeze']);
+    expect(s.steps[0]!.action).toEqual({ kind: 'freeze', on: true });
   });
 });

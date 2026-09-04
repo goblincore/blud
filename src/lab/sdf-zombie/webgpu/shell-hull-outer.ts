@@ -246,6 +246,16 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
     // Distance from the camera — exactly the ray parameter the march compares
     // against; depth would need the projection undone per marched pixel.
     material.colorNode = vec4(dist, dist, dist, 1);
+    // FOG MUST BE OFF HERE (close-up diagnostics task 1, 2026-09-04). The
+    // pre-pass renders through the main scene, whose fog the WebGPU node
+    // system applies to every fogged material's OUTPUT — and the TSL fog
+    // factor is smoothstep(near, far, viewZ), so the written "distance"
+    // was mix(dist, fogColor, smoothstep(...)): exact below fog.near, then
+    // collapsing toward fogColor with range. That was the "unexplained
+    // three-r185 TSL distance decay" that held GAME_HULL_EXIT_BOUND at 0
+    // and killed the occluder pre-pass — the ladder fit the fog curve to
+    // four decimals once the fog was suspected (tex-roundtrip notes).
+    material.fog = false;
     material.depthWrite = true;
     material.depthTest = true;
     material.side = side;
