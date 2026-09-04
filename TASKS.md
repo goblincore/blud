@@ -250,6 +250,33 @@ gib chunks; (7) collision. Merge picture: gore × perf chain conflicts only in
 `march.wgsl.ts` signatures + one `game-main.ts` block — merge ONCE after the
 chain finishes (~1 h); gore × elbow branch is clean.
 
+**CLOSE-UP FRAME RATE + GORE COST — SPEC WRITTEN, 5 TASKS QUEUED INERT
+(2026-09-04).** Successor program to perf r2, aimed at the owner's restated
+problem: **a body filling the screen**, and heavy blood spray. Spec
+[docs/superpowers/specs/2026-09-04-close-up-and-gore-cost-design.md](docs/superpowers/specs/2026-09-04-close-up-and-gore-cost-design.md)
+carries the nine closed ideas (adaptive REJECTED, tiles nil, upload nil, depth
+gate exact-but-OFF, exit bound deletes bodies, occluder ~nothing, shell/hull
+parked, omega 0.6 costs) — **re-proposing any of them is a failure.** Dispatch
+`~/.claude/dispatch/plans/2026-09-04-closeup-task-{1..5}-*.md`, `status: queued`,
+trigger manually. Graph: **task-1 diagnostics** → task-2 ∥ task-5; task-2 →
+task-3; **task-4 (goo) parallel to everything**. Two things task-1 settles that
+nobody has measured: (a) **shading vs marching at fill-screen** — every counter
+here counts *steps* and none separates the per-pixel shading chain, so tasks 2/3
+may be aimed at the wrong half of the frame; (b) **does a written ray parameter
+survive a texture round-trip** — the three-r185 decay (true 9 m reads 2.8 m,
+near exact) killed the occluder pre-pass AND holds `GAME_HULL_EXIT_BOUND` at 0,
+and task-3's quarter-res depth prepass does the same write/read. Root-causing it
+unblocks two features. Task-4 (goo): the cost is **not** the 600 billboards, it
+is `goo-layer.ts` compositing at **full canvas res** (`:854`) over
+`densityScale 0.5` pre-blurred inputs, plus additive-quad overdraw
+(`quadScale 3.2`, no depth reject) — owner agrees, easy win. Task-5: settled gib
+chunks are static fields still marched as 12 proxy boxes (`MAX_CHUNKS`,
+`game-main.ts:1712`); bake once at settle and the hull's ~3-4 ms/frame
+extraction objection is *deleted*, plus baked meshes are real early-Z occluders.
+NOTE: **no corpse exists in `sdf-game.html` yet** (sever/gib only; death state is
+on the zombie-crowd branch) — settled chunks are the beachhead and the path
+generalises to corpses unchanged.
+
 **SDF RENDER PERF ROUND 2 — PLANNED (2026-09-01), not started.** A read-only
 review of the march, the pass chain and the perf record after the shell
 march produced an 8-task plan: fresh baseline → hull exit bounds `tMax` on
