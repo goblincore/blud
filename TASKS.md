@@ -841,19 +841,23 @@ adaptive + tile fold both on.
   controller had resized the layer. Fixed in `a04caf0` — **preserve both
   invariants if you touch `tileAB()`**.
 
-**QUEUED (2026-08-25, ox-alpha, serial):** `2026-08-25-crowd-alive` then
-`2026-08-25-tile-all-bodies`. Crowd bodies are static fill *by design*
-(`lab-main.ts:21`), so the per-body cost that scales to 15 characters — rig
-solve, wound repack, data-texture upload — is currently **not measured at all**.
-crowd-alive gives every body its own actor record, animation and wounds, while
-keeping `freezeCosmetics()`/`setMotionEnabled(false)` freezing *every* body and
-the crowd clock deterministic (the frozen noise floor 0.814 -> 0.0278 is the
-only reason the relax question ever closed). tile-all-bodies then profiles 15
-live bodies and **stops if the frame is CPU-bound**, extending tile lists across
-bodies only if fragment work dominates. NOTE: each body already draws a *tight
-proxy box* (`zombie-gpu.ts:964`), not a full-screen quad — "15 bodies = 15
-full-screen marches" is false; the real costs are misses inside the box,
-overlap, and per-body CPU work.
+**`2026-08-25-tile-all-bodies` DELETED (2026-09-04) — replaced by
+`2026-09-04-merged-march`, PARKED.** crowd-alive shipped (merged to main); the
+tile follow-up never ran and its whole premise expired. Four reasons: the owner
+restated the real problem as one body **filling the screen**, not a crowd, and
+named tile binning "measured nil — not the cost"; the perf r2 chain harvested
+~40% of march steps and landed on **hit-pixel fill** as the remainder, which
+tiles (a per-step prim-fold cut) do not touch; r2 task 8 killed the per-body-CPU
+worry (0.06 ms/frame for ten bodies); and its `base_branch: dispatch/crowd-alive`
+no longer exists. Its cost table (58 ms @15 bodies, ~21 ms non-pixel floor)
+predates the chain and is void. **The one surviving idea** is a single **merged
+march pass** over all bodies (prim data reached via the entry stream's
+`bodyIndex`, a field designed for this and never exercised) — the only form of
+the overlap fix r2 did *not* test, and precisely the form that removes the
+per-draw pass structure that made task 5b's exact-and-biting depth gate cost
++4.6 ms at 3–4 bodies. Brief at `~/.claude/dispatch/plans/2026-09-04-merged-march.md`,
+`status: queued`, priority 4: **do not trigger** until the close-up work is done
+and only if its Phase 0 shows per-pass overhead growing with body count.
 
 **SHELL PRIM + SCHOOLGIRL COLLAR (merged 2026-08-25, `07addaa`):** added a `shell` prim to the `.blob` language (thin sheet off a closed field, `abs(d)-thickness`, clipped against a plane with a rounded rim — iq's cloth construction). Rebuilt the sailor collar from shells (was 7 blob masses, now a 3-prim cloth cape+V+knot; owner's "epaulette plates"/"blob mass" read addressed — the collar now drapes over the shoulders with a V), made the skirt a thin shell cone with a rounded hem (was a solid cone), and deleted the shoe sole. Schoolgirl 62→57 prims. tsc 0, 1559 lab tests, render-check schoolgirl/zombie/cyclops/mouse all green. Collar reworked to a V/sailor read after owner review. (The dispatch could not commit — sandbox denied writes to the main repo's `.git` — so the work was auto-committed on the branch and merged from there.)
 
