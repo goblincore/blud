@@ -61,31 +61,76 @@ maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
 
 **ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
 
-**[ ] F-eject.1 — spent cases clip through the frame, and every reload throws
-them identically.** Owner, 2026-09-03, after the breech merge: "the shells
-eject but seem to clip through the gun frame so there needs to be some tweaking
-there. also they always eject the same animation would be better to have some
-randomness but not a blocker." Two separate things. The clip is a collision the
-hand-off does not test for — `ejectedShell()` is a pure ballistic arc from the
-breech with no awareness of the receiver it passes over, and the gate only
-checks where a case STARTS (within 5 cm of a chamber mouth), not where it
-travels. The sameness is `ejectedShell()` being deterministic by design
-(`game-viewmodel.ts`: "same reload, same arc, every time") — which was the right
-call for gating and the wrong one for feel. Randomising it means the eject gate
-needs a seed it can pin, or it becomes flaky.
+**SHELLS: EJECT CLIP + LOAD INSERTION — DONE (2026-09-04), F-eject.1 and
+F-eject.2** — [notes + before/after strip](docs/dev-notes/2026-09-04-shell-reload/notes.md).
+Owner: "the shells eject but seem to clip through the gun frame", "new shells
+magically appear to load", "the reloading thing is more urgent". Both were the
+same class of bug: cases handled in RIG space with no idea where the bore was.
+* **Eject clip.** The tumble started AT the chamber mouth (not where the
+  7 cm extract slide had left the case), snapped to rig −Z (not the bore,
+  66° off it on the open gun) and flew in rig +Y — so its rear half was back
+  in the tube and its rise cut the chamber wall and standing breech. Now:
+  `boreFrameInRig()` reads `out`/`side` off the live Muzzle/Breech locators;
+  the hand-off is the extracted case's centre (`mouth + out·SHELL_LEN/2`),
+  bore-aligned via quaternion, with velocity `0.55·out + 2.05·up + side`
+  and end-over-end spin about `side`. Cases leave the frame and are DROPPED
+  once past the apex and back near breech height (`EJECT_DROP_BELOW_M`) —
+  the old arc fell back through the frame past the camera as a huge shell.
+  Per-reload seed jitters the arc (`reloadSeed`, `pinReloadSeed(n)`; seed 0 =
+  reference); at the hand-off beat every seed is the origin, so the eject
+  gate is seed-invariant — it now reads 3.50 cm (the SHELL_LEN/2 offset), the
+  stale hardcoded breech still fails at 16.8.
+* **Load insertion.** Two stages, mirroring the eject: a rig-space CARRY
+  (0.74→0.96, `loadCarry`) with the cases riding rigidly in the hand to
+  `stagedShellCenter()` — tips 1.5 cm behind the mouths, ON the bore axis —
+  then a barrel-local INSERT (0.96→1.11, `insertStage`) sliding the seated
+  Shell_L/R nodes in along their own z, the extract in reverse. The support
+  hand's two breech keys are DERIVED each frame (`loadHold()` → `HandHold`
+  into `supportHandPose(t, hold)`); the authored table had the hand at the
+  bottom of the frame at 1110 ms while the cases seated by themselves.
+* **Two placements were wrong before they were right**, both in the notes:
+  the orb behind the heads along `out` sat between the eye and the breech
+  and hid the whole load (`out` points largely at the camera on the presented
+  gun); and "left of the pair" went screen-RIGHT because the GLB is yawed
+  180° so the model's right chamber is screen-left — `loadHold` now picks the
+  side by `side.x < 0` in rig space.
+* **Forearms** are now anchored to fixed ELBOW_L/R points behind the camera
+  and re-aimed per frame (`aimForearm`), 0.90 m long: the 0.15/0.26 capsules
+  ended in a rounded stump that came into view on a hard look down (the
+  detached arm the owner saw), and a hand at the breech with its resting arm
+  direction pointed the forearm straight at the eye. Checked at pitch ±1.45
+  with the reticle at both frame edges: no end in view.
+* Gate strip now samples 960 (staged) and 1040 (mid-insert);
+  `GAME_EXTRA_BEATS=530,560` adds frames without touching the owned list.
+* **Round 2, owner's pass:** the remaining clip was the MODEL — the receiver's
+  top strap ran forward over the chambers, so an open mouth sat level with the
+  receiver top and every case spent its first 35 mm inside it. The body loft
+  now steps down to action flats (z −0.004) forward of the breech face;
+  `shorty-double.glb` re-exported (13994 tris). Pose retuned LOW (dy 0.040,
+  roll −16; a true drop put the reload off the bottom edge because the breech
+  rests there). Hand is a fist centred on the pair, covering heads then mouths
+  as it pushes (owner: "you wouldn't really see the shells"). KeyT slow-mo
+  (1 → 0.25 → 0.1) for inspection. The flat bar across the open mouths was the
+  `extractor` box sitting ON the bore axis — now a plate under the tubes.
+  Owner's second look: "it looks better yes". **Round 3:** the hinge pin sits
+  inside the chamber's length, so the open chamber swung DOWN through the
+  tray and the tray showed inside the empty bore as a grey slab (owner found
+  it by hand). Flats now ramp −0.004 → −0.022 toward the knuckle and taper in
+  width; the bore plug starts at `HOLLOW_DEPTH` 27 mm (gate asserts that);
+  chamber inner wall is matte `Bore` via a second material slot. Owner:
+  "other than that I think I like this, think it can be merged".
 
-**[ ] F-eject.2 — fresh shells still appear from nowhere.** Owner: "new shells
-magically appear to load. this is a gap in the spec." Correct, and the spec
-names it: the load beat carries the cases up with the support hand but never
-shows them being *inserted*. The Doom reload the tempo was taken from has the
-left hand jamming two shells into the barrels. Owner's read on difficulty, which
-matches mine: the hand is a blobby orb so the ANIMATION is not the hard part —
-the timing against the 1.30 s beat sheet and keeping the fresh cases from
-clipping the barrels on the way in are. Note the reference GLB
-(`docs/dev-notes/refs/sawnoffs_animated.glb`) does NOT solve this: its slugs
-simply reappear seated at t=1.933, which is why our support hand was kept over
-its approach in the first place. So this one has no reference to decode — it
-has to be authored.
+**[ ] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
+Owner, 2026-09-04: "the arm itself probably needs some work to more
+accurately resemble the goblin SDF model (I guess that will be the main
+player character)". Today each arm is one skin-coloured capsule from the hand
+orb to a fixed elbow; the goblin blob has a forearm bar r=0.028 with an elbow
+blob r=0.038 over a 0.235 bone (`goblin-skin.ts` already carries the
+numbers), mottle, and a real hand. Options: pose the SDF goblin's own arm
+prims in the view-model (the hands sheet / hand-volume path already marches a
+hand), or author a low-poly forearm+hand in Blender alongside the shorty.
+Not a blocker; the elbow-anchor from F-eject gives whichever replacement its
+attachment point.
 
 **SHORTY BREECH MECHANISM — DONE (2026-09-03), all 8 tasks** —
 [plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·

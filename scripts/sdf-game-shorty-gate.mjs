@@ -200,6 +200,11 @@ const ready = await evaluate(`
 `);
 if (ready !== true) fail(`gun never returned to full shut rest: ${JSON.stringify(ready)}`);
 let maxOpen = 0;
+// Pin the eject arc. Reloads seed their arc from Math.random (owner asked for
+// variety); seed 0 is the reference arc, so two runs of this gate photograph
+// the same tumble. The eject-origin check below does not depend on the seed
+// either way -- at the hand-off beat every seed starts from the same point.
+await evaluate('typeof __sdfGame.pinReloadSeed === "function" ? (__sdfGame.pinReloadSeed(0), 1) : 0');
 if ((await evaluate('__sdfGame.fire(1)')) !== true) fail('reload fire 1 rejected');
 // Clear fireCooldownSec (0.45 s) in GAME time, not wall time: headless rAF is
 // slow enough that dt clamps to 1/20 s and 500 ms of wall clock can be under
@@ -219,7 +224,9 @@ if (spent !== 0) fail(`two shots left ${spent} shells, expected 0`);
 //   350  mid-break          — barrels swinging, chamber mouths coming into view
 //   510  breakEndSec 0.51   — full 45 deg open, spent cases at the mouth
 //   650  post-ejectAt 0.51  — cases clear of the bore and tumbling free
-//   900  mid-load           — fresh cases visibly rising into the chambers
+//   900  mid-carry          — fresh cases in the hand, rising to the breech
+//   960  loadStageSec 0.96  — cases staged on the bore axis, tips at the mouths
+//   1040 mid-insert         — cases half-way into the chambers, hand behind them
 //   1110 loadSeatSec 1.11   — both fresh cases seated, gun still open
 //   1180 snapEndSec 1.16    — snapped shut
 // The old set ([120 260 400 550 740 900]) was cut for a 0.95 s reload and never
@@ -227,7 +234,12 @@ if (spent !== 0) fail(`two shots left ${spent} shells, expected 0`);
 // case was visible, and ended mid-load — the seat and the snap, the back third
 // of the animation, were never photographed at all.
 let ticks = 0;
-for (const ms of [180, 350, 510, 650, 900, 1110, 1180]) {
+// GAME_EXTRA_BEATS=540,580 adds frames between the beats (e.g. to watch the
+// cases actually leave the bore) without touching the strip the gate owns.
+const BEATS = [...new Set([180, 350, 510, 650, 900, 960, 1040, 1110, 1180,
+  ...(process.env.GAME_EXTRA_BEATS ?? '').split(',').filter(Boolean).map(Number)])]
+  .sort((a, b) => a - b);
+for (const ms of BEATS) {
   const target = Math.round((ms / 1000) / (1 / 60));
   await evaluate(`__sdfGame.step(${target - ticks}, 1 / 60)`);
   ticks = target;
@@ -241,6 +253,11 @@ for (const ms of [180, 350, 510, 650, 900, 1110, 1180]) {
   // drifted downrange with the shell's own ballistic arc. Sampling any later
   // beat would fail a CORRECT build for the wrong reason -- the shell is
   // supposed to have moved on by then.
+  //
+  // The origin is the extracted case's CENTRE, half a case length (3.5 cm)
+  // out of the mouth along the bore -- where the axial slide actually left
+  // it -- so a correct build reads ~3.5 cm here, not ~0. The 5 cm bound still
+  // separates that from the stale hardcoded breech (16.8 cm).
   if (ms === 510) {
     const eject = await evaluate(
       '({ o: __sdfGame.lastEjectOrigin, b: __sdfGame.breechWorld() })');
