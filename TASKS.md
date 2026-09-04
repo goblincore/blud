@@ -25,6 +25,27 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 **ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
 
+**ZOMBIE COMBAT CHOREOGRAPHY — LANDED (2026-09-05), awaiting owner look.**
+The owner's play-test of the crowd/brain build: arms clip when several
+surround you, and the two-arm slam is "merely… okay". `melee-ring.ts` caps the
+swingers at two and requires 90° of bearing separation between them — angles
+are the claimants' CURRENT bearings, NOT fixed slots, which would orbit the
+ring as the player turns. The arithmetic: separation's 0.35 m circles touch at
+0.70 m while an arm reaches 0.6 m, so the circles are satisfied and the arms
+always overlap; two holders 90° apart at 1.0 m are 1.41 m apart, clear with
+0.2 m to spare (75° gives 1.22 m, which clears by 2 cm — not clearing).
+`brain.ts` is now seven named states and absorbed the blast hold that used to
+be a private timer in `game-actor.ts`. `attack.ts` is an alternating one-arm
+hook; `motion.ts`'s reach pivot gained a world-up sweep to carry it, with the
+lab's bit-identity pin untouched. Gate: `minHandGap()` — the owner's
+screenshot as a number — plus the token cap and the spacing, all proven to
+fail. Notes + frames:
+[docs/dev-notes/2026-09-05-zombie-choreography/](docs/dev-notes/2026-09-05-zombie-choreography/notes.md).
+**Still open:** getting stuck on furniture — navigation is its own spec and is
+NOT in this change.
+[spec](docs/superpowers/specs/2026-09-05-zombie-combat-choreography-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-zombie-combat-choreography.md)
+
 **ZOMBIE CROWD + BRAIN — LANDED (2026-09-04), awaiting owner look.** The two
 reports from the same session: bodies clipped through each other constantly,
 and nothing in the level cared where the player was. Three pure modules —
