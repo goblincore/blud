@@ -31,8 +31,10 @@ export interface PackedBody {
   primScale: Float32Array;     // xyz = ellipsoid scale, w = 1 when this is a carve
   primQuat: Float32Array;      // xyzw = prim orientation; identity when absent
   /** x = radius at endpoint B, NEGATIVE when untapered; y = fold profile
-   *  (0 round, 1 chamfer, 2 round+BENT, 3 chamfer+BENT); zw spare (groove
-   *  depth/width). Negative is the sentinel rather than "equal to radius"
+   *  BITFIELD: bit 0 (1) chamfer, bit 1 (2) bent, bit 2 (4) shell,
+   *  bit 3 (8) box, bit 4 (16) metal (SHADING-ONLY — every fold read of
+   *  prof is a bit mask, so the bit never changes geometry); zw spare
+   *  (groove depth/width). Negative is the sentinel rather than "equal to radius"
    *  because 0 is a LEGITIMATE taper target — a true point is the whole
    *  reason the taper exists. */
   primShape: Float32Array;
@@ -48,7 +50,10 @@ export interface PackedBody {
   /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0/1).
    *  Only read by prims folded as a shell (profile bit 2). */
   primShell: Float32Array;
-  /** xyz = the clip plane's unit normal (w spare). See primShell. */
+  /** xyz = the clip plane's unit normal; w = per-prim emissive `glow=` 0..1
+   *  (hard-surface task 3; written on BOTH the shell and plain branches —
+   *  see the primClip.set call below). Kept in step with ROW_PRIM_CLIP's
+   *  docstring in march.wgsl.ts, which is the row table this mirrors. */
   primClip: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
@@ -185,10 +190,12 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const bent = p.bend !== undefined ? 2 : 0;
     // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
     // a SHELL adds bit 2 (value 4) so straight=4, bent=6; a BOX adds bit 3
-    // (value 8). The shader folds any prof >= 4 as a shell and reads the shell
-    // rows; the low bits still mean chamfer/bend for the non-shell range and
-    // are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0);
+    // (value 8); METAL adds bit 4 (value 16) — a shading-only bit, safe
+    // because every fold read of prof is a bit mask ((& 2), (& 4), (& 8),
+    // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
+    // as a shell ONLY through the (& 4) mask; the low bits still mean
+    // chamfer/bend for the non-shell range and are ignored on a shell.
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0);
     // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
     // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
     // box is rejected at compile time, so a box never sets that bit and the
@@ -202,16 +209,20 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
     // Shell fold (2026-08-25): the row-array pair for a shell-clipped sheet.
     // Sets ROW_PRIM_SHELL (thickness, rim, clip offset, hasClip) and
-    // ROW_PRIM_CLIP (clip normal). Rows are zero for every non-shell prim, and
-    // the shader only reads them when the prim's profile marks it a shell, so
-    // an additive prim pays nothing for the extra rows.
+    // ROW_PRIM_CLIP (clip normal, PLUS the per-prim glow in w). The shader
+    // reads these rows only where the prim's profile marks it a shell (field
+    // path, .xyz only) and at the hit pixel (shading path, .w = glow), so an
+    // additive prim pays nothing for them. glow rides the row on BOTH
+    // branches: the glow COLOUR is the prim's own albedo (packs in primColor
+    // above), and a glowing shell — a lit cable run authored as a sheet —
+    // must glow exactly like a glowing capsule. (hard-surface task 3.)
     const sh = p.shell;
     primShell.set(sh
       ? [sh.thickness, sh.rim, sh.clipOffset, 1]
       : [0, 0, 0, 0], o);
     primClip.set(sh
-      ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], 0]
-      : [0, 0, 0, 0], o);
+      ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0]
+      : [0, 0, 0, p.glow ?? 0], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
       prof,
@@ -281,7 +292,8 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const oriented = own.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-      || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
+      || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
+      || p.metal !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -303,15 +315,20 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       const gOwn = body.prims.slice(g.start, g.start + g.count);
       const oriented = gOwn.some(p => p.orient && Math.abs(1 - p.orient[3]) > 1e-6);
       // shell and box MUST be tested here too, same as the cluster-level
-      // `shaped` above. This is the flag foldGroup actually reads (the
-      // cluster-level one only feeds applyCarves), so a shell or box prim
-      // whose group carries no other shaped property arrives at the shader
-      // with prof = 0: ROW_PRIM_SHAPE/ROW_PRIM_BEND are never loaded, the
-      // shell/box bits never reach `(i32(prof) & ...) != 0`, and it draws as
-      // a plain closed capsule instead of a clipped sheet or a rounded box.
+      // `shaped` above — and METAL joins them (hard-surface task 2): a
+      // metal-ONLY prim (no taper, chamfer, bend, shell or box) is exactly
+      // the fixture that caught the shell omission, and one on `box metal`
+      // would have passed any test that did not isolate it. This is the
+      // flag foldGroup actually reads (the cluster-level one only feeds
+      // applyCarves), so a prim whose group carries no other shaped
+      // property arrives at the shader with prof = 0: ROW_PRIM_SHAPE and
+      // ROW_PRIM_BEND are never loaded, no bit reaches
+      // `(i32(prof) & ...) != 0`, and the prim draws as a plain closed
+      // capsule with its material silently dropped.
       const shaped = gOwn.some(p =>
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
-        || p.bend !== undefined || p.shell !== undefined || p.box !== undefined);
+        || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
+        || p.metal !== undefined);
       groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
       groupCount++;
     }

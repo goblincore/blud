@@ -272,6 +272,23 @@ body
   bar  head on skull from=0.575 to=0.70 offset=(0.098,0.0,0.020) tip=(0.162,0.046,-0.005) bend=(0.048,-0.042,0.0) r=0.050 r2=0.013 blend=0.004 chamfer both color=221a1a gloss=0.45
 
   # ============================================================
+  # EYES — glowing (hard-surface task 3 acceptance: per-prim glow=). The
+  # first emissive prims in any character; the decal bake already paints red
+  # eyes at this spot, and these prims light them. at=0.41: boneAt(t).y =
+  # 1.386 + 0.84t -> 1.730, the decal solve's own EYE row. x +/-0.035 is the
+  # mesh's eye spacing (decal comment below). z: the FIRST attempt solved
+  # 0.068 off the decal comment's ellipsoid — but it read hs.y (a head-space
+  # RATIO) as metres and buried the beads 11 cm inside the skull (frames
+  # showed nothing; the CPU field probe scripts/tmp/eye-surface.ts puts the
+  # real front surface at z 0.188 for y 1.70-1.82, agreeing with the
+  # corrected ellipsoid arithmetic 0.188 at the eye row). Centre sits at
+  # 0.183: a bead sunk to ~60% depth, ~6 mm proud — an eye in a socket, not
+  # a headlamp. r=0.012: 24 mm, small against the 250 mm muzzle. `both`
+  # mirrors the offset x like every facial pair.
+  # ============================================================
+  blob head on skull at=0.41 offset=(0.035,0.0,0.183) r=0.012 blend=0.004 both color=ff2200 glow=0.9
+
+  # ============================================================
   # ARMS — huge (mesh upperarm rho p50 0.085-0.096 = 0.13-0.15 authored,
   # forearm tapering 0.11 -> 0.075). Deltoid ball at the clavicle tail is the
   # arm's core (house pattern — the fuse probe must not pick an accessory).
@@ -323,8 +340,8 @@ body
   # modelled bolts — so: `box` plates at round=0.05-0.12 (machined), metal
   # paint + gloss for the read, grooves for seams (added after first render),
   # ROUND 4 — POLISHED, not painted. The plates read as matte grey card at
-  # gloss 0.70. `gloss` is the only metal lever the shader has, and it drives
-  # four terms at once (march.wgsl.ts): the specular exponent
+  # gloss 0.70. `gloss` was then the only metal lever the shader had, and it
+  # drives four terms at once (march.wgsl.ts): the specular exponent
   # mix(mix(128,4,roughness), 220, gloss), the specular weight
   # mix(surfCfg.x, 1.5, gloss), the fresnel rim mix(1, 2.5, gloss), and `wet`
   # toward 1. At 0.70 all four sit mid-scale, which is exactly "plastic".
@@ -332,8 +349,12 @@ body
   # The albedo comes DOWN with it (848a91 -> 6a7078, roughly -35% linear):
   # metal's diffuse is dark and its brightness is the highlight — a light
   # albedo plus a hot spec reads as white plastic, which is what round 3 was.
-  # These are still PAINT values, not a metallic BRDF; there is no metalness
-  # channel in this shader and this is the honest approximation of one.
+  # ROUND 5 (hard-surface task 2) — the bare word `metal` on each plate:
+  # the shader now drops the diffuse family to a 0.25 floor and tints the
+  # specular AND fresnel rim by this paint, which is what was still missing
+  # from the plastic read. `metal` implies gloss's noise suppression on its
+  # own. STILL a paint approximation, not a metallic BRDF — there is no
+  # environment map; this is the honest approximation of metalness.
   # one cable run as a plain bent capsule. Mesh .r radii: thigh cowl p50
   # 0.104-0.114 UNIFORM (a slab, not a taper) = 0.16-0.18 authored, p75 to
   # 0.17 (0.26 authored — the cowl's outer flare); shin plates 0.110-0.131
@@ -345,17 +366,17 @@ body
   # Thigh cowl: one slab hip->mid-thigh, proud of the flesh on the outer face.
   # Render round 1: the flesh hip ball poked out above the cowl — extended
   # down to the bone head and thickened. Paint darkened (9aa0a6 read white).
-  bar  leg on thigh from=-0.05 to=0.68 offset=(-0.033,0.008,0.012) r=0.162 wide=1.28 tall=1.20 deep=1.18 box round=0.10 color=6a7078 gloss=0.95 blend=0.010 side=r
+  bar  leg on thigh from=-0.05 to=0.68 offset=(-0.033,0.008,0.012) r=0.162 wide=1.28 tall=1.20 deep=1.18 box round=0.10 color=6a7078 metal gloss=0.95 blend=0.010 side=r
   # Knee block: the mesh's dark square knee panel.
-  blob leg on shin  at=0.04 offset=(-0.010,-0.010,0.015) r=0.135 wide=1.15 tall=1.10 deep=1.10 box round=0.18 color=4e545c gloss=0.93 blend=0.009 side=r
+  blob leg on shin  at=0.04 offset=(-0.010,-0.010,0.015) r=0.135 wide=1.15 tall=1.10 deep=1.10 box round=0.18 color=4e545c metal gloss=0.93 blend=0.009 side=r
   # Stacked shin greave: two OVERLAPPING slabs so the silhouette steps without
   # gapping; deepened per rings' deep-hint (the mesh prosthetic is deeper
   # front-to-back than a first pass).
-  bar  leg on shin  from=0.06 to=0.55 offset=(-0.024,0.005,0.018) r=0.128 wide=1.25 tall=1.15 deep=1.35 box round=0.07 color=6a7078 gloss=0.95 blend=0.008 side=r
-  bar  leg on shin  from=0.50 to=0.92 offset=(-0.018,0.000,0.000) r=0.115 wide=1.20 tall=1.10 deep=1.45 box round=0.07 color=5d636b gloss=0.94 blend=0.007 side=r
+  bar  leg on shin  from=0.06 to=0.55 offset=(-0.024,0.005,0.018) r=0.128 wide=1.25 tall=1.15 deep=1.35 box round=0.07 color=6a7078 metal gloss=0.95 blend=0.008 side=r
+  bar  leg on shin  from=0.50 to=0.92 offset=(-0.018,0.000,0.000) r=0.115 wide=1.20 tall=1.10 deep=1.45 box round=0.07 color=5d636b metal gloss=0.94 blend=0.007 side=r
   # Flat boot: deep slab, top overlapping the greave's bottom (the ankle slot
   # render round 3), sole planted (bottom just under y 0).
-  bar  leg on foot  from=0.10 to=0.70 offset=(-0.010,-0.090,0.045) r=0.100 wide=1.25 tall=1.50 deep=1.60 box round=0.10 color=44494f gloss=0.90 blend=0.008 side=r
+  bar  leg on foot  from=0.10 to=0.70 offset=(-0.010,-0.090,0.045) r=0.100 wide=1.25 tall=1.50 deep=1.60 box round=0.10 color=44494f metal gloss=0.90 blend=0.008 side=r
   # Red cable run down the greave's outer FACE (rides the plate surface:
   # plate outer face ~0.194 from the axis, cable at 0.194+0.016).
   bar  leg on shin  from=0.12 to=0.52 offset=(-0.210,0.020,-0.020) bend=(-0.020,0.020,0.010) r=0.016 r2=0.012 blend=0.004 color=cc2a1a gloss=0.85 side=r

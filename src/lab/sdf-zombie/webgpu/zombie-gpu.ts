@@ -759,6 +759,14 @@ export function createMarchMaterial(
     counts: u.counts,
     counts2: u.counts2,
     marchCfg: (rays?.marchCfg ?? u.marchCfg) as never,
+    // meltCfg MUST be bound: MARCH_BODY declares the input, and an unbound
+    // declared input logs "THREE.TSL: Input 'meltCfg' not found in 'Fn()'"
+    // and shades as zero — which is exactly the inert-melt state this base
+    // shipped in (c52b05b added the uniform + the WGSL input but not this
+    // binding; found while rendering hard-surface task 3's acceptance
+    // frames). Same repair as 6643f4b on the bodysheet branch. Signature
+    // order, per the ORDER MATTERS note below.
+    meltCfg: u.meltCfg,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
     baseColor: u.baseColor,
@@ -1241,7 +1249,15 @@ export function createZombieGpuView(
     counts: u.counts,
     counts2: u.counts2,
     marchCfg: u.marchCfg,
-    meltCfg: u.meltCfg,
+    // NOTE: meltCfg is deliberately NOT bound here. The melt commit (c52b05b)
+    // passed u.meltCfg into this literal while CONE_MARCH's WGSL signature
+    // never declared the input — three threw "Input 'meltCfg' not found in
+    // 'Fn()'" on every lab page boot (pre-existing on main 121ef37; found
+    // while rendering hard-surface task 3's acceptance frames). The cone
+    // keeps marching the SMOOTH field (its mapBody call passes noiseCfg 0),
+    // which is the pre-melt contract exactly; when the melt chain plumbs melt
+    // into the cone for real, it must add the WGSL input AND this binding in
+    // the same commit.
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
     coneK: opts.cone ? opts.cone.uniforms.k : float(0.02),

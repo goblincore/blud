@@ -334,6 +334,8 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.bend ? { bend: p.bend as Vec3 } : {}),
       ...(p.color ? { color: p.color as Vec3 } : {}),
       ...(p.gloss === null ? {} : { gloss: p.gloss }),
+      ...(p.glow === null ? {} : { glow: p.glow }),
+      ...(p.metal ? { metal: true } : {}),
       ...(p.core ? { core: true } : {}),
       ...(p.kind === 'shell'
         ? {

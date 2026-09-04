@@ -169,6 +169,28 @@ function parseGlossArg(l: BlobLine, painted: boolean): number | null {
   return g;
 }
 
+/** The bare word `metal`, and only beside a `color=` — same gate and same
+ *  reasoning as gloss: the shader keys both off the painted-prim row, so on
+ *  flesh the word would shade nothing. */
+function parseMetalArg(l: BlobLine, painted: boolean): boolean {
+  if (!l.words.includes('metal')) return false;
+  if (!painted) throw new BlobError('metal only means something on a coloured primitive; add color=rrggbb', l.line, l.indent + 1);
+  return true;
+}
+
+/** `glow=0..1`, and only beside a `color=` — the glow COLOUR is the prim's
+ *  own albedo (hard-surface design C: no new colour field, the authored
+ *  intent stays on one line), so on flesh it would have nothing to emit.
+ *  Same gate and same error voice as gloss: silently doing nothing is how an
+ *  author loses an hour. */
+function parseGlowArg(l: BlobLine, painted: boolean): number | null {
+  if (strArg(l, 'glow') === null) return null;
+  const g = numArg(l, 'glow');
+  if (g < 0 || g > 1) throw new BlobError(`glow= is 0..1, got ${g}`, l.line, l.indent + 1);
+  if (!painted) throw new BlobError('glow= only means something on a coloured primitive; add color=rrggbb', l.line, l.indent + 1);
+  return g;
+}
+
 const LIMBS = ['head', 'torso', 'arm', 'leg'] as const;
 type LimbName = (typeof LIMBS)[number];
 
@@ -420,6 +442,18 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // stored linear because that is what the shader mixes in.
     color: parseColorArg(l, strArg(l, 'color')),
     gloss: parseGlossArg(l, strArg(l, 'color') !== null),
+    // `glow=` — per-prim emissive 0..1, gated on paint exactly as `gloss=`
+    // is. The colour is the prim's OWN `color=` (no new colour field): a
+    // prim with `color=ff2200 glow=0.9` glows red because it IS red. Packed
+    // into primClip.w — see pack.ts.
+    glow: parseGlowArg(l, strArg(l, 'color') !== null),
+    // `metal` — a bare word like `chamfer`/`box`, gated on paint exactly as
+    // `gloss=` is. Marks the painted surface as METAL at shading time: the
+    // shader suppresses its diffuse to a small floor and tints the specular
+    // by this prim's own albedo. Implies gloss's noise suppression even
+    // with no `gloss=` (say so on the grammar line — an author writing
+    // `metal` alone reasonably expects the polished look, not pores).
+    metal: parseMetalArg(l, strArg(l, 'color') !== null),
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
     // `organ`: a bones-block line opting into viscera (organs r3). Same bare-
