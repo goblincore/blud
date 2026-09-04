@@ -62,6 +62,7 @@ import {
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
+import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
@@ -1061,6 +1062,11 @@ async function main() {
   /** Ground radius the crowd separates zombies at — the same 0.35 m the
    *  player's soft-obstacle boxes already use, so the two agree. */
   const ZOMBIE_RADIUS = 0.35;
+  /** Separation radius for a body in engage/attack/recover. Wider than the
+   *  0.35 m walking circle because an arm reaches ~0.6 m: the melee ring's
+   *  angular rule is the structural fix for arm clipping, and this catches
+   *  the transient while a body is still arriving. */
+  const ENGAGED_RADIUS = 0.55;
   const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
   /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
    *  a player who shares their room. */
@@ -2309,9 +2315,37 @@ async function main() {
       shotAlert = false;
       for (const a of actors) a.setBrainInput(pInfo, a.room === alertRoom);
 
+      // --- melee ring: who may swing this frame ---------------------------
+      // Claimants are the alert bodies that are actually in the encounter; an
+      // idle wanderer must not take a token it cannot use and starve a body
+      // that is closing. Runs BEFORE the actors step, so a body's brain sees
+      // this frame's verdict rather than last frame's.
+      if (pInfo) {
+        const claimants: RingClaimant[] = actors
+          .filter(a => a.brain().alert && a.brain().state !== 'idle')
+          .map(a => {
+            const p = a.pose().pos;
+            return {
+              id: a.id, x: p[0], z: p[2],
+              committed: a.committed(),
+              incumbent: a.debug().hasToken,
+            };
+          });
+        const verdict = arbitrate({ x: pInfo.x, z: pInfo.z }, claimants);
+        for (const a of actors) {
+          a.setRingInput(verdict.holders.has(a.id), verdict.drift.get(a.id) ?? 0);
+        }
+      } else {
+        for (const a of actors) a.setRingInput(false, 0);
+      }
+
       const agents: CrowdAgent[] = actors.map(a => {
         const p = a.pose().pos;
-        return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
+        return {
+          x: p[0], z: p[2],
+          r: a.engagedForCrowd() ? ENGAGED_RADIUS : ZOMBIE_RADIUS,
+          mobile: true,
+        };
       });
       // The player is an ANCHOR: zombies slide off him rather than shove him.
       // His own capsule already resolves against the per-frame zombie boxes
@@ -2884,17 +2918,52 @@ async function main() {
       const b = a.brain();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, mode: b.mode, alert: b.alert,
-        engaged: b.engaged, swingT: b.swingT,
+        id: a.id, room: a.room, state: b.state, alert: b.alert,
+        swingT: b.swingT, side: b.side, hasToken: a.debug().hasToken,
         dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
+        bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),
       };
     }),
+    /** Ring tuning, so a capture driver asserts against the real numbers
+     *  rather than duplicating them. */
+    ringTuning: () => ({ ...RING_TUNING }),
     /** Smallest centre-to-centre distance between any two zombies (m).
      *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
     crowdMinDist: () => minPairDistance(actors.map(a => {
       const p = a.pose().pos;
       return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
     })),
+    /** Closest surface gap (m) between arm primitives belonging to DIFFERENT
+     *  bodies. Negative means interpenetration — which is exactly the defect
+     *  the owner photographed on 2026-09-04, so it is a number now rather
+     *  than something we look at. Endpoint-to-endpoint minus the two radii:
+     *  a conservative under-estimate of the true capsule gap, which is the
+     *  right direction for a gate (it can cry wolf, it cannot miss a clip).
+     *  O(n^2 k^2) over ten bodies — only the capture driver calls it. */
+    minHandGap: () => {
+      const arms = actors.map(a => {
+        const posed = a.posed();
+        const pts: { p: Vec3; r: number }[] = [];
+        for (const prim of posed.prims) {
+          if (prim.limb !== 'armL' && prim.limb !== 'armR') continue;
+          pts.push({ p: prim.a, r: prim.radius }, { p: prim.b, r: prim.radius });
+        }
+        return pts;
+      });
+      let best = Infinity;
+      for (let i = 0; i < arms.length; i++) {
+        for (let j = i + 1; j < arms.length; j++) {
+          for (const u of arms[i]!) {
+            for (const v of arms[j]!) {
+              const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2])
+                - u.r - v.r;
+              if (g < best) best = g;
+            }
+          }
+        }
+      }
+      return best;
+    },
     /** Debug seam for the crowd capture driver: the separation nudge, by id,
      *  with the same bounds clamp and furniture rejection. Lets a driver
      *  PLACE bodies (e.g. coincident, to watch separate() push them apart)
