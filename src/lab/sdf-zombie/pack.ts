@@ -135,6 +135,13 @@ export interface PackOpts {
    * while the cluster sphere is rewritten from the chunk's own position.
    */
   singleGroup?: boolean;
+  /**
+   * Write bone rows (op 'bone') into the inside-flesh array. Default TRUE —
+   * the shipped layout. The bone-tubes renderer sets it FALSE: bones are
+   * drawn as instanced tubes instead, so the wound-zone fold sees ORGANS only
+   * and boneCount counts organs. Byte-identical rows when true.
+   */
+  packBones?: boolean;
 }
 
 export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}): PackedBody {
@@ -263,9 +270,11 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   // bonePrims positionally — applyRig poses bones without reordering, the
   // same contract as prims.
   const restBones = (rest ?? body).bonePrims ?? [];
+  const packBones = opts.packBones ?? true;
   let boneCount = 0;
   (body.bonePrims ?? []).forEach((b, j) => {
     if (!body.clusters[b.cluster]?.alive) return;
+    if (!packBones && b.op === 'bone') return;
     writePrim(b, body.prims.length + boneCount,
       b.dead ? W_DEAD : b.op === 'organ' ? W_ORGAN : W_BONE, restBones[j]);
     boneCount++;

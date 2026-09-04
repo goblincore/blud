@@ -8,22 +8,30 @@
 // Beat sheet per the spec's §5 (Doom-SSG rhythm).
 
 export const RELOAD = {
-  presentSec:  0.14,
-  breakEndSec: 0.32,
-  ejectEndSec: 0.44,
-  loadEndSec:  0.72,
-  snapEndSec:  0.86,
-  totalSec:    1.05,
-  /** How far the barrels swing off the frame, radians (~35 deg). */
-  openRad: 0.61,
-  /** When the spent cases leave the breech. Inside the eject beat, a beat
-   *  after the hinge is fully open -- they cannot clear a shut gun. */
-  ejectAtSec: 0.34,
+  /** Gun rolled into view AND the top lever thrown. The reference has no
+   *  present beat at all -- it is a fixed camera -- so ours is folded INTO the
+   *  lever throw rather than added in front of it, which is what keeps the
+   *  whole reload at the reference's 1.30 s instead of 1.46 s. */
+  presentSec:  0.18,
+  /** Barrels at full 45 deg. 0.33 s of travel, straight off the reference. */
+  breakEndSec: 0.51,
+  ejectEndSec: 0.65,
+  loadEndSec:  1.11,
+  snapEndSec:  1.16,
+  totalSec:    1.30,
+  /** How far the barrels swing off the frame, radians (45 deg). The reference
+   *  opens this wide; our old 35 deg barely showed the breech. */
+  openRad: Math.PI / 4,
+  /** When the spent cases start their AXIAL slide out of the bore -- a beat
+   *  before the hinge finishes, exactly as the reference does it. */
+  extractAtSec: 0.45,
+  /** When they clear the mouth and the free tumble takes over. */
+  ejectAtSec: 0.51,
   /** When fresh cases first appear coming up from under the frame, and when
-   *  they seat. Seating a hair before the snap so the gun never closes on a
+   *  they seat. Seating well before the snap so the gun never closes on a
    *  shell that is still visibly outside it. */
-  loadStartSec: 0.46,
-  loadSeatSec:  0.70,
+  loadStartSec: 0.74,
+  loadSeatSec:  1.11,
 } as const;
 
 /**
@@ -60,14 +68,14 @@ const RELOAD_KEYS: readonly (ReloadPose & { t: number })[] = [
   // at roll -19 / dy 0.055 the action opened off the bottom-right of the screen
   // and the break was invisible, which defeats the point of the animation.
   { t: 0.00, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
-  { t: 0.14, roll: -22, pitch: 11, dy: 0.085, dz: 0.055, hinge: 0 },
-  { t: 0.32, roll: -30, pitch: 21, dy: 0.115, dz: 0.080, hinge: 1 },
-  { t: 0.44, roll: -30, pitch: 22, dy: 0.118, dz: 0.082, hinge: 1 },
-  { t: 0.72, roll: -27, pitch: 19, dy: 0.108, dz: 0.074, hinge: 1 },
-  // The snap. 0.14 s to shut against 0.18 s to open, so it closes harder than
-  // it opened -- that asymmetry IS the "clack".
-  { t: 0.86, roll:  -9, pitch:  3, dy: 0.022, dz: 0.012, hinge: 0 },
-  { t: 1.05, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
+  { t: 0.18, roll: -22, pitch: 11, dy: 0.085, dz: 0.055, hinge: 0 },
+  { t: 0.51, roll: -30, pitch: 21, dy: 0.115, dz: 0.080, hinge: 1 },
+  { t: 0.65, roll: -30, pitch: 22, dy: 0.118, dz: 0.082, hinge: 1 },
+  { t: 1.11, roll: -27, pitch: 19, dy: 0.108, dz: 0.074, hinge: 1 },
+  // The snap. 0.14 s to shut against 0.33 s to open, so it closes far harder
+  // than it opened -- that asymmetry IS the "clack".
+  { t: 1.16, roll:  -9, pitch:  3, dy: 0.022, dz: 0.012, hinge: 0 },
+  { t: 1.30, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
 ];
 
 export const FLASH = {
@@ -172,6 +180,62 @@ export function loadShellTravel(t: number): number | null {
   return smoothstep(RELOAD.loadStartSec, RELOAD.loadSeatSec, t);
 }
 
+/** Chamber depth in metres, mirroring CHAMBER_DEPTH in the model script. A
+ *  shell has cleared the mouth once it has travelled this far. */
+export const CHAMBER_DEPTH_M = 0.070;
+
+/** Extractor throw in metres. Proportional to the reference's, which pushes
+ *  its slugs about 65% of a case length clear of the mouth. */
+export const EXTRACTOR_THROW_M = 0.009;
+
+const LEVER_THROW_RAD = Math.PI * 40 / 180;
+
+/**
+ * Top-lever yaw at `t`, radians. Thrown open across the present beat, held
+ * while the action is open, home again as it snaps shut.
+ *
+ * It has to LEAD the break: on a real break-action the lever unlocks the bolt
+ * before the barrels can drop, and the reference animates exactly that (its
+ * `release` is at full throw a sixth of a second before `front` starts to
+ * move). A lever that swings WITH the barrels reads as decoration.
+ */
+export function topLeverAngle(t: number): number {
+  if (t <= 0 || t >= RELOAD.totalSec) return 0;
+  if (t < RELOAD.presentSec) {
+    return LEVER_THROW_RAD * smoothstep(0, RELOAD.presentSec, t);
+  }
+  if (t < RELOAD.snapEndSec) return LEVER_THROW_RAD;
+  return LEVER_THROW_RAD * (1 - smoothstep(RELOAD.snapEndSec, RELOAD.totalSec, t));
+}
+
+/**
+ * Normalised 0..1 axial travel of a seated case, or `null` outside the extract
+ * window. Multiply by CHAMBER_DEPTH_M for metres.
+ *
+ * This is stage one of a TWO-STAGE eject, which is the thing that makes cases
+ * leave a tilted gun correctly. The case is a child of the barrel group, so
+ * this slide happens in the barrels' own frame and needs no rotated basis;
+ * `ejectedShell` then takes over for the free tumble.
+ */
+export function extractStage(t: number): number | null {
+  if (t < RELOAD.extractAtSec || t > RELOAD.ejectAtSec) return null;
+  return smoothstep(RELOAD.extractAtSec, RELOAD.ejectAtSec, t);
+}
+
+/**
+ * Extractor throw in metres at `t`. Rides out with the cases, HOLDS while the
+ * breech is empty, and retracts as the fresh ones seat -- the reference's
+ * `unloader` channel exactly.
+ */
+export function extractorOffset(t: number): number {
+  if (t < RELOAD.extractAtSec || t >= RELOAD.loadSeatSec) return 0;
+  if (t < RELOAD.ejectAtSec) {
+    return EXTRACTOR_THROW_M * smoothstep(RELOAD.extractAtSec, RELOAD.ejectAtSec, t);
+  }
+  if (t < RELOAD.loadStartSec) return EXTRACTOR_THROW_M;
+  return EXTRACTOR_THROW_M * (1 - smoothstep(RELOAD.loadStartSec, RELOAD.loadSeatSec, t));
+}
+
 /** Flash brightness at `t` seconds since the shot: instant attack, exponential
  *  decay, hard zero outside the window so nothing lingers a frame too long. */
 export function flashEnvelope(t: number): number {
@@ -245,12 +309,12 @@ export interface SupportHandPose {
  */
 const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.00, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
-  { t: 0.14, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
-  { t: 0.32, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
-  { t: 0.46, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
-  { t: 0.70, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },
-  { t: 0.86, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
-  { t: 1.05, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
+  { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
+  { t: 0.51, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
+  { t: 0.74, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
+  { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },
+  { t: 1.16, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
+  { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
 ];
 
 export function supportHandPose(t: number): SupportHandPose {

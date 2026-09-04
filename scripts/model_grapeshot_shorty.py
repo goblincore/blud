@@ -142,6 +142,39 @@ def tube(ro,ri,d,segs=32):
     bmesh.ops.remove_doubles(bm,verts=bm.verts,dist=1e-6)
     me=bpy.data.meshes.new('t'); bm.to_mesh(me); bm.free(); return me
 
+def taper_tube(ro, ri_front, ri_back, d, segs=32):
+    """Tube of constant OUTER radius whose INNER radius differs end to end.
+
+    This is the forcing cone: the chamber's mouth is wider than the bore, and a
+    real barrel tapers between them rather than presenting a flat shoulder.
+
+    Local axis is Z. Placed with rot=(RY,0,0), local +Z points down -Y in world
+    space -- i.e. toward the MUZZLE -- so `ri_front` is the radius at +d/2.
+    """
+    bm = bmesh.new()
+    def ri_at(z):
+        t = (z + d/2) / d              # 0 at the back, 1 at the front
+        return ri_back + (ri_front - ri_back) * t
+    for i in range(segs):
+        a0 = 2*math.pi*i/segs; a1 = 2*math.pi*(i+1)/segs
+        zb, zf = -d/2, d/2
+        rb, rf = ri_at(zb), ri_at(zf)
+        # outer wall
+        bm.faces.new([bm.verts.new((ro*math.cos(a), ro*math.sin(a), z))
+                      for a, z in ((a0, zb), (a1, zb), (a1, zf), (a0, zf))])
+        # inner wall, wound the other way so it faces into the bore
+        bm.faces.new([bm.verts.new((r*math.cos(a), r*math.sin(a), z))
+                      for a, z, r in ((a0, zb, rb), (a1, zb, rb),
+                                      (a1, zf, rf), (a0, zf, rf))][::-1])
+        # annular end caps
+        for z, r, flip in ((zb, rb, False), (zf, rf, True)):
+            v = [bm.verts.new((rr*math.cos(a), rr*math.sin(a), z))
+                 for rr, a in ((ro, a0), (ro, a1), (r, a1), (r, a0))]
+            bm.faces.new(v[::-1] if flip else v)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new('tt'); bm.to_mesh(me); bm.free(); return me
+
 def outline_normals(pts):
     """Outward 2D normals for a CCW closed outline in the YZ plane."""
     n=len(pts); out=[]
@@ -234,25 +267,50 @@ def arc(c,r,a0,a1,n,flat=1.0):
 RY = math.pi/2
 
 # ---------------- barrels ----------------
-BLEN, RO, RI, XSEP = 0.258, 0.0225, 0.0166, 0.0234
-BMID = -0.060 - BLEN/2
+# The chamber is a real, hollow, 70 mm sleeve because our shell is 70 mm long.
+# The previous build used cyl() -- capped at both ends -- so breaking the action
+# open showed two solid domed knobs where the mouths should be.
+RO, RI, XSEP = 0.0225, 0.0166, 0.0234
+RCH  = RI * 1.10             # chamber bore, wider than the barrel bore
+CY1  = -0.031                # THE BREECH FACE. Everything breech-y lives here.
+CHAMBER_DEPTH = 0.070        # set by our shell length, not by realism
+CY0  = CY1 - CHAMBER_DEPTH   # -0.101, chamber floor
+CONE_LEN  = 0.008
+BY_BACK   = CY0 - CONE_LEN   # -0.109, barrel tube's rear end
+BY_MUZZLE = -0.318           # unchanged: game-main's MUZZLE_LOCAL depends on it
+BLEN = BY_BACK - BY_MUZZLE   # 0.209
+BMID = (BY_MUZZLE + BY_BACK) / 2
 for i,x in enumerate((-XSEP,XSEP)):
     put(tube(RO,RI,BLEN),f'barrel{i}','Blue',loc=(x,BMID,0),rot=(RY,0,0),bevel=0.0012,smooth=True)
-    put(tube(RO*1.09,RI,0.012),f'crown{i}','Steel',loc=(x,BMID-BLEN/2+0.006,0),rot=(RY,0,0),
+    put(tube(RO*1.09,RI,0.012),f'crown{i}','Steel',loc=(x,BY_MUZZLE+0.006,0),rot=(RY,0,0),
         bevel=0.0016,smooth=True)
-    put(cyl(RI*0.99,0.11),f'bore{i}','Bore',loc=(x,BMID+0.03,0),rot=(RY,0,0),bevel=0,smooth=True)
-put(box(XSEP*2.0,BLEN*0.94,0.010),'rib_top','Blue',loc=(0,BMID+0.004,RO*0.62),bevel=0.0016,segs=2)
-put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BMID-BLEN/2+0.010,RO*0.62+0.006),bevel=0,smooth=True)
+    # Forcing cone: chamber mouth (RCH) tapering down to the bore (RI).
+    put(taper_tube(RO,RI,RCH,CONE_LEN),f'cone{i}','Bore',
+        loc=(x,(BY_BACK+CY0)/2,0),rot=(RY,0,0),bevel=0,smooth=True)
+    # Dark plug. Starts at the cone's front so the open breech reads as DEPTH
+    # rather than a lit tube wall, and stops short of the muzzle so looking down
+    # the bores from the front still has somewhere to look into.
+    put(cyl(RI*0.99,0.121),f'bore{i}','Bore',loc=(x,-0.1695,0),rot=(RY,0,0),bevel=0,smooth=True)
+# The rib runs the full barrel assembly, breech to muzzle.
+put(box(XSEP*2.0,(CY1-BY_MUZZLE)*0.94,0.010),'rib_top','Blue',
+    loc=(0,(BY_MUZZLE+CY1)/2,RO*0.62),bevel=0.0016,segs=2)
+put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,RO*0.62+0.006),bevel=0,smooth=True)
 
 # --------- THE LOFTED BODY: breech -> top strap -> rounded back -> grip --------
 # Half-width taper. Wide enough at the breech to carry both barrels, narrowing
 # to a comfortable OVAL at the grip -- v3's grip was 38 mm of flat slab, which
 # is what "painful to hold" meant. This is 52 mm across and round in section.
 def HW(y):
-    if y <= -0.020: return 0.039
+    # THE STANDING BREECH MUST CARRY ITS BARRELS. At 0.039 the receiver was
+    # +-0.0389 against a barrel cluster of +-0.0475, so the barrels overhung the
+    # frame by 8.6 mm a side -- which is both backwards for a break action (the
+    # barrels seat AGAINST this face) and the reason the open action read as
+    # misaligned even though every part is centred on 0.00000 exactly.
+    # 0.050 clears the cluster by 2.5 mm. The grip end is untouched.
+    if y <= -0.020: return 0.050
     if y >=  0.058: return 0.026
     t = (y + 0.020) / 0.078
-    return 0.039 + (0.026-0.039) * (t*t*(3-2*t))     # smoothstep, no crease
+    return 0.050 + (0.026-0.050) * (t*t*(3-2*t))     # smoothstep, no crease
 
 # Hand-placed to the landmark table above. +y is REARWARD.
 #   belly/receiver floor  z = -0.0262, running back to y = +0.048
@@ -285,11 +343,17 @@ body = [
 put(loft(body, HW, round_frac=0.30, sections=16, name='body'), 'body', 'Steel',
     bevel=0.0016, segs=2, smooth='auto')
 
-# breech face: chamber mouths + extractor rim (what the reload actually shows)
+# THE BREECH FACE, at y = CY1. The previous build put the mouths and the
+# extractor at y ~ -0.066 -- the chamber's FRONT, 35 mm away, buried inside the
+# frame beside the hinge pin, where they were never once visible.
 for i,x in enumerate((-XSEP,XSEP)):
-    put(cyl(RO*1.07,0.034),f'chamber{i}','Steel',loc=(x,-0.048,0),rot=(RY,0,0),bevel=0.0022,smooth=True)
-    put(tube(RO*0.99,RI*1.02,0.006),f'mouth{i}','Bore',loc=(x,-0.0655,0),rot=(RY,0,0),bevel=0,smooth=True)
-put(box(0.052,0.007,0.016),'extractor','Steel',loc=(0,-0.066,0),bevel=0.0018)
+    put(tube(RO*1.07,RCH,CHAMBER_DEPTH),f'chamber{i}','Steel',
+        loc=(x,(CY0+CY1)/2,0),rot=(RY,0,0),bevel=0.0022,smooth=True)
+    # A machined rim at the mouth. Steel, not 'Bore': the darkness now comes
+    # from the real hole behind it rather than from painting a disc black.
+    put(tube(RO*1.07,RCH,0.004),f'mouth{i}','Steel',
+        loc=(x,CY1-0.002,0),rot=(RY,0,0),bevel=0,smooth=True)
+put(box(0.052,0.007,0.016),'extractor','Steel',loc=(0,CY1+0.0035,0),bevel=0.0018)
 for sx in (-1,1):
     put(cyl(0.0092,0.009,20),'hinge','Brass',loc=(sx*0.040,-0.070,-0.016),rot=(0,RY,0),
         bevel=0.0014,smooth=True)
@@ -350,39 +414,93 @@ put(loft(fe, lambda y: 0.0335, round_frac=0.42, sections=12, name='fe'),
     'foreend','Wood',bevel=0.0028,segs=3,smooth='auto')
 put(box(0.074,0.013,0.024),'fe_cap','Steel',loc=(0,-0.076,-0.028),bevel=0.0035,segs=3)
 
+# ---- shells, seated in the chambers ----------------------------------------
+# Parented under BARREL_NODE so they inherit the break rotation for free. That
+# is the whole trick: the runtime slides them along their own LOCAL bore axis
+# and they come out of the tilted tubes correctly without anyone anywhere
+# computing a rotated basis.
+MATS['Hull'] = M('Hull', (0.66, 0.075, 0.06, 1), 0.0, 0.55)
+MATS['Head'] = M('Head', (0.62, 0.44, 0.16, 1), 0.9, 0.35)
+SHELL_HEAD = 0.021           # brass head length
+SHELL_LEN  = CHAMBER_DEPTH   # 0.070 -- a shell exactly fills the chamber
+for i, x in enumerate((-XSEP, XSEP)):
+    tag = 'L' if i == 0 else 'R'
+    # Hull runs forward from the head to the chamber floor. segs=12, not cyl()'s
+    # default 32: at this diameter (RCH*0.985 ~= 20mm) the default put the whole
+    # script 714 tris over the 14000 cap the FIRST time shells were added; a
+    # 5mm-radius part reads just as round at 12 segments.
+    hull_len = SHELL_LEN - SHELL_HEAD
+    put(cyl(RCH*0.985, hull_len, segs=12), f'shell_hull_{tag}', 'Hull',
+        loc=(x, CY1 - SHELL_HEAD - hull_len/2, 0), rot=(RY,0,0), bevel=0, smooth=True)
+    # Brass head, rim flush with the breech face.
+    put(cyl(RCH*1.02, SHELL_HEAD, segs=12), f'shell_head_{tag}', 'Head',
+        loc=(x, CY1 - SHELL_HEAD/2, 0), rot=(RY,0,0), bevel=0.0008, smooth=True)
+
 # ---- two rigid groups + locator empties. Placed here: after every put()
 # call, before any render. The GLB carries NO animation -- the hinge is a
 # code-driven rotation at runtime, so it only has to name things.
 def group_and_locate():
-    """Two rigid groups plus locators. The hinge is a code-driven rotation at
-    runtime, so the GLB carries NO animation -- it only has to name things."""
+    """Rigid groups, driven nodes and locators. The GLB carries NO animation --
+    every moving part is a code-driven transform at runtime, so this only has to
+    name things. A name the runtime cannot find is a reload that plays and moves
+    nothing, so the gate below treats a missing name as fatal."""
     root    = bpy.data.objects.new("GunRoot", None); col.objects.link(root)
     barrels = bpy.data.objects.new(BARREL_NODE, None); col.objects.link(barrels)
     frame   = bpy.data.objects.new(FRAME_NODE, None); col.objects.link(frame)
     barrels.parent = root
     frame.parent = root
 
+    # Driven nodes. Each owns exactly the meshes the runtime moves as a unit.
+    driven = {}
+    for name, parent, loc in (
+        ("Shell_L",   barrels, (-XSEP, 0.0,    0.0)),
+        ("Shell_R",   barrels, ( XSEP, 0.0,    0.0)),
+        ("Extractor", barrels, ( 0.0,  CY1,    0.0)),
+        ("TopLever",  frame,   ( 0.0,  0.026,  0.0228)),
+    ):
+        e = bpy.data.objects.new(name, None); col.objects.link(e)
+        e.location = loc; e.empty_display_size = 0.01; e.parent = parent
+        driven[name] = e
+    bpy.context.view_layer.update()
+
     # Everything forward of the hinge pin swings; everything else is the frame.
-    swing = ("barrel", "crown", "bore", "rib_top", "bead",
-             "chamber", "mouth", "extractor", "foreend", "fe_cap")
+    swing = ("barrel", "crown", "cone", "bore", "rib_top", "bead",
+             "chamber", "mouth", "foreend", "fe_cap")
     for o in list(col.objects):
         if o.type != 'MESH' or o.parent is not None:
             continue
-        o.parent = frame if not o.name.startswith(swing) else barrels
+        base = o.name.split('.')[0]
+        if base.startswith("shell_") and base.endswith("_L"):
+            o.parent = driven["Shell_L"]
+        elif base.startswith("shell_") and base.endswith("_R"):
+            o.parent = driven["Shell_R"]
+        elif base == "extractor":
+            o.parent = driven["Extractor"]
+        elif base == "toplever":
+            o.parent = driven["TopLever"]
+        else:
+            o.parent = frame if not base.startswith(swing) else barrels
+        # Parenting in bpy does not re-seat the child, so its world position is
+        # already right; only the driven empties need their offset removed.
+        o.matrix_parent_inverse = o.parent.matrix_world.inverted()
 
-    # Locators. HINGE sits on the hinge-pin axis; the barrels rotate about its X.
-    for name, loc in (
-        (HINGE_NODE,  (0.0,     -0.070, -0.016)),
-        ("Muzzle_L",  (-XSEP,   BMID - BLEN / 2, 0.0)),
-        ("Muzzle_R",  ( XSEP,   BMID - BLEN / 2, 0.0)),
-        ("Grip_Hand", (0.0,      0.074, -0.074)),
-        ("Fore_Hand", (0.0,     -0.155, -0.045)),
+    # Locators. HINGE is the axis the barrels rotate about. Breech_L/R are the
+    # chamber mouths, read EVERY FRAME by the runtime so the eject origin and
+    # the load destination follow the hinge instead of being guessed once.
+    for name, loc, parent in (
+        (HINGE_NODE,  (0.0,     -0.070,     -0.016), frame),
+        ("Muzzle_L",  (-XSEP,   BY_MUZZLE,   0.0),   barrels),
+        ("Muzzle_R",  ( XSEP,   BY_MUZZLE,   0.0),   barrels),
+        ("Breech_L",  (-XSEP,   CY1,         0.0),   barrels),
+        ("Breech_R",  ( XSEP,   CY1,         0.0),   barrels),
+        ("Grip_Hand", (0.0,      0.074,     -0.074), frame),
+        ("Fore_Hand", (0.0,     -0.155,     -0.045), frame),
     ):
         e = bpy.data.objects.new(name, None)
         col.objects.link(e)
         e.location = loc
         e.empty_display_size = 0.01
-        e.parent = barrels if name.startswith("Muzzle") or name == "Fore_Hand" else frame
+        e.parent = parent
     bpy.context.view_layer.update()
     return root
 
@@ -487,7 +605,9 @@ def verify_glb(path):
             o.data.calc_loop_triangles()
             tris += len(o.data.loop_triangles)
     required = {BARREL_NODE, FRAME_NODE, HINGE_NODE,
-                "Muzzle_L", "Muzzle_R", "Grip_Hand", "Fore_Hand"}
+                "Muzzle_L", "Muzzle_R", "Grip_Hand", "Fore_Hand",
+                "Breech_L", "Breech_R", "Shell_L", "Shell_R",
+                "Extractor", "TopLever"}
     missing = sorted(required - names)
     barrel_kids = 0
     for o in new:
@@ -497,12 +617,88 @@ def verify_glb(path):
                 barrel_kids += 1
                 break
             p = p.parent
+    # WHICH subtree each driven node landed in. The whole mechanism rests on
+    # these riding the hinge, so "it exists" is not the question.
+    must_swing = {"Shell_L", "Shell_R", "Breech_L", "Breech_R", "Extractor"}
+    swinging = set()
+    for o in new:
+        p = o
+        while p is not None:
+            if p.name.split('.')[0] == BARREL_NODE:
+                swinging.add(o.name.split('.')[0]); break
+            p = p.parent
+    stranded = sorted(must_swing - swinging)
     for o in list(new):
         try:
             bpy.data.objects.remove(o, do_unlink=True)
         except ReferenceError:
             pass
-    return {"tris": tris, "missing_nodes": missing, "barrel_descendants": barrel_kids}
+    return {"tris": tris, "missing_nodes": missing, "barrel_descendants": barrel_kids,
+            "stranded": stranded}
+
+
+def verify_bores_hollow():
+    """Cast a ray down each bore from just behind the breech face.
+
+    A solid chamber stops the ray within a couple of millimetres. A hollow one
+    lets it run at least the chamber's depth before the forcing cone or the
+    dark plug catches it. Shells are hidden for the cast -- we are asking about
+    the STEEL, not about what is loaded into it.
+
+    DEVIATION FROM PLAN: `extractor` is ALSO hidden here, which the plan text
+    did not call for. Measured after the first run of this function: `extractor`
+    (loc y=CY1+0.0035, full 52mm width, +-8mm tall in z) sits from y=CY1 to
+    y=CY1+0.007 -- i.e. it starts exactly AT the breech face and bridges both
+    bores at bore-CENTRE height. The origin below (CY1+0.005, on-axis) lands
+    inside it, so the ray hit its front face at dist=0.005 on every run,
+    reporting "not hollow" unconditionally -- even with a correctly hollow
+    chamber. Hiding it here matches the existing shells rationale exactly: this
+    check asks about the CHAMBER's steel, not about an unrelated part that
+    happens to sit in the sample ray's path. No landmark (CY1, extractor's own
+    position) changed.
+
+    CAST ONLY AGAINST GEOMETRY THAT SWINGS. The first version of this check
+    cast against the whole scene and could never pass, on any geometry: the
+    origin sits 5 mm REARWARD of the breech face, and in a shut break-action
+    the space behind the breech face is the standing breech -- solid receiver.
+    The ray started inside `body` and reported the bore blocked at 0.051 m,
+    which is the distance to the receiver's front face at y=-0.078, not a fact
+    about the bore at all.
+
+    The receiver is legitimately behind the chamber and is not part of it, so
+    it must not answer for it. Hiding the frame is therefore the narrow, honest
+    fix; hiding `body` from a whole-scene cast would have been the fudge.
+    """
+    def swings(o):
+        p = o
+        while p is not None:
+            if p.name.split('.')[0] == BARREL_NODE:
+                return True
+            p = p.parent
+        return False
+
+    hidden = []
+    for o in bpy.data.objects:
+        if o.type != 'MESH':
+            continue
+        base = o.name.split('.')[0]
+        if (not swings(o)) or base.startswith('shell') or base == 'extractor':
+            hidden.append((o, o.hide_viewport))
+            o.hide_viewport = True
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    bad = []
+    for x in (-XSEP, XSEP):
+        origin = Vector((x, CY1 + 0.005, 0.0))
+        hit, loc, _n, _idx, obj, _m = bpy.context.scene.ray_cast(
+            dg, origin, Vector((0.0, -1.0, 0.0)))
+        dist = (loc - origin).length if hit else float('inf')
+        if dist < CHAMBER_DEPTH:
+            bad.append((x, round(dist, 5), obj.name if obj else None))
+    for o, v in hidden:
+        o.hide_viewport = v
+    bpy.context.view_layer.update()
+    return bad
 
 
 size = export_glb(OUT_GLB)
@@ -520,6 +716,14 @@ if info["missing_nodes"]:
 if info["barrel_descendants"] < 8:
     print(f"[shorty] FAIL: only {info['barrel_descendants']} meshes under "
           f"{BARREL_NODE}; the hinge would move nothing", file=sys.stderr); ok = False
+if info["stranded"]:
+    print(f"[shorty] FAIL: {info['stranded']} are not under {BARREL_NODE}; they "
+          f"would hang in mid-air while the barrels drop", file=sys.stderr); ok = False
+blocked = verify_bores_hollow()
+if blocked:
+    print(f"[shorty] FAIL: bore not hollow -- ray stopped short at {blocked}; "
+          f"a chamber built with cyl() instead of tube() looks like a solid knob "
+          f"the moment the action opens", file=sys.stderr); ok = False
 if not ok:
     sys.exit(1)
 print("[shorty] OK")

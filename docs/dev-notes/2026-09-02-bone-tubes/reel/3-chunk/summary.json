@@ -1,0 +1,64 @@
+{
+  "state": {
+    "shell": {
+      "enabled": true,
+      "instances": 731,
+      "overflowed": false,
+      "shellAmp": 0.016
+    },
+    "occluder": false,
+    "cone": false,
+    "fxaa": true,
+    "relax": 1,
+    "sdfScale": 1,
+    "adaptive": false,
+    "halfRate": false,
+    "sdfTarget": {
+      "width": 800,
+      "height": 600
+    },
+    "backend": "webgpu"
+  },
+  "room": 3,
+  "onJs": "__sdfGame.setBoneMesh(true)",
+  "offJs": "__sdfGame.setBoneMesh(false)",
+  "preJs": "__sdfGame.aimSurface('armL'); __sdfGame.fireSlug(); __sdfGame.fireSlug(); await new Promise(r=>setTimeout(r, 1500))",
+  "outDir": "docs/dev-notes/2026-09-02-bone-tubes/reel/3-chunk",
+  "noiseFloor": {
+    "changed": 55,
+    "bigChanged": 40,
+    "meanD": 0.14,
+    "maxD": 691,
+    "hotCells": []
+  },
+  "pairs": {
+    "a-1 vs b-1": {
+      "changed": 13,
+      "bigChanged": 0,
+      "meanD": 0.68,
+      "maxD": 99,
+      "hotCells": []
+    },
+    "a-2 vs b-2": {
+      "changed": 60,
+      "bigChanged": 40,
+      "meanD": 0.59,
+      "maxD": 691,
+      "hotCells": []
+    },
+    "a-1 vs a-2": {
+      "changed": 3,
+      "bigChanged": 0,
+      "meanD": 0.23,
+      "maxD": 94,
+      "hotCells": []
+    },
+    "b-1 vs b-2": {
+      "changed": 57,
+      "bigChanged": 40,
+      "meanD": 0.33,
+      "maxD": 691,
+      "hotCells": []
+    }
+  }
+}

@@ -1673,13 +1673,15 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('woundFibre');
   });
 
-  it('stains bone toward deepColor where it meets flesh', () => {
-    expect(SHADE_BODY).toContain('boneColor');
-    expect(SHADE_BODY).toMatch(/boneStain|dmg - dBone|fleshGap/);
+  it('no longer stains bone toward deepColor — the branch is GONE (bone tubes)', () => {
+    // Bone tubes (2026-09-02 plan task 3): op 'bone' prims leave the marched
+    // field for instanced analytic tubes, so the bone albedo branch was
+    // deleted, not orphaned. Asserted as ABSENCE so it cannot quietly return.
+    expect(SHADE_BODY).not.toContain('boneStain');
   });
 
-  it('identifies bone by the dominant prim material, not a radius guess', () => {
-    expect(SHADE_BODY).toMatch(/isBone/);
+  it('no longer identifies bone by material code — isBone is GONE (bone tubes)', () => {
+    expect(SHADE_BODY).not.toMatch(/isBone/);
   });
 });
 

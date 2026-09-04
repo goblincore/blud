@@ -212,17 +212,58 @@ if (spent !== 0) fail(`two shots left ${spent} shells, expected 0`);
 // The loop stays parked (step() parked it): the reload beats are stepped in
 // GAME time too, so each reload-*.png frame is exactly the beat it names —
 // this strip is Task 8's evidence, and wall-clock sampling would race it.
+//
+// Every sample sits ON a beat from game-viewmodel.ts's RELOAD, a hair after it
+// so the beat has actually landed in the frame:
+//   180  presentSec 0.18   — rolled into view, top lever thrown
+//   350  mid-break          — barrels swinging, chamber mouths coming into view
+//   510  breakEndSec 0.51   — full 45 deg open, spent cases at the mouth
+//   650  post-ejectAt 0.51  — cases clear of the bore and tumbling free
+//   900  mid-load           — fresh cases visibly rising into the chambers
+//   1110 loadSeatSec 1.11   — both fresh cases seated, gun still open
+//   1180 snapEndSec 1.16    — snapped shut
+// The old set ([120 260 400 550 740 900]) was cut for a 0.95 s reload and never
+// moved: it opened mid-present, spent 740 on loadStart before a single fresh
+// case was visible, and ended mid-load — the seat and the snap, the back third
+// of the animation, were never photographed at all.
 let ticks = 0;
-for (const ms of [120, 260, 400, 550, 740, 900]) {
+for (const ms of [180, 350, 510, 650, 900, 1110, 1180]) {
   const target = Math.round((ms / 1000) / (1 / 60));
   await evaluate(`__sdfGame.step(${target - ticks}, 1 / 60)`);
   ticks = target;
   const open = await evaluate('__sdfGame.hingeOpenRad');
   maxOpen = Math.max(maxOpen, open);
   await shot(`reload-${ms}`);
+  // 5b. THE EJECT ORIGIN — the owner's actual complaint ("the ejected shells
+  // dont come out of the right location"). 510 ms IS RELOAD.ejectAtSec (0.51 s):
+  // the first frame the free tumble takes over from the axial extract, so
+  // lastEjectOrigin is still (near) the chamber mouth rather than having
+  // drifted downrange with the shell's own ballistic arc. Sampling any later
+  // beat would fail a CORRECT build for the wrong reason -- the shell is
+  // supposed to have moved on by then.
+  if (ms === 510) {
+    const eject = await evaluate(
+      '({ o: __sdfGame.lastEjectOrigin, b: __sdfGame.breechWorld() })');
+    if (!eject.o) fail('lastEjectOrigin still null at the eject beat');
+    const dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const d = Math.min(...eject.b.map((p) => dist3(p, eject.o)));
+    if (d > 0.05) {
+      fail(`case left ${(d * 100).toFixed(1)} cm from the nearest chamber mouth ` +
+           `at the eject beat -- eject origin has drifted off the live breech`);
+    }
+    console.log(`eject origin: ${(d * 100).toFixed(2)} cm from the nearest breech mouth`);
+  }
 }
 if (maxOpen < 0.4) fail(`hinge only reached ${maxOpen} rad; the barrels never opened`);
-await evaluate(`__sdfGame.step(${57 - ticks + 6}, 1 / 60)`); // past RELOAD.totalSec (0.95 s = 57 ticks)
+// Step past the END of the reload, DERIVED from the page rather than hardcoded.
+// This line used to read `57 - ticks + 6` against a comment claiming 0.95 s;
+// the reload then became 1.05 s and the number was never revisited, and when it
+// became 1.30 s the gate failed a perfectly correct build and sent someone
+// hunting a phantom eject bug. Ask the game how long its own reload is.
+const totalSec = await evaluate('__sdfGame.reloadTotalSec');
+if (typeof totalSec !== 'number') fail('__sdfGame.reloadTotalSec missing — cannot size the reload wait');
+const endTick = Math.ceil(totalSec * 60) + 6;   // +6 frames of slack past the last beat
+await evaluate(`__sdfGame.step(${endTick - ticks}, 1 / 60)`);
 await evaluate('__sdfGame.setLoopRunning(true)');
 const after = await evaluate('__sdfGame.shells');
 const shut = await evaluate('__sdfGame.hingeOpenRad');

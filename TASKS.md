@@ -20,30 +20,87 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**NEXT ACTION: the shorty's breech mechanism.** Plan written and ready, 8
-tasks, not started —
+**BONE TUBES — BUILT, AWAITING OWNER VERDICT (2026-09-02).** Skeleton out of the marched field: posed bone prims drawn as ONE instanced analytic tube mesh (interleaved 18-float instances, WGSL vertex sweep, march-parity lighting) in the polygonal pass; the composite depth test hides bone under flesh and reveals it in cavities. Organs stay in the field. `packBones` flag (default on = legacy layout) flips bone rows out of the inside-flesh array. Counter gate (12-slug recipe): bonesTotal 1,807,616 → 309,992 with tubes on = exactly the organ share (≈8 of ~46.7 prims/body); meanPerPayingRay 276.4 → 47.0 — bone evals deleted, organs remain by design. Reel captured (torso / head / armL chunk, `scripts/bone-tubes-reel.sh`): no bone through intact skin seen; a-vs-b diffs at/below noise floor. Seams `__sdfGame.setBoneMesh(on)` / `.boneMesh` / `.boneTubes()`; default **OFF** until the owner's look verdict. Branch `claude/bone-tubes`.
+[spec](docs/superpowers/specs/2026-09-02-bone-tubes-design.md) · [plan](docs/superpowers/plans/2026-09-02-bone-tubes.md) · [notes](docs/dev-notes/2026-09-02-bone-tubes/notes.md)
+
+**ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
+
+**[ ] F-eject.1 — spent cases clip through the frame, and every reload throws
+them identically.** Owner, 2026-09-03, after the breech merge: "the shells
+eject but seem to clip through the gun frame so there needs to be some tweaking
+there. also they always eject the same animation would be better to have some
+randomness but not a blocker." Two separate things. The clip is a collision the
+hand-off does not test for — `ejectedShell()` is a pure ballistic arc from the
+breech with no awareness of the receiver it passes over, and the gate only
+checks where a case STARTS (within 5 cm of a chamber mouth), not where it
+travels. The sameness is `ejectedShell()` being deterministic by design
+(`game-viewmodel.ts`: "same reload, same arc, every time") — which was the right
+call for gating and the wrong one for feel. Randomising it means the eject gate
+needs a seed it can pin, or it becomes flaky.
+
+**[ ] F-eject.2 — fresh shells still appear from nowhere.** Owner: "new shells
+magically appear to load. this is a gap in the spec." Correct, and the spec
+names it: the load beat carries the cases up with the support hand but never
+shows them being *inserted*. The Doom reload the tempo was taken from has the
+left hand jamming two shells into the barrels. Owner's read on difficulty, which
+matches mine: the hand is a blobby orb so the ANIMATION is not the hard part —
+the timing against the 1.30 s beat sheet and keeping the fresh cases from
+clipping the barrels on the way in are. Note the reference GLB
+(`docs/dev-notes/refs/sawnoffs_animated.glb`) does NOT solve this: its slugs
+simply reappear seated at t=1.933, which is why our support hand was kept over
+its approach in the first place. So this one has no reference to decode — it
+has to be authored.
+
+**SHORTY BREECH MECHANISM — DONE (2026-09-03), all 8 tasks** —
 [plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·
 [spec](docs/superpowers/specs/2026-09-03-shorty-breech-mechanism-design.md).
-Three defects, one of them not in the owner's report:
-* `chamber{i}` is built with `cyl()`, which caps both ends — breaking the
-  action open shows two solid domed knobs where the mouths should be
-  ([before-open45.png](docs/dev-notes/2026-09-03-shorty-breech/before-open45.png)).
-* Every piece of breech-face detail (`mouth{i}`, `extractor`) sits at
-  y ≈ −0.066 — the chamber's FRONT, 35 mm from the actual breech face at
-  y = −0.031, buried in the frame beside the hinge pin.
-* The eject origin is a stale constant whose x predates `1e99b54` centring the
-  gun, and which cannot follow the barrels through their swing.
-Fix comes off `docs/dev-notes/refs/sawnoffs_animated.glb` (DJMaesen, CC-BY-4.0,
-credited in ATTRIBUTIONS.md), decoded channel by channel: its slugs are
-CHILDREN of the swinging barrel node so they inherit the break rotation, and
-its eject is TWO-STAGE — an axial slide out of the bore, then a free tumble.
-Retimed to its tempo at the owner's call (45° over 0.33 s, shut in 0.14, 1.30 s
-total). NOT taken from it: dimensions. Owner: "we dont need to be completly
-realistic, its in a fantasy world anyways".
-**Before running it:** audit the plan's verification steps — it leans on
-"render it and look", which fails the same way Task 2's visual check did (it
-pushed the reticle left/right, both pure yaw, the one case the bug did not show
-in). Make each step state what would have to break for it to fail.
+Fixed three defects, one of them not in the owner's report ("the tube is
+solid, not hollow... the ejected shells dont come out of the right
+location"):
+* `chamber{i}` was built with `cyl()`, which caps both ends — breaking the
+  action open showed two solid domed knobs where the mouths should be.
+  Rebuilt with `tube()` + a `taper_tube()` forcing cone; a raycast down each
+  bore is now part of the model gate (`[shorty] OK`), proven to FAIL when the
+  chamber is reverted to `cyl()`.
+* Breech-face detail (`mouth{i}`, `extractor`) sat at the chamber's FRONT,
+  35 mm from the real breech face — moved to y = −0.031, with a widened
+  standing breech (Task 3) that now carries its own barrels instead of
+  overhanging the frame.
+* The eject origin was a stale hardcoded constant that could not follow the
+  barrels through their swing. Cases now extract along their own local bore
+  axis as children of `Barrels`, then hand off to a free tumble spawned at
+  the LIVE `Breech_L/R` world position, read every frame via `breechInRig()`
+  (exposed for gating as `__sdfGame.breechWorld()` / `.lastEjectOrigin`).
+  **Task 7 Step 5b's gate was landed late, during Task 8:** the runtime
+  plumbing shipped in `a5c7f7e` but the assertion the audit actually asked
+  for — sample `lastEjectOrigin` at the eject beat, assert within 5 cm of
+  `breechWorld()` — had no driver anywhere in the repo (`git log` / grep for
+  `breechWorld` outside `game-main.ts` came up empty). Added to
+  `sdf-game-shorty-gate.mjs` at the 510 ms beat (== `RELOAD.ejectAtSec`, the
+  first frame the tumble owns the position, before it drifts downrange):
+  passes at 1.18 cm on the real build, proven to FAIL at 16.8 cm when `breech`
+  is hardcoded back to the old `(0.105, -0.075, -0.360)` constant.
+Reload retimed to the reference's tempo (45° over 0.33 s, shut in 0.14 s,
+1.30 s total — up from 1.05 s); `scripts/sdf-game-shorty-gate.mjs` derives its
+wait from `__sdfGame.reloadTotalSec` rather than a hardcoded frame count, and
+its reload strip now samples the actual beats (present/break/eject/load/snap)
+instead of a stale timing left over from the shorter reload.
+**Verification (Task 8):** three render angles, not one — FPV, a straight-on
+rear view, and a three-quarter — in
+[docs/dev-notes/2026-09-03-shorty-breech/](docs/dev-notes/2026-09-03-shorty-breech/)
+(`before-open45.png` vs `after-open45{,-rear,-threequarter}.png`). The
+three-quarter is the angle that actually proves hollowness by eye (a dark bore
+reads all the way from muzzle to breech); the straight-on rear view, looking
+near the bore axis, would look the same whether the chamber were solid or
+hollow, so it's read for FRAME FIT (mouths seated within the widened receiver,
+not overhanging it) rather than hollowness — the raycast gate is what proves
+hollowness, per the render-vs-raycast audit below. In-game reload captured
+headlessly (`__sdfGame.step`/`setLoopRunning(false)`, `ingame-reload/`)
+confirms by eye: the top lever is at full throw while the hinge is still shut
+(180 ms vs 350 ms), cases tumble up and away after sliding out the tilted
+bores, the extractor sits visibly proud between two genuinely dark, empty
+mouths mid-reload (650/900 ms), and the fresh cases seat and the action snaps
+shut (1110/1180 ms).
 
 **FPV WEAPON OVERHAUL — GOBLIN SAWED-OFF — MERGED (2026-09-03).**
 `sdf-game.html`'s view-model is a procedural break-action sawed-off double
@@ -192,6 +249,33 @@ same array; (5) gate the per-hit bone-material read on `wm > 0`; (6) bone in
 gib chunks; (7) collision. Merge picture: gore × perf chain conflicts only in
 `march.wgsl.ts` signatures + one `game-main.ts` block — merge ONCE after the
 chain finishes (~1 h); gore × elbow branch is clean.
+
+**CLOSE-UP FRAME RATE + GORE COST — SPEC WRITTEN, 5 TASKS QUEUED INERT
+(2026-09-04).** Successor program to perf r2, aimed at the owner's restated
+problem: **a body filling the screen**, and heavy blood spray. Spec
+[docs/superpowers/specs/2026-09-04-close-up-and-gore-cost-design.md](docs/superpowers/specs/2026-09-04-close-up-and-gore-cost-design.md)
+carries the nine closed ideas (adaptive REJECTED, tiles nil, upload nil, depth
+gate exact-but-OFF, exit bound deletes bodies, occluder ~nothing, shell/hull
+parked, omega 0.6 costs) — **re-proposing any of them is a failure.** Dispatch
+`~/.claude/dispatch/plans/2026-09-04-closeup-task-{1..5}-*.md`, `status: queued`,
+trigger manually. Graph: **task-1 diagnostics** → task-2 ∥ task-5; task-2 →
+task-3; **task-4 (goo) parallel to everything**. Two things task-1 settles that
+nobody has measured: (a) **shading vs marching at fill-screen** — every counter
+here counts *steps* and none separates the per-pixel shading chain, so tasks 2/3
+may be aimed at the wrong half of the frame; (b) **does a written ray parameter
+survive a texture round-trip** — the three-r185 decay (true 9 m reads 2.8 m,
+near exact) killed the occluder pre-pass AND holds `GAME_HULL_EXIT_BOUND` at 0,
+and task-3's quarter-res depth prepass does the same write/read. Root-causing it
+unblocks two features. Task-4 (goo): the cost is **not** the 600 billboards, it
+is `goo-layer.ts` compositing at **full canvas res** (`:854`) over
+`densityScale 0.5` pre-blurred inputs, plus additive-quad overdraw
+(`quadScale 3.2`, no depth reject) — owner agrees, easy win. Task-5: settled gib
+chunks are static fields still marched as 12 proxy boxes (`MAX_CHUNKS`,
+`game-main.ts:1712`); bake once at settle and the hull's ~3-4 ms/frame
+extraction objection is *deleted*, plus baked meshes are real early-Z occluders.
+NOTE: **no corpse exists in `sdf-game.html` yet** (sever/gib only; death state is
+on the zombie-crowd branch) — settled chunks are the beachhead and the path
+generalises to corpses unchanged.
 
 **SDF RENDER PERF ROUND 2 — PLANNED (2026-09-01), not started.** A read-only
 review of the march, the pass chain and the perf record after the shell
@@ -1067,19 +1151,23 @@ adaptive + tile fold both on.
   controller had resized the layer. Fixed in `a04caf0` — **preserve both
   invariants if you touch `tileAB()`**.
 
-**QUEUED (2026-08-25, ox-alpha, serial):** `2026-08-25-crowd-alive` then
-`2026-08-25-tile-all-bodies`. Crowd bodies are static fill *by design*
-(`lab-main.ts:21`), so the per-body cost that scales to 15 characters — rig
-solve, wound repack, data-texture upload — is currently **not measured at all**.
-crowd-alive gives every body its own actor record, animation and wounds, while
-keeping `freezeCosmetics()`/`setMotionEnabled(false)` freezing *every* body and
-the crowd clock deterministic (the frozen noise floor 0.814 -> 0.0278 is the
-only reason the relax question ever closed). tile-all-bodies then profiles 15
-live bodies and **stops if the frame is CPU-bound**, extending tile lists across
-bodies only if fragment work dominates. NOTE: each body already draws a *tight
-proxy box* (`zombie-gpu.ts:964`), not a full-screen quad — "15 bodies = 15
-full-screen marches" is false; the real costs are misses inside the box,
-overlap, and per-body CPU work.
+**`2026-08-25-tile-all-bodies` DELETED (2026-09-04) — replaced by
+`2026-09-04-merged-march`, PARKED.** crowd-alive shipped (merged to main); the
+tile follow-up never ran and its whole premise expired. Four reasons: the owner
+restated the real problem as one body **filling the screen**, not a crowd, and
+named tile binning "measured nil — not the cost"; the perf r2 chain harvested
+~40% of march steps and landed on **hit-pixel fill** as the remainder, which
+tiles (a per-step prim-fold cut) do not touch; r2 task 8 killed the per-body-CPU
+worry (0.06 ms/frame for ten bodies); and its `base_branch: dispatch/crowd-alive`
+no longer exists. Its cost table (58 ms @15 bodies, ~21 ms non-pixel floor)
+predates the chain and is void. **The one surviving idea** is a single **merged
+march pass** over all bodies (prim data reached via the entry stream's
+`bodyIndex`, a field designed for this and never exercised) — the only form of
+the overlap fix r2 did *not* test, and precisely the form that removes the
+per-draw pass structure that made task 5b's exact-and-biting depth gate cost
++4.6 ms at 3–4 bodies. Brief at `~/.claude/dispatch/plans/2026-09-04-merged-march.md`,
+`status: queued`, priority 4: **do not trigger** until the close-up work is done
+and only if its Phase 0 shows per-pass overhead growing with body count.
 
 **SHELL PRIM + SCHOOLGIRL COLLAR (merged 2026-08-25, `07addaa`):** added a `shell` prim to the `.blob` language (thin sheet off a closed field, `abs(d)-thickness`, clipped against a plane with a rounded rim — iq's cloth construction). Rebuilt the sailor collar from shells (was 7 blob masses, now a 3-prim cloth cape+V+knot; owner's "epaulette plates"/"blob mass" read addressed — the collar now drapes over the shoulders with a V), made the skirt a thin shell cone with a rounded hem (was a solid cone), and deleted the shoe sole. Schoolgirl 62→57 prims. tsc 0, 1559 lab tests, render-check schoolgirl/zombie/cyclops/mouse all green. Collar reworked to a V/sailor read after owner review. (The dispatch could not commit — sandbox denied writes to the main repo's `.git` — so the work was auto-committed on the branch and merged from there.)
 
@@ -1920,4 +2008,4 @@ Key reference docs (open these before touching their area):
 - **Discovering a new task:** next available number in the right section, **one line**, commit.
 - **Task rows are ≤2 lines.** If context needs more, put it in a linked dev-note / plan doc and leave a bare link on the row.
 - **Milestone rollup:** when a milestone lands, collapse per-task detail into a single line with the commit range; the plan file + git log hold the rest.
-- **Design questions:** re-read the design spec above before adjusting scope.
+- **Design questions:** re-read the design spec above before adjusting scope. **Real problem restated (owner, 2026-09-04): frame dips when a body FILLS the screen (and under heavy blood particles).** Next levers, pixel-scaling only: (1) post-hit probes → derivative normals + reduced-rate AO/thin (6 → ~1 evals/pixel), (2) quarter-res depth prepass to start rays near the skin without vertex cost. Adaptive resolution REJECTED for close-up (visible res drop). Tile binning measured nil — not the cost. Plan note: Obsidian `Claude Notes/Planning/2026-09-04-sdf-close-up-frame-rate-plan.md`.

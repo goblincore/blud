@@ -14,6 +14,7 @@ import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
+import type { Primitive } from '../types';
 import * as THREE from 'three/webgpu';
 
 const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
@@ -187,5 +188,25 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     expect(marchCalls.length).toBe(2); // createMarchMaterial + cone twin
     expect(src.match(/volumeWarp: u\.volumeWarp,\s*\n\s*volumeClip: u\.volumeClip,/g)?.length)
       .toBe(2);
+  });
+});
+
+describe('bone tubes plumbing', () => {
+  it('chunk view exposes posedBones in world space with squash applied, and skips bone rows when packBones is off', () => {
+    const chunk = makeChunk('armL', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], () => 0.5, 'limb');
+    const bone: Primitive = { a: [1, 2, 3], b: [1, 2.2, 3], radius: 0.02, scale: [1, 1, 1], blendK: 0, limb: 'armL', cluster: 2, op: 'bone' };
+    const view = createChunkGpuView(chunk, [/* one flesh prim */ { ...bone, op: 'add', radius: 0.05 }], defaultUniforms(blankFaceTexture()), undefined, undefined, undefined, [bone]);
+    view.setPackBones(false);
+    view.update(chunk);
+    const pb = view.posedBones();
+    expect(pb.length).toBe(1);
+    expect(pb[0]!.op).toBe('bone');
+    // a is recentred on the chunk origin then re-placed at chunk.pos: identity at spawn
+    expect(pb[0]!.a.map(v => +v.toFixed(6))).toEqual([1, 2, 3]);
+    expect(view.uniforms.counts2.value.x).toBe(0);   // no bone rows
+    view.setPackBones(true);
+    view.update(chunk);
+    expect(view.uniforms.counts2.value.x).toBe(1);
+    view.dispose();
   });
 });

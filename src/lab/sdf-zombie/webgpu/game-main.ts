@@ -36,11 +36,13 @@ import {
   weaponAngles, weaponSlide, type AimPoint, type Frustum,
 } from './free-aim';
 import {
-  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope,
-  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
+  FLASH, MAGAZINE_CAPACITY, RECOIL, RELOAD, CHAMBER_DEPTH_M, ejectedShell,
+  extractStage, extractorOffset, fireRecoil, flashEnvelope, loadShellTravel,
+  magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose, topLeverAngle,
 } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
+import { createBoneInstancer } from './bone-instancer';
 import { createPostAa } from './post-aa';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
@@ -564,6 +566,13 @@ async function main() {
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
       }
+      // Bone tubes take the SAME beam (bone-instancer's boneShade is the
+      // march's own cone formula on these exact values).
+      boneInstancer.uniforms.spotPos.value.copy(flashlight.spot.position);
+      boneInstancer.uniforms.spotAxis.value.copy(sAxis);
+      boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+      boneInstancer.uniforms.spotColor.value.copy(flashlight.spot.color);
+      boneInstancer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
     // two-rate wobble reads as flame; white noise reads as a broken light.
@@ -575,6 +584,23 @@ async function main() {
     // Front-to-back per-body passes (perf round 2 task 5): register this
     // frame's bodies and chunks. With the gate off the lists are not walked.
     sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
+    // Bone tubes: feed this frame's posed bones (actors stepped in tick
+    // ahead of this draw; chunks repacked world-space there too — posed()
+    // and posedBones() are always current).
+    if (boneMesh) {
+      {
+        const craters: { pos: Vec3; radius: number }[] = [];
+        for (const a of actors) {
+          const prims = a.posed().prims;
+          for (const w of a.wounds()) craters.push({ pos: woundWorldPos(prims, w, 0), radius: w.radius });
+        }
+        boneInstancer.setWounds(craters);
+      }
+      boneInstancer.update([
+        ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
+        ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
+      ]);
+    }
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -707,6 +733,29 @@ async function main() {
   // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
   // .setShell(false) is the kill switch.
   sdfLayer.setShellEnabled(true);
+
+  // BONE TUBES (2026-09-02-bone-tubes plan, task 5): every posed bone prim
+  // drawn as one instanced analytic tube in the POLYGONAL pass (layer 0),
+  // hidden under flesh and revealed in cavities by the composite depth test.
+  // Ships OFF until the owner's gate — applyBoneMesh also flips every view's
+  // packBones layout so the field stops carrying the bones it no longer draws.
+  // Cap 512, not the plan's 256: measured on the live page (task 5 boot) the
+  // cast packs 380 live bones — 46 bonePrims per zombie (23 authored × mirror
+  // expansion), 38 in live clusters × 10 zombies — plus up to 12 flying
+  // chunks. 256 overflowed on the first frame.
+  // 2026-09-03 skeleton re-author: 67 drawn bones per zombie (12 rib pairs as
+  // hoops, clavicles, a 15-piece pelvis), x10 bodies = 670 > 512.
+  const boneInstancer = createBoneInstancer(1024);
+  boneInstancer.object.layers.set(0);
+  boneInstancer.object.visible = false;
+  scene.add(boneInstancer.object);
+  let boneMesh = false;
+  function applyBoneMesh(on: boolean): void {
+    boneMesh = on;
+    boneInstancer.object.visible = on;
+    for (const a of actors) a.view.setPackBones(!on);
+    for (const c of liveChunks) c.view.setPackBones(!on);
+  }
 
   /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
    *  by the depth nearer passes already recorded at each pixel.
@@ -882,6 +931,8 @@ async function main() {
         prev: sdfLayer.prev,
         levelShadow: { light: flashlight.levelShadow },
       });
+    // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
+    view.setPackBones(!boneMesh);
     view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
@@ -939,6 +990,28 @@ async function main() {
   spawnAll(errors);
   if (errors.length > 0) {
     console.error('[sdf-game] body errors:', errors.join(' | '));
+  }
+  // Bone tubes (task 5): the instancer owns its own light set — seed it once
+  // from body 1's view, which just took the LIGHT_PRESETS apply above, so
+  // the tube pass cannot drift from the march's key.
+  {
+    const v = actors[0]!.view.uniforms;
+    boneInstancer.uniforms.lightDir.value.copy(v.lightDir.value);
+    boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
+    boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
+    boneInstancer.uniforms.boneColor.value.copy(v.boneColor.value);
+    boneInstancer.uniforms.deepColor.value.copy(v.deepColor.value);
+    // Ambient fill: the enclosure's mean wall albedo weighted by the bounce
+    // probe weight, on top of the preset's fill — a cheap stand-in for the
+    // march's ambientAt probe so cavity bone sits in the same light as flesh.
+    {
+      const walls = [v.wallNegX, v.wallPosX, v.wallNegY, v.wallPosY, v.wallNegZ, v.wallPosZ].map(w => w.value);
+      let mr = 0, mg = 0, mb = 0;
+      for (const c of walls) { mr += c.r / 6; mg += c.g / 6; mb += c.b / 6; }
+      const fill = v.lightCfg.value.y, key = v.keyColor.value, pw = v.bounceCfg.value.x;
+      boneInstancer.uniforms.ambient.value.setRGB(
+        fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
+    }
   }
 
   /** The wound panel's boneRatio lever (applyWoundTuning calls this). Bones
@@ -1094,6 +1167,16 @@ async function main() {
   /** The GLB's own muzzle locators, kept so muzzleWorld() can read their LIVE
    *  world position each shot rather than a position sampled once at load. */
   let muzzleNodes: THREE.Object3D[] = [];
+  /** Driven GLB nodes. Shells and the extractor live INSIDE Barrels, so they
+   *  inherit the break rotation and the runtime only ever writes their LOCAL
+   *  position -- no rotated basis is computed anywhere. */
+  let shellNodes: THREE.Object3D[] = [];
+  let breechNodes: THREE.Object3D[] = [];
+  let extractorNode: THREE.Object3D | null = null;
+  let topLeverNode: THREE.Object3D | null = null;
+  /** Each shell's seated local position, so the extract slide is a delta. */
+  const shellRestZ: number[] = [];
+  let extractorRestZ = 0;
   let gripHandGroup: THREE.Group | null = null;
   let foreHandGroup: THREE.Group | null = null;
   let gunGroup: THREE.Group | null = null;
@@ -1109,6 +1192,11 @@ async function main() {
   const smokePuffs: { mesh: THREE.Mesh; age: number; vel: THREE.Vector3; roll: number }[] = [];
   const ejectedShells: THREE.Group[] = [];
   const loadShells: THREE.Group[] = [];
+  /** Where the last spent case was placed, in WORLD space, the moment it was
+   *  handed from the extraction slide to the free tumble. Step 5b's proof
+   *  that the eject origin is a real chamber mouth: this is asserted against
+   *  breechWorld() rather than trusted by construction. */
+  let lastEjectOrigin: Vec3 | null = null;
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -1139,6 +1227,21 @@ async function main() {
     if (!found) return false;
     viewModelAnchor.updateMatrixWorld(true);
     out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
+    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    return true;
+  }
+  /** A breech locator's position in aim-rig space RIGHT NOW. Unlike
+   *  locatorInView this is called every frame, so it assumes the caller has
+   *  already refreshed the view-model's matrices this frame.
+   *
+   *  This is what replaces the hardcoded breech vector. That constant was both
+   *  4 cm right of the real chambers (it predated the gun being centred) and
+   *  static, so it could not follow the barrels through their swing -- which is
+   *  the whole of "the shells don't come out of the right location". */
+  function breechInRig(i: 0 | 1, out: THREE.Vector3): boolean {
+    const n = breechNodes[i];
+    if (!n) return false;
+    n.getWorldPosition(out);
     (aimRig ?? viewModelAnchor).worldToLocal(out);
     return true;
   }
@@ -1204,6 +1307,20 @@ async function main() {
     if (!barrels || !hingeNode) {
       throw new Error('[sdf-game] shorty-double.glb is missing Barrels/Hinge nodes');
     }
+    // Every moving part is a named node. A missing one must be LOUD: silently
+    // skipping it presents as a reload that animates and moves nothing, which
+    // is precisely the class of bug this whole change exists to remove.
+    const need = (n: string): THREE.Object3D => {
+      const o = gltf.scene.getObjectByName(n);
+      if (!o) throw new Error(`[sdf-game] shorty-double.glb is missing the ${n} node`);
+      return o;
+    };
+    shellNodes = [need('Shell_L'), need('Shell_R')];
+    breechNodes = [need('Breech_L'), need('Breech_R')];
+    extractorNode = need('Extractor');
+    topLeverNode = need('TopLever');
+    for (const s of shellNodes) shellRestZ.push(s.position.z);
+    extractorRestZ = extractorNode.position.z;
     // Rotate about the HINGE, not about the barrel node's own origin -- the
     // latter would swing the barrels through the frame. Standard fix: a pivot
     // group parked at the hinge, with the barrels offset back by the same
@@ -1629,6 +1746,7 @@ async function main() {
     if (oldest) {
       oldest.view.reset(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
+      oldest.view.setPackBones(!boneMesh);
       liveChunks.push({ id: nextChunkId++, state, view: oldest.view });
     } else {
       const view = createChunkGpuView(
@@ -1636,6 +1754,7 @@ async function main() {
         piece.tornAt.length ? piece.tornAt : undefined,
         template.volumeTexture, chunkMaterial, piece.bones,
       );
+      view.setPackBones(!boneMesh);
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
       chunkViews.push(view);
@@ -2313,6 +2432,11 @@ async function main() {
       );
     }
     if (hingePivot) hingePivot.rotation.x = rp.hinge * RELOAD.openRad;
+    // The breech locators are read below in RIG space, and they hang off the
+    // hinge pivot that was just rotated. Without this the eject would trail the
+    // barrels by exactly one frame.
+    if (gunGroup) viewModelAnchor.updateMatrixWorld(true);
+    if (topLeverNode) topLeverNode.rotation.y = topLeverAngle(reloading ? reloadAge : 0);
 
     if (reloading) {
       // THE SUPPORT HAND leaves the fore-end, drops out of frame low-left, and
@@ -2326,29 +2450,62 @@ async function main() {
           FORE_HAND_REST.z + sh.dz,
         );
       }
-      // SPENT CASES thrown up and back out of the open breech.
-      const breech = new THREE.Vector3(0.105, -0.075, -0.360);
+      // ——— STAGE 1: EXTRACTION ———————————————————————————————————————
+      // The seated cases are children of Barrels, so they are already carrying
+      // the 45 deg tilt. Sliding them along their own LOCAL -Z walks them
+      // straight back out of the bores. Larger z is toward the muzzle.
+      const ex = extractStage(reloadAge);
+      for (let i = 0; i < shellNodes.length; i++) {
+        const s = shellNodes[i];
+        const restZ = shellRestZ[i];
+        if (!s || restZ === undefined) continue;
+        if (ex === null) {
+          // Seated before the extract beat, gone after the hand-off.
+          const seated = reloadAge < RELOAD.extractAtSec;
+          s.visible = seated || reloadAge >= RELOAD.loadSeatSec;
+          s.position.z = restZ;
+        } else {
+          s.visible = true;
+          s.position.z = restZ - ex * CHAMBER_DEPTH_M;
+        }
+      }
+      if (extractorNode) {
+        extractorNode.position.z = extractorRestZ - extractorOffset(reloadAge);
+      }
+
+      // ——— STAGE 2: THE TUMBLE ———————————————————————————————————————
+      // Handed off at the moment the case clears the mouth, from the breech
+      // locator's CURRENT world position -- so it starts exactly where stage
+      // one left it, on a gun that may be at any point in its swing.
+      const breech = new THREE.Vector3();
       for (let i = 0; i < ejectedShells.length; i++) {
         const m = ejectedShells[i];
         if (!m) continue;
         const e = ejectedShell(reloadAge, i === 0 ? 0 : 1);
-        if (!e) { m.visible = false; continue; }
+        if (!e || !breechInRig(i === 0 ? 0 : 1, breech)) { m.visible = false; continue; }
         m.visible = true;
         m.position.set(breech.x + e.x, breech.y + e.y, breech.z + e.z);
         m.rotation.set(Math.PI / 2 + e.spin, e.spin * 0.6, 0);
+        const originWorld = (aimRig ?? viewModelAnchor).localToWorld(m.position.clone());
+        lastEjectOrigin = [originWorld.x, originWorld.y, originWorld.z];
       }
+
       // FRESH CASES riding up with the hand and seating in the chambers.
       const travel = loadShellTravel(reloadAge);
       for (let i = 0; i < loadShells.length; i++) {
         const m = loadShells[i];
         if (!m) continue;
-        if (travel === null) { m.visible = false; continue; }
+        if (travel === null || !breechInRig(i === 0 ? 0 : 1, breech)) {
+          m.visible = false; continue;
+        }
         m.visible = true;
-        const side = i === 0 ? -0.024 : 0.024;
-        // From under the frame, in the support hand, to the chamber mouths.
-        const from = new THREE.Vector3(FORE_HAND_REST.x + sh.dx + side, FORE_HAND_REST.y + sh.dy + 0.03, FORE_HAND_REST.z + sh.dz);
-        const to = new THREE.Vector3(breech.x + side, breech.y + 0.005, breech.z - 0.020);
-        m.position.lerpVectors(from, to, travel);
+        // From under the frame, in the support hand, to the real chamber mouth.
+        const from = new THREE.Vector3(
+          FORE_HAND_REST.x + sh.dx + (i === 0 ? -0.024 : 0.024),
+          FORE_HAND_REST.y + sh.dy + 0.03,
+          FORE_HAND_REST.z + sh.dz,
+        );
+        m.position.lerpVectors(from, breech, travel);
         m.rotation.set(Math.PI / 2, 0, 0);
       }
 
@@ -2356,6 +2513,15 @@ async function main() {
         shells = MAGAZINE_CAPACITY;
         reloadAge = Infinity;
         if (hingePivot) hingePivot.rotation.x = 0;
+        if (topLeverNode) topLeverNode.rotation.y = 0;
+        if (extractorNode) extractorNode.position.z = extractorRestZ;
+        for (let i = 0; i < shellNodes.length; i++) {
+          const s = shellNodes[i];
+          const restZ = shellRestZ[i];
+          if (!s || restZ === undefined) continue;
+          s.visible = true;              // loaded gun: two heads at the breech
+          s.position.z = restZ;
+        }
         if (gunGroup) {
           gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
           gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
@@ -2598,11 +2764,11 @@ async function main() {
    * connected would be measuring something the scenario never described.
    */
   const MIN_STANDOFF = 1.5;
-  function aimAtNearestSurface(): boolean {
+  function aimAtNearestSurface(limb?: string): boolean {
     const eye = eyeOf(player);
     const candidates = actors
       .map((a) => {
-        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
+        const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso'))?.center;
         return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
       })
       .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
@@ -2788,6 +2954,21 @@ async function main() {
     },
     get shells() { return shells; },
     get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
+    /** The reload's total length, seconds. Exposed so hand-stepping gates can
+     *  DERIVE their wait budget instead of hardcoding a tick count: the shorty
+     *  gate carried `57 ticks` against a 0.95 s reload, was still carrying it
+     *  when the reload became 1.05 s, and failed a correct build the moment it
+     *  became 1.30 s. A gate that has to be edited every time a constant moves
+     *  will eventually be edited wrongly, or not at all. */
+    get reloadTotalSec() { return RELOAD.totalSec; },
+    /** The two chamber mouths in WORLD space, right now. The eject origin is
+     *  supposed to track these through the swing; nothing proved it did. */
+    breechWorld: () => breechNodes.map((n) => {
+      const v = new THREE.Vector3(); n.getWorldPosition(v);
+      return [v.x, v.y, v.z] as Vec3;
+    }),
+    /** Where the last case was when it was handed to the tumble. */
+    get lastEjectOrigin() { return lastEjectOrigin; },
     get gunReady() { return gunReady; },
     get cooldown() { return cooldown; },
     // SLUG MODE surface + HUD-truthful flag.
@@ -2860,8 +3041,11 @@ async function main() {
     setHalfRateMode: (n: number) => sdfLayer.setHalfRateMode(n),
     get halfRateMode() { return sdfLayer.halfRateMode; },
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
-     *  shot the same way the bench scenario does. */
-    aimSurface: () => aimAtNearestSurface(),
+     *  shot the same way the bench scenario does. Optional `limb` aims at
+     *  that cluster's centre instead of the torso (same confirm gate). */
+    aimSurface: (limb?: string) => aimAtNearestSurface(limb),
+    /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
+    aimHead: () => aimAtNearestSurface('head'),
 
     /**
      * Screen-space metaball blood (X1.bleed-look round 2). ON suppresses the
@@ -3012,6 +3196,19 @@ async function main() {
     get woundTuning() {
       return woundTuningNow();
     },
+    /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
+     *  bones; ON draws every posed bone as an instanced polygonal tube and
+     *  flips every view's packBones off so the field drops its bone rows. */
+    setBoneMesh: (on: boolean) => applyBoneMesh(on),
+    /** Tube bone look: { stain 0..1 toward deepColor, wet 0..1 blood tint on highlights, spec gain, fres gain }. */
+    setBoneLook: (o: { stain?: number; wet?: number; spec?: number; fres?: number }) => {
+      const l = boneInstancer.uniforms.look.value;
+      if (o.stain !== undefined) l.x = o.stain; if (o.wet !== undefined) l.y = o.wet;
+      if (o.spec !== undefined) l.z = o.spec; if (o.fres !== undefined) l.w = o.fres;
+      return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
+    },
+    get boneMesh() { return boneMesh; },
+    boneTubes: () => ({ count: boneInstancer.count, overflowed: boneInstancer.overflowed }),
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
       mode?: 'overlay' | 'depth';

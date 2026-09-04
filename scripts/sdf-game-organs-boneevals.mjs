@@ -14,7 +14,10 @@
 // staged set: organAmp only gates MATERIAL, so the counter must not move.
 // That is what proves the delta is the prims, not the shading.
 //
-// Usage: node scripts/sdf-game-organs-boneevals.mjs <vitePort> <cdpPort> <outJson> <tag> [--amp-check]
+// Usage: node scripts/sdf-game-organs-boneevals.mjs <vitePort> <cdpPort> <outJson> <tag> [--amp-check] [--bone-mesh]
+// --bone-mesh (bone tubes gate): sets __sdfGame.setBoneMesh(true) before
+// staging — bones leave the marched field, so bonesTotal must drop to the
+// organ share (≈8 prims) of the field leg.
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
@@ -23,6 +26,7 @@ const CDP = Number(process.argv[3] ?? 9297);
 const OUT = process.argv[4] ?? `/tmp/organs-boneevals-${Date.now()}.json`;
 const TAG = process.argv[5] ?? 'run';
 const AMP_CHECK = process.argv.includes('--amp-check');
+const BONE_MESH = process.argv.includes('--bone-mesh');
 const BODIES = 4;
 const WOUNDS_PER_BODY = 3;
 
@@ -84,10 +88,11 @@ await sleep(2000);
 const zcount = await evaluate('__sdfGame.zombies().length');
 if (!zcount) fail('no zombies spawned');
 
-const log = { tag: TAG, ampCheck: AMP_CHECK };
+const log = { tag: TAG, ampCheck: AMP_CHECK, boneMesh: BONE_MESH };
 
 // Freeze the wanderers so the staged wounds hold their halos through the read.
 await evaluate('__sdfGame.freeze(true)');
+if (BONE_MESH) await evaluate('__sdfGame.setBoneMesh(true)');
 await evaluate('__sdfGame.step(2)');
 
 // Stage 12 slugs across up to 4 bodies (walk the zombie list; skip a body

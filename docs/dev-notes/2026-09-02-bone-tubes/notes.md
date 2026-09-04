@@ -1,0 +1,93 @@
+# Bone tubes — notes
+
+**Date:** 2026-09-02 · **Spec:** ../../superpowers/specs/2026-09-02-bone-tubes-design.md · **Plan:** ../../superpowers/plans/2026-09-02-bone-tubes.md · **Branch:** claude/bone-tubes
+
+## What was built
+
+- `webgpu/bone-tube-geom.ts` — unit tube mesh (`TUBE_RINGS=24`, `TUBE_SEGS=12`, 4 cap lat rings + pole per end), `tubePoint()` CPU mirror, `boneInstanceOf()` (a, b, c=bendCtrl, r1, r2, scale, orient).
+- `webgpu/bone-instancer.ts` — `createBoneInstancer(512)`: one `InstancedBufferGeometry`, per-instance data as **interleaved** `InstancedInterleavedBuffer` (18 floats/instance: a3 b3 c3 r2 scale3 quat4) with six `InterleavedBufferAttribute` views (`iA iB iC iR iScale iQ`); the interleaved form shipped — the split-attribute fallback was not needed. WGSL vertex sweep (`BONE_VERTEX_WGSL`) + march-parity Lambert key + flashlight cone (`BONE_SHADE_WGSL`). **No winding flip** — the shipped index order renders front-side correct on the page.
+- `pack.ts` — `PackOpts.packBones` (default true = byte-identical legacy layout); false skips `op === 'bone'` rows and `boneCount` counts organs only.
+- `zombie-gpu.ts` — `GpuViewOpts.packBones`, `setPackBones(on)` on both views, `ChunkGpuView.posedBones()` (world-space, squash applied).
+- `game-main.ts` — instancer on layer 0 fed per frame from actors + `posedBones()` of live chunks; seams `__sdfGame.setBoneMesh(on)` / `.boneMesh` / `.boneTubes()`; flashlight + key-light uniforms copied per frame; `aimSurface(limb?)` + `aimHead()` added for the reel. Ships **OFF**.
+- Two fixes found at first real-device boot (task 5): WGSL `ref` is a reserved word (renamed `refAxis`; vitest WGSL-string tests do not catch reserved keywords, only the page boot does), and cap 256 overflowed the live cast (46 bonePrims/zombie × mirror expansion × 10 zombies → 380; cap now 512).
+
+## Tube-vs-field agreement
+
+Worst |sdPrimitive| over every tube vertex (body + caps), per Task 1 case (bound: < 1 mm):
+
+| case | worst |
+| --- | --- |
+| straight capsule | 0.0000 mm |
+| round cone (radiusB) | 0.0351 mm |
+| bent rib | 0.0000 mm |
+| skull sphere (a == b) | 0.0000 mm |
+| scaled (wide/deep) | 0.0000 mm |
+| oriented skull sphere | 0.0000 mm |
+| bent + tapered + scaled | 0.0000 mm |
+
+## Counter gate (12-slug recipe, `__sdfGame.boneEvals()`)
+
+`scripts/sdf-game-organs-boneevals.mjs` gained a `--bone-mesh` leg (`setBoneMesh(true)` before staging). Both legs: 12/12 slugs staged on 4 bodies, fresh page each.
+
+| leg | bonesTotal | meanPerPayingRay | paying px |
+| --- | --- | --- | --- |
+| field bones (off) | 1,807,616 | 276.4 | 6,540 / 42,822 (share 0.153) |
+| tubes (on) — organs only remain | 309,992 | 47.0 | 6,593 / 43,275 (share 0.152) |
+
+Not zero — the counter counts every prim in the inside-flesh array and **organs stay** by design. The tubes leg is exactly the organ share: 309,992 / 1,807,616 = 0.171 ≈ 8 organs of ~46.7 prims/body, and meanOnHit 68.4 → 11.4 (÷6.0 ≈ (38 live bones + 8 organs) / 8). Bone capsule evaluations in the marched field: **deleted**; what remains is organs.
+
+## Reel (owner judges)
+
+`scripts/bone-tubes-reel.sh docs/dev-notes/2026-09-02-bone-tubes/reel` — room 3, frozen scene, A/B/A/B via `perf-r2-parity.mjs`.
+
+| scene | a-1 (tubes) vs b-1 (field) changed px | noise floor | hot cells (a vs b) |
+| --- | --- | --- | --- |
+| 1-torso (slug crater) | 75 (0.0073%) | 1,213 | none |
+| 2-head (`aimHead()` slug) | 20,615 (2.01%) | 20,915 | bottom band = goo pool churn; a-1 vs a-2 also 16,951 — within scene noise |
+| 3-chunk (armL severed, 2 slugs) | 13 (0.0013%) | 55 | none |
+
+Agent inspection (a-1 vs b-1, full frame + wound zooms): no pale bone visible through intact skin anywhere in any capture; wound interiors read as dark red cavities in both legs at these capture distances, and the tube-vs-field diffs sit at or below the frozen-scene noise floor. Head-shot frame shows blood-particle/goo churn, not geometry.
+
+Bone through intact skin anywhere: **none seen**.
+
+## Reviewer's own check (2026-09-03, headless game page via `scripts/hull-spike-drive.mjs` with `DRIVE_PAGE=/sdf-game.html DRIVE_SEAM=__sdfGame`)
+
+- Chain merged into `claude/bone-tubes`; `tsc` clean, `vitest run src/lab` 114 files / 2166 green.
+- `close-diag3/skeleton-crop.png`: every zombie's flesh hidden (`zombie(id).view.object.visible=false`) with tubes on — a complete posed skeleton (cranium, jaw, ribcage, spine, pelvis, limb bones), lit like the scene, 380 instances, no overflow. The instancer itself is right.
+- Tubes-on vs field frames at 1.2–2 m from a zombie, front and angled, with and without slugs: no bone through intact skin anywhere; frames indistinguishable.
+- NOT demonstrated by the reviewer: bone visible INSIDE a cavity on both paths — the headless shots never framed an open crater (slugs landed on the far side). The dispatch agent's reel reports cavities reading as dark red in both legs at capture distance. Owner to confirm in-tab: `__sdfGame.setBoneMesh(true)`, put two slugs in a chest at close range, toggle.
+
+## Owner's first look (2026-09-03) and the two fixes it drove
+
+Owner: functionally fine (nothing through skin) but the cavity looked WORSE than the
+field bone, and "the ribcage structure seems way off… ribs aren't properly connected".
+
+1. **Ribs were not rigid.** `rig-bind.ts` bound each bone endpoint to its own nearest
+   joint; on the zombie six torso bones (the rib pairs, sternum sides) spanned a spine
+   joint and a hip/shoulder joint, so their tips swung with the gait and the cage
+   pulled apart. Field shading inside cavities hid it; tubes showed it. Fix: torso and
+   head bones bind BOTH ends to the joint nearest their midpoint (rigid with the spine
+   segment); limb bones keep the two-joint span. Pinned in `rig-bind-bones.test.ts`.
+   `rib-diag/sheet.png`: skeleton mid-walk from both sides, cage intact.
+2. **Cavity shading.** The tube shader was Lambert + 0.06 ambient — near black in a
+   cavity beside flesh that gets the enclosure ambient, wet specular, fresnel and the
+   blood stain. Now: ambient fill from the enclosure (fill·key + bounce-weighted mean
+   wall albedo), wrapped diffuse, wet specular + fresnel with a blood-tinted highlight,
+   and a 0.45 stain toward deepColor. Owner to re-judge in-tab.
+
+## Owner's second look (2026-09-03): "bones a bit too clean", "bone breaking seems off"
+
+3. **Bone sticking out of a stump.** `severDistal` killed the flesh beyond a mid-limb
+   cut but left every bone of the limb intact, so the upper-arm bone kept spanning to
+   the (now flesh-less) elbow and the tubes drew it in the air. The field had hidden it
+   inside the stump's wound zone. Fix: bones are split against the cut plane — wholly
+   proximal stays, wholly distal moves to the chunk (`chunk.bones`, so the flying piece
+   now carries its bone), a spanning bone is cut at the plane with the radius
+   interpolated and the bend dropped. Pinned in `sever-bones.test.ts`.
+4. **Too clean.** The stain/wet/spec/fresnel mix is now a live knob:
+   `__sdfGame.setBoneLook({ stain, wet, spec, fres })`, defaults 0.65 / 0.5 / 1.2 / 0.6
+   (up from stain 0.45, wet 0.35). Owner tunes; the chosen values become the default.
+
+## Verdict
+
+_pending owner_ — ships OFF until then (`__sdfGame.setBoneMesh(true)` to try).

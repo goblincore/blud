@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/webgpu/game-viewmodel.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  RECOIL, RELOAD, ejectedShell, fireRecoil, flashEnvelope, hingeOpenFraction,
-  loadShellTravel, magazineAfterFire, reloadPhaseAt, reloadPose, supportHandPose,
+  CHAMBER_DEPTH_M, RECOIL, RELOAD, ejectedShell, extractStage, extractorOffset,
+  fireRecoil, flashEnvelope, hingeOpenFraction, loadShellTravel, magazineAfterFire,
+  reloadPhaseAt, reloadPose, supportHandPose, topLeverAngle,
 } from './game-viewmodel';
 
 describe('flashEnvelope', () => {
@@ -39,11 +40,11 @@ describe('magazineAfterFire', () => {
 describe('reloadPhaseAt', () => {
   it('walks the six beats in order', () => {
     expect(reloadPhaseAt(0.00)).toBe('present');
-    expect(reloadPhaseAt(0.25)).toBe('break');
-    expect(reloadPhaseAt(0.40)).toBe('eject');
-    expect(reloadPhaseAt(0.55)).toBe('load');
-    expect(reloadPhaseAt(0.75)).toBe('snap');
-    expect(reloadPhaseAt(0.90)).toBe('settle');
+    expect(reloadPhaseAt(0.40)).toBe('break');
+    expect(reloadPhaseAt(0.60)).toBe('eject');
+    expect(reloadPhaseAt(0.90)).toBe('load');
+    expect(reloadPhaseAt(1.13)).toBe('snap');
+    expect(reloadPhaseAt(1.25)).toBe('settle');
   });
   it('is done past the total', () => {
     expect(reloadPhaseAt(RELOAD.totalSec + 0.01)).toBe('done');
@@ -56,8 +57,8 @@ describe('hingeOpenFraction', () => {
     expect(hingeOpenFraction(RELOAD.totalSec)).toBeCloseTo(0, 6);
   });
   it('is fully open across eject and load', () => {
-    expect(hingeOpenFraction(0.40)).toBeCloseTo(1, 6);
-    expect(hingeOpenFraction(0.55)).toBeCloseTo(1, 6);
+    expect(hingeOpenFraction(0.60)).toBeCloseTo(1, 6);
+    expect(hingeOpenFraction(0.90)).toBeCloseTo(1, 6);
   });
   it('opens monotonically through the break beat', () => {
     let prev = -Infinity;
@@ -101,7 +102,15 @@ describe('reloadPose', () => {
   });
 
   it('holds the hinge fully open across eject and load', () => {
-    for (const t of [0.34, 0.44, 0.55, 0.70]) {
+    // Tied to RELOAD.* rather than hardcoded absolute times: this test held
+    // stale 1.05s-timeline numbers (0.34/0.44/0.55/0.70) straight through the
+    // Task 4 retime and went quietly wrong -- at the new tempo 0.34s lands
+    // mid-break (hinge ~0.48), not fully open. Anchoring to the beat sheet is
+    // what keeps this from happening again.
+    for (const t of [
+      RELOAD.breakEndSec + 0.04, RELOAD.ejectEndSec,
+      (RELOAD.ejectEndSec + RELOAD.loadEndSec) / 2, RELOAD.loadSeatSec,
+    ]) {
       expect(reloadPose(t).hinge).toBeGreaterThan(0.97);
     }
   });
@@ -194,6 +203,31 @@ describe('fireRecoil', () => {
   });
 });
 
+describe('the retimed beat sheet', () => {
+  it('runs 1.30 s, the reference tempo', () => {
+    expect(RELOAD.totalSec).toBeCloseTo(1.30, 3);
+  });
+  it('orders every beat', () => {
+    const beats = [
+      RELOAD.presentSec, RELOAD.extractAtSec, RELOAD.breakEndSec,
+      RELOAD.ejectEndSec, RELOAD.loadStartSec, RELOAD.loadSeatSec,
+      RELOAD.snapEndSec, RELOAD.totalSec,
+    ];
+    for (let i = 1; i < beats.length; i++) {
+      expect(beats[i]!).toBeGreaterThan(beats[i - 1]!);
+    }
+  });
+  it('opens to 45 degrees', () => {
+    expect(RELOAD.openRad).toBeCloseTo(Math.PI / 4, 3);
+  });
+  it('shuts harder than it opens — the asymmetry IS the clack', () => {
+    const open = RELOAD.breakEndSec - RELOAD.presentSec;
+    const shut = RELOAD.totalSec - RELOAD.snapEndSec;
+    expect(shut).toBeLessThan(open);
+    expect(open / shut).toBeGreaterThan(1.8);
+  });
+});
+
 describe('supportHandPose', () => {
   it('rests on the fore-end at both ends of the reload', () => {
     for (const t of [0, RELOAD.totalSec, RELOAD.totalSec + 1]) {
@@ -216,5 +250,57 @@ describe('supportHandPose', () => {
   it('arrives at the breech by the time the cases seat', () => {
     const seat = supportHandPose(RELOAD.loadSeatSec);
     expect(seat.dy).toBeGreaterThan(-0.02);
+  });
+});
+
+describe('topLeverAngle', () => {
+  it('is home at rest and home again at the end', () => {
+    expect(topLeverAngle(0)).toBeCloseTo(0, 6);
+    expect(topLeverAngle(RELOAD.totalSec)).toBeCloseTo(0, 6);
+  });
+  it('LEADS the break — fully thrown while the hinge is still shut', () => {
+    const t = RELOAD.presentSec * 0.9;
+    expect(topLeverAngle(t)).toBeGreaterThan(0.6);
+    expect(hingeOpenFraction(t)).toBeCloseTo(0, 6);
+  });
+  it('reaches the reference throw of 40 degrees', () => {
+    const peak = Math.max(...Array.from({ length: 131 }, (_, k) => topLeverAngle(k / 100)));
+    expect(peak).toBeCloseTo(Math.PI * 40 / 180, 2);
+  });
+});
+
+describe('extractStage', () => {
+  it('is absent before the extract beat and after the hand-off', () => {
+    expect(extractStage(0)).toBeNull();
+    expect(extractStage(RELOAD.extractAtSec - 0.01)).toBeNull();
+    expect(extractStage(RELOAD.ejectAtSec + 0.01)).toBeNull();
+  });
+  it('runs 0 -> 1 monotonically across the extract window', () => {
+    expect(extractStage(RELOAD.extractAtSec)).toBeCloseTo(0, 5);
+    let prev = -1;
+    for (let t = RELOAD.extractAtSec; t <= RELOAD.ejectAtSec; t += 0.005) {
+      const v = extractStage(t)!;
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+    expect(prev).toBeCloseTo(1, 5);
+  });
+  it('has fully cleared the chamber by the hand-off, or the case would be reparented mid-steel', () => {
+    expect(extractStage(RELOAD.ejectAtSec)! * CHAMBER_DEPTH_M)
+      .toBeGreaterThanOrEqual(CHAMBER_DEPTH_M - 1e-6);
+  });
+});
+
+describe('extractorOffset', () => {
+  it('is home at rest and home once the fresh cases are seated', () => {
+    expect(extractorOffset(0)).toBeCloseTo(0, 6);
+    expect(extractorOffset(RELOAD.totalSec)).toBeCloseTo(0, 6);
+  });
+  it('is thrown out while the breech is empty', () => {
+    expect(extractorOffset(RELOAD.ejectAtSec)).toBeGreaterThan(0.005);
+    expect(extractorOffset(RELOAD.loadStartSec)).toBeGreaterThan(0.005);
+  });
+  it('retracts as the fresh cases seat, not after', () => {
+    expect(extractorOffset(RELOAD.loadSeatSec)).toBeCloseTo(0, 4);
   });
 });

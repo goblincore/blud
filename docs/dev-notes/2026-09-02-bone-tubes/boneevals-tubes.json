@@ -1,0 +1,36 @@
+{
+  "tag": "tubes",
+  "ampCheck": false,
+  "boneMesh": true,
+  "staged": 12,
+  "bodies": [
+    {
+      "id": 1,
+      "wounds": 3
+    },
+    {
+      "id": 2,
+      "wounds": 3
+    },
+    {
+      "id": 3,
+      "wounds": 3
+    },
+    {
+      "id": 4,
+      "wounds": 3
+    }
+  ],
+  "misses": [],
+  "evals": {
+    "rasterised": 43275,
+    "hits": 21741,
+    "bonesTotal": 309992,
+    "meanPerRay": 7.163304448295783,
+    "meanPerPayingRay": 47.01122232332423,
+    "payingShare": 0.15237435008665512,
+    "meanOnHit": 11.388620578630238,
+    "maxBones": 288,
+    "bodiesOnScreen": 6
+  }
+}
