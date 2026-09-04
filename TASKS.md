@@ -1694,4 +1694,4 @@ Key reference docs (open these before touching their area):
 - **Discovering a new task:** next available number in the right section, **one line**, commit.
 - **Task rows are ≤2 lines.** If context needs more, put it in a linked dev-note / plan doc and leave a bare link on the row.
 - **Milestone rollup:** when a milestone lands, collapse per-task detail into a single line with the commit range; the plan file + git log hold the rest.
-- **Design questions:** re-read the design spec above before adjusting scope.
+- **Design questions:** re-read the design spec above before adjusting scope. **Real problem restated (owner, 2026-09-04): frame dips when a body FILLS the screen (and under heavy blood particles).** Next levers, pixel-scaling only: (1) post-hit probes → derivative normals + reduced-rate AO/thin (6 → ~1 evals/pixel), (2) quarter-res depth prepass to start rays near the skin without vertex cost. Adaptive resolution REJECTED for close-up (visible res drop). Tile binning measured nil — not the cost. Plan note: Obsidian `Claude Notes/Planning/2026-09-04-sdf-close-up-frame-rate-plan.md`.
