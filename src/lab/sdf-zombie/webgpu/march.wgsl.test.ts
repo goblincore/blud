@@ -429,7 +429,10 @@ describe('ported features reach the entry point', () => {
     // could tunnel — 0.6 under-relaxation pays for the noise instead. And the
     // overshoot retraction assumes the un-displaced field (it rewinds by the
     // omega excess), so it must be suppressed whenever d carries the shell.
-    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative || nearWound)');
+    // The wound zone has its OWN, stricter multiplier (WOUND_STEP_MUL, since
+    // 2026-09-04) and the two are combined with min, so the shell's figure is
+    // still the shell's — see march-step-soundness.test.ts for why they split.
+    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
     expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
   });
 

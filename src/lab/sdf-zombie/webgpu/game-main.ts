@@ -3551,6 +3551,22 @@ async function main() {
     /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
     setWoundEarlyOut(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
     get woundEarlyOut() { return (actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
+    /**
+     * Near-wound step multiplier (perfCfg.z), for looking at the 2026-09-04
+     * retune on screen. 0 restores the shipped WOUND_STEP_MUL; **0.6 is the
+     * old value** — set it, shoot a torso half a dozen times, and compare the
+     * crater at 1.5-2.5 m, which is where 4.3% / 2.2% of that body's pixels
+     * shaded from inside the meat. See WOUND_STEP_MUL in march.wgsl.ts for
+     * what the counts mean and what each value costs in steps.
+     *
+     * Takes effect on the next frame and survives a body rebuild (perfCfg is
+     * a settings uniform, and chunk views copy it from the template).
+     */
+    setWoundStep(v: number) {
+      const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
+      for (const a of actors) a.view.uniforms.perfCfg.value.z = n;
+    },
+    get woundStep() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {
       const n = Math.max(0.1, Math.min(1.0, v));

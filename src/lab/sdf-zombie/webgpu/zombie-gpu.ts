@@ -418,8 +418,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
     /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
-     *  early-out, zw spare. All zero = the pre-plan shader, which is what the
-     *  lab binds. */
+     *  early-out, z near-wound step multiplier override (2026-09-04; 0 = the
+     *  compiled WOUND_STEP_MUL), w spare. All zero = the pre-plan shader,
+     *  which is what the lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** Half extents of the view's proxy box, world space (perf round 2 task
      *  5): the accumulated-depth gate's conservative per-body ray entry —

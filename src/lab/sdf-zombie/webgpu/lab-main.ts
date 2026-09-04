@@ -4257,6 +4257,13 @@ async function main() {
     setSilhouetteNoise(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.z = v; },
     /** Over-relaxation factor; <= 1 disables the relaxed tracer. */
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
+    /** Near-wound step multiplier (perfCfg.z); 0 = the compiled
+     *  WOUND_STEP_MUL, 0.6 = the value that shipped before 2026-09-04. The
+     *  twin of `__sdfGame.setWoundStep` — see WOUND_STEP_MUL in march.wgsl.ts. */
+    setWoundStep(v: number) {
+      const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
+      for (const x of [view, ...crowd]) x.uniforms.perfCfg.value.z = n;
+    },
     /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
     /** Dynamic resolution: drives the SDF scale to hold the frame budget. */
