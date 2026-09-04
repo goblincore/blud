@@ -499,7 +499,15 @@ wound pops, gait stop-motion).
   reference and `--apply` items.
   [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
 
-- `M?.minotaur` [~] **Author the minotaur from r1, by hand** — `minotaur.blob`
+- `M?.minotaur` [x] **Minotaur — DONE ENOUGH, not a great character.** Owner
+  2026-09-03: *"not particularly good result from this. but i guess that is
+  okay, part of the process."* It is a working, correctly formed, correctly
+  proportioned mid-tier enemy and it does NOT need more rounds. What it never
+  got was muscle definition, and that is now known to be an ENGINE limit
+  rather than an authoring failure (`X4`, `X5`). Closed deliberately.
+  Original entry follows.
+
+- `M?.minotaur-log` [x] **Author the minotaur from r1, by hand** — `minotaur.blob`
   is r1's content. **Round 4 done** (`6190370`): horns raised from ear height
   (y 1.702, 34% up the cranium) to the crown (roots 1.873, tips 2.021, clearing
   the cranium's own 1.959 — they had been dying 0.11 BELOW it); flesh
@@ -567,6 +575,34 @@ wound pops, gait stop-motion).
   not `mapBody` — a sheet in `mapBody` alone is a normal map with extra
   steps. The spec predates that finding; fix it before task 3.
   [design](docs/superpowers/specs/2026-09-03-body-sheet-design.md) · [plan](docs/superpowers/plans/2026-09-03-body-sheet.md) · [evidence](docs/dev-notes/2026-09-03-torso-relief/notes.md)
+
+- `M?.mancubus` [ ] **NEXT CHARACTER — start fresh here.** Owner is shifting
+  from the minotaur to a **mancubus-style** enemy (Doom): bloated, sagging,
+  huge low belly, narrow shoulders, arm cannons.
+  **Why this fits, in the engine's own terms** — every failure mode this
+  toolchain showed on the minotaur is a mancubus asset:
+  * smooth-min blended masses want to be a centre-heavy dome. That IS a
+    mancubus body; the minotaur's cross-section pass spent itself fighting it
+  * `silhouetteNoiseAmp` lumps are the ONE thing that reads clearly on any
+    character (real geometry, breaks the silhouette). They failed as muscle
+    and are exactly right as sagging, uneven flesh
+  * the mottle competed with muscle relief; on a bloated thing it reads as hide
+  * **no crisp relief needed** — the wall of `X4`/`X5` (creases cannot read
+    without a cavity-AO term) simply does not apply to a body with no muscle
+    definition to show
+  * the arm cannons are hard-surface: `box` + `metal` + `glow`, all three
+    shipped this session, `glow` with a dark A/B behind it
+  **Carry over:** the round-5 cross-section method (fit against
+  `blob:relief`, bounded by judgement, then LOOK). It worked — 21.6 → 15.3mm
+  and the render agreed — and a mancubus silhouette is the easy direction for
+  it, unlike the V-taper the engine resisted.
+  **RUN IT DIFFERENTLY, and this is the lesson worth more than the tooling:**
+  this session went to instruments and engine work over and over instead of
+  authoring, and THREE separate times a score improved while the render did
+  not. Lead with frames. Use measurement only to catch gross proportion
+  errors, never as the thing being optimised. Accept cruder measurement and
+  spend the hours on shape.
+  Needs: a reference mesh in `docs/dev-notes/refs/mancubus-mesh/`.
 
 - `X6.merge-dispatch` [ ] **Merge the two dispatch chains — DO THIS FIRST NEXT
   SESSION** — both branched off `121ef37` and both are LINEAR, so two merges
