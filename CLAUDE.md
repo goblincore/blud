@@ -17,6 +17,7 @@ Blood-inspired FPS (short-run roguelike, Weird West × online brainrot setting, 
 | `docs/tuning-sources-gibs.md`    | Gib picnum map (tile 2154 = hero blood chunk; 1267/8/9/1454/1456 = body chunks) |
 | `docs/dev-notes/`                | Ad-hoc dev notes (sprite extraction, palette decoding, etc) |
 | `scripts/extract_blood_sprites.py` | Blood RFF/ART → PNG (dev placeholder pipeline, never ships) |
+| `scripts/link-dev-assets.sh`     | Link the gitignored Blood placeholders into a fresh worktree (run once per worktree, or the game will not boot) |
 | `assets-source/blood-extracted/` | Cached extracted Blood asset dump (**gitignored, dev only, never ship**) |
 | `src/`                           | Game code (created by M1 dispatch tasks) |
 | `public/`                        | Static web assets served by Vite |
