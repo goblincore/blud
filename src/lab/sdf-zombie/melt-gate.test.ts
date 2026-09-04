@@ -34,7 +34,7 @@ import { applyMelt, endpointHeights, MELT_TUNING_BODY, meltInitBody, stepMelt } 
 import { makeChunk, stepChunk, type Chunk } from './gib-chunks';
 import {
   boneChunkRadius, groupCentroid, groupReleaseProgress, limbOfGroup,
-  MELT_BONE_RELEASE_U, meltBoneSpawnVel, mulberry32,
+  releaseThreshold, meltBoneSpawnVel, mulberry32,
   partitionBones, releaseOrder, type BoneGroup,
 } from './melt-bones';
 import type { Primitive, Vec3 } from './types';
@@ -150,7 +150,7 @@ describe('MELT GATE — the end state must be shorter, wider and lower', () => {
         if (released.has(g)) continue;
         const prims = parts.get(g)!;
         const centroid = groupCentroid(prims);
-        if (groupReleaseProgress(s, centroid[1], span) <= MELT_BONE_RELEASE_U) continue;
+        if (groupReleaseProgress(s, centroid[1], span) <= releaseThreshold(g)) continue;
         released.add(g);
         chunks.push({
           g,

@@ -131,7 +131,7 @@ import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
 import {
   boneChunkRadius, groupCentroid, groupOf, groupReleaseProgress, limbOfGroup,
-  MELT_BONE_RELEASE_U, meltBoneSpawnVel, mulberry32,
+  releaseThreshold, meltBoneSpawnVel, mulberry32,
   partitionBones, releaseOrder, type BoneGroup,
 } from '../melt-bones';
 import {
@@ -1092,7 +1092,7 @@ async function main() {
    * severed limb (it adds the root shift itself); the seeded rng is what
    * makes two capture runs shoot the same tumble.
    */
-  // MELT_BONE_RELEASE_U lives in melt-bones.ts so the Gate A settle test
+  // releaseThreshold lives in melt-bones.ts so the Gate A settle test
   // reads the SAME threshold — two copies would drift.
   function releaseMeltBones(posedBody: BuildResult) {
     if (!meltState || !meltBones) return;
@@ -1104,7 +1104,7 @@ async function main() {
       // the sag run on the same numbers.
       const restCentroid = groupCentroid(restPrims);
       if (groupReleaseProgress(meltState, restCentroid[1], meltBones.span)
-          <= MELT_BONE_RELEASE_U) continue;
+          <= releaseThreshold(g)) continue;
       meltBones.released.add(g);
       // ...but SPAWN where the skeleton actually is: the POSED bone prims.
       // Rest prims + heroMotion.lastRootShift is the sever precedent, and it

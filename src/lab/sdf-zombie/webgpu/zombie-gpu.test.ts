@@ -14,6 +14,8 @@ import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
+import { ROW_PRIM_BEND } from './march.wgsl';
+import { MAX_PRIMS } from '../validate';
 import type { Primitive } from '../types';
 import * as THREE from 'three/webgpu';
 
@@ -188,6 +190,86 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     expect(marchCalls.length).toBe(2); // createMarchMaterial + cone twin
     expect(src.match(/volumeWarp: u\.volumeWarp,\s*\n\s*volumeClip: u\.volumeClip,/g)?.length)
       .toBe(2);
+  });
+});
+
+describe('chunk bend transform', () => {
+  // A bent bar that keeps a LOCAL control point while its endpoints are
+  // rewritten to world space straightens as the chunk turns. On the melt's
+  // released ribcage that is the whole defect: ribs are two BENT bars per
+  // hoop, and hoops whose control points no longer match their endpoints
+  // collapse into rods — "a linear bundle of sticks" (owner, 2026-09-03).
+  it('rewrites ROW_PRIM_BEND every frame in apply, not once in reset', () => {
+    // Tripwire in this file's established style (see the volumeClip test):
+    // the row's value cannot be read back out of the data texture here, and
+    // the failure mode is a MISSING write, which a tripwire catches exactly.
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
+    const apply = src.slice(src.indexOf('function apply(c: Chunk)'));
+    const body = apply.slice(0, apply.indexOf('\n  }'));
+    expect(body).toContain('writeRow(ROW_PRIM_BEND');
+    // ...and both prim loops must feed it, flesh and bone.
+    expect(body.match(/writeBend\(/g)?.length).toBe(2);
+    // ...and writeBend must actually WRITE. Counting call sites alone passes
+    // against a gutted body — verified by mutation: stubbing writeBend to
+    // return early left this whole file green until this assertion existed.
+    const wb = src.slice(src.indexOf('function writeBend('));
+    const wbBody = wb.slice(0, wb.indexOf('\n  }'));
+    expect(wbBody).toContain('packed.primBend.set');
+    expect(wbBody).toContain('chunkPoint(current, bendCtrl(');
+  });
+
+  it('writes the TRANSFORMED control point into the bend row', () => {
+    // The real behavioural check: read ROW_PRIM_BEND straight out of the
+    // dataTexture the march samples. A source tripwire cannot catch a gutted
+    // writeBend — the text stays there — so this is the assertion that does.
+    const quat: [number, number, number, number] = [0.3826834, 0, 0, 0.9238795];
+    const bone: Primitive = {
+      a: [1, 2, 3], b: [1, 2.4, 3], radius: 0.02, scale: [1, 1, 1], blendK: 0,
+      limb: 'armL', cluster: 2, op: 'bone', bend: [0.1, 0, 0.05],
+    };
+    const spawn = makeChunk('armL', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], () => 0.5, 'limb');
+    const view = createChunkGpuView(
+      { ...spawn, quat }, [{ ...bone, op: 'add', radius: 0.05, bend: undefined }],
+      defaultUniforms(blankFaceTexture()), undefined, undefined, undefined, [bone]);
+
+    const readBend = (row: number): number[] => {
+      const data = (view.dataTexture as THREE.DataTexture).image.data as Float32Array;
+      const o = (ROW_PRIM_BEND * MAX_PRIMS + row) * 4;
+      return [data[o]!, data[o + 1]!, data[o + 2]!];
+    };
+
+    // Update at two different orientations: the control point must MOVE with
+    // the chunk. A bend left in local space is identical in both, which is
+    // exactly the straightening the ribcage showed.
+    view.update({ ...spawn, quat });
+    const atA = readBend(1); // row 0 is the flesh prim, row 1 the bone
+    view.update({ ...spawn, quat: [0, 0.7071068, 0, 0.7071068] });
+    const atB = readBend(1);
+
+    expect(Math.hypot(...atA)).toBeGreaterThan(1e-6);
+    const moved = Math.hypot(atA[0]! - atB[0]!, atA[1]! - atB[1]!, atA[2]! - atB[2]!);
+    expect(moved).toBeGreaterThan(1e-3);
+  });
+
+  it('carries a bent bone through the chunk transform', () => {
+    // Rotated chunk: identity would pass whether or not the bend transforms.
+    const chunk = { ...makeChunk('armL', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], () => 0.5, 'limb'),
+      quat: [0.3826834, 0, 0, 0.9238795] as [number, number, number, number] };
+    const bone: Primitive = {
+      a: [1, 2, 3], b: [1, 2.4, 3], radius: 0.02, scale: [1, 1, 1], blendK: 0,
+      limb: 'armL', cluster: 2, op: 'bone', bend: [0.1, 0, 0.05],
+    };
+    const view = createChunkGpuView(
+      chunk, [{ ...bone, op: 'add', radius: 0.05, bend: undefined }],
+      defaultUniforms(blankFaceTexture()), undefined, undefined, undefined, [bone]);
+    view.update(chunk);
+    const posed = view.posedBones()[0]!;
+    // The bend must survive as a real displacement — a straightened bar
+    // reports (0,0,0) — and must not be the untransformed authored value.
+    expect(posed.bend).toBeDefined();
+    const mag = Math.hypot(...posed.bend!);
+    expect(mag).toBeGreaterThan(1e-6);
+    expect(posed.bend).not.toEqual(bone.bend);
   });
 });
 

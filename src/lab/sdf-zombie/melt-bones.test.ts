@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BONE_GROUPS, groupOf, partitionBones, releaseOrder, groupCentroid,
   groupReleaseProgress, limbOfGroup, mulberry32,
+  releaseThreshold, MELT_BONE_RELEASE_U,
 } from './melt-bones';
 import { meltInit, stepMelt } from './melt';
 import type { Primitive } from './types';
@@ -134,5 +135,27 @@ describe('mulberry32', () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThan(1);
     }
+  });
+});
+
+describe('per-group release thresholds', () => {
+  it('holds the cage in far longer than everything else', () => {
+    // The cage is 40-odd thin bars: out of the flesh early, it stops reading
+    // as a ribcage and becomes a fan of loose spikes (owner review, t ~= 0.65).
+    expect(releaseThreshold('cage')).toBeGreaterThan(MELT_BONE_RELEASE_U);
+    expect(releaseThreshold('cage')).toBe(0.72);
+  });
+
+  it('leaves every other group on the default', () => {
+    for (const g of BONE_GROUPS) {
+      if (g === 'cage') continue;
+      expect(releaseThreshold(g)).toBe(MELT_BONE_RELEASE_U);
+    }
+  });
+
+  it('still releases the cage before the ramp ends', () => {
+    // Below 1.0 by a real margin, or the cage never lands and Gate A's
+    // bone-settle check fails the same way the skull did at 0.6.
+    expect(releaseThreshold('cage')).toBeLessThan(0.85);
   });
 });

@@ -62,7 +62,7 @@ const CDP = Number(process.argv[4] ?? 9223);
 // The melt is a zombie feature; the lab's default character is not assumed.
 const CHARACTER = process.env.BLOB_CHARACTER ?? 'zombie';
 // Fixed progress sweep — the spec's verification points. Never time-derived.
-const PROGRESS = [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1.0];
+const PROGRESS = (process.env.MELT_PROGRESS ? process.env.MELT_PROGRESS.split(",").map(Number) : [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1.0]);
 mkdirSync(OUT, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

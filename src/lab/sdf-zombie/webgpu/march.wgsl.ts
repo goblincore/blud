@@ -1435,6 +1435,39 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 export const FACE_MELT_SAG = 0.25;
 export const FACE_MELT_STRETCH = 0.6;
 export const FACE_MELT_FADE_LO = 0.05;
+
+/**
+ * MELT SKIN PATCHES (owner review, 2026-09-03: "some of the pink would still
+ * be there like the skin, so some parts are still pink mixed with the red").
+ *
+ * The first version lerped ALL flesh albedo toward the deep red on one global
+ * progress, so every pixel crossed over together and the body took a uniform
+ * stain. Skin does not do that — it SLOUGHS, in patches, exposing the meat
+ * under it while other patches are still intact.
+ *
+ * So the crossover threshold is per-point, read off the same rest-space noise
+ * anchor the mottle uses: each patch turns at its own progress. FREQ sets the
+ * patch size (the mottle beside it runs at 6.0), SOFT the softness of each
+ * patch's edge, and KEEP > 1 scales the threshold ABOVE full progress so the
+ * highest patches never cross at all — that is what leaves pink skin on the
+ * finished puddle instead of converging to one red at t = 1.
+ */
+export const MELT_SKIN_PATCH_FREQ = 5.0;
+export const MELT_SKIN_PATCH_SOFT = 0.16;
+export const MELT_SKIN_KEEP = 1.30;
+/**
+ * Spread of the patch field before it becomes a threshold.
+ *
+ * NEEDED because fbm does NOT fill 0..1 evenly — it clusters hard around its
+ * midpoint, so `fbm * 0.5 + 0.5` puts almost every point near 0.5 and every
+ * patch crosses at nearly the same progress. The first version of this had no
+ * contrast term and the body still went uniformly red, which looked exactly
+ * like the bug it was meant to fix. Multiplying the deviation from the
+ * midpoint before the bias is what actually separates early patches from late
+ * ones (measured against captures at t = 0.35, where the uncontrasted version
+ * had no pink left at all).
+ */
+export const MELT_SKIN_CONTRAST = 2.8;
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -2301,7 +2334,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     if (isBone) {
       albedo = mix(albedo, boneColor, meltU * 0.9);
     } else {
-      albedo = mix(albedo, deepColor * 0.8, meltU * 0.8);
+      // Patchy, not uniform: skin sloughs in pieces. Each point crosses over
+      // at its OWN progress, read off the rest-space anchor, and the patches
+      // scaled past 1.0 by MELT_SKIN_KEEP never cross at all — so pink skin
+      // survives in the finished puddle instead of everything staining red
+      // together. See the constants for the owner's brief.
+      // NB 'patch' is a RESERVED KEYWORD in WGSL — naming this variable that
+      // compiles fine in TypeScript and fails the shader at runtime, which
+      // renders the body invisible rather than erroring anywhere a test looks.
+      let skinPatch = clamp(fbm(anchor * ${MELT_SKIN_PATCH_FREQ}) * ${MELT_SKIN_CONTRAST} * 0.5 + 0.5, 0.0, 1.0);
+      let thresh = skinPatch * ${MELT_SKIN_KEEP};
+      let local = smoothstep(thresh - ${MELT_SKIN_PATCH_SOFT}, thresh + ${MELT_SKIN_PATCH_SOFT}, meltU);
+      albedo = mix(albedo, deepColor * 0.8, local * 0.8);
     }
   }
 

@@ -151,6 +151,16 @@ export interface MeltBodyTuning {
    * puddle ONE fused surface instead of a heap of sausages.
    */
   fuseK: number;
+  /**
+   * Fuse for HEAD prims specifically. The head is a handful of small prims —
+   * cranium, jaw, brow, nose — and per-endpoint sag pulls them apart faster
+   * than the body's fuse can hold them together, so at t ~= 0.65 one drooping
+   * mass became a STACK OF BALLS with the painted eyes stranded on the middle
+   * one (owner review, watching it live). It needs its own number rather than
+   * a global rise: raising fuseK for the whole body re-inflates the puddle,
+   * which is the bug task 4 spent its Step 0 fixing.
+   */
+  headFuseK: number;
 }
 
 export const MELT_TUNING_BODY: MeltBodyTuning = {
@@ -158,6 +168,7 @@ export const MELT_TUNING_BODY: MeltBodyTuning = {
   crush: 0.25,
   spread: 0.16,
   fuseK: 0.035,
+  headFuseK: 0.085,
 };
 
 /** Endpoint Y in the canonical order: prim i contributes 2i (a), 2i+1 (b). */
@@ -209,7 +220,7 @@ export function applyMelt(
       radius: p.radius / Math.sqrt(shrink || 1),
       ...(p.radiusB !== undefined ? { radiusB: p.radiusB / Math.sqrt(shrink || 1) } : {}),
       scale: [p.scale[0], yScale, p.scale[2]] as Vec3,
-      blendK: lerp(p.blendK, body.fuseK, u),
+      blendK: lerp(p.blendK, p.limb === 'head' ? body.headFuseK : body.fuseK, u),
     };
   });
 }

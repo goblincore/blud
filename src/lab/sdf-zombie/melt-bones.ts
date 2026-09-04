@@ -118,6 +118,29 @@ export function groupReleaseProgress(
 export const MELT_BONE_RELEASE_U = 0.4;
 
 /**
+ * Per-group override of the release threshold.
+ *
+ * The CAGE is the exception the default cannot serve. It is 40-odd thin bars,
+ * and the moment it leaves the flesh those bars stop reading as a ribcage and
+ * become a fan of loose spikes (owner review, watching it live at t ~= 0.65).
+ * Every other group is a compact lump that reads the same in or out of the
+ * body, so only the cage needs to stay embedded longer — long enough that the
+ * flesh around it has already pooled by the time it drops, which is what makes
+ * it fall INTO goo instead of standing up out of a half-melted torso.
+ *
+ * It is still well under 1.0: the cage must land before the ramp ends, or it
+ * fails the Gate A bone-settle check the same way the skull did at 0.6.
+ */
+export const MELT_BONE_RELEASE_U_BY_GROUP: Partial<Record<BoneGroup, number>> = {
+  cage: 0.72,
+};
+
+/** The threshold this group actually releases at. */
+export function releaseThreshold(g: BoneGroup): number {
+  return MELT_BONE_RELEASE_U_BY_GROUP[g] ?? MELT_BONE_RELEASE_U;
+}
+
+/**
  * The spawn velocity of a released group: a gentle clatter OUTWARD off the
  * body's vertical axis — gravity does the drop; this just keeps the pile
  * from stacking on its own centre. Pure (the caller's rng is the seeded one)

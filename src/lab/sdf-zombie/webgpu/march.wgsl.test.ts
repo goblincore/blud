@@ -641,7 +641,19 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
       'let meltU = smoothstep(0.0, 1.0, clamp(meltCfg.x * 2.0, 0.0, 1.0));');
     // Flesh reddens; bone goes PALE instead — the contrast is the effect.
     expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, meltU * 0.9)');
-    expect(MARCH_BODY).toContain('albedo = mix(albedo, deepColor * 0.8, meltU * 0.8)');
+    // Flesh mixes toward the deep red — but through the PER-PATCH `local`,
+    // not meltU directly. Skin sloughs in pieces (owner review 2026-09-03):
+    // each point crosses at its own progress off the rest-space anchor, and
+    // patches scaled past 1.0 by MELT_SKIN_KEEP never cross at all, so pink
+    // survives on the finished puddle. Pinning the intent — reddening driven
+    // by a patch threshold that reads meltU — rather than the exact spelling,
+    // which is a tuning surface.
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, deepColor * 0.8, local * 0.8)');
+    expect(MARCH_BODY).toContain('let thresh = skinPatch * ');
+    expect(MARCH_BODY).toMatch(/let local = smoothstep\(thresh - [\d.]+, thresh \+ [\d.]+, meltU\)/);
+    // `patch` is a RESERVED WORD in WGSL: naming it that compiles in TS and
+    // fails the shader at runtime, rendering the body invisible. Guard it.
+    expect(MARCH_BODY).not.toMatch(/\blet patch\b/);
     // Wetness ramps on flesh ONLY — bone stays matte.
     expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), meltU)');
   });

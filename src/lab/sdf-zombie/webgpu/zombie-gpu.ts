@@ -1549,6 +1549,32 @@ export function createChunkGpuView(
     u.faceGlowColor.value.copy(template.faceGlowColor.value);
   }
 
+  /**
+   * Transform a bent prim's Bezier control point by the chunk's own transform.
+   *
+   * WITHOUT THIS A BENT BAR STRAIGHTENS AS THE CHUNK TURNS. `apply` rewrites
+   * primA/primB into world space every frame, but ROW_PRIM_BEND was written
+   * ONCE by `reset` in local space and never again — so the endpoints rotated
+   * with the chunk while the control point stayed where the chunk was born.
+   * On the melt's released ribcage that is the whole defect the owner saw: the
+   * ribs are two BENT bars per hoop, and a hoop whose control point no longer
+   * matches its endpoints collapses into a straight rod. Twelve of those is
+   * "a linear bundle of sticks" rather than a ribcage.
+   *
+   * The row stores the ABSOLUTE control point (pack.ts), so this is exactly
+   * the transform the endpoints get — not a displacement that needs rotating.
+   * `posedBones()` already knew this and did it for its own read path; the
+   * render path simply never got the same treatment.
+   *
+   * Prims with no bend are left alone: their row carries a BOX's corner
+   * rounding in .w, which this must not clobber.
+   */
+  function writeBend(p: Primitive, o: number, sx: number, sy: number, sz: number): void {
+    if (p.bend === undefined) return;
+    packed.primBend.set(
+      [...chunkPoint(current, bendCtrl(p.a, p.b, p.bend), sx, sy, sz), 0], o);
+  }
+
   /** Writes the local prims into the world-space data rows for state `c`. */
   function apply(c: Chunk): { sx: number; sy: number; sz: number } {
     current = c;
@@ -1563,6 +1589,7 @@ export function createChunkGpuView(
       // never shows.
       packed.primScale.set([p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
         p.op === 'sub' ? 1 : 0], o);
+      writeBend(p, o, sx, sy, sz);
     });
     // Bones ride the same squash and transform, written at the rows packBody
     // put them on — AFTER the flesh. Missing this would leave them in local
@@ -1582,6 +1609,7 @@ export function createChunkGpuView(
       packed.primScale.set(
         [p.scale[0] * sx, p.scale[1] * sy, p.scale[2] * sz,
         p.op === 'organ' ? W_ORGAN : W_BONE], o);
+      writeBend(p, o, sx, sy, sz);
     });
     packed.clusterBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
     // The chunk's one bound group IS its cluster (singleGroup above): same
@@ -1591,6 +1619,7 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
     writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
     writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
+    writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
     writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, 1);
 
