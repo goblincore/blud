@@ -126,6 +126,13 @@ same class of bug: cases handled in RIG space with no idea where the bore was.
   tray now a constant 0.040 half-width under the tubes.
 
 **[ ] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
+Spec written 2026-09-04 (approach B, owner-approved in conversation):
+[docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md](docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md)
+— Blender-authored arm GLB (thicker skin with ball joints, leather bracer
+with brass hardware matching the gun, a SMARTWATCH on the left wrist with a
+drawable glowing screen), generated albedo + normal skin maps with no
+emissive, kit parity for the watch. Follow-up once built: use the watch
+screen as an in-game device (shells / health / timer).
 Owner, 2026-09-04: "the arm itself probably needs some work to more
 accurately resemble the goblin SDF model (I guess that will be the main
 player character)". Today each arm is one skin-coloured capsule from the hand
