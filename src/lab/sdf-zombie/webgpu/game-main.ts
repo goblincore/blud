@@ -63,7 +63,13 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
-import { buildFirefight, validateScenario } from './game-bench-scenario';
+import { buildFirefight, buildCloseup, validateScenario } from './game-bench-scenario';
+// TSL nodes for the texRoundTrip diagnostic (close-up task 1, question B).
+// Named with a Tsl suffix where the name collides with anything in this file.
+import {
+  wgslFn, texture as tslTexture, screenUV as tslScreenUV, vec4 as tslVec4,
+  length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
+} from 'three/tsl';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
@@ -431,6 +437,21 @@ async function main() {
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
   let sdfScale = 1.0;
+  // Texture round-trip probe rig (texRoundTrip below) — built lazily on the
+  // first call, page-lifetime, never rendered by the frame loop. A diagnostic
+  // of the 2026-09-04 close-up task; nothing outside texRoundTrip touches it.
+  let texProbe: null | {
+    scene: THREE.Scene;
+    quad: THREE.Mesh;
+    ortho: THREE.OrthographicCamera;
+    writes: {
+      uniform: { m: THREE.MeshBasicNodeMaterial; u: { value: number } };
+      dist: { m: THREE.MeshBasicNodeMaterial };
+      'dist-small': { m: THREE.MeshBasicNodeMaterial };
+    };
+    fetchNode: ReturnType<typeof wgslFn>;
+    targets: Record<string, [THREE.RenderTarget, THREE.RenderTarget]>;
+  } = null;
   // Declared AHEAD of sizeSdfLayer because that function reads it and runs
   // during init — a `let` further down is a temporal dead zone and the page
   // dies before __sdfGame exists (caught immediately: headless boot found no
@@ -2320,7 +2341,15 @@ async function main() {
   // -----------------------------------------------------------------------
   // Frame loop.
   // -----------------------------------------------------------------------
-  let wanderFrozen = false;
+  // ?frozen=1 — boot with the wanderers frozen from frame 0. The boot loop
+  // starts stepping the moment the page loads, so a driver that freezes via
+  // the seam has already inherited a non-deterministic amount of wander;
+  // captures that must be reproducible across boots (pixel parity, staged
+  // benches) need the freeze to predate the first frame. Default unchanged.
+  let wanderFrozen = new URLSearchParams(location.search).has('frozen');
+  /** Whether the hulls have been built for the CURRENT frozen stretch — see
+   *  the frozen-from-boot hull build in tick. */
+  let frozenHullBuilt = false;
   let frameCount = 0;
   /** The __sdfGame.placeMarker debug sphere. */
   let marker: THREE.Mesh | null = null;
@@ -2389,6 +2418,7 @@ async function main() {
     stepPlayer(player, input, dt, [...colliders, ...zombieBoxes]);
 
     if (!wanderFrozen) {
+      frozenHullBuilt = false;
       for (const a of actors) a.step(dt);
       const now = performance.now() / 1000;
       for (const a of actors) {
@@ -2425,6 +2455,32 @@ async function main() {
         // the rebuild on the next frame, so the A/B seam still works.
         { occluder: sdfLayer.occluderEnabled },
       );
+    } else if (!frozenHullBuilt) {
+      // FROZEN-FROM-BOOT HULL BUILD (closeup task 1, 2026-09-04). A body
+      // frozen via ?frozen=1 never runs the branch above, so the outer hull
+      // never builds, the shell entry/exit targets stay cleared to zero, and
+      // shellFetch reads shellOut = 0 — which the march treats as "no hull
+      // covers this pixel" is FALSE, it reads it as shellOut <= 0 and
+      // DISCARDS EVERY FRAGMENT: the entire march layer is invisible while
+      // everything else (CPU field, predictor, polygonal world) works. The
+      // freeze() SEAM never hit this because it freezes after frames have
+      // run. Nothing can move once frozen, so both hulls build exactly once;
+      // unfreezing clears the flag and the normal per-frame path resumes.
+      if (sdfLayer.shellEnabled) {
+        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      }
+      occluderHull.update(
+        actors.map(a => a.posed()),
+        hullExclusionsEnabled
+          ? actors.flatMap(a => {
+            const prims = a.posed().prims;
+            const yaw = a.pose().yaw;
+            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+          })
+          : [],
+        { occluder: sdfLayer.occluderEnabled },
+      );
+      frozenHullBuilt = true;
     }
 
     // ---------------------------------------------------------------
@@ -3659,6 +3715,21 @@ async function main() {
       for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
     },
     get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
+    /** FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). 1 = the
+     *  march fragment returns the body's base albedo at the hit and skips
+     *  the whole post-hit chain (see the seam block in MARCH_BODY); 0 =
+     *  bit-identical to the pre-seam shader (pinned by test). Rides the
+     *  spare debugCfg.y channel, so no march signature or literal changes.
+     *  Chunk views own COPIED uniform sets ("Its VALUES are copied, not the
+     *  nodes" — createChunkGpuView), so they are looped too: a gib-frame A/B
+     *  with flying chunks must not read chunks shaded by a different rule
+     *  than the bodies. */
+    setFlatAlbedo(on: boolean) {
+      const v = on ? 1 : 0;
+      for (const a of actors) a.view.uniforms.debugCfg.value.y = v;
+      for (const c of chunkViews) c.uniforms.debugCfg.value.y = v;
+    },
+    get flatAlbedo() { return (actors[0]?.view.uniforms.debugCfg.value.y ?? 0) > 0.5; },
     setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
     get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
     /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
@@ -3846,10 +3917,17 @@ async function main() {
      */
     async bench(o: {
       room?: number; mode?: 'throughput' | 'spike';
+      /** 'closeup' — the static frozen-frame scenario (buildCloseup): no
+       *  teleport, no shots; the DRIVER stages camera + wounds before
+       *  calling. Default 'firefight' — the scripted walk/fire/gib. */
+      kind?: 'firefight' | 'closeup';
+      closeupFrames?: number;
       walkFrames?: number; fireFrames?: number; gibFrames?: number;
       chunkFrames?: number; warmup?: number; label?: string;
     } = {}) {
-      const scenario = buildFirefight({
+      const scenario = o.kind === 'closeup'
+        ? buildCloseup({ frames: o.closeupFrames })
+        : buildFirefight({
         room: o.room ?? 4,
         walkFrames: o.walkFrames,
         fireFrames: o.fireFrames,
@@ -4034,6 +4112,303 @@ async function main() {
         handle.setLoopRunning(true);
       }
     },
+
+    /**
+     * OCCLUDER WORLD-POSITION CHECK (close-up diagnostics task 1, question
+     * B). Renders the synthetic sphere TWICE — once writing the camera
+     * distance (the shipping encoding), once with uDebugWorld=1 writing the
+     * fragment's WORLD POSITION — and compares both against the analytic
+     * sphere the instance matrix claims was drawn.
+     *
+     * The attribution this buys: if the written POSITION is right but the
+     * written DISTANCE is wrong, the defect is in the material's
+     * length(positionWorld - cameraPosition) evaluation; if the POSITION is
+     * itself wrong at range, the defect is upstream in the instance/vertex
+     * path. Either way the texture round-trip is already exonerated (the
+     * quad probes in texRoundTrip).
+     */
+    async occluderWorldCheck(dist = 5, radius = 0.2) {
+      const wasOn = sdfLayer.occluderEnabled;
+      try {
+        handle.setLoopRunning(false);
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        const c = camera.position.clone().addScaledVector(fwd, dist);
+        occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
+        sdfLayer.setOccluderEnabled(true);
+        const readFrame = async () => {
+          handle.step(1 / 60);
+          await handle.resolveGpu();
+          const t = sdfLayer.occluderTarget;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height),
+          );
+          return { buf, w: t.width, h: t.height };
+        };
+        occluderHull.debugWorld.value = 0;
+        const d0 = await readFrame();
+        occluderHull.debugWorld.value = 1;
+        const d1 = await readFrame();
+        occluderHull.debugWorld.value = 0;
+        const fpr = (w: number) => Math.ceil((w * 16) / 256) * 256 / 4;
+        const ndc = c.clone().project(camera);
+        const col = Math.round(((ndc.x + 1) / 2) * d0.w - 0.5);
+        const rowTop = Math.round(((1 - ndc.y) / 2) * d0.h - 0.5);
+        const cell = (d: { buf: Float32Array; w: number }, r: number, cc: number, ch: number) =>
+          d.buf[r * fpr(d.w) + cc * 4 + ch] ?? NaN;
+        const r1 = Math.min(d0.h - 1 - rowTop, d0.h - 1);
+        const writtenDist = cell(d0, r1, col, 0);
+        const wPos = new THREE.Vector3(cell(d1, r1, col, 0), cell(d1, r1, col, 1), cell(d1, r1, col, 2));
+        const dir = c.clone().sub(camera.position).normalize();
+        const tHit = camera.position.distanceTo(c) - radius;
+        const expectedPos = camera.position.clone().addScaledVector(dir, tHit);
+        return {
+          sphereCentreDistFromCam: +camera.position.distanceTo(c).toFixed(4),
+          analyticCentrePixel: +tHit.toFixed(4),
+          writtenDist: +writtenDist.toFixed(4),
+          expectedPos: expectedPos.toArray().map(v => +v.toFixed(4)),
+          writtenPos: wPos.toArray().map(v => +v.toFixed(4)),
+          posErr: +wPos.distanceTo(expectedPos).toFixed(4),
+          distFromWrittenPos: +wPos.distanceTo(camera.position).toFixed(4),
+        };
+      } finally {
+        sdfLayer.setOccluderEnabled(wasOn);
+        handle.setLoopRunning(true);
+      }
+    },
+
+    /** Parity/bench instrumentation (close-up diagnostics task 1): installs
+     *  window.__sdfGameDebug with a padded-row march-target readback + FNV
+     *  hash, computed IN-PAGE (a 2.3M-float readback must not cross CDP as
+     *  a returnByValue object). Outside every timing path; only the parity
+     *  gate calls it. */
+    installDebugProbe: () => {
+      (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
+        async hashMarchTarget() {
+          const t = sdfLayer.marchTarget;
+          const w = t.width, h = t.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          let hash = 0x811c9dc5;
+          let nonZero = 0;
+          let rSum = 0;
+          for (let row = 0; row < h; row++) {
+            const base = row * floatsPerRow;
+            for (let col = 0; col < w; col++) {
+              const o = base + col * 4;
+              const r = buf[o]!, g = buf[o + 1]!, b = buf[o + 2]!;
+              hash = Math.imul(hash ^ (r | 0), 0x01000193);
+              hash = Math.imul(hash ^ (g | 0), 0x01000193);
+              hash = Math.imul(hash ^ (b | 0), 0x01000193);
+              if (r !== 0 || g !== 0 || b !== 0) nonZero++;
+              rSum += r;
+            }
+          }
+          return { w, h, hash: (hash >>> 0).toString(16), nonZero, rSum: +rSum.toFixed(3) };
+        },
+      };
+      return 1;
+    },
+
+    /**
+     * TEXTURE ROUND-TRIP PROBE (close-up diagnostics task 1, question B).
+     *
+     * Writes a KNOWN ray parameter into render targets in the shapes the
+     * quarter-res depth prepass (and the parked hull exit bound) would use,
+     * and reads it back through BOTH consumption paths — the CPU readback
+     * and the WGSL textureLoad fetch the march actually binds — at a range
+     * ladder. Purpose: decide whether a written t survives the round-trip
+     * (the prepass may proceed) or decays with range (the phenomenon that
+     * killed the occluder pre-pass and holds GAME_HULL_EXIT_BOUND at 0).
+     *
+     * Three write paths, so a decay can be attributed:
+     *   mode 'uniform' — colorNode = vec4(uT), uT set from the CPU. No
+     *     geometry involvement at all: isolates the TEXTURE itself.
+     *   mode 'dist' — the exact shipped expression,
+     *     colorNode = vec4(length(positionWorld - cameraPosition)), on a
+     *     quad perpendicular to the camera's forward at `dist`. Isolates
+     *     the TSL distance expression under rasterisation: every fragment
+     *     of a forward-facing plane at that distance should read dist
+     *     exactly.
+     *   (mode 'mesh' — the occluder's instanced-sphere path — is the
+     *     existing syntheticSphereCheck; the driver runs both and merges
+     *     the table.)
+     *
+     * Targets: RGBA32F and R32F (the occluder's and the outer hull's
+     * formats), each at FULL march-target scale and QUARTER scale (the
+     * depth prepass's scale). All NearestFilter, depth-tested like the
+     * shipped pre-passes. Quarter dims are ceil, matching how a prepass
+     * would allocate.
+     *
+     * The WGSL read is the occFetch/shellFetch body verbatim (clamp to
+     * dims, floor(screenUV * dims), textureLoad .x) rendered through a
+     * second material into a second target set — so the validated operator
+     * is the one the march would bind, not a lookalike.
+     *
+     * Self-contained and idle by default: builds its scene/targets lazily
+     * on first call, parks the loop, restores everything it touched.
+     */
+    async texRoundTrip(o: { dist: number; mode?: 'uniform' | 'dist' | 'dist-small' }) {
+      const dist = o.dist;
+      const mode = o.mode ?? 'uniform';
+      // ---- lazily-built probe rig ----------------------------------------
+      if (!texProbe) {
+        const QuadFetchWGSL = /* wgsl */ `fn quadFetch(
+  srcTex: texture_2d<f32>,
+  suv: vec2<f32>
+) -> f32 {
+  let dims = vec2<f32>(textureDimensions(srcTex, 0));
+  let c = clamp(vec2<i32>(floor(suv * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  return textureLoad(srcTex, c, 0).x;
+}`;
+        const mkWriteTarget = (fmt: 'rgba' | 'red', quarter: boolean): THREE.RenderTarget => new THREE.RenderTarget(
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.width / 4)) : sdfLayer.marchTarget.width,
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.height / 4)) : sdfLayer.marchTarget.height,
+          {
+            depthBuffer: true,
+            type: THREE.FloatType,
+            ...(fmt === 'red' ? { format: THREE.RedFormat } : {}),
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+          },
+        );
+        // Read targets are ALWAYS RGBA32F at the write target's scale: the
+        // production consumers never CPU-read a RedFormat target either —
+        // they textureLoad it in-shader — so the validated chain is
+        // write(fmt) -> textureLoad -> rgba32f -> CPU, and the r32f CPU
+        // readback (which this renderer's helper does not support) never
+        // enters the picture.
+        const mkReadTarget = (quarter: boolean): THREE.RenderTarget => new THREE.RenderTarget(
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.width / 4)) : sdfLayer.marchTarget.width,
+          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.height / 4)) : sdfLayer.marchTarget.height,
+          {
+            depthBuffer: false,
+            type: THREE.FloatType,
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+          },
+        );
+        const scene = new THREE.Scene();
+        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+        quad.frustumCulled = false;
+        scene.add(quad);
+        const uniformMat = new THREE.MeshBasicNodeMaterial();
+        const u = tslUniform(0);
+        uniformMat.colorNode = tslVec4(u, u, u, 1);
+        const distMat = new THREE.MeshBasicNodeMaterial();
+        const dNode = tslLength(tslSub(positionWorld, cameraPosition));
+        distMat.colorNode = tslVec4(dNode, dNode, dNode, 1);
+        // The read pass quad faces +z from z = 0 toward an ortho camera at
+        // z = 5 looking down -z: a fixed full-screen blit shape, so the
+        // fetch operator's screenUV maps 1:1 onto the write target's texels.
+        const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+        ortho.position.set(0, 0, 5);
+        ortho.lookAt(0, 0, 0);
+        texProbe = {
+          scene, quad, ortho,
+          writes: { uniform: { m: uniformMat, u }, dist: { m: distMat }, 'dist-small': { m: distMat } },
+          fetchNode: wgslFn(QuadFetchWGSL),
+          targets: {
+            'rgba-full': [mkWriteTarget('rgba', false), mkReadTarget(false)],
+            'rgba-quarter': [mkWriteTarget('rgba', true), mkReadTarget(true)],
+            'red-full': [mkWriteTarget('red', false), mkReadTarget(false)],
+            'red-quarter': [mkWriteTarget('red', true), mkReadTarget(true)],
+          },
+        };
+      }
+      const probe = texProbe;
+      try {
+        handle.setLoopRunning(false);
+        // One step so the camera's world matrix reflects any pose the driver
+        // set just before this call.
+        handle.step(1 / 60);
+        const fwd = new THREE.Vector3();
+        camera.getWorldDirection(fwd);
+        // Near-plane guard: a quad closer than the near plane clips, which
+        // must read as a staging fault, never as decay.
+        if (dist <= camera.near * 1.2) {
+          return { error: `dist ${dist} <= near ${camera.near} — stage further out` };
+        }
+        // The value every covered fragment should carry.
+        const expected = mode === 'uniform'
+          ? (probe.writes.uniform.u.value = dist, dist)
+          : dist;
+        // 'dist-small': the SAME per-fragment distance expression on a quad
+        // only 0.4 m tall — the synthetic sphere's projected size class. If
+        // THIS decays with range, the defect is projected-size-dependent
+        // (rasteriser/precision), not mesh-specific; if it is exact, the
+        // occluder's instanced-geometry path owns the fault alone.
+        const smallQuad = mode === 'dist-small';
+        probe.quad.material = probe.writes[mode].m;
+        // Where the WRITE pass needs the quad: perpendicular to the view
+        // axis at `dist`, sized to overflow the frustum there, so the centre
+        // pixel and its neighbours are all covered by the quad itself.
+        const writePos = camera.position.clone().addScaledVector(fwd, dist);
+        const writeQuat = new THREE.Quaternion().setFromRotationMatrix(
+          new THREE.Matrix4().lookAt(camera.position, writePos, camera.up),
+        );
+        const writeScale = smallQuad
+          ? 0.4
+          : Math.max(1, 2.5 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+        const rows: { target: string; cpu: number; wgsl: number; relErr: number; neighbourSpread: string }[] = [];
+        for (const [name, [writeT, readT]] of Object.entries(probe.targets)) {
+          // ---- write pass (main camera; renderer autoClears) ----
+          probe.quad.position.copy(writePos);
+          probe.quad.quaternion.copy(writeQuat);
+          probe.quad.scale.setScalar(writeScale);
+          handle.renderer.setRenderTarget(writeT);
+          handle.renderer.render(probe.scene, camera);
+          await handle.resolveGpu();
+          // ---- CPU read of the WRITE target (RGBA only — see mkReadTarget):
+          // centre pixel + neighbours, so a partial-coverage write shows up
+          // as spread rather than silently aliasing into the centre value ----
+          const w = writeT.width, ht = writeT.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(writeT, 0, 0, w, ht),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          const cx = Math.floor(w / 2), cy = Math.floor(ht / 2);
+          const at = (x: number, y: number) => buf[y * floatsPerRow + x * 4] ?? NaN;
+          const cpu = at(cx, cy);
+          const spread = [at(cx - 1, cy), at(cx + 1, cy), at(cx, cy - 1), at(cx, cy + 1)];
+          // ---- WGSL read: the occFetch/shellFetch operator rendered into
+          // the paired RGBA target through the fixed ortho blit, then
+          // CPU-read at the same centre texel ----
+          const mat = new THREE.MeshBasicNodeMaterial();
+          const fetched = probe.fetchNode({ srcTex: tslTexture(writeT.texture), suv: tslScreenUV });
+          mat.outputNode = tslVec4(fetched, fetched, fetched, 1);
+          mat.depthTest = false;
+          mat.depthWrite = false;
+          const savedMat: THREE.Material = probe.quad.material as THREE.Material;
+          probe.quad.material = mat;
+          probe.quad.position.set(0, 0, 0);
+          probe.quad.quaternion.identity();
+          probe.quad.scale.set(1, 1, 1);
+          handle.renderer.setRenderTarget(readT);
+          handle.renderer.render(probe.scene, probe.ortho);
+          await handle.resolveGpu();
+          const buf2 = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(readT, 0, 0, w, ht),
+          );
+          const wgsl = buf2[cy * floatsPerRow + cx * 4] ?? NaN;
+          rows.push({
+            target: name,
+            cpu: +cpu.toFixed(5), wgsl: +wgsl.toFixed(5),
+            relErr: expected !== 0 ? +Math.abs((cpu - expected) / expected).toFixed(5) : 0,
+            neighbourSpread: spread.map(v => +v.toFixed(4)).join(','),
+          });
+          probe.quad.material = savedMat;
+          mat.dispose();
+        }
+        return { dist, mode, expected, near: camera.near, far: camera.far, rows };
+      } finally {
+        handle.renderer.setRenderTarget(null);
+        handle.setLoopRunning(true);
+      }
+    },
+
     /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
      *  so frozen captures would otherwise shoot through a stale hull). No
      *  simulation steps, so a stamped body stays exactly where it was put. */

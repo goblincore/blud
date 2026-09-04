@@ -331,6 +331,40 @@ gib chunks; (7) collision. Merge picture: gore × perf chain conflicts only in
 `march.wgsl.ts` signatures + one `game-main.ts` block — merge ONCE after the
 chain finishes (~1 h); gore × elbow branch is clean.
 
+**THE THREE-r185 DISTANCE DECAY WAS FOG — ROOT-CAUSED AND FIXED (2026-09-04,
+main `8da0bdd`).** The "unexplained TSL distance decay" that killed the occluder
+pre-pass and held `GAME_HULL_EXIT_BOUND` at 0 for weeks is **scene fog**. The
+pre-pass materials render through the main scene, and the WebGPU node system
+applies fog to every fogged material's **output** — so the written distance was
+`mix(dist, fogColor, smoothstep(near, far, viewZ))`. Dungeon rig fog is
+near 2.5 / far 13: exact below 2.5 m, collapsing toward `fogColor` with range.
+That is the "near field exact, true 9 m stores 2.8 m" signature exactly, and the
+measured ladder **fits the fog curve to four decimals**. Fix: `material.fog =
+false` in `occluder-hull.ts` and `shell-hull-outer.ts`. **Consequences:** a
+texture round-trip of a ray parameter is now clean (task-3's depth prepass is
+un-gated), and the exit bound's measured-but-untakeable step win
+(missStepShare 0.54 → 0.41) is takeable — task 1b re-takes its census and
+decides the flip. Second bug fixed in the same run: **`?frozen=1` killed the
+march layer** — booting frozen meant the outer hull never built, shell targets
+stayed zero, `shellOut = 0` discarded every fragment, and the whole march layer
+went invisible while the CPU field, predictor and polygonal world read fine.
+Task 1 was capped at 120m mid-Question-A; its work was auto-committed, verified
+independently here (tsc 0, 2457 tests green) and merged. **Question A —
+shading vs marching at fill-screen — is still UNANSWERED** (spreads blew out,
+the page crashed under load spikes); it is task 1b's.
+
+**CLOSE-UP HARNESS LANDED (same commit).** `scripts/sdf-game-closeup-bench.mjs`
++ `buildCloseup()` in `game-bench-scenario.ts` + the `setFlatAlbedo` seam: pins
+fourteen ship levers explicitly, searches the distance ladder 1.6 → 0.6 m
+keeping the rung with the **best** flesh coverage, stamps camera-facing wounds,
+and fails loudly if fewer than 3 stamp / the blood sim is non-empty / a stamp
+severed something. Rotates the starting leg per rep against thermal ramp. Task
+1b extracts it to `scripts/lib/sdf-closeup-stage.mjs`; every later task imports
+it rather than re-deriving a scene. Chain is now fully serial (one bench at a
+time — concurrent benches are what spoiled the tile table and the r2 sweep):
+**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
+trigger.
+
 **CLOSE-UP FRAME RATE + GORE COST — SPEC WRITTEN, 5 TASKS QUEUED INERT
 (2026-09-04).** Successor program to perf r2, aimed at the owner's restated
 problem: **a body filling the screen**, and heavy blood spray. Spec
