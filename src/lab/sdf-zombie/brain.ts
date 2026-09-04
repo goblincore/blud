@@ -76,8 +76,9 @@ export interface BrainOutput {
   halt: boolean;
   /** The swing to compose, or null. */
   attack: { phase: number; side: 'L' | 'R' } | null;
-  /** True while this body should be separated at the wider engaged radius —
-   *  belt-and-braces for the moment of arrival, before the ring has settled. */
+  /** True while this body is IN the melee ring at all — attacking, closing,
+   *  recovering or waiting — and so should be separated at the wider engaged
+   *  radius. Waiters count: see the encircle branch. */
   engaged: boolean;
   /** True while the ring may NOT revoke this body's token. */
   committed: boolean;
@@ -90,8 +91,18 @@ export const BRAIN_TUNING = {
   noticeCone: (70 * Math.PI) / 180,
   /** Alert survives this long after the player leaves the room (s). */
   loseGrace: 4,
-  /** Where a token holder stands (m). */
-  meleeRadius: 1.0,
+  /** Where a token holder stands (m).
+   *
+   *  IT MUST CLEAR THE SEPARATION EQUILIBRIUM. game-main submits a body in
+   *  the ring at ENGAGED_RADIUS (0.70) and the player as an immobile 0.32 m
+   *  anchor, so separation parks an engaged body 1.02 m from him. At the
+   *  original 1.0 m this radius sat INSIDE that equilibrium: the body was
+   *  pushed to 1.02, `dist <= meleeRadius` never held, and it stood in
+   *  `engage` forever without ever swinging (caught by a 12 s hand probe,
+   *  2026-09-05 — zombie 10 pinned at 0.99 m in `engage` for ten seconds).
+   *  1.25 clears 1.02 with real margin, and widens the 90-degree holder
+   *  spacing from 1.41 m to 1.77 m as a bonus. */
+  meleeRadius: 1.25,
   /** Where a waiter holds (m). */
   outerRadius: 1.8,
   /** pursue -> the ring states (m). */
@@ -221,7 +232,14 @@ export function stepBrain(
     return {
       brain: { state: 'encircle', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
       target: ringPoint(player, bearing + input.drift * tuning.driftStep, tuning.outerRadius),
-      halt: false, attack: null, engaged: false, committed: false,
+      // ENGAGED, for separation purposes. Measured 2026-09-05: the ring
+      // spaces token HOLDERS from each other, but nothing spaced the waiters,
+      // so two encirclers converging on the same clear bearing settled at the
+      // 0.35 m walking circle's 0.70 m and their arms overlapped — the
+      // owner's original defect, moved from the attackers to the queue.
+      // minHandGap went to -0.06 m in a 12 s probe with only ONE body at
+      // melee radius, which is how it was found.
+      halt: false, attack: null, engaged: true, committed: false,
     };
   }
 

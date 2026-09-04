@@ -59,18 +59,45 @@ and it is the knob to move if the pack ends up feeling too spread out.
 * **Token cap** — never more than `RING_TUNING.tokens` bodies in an attack state.
 * **Holder spacing** — any two token holders' bearings differ by ≥ `minSlotAngle`.
 
-Measured on this machine:
+Measured on this machine, room-4 pairs (the pack around the player):
 
 | | worst arm gap | most engaged | tightest spread |
 |---|---|---|---|
-| ring wired | **1.971** m | **2** | **147.1°** |
-| every body forced to hold a token | **0.036** m | **4** | **0.1°** → gate FAILS |
+| shipped | **0.435** m | **2** | **114.9°** |
+| waiters back on the 0.35 m walking circle | **-0.020** m → gate FAILS | 2 | 147.5° |
 
-Both rows are from the real runs — a gate never shown to fail is not a gate.
-This one was. The mutation forces a token on every body through `setRingInput`, which packs
-four claimants onto the two-token ring: all four read as an attack state
-(4 > cap 2, check 5b), nothing spreads their bearings (0.1°, floor 90°, 5c),
-and the arm gap collapses from 1.971 m to 0.036 m (5a).
+## Three defects found by verifying the dispatch output, and fixed
+
+The eight dispatch tasks all exited 0 and the gate passed. Verifying it by hand
+found three things anyway, all of the same shape: **the measure did not cover
+the case that was broken.**
+
+**1. The ring's arm-gap measure excluded the waiters.** The gate narrowed
+`minHandGap()`'s all-bodies aperture to bodies in `engage`/`attack`/`recover`
+— correctly, because the global number was being set by two IDLE bodies parked
+in room 3, ten metres from the fight. But the narrowed set left out
+`encircle`, and a room-4 all-states probe measured **-0.051 m between bodies 7
+and 10, with 7 encircling**. Waiters stand in the same pack the owner
+photographed. `encircle` is now in the set, and a waiter is submitted to
+separation at the engaged radius like everyone else.
+
+**2. `ENGAGED_RADIUS` never cleared two arm reaches.** It was 0.55 — two such
+circles settle 1.10 m apart, and two ~0.6 m arms need 1.20 m. The 90° ring
+spacing was computed from the arm reach; this number was picked as "wider than
+0.35" and never checked against it. Now 0.70 → 1.40 m, the same 0.2 m of
+margin the ring spacing was given.
+
+**3. `meleeRadius` then sat inside the separation equilibrium.** With the
+radius at 0.70 and the player an immobile 0.32 m anchor, separation parks an
+engaged body 1.02 m from him — outside the old 1.0 m melee radius, so
+`dist <= meleeRadius` never held and a body stood in `engage` for ten seconds
+without swinging (zombie 10, caught by the same probe). `meleeRadius` is 1.25,
+which clears 1.02 with margin and widens the holder spacing from 1.41 m to
+1.77 m as a side effect.
+
+The gate's window was also 3 s of sampling straight after the settle, which
+lands in the approach rather than the melee; it is 12 s now, and refuses to
+report at all if it never saw a body in `attack`.
 
 ## Known limits, deliberate
 
@@ -83,3 +110,15 @@ and the arm gap collapses from 1.971 m to 0.036 m (5a).
   bounds. Cross-room pursuit falls out of the navigation work, not this.
 * **A body does not re-aim mid-swing**: `halt` gates `stepWander`, so heading
   stops updating for the 0.7 s a swing lasts.
+* **Idle wanderers in other rooms still clip.** The global `minHandGap()` goes
+  negative for bodies 4/5/6 idling in room 3: they separate at the base 0.35 m
+  walking circle, which is 0.70 m apart against a 1.2 m arm span. Fixing it
+  means raising `ZOMBIE_RADIUS` toward 0.6, which spreads EVERY crowd
+  permanently — a feel decision for the owner, not a bug fix, so it is
+  reported by the gate and not gated.
+* **A stuck token-holder halves the pressure.** In every probe, one body
+  (zombie 9) held a token while pinned at 2.85 m by furniture and never
+  closed, so the nominal two attackers were really one. That is the navigation
+  problem the owner reported, and it will not go away until the nav spec is
+  built; a possible cheaper mitigation is revoking a token from a holder that
+  has not closed in N seconds.

@@ -1062,11 +1062,19 @@ async function main() {
   /** Ground radius the crowd separates zombies at — the same 0.35 m the
    *  player's soft-obstacle boxes already use, so the two agree. */
   const ZOMBIE_RADIUS = 0.35;
-  /** Separation radius for a body in engage/attack/recover. Wider than the
-   *  0.35 m walking circle because an arm reaches ~0.6 m: the melee ring's
-   *  angular rule is the structural fix for arm clipping, and this catches
-   *  the transient while a body is still arriving. */
-  const ENGAGED_RADIUS = 0.55;
+  /** Separation radius for any body in the melee ring — attacking, closing,
+   *  recovering or waiting.
+   *
+   *  IT IS DERIVED, NOT PICKED. Two circles of radius r settle 2r apart, and
+   *  an arm reaches ~0.6 m, so clearing two facing arms needs 2r > 1.2, i.e.
+   *  r > 0.6. The first value here was 0.55 — 1.10 m apart, which does NOT
+   *  clear 1.2 m of arms — specified from "wider than 0.35" rather than from
+   *  the arm reach the 90-degree ring spacing was computed from. A 12 s hand
+   *  probe caught it: minHandGap still went to -0.06 m with only ONE body at
+   *  melee radius, because the pair clipping was two WAITERS, not two
+   *  attackers. 0.70 gives 1.40 m and 0.2 m of margin, the same margin the
+   *  ring's 90 degrees was given. */
+  const ENGAGED_RADIUS = 0.70;
   const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
   /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
    *  a player who shares their room. */
@@ -2951,18 +2959,54 @@ async function main() {
         return pts;
       });
       let best = Infinity;
+      let bestPair: [number, number] = [-1, -1];
       for (let i = 0; i < arms.length; i++) {
         for (let j = i + 1; j < arms.length; j++) {
           for (const u of arms[i]!) {
             for (const v of arms[j]!) {
               const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2])
                 - u.r - v.r;
-              if (g < best) best = g;
+              if (g < best) { best = g; bestPair = [actors[i]!.id, actors[j]!.id]; }
             }
           }
         }
       }
       return best;
+    },
+    /** Which two bodies produced minHandGap()'s number, and what rooms they
+     *  are in. Diagnostic: the metric is GLOBAL, so a negative can come from
+     *  two idle wanderers in a distant room rather than from the melee ring
+     *  around the player — which is exactly what it did on 2026-09-05. */
+    minHandGapPair: () => {
+      const arms = actors.map(a => {
+        const posed = a.posed();
+        const pts: { p: Vec3; r: number }[] = [];
+        for (const prim of posed.prims) {
+          if (prim.limb !== 'armL' && prim.limb !== 'armR') continue;
+          pts.push({ p: prim.a, r: prim.radius }, { p: prim.b, r: prim.radius });
+        }
+        return pts;
+      });
+      let best = Infinity;
+      let pair: { a: number; b: number; roomA: number; roomB: number } | null = null;
+      for (let i = 0; i < arms.length; i++) {
+        for (let j = i + 1; j < arms.length; j++) {
+          for (const u of arms[i]!) {
+            for (const v of arms[j]!) {
+              const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2])
+                - u.r - v.r;
+              if (g < best) {
+                best = g;
+                pair = {
+                  a: actors[i]!.id, b: actors[j]!.id,
+                  roomA: actors[i]!.room, roomB: actors[j]!.room,
+                };
+              }
+            }
+          }
+        }
+      }
+      return { gap: best, ...(pair ?? {}) };
     },
     /** Debug seam for the crowd capture driver: the separation nudge, by id,
      *  with the same bounds clamp and furniture rejection. Lets a driver

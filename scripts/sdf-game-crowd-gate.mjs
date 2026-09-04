@@ -304,8 +304,13 @@ let worstSpread = Math.PI;
 // mutation below (every body forced to hold a token) still fails this: four
 // claimants pack the ring with nothing spreading their bearings, and all
 // four read as an attack state, tripping 5b as well.
+// ENCIRCLE COUNTS. The subset above was 'engage/attack/recover', which left
+// the WAITERS out -- and on the build this gate was written against, the pair
+// actually interpenetrating was 7+10 with 7 encircling: measured -0.051 m by a
+// room-4 all-states probe while this check reported everything clear. Waiters
+// stand in the same pack the owner photographed; they are part of the claim.
 const RING_GAP = `(() => {
-  const ATTACK = ['engage', 'attack', 'recover'];
+  const ATTACK = ['encircle', 'engage', 'attack', 'recover'];
   const ids = __sdfGame.brains().filter((b) => ATTACK.includes(b.state)).map((b) => b.id);
   const arms = ids.map((id) => {
     const pts = [];
@@ -328,14 +333,21 @@ const RING_GAP = `(() => {
   }
   return best;
 })()`;
-for (let i = 0; i < 30; i++) {
-  await evaluate('__sdfGame.step(6, 1 / 60)');
+// SAMPLE LONG, AND LATE. The first version of this check sampled 30 x 6
+// frames (3 s) straight after the settle and reported a 1.971 m worst gap --
+// while a 12 s hand probe on the SAME build caught -0.06 m. The short window
+// lands in the approach, before anyone is holding station at melee radius.
+// 60 x 12 frames is 12 s, which covers several full swing+cooldown cycles.
+let everAttacked = false;
+for (let i = 0; i < 60; i++) {
+  await evaluate('__sdfGame.step(12, 1 / 60)');
   const bs = await evaluate('__sdfGame.brains()');
   const gap = await evaluate(RING_GAP);
   if (typeof gap === 'number' && Number.isFinite(gap) && gap < worstGap) worstGap = gap;
 
   const swinging = bs.filter((b) => ATTACK_STATES.includes(b.state));
   if (swinging.length > maxSwinging) maxSwinging = swinging.length;
+  if (bs.some((b) => b.state === 'attack')) everAttacked = true;
 
   // Every pair of token holders must clear minSlotAngle.
   const holders = bs.filter((b) => b.hasToken);
@@ -353,6 +365,15 @@ console.log(
   `ring: worst arm gap ${worstGap.toFixed(3)} m · most engaged at once ${maxSwinging}` +
   ` · tightest holder spread ${((worstSpread * 180) / Math.PI).toFixed(1)} deg`,
 );
+
+// 5-pre. A WINDOW THAT SAW NO MELEE PROVES NOTHING. Without this the three
+//     checks below pass trivially whenever the pack never actually closed --
+//     which is exactly how the 3 s window used to report a 1.971 m gap on a
+//     build whose real minimum was negative.
+if (!everAttacked) {
+  fail('the ring window never saw a body in the attack state, so its arm-gap, ' +
+       'cap and spacing numbers mean nothing');
+}
 
 // 5a. THE OWNER'S DEFECT, AS A NUMBER. Arms on different bodies must not
 //     interpenetrate. The measure is conservative (endpoint-to-endpoint minus

@@ -699,7 +699,11 @@ describe('createZombieActor — the ring wiring', () => {
     a.setRingInput(false, 1);
     a.step(1 / 60);
     expect(a.brain().state).toBe('encircle');
-    expect(a.engagedForCrowd()).toBe(false);
+    // A waiter takes the wide separation circle too. Measured 2026-09-05: the
+    // pair actually interpenetrating in room 4 was an ATTACKER and a WAITER
+    // (-0.051 m), so leaving waiters on the 0.35 m walking circle left the
+    // owner's defect in place next to a ring that looked clean.
+    expect(a.engagedForCrowd()).toBe(true);
   });
 
   it('a slug hit staggers it through the brain, not a private timer', () => {

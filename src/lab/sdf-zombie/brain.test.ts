@@ -98,7 +98,10 @@ describe('stepBrain — the ring states', () => {
     const { brain, over } = alertAt(2.0);
     const out = stepBrain(brain, input({ ...over, hasToken: false }));
     expect(out.brain.state).toBe('encircle');
-    expect(out.engaged).toBe(false);
+    // Waiters take the wide separation circle too — the ring spaces holders
+    // from each other, but nothing else spaces two waiters, and at the 0.35 m
+    // walking circle their arms overlap.
+    expect(out.engaged).toBe(true);
     expect(out.target).not.toBeNull();
   });
 

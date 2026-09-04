@@ -25,6 +25,22 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 **ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
 
+**Post-dispatch verification found three defects, all fixed (2026-09-05):**
+the ring's arm-gap measure excluded `encircle`, so the pair actually
+interpenetrating (an attacker and a WAITER, -0.051 m) was invisible to a gate
+that reported everything clear; `ENGAGED_RADIUS` was 0.55, which settles two
+bodies 1.10 m apart against a 1.20 m arm span (the 90-degree ring spacing was
+derived from the arm reach, this number was not); and raising it to 0.70 then
+put `meleeRadius` 1.0 INSIDE the separation equilibrium (0.70 + the player's
+0.32 anchor = 1.02 m), so a body stood in `engage` for ten seconds without
+swinging. Now 0.70 / 1.25, waiters included, gate window 12 s instead of 3 s
+and refusing to report if it never saw an `attack`. Gate: room-4 arm gap
++0.435 m shipped, -0.020 m with waiters put back on the walking circle.
+**Known and NOT fixed:** idle wanderers in other rooms still clip (they use the
+base 0.35 m circle; raising it spreads every crowd — owner's call), and one
+token-holder stays pinned by furniture at 2.85 m, so two nominal attackers are
+really one until navigation lands.
+
 **ZOMBIE COMBAT CHOREOGRAPHY — LANDED (2026-09-05), awaiting owner look.**
 The owner's play-test of the crowd/brain build: arms clip when several
 surround you, and the two-arm slam is "merely… okay". `melee-ring.ts` caps the
