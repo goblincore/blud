@@ -1160,8 +1160,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // ship). Outside a wound the call is provably a no-op — the inside-flesh
   // rows are contained inside flesh — so skipping it is exact, not an
   // approximation. counts2.x carries boneCount: counts was already full and
-  // woundCfg2.w is the volume hitEps override, not spare.
-  if (nearWound > 0.5 && counts2.x > 0.0) {
+  // woundCfg2.w is the volume hitEps override, not spare. counts2.y is the
+  // BARE-BONES bypass (melt task 5): the gate's proof ("bones are contained
+  // in flesh") stops holding the moment flesh moves without a wound — a
+  // melting body sags off its own skeleton, and a bone-only chunk (a
+  // released skeleton group) has no flesh and no wound to be near, so gated
+  // it would march an EMPTY field.
+  if ((nearWound > 0.5 || counts2.y > 0.5) && counts2.x > 0.0) {
     dmg = applyBones(dmg, p, data, counts, counts2.x, 0);
   }
   // bestIdx is read AFTER the bone fold so a bone that won the min is the
@@ -1347,8 +1352,14 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 //               exact v1 sample); the shared fallback binds [0,0,0,1]; a
 //               v2 clip binds frameDepth and drives x/y/z per frame.
 //   counts     x primCount, y clusterCount, z carveCount, w maxBlendK
-//   counts2    x boneCount, yzw spare (wound pass r2; counts was already
-//              full and woundCfg2.w is the volume hitEps override, not spare)
+//   counts2    x boneCount, y bareBones (melt task 5: fold inside-flesh
+//              rows WITHOUT a wound - see mapBody), zw spare (wound pass r2;
+//              counts was already full and woundCfg2.w is the volume hitEps
+//              override, not spare)
+//   meltCfg    x melt progress 0..1 (zombie melt task 6) — drives the
+//              flesh-only wet-red albedo/gloss ramp below; yzw spare.
+//              0 everywhere except a melting body and its released bone
+//              chunks, so every other view shades bit-identical
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp
 //   woundCfg   x count, y blendK, z rimSplay, w rimOffset
 //   woundCfg2  x rimWidth, y relaxation factor, z shellAmp (silhouette shell)
@@ -1408,6 +1419,22 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
 // lodCfg.x because "no ambient occlusion" has no amplitude to turn down;
 // the gore mask took the spare lodCfg.w for the same reason — "no gore"
 // has no colour amplitude to fade to.
+// ——— Face melt (zombie melt task 8) ————————————————————————————————————
+// meltCfg.x drives all three. Interpolated into MARCH_BODY below, so a WGSL
+// reader sees numbers and a tuner sees these names. SAG slides the SAMPLED
+// sheet V upward, which drags the features DOWN the skull: shader-sheet v
+// increases up the face (the upload flip in lab-main keeps the face upright
+// with a positive faceProj.y), so a surface point must sample HIGHER v to
+// show what used to be above it. STRETCH narrows the sampled V window about
+// the projection centre, so each feature covers MORE surface as it goes —
+// the elongation is what reads as dripping rather than a sticker sliding.
+// FADE_LO is where the facing fade's lower bound moves at full melt: a
+// flattened head's surface turns away from the forward axis far sooner, and
+// the standing-zombie 0.28 cutoff fades the face out before it has finished
+// dripping.
+export const FACE_MELT_SAG = 0.25;
+export const FACE_MELT_STRETCH = 0.6;
+export const FACE_MELT_FADE_LO = 0.05;
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -1480,6 +1507,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   prevT: f32,
   bodyCentre: vec3<f32>,
   bodyHalf: vec3<f32>,
+  // Melt progress in x, yzw spare (zombie melt task 6). Zero everywhere but a
+  // melting body and its released bone chunks; the flesh-only wet-red ramp
+  // below is bit-identical to the pre-melt shader while it is 0.
+  meltCfg: vec4<f32>,
   // Level-only shadow (perf round 2 task 7) — bound positionally LAST to
   // match createMarchMaterial's binding order. The gate is cfg.x — zero
   // keeps the march bit-identical to the pre-task-7 shader.
@@ -2034,10 +2065,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // unwounded pixel this texel load can never change the answer. It ran on
   // every hit pixel of every body before the gate.
   var hitMat = 0.0;
-  if (wm > 0.0 && hitBest >= 0) {
+  // The melt reads this too (meltCfg.x > 0): the skeleton EMERGES through
+  // thinning flesh with no wound anywhere near it (the bareBones bypass), so
+  // the wm gate alone would leave an exposed bone unidentified and it would
+  // shade as meat — the exact pale-vs-red contrast the melt lives on lost.
+  if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0) {
     hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE}), 0).w;
   }
   let isOrgan = hitMat > 4.5 && hitMat < 5.5;
+  // W_BONE is 4 — the dominant row is a packed bone prim (bones still fold
+  // under the default packBones-on layout). Only consulted by the melt ramp.
+  let isBone = hitMat > 3.5 && hitMat < 4.5;
   if (isOrgan) {
     // Pale, wet, and NOT stained toward the meat: viscera is already wet
     // and already the same family of colour as the flesh around it. organAmp
@@ -2136,16 +2174,27 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
         atan2(dir.x * forward, dir.z * forward) / 3.14159265,
         asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
     }
-    let uv = raw * faceProj.xy + faceProj.zw;
+    let uv0 = raw * faceProj.xy + faceProj.zw;
+    // Melt drips the face off the skull (task 8): sag drags features DOWN
+    // (see the FACE_MELT_SAG comment at the constants for why positive is
+    // down), the stretch elongates them as they go. The offset alone would
+    // slide a rigid face downward like a sticker.
+    let meltSag = meltCfg.x;
+    var uv = uv0;
+    uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};
     // Fade by how squarely this surface faces the front, so the projection does
     // not smear a second face down the sides and back of the skull. A planar
     // projection derives uv from x/y alone, so as the surface turns away it
     // repeats the same uv column and STREAKS; fading out well before edge-on
     // hides that.
     // The facing axis is the head's rotated forward, not world +z.
+    // The lower bound widens toward FACE_MELT_FADE_LO as the melt flattens
+    // the head: a squashed skull's surface turns away from the forward axis
+    // far sooner than a round one's, and the un-widened cutoff faded the
+    // face out before it had finished dripping.
     let hfw = vec3<f32>(0.0, 0.0, forward);
     let hfr = hfw + 2.0 * cross(headQuat.xyz, cross(headQuat.xyz, hfw) + headQuat.w * hfw);
-    var facing = smoothstep(0.28, 0.66, dot(n, hfr));
+    var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, meltCfg.x), 0.66, dot(n, hfr));
     // Confine it to the HEAD. Generous, because the surface now sits at
     // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
     // against wrapping onto the neck.
@@ -2230,6 +2279,32 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
 
   albedo = mix(albedo, charColor, cm);
 
+  // MELT (2026-09-03, task 6) — the wet red, on flesh ONLY.
+  //
+  // The colour LEADS the sag: the reference goes red while the body is still
+  // standing, before any height is visibly lost, so the ramp runs on
+  // smoothstep(clamp(meltCfg.x * 2)) and is essentially complete by half
+  // progress. That is the frame that reads as "melt" rather than "fall".
+  //
+  // A dominant BONE row does the opposite: it goes PALE (boneColor, the
+  // wound pass's exposed-bone colour) and stays matte — the wetness boost
+  // below skips it. Pale matte bones sitting in wet red goo is the contrast
+  // this effect lives on, and before this branch a bone row winning the fold
+  // shaded as plain meat (the old bone-albedo branch was deleted with the
+  // bone-tubes pack flag), which would have reddened the very skeleton the
+  // melt exists to reveal.
+  //
+  // meltCfg.x is 0 everywhere except a melting body and its released bone
+  // chunks, so every other pixel shades bit-identical to before this existed.
+  let meltU = smoothstep(0.0, 1.0, clamp(meltCfg.x * 2.0, 0.0, 1.0));
+  if (meltU > 0.0) {
+    if (isBone) {
+      albedo = mix(albedo, boneColor, meltU * 0.9);
+    } else {
+      albedo = mix(albedo, deepColor * 0.8, meltU * 0.8);
+    }
+  }
+
   // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
   // The world's SpotLight is invisible to the march — SDF bodies are shaded
   // here, not by three — so the beam is re-evaluated analytically per pixel.
@@ -2300,7 +2375,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // polished.
   let lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
   let wetWound = max(wm * lip, gore);
-  let wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);
+  var wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);
+  // Melt wetness (task 6): liquefying flesh goes FULLY wet — the puddle
+  // glistens. FLESH ONLY: bone stays matte (the anchor comment above — wet
+  // skin reflects, wet bone just looks polished), and that matte-vs-wet
+  // contrast is what makes pale bones read inside the red puddle.
+  // 1.6, the wound-wetness precedent: 2.2 was the first guess and the
+  // near-level capture showed the whole grazing-angle puddle clipping to
+  // paper white — wet, yes; blown out, no.
+  if (meltU > 0.0) {
+    wet = mix(wet, select(1.6, 0.45, isBone), meltU);
+  }
   let shine = pow(max(dot(n, H), 0.0), mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss));
   // Fresnel fades out INSIDE wounds rather than riding the wet boost: it is
   // environment rim-light, and inside a cavity the "environment" is the wound

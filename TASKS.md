@@ -378,8 +378,8 @@ wound pops, gait stop-motion).
 [bleed note](docs/dev-notes/2026-08-31-bleeding-wounds/notes.md) ·
 [c2 note](docs/dev-notes/2026-08-31-temporal-c2-spike/notes.md)
 
-- `X5.melt` [~] **Melting death — flesh sags into goo, the skeleton falls out**
-  — branch `claude/zombie-melting-death-519db8`. Owner's brief with a Fallout 2
+- `X5.melt` [x] **Melting death — flesh sags into goo, the skeleton falls out**
+  — DONE (lab) 2026-09-03, all 7 dispatch tasks. Owner's brief with a Fallout 2
   reference clip: *"the whole flesh would distort and fall away like stretchy
   gooey dough and the bones fall out onto the ground in a fleshy puddle."*
   LAB ONLY — no weapon gate, no game wiring.
@@ -398,18 +398,30 @@ wound pops, gait stop-motion).
   Bone exposure then falls out of the existing hard `min` for free. Bones
   release as ELEVEN rigid groups (skull, cage, pelvis, eight long bones), not
   45 loose tubes.
-  **TWO GATES, and they are the point.** `c52b05b` shipped green and tested and
-  changed zero pixels. Gate A is an in-suite AABB test on the real
-  `zombie.blob` — height ≤40%, width ≥150%, centroid ≤25%. Gate B is the same
-  three ratios measured through the renderer. A disagreement between them IS
-  the finding.
+  **SHIPPED MECHANISM (supersedes the `c52b05b` ridged-noise attempt, which
+  warped a normal and never moved a surface):** pure CPU prim-table animation
+  in `src/lab/sdf-zombie/melt.ts` — per-ENDPOINT sag on a melt front rising
+  through the body (`softness 0.65`, `frontLead 1.75`), volume-conserving
+  crush (`r ∝ 1/√yScale`), `blendK` fuse, clusters re-fit per frame; bones
+  release as 11 rigid groups into the chunk stepper (`MELT_BONE_RELEASE_U
+  0.4`) and land in the puddle; organs melt at half rate on a catch-up
+  schedule; `meltCfg` ramps flesh to wet dark red at twice the sag rate.
+  **TWO GATES, both PASSING.** `c52b05b` shipped green and tested and
+  changed zero pixels. Gate A (in-suite AABB on the real `zombie.blob`):
+  height 0.10x, width 1.60x, centroid 0.08x, 10/11 bone groups at rest in
+  the puddle. Gate B (fixed-camera pixels via `npm run melt:shot`): height
+  0.20x, width 2.32x, centroid 0.18x. The final tuning pass (task 7) barely
+  moved the ratios — it killed a mid-ramp totem-pole and a floating skull
+  that only the FRAMES showed.
   **TRAP:** `checkBoneContainment`'s 4 mm margin is violated on purpose —
   bones breaching flesh IS the effect. "Fixing" it deletes the feature.
-  **Status:** spec + plan committed; 7 dispatch tasks queued on kimi-k3
-  (`2026-09-03-melt-task-{1..7}`, serial `depends_on`), task 1 running from
-  2026-09-03 21:12Z.
+  **Known and accepted:** the render loop still re-uploads the frozen
+  puddle's rows per frame (state and geometry are frozen, uploads are not —
+  noted honestly in the notes, elision is arena-work); a transient dark gap
+  in the draining torso at t≈0.5 reads as a hole at a glance.
   [design](docs/superpowers/specs/2026-09-03-zombie-melt-design.md) ·
-  [plan](docs/superpowers/plans/2026-09-03-zombie-melt.md)
+  [plan](docs/superpowers/plans/2026-09-03-zombie-melt.md) ·
+  [notes](docs/dev-notes/2026-09-03-zombie-melt/notes.md)
 
 - `X1.wound-r2` [~] **Bone through wounds + tissue-depth shading** — branch
   `claude/continue-previous-work-91055b`, **NOT merged**. 11 dispatch tasks,
