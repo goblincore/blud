@@ -17,7 +17,8 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { translateBody } from '../translate';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
-import { createZombieActor } from './game-actor';
+import { createZombieActor, avoidPoint, firstBlockingBox, pickAvoidSide, pushOutOfFurniture, segmentCrossesBox } from './game-actor';
+import type { Aabb } from './game-level';
 import { ROOMS, FURNITURE, wanderBounds, spawnPoints } from './game-level';
 import { sdBody } from '../validate';
 import { woundWorldPos } from '../damage';
@@ -629,5 +630,77 @@ describe('createZombieActor — the brain and the crowd', () => {
     }
     expect(a.debug().mode).toBe('attack');
     expect(a.debug().swingT).toBeGreaterThan(0);
+  });
+
+  // --- chase routing (the room-4 doorway deadlock, 2026-09-04) ------------
+  describe('chase routing helpers', () => {
+    const crate: Aabb = { min: [-1, 0, 2], max: [1, 0.5, 3] };
+
+    it('segmentCrossesBox sees the straight line through the crate', () => {
+      expect(segmentCrossesBox([0, 0, 4], [0, 0, 0], crate)).toBe(true);
+    });
+
+    it('a line passing beside the crate is clear', () => {
+      expect(segmentCrossesBox([-3, 0, 4], [-3, 0, 0], crate)).toBe(false);
+    });
+
+    it('an endpoint inside the fattened box reads as blocked', () => {
+      // The player hugging a crate parks any point 1 m north of him inside
+      // its margin — the exact geometry the gate's doorway pose produced.
+      expect(segmentCrossesBox([0, 0, 4], [0, 0, 2.5], crate)).toBe(true);
+    });
+
+    it('avoidPoint pushes the goal to the committed side, perpendicular to the chase', () => {
+      // Chasing due north (p at the origin, goal at (0, 4)): side +1 puts the
+      // way-point 2.5 m to the +x side, side −1 to the −x side.
+      expect(avoidPoint([0, 0, 0], [0, 0, 4], 1)[0]).toBeCloseTo(2.5, 9);
+      expect(avoidPoint([0, 0, 0], [0, 0, 4], -1)[0]).toBeCloseTo(-2.5, 9);
+      // It rides the goal's z, not the body's — it is a way-point near the
+      // goal, not a heading.
+      expect(avoidPoint([0, 0, 0], [0, 0, 4], 1)[2]).toBeCloseTo(4, 9);
+    });
+
+    it('pickAvoidSide commits to the side with the clear first leg', () => {
+      // From due north BOTH side legs would cut the crate's corner (the
+      // way-point rides the goal's z), so stand off-axis: from the north-west
+      // the west way-point is reachable by a clear line and the east one is
+      // not — the pick must be that side.
+      const side = pickAvoidSide([-3, 0, 4], [0, 0, 0], [crate]);
+      const way = avoidPoint([-3, 0, 4], [0, 0, 0], side);
+      expect(firstBlockingBox([-3, 0, 4], way, [crate])).toBeNull();
+    });
+
+    it('pushOutOfFurniture keeps the tangential component of a face press', () => {
+      // Pressed against the crate's fattened north face, nudged 18 mm west
+      // and 4.5 mm into it: the z-penetration is corrected, the westward
+      // slide survives. A full restore here is what deadlocked the chaser.
+      const out = pushOutOfFurniture([-0.878, 0, 3.5455], [crate]);
+      expect(out[0]).toBeCloseTo(-0.878, 9);
+      expect(out[2]).toBeCloseTo(3.55, 9);
+      // And a body clear of every box is left alone.
+      const free = pushOutOfFurniture([-3, 0, 4], [crate]);
+      expect(free[0]).toBeCloseTo(-3, 9);
+      expect(free[2]).toBeCloseTo(4, 9);
+    });
+
+    it('a chaser routes AROUND furniture and swings, instead of deadlocking', () => {
+      // Shrunk room-4 doorway: the player at the origin, a crate between him
+      // and the spawn at (0, 0, 4). The old wiring re-aimed the standoff point
+      // every sub-step, so the body walked into the crate, was rejected,
+      // restored and re-aimed — frozen ~2 m short of attackRange forever.
+      // 12 s is generous: the arc is ~4 m of shamble at cruise 1.15 m/s.
+      const a = makeTestActor({
+        start: [0, 0, 4],
+        room: 4,
+        furniture: [{ min: [-1, 0, 2], max: [1, 0.5, 3] }],
+      });
+      let sawSwing = false;
+      for (let i = 0; i < 60 * 12 && !sawSwing; i++) {
+        a.setBrainInput({ x: 0, z: 0, room: 4 }, true);   // alerted: skips the cone
+        a.step(1 / 60);
+        sawSwing = a.brain().mode === 'attack' && a.brain().swingT > 0;
+      }
+      expect(sawSwing).toBe(true);
+    });
   });
 });

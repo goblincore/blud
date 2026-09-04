@@ -102,6 +102,119 @@ export interface DetachedPiece {
 /** How far outside a furniture AABB a wanderer's centre must stay. */
 const FURNITURE_MARGIN = 0.55;
 
+// ---- chase routing (ground-plane, furniture-aware) ------------------------
+// Pure helpers behind the actor's chase-target wiring. brain.ts stays pure
+// geometry (self/player/room only), so obstacle knowledge lives HERE, next
+// to the furniture rejection that already lives here.
+
+/** Does the ground-plane segment p→q cross this furniture box, fattened by
+ *  `margin` (the same fattening insideFurniture rejects at)? 2D slab test on
+ *  x/z; y is ignored — bodies walk on the plane. Conservative: a segment
+ *  that only TOUCHES the fattened boundary counts as crossing, so routing
+ *  keeps a step of slack instead of shaving the corner. */
+export function segmentCrossesBox(
+  p: Vec3, q: Vec3, box: Aabb, margin = FURNITURE_MARGIN,
+): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const axes: [number, number, number, number][] = [
+    [p[0], q[0] - p[0], box.min[0] - margin, box.max[0] + margin],
+    [p[2], q[2] - p[2], box.min[2] - margin, box.max[2] + margin],
+  ];
+  for (const [a, d, lo, hi] of axes) {
+    if (Math.abs(d) < 1e-9) {
+      if (a < lo || a > hi) return false;   // parallel, outside the slab
+      continue;
+    }
+    let ta = (lo - a) / d;
+    let tb = (hi - a) / d;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta);
+    t1 = Math.min(t1, tb);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** Push a position that ended up inside a fattened furniture box back out
+ *  along its shallowest axis, per box in injection order. Depths here are
+ *  sub-step-sized (the rejection fires per 1/60 s step), so this is a
+ *  slide-to-the-face, not a teleport — which is the point: a body pressing
+ *  a face keeps the TANGENTIAL component of its step and slides along it,
+ *  and that slide is what lets the chase router round a corner. */
+export function pushOutOfFurniture(
+  p: Vec3, furniture: readonly Aabb[], margin = FURNITURE_MARGIN,
+): Vec3 {
+  let x = p[0]!;
+  let z = p[2]!;
+  for (const f of furniture) {
+    const minX = f.min[0] - margin, maxX = f.max[0] + margin;
+    const minZ = f.min[2] - margin, maxZ = f.max[2] + margin;
+    if (x <= minX || x >= maxX || z <= minZ || z >= maxZ) continue;
+    const west = x - minX, east = maxX - x;
+    const north = maxZ - z, south = z - minZ;
+    const min = Math.min(west, east, north, south);
+    if (min === west) x = minX;
+    else if (min === east) x = maxX;
+    else if (min === north) z = maxZ;
+    else z = minZ;
+  }
+  return [x, 0, z];
+}
+
+/** The first furniture box the segment p→q crosses (injection order), or
+ *  null when the way is clear. */
+export function firstBlockingBox(
+  p: Vec3, q: Vec3, furniture: readonly Aabb[], margin = FURNITURE_MARGIN,
+): Aabb | null {
+  for (const f of furniture) {
+    if (segmentCrossesBox(p, q, f, margin)) return f;
+  }
+  return null;
+}
+
+/** How far to the side of the goal the avoid way-point aims (m). Must exceed
+ *  the level's widest furniture half-extent (room 2's crate: 0.9) plus the
+ *  body margin (0.55), so the way-point sits outside the box's shadow along
+ *  the avoid axis and the arc can actually round the blocker. */
+const AVOID_OFFSET = 2.5;
+
+/** The avoid way-point: `goal` pushed `offset` to `side`, along the
+ *  perpendicular of (goal − p). Re-aimed every sub-step — it rotates with
+ *  the body, which is what makes the chase ARC around the blocker instead of
+ *  pressing into it. Not a parking spot: the wander's arrival branch cannot
+ *  trap the body here because the point moves as the body moves. */
+export function avoidPoint(
+  p: Vec3, goal: Vec3, side: -1 | 1, offset = AVOID_OFFSET,
+): Vec3 {
+  const dx = goal[0] - p[0];
+  const dz = goal[2] - p[2];
+  const d = Math.hypot(dx, dz) || 1;
+  // (goal − p) rotated ±90°: side +1 → (dz, −dx), side −1 → (−dz, dx).
+  return [goal[0] + side * (dz / d) * offset, 0, goal[2] + side * (-dx / d) * offset];
+}
+
+/** Committed avoid side for a blocked chase line: prefer the side whose
+ *  way-point gives a clear first leg, tie-broken by the shorter total path
+ *  (first leg + side-hop); +1 when everything ties. Computed ONCE per
+ *  blocked episode (the caller keeps the answer) — re-picking every sub-step
+ *  would flip sides as the body moves and jitter in place. */
+export function pickAvoidSide(
+  p: Vec3, goal: Vec3, furniture: readonly Aabb[], offset = AVOID_OFFSET,
+): -1 | 1 {
+  const scores = ([-1, 1] as const).map((side) => {
+    const w = avoidPoint(p, goal, side, offset);
+    const clear = firstBlockingBox(p, w, furniture) === null;
+    const cost = Math.hypot(w[0] - p[0], w[2] - p[2])
+      + Math.hypot(goal[0] - w[0], goal[2] - w[2]);
+    return { side, clear, cost };
+  });
+  const clear = scores.filter(s => s.clear);
+  const pool = clear.length ? clear : scores;
+  pool.sort((a, b) => a.cost - b.cost);
+  return pool[0]!.side;   // pool is non-empty by construction
+}
+
 export interface ZombieActor {
   readonly id: number;
   readonly room: number;
@@ -235,6 +348,10 @@ export function createZombieActor(opts: {
   let brain: BrainState = makeBrainState();
   let brainPlayer: BrainPlayer | null = null;
   let brainAlerted = false;
+  // Committed avoid side while the direct chase line is blocked (0 = direct,
+  // walking at the goal). Chosen once per blocked episode; see the routing
+  // block inside step().
+  let detourSide: -1 | 0 | 1 = 0;
 
   function woundedLimbs() {
     const w = { armL: false, armR: false, legL: false, legR: false };
@@ -422,13 +539,48 @@ export function createZombieActor(opts: {
       brain = think.state;
       brainAlerted = false;   // one-shot: the first sub-step consumes it
       if (think.target) {
+        // CHASE ROUTING. The furniture rejection's escape hatch (drop the
+        // target, stepWander picks another) cannot work for a chaser: the
+        // brain re-aims every sub-step, so a body whose straight line to him
+        // crossed a crate was rejected, restored and re-aimed into the crate
+        // forever. Two measures, both wired here because this is where the
+        // furniture AABBs live; brain.ts stays pure geometry:
+        //   1. The walk goal is the PLAYER himself, not the brain's standoff
+        //      point. The standoff sits attackRange (1.0 m) out and
+        //      stepWander's arrival band (0.4 m) stops a body ~1.4 m out —
+        //      outside attackRange — so a chaser aiming at the standoff
+        //      could never cross the engage threshold (found end-to-end by
+        //      the crowd gate, 2026-09-04). Walking AT him crosses 1.0 m on
+        //      the way in; the engage latch then HALTS the walk, and the
+        //      crowd separation (the player is an immobile agent) keeps the
+        //      pair from overlapping.
+        //   2. When the straight line to him is blocked, aim at the goal
+        //      pushed to one COMMITTED side (pickAvoidSide) so the body arcs
+        //      around the blocker; the furniture rejection's min-axis
+        //      push-out lets it SLIDE along the face instead of pressing
+        //      it. The side is re-picked only per blocked episode —
+        //      re-picking every sub-step would jitter in place.
+        const goal: Vec3 = brainPlayer
+          ? [brainPlayer.x, 0, brainPlayer.z]
+          : think.target;
+        if (firstBlockingBox(state.wander.pos, goal, opts.furniture)) {
+          if (detourSide === 0) {
+            detourSide = pickAvoidSide(state.wander.pos, goal, opts.furniture);
+          }
+        } else {
+          detourSide = 0;
+        }
         // idle 0 as well: a chaser must never take a wander pause mid-pursuit.
+        const target = detourSide === 0
+          ? goal
+          : avoidPoint(state.wander.pos, goal, detourSide);
         state = {
           ...state,
-          wander: { ...state.wander, target: think.target, idle: 0 },
+          wander: { ...state.wander, target, idle: 0 },
         };
+      } else {
+        detourSide = 0;
       }
-      const prevPos: Vec3 = [...state.wander.pos] as Vec3;
       const stepR = stepMotion(
         state, joints,
         {
@@ -445,10 +597,23 @@ export function createZombieActor(opts: {
       state = stepR.state;
       lastFrame = stepR.frame;
       const f = stepR.frame;
-      // Furniture rejection: restore the position, drop the target. The
-      // heading stays, so the body turns as it picks the next target.
+      // Furniture rejection. A step that lands inside a fattened box is
+      // pushed back out along its shallowest axis (pushOutOfFurniture), so
+      // the tangential component of the step survives and a body pressing a
+      // face SLIDES along it — the chase router's committed-side arc needs
+      // that slide to get round a corner; a full restore would cancel it and
+      // the body would press the same spot forever. A plain wanderer (no
+      // brain target) additionally drops its target and pauses: the next leg
+      // starts somewhere else, the designed unstick.
       if (insideFurniture(state.wander.pos)) {
-        state = { ...state, wander: { ...state.wander, pos: prevPos, target: null, idle: 0.2 } };
+        let w = {
+          ...state.wander,
+          pos: pushOutOfFurniture(state.wander.pos, opts.furniture),
+        };
+        if (!think.target) {
+          w = { ...w, target: null, idle: 0.2 };
+        }
+        state = { ...state, wander: w };
       }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);

@@ -2895,6 +2895,13 @@ async function main() {
       const p = a.pose().pos;
       return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
     })),
+    /** Debug seam for the crowd capture driver: the separation nudge, by id,
+     *  with the same bounds clamp and furniture rejection. Lets a driver
+     *  PLACE bodies (e.g. coincident, to watch separate() push them apart)
+     *  without a separate teleport path that could dodge the clamps. */
+    zombieNudge: (id: number, dx: number, dz: number) => {
+      actors.find(a => a.id === id)?.nudge(dx, dz);
+    },
     /** One zombie's internals — the weapon seam: view (uniforms/wounds),
      *  posed() (raycast target), boundRig() (impulse/recoil entry). */
     zombie: (id: number) => {
