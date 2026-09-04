@@ -87,6 +87,8 @@ export interface BrainState {
   /** Seconds the player has been out of this brain's room (0 while in it). */
   lostFor: number;
   alert: boolean;
+  /** Melee hysteresis latch: set at attackRange, cleared past releaseRange. */
+  engaged: boolean;
   /** Swing progress 0..1 while mode === 'attack', else 0. */
   swingT: number;
   /** Seconds until the next swing may start. */
@@ -223,8 +225,11 @@ The actor's existing `debug()` return grows `mode`, `alert` and `swingT`.
 
 Unit tests (vitest), one file per module:
 
-* **crowd** — a resolved pair actually ends non-overlapping after the declared
-  iterations; corrections are equal-and-opposite for two mobile agents; an
+* **crowd** — a pair's overlap shrinks by the factor the tuning predicts
+  (soft relaxation leaves 0.25 of the original overlap after two iterations at
+  `stiffness` 0.5 — it does NOT fully separate in one frame, by design), and
+  repeated frames drive the overlap below 1 mm; corrections are
+  equal-and-opposite for two mobile agents; an
   immobile agent receives exactly `[0, 0]` and its partner takes the whole
   correction; coincident agents separate deterministically (same input, same
   output, twice); no pair beyond `r1 + r2` moves at all; `maxPush` caps a deep
