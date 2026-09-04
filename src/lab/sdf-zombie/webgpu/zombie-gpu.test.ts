@@ -193,6 +193,29 @@ describe('clip frame uniform (X1.27 task C3)', () => {
   });
 });
 
+describe('melt stops the body walking', () => {
+  // The melt bypasses collapse.ts on purpose (that is what stops it toppling),
+  // so nothing else told the rig it had died: gait and wander kept running and
+  // the finished PUDDLE walked around the floor. Captures never showed it —
+  // melt-capture.mjs freezes motion to hold the pose, so the harness that
+  // makes the melt measurable is exactly what hid this.
+  it('startMelt freezes motion and wander, stopMelt restores them', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/lab-main.ts', 'utf8');
+    const start = src.slice(src.indexOf('function startMelt()'));
+    const startBody = start.slice(0, start.indexOf('\n  }'));
+    expect(startBody).toContain('setMotionEnabled(false)');
+    expect(startBody).toContain('setWander(false)');
+    // Saved BEFORE the freeze, or the restore puts back the frozen values.
+    expect(startBody).toContain('meltPrevMotion = { motion: motionEnabled, wander: wanderOn }');
+
+    const stop = src.slice(src.indexOf('function stopMelt()'));
+    const stopBody = stop.slice(0, stop.indexOf('\n  }'));
+    expect(stopBody).toContain('setMotionEnabled(meltPrevMotion.motion)');
+    expect(stopBody).toContain('setWander(meltPrevMotion.wander)');
+    expect(stopBody).toContain('meltPrevMotion = null');
+  });
+});
+
 describe('chunk bend transform', () => {
   // A bent bar that keeps a LOCAL control point while its endpoints are
   // rewritten to world space straightens as the chunk turns. On the melt's

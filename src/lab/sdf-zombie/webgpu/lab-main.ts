@@ -1050,10 +1050,30 @@ async function main() {
       rng: mulberry32(MELT_BONE_SEED),
     };
   }
+  /**
+   * Motion + wander as they were before the melt, so `M` puts the lab back.
+   * Null when no melt has taken them over.
+   */
+  let meltPrevMotion: { motion: boolean; wander: boolean } | null = null;
+
   function startMelt() {
     meltHeld = false;
     meltState = meltInitBody(current.prims, 0);
     resetMeltBones();
+    // MELTING IS THE DEATH, so the body must stop walking. The melt bypasses
+    // collapse.ts on purpose — that is what stops it toppling instead of
+    // going straight down — but nothing else was telling the rig it had died,
+    // so gait and wander kept running and the finished PUDDLE strolled around
+    // the floor (owner, watching it live 2026-09-03). The captures never
+    // showed it because melt-capture.mjs calls setMotionEnabled(false) to hold
+    // the pose: the harness that makes this measurable is exactly what hid it.
+    //
+    // setMotionEnabled(false) is the right freeze rather than a gait flag: it
+    // statues the rig at wherever the body ACTUALLY is, in its authored pose,
+    // instead of mid-stride or snapped back to the origin.
+    if (!meltPrevMotion) meltPrevMotion = { motion: motionEnabled, wander: wanderOn };
+    setMotionEnabled(false);
+    setWander(false);
     // The melting body sags off its own skeleton ON PURPOSE, so the march's
     // nearWound gate ("bones are contained in flesh") must lift: bare bones
     // fold without a wound and the skeleton EMERGES through the thinning
@@ -1064,6 +1084,13 @@ async function main() {
     meltHeld = false;
     meltState = null;
     view.setBonesBare(false);
+    // Put motion back exactly as the melt found it — a capture that had
+    // already frozen the rig must stay frozen after a reset.
+    if (meltPrevMotion) {
+      setMotionEnabled(meltPrevMotion.motion);
+      setWander(meltPrevMotion.wander);
+      meltPrevMotion = null;
+    }
     if (meltBones) {
       for (const id of meltBones.chunkIds) removeChunk(id);
       meltBones = null;
