@@ -1821,7 +1821,18 @@ Immediately before the final `console.log(`[crowd] OK ...`)` line, insert:
 // --- 5. THE MELEE RING. Three claims, one per line of the 2026-09-05 spec.
 //     Walk back into room 4 and let the pack settle into the ring.
 await evaluate(FPV);
+// WAKE THE WHOLE ROOM FIRST. Only 2 of room 4's 4 bodies notice the player on
+// their own (the other two are outside the facing cone when he walks in), and
+// a ring check that only ever sees two claimants cannot exercise the token
+// cap -- it would pass trivially. A shot bypasses the cone for every body in
+// the room, which is what puts four claimants on a two-token ring.
+await evaluate('__sdfGame.fire(1)');
 await evaluate('__sdfGame.step(240, 1 / 60)');
+const awake = (await evaluate('__sdfGame.brains()')).filter((b) => b.room === 4 && b.alert);
+if (awake.length < 3) {
+  fail(`only ${awake.length} room-4 bodies woke after a shot in the room; the ring ` +
+       'check needs at least 3 claimants to mean anything');
+}
 const ring = await evaluate('__sdfGame.ringTuning()');
 const ATTACK_STATES = ['engage', 'attack', 'recover'];
 
