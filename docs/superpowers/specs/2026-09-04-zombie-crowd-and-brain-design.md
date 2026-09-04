@@ -198,8 +198,8 @@ claim in a comment.
 
 Inside `step()`, per sub-step: `stepBrain` runs first, its `target` overrides
 `state.wander.target` (and forces `wander.idle = 0`, so a chasing zombie never
-pauses mid-pursuit), its `halt` ORs into the existing `holdSecs <= 0` gate that
-already feeds `cfg.wander`, and its `attack` passes through as `cfg.attack`.
+pauses mid-pursuit), its `halt` combines with the existing blast hold into the single
+`cfg.wander` gate (`cfg.wander = holdSecs <= 0 && !halt`), and its `attack` passes through as `cfg.attack`.
 Blast hold and knockback keep priority: a zombie taking a slug still stops and
 stumbles, then resumes the chase.
 
