@@ -568,6 +568,30 @@ wound pops, gait stop-motion).
   steps. The spec predates that finding; fix it before task 3.
   [design](docs/superpowers/specs/2026-09-03-body-sheet-design.md) · [plan](docs/superpowers/plans/2026-09-03-body-sheet.md) · [evidence](docs/dev-notes/2026-09-03-torso-relief/notes.md)
 
+- `X6.merge-dispatch` [ ] **Merge the two dispatch chains — DO THIS FIRST NEXT
+  SESSION** — both branched off `121ef37` and both are LINEAR, so two merges
+  take everything: `dispatch/bodysheet-task-4` (14 commits, contains tasks
+  1-4) and `dispatch/hardsurf-task-4` (11+ and still running at session end).
+  **They will conflict.** They overlap on ten files including
+  `march.wgsl.ts`, `pack.ts`, `types.ts`, `blob-parse.ts` and
+  `minotaur.blob`; both added a `prof` bit and both touched the noise
+  config, which the melt work also widened to `noiseCfg: vec4`. Merge one,
+  run the suite, then the other — the suite is the gate, not the diff.
+  **Both returned honest verdicts:**
+  `glow=` WORKS — a dark A/B with two red glowing eyes and a `glow=0.0`
+  control where they vanish (`/tmp/minotaur-dark-{glow,noglow}-crop.png`).
+  The BODY SHEET is live but FAINT: the diff heatmap shows "a vertical
+  sternum-groove band down the centre-chest, window edges clean, head and
+  arms untouched — the mechanism puts structure exactly where anatomy is,
+  but faintly". And when it tried the design's own amp 0.018 to give the
+  effect its best chance, **the budget guard refused the capture**
+  (`displacement product 0.419 violates budget 0.200`).
+  **That is the same wall `X5` hit**, and it is the finding to carry: the
+  amplitude that READS needs more gradient than the budget allows, so it has
+  to be BOUGHT with `stepMultiplier` rather than tuned around. Both are
+  transient effects, so that is affordable — but nobody has priced it yet,
+  and that price is now the real lever for both.
+
 - `X5.melt` [~] **Melting-flesh effect — PICK UP HERE NEXT SESSION** — owner's
   brief: *"when shot the whole zombie melts, the flesh basically turns into a
   pile of goo and bones."* Plumbing is IN and tested (`c52b05b`, suite 2286
