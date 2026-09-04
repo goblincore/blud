@@ -715,7 +715,22 @@ wound pops, gait stop-motion).
   spend the hours on shape.
   Needs: a reference mesh in `docs/dev-notes/refs/mancubus-mesh/`.
 
-- `X6.merge-dispatch` [ ] **Merge the two dispatch chains — DO THIS FIRST NEXT
+- `X6b.bodysheet-merge` [ ] **Merge `dispatch/bodysheet-task-4` — a real 3-way
+  integration, not a resolve.** The hardsurf chain and main are IN main as of
+  `bb6a55b`; the body sheet is the one thing left out, deliberately. It
+  conflicts with hardsurf on the SAME `calcNormal` call site, and both edits
+  are needed:
+  * hardsurf wraps the amp — `vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w)`
+  * bodysheet adds three params — `..., noiseShift, bodyTex, sheetCfg, sheetProj, volumeTex, ...`
+  The merged form needs both, plus the same reconciliation in
+  `march.wgsl.test.ts` (which pins the call site as an exact string) and in
+  `zombie-gpu.ts`. Budget real time; the exact-string test pins will catch a
+  sloppy resolve, which is the good news.
+  **Worth remembering it is the LOWEST-value of the three** — live and
+  provably in the right place, but faint, and blocked behind the gradient
+  budget until that is priced.
+
+- `X6.merge-dispatch` [x] **DONE — hardsurf chain and main merged — DO THIS FIRST NEXT
   SESSION** — both branched off `121ef37` and both are LINEAR, so two merges
   take everything: `dispatch/bodysheet-task-4` (14 commits, contains tasks
   1-4) and `dispatch/hardsurf-task-4` (11+ and still running at session end).
