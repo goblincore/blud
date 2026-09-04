@@ -50,7 +50,10 @@ export interface PackedBody {
   /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0/1).
    *  Only read by prims folded as a shell (profile bit 2). */
   primShell: Float32Array;
-  /** xyz = the clip plane's unit normal (w spare). See primShell. */
+  /** xyz = the clip plane's unit normal; w = per-prim emissive `glow=` 0..1
+   *  (hard-surface task 3; written on BOTH the shell and plain branches —
+   *  see the primClip.set call below). Kept in step with ROW_PRIM_CLIP's
+   *  docstring in march.wgsl.ts, which is the row table this mirrors. */
   primClip: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
