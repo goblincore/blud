@@ -45,6 +45,16 @@ export interface LabRendererHandle {
    * fifteen seconds and the median means nothing. Stepping by hand takes the
    * compositor out of the loop entirely.
    */
+  /**
+   * Present at most `fps` frames per second, 0 to uncap. OFF by default: the
+   * bench measures wall-clock deltas in its own render callback, and pacing
+   * would flatten every benchmark reading to the cap. Pages opt in.
+   */
+  setFrameCap(fps: number): void;
+  /** The active cap in fps, 0 when uncapped. */
+  readonly frameCap: number;
+  /** The measured display refresh in ms. Measured, never assumed. */
+  readonly refreshMs: number;
   step(dtSec: number): void;
   /**
    * Awaits the GPU timestamp resolve. The VALUE is discarded on purpose: with
@@ -149,6 +159,65 @@ export function canvasCssSize(
 
 /** `cap` opts this page out of the legacy 960x540 fit-aspect look (see
  *  RenderCap). Omitted = unchanged lab behaviour. */
+// ---------------------------------------------------------------------------
+// FRAME PACING
+// ---------------------------------------------------------------------------
+//
+// rAF presents on the display's schedule, so "30 fps" reached by letting work
+// take ~33 ms is really an alternation between vsync slots -- 33, 50, 33, 50 --
+// whose MEAN reads a healthy 38 ms while the hand feels a stagger. Pacing takes
+// the deadline back: present on a cadence we chose, so a missed slot is a thing
+// we can name rather than infer.
+//
+// THE SLACK IS HALF A REFRESH, NEVER A CONSTANT. The question each tick asks is
+// "has the next slot arrived", and a slot is one refresh interval wide. An
+// 8.3 ms constant is right only at 60 Hz; at 120 Hz it fires a tick early and
+// paces to 40 fps. That is the same shape of bug as the spike detector's fixed
+// 1.8x budget, which went blind the moment the budget stopped being 16.7 ms --
+// so this one is expressed relative to a MEASURED refresh from the start.
+
+/** Sane bounds for a display refresh, ms: 240 Hz down to 20 Hz. */
+export const REFRESH_MS_RANGE: readonly [number, number] = [1000 / 240, 1000 / 20];
+
+/** What we assume when there is nothing to measure. */
+const REFRESH_FALLBACK_MS = 1000 / 60;
+
+function sanitizeRefreshMs(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return REFRESH_FALLBACK_MS;
+  const [lo, hi] = REFRESH_MS_RANGE;
+  return Math.min(hi, Math.max(lo, ms));
+}
+
+/**
+ * The refresh interval, in ms, from raw rAF deltas.
+ *
+ * MINIMUM, not mean or median: rAF fires every refresh, so a delta is one
+ * refresh or a multiple of one (a skipped tick, a hitch, a throttled tab). It
+ * can never be LESS. That makes the floor of the samples the estimate, and it
+ * is why this works while pacing -- most deltas are 2x refresh on a 30 fps cap
+ * and the skipped ticks supply the 1x samples for free.
+ */
+export function estimateRefreshMs(deltasMs: readonly number[]): number {
+  let min = Infinity;
+  for (const d of deltasMs) if (Number.isFinite(d) && d > 0 && d < min) min = d;
+  if (!Number.isFinite(min)) return REFRESH_FALLBACK_MS;
+  return sanitizeRefreshMs(min);
+}
+
+/**
+ * Draw this tick? `capMs` of 0 (or less) is uncapped -- every tick draws, which
+ * is the pre-pacing behaviour exactly.
+ *
+ * No drift correction on purpose. `elapsedMs` is measured from the last frame
+ * PRESENTED, so a frame that overran simply resumes the cadence from where it
+ * landed rather than trying to catch up -- catching up means presenting two
+ * frames back to back, which is the judder this exists to remove.
+ */
+export function shouldPresent(elapsedMs: number, capMs: number, refreshMs: number): boolean {
+  if (!(capMs > 0)) return true;
+  return elapsedMs >= capMs - sanitizeRefreshMs(refreshMs) / 2;
+}
+
 export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Promise<LabRendererHandle> {
   if (cap) setRenderCap(cap);
   // trackTimestamp turns on the WebGPU timestamp-query pool. It is the whole
@@ -215,6 +284,19 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   window.addEventListener('resize', resize);
 
   let lastTime = performance.now();
+  // Pacing. `lastPresent` tracks DRAWN frames; `rafDeltas` is a small ring of
+  // raw tick gaps, which is where the refresh estimate comes from -- the loop
+  // still wakes on every vsync when capped, so the skipped ticks measure the
+  // display for free.
+  let frameCapMs = 0;
+  // The REQUESTED fps is stored rather than re-derived from frameCapMs: the
+  // ms round-trip reports 30 as 29.999999999999996, and a tuning seam that
+  // echoes back something other than what you typed reads as a bug.
+  let frameCapFps = 0;
+  let lastPresent = 0;
+  let lastRaf = 0;
+  const rafDeltas: number[] = [];
+  let refreshMs = 1000 / 60;
   let cb: (dtSec: number) => void = () => {};
   let drawFn: () => void = () => { void renderer.render(scene, camera); };
 
@@ -225,6 +307,20 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
 
   const loop = () => {
     const now = performance.now();
+
+    // Measure the display before deciding anything: this runs on EVERY tick,
+    // including the ones we skip, which is precisely what makes the estimate
+    // available under a cap.
+    if (lastRaf > 0) {
+      rafDeltas.push(now - lastRaf);
+      if (rafDeltas.length > 120) rafDeltas.shift();
+      refreshMs = estimateRefreshMs(rafDeltas);
+    }
+    lastRaf = now;
+
+    if (!shouldPresent(now - lastPresent, frameCapMs, refreshMs)) return;
+    lastPresent = now;
+
     const dt = (now - lastTime) / 1000;
     lastTime = now;
     cb(dt);
@@ -255,6 +351,15 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     scene,
     camera,
     canvas: renderer.domElement as HTMLCanvasElement,
+    setFrameCap(fps) {
+      const ok = Number.isFinite(fps) && fps > 0;
+      frameCapFps = ok ? fps : 0;
+      frameCapMs = ok ? 1000 / fps : 0;
+      // Present the very next tick rather than waiting out a stale interval.
+      lastPresent = 0;
+    },
+    get frameCap() { return frameCapFps; },
+    get refreshMs() { return refreshMs; },
     setRenderCallback(fn) { cb = fn; },
     setDrawFn(fn) { drawFn = fn; },
     backend: backendName,

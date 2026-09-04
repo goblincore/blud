@@ -24,7 +24,9 @@
 //   (canvas == content size; CSS does the nearest upscale as today). Sharp
 //   upscale ON: the canvas backing grows to the window and the blit does a
 //   UV-snapped "sharp bilinear" — fat pixels whose BORDERS are antialiased
-//   over one output pixel — instead of the CSS nearest stretch.
+//   over one output pixel — instead of the CSS nearest stretch. Fisheye ON
+//   (lens.x > 0): supersedes sharp upscale, a 4-tap prefiltered radial warp
+//   reading FISHEYE_WGSL's map — see fisheye.ts.
 //
 // COLOUR CHAIN (the hard constraint — see lab-main's legacy-gamma note and
 // commits 12a4e40/cc63f6c). Rendering into ANY RenderTarget applies NO
@@ -63,6 +65,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
+import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -196,12 +199,16 @@ fn postAaOetf(c: vec3<f32>) -> vec3<f32> {
  * The canvas blit. cfg: x = flipY (canvas-boundary inversion, verified on
  * screen, uniform rather than assumed — the sdf-layer discipline), y = src
  * is display-space already, z = sharp-upscale mode. sizes.zw = the canvas
- * (destination) size in device pixels.
+ * (destination) size in device pixels. lens = (k, rmax, aspect), the radial
+ * fisheye map — see fisheye.ts for the definition; k = 0 is the off switch.
  *
  * Sharp mode maps each destination pixel centre into source pixel-centre
  * coordinates and re-ramps the fractional part by the magnification ratio,
  * so bilinear interpolation only happens inside a one-destination-pixel
  * band at source texel borders: fat pixels, antialiased borders, no blur.
+ *
+ * Fisheye mode (lens.x > 0) supersedes sharp mode rather than stacking with
+ * it — see the branch's own comment below for why.
  *
  * The output is DECODED back to working space (postAaEotf) because three
  * applies its OETF to everything bound for the canvas — the two cancel and
@@ -212,14 +219,41 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
   srcTex: texture_2d<f32>,
   texCoord: vec2<f32>,
   cfg: vec4<f32>,
-  dstSize: vec2<f32>
+  dstSize: vec2<f32>,
+  lens: vec3<f32>
 ) -> vec4<f32> {
   var st = texCoord;
   if (cfg.x > 0.5) { st.y = 1.0 - st.y; }
   let srcDims = vec2<f32>(textureDimensions(srcTex, 0));
   let maxP = vec2<i32>(srcDims) - vec2<i32>(1, 1);
   var c: vec3<f32>;
-  if (cfg.z > 0.5) {
+  if (lens.x > 0.0) {
+    // FISHEYE. Pinning the corner (see fisheye.ts) minifies the periphery
+    // ~2x, and a single point fetch out there shimmers — so this branch
+    // prefilters with four rotated-grid taps a quarter of a DESTINATION
+    // pixel apart, each warped INDEPENDENTLY (offset applied before the
+    // warp, not after): where the lens minifies, the warp itself spreads
+    // the taps further apart in the source, so the average is a prefilter
+    // that costs no Jacobian maths. 0.125/0.375 is the standard rotated-grid
+    // set — its four samples land on four distinct positions on BOTH axes,
+    // which a tidier 0.25-spaced box would collapse to two. Supersedes
+    // sharp mode (cfg.z), whose fractional ramp assumes an axis-aligned
+    // uniform magnification the warp does not provide.
+    //
+    // offs is a var, not a let: WGSL only allows a dynamic (loop-variable)
+    // index on a reference.
+    var offs: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
+      vec2<f32>( 0.125,  0.375), vec2<f32>( 0.375, -0.125),
+      vec2<f32>(-0.125, -0.375), vec2<f32>(-0.375,  0.125));
+    let dstPxUv = vec2<f32>(1.0, 1.0) / dstSize;
+    var acc = vec3<f32>(0.0, 0.0, 0.0);
+    for (var i: i32 = 0; i < 4; i = i + 1) {
+      let warped = fisheyeWarp(st + offs[i] * dstPxUv, lens);
+      let wp = clamp(vec2<i32>(floor(warped * srcDims)), vec2<i32>(0, 0), maxP);
+      acc = acc + postAaFetch(srcTex, wp, cfg.y, maxP);
+    }
+    c = acc * 0.25;
+  } else if (cfg.z > 0.5) {
     let dstPx = floor(st * dstSize);
     let g = (dstPx + vec2<f32>(0.5, 0.5)) * (srcDims / dstSize);
     let ratio = dstSize / srcDims;
@@ -268,7 +302,9 @@ fn postAaFetch(srcTex: texture_2d<f32>, idx: vec2<i32>, isDisplay: f32, maxP: ve
   let c = textureLoad(srcTex, clamp(idx, vec2<i32>(0, 0), maxP), 0).rgb;
   if (isDisplay > 0.5) { return c; }
   return postAaOetf(c);
-}`;
+}
+
+` + FISHEYE_WGSL;
 
 /** three 0.185 types wgslFn's result as a plain Node; this keeps the swizzles honest. */
 type Swizzled = { xyz: unknown };
@@ -299,6 +335,15 @@ export interface PostAa {
   setSharpUpscale(on: boolean): void;
   /** Console escape hatch for the canvas-boundary flip — see sdf-layer. */
   setBlitFlipY(on: boolean): void;
+  /**
+   * The fisheye. Both arguments are VERTICAL degrees: what the camera renders,
+   * and what the middle of the screen should read as. A centre FOV that is not
+   * narrower than the render FOV turns the lens off exactly (k = 0), and the
+   * all-off parity path then still applies.
+   */
+  setLens(renderFovDeg: number, centerFovDeg: number): void;
+  /** The lens resolved against the live content aspect. `k = 0` = off. */
+  readonly lens: Lens;
   readonly fxaa: boolean;
   readonly smear: number;
   readonly sharpUpscale: boolean;
@@ -348,11 +393,26 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   // so this is correct for every toggle combination at 1.
   const uFlipY = uniform(1);
   const uSmear = uniform(POST_AA_DEFAULTS.smear);
+  // The lens, held as the two FOVs it was asked for: `k` depends on the
+  // display aspect, so it is re-resolved on every refit rather than cached
+  // from whatever the window happened to be at boot. `k = 0` is the real off
+  // flag — the FOVs default to 0 (clamped to 1° by makeLens) and are only
+  // meaningful once setLens() has actually run, so a HUD reading
+  // lens.renderFovDeg before that must check lens.k first.
+  let lensRenderFov = 0;
+  let lensCenterFov = 0;
+  // Placeholder; the construction-time refit() below overwrites it (via
+  // recomputeLens) before the first frame.
+  let lens: Lens = makeLens(0, 0, 1);
   // x = effective smear, y = current frame arrives display-encoded.
   const uBlendCfg = uniform(new THREE.Vector2(0, 0));
   // x = flipY, y = src is display-space, z = sharp mode, w = spare.
   const uBlitCfg = uniform(new THREE.Vector4(1, 0, 0, 0));
   const uBlitDst = uniform(new THREE.Vector2(1, 1));
+  // (k, rmax, aspect) — see fisheye.ts. Owned by recomputeLens() from the
+  // construction-time refit() onward; k = 0 is the off switch (an exact
+  // identity in the blit) whatever rmax and aspect happen to be.
+  const uLens = uniform(new THREE.Vector3(0, 0, 0));
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
@@ -404,6 +464,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     texCoord: uv(),
     cfg: uBlitCfg,
     dstSize: uBlitDst,
+    lens: uLens,
   }) as unknown as Swizzled;
   const blitMat = new MeshBasicNodeMaterial();
   blitMat.colorNode = vec4(blitOut.xyz as never, 1.0);
@@ -423,6 +484,26 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   let targetsNeedInit = true;
   const emptyScene = new THREE.Scene();
   const drawSize = new THREE.Vector2();
+
+  /**
+   * The ONLY writer of `lens` and `uLens`. Must run after anything that can
+   * move the content size — it is called from setLens() and from the tail of
+   * refit(), and there is no other path that keeps them in sync. NOTE: a
+   * future runtime setRenderCap() switch fires no resize event, so a caller
+   * that adds one must call refit() itself or the lens and contentSize will
+   * silently disagree about the aspect.
+   */
+  function recomputeLens() {
+    const c = computeRenderSize(window.innerWidth, window.innerHeight);
+    const next = makeLens(lensRenderFov, lensCenterFov, c.width / c.height);
+    // makeLens's clamp does not catch NaN (see fisheye.ts), and the JS gate
+    // (k > 0) and the WGSL gate (k <= 0.0) disagree about it: JS reads NaN as
+    // off, WGSL as on, so the frame would warp on every UV while the API
+    // reports the lens as off. Resolve it here, once, at the seam that takes
+    // the input, rather than leaving two disagreeing gates downstream.
+    lens = Number.isFinite(next.k) ? next : makeLens(0, 0, c.width / c.height);
+    uLens.value.set(lens.k, lens.rmax, lens.aspect);
+  }
 
   function refit() {
     const winW = window.innerWidth;
@@ -459,6 +540,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     // old history is the wrong size besides.
     targetsNeedInit = true;
     historyValid = false;
+    recomputeLens();
   }
   refit();
   // Registered AFTER lab-renderer's own resize listener (this is created
@@ -468,7 +550,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   return {
     render(chain) {
       const smear = uSmear.value;
-      const active = fxaaOn || smear > 0 || sharpOn;
+      // A narrowing lens is an effect like any other: it needs the capture
+      // redirect, because the blit has to sample a texture rather than be one.
+      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
         if (redirected) {
@@ -554,6 +638,12 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     setFxaa(on) { fxaaOn = on; },
     setSmear(v) { uSmear.value = Math.max(0, Math.min(POST_AA_SMEAR_MAX, v)); },
+    setLens(renderFovDeg, centerFovDeg) {
+      lensRenderFov = renderFovDeg;
+      lensCenterFov = centerFovDeg;
+      recomputeLens();
+    },
+    get lens() { return lens; },
     setSharpUpscale(on) {
       if (on === sharpOn) return;
       sharpOn = on;
