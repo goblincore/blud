@@ -118,7 +118,12 @@ same class of bug: cases handled in RIG space with no idea where the bore was.
   it by hand). Flats now ramp −0.004 → −0.022 toward the knuckle and taper in
   width; the bore plug starts at `HOLLOW_DEPTH` 27 mm (gate asserts that);
   chamber inner wall is matte `Bore` via a second material slot. Owner:
-  "other than that I think I like this, think it can be merged".
+  "other than that I think I like this, think it can be merged". Merged to
+  main `6c783f2`. **Round 4 (post-merge):** the top rib's underside was inside
+  the hollow chambers (showed as a rectangle in the empty bores) — now a 10 mm
+  valley strip; the "asymmetric shelf" was the ramped tray's side face seen on
+  the near side only (loft is symmetric; both-side renders in the notes) —
+  tray now a constant 0.040 half-width under the tubes.
 
 **[ ] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
 Owner, 2026-09-04: "the arm itself probably needs some work to more

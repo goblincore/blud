@@ -141,3 +141,22 @@ changes:
   the exporter splits it into `t004`/`t004_1` primitives, verified live).
 
 13782 tris. Mouths after: `round3-mouths-clean.png`; model: `model-threequarter.png`.
+
+## Round 4 — the rib in the bore, and the "asymmetric" receiver
+
+Owner after the merge: a rectangle still visible in the empty tubes, "from the
+bar that runs between both barrels"; and the receiver reads asymmetric — a
+triangular shelf on the FPV-left side, smooth on the right.
+
+* **The rib.** `rib_top` was a 47 × 10 mm box at z 0.014 spanning both tube
+  tops; its underside was 9 mm from each bore axis, inside the 18 mm hollow,
+  so it showed through the open mouths. Now a 10 mm strip in the valley with
+  its floor at z 0.006 (nearest point to an axis 18.1 mm) and its top flush
+  with the tubes; bead raised to match. `round4-mouths.png`.
+* **The shelf.** The loft is mirror-symmetric in x by construction (checked
+  with open-action renders from both sides, `side-L.png` / `side-R.png`:
+  mirror images). What read as one-sided was the ramped tray's side face in
+  profile, visible on the near side of the rolled gun and hidden behind the
+  tubes on the far side. The tray is now a constant 0.040 half-width — under
+  the tubes' bulge (edge ±0.047 at that height) when shut, a slim bar when
+  open — so there is no shelf to see on either side. 13754 tris.

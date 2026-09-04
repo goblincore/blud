@@ -315,9 +315,15 @@ for i,x in enumerate((-XSEP,XSEP)):
     plug_len = HOLLOW_BACK - PLUG_FRONT             # the front bores still have depth
     put(cyl(RI*0.99,plug_len),f'bore{i}','Bore',loc=(x,HOLLOW_BACK-plug_len/2,0),rot=(RY,0,0),bevel=0,smooth=True)
 # The rib runs the full barrel assembly, breech to muzzle.
-put(box(XSEP*2.0,(CY1-BY_MUZZLE)*0.94,0.010),'rib_top','Blue',
-    loc=(0,(BY_MUZZLE+CY1)/2,RO*0.62),bevel=0.0016,segs=2)
-put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,RO*0.62+0.006),bevel=0,smooth=True)
+# The rib is a narrow STRIP in the valley between the tubes, not a slab across
+# their tops. The 47 mm x 10 mm box at z 0.014 reached 9 mm from each bore
+# axis -- inside the 18 mm chamber interior -- and showed through the open
+# mouths as a rectangle (owner, 2026-09-04: "the bar that runs between both
+# barrels"). 10 mm wide with its floor at z 0.006, the nearest point to an
+# axis is 18.1 mm: outside the hollow, and its top is flush with the tubes.
+put(box(0.010,(CY1-BY_MUZZLE)*0.94,0.018),'rib_top','Blue',
+    loc=(0,(BY_MUZZLE+CY1)/2,0.015),bevel=0.0016,segs=2)
+put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,0.024+0.0037),bevel=0,smooth=True)
 
 # --------- THE LOFTED BODY: breech -> top strap -> rounded back -> grip --------
 # Half-width taper. Wide enough at the breech to carry both barrels, narrowing
@@ -330,14 +336,15 @@ def HW(y):
     # barrels seat AGAINST this face) and the reason the open action read as
     # misaligned even though every part is centred on 0.00000 exactly.
     # 0.050 clears the cluster by 2.5 mm. The grip end is untouched.
-    if y <= -0.034:
-        # THE ACTION FLATS narrow toward the hinge knuckle. At a constant 0.050
-        # the tray's top corners stood 2.5 mm proud of the chamber tubes, and
-        # with the action open the front-left corner read as a triangular
-        # flange jutting off the receiver (owner, 2026-09-04). Under 0.047 the
-        # tray sits inside the tubes' bulge when shut and is a slim bar open.
-        t = min(1.0, (-0.034 - y) / 0.044)
-        return 0.050 + (0.040-0.050) * (t*t*(3-2*t))
+    if y <= -0.033:
+        # THE ACTION FLATS are narrower than the chamber cluster along their
+        # whole length. At 0.050 (then tapering from 0.050) the tray's edge
+        # stood proud of the tubes near the breech face, and from the FPV
+        # angle its ramped side face read as a triangular shelf on the near
+        # side of the receiver (owner, 2026-09-04). At 0.040 it is under the
+        # tubes' bulge (edge at +-0.047 at this height) when shut and a slim
+        # bar when open. The standing breech behind stays 0.050 to carry them.
+        return 0.040
     if y <= -0.020: return 0.050
     if y >=  0.058: return 0.026
     t = (y + 0.020) / 0.078
