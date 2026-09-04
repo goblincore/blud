@@ -1227,7 +1227,8 @@ async function main() {
     if (keep && keep.length === heroMotion.bound.rig.points.length) {
       heroMotion.bound = {
         ...heroMotion.bound,
-        rig: { ...heroMotion.bound.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...heroMotion.bound.rig, bodyYaw: heroMotion.lastBodyYaw,
+          points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
   }
@@ -3617,6 +3618,7 @@ async function main() {
         ...heroMotion.bound,
         rig: {
           ...heroMotion.bound.rig,
+          bodyYaw: 0,
           restPose: heroMotion.motionJoints.base.map(
             v => [v[0] + heroMotion.lastRootShift[0], v[1], v[2] + heroMotion.lastRootShift[2]] as Vec3),
         },
