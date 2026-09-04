@@ -233,6 +233,26 @@ export async function stampFacingWounds(evaluate, opts = {}, fail = failHard) {
   return r;
 }
 
+/** The leg rotation: rep 0 runs the legs in table order, rep 1 starts at the
+ *  second leg, and so on — so a thermal ramp cannot alias onto one leg
+ *  (interleave discipline, inherited). Pure so the discipline is testable
+ *  without a browser. */
+export function interleaveOrder(names, rep) {
+  return names.map((_, i) => names[(i + rep) % names.length]);
+}
+
+/** The load gate, pure for the same reason. `row` needs { load1, load1Start }.
+ *  gate null = everything passes (plain mode). A row passes only if the
+ *  1-minute load average neither rose more than maxRise above its own
+ *  leg-start sample nor exceeds maxAbs at read time. */
+export function passesLoadGate(row, gate) {
+  if (!gate) return true;
+  const rise = row.load1 - row.load1Start;
+  if (rise > gate.maxRise) return false;
+  if (row.load1 > gate.maxAbs) return false;
+  return true;
+}
+
 /**
  * The interleaved leg loop: rotate the starting leg each rep (so a thermal
  * ramp cannot alias onto one leg), fresh page per run, apply the leg, run
@@ -290,9 +310,7 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
   let loadRejected = 0;
   let makeupReps = 0;
   const names = Object.keys(legs);
-  // Rotate the starting leg each rep so a thermal ramp cannot alias onto one
-  // leg (interleave discipline, inherited).
-  const order = (rep) => names.map((_, i) => names[(i + rep) % names.length]);
+  const order = (rep) => interleaveOrder(names, rep);
 
   const runLeg = async (leg, rep) => {
     const L = legs[leg];
@@ -300,7 +318,12 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
     const loadStart = loadavg()[0];
     await bootCloseupPage({ send: conn.send, evaluate: ev, url: opts.url, fail });
     await applyShipDefaults(ev);
-    const staging = await stageCloseUp(ev, opts.stage, fail);
+    if (L.exitBound !== undefined) await ev(`__sdfGame.setHullExitBound(${L.exitBound})`);
+    // Default staging: the room-1 fill-screen closeup. A caller can replace
+    // it wholesale with stageJs (any eval returning {d?, cov?, body?, ...})
+    // — the A/B legs stage other scenes through it.
+    const staging = opts.stageJs ? await ev(opts.stageJs) : await stageCloseUp(ev, opts.stage, fail);
+    if (staging.error) fail(staging.error);
     stagingRecords.push({ rep, leg, ...staging });
     let woundInfo = null;
     if (L.wounds) {
@@ -322,7 +345,7 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
       rep, leg,
       p50: seg.p50, p95: seg.p95, mean: seg.mean, max: seg.max,
       coverage: occ.hits / (occ.targetW * occ.targetH),
-      dist: staging.d,
+      dist: staging.d ?? null,
       wounds: woundInfo?.wounds ?? 0,
       bodies: census?.bodies ?? occ.bodiesOnScreen,
       meanStepsHit: occ.meanStepsHit, missStepShare: occ.missStepShare,
@@ -350,11 +373,11 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
   };
 
   const keep = (row) => {
-    if (!gate) return true;
+    if (passesLoadGate(row, gate)) return true;
     const rise = row.load1 - row.load1Start;
-    if (rise > gate.maxRise) { loadRejected++; console.warn(`  [load-reject] ${row.leg} rep${row.rep}: load1 rose ${rise.toFixed(1)} > ${gate.maxRise} during the leg`); return false; }
-    if (row.load1 > gate.maxAbs) { loadRejected++; console.warn(`  [load-reject] ${row.leg} rep${row.rep}: load1 ${row.load1.toFixed(1)} > ${gate.maxAbs}`); return false; }
-    return true;
+    if (rise > gate.maxRise) { loadRejected++; console.warn(`  [load-reject] ${row.leg} rep${row.rep}: load1 rose ${rise.toFixed(1)} > ${gate.maxRise} during the leg`); }
+    else { loadRejected++; console.warn(`  [load-reject] ${row.leg} rep${row.rep}: load1 ${row.load1.toFixed(1)} > ${gate.maxAbs}`); }
+    return false;
   };
 
   const runRep = async (legsToRun, rep) => {
