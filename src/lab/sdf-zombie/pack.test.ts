@@ -389,6 +389,60 @@ describe('primColor row', () => {
   });
 });
 
+describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
+  // primClip was the last documented-spare lane: xyz = shell clip normal,
+  // w = 0 always. glow= now rides w on BOTH branches — the shell branch and
+  // the plain one — because a glowing shell (a lit cable run authored as a
+  // cloth sheet) must glow exactly like a glowing capsule.
+  const base = {
+    a: [0, 0, 0] as Vec3, b: [0, 0, 1] as Vec3, radius: 0.1,
+    scale: [1, 1, 1] as Vec3, blendK: 0.02, limb: 'torso' as const, cluster: 0,
+  };
+  const cluster = () =>
+    ({ id: 0, limb: 'torso' as const, start: 0, count: 1, center: [0, 0, 0] as Vec3, radius: 0.1, alive: true });
+
+  it('packs glow into primClip.w on a NON-shell prim', () => {
+    const p = packBody({ prims: [{ ...base, color: [1, 0.13, 0] as Vec3, glow: 0.9 }], clusters: [cluster()], bones: new Map(), bonePrims: [] });
+    expect(p.primClip[0]).toBe(0);
+    expect(p.primClip[1]).toBe(0);
+    expect(p.primClip[2]).toBe(0);
+    expect(p.primClip[3]).toBeCloseTo(0.9, 6);
+  });
+
+  it('packs glow into primClip.w on a SHELL prim too — a glowing shell still glows', () => {
+    const p = packBody({
+      prims: [{
+        ...base, color: [1, 0.13, 0] as Vec3, glow: 0.9,
+        shell: { thickness: 0.004, rim: 0.01, clipOffset: 0, clipNormal: [0, 1, 0] as Vec3 },
+      }],
+      clusters: [cluster()], bones: new Map(), bonePrims: [],
+    });
+    expect(p.primClip[0]).toBe(0);
+    expect(p.primClip[1]).toBeCloseTo(1, 6);
+    expect(p.primClip[2]).toBe(0);
+    expect(p.primClip[3]).toBeCloseTo(0.9, 6);
+  });
+
+  it('leaves primClip.w at 0 for a prim without glow — pre-glow rows stay byte-identical', () => {
+    const p = packBody({ prims: [{ ...base }], clusters: [cluster()], bones: new Map(), bonePrims: [] });
+    expect(Array.from(p.primClip.slice(0, 4))).toEqual([0, 0, 0, 0]);
+  });
+
+  it('every shipped character still packs primClip.w as all zeros (nobody authors glow yet)', () => {
+    // The Done-when for this task is that EXISTING characters are untouched:
+    // glow= is opt-in per prim, and until the minotaur's eyes are authored
+    // every row must pack exactly as before.
+    for (const [name, raw] of Object.entries(CHARACTERS)) {
+      const built = buildBody(compileBlob(parseBlob(raw)), DEFAULT_BUILD_OPTS);
+      const packed = packBody(built);
+      let sum = 0;
+      for (let i = 0; i < packed.primClip.length; i += PRIM_STRIDE) sum += Math.abs(packed.primClip[i + 3]!);
+      if (sum !== 0) throw new Error(`${name}: primClip.w is nonzero but no prim authors glow=`);
+      expect(sum).toBe(0);
+    }
+  });
+});
+
 describe('bound groups (the fold cull unit)', () => {
   const body = () => buildBody(compileBlob(parseBlob(schoolgirlSrc)));
 

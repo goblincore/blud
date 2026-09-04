@@ -452,3 +452,41 @@ describe('metal — the bare word on a painted prim (hard-surface task 2)', () =
     expect(d.parts[1]!.metal).toBe(false);
   });
 });
+
+describe('glow= — per-prim emissive, gated on paint (hard-surface task 3)', () => {
+  const doc = (body: string) => parseBlob(
+    `model t\nskeleton\n  root pelvis at 1.0\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+
+  it('reads glow= into part.glow, null when absent', () => {
+    expect(doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 glow=0.9').parts[0]!.glow).toBeCloseTo(0.9, 6);
+    expect(doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200').parts[0]!.glow).toBeNull();
+  });
+
+  it('keeps glow in 0..1, naming the value', () => {
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 glow=1.5'))
+      .toThrow(/glow= is 0\.\.1, got 1\.5/);
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 glow=-0.1'))
+      .toThrow(/glow= is 0\.\.1/);
+  });
+
+  it('is a parse error without color=, in the house voice (same gate as gloss/metal)', () => {
+    // The glow COLOUR is the prim's own albedo (design C: no new colour
+    // field), so on flesh it would have nothing to emit — same gate, same
+    // reasoning as gloss: silently doing nothing loses an author an hour.
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 glow=0.9'))
+      .toThrow(/glow= only means something on a coloured primitive/);
+  });
+
+  it('coexists with gloss and metal on one line', () => {
+    const p = doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 metal gloss=0.9 glow=0.9').parts[0]!;
+    expect(p.metal).toBe(true);
+    expect(p.gloss).toBeCloseTo(0.9, 6);
+    expect(p.glow).toBeCloseTo(0.9, 6);
+  });
+
+  it('does not leak into sibling parts', () => {
+    const d = doc('  blob head on spine at=0.95 r=0.05 color=ff2200 glow=0.9\n  bar torso on spine from=0.1 to=0.9 r=0.05');
+    expect(d.parts[0]!.glow).toBeCloseTo(0.9, 6);
+    expect(d.parts[1]!.glow).toBeNull();
+  });
+});

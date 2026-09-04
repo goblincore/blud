@@ -1685,8 +1685,12 @@ describe('organ shading (organs r3)', () => {
   const SHADE_BODY = MARCH_BODY;
 
   it('reads the organ code from the SAME hitMat load as bone', () => {
-    // One texel load serves both; a second load would undo refinement 5.
-    expect((SHADE_BODY.match(/textureLoad\(data, vec2<i32>\(hitBest, \d+\), 0\)\.w/g) ?? []))
+    // One HITMAT texel load serves both; a second load would undo refinement
+    // 5. Pinned against the hitMat row itself (ROW_PRIM_SCALE), not against
+    // "any hitBest read ending in .w": glow= legitimately reads ROW_PRIM_CLIP.w
+    // at the same pixel (hard-surface task 3), which is a different row and a
+    // different lane, not a duplicated hitMat.
+    expect((SHADE_BODY.match(new RegExp(`textureLoad\\(data, vec2<i32>\\(hitBest, ${ROW_PRIM_SCALE}\\), 0\\)\\.w`, 'g')) ?? []))
       .toHaveLength(1);
     expect(SHADE_BODY).toContain('isOrgan');
   });
@@ -1862,5 +1866,72 @@ describe('metal modifier (hard-surface task 2)', () => {
       'let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));');
     expect(SHADE_BODY).toContain(
       'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
+  });
+});
+
+describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
+  // No GPU in CI, so these are structural pins — where the value is read,
+  // what it composes with, and what stays bit-identical at glow 0. Whether
+  // the eyes READ as glowing is the render's job (task 3 step 4 does that
+  // from frames, not from strings).
+  const SHADE_BODY = MARCH_BODY;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0)`;
+
+  it('row 17 no longer documents w as spare', () => {
+    // Done-when: leaving "w spare" in the row table is how the next person
+    // packs over the lane.
+    expect(MARCH_BODY).not.toContain('w spare');
+  });
+
+  it('reads glow from ROW_PRIM_CLIP.w, inside the painted branch only', () => {
+    // glow= is parse-gated on color= (same gate as gloss/metal), so an
+    // unpainted pixel can never author a glow — the read is paid only where
+    // it can matter. And the field path reads this row as .xyz only
+    // (sdShell), so the lane was genuinely spare until this.
+    expect(SHADE_BODY).toContain(CLIP_LOAD);
+    expect(SHADE_BODY).toContain('primGlow = clamp(');
+    // ONE read: the load must not be repeated per consumer.
+    expect((SHADE_BODY.match(new RegExp(esc(CLIP_LOAD), 'g')) ?? []).length).toBe(1);
+    // ...and it happens INSIDE the painted branch (after `painted = 1.0;`,
+    // before the branch closes).
+    expect(SHADE_BODY.indexOf('painted = 1.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf(CLIP_LOAD));
+  });
+
+  it('the glow COLOUR is the prim albedo — the authored glow= is the strength', () => {
+    // Design C: a prim with color=ff2200 glow=0.9 glows red because it IS
+    // red. No new colour field, no global strength multiplier (the authored
+    // value IS the strength), no flicker (that is the face sheet's
+    // heartbeat).
+    expect(SHADE_BODY).toContain('+ primAlbedo * primGlow * (1.0 - cm)');
+  });
+
+  it('composes at the SAME two composite lines the face glow uses, and fades the lit term', () => {
+    // The face path replaces lit with fleshLit * (1 - faceGlow) + glow;
+    // per-prim glow fades by its own amount, and at primGlow 0 the factor is
+    // exactly 1.0 — bit-identical (multiplication by 1.0 is exact), so every
+    // non-glowing pixel everywhere shades byte-for-byte as before.
+    expect(SHADE_BODY).toContain(
+      'var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;');
+  });
+
+  it('char still kills per-prim glow — burnt is burnt', () => {
+    // The face glow carries * (1.0 - cm); the per-prim term must too, or a
+    // charred eye keeps shining through the burn.
+    const glowLine = SHADE_BODY.split('\n').find(l => l.includes('+ primAlbedo * primGlow'))!;
+    expect(glowLine).toContain('(1.0 - cm)');
+  });
+
+  it('does NOT resurrect the face glow on painted prims — the sunglasses rule is untouched', () => {
+    // march.wgsl.ts zeroes faceGlow on paint so baked eyes cannot shine
+    // through sunglasses. The precedence decision: that kill stays exactly
+    // as it was and applies to the FACE term only; per-prim glow is authored
+    // per prim and survives paint BY CONSTRUCTION — nothing in the kill
+    // reads primGlow. This pins both halves: the kill string, and that the
+    // kill line carries no primGlow.
+    expect(SHADE_BODY).toContain('faceGlow = faceGlow * (1.0 - painted);');
+    const killLine = SHADE_BODY.split('\n').find(l => l.includes('faceGlow = faceGlow * (1.0 - painted);'))!;
+    expect(killLine).not.toContain('primGlow');
   });
 });

@@ -198,6 +198,17 @@ export interface PrimDef {
    */
   metal?: boolean;
   /**
+   * Per-prim emissive strength, 0..1 (hard-surface design C). The glow
+   * COLOUR is the prim's own `color` — a prim with `color=ff2200 glow=0.9`
+   * glows red because it IS red; there is no separate glow colour field.
+   * Only read when `color` is set (enforced at parse time). Packed into
+   * primClip.w (row 17) — see pack.ts. Unlike the FACE glow (a baked sheet,
+   * deliberately zeroed on painted prims so a bake cannot self-illuminate
+   * through sunglasses), this is AUTHORED emission on the prim itself and
+   * survives paint by design.
+   */
+  glow?: number;
+  /**
    * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
    * (clusterCore). Without it the fattest prim in the cluster is taken,
    * which is wrong as soon as a shoe or a sleeve is fatter than the bone it
@@ -321,6 +332,8 @@ export interface Primitive {
   color?: Vec3;
   /** See PrimDef.gloss. */
   gloss?: number;
+  /** See PrimDef.glow. Carried through mirror, resolve and the rig untouched. */
+  glow?: number;
   /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
   metal?: boolean;
   /** See PrimDef.core. */

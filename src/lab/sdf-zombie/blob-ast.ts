@@ -97,6 +97,9 @@ export interface BlobPart {
   color: readonly [number, number, number] | null;
   /** `gloss=0..1`. null = the flesh preset's own wetness. */
   gloss: number | null;
+  /** `glow=0..1`. Emissive strength; the COLOUR is the prim's own `color=`
+   *  (hard-surface design C — no new colour field). null = not emissive. */
+  glow: number | null;
   /**
    * The bare word `metal`: this painted prim shades as METAL — the shader
    * drops its diffuse to a small floor and tints the specular by the prim's

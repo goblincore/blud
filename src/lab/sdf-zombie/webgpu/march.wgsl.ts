@@ -53,7 +53,8 @@ import { MAX_PRIMS } from '../validate';
 //   row 15 clusterGps   x = first group, y = group count
 //   row 16 primShell    x = half-thickness, y = rim, z = clip offset,
 //                       w = hasClip (shell-fold prims only)
-//   row 17 primClip     xyz = clip plane normal (shell-fold prims only)
+//   row 17 primClip     xyz = clip plane normal (shell-fold prims only),
+//                       w = per-prim glow 0..1 (hard-surface task 3)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -122,7 +123,10 @@ export const ROW_CLUSTER_GROUPS = 15;
  *  z = clip offset, w = hasClip (0/1). Read only by prims with a shell fold
  *  (profile bit 2 set — see ROW_PRIM_SHAPE's `prof`). */
 export const ROW_PRIM_SHELL = 16;
-/** `shell` clip plane: xyz = unit normal, w spare. See ROW_PRIM_SHELL. */
+/** `shell` clip plane: xyz = unit normal; w = per-prim emissive `glow=`
+ *  0..1 (hard-surface task 3), packed on BOTH the shell and plain branches —
+ *  the glow COLOUR is the prim's own ROW_PRIM_COLOR albedo, so the lane is
+ *  inert (w = 0) unless the author writes `glow=`. See ROW_PRIM_SHELL. */
 export const ROW_PRIM_CLIP = 17;
 
 
@@ -2031,6 +2035,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   var gloss = 0.0;
   var painted = 0.0;
   var metal = 0.0;
+  var primGlow = 0.0;
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
     let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
@@ -2040,6 +2045,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       painted = 1.0;
       let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0);
       if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
+      // GLOW (hard-surface task 3): primClip.w, the lane that was documented
+      // spare until now. Loaded ONLY inside the painted branch — glow is
+      // parse-gated on color=, so an unpainted pixel can never author one,
+      // and this is the third texel a painted hit pixel pays for (colour,
+      // shape, clip) and the last.
+      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0).w, 0.0, 1.0);
     }
   }
   // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
@@ -2328,9 +2339,20 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // up above calcNormal, where the noise suppression needs them; the
   // OVERWRITE itself stays HERE, after the face pass, because a painted
   // prim replaces everything the flesh passes laid down. Char still wins
-  // below, because burnt is burnt. The eye glow is zeroed on paint for the
-  // same reason the sheet is: the painted eyes sit exactly where a pair of
-  // sunglasses goes, and they must not shine through the lenses.
+  // below, because burnt is burnt.
+  //
+  // GLOW PRECEDENCE (hard-surface task 3): the eye-glow kill two lines down
+  // applies to the FACE glow only — the baked sheet's own emission, which is
+  // zeroed on paint for the same reason the sheet is: the painted eyes sit
+  // exactly where a pair of sunglasses goes, and they must not shine through
+  // the lenses. Per-prim glow (primGlow, primClip.w) is AUTHORED emission on
+  // the prim itself, packed per prim, and deliberately SURVIVES this kill:
+  // the whole point of glow= is a prim that emits — the minotaur's red eyes
+  // — and those prims are painted (glow= is parse-gated on color=). The face
+  // sheet under a painted prim contributes exactly what it always did here
+  // (zero); the prim's own authored emission is a separate additive term at
+  // the composite. Nothing in that kill reads primGlow, so the sunglasses
+  // rule is intact BY CONSTRUCTION, not by a second kill that could drift.
   if (painted > 0.0) {
     albedo = primAlbedo;
   }
@@ -2489,22 +2511,6 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   //
   // METAL (hard-surface task 2), at metal 1:
   //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
-  //    0.25 floor — bounce IS diffuse, and leaving it full would keep the
-  //    plate reading as paint. NOT zero: with no environment map the lab
-  //    has one key, and a true-zero diffuse goes black wherever the
-  //    highlight is not. 0.25 is what the render A/B settled on (task 2
-  //    report).
-  //  - the specular AND the fresnel rim are tinted by the prim's own
-  //    albedo instead of shining the light's colour — the single change
-  //    that makes steel differ from white plastic under the same light.
-  //  - wet, scatter and the wound terms are untouched: scope discipline,
-  //    and the floor above keeps the plate readable without them.
-  // At metal 0 both factors are exactly 1.0 — bit-identical to the old sum
-  // (multiplication by 1.0 is exact), so every non-metal character shades
-  // byte-for-byte as before.
-  //
-  // METAL (hard-surface task 2), at metal 1:
-  //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
   //    0.45 floor — bounce IS diffuse, and leaving it full would keep the
   //    plate reading as paint. NOT zero: with no environment map the lab
   //    has one key, and a true-zero diffuse goes black wherever the
@@ -2529,6 +2535,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // At metal 0 both factors are exactly 1.0 — bit-identical to the old sum
   // (multiplication by 1.0 is exact), so every non-metal character shades
   // byte-for-byte as before.
+  // (Task 3's merge removed a STALE duplicate of this block left by task 2's
+  // tuning pass — it claimed the 0.25 floor this curve superseded.)
   let metalTintLum = max(dot(primAlbedo, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
   let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));
   var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
@@ -2563,8 +2571,24 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // always claimed — "an eye should not be lit by the key light at all" — a
   // statement the code never actually implemented.
   let glow = faceGlowColor * faceGlow * faceCfg2.w
-           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
-  var lit = fleshLit * (1.0 - faceGlow) + glow;
+           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm)
+           // PER-PRIM GLOW (hard-surface task 3): the same two lines keyed
+           // off the prim row instead of the face texture. The colour is the
+           // prim's OWN albedo (design C — a prim with color=ff2200 glow=0.9
+           // glows red because it IS red), the strength is the authored
+           // 0..1 from primClip.w. No faceCfg2.w global (the authored value
+           // IS the strength) and no flicker (that is the face sheet's
+           // heartbeat). Char kills it exactly as it kills the face glow:
+           // burnt is burnt.
+           + primAlbedo * primGlow * (1.0 - cm);
+  // Each emission source fades the lit term by its own amount, mirroring the
+  // face path's fleshLit * (1 - faceGlow): a surface that IS the light
+  // should not ALSO carry the key's full diffuse on top — that add-then-clamp
+  // is exactly how the face glow used to render pale cream (comment above).
+  // At primGlow 0 the factor is exactly 1.0 — bit-identical to the old line
+  // (multiplication by 1.0 is exact), so every non-glowing pixel everywhere
+  // shades byte-for-byte as before.
+  var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;
 
   // Legacy display look (lodCfg.y). Every flesh preset was hand-tuned in the
   // WebGL lab, which displayed the lit LINEAR value raw — no output sRGB

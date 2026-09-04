@@ -206,16 +206,20 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
     // Shell fold (2026-08-25): the row-array pair for a shell-clipped sheet.
     // Sets ROW_PRIM_SHELL (thickness, rim, clip offset, hasClip) and
-    // ROW_PRIM_CLIP (clip normal). Rows are zero for every non-shell prim, and
-    // the shader only reads them when the prim's profile marks it a shell, so
-    // an additive prim pays nothing for the extra rows.
+    // ROW_PRIM_CLIP (clip normal, PLUS the per-prim glow in w). The shader
+    // reads these rows only where the prim's profile marks it a shell (field
+    // path, .xyz only) and at the hit pixel (shading path, .w = glow), so an
+    // additive prim pays nothing for them. glow rides the row on BOTH
+    // branches: the glow COLOUR is the prim's own albedo (packs in primColor
+    // above), and a glowing shell — a lit cable run authored as a sheet —
+    // must glow exactly like a glowing capsule. (hard-surface task 3.)
     const sh = p.shell;
     primShell.set(sh
       ? [sh.thickness, sh.rim, sh.clipOffset, 1]
       : [0, 0, 0, 0], o);
     primClip.set(sh
-      ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], 0]
-      : [0, 0, 0, 0], o);
+      ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0]
+      : [0, 0, 0, p.glow ?? 0], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
       prof,

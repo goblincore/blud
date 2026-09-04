@@ -103,6 +103,7 @@ export function placePrims(
       // not of where the rig put it.
       ...(p.color === undefined ? {} : { color: p.color }),
       ...(p.gloss === undefined ? {} : { gloss: p.gloss }),
+      ...(p.glow === undefined ? {} : { glow: p.glow }),
       ...(p.metal === undefined ? {} : { metal: p.metal }),
       ...(p.core ? { core: true } : {}),
       ...(p.shell === undefined ? {} : { shell: p.shell }),
