@@ -75,6 +75,7 @@ import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './co
 import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
+import { attackPose, type AttackPose } from './attack';
 
 /** Motion knobs owned by the wiring (the modules own their own). */
 export const MOTION_TUNING = {
@@ -321,6 +322,12 @@ export interface MotionConfig {
   /** Gaze-follow gain override 0..1 — defaults to MOTION_TUNING.gazeFollow.
    *  0 pins the gaze to the wander target (the creepy variant). */
   gazeFollow?: number;
+  /** Melee swing phase 0..1 — the actor's brain drives it (webgpu/brain.ts
+   *  via game-actor). UNDEFINED IS NOT "0": undefined skips the composition
+   *  branch entirely, so the lab's wiring — which never sets this — produces
+   *  bit-identical motion. attack.ts's pose is exactly zero at phase 0 and 1,
+   *  so setting either is also a no-op, just a slower one. */
+  attack?: number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -500,6 +507,11 @@ export function stepMotion(
     skew, dt, armStyle,
   );
 
+  // The melee swing, if the brain is driving one. Composed exactly where a
+  // stagger composes — see attack.ts's header. A collapsed body never swings.
+  const attack: AttackPose | null =
+    cfg.attack !== undefined && !collapsed ? attackPose(cfg.attack) : null;
+
   // --- assemble the standing rest targets ----------------------------------
   // The whole authored pose is rotated by bodyYaw about the root's vertical
   // axis (the pelvis line), THEN translated by the root shift; the body-local
@@ -521,7 +533,12 @@ export function stepMotion(
     const gaitOff = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
     const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
     const s = ARM_JOINTS.has(name) ? armPresence : blend;
-    const local = add(scale(gaitOff, s), stagOff);
+    // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
+    // into +0 and break the lab's bit-identity pin for no benefit.
+    const base2 = add(scale(gaitOff, s), stagOff);
+    const local = attack
+      ? add(base2, name === 'pelvis' ? attack.rootOffset : attack.offsets[name] ?? Z)
+      : base2;
     const leanShare = LEAN_SHARE[name] ?? 0;
     const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
     const spun = rotateYaw([base[0] - pivot[0], base[1], base[2] - pivot[2]], bodyYaw);
@@ -558,7 +575,8 @@ export function stepMotion(
       const iS = idx[sJ]!, iE = idx[eJ]!, iH = idx[hJ]!;
       // Positive pitch = forward reach: about +right the hang swings BACK,
       // so the rotation angle is negated.
-      const pitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
+      const pitch = attack ? basePitch + attack.reachPitch : basePitch;
       const qUp = qFromAxisAngle(right, -pitch);
       const qFore = qFromAxisAngle(right, -(pitch - r.drop * armPresence));
       // The rest segments in world (the generic assembly rotates the base
