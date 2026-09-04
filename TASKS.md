@@ -541,7 +541,24 @@ wound pops, gait stop-motion).
   (4 new, all mutation-verified); render A/B: cyclops lens pitting visibly
   gone (improved), minotaur plates smoother, mouse is a NO-OP (its preset has
   both noise amps at 0 — nothing to suppress), flesh byte-identical.
-  **Tasks 2-4 still to run.**
+  **Tasks 2-4 DONE 2026-09-03 on the dispatch chain** (task 2 `9a39bc2`+`d0b584a`
+  metal: diffuse to a rendered 0.45 floor, spec tinted by the prim's albedo
+  renormalised to iron F0 0.56 — raw-albedo tint went BLACK first try; task 3
+  `b85e792`+`25f5577`+`ea96278` glow= in primClip.w on both pack branches, with
+  the minotaur's glowing eyes as the acceptance case; task 4 `211e454` verdict).
+  **Task 4 verdict
+  (docs/dev-notes/2026-09-03-hard-surface-material/notes.md): plates GONE
+  pitted and GONE chrome-plastic blowout, but they read as BLACKENED metal, not
+  milled steel — root cause is the round-4 darkened plate ALBEDO, not the
+  shader (the 0.45 diffuse floor is as low as stays readable); owner call:
+  accept blackened-iron or raise the five plate colours.** Glow eyes work —
+  cybernetic head unblocked. Nothing else got worse: cyclops lens cleaner,
+  mouse and schoolgirl-alt frame-identical (72 frames read), 2301/118 green,
+  render-check 0 holes, budgets 61/128 prims and **6/6 clusters — at the hard
+  ceiling, no seventh added**. Watch: the plan's "48/128" was stale; and the
+  base `claude/blob-side-grammar` boots the lab with a meltCfg TSL error
+  (fixed by ea96278) — before-shots in any A/B off it FAIL the shot gate while
+  rendering fine.
   `box` taught the FIELD about hard surfaces; nothing taught the shader, so a
   machined plate is textured and wobbled as though it were skin.
   (A) `gloss` suppresses `surfaceNoiseAmp`/`silhouetteNoiseAmp` — both are
