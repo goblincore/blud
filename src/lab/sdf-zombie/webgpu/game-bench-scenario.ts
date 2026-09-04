@@ -141,6 +141,40 @@ export function buildFirefight(opts: FirefightOpts): Scenario {
 }
 
 // ---------------------------------------------------------------------------
+// CLOSEUP BENCH SCENARIO — a STATIC frozen frame, no shots.
+// ---------------------------------------------------------------------------
+
+export interface CloseupOpts {
+  /** Sampled frames. The whole run is one segment. */
+  frames?: number;
+}
+
+export const CLOSEUP_DEFAULTS = {
+  frames: 240,
+} as const;
+
+/**
+ * The close-up diagnostic scene (2026-09-04 close-up task 1): ONE body
+ * filling the screen, frozen, with the driver's staging already applied
+ * (pose + stamped wounds) BEFORE the bench starts.
+ *
+ * Deliberately unlike the firefight: no teleport (it would override the
+ * staged camera), no aim/fire (more damage would change the wound set
+ * mid-run), and freeze ON at frame 0 (a moving body changes pixel coverage
+ * frame to frame, which is measurement noise, not signal — the firefight
+ * legs keep the wander because steady-state GAME cost is their question;
+ * here the question is the fixed frame's march/shading split).
+ */
+export function buildCloseup(opts: CloseupOpts = {}): Scenario {
+  const frames = opts.frames ?? CLOSEUP_DEFAULTS.frames;
+  return {
+    frames,
+    steps: [{ at: 0, action: { kind: 'freeze', on: true } }],
+    segments: [{ name: 'closeup', from: 0, to: frames }],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // DUNGEON BENCH LEGS — same firefight, three lighting states.
 // ---------------------------------------------------------------------------
 
