@@ -1,8 +1,8 @@
 // src/lab/sdf-zombie/brain.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  BRAIN_TUNING, makeBrainState, stepBrain,
-  type BrainInput, type BrainState,
+  BRAIN_TUNING, makeBrain, stepBrain,
+  type Brain, type BrainInput,
 } from './brain';
 
 const DT = 1 / 60;
@@ -13,165 +13,252 @@ function input(over: Partial<BrainInput> = {}): BrainInput {
     self: { x: 0, z: 0, yaw: 0, room: 3 },   // facing +z
     player: { x: 0, z: 4, room: 3 },          // straight ahead, 4 m
     alerted: false,
+    hasToken: false,
+    drift: 0,
+    blasted: false,
     ...over,
   };
 }
 
-/** Runs the brain for `seconds`, returning the last output. */
-function run(state: BrainState, over: Partial<BrainInput>, seconds: number) {
-  let s = state;
-  let out = stepBrain(s, input(over));
-  for (let t = 0; t < seconds; t += DT) {
-    out = stepBrain(s, input(over));
-    s = out.state;
+/** Runs the brain for `seconds` and returns the last output. */
+function run(brain: Brain, over: Partial<BrainInput>, seconds: number) {
+  let b = brain;
+  let out = stepBrain(b, input(over));
+  b = out.brain;
+  for (let t = DT; t < seconds; t += DT) {
+    out = stepBrain(b, input(over));
+    b = out.brain;
   }
   return out;
 }
 
-describe('stepBrain — noticing', () => {
+/** Alert, in the player's room, at `d` metres directly ahead. */
+function alertAt(d: number, over: Partial<BrainInput> = {}) {
+  const seed = stepBrain(makeBrain(), input()).brain;
+  return { brain: seed, over: { player: { x: 0, z: d, room: 3 }, ...over } };
+}
+
+describe('stepBrain — aggro (carried over from the predecessor spec)', () => {
   it('notices a player in front, in the same room, in range', () => {
-    const out = stepBrain(makeBrainState(), input());
-    expect(out.state.alert).toBe(true);
-    expect(out.state.mode).toBe('chase');
+    const out = stepBrain(makeBrain(), input());
+    expect(out.brain.alert).toBe(true);
+    expect(out.brain.state).toBe('pursue');
   });
 
   it('does not notice a player behind it', () => {
-    const out = stepBrain(makeBrainState(), input({ player: { x: 0, z: -4, room: 3 } }));
-    expect(out.state.alert).toBe(false);
-    expect(out.state.mode).toBe('wander');
+    const out = stepBrain(makeBrain(), input({ player: { x: 0, z: -4, room: 3 } }));
+    expect(out.brain.alert).toBe(false);
+    expect(out.brain.state).toBe('idle');
     expect(out.target).toBeNull();
   });
 
   it('does not notice a player in another room', () => {
-    const out = stepBrain(makeBrainState(), input({ player: { x: 0, z: 4, room: 2 } }));
-    expect(out.state.alert).toBe(false);
+    expect(stepBrain(makeBrain(), input({ player: { x: 0, z: 4, room: 2 } })).brain.alert)
+      .toBe(false);
   });
 
   it('does not notice a player past noticeRange', () => {
     const far = BRAIN_TUNING.noticeRange + 1;
-    const out = stepBrain(makeBrainState(), input({ player: { x: 0, z: far, room: 3 } }));
-    expect(out.state.alert).toBe(false);
+    expect(stepBrain(makeBrain(), input({ player: { x: 0, z: far, room: 3 } })).brain.alert)
+      .toBe(false);
   });
 
   it('a shot in the room turns heads regardless of the cone', () => {
     const out = stepBrain(
-      makeBrainState(),
-      input({ player: { x: 0, z: -4, room: 3 }, alerted: true }),
+      makeBrain(), input({ player: { x: 0, z: -4, room: 3 }, alerted: true }),
     );
-    expect(out.state.alert).toBe(true);
-  });
-});
-
-describe('stepBrain — the lock', () => {
-  it('keeps chasing while the player is briefly out of the room', () => {
-    const alert = stepBrain(makeBrainState(), input()).state;
-    const out = run(alert, { player: { x: 0, z: 4, room: 9 } }, BRAIN_TUNING.loseGrace - 0.5);
-    expect(out.state.alert).toBe(true);
+    expect(out.brain.alert).toBe(true);
   });
 
-  it('gives up once the player has been gone past the grace', () => {
-    const alert = stepBrain(makeBrainState(), input()).state;
-    const out = run(alert, { player: { x: 0, z: 4, room: 9 } }, BRAIN_TUNING.loseGrace + 0.5);
-    expect(out.state.alert).toBe(false);
-    expect(out.state.mode).toBe('wander');
+  it('keeps the lock while the player is briefly out of the room', () => {
+    const seed = stepBrain(makeBrain(), input()).brain;
+    const out = run(seed, { player: { x: 0, z: 4, room: 9 } }, BRAIN_TUNING.loseGrace - 0.5);
+    expect(out.brain.alert).toBe(true);
+  });
+
+  it('gives up past the grace, and goes idle', () => {
+    const seed = stepBrain(makeBrain(), input()).brain;
+    const out = run(seed, { player: { x: 0, z: 4, room: 9 } }, BRAIN_TUNING.loseGrace + 0.5);
+    expect(out.brain.alert).toBe(false);
+    expect(out.brain.state).toBe('idle');
     expect(out.target).toBeNull();
   });
-
-  it('a null player (tunnel / void) also counts as gone', () => {
-    const alert = stepBrain(makeBrainState(), input()).state;
-    const out = run(alert, { player: null }, BRAIN_TUNING.loseGrace + 0.5);
-    expect(out.state.alert).toBe(false);
-  });
 });
 
-describe('stepBrain — the standoff target', () => {
-  it('aims at a point attackRange from the player, on the zombie side', () => {
-    const out = stepBrain(makeBrainState(), input());
-    const t = out.target!;
-    expect(t).not.toBeNull();
-    // Player at (0, 4), zombie at (0, 0): the standoff sits between them.
-    expect(Math.hypot(t[0] - 0, t[2] - 4)).toBeCloseTo(BRAIN_TUNING.attackRange, 6);
-    expect(t[2]).toBeLessThan(4);
-    expect(t[1]).toBe(0);
+describe('stepBrain — the ring states', () => {
+  it('pursues while further out than engageRange', () => {
+    const { brain, over } = alertAt(BRAIN_TUNING.engageRange + 1);
+    const out = stepBrain(brain, input(over));
+    expect(out.brain.state).toBe('pursue');
+    expect(out.halt).toBe(false);
+    expect(out.engaged).toBe(false);
   });
 
-  it('falls back to its own facing when standing exactly on the player', () => {
-    const alert = stepBrain(makeBrainState(), input()).state;
-    const out = stepBrain(alert, input({
-      self: { x: 2, z: 2, yaw: 0, room: 3 },
-      player: { x: 2, z: 2, room: 3 },
-    }));
+  it('encircles inside engageRange without a token', () => {
+    const { brain, over } = alertAt(2.0);
+    const out = stepBrain(brain, input({ ...over, hasToken: false }));
+    expect(out.brain.state).toBe('encircle');
+    expect(out.engaged).toBe(false);
+    expect(out.target).not.toBeNull();
+  });
+
+  it('engages inside engageRange with a token', () => {
+    const { brain, over } = alertAt(2.0);
+    const out = stepBrain(brain, input({ ...over, hasToken: true }));
+    expect(out.brain.state).toBe('engage');
+    expect(out.engaged).toBe(true);
+  });
+
+  it('an encircler holds outerRadius, not the player', () => {
+    const { brain, over } = alertAt(2.0);
+    const out = stepBrain(brain, input({ ...over, hasToken: false }));
     const t = out.target!;
-    expect(Number.isFinite(t[0])).toBe(true);
-    expect(Math.hypot(t[0] - 2, t[2] - 2)).toBeCloseTo(BRAIN_TUNING.attackRange, 6);
+    const p = over.player!;   // measured from the player alertAt actually moved
+    expect(Math.hypot(t[0] - p.x, t[2] - p.z)).toBeCloseTo(BRAIN_TUNING.outerRadius, 6);
+  });
+
+  it('an engager walks at the PLAYER, not at a standoff point', () => {
+    // The predecessor's bug: a target at meleeRadius plus stepWander's 0.4 m
+    // arrive band parks the body outside meleeRadius, so it never engages.
+    const { brain, over } = alertAt(2.0);
+    const out = stepBrain(brain, input({ ...over, hasToken: true }));
+    expect(out.target).toEqual([0, 0, 2.0]);
+  });
+
+  it('drift rotates the encircle target tangentially', () => {
+    const { brain, over } = alertAt(2.0);
+    const still = stepBrain(brain, input({ ...over, hasToken: false, drift: 0 })).target!;
+    const moved = stepBrain(brain, input({ ...over, hasToken: false, drift: 1 })).target!;
+    const p = over.player!;   // both measured from the player alertAt actually moved
+    expect(moved).not.toEqual(still);
+    // Same radius, different bearing: it slides around the ring.
+    expect(Math.hypot(moved[0] - p.x, moved[2] - p.z))
+      .toBeCloseTo(Math.hypot(still[0] - p.x, still[2] - p.z), 6);
+  });
+
+  it('falls back to pursue past releaseRange (hysteresis)', () => {
+    const { brain, over } = alertAt(2.0);
+    const engaged = stepBrain(brain, input({ ...over, hasToken: true })).brain;
+    const mid = (BRAIN_TUNING.engageRange + BRAIN_TUNING.releaseRange) / 2;
+    const held = stepBrain(engaged, input({
+      player: { x: 0, z: mid, room: 3 }, hasToken: true,
+    }));
+    expect(held.brain.state).toBe('engage');
+    const gone = stepBrain(held.brain, input({
+      player: { x: 0, z: BRAIN_TUNING.releaseRange + 0.5, room: 3 }, hasToken: true,
+    }));
+    expect(gone.brain.state).toBe('pursue');
   });
 });
 
 describe('stepBrain — the swing', () => {
-  const close = { player: { x: 0, z: 0.8, room: 3 } };
+  const close = { player: { x: 0, z: BRAIN_TUNING.meleeRadius - 0.05, room: 3 }, hasToken: true };
 
-  it('halts and swings once inside attackRange', () => {
-    const alert = stepBrain(makeBrainState(), input()).state;
-    const out = stepBrain(alert, input(close));
+  it('attacks at meleeRadius with a token and no cooldown', () => {
+    const { brain } = alertAt(2.0);
+    const out = stepBrain(brain, input(close));
+    expect(out.brain.state).toBe('attack');
     expect(out.halt).toBe(true);
-    expect(out.state.mode).toBe('attack');
-    expect(out.attack).not.toBeNull();
+    expect(out.committed).toBe(true);
+    expect(out.attack).toEqual({ phase: 0, side: out.brain.side });
   });
 
-  it('runs the swing over swingSec and then cools down', () => {
-    let s = stepBrain(makeBrainState(), input()).state;
-    let out = stepBrain(s, input(close));
-    s = out.state;
-    const frames = Math.ceil(BRAIN_TUNING.swingSec / DT) + 2;
-    for (let i = 0; i < frames; i++) { out = stepBrain(s, input(close)); s = out.state; }
-    expect(s.mode).not.toBe('attack');
-    expect(s.cooldown).toBeGreaterThan(0);
-  });
-
-  it('finishes a swing already in flight after the player retreats', () => {
-    let s = stepBrain(makeBrainState(), input()).state;
-    s = stepBrain(s, input(close)).state;         // committed
-    const out = stepBrain(s, input({ player: { x: 0, z: 6, room: 3 } }));
-    expect(out.state.mode).toBe('attack');
-    expect(out.attack).not.toBeNull();
-  });
-
-  it('gates the second swing behind cooldownSec', () => {
-    let s = stepBrain(makeBrainState(), input()).state;
-    let out = stepBrain(s, input(close)); s = out.state;
-    const frames = Math.ceil(BRAIN_TUNING.swingSec / DT) + 2;
-    for (let i = 0; i < frames; i++) { out = stepBrain(s, input(close)); s = out.state; }
-    expect(s.mode).not.toBe('attack');
-    // Half the cooldown later it must still not have started another.
-    for (let t = 0; t < BRAIN_TUNING.cooldownSec / 2; t += DT) {
-      out = stepBrain(s, input(close)); s = out.state;
+  it('runs the swing over swingSec, then recovers and flips the arm', () => {
+    const { brain } = alertAt(2.0);
+    let out = stepBrain(brain, input(close));
+    const firstSide = out.attack!.side;
+    let b = out.brain;
+    for (let i = 0; i < Math.ceil(BRAIN_TUNING.swingSec / DT) + 2; i++) {
+      out = stepBrain(b, input(close));
+      b = out.brain;
     }
-    expect(s.mode).not.toBe('attack');
-    // Past the cooldown it swings again.
-    for (let t = 0; t < BRAIN_TUNING.cooldownSec; t += DT) {
-      out = stepBrain(s, input(close)); s = out.state;
-      if (s.mode === 'attack') break;
+    expect(b.state).toBe('recover');
+    expect(b.cooldown).toBeGreaterThan(0);
+    expect(b.side).not.toBe(firstSide);
+  });
+
+  it('a committed swing reports committed and finishes after the token is gone', () => {
+    const { brain } = alertAt(2.0);
+    const swinging = stepBrain(brain, input(close)).brain;
+    const out = stepBrain(swinging, input({ ...close, hasToken: false }));
+    expect(out.brain.state).toBe('attack');
+    expect(out.committed).toBe(true);
+  });
+
+  it('recover holds position rather than shuffling in', () => {
+    const { brain } = alertAt(2.0);
+    let out = stepBrain(brain, input(close));
+    let b = out.brain;
+    for (let i = 0; i < Math.ceil(BRAIN_TUNING.swingSec / DT) + 2; i++) {
+      out = stepBrain(b, input(close)); b = out.brain;
     }
-    expect(s.mode).toBe('attack');
+    expect(b.state).toBe('recover');
+    expect(out.halt).toBe(true);
+    expect(out.engaged).toBe(true);
   });
 
-  it('holds position through the cooldown instead of walking into the player', () => {
-    let s = stepBrain(makeBrainState(), input()).state;
-    let out = stepBrain(s, input(close)); s = out.state;
-    const frames = Math.ceil(BRAIN_TUNING.swingSec / DT) + 2;
-    for (let i = 0; i < frames; i++) { out = stepBrain(s, input(close)); s = out.state; }
-    expect(out.halt).toBe(true);   // engaged latch keeps it halted
+  it('a revoked token drops a recovering body back to encircle', () => {
+    const { brain } = alertAt(2.0);
+    let out = stepBrain(brain, input(close));
+    let b = out.brain;
+    for (let i = 0; i < Math.ceil(BRAIN_TUNING.swingSec / DT) + 2; i++) {
+      out = stepBrain(b, input(close)); b = out.brain;
+    }
+    expect(b.state).toBe('recover');
+    const dropped = stepBrain(b, input({ ...close, hasToken: false }));
+    expect(dropped.brain.state).toBe('encircle');
+  });
+});
+
+describe('stepBrain — stagger', () => {
+  it('a blast forces stagger from every other state', () => {
+    const states: Brain['state'][] = [];
+    const seeds: Brain[] = [];
+    // idle
+    seeds.push(makeBrain());
+    // pursue
+    seeds.push(stepBrain(makeBrain(), input()).brain);
+    // encircle / engage / attack / recover
+    const { brain } = alertAt(2.0);
+    seeds.push(stepBrain(brain, input({ player: { x: 0, z: 2, room: 3 } })).brain);
+    seeds.push(stepBrain(brain, input({ player: { x: 0, z: 2, room: 3 }, hasToken: true })).brain);
+    const close = { player: { x: 0, z: 0.9, room: 3 }, hasToken: true };
+    const swinging = stepBrain(brain, input(close)).brain;
+    seeds.push(swinging);
+    let b = swinging;
+    let out = stepBrain(b, input(close));
+    for (let i = 0; i < Math.ceil(BRAIN_TUNING.swingSec / DT) + 2; i++) {
+      out = stepBrain(b, input(close)); b = out.brain;
+    }
+    seeds.push(b);
+    for (const s of seeds) {
+      const hit = stepBrain(s, input({ blasted: true }));
+      states.push(hit.brain.state);
+      expect(hit.halt).toBe(true);
+      // A staggering body must not keep a melee slot it cannot use.
+      expect(hit.committed).toBe(false);
+      expect(hit.engaged).toBe(false);
+    }
+    expect(states.every(s => s === 'stagger')).toBe(true);
   });
 
-  it('releases the halt only past releaseRange (hysteresis)', () => {
-    let s = stepBrain(makeBrainState(), input()).state;
-    s = stepBrain(s, input(close)).state;
-    // Just past attackRange but inside releaseRange: still engaged.
-    const mid = (BRAIN_TUNING.attackRange + BRAIN_TUNING.releaseRange) / 2;
-    let out = stepBrain(s, input({ player: { x: 0, z: mid, room: 3 } }));
-    expect(out.state.engaged).toBe(true);
-    // Past releaseRange: released, and walking again.
-    out = stepBrain(out.state, input({ player: { x: 0, z: BRAIN_TUNING.releaseRange + 0.3, room: 3 } }));
-    expect(out.state.engaged).toBe(false);
+  it('holds for blastHoldSec then resumes the chase', () => {
+    const seed = stepBrain(makeBrain(), input()).brain;
+    const hit = stepBrain(seed, input({ blasted: true })).brain;
+    const out = run(hit, {}, BRAIN_TUNING.blastHoldSec + 0.1);
+    expect(out.brain.state).not.toBe('stagger');
+    expect(out.brain.alert).toBe(true);
+  });
+
+  it('a blast cancels a swing in flight — the lurch outranks the hook', () => {
+    const { brain } = alertAt(2.0);
+    const swinging = stepBrain(
+      brain, input({ player: { x: 0, z: 0.9, room: 3 }, hasToken: true }),
+    ).brain;
+    expect(swinging.state).toBe('attack');
+    const hit = stepBrain(swinging, input({ blasted: true }));
+    expect(hit.brain.state).toBe('stagger');
+    expect(hit.attack).toBeNull();
+    expect(hit.brain.swingT).toBe(0);
   });
 });

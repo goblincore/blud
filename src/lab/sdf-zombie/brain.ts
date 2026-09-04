@@ -1,42 +1,53 @@
 // src/lab/sdf-zombie/brain.ts
 //
-// One zombie's decision layer: wander until it notices the player, then walk
-// at him and swing when it gets there. Pure — no clock, no RNG, no THREE —
-// so the whole behaviour is unit-testable against hand-worked geometry.
+// One zombie's decision layer, as a named state machine. Pure — no clock, no
+// RNG, no THREE — so every transition is unit-testable against hand-worked
+// geometry.
 //
-// IT DOES NOT DRIVE LOCOMOTION. There is exactly one walker in this codebase
-// (wander.ts, through motion.ts) and adding a second would mean two sets of
-// turn rates, accelerations and gait blends drifting apart. Instead the brain
-// emits a STANDOFF TARGET — a point `attackRange` from the player, on the
-// zombie's side — and the actor writes it into wander.target. A chasing
-// zombie is the same shamble, aimed.
+// WHY IT IS A MACHINE NOW. The first version had three modes and three
+// ad-hoc overrides doing the same job three different ways: a hysteresis
+// latch for "close enough to swing", an early return for "a committed swing
+// always finishes", and a blast hold that was not even in this file — it was
+// a holdSecs timer in game-actor.ts gating cfg.wander from outside. All three
+// are states here, which is the whole point: the transitions are a table you
+// can read in one place instead of conditionals across two files.
+//
+// IT DOES NOT DRIVE LOCOMOTION. There is exactly one walker (wander.ts,
+// through motion.ts) and a second would mean two sets of turn rates drifting
+// apart. The machine emits a TARGET and a HALT flag; the actor writes them
+// into the wander.
+//
+// IT DOES NOT DECIDE WHO SWINGS. That is crowd-level and lives in
+// melee-ring.ts; `hasToken` and `drift` arrive as input. This file only says
+// what one body does with the answer.
 //
 // HEADING CONVENTION (wander.ts): yaw 0 faces +z, positive is clockwise seen
-// from above. The bearing to a point is therefore atan2(dx, dz).
+// from above. The bearing to a point is atan2(dx, dz).
 //
 // ROOM-BOUND, DELIBERATELY. stepWander clamps every body to its own room's
-// bounds, so a chaser stops at the doorway and will not follow through a
-// tunnel. Lifting that clamp without navigation walks bodies into walls; see
-// the spec's "Accepted limitation".
+// bounds, so a chaser stops at the doorway. Cross-room pursuit needs
+// navigation and is a separate spec.
 import type { Vec3 } from './types';
 import { wrapPi } from './wander';
 
-export type BrainMode = 'wander' | 'chase' | 'attack';
+export type BrainState =
+  | 'idle' | 'pursue' | 'encircle' | 'engage' | 'attack' | 'recover' | 'stagger';
 
-export interface BrainState {
-  mode: BrainMode;
-  /** Seconds the player has been out of this brain's room (0 while in it). */
-  lostFor: number;
+export interface Brain {
+  state: BrainState;
   /** Has noticed the player and not yet forgotten him. */
   alert: boolean;
-  /** Melee hysteresis latch: set at attackRange, cleared past releaseRange.
-   *  Without it a body hovering at exactly attackRange flickers between
-   *  walking and halting every frame. */
-  engaged: boolean;
-  /** Swing progress 0..1 while mode === 'attack', else 0. */
+  /** Seconds the player has been out of this brain's room (0 while in it). */
+  lostFor: number;
+  /** Swing progress 0..1 while state === 'attack', else 0. */
   swingT: number;
   /** Seconds until another swing may start. */
   cooldown: number;
+  /** Seconds of blast hold remaining. */
+  holdSecs: number;
+  /** Which arm the NEXT swing uses. Alternates, so a stalled pack swinging
+   *  the same arm every time does not read as a metronome. */
+  side: 'L' | 'R';
 }
 
 export interface BrainSelf { x: number; z: number; yaw: number; room: number }
@@ -49,64 +60,79 @@ export interface BrainInput {
   player: BrainPlayer | null;
   /** A shot was fired in this brain's room since the last step. */
   alerted: boolean;
+  /** This body holds a melee token this frame (melee-ring.ts). */
+  hasToken: boolean;
+  /** Tangential shuffle direction while waiting (melee-ring.ts). */
+  drift: -1 | 0 | 1;
+  /** A blast-profile hit landed this frame. Outranks every other transition. */
+  blasted: boolean;
 }
 
 export interface BrainOutput {
-  state: BrainState;
-  /** Wander-target override (world ground point); null = leave the wander alone. */
+  brain: Brain;
+  /** Wander-target override (world ground point); null = leave it alone. */
   target: Vec3 | null;
   /** True = locomotion off this frame (the actor's cfg.wander gate). */
   halt: boolean;
-  /** Swing phase 0..1, or null when not swinging. */
-  attack: number | null;
+  /** The swing to compose, or null. */
+  attack: { phase: number; side: 'L' | 'R' } | null;
+  /** True while this body should be separated at the wider engaged radius —
+   *  belt-and-braces for the moment of arrival, before the ring has settled. */
+  engaged: boolean;
+  /** True while the ring may NOT revoke this body's token. */
+  committed: boolean;
 }
 
 export const BRAIN_TUNING = {
   /** Beyond this the player goes unnoticed (m). */
   noticeRange: 9,
-  /** Half-angle of the notice cone (rad) — the player must be roughly ahead. */
+  /** Half-angle of the notice cone (rad). */
   noticeCone: (70 * Math.PI) / 180,
   /** Alert survives this long after the player leaves the room (s). */
   loseGrace: 4,
-  /** Halt-and-swing distance (m). */
-  attackRange: 1.0,
-  /** Walk again past this distance — hysteresis against attackRange (m). */
-  releaseRange: 1.6,
+  /** Where a token holder stands (m). */
+  meleeRadius: 1.0,
+  /** Where a waiter holds (m). */
+  outerRadius: 1.8,
+  /** pursue -> the ring states (m). */
+  engageRange: 2.6,
+  /** Back to pursue — hysteresis against engageRange (m). */
+  releaseRange: 3.2,
+  /** Tangential step applied to an encircling body's target (rad). */
+  driftStep: 0.6,
   /** One swing, wind-up through recovery (s). */
   swingSec: 0.7,
   /** Gap before the next swing may start (s). */
   cooldownSec: 1.1,
+  /** Blast hold — moved here from game-actor.ts's BLAST_HOLD_SEC (s). */
+  blastHoldSec: 0.55,
 } as const;
 
 export type BrainTuning = typeof BRAIN_TUNING;
 
-export function makeBrainState(): BrainState {
-  return { mode: 'wander', lostFor: 0, alert: false, engaged: false, swingT: 0, cooldown: 0 };
+export function makeBrain(): Brain {
+  return {
+    state: 'idle', alert: false, lostFor: 0,
+    swingT: 0, cooldown: 0, holdSecs: 0, side: 'R',
+  };
 }
 
-/** The point `range` metres from the player along the player→zombie
- *  direction. Standing exactly on the player is degenerate: back off along
- *  the zombie's own facing instead of dividing by zero. */
-function standoffPoint(self: BrainSelf, player: BrainPlayer, range: number): Vec3 {
-  const dx = self.x - player.x;
-  const dz = self.z - player.z;
-  const d = Math.hypot(dx, dz);
-  if (d < 1e-6) {
-    return [player.x + Math.sin(self.yaw) * range, 0, player.z + Math.cos(self.yaw) * range];
-  }
-  return [player.x + (dx / d) * range, 0, player.z + (dz / d) * range];
+/** A point `radius` from the player, on `bearing`. */
+function ringPoint(player: BrainPlayer, bearing: number, radius: number): Vec3 {
+  return [player.x + Math.sin(bearing) * radius, 0, player.z + Math.cos(bearing) * radius];
 }
 
 export function stepBrain(
-  state: BrainState,
+  brain: Brain,
   input: BrainInput,
   tuning: BrainTuning = BRAIN_TUNING,
 ): BrainOutput {
   const dt = Math.max(0, input.dt);
   const { self, player } = input;
 
-  let { mode, lostFor, alert, engaged, swingT, cooldown } = state;
+  let { state, alert, lostFor, swingT, cooldown, holdSecs, side } = brain;
   cooldown = Math.max(0, cooldown - dt);
+  holdSecs = Math.max(0, holdSecs - dt);
 
   const sameRoom = player !== null && player.room === self.room;
   lostFor = sameRoom ? 0 : lostFor + dt;
@@ -124,61 +150,101 @@ export function stepBrain(
       if (Math.abs(wrapPi(bearing - self.yaw)) <= tuning.noticeCone) alert = true;
     }
   }
-  if (alert && lostFor > tuning.loseGrace) {
-    alert = false;
-    engaged = false;
+  if (alert && lostFor > tuning.loseGrace) alert = false;
+
+  const idle = (): BrainOutput => ({
+    brain: { state: 'idle', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+    target: null, halt: false, attack: null, engaged: false, committed: false,
+  });
+
+  // --- stagger outranks everything ----------------------------------------
+  // A blast-profile hit forces it from any state and DROPS the token: a
+  // staggering body must not hold a melee slot it cannot use. The swing is
+  // cancelled outright — the lurch is the bigger read.
+  if (input.blasted) {
+    return {
+      brain: { state: 'stagger', alert, lostFor, swingT: 0, cooldown, holdSecs: tuning.blastHoldSec, side },
+      target: null, halt: true, attack: null, engaged: false, committed: false,
+    };
   }
-
-  // --- the melee latch -----------------------------------------------------
-  // Runs even mid-swing: a player who retreats past releaseRange unlatches
-  // the body now, not only once the swing animation has played out.
-  if (dist <= tuning.attackRange) engaged = true;
-  else if (dist > tuning.releaseRange) engaged = false;
-
-  // --- a swing already in flight ALWAYS finishes ---------------------------
-  // An attack that can be cancelled mid-frame reads weightless — the same
-  // reasoning behind game-actor's BLAST_HOLD_SEC.
-  if (mode === 'attack') {
-    swingT = tuning.swingSec > 0 ? Math.min(1, swingT + dt / tuning.swingSec) : 1;
-    if (swingT >= 1) {
-      swingT = 0;
-      cooldown = tuning.cooldownSec;
-      mode = alert ? 'chase' : 'wander';
-    } else {
+  if (state === 'stagger') {
+    if (holdSecs > 0) {
       return {
-        state: { mode, lostFor, alert, engaged, swingT, cooldown },
-        target: alert && player ? standoffPoint(self, player, tuning.attackRange) : null,
-        halt: true,
-        attack: swingT,
+        brain: { state, alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+        target: null, halt: true, attack: null, engaged: false, committed: false,
       };
     }
+    state = alert && player ? 'pursue' : 'idle';
   }
 
-  // --- calm ----------------------------------------------------------------
-  if (!alert || !player) {
+  if (!alert || !player) return idle();
+
+  const bearing = Math.atan2(self.x - player.x, self.z - player.z);
+  const playerPoint: Vec3 = [player.x, 0, player.z];
+
+  // --- a committed swing runs to the end ----------------------------------
+  if (state === 'attack') {
+    swingT = tuning.swingSec > 0 ? Math.min(1, swingT + dt / tuning.swingSec) : 1;
+    if (swingT < 1) {
+      return {
+        brain: { state, alert, lostFor, swingT, cooldown, holdSecs, side },
+        target: playerPoint, halt: true,
+        attack: { phase: swingT, side },
+        engaged: true, committed: true,
+      };
+    }
+    swingT = 0;
+    cooldown = tuning.cooldownSec;
+    side = side === 'R' ? 'L' : 'R';           // alternate
+    state = 'recover';
+  }
+
+  // --- pursue <-> ring, with hysteresis ------------------------------------
+  const inRing = state === 'encircle' || state === 'engage' || state === 'recover';
+  if (inRing && dist > tuning.releaseRange) state = 'pursue';
+  else if (!inRing && dist <= tuning.engageRange) state = input.hasToken ? 'engage' : 'encircle';
+  else if (state === 'idle') state = 'pursue';   // just noticed, still outside ring range
+
+  if (state === 'pursue') {
     return {
-      state: { mode: 'wander', lostFor, alert, engaged: false, swingT: 0, cooldown },
-      target: null,
-      halt: false,
-      attack: null,
+      brain: { state, alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      // The PLAYER, not a standoff point: stepWander's 0.4 m arrive band on a
+      // target at meleeRadius parks the body outside meleeRadius, so it could
+      // never engage (the predecessor's defect, found by the crowd gate).
+      target: playerPoint, halt: false, attack: null,
+      engaged: false, committed: false,
     };
   }
 
-  const target = standoffPoint(self, player, tuning.attackRange);
-
-  if (engaged && cooldown <= 0) {
+  // Inside the ring. The token decides which side of it this body is on.
+  if (!input.hasToken) {
     return {
-      state: { mode: 'attack', lostFor, alert, engaged, swingT: 0, cooldown },
-      target,
-      halt: true,
-      attack: 0,
+      brain: { state: 'encircle', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      target: ringPoint(player, bearing + input.drift * tuning.driftStep, tuning.outerRadius),
+      halt: false, attack: null, engaged: false, committed: false,
     };
   }
+
+  if (state === 'recover' && cooldown > 0) {
+    return {
+      brain: { state: 'recover', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      target: playerPoint, halt: true, attack: null,
+      engaged: true, committed: false,
+    };
+  }
+
+  if (dist <= tuning.meleeRadius && cooldown <= 0) {
+    return {
+      brain: { state: 'attack', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      target: playerPoint, halt: true,
+      attack: { phase: 0, side },
+      engaged: true, committed: true,
+    };
+  }
+
   return {
-    state: { mode: 'chase', lostFor, alert, engaged, swingT: 0, cooldown },
-    target,
-    // Engaged but cooling down: stand at range rather than shuffling into him.
-    halt: engaged,
-    attack: null,
+    brain: { state: 'engage', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+    target: playerPoint, halt: false, attack: null,
+    engaged: true, committed: false,
   };
 }
