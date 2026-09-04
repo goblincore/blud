@@ -34,52 +34,81 @@ describe('attackDrive', () => {
 });
 
 describe('attackPose', () => {
-  it('is exactly zero at phase 0 and phase 1', () => {
-    for (const p of [0, 1]) {
-      const pose = attackPose(p);
-      expect(pose.rootOffset).toEqual([0, 0, 0]);
-      expect(pose.reachPitch).toBe(0);
-      for (const v of Object.values(pose.offsets)) expect(v).toEqual([0, 0, 0]);
+  const STRIKE = (ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2;
+  const WINDUP = ATTACK_TUNING.windupEnd;
+
+  it('is exactly zero at phase 0 and phase 1, both sides', () => {
+    for (const side of ['L', 'R'] as const) {
+      for (const p of [0, 1]) {
+        const pose = attackPose(p, side);
+        expect(pose.rootOffset).toEqual([0, 0, 0]);
+        expect(pose.reach).toEqual({ pitchL: 0, pitchR: 0, yawL: 0, yawR: 0 });
+        for (const v of Object.values(pose.offsets)) expect(v).toEqual([0, 0, 0]);
+      }
     }
   });
 
-  it('drives the root forward at the strike peak', () => {
-    const peak = attackPose((ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2);
-    expect(peak.rootOffset[2]).toBeCloseTo(ATTACK_TUNING.lunge, 6);
-    expect(peak.rootOffset[0]).toBe(0);
+  it('swings the named arm, not the other one', () => {
+    const r = attackPose(STRIKE, 'R').reach;
+    expect(Math.abs(r.yawR)).toBeGreaterThan(Math.abs(r.yawL));
+    expect(Math.abs(r.pitchR)).toBeGreaterThan(Math.abs(r.pitchL));
+    const l = attackPose(STRIKE, 'L').reach;
+    expect(Math.abs(l.yawL)).toBeGreaterThan(Math.abs(l.yawR));
+    expect(Math.abs(l.pitchL)).toBeGreaterThan(Math.abs(l.pitchR));
   });
 
-  it('pulls the root back during the wind-up', () => {
-    const wind = attackPose(ATTACK_TUNING.windupEnd);
-    expect(wind.rootOffset[2]).toBeCloseTo(-ATTACK_TUNING.windback, 6);
+  it('L and R are mirror images', () => {
+    const r = attackPose(STRIKE, 'R');
+    const l = attackPose(STRIKE, 'L');
+    expect(l.reach.yawL).toBeCloseTo(-r.reach.yawR, 9);
+    expect(l.reach.yawR).toBeCloseTo(-r.reach.yawL, 9);
+    expect(l.reach.pitchL).toBeCloseTo(r.reach.pitchR, 9);
+    // The shoulder drive mirrors: R drives the right shoulder forward.
+    expect(l.offsets.shoulderL![2]).toBeCloseTo(r.offsets.shoulderR![2], 9);
   });
 
-  it('swings the arms back then forward', () => {
-    expect(attackPose(ATTACK_TUNING.windupEnd).reachPitch)
-      .toBeCloseTo(-ATTACK_TUNING.pitchWindup, 6);
-    expect(attackPose((ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2).reachPitch)
-      .toBeCloseTo(ATTACK_TUNING.pitchStrike, 6);
+  it('cocks out on the wind-up and sweeps across on the strike', () => {
+    const wind = attackPose(WINDUP, 'R').reach;
+    const hit = attackPose(STRIKE, 'R').reach;
+    // Opposite signs: out, then across.
+    expect(Math.sign(wind.yawR)).toBe(-Math.sign(hit.yawR));
+    expect(Math.abs(hit.yawR)).toBeCloseTo(ATTACK_TUNING.yawStrike, 6);
+    expect(Math.abs(wind.yawR)).toBeCloseTo(ATTACK_TUNING.yawWindup, 6);
   });
 
-  it('drops the hands only on the forward half', () => {
-    expect(attackPose(ATTACK_TUNING.windupEnd).offsets.handL![1]).toBe(0);
-    expect(attackPose((ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2).offsets.handL![1])
+  it('the off arm counter-swings at a fraction of the swinging arm', () => {
+    const r = attackPose(STRIKE, 'R').reach;
+    expect(r.yawL).toBeCloseTo(-r.yawR * ATTACK_TUNING.offArmShare, 9);
+    expect(r.pitchL).toBeCloseTo(-r.pitchR * ATTACK_TUNING.offArmShare, 9);
+  });
+
+  it('twists the torso: the swinging shoulder forward, the other back', () => {
+    const p = attackPose(STRIKE, 'R');
+    expect(p.offsets.shoulderR![2]).toBeGreaterThan(0);
+    expect(p.offsets.shoulderL![2]).toBeCloseTo(-p.offsets.shoulderR![2], 9);
+  });
+
+  it('lunges less than the old two-arm slam did — the rotation carries it', () => {
+    expect(ATTACK_TUNING.lunge).toBeLessThan(0.2);
+    expect(attackPose(STRIKE, 'R').rootOffset[2]).toBeCloseTo(ATTACK_TUNING.lunge, 6);
+  });
+
+  it('drops only the swinging hand, and only on the forward half', () => {
+    expect(attackPose(WINDUP, 'R').offsets.handR![1]).toBe(0);
+    expect(attackPose(STRIKE, 'R').offsets.handR![1])
       .toBeCloseTo(-ATTACK_TUNING.handDrop, 6);
+    expect(attackPose(STRIKE, 'R').offsets.handL![1]).toBe(0);
   });
 
-  it('carries the head at a share of the chest, both arms symmetric', () => {
-    const p = attackPose(0.55);
-    expect(p.offsets.head![2]).toBeCloseTo(p.offsets.chest![2] * ATTACK_TUNING.headShare, 6);
-    expect(p.offsets.handL).toEqual(p.offsets.handR);
-  });
-
-  it('is finite across a full sweep', () => {
-    for (let p = -0.5; p <= 1.5; p += 0.01) {
-      const pose = attackPose(p);
-      for (const v of [pose.rootOffset, ...Object.values(pose.offsets)]) {
-        expect(v!.every(Number.isFinite)).toBe(true);
+  it('is finite across a full sweep, both sides', () => {
+    for (const side of ['L', 'R'] as const) {
+      for (let p = -0.5; p <= 1.5; p += 0.01) {
+        const pose = attackPose(p, side);
+        for (const v of [pose.rootOffset, ...Object.values(pose.offsets)]) {
+          expect(v!.every(Number.isFinite)).toBe(true);
+        }
+        for (const a of Object.values(pose.reach)) expect(Number.isFinite(a)).toBe(true);
       }
-      expect(Number.isFinite(pose.reachPitch)).toBe(true);
     }
   });
 });
