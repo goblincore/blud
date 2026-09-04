@@ -39,8 +39,10 @@ export const failHard = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1
  * tabs — this is where that stops being optional.
  *
  * Returns { tab, send, evaluate, ws }. `evaluate(expression, timeoutMs)`
- * awaits promises and returns by value; a page exception becomes a
- * StageFail (via `onFail`, default failHard).
+ * awaits promises and returns by value; a page exception THROWS StageFail
+ * (retriable upstream; the bench's top level prints FAIL and exits — same
+ * visible behaviour as the pre-library script). A dead tab rejects every
+ * pending send, which is what makes crash-retry possible at all.
  */
 export async function connectGame({ vite, cdp, width = 1280, height = 800, onFail = failHard }) {
   const fail = onFail;
@@ -58,16 +60,26 @@ export async function connectGame({ vite, cdp, width = 1280, height = 800, onFai
   const pending = new Map();
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+    if (m.id && pending.has(m.id)) { pending.get(m.id).resolve(m); pending.delete(m.id); }
   };
-  const send = (method, params = {}) => new Promise((resolve) => {
-    const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params }));
+  // A dead tab must REJECT, not hang: a page crash destroys the target, the
+  // websocket closes, and every in-flight send would otherwise pend forever —
+  // node then exits with an 'unsettled top-level await' and the crash-retry
+  // never fires (measured 2026-09-04, killed a Question A run mid-rep).
+  const hangup = (why) => {
+    for (const [, p] of pending) p.reject(new StageFail(`CDP ${why} — page gone`));
+    pending.clear();
+  };
+  ws.onclose = () => hangup('websocket closed');
+  ws.onerror = () => hangup('websocket error');
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = ++seq; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression, timeoutMs = 120_000) => {
     const r = await send('Runtime.evaluate', {
       expression, awaitPromise: true, returnByValue: true, timeout: timeoutMs,
     });
-    if (r.result?.exceptionDetails) fail(`page threw: ${JSON.stringify(r.result.exceptionDetails).slice(0, 400)}`);
+    if (r.result?.exceptionDetails) throw new StageFail(`page threw: ${JSON.stringify(r.result.exceptionDetails).slice(0, 400)}`);
     return r.result?.result?.value;
   };
 
