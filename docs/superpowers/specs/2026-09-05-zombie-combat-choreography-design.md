@@ -144,9 +144,15 @@ the same input always yields the same verdict):
 2. Then `incumbent` claimants, nearest first, while a token remains and their
    bearing is `≥ minSlotAngle` from every already-granted holder.
 3. Then everyone else, nearest first, under the same angular test.
-4. Non-holders get a `drift` of -1/+1 toward the nearer edge of the nearest
-   angular gap wide enough to hold a token (`≥ 2 × minSlotAngle` from a
-   holder), or 0 if they already stand in one.
+4. Non-holders get a `drift` of -1/+1: the tangential direction toward the
+   nearest bearing that is `≥ minSlotAngle` from **every** holder, or 0 when
+   the body already stands at such a bearing. (With two holders 90° apart the
+   two arcs between them are 90° and 270° wide, and only the 270° one contains
+   any bearing that clears both — so waiters converge on the open side rather
+   than crowding the seam between the attackers.)
+
+Rule 1 cannot overflow the cap: `committed` bodies are a subset of the previous
+frame's holders, which was itself at most `tokens`.
 
 | knob | value | why |
 |---|---|---|
