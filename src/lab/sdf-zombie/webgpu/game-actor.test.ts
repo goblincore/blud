@@ -541,60 +541,32 @@ describe('wounds ride the body yaw (billboarding regression)', () => {
   });
 });
 
+/** A real zombie + actor at `start` (default the origin), following the
+ *  file's build recipe: makeZombie -> buildBody -> translateBody to the
+ *  spawn, so the flesh sits where motion's wander.pos says it is. Shared by
+ *  the two wiring describes below. */
+function makeTestActor(over: Partial<Parameters<typeof createZombieActor>[0]> = {}) {
+  const start = over.start ?? [0, 0, 0];
+  const placed = translateBody(buildBody(makeZombie()), start);
+  return createZombieActor({
+    id: 1, room: 1, body: placed, view: stubView() as never,
+    start, seed: 7,
+    bounds: { minX: -8, maxX: 8, minZ: -8, maxZ: 8 }, furniture: [],
+    ...over,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The brain and the crowd (zombie-crowd task 5). The actor is the WIRING for
 // brain.ts (notice/chase/attack) and crowd.ts (separation nudges): the brain
-// steps inside the sub-step loop and its standoff target overrides the
-// wander's; a nudge re-applies the room clamp and the furniture rejection so
-// separation can never shove a body into a crate. Same offline recipe as
-// every describe above — real motion pipeline, stub view.
+// steps inside the sub-step loop and its target overrides the wander's; a
+// nudge re-applies the room clamp and the furniture rejection so separation
+// can never shove a body into a crate. Same offline recipe as every describe
+// above — real motion pipeline, stub view. The brain states themselves are
+// gated by the ring-wiring describe at the end of this file; the transitions
+// live in brain.test.ts.
 // ---------------------------------------------------------------------------
 describe('createZombieActor — the brain and the crowd', () => {
-  /** A real zombie + actor at `start` (default the origin), following the
-   *  file's build recipe: makeZombie -> buildBody -> translateBody to the
-   *  spawn, so the flesh sits where motion's wander.pos says it is. */
-  function makeTestActor(over: Partial<Parameters<typeof createZombieActor>[0]> = {}) {
-    const start = over.start ?? [0, 0, 0];
-    const placed = translateBody(buildBody(makeZombie()), start);
-    return createZombieActor({
-      id: 1, room: 1, body: placed, view: stubView() as never,
-      start, seed: 7,
-      bounds: { minX: -8, maxX: 8, minZ: -8, maxZ: 8 }, furniture: [],
-      ...over,
-    });
-  }
-
-  it('wanders when no player has been supplied', () => {
-    const a = makeTestActor({ start: [0, 0, 0] });
-    a.step(1 / 60);
-    expect(a.brain().mode).toBe('wander');
-    expect(a.brain().alert).toBe(false);
-  });
-
-  it('notices a player in front and walks toward him', () => {
-    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
-    // Face +z (the authored facing) and put the player straight ahead.
-    a.setBrainInput({ x: 0, z: 3, room: 3 }, false);
-    a.step(1 / 60);
-    expect(a.brain().alert).toBe(true);
-    const before = a.pose().pos;
-    // Two seconds: the body has to finish its damped turn (headingFollowRate
-    // 1.7 rad/s) before it can accelerate, so one second is not enough margin.
-    for (let i = 0; i < 120; i++) {
-      a.setBrainInput({ x: 0, z: 3, room: 3 }, false);
-      a.step(1 / 60);
-    }
-    const after = a.pose().pos;
-    expect(after[2]).toBeGreaterThan(before[2]);   // closed the distance
-  });
-
-  it('a shot in the room alerts it even from behind', () => {
-    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
-    a.setBrainInput({ x: 0, z: -3, room: 3 }, true);
-    a.step(1 / 60);
-    expect(a.brain().alert).toBe(true);
-  });
-
   it('nudge moves the body on the ground plane', () => {
     const a = makeTestActor({ start: [0, 0, 0] });
     const before = a.pose().pos;
@@ -620,16 +592,6 @@ describe('createZombieActor — the brain and the crowd', () => {
     const before = a.pose().pos;
     a.nudge(0.5, 0);        // straight into the crate + its margin
     expect(a.pose().pos).toEqual(before);
-  });
-
-  it('reports the swing through debug()', () => {
-    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
-    for (let i = 0; i < 8; i++) {
-      a.setBrainInput({ x: 0, z: 0.5, room: 3 }, true);
-      a.step(1 / 60);
-    }
-    expect(a.debug().mode).toBe('attack');
-    expect(a.debug().swingT).toBeGreaterThan(0);
   });
 
   // --- chase routing (the room-4 doorway deadlock, 2026-09-04) ------------
@@ -697,10 +659,71 @@ describe('createZombieActor — the brain and the crowd', () => {
       let sawSwing = false;
       for (let i = 0; i < 60 * 12 && !sawSwing; i++) {
         a.setBrainInput({ x: 0, z: 0, room: 4 }, true);   // alerted: skips the cone
+        // The brain cannot swing without a melee token (no token = encircle
+        // forever, by design) — so the harness plays the ring's answer the
+        // way game-main's arbitration will from task 6 on.
+        a.setRingInput(true, 0);
         a.step(1 / 60);
-        sawSwing = a.brain().mode === 'attack' && a.brain().swingT > 0;
+        sawSwing = a.brain().state === 'attack' && a.brain().swingT > 0;
       }
       expect(sawSwing).toBe(true);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The ring wiring (choreography task 5). The melee ring's verdict (melee-ring
+// .ts) and a blast-profile hit now reach the brain as INPUTS — hasToken/drift
+// and a one-shot blasted flag — instead of the actor gating locomotion with a
+// private timer. Four seams prove the wiring: the brain reports its state
+// through brain(), the ring verdict engages or encircles, a slug staggers
+// through the brain (not a private hold), and debug() carries what the
+// capture driver records.
+// ---------------------------------------------------------------------------
+describe('createZombieActor — the ring wiring', () => {
+  const near = { x: 0, z: 1.5, room: 3 };
+
+  it('reports its brain state and takes a ring verdict', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    a.setBrainInput(near, false);
+    a.setRingInput(true, 0);
+    a.step(1 / 60);
+    expect(a.brain().alert).toBe(true);
+    expect(['engage', 'attack']).toContain(a.brain().state);
+    expect(a.engagedForCrowd()).toBe(true);
+  });
+
+  it('encircles when the ring gives it no token', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    a.setBrainInput(near, false);
+    a.setRingInput(false, 1);
+    a.step(1 / 60);
+    expect(a.brain().state).toBe('encircle');
+    expect(a.engagedForCrowd()).toBe(false);
+  });
+
+  it('a slug hit staggers it through the brain, not a private timer', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    a.setBrainInput(near, false);
+    a.setRingInput(true, 0);
+    a.step(1 / 60);
+    a.hitSlug([0, 1.1, 0.2], [0, 0, 1]);
+    a.setBrainInput(near, false);
+    a.setRingInput(true, 0);
+    a.step(1 / 60);
+    expect(a.brain().state).toBe('stagger');
+    expect(a.committed()).toBe(false);
+  });
+
+  it('debug() carries the state, token and swing for the capture driver', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    for (let i = 0; i < 8; i++) {
+      a.setBrainInput({ x: 0, z: 0.6, room: 3 }, true);
+      a.setRingInput(true, 0);
+      a.step(1 / 60);
+    }
+    expect(a.debug().state).toBe('attack');
+    expect(a.debug().swingT).toBeGreaterThan(0);
+    expect(['L', 'R']).toContain(a.debug().side);
   });
 });

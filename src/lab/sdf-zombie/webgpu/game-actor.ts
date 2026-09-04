@@ -39,7 +39,7 @@ import {
 } from '../motion';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import {
-  makeBrainState, stepBrain, type BrainPlayer, type BrainState,
+  makeBrain, stepBrain, type Brain, type BrainPlayer,
 } from '../brain';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
@@ -74,11 +74,6 @@ const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.
  *  blast response (stagger.ts StaggerHit.gain; default 1 = lab amplitudes).
  *  Pellets send no gain: eight arrive together and re-flinch the body. */
 const SLUG_GAIN = 1.3;
-
-/** Heavy-hit walk stop: after a blast-profile hit the zombie HALTS for this
- *  long (the lurch plays on a stopped walker — a stagger that never
- *  interrupts locomotion reads weightless), then resumes its wander. */
-const BLAST_HOLD_SEC = 0.55;
 
 /** Heavy-hit root knockback: initial ground-plane speed (m/s) along the
  *  shot's horizontal direction — the body's ROOT actually travels back
@@ -234,7 +229,15 @@ export interface ZombieActor {
    *  actor's room. Set BEFORE step(). */
   setBrainInput(player: BrainPlayer | null, alerted: boolean): void;
   /** Live brain state — the debug seam and the capture driver's oracle. */
-  brain(): BrainState;
+  brain(): Brain;
+  /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
+   *  BEFORE step(), like setBrainInput. */
+  setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
+  /** True while game-main should submit this body to crowd separation at the
+   *  wider engaged radius. */
+  engagedForCrowd(): boolean;
+  /** True while the ring may not revoke this body's token (mid-swing). */
+  committed(): boolean;
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
@@ -251,7 +254,9 @@ export interface ZombieActor {
     staggerKind: string | null;
     target: Vec3 | null;
     idle: number;
-    mode: string;
+    state: string;
+    side: 'L' | 'R';
+    hasToken: boolean;
     alert: boolean;
     swingT: number;
   };
@@ -327,27 +332,32 @@ export function createZombieActor(opts: {
   let lastDebug: ReturnType<ZombieActor['debug']> | null = null;
   let lastFrame: ReturnType<typeof stepMotion>['frame'] | null = null;
 
-  // Heavy-hit choreography state (blast-profile hits — the slug). A stagger
-  // that never interrupts locomotion reads weightless: after a blast hit the
-  // zombie HALTS for BLAST_HOLD_SEC (the lurch plays on a stopped walker;
-  // MotionConfig.wander=false fades the stride out and it resumes after),
-  // while its ROOT is knocked back along the shot's ground-plane direction
-  // from BLAST_KNOCK_MPS, decaying exponentially at BLAST_KNOCK_DECAY/s
-  // (total travel ≈ v0/k). Actor-owned on purpose: MotionConfig.wander and a
-  // wander.pos delta already express both, so the shared motion modules and
-  // the lab's wiring — which must stay bit-identical — are untouched.
-  let holdSecs = 0;
+  // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
+  // knock. Knocked back along the shot's ground-plane direction from
+  // BLAST_KNOCK_MPS, decaying exponentially at BLAST_KNOCK_DECAY/s (total
+  // travel ≈ v0/k). Actor-owned on purpose: a wander.pos delta already
+  // expresses it, so the shared motion modules and the lab's wiring — which
+  // must stay bit-identical — are untouched. The walk STOP is not here: a
+  // blast sets pendingBlast and the brain's stagger state gates cfg.wander
+  // for blastHoldSec — locomotion is gated in exactly one place.
   let knockV = 0;
   let knockDir: Vec3 = [0, 0, 0];
 
   // ---- brain state --------------------------------------------------------
   // The decision layer (brain.ts) runs INSIDE the sub-step loop so a chase
   // target is refreshed at the same cadence the locomotion integrates at.
-  // Its target overrides wander.target; its halt joins the blast hold in the
-  // single cfg.wander gate; its swing phase becomes cfg.attack.
-  let brain: BrainState = makeBrainState();
+  // Its target overrides wander.target; its halt IS the single cfg.wander
+  // gate (the blast hold is a brain state now); its swing phase becomes
+  // cfg.attack. The melee ring's verdict and the blast flag arrive as inputs.
+  let brain: Brain = makeBrain();
   let brainPlayer: BrainPlayer | null = null;
   let brainAlerted = false;
+  let ringToken = false;
+  let ringDrift: -1 | 0 | 1 = 0;
+  /** A blast-profile hit landed since the last step — one-shot into the brain. */
+  let pendingBlast = false;
+  let lastEngaged = false;
+  let lastCommitted = false;
   // Committed avoid side while the direct chase line is blocked (0 = direct,
   // walking at the goal). Chosen once per blocked episode; see the routing
   // block inside step().
@@ -487,10 +497,9 @@ export function createZombieActor(opts: {
     let firstSub = true;
     for (const sdt of planSubSteps(dt)) {
       // Heavy-hit choreography (see the state block): knock the ROOT before
-      // the motion step so this sub-step's targets ride the moved root, and
-      // gate the wander off while the hold lasts. Bounds-clamped like
-      // stepWander's own integration, so a knock cannot shove the body
-      // through a room wall.
+      // the motion step so this sub-step's targets ride the moved root.
+      // Bounds-clamped like stepWander's own integration, so a knock cannot
+      // shove the body through a room wall.
       if (knockV > 1e-4) {
         const w = state.wander;
         const nx = w.pos[0] + knockDir[0] * knockV * sdt;
@@ -508,7 +517,6 @@ export function createZombieActor(opts: {
         };
         knockV *= Math.exp(-BLAST_KNOCK_DECAY * sdt);
       }
-      holdSecs = Math.max(0, holdSecs - sdt);
       // Real signals on the damaged path; CALM otherwise. severed/freshWounds
       // alias the pending arrays and drain after the FIRST sub-step, exactly
       // like the lab's hero signals.
@@ -535,34 +543,32 @@ export function createZombieActor(opts: {
         },
         player: brainPlayer,
         alerted: brainAlerted,
+        hasToken: ringToken,
+        drift: ringDrift,
+        blasted: pendingBlast,
       });
-      brain = think.state;
+      brain = think.brain;
       brainAlerted = false;   // one-shot: the first sub-step consumes it
+      pendingBlast = false;   // likewise
+      lastEngaged = think.engaged;
+      lastCommitted = think.committed;
       if (think.target) {
         // CHASE ROUTING. The furniture rejection's escape hatch (drop the
         // target, stepWander picks another) cannot work for a chaser: the
         // brain re-aims every sub-step, so a body whose straight line to him
         // crossed a crate was rejected, restored and re-aimed into the crate
-        // forever. Two measures, both wired here because this is where the
-        // furniture AABBs live; brain.ts stays pure geometry:
-        //   1. The walk goal is the PLAYER himself, not the brain's standoff
-        //      point. The standoff sits attackRange (1.0 m) out and
-        //      stepWander's arrival band (0.4 m) stops a body ~1.4 m out —
-        //      outside attackRange — so a chaser aiming at the standoff
-        //      could never cross the engage threshold (found end-to-end by
-        //      the crowd gate, 2026-09-04). Walking AT him crosses 1.0 m on
-        //      the way in; the engage latch then HALTS the walk, and the
-        //      crowd separation (the player is an immobile agent) keeps the
-        //      pair from overlapping.
-        //   2. When the straight line to him is blocked, aim at the goal
-        //      pushed to one COMMITTED side (pickAvoidSide) so the body arcs
-        //      around the blocker; the furniture rejection's min-axis
-        //      push-out lets it SLIDE along the face instead of pressing
-        //      it. The side is re-picked only per blocked episode —
-        //      re-picking every sub-step would jitter in place.
-        const goal: Vec3 = brainPlayer
-          ? [brainPlayer.x, 0, brainPlayer.z]
-          : think.target;
+        // forever. Wired here because this is where the furniture AABBs
+        // live; brain.ts stays pure geometry: when the straight line to the
+        // goal is blocked, aim at the goal pushed to one COMMITTED side
+        // (pickAvoidSide) so the body arcs around the blocker; the furniture
+        // rejection's min-axis push-out lets it SLIDE along the face instead
+        // of pressing it. The side is re-picked only per blocked episode —
+        // re-picking every sub-step would jitter in place.
+        // The brain now emits the point it actually wants walked to — the
+        // player for pursue/engage, a ring point for encircle — so the
+        // router must NOT substitute the player, or an encircling body would
+        // be routed straight into the melee it is waiting outside of.
+        const goal: Vec3 = think.target;
         if (firstBlockingBox(state.wander.pos, goal, opts.furniture)) {
           if (detourSide === 0) {
             detourSide = pickAvoidSide(state.wander.pos, goal, opts.furniture);
@@ -585,8 +591,7 @@ export function createZombieActor(opts: {
         state, joints,
         {
           enabled: true,
-          // The blast hold and the melee halt are the same gate.
-          wander: holdSecs <= 0 && !think.halt,
+          wander: !think.halt,
           // Spread, not `attack: think.attack ?? undefined`: motion.ts's
           // bit-identity contract is about the key being ABSENT.
           ...(think.attack !== null ? { attack: think.attack } : {}),
@@ -651,7 +656,7 @@ export function createZombieActor(opts: {
     refreshWounds();
     const d = lastFrame;
     if (d) lastDebug = {
-      holdSecs,
+      holdSecs: brain.holdSecs,
       knockV,
       phase: d.phase,
       meter: d.meter,
@@ -660,9 +665,8 @@ export function createZombieActor(opts: {
       staggerKind: d.staggerKind,
       target: state.wander.target ? [...state.wander.target] as Vec3 : null,
       idle: state.wander.idle,
-      mode: brain.mode,
-      alert: brain.alert,
-      swingT: brain.swingT,
+      state: brain.state, alert: brain.alert, swingT: brain.swingT,
+      side: brain.side, hasToken: ringToken,
     };
   }
 
@@ -725,8 +729,10 @@ export function createZombieActor(opts: {
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
     };
     if (wound.type === 'blast') {
-      // Heavy-hit choreography: stop the walk, knock the ROOT back.
-      holdSecs = BLAST_HOLD_SEC;
+      // Heavy-hit choreography: the flag is one-shot into the brain, whose
+      // stagger state stops the walk for blastHoldSec. The ROOT knock stays
+      // here — moving the root is a different thing from gating locomotion.
+      pendingBlast = true;
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
       if (l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;
@@ -768,12 +774,20 @@ export function createZombieActor(opts: {
       if (alerted) brainAlerted = true;
     },
     brain: () => brain,
+    setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
+      ringToken = hasToken;
+      ringDrift = drift;
+    },
+    engagedForCrowd: () => lastEngaged,
+    committed: () => lastCommitted,
     step,
     wounds: () => wounds,
     debug: () => lastDebug ?? {
-      holdSecs, knockV, phase: 'standing', meter: 0, blend: 0, speed: 0,
+      holdSecs: brain.holdSecs, knockV, phase: 'standing', meter: 0,
+      blend: 0, speed: 0,
       staggerKind: null, target: null, idle: 0,
-      mode: brain.mode, alert: brain.alert, swingT: brain.swingT,
+      state: brain.state, alert: brain.alert, swingT: brain.swingT,
+      side: brain.side, hasToken: ringToken,
     },
     hit,
     hitSlug,
