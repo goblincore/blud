@@ -156,7 +156,6 @@ Create `src/lab/sdf-zombie/crowd.ts`:
 //
 // Pure: no RNG, no clock, no THREE. The caller owns the positions; this only
 // says how far each agent should move.
-import type { Vec3 } from './types';
 
 /** One body on the floor. `mobile: false` = an anchor (the player): it takes
  *  none of its share of a correction, so its partner takes all of it. */
@@ -207,18 +206,24 @@ export function separate(
         let dz = pz[j]! - pz[i]!;
         let d = Math.hypot(dx, dz);
         if (d >= want) continue;
+        let nx: number;
+        let nz: number;
         if (d < 1e-6) {
           // Coincident bodies (a stacked spawn, a pile). The escape direction
           // comes from the index pair, NOT an RNG: separation has to be
-          // reproducible frame to frame or the pair jitters in place.
+          // reproducible frame to frame or the pair jitters in place. d is
+          // forced to 0, not 1 — the overlap here is the FULL `want`, and
+          // normalising against a fake unit distance would hand `want - d` a
+          // negative number and pull the pair further together.
           const ang = ((i * 7 + j * 13) % 16) * (Math.PI / 8);
-          dx = Math.sin(ang);
-          dz = Math.cos(ang);
-          d = 1;
+          nx = Math.sin(ang);
+          nz = Math.cos(ang);
+          d = 0;
+        } else {
+          nx = dx / d;
+          nz = dz / d;
         }
         const move = (want - d) * tuning.stiffness;
-        const nx = dx / d;
-        const nz = dz / d;
         // Both mobile: split the correction. One anchored: the mover takes it all.
         const share = ai.mobile && aj.mobile ? 0.5 : 1;
         if (ai.mobile) {
@@ -258,11 +263,6 @@ export function minPairDistance(agents: readonly CrowdAgent[]): number {
     }
   }
   return best;
-}
-
-/** A ground point as a Vec3, for callers that speak the rig's coordinate type. */
-export function agentPoint(a: CrowdAgent): Vec3 {
-  return [a.x, 0, a.z];
 }
 ```
 
@@ -940,9 +940,6 @@ Expected: no output.
 
 - [ ] **Step 6: Commit**
 
-```ts
-```
-
 ```bash
 git add src/lab/sdf-zombie/attack.ts src/lab/sdf-zombie/attack.test.ts
 git commit -m "attack: the melee swing pose
@@ -1167,7 +1164,9 @@ describe('createZombieActor — the brain and the crowd', () => {
     a.step(1 / 60);
     expect(a.brain().alert).toBe(true);
     const before = a.pose().pos;
-    for (let i = 0; i < 60; i++) {
+    // Two seconds: the body has to finish its damped turn (headingFollowRate
+    // 1.7 rad/s) before it can accelerate, so one second is not enough margin.
+    for (let i = 0; i < 120; i++) {
       a.setBrainInput({ x: 0, z: 3, room: 3 }, false);
       a.step(1 / 60);
     }
@@ -1421,7 +1420,7 @@ Add near the existing `import { createZombieActor, type ZombieActor } from './ga
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 ```
 
-and make sure `ROOMS` and `enclosureKeyAt` are in the existing `./game-level` import list (both are already exported; add whichever is missing).
+`ROOMS` and `enclosureKeyAt` are already in the `./game-level` import block at `game-main.ts:57-61` — nothing to add there.
 
 - [ ] **Step 2: Add the room lookup and the shot-alert flag**
 
@@ -1445,10 +1444,14 @@ Just above the `const player: PlayerState = {` declaration, add:
 
 - [ ] **Step 3: Raise the flag when the gun fires**
 
-Find the function that actually discharges the weapon — the one `__sdfGame.fire` routes to (grep: `fire(`). At the top of its body, after the cooldown/ammo checks that can reject the shot and before it spawns pellets, add:
+In `function fire(barrels: 1 | 2): boolean` (`game-main.ts:1653`), after the four
+guards that can still reject the shot and immediately before
+`cooldown = GRAPESHOT.fireCooldownSec;`, add:
 
 ```ts
-    // Gunfire in a room turns every head in it, cone or no cone.
+    // Gunfire in a room turns every head in it, cone or no cone. Placed after
+    // the guards on purpose: a dry click or a shot during a reload must not
+    // alert anything, or the flag fires on inputs that made no noise.
     shotAlert = true;
 ```
 
@@ -1565,6 +1568,16 @@ await evaluate('__sdfGame.setPose(-4.8, 2.0, 0, 0)');
 await evaluate('__sdfGame.step(1, 1 / 60)');
 await shot('room4-enter');
 
+// setPose's 5th argument is an eye HEIGHT, so a raised, pitched-down camera
+// is the top-down the spec asks for -- one frame that shows the whole pack's
+// footprint at once, which an FPV shot from the doorway cannot.
+const TOPDOWN = "__sdfGame.setPose(-4.8, 4.8, 0, -1.35, 7)";
+const FPV = "__sdfGame.setPose(-4.8, 2.0, 0, 0, 0)";
+await evaluate(TOPDOWN);
+await evaluate('__sdfGame.step(1, 1 / 60)');
+await shot('room4-topdown-before');
+await evaluate(FPV);
+
 // Two seconds of simulated time: long enough for four bodies to notice and
 // converge, short enough that they have not all reached melee range.
 const TOUCH = 0.70;   // two 0.35 m bodies touching
@@ -1575,6 +1588,10 @@ for (let i = 0; i < 8; i++) {
   if (typeof d === 'number' && d < worst) worst = d;
 }
 await shot('room4-converged');
+await evaluate(TOPDOWN);
+await evaluate('__sdfGame.step(1, 1 / 60)');
+await shot('room4-topdown-after');
+await evaluate(FPV);
 console.log(`crowd: worst pairwise centre distance ${worst.toFixed(3)} m (touching = ${TOUCH})`);
 
 // The gate. Separation is SOFT, so a shove may leave a shallow overlap for a
@@ -1634,7 +1651,7 @@ process.exit(0);
   node scripts/sdf-game-crowd-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"
 ```
 
-Expected: `[crowd] OK — 3 shots in docs/dev-notes/2026-09-04-zombie-crowd`, with the worst pairwise distance printed and above 0.35 m.
+Expected: `[crowd] OK — 5 shots in docs/dev-notes/2026-09-04-zombie-crowd`, with the worst pairwise distance printed and above 0.35 m.
 
 If it fails, fix the code, not the threshold. The one legitimate reason to move a number here is if room 4's spawn points are themselves closer than 0.70 m apart at t=0 — check `SPAWN_TABLE[4]` in `game-level.ts` before touching anything else.
 
@@ -1666,6 +1683,7 @@ Three pure modules — `crowd.ts` (soft circle separation), `brain.ts`
 |------|---------------|
 | `room4-enter.png` | Room 4 as the player steps in: four bodies, pre-convergence. |
 | `room4-converged.png` | Two simulated seconds later: the pack has closed and fanned, not stacked. |
+| `room4-topdown-before.png` / `room4-topdown-after.png` | The same convergence from a raised camera — the footprint view, where stacking would be unmistakable. |
 | `fpv-swing.png` | The nearest body at melee range, mid-swing. |
 
 ## The gate
