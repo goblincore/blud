@@ -26,6 +26,10 @@ import {
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+// @ts-expect-error — raw source import: the row-table docstrings are TS
+// comments, invisible to every exported WGSL string, and the Done-when
+// "docstring no longer lies" check needs the file's actual text.
+import moduleSource from './march.wgsl?raw';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (see the comment below).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
@@ -1880,8 +1884,16 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
 
   it('row 17 no longer documents w as spare', () => {
     // Done-when: leaving "w spare" in the row table is how the next person
-    // packs over the lane.
-    expect(MARCH_BODY).not.toContain('w spare');
+    // packs over the lane. Pinned against the MODULE SOURCE — the docstring
+    // is a TS comment, not part of any exported WGSL string, so a check on
+    // MARCH_BODY cannot see it (that vacuous version was caught by its own
+    // mutation run). Scoped to ROW_PRIM_CLIP's OWN doc block: other rows'
+    // "yzw spare" notes are true statements about other lanes and contain
+    // the same substring.
+    const clipConst = moduleSource.indexOf('export const ROW_PRIM_CLIP');
+    const clipDoc = moduleSource.slice(moduleSource.lastIndexOf('/**', clipConst), clipConst);
+    expect(clipDoc).not.toContain('spare');
+    expect(clipDoc).toContain('glow');
   });
 
   it('reads glow from ROW_PRIM_CLIP.w, inside the painted branch only', () => {
@@ -1933,5 +1945,11 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     expect(SHADE_BODY).toContain('faceGlow = faceGlow * (1.0 - painted);');
     const killLine = SHADE_BODY.split('\n').find(l => l.includes('faceGlow = faceGlow * (1.0 - painted);'))!;
     expect(killLine).not.toContain('primGlow');
+    // ...and primGlow is ASSIGNED exactly twice in the module: the `var
+    // primGlow = 0.0` default and the clamp read. A third assignment — e.g. a
+    // separate `primGlow = primGlow * (1.0 - painted)` kill line — would be
+    // the resurrected sunglasses rule wearing a different hat (this exact
+    // mutation was run and killed).
+    expect((moduleSource.match(/primGlow =/g) ?? []).length).toBe(2);
   });
 });
