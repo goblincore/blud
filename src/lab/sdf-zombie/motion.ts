@@ -322,12 +322,12 @@ export interface MotionConfig {
   /** Gaze-follow gain override 0..1 — defaults to MOTION_TUNING.gazeFollow.
    *  0 pins the gaze to the wander target (the creepy variant). */
   gazeFollow?: number;
-  /** Melee swing phase 0..1 — the actor's brain drives it (webgpu/brain.ts
-   *  via game-actor). UNDEFINED IS NOT "0": undefined skips the composition
-   *  branch entirely, so the lab's wiring — which never sets this — produces
-   *  bit-identical motion. attack.ts's pose is exactly zero at phase 0 and 1,
-   *  so setting either is also a no-op, just a slower one. */
-  attack?: number;
+  /** Melee swing: phase 0..1 plus which arm swings (brain.ts drives both
+   *  through game-actor). UNDEFINED IS NOT "phase 0": undefined skips the
+   *  composition branches entirely, so the lab's wiring — which never sets
+   *  this — produces bit-identical motion. attack.ts's pose is exactly zero
+   *  at phase 0 and 1, so setting either is also a no-op, just a slower one. */
+  attack?: { phase: number; side: 'L' | 'R' };
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -510,7 +510,9 @@ export function stepMotion(
   // The melee swing, if the brain is driving one. Composed exactly where a
   // stagger composes — see attack.ts's header. A collapsed body never swings.
   const attack: AttackPose | null =
-    cfg.attack !== undefined && !collapsed ? attackPose(cfg.attack) : null;
+    cfg.attack !== undefined && !collapsed
+      ? attackPose(cfg.attack.phase, cfg.attack.side)
+      : null;
 
   // --- assemble the standing rest targets ----------------------------------
   // The whole authored pose is rotated by bodyYaw about the root's vertical
@@ -576,9 +578,20 @@ export function stepMotion(
       // Positive pitch = forward reach: about +right the hang swings BACK,
       // so the rotation angle is negated.
       const basePitch = (side === 'L' ? r.pitchL : r.pitchR) * armPresence;
-      const pitch = attack ? basePitch + attack.reachPitch : basePitch;
+      const pitch = attack
+        ? basePitch + (side === 'L' ? attack.reach.pitchL : attack.reach.pitchR)
+        : basePitch;
       const qUp = qFromAxisAngle(right, -pitch);
       const qFore = qFromAxisAngle(right, -(pitch - r.drop * armPresence));
+      // THE HOOK'S SWEEP. A pitch about the body's right axis can only raise
+      // and lower an arm; carrying it ACROSS the body is a rotation about
+      // world up, composed onto the same segments AFTER the pitch so the arm
+      // sweeps from wherever the raise left it. Null when there is no attack
+      // — a q of angle 0 would still be a multiply, and the lab's
+      // bit-identity pin is not worth spending on tidiness.
+      const attackYaw = attack ? (side === 'L' ? attack.reach.yawL : attack.reach.yawR) : 0;
+      const qSweep = attackYaw !== 0 ? qFromAxisAngle([0, 1, 0], attackYaw) : null;
+      const swept = (v: Vec3): Vec3 => (qSweep ? qRotate(qSweep, v) : v);
       // The rest segments in world (the generic assembly rotates the base
       // pose by the same bodyYaw, so these line up with the targets).
       const s1 = rotateYaw(sub(joints.base[idx[eJ]]!, joints.base[idx[sJ]]!), bodyYaw);
@@ -589,10 +602,10 @@ export function stepMotion(
         scale(rotateYaw(r.shift, bodyYaw), armPresence),
         rotateYaw([lean * (LEAN_SHARE[eJ] ?? 0), 0, 0], bodyYaw),
       );
-      const eGeom = add(targets[iS]!, qRotate(qUp, s1));
+      const eGeom = add(targets[iS]!, swept(qRotate(qUp, s1)));
       targets[iE] = add(add(eGeom, shiftW), rotateYaw(stagger.offsets[eJ] ?? Z, bodyYaw));
       targets[iH] = add(
-        add(add(eGeom, qRotate(qFore, s2)), shiftW),
+        add(add(eGeom, swept(qRotate(qFore, s2))), shiftW),
         rotateYaw(stagger.offsets[hJ] ?? Z, bodyYaw),
       );
     };
