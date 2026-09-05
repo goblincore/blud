@@ -507,6 +507,33 @@ time — concurrent benches are what spoiled the tile table and the r2 sweep):
 **CLOSE-UP WOUND CULL — DONE, SHIPS ON (2026-09-05, `dispatch/2026-09-05-closeup-wound-cull`, commit 8c03342).** `applyWounds` now tests ONE bounding sphere of every wound's reach (`woundBound` uniform, computed by `woundReachBound` at `setWounds` from the live woundCfg/woundCfg2 — not a hardcoded copy) BEFORE its 16-slot loop; outside it the loop would early-out per wound anyway, so the cull is a value no-op by construction. Parity PROVEN, not hoped: 0 changed pixels, wounded ON/OFF + ON/ON + both unwounded pairs (`scripts/closeup-woundcull-capture.mjs` — note it pins `performance.now`, because the fire flicker ticks off wall-clock even frozen and jitters ~19% of pixels at d>0 between same-state captures). Bound proven live in-page (r 0.933 m on the 5-wound staging). Bench (BENCH_REPEATS=4, quiet machine, 0 rejects): cullOff − ship = **+1.4 ms median** (rep deltas 3.0 / −2.1 / 2.5 / 0.5 — one inversion inside rep noise) of the ~25.3 ms (ship − unwounded) wound gap; stepFull re-confirmed at −7.8 ms. The far-sample loop was ~5% of the wound cost on the fill-screen staging because the camera-facing wound cluster sits where the march steps concentrate. **Step 2 (per-cluster wound lists) spec'd in the notes and deliberately NOT built** — it attacks a sub-slice of the remaining in-bound loads (≪1.4 ms) while 69% of the gap is lever-1 stepping + intrinsic in-reach maths. Next real lever: re-gate the 0.6 near-wound factor at ω 1.0 (look-gated, separate task). Seam `__sdfGame.setWoundCull(on)` / `.woundCull` / `.woundBound()`. Suite 3141/3141, tsc clean.
 [notes](docs/dev-notes/2026-09-04-closeup-2-probes/notes.md#wound-union-reach-cull-2026-09-05-dispatch2026-09-05-closeup-wound-cull)
 
+**CLOSE-UP TASK 3 (depth prepass) — BUILT, CENSUS-CLEAN, DOES NOT SHIP
+(2026-09-05).** The quarter-res coarse march of the field exists and works:
+one texel per 4x4 SDF-pixel block, cone radius = the block's half-diagonal
+(the proof the start is a lower bound), per-body twins resolving to the
+NEAREST touch via frag_depth, consumed as a third max() term at the ray
+start. Census CLEAN at six views (0.5/3/9 m + head/thin + rooms 3/4): hits
+kept 99.99-100.02%, state-clean, pixel diffs at/below noise; meanStepsHit
+-5% to -45%. But Question A's walk share did not survive its own baseline:
+re-measured at today's 13.9 ms wounded fill-screen frame the walk is
+**15.9%** (normal 13.86 vs flat 11.65), so halving the walk buys ~1 ms while
+the pass costs ~0.5-2 ms (growing with bodies - the coarse rays march long
+distances at standoff). Bench: fill-screen +0.5 ms, room3 +0.95, room4 +1.94.
+**Verdict: ships OFF** (`GAME_DEPTH_PREPASS = 0`,
+`__sdfGame.setDepthPrepass`); the seam, the census
+(`scripts/sdf-depth-prepass-census.mjs`) and `depthPreStats()` stay. Three
+new shader-wiring traps found and pinned, all rendering as "every body
+unlit-black with every uniform dead": a PAREN in a WGSL-signature comment
+truncates three's parameter parse exactly like the known colon hazard;
+calling a helper by its CONST name instead of its source name is an
+unresolved call target; and `vec4(a, b, 0, 0)` composed from two SCALAR
+uniforms in a wgslFn literal breaks WGSL generation outright — pass ONE vec4
+uniform whole. Also: `createZombieGpuView`'s positional createMarchMaterial
+call silently dropped the new argument (the march sampled the 1x1 zero
+fallback while the twin wrote real starts) — positional call sites must be
+re-counted when a parameter is added.
+[notes](docs/dev-notes/2026-09-04-closeup-3-depth-prepass/notes.md).
+
 **CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
 ("the goo layer is the blood cost") does NOT reproduce. Measured with the
 item seams landed on `dispatch/2026-09-04-closeup-task-4-attempt1` (parity-

@@ -1,0 +1,7 @@
+{
+  "label": "autoround-q2ks-fsm-turbo4",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 1200, "files": 0, "stdout_bytes": 0},
+    "task5": {"name": "LRU cache", "elapsed_s": 19, "files": 0, "stdout_bytes": 0}
+  }
+}

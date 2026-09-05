@@ -1,0 +1,75 @@
+diff --git a/src/engine/rng.test.ts b/src/engine/rng.test.ts
+index 616178b..e2385b3 100644
+--- a/src/engine/rng.test.ts
++++ b/src/engine/rng.test.ts
+@@ -104,4 +104,24 @@ describe('SeededRng', () => {
+     // Different positions in the stream → different values
+     expect(aVal).not.toBe(bVal);
+   });
++
++  it('nextGaussian produces normally distributed values', () => {
++    const rng = new SeededRng(12345);
++    const n = 10000;
++    const samples: number[] = [];
++    for (let i = 0; i < n; i++) {
++      samples.push(rng.nextGaussian());
++    }
++
++    const sum = samples.reduce((a, b) => a + b, 0);
++    const mean = sum / n;
++    const variance =
++      samples.reduce((acc, val) => acc + (val - mean) ** 2, 0) / n;
++    const stddev = Math.sqrt(variance);
++
++    // Sample mean should be within 0.1 of 0 (expected stddev of mean ≈ 0.01)
++    expect(Math.abs(mean)).toBeLessThan(0.1);
++    // Sample stddev should be within 0.1 of 1
++    expect(Math.abs(stddev - 1)).toBeLessThan(0.1);
++  });
+ });
+diff --git a/src/engine/rng.ts b/src/engine/rng.ts
+index 0c02fea..0dd73cf 100644
+--- a/src/engine/rng.ts
++++ b/src/engine/rng.ts
+@@ -1,5 +1,6 @@
+ export class SeededRng {
+   private state: number;
++  private gaussianCache: number | null = null;
+ 
+   constructor(seed: number) {
+     // Ensure seed is treated as unsigned 32-bit integer
+@@ -60,6 +61,34 @@ export class SeededRng {
+     return arrCopy;
+   }
+ 
++  /**
++   * Returns a normally-distributed random number (mean 0, stddev 1)
++   * using the Box-Muller transform.
++   */
++  nextGaussian(): number {
++    if (this.gaussianCache !== null) {
++      const val = this.gaussianCache;
++      this.gaussianCache = null;
++      return val;
++    }
++
++    let u1 = this.next();
++    let u2 = this.next();
++
++    // Avoid log(0)
++    while (u1 === 0) {
++      u1 = this.next();
++    }
++
++    const mag = Math.sqrt(-2.0 * Math.log(u1));
++    const z0 = mag * Math.cos(2 * Math.PI * u2);
++    const z1 = mag * Math.sin(2 * Math.PI * u2);
++
++    // Cache one value; Box-Muller produces two independent normals per call pair
++    this.gaussianCache = z1;
++    return z0;
++  }
++
+   fork(): SeededRng {
+     // Create a new instance with the current state as seed
+     // This ensures the new RNG is independent but derived from current state

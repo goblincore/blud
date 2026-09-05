@@ -1,0 +1,76 @@
+diff --git a/src/engine/rng.test.ts b/src/engine/rng.test.ts
+index 616178b..a8eba09 100644
+--- a/src/engine/rng.test.ts
++++ b/src/engine/rng.test.ts
+@@ -83,6 +83,23 @@ describe('SeededRng', () => {
+     expect(original).toEqual([1, 2, 3, 4, 5, 6, 7, 8]); // input not mutated
+   });
+ 
++  it('nextGaussian returns values with correct distribution', () => {
++    const rng = new SeededRng(42);
++    const n = 10000;
++    const samples: number[] = [];
++    for (let i = 0; i < n; i++) {
++      samples.push(rng.nextGaussian());
++    }
++    const sum = samples.reduce((a, b) => a + b, 0);
++    const mean = sum / n;
++    const variance = samples.reduce((acc, x) => acc + (x - mean) ** 2, 0) / n;
++    const stddev = Math.sqrt(variance);
++    expect(mean).toBeGreaterThan(-0.1);
++    expect(mean).toBeLessThan(0.1);
++    expect(stddev).toBeGreaterThan(0.9);
++    expect(stddev).toBeLessThan(1.1);
++  });
++
+   it('fork produces independent instances from same state', () => {
+     const rng1 = new SeededRng(12345);
+     const rng2 = rng1.fork();
+diff --git a/src/engine/rng.ts b/src/engine/rng.ts
+index 737d432..e667c7b 100644
+--- a/src/engine/rng.ts
++++ b/src/engine/rng.ts
+@@ -1,9 +1,13 @@
+ export class SeededRng {
+   private state: number;
++  private gaussianReady: boolean;
++  private gaussianCached: number;
+ 
+   constructor(seed: number) {
+     // Ensure seed is treated as unsigned 32-bit integer
+     this.state = seed | 0;
++    this.gaussianReady = false;
++    this.gaussianCached = 0;
+   }
+ 
+   private mulberry32(): number {
+@@ -43,6 +47,29 @@ export class SeededRng {
+     return this.next() < probability;
+   }
+ 
++  /**
++   * Returns a normally-distributed random number with mean 0 and stddev 1.
++   * Uses the Box-Muller transform on two uniform [0,1) samples.
++   */
++  nextGaussian(): number {
++    if (this.gaussianReady) {
++      this.gaussianReady = false;
++      return this.gaussianCached;
++    }
++    let u1: number;
++    let u2: number;
++    do {
++      u1 = this.next();
++    } while (u1 === 0); // avoid log(0)
++    u2 = this.next();
++    const r = Math.sqrt(-2 * Math.log(u1));
++    const z1 = r * Math.cos(2 * Math.PI * u2);
++    const z2 = r * Math.sin(2 * Math.PI * u2);
++    this.gaussianCached = z2;
++    this.gaussianReady = true;
++    return z1;
++  }
++
+   pick<T>(arr: T[]): T {
+     if (arr.length === 0) {
+       throw new Error('Cannot pick from empty array');

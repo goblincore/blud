@@ -1,0 +1,32 @@
+diff --git a/src/game/gibs/tuning.ts b/src/game/gibs/tuning.ts
+index 41fbe09..c2ab221 100644
+--- a/src/game/gibs/tuning.ts
++++ b/src/game/gibs/tuning.ts
+@@ -171,3 +171,27 @@ export const AXE_ZOMBIE = {
+   aggroRadiusM: 40,           // when within this distance the zombie chases
+   gibThresholdOverride: undefined as number | undefined, // use global GIB_THRESHOLD
+ } as const;
++
++// ——— Tommy-gun cultist ————————————————————————————————
++// source: Blood kDudeCultistTommy (actor id 201) + actor.cpp + weapon.cpp
++//
++// Blood's Tommy-gun cultist is a ranged enemy that fires bursts of shots.
++// We derive values from the original weapon.cfg (muzzFireRate) and actor.cpp:
++//
++//   - fireRate = 100ms per shot (muzzFireRate = 0x9C40 = 39984 ticks, ~100ms)
++//   - 30-round magazine (3 bursts × 10 shots, or 1 burst of 3 at 100ms)
++//   - Reload takes ~1.2s (muzzReload = 0xB71C0 = 750000 ticks)
++//   - Detection range ~15m (similar to other ranged actors)
++//
++// Converted to metric for our game scale. Feel-tune in Task 12 if needed.
++export const CULTIST_TOMMY = {
++  hp: 80,                     // dudeInfo[201].startHealth — ~40% of axe zombie (lighter infantry)
++  damage: 8,                  // muzzFire damage per shot (weapon.cfg)
++  detectionRangeM: 15,        // when player enters this range the cultist chases
++  preferredRangeM: 8,         // switches from chase to aim phase
++  shotsPerBurst: 3,           // 3 shots per burst (muzzFire rate ~100ms per shot)
++  shotIntervalMs: 100,        // time between shots within a burst (muzzFireRate = 0x9C40)
++  reloadSec: 1.2,             // time to reload after firing a burst (muzzReload = 0xB71C0)
++  staggerSec: 0.3,            // duration of stagger interrupt (Blood ~0.25-0.35s range)
++  aimWindupSec: 0.5,          // windup time before firing a burst
++} as const;

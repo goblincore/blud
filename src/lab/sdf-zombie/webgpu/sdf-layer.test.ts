@@ -1,6 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+
+describe('depth prepass sizing (close-up task 3)', () => {
+  it('the block footprint constant stays in step with the downsample factor', () => {
+    // THE PROOF'S ONE NUMBER. The coarse cone's radius must cover the block's
+    // half-diagonal — (DIV/2, DIV/2) SDF pixels from the texel-centre ray —
+    // or a full-res ray near a block corner can escape the cone and the
+    // "start is a lower bound" proof dies. If DIV ever changes, this fails
+    // until DEPTH_PREPASS_BLOCK_PX is recomputed with it.
+    expect(DEPTH_PREPASS_BLOCK_PX).toBeCloseTo((DEPTH_PREPASS_DIV / 2) * Math.SQRT2, 12);
+  });
+
+  it('coarse target size ceils, never zeroes, and a partial block stays covered', () => {
+    expect(depthPrepassSize(960, 540)).toEqual({ width: 240, height: 135 });
+    expect(depthPrepassSize(961, 541)).toEqual({ width: 241, height: 136 });
+    expect(depthPrepassSize(3, 2)).toEqual({ width: 1, height: 1 });
+    // A partial edge block is SMALLER than a full one, so its corners sit
+    // nearer the texel centre than DEPTH_PREPASS_BLOCK_PX assumes — ceil is
+    // conservative in exactly the direction the proof wants.
+    expect(depthPrepassSize(1, 1).width).toBe(1);
+  });
+});
 
 describe('sortFrontToBack', () => {
   it('orders objects by distance from the camera, nearest first, without mutating the input', () => {

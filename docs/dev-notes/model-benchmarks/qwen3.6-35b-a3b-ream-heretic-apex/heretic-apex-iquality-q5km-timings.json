@@ -1,0 +1,7 @@
+{
+  "label": "heretic-apex-iquality-q5km",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 576, "files": 5, "stdout_bytes": 836},
+    "task5": {"name": "LRU cache", "elapsed_s": 235, "files": 4, "stdout_bytes": 1006}
+  }
+}

@@ -34,7 +34,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
-import { createConeUniforms, type ConeSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type OccluderSource, type PrevSource } from './zombie-gpu';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -156,6 +156,43 @@ export const SHELL_EXIT_LAYER = 5;
 export const SHADOW_HULL_LAYER = 6;
 
 /**
+ * The layer the quarter-resolution depth-prepass twins live on (close-up
+ * task 3). One mesh per body — the SAME proxy-box geometry as the march
+ * mesh, a distance-writing material — rendered into `depthPre` at a quarter
+ * of the SDF target's linear size, one coarse march per 4x4 block of SDF
+ * pixels (~1/16 of the marching work, no vertices, no new geometry
+ * pipeline). The full march then starts each ray from the coarse touch
+ * distance, which is a PROVABLE lower bound on the first hit of every ray
+ * in the block (the proof lives on DEPTH_PREPASS_MARCH — the cone radius
+ * used by the coarse march is the block's own half-diagonal footprint).
+ *
+ * A separate layer, like every other pre-pass twin, so no render list is
+ * ever mutated per frame: the pass is a camera layer mask away.
+ */
+export const DEPTH_PREPASS_LAYER = 7;
+
+/** The depth prepass's linear downsample factor per axis. 4 → one coarse
+ *  texel per 4x4 block of SDF pixels → ~1/16 of the march work. */
+export const DEPTH_PREPASS_DIV = 4;
+
+/** The coarse block's half-diagonal in SDF pixels — the angular radius the
+ *  coarse cone must cover so no full-res ray in the block can escape it.
+ *  Block corners sit at (±2, ±2) SDF px from the texel centre ray. This is
+ *  the ONE number the proof depends on; it must stay in step with
+ *  DEPTH_PREPASS_DIV (block width / 2, times √2). */
+export const DEPTH_PREPASS_BLOCK_PX = 2 * Math.SQRT2;
+
+/** Pure coarse-target size for an SDF target of w×h. Ceil so the last
+ *  partial block still gets a texel; a partial block is SMALLER than a full
+ *  one, so its corners stay inside the proof's radius. */
+export function depthPrepassSize(width: number, height: number): { width: number; height: number } {
+  return {
+    width: Math.max(1, Math.ceil(width / DEPTH_PREPASS_DIV)),
+    height: Math.max(1, Math.ceil(height / DEPTH_PREPASS_DIV)),
+  };
+}
+
+/**
  * Tile size of the cone pre-pass, in full-resolution pixels.
  *
  * 8 is the figure the technique is usually quoted with. Bigger tiles make the
@@ -270,6 +307,14 @@ export interface SdfLayer {
   setFlipY(on: boolean): void;
   /** The pre-pass output, to hand to every view that should start from it. */
   readonly cone: ConeSource;
+  /** The quarter-res depth prepass (close-up task 3): pass to every body
+   *  view that should start from it. Its `enabled` uniform gates BOTH the
+   *  coarse pass below and the march's fetch — one flag, both ends. */
+  readonly depthPre: DepthPreSource;
+  /** Turns the depth prepass and the march's consumption of it on or off,
+ *  for measurement. Off is bit-identical to the pre-task-3 march. */
+  setDepthPreEnabled(on: boolean): void;
+  readonly depthPreEnabled: boolean;
   /** The inner-hull pre-pass the march clamps its tMax by. See OCCLUDER_LAYER. */
   readonly occluder: OccluderSource;
   /** Outer-hull ENTRY distance (nearest front face) — 0 where no hull covers
@@ -293,7 +338,8 @@ export interface SdfLayer {
   readonly halfRateMode: number;
   /** Turns the cone pre-pass on or off, for measurement. */
   setConeEnabled(on: boolean): void;
-  /** Lens and layer height, from which both levels' cone widths are derived. */
+  /** Lens and layer height, from which both levels' cone widths are derived
+   *  — and the depth prepass's block footprint with them. */
   setConeGeometry(fovDeg: number, targetHeight: number): void;
   /** Second-level tile size in pixels, or 0 for a single level. */
   setConeFineTile(px: number): void;
@@ -308,6 +354,8 @@ export interface SdfLayer {
   readonly marchTarget: THREE.RenderTarget;
   /** The occluder pre-pass target, for MEASUREMENT readback only. */
   readonly occluderTarget: THREE.RenderTarget;
+  /** The quarter-res depth-prepass target, for MEASUREMENT readback only. */
+  readonly depthPreTarget: THREE.RenderTarget;
   /** Outer-hull entry/exit targets, for MEASUREMENT readback only. */
   readonly shellEntryTarget: THREE.RenderTarget;
   readonly shellExitTarget: THREE.RenderTarget;
@@ -447,6 +495,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const shellEntry = new THREE.RenderTarget(1, 1, { ...shellOpts });
   const shellExit = new THREE.RenderTarget(1, 1, { ...shellOpts });
   const shellUniforms = { enabled: uniform(0) };
+
+  // Quarter-res depth prepass (close-up task 3). Same float-distance
+  // encoding as the shell targets — .x is the coarse ray parameter, zero
+  // means "no coarse ray touched anything in this block". The hardware
+  // depth test resolves OVERLAPPING bodies' proxy boxes to the nearest
+  // touch: each twin writes frag_depth from its own marched distance, so a
+  // farther body's touch can never overwrite a nearer one's.
+  const depthPre = new THREE.RenderTarget(1, 1, { ...shellOpts });
+  const depthPreUniforms = createDepthPreUniforms();
   const clearColorScratch = new THREE.Color();
 
   /**
@@ -541,6 +598,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       Math.max(1, Math.ceil(w / ft)),
       Math.max(1, Math.ceil(h / ft)),
     );
+    // A THREE RENDER TARGET resizes fine (unlike the DataTexture trap):
+    // setSize reallocates the backing texture, and the shader reads its grid
+    // from textureDimensions — never from a captured value. The block
+    // footprint k follows separately via setConeGeometry, which the page
+    // re-calls from sizeSdfLayer on EVERY resize/adaptive move.
+    const dp = depthPrepassSize(w, h);
+    depthPre.setSize(dp.width, dp.height);
   }
 
   return {
@@ -585,7 +649,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // (the enable uniform gates the fetch, not the binding), and an
         // uninitialised prev would hit the same lazy-init submit conflict
         // the comment above describes.
-        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev]) {
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -595,6 +659,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // (canvas, or post-aa's capture target). This leaves the depth the
       // composite will test against.
       camera.layers.disable(SDF_LAYER);
+      // The depth-prepass twins must not rasterise into the polygonal pass
+      // either — the disable above covers only the SDF layer itself.
+      camera.layers.disable(DEPTH_PREPASS_LAYER);
       renderer.setRenderTarget(outputTarget);
       void renderer.render(scene, camera);
 
@@ -680,6 +747,24 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.setClearColor(prevClear);
       }
 
+      // Pass 1e — the quarter-res depth prepass (close-up task 3). One coarse
+      // march per 4x4 block of SDF pixels; the march's ray start consumes it.
+      // Runs BEFORE the march in the same frame — never a frame stale.
+      //
+      // Cleared to BLACK for the same reason the occluder and shell targets
+      // are: the scene background colour is non-zero, and a non-zero clear
+      // would read as "a surface 10 cm from the camera" on every block —
+      // here every ray would start at 10 cm minus a footprint, INSIDE the
+      // body at close range. Zero is the "no start" sentinel.
+      if (depthPreUniforms.cfg.value.x > 0.5) {
+        camera.layers.set(DEPTH_PREPASS_LAYER);
+        renderer.setRenderTarget(depthPre);
+        const prevClear = renderer.getClearColor(clearColorScratch).getHex();
+        renderer.setClearColor(0x000000);
+        void renderer.render(scene, camera);
+        renderer.setClearColor(prevClear);
+      }
+
       // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
       // starting from the distance the pre-pass proved empty. The clear leaves
       // alpha at 1.0, which is the "nothing here" sentinel the composite
@@ -753,11 +838,19 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     setConeGeometry(fovDeg, targetHeight) {
       coneFov = fovDeg;
       coneHeight = targetHeight;
+      // The depth prepass's block footprint tracks the same lens and the
+      // same SDF pass height the AA epsilon does. Called from sizeSdfLayer on
+      // every resize AND every adaptive-rung move, so k can never go stale
+      // while the coarse grid (resize above) moves under it.
+      depthPreUniforms.cfg.value.y = coneKFor(DEPTH_PREPASS_BLOCK_PX);
     },
     setConeFineTile(px) { coneFineTile = Math.max(0, Math.round(px)); resize(); },
     get coneFineTile() { return coneFineTile; },
     setConeEnabled(on) { coneUniforms.enabled.value = on ? 1 : 0; },
     occluder: { texture: occluder.texture, uniforms: occluderUniforms },
+    depthPre: { texture: depthPre.texture, uniforms: depthPreUniforms },
+    setDepthPreEnabled(on) { depthPreUniforms.cfg.value.x = on ? 1 : 0; },
+    get depthPreEnabled() { return depthPreUniforms.cfg.value.x > 0.5; },
     shellEntry: { texture: shellEntry.texture, uniforms: shellUniforms },
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },
     setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },
@@ -785,6 +878,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     /** The occluder pre-pass target, for diagnostics that need occT per pixel
      *  (same access the shell targets already have). */
     get occluderTarget() { return occluder; },
+    /** The quarter-res depth-prepass target, for MEASUREMENT readback only
+     *  (the occupancy probe pattern — never render through it). */
+    get depthPreTarget() { return depthPre; },
     get shellEntryTarget() { return shellEntry; },
     get shellExitTarget() { return shellExit; },
     get targetSize() { return { width: target.width, height: target.height }; },
@@ -797,6 +893,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       prev.dispose();
       coneCoarse.dispose();
       coneFine.dispose();
+      depthPre.dispose();
       quad.geometry.dispose();
       quadMat.dispose();
       blitQuad.geometry.dispose();

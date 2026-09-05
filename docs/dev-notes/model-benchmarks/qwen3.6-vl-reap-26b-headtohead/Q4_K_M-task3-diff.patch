@@ -1,0 +1,24 @@
+diff --git a/src/vfx/post-fx/barrel-pass.ts b/src/vfx/post-fx/barrel-pass.ts
+index a7c0d66..c95cc97 100644
+--- a/src/vfx/post-fx/barrel-pass.ts
++++ b/src/vfx/post-fx/barrel-pass.ts
+@@ -22,6 +22,7 @@ const BARREL_FRAG = /* glsl */ `
+ `;
+ 
+ export class BarrelEffect extends Effect {
++  readonly name = 'barrel-distortion';
+   constructor(distortion = 0.15) {
+     super('Barrel', BARREL_FRAG, {
+       uniforms: new Map<string, THREE.Uniform>([
+diff --git a/src/vfx/post-fx/palette-dither-pass.ts b/src/vfx/post-fx/palette-dither-pass.ts
+index 7d3b529..7f9f72f 100644
+--- a/src/vfx/post-fx/palette-dither-pass.ts
++++ b/src/vfx/post-fx/palette-dither-pass.ts
+@@ -58,6 +58,7 @@ const DITHER_FRAG = /* glsl */ `
+ `;
+ 
+ export class PaletteDitherEffect extends Effect {
++  readonly name = 'palette-dither';
+   constructor(paletteTexture: THREE.Texture, strength = 0.5) {
+     super('PaletteDither', DITHER_FRAG, {
+       uniforms: new Map<string, THREE.Uniform>([

@@ -1,0 +1,4 @@
+{
+  "label": "autoround-q4km-PROPER-fsm65k",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 1200, "files": 2, "stdout_bytes": 0},

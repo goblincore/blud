@@ -1,0 +1,7 @@
+{
+  "label": "ream-q3ks-thinkon-2026-05-05",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 995, "files": 5, "stdout_bytes": 951},
+    "task5": {"name": "LRU cache", "elapsed_s": 814, "files": 2, "stdout_bytes": 834}
+  }
+}

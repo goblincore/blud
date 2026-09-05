@@ -31,7 +31,7 @@ import {
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
+  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
@@ -42,6 +42,12 @@ export interface ZombieGpuView {
   object: THREE.Object3D;
   /** The coarse cone-march twin, rendered into the pre-pass targets. */
   coneObject: THREE.Object3D;
+  /** The quarter-res depth-prepass twin (close-up task 3) — same proxy
+   *  geometry, distance-writing material, rendered into the layer's
+   *  depthPre target only when the caller passes opts.depthPre. Present but
+   *  never rendered when omitted, so callers may add it to the scene
+   *  unconditionally. */
+  depthPreObject?: THREE.Object3D;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
   /** The 3D texture bound to the march's volume slot (X1.26). The shared
@@ -169,6 +175,17 @@ const coneMarch = (() => {
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
   return wgslFn(CONE_MARCH, nodes.slice(-1));
+})();
+
+/** The quarter-res depth-prepass entry (close-up task 3), same helper chain.
+ *  Its own chain rather than coneMarch's final node — buildMarchFn's edge
+ *  structure is load-bearing and boot-profiled, and this page is not the
+ *  place to optimise node sharing away from a shipping path. */
+const depthPreMarch = (() => {
+  const nodes = HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+  );
+  return wgslFn(DEPTH_PREPASS_MARCH, nodes.slice(-1));
 })();
 
 /**
@@ -724,6 +741,64 @@ export interface ConeSource {
   uniforms: ConeUniforms;
 }
 
+/**
+ * The quarter-res depth pre-pass's uniforms (close-up task 3). Same shape as
+ * the cone's — the texture binds unconditionally, the uniforms gate and size.
+ * enabled 0 is the full identity — the pass does not run and the march's
+ * fetch hands back 0, which folds away inside the ray start's max().
+ */
+export function createDepthPreUniforms() {
+  return {
+    /** ONE vec4 — x enabled, y the coarse block footprint — and NOT two
+     *  scalar uniforms composed with vec4(a, b, 0, 0) in the material
+     *  literal: a JoinNode over uniform SCALARS breaks three's WGSL
+     *  generation (WGSLNodeBuilder.getTypeFromLength null deref), the
+     *  console error is easy to miss, and the material falls back to a
+     *  pipeline with NO working uniforms — bodies render unlit-black and
+     *  every uniform write goes dead (2026-09-05, boot-screenshot bisect).
+     *  A vec4 uniform passed WHOLE is the house pattern in this file, and
+     *  it is load-bearing. x 0 is the full identity — the pass does not
+     *  run and the march's fetch hands back 0, folding away inside the ray
+     *  start's max(). y is consumed twice on purpose: the coarse march's
+     *  cone radius (the proof's own radius) and the full march's start
+     *  backoff (insurance beyond the proof). One number, one source. */
+    cfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+  };
+}
+export type DepthPreUniforms = ReturnType<typeof createDepthPreUniforms>;
+
+/** The quarter-res depth pre-pass's output, as the march material needs it.
+ *  Same shape as OccluderSource/ConeSource. */
+export interface DepthPreSource {
+  texture: THREE.Texture;
+  uniforms: DepthPreUniforms;
+}
+
+/**
+ * The 1×1 depth-prepass texture views bind when their caller passes no
+ * DepthPreSource — same contract as fallbackLevelShadowTexture. The binding
+ * must exist (MARCH_BODY declares the input), the fetch never reads it:
+ * cfg.x 0 returns before the load. Zero-valued so even a stray read is the
+ * "no start" identity rather than garbage.
+ */
+let fallbackDepthPre: THREE.DataTexture | null = null;
+let fallbackDepthPreCfg: { value: THREE.Vector4 } | null = null;
+function fallbackDepthPreTexture() {
+  if (!fallbackDepthPre) {
+    const t = new THREE.DataTexture(new Float32Array([0]), 1, 1, THREE.RedFormat, THREE.FloatType);
+    t.needsUpdate = true;
+    fallbackDepthPre = t;
+  }
+  return fallbackDepthPre;
+}
+/** The no-source cfg identity — a shared all-zero vec4 UNIFORM, not a
+ *  composed constant node (see createDepthPreUniforms for the JoinNode
+ *  trap that forces this shape). */
+function fallbackDepthPreUniform() {
+  if (!fallbackDepthPreCfg) fallbackDepthPreCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  return fallbackDepthPreCfg;
+}
+
 /** Hull-refine (phase 0): per-fragment ray overrides so the SHIPPED march
  *  does a short band walk from a rasterised hull instead of a proxy-box
  *  march. `worldPos` feeds tMaxBox = length(worldPos - camPos) — pass the
@@ -755,6 +830,7 @@ export function createMarchMaterial(
   prev?: PrevSource,
   levelShadow?: { light: THREE.SpotLight },
   rays?: MarchRayOverride,
+  depthPre?: DepthPreSource,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -931,6 +1007,14 @@ export function createMarchMaterial(
     // levelShadow*, woundBound, in this order (see the ORDER MATTERS note
     // above).
     woundBound: u.woundBound,
+    // Quarter-res depth prepass (close-up task 3) — POSITIONALLY LAST after
+    // windDrift, bound in the same commit as the WGSL input (the meltCfg
+    // rule). Without a source the fallback 1×1 texture and the all-zero cfg
+    // keep the fetch at its "no start" identity — the disabled march is
+    // bit-identical, and cfg.y (the block footprint) is only read after the
+    // enabled test in DEPTH_PRE_FETCH's consumer.
+    depthPreTex: texture(depthPre ? depthPre.texture : fallbackDepthPreTexture()),
+    depthPreCfg: (depthPre ? depthPre.uniforms.cfg : fallbackDepthPreUniform()) as never,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1207,6 +1291,10 @@ export interface GpuViewOpts {
   /** Accumulated colour+depth for the front-to-back per-body passes (perf
    *  round 2 task 5). Omit for the ungated march — 1e9 is the identity. */
   prev?: PrevSource;
+  /** Quarter-resolution depth prepass (close-up task 3): this view's coarse
+   *  twin renders into it, and the march starts from its nearest-touch
+   *  distance. Omit for the from-camera march — the fetch identity is 0. */
+  depthPre?: DepthPreSource;
   /** Level-only shadow light (perf round 2 task 7) — the twin of the
    *  flashlight. Omit in the lab/hands: the binding falls back to a 1×1
    *  depth texture and levelShadowCfg.x = 0 keeps the march inert. */
@@ -1346,7 +1434,8 @@ export function createZombieGpuView(
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     marchBody,
-    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow);
+    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
+    undefined, opts.depthPre);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -1448,9 +1537,58 @@ export function createZombieGpuView(
   coneMesh.frustumCulled = false;
   coneMesh.position.copy(mesh.position);
 
+  // The quarter-res depth-prepass twin (close-up task 3): same proxy box,
+  // a distance-writing material, its own layer. The coarse march inside it
+  // stops at the first touch of a BLOCK-radius cone — a provable lower bound
+  // on the first hit of every full-res ray in the block (proof on
+  // DEPTH_PREPASS_MARCH). frag_depth is the touch distance normalised exactly
+  // like the cone twin's, so where proxy boxes overlap the hardware depth
+  // test keeps the NEAREST touch — the one value safe for every body at that
+  // pixel. FOG IS OFF, and must stay off: this material renders through the
+  // main scene, and the fog fix (8da0bdd) exists because scene fog was
+  // smoothstep-mixing exactly such a written distance toward fogColor with
+  // range — the decay that killed the occluder pre-pass.
+  let depthPreMesh: THREE.Mesh | undefined;
+  let depthPreMaterial: MeshBasicNodeMaterial | undefined;
+  if (opts.depthPre) {
+    const depthPreT = depthPreMarch({
+      worldPos: positionWorld,
+      camPos: cameraPosition,
+      data: texture(dataTex),
+      volumeTex: texture3D(volumeTex),
+      volumePose0: u.volumePose0,
+      volumePose1: u.volumePose1,
+      volumeMin: u.volumeMin,
+      volumeInvExtent: u.volumeInvExtent,
+      volumeWarp: u.volumeWarp,
+      volumeClip: u.volumeClip,
+      counts: u.counts,
+      counts2: u.counts2,
+      marchCfg: u.marchCfg,
+      woundCfg: u.woundCfg,
+      woundCfg2: u.woundCfg2,
+      depthPreCfg: opts.depthPre.uniforms.cfg,
+      // Bound POSITIONALLY last, matching DEPTH_PREPASS_MARCH's WGSL
+      // signature (the ORDER MATTERS note in createMarchMaterial).
+      perfCfg: u.perfCfg,
+      windDrift: u.windDrift,
+    }) as unknown as { div: (d: unknown) => unknown };
+    depthPreMaterial = new MeshBasicNodeMaterial();
+    depthPreMaterial.side = THREE.BackSide;
+    depthPreMaterial.fog = false;
+    depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
+    depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+    depthPreMaterial.depthWrite = true;
+    depthPreMaterial.depthTest = true;
+    depthPreMesh = new THREE.Mesh(mesh.geometry, depthPreMaterial);
+    depthPreMesh.frustumCulled = false;
+    depthPreMesh.position.copy(mesh.position);
+  }
+
   return {
     object: mesh,
     coneObject: coneMesh,
+    depthPreObject: depthPreMesh,
     uniforms: u,
     volumeTexture: volumeTex,
     dataTexture: dataTex,
@@ -1471,6 +1609,10 @@ export function createZombieGpuView(
       u.bodyHalf.value.set(f.size.x / 2, f.size.y / 2, f.size.z / 2);
       coneMesh.position.copy(mesh.position);
       coneMesh.scale.copy(mesh.scale);
+      if (depthPreMesh) {
+        depthPreMesh.position.copy(mesh.position);
+        depthPreMesh.scale.copy(mesh.scale);
+      }
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps) {
       u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps);
@@ -1534,6 +1676,7 @@ export function createZombieGpuView(
       mesh.geometry.dispose();
       material.dispose();
       coneMaterial.dispose();
+      if (depthPreMaterial) depthPreMaterial.dispose();
       dataTex.dispose();
       if (ownsVolume) volumeTex.dispose();
       // viewTiles' underlying binding is owned by its creator, not the view.
