@@ -62,7 +62,7 @@ import { MAX_PRIMS } from '../validate';
 import { WOUND_PROFILES, type Wound } from '../damage';
 import { woundWorldPos } from '../damage';
 import type { Primitive, Vec3 } from '../types';
-import { boxReach, shellReach } from '../extent';
+import { boxReach, shellReach, strandReach } from '../extent';
 import { PROP_MESH } from '../hands';
 import type { HandSheet } from './hands-sheet';
 import type { BurstVisual } from '../explosion-aoe';
@@ -242,10 +242,12 @@ export function fitHandCluster(members: Primitive[]): { center: Vec3; radius: nu
     // tapers (hands.ts only emits capsules with a single radius; grep finds
     // no `radiusB` anywhere in the hand-authoring files). If that ever
     // changes, this term needs the same max() the others use.
-    // shellReach is 0 for every hand prim today — hands.ts emits no shells —
-    // but it costs nothing and stops this site drifting out of step with the
-    // other seven the way the shell-thickness term already had.
-    const s = Math.max(m.scale[0], m.scale[1], m.scale[2]) * m.radius * boxReach(m.box) + shellReach(m);
+    // Both reaches are inert for every hand prim today — hands.ts emits
+    // neither shells nor strands — but they cost nothing and stop this site
+    // drifting out of step with the other seven the way the shell-thickness
+    // term already had. strandReach MULTIPLIES (a bundle occupies a wider
+    // tube); shellReach ADDS (a sheet rides proud of its base).
+    const s = Math.max(m.scale[0], m.scale[1], m.scale[2]) * m.radius * boxReach(m.box) * strandReach(m.strand) + shellReach(m);
     for (const e of [m.a, m.b]) {
       const d = Math.hypot(e[0] - center[0], e[1] - center[1], e[2] - center[2]);
       radius = Math.max(radius, d + s);
@@ -378,7 +380,7 @@ export function createHandsGpuView(
     for (const p of prims) {
       // Same deliberate bare-`radius` omission as fitHandCluster above — no
       // hand prim tapers today.
-      const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]) * boxReach(p.box) + shellReach(p) + 0.02;
+      const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]) * boxReach(p.box) * strandReach(p.strand) + shellReach(p) + 0.02;
       for (const e of [p.a, p.b]) {
         minX = Math.min(minX, e[0] - r); maxX = Math.max(maxX, e[0] + r);
         minY = Math.min(minY, e[1] - r); maxY = Math.max(maxY, e[1] + r);

@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/clusters.ts
 import { CLUSTER_ORDER, type ClusterInfo, type LimbId, type Primitive, type Vec3 } from './types';
 import { add, bendCtrl, len, scale as vscale, sub } from './vec';
-import { boxReach, shellReach } from './extent';
+import { boxReach, shellReach, strandReach } from './extent';
 
 /**
  * Sorts primitives into the fixed CLUSTER_ORDER fold sequence and computes a
@@ -54,7 +54,7 @@ export function assignClusters(
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
       const ends = p.bend === undefined
         ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
-      const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box);
+      const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand);
       // A shell rides `thickness` PROUD of its base capsule's surface, so its
       // outermost extent is rMax*maxScale + thickness — the extra term, or the
       // cluster sphere the shader culls with under-covers the sheet.

@@ -1,5 +1,6 @@
 // src/lab/sdf-zombie/blob-parse.ts
 import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, type BlobStance, BlobError } from './blob-ast';
+import { STRAND_DEFAULT_CYCLES, STRAND_DEFAULT_FAT, STRAND_DEFAULT_WAVE } from './strand';
 
 /**
  * A `BlobLine[]` with one extra property: the comment/blank trivia that
@@ -495,6 +496,14 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // means on a first pass, and 0.08 still reads machined. See BlobPart.round
     // for why this is a fraction rather than metres.
     round: numArg(l, 'round', 0.08),
+    // `strand=n` — a bundle of `n` wavy strands along this prim instead of
+    // one solid sweep (hairlock). `wave=`/`cycles=`/`fat=` tune it; all four
+    // ranges are validated in blob-compile.ts's partToPrim, which knows the
+    // line and the kind.
+    strand: strArg(l, 'strand') === null ? null : numArg(l, 'strand'),
+    strandWave: numArg(l, 'wave', STRAND_DEFAULT_WAVE),
+    strandCycles: numArg(l, 'cycles', STRAND_DEFAULT_CYCLES),
+    strandFat: numArg(l, 'fat', STRAND_DEFAULT_FAT),
     src: l,
   } satisfies BlobPart;
 
@@ -513,6 +522,14 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     throw new BlobError(
       `side=${part.side} needs an arm|leg limb (got "${limb}" — head/torso prims are not mirrored)`,
       l.line, l.indent + 1);
+
+  // A strand TUNING word with no `strand=` is a silently inert number — the
+  // same class as `gloss=` on unpainted flesh, which throws for exactly this
+  // reason. (The ranges are compile's job — partToPrim knows the kind.)
+  if (part.strand === null
+    && (strArg(l, 'wave') !== null || strArg(l, 'cycles') !== null || strArg(l, 'fat') !== null))
+    throw new BlobError(
+      'wave=/cycles=/fat= only mean something beside strand=n', l.line, l.indent + 1);
 
   into.push(part);
 }
@@ -546,7 +563,16 @@ function parseBonesLine(l: BlobLine, s: ParseState): void {
     throw new BlobError(
       `a bones line must be "blob", "bar" or "ratio", got "${head}"`,
       l.line, l.indent + 1);
-  parseBodyLine(l, s, s.doc.bonesBlock.parts);
+  const block = s.doc.bonesBlock;
+  parseBodyLine(l, s, block.parts);
+  // strand= on a bone would DIVERGE: the GPU bone fold (applyBones) never
+  // reads the strand row, so the bone would march solid while the CPU field
+  // sees a bundle. Reject here rather than let the two fields disagree.
+  const added = block.parts[block.parts.length - 1]!;
+  if (added.strand !== null)
+    throw new BlobError(
+      'strand= is not supported in a bones block — the bone fold does not '
+      + 'read strand rows (hair is flesh, not bone)', l.line, l.indent + 1);
 }
 
 /**

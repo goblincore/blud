@@ -22,7 +22,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, APPLY_WOUNDS, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
+  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
@@ -909,7 +909,7 @@ describe('data texture layout', () => {
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
       ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
-      ROW_PRIM_WARP,
+      ROW_PRIM_WARP, ROW_PRIM_STRAND,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -1171,9 +1171,13 @@ describe('sdRoundBox in WGSL (task 6 — the GPU field)', () => {
   });
 
   it('sdPrim and sdPrimO both branch on the box bit (& 8), and it appears before the bend bit (& 2)', () => {
+    // Matched with the `if (` prefix, not on the bit test alone: the STRAND
+    // branch above these reads the same bit inside a select() to decide
+    // whether coneStrand may use the control point, and a bare substring
+    // search finds THAT first and reports the gates as mis-ordered.
     for (const src of [SD_PRIM, SD_PRIM_ORIENTED]) {
-      const boxGate = src.indexOf('(i32(prof) & 8) != 0');
-      const bendGate = src.indexOf('(i32(prof) & 2) != 0');
+      const boxGate = src.indexOf('if ((i32(prof) & 8) != 0)');
+      const bendGate = src.indexOf('if ((i32(prof) & 2) != 0)');
       expect(boxGate).toBeGreaterThan(-1);
       expect(bendGate).toBeGreaterThan(-1);
       expect(boxGate).toBeLessThan(bendGate);
@@ -1188,7 +1192,8 @@ describe('sdRoundBox in WGSL (task 6 — the GPU field)', () => {
     for (const src of [SD_PRIM, SD_PRIM_ORIENTED]) {
       expect(src).toContain('sdRoundBox(');
       expect(src).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w`);
-      const boxBranch = src.slice(src.indexOf('(i32(prof) & 8) != 0'), src.indexOf('(i32(prof) & 2) != 0'));
+      const boxBranch = src.slice(
+        src.indexOf('if ((i32(prof) & 8) != 0)'), src.indexOf('if ((i32(prof) & 2) != 0)'));
       expect(boxBranch).toContain('* minScale');
     }
   });
@@ -1285,8 +1290,9 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // — each without displacing any existing row. The wound depth slab added
     // ROW_WOUND_CAP (2026-08-27, pale-wound fix). The entrails cavity flag
     // added ROW_WOUND_FLAGS (2026-09-02). The shell cloth spike added
-    // ROW_PRIM_WARP (2026-09-05).
-    expect(DATA_ROWS).toBe(21);
+    // ROW_PRIM_WARP and hairlock ROW_PRIM_STRAND (both 2026-09-05 — they
+    // collided on index 20 across two branches; see ROW_PRIM_STRAND's doc).
+    expect(DATA_ROWS).toBe(22);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

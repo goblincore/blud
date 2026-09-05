@@ -54,6 +54,39 @@ export interface ShellParams {
  */
 export interface BoxParams { round: number }
 
+/**
+ * A `strand` modifier (hairlock, 2026-09-05): turns ONE two-ended primitive
+ * (a `bar`, or a `blob` with `tip=`) into a bundle of wavy strands — a fringe
+ * or a face-framing lock — for ONE curve evaluation plus 2D arithmetic
+ * instead of one primitive per strand. The parent segment/bezier supplies the
+ * bundle's path; in its cross-section plane the strands sit on a jittered
+ * grid (`round(q / cell)`, iq's limited repetition), each with its own wobble
+ * phase along the curve parameter.
+ *
+ * `count` strands across the bundle's diameter; the cell size follows the
+ * parent's taper (`cell = 2·r(t)/count`) so the bundle narrows to the same
+ * point the parent would. `wave` is the wobble amplitude as a fraction of
+ * the cell (capped below the repetition-coverage bound — see strand.ts);
+ * `cycles` the wobble periods along the curve; `fat` the strand diameter as
+ * a fraction of the cell (1 = strands touching, no gaps).
+ *
+ * The field is NOT a distance: the fold and the wobble lift its Lipschitz
+ * constant above 1, so both field implementations divide the result by a
+ * conservatively computed bound (`strandLipschitz`). The march pays that as
+ * extra steps; the render-check at relax 1.4 is the gate that proved the
+ * bound sufficient (the nearWound plain-step pattern was the fallback).
+ */
+export interface StrandParams {
+  /** Strands across the bundle diameter. Integer, 1..16. */
+  count: number;
+  /** Wobble amplitude, fraction of the local cell. 0..STRAND_WAVE_MAX. */
+  wave: number;
+  /** Wobble periods along the curve. 0.25..12. */
+  cycles: number;
+  /** Strand diameter as a fraction of the cell. 0.05..1. */
+  fat: number;
+}
+
 /** Fixed fold order. Index into this array IS the cluster id. Never reorder. */
 export const CLUSTER_ORDER = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'] as const;
 export type LimbId = (typeof CLUSTER_ORDER)[number];
@@ -250,6 +283,13 @@ export interface PrimDef {
    * `radius` (0..1), inset — see BoxParams.
    */
   box?: BoxParams;
+  /**
+   * Present when this primitive is a strand BUNDLE (a fringe or lock) rather
+   * than one solid sweep — see StrandParams. Carried through mirror, resolve
+   * and the rig untouched: every parameter is a scalar in the prim's own
+   * frame, so nothing x-negates.
+   */
+  strand?: StrandParams;
 }
 
 export interface BodyDef {
@@ -364,6 +404,9 @@ export interface Primitive {
   shell?: ShellParams;
   /** See PrimDef.box. Carried through mirror, resolve and the rig untouched. */
   box?: BoxParams;
+  /** See PrimDef.strand. Carried through mirror, resolve and the rig
+   *  untouched — all four parameters are scalars in the prim's own frame. */
+  strand?: StrandParams;
 }
 
 export interface ClusterInfo {

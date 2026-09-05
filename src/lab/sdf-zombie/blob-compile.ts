@@ -1,5 +1,9 @@
 // src/lab/sdf-zombie/blob-compile.ts
 import { type BlobDoc, type BlobPart, BlobError } from './blob-ast';
+import {
+  STRAND_COUNT_MAX, STRAND_CYCLES_MAX, STRAND_CYCLES_MIN,
+  STRAND_FAT_MAX, STRAND_FAT_MIN, STRAND_WAVE_MAX,
+} from './strand';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 
@@ -361,6 +365,56 @@ function partToPrim(p: BlobPart): PrimDef {
       throw new BlobError(
         `round= must be between 0 and 1 (a fraction of r), got ${p.round}`,
         p.src.line, p.src.indent + 1);
+    // STRAND (hairlock, 2026-09-05): the bundle-of-strands modifier. Every
+    // rejection names the line and NONE clamps — a clamped wave or count is
+    // a number whose authored value stopped being the value in effect.
+    if (p.strand !== null) {
+      // A strand bundle needs two ends to run between (its strands wave along
+      // the curve parameter); a `blob` with no `tip=` has one point, and the
+      // cross-section plane the strands repeat across is defined from a
+      // tangent that does not exist. Same shape as the bend= rejection above.
+      if (p.kind === 'blob' && p.tip === null)
+        throw new BlobError(
+          'strand= needs two distinct ends to run strands BETWEEN: use it on a '
+          + 'bar, or give the blob a tip=(x,y,z) so its far end sits somewhere else',
+          p.src.line, p.src.indent + 1);
+      // A strand prim IS its own field construction (the tangent-capsule
+      // fold in strand.ts); on a carve or groove it would silently never be
+      // the cutter the words ask for, and on a shell or box it has no
+      // meaning the field defines — so all four fail loudly.
+      if (p.kind === 'carve' || p.kind === 'groove')
+        throw new BlobError(
+          'strand= is not supported on a carve/groove — strands are additive; '
+          + 'a cutting bundle is a shape nobody has defined', p.src.line, p.src.indent + 1);
+      if (p.kind === 'shell')
+        throw new BlobError(
+          'strand= is not supported on a shell — a shell thins a closed sweep; '
+          + 'a bundle of strands is not one', p.src.line, p.src.indent + 1);
+      if (p.box)
+        throw new BlobError(
+          'strand= is not supported on a box — strands repeat a swept tube, '
+          + 'not a slab', p.src.line, p.src.indent + 1);
+      if (!Number.isInteger(p.strand) || p.strand < 1 || p.strand > STRAND_COUNT_MAX)
+        throw new BlobError(
+          `strand= is an integer strand count, 1..${STRAND_COUNT_MAX}, got ${p.strand}`,
+          p.src.line, p.src.indent + 1);
+      // The 0.39 coverage budget is strand.ts's: past it the nearest strand
+      // can sit outside the evaluated 3x3 neighbourhood and the repetition
+      // stops being the union of strands. The static jitter spends
+      // 0.4*wave of it, hence wave + 0.4*wave <= 0.39.
+      if (p.strandWave < 0 || p.strandWave > STRAND_WAVE_MAX)
+        throw new BlobError(
+          `wave= is 0..${STRAND_WAVE_MAX} (the fold-coverage budget 0.39 less the `
+          + `0.4x jitter), got ${p.strandWave}`, p.src.line, p.src.indent + 1);
+      if (p.strandCycles < STRAND_CYCLES_MIN || p.strandCycles > STRAND_CYCLES_MAX)
+        throw new BlobError(
+          `cycles= is ${STRAND_CYCLES_MIN}..${STRAND_CYCLES_MAX}, got ${p.strandCycles}`,
+          p.src.line, p.src.indent + 1);
+      if (p.strandFat < STRAND_FAT_MIN || p.strandFat > STRAND_FAT_MAX)
+        throw new BlobError(
+          `fat= is ${STRAND_FAT_MIN}..${STRAND_FAT_MAX} (a fraction of the cell), got ${p.strandFat}`,
+          p.src.line, p.src.indent + 1);
+    }
     return {
       bone: p.bone,
       src: p.src.line,
@@ -400,6 +454,14 @@ function partToPrim(p: BlobPart): PrimDef {
           }
         : {}),
       ...(p.box ? { box: { round: p.round } } : {}),
+      ...(p.strand === null ? {} : {
+        strand: {
+          count: p.strand,
+          wave: p.strandWave,
+          cycles: p.strandCycles,
+          fat: p.strandFat,
+        },
+      }),
     } satisfies PrimDef;
 }
 

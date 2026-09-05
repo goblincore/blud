@@ -57,6 +57,9 @@ import { MAX_PRIMS } from '../validate';
 //                       w = per-prim glow 0..1 (hard-surface task 3)
 //   row 20 primWarp     x = wrinkle amplitude (m), yzw = per-axis wrinkle
 //                       frequency (rad/m) (shell-fold prims only)
+//   row 21 primStrand   x = strand count, y = wave, z = cycles, w = fat
+//                       (hairlock 2026-09-05; zeros = no bundle — the exact
+//                       no-op every pre-strand character packs)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -81,7 +84,7 @@ import { MAX_PRIMS } from '../validate';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 21;
+export const DATA_ROWS = 22;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -130,7 +133,7 @@ export const ROW_PRIM_SHELL = 16;
  *  the glow COLOUR is the prim's own ROW_PRIM_COLOR albedo, so the lane is
  *  inert (w = 0) unless the author writes `glow=`. See ROW_PRIM_SHELL. */
 export const ROW_PRIM_CLIP = 17;
-/** WRINKLES (shell cloth spike): x = warp amplitude in metres, y = warp
+/** WRINKLES (shell cloth spike): x = warp amplitude in metres,
  *  yzw = per-axis frequency in radians per metre. Read only by prims with a
  *  shell fold, and only when the amplitude and the frequency are both
  *  non-zero — a shell authored without
@@ -146,6 +149,19 @@ export const ROW_PRIM_CLIP = 17;
  *  bit went wrong. One row costs MAX_PRIMS * 16 bytes = 2 KiB per body, the
  *  same bargain ROW_WOUND_FLAGS took. */
 export const ROW_PRIM_WARP = 20;
+/** Strand bundle parameters (hairlock, 2026-09-05): x = strand count,
+ *  y = wave (wobble amplitude, fraction of cell), z = cycles, w = fat
+ *  (strand diameter as a fraction of the cell). Read only where the prim's
+ *  profile carries bit 5 (value 32). The CPU mirror of everything this row
+ *  drives is strand.ts; see its header for the construction and the
+ *  Lipschitz argument.
+ *
+ *  21, NOT 20: hairlock and the shell cloth spike each added "the next row"
+ *  on their own branch and both landed on 20. A textual merge would have
+ *  reported success with two names for one row — every warped shell reading
+ *  the strand bundle's parameters as its wrinkle frequency. Same class as
+ *  the meltCfg collision the noiseCfg comment records. */
+export const ROW_PRIM_STRAND = 21;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -339,7 +355,155 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
   return best * minScale;
 }`;
 
-// Rounded box — the exact CPU mirror of sdRoundBox in validate.ts. `e` is the
+// STRAND BUNDLE (hairlock, 2026-09-05) — the GPU mirror of sdStrand in
+// strand.ts, whose header carries the full construction and the Lipschitz
+// argument. Edit both in the same commit: the CPU field backs
+// click-to-shoot and the render-check mask, so a drift here is a shot that
+// lands where no strand is drawn.
+//
+// One curve evaluation (the exact closest point t*), then a 3x3 jittered
+// grid fold of WINDOWED TANGENT CAPSULES in the cross-section plane — iq's
+// limited repetition with a per-strand wobble phase. The hashes use SMALL
+// COEFFICIENTS ONLY, so f32 (here) and f64 (validate.ts) agree to ~1e-6 and
+// the two fields wobble the same strands the same way.
+export const STRAND_HASH4 = /* wgsl */ `fn strandHash4(ix: f32, iy: f32) -> vec4<f32> {
+  return fract(vec4<f32>(
+    0.371 * ix + 0.733 * iy,
+    0.531 * ix + 0.297 * iy + 0.41,
+    0.617 * ix + 0.173 * iy + 0.73,
+    0.229 * ix + 0.859 * iy + 0.19));
+}`;
+
+// The conservative Lipschitz bound the strand field is divided by — the GPU
+// mirror of strandLipschitz in strand.ts. bent is 1.0 when the prim carries
+// a curve (profile bit 1), in which case `c` is the packed control point;
+// a straight strand passes c = vec3(0) and must not read it.
+export const STRAND_LIPSCHITZ = /* wgsl */ `fn strandLip(a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, bent: f32, st: vec4<f32>) -> f32 {
+  let n = st.x;
+  let wave = st.y;
+  let cycles = st.z;
+  let fat = st.w;
+  let rb = select(r2, r1, r2 < 0.0);
+  var e1 = b - a;
+  var bb = vec3<f32>(0.0);
+  if (bent > 0.5) {
+    e1 = (c - a) * 2.0;
+    bb = a - 2.0 * c + b;
+    if (dot(bb, bb) < 1e-12) { e1 = b - a; bb = vec3<f32>(0.0); }
+  }
+  let bbLen = length(bb);
+  var spdMin = length(e1);
+  if (bbLen >= 1e-9) {
+    let dd = 2.0 * bb;
+    let tMin = clamp(-dot(e1, dd) / dot(dd, dd), 0.0, 1.0);
+    spdMin = length(e1 + dd * tMin);
+  }
+  // A degenerate (zero-length) strand has no curve to wave along.
+  if (spdMin < 1e-9) { return 1.0; }
+  let m = ceil(n * 0.5);
+  let rMax = max(r1, rb);
+  let cellMax = 2.0 * rMax / n;
+  let cellRate = 2.0 * abs(rb - r1) / n;
+  // STRAND_JITTER: keep in step with strand.ts (0.4 of the wobble).
+  let centreMax = m * cellMax + wave * 1.4 * cellMax;
+  let rhoMax = centreMax + fat * cellMax * 0.5;
+  let kappa = 2.0 * bbLen / (spdMin * spdMin);
+  let rate = 1.0 / (spdMin * max(1.0 - rhoMax * kappa, 0.25));
+  let dCentre = m * cellRate + wave * 1.4 * cellRate + wave * 6.2831853 * cycles * cellMax;
+  let spin = 2.0 * bbLen / spdMin;
+  let dSdir = spin + wave * 6.2831853 * cycles * (cellRate + 6.2831853 * cycles * cellMax) / spdMin;
+  let win = 2.0 * cellMax;
+  let dRad = fat * cellRate * 0.5;
+  return 1.0 + rate * (dCentre + spin * centreMax + win * dSdir + dRad);
+}`;
+
+// The bundle field itself. Same contract as coneBend: scale-divided sample
+// and endpoints, raw radii, minScale applied at the end — PLUS the Lipschitz
+// division, which is what makes the folded, wobbling field safe to sphere
+// trace (at a step cost). The bound is NEARLY exact rather than exact — the
+// strand-grid seams are isolated sub-millimetre jumps — and strand.ts's
+// header carries the measurements. The gate is strand-wiring.test.ts, not
+// the render check: losing the bundle draws the parent capsule, which is
+// MORE material, and render-check only reports holes.
+export const CONE_STRAND = /* wgsl */ `fn coneStrand(q: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, minScale: f32, bent: f32, st: vec4<f32>) -> f32 {
+  let n = st.x;
+  let wave = st.y;
+  let cycles = st.z;
+  let fat = st.w;
+  let rb = select(r2, r1, r2 < 0.0);
+  var e1 = b - a;
+  var bb = vec3<f32>(0.0);
+  if (bent > 0.5) {
+    e1 = (c - a) * 2.0;
+    bb = a - 2.0 * c + b;
+    if (dot(bb, bb) < 1e-12) { e1 = b - a; bb = vec3<f32>(0.0); }
+  }
+  // t*: the EXACT closest point on the base curve. Straight: the clamped
+  // projection. Bent: the cubic roots are every interior distance extremum,
+  // so roots + ends suffice — no quarters, no refinement (those exist in
+  // coneBend for the radius term, which the strand fold applies AFTER t*).
+  let abLen2 = dot(b - a, b - a);
+  var tStar = 0.0;
+  if (abLen2 >= 1e-12) {
+    if (dot(bb, bb) < 1e-12) {
+      tStar = clamp(dot(q - a, b - a) / abLen2, 0.0, 1.0);
+    } else {
+      let cand = sdBezierT(q, a, c, b);
+      var bestD = 1e9;
+      var ts = array<f32, 5>(cand.x, cand.y, cand.z, 0.0, 1.0);
+      for (var i = 0; i < 5; i = i + 1) {
+        if (f32(i) >= cand.w && i < 3) { continue; }
+        let t = ts[i];
+        let p0 = a + e1 * t + bb * (t * t);
+        let dd = dot(q - p0, q - p0);
+        if (dd < bestD) { bestD = dd; tStar = t; }
+      }
+    }
+  }
+  let pt = a + e1 * tStar + bb * (tStar * tStar);
+  let dC = e1 + 2.0 * bb * tStar;
+  let spd = max(length(dC), 1e-9);
+  let tan = dC / spd;
+  // Cross-section basis off the axis LEAST aligned with the tangent.
+  let seedAxis = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(tan.y) < 0.9);
+  let u = normalize(cross(tan, seedAxis));
+  let v = cross(tan, u);
+  let rT = r1 + (rb - r1) * tStar;
+  let cell = max(2.0 * rT / n, 1e-6);
+  let rS = fat * cell * 0.5;
+  let m = ceil(n * 0.5);
+  let win = 2.0 * cell;
+  let rel = q - pt;
+  let pl = vec2<f32>(dot(rel, u), dot(rel, v));
+  let id0 = round(pl / cell);
+  var best = 1e9;
+  for (var di = -1; di <= 1; di = di + 1) {
+    for (var dj = -1; dj <= 1; dj = dj + 1) {
+      let idc = clamp(id0 + vec2<f32>(f32(di), f32(dj)), vec2<f32>(-m), vec2<f32>(m));
+      let h = strandHash4(idc.x, idc.y);
+      let phx = 6.2831853 * (cycles * tStar + h.x);
+      let phy = 6.2831853 * (cycles * tStar + h.y + 0.25);
+      let wob = wave * cell;
+      let ctr = idc * cell + wob * vec2<f32>(sin(phx), sin(phy)) + 0.4 * wob * (2.0 * h.zw - vec2<f32>(1.0));
+      // The strand's local direction: the curve's plus the wobble's slope,
+      // so the windowed capsule lies ALONG the wavy strand rather than
+      // beading at every sample station.
+      let dw = wob * 6.2831853 * cycles * vec2<f32>(cos(phx), cos(phy));
+      let sd3 = normalize(dC + dw.x * u + dw.y * v);
+      let m3 = pt + ctr.x * u + ctr.y * v;
+      let w3 = q - m3;
+      let dl = dot(w3, sd3);
+      // The window kills the ghost ridge a curve-length tangent line would
+      // leave, and never runs past the curve's own ends: a pointed lock
+      // ENDS at t = 1.
+      let dlc = clamp(dl, max(-win, -tStar * spd), min(win, (1.0 - tStar) * spd));
+      let dI = length(w3 - dlc * sd3) - rS;
+      best = min(best, dI);
+    }
+  }
+  return best * minScale / strandLip(a, b, c, r1, r2, bent, st);
+}`;
+
 // half-extent BEFORE rounding; the caller insets it by `r` so total half-extent
 // is unchanged. Edit both in the same commit or click-to-shoot drifts from
 // what is drawn.
@@ -354,6 +518,22 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE} + band), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
+  // STRAND before every other branch, mirroring sdPrimitive in validate.ts:
+  // a strand prim is its own field construction, and box/shell are rejected
+  // on it at compile time, so it cannot belong to any branch below. The
+  // strand row is fetched HERE rather than by the caller — the same
+  // on-demand discipline the box branch uses for ROW_PRIM_BEND — so a prim
+  // without strands never pays for the fetch.
+  //
+  // The bent flag selects whether coneStrand reads the control point: a
+  // straight strand is passed c = vec3(0) and must not use it. (No backticks
+  // in this comment -- it lives inside a TEMPLATE LITERAL, and one would end
+  // the WGSL string mid-function.)
+  if ((i32(prof) & 32) != 0) {
+    let ST = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_STRAND} + band), 0);
+    let bent = select(0.0, 1.0, (i32(prof) & 2) != 0);
+    return coneStrand(p * inv, A.xyz * inv, B.xyz * inv, cpos * inv, A.w, r2, minScale, bent, ST);
+  }
   // BOX before BENT: bend= is rejected on a box at compile time, so the two
   // never coexist; testing box first means the bend row is never fetched for
   // one, which is what makes sharing primBend.w safe. The bend row is
@@ -432,6 +612,22 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   a = a * inv;
   b = b * inv;
   let minScale = min(S.x, min(S.y, S.z));
+  // STRAND before every other branch, mirroring sdPrimitive in validate.ts:
+  // a strand prim is its own field construction, and box/shell are rejected
+  // on it at compile time, so it cannot belong to any branch below. The
+  // strand row is fetched HERE rather than by the caller — the same
+  // on-demand discipline the box branch uses for ROW_PRIM_BEND — so a prim
+  // without strands never pays for the fetch.
+  //
+  // The bent flag selects whether coneStrand reads the control point: a
+  // straight strand is passed c = vec3(0) and must not use it. (No backticks
+  // in this comment -- it lives inside a TEMPLATE LITERAL, and one would end
+  // the WGSL string mid-function.)
+  if ((i32(prof) & 32) != 0) {
+    let ST = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_STRAND} + band), 0);
+    let bent = select(0.0, 1.0, (i32(prof) & 2) != 0);
+    return coneStrand(qq, a, b, c * inv, A.w, r2, minScale, bent, ST);
+  }
   // BOX before BENT — same reasoning as sdPrim: bend= and box never coexist,
   // so testing box first means the bend row is fetched only here, on demand.
   if ((i32(prof) & 8) != 0) {
@@ -3025,7 +3221,14 @@ export const HELPERS = [
   // ordering test below only checks what is IN the list, so an omitted helper
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
-  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
+  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND,
+  // Strand bundle, BEFORE SD_PRIM because both sdPrim and sdPrimO call
+  // coneStrand, and coneStrand itself calls strandHash4 and strandLip — so
+  // all three must be declared ahead of it. Omitting a helper from this list
+  // is the quiet failure this comment block warns about: it passes every
+  // unit test and dies at pipeline creation with a bare WGSL parse error.
+  STRAND_HASH4, STRAND_LIPSCHITZ, CONE_STRAND,
+  SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
   SD_SHELL,
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,

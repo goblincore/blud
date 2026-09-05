@@ -45,6 +45,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { positionWorld, cameraPosition, vec4, length, sub, uniform, mix } from 'three/tsl';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
+import { strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
 
 /**
@@ -240,12 +241,24 @@ export function buildHullInstances(
       // the flesh under it did not already occlude.
       if (p.shell) continue;
       if (!live.has(p.cluster)) continue;
+      // STRAND bundles (hairlock): the modifier REPLACES the solid sweep
+      // with sparse strand tubes, so the capsule interior is mostly air and
+      // NO sphere sized off it is guaranteed inside anything — the inner
+      // hull (shrink < 1) must contribute nothing, or a ray through a strand
+      // gap is cut at a phantom sphere and everything behind the hair
+      // vanishes: the see-through-hole class this whole file exists to
+      // prevent. The SHADOW hull (shrink >= 1) is an OUTER bound and takes
+      // the opposite fix: grow by strandReach so the wobble's overshoot past
+      // the parent radius still casts. A fat hair shadow reads as a soft
+      // edge; a hole in it reads as broken.
+      if (p.strand !== undefined && shrink < 1) continue;
+      const strandGrow = p.strand === undefined ? 1 : strandReach(p.strand);
       // Minus the amp, not plus: the dent side is the one that can reach
       // past the hull (see the buildHullInstances doc). A sphere that cannot
       // afford the margin is dropped — a half-margin sphere is the dropout
       // bug in miniature.
       const minScale = Math.min(p.scale[0], p.scale[1], p.scale[2]);
-      const rA = p.radius * minScale * shrink - shellAmp;
+      const rA = p.radius * minScale * shrink * strandGrow - shellAmp;
       // PER END. A tapered primitive (`r2=`) is a round cone: radius `radius`
       // at `a`, `radiusB` at `b`. Sizing the b-sphere from `radius` put a
       // 0.046 sphere inside 0.036 of flesh at the mouse's snout tip — 10 mm
@@ -255,7 +268,7 @@ export function buildHullInstances(
       // most of a day being hunted as a modelling defect. The mouse was just
       // the first character whose tapered prim was fat enough to clear
       // MIN_HULL_RADIUS; nothing about it was unusual.
-      const rB = (p.radiusB ?? p.radius) * minScale * shrink - shellAmp;
+      const rB = (p.radiusB ?? p.radius) * minScale * shrink * strandGrow - shellAmp;
       if (rA >= MIN_HULL_RADIUS && clearOfWounds(p.a, rA)) out.push({ centre: p.a, radius: rA });
       // A zero-length capsule is a sphere; one instance is enough.
       const dx = p.b[0] - p.a[0], dy = p.b[1] - p.a[1], dz = p.b[2] - p.a[2];

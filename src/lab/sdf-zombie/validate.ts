@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { boxReach, shellReach } from './extent';
+import { boxReach, shellReach, strandReach } from './extent';
+import { sdStrand, strandLipschitz } from './strand';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
@@ -119,6 +120,20 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   const t = abLen2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / abLen2));
   const closest = add(a, vscale(ab, t));
   const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+  // STRAND before every other branch (hairlock, 2026-09-05): a strand prim
+  // is its own field construction — the bundle of windowed tangent capsules
+  // in strand.ts — and box/shell are rejected on it at compile time, so it
+  // cannot belong to any branch below. The result is divided by the
+  // Lipschitz bound BOTH fields compute with the same formula: the fold and
+  // the wobble lift |grad| past 1, and the division restores the bound the
+  // sphere tracer needs, at the cost of shorter steps near hair.
+  if (prim.strand) {
+    const cScaled: Vec3 | undefined = cv === undefined
+      ? undefined : [cv[0] * inv[0], cv[1] * inv[1], cv[2] * inv[2]];
+    const r2 = prim.radiusB ?? -1;
+    const raw = sdStrand(q, a, b, cScaled, prim.radius, r2, prim.strand);
+    return raw * minScale / strandLipschitz(a, b, cScaled, prim.radius, r2, prim.strand);
+  }
   // Bent before tapered: a curved horn of CONSTANT radius is legitimate, so
   // the bend branch cannot sit below the untapered shortcut.
   let base: number;
@@ -672,7 +687,10 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       const ends = prim.bend === undefined
         ? [prim.a, prim.b]
         : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
-      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box);
+      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box) * strandReach(prim.strand);
+      // shellReach, not the inlined thickness the strand branch reintroduced:
+      // it also carries the WARP amplitude, an order of magnitude larger than
+      // a sheet's thickness and the term that actually bites.
       const reach = rMax * maxScale + shellReach(prim);
       for (const end of ends)
         if (len(sub(end, c.center)) + reach > c.radius + 1e-6)

@@ -108,6 +108,12 @@ export function placePrims(
       ...(p.core ? { core: true } : {}),
       ...(p.shell === undefined ? {} : { shell: p.shell }),
       ...(p.box === undefined ? {} : { box: p.box }),
+      // The strand bundle rides through placement exactly like paint and
+      // bend: four scalars in the prim's own frame, nothing positional.
+      // radiusRamp's notes record this line being FORGOTTEN on its first
+      // pass — placePrims rebuilds prims field-by-field, so an attribute
+      // that isn't copied here silently never reaches the field.
+      ...(p.strand === undefined ? {} : { strand: p.strand }),
     };
   });
 }

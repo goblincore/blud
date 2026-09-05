@@ -48,6 +48,7 @@ import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
 import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
 import schoolgirlDescribedBlobSrc from '../characters/schoolgirl-described.blob?raw';
+import strandFixtureBlobSrc from '../characters/strand-fixture.blob?raw';
 import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 import dragonBlobSrc from '../characters/dragon.blob?raw';
 import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
@@ -76,6 +77,8 @@ const CHARACTERS: Record<string, string> = {
   schoolgirl: schoolgirlBlobSrc,
   'schoolgirl-alt': schoolgirlAltBlobSrc,
   'schoolgirl-described': schoolgirlDescribedBlobSrc,
+  // Not a character — the strand primitive's acceptance case. See its header.
+  'strand-fixture': strandFixtureBlobSrc,
   bonewalker: bonewalkerBlobSrc,
   dragon: dragonBlobSrc,
   'box-fixture': boxFixtureBlobSrc,
