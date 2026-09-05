@@ -25,8 +25,7 @@
 // world ray direction with rotateYaw(dir, -heading) before passing it in.
 //
 // Two signals the wiring consumes:
-//   - staggered: while true, feed it to ik.ts stepClutch's `staggered` input
-//     — any active wound-clutch is interrupted for the reaction's duration.
+//   - staggered: true while a hit reaction is active.
 //   - phaseKnock: a gait-clock TIME offset (s) to add to gait state.time
 //     before stepping (state.time + phaseKnock). A blast shoves the stride
 //     out of sync; the knock decays to 0 over phaseKnockTime and the gait
@@ -154,7 +153,7 @@ export interface StaggerStep {
   rootOffset: Vec3;
   /** Per-joint offsets (m) — ADD to gait's offsets (body-local); missing = 0. */
   offsets: Partial<Record<GaitJointName, Vec3>>;
-  /** True while a reaction is active — feed to stepClutch's `staggered`. */
+  /** True while a hit reaction is active. */
   staggered: boolean;
   /** Blast only: true for one window mid-lurch. The wiring forces the IK
    *  foot plant to re-lock (a fresh stance edge) while it's up — the body
