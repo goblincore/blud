@@ -128,3 +128,20 @@ test('legacy settling fails at four reads on persistent drift or nonfinite outpu
   let reads=0;await assert.rejects(settleNormalLegacy(async()=>({data:new Float32Array([reads++])}),async()=>({})),/four-read cap/);assert.equal(reads,4);
   await assert.rejects(settleNormalLegacy(async()=>({data:new Float32Array([NaN])}),async()=>({})),/four-read cap/);
 });
+
+test('raw transport reconstructs exact bytes with bounded CDP slices and rejects truncation', async()=>{
+  const { readNormalRaw }=await import('./normal-gradient-intact.mjs');
+  const bytes=Buffer.alloc(32);for(let i=0;i<bytes.length;i++)bytes[i]=i*7;
+  const rgba32f=bytes.toString('base64');let hash=0x811c9dc5;for(const c of rgba32f)hash=Math.imul(hash^c.charCodeAt(0),0x01000193)>>>0;const calls=[];
+  const evaluate=async expression=>{
+    calls.push(expression);
+    if(expression.startsWith('(async()=>'))return {w:2,h:1,chars:rgba32f.length,hash};
+    const [,a,b]=expression.match(/slice\((\d+),(\d+)\)/);return rgba32f.slice(+a,+b);
+  };
+  const raw=await readNormalRaw(evaluate,8);
+  assert.deepEqual(Buffer.from(raw.rgba32f,'base64'),bytes);
+  assert.equal(calls.length,1+Math.ceil(rgba32f.length/8));
+  await assert.rejects(readNormalRaw(async e=>e.startsWith('(async()=>')?{w:2,h:1,chars:rgba32f.length,hash:0}:rgba32f,262144),/hash/);
+  await assert.rejects(readNormalRaw(async expression=>expression.startsWith('(async()=>')?{w:2,h:1,chars:rgba32f.length}:'',8),/incomplete/);
+  await assert.rejects(readNormalRaw(async()=>({w:2,h:1,chars:1})),/metadata/);
+});

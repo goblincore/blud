@@ -117,3 +117,22 @@ export async function settleNormalLegacy(readFrame, readState) {
   }
   throw new Error(`no two identical legacy reads within four-read cap: ${JSON.stringify(settling)}`);
 }
+
+/** Keep multi-megabyte RGBA32F base64 responses out of one CDP message.
+ * The page retains one current raw image; all slices reconstruct exact bytes.
+ * The frame PNG and wound ROI read this same retained image in-page. */
+export async function readNormalRaw(evaluate, sliceChars = 262144) {
+  if(!Number.isInteger(sliceChars)||sliceChars<4||sliceChars>262144)throw new Error('invalid normal raw slice size');
+  const meta=await evaluate(`(async()=>{window.__ngRawTransfer=await __sdfGameDebug.readMarchTarget();const r=window.__ngRawTransfer;let hash=0x811c9dc5;for(let i=0;i<r.rgba32f.length;i++)hash=Math.imul(hash^r.rgba32f.charCodeAt(i),0x01000193)>>>0;return {w:r.w,h:r.h,chars:r.rgba32f.length,hash};})()`);
+  if(!Number.isInteger(meta?.w)||meta.w<1||!Number.isInteger(meta?.h)||meta.h<1||meta.chars!==4*Math.ceil(meta.w*meta.h*16/3)||meta.chars>128*1024*1024)throw new Error('invalid normal raw metadata');
+  const parts=[];
+  for(let start=0;start<meta.chars;start+=sliceChars) {
+    const end=Math.min(start+sliceChars,meta.chars);
+    const part=await evaluate(`window.__ngRawTransfer.rgba32f.slice(${start},${end})`);
+    if(typeof part!=='string'||part.length!==end-start)throw new Error('incomplete normal raw slice');
+    parts.push(part);
+  }
+  const rgba32f=parts.join('');let hash=0x811c9dc5;for(let i=0;i<rgba32f.length;i++)hash=Math.imul(hash^rgba32f.charCodeAt(i),0x01000193)>>>0;
+  if(hash!==meta.hash)throw new Error('normal raw transport hash mismatch');
+  return {w:meta.w,h:meta.h,rgba32f,transport:{chars:meta.chars,sliceChars,slices:parts.length,fnv1a:hash.toString(16)}};
+}

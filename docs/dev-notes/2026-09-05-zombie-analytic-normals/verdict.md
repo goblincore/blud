@@ -1,3 +1,13 @@
+# Zombie analytic normals — correctness passed, performance pending
+
+Updated2026-09-05 after current main b280709 integration and final Task4 GPU validation. Wounds and technical visual evidence now pass. The owner approved manual d1a7450 wound/gameplay appearance; this carries no measured speedup claim. The feature remains default off and the overall performance verdict is incomplete.
+
+Final bounded settling, exact depth/fallback, detached-chunk point proof, both initial impact ticks, and default-on bake/re-gib/view-reuse checks pass. Root accepted the exact fresh body/chunk angle flags after independent gradient/owner/noise proof and image inspection. See [completion evidence](wound-resume/resume.json) for hashes, fresh images and preserved failed runs. Timing is pending under the full Task5 protocol.
+
+## Historical checkpoint before this completion
+
+The following retained report describes the superseded deferred checkpoint, including its original unresolved items and limitations. Final disposition is above and in the completion evidence.
+
 # Zombie analytic normals — incomplete after partial wound validation
 
 Updated 2026-09-05 from the retained Task 4 evidence. The overall verdict is **incomplete**. `reference`, `gpuKernel`, and `intact` pass; `wounds` is deferred; `visualEvidence` and `timing` are skipped by that gate; full `ownerLook` remains pending. The feature stays default off. No performance or acceptance conclusion can be derived from analytic-pixel percentages.

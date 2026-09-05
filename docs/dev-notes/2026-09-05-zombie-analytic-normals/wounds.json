@@ -1,18 +1,18 @@
 {
   "version": 1,
   "phase": "wounds",
-  "status": "deferred",
+  "status": "pass",
   "gpuExecuted": true,
   "defaultMode": 0,
-  "timing": "not measured; Task5 gated",
-  "ownerLook": "unchanged",
+  "timing": "not measured; Task5 pending",
+  "ownerLook": "pass for manual d1a7450 wound/gameplay appearance",
   "trackedBeautyImages": [
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-torso-after-impact-legacy-beauty.png",
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-torso-after-impact-hybrid-beauty.png",
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-detached-chunk-1-legacy-beauty.png",
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-detached-chunk-1-hybrid-beauty.png"
   ],
-  "reason": "Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12).",
+  "reason": "Completed by accepted scoped historical evidence plus final sliced arm/shoulder and default-on bake integration. See wound-resume/resume.json for exact artifacts and root adjudication.",
   "woundNumerics": [
     {
       "name": "sphere-wall",
@@ -3746,5 +3746,529 @@
       "max": 7.610726023748462
     },
     "boundedPolicy": "Final driver requires two identical legacy raw/state reads, four-read maximum; rejected frames retained. Final helper GPU run blocked; Node control tests pass."
+  },
+  "previousCheckpointStatus": {
+    "status": "deferred",
+    "reason": "Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12)."
+  },
+  "completion": {
+    "status": "pass",
+    "base": "d1a7450",
+    "integration": "d5c36b2",
+    "mergedMain": "b280709",
+    "defaultMode": 0,
+    "scopedCodeReview": "pending",
+    "timing": "not measured; Task5 pending",
+    "ownerLook": {
+      "status": "pass",
+      "scope": "manual d1a7450 wound/gameplay appearance; owner could not distinguish modes and noticed no subjective performance change; no measured performance claim"
+    },
+    "technicalReview": {
+      "status": "pass",
+      "authority": "root artifact-specific adjudication 2026-09-05",
+      "acceptedArtifacts": {
+        "sliced-arm": "e22b87be5cc6665beee71dd8e8f9ee1d5c7ad76e0c8511c0c4910ae80b363a7c",
+        "sliced-shoulder": "f8c946ab8e333f5a12fa0b218310a881dcb114afcbdb989ce704fe71a9021abd"
+      },
+      "reason": "Independent localized CPU/GPU central gradient agreement, stable tetra owners and identical noise decomposition; benign reviewed beauty. Specific chunk p99 5.846468578/max 8.913456378 and body max39.398437819 accepted as finite-stencil approximation. Original raw flags and unreviewed capture booleans retained; no general threshold change."
+    },
+    "chunkBake": {
+      "pureDerivativeCapture": "OFF before fresh sever; baked meshes excluded from live SDF coverage",
+      "combinedLifecycle": "default ON; all8 checks pass",
+      "checks": [
+        {
+          "name": "default-on bake and default-off normals",
+          "passed": true
+        },
+        {
+          "name": "spawn inherits hybrid",
+          "passed": true
+        },
+        {
+          "name": "default-on live to baked transition",
+          "passed": true
+        },
+        {
+          "name": "baked mesh retained and pooled mode 0",
+          "passed": true
+        },
+        {
+          "name": "baked mesh retained and pooled mode 1",
+          "passed": true
+        },
+        {
+          "name": "real weapon re-gib creates hybrid live pieces",
+          "passed": true
+        },
+        {
+          "name": "ring reuse resets inherited legacy mode",
+          "passed": true
+        },
+        {
+          "name": "toggle reaches all recycled live pieces",
+          "passed": true
+        }
+      ]
+    },
+    "transport": {
+      "diagnosis": "Full10MB CDP response times out60s after GPU step/timestamps/pixels completed. Reduced responses at identical settings/staging complete166-178ms. Sliced transfer succeeds at identical800x600 resolution.",
+      "implementation": "256KiB bounded base64 slices; exact decoded byte length plus matching page/host FNV1a; current retained frame reused for in-page PNG/ROI; no renderer change",
+      "rawArtifacts": [
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/arm-before-sever-eligibility.rgba32f",
+          "bytes": 7680000,
+          "sha256": "791041e30ff2e330c6f8f47b5fa255adebae923740d68fc6db93ac46059a5a2f"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/arm-before-sever-hybrid-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "925c62250e1e1c622b950834d4854f4283339d590e6c5df162b4cab522509672"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/arm-before-sever-legacy-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "b096fe19abe82589fd0fe795b99377fb0a4bf1da8b10cc739d6f967136de0360"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/arm-before-sever-legacy-settle-0.rgba32f",
+          "bytes": 7680000,
+          "sha256": "b096fe19abe82589fd0fe795b99377fb0a4bf1da8b10cc739d6f967136de0360"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/arm-before-sever-legacy-settle-1.rgba32f",
+          "bytes": 7680000,
+          "sha256": "b096fe19abe82589fd0fe795b99377fb0a4bf1da8b10cc739d6f967136de0360"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/body-after-arm-sever-eligibility.rgba32f",
+          "bytes": 7680000,
+          "sha256": "66d3d7e45ee3362a4110903b15e798d705a6db651963bb0d1a614190f21ecbfa"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/body-after-arm-sever-hybrid-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dbab0d086e3c1955b9f2e9effe87ee5c452ac68f008b94b1e04009be49828211"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/body-after-arm-sever-legacy-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dc9e97783c6e588a13c86158d5aad8803c6aa9e494feacbb00e721ab4ebae16c"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/body-after-arm-sever-legacy-settle-0.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dc9e97783c6e588a13c86158d5aad8803c6aa9e494feacbb00e721ab4ebae16c"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/body-after-arm-sever-legacy-settle-1.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dc9e97783c6e588a13c86158d5aad8803c6aa9e494feacbb00e721ab4ebae16c"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/detached-chunk-1-eligibility.rgba32f",
+          "bytes": 7680000,
+          "sha256": "705f38972dc5df2fad30a71850a2f2e885b2701d574fcce90baa5d75caa73df6"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/detached-chunk-1-hybrid-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dbab0d086e3c1955b9f2e9effe87ee5c452ac68f008b94b1e04009be49828211"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/detached-chunk-1-legacy-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dc9e97783c6e588a13c86158d5aad8803c6aa9e494feacbb00e721ab4ebae16c"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/detached-chunk-1-legacy-settle-0.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dc9e97783c6e588a13c86158d5aad8803c6aa9e494feacbb00e721ab4ebae16c"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-arm/detached-chunk-1-legacy-settle-1.rgba32f",
+          "bytes": 7680000,
+          "sha256": "dc9e97783c6e588a13c86158d5aad8803c6aa9e494feacbb00e721ab4ebae16c"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/moving-shoulder-after-impact-eligibility.rgba32f",
+          "bytes": 7680000,
+          "sha256": "6a9679b0d289783a70ebd8108abbf7def5bca58ead6a693bd1da4648a93ee4f5"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/moving-shoulder-after-impact-hybrid-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "4157fe6386d04128fd5d5d14368e3bd047144267b3e1f64d5edcd6a3a9751c4e"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/moving-shoulder-after-impact-legacy-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "b2cd5a75aac77f2d72fe2c2c6fee7151e680447bc0bffdc815a55c8bc19f5c8d"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/moving-shoulder-after-impact-legacy-settle-0.rgba32f",
+          "bytes": 7680000,
+          "sha256": "b2cd5a75aac77f2d72fe2c2c6fee7151e680447bc0bffdc815a55c8bc19f5c8d"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/moving-shoulder-after-impact-legacy-settle-1.rgba32f",
+          "bytes": 7680000,
+          "sha256": "b2cd5a75aac77f2d72fe2c2c6fee7151e680447bc0bffdc815a55c8bc19f5c8d"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/shoulder-before-impact-eligibility.rgba32f",
+          "bytes": 7680000,
+          "sha256": "ff19b4cb928dd802c14fdc1988beb0fb03f77b8ea1bf954ae680970f52fb3f09"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/shoulder-before-impact-hybrid-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "ddf33da505151fb53f389fef749aa14c1b40cd02200074ca75377fa5db74c09a"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/shoulder-before-impact-legacy-normal.rgba32f",
+          "bytes": 7680000,
+          "sha256": "f8e405cceaeaed008a9e0987fd0edc23cded75f87c8a4ff0ff775445566700a1"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/shoulder-before-impact-legacy-settle-0.rgba32f",
+          "bytes": 7680000,
+          "sha256": "f8e405cceaeaed008a9e0987fd0edc23cded75f87c8a4ff0ff775445566700a1"
+        },
+        {
+          "path": "/tmp/zombie-ng-sliced-shoulder/shoulder-before-impact-legacy-settle-1.rgba32f",
+          "bytes": 7680000,
+          "sha256": "f8e405cceaeaed008a9e0987fd0edc23cded75f87c8a4ff0ff775445566700a1"
+        }
+      ]
+    },
+    "scenes": [
+      {
+        "name": "arm-before-sever",
+        "pieceKey": "body:1",
+        "total": 21285,
+        "reasons": {
+          "ok": 18957,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 2328,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8906272022551093,
+        "depthChanged": 0,
+        "depthMax": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.0477378964424133e-08,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 18957,
+          "p50": 0.3603451006568344,
+          "p95": 0.9895667374440172,
+          "p99": 1.411744798971307,
+          "max": 2.4055136713233707
+        },
+        "sameMode": {
+          "stable": true,
+          "settling": [
+            {
+              "attempt": 0,
+              "stateStable": true,
+              "changed": null,
+              "max": null
+            },
+            {
+              "attempt": 1,
+              "stateStable": true,
+              "changed": 0,
+              "max": 0
+            }
+          ],
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "body-after-arm-sever",
+        "pieceKey": "body:1",
+        "total": 19990,
+        "reasons": {
+          "ok": 17101,
+          "unsupported": 247,
+          "degenerate": 0,
+          "hard-boundary": 525,
+          "owner-unstable": 2117,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8554777388694347,
+        "depthChanged": 0,
+        "depthMax": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.525040715932846e-08,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 17101,
+          "p50": 0.34671052772366406,
+          "p95": 1.0480168916399277,
+          "p99": 1.7288273038860575,
+          "max": 39.39843781940888
+        },
+        "sameMode": {
+          "stable": true,
+          "settling": [
+            {
+              "attempt": 0,
+              "stateStable": true,
+              "changed": null,
+              "max": null
+            },
+            {
+              "attempt": 1,
+              "stateStable": true,
+              "changed": 0,
+              "max": 0
+            }
+          ],
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "detached-chunk-1",
+        "pieceKey": "chunk:1",
+        "total": 1283,
+        "reasons": {
+          "ok": 1183,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 19,
+          "owner-unstable": 81,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.9220576773187841,
+        "depthChanged": 0,
+        "depthMax": 0,
+        "fallbackMax": 0,
+        "scalarMax": 7.916241884231567e-09,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 1183,
+          "p50": 0.5986793199124677,
+          "p95": 2.6655866263851844,
+          "p99": 5.846468578011772,
+          "max": 8.913456378042234
+        },
+        "sameMode": {
+          "stable": true,
+          "settling": [
+            {
+              "attempt": 0,
+              "stateStable": true,
+              "changed": null,
+              "max": null
+            },
+            {
+              "attempt": 1,
+              "stateStable": true,
+              "changed": 0,
+              "max": 0
+            }
+          ],
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "shoulder-before-impact",
+        "pieceKey": "body:1",
+        "total": 23853,
+        "reasons": {
+          "ok": 21333,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 2520,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8943529115834487,
+        "depthChanged": 0,
+        "depthMax": 0,
+        "fallbackMax": 0,
+        "scalarMax": 9.080395102500916e-09,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 21333,
+          "p50": 0.3670936795277125,
+          "p95": 0.9657273608249101,
+          "p99": 1.3864239558722193,
+          "max": 2.611000913351167
+        },
+        "sameMode": {
+          "stable": true,
+          "settling": [
+            {
+              "attempt": 0,
+              "stateStable": true,
+              "changed": null,
+              "max": null
+            },
+            {
+              "attempt": 1,
+              "stateStable": true,
+              "changed": 0,
+              "max": 0
+            }
+          ],
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "moving-shoulder-after-impact",
+        "pieceKey": "body:1",
+        "total": 26407,
+        "reasons": {
+          "ok": 23147,
+          "unsupported": 245,
+          "degenerate": 0,
+          "hard-boundary": 334,
+          "owner-unstable": 2681,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8765478850304843,
+        "depthChanged": 0,
+        "depthMax": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.7695128917694092e-08,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 23147,
+          "p50": 0.37039433954870943,
+          "p95": 1.0779619216498937,
+          "p99": 1.6930036341187737,
+          "max": 7.610726023748462
+        },
+        "sameMode": {
+          "stable": true,
+          "settling": [
+            {
+              "attempt": 0,
+              "stateStable": true,
+              "changed": null,
+              "max": null
+            },
+            {
+              "attempt": 1,
+              "stateStable": true,
+              "changed": 0,
+              "max": 0
+            }
+          ],
+          "hybridStateStable": true
+        }
+      }
+    ],
+    "rawReports": [
+      {
+        "name": "integrated-shoulder",
+        "path": "/tmp/zombie-ng-integrated-shoulder/wounds.json",
+        "sha256": "f0b87c081875bfd662829430d24961ae359db0c2ea33fc68da6c91c28c67254d",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/integrated-shoulder.json.gz"
+      },
+      {
+        "name": "integrated-arm",
+        "path": "/tmp/zombie-ng-integrated-arm/wounds.json",
+        "sha256": "54a6688d4012839daf769ac207bb4754d9a918fcf973a1e1e18a0aa9aa4a01f1",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/integrated-arm.json.gz"
+      },
+      {
+        "name": "integrated-shoulder-followup",
+        "path": "/tmp/zombie-ng-integrated-shoulder-followup/wounds.json",
+        "sha256": "dada629e63e2a3cdb2348716c30604929b33e3d727b3dbb54db416f446a3f6be",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/integrated-shoulder-followup.json.gz"
+      },
+      {
+        "name": "integrated-bake",
+        "path": "/tmp/zombie-ng-bake-integration/bake-integration.json",
+        "sha256": "14f2c7f660e39b622088671728736c18d17d4a52430be2278509b5973ec74b66",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/integrated-bake.json.gz"
+      },
+      {
+        "name": "simple-candidate",
+        "path": "/tmp/zombie-ng-simple-candidate/control.json",
+        "sha256": "fc4727e768499b190755727537cd0d72d22191e626f10fb9358fd1a7b7f961d7",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/simple-candidate.json.gz"
+      },
+      {
+        "name": "staged-control",
+        "path": "/tmp/zombie-ng-staged-control/control.json",
+        "sha256": "6be0b8dafae1f2fd64317f4e5ab7c48a7bd91be4eb0925aaf73e3ea4cad8fd91",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/staged-control.json.gz"
+      },
+      {
+        "name": "transport-control",
+        "path": "/tmp/zombie-ng-transport-control/control.json",
+        "sha256": "af76ede5ea738b119c78bbb8f6c706ad4a7e039f60414a92a2873e72273b7721",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/transport-control.json.gz"
+      },
+      {
+        "name": "sliced-arm",
+        "path": "/tmp/zombie-ng-sliced-arm/wounds.json",
+        "sha256": "e22b87be5cc6665beee71dd8e8f9ee1d5c7ad76e0c8511c0c4910ae80b363a7c",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/sliced-arm.json.gz"
+      },
+      {
+        "name": "sliced-shoulder",
+        "path": "/tmp/zombie-ng-sliced-shoulder/wounds.json",
+        "sha256": "f8c946ab8e333f5a12fa0b218310a881dcb114afcbdb989ce704fe71a9021abd",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/sliced-shoulder.json.gz"
+      },
+      {
+        "name": "sliced-bake",
+        "path": "/tmp/zombie-ng-sliced-bake/bake-integration.json",
+        "sha256": "ec35b00a568fbea182569de3b36acefb8f8fdebe5e1bc2d04bbe790d23056d8a",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/sliced-bake.json.gz"
+      },
+      {
+        "name": "root-validation",
+        "path": "/tmp/zombie-ng-integrated-root-validation.json",
+        "sha256": "093339cd6534ab5ae1e090d22308ead8b88449a40be8470fad20a31a1bc9a97c",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/root-validation.json.gz"
+      },
+      {
+        "name": "root-arm-proof",
+        "path": "/tmp/zombie-ng-sliced-arm-root-proof.json",
+        "sha256": "17e84dba965c8df12a8eca3f5851f93b30b02371dab52622b4b0c332c98ec659",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/root-arm-proof.json.gz"
+      }
+    ],
+    "images": [
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/body-after-arm-sever-legacy-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/body-after-arm-sever-hybrid-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/detached-chunk-1-legacy-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/detached-chunk-1-hybrid-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/elbow-slug-sever-flight-0-1.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/elbow-slug-sever-flight-1-1.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/sever-motion-0-000.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/sever-motion-1-000.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/moving-shoulder-after-impact-legacy-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/moving-shoulder-after-impact-hybrid-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/moving-shoulder-control-flight-0-1.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/moving-shoulder-control-flight-1-1.png"
+    ],
+    "motion": {
+      "initialTicks": "Both first projectile/impact ticks paired for actual elbow sever and moving shoulder",
+      "later": "One later sever-flight frame paired; prior12/24frame sequences retained as historical scope",
+      "beautyState": "Exact stronger scene signatures/material/config controls passed in all fresh pairs"
+    },
+    "remaining": [
+      "Scoped implementation review",
+      "Task5 full paired timing protocol; no main merge/push/default flip"
+    ]
   }
 }

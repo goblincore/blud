@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyShipDefaults } from './lib/sdf-closeup-stage.mjs';
-import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames, normalCoverageFailure, normalAngularFailure, settleNormalLegacy } from './lib/normal-gradient-intact.mjs';
+import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames, normalCoverageFailure, normalAngularFailure, settleNormalLegacy, readNormalRaw } from './lib/normal-gradient-intact.mjs';
 import { readNormalGates, writeNormalGates } from './lib/normal-gradient-gates.mjs';
 
 const argv = process.argv.slice(2);
@@ -202,9 +202,11 @@ const send = (method, params = {}) => withTimeout(new Promise((resolveSend, reje
 }), 30000, method);
 
 const evaluate = async expression => {
-  const response = await send('Runtime.evaluate', {
+  report.lastOperation=expression.slice(0,220);
+  let response;
+  try { response = await send('Runtime.evaluate', {
     expression, awaitPromise: true, returnByValue: true,
-  });
+  }); } catch(error) { const detail=`${error.message}; expression: ${report.lastOperation}`; (report.operationErrors??=[]).push(detail); throw new Error(detail,{cause:error}); }
   if (response.result?.exceptionDetails) {
     throw new Error(JSON.stringify(response.result.exceptionDetails).slice(0, 1200));
   }
@@ -263,6 +265,12 @@ async function runIntact() {
     report.criteria={depth:'exact float alpha equality',fallbackMax:1e-6,scalarMax:1e-5,legacyStencilAngle:{p99:5,max:25,unit:'degrees'},intactHeadAndTorsoCoverage:.5,otherSceneProbeFloor:.1,ownerLook:'pending',timing:'not measured'};
     await evaluate(`__sdfGame.freeze(true); __sdfGame.setLoopRunning(false); __sdfGame.installDebugProbe()`);
     await applyShipDefaults(evaluate);
+    // Pure derivative captures need persistent live SDF chunks. A frozen actor
+    // does not stop the default-on settled-chunk bake scheduler.
+    if(phase==='wounds'&&!argv.includes('--bake-integration')) {
+      await evaluate('__sdfGame.setChunkBake(false)');
+      report.chunkBake={enabled:await evaluate('__sdfGame.chunkBake'),scope:'diagnostic live-piece capture; disabled before fresh sever',bakedMeshesExcludedFromCoverage:true};
+    }
     await evaluate(`__sdfGame.step(1); window.__ngClockOriginal = performance.now.bind(performance); window.__ngClock = performance.now(); performance.now = () => window.__ngClock`);
   };
   await bootScene();
@@ -289,7 +297,8 @@ async function runIntact() {
   };
   const frame = async (mode, diagnostic, name) => {
     const before=await evaluate('__sdfGameDebug.normalCaptureState()');
-    const r = await evaluate(`__sdfGame.setNormalGradient(${mode}); __sdfGame.setNormalGradientDebug(${diagnostic}); __sdfGameDebug.readMarchTarget()`);
+    await evaluate(`__sdfGame.setNormalGradient(${mode}); __sdfGame.setNormalGradientDebug(${diagnostic})`);
+    const r = await readNormalRaw(evaluate);
     const after=await evaluate('__sdfGameDebug.normalCaptureState()');
     if(JSON.stringify(before)!==JSON.stringify(after))throw new Error(`${name}: camera/packed rows/config changed during raw pass`);
     if (!r?.rgba32f || !(r.w>0 && r.h>0)) throw new Error('missing raw float target');
@@ -298,7 +307,7 @@ async function runIntact() {
     writeFileSync(resolve(outDir, `${name}.rgba32f`), bytes);
     const data = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.length/4);
     const png = await evaluate(`(() => {
-      const raw = Uint8Array.from(atob(${JSON.stringify(r.rgba32f)}), c=>c.charCodeAt(0));
+      const raw = Uint8Array.from(atob(window.__ngRawTransfer.rgba32f), c=>c.charCodeAt(0));
       const data = new Float32Array(raw.buffer);
       const canvas = document.createElement('canvas'); canvas.width=${r.w}; canvas.height=${r.h};
       const ctx=canvas.getContext('2d'); const img=ctx.createImageData(canvas.width,canvas.height);
@@ -345,7 +354,7 @@ async function runIntact() {
       } else for(let k=0;k<3;k++) fallbackMax=Math.max(fallbackMax,Math.abs(legacy.data[i+k]-hybrid.data[i+k]));
     }
     suspects.sort((a,b)=>b.angle-a.angle);const sampledSuspects=suspects.slice(0,8).map(s=>s.pixel);
-    if(phase==='wounds')woundROI=await evaluate(`__sdfGameDebug.normalWoundCoverage(${JSON.stringify(bodyId)},${JSON.stringify(Buffer.from(eligibility.data.buffer,eligibility.data.byteOffset,eligibility.data.byteLength).toString('base64'))},${eligibility.w},${eligibility.h},${JSON.stringify(sampledSuspects)})`);
+    if(phase==='wounds')woundROI=await evaluate(`__sdfGameDebug.normalWoundCoverage(${JSON.stringify(bodyId)},window.__ngRawTransfer.rgba32f,${eligibility.w},${eligibility.h},${JSON.stringify(sampledSuspects)})`);
     const localized=woundROI?.samples?.length?await evaluate(`__sdfGameDebug.normalPointSamples(${JSON.stringify(bodyId)},${JSON.stringify(woundROI.samples.map(s=>s.p))})`):[];
     angles.sort((a,b)=>a-b);
     const total=Object.values(reasons).reduce((a,b)=>a+b,0);
@@ -483,13 +492,14 @@ async function runIntact() {
       report.detachedPieces=pieces;
       if(!pieces.length)report.failures.push('actual elbow slug did not produce detached pieces');
       for(const piece of pieces)await compare(`detached-${piece.key.replace(':','-')}`,piece.key);
-      for(let i=0;i<12;i++) {
+      const flightFrames=argv.includes('--arm-smoke')?1:12;
+      for(let i=0;i<flightFrames;i++) {
         await simulate(1);
         const a=await beauty(0,stage.body,`sever-motion-0-${String(i).padStart(3,'0')}`);
         const b=await beauty(1,stage.body,`sever-motion-1-${String(i).padStart(3,'0')}`);
         if(JSON.stringify(a)!==JSON.stringify(b))report.failures.push(`sever-motion ${i}: mismatched state`);
       }
-      report.motion.push({name:'sever-flight',frames:12,simDt:1/60,source:'actual elbow slug; every simulation frame captured'});
+      report.motion.push({name:'sever-flight',frames:flightFrames,simDt:1/60,source:'actual elbow slug; every simulation frame captured'});
       if(argv.includes('--arm-smoke')){report.partial=true;report.failures.push('arm smoke only; full wound event validation omitted');return;}
       const wall=report.results.reduce((n,r)=>n+(r.woundROI?.regions.wall.analytic??0),0);
       const curved=report.results.reduce((n,r)=>n+(r.woundROI?.regions.curvedInternal.hits??0),0);
@@ -513,7 +523,8 @@ async function runIntact() {
     await evaluate(`__sdfGame.zombie(${body}).view.uniforms.counts2.value.y = 0`);
     // Shipped-look paired moving-body/flashlight reel, same frozen pose per pair.
     // Clock increments are explicit and restored before this driver exits.
-    for(let i=0;i<12;i++) {
+    const flightFrames=argv.includes('--arm-smoke')?1:12;
+      for(let i=0;i<flightFrames;i++) {
       await evaluate(`performance.now=window.__ngClockOriginal;__sdfGame.freeze(false);__sdfGame.step(4);__sdfGame.freeze(true);window.__ngClock+=66.6667;performance.now=()=>window.__ngClock`);
       const z=await evaluate(`__sdfGame.zombies().find(z=>z.id===${body})`);
       const ang=.2*Math.sin(i*.4), distance=1.8;
@@ -553,7 +564,8 @@ async function runIntact() {
     const mixedFallback=normalCoverageFailure(report.results.at(-1),{woundControl:true});if(mixedFallback)report.failures.push(mixedFallback);
 
   } finally {
-    await evaluate(`if(window.__ngClockOriginal)performance.now=window.__ngClockOriginal;__sdfGame.setNormalGradient(0);__sdfGame.setNormalGradientDebug(0);__sdfGame.setLoopRunning(false)`);
+    try { await evaluate(`if(window.__ngClockOriginal)performance.now=window.__ngClockOriginal;__sdfGame.setNormalGradient(0);__sdfGame.setNormalGradientDebug(0);__sdfGame.setLoopRunning(false);delete window.__ngRawTransfer`); }
+    catch(error) { report.failures.push(`scene cleanup: ${error.message}`); }
   }
 }
 

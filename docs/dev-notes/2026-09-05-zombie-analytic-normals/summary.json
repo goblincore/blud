@@ -1,13 +1,13 @@
 {
-  "commit": "6737ba8",
+  "commit": "d5c36b2 plus Task4 capture completion",
   "gates": {
     "reference": "pass",
     "gpuKernel": "pass",
     "intact": "pass",
-    "wounds": "deferred",
-    "visualEvidence": "skipped-by-gate",
-    "timing": "skipped-by-gate",
-    "ownerLook": "pending"
+    "wounds": "pass",
+    "visualEvidence": "pass",
+    "timing": "pending",
+    "ownerLook": "pass"
   },
   "scenes": [
     {
@@ -17,13 +17,13 @@
     },
     {
       "name": "wounded-head-and-torso",
-      "status": "partial-evidence-validation-deferred",
-      "reason": "Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is deferred; final chunk proof and updated capture harness validation remain unresolved."
+      "status": "correctness-and-technical-appearance-pass",
+      "reason": "Accepted historical plus final Task4 evidence; timing remains unmeasured."
     },
     {
       "name": "two-body-close-up-with-surrounding-actors",
-      "status": "skipped-by-gate",
-      "reason": "Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is deferred; final chunk proof and updated capture harness validation remain unresolved."
+      "status": "pending",
+      "reason": "Task5 full paired performance fixture remains unmeasured."
     },
     {
       "name": "walking-and-flashlight-motion",
@@ -32,8 +32,8 @@
     },
     {
       "name": "impact-stagger-sever-sequence",
-      "status": "partial-evidence-validation-deferred",
-      "reason": "Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is deferred; final chunk proof and updated capture harness validation remain unresolved. Motion scope: actual slug before reel; every subsequent simulation frame captured in both modes; actual elbow slug; every simulation frame captured."
+      "status": "correctness-and-technical-appearance-pass",
+      "reason": "Accepted historical plus final Task4 evidence; timing remains unmeasured."
     },
     {
       "name": "unsupported-control",
@@ -42,15 +42,15 @@
     }
   ],
   "timings": {
-    "status": "skipped-by-gate",
+    "status": "pending",
     "measurements": null,
-    "reason": "No eligible paired runs were attempted; no frame-time or compile-time claim is available."
+    "reason": "Task4 prerequisites passed; full Task5 paired gameplay timing has not run."
   },
   "coverage": {
     "status": "incomplete-wounds-deferred",
     "scope": {
       "intactValidation": "complete",
-      "fullWoundGameplayValidation": "deferred"
+      "fullWoundGameplayValidation": "complete for Task4 correctness scope; full Task5 performance fixtures pending"
     },
     "measurements": [
       {
@@ -88,7 +88,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 7.916241884231567e-9,
+        "scalarMax": 7.916241884231567e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 8337,
@@ -133,7 +133,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 9.080395102500916e-9,
+        "scalarMax": 9.080395102500916e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 32036,
@@ -178,7 +178,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.0186340659856796e-8,
+        "scalarMax": 1.0186340659856796e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 53213,
@@ -223,7 +223,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.0360963642597198e-8,
+        "scalarMax": 1.0360963642597198e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 34322,
@@ -313,7 +313,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 3.725290298461914e-9,
+        "scalarMax": 3.725290298461914e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 23,
@@ -358,7 +358,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 5.122274160385132e-9,
+        "scalarMax": 5.122274160385132e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 1702,
@@ -388,7 +388,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.0360963642597198e-8,
+        "scalarMax": 1.0360963642597198e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 32071,
@@ -503,7 +503,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.594889909029007e-8,
+        "scalarMax": 1.594889909029007e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 33830,
@@ -619,7 +619,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.83936208486557e-8,
+        "scalarMax": 1.83936208486557e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 20917,
@@ -734,7 +734,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 2.3865140974521637e-8,
+        "scalarMax": 2.3865140974521637e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 27538,
@@ -849,7 +849,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.0360963642597198e-8,
+        "scalarMax": 1.0360963642597198e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 39122,
@@ -964,7 +964,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.7695128917694092e-8,
+        "scalarMax": 1.7695128917694092e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 40843,
@@ -1079,7 +1079,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 2.2351741790771484e-8,
+        "scalarMax": 2.2351741790771484e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 29874,
@@ -1194,7 +1194,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 9.080395102500916e-9,
+        "scalarMax": 9.080395102500916e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 21333,
@@ -1309,7 +1309,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.0477378964424133e-8,
+        "scalarMax": 1.0477378964424133e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 18957,
@@ -1429,7 +1429,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.4901161193847656e-8,
+        "scalarMax": 1.4901161193847656e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 17103,
@@ -1550,7 +1550,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 7.916241884231567e-9,
+        "scalarMax": 7.916241884231567e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 1183,
@@ -1585,7 +1585,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 9.080395102500916e-9,
+        "scalarMax": 9.080395102500916e-09,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 21333,
@@ -1705,7 +1705,7 @@
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 1.7695128917694092e-8,
+        "scalarMax": 1.7695128917694092e-08,
         "nonFinite": 0,
         "angularDegrees": {
           "count": 23147,
@@ -1808,886 +1808,24 @@
         }
       }
     ],
-    "reason": "Historical raw numerical/anatomical coverage is preserved. Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Wound ROI and piece coverage are retained separately; coverage percentages do not establish performance or acceptance."
+    "reason": "Historical plus final body/chunk/wound captures accepted; see wound-resume/resume.json. No timing inference from coverage."
   },
   "woundEvidence": {
-    "status": "deferred",
-    "oracleCases": 11,
-    "firstReadControl": {
-      "path": "/tmp/zombie-ng-wounds-shoulder-controlled/moving-shoulder-after-impact-capture-state.json",
-      "cpuStateExact": true,
-      "legacyToLegacy": {
-        "changedFloats": 14670,
-        "depthChanged": 3666,
-        "depthMax": 0.08432507514953613
-      },
-      "firstLegacyMatchesHistoricalFailedLegacy": "byte-identical (0 changed floats)",
-      "settledLegacyToHybrid": {
-        "depthChanged": 0,
-        "fallbackMax": 0,
-        "p99": 1.6930036341187737,
-        "max": 7.610726023748462
-      },
-      "boundedPolicy": "Final driver requires two identical legacy raw/state reads, four-read maximum; rejected frames retained. Final helper GPU run blocked; Node control tests pass."
-    },
-    "localizedReviews": [
-      {
-        "scene": "torso-after-impact",
-        "pixel": [
-          451,
-          254
-        ],
-        "state": [
-          0,
-          5,
-          1.0011239051818848,
-          0
-        ],
-        "cpuGradientError": 0.000016674640015490617,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.00023625660022377044
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.000047337049582423526
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.00012134049616373271
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0007204597111494188
-          }
-        ],
-        "tetraOwners": [
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ]
-        ],
-        "noiseDecompositionError": 0.000012214328550367924
-      },
-      {
-        "scene": "torso-after-impact",
-        "pixel": [
-          452,
-          255
-        ],
-        "state": [
-          0,
-          5,
-          1.001312255859375,
-          0
-        ],
-        "cpuGradientError": 0.000004460205045338127,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.0019595590117712515
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.0000437258152633755
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.0003298276603982011
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0007106730298620856
-          }
-        ],
-        "tetraOwners": [
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ]
-        ],
-        "noiseDecompositionError": 0.00004002071111599187
-      },
-      {
-        "scene": "torso-after-impact",
-        "pixel": [
-          452,
-          256
-        ],
-        "state": [
-          0,
-          5,
-          1.001726508140564,
-          0
-        ],
-        "cpuGradientError": 0.000013524039938560395,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.0000429823670845699
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.0000863036605889335
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.0003384359606001809
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0009245314707811364
-          }
-        ],
-        "tetraOwners": [
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ]
-        ],
-        "noiseDecompositionError": 0.000046512896764630284
-      },
-      {
-        "scene": "torso-after-impact",
-        "pixel": [
-          452,
-          257
-        ],
-        "state": [
-          0,
-          5,
-          1.0022261142730713,
-          0
-        ],
-        "cpuGradientError": 0.00001869091843436158,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.00011051896142982761
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.0000872898885804116
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.00012019053392110641
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0002681551619420463
-          }
-        ],
-        "tetraOwners": [
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ]
-        ],
-        "noiseDecompositionError": 0.000040506646826666774
-      },
-      {
-        "scene": "torso-after-impact",
-        "pixel": [
-          453,
-          258
-        ],
-        "state": [
-          0,
-          5,
-          1.0025883913040161,
-          0
-        ],
-        "cpuGradientError": 0.0000041511571775871795,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.00015564540636136718
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.00020189702078933982
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.0003169524250589609
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0004809768432839912
-          }
-        ],
-        "tetraOwners": [
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ]
-        ],
-        "noiseDecompositionError": 0.00003632524599800133
-      },
-      {
-        "scene": "torso-after-impact",
-        "pixel": [
-          454,
-          258
-        ],
-        "state": [
-          0,
-          5,
-          1.0023266077041626,
-          0
-        ],
-        "cpuGradientError": 0.000008842681053990062,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.00014361639484032821
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.00007792876185152244
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.00020208812781082495
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0004559458408491685
-          }
-        ],
-        "tetraOwners": [
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ],
-          [
-            5,
-            5
-          ]
-        ],
-        "noiseDecompositionError": 1.7773078054928252e-8
-      },
-      {
-        "scene": "body-after-arm-sever",
-        "pixel": [
-          401,
-          314
-        ],
-        "state": [
-          0,
-          10,
-          4.030343532562256,
-          1
-        ],
-        "cpuGradientError": 0.000021260434884187147,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.0026781214003152904
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.00025931570507338133
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.0008367305557819412
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.001263105017288857
-          }
-        ],
-        "tetraOwners": [
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ]
-        ],
-        "noiseDecompositionError": 0.000008452913030141612
-      },
-      {
-        "scene": "body-after-arm-sever",
-        "pixel": [
-          402,
-          315
-        ],
-        "state": [
-          0,
-          10,
-          3.95371150970459,
-          1
-        ],
-        "cpuGradientError": 0.00005186433383102138,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.002124786606691917
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.0004766751143919103
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.00041193921979789836
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0012043661274998899
-          }
-        ],
-        "tetraOwners": [
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ]
-        ],
-        "noiseDecompositionError": 0.000007291340021384559
-      },
-      {
-        "scene": "body-after-arm-sever",
-        "pixel": [
-          405,
-          318
-        ],
-        "state": [
-          0,
-          10,
-          3.563020706176758,
-          1
-        ],
-        "cpuGradientError": 0.00001785695572043026,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.007000480858301002
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.0008880147310202968
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.0011765046194194897
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0013057002649995008
-          }
-        ],
-        "tetraOwners": [
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ]
-        ],
-        "noiseDecompositionError": 0.000014538855661062284
-      },
-      {
-        "scene": "body-after-arm-sever",
-        "pixel": [
-          392,
-          319
-        ],
-        "state": [
-          0,
-          10,
-          3.4303531646728516,
-          1
-        ],
-        "cpuGradientError": 0.000008355622263225055,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.06206187945677721
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.006994164812573423
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.00019345598733287289
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0007935235280576403
-          }
-        ],
-        "tetraOwners": [
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ]
-        ],
-        "noiseDecompositionError": 0.00004014195466112176
-      },
-      {
-        "scene": "body-after-arm-sever",
-        "pixel": [
-          391,
-          328
-        ],
-        "state": [
-          0,
-          10,
-          3.5961380004882812,
-          1
-        ],
-        "cpuGradientError": 0.000012288320364556421,
-        "gpuCentralErrors": [
-          {
-            "epsilon": 0.0015,
-            "error": 0.07442893970725782
-          },
-          {
-            "epsilon": 0.0005,
-            "error": 0.015445499782206992
-          },
-          {
-            "epsilon": 0.0002,
-            "error": 0.0013335351084907676
-          },
-          {
-            "epsilon": 0.0001,
-            "error": 0.0007891266722405856
-          }
-        ],
-        "tetraOwners": [
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ],
-          [
-            10,
-            10
-          ]
-        ],
-        "noiseDecompositionError": 0.0000055069989791239935
-      }
-    ],
-    "events": {
-      "final-events": [
-        {
-          "name": "torso-slug-impact",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 0,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 1,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          }
-        },
-        {
-          "name": "torso-overlap-impact",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 1,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 2,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          }
-        },
-        {
-          "name": "head-slug-impact",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 0,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 1,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          }
-        },
-        {
-          "name": "head-repeat-impact",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 1,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 2,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          }
-        },
-        {
-          "name": "shoulder-slug-sever",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 0,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 1,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          }
-        }
-      ],
-      "elbow-controlled": [
-        {
-          "name": "elbow-slug-sever",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 0,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 2,
-            "pieces": 11,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10",
-              "chunk:1"
-            ]
-          }
-        }
-      ],
-      "shoulder-controlled": [
-        {
-          "name": "moving-shoulder-control",
-          "source": "actual fireSlug projectile/impact/impulse",
-          "before": {
-            "wounds": 0,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          },
-          "after": {
-            "wounds": 1,
-            "pieces": 10,
-            "pieceKeys": [
-              "body:1",
-              "body:2",
-              "body:3",
-              "body:4",
-              "body:5",
-              "body:6",
-              "body:7",
-              "body:8",
-              "body:9",
-              "body:10"
-            ]
-          }
-        }
-      ]
-    },
-    "motion": {
-      "final-events": [
-        {
-          "name": "impact-stagger-moving-light",
-          "frames": 24,
-          "simDt": 0.016666666666666666,
-          "source": "actual slug before reel; every subsequent simulation frame captured in both modes"
-        }
-      ],
-      "elbow-controlled": [
-        {
-          "name": "sever-flight",
-          "frames": 12,
-          "simDt": 0.016666666666666666,
-          "source": "actual elbow slug; every simulation frame captured"
-        }
-      ],
-      "shoulder-controlled": []
-    },
-    "unresolved": [
-      "Run detached-piece worst-point CPU/GPU finite-difference and owner/noise proof, then controller review of p99=5.846 degrees; never silently raise threshold.",
-      "Run the final bounded settling and piece-point adapter on real WebGPU. Its focused Node tests and tsc pass, but the last GPU launch was blocked.",
-      "Capture both initial projectile flight/impact simulation ticks in both modes using the added driver hook. Existing event runs step two ticks before their first post-impact capture; full-rate subsequent 24-frame stagger and 12-frame sever flight evidence exists.",
-      "Validate stronger full-state beauty signatures and refreshHull control across moving-light reel. Earlier motion review was scoped to actor appearance because background shadows differed."
-    ],
-    "reason": "Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12)."
+    "status": "pass",
+    "completion": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/resume.json",
+    "historicalRawReports": "wounds.json retains original failures and raw archives"
   },
   "appearance": {
     "intactOwnerReview": "pass",
-    "woundTechnicalReview": "partial-historical-artifacts-only",
-    "fullOwnerLook": "pending",
-    "visualEvidenceGate": "skipped-by-gate",
-    "woundMotionScope": "actual slug before reel; every subsequent simulation frame captured in both modes; actual elbow slug; every simulation frame captured",
-    "reason": "Specific retained wound captures have controller review. Final settling, chunk proof and initial impact capture changes have not run on GPU, so full visual acceptance is unavailable."
+    "woundTechnicalReview": "pass for artifact-specific historical plus sliced captures",
+    "fullOwnerLook": "pass",
+    "ownerScope": "manual d1a7450 wound/gameplay appearance; owner could not distinguish modes and noticed no subjective performance change; no measured performance claim",
+    "visualEvidenceGate": "pass",
+    "woundMotionScope": {
+      "initialTicks": "Both first projectile/impact ticks paired for actual elbow sever and moving shoulder",
+      "later": "One later sever-flight frame paired; prior12/24frame sequences retained as historical scope",
+      "beautyState": "Exact stronger scene signatures/material/config controls passed in all fresh pairs"
+    }
   },
   "artifacts": {
     "kernel": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
@@ -2795,7 +1933,9 @@
         "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/shoulder-controlled.json.gz",
         "note": "Original moving shoulder repeated; first legacy raw byte-identical to failed arm run; subsequent legacy/hybrid exact depth/fallback"
       }
-    ]
+    ],
+    "resume": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/resume.json",
+    "historicalCheckpointSummary": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/pre-resume-summary.json.gz"
   },
-  "conclusion": "incomplete"
+  "conclusion": "incomplete: correctness and reviewed appearance passed; performance not measured"
 }
