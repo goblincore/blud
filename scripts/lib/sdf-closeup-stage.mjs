@@ -356,7 +356,11 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
     await ev(`__sdfGame.setFlatAlbedo(${L.flat})`);
     await ev('__sdfGame.step(2)');
     const occ = await ev('__sdfGame.occupancy()');
-    await ev(`__sdfGame.bench({ kind: 'closeup', mode: 'throughput', warmup: 120, chunkFrames: 10, closeupFrames: 240, label: ${JSON.stringify(leg)}, ...(L.benchArgs ?? ${JSON.stringify(opts.benchArgs ?? {})}) })`);
+    // L is NODE-side only — `L.benchArgs` written bare here reached the page
+    // as live JS and threw ReferenceError before any bench ran (the exact
+    // failure class the deleted smoke scripts existed to catch; found first
+    // run of the real bench). Interpolate the resolved value instead.
+    await ev(`__sdfGame.bench({ kind: 'closeup', mode: 'throughput', warmup: 120, chunkFrames: 10, closeupFrames: 240, label: ${JSON.stringify(leg)}, ...(${JSON.stringify(L.benchArgs ?? opts.benchArgs ?? {})}) })`);
     const r = JSON.parse(await ev('JSON.stringify(window.__gameBench)'));
     if (!r.valid) fail(`${leg} rep${rep}: ${r.hiddenSteps} hidden frames — INVALID`);
     // Every segment, keyed by name (close-up task 4): the closeup scenario
