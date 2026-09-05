@@ -31,21 +31,26 @@ export type ArmStyle = 'swing' | 'reach';
 // Joint schema — one name per rig point.
 // ---------------------------------------------------------------------------
 
-/** One name per rig point, mirroring the zombie's authored bones (body.ts).
- *  Mirrored bones use the `.l`/`.r` suffix convention from mirror.ts. */
+/** One name per rig point. The first 17 are the PRIMARY joints (the zombie's
+ *  authored bones). The rest are SECONDARY: extra rig points that richer
+ *  skeletons have (a two- or three-bone spine, clavicles that start off the
+ *  spine, hand and foot bones with free tips). A secondary joint carries a
+ *  derived offset (rigid with its parent) — nothing in the gait is authored
+ *  against it, so a body without one loses nothing. */
 export type GaitJointName =
   | 'pelvis' | 'hips' | 'chest' | 'neck' | 'head'
   | 'shoulderL' | 'shoulderR' | 'elbowL' | 'elbowR' | 'handL' | 'handR'
-  | 'hipL' | 'hipR' | 'kneeL' | 'kneeR' | 'footL' | 'footR';
+  | 'hipL' | 'hipR' | 'kneeL' | 'kneeR' | 'footL' | 'footR'
+  | 'spineA' | 'spineB' | 'clavicleL' | 'clavicleR'
+  | 'handTipL' | 'handTipR' | 'toeL' | 'toeR';
 
-/** The 17 joints in rig-point order. bindRig emits points as dedup'd bone
- *  head/tail positions in body.bones iteration order; jointNamesForBody
- *  reproduces that order with names, so `pose.offsets[names[i]]` lines up
- *  with `rig.points[i]`. */
+/** Every joint, primary first — the ORDER is the naming priority when two
+ *  bone ends share a position (jointNamesForBody). */
 export const GAIT_JOINTS: readonly GaitJointName[] = [
   'pelvis', 'hips', 'chest', 'neck', 'head',
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
-  'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+  'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
+  'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
 ];
 
 /** All gait frequencies and amplitudes in one place — the "motion DNA".
@@ -448,6 +453,16 @@ export function stepGait(
     kneeR: legB.knee,
     footL: legA.foot,
     footR: legB.foot,
+    // Secondary joints — rigid with their parents. Nothing is authored
+    // against them; they exist so richer skeletons have a target per point.
+    spineA: [sway * 0.75, bob * 0.75, 0],
+    spineB: [sway * 0.65, bob * 0.65, 0],
+    clavicleL: [sway * 0.6, bob * 0.6, 0],
+    clavicleR: [sway * 0.6, bob * 0.6, 0],
+    handTipL: armA.hand,
+    handTipR: armB.hand,
+    toeL: legA.foot,
+    toeR: legB.foot,
   };
 
   let p = (phiL % TAU) / TAU;
@@ -470,23 +485,32 @@ export function stepGait(
 // ---------------------------------------------------------------------------
 
 // Bone-name → joint-name table. Mirrored bones (suffix `.l`/`.r`) map to the
-// sided head/tail names; centerline bones stay unsided. Matches body.ts.
-// Values use the unsuffixed base names ('shoulder', 'hip', …) that become
-// sided once the `.l`/`.r` suffix is applied — see jointForBoneEnd.
-const JOINT_AT: Record<string, { head?: string; tail?: string }> = {
-  pelvis: { head: 'pelvis', tail: 'hips' },
-  spine: { head: 'hips', tail: 'chest' },
-  neck: { head: 'chest', tail: 'neck' },
-  skull: { head: 'neck', tail: 'head' },
-  clavicle: { head: 'chest', tail: 'shoulder' },
+// sided names. The zombie's names (spine, upperArm, foreArm) and the newer
+// `.blob` names (spine1/chest/spine2, upperarm/forearm/hand, foot) both
+// resolve. A bone end absent here is a wiring error (makeMotionJoints nulls).
+const JOINT_AT: Record<string, { head: string; tail: string }> = {
+  pelvis:   { head: 'pelvis',   tail: 'hips' },
+  spine:    { head: 'hips',     tail: 'chest' },
+  spine1:   { head: 'hips',     tail: 'spineA' },
+  chest:    { head: 'spineA',   tail: 'spineB' },
+  spine2:   { head: 'spineB',   tail: 'chest' },
+  neck:     { head: 'chest',    tail: 'neck' },
+  skull:    { head: 'neck',     tail: 'head' },
+  clavicle: { head: 'clavicle', tail: 'shoulder' },
   upperArm: { head: 'shoulder', tail: 'elbow' },
-  foreArm: { head: 'elbow', tail: 'hand' },
-  thigh: { head: 'hip', tail: 'knee' },
-  shin: { head: 'knee', tail: 'foot' },
+  upperarm: { head: 'shoulder', tail: 'elbow' },
+  foreArm:  { head: 'elbow',    tail: 'hand' },
+  forearm:  { head: 'elbow',    tail: 'hand' },
+  hand:     { head: 'hand',     tail: 'handTip' },
+  thigh:    { head: 'hip',      tail: 'knee' },
+  shin:     { head: 'knee',     tail: 'foot' },
+  foot:     { head: 'foot',     tail: 'toe' },
 };
 
 /** The joint names that carry a per-side suffix (centerline joints never do). */
-const SIDED: ReadonlySet<string> = new Set(['shoulder', 'elbow', 'hand', 'hip', 'knee', 'foot']);
+const SIDED: ReadonlySet<string> = new Set([
+  'clavicle', 'shoulder', 'elbow', 'hand', 'handTip', 'hip', 'knee', 'foot', 'toe',
+]);
 
 /** Joint name for a resolved bone's head/tail, or null for unknown bones.
  *  e.g. jointForBoneEnd('thigh.l', 'tail') === 'kneeL'. */
@@ -500,21 +524,47 @@ export function jointForBoneEnd(bone: string, end: 'head' | 'tail'): GaitJointNa
   return at as GaitJointName;
 }
 
+/** Same tolerance bindRig dedups rig points with. */
+const KEY_EPS = 1e-4;
+
 /** Joint names in rig-point order for a built body — the exact zip key for
- *  task-4 wiring: `pose.offsets[names[i]]` (or pose.rootOffset when the name
- *  is 'pelvis') applies to `rig.points[i]`'s rest target. Same iteration and
- *  dedup semantics as bindRig, so the order always matches. */
+ *  the wiring: `pose.offsets[names[i]]` applies to `rig.points[i]`'s target.
+ *
+ *  Dedup is by POSITION, exactly as bindRig does it: a bone's tail and its
+ *  child's head are one rig point and get ONE name. When several bone ends
+ *  share a position (the zombie's spine.tail, neck.head, clavicle.l.head and
+ *  clavicle.r.head are all `chest`), the name earliest in GAIT_JOINTS wins —
+ *  so `chest` beats `spineB` on the goblin, whose chest bone runs straight
+ *  into the neck. A name is never used twice; a candidate already taken
+ *  falls through to the next, and a point left nameless shows up as a
+ *  count mismatch in makeMotionJoints (null), never as a scrambled pose. */
 export function jointNamesForBody(body: BuildResult): GaitJointName[] {
-  const names: GaitJointName[] = [];
-  const seen = new Set<GaitJointName>();
+  const positions: Vec3[] = [];
+  const candidates: GaitJointName[][] = [];
+  const indexOf = (p: Vec3): number => {
+    for (let i = 0; i < positions.length; i++) {
+      const q = positions[i]!;
+      if (Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) < KEY_EPS) return i;
+    }
+    positions.push(p);
+    candidates.push([]);
+    return positions.length - 1;
+  };
   for (const [boneName, bone] of body.bones.entries()) {
     for (const end of ['head', 'tail'] as const) {
+      const i = indexOf(bone[end]);
       const name = jointForBoneEnd(boneName, end);
-      if (name && !seen.has(name)) {
-        seen.add(name);
-        names.push(name);
-      }
+      if (name && !candidates[i]!.includes(name)) candidates[i]!.push(name);
     }
+  }
+  const rank = (n: GaitJointName) => GAIT_JOINTS.indexOf(n);
+  const used = new Set<GaitJointName>();
+  const names: GaitJointName[] = [];
+  for (const cands of candidates) {
+    const pick = cands.slice().sort((a, b) => rank(a) - rank(b)).find(n => !used.has(n));
+    if (!pick) continue;
+    used.add(pick);
+    names.push(pick);
   }
   return names;
 }

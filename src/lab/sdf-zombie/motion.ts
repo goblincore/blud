@@ -382,6 +382,7 @@ const LEAN_SHARE: Partial<Record<GaitJointName, number>> = {
   pelvis: 0.3, hips: 0.45, chest: 0.8, neck: 0.9, head: 1,
   shoulderL: 0.85, shoulderR: 0.85, elbowL: 0.6, elbowR: 0.6,
   handL: 0.5, handR: 0.5,
+  spineA: 0.55, spineB: 0.7, clavicleL: 0.85, clavicleR: 0.85, handTipL: 0.5, handTipR: 0.5,
 };
 
 /** Normalised attack-decay envelope (peak exactly 1) — the recoil's shape,

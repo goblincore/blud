@@ -14,6 +14,12 @@ import {
 import { bindRig } from './rig-bind';
 import { buildBody } from './build-body';
 import { makeZombie } from './body';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import { makeMotionJoints } from './motion';
+import soldierSrc from './characters/soldier.blob?raw';
+import goblinSrc from './characters/goblin.blob?raw';
+import zombieSrc from './characters/zombie.blob?raw';
 import { len, sub } from './vec';
 import type { Vec3 } from './types';
 
@@ -287,7 +293,13 @@ describe('body ↔ joint wiring contract', () => {
     const bound = bindRig(body);
     const names = jointNamesForBody(body);
     expect(names).toHaveLength(17);
-    expect(names).toEqual([...GAIT_JOINTS]);
+    // The zombie's 17 primary names, in rig-point order (mirrored bones emit
+    // as adjacent .l/.r pairs, so the sides interleave bone-by-bone).
+    expect(names).toEqual([
+      'pelvis', 'hips', 'chest', 'neck', 'head',
+      'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
+      'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+    ]);
     expect(bound.rig.points).toHaveLength(17);
     // every resolved bone joint lands on the named rig point at the right spot
     for (const [boneName, bone] of body.bones.entries()) {
@@ -295,6 +307,7 @@ describe('body ↔ joint wiring contract', () => {
         const name = jointForBoneEnd(boneName, end);
         if (!name) continue;
         const idx = names.indexOf(name);
+        if (idx < 0) continue; // a primary name won this point's position
         expect(len(sub(bound.rig.points[idx]!.pos, bone[end]))).toBeLessThan(1e-4);
       }
     }
@@ -306,7 +319,7 @@ describe('body ↔ joint wiring contract', () => {
     expect(jointForBoneEnd('spine', 'tail')).toBe('chest');
     expect(jointForBoneEnd('thigh.l', 'head')).toBe('hipL');
     expect(jointForBoneEnd('shin.r', 'tail')).toBe('footR');
-    expect(jointForBoneEnd('clavicle.l', 'head')).toBe('chest');
+    expect(jointForBoneEnd('clavicle.l', 'head')).toBe('clavicleL');
     expect(jointForBoneEnd('foreArm.r', 'tail')).toBe('handR');
     expect(jointForBoneEnd('mysteryBone', 'tail')).toBeNull();
   });
@@ -323,5 +336,61 @@ describe('rotateYaw', () => {
     const v: Vec3 = [0.3, 0.7, -0.2];
     const back = rotateYaw(rotateYaw(v, 1.3), -1.3);
     expect(close(back, v, 1e-9)).toBe(true);
+  });
+});
+
+describe('joint naming — every rig point of every character gets a name', () => {
+  const load = (src: string) => {
+    const body = buildBody(compileBlob(parseBlob(src)));
+    return { body, bound: bindRig(body), names: jointNamesForBody(body) };
+  };
+  it('zombie: the 17 primary names in rig-point order', () => {
+    const { names } = load(zombieSrc);
+    // compileBlob emits each mirrored bone as an adjacent .l/.r pair, so the
+    // rig points (and their names) interleave the sides bone-by-bone — this
+    // is the order bindRig has always emitted for the blob-compiled zombie.
+    expect(names).toEqual([
+      'pelvis', 'hips', 'chest', 'neck', 'head',
+      'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
+      'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+    ]);
+  });
+  it.each([['soldier', soldierSrc], ['goblin', goblinSrc]])('%s: names == rig points, makeMotionJoints is live', (_n, src) => {
+    const { bound, names, body } = load(src);
+    expect(names.length).toBe(bound.rig.points.length);
+    expect(new Set(names).size).toBe(names.length);
+    expect(makeMotionJoints(body, bound.rig.restPose)).not.toBeNull();
+    for (const j of ['shoulderL', 'elbowL', 'handL', 'hipL', 'kneeL', 'footL', 'chest', 'neck', 'head'])
+      expect(names, j).toContain(j);
+  });
+  it('soldier: the secondary names land on the right points', () => {
+    const { body, bound, names } = load(soldierSrc);
+    const at = (n: string) => bound.rig.points[names.indexOf(n as never)]!.pos;
+    expect(at('spineA')).toEqual(body.bones.get('spine1')!.tail);
+    expect(at('spineB')).toEqual(body.bones.get('chest')!.tail);
+    expect(at('chest')).toEqual(body.bones.get('neck')!.head);
+    expect(at('clavicleL')).toEqual(body.bones.get('clavicle.l')!.head);
+    expect(at('handTipR')).toEqual(body.bones.get('hand.r')!.tail);
+    expect(at('toeL')).toEqual(body.bones.get('foot.l')!.tail);
+  });
+  it('goblin: chest.tail and neck.head coincide and the PRIMARY name wins', () => {
+    const { names } = load(goblinSrc);
+    expect(names).toContain('chest');
+    expect(names).not.toContain('spineB');
+  });
+  it('jointForBoneEnd aliases', () => {
+    expect(jointForBoneEnd('upperarm.l', 'head')).toBe('shoulderL');
+    expect(jointForBoneEnd('forearm.r', 'tail')).toBe('handR');
+    expect(jointForBoneEnd('hand.r', 'tail')).toBe('handTipR');
+    expect(jointForBoneEnd('foot.l', 'tail')).toBe('toeL');
+    expect(jointForBoneEnd('clavicle.l', 'head')).toBe('clavicleL');
+    expect(jointForBoneEnd('spine2', 'tail')).toBe('chest');
+  });
+  it('the pose carries every secondary joint, rigid with its parent', () => {
+    const p = stepGait(makeGaitState(3), NONE, 0.2, 'swing').pose;
+    expect(p.offsets.handTipL).toEqual(p.offsets.handL);
+    expect(p.offsets.toeR).toEqual(p.offsets.footR);
+    expect(p.offsets.clavicleL).toEqual(p.offsets.chest);
+    expect(p.offsets.spineA[1]).not.toBe(0);
   });
 });
