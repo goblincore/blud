@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { parseBlob } from './blob-parse';
 import { emitBlob } from './blob-emit';
 import src from './characters/zombie.blob?raw';
+import soldierSrc from './characters/soldier.blob?raw';
+import zombieSrc from './characters/zombie.blob?raw';
 
 /**
  * EVERY shipped character, not just the zombie — globbed rather than listed so
@@ -86,5 +88,27 @@ describe('emitBlob', () => {
       'bones\n  # hand-tuned skull dome, retuned 2026-09\n  ratio 0.25\n' +
       '  blob head on skull at=0.5 r=0.02\n';
     expect(emitBlob(parseBlob(withBones))).toBe(withBones);
+  });
+});
+
+describe('palette override', () => {
+  it('splices only the baseColor value span; every other byte survives', () => {
+    const doc = parseBlob(soldierSrc);
+    const out = emitBlob(doc, { palette: { baseColor: [0.5, 0.25, 0.125] } });
+    const before = soldierSrc.split('\n'), after = out.split('\n');
+    expect(after.length).toBe(before.length);
+    const changed = before.map((l, i) => [l, after[i]!] as const).filter(([a, b]) => a !== b);
+    expect(changed.length).toBe(1);
+    expect(changed[0]![0]).toMatch(/^\s*baseColor\s/);
+    expect(changed[0]![1]).toMatch(/^\s*baseColor\s+0\.5 0\.25 0\.125\s*$/);
+    // Re-parses to the new colour.
+    expect(parseBlob(out).palette!.baseColor).toEqual([0.5, 0.25, 0.125]);
+  });
+  it('an override for a character with no palette block throws loudly', () => {
+    expect(() => emitBlob(parseBlob(zombieSrc), { palette: { baseColor: [1, 1, 1] } }))
+      .toThrow(/no palette block/);
+  });
+  it('a wrong arity throws', () => {
+    expect(() => emitBlob(parseBlob(soldierSrc), { palette: { baseColor: [1, 1] } })).toThrow(/3 values/);
   });
 });
