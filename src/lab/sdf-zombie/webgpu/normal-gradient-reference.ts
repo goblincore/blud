@@ -157,3 +157,38 @@ export function detailGradient(f: (p: V3) => number, p: V3, eps: number): V3 {
   const den = 4 * eps;
   return [gx / den, gy / den, gz / den];
 }
+
+/** Ordered production wound fold; every rim uses the ORIGINAL carved flesh. */
+export function woundGradient(base: Dg, p: V3, wounds: readonly WoundInput[]): Dg {
+  assertDg('wound base', base);
+  assertFinite('wound point', p);
+  let d = base;
+  for (const w of wounds) {
+    assertFinite('wound', [...w.center, w.depth, w.cap, ...w.inward, w.blend, w.rimPosition, w.rimWidth, w.rimAmp]);
+    if (w.rimWidth <= 0 || w.rimAmp < 0) throw new RangeError('invalid wound rim');
+    const v = p.map((x, i) => x - w.center[i]!) as unknown as V3;
+    const r = Math.hypot(...v);
+    const sphere = w.depth-r;
+    const slab = w.cap-v.reduce((s,x,i)=>s+x*w.inward[i]!,0);
+    const corner = Math.abs(sphere-slab) < 1e-7;
+    const cutter: Dg = {
+      d: Math.min(sphere,slab),
+      g: sphere < slab && r > 0 ? v.map(x=>-x/r) as unknown as V3 : w.inward.map(x=>-x) as unknown as V3,
+      reason: r === 0 ? 'degenerate' : corner ? 'hard-boundary' : 'ok',
+    };
+    const before=d.d;
+    d = smoothMaxGradient(d,cutter,w.blend);
+    // Conservatively keep singularity reasons even when a blend excludes them.
+    if (cutter.reason !== 'ok') d = {...d,reason:cutter.reason};
+    if (w.blend <= 0 && Math.abs(before-cutter.d)<1e-7) d={...d,reason:'hard-boundary'};
+    if (w.rimAmp === 0) continue;
+    const x=(r-w.rimPosition)/w.rimWidth;
+    const bump=w.rimAmp*Math.exp(-x*x);
+    const u=Math.max(0,Math.min(1,(base.d+.3*w.rimAmp)/w.rimAmp));
+    const m=1-u*u*(3-2*u);
+    const gateFactor=-(6*u*(1-u)/w.rimAmp);
+    const g=d.g.map((a,i)=>a-m*bump*(-2*x/w.rimWidth)*(r>0?v[i]!/r:0)-bump*gateFactor*base.g[i]!) as unknown as V3;
+    d={d:d.d-bump*m,g,reason:d.reason !== 'ok' ? d.reason : gateFactor*bump !== 0 ? base.reason : 'ok'};
+  }
+  return d;
+}

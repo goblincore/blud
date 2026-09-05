@@ -216,3 +216,63 @@ describe('independent numerical gradients', () => {
     ).reason).toBe('hard-boundary');
   });
 });
+
+import { woundGradient, type WoundInput } from './normal-gradient-reference';
+
+// Independent scalar transcription of applyWounds, deliberately does not call
+// the gradient implementation. Inputs have already resolved burn/upload rows.
+function woundOracle(base: number, p: V3, wounds: readonly WoundInput[]): number {
+  let d = base;
+  for (const w of wounds) {
+    const v = p.map((x, i) => x - w.center[i]!);
+    const r = Math.hypot(...v);
+    d = smax(d, Math.min(w.depth-r, w.cap-v.reduce((s,x,i)=>s+x*w.inward[i]!,0)), w.blend);
+    if (w.rimAmp === 0) continue;
+    const u = Math.max(0,Math.min(1,(base+.3*w.rimAmp)/w.rimAmp));
+    d -= Math.exp(-(((r-w.rimPosition)/w.rimWidth)**2))*w.rimAmp*(1-u*u*(3-2*u));
+  }
+  return d;
+}
+const wound: WoundInput = {center:[0,0,0],depth:.16,cap:.08,inward:[0,0,-1],blend:.018,rimPosition:.176,rimWidth:.025,rimAmp:.019};
+describe('procedural wound gradients', () => {
+  const baseAt = (p: V3): Dg => ({d:p[2]-.02,g:[0,0,1],reason:'ok'});
+  it.each([
+    ['sphere wall',[.14,.01,-.03], [wound]],
+    ['slab floor',[.01,.015,-.10], [wound]],
+    ['fresh rim',[.174,.02,.021], [wound]],
+    ['overlap ordered',[.145,.016,.015], [wound,{...wound,center:[.04,.02,.01],depth:.12,rimAmp:.015}]],
+    ['resolved burn',[.04,.01,.017], [{...wound,depth:.16*.35*.7,rimAmp:.16*.35*.7*.12*.25,rimPosition:.048,rimWidth:.006}]],
+    ['zero amplitude',[.14,.01,-.03], [{...wound,rimAmp:0}]],
+    ['outside rim gate',[.18,.03,.07], [wound]],
+  ] as const)('%s matches scalar and finite differences at multiple epsilons', (_name, point, wounds) => {
+    const p = point as V3;
+    const actual = woundGradient(baseAt(p),p,wounds as readonly WoundInput[]);
+    const scalar = (q:V3) => woundOracle(baseAt(q).d,q,wounds as readonly WoundInput[]);
+    expect(actual.reason).toBe('ok');
+    expect(actual.d).toBeCloseTo(scalar(p),11);
+    const errors=[1e-4,5e-5,2.5e-5].map(e=>Math.hypot(...finiteGradient(scalar,p,e).map((v,i)=>v-actual.g[i]!)));
+    expect(errors[2]).toBeLessThan(2e-5);
+  });
+  it('includes the flesh-gate derivative when the radial bump derivative is zero', () => {
+    const p:V3=[wound.rimPosition,0,0];
+    const base:Dg={d:0,g:[0,0,1],reason:'ok'};
+    const actual=woundGradient(base,p,[wound]);
+    const scalar=(q:V3)=>woundOracle(q[2],q,[wound]);
+    expect(actual.g[2]).toBeGreaterThan(1.2);
+    expectV3Close(actual.g,finiteGradient(scalar,p,1e-6),7);
+  });
+  it('preserves the original flesh gate throughout the ordered loop', () => {
+    const p:V3=[.175,.006,.022];
+    const list=[wound,{...wound,center:[.035,0,0]}] as const;
+    const result=woundGradient(baseAt(p),p,list);
+    expect(result.d).toBeCloseTo(woundOracle(baseAt(p).d,p,list),11);
+    const wrong=woundGradient(woundGradient(baseAt(p),p,[list[0]]),p,[list[1]]);
+    expect(Math.abs(result.d-wrong.d)).toBeGreaterThan(1e-4);
+  });
+  it('keeps radius degeneracy, cap corners and hard joins explicit', () => {
+    expect(woundGradient({d:-.1,g:[0,0,1],reason:'ok'},[0,0,0],[wound]).reason).toBe('degenerate');
+    const corner={...wound,depth:.2,cap:.1,inward:[0,0,1] as V3,rimAmp:0};
+    expect(woundGradient({d:-.2,g:[0,1,0],reason:'ok'},[.1,0,0],[corner]).reason).toBe('hard-boundary');
+    expect(woundGradient({d:.02,g:[0,1,0],reason:'ok'},[.14,0,0],[{...wound,blend:0,rimAmp:0,cap:1e5}]).reason).toBe('hard-boundary');
+  });
+});

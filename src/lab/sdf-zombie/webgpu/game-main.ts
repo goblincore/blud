@@ -1,4 +1,6 @@
-import { classifyNormalSupport } from './normal-gradient-support';
+import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
+import { finiteGradient, woundGradient, type V3, type WoundInput } from './normal-gradient-reference';
+import { classifyNormalSupport, normalHitPoint } from './normal-gradient-support';
 // src/lab/sdf-zombie/webgpu/game-main.ts
 //
 // sdf-game.html — the grey-box ring the owner walks to judge on-screen enemy
@@ -28,7 +30,7 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { WOUND_STEP_MUL } from './march.wgsl';
+import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS } from './march.wgsl';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN } from './goblin-skin';
@@ -73,11 +75,11 @@ import { buildFirefight, buildCloseup, validateScenario } from './game-bench-sce
 // TSL nodes for the texRoundTrip diagnostic (close-up task 1, question B).
 // Named with a Tsl suffix where the name collides with anything in this file.
 import {
-  wgslFn, texture as tslTexture, screenUV as tslScreenUV, vec4 as tslVec4,
+  wgslFn, texture3D as tslTexture3D, texture as tslTexture, screenUV as tslScreenUV, vec4 as tslVec4,
   length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
 } from 'three/tsl';
 import { runBench, type BenchDeps } from './game-bench';
-import { sdBody } from '../validate';
+import { sdBody, smax } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
@@ -3312,6 +3314,7 @@ async function main() {
     zombie: (id: number) => {
       const a = actors.find(a => a.id === id);
       return a ? {
+        get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
@@ -4041,6 +4044,18 @@ async function main() {
       for (const a of actors) a.view.uniforms.normalGradientCfg.value.y = normalGradientDebug;
       for (const c of chunkViews) c.uniforms.normalGradientCfg.value.y = normalGradientDebug;
     },
+    /** Read-only diagnostic identities; chunk ids survive pooled-view reuse. */
+    normalGradientPieces() {
+      return [
+        ...actors.map(a=>({key:`body:${a.id}`,kind:'body',id:a.id,ownerLimbs:[...a.posed().prims.map(p=>p.limb),...(a.posed().bonePrims??[]).map(()=> 'internal')]})),
+        ...liveChunks.map(c=>({key:`chunk:${c.id}`,kind:'chunk',id:c.id,ownerLimbs:Array.from({length:Math.round(c.view.uniforms.counts.value.x)},()=>c.state.limb)})),
+      ];
+    },
+    normalGradientPiece(key: string) {
+      if(key.startsWith('body:')) return actors.find(a=>a.id===Number(key.slice(5)))?.view;
+      if(key.startsWith('chunk:')) return liveChunks.find(c=>c.id===Number(key.slice(6)))?.view;
+      return undefined;
+    },
     normalGradientStatus() {
       const supportedBodies = actors.filter(a => classifyNormalSupport(a.posed()).commonFlesh).length;
       return { mode: normalGradientMode, diagnostic: normalGradientDebug,
@@ -4581,6 +4596,10 @@ async function main() {
       (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
         /** Raw float readback, row padding removed. The driver compares these
          * bytes before any composite, color conversion or antialias filtering. */
+        normalCaptureState() {
+          const pieces=[...actors.map(a=>({key:`body:${a.id}`,view:a.view})),...liveChunks.map(c=>({key:`chunk:${c.id}`,view:c.view}))];
+          return {camera:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),pieces:pieces.map(({key,view})=>({key,data:Array.from((view.dataTexture as THREE.DataTexture).image.data as Float32Array),uniforms:Object.fromEntries(Object.entries(view.uniforms).filter(([k])=>k!=='normalGradientCfg'&&k!=='debugCfg').map(([k,u])=>{const v=u.value;return [k,v&&typeof v==='object'&&'toArray' in v?(v as {toArray:()=>unknown}).toArray():v];}))}))};
+        },
         async readMarchTarget() {
           handle.setLoopRunning(false);
           handle.step(0);
@@ -4595,6 +4614,107 @@ async function main() {
           let binary = '';
           for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
           return { w, h, rgba32f: btoa(binary) };
+        },
+        async normalPointSamples(bodyId: number | string, points: Vec3[]) {
+          const view=typeof bodyId==='number'?actors.find(a=>a.id===bodyId)?.view:liveChunks.find(c=>`chunk:${c.id}`===bodyId)?.view;if(!view)throw new Error('missing probe piece');
+          const u=view.uniforms,p=tslUniform(new THREE.Vector3()),kind=tslUniform(0),noise=tslUniform(new THREE.Vector4());
+          const material=new THREE.MeshBasicNodeMaterial();
+          material.outputNode=buildNormalBodyPointFn()({p,data:tslTexture(view.dataTexture),counts:u.counts,counts2:u.counts2,noiseCfg:noise,woundCfg:u.woundCfg,woundCfg2:u.woundCfg2,noiseShift:tslUniform(new THREE.Vector3(u.faceCfg3.value.z,u.lodCfg.value.z,u.faceCfg3.value.w)),volumeTex:tslTexture3D(view.volumeTexture),volumePose0:u.volumePose0,volumePose1:u.volumePose1,volumeMin:u.volumeMin,volumeInvExtent:u.volumeInvExtent,volumeWarp:u.volumeWarp,volumeClip:u.volumeClip,perfCfg:u.perfCfg,woundBound:u.woundBound,probeKind:kind});
+          material.depthTest=false;material.depthWrite=false;material.blending=THREE.NoBlending;material.toneMapped=false;
+          const scene=new THREE.Scene(),geometry=new THREE.PlaneGeometry(2,2),quad=new THREE.Mesh(geometry,material);quad.frustumCulled=false;scene.add(quad);
+          const camera=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+          const target=new THREE.RenderTarget(1,1,{depthBuffer:false,type:THREE.FloatType,format:THREE.RGBAFormat});
+          const renderer=handle.renderer,previous=renderer.getRenderTarget();
+          const read=async(q:Vec3,mode:number)=>{p.value.fromArray(q);kind.value=mode;renderer.setRenderTarget(target);renderer.render(scene,camera);await handle.resolveGpu();return Array.from(new Float32Array(await renderer.readRenderTargetPixelsAsync(target,0,0,1,1)).slice(0,4));};
+          const results=[];
+          try {for(const point of points) {
+            noise.value.x=0;
+            const analytic=await read(point,0),state=await read(point,1),scalar=await read(point,2);
+            const epsilons=[];
+            for(const epsilon of [.0015,.0005,.0002,.0001]) {
+              const gradient=[];
+              for(let axis=0;axis<3;axis++) {const lo=[...point] as [number,number,number],hi=[...point] as [number,number,number];lo[axis]!-=epsilon;hi[axis]!+=epsilon;gradient.push(((await read(hi,2))[0]!-(await read(lo,2))[0]!)/(2*epsilon));}
+              epsilons.push({epsilon,gradient});
+            }
+            const signs:Vec3[]=[[1,-1,-1],[-1,-1,1],[-1,1,-1],[1,1,1]];
+            const tetra:Array<{point:Vec3;sign:Vec3;geometric:number[];noisy:number[]}>=[];
+            for(const sign of signs) {const q=point.map((v,i)=>v+.0015*sign[i]!) as unknown as Vec3;tetra.push({point:q,sign,geometric:await read(q,2),noisy:[] as number[]});}
+            const image=view.dataTexture.image as {width:number;data:Float32Array};
+            const owner=state[1]!;const color=image.data[(ROW_PRIM_COLOR*image.width+owner)*4+3]!;const shape=image.data[(ROW_PRIM_SHAPE*image.width+owner)*4+1]!;
+            const suppression=color>0?Math.max(Math.max(0,Math.min(1,color-1)),(Math.round(shape)&16)!==0?1:0):0;
+            noise.value.x=u.marchCfg.value.z*(1-suppression);
+            const combined=await read(point,3),noiseOnly=await read(point,4);
+            for(const sample of tetra)sample.noisy=await read(sample.point,2);
+            const sum=(key:'geometric'|'noisy')=>[0,1,2].map(axis=>tetra.reduce((v,s)=>v+s.sign[axis]!*s[key][0]!,0)/(.0015*4));
+            results.push({point,analytic,state,scalar,epsilons,detailBreakdown:{amplitude:noise.value.x,tetra,geometricTetra:sum('geometric'),fullTetra:sum('noisy'),combined:combined.slice(1),noiseOnly:noiseOnly.slice(1)}});
+          }} finally {renderer.setRenderTarget(previous);material.dispose();geometry.dispose();target.dispose();}
+          return results;
+        },
+        /** Affected wound ROI from exact clip depth and the uploaded wound
+         * rows. sdBody supplies original authored/carved flesh; classification
+         * uses the production scalar equations, not a screen-space circle. */
+        normalWoundCoverage(bodyId: number | string, packed: string, w: number, h: number, suspects: number[] = []) {
+          const actor=typeof bodyId==='number'?actors.find(a=>a.id===bodyId):undefined;
+          const chunk=typeof bodyId==='string'?liveChunks.find(c=>`chunk:${c.id}`===bodyId):undefined;
+          const view=actor?.view??chunk?.view;if(!view)throw new Error('missing wound coverage piece');
+          const u=view.uniforms,tex=view.dataTexture as THREE.DataTexture;
+          const image=tex.image as {data:Float32Array;width:number};
+          const row=(i:number,y:number)=>Array.from(image.data.subarray((y*image.width+i)*4,(y*image.width+i)*4+4));
+          // Chunk CPU oracle consumes the actual uploaded straight-capsule
+          // rows; other profiles require a separate independent adapter.
+          const body=actor?.posed()??{
+            prims:Array.from({length:Math.round(u.counts.value.x)},(_,i)=>{
+              const a=row(i,ROW_PRIM_A),b=row(i,ROW_PRIM_B),scale=row(i,ROW_PRIM_SCALE),shape=row(i,ROW_PRIM_SHAPE);
+              if(shape[0]!>=0||(Math.round(shape[1]!)&47)!==0)throw new Error('chunk oracle requires straight capsules');
+              return {a:a.slice(0,3) as unknown as Vec3,b:b.slice(0,3) as unknown as Vec3,radius:a[3]!,blendK:b[3]!,scale:scale.slice(0,3) as unknown as Vec3,op:scale[3]!>.5?'sub' as const:'add' as const,limb:chunk!.state.limb,cluster:0,orient:row(i,ROW_PRIM_QUAT) as unknown as [number,number,number,number]};
+            }),
+            clusters:Array.from({length:Math.round(u.counts.value.y)},(_,i)=>{const r=row(i,ROW_CLUSTER_RANGE),b=row(i,ROW_CLUSTER_BOUNDS);return {id:i,limb:chunk!.state.limb,start:r[0]!,count:r[1]!,alive:r[2]!>.5,center:b.slice(0,3) as unknown as Vec3,radius:b[3]!};}),
+          };
+          const cfg=u.woundCfg.value.toArray(),cfg2=u.woundCfg2.value.toArray(),perf=u.perfCfg.value.toArray();
+          const bound=u.woundBound.value;
+          const wounds=Array.from({length:Math.round(cfg[0]!)},(_,i)=>({w:row(i,ROW_WOUND),meta:row(i,ROW_WOUND_META),cap:row(i,ROW_WOUND_CAP)}));
+          const raw=Uint8Array.from(atob(packed),c=>c.charCodeAt(0));const data=new Float32Array(raw.buffer);
+          const make=()=>({hits:0,analytic:0,reasons:Array<number>(8).fill(0)});
+          const regions={wall:make(),rim:make(),internal:make(),curvedInternal:make(),headWound:make(),torsoWound:make()};
+          const point=new THREE.Vector3();
+          let scalarSurfaceMax=0;const samples:unknown[]=[];
+          for(let i=0;i<data.length;i+=4) {
+            const code=Math.round(data[i]!)-1,owner=Math.round(data[i+2]!);
+            if(code<0||code>7||owner<0)continue;
+            const pixel=i/4,x=pixel%w,y=Math.floor(pixel/w);
+            const p=normalHitPoint(x,y,w,h,data[i+3]!,camera);
+            point.fromArray(p);
+            const base=sdBody(p,body);let d=base;
+            if(point.distanceTo(new THREE.Vector3(bound.x,bound.y,bound.z))<=bound.w) for(const wound of wounds) {
+              const v=p.map((a,k)=>a-wound.w[k]!);const r=Math.hypot(...v);
+              const reach=wound.w[3]!*Math.max(2,2*cfg[3]!+3*cfg2[0]!)+4*cfg[1]!+.25;
+              if(perf[1]!>.5&&r>reach)continue;
+              const burn=wound.meta[0]!>1.5;
+              const depth=wound.w[3]!*(burn?.35*Math.max(0,Math.min(1,wound.meta[1]!)):1);
+              const cap=wound.cap[3]!>0?wound.cap[3]!:1e5;
+              d=smax(d,Math.min(depth-r,cap-v.reduce((a,b,k)=>a+b*wound.cap[k]!,0)),cfg[1]!);
+              const amp=depth*cfg[2]!*wound.meta[2]!*(burn?.25:1);
+              if(amp>0) {
+                const xx=(r-depth*cfg[3]!*wound.meta[3]!)/Math.max(depth*cfg2[0]!,1e-4);
+                const gate=Math.max(0,Math.min(1,(base+.3*amp)/amp));
+                d-=Math.exp(-xx*xx)*amp*(1-gate*gate*(3-2*gate));
+              }
+            }
+            if(suspects.includes(pixel)) {
+              const baseG=finiteGradient(q=>sdBody(q,body),p,1e-5);
+              const resolved:WoundInput[]=wounds.map(v=>{const burn=v.meta[0]!>1.5,depth=v.w[3]!*(burn?.35*Math.max(0,Math.min(1,v.meta[1]!)):1);return {center:v.w.slice(0,3) as unknown as V3,depth,cap:v.cap[3]!>0?v.cap[3]!:1e5,inward:v.cap.slice(0,3) as unknown as V3,blend:cfg[1]!,rimPosition:depth*cfg[3]!*v.meta[3]!,rimWidth:Math.max(depth*cfg2[0]!,1e-4),rimAmp:depth*cfg[2]!*v.meta[2]!*(burn?.25:1)};});
+              const dg=woundGradient({d:base,g:baseG,reason:'ok'},p,resolved);
+              samples.push({pixel:[x,y],p,owner,base,baseG,dg,gradientLength:Math.hypot(...dg.g),primitive:body.prims[owner]});
+            }
+            const add=(region:ReturnType<typeof make>)=>{region.hits++;region.reasons[code]!++;if(code===0)region.analytic++;};
+            if(owner>=u.counts.value.x) {add(regions.internal);if((Math.round(row(owner,ROW_PRIM_SHAPE)[1]!)&2)!==0)add(regions.curvedInternal);continue;}
+            if(Math.abs(d-base)<=1e-5)continue;
+            scalarSurfaceMax=Math.max(scalarSurfaceMax,Math.abs(d));
+            add(d>base?regions.wall:regions.rim);
+            if(body.prims[owner]?.limb==='head')add(regions.headWound);
+            if(body.prims[owner]?.limb==='torso')add(regions.torsoWound);
+          }
+          return {thresholdMetres:1e-5,method:'unproject WebGPU clip-depth alpha; production uploaded wound scalar minus sdBody authored flesh; internal owners separate',regions,scalarSurfaceMax,samples,wounds,cfg,cfg2,perf};
         },
         async hashMarchTarget() {
           const t = sdfLayer.marchTarget;

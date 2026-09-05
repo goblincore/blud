@@ -3,7 +3,7 @@
   "reference": "pass",
   "gpuKernel": "pass",
   "intact": "pass",
-  "wounds": "skipped-by-gate",
+  "wounds": "deferred",
   "visualEvidence": "skipped-by-gate",
   "timing": "skipped-by-gate",
   "ownerLook": "pending",
@@ -73,6 +73,12 @@
       "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
       "reason": "wounds gate is skipped-by-gate. 20 real gameplay scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Corrected beauty is valid technical evidence; owner review remains pending. No paired timing records exist."
+    },
+    {
+      "commit": "Task4 checkpoint based on 8f3394b; review pending",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase wounds --arm-smoke --vite 5251 --cdp 9251 --out /tmp/zombie-ng-wounds-sever-proof (guarded launch deferred: load1 26.50 then 55.74)",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json",
+      "reason": "Real 11-case production wound oracle, actual head/torso walls, overlap, exposed curved fallback, impact/stagger and actual detached forearm evidence exist. Old moving-shoulder depth failure is reproduced legacy-to-legacy first-read settling; settled candidate has exact depth/fallback. Detached-piece p99=5.846 remains pending localized correctness proof and review; final bounded settling/chunk/initial-flight harness GPU run blocked by load. No Task4 completion or timing/ownerLook claim."
     }
   ]
 }

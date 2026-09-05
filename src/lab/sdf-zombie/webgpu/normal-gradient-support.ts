@@ -27,3 +27,23 @@ export function stableNormalOwner(best: number, second: number, excludedLower: n
   const radius = Math.sqrt(3) * .0015;
   return Number.isFinite(best) && second - best > 2 * radius && excludedLower > best + radius;
 }
+
+import type { Primitive, Vec3 } from '../types';
+import { bendCtrl } from '../vec';
+/** CPU statement of ngInternalLower. Uses applyBones' unrotated semantics. */
+export function internalNormalLowerBound(p: Vec3, shape: Primitive): number {
+  if (shape.strand || shape.box || shape.shell || shape.scale.some(v=>v<=0)) return -Infinity;
+  const points=[shape.a,shape.b];
+  if (shape.bend) points.push(bendCtrl(shape.a,shape.b,shape.bend));
+  const outside=p.map((v,i)=> {
+    const axis=points.map(q=>q[i]!/shape.scale[i]!);
+    return Math.max(0,Math.min(...axis)-v/shape.scale[i]!,v/shape.scale[i]!-Math.max(...axis));
+  });
+  return (Math.hypot(...outside)-Math.max(shape.radius,shape.radiusB??shape.radius))*Math.min(...shape.scale)-Math.sqrt(3)*.0015;
+}
+
+import { Vector3, type Camera } from 'three/webgpu';
+/** The march target stores WebGPU clip depth in alpha, not ray distance. */
+export function normalHitPoint(x: number, y: number, width: number, height: number, depth: number, camera: Camera): Vec3 {
+  return new Vector3((x+.5)/width*2-1,1-(y+.5)/height*2,depth).unproject(camera).toArray() as [number,number,number];
+}

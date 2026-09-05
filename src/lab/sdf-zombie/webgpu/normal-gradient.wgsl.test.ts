@@ -15,7 +15,7 @@ describe('normal-gradient WGSL registration', () => {
   it('parses every helper with the real wgslFn parser and exports the required signatures', () => {
     const parsed = NORMAL_GRADIENT_HELPERS.map(src => new WGSLNodeFunction(src));
     expect(parsed.map(x => x.name)).toEqual([
-      'ngReset', 'ngQRot', 'ngCapsule', 'ngCapsuleOriented', 'ngSmin', 'ngSmax',
+      'ngReset', 'ngQRot', 'ngCapsule', 'ngCapsuleOriented', 'ngSmin', 'ngSmax', 'ngWound',
     ]);
     expect(parsed.find(x => x.name === 'ngCapsule')?.inputs.map((x: { name: string }) => x.name))
       .toEqual(['p', 'a', 'b', 'r', 'scale']);
@@ -76,9 +76,11 @@ describe('final-hit helper isolation', () => {
     }
     expect(NG_BODY).toContain('gTileActive');
     expect(NG_BODY).toContain('if (!listed)');
-    expect(NG_BODY).toContain('reach + R');
+    expect(NORMAL_GRADIENT_GAME_HELPERS.join('\n')).toContain('abs(r - reach) <= R');
     expect(NG_BODY).toContain('volumePose0.w > 0.5');
     expect(NG_BODY).toContain('counts2.y > 0.5');
-    expect(NG_BODY).toContain('d.x + cutter.x <= 4.0 * B.w + 2.0 * R');
+    expect(NG_BODY).toContain('d = ngSmax(d, -cutter, B.w)');
+    expect(NG_BODY).toContain('ngWounds(d, p');
+    expect(NG_BODY).toContain('ngBones(d, p');
   });
 });

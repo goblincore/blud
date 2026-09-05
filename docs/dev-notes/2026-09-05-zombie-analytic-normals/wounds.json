@@ -1,0 +1,3734 @@
+{
+  "version": 1,
+  "phase": "wounds",
+  "status": "deferred",
+  "gpuExecuted": true,
+  "defaultMode": 0,
+  "timing": "not measured; Task5 gated",
+  "ownerLook": "unchanged",
+  "reason": "Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12).",
+  "woundNumerics": [
+    {
+      "name": "sphere-wall",
+      "actual": [
+        0.013026331551373005,
+        -1.2980924844741821,
+        -0.0927208960056305,
+        0.31654465198516846
+      ],
+      "productionScalar": 0.013026331551373005,
+      "cpuScalar": 0.013026334438308413,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -1.2980933607015763,
+            -0.09272093048196157,
+            0.3165449767342926
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -1.2980928342933538,
+            -0.09272091077146966,
+            0.3165447418869774
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -1.2980927026867706,
+            -0.09272090584318965,
+            0.3165446831748103
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slab-floor",
+      "actual": [
+        -0.02000274509191513,
+        -6.425217725336552e-05,
+        -9.637825860409066e-05,
+        1.0006425380706787
+      ],
+      "productionScalar": -0.02000274509191513,
+      "cpuScalar": -0.02000274271414249,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -6.425297035747568e-05,
+            -9.637953473501382e-05,
+            1.0006425715187137
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -6.425242945334864e-05,
+            -9.637866397321782e-05,
+            1.0006425347479364
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -6.425229417961198e-05,
+            -9.637844626542158e-05,
+            1.0006425255554285
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fresh-rim",
+      "actual": [
+        -0.0023810002021491528,
+        -0.35666412115097046,
+        -0.040995873510837555,
+        1.9461619853973389
+      ],
+      "productionScalar": -0.0023810002021491528,
+      "cpuScalar": -0.00238100044778204,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -0.3566641665420176,
+            -0.04099568732498192,
+            1.9461075849026408
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -0.35666399407573157,
+            -0.04099581291622939,
+            1.9461483095240157
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -0.35666395095869385,
+            -0.04099584431427328,
+            1.9461584906805758
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ordered-overlap",
+      "actual": [
+        0.032849445939064026,
+        -1.3186181783676147,
+        -0.03310501575469971,
+        0.13200676441192627
+      ],
+      "productionScalar": 0.032849445939064026,
+      "cpuScalar": 0.03284945141412909,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -1.3186206302970986,
+            -0.033104989148706465,
+            0.13200258853759278
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -1.3186186952530292,
+            -0.033104997627028676,
+            0.13200569366843273
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -1.318618211478828,
+            -0.0331049997466526,
+            0.1320064699424084
+          ]
+        }
+      ]
+    },
+    {
+      "name": "burn",
+      "actual": [
+        0.01271140668541193,
+        -0.3550947308540344,
+        -0.0887736827135086,
+        0.36573898792266846
+      ],
+      "productionScalar": 0.01271140668541193,
+      "cpuScalar": 0.012711406392287428,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -0.3551097617154365,
+            -0.08877236236626632,
+            0.36574077160924506
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -0.3550986461333533,
+            -0.08877339194116388,
+            0.3657393381192517
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -0.35509586697471396,
+            -0.08877364934104653,
+            0.3657389797356858
+          ]
+        }
+      ]
+    },
+    {
+      "name": "gate-only-derivative",
+      "actual": [
+        -0.00416391110047698,
+        -0.3888888657093048,
+        0,
+        1.8711111545562744
+      ],
+      "productionScalar": -0.00416391110047698,
+      "cpuScalar": -0.0041639111111111075,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -0.3888888888888605,
+            0,
+            1.8710570549225827
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -0.3888888888888692,
+            0,
+            1.8710975970642925
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -0.3888888888889386,
+            0,
+            1.871107732599464
+          ]
+        }
+      ]
+    },
+    {
+      "name": "zero-amplitude",
+      "actual": [
+        0.01657906360924244,
+        -0.9379873871803284,
+        -0.06699910014867783,
+        0.23937927186489105
+      ],
+      "productionScalar": 0.01657906360924244,
+      "cpuScalar": 0.01657906759563437,
+      "reasonCode": 0,
+      "expectedReason": "ok",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -0.9379874361201481,
+            -0.06699907123101229,
+            0.23937939990380588
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -0.9379874530007076,
+            -0.06699909594849729,
+            0.23937929764860505
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -0.937987457220249,
+            -0.06699910212737414,
+            0.239379272084575
+          ]
+        }
+      ]
+    },
+    {
+      "name": "radius-degenerate",
+      "actual": [
+        0.07999999821186066,
+        0,
+        0,
+        1
+      ],
+      "productionScalar": 0.07999999821186066,
+      "cpuScalar": 0.08,
+      "reasonCode": 2,
+      "expectedReason": "degenerate",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            0,
+            0,
+            1.0000000000000286
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            0,
+            0,
+            0.9999999999998899
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            0,
+            0,
+            0.9999999999998899
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cap-corner",
+      "actual": [
+        0.09999998658895493,
+        -1.0000022649765015,
+        0,
+        0
+      ],
+      "productionScalar": 0.09999998658895493,
+      "cpuScalar": 0.09999999053155788,
+      "reasonCode": 3,
+      "expectedReason": "hard-boundary",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            -0.5000023271747173,
+            0,
+            -0.4997500000624572
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            -0.5000023270168574,
+            0,
+            -0.4998750000077823
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            -0.5000023269774445,
+            0,
+            -0.4999375000008799
+          ]
+        }
+      ]
+    },
+    {
+      "name": "near-boundary",
+      "actual": [
+        -0.019999999552965164,
+        3.451162559941004e-14,
+        0,
+        1
+      ],
+      "productionScalar": -0.019999999552965164,
+      "cpuScalar": -0.020000000000000077,
+      "reasonCode": 3,
+      "expectedReason": "hard-boundary",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            3.469446951953614e-14,
+            0,
+            0.9999999999999939
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            3.469446951953614e-14,
+            0,
+            1.0000000000000286
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            6.938893903907228e-14,
+            0,
+            1.0000000000000286
+          ]
+        }
+      ]
+    },
+    {
+      "name": "reach-boundary",
+      "actual": [
+        -0.019999999552965164,
+        0,
+        0,
+        1
+      ],
+      "productionScalar": -0.019999999552965164,
+      "cpuScalar": -0.02,
+      "reasonCode": 3,
+      "expectedReason": "hard-boundary",
+      "epsilons": [
+        {
+          "epsilon": 0.0001,
+          "gradient": [
+            0,
+            0,
+            0.9999999999999939
+          ]
+        },
+        {
+          "epsilon": 5e-05,
+          "gradient": [
+            0,
+            0,
+            1.0000000000000286
+          ]
+        },
+        {
+          "epsilon": 2.5e-05,
+          "gradient": [
+            0,
+            0,
+            1.0000000000000286
+          ]
+        }
+      ]
+    }
+  ],
+  "sceneComparisons": [
+    {
+      "name": "torso-before-impact",
+      "pieceKey": "body:1",
+      "total": 36302,
+      "reasons": {
+        "ok": 32071,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 0,
+        "owner-unstable": 4231,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8834499476612859,
+      "anatomy": {
+        "head": {
+          "hits": 5536,
+          "analytic": 4634,
+          "fallback": 902,
+          "analyticFraction": 0.8370664739884393
+        },
+        "torso": {
+          "hits": 12582,
+          "analytic": 10921,
+          "fallback": 1661,
+          "analyticFraction": 0.8679860117628359
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.0360963642597198e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 32071,
+        "p50": 0.36300432583018233,
+        "p95": 1.0317487699403654,
+        "p99": 1.4644109182188143,
+        "max": 2.4434079451216735
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "torso-after-impact",
+      "pieceKey": "body:1",
+      "total": 37662,
+      "reasons": {
+        "ok": 33830,
+        "unsupported": 362,
+        "degenerate": 0,
+        "hard-boundary": 785,
+        "owner-unstable": 2685,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8982528808878976,
+      "anatomy": {
+        "head": {
+          "hits": 4747,
+          "analytic": 4059,
+          "fallback": 688,
+          "analyticFraction": 0.8550663576995997
+        },
+        "torso": {
+          "hits": 6781,
+          "analytic": 5989,
+          "fallback": 792,
+          "analyticFraction": 0.8832030673941896
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.594889909029007e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 33830,
+        "p50": 0.47964992596219297,
+        "p95": 1.4672380466281993,
+        "p99": 2.6408748541301628,
+        "max": 40.37185923534368
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 2627,
+          "analytic": 2074,
+          "reasons": [
+            2074,
+            104,
+            0,
+            223,
+            226,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 11993,
+          "analytic": 11015,
+          "reasons": [
+            11015,
+            169,
+            0,
+            484,
+            325,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 579,
+          "analytic": 390,
+          "reasons": [
+            390,
+            89,
+            0,
+            78,
+            22,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 5692,
+          "analytic": 5010,
+          "reasons": [
+            5010,
+            239,
+            0,
+            312,
+            131,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null,
+      "maxAngleReview": "Controller accepted localized derivative/owner/noise proof and benign technical beauty; retain original max and failed run. No ownerLook gate change."
+    },
+    {
+      "name": "torso-after-stagger",
+      "pieceKey": "body:1",
+      "total": 23752,
+      "reasons": {
+        "ok": 20917,
+        "unsupported": 634,
+        "degenerate": 0,
+        "hard-boundary": 215,
+        "owner-unstable": 1986,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8806416301785113,
+      "anatomy": {
+        "head": {
+          "hits": 3278,
+          "analytic": 2814,
+          "fallback": 464,
+          "analyticFraction": 0.8584502745576571
+        },
+        "torso": {
+          "hits": 3625,
+          "analytic": 2810,
+          "fallback": 815,
+          "analyticFraction": 0.7751724137931034
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.83936208486557e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 20917,
+        "p50": 0.48644391925749864,
+        "p95": 1.1454968659388582,
+        "p99": 2.509179889758333,
+        "max": 13.63955273444947
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 363,
+          "analytic": 237,
+          "reasons": [
+            237,
+            48,
+            0,
+            40,
+            38,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 5876,
+          "analytic": 4975,
+          "reasons": [
+            4975,
+            388,
+            0,
+            152,
+            361,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 242,
+          "analytic": 13,
+          "reasons": [
+            13,
+            198,
+            0,
+            23,
+            8,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 101,
+          "analytic": 0,
+          "reasons": [
+            0,
+            101,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 2316,
+          "analytic": 1599,
+          "reasons": [
+            1599,
+            294,
+            0,
+            117,
+            306,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "torso-overlap",
+      "pieceKey": "body:1",
+      "total": 35852,
+      "reasons": {
+        "ok": 27538,
+        "unsupported": 4124,
+        "degenerate": 0,
+        "hard-boundary": 1151,
+        "owner-unstable": 3039,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.7681021979248019,
+      "anatomy": {
+        "head": {
+          "hits": 5497,
+          "analytic": 4868,
+          "fallback": 629,
+          "analyticFraction": 0.8855739494269601
+        },
+        "torso": {
+          "hits": 9509,
+          "analytic": 5023,
+          "fallback": 4486,
+          "analyticFraction": 0.5282364076138395
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 2.3865140974521637e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 27538,
+        "p50": 0.40220836975323354,
+        "p95": 1.0360588893474163,
+        "p99": 2.345205993176661,
+        "max": 6.256629350915651
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 1549,
+          "analytic": 633,
+          "reasons": [
+            633,
+            492,
+            0,
+            322,
+            102,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 8727,
+          "analytic": 4977,
+          "reasons": [
+            4977,
+            2929,
+            0,
+            493,
+            328,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 1092,
+          "analytic": 28,
+          "reasons": [
+            28,
+            701,
+            0,
+            336,
+            27,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 429,
+          "analytic": 0,
+          "reasons": [
+            0,
+            374,
+            0,
+            55,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 8552,
+          "analytic": 4175,
+          "reasons": [
+            4175,
+            3421,
+            0,
+            623,
+            333,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "head-before-impact",
+      "pieceKey": "body:1",
+      "total": 44426,
+      "reasons": {
+        "ok": 39122,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 0,
+        "owner-unstable": 5304,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8806104533381354,
+      "anatomy": {
+        "head": {
+          "hits": 4206,
+          "analytic": 3542,
+          "fallback": 664,
+          "analyticFraction": 0.8421302900618165
+        },
+        "torso": {
+          "hits": 17773,
+          "analytic": 15348,
+          "fallback": 2425,
+          "analyticFraction": 0.8635570809655094
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.0360963642597198e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 39122,
+        "p50": 0.3261955650399728,
+        "p95": 0.9974142709787623,
+        "p99": 1.420853933281607,
+        "max": 2.684353066036229
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "head-after-impact",
+      "pieceKey": "body:1",
+      "total": 47598,
+      "reasons": {
+        "ok": 40843,
+        "unsupported": 790,
+        "degenerate": 0,
+        "hard-boundary": 709,
+        "owner-unstable": 5256,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8580822723643851,
+      "anatomy": {
+        "head": {
+          "hits": 2015,
+          "analytic": 1475,
+          "fallback": 540,
+          "analyticFraction": 0.7320099255583127
+        },
+        "torso": {
+          "hits": 15814,
+          "analytic": 12900,
+          "fallback": 2914,
+          "analyticFraction": 0.8157328949032503
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.7695128917694092e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 40843,
+        "p50": 0.3899686335478655,
+        "p95": 1.0776823780789329,
+        "p99": 1.8880495511322215,
+        "max": 13.799753735900877
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 2545,
+          "analytic": 1399,
+          "reasons": [
+            1399,
+            478,
+            0,
+            199,
+            469,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 15366,
+          "analytic": 13364,
+          "reasons": [
+            13364,
+            251,
+            0,
+            404,
+            1347,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 1516,
+          "analytic": 1125,
+          "reasons": [
+            1125,
+            61,
+            0,
+            106,
+            224,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 61,
+          "analytic": 0,
+          "reasons": [
+            0,
+            61,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 2015,
+          "analytic": 1475,
+          "reasons": [
+            1475,
+            0,
+            0,
+            28,
+            512,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 8901,
+          "analytic": 7151,
+          "reasons": [
+            7151,
+            727,
+            0,
+            347,
+            676,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "head-after-repeat",
+      "pieceKey": "body:1",
+      "total": 33008,
+      "reasons": {
+        "ok": 29874,
+        "unsupported": 48,
+        "degenerate": 0,
+        "hard-boundary": 396,
+        "owner-unstable": 2690,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.905053320407174,
+      "anatomy": {
+        "head": {
+          "hits": 1889,
+          "analytic": 1573,
+          "fallback": 316,
+          "analyticFraction": 0.8327157226045526
+        },
+        "torso": {
+          "hits": 10043,
+          "analytic": 8992,
+          "fallback": 1051,
+          "analyticFraction": 0.895349995021408
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 2.2351741790771484e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 29874,
+        "p50": 0.4032474056778568,
+        "p95": 1.1122547997831878,
+        "p99": 2.0663558576803505,
+        "max": 9.100439102961401
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 195,
+          "analytic": 168,
+          "reasons": [
+            168,
+            0,
+            0,
+            0,
+            27,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 5421,
+          "analytic": 4667,
+          "reasons": [
+            4667,
+            48,
+            0,
+            396,
+            310,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 40,
+          "analytic": 24,
+          "reasons": [
+            24,
+            0,
+            0,
+            0,
+            16,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 1889,
+          "analytic": 1573,
+          "reasons": [
+            1573,
+            0,
+            0,
+            177,
+            139,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 2076,
+          "analytic": 1796,
+          "reasons": [
+            1796,
+            48,
+            0,
+            160,
+            72,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "arm-before-sever",
+      "pieceKey": "body:1",
+      "total": 23853,
+      "reasons": {
+        "ok": 21333,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 0,
+        "owner-unstable": 2520,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8943529115834487,
+      "anatomy": {
+        "head": {
+          "hits": 2021,
+          "analytic": 1697,
+          "fallback": 324,
+          "analyticFraction": 0.8396833250865908
+        },
+        "torso": {
+          "hits": 7401,
+          "analytic": 6411,
+          "fallback": 990,
+          "analyticFraction": 0.8662342926631537
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 9.080395102500916e-09,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 21333,
+        "p50": 0.3670936795277125,
+        "p95": 0.9657273608249101,
+        "p99": 1.3864239558722193,
+        "max": 2.611000913351167
+      },
+      "artifact": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": null
+    },
+    {
+      "name": "arm-before-sever",
+      "pieceKey": "body:1",
+      "total": 21285,
+      "reasons": {
+        "ok": 18957,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 0,
+        "owner-unstable": 2328,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8906272022551093,
+      "anatomy": {
+        "head": {
+          "hits": 2239,
+          "analytic": 1889,
+          "fallback": 350,
+          "analyticFraction": 0.8436802143814203
+        },
+        "torso": {
+          "hits": 6878,
+          "analytic": 5954,
+          "fallback": 924,
+          "analyticFraction": 0.8656586216923524
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.0477378964424133e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 18957,
+        "p50": 0.3603451006568344,
+        "p95": 0.9895667374440172,
+        "p99": 1.411744798971307,
+        "max": 2.4055136713233707
+      },
+      "artifact": "/tmp/zombie-ng-wounds-elbow-controlled/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": {
+        "changed": 0,
+        "max": 0,
+        "stateStable": true,
+        "hybridStateStable": true
+      }
+    },
+    {
+      "name": "body-after-arm-sever",
+      "pieceKey": "body:1",
+      "total": 19990,
+      "reasons": {
+        "ok": 17103,
+        "unsupported": 247,
+        "degenerate": 0,
+        "hard-boundary": 523,
+        "owner-unstable": 2117,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8555777888944472,
+      "anatomy": {
+        "head": {
+          "hits": 2197,
+          "analytic": 1800,
+          "fallback": 397,
+          "analyticFraction": 0.8192990441511152
+        },
+        "torso": {
+          "hits": 7098,
+          "analytic": 5917,
+          "fallback": 1181,
+          "analyticFraction": 0.833615102845872
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.4901161193847656e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 17103,
+        "p50": 0.3465349435805266,
+        "p95": 1.0480168916399277,
+        "p99": 1.730060113392933,
+        "max": 44.347012605663544
+      },
+      "artifact": "/tmp/zombie-ng-wounds-elbow-controlled/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 167,
+          "analytic": 163,
+          "reasons": [
+            163,
+            0,
+            0,
+            2,
+            2,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 3597,
+          "analytic": 2585,
+          "reasons": [
+            2585,
+            247,
+            0,
+            200,
+            565,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 73,
+          "analytic": 73,
+          "reasons": [
+            73,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 2212,
+          "analytic": 1568,
+          "reasons": [
+            1568,
+            191,
+            0,
+            107,
+            346,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": {
+        "changed": 0,
+        "max": 0,
+        "stateStable": true,
+        "hybridStateStable": true
+      },
+      "maxAngleReview": "Controller accepted localized derivative/owner/noise proof and benign technical beauty; retain original max and failed run. No ownerLook gate change."
+    },
+    {
+      "name": "detached-chunk-1",
+      "pieceKey": "chunk:1",
+      "total": 1283,
+      "reasons": {
+        "ok": 1183,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 19,
+        "owner-unstable": 81,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.9220576773187841,
+      "anatomy": {
+        "head": {
+          "hits": 0,
+          "analytic": 0,
+          "fallback": 0,
+          "analyticFraction": 0
+        },
+        "torso": {
+          "hits": 0,
+          "analytic": 0,
+          "fallback": 0,
+          "analyticFraction": 0
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 7.916241884231567e-09,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 1183,
+        "p50": 0.5986793199124677,
+        "p95": 2.6655866263851844,
+        "p99": 5.846468578011772,
+        "max": 8.913456378042234
+      },
+      "artifact": "/tmp/zombie-ng-wounds-elbow-controlled/wounds.json",
+      "woundROI": null,
+      "sameMode": {
+        "changed": 0,
+        "max": 0,
+        "stateStable": true,
+        "hybridStateStable": true
+      },
+      "p99Review": "pending independent localized proof; p99 remains failed/flagged"
+    },
+    {
+      "name": "shoulder-before-impact",
+      "pieceKey": "body:1",
+      "total": 23853,
+      "reasons": {
+        "ok": 21333,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 0,
+        "owner-unstable": 2520,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8943529115834487,
+      "anatomy": {
+        "head": {
+          "hits": 2021,
+          "analytic": 1697,
+          "fallback": 324,
+          "analyticFraction": 0.8396833250865908
+        },
+        "torso": {
+          "hits": 7401,
+          "analytic": 6411,
+          "fallback": 990,
+          "analyticFraction": 0.8662342926631537
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 9.080395102500916e-09,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 21333,
+        "p50": 0.3670936795277125,
+        "p95": 0.9657273608249101,
+        "p99": 1.3864239558722193,
+        "max": 2.611000913351167
+      },
+      "artifact": "/tmp/zombie-ng-wounds-shoulder-controlled/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 0,
+          "analytic": 0,
+          "reasons": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": {
+        "changed": 0,
+        "max": 0,
+        "stateStable": true,
+        "hybridStateStable": true
+      }
+    },
+    {
+      "name": "moving-shoulder-after-impact",
+      "pieceKey": "body:1",
+      "total": 26407,
+      "reasons": {
+        "ok": 23147,
+        "unsupported": 245,
+        "degenerate": 0,
+        "hard-boundary": 334,
+        "owner-unstable": 2681,
+        "wound-pending": 0,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.8765478850304843,
+      "anatomy": {
+        "head": {
+          "hits": 2185,
+          "analytic": 1816,
+          "fallback": 369,
+          "analyticFraction": 0.8311212814645309
+        },
+        "torso": {
+          "hits": 7409,
+          "analytic": 6113,
+          "fallback": 1296,
+          "analyticFraction": 0.8250776083142124
+        }
+      },
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 1.7695128917694092e-08,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 23147,
+        "p50": 0.37039433954870943,
+        "p95": 1.0779619216498937,
+        "p99": 1.6930036341187737,
+        "max": 7.610726023748462
+      },
+      "artifact": "/tmp/zombie-ng-wounds-shoulder-controlled/wounds.json",
+      "woundROI": {
+        "wall": {
+          "hits": 631,
+          "analytic": 468,
+          "reasons": [
+            468,
+            0,
+            0,
+            36,
+            127,
+            0,
+            0,
+            0
+          ]
+        },
+        "rim": {
+          "hits": 5864,
+          "analytic": 4710,
+          "reasons": [
+            4710,
+            214,
+            0,
+            241,
+            699,
+            0,
+            0,
+            0
+          ]
+        },
+        "internal": {
+          "hits": 111,
+          "analytic": 9,
+          "reasons": [
+            9,
+            31,
+            0,
+            8,
+            63,
+            0,
+            0,
+            0
+          ]
+        },
+        "curvedInternal": {
+          "hits": 39,
+          "analytic": 0,
+          "reasons": [
+            0,
+            31,
+            0,
+            8,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "headWound": {
+          "hits": 972,
+          "analytic": 740,
+          "reasons": [
+            740,
+            0,
+            0,
+            50,
+            182,
+            0,
+            0,
+            0
+          ]
+        },
+        "torsoWound": {
+          "hits": 3460,
+          "analytic": 2754,
+          "reasons": [
+            2754,
+            212,
+            0,
+            127,
+            367,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "sameMode": {
+        "changed": 14670,
+        "max": 0.8546689450740814,
+        "stateStable": true,
+        "hybridStateStable": true
+      }
+    }
+  ],
+  "localizedReviews": [
+    {
+      "scene": "torso-after-impact",
+      "pixel": [
+        451,
+        254
+      ],
+      "point": [
+        -4.6124069936115415,
+        1.3303652833829458,
+        -4.766647741666343
+      ],
+      "state": [
+        0,
+        5,
+        1.0011239051818848,
+        0
+      ],
+      "analytic": [
+        0.000992154935374856,
+        0.021369246765971184,
+        -0.08372398465871811,
+        0.24341726303100586
+      ],
+      "cpuGradientError": 1.6674640015490617e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.00023625660022377044
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 4.7337049582423526e-05
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.00012134049616373271
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0007204597111494188
+        }
+      ],
+      "tetraOwners": [
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      "geometricTetra": [
+        0.01027754721386979,
+        -0.10591191918744396,
+        0.20955983685174337
+      ],
+      "noiseOnly": [
+        -0.08886884152889252,
+        0.08443822711706161,
+        -0.15497691929340363
+      ],
+      "fullTetra": [
+        -0.07857928661299714,
+        -0.02147210580005776,
+        0.05458134000946302
+      ],
+      "combined": [
+        -0.06749959290027618,
+        0.0007142433314584196,
+        0.08844035118818283
+      ],
+      "noiseDecompositionError": 1.2214328550367924e-05
+    },
+    {
+      "scene": "torso-after-impact",
+      "pixel": [
+        452,
+        255
+      ],
+      "point": [
+        -4.60819363218923,
+        1.3261584562806816,
+        -4.768356098685805
+      ],
+      "state": [
+        0,
+        5,
+        1.001312255859375,
+        0
+      ],
+      "analytic": [
+        0.0010472044814378023,
+        0.017542148008942604,
+        -0.08660118281841278,
+        0.20590701699256897
+      ],
+      "cpuGradientError": 4.460205045338127e-06,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.0019595590117712515
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 4.37258152633755e-05
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.0003298276603982011
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0007106730298620856
+        }
+      ],
+      "tetraOwners": [
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      "geometricTetra": [
+        0.0034099308929095664,
+        -0.11339458675744632,
+        0.1718039372159789
+      ],
+      "noiseOnly": [
+        -0.10101177543401718,
+        0.05084659531712532,
+        -0.1897912472486496
+      ],
+      "fullTetra": [
+        -0.09758997991108724,
+        -0.06254948705948966,
+        -0.017949117742925107
+      ],
+      "combined": [
+        -0.08346962183713913,
+        -0.03575458750128746,
+        0.016115771606564522
+      ],
+      "noiseDecompositionError": 4.002071111599187e-05
+    },
+    {
+      "scene": "torso-after-impact",
+      "pixel": [
+        452,
+        256
+      ],
+      "point": [
+        -4.607635813747723,
+        1.3219518174344533,
+        -4.769983586550925
+      ],
+      "state": [
+        0,
+        5,
+        1.001726508140564,
+        0
+      ],
+      "analytic": [
+        0.0009991562692448497,
+        0.11420130729675293,
+        -0.04455948621034622,
+        0.22658899426460266
+      ],
+      "cpuGradientError": 1.3524039938560395e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 4.29823670845699e-05
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 8.63036605889335e-05
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.0003384359606001809
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0009245314707811364
+        }
+      ],
+      "tetraOwners": [
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      "geometricTetra": [
+        0.10184820954843114,
+        -0.06967559359812488,
+        0.19666433702999106
+      ],
+      "noiseOnly": [
+        -0.11610958725214005,
+        0.009749352931976318,
+        -0.20620130002498627
+      ],
+      "fullTetra": [
+        -0.01424047362282484,
+        -0.05992636791537127,
+        -0.009495412390000032
+      ],
+      "combined": [
+        -0.001908282283693552,
+        -0.034810133278369904,
+        0.020387688651680946
+      ],
+      "noiseDecompositionError": 4.6512896764630284e-05
+    },
+    {
+      "scene": "torso-after-impact",
+      "pixel": [
+        452,
+        257
+      ],
+      "point": [
+        -4.607375456069546,
+        1.31819180564227,
+        -4.769950221274867
+      ],
+      "state": [
+        0,
+        5,
+        1.0022261142730713,
+        0
+      ],
+      "analytic": [
+        0.0011666755890473723,
+        0.17997291684150696,
+        -0.020273707807064056,
+        0.2535172998905182
+      ],
+      "cpuGradientError": 1.869091843436158e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.00011051896142982761
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 8.72898885804116e-05
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.00012019053392110641
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0002681551619420463
+        }
+      ],
+      "tetraOwners": [
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      "geometricTetra": [
+        0.16728903574403375,
+        -0.04569268882429848,
+        0.2242450767274325
+      ],
+      "noiseOnly": [
+        -0.12576612830162048,
+        -0.026453236117959023,
+        -0.19604957103729248
+      ],
+      "fullTetra": [
+        0.04153538914882423,
+        -0.07214765537355561,
+        0.0282340024568839
+      ],
+      "combined": [
+        0.05420679226517677,
+        -0.04672694578766823,
+        0.05746772140264511
+      ],
+      "noiseDecompositionError": 4.0506646826666774e-05
+    },
+    {
+      "scene": "torso-after-impact",
+      "pixel": [
+        453,
+        258
+      ],
+      "point": [
+        -4.602588208696499,
+        1.3130967852260105,
+        -4.7745553253307165
+      ],
+      "state": [
+        0,
+        5,
+        1.0025883913040161,
+        0
+      ],
+      "analytic": [
+        0.001191833638586104,
+        0.219687357544899,
+        -0.03339462727308273,
+        0.21100851893424988
+      ],
+      "cpuGradientError": 4.1511571775871795e-06,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.00015564540636136718
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 0.00020189702078933982
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.0003169524250589609
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0004809768432839912
+        }
+      ],
+      "tetraOwners": [
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      "geometricTetra": [
+        0.20585168870942047,
+        -0.06019458426938702,
+        0.1826357183745131
+      ],
+      "noiseOnly": [
+        -0.16957104206085205,
+        -0.03033428080379963,
+        -0.17981159687042236
+      ],
+      "fullTetra": [
+        0.03628254732272277,
+        -0.09052699412374447,
+        0.0028603487104798355
+      ],
+      "combined": [
+        0.05011630803346634,
+        -0.06372890621423721,
+        0.031196918338537216
+      ],
+      "noiseDecompositionError": 3.632524599800133e-05
+    },
+    {
+      "scene": "torso-after-impact",
+      "pixel": [
+        454,
+        258
+      ],
+      "point": [
+        -4.5975737149046445,
+        1.3110753714534904,
+        -4.781632869094987
+      ],
+      "state": [
+        0,
+        5,
+        1.0023266077041626,
+        0
+      ],
+      "analytic": [
+        0.0011985542951151729,
+        0.24993230402469635,
+        -0.04303024709224701,
+        0.14174628257751465
+      ],
+      "cpuGradientError": 8.842681053990062e-06,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.00014361639484032821
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 7.792876185152244e-05
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.00020208812781082495
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0004559458408491685
+        }
+      ],
+      "tetraOwners": [
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      "geometricTetra": [
+        0.2347551247415443,
+        -0.07055728929117322,
+        0.11436763452365994
+      ],
+      "noiseOnly": [
+        -0.1919104903936386,
+        0.027752244845032692,
+        -0.136971116065979
+      ],
+      "fullTetra": [
+        0.042844651034101844,
+        -0.042805050422127046,
+        -0.02260348022294541
+      ],
+      "combined": [
+        0.05802181363105774,
+        -0.015278002247214317,
+        0.004775173496454954
+      ],
+      "noiseDecompositionError": 1.7773078054928252e-08
+    },
+    {
+      "scene": "body-after-arm-sever",
+      "pixel": [
+        401,
+        314
+      ],
+      "point": [
+        -4.506852466136567,
+        1.1537605082751163,
+        -4.942544370060735
+      ],
+      "state": [
+        0,
+        10,
+        4.030343532562256,
+        1
+      ],
+      "analytic": [
+        0.001924704760313034,
+        0.07911500334739685,
+        0.18598340451717377,
+        0.21885859966278076
+      ],
+      "cpuGradientError": 2.1260434884187147e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.0026781214003152904
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 0.00025931570507338133
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.0008367305557819412
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.001263105017288857
+        }
+      ],
+      "tetraOwners": [
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ]
+      ],
+      "geometricTetra": [
+        -0.11741794878616929,
+        0.010178948286920786,
+        0.33171597169712186
+      ],
+      "noiseOnly": [
+        -0.038303740322589874,
+        -0.09487716108560562,
+        0.037071455270051956
+      ],
+      "fullTetra": [
+        -0.15571325396498045,
+        -0.08469781217475732,
+        0.36878705335160095
+      ],
+      "combined": [
+        0.040811263024806976,
+        0.09110624343156815,
+        0.2559300661087036
+      ],
+      "noiseDecompositionError": 8.452913030141612e-06
+    },
+    {
+      "scene": "body-after-arm-sever",
+      "pixel": [
+        402,
+        315
+      ],
+      "point": [
+        -4.50103842236392,
+        1.1481840894915016,
+        -4.940914732712926
+      ],
+      "state": [
+        0,
+        10,
+        3.95371150970459,
+        1
+      ],
+      "analytic": [
+        0.0017628063214942813,
+        -0.05473906174302101,
+        0.11248067021369934,
+        0.4732685983181
+      ],
+      "cpuGradientError": 5.186433383102138e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.002124786606691917
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 0.0004766751143919103
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.00041193921979789836
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0012043661274998899
+        }
+      ],
+      "tetraOwners": [
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ]
+      ],
+      "geometricTetra": [
+        -0.20401026510323086,
+        -0.06482034223154187,
+        0.5737253425953289
+      ],
+      "noiseOnly": [
+        -0.03714941814541817,
+        -0.12036177515983582,
+        -0.03003799356520176
+      ],
+      "fullTetra": [
+        -0.24115244741551578,
+        -0.185181435275202,
+        0.5436867650132626
+      ],
+      "combined": [
+        -0.09188847988843918,
+        -0.00788110587745905,
+        0.44323059916496277
+      ],
+      "noiseDecompositionError": 7.291340021384559e-06
+    },
+    {
+      "scene": "body-after-arm-sever",
+      "pixel": [
+        405,
+        318
+      ],
+      "point": [
+        -4.483623831117247,
+        1.1316680941941717,
+        -4.935345421709851
+      ],
+      "state": [
+        0,
+        10,
+        3.563020706176758,
+        1
+      ],
+      "analytic": [
+        0.002783479867503047,
+        0.6211425065994263,
+        0.35148054361343384,
+        0.19533750414848328
+      ],
+      "cpuGradientError": 1.785695572043026e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.007000480858301002
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 0.0008880147310202968
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.0011765046194194897
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0013057002649995008
+        }
+      ],
+      "tetraOwners": [
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ]
+      ],
+      "geometricTetra": [
+        0.513593511035045,
+        0.15749859934051832,
+        0.3466201014816761
+      ],
+      "noiseOnly": [
+        0.07572926580905914,
+        -0.08560793846845627,
+        0.012367509305477142
+      ],
+      "fullTetra": [
+        0.589319936504277,
+        0.07188160573908438,
+        0.35899862511238706
+      ],
+      "combined": [
+        0.6968717575073242,
+        0.265872597694397,
+        0.20770502090454102
+      ],
+      "noiseDecompositionError": 1.4538855661062284e-05
+    },
+    {
+      "scene": "body-after-arm-sever",
+      "pixel": [
+        392,
+        319
+      ],
+      "point": [
+        -4.5565434027440945,
+        1.1555746276831833,
+        -4.833771444256078
+      ],
+      "state": [
+        0,
+        10,
+        3.4303531646728516,
+        1
+      ],
+      "analytic": [
+        0.001680709421634674,
+        0.3460996150970459,
+        -0.515540599822998,
+        0.18149062991142273
+      ],
+      "cpuGradientError": 8.355622263225055e-06,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.06206187945677721
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 0.006994164812573423
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.00019345598733287289
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0007935235280576403
+        }
+      ],
+      "tetraOwners": [
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ]
+      ],
+      "geometricTetra": [
+        0.21634111180901527,
+        -0.6691498371462027,
+        0.3094705753028393
+      ],
+      "noiseOnly": [
+        0.07327871769666672,
+        0.11871670931577682,
+        -0.2085130363702774
+      ],
+      "fullTetra": [
+        0.28961543769886094,
+        -0.5504384559268752,
+        0.1009970825786392
+      ],
+      "combined": [
+        0.4193783402442932,
+        -0.3968238830566406,
+        -0.027022412046790123
+      ],
+      "noiseDecompositionError": 4.014195466112176e-05
+    },
+    {
+      "scene": "body-after-arm-sever",
+      "pixel": [
+        391,
+        328
+      ],
+      "point": [
+        -4.564087404983772,
+        1.0846440394511294,
+        -4.893100052758415
+      ],
+      "state": [
+        0,
+        10,
+        3.5961380004882812,
+        1
+      ],
+      "analytic": [
+        0.001995021477341652,
+        0.33017697930336,
+        0.24542652070522308,
+        0.3877659738063812
+      ],
+      "cpuGradientError": 1.2288320364556421e-05,
+      "gpuCentralErrors": [
+        {
+          "epsilon": 0.0015,
+          "error": 0.07442893970725782
+        },
+        {
+          "epsilon": 0.0005,
+          "error": 0.015445499782206992
+        },
+        {
+          "epsilon": 0.0002,
+          "error": 0.0013335351084907676
+        },
+        {
+          "epsilon": 0.0001,
+          "error": 0.0007891266722405856
+        }
+      ],
+      "tetraOwners": [
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          10,
+          10
+        ]
+      ],
+      "geometricTetra": [
+        0.14978216495364904,
+        0.07839070167392492,
+        0.5937174816305438
+      ],
+      "noiseOnly": [
+        -0.08081632852554321,
+        0.13548099994659424,
+        -0.012267821468412876
+      ],
+      "fullTetra": [
+        0.0689623411744833,
+        0.21387520246207714,
+        0.5814520797381798
+      ],
+      "combined": [
+        0.24936065077781677,
+        0.3809075355529785,
+        0.3754981458187103
+      ],
+      "noiseDecompositionError": 5.5069989791239935e-06
+    }
+  ],
+  "events": {
+    "final-events": [
+      {
+        "name": "torso-slug-impact",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.762609046164249,
+            1.2190136476780529,
+            -4.193681695776874
+          ],
+          "dir": [
+            -0.005063812978324849,
+            -0.40873104702505536,
+            -0.912640832417618
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.765140952653411,
+            1.0142314574988585,
+            -4.650002111985684
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.8,
+              0,
+              -4.8
+            ],
+            "yaw": 0
+          },
+          "wounds": 0,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.799685669392391,
+              0,
+              -4.835110678340611
+            ],
+            "yaw": 0.056666666666666664
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.755653917791056,
+                1.0102437724302848,
+                -4.7357967901554865
+              ],
+              "carveNormal": [
+                -0.22616524864771942,
+                -0.24618042432049275,
+                -0.9424672296613276
+              ],
+              "carveDepth": 0.12600000000000008,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 8
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        }
+      },
+      {
+        "name": "torso-overlap-impact",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.436187968336884,
+            1.21874282180534,
+            -4.458984578322214
+          ],
+          "dir": [
+            -0.005290305914490631,
+            -0.40869355659491335,
+            -0.9126563369971915
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.438354376162544,
+            1.0511148397535601,
+            -4.832722101740986
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.47525141291343,
+              0,
+              -5.06543077000943
+            ],
+            "yaw": 1.4778611568590119
+          },
+          "wounds": 1,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.475367399671185,
+              0,
+              -5.104182978283665
+            ],
+            "yaw": 1.4778611568590119
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.297033762572415,
+                1.003273774672453,
+                -5.047218585282174
+              ],
+              "carveNormal": [
+                -0.9656490124318377,
+                -0.24618042432049275,
+                0.08316960665290564
+              ],
+              "carveDepth": 0.12600000000000008,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 8
+            },
+            {
+              "surface": [
+                -4.429159884033702,
+                1.0479137206514697,
+                -4.857159847728409
+              ],
+              "carveNormal": [
+                -0.18194808237635385,
+                0.3118286421348902,
+                -0.9325544452008568
+              ],
+              "carveDepth": 0.1368000000000001,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 7
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        }
+      },
+      {
+        "name": "head-slug-impact",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.762641703846532,
+            1.5136516144032177,
+            -4.3270631765977985
+          ],
+          "dir": [
+            -0.005059389996809306,
+            0.09299002644751082,
+            -0.9956541857262248
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.763906551345734,
+            1.5368991210150955,
+            -4.575976723029354
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.8,
+              0,
+              -4.8
+            ],
+            "yaw": 0
+          },
+          "wounds": 0,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.79967632869629,
+              0,
+              -4.835110727986411
+            ],
+            "yaw": 0.056666666666666664
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.744082810628961,
+                1.5098931285191695,
+                -4.742804315650107
+              ],
+              "carveNormal": [
+                -0.2954405451273066,
+                0.16935273138743723,
+                -0.9402311081146455
+              ],
+              "carveDepth": 0.08640000000000006,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 2
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        }
+      },
+      {
+        "name": "head-repeat-impact",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.7080041619439434,
+            1.5133777357540594,
+            -4.556887963391144
+          ],
+          "dir": [
+            -0.00529136692103314,
+            0.09302696213431662,
+            -0.9956495295796445
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.710575435557132,
+            1.5581897959995372,
+            -5.040711406671253
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.74707542997841,
+              0,
+              -5.029802685215989
+            ],
+            "yaw": 1.3316666666666663
+          },
+          "wounds": 1,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.747182194362427,
+              0,
+              -5.068575750837522
+            ],
+            "yaw": 1.388333333333333
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.508621025153598,
+                1.4750867869068116,
+                -5.252668303452335
+              ],
+              "carveNormal": [
+                -0.991132275146936,
+                0.12795505869378093,
+                -0.03583735644169676
+              ],
+              "carveDepth": 0.08640000000000006,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 2
+            },
+            {
+              "surface": [
+                -4.709460347789909,
+                1.5215891206842636,
+                -5.2729882046737115
+              ],
+              "carveNormal": [
+                0.8570946761222991,
+                0.3476203123185703,
+                0.3801957845983442
+              ],
+              "carveDepth": 0.10800000000000008,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 1
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        }
+      },
+      {
+        "name": "shoulder-slug-sever",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.583943363475795,
+            1.4264486271087198,
+            -3.865557711494807
+          ],
+          "dir": [
+            -0.004883100349024341,
+            -0.04654853647764189,
+            -0.9989040940364451
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.58798718095233,
+            1.3862599953381727,
+            -4.692775164368737
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.8,
+              0,
+              -4.8
+            ],
+            "yaw": 0
+          },
+          "wounds": 0,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.799555810841252,
+              0,
+              -4.800419705588924
+            ],
+            "yaw": 0.056666666666666664
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.6084478284561206,
+                1.4111739852375906,
+                -4.84707502399016
+              ],
+              "carveNormal": [
+                0.7716778470627224,
+                -0.30912486228280456,
+                -0.555837314212782
+              ],
+              "carveDepth": 0.04860000000000004,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 10
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        }
+      }
+    ],
+    "elbow-controlled": [
+      {
+        "name": "elbow-slug-sever",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.479999162935686,
+            1.3204550997887559,
+            -3.820126203256586
+          ],
+          "dir": [
+            -0.004818398915118552,
+            -0.22512771497241013,
+            -0.9743173481895906
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.484409754650958,
+            1.1123043398595838,
+            -4.7119817967165885
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.8,
+              0,
+              -4.8
+            ],
+            "yaw": 0
+          },
+          "wounds": 0,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.8,
+              0,
+              -4.8
+            ],
+            "yaw": 0
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.497198506682866,
+                1.1167493544022762,
+                -4.852810231609398
+              ],
+              "carveNormal": [
+                -0.6056791819019127,
+                0.5500300982742583,
+                -0.5749953213749134
+              ],
+              "carveDepth": 0.050400000000000035,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 10
+            },
+            {
+              "surface": [
+                -4.532371930357413,
+                1.1389590775144327,
+                -4.89511592016728
+              ],
+              "carveNormal": null,
+              "radius": 0.066,
+              "type": "blast",
+              "primIdx": 10
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10",
+            "chunk:1"
+          ]
+        }
+      }
+    ],
+    "shoulder-controlled": [
+      {
+        "name": "moving-shoulder-control",
+        "source": "actual fireSlug projectile/impact/impulse",
+        "prediction": {
+          "origin": [
+            -4.583943363475795,
+            1.4264486271087198,
+            -3.865557711494807
+          ],
+          "dir": [
+            -0.004883100349024341,
+            -0.04654853647764189,
+            -0.9989040940364451
+          ],
+          "actorId": 1,
+          "hit": [
+            -4.58798718095233,
+            1.3862599953381727,
+            -4.692775164368737
+          ]
+        },
+        "before": {
+          "actor": {
+            "pos": [
+              -4.8,
+              0,
+              -4.8
+            ],
+            "yaw": 0
+          },
+          "wounds": 0,
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        },
+        "after": {
+          "actor": {
+            "pos": [
+              -4.799555810841252,
+              0,
+              -4.800419705588924
+            ],
+            "yaw": 0.056666666666666664
+          },
+          "wounds": [
+            {
+              "surface": [
+                -4.6084478284561206,
+                1.4111739852375906,
+                -4.84707502399016
+              ],
+              "carveNormal": [
+                0.7716778470627224,
+                -0.30912486228280456,
+                -0.555837314212782
+              ],
+              "carveDepth": 0.04860000000000004,
+              "radius": 0.16,
+              "type": "blast",
+              "primIdx": 10
+            }
+          ],
+          "pieces": [
+            "body:1",
+            "body:2",
+            "body:3",
+            "body:4",
+            "body:5",
+            "body:6",
+            "body:7",
+            "body:8",
+            "body:9",
+            "body:10"
+          ]
+        }
+      }
+    ]
+  },
+  "motion": {
+    "final-events": [
+      {
+        "name": "impact-stagger-moving-light",
+        "frames": 24,
+        "simDt": 0.016666666666666666,
+        "source": "actual slug before reel; every subsequent simulation frame captured in both modes"
+      }
+    ],
+    "elbow-controlled": [
+      {
+        "name": "sever-flight",
+        "frames": 12,
+        "simDt": 0.016666666666666666,
+        "source": "actual elbow slug; every simulation frame captured"
+      }
+    ],
+    "shoulder-controlled": []
+  },
+  "historicalRuns": [
+    {
+      "path": "/tmp/zombie-ng-wounds-first/wounds.json",
+      "sha256": "5cc39c7457cb09144f6813c18e046cbf9e4ac315ae5e87543b0604f07f007937",
+      "note": "WGSL reserved meta keyword; fixed before numeric validation"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-second/wounds.json",
+      "sha256": "e63895673d15cfa64a61d5a45c827280998976075c2cc62b5344a82c7f0a09cc",
+      "note": "11 production WGSL wound cases pass; stamped crater only, not impulse evidence"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-events/wounds.json",
+      "sha256": "9646b2048dffdb4858eacdec33a591685b3f4d347fed8aabd26d6e5441afbcbf",
+      "note": "Initial actual event run; ROI unprojection incorrect, do not use ROI from this run"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-localized/wounds.json",
+      "sha256": "6232089e9c2d2ddafae34dcdee4c81c52d088054584b60396d5f9c0ea507755a",
+      "note": "Corrected clip-depth ROI; torso-only partial"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-point-proof/wounds.json",
+      "sha256": "d5f02c45923ba21c080afc80adc98b4cdb46cf3be118a196becfe82533b9ec16",
+      "note": "Actual GPU central finite differences at torso outliers"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+      "sha256": "5e3b64a7d6a51ab7de1def0a27742f5938048b1eee1fd5d60a4d6b21f3241e1a",
+      "note": "Actual torso/head impacts and overlap; torso max-angle flag later reviewed; arm point proof timeout; background shadow motion confound"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-arm-proof/wounds.json",
+      "sha256": "cca2683a45ec6110f09efef92620b1e809c5dd9ec36d79495da96e0374bc3224",
+      "note": "Moving shoulder initially failed depth/fallback/angular parity; later reproduced as first legacy read settling, independent of gradient mode"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-elbow-state/wounds.json",
+      "sha256": "b865af53a133f8d09201282aa3ff82a489b5e2b396308364005ea2e247dcda17",
+      "note": "Harness wrapper API mismatch; stopped before gameplay comparisons"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-elbow-controlled/wounds.json",
+      "sha256": "31ee87af51389e1c22e6919dc0fb42b8ec8446d01670f9b58615210f0d4fcfed",
+      "note": "Actual elbow sever, exact body/chunk depth/fallback and stable full state; body max reviewed, chunk p99 pending"
+    },
+    {
+      "path": "/tmp/zombie-ng-wounds-shoulder-controlled/wounds.json",
+      "sha256": "aa9289af224e498f79e7ee47f1c538f10c026f1a7e045468d81c6bb71ddc98ef",
+      "note": "Original moving shoulder repeated; first legacy raw byte-identical to failed arm run; subsequent legacy/hybrid exact depth/fallback"
+    }
+  ],
+  "remaining": [
+    "Run detached-piece worst-point CPU/GPU finite-difference and owner/noise proof, then controller review of p99=5.846 degrees; never silently raise threshold.",
+    "Run the final bounded settling and piece-point adapter on real WebGPU. Its focused Node tests and tsc pass, but the last GPU launch was blocked.",
+    "Capture both initial projectile flight/impact simulation ticks in both modes using the added driver hook. Existing event runs step two ticks before their first post-impact capture; full-rate subsequent 24-frame stagger and 12-frame sever flight evidence exists.",
+    "Validate stronger full-state beauty signatures and refreshHull control across moving-light reel. Earlier motion review was scoped to actor appearance because background shadows differed."
+  ],
+  "tests": {
+    "vitest": {
+      "files": 4,
+      "passed": 245,
+      "command": "npx vitest run src/lab/sdf-zombie/webgpu/normal-gradient-reference.test.ts src/lab/sdf-zombie/webgpu/normal-gradient-support.test.ts src/lab/sdf-zombie/webgpu/normal-gradient.wgsl.test.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts --minWorkers=1 --maxWorkers=1"
+    },
+    "node": {
+      "passed": 13,
+      "command": "node --test scripts/lib/normal-gradient-intact.test.mjs"
+    },
+    "tsc": "npx tsc --noEmit: pass",
+    "diffCheck": "git diff --check: pass"
+  },
+  "firstReadControl": {
+    "path": "/tmp/zombie-ng-wounds-shoulder-controlled/moving-shoulder-after-impact-capture-state.json",
+    "cpuStateExact": true,
+    "legacyToLegacy": {
+      "changedFloats": 14670,
+      "depthChanged": 3666,
+      "depthMax": 0.08432507514953613
+    },
+    "firstLegacyMatchesHistoricalFailedLegacy": "byte-identical (0 changed floats)",
+    "settledLegacyToHybrid": {
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "p99": 1.6930036341187737,
+      "max": 7.610726023748462
+    },
+    "boundedPolicy": "Final driver requires two identical legacy raw/state reads, four-read maximum; rejected frames retained. Final helper GPU run blocked; Node control tests pass."
+  }
+}

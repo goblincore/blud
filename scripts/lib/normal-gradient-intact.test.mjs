@@ -79,3 +79,52 @@ test('wounded control requires actual fallback while mixed fixture retains both 
   assert.match(normalCoverageFailure({...result,total:200,reasons:{ok:99},analyticFraction:.495}),/10% probe floor/);
   assert.equal(normalCoverageFailure({...result,total:1000,reasons:{ok:100},analyticFraction:.1}),null);
 });
+
+test('wound fallback control accepts current explicit boundary/unsupported reasons',()=>{
+  assert.equal(normalCoverageFailure({name:'wound',reasons:{ok:900,unsupported:100}},{woundControl:true}),null);
+  assert.match(normalCoverageFailure({name:'wound',reasons:{ok:1000}},{woundControl:true}),/no wound fallback/);
+});
+
+test('piece mask isolates detached chunks by stable identity and restores foreign body/chunk views', async () => {
+  const mkView=()=>({uniforms:{baseColor:{value:{values:[.2,.3,.4],toArray(){return [...this.values]},setRGB(...v){this.values=v}}},debugCfg:{value:{y:0}}}});
+  const views=new Map([['body:7',mkView()],['chunk:7',mkView()],['chunk:8',mkView()]]);
+  const game={chunkCount:2,normalGradientPieces:()=>[...views.keys()].map(key=>({key})),normalGradientPiece:key=>views.get(key)};
+  const window={};const evaluate=async source=>new Function('__sdfGame','window',`return (${source});`)(game,window);
+  await withNormalBodyMask(evaluate,'chunk:7',async()=>{
+    assert.deepEqual(views.get('chunk:7').uniforms.baseColor.value.toArray(),[.2,.3,.4]);
+    assert.deepEqual(views.get('body:7').uniforms.baseColor.value.toArray(),[-1,-1,-1]);
+    assert.deepEqual(views.get('chunk:8').uniforms.baseColor.value.toArray(),[-1,-1,-1]);
+  });
+  for(const view of views.values())assert.deepEqual(view.uniforms.baseColor.value.toArray(),[.2,.3,.4]);
+});
+
+import { normalAngularFailure } from './normal-gradient-intact.mjs';
+test('reviewed stencil differences require independent gradient and identical owner/noise proofs; p99 remains a gate',()=>{
+  const point={analytic:[0,.2,.1,.3],scalar:[0],state:[0,5],epsilons:[{epsilon:.0005,gradient:[.2,.1,.3]}],detailBreakdown:{tetra:Array.from({length:4},()=>({geometric:[0,5],noisy:[0,5]})),geometricTetra:[.21,.09,.31],fullTetra:[.03,.01,.02],noiseOnly:[-.18,-.08,-.29],combined:[.02,.02,.01]}};
+  const result={name:'reviewed',angularDegrees:{p99:2,max:40},angularOutliers:1,localized:[point],woundROI:{samples:[{dg:{g:[.2,.1,.3]}}]}};
+  assert.match(normalAngularFailure(result),/requires localized/);
+  assert.equal(normalAngularFailure(result,{technicalBeautyReviewed:true}),null);
+  assert.match(normalAngularFailure({...result,angularDegrees:{p99:6,max:40}},{technicalBeautyReviewed:true}),/p99/);
+  const changedOwner=structuredClone(result);changedOwner.localized[0].detailBreakdown.tetra[0].noisy[1]=6;
+  assert.match(normalAngularFailure(changedOwner,{technicalBeautyReviewed:true}),/owner/);
+  const wrongNoise=structuredClone(result);wrongNoise.localized[0].detailBreakdown.noiseOnly[0]=0;
+  assert.match(normalAngularFailure(wrongNoise,{technicalBeautyReviewed:true}),/noise/);
+  const wrongGradient=structuredClone(result);wrongGradient.localized[0].analytic[1]=.5;
+  assert.match(normalAngularFailure(wrongGradient,{technicalBeautyReviewed:true}),/gradient/);
+  assert.match(normalAngularFailure({...result,localized:[]},{technicalBeautyReviewed:true}),/missing/);
+});
+
+
+import { settleNormalLegacy } from './normal-gradient-intact.mjs';
+test('bounded legacy settling retains first stale frame and requires two equal reads', async()=>{
+  const r=await settleNormalLegacy(async i=>({data:new Float32Array([i===0?0:1])}),async()=>({camera:[1]}));
+  assert.equal(r.settling.length,3);assert.equal(r.settling[1].changed,1);assert.equal(r.settling[2].changed,0);
+});
+test('stable output cannot conceal changing camera or packed geometry', async()=>{
+  let state=0;
+  await assert.rejects(settleNormalLegacy(async()=>({data:new Float32Array([1])}),async()=>({packed:[state++]})),/four-read cap/);
+});
+test('legacy settling fails at four reads on persistent drift or nonfinite output',async()=>{
+  let reads=0;await assert.rejects(settleNormalLegacy(async()=>({data:new Float32Array([reads++])}),async()=>({})),/four-read cap/);assert.equal(reads,4);
+  await assert.rejects(settleNormalLegacy(async()=>({data:new Float32Array([NaN])}),async()=>({})),/four-read cap/);
+});

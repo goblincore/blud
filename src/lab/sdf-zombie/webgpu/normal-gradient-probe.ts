@@ -1,10 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { uniform, texture, wgslFn } from 'three/tsl';
 import { qFromAxisAngle, qRotate } from '../vec';
 import { sdPrimitive, smax, smin } from '../validate';
 import {
-  capsuleGradient,
+  capsuleGradient, woundGradient, type WoundInput,
   finiteGradient,
   smoothMaxGradient,
   smoothMinGradient,
@@ -13,7 +13,9 @@ import {
   type NgReason,
   type V3,
 } from './normal-gradient-reference';
-import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE } from './normal-gradient.wgsl';
+import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE, NORMAL_GRADIENT_HELPERS, NG_WOUND_LIP, NG_WOUNDS } from './normal-gradient.wgsl';
+
+import { SMIN, SMAX, APPLY_WOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, DATA_ROWS } from './march.wgsl';
 
 type V4 = [number, number, number, number];
 
@@ -183,6 +185,7 @@ const api = {
   async run(_opts: { negateX?: boolean } = {}): Promise<ProbeResult[]> {
     throw new Error('probe is not ready');
   },
+  async runWounds(): Promise<unknown[]> { throw new Error('probe is not ready'); },
   status() {
     return { phase: this.phase, backend: this.backend, error: this.error, count: this.count };
   },
@@ -298,6 +301,86 @@ async function main(): Promise<void> {
     if (out.length === 0) throw new Error('probe returned no fixtures');
     showResults(out);
     return out;
+  };
+  // Exercise the REAL production applyWounds alongside ngWounds with the
+  // exact uploaded row adapter. The CPU scalar oracle below is independent.
+  const woundRows = new Float32Array(16 * DATA_ROWS * 4);
+  const woundTexture = new THREE.DataTexture(woundRows,16,DATA_ROWS,THREE.RGBAFormat,THREE.FloatType);
+  woundTexture.needsUpdate=true;
+  const uCfg=uniform(new THREE.Vector4());
+  const uCfg2=uniform(new THREE.Vector4());
+  const uBound=uniform(new THREE.Vector4());
+  const uPerf=uniform(new THREE.Vector4());
+  const sources=[SMIN,SMAX,APPLY_WOUNDS,...NORMAL_GRADIENT_HELPERS,NG_WOUND_LIP,NG_WOUNDS];
+  const chain=sources.reduce<ReturnType<typeof wgslFn>[]>((a,h)=>[...a,wgslFn(h,a.slice(-1))],[]);
+  const woundFn=wgslFn(`fn ngWoundProbe(p: vec3<f32>, base: vec4<f32>, data: texture_2d<f32>, cfg: vec4<f32>, cfg2: vec4<f32>, perf: vec4<f32>, bound: vec4<f32>, kind: f32) -> vec4<f32> {
+    let reset = ngReset();
+    let incoming = vec4<f32>(base.x + dot(base.yzw, p), base.yzw);
+    if (kind > 1.5) { let scalar = applyWounds(incoming.x, p, data, cfg, cfg2, perf, bound); return vec4<f32>(scalar.x, scalar.y, 0.0, 0.0); }
+    let result = ngWounds(incoming, p, data, cfg, cfg2, perf, bound);
+    if (kind > 0.5) { return vec4<f32>(f32(gNgReason), gNgLip, gNgNear, 0.0); }
+    return result;
+  }`,chain.slice(-1));
+  const woundMaterial=new MeshBasicNodeMaterial();
+  woundMaterial.outputNode=woundFn({p:uP,base:uDgA,data:texture(woundTexture),cfg:uCfg,cfg2:uCfg2,perf:uPerf,bound:uBound,kind:uKind});
+  woundMaterial.depthTest=false;woundMaterial.depthWrite=false;woundMaterial.blending=THREE.NoBlending;woundMaterial.toneMapped=false;
+  api.runWounds=async()=> {
+    const cfg:V4=[1,.018,.12,1.1],cfg2:V4=[.15625,1,1,0],perf:V4=[0,1,0,0],bound:V4=[0,0,0,2];
+    const raw={w:[0,0,0,.16] as V4,meta:[0,1,1,1] as V4,cap:[0,0,-1,.08] as V4};
+    const cases=[
+      {name:'sphere-wall',p:[.14,.01,-.03],rows:[raw]},
+      {name:'slab-floor',p:[.01,.015,-.10],rows:[raw]},
+      {name:'fresh-rim',p:[.174,.02,.021],rows:[raw]},
+      {name:'ordered-overlap',p:[.145,.016,.015],rows:[raw,{...raw,w:[.04,.02,.01,.12] as V4}]},
+      {name:'burn',p:[.04,.01,.017],rows:[{...raw,meta:[2,.7,1,1] as V4}]},
+      {name:'gate-only-derivative',p:[.176,0,0],rows:[raw],base:[0,0,0,1] as V4},
+      {name:'zero-amplitude',p:[.14,.01,-.03],rows:[{...raw,meta:[0,1,0,1] as V4}]},
+      {name:'radius-degenerate',p:[0,0,0],rows:[raw],reason:'degenerate'},
+      {name:'cap-corner',p:[.1,0,0],rows:[{...raw,w:[0,0,0,.2] as V4,cap:[0,0,1,.1] as V4}],reason:'hard-boundary'},
+      {name:'near-boundary',p:[.32,0,0],rows:[raw],reason:'hard-boundary'},
+      {name:'reach-boundary',p:[.749,0,0],rows:[raw],reason:'hard-boundary'},
+    ];
+    const results=[];
+    quad.material=woundMaterial;
+    try { for(const c of cases) {
+      const p=c.p as unknown as V3;
+      const base=c.base??[-.02,0,0,1] as V4;
+      const baseAt=(q:V3)=>base[0]+q.reduce((v,x,i)=>v+x*base[i+1]!,0);
+      woundRows.fill(0);
+      c.rows.forEach((r,i)=>{woundRows.set(r.w,(ROW_WOUND*16+i)*4);woundRows.set(r.meta,(ROW_WOUND_META*16+i)*4);woundRows.set(r.cap,(ROW_WOUND_CAP*16+i)*4);});
+      woundTexture.needsUpdate=true;
+      uCfg.value.fromArray([c.rows.length,...cfg.slice(1)]);uCfg2.value.fromArray(cfg2);uBound.value.fromArray(bound);uPerf.value.fromArray(perf);
+      uP.value.fromArray(p);uDgA.value.fromArray(base);
+      const resolved:WoundInput[]=c.rows.map(row=>{
+        const burn=row.meta[0]>1.5;
+        const depth=burn?row.w[3]*.35*Math.max(0,Math.min(1,row.meta[1])):row.w[3];
+        return {center:row.w.slice(0,3) as unknown as V3,depth,cap:row.cap[3]>0?row.cap[3]:1e5,inward:row.cap.slice(0,3) as unknown as V3,blend:cfg[1],rimPosition:depth*cfg[3]*row.meta[3],rimWidth:Math.max(depth*cfg2[0],1e-4),rimAmp:depth*cfg[2]*row.meta[2]*(burn?.25:1)};
+      });
+      // Independent raw-row production scalar: no derivative helper calls.
+      const scalar=(q:V3)=> {
+        const incoming=baseAt(q);let d=incoming;
+        if(Math.hypot(q[0]-bound[0],q[1]-bound[1],q[2]-bound[2])>bound[3])return d;
+        for(const row of c.rows) {
+          const v=q.map((x,i)=>x-row.w[i]!);const radius=Math.hypot(...v);
+          const reach=row.w[3]*Math.max(2,2*cfg[3]+3*cfg2[0])+4*cfg[1]+.25;
+          if(perf[1]>.5&&radius>reach)continue;
+          const burn=row.meta[0]>1.5;
+          const depth=burn?row.w[3]*.35*Math.max(0,Math.min(1,row.meta[1])):row.w[3];
+          const cap=row.cap[3]>0?row.cap[3]:1e5;
+          d=smax(d,Math.min(depth-radius,cap-v.reduce((a,x,i)=>a+x*row.cap[i]!,0)),cfg[1]);
+          const amp=depth*cfg[2]*row.meta[2]*(burn?.25:1);
+          if(amp===0)continue;
+          const x=(radius-depth*cfg[3]*row.meta[3])/Math.max(depth*cfg2[0],1e-4);
+          const u=Math.max(0,Math.min(1,(incoming+.3*amp)/amp));
+          d-=Math.exp(-x*x)*amp*(1-u*u*(3-2*u));
+        }
+        return d;
+      };
+      uKind.value=0;const actual=await readPass();uKind.value=1;const reason=await readPass();uKind.value=2;const production=await readPass();
+      const expected=woundGradient({d:baseAt(p),g:base.slice(1) as unknown as V3,reason:'ok'},p,resolved);
+      results.push({name:c.name,actual,productionScalar:production[0],cpuScalar:scalar(p),reasonCode:Math.round(reason[0]!),expected:asV4(expected),expectedReason:c.reason??expected.reason,oracle:[scalar(p),...finiteGradient(scalar,p,1e-5)],epsilons:[1e-4,5e-5,2.5e-5].map(epsilon=>({epsilon,gradient:finiteGradient(scalar,p,epsilon)})),lip:reason[1],rows:c.rows,cfg,cfg2,base});
+    }} finally {quad.material=material;}
+    return results;
   };
   api.count = fixtures().length;
   api.phase = 'ready';
