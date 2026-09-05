@@ -200,7 +200,12 @@ body
   # 13.5 mm clear of the head it is supposed to sit on. The defect was in the
   # character as authored; the pauldrons hid it, and removing them exposed it.
   # 22 mm down puts the box 8 mm INTO the crown, so the two fuse.
-  blob head on skull at=0.55 offset=(0,0.074,-0.004) r=0.070 wide=1.02 tall=0.30 deep=0.96 box round=0.10 blend=0.004 color=2e6034
+  # NARROWER (owner, 2026-09-05: "his hair is too wide for his head, it looks
+  # like a box on his head"). wide 1.02 -> 0.78 and deep 0.96 -> 0.80 pull the
+  # cap inside the cranium's outline (0.143 m across -> 0.109; the skull is
+  # ~0.12), round 0.10 -> 0.22 softens the corners so it reads as a cut,
+  # not a crate. Still a box, still tall 0.30, still 8 mm into the crown.
+  blob head on skull at=0.55 offset=(0,0.074,-0.004) r=0.070 wide=0.78 tall=0.30 deep=0.80 box round=0.22 blend=0.004 color=2e6034
   # A thin slab down the back of the head: the cut wraps the skull in the
   # bake and in the brief's read, and from behind an all-skin head loses
   # him. Flat, shallow, and proud only 6 mm.

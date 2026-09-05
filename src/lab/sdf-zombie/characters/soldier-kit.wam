@@ -150,15 +150,21 @@ parts
     # the neck. side=0.0118 then pushes every ring 20 mm outward to hold the
     # forced inner-rim tuck (see the header) inside anatomy's bound — the
     # levelled ray pulls the rim further into the chest and this buys it back.
+    #
+    # ORB, NOT TABLE (owner, 2026-09-05: "shoulder pads should be more orb
+    # shaped"). Same ray, same 20 mm outward shift, same reach down the arm;
+    # the rings now start narrow under a DOME cap, swell to the widest ring a
+    # third of the way down (where the flat top used to be widest), and
+    # round off below — a shell riding the deltoid orb, the goblin's read.
     loft pauldron bone=upperarm at=0.0 offset=(-0.0074,0.0529,-0.0019) dir=down pitch=-2 tilt=3 len=0.1324 material=plate
-      ring 0.00 w=0.159 d=0.141 side=0.0118
-      ring 0.15 w=0.156 d=0.144 side=0.0118
-      ring 0.30 w=0.150 d=0.141 side=0.0118
-      ring 0.45 w=0.147 d=0.138 side=0.0118
-      ring 0.60 w=0.135 d=0.130 side=0.0118
-      ring 0.80 w=0.121 d=0.118 side=0.0118
-      ring 1.00 w=0.112 d=0.109 side=0.0118
-      cap start=flat end=none
+      ring 0.00 w=0.095 d=0.088 side=0.0118
+      ring 0.12 w=0.138 d=0.126 side=0.0118
+      ring 0.30 w=0.156 d=0.144 side=0.0118
+      ring 0.48 w=0.152 d=0.141 side=0.0118
+      ring 0.65 w=0.138 d=0.130 side=0.0118
+      ring 0.82 w=0.121 d=0.116 side=0.0118
+      ring 1.00 w=0.104 d=0.100 side=0.0118
+      cap start=dome end=none
 
     # KNEE PLATE — a hard box-section shell over the knee, proud at the front
     # (dtop) and snug at the back of the joint (dbot) so it reads as a pad
