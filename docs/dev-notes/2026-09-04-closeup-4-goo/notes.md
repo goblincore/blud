@@ -69,6 +69,82 @@ each look-judged unfrozen:
 - Content size on the bench canvas: 800×600 (4:3 cap) → density target
   400×300, surface composite 480k px → item 1 shades 120k px.
 
+## Retry-brief instrument fixes (2026-09-05, before any benching)
+
+The implementation was already green on this branch; the retry session's job
+was benching. Four instrument fixes landed first:
+
+- `goo-smoke*.mjs` deleted. The seam verification the smoke scripts existed for
+  is 12 SINGLE-LINE evals through `connectGame` (defaults, each seam on/off via
+  `setGooPerf`'s return value, passGate off/restore, `gooProbe` typeof, bleed
+  readback) — all pass.
+- **`L.benchArgs` leaked into the page eval as bare JS** (`sdf-closeup-stage.mjs`):
+  `...(L.benchArgs ?? …)` inside the template reached the page where `L` does
+  not exist → `ReferenceError` on the first real bench rep, before any number
+  existed. Interpolated node-side. This is exactly the failure class the
+  smoke scripts were supposed to catch — and why a smoke that never runs is
+  worth nothing.
+- **Top-level `await` inside `Runtime.evaluate` is a syntax error**, and the
+  gooProbe readback's `.catch(() => null)` swallowed it as `cov ?` on every
+  row. Wrapped in an async IIFE; single-line discipline kept.
+- Bench JSON filenames now carry the staging mode — phase0-close overwrote the
+  room-4 phase0 JSON (printed summary survived in the log).
+
+## What the room-4 firefight says (phase 0, first run)
+
+5/5/5/5/4/5 kept rows (18 load-rejects during a sibling vitest storm, 3
+makeup reps), interleave rotation intact, `uptime`/load quoted per row in the
+JSON. The clock basis drifts 2.25x WITHIN one run (same leg: 17.1 → 7.6 ms as
+GPU clocks ramp), so medians-of-raw-p50 are meaningless; the deltas below are
+medians of WITHIN-REP deltas (all legs of rep k share a clock window).
+
+| segment | ship p50 | whole goo (ship−goooff) | surface (ship−nosurface) | density (ship−nodensity) | blur (bluron−ship) |
+|---|---|---|---|---|---|
+| walk (idle, no blood) | 7.61 | 0.26 [n4, 0.03..0.57] | −0.09 [−0.78..0.28] | 0.17 [−2.30..0.22] | 0.55 [−0.09..1.23] |
+| fire | 14.01 | 0.54 [−4.14..0.87] | 1.94 [−2.62..3.36] | 0.16 [−1.11..2.14] | 0.36 [−2.92..4.81] |
+| gib | 11.56 | 0.07 [−0.12..0.85] | −0.19 [−0.21..0.27] | −0.22 [−0.42..−0.03] | 0.28 [−0.06..0.45] |
+
+Coverage at gameplay range: **cov 1.05%** (ship/nosurface/bluron), bigblobs
+1.31% — there is almost no goo on screen at room-4 range, and the whole chain
+is worth ~0.1–0.5 ms of an 11–20 ms frame. The idle answer is already here:
+whole goo at idle ≈ 0.26 ms — the idle-frame early-out is confirmed a non-win.
+
+**The premise does not reproduce at gameplay range.** The spec's claim was
+written from code reading and marked "a bench must confirm"; at the range the
+firefight benches, the goo layer is noise-level. The spec's own scene — the
+close-up — is where the question had to go next.
+
+## Coverage reality-check (drives the close-range staging)
+
+Manual trajectory of the 1.1 m burst staging (frozen boot, manual steps,
+`gooProbe` after each):
+
+| step after staging | 0 | 6 | 12 | 18 | 24 | 36 | 48 | 72 |
+|---|---|---|---|---|---|---|---|---|
+| cov % | 1.29 | 1.61 | 1.99 | 1.52 | 1.56 | 1.34 | 0.87 | 0.52 |
+| droplets | 166 | 151 | 128 | 105 | 82 | 63 | 43 | 23 |
+| splats | 13 | 34 | 61 | 89 | 124 | 149 | 173 | 201 |
+
+Even point-blank, one slug's burst peaks at **~2% density coverage** — the goo
+is streaks, not a flood. Binary coverage cannot see additive overdraw (N quads
+on one texel count once), which is why the per-pass attribution still matters.
+Two further instrument findings:
+
+- **The bench's default warmup (120) + 240-frame window samples only the dead
+  tail** of a burst that decays in ~1.5 s (first close run: droplets 2, cov
+  0.1%). Close legs pin `warmup 10, closeupFrames 80` — the peak-to-early-
+  decay window.
+- **`stampWoundAt` never bleeds.** It carves + spills but does not enter the
+  bleed ledger — 8 stamps + 2400 steps → droplets 0, splats 0, on frozen AND
+  live pages. The ledger is fed by real SEVERS (fireSlug → stump gush
+  emitter). The capture spec's stamp-built "accumulated floor" scene was dead
+  on arrival; rebuilt around 3 point-blank slugs + hold until the 256-ring
+  saturates (cov 6.18% looking down at the pool — the real heavy state).
+
+## Phase 0 — close-up and floor attribution
+
+(pending: close burst at cov ~2%, floor pool at cov ~6%)
+
 ## Phase 0 — per-pass attribution (pending bench)
 
 (tables to land here)
