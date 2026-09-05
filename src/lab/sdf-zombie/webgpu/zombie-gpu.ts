@@ -418,8 +418,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
     /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
-     *  early-out, zw spare. All zero = the pre-plan shader, which is what the
-     *  lab binds. */
+     *  early-out, z near-wound step multiplier override (2026-09-04; 0 = the
+     *  compiled WOUND_STEP_MUL), w spare. All zero = the pre-plan shader,
+     *  which is what the lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** Half extents of the view's proxy box, world space (perf round 2 task
      *  5): the accumulated-depth gate's conservative per-body ray entry —
@@ -873,6 +874,14 @@ export function createMarchMaterial(
     // Melt progress (zombie melt task 6). Bound between bodyHalf and the
     // level-shadow slots, matching MARCH_BODY's signature — positional, see
     // the ORDER MATTERS note above.
+    //
+    // IT MUST BE BOUND AT ALL, and the failure is quiet: MARCH_BODY declares
+    // the input, and an unbound declared input logs "THREE.TSL: Input
+    // 'meltCfg' not found in 'Fn()'" once at boot and then shades as ZERO.
+    // The parked melt spike (c52b05b) added a uniform and a WGSL input and
+    // no binding, and rendered as nothing at every amplitude while the
+    // uniform read back correctly from the console — hours went into looking
+    // for the bug on the shader side of a wire that was never connected.
     meltCfg: u.meltCfg,
     // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
     // MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg, levelShadow*, in
@@ -1261,6 +1270,15 @@ export function createZombieGpuView(
     counts: u.counts,
     counts2: u.counts2,
     marchCfg: u.marchCfg,
+    // NOTE: meltCfg is deliberately NOT bound here. The melt commit (c52b05b)
+    // passed u.meltCfg into this literal while CONE_MARCH's WGSL signature
+    // never declared the input — three threw "Input 'meltCfg' not found in
+    // 'Fn()'" on every lab page boot (pre-existing on main 121ef37; found
+    // while rendering hard-surface task 3's acceptance frames). The cone
+    // keeps marching the SMOOTH field (its mapBody call passes noiseCfg 0),
+    // which is the pre-melt contract exactly; when the melt chain plumbs melt
+    // into the cone for real, it must add the WGSL input AND this binding in
+    // the same commit.
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
     coneK: opts.cone ? opts.cone.uniforms.k : float(0.02),

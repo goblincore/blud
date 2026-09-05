@@ -27,7 +27,7 @@ import {
   planSubSteps, STANDING_RIG, stepMotion,
   type MotionFrame, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
-import { stepRig } from './rig';
+import { constrainRigBends, stepRig } from './rig';
 import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import { makeRng, type Rng, type WanderBounds } from './wander';
@@ -173,7 +173,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     m.lastBodyYaw = f.bodyYaw;
 
     let points = stepRig(
-      { ...m.bound.rig, restPose: f.restPose }, sdt,
+      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw }, sdt,
       {
         gravity: f.gravity,
         damping: 0.06,
@@ -187,7 +187,8 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     }
     m.bound = {
       ...m.bound,
-      rig: { points, constraints: m.bound.rig.constraints, restPose: f.restPose },
+      rig: constrainRigBends({ ...m.bound.rig, points, restPose: f.restPose, bodyYaw: f.bodyYaw },
+        f.collapsed ? m.motionJoints.groundY - MOTION_TUNING.floorPad : undefined),
     };
   }
   return f;

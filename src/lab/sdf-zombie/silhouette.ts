@@ -371,17 +371,24 @@ function frameOf(box: Box, view: 'front' | 'side', pad: number, heightPx: number
 /**
  * Fill a triangle soup into an existing bitmap, through a frame.
  *
- * A silhouette only asks "is anything here", so depth never has to be resolved
- * between the polygons and whatever is already set — which is the whole reason
- * this can ignore the depth-in-alpha compositing the real renderer needs.
+ * A silhouette only asks "is anything here", so depth never HAS to be resolved
+ * between the polygons — which is the whole reason this can ignore the
+ * depth-in-alpha compositing the real renderer needs. Pass `depth` to have it
+ * resolved anyway (see fillTriangleDepth); without one this is exactly the
+ * coverage raster every existing caller shares.
  */
-function rasterTriangles(bits: Uint8Array, tris: Float32Array, f: Frame): void {
+function rasterTriangles(bits: Uint8Array, tris: Float32Array, f: Frame, depth?: Float32Array): void {
   const toPx = (i: number): [number, number] => [
     ((f.view === 'front' ? tris[i]! : tris[i + 2]!) - f.u0) / f.spanU * f.w,
     (f.maxY - tris[i + 1]!) / f.spanY * f.h,
   ];
-  for (let i = 0; i + 8 < tris.length; i += 9)
-    fillTriangle(bits, f.w, f.h, toPx(i), toPx(i + 3), toPx(i + 6));
+  // The depth-axis coordinate of one vertex — the world axis `u`'s mapping
+  // above already picks per view, seen from the other side of the ray.
+  const toD = (i: number): number => (f.view === 'front' ? tris[i + 2]! : tris[i]!);
+  for (let i = 0; i + 8 < tris.length; i += 9) {
+    if (depth) fillTriangleDepth(bits, f.w, f.h, toPx(i), toPx(i + 3), toPx(i + 6), depth, toD(i), toD(i + 3), toD(i + 6));
+    else fillTriangle(bits, f.w, f.h, toPx(i), toPx(i + 3), toPx(i + 6));
+  }
 }
 
 export interface TriMaskOpts {
@@ -395,6 +402,11 @@ export interface TriMaskOpts {
  * `maskFromBody` unions a kit with, exposed so a reference MESH (a .glb
  * through parseGlb + gltfTriangles) can be the thing a .blob is scored
  * against. Same axes as maskFromBody.
+ *
+ * Runs the coverage rasteriser fillTriangle has always been — NOT
+ * fillTriangleDepth. Every existing silhouette score reads this mask, and
+ * the bit-identical test pins depthFromTriangles to it; one shared raster
+ * would set that test comparing a raster with itself and prove nothing.
  */
 export function maskFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): Mask {
   const view = opts.view ?? 'front';
@@ -409,9 +421,42 @@ export function maskFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): M
   return { w: f.w, h: f.h, bits };
 }
 
-/** The mask AND the frame it was taken in. maskFromBody throws the frame away;
- *  bandOwners needs it to turn a mask row back into a world height. */
-function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: Frame } | null {
+export interface TriDepth { mask: Mask; depth: Float32Array }
+
+/**
+ * Triangle-soup raster WITH the per-pixel depth the silhouette path discards.
+ * `depth` is NaN wherever the mask is 0.
+ *
+ * Unlike the body march — whose first hit IS the depth, so recording `t` cost
+ * nothing — triangles arrive in arbitrary order, so depth resolution is a
+ * real z-buffer (fillTriangleDepth): extra work per pixel that the
+ * coverage-only path must never pay. That split is also why this frames its
+ * own raster instead of riding along inside maskFromTriangles: the two agree
+ * on coverage BY TEST, not by construction.
+ */
+export function depthFromTriangles(tris: Float32Array, opts: TriMaskOpts = {}): TriDepth {
+  const view = opts.view ?? 'front';
+  const heightPx = opts.heightPx ?? 256;
+  const pad = opts.pad ?? 0.02;
+  if (tris.length < 9) {
+    // Same degenerate shape maskFromTriangles falls back to, extended with a
+    // NaN depth — no triangles, no surface, no depth anywhere.
+    return { mask: { w: 1, h: 1, bits: new Uint8Array(1) }, depth: new Float32Array(1).fill(NaN) };
+  }
+  const box = emptyBox();
+  growByTriangles(box, tris);
+  const f = frameOf(box, view, pad, heightPx);
+  const bits = new Uint8Array(f.w * f.h);
+  const depth = new Float32Array(f.w * f.h).fill(NaN);
+  rasterTriangles(bits, tris, f, depth);
+  return { mask: { w: f.w, h: f.h, bits }, depth };
+}
+
+/** The mask, the frame it was taken in, AND the per-pixel hit depth.
+ *  maskFromBody throws both frame and depth away; bandOwners needs the frame
+ *  to turn a mask row back into a world height, and depthFromBody needs the
+ *  depth to feed the depth diff (Task 3). */
+function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: Frame; depth: Float32Array } | null {
   const view = opts.view ?? 'front';
   const heightPx = opts.heightPx ?? 256;
   const pad = opts.pad ?? 0.02;
@@ -431,6 +476,11 @@ function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: F
   const f = frameOf(box, view, pad, heightPx);
   const { w, h, u0, spanU, maxY, spanY, dMin, dMax } = f;
   const bits = new Uint8Array(w * h);
+  // Depth of the hit along the view's depth axis (front: world z, side: world
+  // x). NaN where the ray missed. The march already computed this and threw it
+  // away — a silhouette only asks "is anything here", as this file's header
+  // says — so nothing needed it until the depth diff.
+  const depth = new Float32Array(w * h).fill(NaN);
 
   const step = spanY / h; // world units per pixel, used as the march floor
   for (let py = 0; py < h; py++) {
@@ -465,17 +515,46 @@ function bodyRaster(body: BuiltBody, opts: BodyMaskOpts): { mask: Mask; frame: F
         // otherwise burn every step creeping and report a miss on solid flesh.
         t += Math.max(d, step * 0.25);
       }
-      if (hit) bits[py * w + px] = 1;
+      if (hit) { bits[py * w + px] = 1; depth[py * w + px] = t; }
     }
   }
 
-  // The kit is UNIONED on top, filled as flat triangles.
+  // The kit is UNIONED on top, filled as flat triangles. It never touches
+  // `depth`: a kit is a polygon overlay with no field behind it — there was
+  // no march, so no `t` to record — and those pixels must stay NaN rather
+  // than inherit a stale 0 or whatever the march left there, or the depth
+  // diff would read them as "the field is right here" instead of "unknown".
   if (kit && kit.length) rasterTriangles(bits, kit, f);
-  return { mask: { w, h, bits }, frame: f };
+  return { mask: { w, h, bits }, frame: f, depth };
 }
 
 export function maskFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): Mask {
   return bodyRaster(body, opts)?.mask ?? { w: 1, h: 1, bits: new Uint8Array(1) };
+}
+
+export interface BodyDepth { mask: Mask; depth: Float32Array; frame: Frame }
+
+/**
+ * Body raster WITH the per-pixel hit depth the silhouette path discards.
+ * `depth` is NaN wherever the mask is 0, and also wherever a KIT triangle
+ * supplied the pixel — a kit is a polygon overlay with no field behind it.
+ *
+ * Separate export rather than a flag on maskFromBody: every existing caller
+ * (bandOwners, the silhouette comparisons) wants occupancy only, and giving
+ * them a Float32Array they never read would be pure overhead on the hot path
+ * this file's header describes — one sphere-trace raster per band, per view.
+ */
+export function depthFromBody(body: BuiltBody, opts: BodyMaskOpts = {}): BodyDepth {
+  const r = bodyRaster(body, opts);
+  if (r) return r;
+  // No cluster alive — the same degenerate case maskFromBody falls back to (a
+  // 1x1 all-background mask), extended with a NaN depth and a zero-span frame
+  // rather than framing an empty box, which would divide by zero.
+  return {
+    mask: { w: 1, h: 1, bits: new Uint8Array(1) },
+    depth: new Float32Array(1).fill(NaN),
+    frame: { view: opts.view ?? 'front', u0: 0, spanU: 0, maxY: 0, spanY: 1e-9, dMin: 0, dMax: 0, w: 1, h: 1 },
+  };
 }
 
 /**
@@ -709,6 +788,56 @@ function fillTriangle(
       const w1 = ((c[0] - b[0]) * (py - b[1]) - (c[1] - b[1]) * (px - b[0])) / area;
       const w2 = ((a[0] - c[0]) * (py - c[1]) - (a[1] - c[1]) * (px - c[0])) / area;
       if (w0 >= 0 && w1 >= 0 && w2 >= 0) bits[y * w + x] = 1;
+    }
+}
+
+/**
+ * fillTriangle WITH depth resolution — ported from scripts/blob-face-bake.py,
+ * whose `zb` buffer and `zz > sub` test do exactly this for face baking.
+ *
+ * The depth-axis coordinate is interpolated barycentrically and the NEAREST
+ * value wins each pixel, because triangles arrive in arbitrary order: without
+ * a buffer, last-written would win and a reference depth would depend on
+ * triangle order inside the glTF. One adaptation to the source: the
+ * comparison is FLIPPED (`d <` where the baker writes `zz >`) because that
+ * baker looks from the +depth side while this file's depth axis marches from
+ * its dMin end — nearest here means smallest.
+ *
+ * MUST agree with fillTriangle on coverage, pixel for pixel:
+ * depthFromTriangles' mask comes from this same raster, and the tests pin the
+ * two masks bit-identical. Coverage and depth are written together rather
+ * than in separate passes so they cannot drift.
+ */
+function fillTriangleDepth(
+  bits: Uint8Array, w: number, h: number,
+  a: [number, number], b: [number, number], c: [number, number],
+  depth: Float32Array, da: number, db: number, dc: number,
+): void {
+  const minX = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0])));
+  const maxX = Math.min(w - 1, Math.ceil(Math.max(a[0], b[0], c[0])));
+  const minY = Math.max(0, Math.floor(Math.min(a[1], b[1], c[1])));
+  const maxY = Math.min(h - 1, Math.ceil(Math.max(a[1], b[1], c[1])));
+  if (minX > maxX || minY > maxY) return;
+  const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  if (area === 0) return; // degenerate, and glTF kits carry a few
+  for (let y = minY; y <= maxY; y++)
+    for (let x = minX; x <= maxX; x++) {
+      const px = x + 0.5, py = y + 0.5;
+      // Same edge functions as fillTriangle, same reason: normalised by the
+      // signed area so winding does not matter. (w0, w1, w2) come out as the
+      // barycentric weights of vertices c, a, b respectively.
+      const w0 = ((b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])) / area;
+      const w1 = ((c[0] - b[0]) * (py - b[1]) - (c[1] - b[1]) * (px - b[0])) / area;
+      const w2 = ((a[0] - c[0]) * (py - c[1]) - (a[1] - c[1]) * (px - c[0])) / area;
+      if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+      const i = y * w + x;
+      bits[i] = 1;
+      // NaN counts as "nothing here yet": every comparison with NaN is
+      // false, so `!(d >= depth[i])` is true and the first triangle to reach
+      // a pixel always writes — the baker's -1e9 fill, achieved without a
+      // sentinel that could ever leak into the output.
+      const d = w0 * dc + w1 * da + w2 * db;
+      if (!(d >= depth[i]!)) depth[i] = d;
     }
 }
 

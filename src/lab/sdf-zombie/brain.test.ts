@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/brain.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  BRAIN_TUNING, makeBrain, stepBrain,
+  BRAIN_TUNING, makeBrain, staggerNow, stepBrain,
   type Brain, type BrainInput,
 } from './brain';
 
@@ -15,7 +15,6 @@ function input(over: Partial<BrainInput> = {}): BrainInput {
     alerted: false,
     hasToken: false,
     drift: 0,
-    blasted: false,
     roll: 0,
     ...over,
   };
@@ -237,7 +236,7 @@ describe('stepBrain — stagger', () => {
     }
     seeds.push(b);
     for (const s of seeds) {
-      const hit = stepBrain(s, input({ blasted: true }));
+      const hit = stepBrain(staggerNow(s), input());
       states.push(hit.brain.state);
       expect(hit.halt).toBe(true);
       // A staggering body must not keep a melee slot it cannot use.
@@ -249,7 +248,7 @@ describe('stepBrain — stagger', () => {
 
   it('holds for blastHoldSec then resumes the chase', () => {
     const seed = stepBrain(makeBrain(), input()).brain;
-    const hit = stepBrain(seed, input({ blasted: true })).brain;
+    const hit = stepBrain(staggerNow(seed), input()).brain;
     const out = run(hit, {}, BRAIN_TUNING.blastHoldSec + 0.1);
     expect(out.brain.state).not.toBe('stagger');
     expect(out.brain.alert).toBe(true);
@@ -261,7 +260,7 @@ describe('stepBrain — stagger', () => {
       brain, input({ player: { x: 0, z: 0.9, room: 3 }, hasToken: true }),
     ).brain;
     expect(swinging.state).toBe('attack');
-    const hit = stepBrain(swinging, input({ blasted: true }));
+    const hit = stepBrain(staggerNow(swinging), input());
     expect(hit.brain.state).toBe('stagger');
     expect(hit.attack).toBeNull();
     expect(hit.brain.swingT).toBe(0);

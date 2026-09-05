@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import {
-  maskFromRgba, maskFromBody, subjectBounds, normalise, compareSilhouette,
-  renderMask, gltfTriangles, maskFromTriangles, bandOwners, type Mask,
+  maskFromRgba, maskFromBody, depthFromBody, subjectBounds, normalise, compareSilhouette,
+  renderMask, gltfTriangles, maskFromTriangles, depthFromTriangles, bandOwners, type Mask,
 } from './silhouette';
 import { decodePng } from './png-decode';
 import { parseBlob } from './blob-parse';
@@ -230,6 +230,84 @@ describe('maskFromBody', () => {
   });
 });
 
+describe('depthFromBody', () => {
+  // Same helper as maskFromBody's own describe block — kept local rather than
+  // hoisted, matching how that block scopes it, since nothing outside either
+  // block needs a built character.
+  const build = (name: string) => {
+    const doc = parseBlob(readFileSync(`src/lab/sdf-zombie/characters/${name}.blob`, 'utf8'));
+    return buildBody(compileBlob(doc, compileFace(doc)));
+  };
+  const body = build('mouse');
+
+  it('returns a depth for every occupied pixel and NaN elsewhere', () => {
+    const { mask, depth } = depthFromBody(body, { view: 'front', heightPx: 64 });
+    expect(depth.length).toBe(mask.w * mask.h);
+    let occupied = 0;
+    for (let i = 0; i < depth.length; i++) {
+      if (mask.bits[i]) { occupied++; expect(Number.isFinite(depth[i]!)).toBe(true); }
+      else expect(Number.isNaN(depth[i]!)).toBe(true);
+    }
+    expect(occupied).toBeGreaterThan(0);
+  });
+
+  // The proof this is real depth and not a constant: two masses placed at
+  // DIFFERENT world z, far enough apart in x that neither's silhouette
+  // touches the other's, so each column's hit can only belong to one mass.
+  // `skull` is required even though nothing is authored on it — compileFace
+  // always emits facePrims that reference it, same as build-body.test.ts's
+  // minimal fixture.
+  it('depth increases with distance from the camera', () => {
+    const SRC = `model t
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up pitch=0 len=0.34
+  bone skull parent=spine dir=up len=0.16
+
+body
+  blob torso on pelvis at=0.20 r=0.12 blend=0.02 offset=(-0.4,0,0)
+  blob torso on pelvis at=0.20 r=0.12 blend=0.02 offset=(0.4,0,0.3)
+`;
+    const doc = parseBlob(SRC);
+    // Not a validateBody-clean figure — the two masses are deliberately
+    // unconnected to each other (and the required `skull` bone carries no
+    // flesh of its own), which trips the disconnected-cluster warning. That
+    // warning is about character validity; it has no bearing on whether the
+    // raster's march reports the right depth, which is all this test checks.
+    const twoMasses = buildBody(compileBlob(doc, compileFace(doc)));
+
+    const { mask, depth } = depthFromBody(twoMasses, { view: 'front', heightPx: 64 });
+    // Front view: u = world x, so the offset=(-0.4,...) mass rasterises into
+    // the left half of the image and the offset=(0.4,...) mass into the
+    // right half. The two never share a column, so the first occupied pixel
+    // found scanning each half belongs unambiguously to one mass — EXCEPT
+    // compileFace always emits facePrims on `skull`, which draw a small mass
+    // centred near the top of the frame regardless of what the body block
+    // asked for. Scanning bottom-up rather than top-down skips past it: the
+    // pelvis-anchored masses sit lower in the frame than a head ever does.
+    let leftDepth: number | null = null, rightDepth: number | null = null;
+    for (let py = mask.h - 1; py >= 0 && (leftDepth === null || rightDepth === null); py--) {
+      for (let px = 0; px < mask.w; px++) {
+        const i = py * mask.w + px;
+        if (!mask.bits[i]) continue;
+        if (px < mask.w / 2) leftDepth ??= depth[i]!;
+        else rightDepth ??= depth[i]!;
+      }
+    }
+    expect(leftDepth).not.toBeNull();
+    expect(rightDepth).not.toBeNull();
+    // offset z=0 vs offset z=0.3: the far mass's surface sits at a larger
+    // world z, and world z IS the depth this view reports.
+    expect(rightDepth!).toBeGreaterThan(leftDepth!);
+  });
+
+  it('leaves maskFromBody bit-identical', () => {
+    const a = maskFromBody(body, { view: 'front', heightPx: 48 });
+    const b = depthFromBody(body, { view: 'front', heightPx: 48 }).mask;
+    expect(Array.from(b.bits)).toEqual(Array.from(a.bits));
+  });
+});
+
 describe('kit geometry', () => {
   // The goblin's kit: the mouse has none any more (its outfit is painted SDF).
   const kit = () => gltfTriangles(
@@ -306,6 +384,62 @@ describe('maskFromTriangles', () => {
     for (const v of m.bits) on += v;
     expect(on / (m.w * m.h)).toBeGreaterThan(0.95);
     expect(Math.abs(m.w / m.h - 0.5)).toBeLessThan(0.1);
+  });
+});
+
+describe('depthFromTriangles', () => {
+  // Two quads with the SAME x/y footprint at different depths, two triangles
+  // each. Front view: the depth axis is world z and the near side is its dMin
+  // end — the same end the body march starts from — so the z = 0 quad is the
+  // NEAR surface and z = 0.3 the far one.
+  const quad = (z: number): number[] => [
+    0, 0, z, 0.2, 0, z, 0.2, 0.4, z,
+    0, 0, z, 0.2, 0.4, z, 0, 0.4, z,
+  ];
+
+  it('keeps the NEAREST surface when two triangles overlap', () => {
+    // The same soup in two ORDERS: without a real z-buffer the last-written
+    // triangle wins, so these two rasters would disagree, and which surface a
+    // depth diff compared would depend on triangle order in the glTF.
+    const a = depthFromTriangles(new Float32Array([...quad(0), ...quad(0.3)]), { view: 'front', heightPx: 64, pad: 0 });
+    const b = depthFromTriangles(new Float32Array([...quad(0.3), ...quad(0)]), { view: 'front', heightPx: 64, pad: 0 });
+    expect(Array.from(b.depth)).toEqual(Array.from(a.depth));
+    // Every pixel the far quad fills the near quad also fills (identical
+    // footprints), so NO occupied pixel may report the far surface's depth.
+    let occupied = 0;
+    for (let i = 0; i < a.depth.length; i++) {
+      if (!a.mask.bits[i]) continue;
+      occupied++;
+      expect(a.depth[i]).toBeCloseTo(0, 5);
+    }
+    expect(occupied).toBeGreaterThan(0);
+  });
+
+  it('is NaN off the subject, finite on it', () => {
+    // DEFAULT pad, deliberately not 0: with pad 0 the frame IS the subject's
+    // bounding box, every pixel is covered, and the NaN half of this
+    // assertion never executes — a zero-filled buffer passes (caught by
+    // mutation M2). `checked` pins that the NaN branch actually ran.
+    const { mask, depth } = depthFromTriangles(new Float32Array(quad(0.3)), { view: 'front', heightPx: 32 });
+    expect(depth.length).toBe(mask.w * mask.h);
+    let occupied = 0, checked = 0;
+    for (let i = 0; i < depth.length; i++) {
+      if (mask.bits[i]) { occupied++; expect(Number.isFinite(depth[i]!)).toBe(true); }
+      else { checked++; expect(Number.isNaN(depth[i]!)).toBe(true); }
+    }
+    expect(occupied).toBeGreaterThan(0);
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('leaves maskFromTriangles bit-identical', () => {
+    // A real soup with heavy self-overlap — thousands of kit triangles — not
+    // the two quads above: the failure this guards is the depth path
+    // rasterising a DIFFERENT pixel set than the coverage path it must agree
+    // with, since maskFromTriangles stays depth-free.
+    const kit = gltfTriangles(JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/goblin-kit.gltf'))));
+    const a = maskFromTriangles(kit, { view: 'front', heightPx: 48, pad: 0 });
+    const b = depthFromTriangles(kit, { view: 'front', heightPx: 48, pad: 0 }).mask;
+    expect(Array.from(b.bits)).toEqual(Array.from(a.bits));
   });
 });
 

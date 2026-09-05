@@ -10,12 +10,14 @@
     "test": "vitest run",
     "blob:measure": "tsx scripts/blob-measure.ts",
     "blob:rings": "tsx scripts/blob-rings.ts",
+    "blob:depth": "tsx scripts/blob-depth.ts",
     "blob:shot": "scripts/blob-shot.sh",
     "melt:shot": "scripts/melt-shot.sh",
     "blob:render-check": "scripts/blob-render-check.sh",
     "test:watch": "vitest",
     "blob:face-bake": "python3 scripts/blob-face-bake.py",
-    "bench:sdf": "scripts/sdf-bench.sh"
+    "bench:sdf": "scripts/sdf-bench.sh",
+    "blob:relief": "tsx scripts/blob-relief.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

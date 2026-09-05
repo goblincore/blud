@@ -27,6 +27,10 @@ import {
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+// Raw source import: the row-table docstrings are TS comments, invisible to
+// every exported WGSL string, and the Done-when "docstring no longer lies"
+// check needs the file's actual text.
+import moduleSource from './march.wgsl?raw';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (see the comment below).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
@@ -318,6 +322,10 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let dres = mapBody(');
     expect(MARCH_BODY).toContain('var d = dres.x;');
     expect(MARCH_BODY).toContain('let shellAmp = woundCfg2.z;');
+    // Restored to the shellAmp-only form in the 2026-09-04 merge: the melt
+    // spike that had widened this band to max(shellAmp, meltAmp) is gone,
+    // superseded by the shipped zombie melt, which sags the body through the
+    // rig rather than by displacing the marched field here.
     expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
     // The shell's fbm samples the dominant prim's REST frame (task 6) — the
     // displaced silhouette rides the same flesh as the normal-warped skin.
@@ -334,7 +342,14 @@ describe('ported features reach the entry point', () => {
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
     expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
+    // (hard-surface task 1: the noiseAmp argument now carries the gloss
+    // kill, `* (1.0 - max(gloss, metal))` — a polished or machined prim's
+    // normal is not rippled. Pinned in detail by the dedicated
+    // gloss-suppression describe below. The amp is a vec4 and only .x
+    // carries anything: y/z/w were the parked melt spike's lanes and are
+    // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
+    // kill this pins is unchanged.)
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -355,14 +370,15 @@ describe('ported features reach the entry point', () => {
     // the bone fold so a bone prim can win the argmin, so the cast is needed
     // here where main's version had already narrowed it.
     expect(mapBody).toContain('let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));');
-    expect(mapBody).toContain('fbm(anchor * 3.0) * noiseAmp');
+    expect(mapBody).toContain('fbm(anchor * 3.0) * noiseCfg.x');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
-    // independent of the motion plumbing — zero shift, dead noise term. The
+    // independent of the motion plumbing — zero shift, dead noise term (the
+    // whole vec4, so the melt experiment's term is dead in the cone too). The
     // volume block still rides along: the cone must see the same field the
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
+      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
   });
 
   it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
@@ -413,7 +429,10 @@ describe('ported features reach the entry point', () => {
     // could tunnel — 0.6 under-relaxation pays for the noise instead. And the
     // overshoot retraction assumes the un-displaced field (it rewinds by the
     // omega excess), so it must be suppressed whenever d carries the shell.
-    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative || nearWound)');
+    // The wound zone has its OWN, stricter multiplier (WOUND_STEP_MUL, since
+    // 2026-09-04) and the two are combined with min, so the shell's figure is
+    // still the shell's — see march-step-soundness.test.ts for why they split.
+    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
     expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
   });
 
@@ -556,7 +575,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
     expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
     // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).
-    expect(WOUND_SHADOW).toContain('counts2, 0.0, woundCfg, woundCfg2');
+    expect(WOUND_SHADOW).toContain('counts2, vec4<f32>(0.0), woundCfg, woundCfg2');
   });
   it('darkens ONLY the key diffuse + specular; fill/ambient/scatter stay lit', () => {
     // Multiply the whole lit sum and craters go pitch black — the fill and
@@ -615,8 +634,12 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     const names = parsed.inputs.map((i: { name: string }) => i.name);
     // 66 on the perf round-2 chain; +8 from the wound-pass-r2 merge (counts2,
     // surfCfg3, fatColor, boneColor and the viscera/gut slots); +1 from the
-    // melt task-6 meltCfg slot. Re-pin when a slot is added ON PURPOSE — a
-    // silent change here is the phantom-input bug.
+    // melt task-6 meltCfg slot. BOTH sides of the 2026-09-04 merge added a
+    // uniform named meltCfg independently — the zombie melt's progress slot
+    // (kept) and the parked melt spike's amp/freq/time slot (removed) — so
+    // this count is +1, not +2. That collision is exactly what this pin is
+    // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
+    // the phantom-input bug.
     expect(names.length).toBe(75);
     expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
@@ -1764,9 +1787,13 @@ describe('organ shading (organs r3)', () => {
   // source the plan calls SHADE_BODY.
   const SHADE_BODY = MARCH_BODY;
 
-  it('reads the organ code from the SAME hitMat load bone used to use', () => {
-    // One texel load serves both; a second load would undo refinement 5.
-    expect((SHADE_BODY.match(/textureLoad\(data, vec2<i32>\(hitBest, \d+\), 0\)\.w/g) ?? []))
+  it('reads the organ code from the SAME hitMat load as bone', () => {
+    // One HITMAT texel load serves both; a second load would undo refinement
+    // 5. Pinned against the hitMat row itself (ROW_PRIM_SCALE), not against
+    // "any hitBest read ending in .w": glow= legitimately reads ROW_PRIM_CLIP.w
+    // at the same pixel (hard-surface task 3), which is a different row and a
+    // different lane, not a duplicated hitMat.
+    expect((SHADE_BODY.match(new RegExp(`textureLoad\\(data, vec2<i32>\\(hitBest, ${ROW_PRIM_SCALE}\\), 0\\)\\.w`, 'g')) ?? []))
       .toHaveLength(1);
     expect(SHADE_BODY).toContain('isOrgan');
   });
@@ -1813,5 +1840,292 @@ describe('viscera ramp (entrails)', () => {
     // must ride the SAME mask — one woundMask call, one mix against wm.
     expect(SHADE_BODY).toContain('mix(baseColor, tissue, wm)');
     expect((SHADE_BODY.match(/woundMask\(/g) ?? []).length).toBe(1);
+  });
+});
+
+describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
+  // Milled steel was getting bull-hide pores: surfaceNoiseAmp (surfCfg2.y)
+  // perturbs the shading normal and silhouetteNoiseAmp (marchCfg.z) ripples
+  // the field calcNormal samples — both body-wide, both applied before the
+  // shader learns the hit prim is painted. The fix scales BOTH by
+  // (1 - gloss) at the point of application. There is no GPU in CI, so the
+  // assertions are structural: the factor must sit at BOTH application
+  // sites, inside the existing amplitude guard, resolved off ONE hoisted
+  // prim-colour read that happens before the normal exists. The numeric
+  // claim — losing pitting improves a lens — is a prediction only the
+  // render A/B can carry; this suite pins the mechanism, the frames pin
+  // the look.
+  const SHADE_BODY = MARCH_BODY;
+  // The one ROW_PRIM_COLOR read (pack.ts writes w = 1 + gloss, w = 0 flesh).
+  const LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0)`;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  it('resolves gloss BEFORE the shading normal exists, off ONE load', () => {
+    // The read was hoisted up from the per-prim colour block; it must be a
+    // hoist, not a repeat — a second load of the same texel on every hit
+    // pixel is exactly the kind of cost this file's other gates exist to
+    // stop (cf. the wm-gated hitMat read).
+    expect((SHADE_BODY.match(new RegExp(esc(LOAD), 'g')) ?? []).length).toBe(1);
+    expect(SHADE_BODY.indexOf('var gloss = 0.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY.indexOf(LOAD))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+  });
+
+  it('scales the silhouette noise reaching calcNormal by (1 - max(gloss, metal))', () => {
+    // calcNormal's noiseAmp is the ONLY path silhouetteNoiseAmp has into the
+    // shading normal (the march loop runs the field smooth; the AO/scatter
+    // probes are field probes, not surface detail, and keep full amp).
+    // hard-surface task 2: `metal` implies the same suppression with no
+    // gloss= — a machined surface has no pores either — so the factor is
+    // the max of both levers (each is 0..1).
+    // task-3 merge: calcNormal's amp is melt's vec4 (x silhouette, y/z/w
+    // melt) — the kill applies to .x only, melt passes through untouched.
+    expect(SHADE_BODY).toContain(
+      'calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg');
+  });
+
+  it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
+    // The guard must wrap the NOISE CALL, not just its result (entrails
+    // post-mortem, 2026-09-02): a polished prim skips the six lookups
+    // outright, it does not compute them and multiply them away — so the
+    // gloss kill folds into the guarded amplitude itself, not into the
+    // fbm result.
+    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
+    expect(SHADE_BODY).toMatch(
+      /if \(detailAmp > 0\.0\) \{[\s\S]{0,200}fbm\(anchor \* 22\.0\)[\s\S]{0,120}\* detailAmp\)/);
+  });
+
+  it('still paints the prim albedo after the face pass; char still wins', () => {
+    // Hoisting the READ must not hoist the OVERWRITE: a painted prim
+    // replaces the flesh albedo (mottle and face sheet included) exactly
+    // where it always did, and burnt is still burnt on top of it.
+    const faceAt = SHADE_BODY.indexOf('if (faceCfg.x > 0.5) {');
+    const paintAt = SHADE_BODY.indexOf('if (painted > 0.0) {');
+    const charAt = SHADE_BODY.indexOf('albedo = mix(albedo, charColor, cm);');
+    expect(faceAt).toBeGreaterThan(-1);
+    expect(paintAt).toBeGreaterThan(faceAt);
+    expect(charAt).toBeGreaterThan(paintAt);
+  });
+});
+
+describe('metal modifier (hard-surface task 2)', () => {
+  // A painted prim gets full diffuse + untinted white highlight — polished
+  // plastic. `metal` (prof bit 4, packed by pack.ts) suppresses the diffuse
+  // to a floor and tints the specular by the prim's own albedo. There is no
+  // GPU in CI, so these are structural pins: where the bit is read, what it
+  // scales, and what stays bit-identical at metal 0. The LOOK — whether the
+  // plates read as steel — is the render's job, not this suite's.
+  const SHADE_BODY = MARCH_BODY;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0)`;
+
+  it('reads the metal bit inside the ONE hoisted painted read, above calcNormal', () => {
+    // Same hoist discipline as gloss (task 1): the value is needed by the
+    // noise-suppression sites BEFORE the shading normal exists, and the
+    // extra texel load is paid only inside the painted branch — metal is
+    // parse-gated on color=, so an unpainted pixel can never change the
+    // answer. One load, not a repeat.
+    expect(SHADE_BODY).toContain('var metal = 0.0;');
+    expect((SHADE_BODY.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
+    expect(SHADE_BODY.indexOf('var metal = 0.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY.indexOf(SHAPE_LOAD))
+      .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
+    expect(SHADE_BODY).toContain('if ((i32(PS.y) & 16) != 0)');
+  });
+
+  it('implies task 1 noise suppression with NO gloss set: both sites use max(gloss, metal)', () => {
+    // Pinned in the gloss describe above with the same strings; this test
+    // makes the METAL half of the max explicit, so dropping metal from
+    // either application site fails HERE as well as there.
+    expect(SHADE_BODY).toContain('marchCfg.z * (1.0 - max(gloss, metal))');
+    expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
+  });
+
+  it('suppresses the whole diffuse family to a floor, not to zero', () => {
+    // A pure-metal term in a shader with no environment map goes black
+    // wherever the highlight is not, and the lab has one key. Rendered
+    // curve (12-frame turntable, 2026-09-03): 0.25 went BLACK at the front
+    // yaw; 0.35 kept slab forms but the front still read near-black; 0.45
+    // keeps the greave's specular gradient AND a readable front face, so
+    // 0.45 ships. Multiplying the whole `albedo * (amb + diff...)` family —
+    // ambient bounce included — because bounce IS diffuse.
+    expect(SHADE_BODY).toContain(
+      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)');
+  });
+
+  it('tints the specular AND the fresnel rim by the prim albedo, at steel F0', () => {
+    // The single change that makes metal read as metal: the highlight takes
+    // the prim's colour instead of the light's, so steel differs from white
+    // plastic under the same key. The tint is NOT the raw albedo — that
+    // rendered the plates black (0.17 linear luminance killed the
+    // highlight; frame-00 A/B) — it is the albedo hue with luminance
+    // renormalised to polished steel's ~56% normal-incidence reflectance.
+    // The tint multiplies BOTH the tight specular and the fresnel rim —
+    // metals tint their grazing reflection too — and never the wound/gore
+    // wet or scatter terms.
+    expect(SHADE_BODY).toContain(
+      'min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5))');
+    expect(SHADE_BODY).toContain(
+      'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
+  });
+
+  it('collapses to an EXACTLY white tint at metal 0 — flesh keeps its highlight', () => {
+    // THE REGRESSION THIS EXISTS FOR (found 2026-09-04, on main, in the lab).
+    // metalTint shipped UNGATED:
+    //     let metalTint = min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5));
+    // primAlbedo is vec3(0) on every UNPAINTED pixel — flesh never enters the
+    // painted branch (PC.w > 0.0) that fills it — so metalTintLum clamped to
+    // its 1e-3 floor, the tint evaluated to vec3(0), and it multiplied the
+    // WHOLE specular + fresnel term to nothing. Every zombie lost its
+    // highlight AND its rim at once, everywhere, lab and game.
+    //
+    // The tell: the specular slider did nothing. surfCfg.x sits INSIDE those
+    // parentheses, so once the common factor is zero the knob cannot move the
+    // pixel. Anything that kills shine and fres TOGETHER is a common factor,
+    // not the shine term.
+    //
+    // The diffuse half of this same feature got its gate right —
+    // `mix(1.0, 0.45, metal)`, pinned above — and this is the missing other
+    // half. mix() to exactly 1.0 is an exact multiply, so at metal 0 flesh
+    // shades bit-identically to the pre-metal shader; at metal 1 the steel
+    // tint is untouched.
+    expect(SHADE_BODY).toContain(
+      'let metalTint = mix(vec3<f32>(1.0), min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5)), metal);');
+  });
+});
+
+describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
+  // No GPU in CI, so these are structural pins — where the value is read,
+  // what it composes with, and what stays bit-identical at glow 0. Whether
+  // the eyes READ as glowing is the render's job (task 3 step 4 does that
+  // from frames, not from strings).
+  const SHADE_BODY = MARCH_BODY;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0)`;
+
+  it('row 17 no longer documents w as spare', () => {
+    // Done-when: leaving "w spare" in the row table is how the next person
+    // packs over the lane. Pinned against the MODULE SOURCE — the docstring
+    // is a TS comment, not part of any exported WGSL string, so a check on
+    // MARCH_BODY cannot see it (that vacuous version was caught by its own
+    // mutation run). Scoped to ROW_PRIM_CLIP's OWN doc block: other rows'
+    // "yzw spare" notes are true statements about other lanes and contain
+    // the same substring.
+    const clipConst = moduleSource.indexOf('export const ROW_PRIM_CLIP');
+    const clipDoc = moduleSource.slice(moduleSource.lastIndexOf('/**', clipConst), clipConst);
+    expect(clipDoc).not.toContain('spare');
+    expect(clipDoc).toContain('glow');
+  });
+
+  it('reads glow from ROW_PRIM_CLIP.w, inside the painted branch only', () => {
+    // glow= is parse-gated on color= (same gate as gloss/metal), so an
+    // unpainted pixel can never author a glow — the read is paid only where
+    // it can matter. And the field path reads this row as .xyz only
+    // (sdShell), so the lane was genuinely spare until this.
+    expect(SHADE_BODY).toContain(CLIP_LOAD);
+    expect(SHADE_BODY).toContain('primGlow = clamp(');
+    // ONE read: the load must not be repeated per consumer.
+    expect((SHADE_BODY.match(new RegExp(esc(CLIP_LOAD), 'g')) ?? []).length).toBe(1);
+    // ...and it happens INSIDE the painted branch (after `painted = 1.0;`,
+    // before the branch closes).
+    expect(SHADE_BODY.indexOf('painted = 1.0;'))
+      .toBeLessThan(SHADE_BODY.indexOf(CLIP_LOAD));
+  });
+
+  it('the glow COLOUR is the prim albedo — the authored glow= is the strength', () => {
+    // Design C: a prim with color=ff2200 glow=0.9 glows red because it IS
+    // red. No new colour field, no global strength multiplier (the authored
+    // value IS the strength), no flicker (that is the face sheet's
+    // heartbeat).
+    expect(SHADE_BODY).toContain('+ primAlbedo * primGlow * (1.0 - cm)');
+  });
+
+  it('composes at the SAME two composite lines the face glow uses, and fades the lit term', () => {
+    // The face path replaces lit with fleshLit * (1 - faceGlow) + glow;
+    // per-prim glow fades by its own amount, and at primGlow 0 the factor is
+    // exactly 1.0 — bit-identical (multiplication by 1.0 is exact), so every
+    // non-glowing pixel everywhere shades byte-for-byte as before.
+    expect(SHADE_BODY).toContain(
+      'var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;');
+  });
+
+  it('char still kills per-prim glow — burnt is burnt', () => {
+    // The face glow carries * (1.0 - cm); the per-prim term must too, or a
+    // charred eye keeps shining through the burn.
+    const glowLine = SHADE_BODY.split('\n').find(l => l.includes('+ primAlbedo * primGlow'))!;
+    expect(glowLine).toContain('(1.0 - cm)');
+  });
+
+  it('does NOT resurrect the face glow on painted prims — the sunglasses rule is untouched', () => {
+    // march.wgsl.ts zeroes faceGlow on paint so baked eyes cannot shine
+    // through sunglasses. The precedence decision: that kill stays exactly
+    // as it was and applies to the FACE term only; per-prim glow is authored
+    // per prim and survives paint BY CONSTRUCTION — nothing in the kill
+    // reads primGlow. This pins both halves: the kill string, and that the
+    // kill line carries no primGlow.
+    expect(SHADE_BODY).toContain('faceGlow = faceGlow * (1.0 - painted);');
+    const killLine = SHADE_BODY.split('\n').find(l => l.includes('faceGlow = faceGlow * (1.0 - painted);'))!;
+    expect(killLine).not.toContain('primGlow');
+    // ...and primGlow is ASSIGNED exactly twice in the module: the `var
+    // primGlow = 0.0` default and the clamp read. A third assignment — e.g. a
+    // separate `primGlow = primGlow * (1.0 - painted)` kill line — would be
+    // the resurrected sunglasses rule wearing a different hat (this exact
+    // mutation was run and killed).
+    expect((moduleSource.match(/primGlow =/g) ?? []).length).toBe(2);
+  });
+});
+
+
+describe('flat-albedo seam (close-up diagnostics task 1)', () => {
+  // The seam is the instrument the 2026-09-04 close-up investigation needs:
+  // a gate that returns the base albedo at the hit and skips the whole
+  // post-hit chain, so frame(A) - frame(flat) is the shading share of the
+  // close-up frame. Its ENTIRE value depends on being inert when off — a
+  // seam that perturbs the walk measures nothing. These pins hold the
+  // inertness contract from text, the same way the wgslFn parse pins do.
+
+  it('gates on debugCfg.y and that channel appears EXACTLY once in the file', () => {
+    // debugCfg.y was chosen because it was the one spare channel on a
+    // uniform every march variant already binds. If a second use appears,
+    // the seam is no longer independently toggleable and the legs share
+    // state — the exact defect the melt-literal incident warns about.
+    // (Comment text is stripped first so this comment itself cannot trip
+    // the count — same rule as the wgslFn parser, comments included.)
+    const code = MARCH_BODY.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+    expect((code.match(/debugCfg\.y/g) ?? []).length).toBe(1);
+    expect(CONE_MARCH).not.toContain('debugCfg'); // cone keeps its own contract
+  });
+
+  it('sits between the hit-discard and calcNormal, so off == bit-identical', () => {
+    const hit = MARCH_BODY.indexOf('if (!hit) { discard; }');
+    const seam = MARCH_BODY.indexOf('debugCfg.y > 0.5');
+    const normals = MARCH_BODY.indexOf('calcNormal(p,');
+    expect(hit).toBeGreaterThan(-1);
+    expect(seam).toBeGreaterThan(hit);
+    expect(normals).toBeGreaterThan(seam);
+  });
+
+  it('returns the base albedo with no field call in the guarded block', () => {
+    // Slice from the guard to its return: the flat path must not evaluate
+    // the field, or "flat" would measure walk + some shading, not walk.
+    const seam = MARCH_BODY.indexOf('if (debugCfg.y > 0.5)');
+    const block = MARCH_BODY.slice(seam, seam + 120);
+    expect(block).toContain('return vec4<f32>(baseColor, t)');
+    expect(block).not.toMatch(/mapBody|calcNormal|woundShadow|woundMask|fbm\(/);
+  });
+
+  it('leaves the post-hit chain below the seam intact', () => {
+    // The seam is a skip, not a deletion: with it off, every post-hit stage
+    // must still be present in the source (scatter probe, AO probe, wound
+    // shadow, level shadow, ambient).
+    const seam = MARCH_BODY.indexOf('debugCfg.y > 0.5');
+    const rest = MARCH_BODY.slice(seam);
+    expect(rest).toContain('woundShadow(p, L,');
+    expect(rest).toContain('levelShadow(p, n,');
+    expect(rest).toContain('ambientAt(p, n,');
+    expect(rest).toContain('calcNormal(p,');
+    expect((rest.match(/mapBody\(p \+/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });

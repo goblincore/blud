@@ -111,6 +111,12 @@ export interface PrimDef {
   limb: LimbBase;
   mirror?: boolean;
   /**
+   * `side=l|r` on the source line: SINGLE-SIDED. expandMirror emits one copy
+   * on that side of the bone pair and never sets `mirrored` — one authored
+   * number placed once, nothing x-negated. See BlobPart.side.
+   */
+  side?: 'l' | 'r';
+  /**
    * 'sub' carves this primitive out of the assembled field instead of adding
    * to it. 'groove' cuts a narrow CHANNEL along where this primitive's surface
    * meets the assembled body — a mouth line, a panel seam, a nostril slit —
@@ -122,6 +128,20 @@ export interface PrimDef {
    * viscera on the same array and the same terms — see W_ORGAN in pack.ts.
    */
   op?: 'add' | 'sub' | 'groove' | 'bone' | 'organ';
+  /**
+   * Groove depth and width, in metres. Only read when `op` is 'groove'.
+   *
+   * DECLARED HERE as well as on Primitive, and the omission was the bug: the
+   * `op` lived on the def while its two parameters lived only on the placed
+   * prim, so `placePrims` had nothing to copy and every authored groove
+   * arrived with `op: 'groove'` and no channel. `sdGroove(d, sd, 0, 0)`
+   * computes `inBand = 0 - |b|`, never positive, and returns the field
+   * untouched — a silent no-op in the CPU field and, through pack.ts reading
+   * the same two fields, in the shader too. An operator and its arguments
+   * belong on the same interface.
+   */
+  grooveDepth?: number;
+  grooveWidth?: number;
   /**
    * Displacement from the bone-relative placement, in world axes. The body is
    * authored in a rest pose with no rotations, so world and bone axes coincide
@@ -164,6 +184,30 @@ export interface PrimDef {
    * `color` is set.
    */
   gloss?: number;
+  /**
+   * Marks this painted primitive as METAL: shading suppresses the diffuse
+   * to a small floor and tints the specular by `color` instead of the light
+   * colour. A paint approximation, not a BRDF — there is no environment map
+   * and no roughness-driven reflection, say so in the grammar docs. Implies
+   * gloss's noise suppression with or without `gloss=` set (a machined
+   * surface has no pores). `gloss` and `metal` stay SEPARATE axes on
+   * purpose: a glass lens is glossy and emphatically not metal, and folding
+   * one into the other turns the cyclops' eye into a ball bearing. Only
+   * read when `color` is set (enforced at parse time). Packed as prof
+   * bit 4 (16) — see pack.ts.
+   */
+  metal?: boolean;
+  /**
+   * Per-prim emissive strength, 0..1 (hard-surface design C). The glow
+   * COLOUR is the prim's own `color` — a prim with `color=ff2200 glow=0.9`
+   * glows red because it IS red; there is no separate glow colour field.
+   * Only read when `color` is set (enforced at parse time). Packed into
+   * primClip.w (row 17) — see pack.ts. Unlike the FACE glow (a baked sheet,
+   * deliberately zeroed on painted prims so a bake cannot self-illuminate
+   * through sunglasses), this is AUTHORED emission on the prim itself and
+   * survives paint by design.
+   */
+  glow?: number;
   /**
    * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
    * (clusterCore). Without it the fattest prim in the cluster is taken,
@@ -288,6 +332,10 @@ export interface Primitive {
   color?: Vec3;
   /** See PrimDef.gloss. */
   gloss?: number;
+  /** See PrimDef.glow. Carried through mirror, resolve and the rig untouched. */
+  glow?: number;
+  /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
+  metal?: boolean;
   /** See PrimDef.core. */
   core?: boolean;
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */

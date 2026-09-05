@@ -1,0 +1,478 @@
+# Minotaur — the seventh .blob character from scratch, the FIRST authored with
+# the `box` primitive, and the first with a SINGLE-SIDED part (`side=r`).
+# Reference: docs/dev-notes/refs/minotaur-mesh/minotaur.glb — a Meshy demon
+# minotaur brawler: bull head with out-and-up wrapped horns, red eyes/fangs,
+# massive traps/pecs/abs, red cables across the shoulders, a heavy V-taper,
+# and a MACHINED PROSTHETIC on the character's RIGHT leg (thigh cowl, blocky
+# stacked shin plates, ankle pistons, flat boot) against a LEFT flesh leg
+# with a splayed beast paw. The mesh is the only reference — the plates are
+# PAINTED on the mesh, no modelled greebles, so plate seams are `groove`s
+# and panel lines are paint, exactly as the brief prescribes.
+#
+# AUTHORED AT 1.90 m (scale = 1.90/1.217 = 1.56122 x the mesh's bind
+# height). The mesh stands 1.217 m in a WIDE SEMI-CROUCH — knees forward,
+# ankles swung back, feet splayed (left ankle x +0.231 vs hip +0.112);
+# straight-leg standing height would be ~1.26 mesh units, so 1.90 m authored
+# is a hulking ~1.95 m standing — taller than the 1.8 m zombie, a brute.
+# Every authored number below = mesh units x 1.56122 unless a comment says
+# otherwise. Mesh measurements: headless Blender dumps of the committed glb
+# (2026-09-02): joint heads from the Armature, per-bone vertex clouds from
+# dominant vertex-group weights (>= 0.35), rho = distance to the bone axis.
+#
+# THE RIG IS meshy-biped (detectRig; verified against the file: all 24 joint
+# heads match the dispatch brief's table to 0.0001). THE .l/.r BONES DIFFER
+# in the rig (thigh.r 0.2624 vs .l 0.2479, forearm.r +6.4%, foot.r +10.3%)
+# but the grammar's mirror block clones ONE len= per pair, so every paired
+# bone here carries the .l/.r MEAN — each side then sits within 5% of its
+# own rig length, the DONE-WHEN line. Ring-fit alignment is rigid per bone,
+# so the fit sees exactly that residual and no more.
+#
+# THE RIG-vs-SURFACE OFFSETS (why this skeleton hangs the way it does):
+# Meshy buries its Hips joint HIGH in the belly (0.695 mesh) while the
+# surface crotch is at 0.548 and the hip sockets at 0.635. Chained from the
+# rig's own Hips, measured-length legs overshoot the floor; rooted at the
+# surface the spine chain — only 0.330 mesh crotch->neck — dies 0.18 BELOW
+# the surface shoulder line (1.004 mesh): this character's traps/neck mass
+# is unmapped surface the rig never built joints for. So, bonewalker's
+# pattern: the pelvis root sits at 0.871 authored (pelvis tail 0.991 = the
+# rig's own socket height, which is also what lands measured-length legs
+# with the mesh's crouch geometry exactly on sole 0), the spine rides the
+# surface, and the clavicles rise at tilt=32 to put the shoulder balls back
+# up on the mesh's shoulder line (authored (0.342, 1.545) vs rig (0.389,
+# 1.568) — the deltoid ball covers the rest).
+#
+# THE PROSTHETIC is authored with `side=r` (the first): the grammar's limb
+# prims were forced bilateral, and plates on one leg cannot be mirrored
+# pairs. The LEFT leg is flesh; the RIGHT wears `box` plates painted metal
+# (the mesh's own metal is a smooth slab with panel lines PAINTED on).
+#
+# blob:rings is PAINT-BLIND and this character is mostly paint: expect it to
+# ask the prosthetic plates to shrink toward the flesh underneath — the
+# plates are judged by RENDER (corner crispness at 3/4 yaw), not by rings.
+model minotaur-r1
+  height 1.90
+  stance humanoid
+
+skeleton
+  # Root at 0.871: pelvis tail = 0.871 + 0.1204 = 0.991 = rig socket height
+  # (0.6347 mesh x 1.5612) — the height from which measured-length legs with
+  # the mesh's crouch land the ankle at 0.222 and the soles on 0.
+  root pelvis at 0.871 len=0.1204          # rig Hips->Spine02 0.0771 x 1.5612
+  # Spine chain: measured lengths, small forward pitches (the rig leans
+  # forward: z 0.065 -> 0.083 authored over hips->neck).
+  bone spine1 parent=pelvis dir=up pitch=2 len=0.1204   # tail 1.111 = waist
+  bone chest  parent=spine1 dir=up pitch=2 len=0.1204   # ribcage
+  bone spine2 parent=chest  dir=up pitch=1 len=0.0484   # rig 0.0310: short neck-base segment
+  bone neck   parent=spine2 dir=up pitch=0 len=0.1063   # tail 1.386 — rig neck is swallowed by traps
+  # LONG ON PURPOSE, bonewalker's pattern: the face block rides skull at=0.45
+  # (fixed in face.ts), so len 0.807 puts the cranium centre at
+  # 1.387 + 0.45 x 0.840 = 1.765 — clearing the trap shelf (tops ~1.61) so
+  # the bull head reads as sitting ON the shoulders (render round 2: at 1.71
+  # the head sank into the traps). Unmapped: no ring-fit sees this length.
+  bone skull  parent=neck   dir=up pitch=0 len=0.8400
+
+  mirror
+    # Clavicle rises at tilt=32 so the shoulder ball lands on the mesh's
+    # shoulder line (1.545 authored vs rig arm joint 1.5675; the T-pose line
+    # is where the DELT tops out, and at rest the arm hangs below it).
+    bone clavicle parent=neck    side=0.087 dir=side tilt=32 len=0.3004
+    # Arms rest DOWN-and-out (the mesh T-poses) — a heavy powerlifter spread.
+    # Measured mean lengths (see header); .l/.r rig values differ <2%.
+    bone upperarm parent=clavicle dir=down tilt=40 pitch=8  len=0.3059
+    bone forearm  parent=upperarm dir=down tilt=18 pitch=20 len=0.3501
+    # Unmapped (rig ends at one Hand joint) — carries the fist only.
+    bone hand     parent=forearm  dir=down tilt=10 pitch=15 len=0.1400
+    # Legs keep the mesh's wide semi-crouch: hip->knee out+forward, shin
+    # swinging back (rig ankle sits BEHIND the knee: z -0.076 authored).
+    # side=0.1755 puts the thigh head at the rig's left socket x (0.1124
+    # mesh x 1.5612).
+    bone thigh    parent=pelvis side=0.1755 dir=down tilt=13.5 pitch=13  len=0.3984
+    bone shin     parent=thigh  dir=down tilt=12 pitch=-22                 len=0.4408
+    # The foot bone only positions paw/boot prims (house pattern) — horizontal
+    # at ankle height, +z forward.
+    bone foot     parent=shin   dir=fwd                                    len=0.2095
+  end
+
+body
+  # ============================================================
+  # TORSO — a heavy V-taper brawler. Measured halfwidths (mesh x 1.5612):
+  # hip bowl 0.24-0.28 at y 0.98-1.08, waist ~0.23 at 1.11, ribcage/lats
+  # 0.30+ at 1.33, traps rising to the neck; belly wall protrudes to z
+  # +0.24 authored, back to -0.25 (the abs are modelled in the mesh).
+  # ============================================================
+  # Pelvis/hip bowl: wide and deep (mesh Hips cloud slabs: xhalf 0.155-0.177,
+  # z -0.11..+0.153 at y 0.63-0.69). Block 3 round 1 (mean 67.1mm): r 0.16 ->
+  # 0.1283, wide 1.65 -> 1.392, centre (x -0.018, z -0.085).
+  # Block 4 (mean 44.4mm): r 0.1397, deep 1.47 (halfdepth 0.205 = the
+  # measured pelvis z -0.11..+0.153 mesh), centre back z -0.064.
+  blob torso on pelvis  at=0.50 r=0.1397 wide=1.392 tall=1.30 deep=1.470 blend=0.012 offset=(-0.018,0,-0.114) core
+  # Waist -> belly (spine1 0.991-1.111). ROUND 5: deep 1.35 -> 1.210 and
+  # wide 1.45 -> 1.490. The relief map's V-taper finding — at the flanks
+  # (x -0.23) the mesh runs 0.24 deep at the chest and 0.14 at the belly, a
+  # 100mm fall, while this body was NEARLY CONSTANT 0.19-0.23 and slightly
+  # deeper at the bottom. An INVERTED taper. Pulling the belly's depth in
+  # while keeping its width is what restores it.
+  bar  torso on spine1  from=0.00 to=1.50 r=0.155 wide=1.490 deep=1.210 blend=0.012 offset=(0,0,0.030)
+  # Abs/ribcage. ROUND 5 — CROSS-SECTION PASS, fitted against a FRONT-WALL
+  # RELIEF MAP (ref mesh vs this body, per (x,y) cell; see
+  # docs/dev-notes/2026-09-03-torso-relief/notes.md). That map is the only
+  # instrument that sees any of this: blob:rings fits a radial AVERAGE,
+  # blob:measure scores a SILHOUETTE, and blob:depth reports a band median
+  # ACROSS x — all three score a dome and a slab identically.
+  #
+  # What it showed: every height band was the same arch, most proud at the
+  # centreline and behind at the flanks. The mesh is a broad flat-fronted
+  # slab; this was a narrow dome. wide 1.40 -> 1.700 (halfwidth 0.210 ->
+  # 0.255) and deep 1.70 -> 1.620 carries the mass out to where the mesh
+  # actually has it. Mean |diff| over 143 torso cells: 21.6mm -> 15.3mm.
+  #
+  # NOT the unbounded optimum. A free search wanted wide 2.08 (halfwidth
+  # 0.312) and traps at x 0.322, and it rendered as a MUSHROOM — a flat cap with
+  # the arms hanging beneath it. The front wall is one view and cannot see
+  # that, so the search runs inside bounds set by judgement and `wide` sits
+  # pinned at its ceiling. The score still wants more. It cannot have it.
+  #
+  # A `box` was tried here and REJECTED, by hand and then by the search from
+  # every start: an ellipse beats a rounded box on this wall once width is
+  # free. A box's corners add ~27% more area than the ellipse of the same
+  #half-extents (4ab vs pi*ab), which lands as volume where the mesh has none.
+  # The remaining centreline error (+27 to +55mm at y 1.363-1.504) is the
+  # STERNUM DIP — the mesh has an 18mm hollow between the pecs at y 1.405,
+  # narrowing to a 5mm linea alba at 1.171. That is muscle relief, not
+  # cross-section, and it is the next pass.
+  bar  torso on chest   from=0.30 to=2.50 r=0.150 wide=1.700 deep=1.430 blend=0.013 offset=(0,0.005,0.010)
+  # TRAP SHELF on the neck bone (the rig's spine2/neck is buried under this
+  # mass — surface shoulder line 1.5675, traps top to 1.64 authored): fills
+  # the neck->deltoid gap so the shoulder balls stop reading as detached
+  # spheres (render round 1).
+  # ROUND 5: offset x 0.052 -> 0.162, moving the pair OUTBOARD. At 0.052 the
+  # two halves (halfwidth 0.361 each) overlapped into one mass that filled
+  # the THROAT: the mesh's centreline at y 1.499 is z 0.184, a hollow, and
+  # this body had 0.257 there — +73mm, the single worst cell on the map.
+  # Traps sit either side of a neck. The unbounded search wanted 0.322,
+  # which is out over the deltoids and is half of what made the mushroom.
+  blob torso on neck    at=0.90 r=0.190 wide=1.90 tall=1.50 deep=1.30 blend=0.011 both offset=(0.162,0.040,-0.010)
+
+  # ============================================================
+  # MUSCLE RELIEF (round 6). Every number below is a target read off
+  #   npm run blob:relief -- minotaur --y 0.92:1.51 --x 0.24
+  # after the round-5 cross-section pass, which is the ONLY tool that sees
+  # any of it (rings averages the ring, measure sees the outline, depth
+  # takes a band median ACROSS x — and a pec split is a dip at x=0 between
+  # two crowns, which a median over x erases by construction).
+  #
+  # What the map asked for, in its own numbers:
+  #   y 1.363-1.504  centreline +27..+55mm proud, flanks only +9..+31
+  #                  -> a RIDGE where the mesh has an 18mm sternum hollow
+  #   y 1.222-1.316  BEHIND everywhere, -4..-27mm, worst at x +/-0.09..0.19
+  #                  -> the lower-pec/upper-ab shelf is simply missing
+  #   y 0.940-1.128  right flank -19..-35mm at x +0.19..0.23
+  #                  -> the oblique/hip flare
+  # Result: 15.3mm -> 12.8mm mean |diff| over the same 143 cells (12.3mm
+  # with wider grooves, deliberately not taken: a 200mm-wide 'line' scores
+  # by shaving proud material, which is a depth edit wearing a crease's name). Numbers
+  # tuned by bounded coordinate descent against that map, then looked at:
+  # NOTHING sits pinned at a bound this time (the cross-section pass had two
+  # pinned), so the optimum is interior and judgement is not fighting it.
+  # (The +51..+64mm at x -0.23 low down is NOT torso: that column is the
+  # prosthetic thigh cowl. Verified against the prim dump.)
+  # ============================================================
+  # OWNER VERDICT ON THIS WHOLE PASS: "i dont see any muscles just the mass
+  # and the normal bumpy texture." Correct, and the numbers below did NOT
+  # earn their render. Diagnosed rather than re-tuned — see
+  # docs/dev-notes/2026-09-03-torso-relief/notes.md. The short version is
+  # that geometry cannot carry muscle in this renderer today: the AO term
+  # is a single field tap at 0.06 m, so nothing shallower than ~60mm casts
+  # any darkening at all; self-shadowing was deliberately cut; and a crease
+  # crisp enough to be sharp is a few pixels wide at gameplay distance while
+  # one wide enough to see is a gentle dish with no contrast. A spike adding
+  # a second AO tap at 0.015 m made these same grooves visible — modestly,
+  # but visibly. That is where the fix lives, not in these numbers.
+  #
+  # Kept anyway because the MASSES are a measured improvement to the form
+  # (15.3mm -> 12.8mm) and the grooves are nearly free and will read the day
+  # a cavity term lands.
+  #
+  # GROOVE WIDTHS BELOW LOOK ABSURDLY SMALL. They are not. `depth` is metres
+  # but `width` is compared against sdPrimitive's SCALED distance, so the
+  # channel's real half-width is `width / min(wide, tall, deep)` — and a
+  # groove plate is FLAT by definition, which is what multiplies it. At
+  # tall=0.05, width=0.010 is a 200mm band: measured here as a 40mm trench
+  # down the whole body, not a line. width=0.0010 is the 20mm line intended.
+  # Nobody could have known this before 2026-09-03: every groove in every
+  # character was a silent no-op (placePrims dropped depth/width while
+  # keeping op), so no authored groove number had ever been seen.
+  #
+  # PECS. A pair, not one mass, so the centreline can fall BETWEEN them —
+  # that is the whole construction. The chest bar's depth comes down to pay
+  # for them (round 5 left it carrying the centre alone, which is what made
+  # the ridge). neck at=0.72 -> y 1.397, the mesh's pec crown height.
+  blob torso on neck   at=0.72 offset=(0.098,0,0.128) r=0.108 wide=1.30 tall=1.15 deep=0.62 blend=0.006 both
+  # Lower-pec shelf: the line that makes a pec read as a PLATE rather than a
+  # bulge. neck at=0.30 -> y 1.352.
+  groove torso on neck at=0.30 offset=(0.090,0,0.150) r=0.115 wide=1.39 tall=0.05 depth=0.0150 width=0.00035 both
+  # Sternum. The mesh's own hollow is 18mm at y 1.405 (relief --abs: z 0.235
+  # at x 0 against 0.255 at x +/-0.05). The pair above does most of it; this
+  # cuts the remainder.
+  groove torso on neck at=0.60 offset=(0,0,0.170) r=0.100 wide=0.05 tall=1.50 depth=0.0220 width=0.0003
+  # Upper-ab / lower-chest mass. chest from=0.85 to=1.75 -> y 1.219-1.328,
+  # exactly the band the map reports 13-25mm behind.
+  bar  torso on chest  from=0.85 to=1.75 r=0.150 wide=1.79 deep=1.66 blend=0.010 offset=(0,0,0.020)
+  # Linea alba: 5mm at y 1.171, shallower than the sternum by measurement,
+  # not by taste.
+  groove torso on spine1 at=1.10 offset=(0,0,0.190) r=0.090 wide=0.05 tall=1.60 depth=0.0120 width=0.00025
+  # Ab cross-lines.
+  groove torso on spine1 at=1.35 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.0130 width=0.00030
+  groove torso on spine1 at=0.95 offset=(0,0,0.185) r=0.130 wide=1.25 tall=0.05 depth=0.0130 width=0.00030
+  # Obliques / hip flare: the map's -19..-35mm at the right flank low down.
+  blob torso on spine1 at=0.10 offset=(0.161,0,0.070) r=0.101 wide=0.95 tall=1.39 deep=1.10 blend=0.008 both
+
+  # Neck: nearly invisible (mesh neck cloud is a 100-vert stub, rho ~0.03
+  # mesh); a short bar swallowed by the traps, fusing head->torso.
+  bar  head on neck from=-0.30 to=1.20 r=0.060 deep=1.20 blend=0.006
+
+  # ============================================================
+  # HORNS — the mesh's second-biggest silhouette feature after the leg.
+  # Measured off the Head cloud: bases at the cranium's top-sides (x +/-0.075
+  # mesh, y 1.06-1.10), sweeping OUT to xhalf 0.165 mesh at y 1.13-1.19 with
+  # the tips curling up and slightly forward; the outer half is wrapped in
+  # near-black bands (texture median there sRGB ~(30,25,25)). Two prims per
+  # horn: a skin-covered base blob, then the wrapped sweep.
+  # ============================================================
+  # Base: skin-covered horn root at the cranium's TOP-sides. Round 4: at=0.375
+  # put the roots at y 1.702, which is 34% up a cranium spanning 1.571-1.959 —
+  # ear height, so the horns read as tusks off the jaw hinge. at=0.58 ->
+  # y 1.873, which is 78% up: the temple/crown corner a bull's horns spring
+  # from. The cranium's own x-halfwidth there is 0.104 (0.125 x sqrt(1 -
+  # ((1.873-1.765)/0.194)^2)), so a root centred at x 0.098 with r 0.055 sits
+  # ON the surface and proud of it by 0.05 — a root bump, not a growth.
+  blob head on skull at=0.58 offset=(0.098,0.0,0.020) r=0.055 wide=1.0 tall=0.85 deep=1.0 blend=0.005 both color=6e4426
+  # Wrapped sweep: one bent tapered bar. Raised with the root (round 4) — the
+  # old tips topped out at y 1.849, BELOW the cranium's own crown at 1.959, so
+  # the head was taller than its horns and they vanished into the silhouette.
+  # Now: root (0.098, 1.873, 0.029) -> tip (0.260, 2.020, 0.024), clearing the
+  # crown by 0.06 and reading against the sky from every yaw. Endpoint arith:
+  # b = boneAt(to) + offset + tip, boneAt(t).y = 1.386 + 0.84t.
+  # `bend` is the control point's displacement from the MIDPOINT, so
+  # (+0.048, -0.042, 0) pulls the curve OUT and DOWN of the chord — the horn
+  # leaves the skull sideways and only hooks up at the tip, which is the bull
+  # silhouette. A straight chord here reads as a spike.
+  # AGAINST THE REFERENCE, honestly: the mesh's horn tips reach the model's own
+  # top, 1.217 mesh = 1.900 authored — i.e. in the mesh the HORNS are the
+  # topmost feature. Here they were not: an earlier round enlarged the cranium
+  # to stop the head sinking into the traps, which put the crown at 1.959,
+  # 0.11 ABOVE the old tips. So part of this is a real correction (restore the
+  # mesh's own ordering) and part is an art call (the tips now sit at 2.021,
+  # 0.12 above the mesh-equivalent 1.900) — a taller horn than the reference
+  # carries, chosen for the read at gameplay distance. `blob:depth` scores
+  # this as a regression in the two crown bands and it is right to; the
+  # deviation is deliberate and this comment is where it is recorded.
+  # topY is now 2.033, above the declared `height 1.90`. Fine — `height` is
+  # documentation, nothing scales by it (grep: only head-profile.ts reads it).
+  bar  head on skull from=0.575 to=0.70 offset=(0.098,0.0,0.020) tip=(0.162,0.046,-0.005) bend=(0.048,-0.042,0.0) r=0.050 r2=0.013 blend=0.004 chamfer both color=221a1a gloss=0.45
+
+  # ============================================================
+  # EYES — glowing (hard-surface task 3 acceptance: per-prim glow=). The
+  # first emissive prims in any character; the decal bake already paints red
+  # eyes at this spot, and these prims light them. at=0.41: boneAt(t).y =
+  # 1.386 + 0.84t -> 1.730, the decal solve's own EYE row. x +/-0.035 is the
+  # mesh's eye spacing (decal comment below). z: the FIRST attempt solved
+  # 0.068 off the decal comment's ellipsoid — but it read hs.y (a head-space
+  # RATIO) as metres and buried the beads 11 cm inside the skull (frames
+  # showed nothing; the CPU field probe scripts/tmp/eye-surface.ts puts the
+  # real front surface at z 0.188 for y 1.70-1.82, agreeing with the
+  # corrected ellipsoid arithmetic 0.188 at the eye row). Centre sits at
+  # 0.183: a bead sunk to ~60% depth, ~6 mm proud — an eye in a socket, not
+  # a headlamp. r=0.012: 24 mm, small against the 250 mm muzzle. `both`
+  # mirrors the offset x like every facial pair.
+  # ============================================================
+  blob head on skull at=0.41 offset=(0.035,0.0,0.183) r=0.012 blend=0.004 both color=ff2200 glow=0.9
+
+  # ============================================================
+  # ARMS — huge (mesh upperarm rho p50 0.085-0.096 = 0.13-0.15 authored,
+  # forearm tapering 0.11 -> 0.075). Deltoid ball at the clavicle tail is the
+  # arm's core (house pattern — the fuse probe must not pick an accessory).
+  # ============================================================
+  blob arm on clavicle at=1.00 r=0.135 blend=0.008 mirror core
+  # Round 2: the .l and .r clouds seesaw around the shared line (the mesh's
+  # arms are NOT mirror-symmetric) — the honest target is the mean of both
+  # sides' wants: r 0.109, r2 0.112, wide 1.0, offset back to (0,0,0.004).
+  bar  arm on upperarm from=0.00 to=0.95 r=0.1090 r2=0.1120 wide=1.000 blend=0.006 mirror offset=(0,0.001,0.004)
+  # Block 12 round 2: minor converges (r 0.110, r2 0.0793, deep 1.078).
+  bar  arm on forearm  from=0.00 to=0.90 r=0.1100 r2=0.0793 deep=1.078 tall=1.131 blend=0.006 mirror offset=(0,-0.001,-0.008)
+  # Fist: one deep mitt (mesh hand cloud rho p50 0.055-0.09 -> 0.085-0.14;
+  # a fist, not a spread hand — no finger attribution exists in the rig).
+  blob arm on hand     at=0.45 r=0.085 wide=0.95 tall=1.10 deep=1.25 blend=0.005 mirror
+
+  # ============================================================
+  # LEFT+RIGHT FLESH LEG — authored mirrored (the grammar's bilateral cage);
+  # the RIGHT side's surface is then REPLACED by the prosthetic plates below,
+  # which is exactly the mesh's own construction: metal over a stump.
+  # Measured flesh radii (LEFT cloud, mesh p50 -> authored): thigh mid 0.129
+  # -> 0.20 (a muscled thigh; the bar's taper carries hip->knee), calf
+  # 0.079-0.091 -> 0.12-0.14 with the bulge back, ankle ~0.09 -> 0.14.
+  # ============================================================
+  blob leg on thigh at=0.02 r=0.160 blend=0.008 mirror core
+  # Block 9 round 1 (mean 26.0mm): r 0.155 -> 0.1171, r2 0.135 -> 0.1669
+  # (thinner shaft, knee-end mass — the crouch fans the cloud), centre back
+  # z -0.072 (hamstring belly hangs behind the axis).
+  bar  leg on thigh from=0.05 to=0.92 r=0.1171 r2=0.1669 wide=1.02 blend=0.007 mirror offset=(0,-0.021,-0.052)
+  blob leg on shin  at=0.02 r=0.125 deep=0.95 blend=0.007 mirror
+  # Block 11 (mean 15.8mm): r 0.1082, r2 0.1155, deep 1.216 (81% column
+  # share), centre back 0.013. The tall 0.545 suggestion (5% share) held off —
+  # an effectively unmeasured column.
+  bar  leg on shin  from=0.08 to=0.60 r=0.1082 r2=0.1155 deep=1.216 tall=1.0 blend=0.007 mirror offset=(0,-0.002,-0.022)
+  # Block 10 (mean 22.4mm): the fit wants this bar to GROW toward the ankle
+  # (r2 0.1317 — the mesh ankle is thick, rho ~0.09 mesh = 0.14 authored) and
+  # thin at the top where the calf owns the surface (r 0.0369).
+  # Block 7 round 2: r 0.0304, centre back (z -0.060 total).
+  bar  leg on shin  from=0.60 to=0.98 r=0.0304 r2=0.1317 blend=0.006 mirror offset=(0,0.009,-0.060)
+  # Beast paw: splayed (mesh left paw x 0.205..0.521 authored — 0.32 wide!),
+  # short and deep, toes forward. Block 11: r 0.0926, centre up 0.046, toe
+  # end reaches further (taper REFUSED — uniform r, longer body).
+  blob leg on foot  at=0.30 offset=(0.010,-0.054,0.095) r=0.0926 wide=1.35 tall=1.07 deep=1.45 blend=0.006 mirror
+  blob leg on foot  at=0.30 offset=(0.085,-0.135,0.130) tip=(0.020,-0.040,0.055) r=0.030 r2=0.008 blend=0.003 mirror color=3a2417
+  blob leg on foot  at=0.30 offset=(-0.070,-0.130,0.125) tip=(-0.015,-0.040,0.055) r=0.030 r2=0.008 blend=0.003 mirror color=3a2417
+
+  # ============================================================
+  # THE PROSTHETIC — RIGHT leg only (side=r; the first single-sided prims).
+  # The mesh's metal is a smooth slab with panel lines PAINTED on — no
+  # modelled bolts — so: `box` plates at round=0.05-0.12 (machined), metal
+  # paint + gloss for the read, grooves for seams (added after first render),
+  # ROUND 4 — POLISHED, not painted. The plates read as matte grey card at
+  # gloss 0.70. `gloss` was then the only metal lever the shader had, and it
+  # drives four terms at once (march.wgsl.ts): the specular exponent
+  # mix(mix(128,4,roughness), 220, gloss), the specular weight
+  # mix(surfCfg.x, 1.5, gloss), the fresnel rim mix(1, 2.5, gloss), and `wet`
+  # toward 1. At 0.70 all four sit mid-scale, which is exactly "plastic".
+  # At 0.90-0.95 the highlight goes tight and hot and the rim lights up.
+  # The albedo comes DOWN with it (848a91 -> 6a7078, roughly -35% linear):
+  # metal's diffuse is dark and its brightness is the highlight — a light
+  # albedo plus a hot spec reads as white plastic, which is what round 3 was.
+  # ROUND 5 (hard-surface task 2) — the bare word `metal` on each plate:
+  # the shader now drops the diffuse family to a 0.25 floor and tints the
+  # specular AND fresnel rim by this paint, which is what was still missing
+  # from the plastic read. `metal` implies gloss's noise suppression on its
+  # own. STILL a paint approximation, not a metallic BRDF — there is no
+  # environment map; this is the honest approximation of metalness.
+  # one cable run as a plain bent capsule. Mesh .r radii: thigh cowl p50
+  # 0.104-0.114 UNIFORM (a slab, not a taper) = 0.16-0.18 authored, p75 to
+  # 0.17 (0.26 authored — the cowl's outer flare); shin plates 0.110-0.131
+  # -> 0.17-0.20. Judged by RENDER (corner at 3/4 yaw), NOT by rings —
+  # rings sees only the on-axis extent and will ask these to shrink.
+  # Offsets are authored in WORLD axes straight onto the .r bones (x
+  # negative = outward on the right).
+  # ============================================================
+  # Thigh cowl: one slab hip->mid-thigh, proud of the flesh on the outer face.
+  # Render round 1: the flesh hip ball poked out above the cowl — extended
+  # down to the bone head and thickened. Paint darkened (9aa0a6 read white).
+  bar  leg on thigh from=-0.05 to=0.68 offset=(-0.033,0.008,0.012) r=0.162 wide=1.28 tall=1.20 deep=1.18 box round=0.10 color=6a7078 metal gloss=0.95 blend=0.010 side=r
+  # Knee block: the mesh's dark square knee panel.
+  blob leg on shin  at=0.04 offset=(-0.010,-0.010,0.015) r=0.135 wide=1.15 tall=1.10 deep=1.10 box round=0.18 color=4e545c metal gloss=0.93 blend=0.009 side=r
+  # Stacked shin greave: two OVERLAPPING slabs so the silhouette steps without
+  # gapping; deepened per rings' deep-hint (the mesh prosthetic is deeper
+  # front-to-back than a first pass).
+  bar  leg on shin  from=0.06 to=0.55 offset=(-0.024,0.005,0.018) r=0.128 wide=1.25 tall=1.15 deep=1.35 box round=0.07 color=6a7078 metal gloss=0.95 blend=0.008 side=r
+  bar  leg on shin  from=0.50 to=0.92 offset=(-0.018,0.000,0.000) r=0.115 wide=1.20 tall=1.10 deep=1.45 box round=0.07 color=5d636b metal gloss=0.94 blend=0.007 side=r
+  # Flat boot: deep slab, top overlapping the greave's bottom (the ankle slot
+  # render round 3), sole planted (bottom just under y 0).
+  bar  leg on foot  from=0.10 to=0.70 offset=(-0.010,-0.090,0.045) r=0.100 wide=1.25 tall=1.50 deep=1.60 box round=0.10 color=44494f metal gloss=0.90 blend=0.008 side=r
+  # Red cable run down the greave's outer FACE (rides the plate surface:
+  # plate outer face ~0.194 from the axis, cable at 0.194+0.016).
+  bar  leg on shin  from=0.12 to=0.52 offset=(-0.210,0.020,-0.020) bend=(-0.020,0.020,0.010) r=0.016 r2=0.012 blend=0.004 color=cc2a1a gloss=0.85 side=r
+  # Panel seams: the mesh's metal has lines PAINTED on; a groove per slab
+  # edge reads as the milled joint (flat axis across the line's direction:
+  # tall small = horizontal seam).
+  groove leg on shin at=0.30 offset=(-0.150,0.0,0.145) r=0.10 wide=1.10 tall=0.06 depth=0.004 width=0.006 side=r
+  groove leg on thigh at=0.30 offset=(-0.185,0.0,0.150) r=0.11 wide=1.15 tall=0.06 depth=0.004 width=0.006 side=r
+
+  # Red cables across the shoulders/upper arms (mesh: paired cables from the
+  # clavicle region out along the deltoid, both sides) — ridden on the arm's
+  # back surface (r 0.109 + cable 0.014 -> z -0.128).
+  bar  arm on upperarm from=0.05 to=0.75 offset=(0,-0.045,-0.128) bend=(0,0.045,0.030) r=0.014 r2=0.011 blend=0.004 mirror color=cc2a1a gloss=0.85
+
+# ============================================================
+# FACE — baked decal (the mesh has a painted face: red eyes, fangs, open
+# mouth). The face block's cranium: mesh head slabs give halfwidth ~0.066
+# mesh (0.103 authored) below the horn bases, head z -0.055..+0.197
+# (muzzle forward), chin ~0.99 mesh = 1.546 authored, crown 1.217 = 1.900.
+# headRadius 0.100 x the scales below: half (0.100, 0.180, 0.155) about
+# centre (0, 1.710, 0.009).
+# ============================================================
+face
+  # Enlarged (render round 2: the head sank into the traps — the mesh's head
+  # with jaw/muzzle is a BIG mass: head cloud halfwidth 0.066 mesh cranium
+  # but 0.103-0.165 with muzzle+horns). Semi-axes (0.125, 0.194, 0.188).
+  headRadius 0.125
+  headWidth  1.00
+  headHeight 1.55
+  headDepth  1.50
+  jawWidth   0.95
+  jawHeight  1.00
+  jawDrop    0.130
+  jawJut     0.110
+  noseLength 0.030
+  noseWidth  0.80
+  noseDrop   0.030
+  browHeavy  0.016
+  browRise   0.040
+  headBlend  0.005
+
+# Face decal: `npm run blob:face-bake -- minotaur` baked the mesh's own head
+# (top 16.5%: red eyes, snarl, fangs; the horn tips widen the box so the FACE
+# occupies only the centre ~28% of uv.x). The PNG is CROPPED to that band
+# (uv.x 0.34..0.66, uv.y 0.28..0.60, alpha zeroed elsewhere) so the bake's
+# horn/trap imagery can never wrap past the cranium's silhouette. Projection
+# aimed at TWO features in head space of the fattest head prim (the cranium,
+# centre (0, 1.764, 0.009), semi-axes 0.125 x 0.194 x 0.188): the image's
+# EYE row (uv.y 0.50) at authored y 1.73 -> hs.y -0.176, and the image's
+# FANG row (uv.y 0.395) at authored y 1.665 -> hs.y -0.510. Solve:
+# scaleY 0.314, centreY 0.555. scaleX 0.139 puts the bake's eye gap
+# (duv.x 0.078) on the mesh's own +/-0.035 eye spacing (hs.x +/-0.28).
+sheet
+  image       minotaur-face.png
+  decal       1
+  projScaleX  0.130
+  projScaleY  0.314
+  projCentreX 0.5
+  projCentreY 0.555
+
+# Palette. ROUND 4 — the mesh's own texture is a warm mid brown and the
+# measured values below rendered as a dark chocolate mass with no read at all
+# under the lab's key. Retargeted to the ZOMBIE's flesh, which is the
+# `henenlotter-latex` preset (material.ts) and is what every character gets by
+# default: baseColor 0.82 0.44 0.46, a foam-latex pink under a hard key.
+# So the numbers here are now the PRESET's, deviating only where this
+# character needs it:
+#   - baseColor lifted 0.82 -> 0.86 to pay for the mottle. material.ts is
+#     explicit that average albedo lands near mix(base, mottle, amp x 0.5), so
+#     with amp 0.22 and mottle 0.62 0.28 0.30 the body averages
+#     (0.834, 0.449, 0.460) — the preset's colour, arrived at WITH the mottle
+#     rather than before it.
+#   - the mottle stays (this is hide, not skin) but moves into the pink
+#     family; the old dusty grey-gold 0.16 0.10 0.06 was half of what made
+#     the body read brown.
+#   - surfaceNoiseAmp 0.09 and silhouetteNoiseAmp 0.014. ROUND 6 halved the
+#     noise and the mottle (0.16 -> 0.09, amp 0.22 -> 0.11): with muscle
+#     relief finally in the geometry, the mottle's blotches sit at roughly
+#     the same spatial frequency as a pec and were the LOUDER signal. Both
+#     move toward the preset, which carries mottleAmp 0 — so this is closer
+#     to the zombie, not further from it. Honest scale of the win: modest.
+#     The mottle is still the loudest thing on the chest at close range.
+# The measured brown (baseColor 0.115 0.055 0.025, mottle 0.16 0.10 0.06) is
+# the REFERENCE's colour, kept in this comment and in git — it is not the
+# colour this character should be in this game.
+palette
+  baseColor     0.86 0.47 0.48
+  deepColor     0.74 0.06 0.10
+  charColor     0.10 0.07 0.08
+  specIntensity 0.95
+  specRoughness 0.16
+  fresnelBoost  0.75
+  translucency  0.45
+  surfaceNoiseAmp    0.09
+  silhouetteNoiseAmp 0.014
+  wetness       0.85
+  mottleAmp     0.11
+  mottleScale   1.6
+  mottleColor   0.62 0.28 0.30

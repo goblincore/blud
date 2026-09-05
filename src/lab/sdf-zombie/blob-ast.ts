@@ -58,6 +58,14 @@ export interface BlobPart {
   mirror: boolean;
   hard: boolean;
   both: boolean;
+  /**
+   * `side=l|r` — this prim is SINGLE-SIDED: expandMirror emits ONE copy, on
+   * that side of the named mirrored bone pair (`thigh` -> `thigh.r`, limb
+   * legR). Every limb prim before this was forced bilateral, which made a
+   * one-sided prosthetic unauthorable — the minotaur's machined right leg is
+   * the case that proved the gap real. Null = bilateral as always.
+   */
+  side: 'l' | 'r' | null;
   /** `chamfer` — fold with a flat bevel instead of the default fillet. */
   chamfer: boolean;
   /** `r2=` — radius at the far end. Null means untapered. */
@@ -89,6 +97,18 @@ export interface BlobPart {
   color: readonly [number, number, number] | null;
   /** `gloss=0..1`. null = the flesh preset's own wetness. */
   gloss: number | null;
+  /** `glow=0..1`. Emissive strength; the COLOUR is the prim's own `color=`
+   *  (hard-surface design C — no new colour field). null = not emissive. */
+  glow: number | null;
+  /**
+   * The bare word `metal`: this painted prim shades as METAL — the shader
+   * drops its diffuse to a small floor and tints the specular by the prim's
+   * own albedo. A paint approximation, not a BRDF: there is no environment
+   * map and no roughness-driven reflection. Implies gloss's noise
+   * suppression whether or not `gloss=` is set — a machined surface has no
+   * pores either. Parse-gated on `color=` exactly as gloss is.
+   */
+  metal: boolean;
   /** The bare word `core`: this prim is the limb's structural mass. */
   core: boolean;
   /** The bare word `organ` (bones block only): soft viscera, not bone.

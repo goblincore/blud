@@ -48,6 +48,19 @@ export interface RefSkin {
   total: number;
   /** Vertices dropped for a top weight at or below MIN_DOMINANT_WEIGHT. */
   dropped: number;
+  /**
+   * TEXCOORD_0 of each kept vertex, PARALLEL to `verts`; present only when
+   * the skinned primitive carries the attribute (absent = no paint to read).
+   *
+   * The draft's colour pass joins a vertex's paint to its geometry through
+   * this. No other join works: the kept set is whatever survived the
+   * MIN_DOMINANT_WEIGHT filter above, so matching texels to verts from the
+   * raw accessors would mean re-deriving that filter in a second module — a
+   * second implementation of a calibrated rule that could silently disagree
+   * (the plausible-and-undebuggable class of failure this file exists to
+   * prevent).
+   */
+  uv?: ReadonlyArray<readonly [number, number] | null>;
 }
 
 type Mat4 = number[]; // column-major, 16 entries, glTF convention
@@ -145,7 +158,37 @@ function readAccessor(gltf: any, bin: Uint8Array, index: number): number[] {
   return out;
 }
 
-export function readRefSkin(bytes: Uint8Array): RefSkin {
+export interface RefSkinOpts {
+  /**
+   * Override MIN_DOMINANT_WEIGHT. Pass 0 to keep EVERY vertex.
+   *
+   * The default filter exists so a vertex can be attributed to ONE bone, and
+   * for that it is right. It is wrong whenever the caller wants the SURFACE
+   * rather than a per-bone cloud, because the vertices it discards are not
+   * scattered — they are exactly the ones where several bones share
+   * influence, i.e. the joints and the broad blended areas between them.
+   *
+   * Measured on minotaur.glb (2026-09-03): 21,657 of 135,942 vertices are
+   * dropped, 16%, and the loss is CONCENTRATED. In 0.047 m height bands
+   * across the trunk the band at authored y 1.312 keeps ZERO vertices and its
+   * neighbours at 1.265 and 1.358 keep 29 and 1,040, while every band below
+   * 1.22 keeps 1,500-2,300 and every band above 1.40 keeps 5,000-7,500. That
+   * hole is the chest, where Spine01 and both Shoulders share weight and no
+   * single joint clears 0.5.
+   *
+   * So anything that measured this character's chest against this cloud was
+   * measuring a hole. A caller that only needs geometry — a front-wall relief
+   * map, a silhouette, a depth image — should pass 0.
+   *
+   * A caller that needs bone attribution must NOT: below the threshold the
+   * `joint` field is the largest of several comparable weights, which is the
+   * mis-attribution the default prevents.
+   */
+  minDominantWeight?: number;
+}
+
+export function readRefSkin(bytes: Uint8Array, opts: RefSkinOpts = {}): RefSkin {
+  const minWeight = opts.minDominantWeight ?? MIN_DOMINANT_WEIGHT;
   const { json, bin } = parseGlb(bytes);
   const gltf = json as any;
   if (!bin) throw new Error('GLB has no BIN chunk');
@@ -237,6 +280,10 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
   }
 
   const verts: RefVertex[] = [];
+  const uvRaw = prim.attributes.TEXCOORD_0 === undefined
+    ? null
+    : readAccessor(gltf, bin, prim.attributes.TEXCOORD_0);
+  const uv: Array<[number, number] | null> | undefined = uvRaw ? [] : undefined;
   let dropped = 0;
   const total = pos.length / 3;
   for (let i = 0; i < total; i++) {
@@ -249,7 +296,7 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
     }
     // `<=`, not `<`: an exact 0.5/0.5 split is a tie, not a majority, and the
     // tie-break would be whichever weight the exporter happened to write first.
-    if (bestW <= MIN_DOMINANT_WEIGHT) { dropped++; continue; }
+    if (bestW <= minWeight) { dropped++; continue; }
     // The full weighted blend, not just the dominant joint's matrix. At an
     // exact bind pose the two agree (every `globalTransform * IBM` is the
     // identity there), but a reference exported mid-pose has them disagreeing
@@ -266,6 +313,9 @@ export function readRefSkin(bytes: Uint8Array): RefSkin {
       }
     }
     verts.push({ joint: jointNames[bestJ] ?? `joint${bestJ}`, position: [px, py, pz] });
+    if (uv) uv.push([uvRaw![i * 2]!, uvRaw![i * 2 + 1]!]);
   }
-  return { verts, jointWorld, total, dropped };
+  return uv
+    ? { verts, jointWorld, total, dropped, uv }
+    : { verts, jointWorld, total, dropped };
 }

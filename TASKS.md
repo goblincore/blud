@@ -157,18 +157,109 @@ travels. The sameness is `ejectedShell()` being deterministic by design
 call for gating and the wrong one for feel. Randomising it means the eject gate
 needs a seed it can pin, or it becomes flaky.
 
-**[ ] F-eject.2 — fresh shells still appear from nowhere.** Owner: "new shells
-magically appear to load. this is a gap in the spec." Correct, and the spec
-names it: the load beat carries the cases up with the support hand but never
-shows them being *inserted*. The Doom reload the tempo was taken from has the
-left hand jamming two shells into the barrels. Owner's read on difficulty, which
-matches mine: the hand is a blobby orb so the ANIMATION is not the hard part —
-the timing against the 1.30 s beat sheet and keeping the fresh cases from
-clipping the barrels on the way in are. Note the reference GLB
-(`docs/dev-notes/refs/sawnoffs_animated.glb`) does NOT solve this: its slugs
-simply reappear seated at t=1.933, which is why our support hand was kept over
-its approach in the first place. So this one has no reference to decode — it
-has to be authored.
+**SHELLS: EJECT CLIP + LOAD INSERTION — DONE (2026-09-04), F-eject.1 and
+F-eject.2** — [notes + before/after strip](docs/dev-notes/2026-09-04-shell-reload/notes.md).
+Owner: "the shells eject but seem to clip through the gun frame", "new shells
+magically appear to load", "the reloading thing is more urgent". Both were the
+same class of bug: cases handled in RIG space with no idea where the bore was.
+* **Eject clip.** The tumble started AT the chamber mouth (not where the
+  7 cm extract slide had left the case), snapped to rig −Z (not the bore,
+  66° off it on the open gun) and flew in rig +Y — so its rear half was back
+  in the tube and its rise cut the chamber wall and standing breech. Now:
+  `boreFrameInRig()` reads `out`/`side` off the live Muzzle/Breech locators;
+  the hand-off is the extracted case's centre (`mouth + out·SHELL_LEN/2`),
+  bore-aligned via quaternion, with velocity `0.55·out + 2.05·up + side`
+  and end-over-end spin about `side`. Cases leave the frame and are DROPPED
+  once past the apex and back near breech height (`EJECT_DROP_BELOW_M`) —
+  the old arc fell back through the frame past the camera as a huge shell.
+  Per-reload seed jitters the arc (`reloadSeed`, `pinReloadSeed(n)`; seed 0 =
+  reference); at the hand-off beat every seed is the origin, so the eject
+  gate is seed-invariant — it now reads 3.50 cm (the SHELL_LEN/2 offset), the
+  stale hardcoded breech still fails at 16.8.
+* **Load insertion.** Two stages, mirroring the eject: a rig-space CARRY
+  (0.74→0.96, `loadCarry`) with the cases riding rigidly in the hand to
+  `stagedShellCenter()` — tips 1.5 cm behind the mouths, ON the bore axis —
+  then a barrel-local INSERT (0.96→1.11, `insertStage`) sliding the seated
+  Shell_L/R nodes in along their own z, the extract in reverse. The support
+  hand's two breech keys are DERIVED each frame (`loadHold()` → `HandHold`
+  into `supportHandPose(t, hold)`); the authored table had the hand at the
+  bottom of the frame at 1110 ms while the cases seated by themselves.
+* **Two placements were wrong before they were right**, both in the notes:
+  the orb behind the heads along `out` sat between the eye and the breech
+  and hid the whole load (`out` points largely at the camera on the presented
+  gun); and "left of the pair" went screen-RIGHT because the GLB is yawed
+  180° so the model's right chamber is screen-left — `loadHold` now picks the
+  side by `side.x < 0` in rig space.
+* **Forearms** are now anchored to fixed ELBOW_L/R points behind the camera
+  and re-aimed per frame (`aimForearm`), 0.90 m long: the 0.15/0.26 capsules
+  ended in a rounded stump that came into view on a hard look down (the
+  detached arm the owner saw), and a hand at the breech with its resting arm
+  direction pointed the forearm straight at the eye. Checked at pitch ±1.45
+  with the reticle at both frame edges: no end in view.
+* Gate strip now samples 960 (staged) and 1040 (mid-insert);
+  `GAME_EXTRA_BEATS=530,560` adds frames without touching the owned list.
+* **Round 2, owner's pass:** the remaining clip was the MODEL — the receiver's
+  top strap ran forward over the chambers, so an open mouth sat level with the
+  receiver top and every case spent its first 35 mm inside it. The body loft
+  now steps down to action flats (z −0.004) forward of the breech face;
+  `shorty-double.glb` re-exported (13994 tris). Pose retuned LOW (dy 0.040,
+  roll −16; a true drop put the reload off the bottom edge because the breech
+  rests there). Hand is a fist centred on the pair, covering heads then mouths
+  as it pushes (owner: "you wouldn't really see the shells"). KeyT slow-mo
+  (1 → 0.25 → 0.1) for inspection. The flat bar across the open mouths was the
+  `extractor` box sitting ON the bore axis — now a plate under the tubes.
+  Owner's second look: "it looks better yes". **Round 3:** the hinge pin sits
+  inside the chamber's length, so the open chamber swung DOWN through the
+  tray and the tray showed inside the empty bore as a grey slab (owner found
+  it by hand). Flats now ramp −0.004 → −0.022 toward the knuckle and taper in
+  width; the bore plug starts at `HOLLOW_DEPTH` 27 mm (gate asserts that);
+  chamber inner wall is matte `Bore` via a second material slot. Owner:
+  "other than that I think I like this, think it can be merged". Merged to
+  main `6c783f2`. **Round 4 (post-merge):** the top rib's underside was inside
+  the hollow chambers (showed as a rectangle in the empty bores) — now a 10 mm
+  valley strip; the "asymmetric shelf" was the ramped tray's side face seen on
+  the near side only (loft is symmetric; both-side renders in the notes) —
+  tray now a constant 0.040 half-width under the tubes.
+
+**[x] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
+Spec written 2026-09-04 (approach B, owner-approved in conversation):
+[docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md](docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md)
+— Blender-authored arm GLB (thicker skin with ball joints, leather bracer
+with brass hardware matching the gun, a SMARTWATCH on the left wrist with a
+drawable glowing screen), generated albedo + normal skin maps with no
+emissive, kit parity for the watch. **BUILT 2026-09-05** via the dispatch UI
+on kimi/k3 (8 tasks, branch `dispatch/2026-09-04-fpv-goblin-arms-task-8`):
+`goblin-arm.glb` (8942 tris) from `scripts/model_goblin_arm.py`, `game-arms.ts`
+dresses it (generated albedo + normals, NO emissive, gun env map), smartwatch
+on the left wrist with a drawable glowing screen (`__sdfGame.watchScreen`),
+kit parity in `goblin-kit.wam`, gate check 2b. Task 1's agent stopped on a
+plan defect of mine (the albedo's own tests were unsatisfiable as written);
+fixed by hand after the chain: wart darkening is a multiplicative shade, the
+mottle mix is linear (0..80%), the mean test budgets luminance at 8% and hue
+at 12% per channel. 3169 tests, tsc, gate all green. Evidence:
+[docs/dev-notes/2026-09-04-fpv-goblin-arms/](docs/dev-notes/2026-09-04-fpv-goblin-arms/notes.md).
+Owner's first look (2026-09-05) drove three more: a TWO-BONE arm (Upper_L/R
+nodes, `armIk` to shoulder anchors behind the camera — the one-piece stick
+showed its end at extreme pitch), skin re-toned to the character's face
+(saturated, wet, fine dark speckle via a fleck lattice; NOT the matte
+darkening tried first), chrome spike studs on the bracer, warts moved off the
+fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. Second look: shoulders moved to CAMERA space (a rig-space shoulder swung in
+front of the eye under free-aim pitch), grain moved into the normal +
+roughness maps (pit field), finer tile, greener/darker tone. Then: with free aim pitched up the
+straight hand-to-shoulder line ran THROUGH the receiver — the IK now has a
+bend floor (34°) toward a camera-space outward hint, so the forearm always
+leaves the hand past the gun. Owner: "good job for now" — **merged.** Follow-up **F-arm.2 — the watch
+as an in-game device** (shells / health / timer drawn on the screen canvas).
+Owner, 2026-09-04: "the arm itself probably needs some work to more
+accurately resemble the goblin SDF model (I guess that will be the main
+player character)". Today each arm is one skin-coloured capsule from the hand
+orb to a fixed elbow; the goblin blob has a forearm bar r=0.028 with an elbow
+blob r=0.038 over a 0.235 bone (`goblin-skin.ts` already carries the
+numbers), mottle, and a real hand. Options: pose the SDF goblin's own arm
+prims in the view-model (the hands sheet / hand-volume path already marches a
+hand), or author a low-poly forearm+hand in Blender alongside the shorty.
+Not a blocker; the elbow-anchor from F-eject gives whichever replacement its
+attachment point.
 
 **SHORTY BREECH MECHANISM — DONE (2026-09-03), all 8 tasks** —
 [plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·
@@ -368,6 +459,67 @@ same array; (5) gate the per-hit bone-material read on `wm > 0`; (6) bone in
 gib chunks; (7) collision. Merge picture: gore × perf chain conflicts only in
 `march.wgsl.ts` signatures + one `game-main.ts` block — merge ONCE after the
 chain finishes (~1 h); gore × elbow branch is clean.
+
+**THE THREE-r185 DISTANCE DECAY WAS FOG — ROOT-CAUSED AND FIXED (2026-09-04,
+main `8da0bdd`).** The "unexplained TSL distance decay" that killed the occluder
+pre-pass and held `GAME_HULL_EXIT_BOUND` at 0 for weeks is **scene fog**. The
+pre-pass materials render through the main scene, and the WebGPU node system
+applies fog to every fogged material's **output** — so the written distance was
+`mix(dist, fogColor, smoothstep(near, far, viewZ))`. Dungeon rig fog is
+near 2.5 / far 13: exact below 2.5 m, collapsing toward `fogColor` with range.
+That is the "near field exact, true 9 m stores 2.8 m" signature exactly, and the
+measured ladder **fits the fog curve to four decimals**. Fix: `material.fog =
+false` in `occluder-hull.ts` and `shell-hull-outer.ts`. **Consequences:** a
+texture round-trip of a ray parameter is now clean (task-3's depth prepass is
+un-gated), and the exit bound's measured-but-untakeable step win
+(missStepShare 0.54 → 0.41) is takeable — task 1b re-takes its census and
+decides the flip. Second bug fixed in the same run: **`?frozen=1` killed the
+march layer** — booting frozen meant the outer hull never built, shell targets
+stayed zero, `shellOut = 0` discarded every fragment, and the whole march layer
+went invisible while the CPU field, predictor and polygonal world read fine.
+Task 1 was capped at 120m mid-Question-A; its work was auto-committed, verified
+independently here (tsc 0, 2457 tests green) and merged. **Question A —
+shading vs marching at fill-screen — is still UNANSWERED** (spreads blew out,
+the page crashed under load spikes); it is task 1b's.
+
+**CLOSE-UP HARNESS LANDED (same commit).** `scripts/sdf-game-closeup-bench.mjs`
++ `buildCloseup()` in `game-bench-scenario.ts` + the `setFlatAlbedo` seam: pins
+fourteen ship levers explicitly, searches the distance ladder 1.6 → 0.6 m
+keeping the rung with the **best** flesh coverage, stamps camera-facing wounds,
+and fails loudly if fewer than 3 stamp / the blood sim is non-empty / a stamp
+severed something. Rotates the starting leg per rep against thermal ramp. Task
+1b extracts it to `scripts/lib/sdf-closeup-stage.mjs`; every later task imports
+it rather than re-deriving a scene. Chain is now fully serial (one bench at a
+time — concurrent benches are what spoiled the tile table and the r2 sweep):
+**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
+trigger.
+
+**CLOSE-UP FRAME RATE + GORE COST — SPEC WRITTEN, 5 TASKS QUEUED INERT
+(2026-09-04).** Successor program to perf r2, aimed at the owner's restated
+problem: **a body filling the screen**, and heavy blood spray. Spec
+[docs/superpowers/specs/2026-09-04-close-up-and-gore-cost-design.md](docs/superpowers/specs/2026-09-04-close-up-and-gore-cost-design.md)
+carries the nine closed ideas (adaptive REJECTED, tiles nil, upload nil, depth
+gate exact-but-OFF, exit bound deletes bodies, occluder ~nothing, shell/hull
+parked, omega 0.6 costs) — **re-proposing any of them is a failure.** Dispatch
+`~/.claude/dispatch/plans/2026-09-04-closeup-task-{1..5}-*.md`, `status: queued`,
+trigger manually. Graph: **task-1 diagnostics** → task-2 ∥ task-5; task-2 →
+task-3; **task-4 (goo) parallel to everything**. Two things task-1 settles that
+nobody has measured: (a) **shading vs marching at fill-screen** — every counter
+here counts *steps* and none separates the per-pixel shading chain, so tasks 2/3
+may be aimed at the wrong half of the frame; (b) **does a written ray parameter
+survive a texture round-trip** — the three-r185 decay (true 9 m reads 2.8 m,
+near exact) killed the occluder pre-pass AND holds `GAME_HULL_EXIT_BOUND` at 0,
+and task-3's quarter-res depth prepass does the same write/read. Root-causing it
+unblocks two features. Task-4 (goo): the cost is **not** the 600 billboards, it
+is `goo-layer.ts` compositing at **full canvas res** (`:854`) over
+`densityScale 0.5` pre-blurred inputs, plus additive-quad overdraw
+(`quadScale 3.2`, no depth reject) — owner agrees, easy win. Task-5: settled gib
+chunks are static fields still marched as 12 proxy boxes (`MAX_CHUNKS`,
+`game-main.ts:1712`); bake once at settle and the hull's ~3-4 ms/frame
+extraction objection is *deleted*, plus baked meshes are real early-Z occluders.
+NOTE: **no corpse exists in `sdf-game.html` yet** (sever/gib only; death state is
+on the zombie-crowd branch) — settled chunks are the beachhead and the path
+generalises to corpses unchanged.
 
 **SDF RENDER PERF ROUND 2 — PLANNED (2026-09-01), not started.** A read-only
 review of the march, the pass chain and the perf record after the shell
@@ -629,6 +781,323 @@ wound pops, gait stop-motion).
   demand — PARKED, retest after collision lands). Reuse the existing pure
   modules — `wander.ts`, `gait.ts`, `motion.ts`, `ik.ts`, `stagger.ts`,
   `collapse.ts` — this is a retarget, not a new rig.
+
+
+- `P1.blob-frame-face` [x] **The two exposed placement defects FIXED, plan
+  judged** — branch `dispatch/framefix-task-3`, 2185 -> **2188** green (112
+  files), tsc clean. Task 1: bands past the fit's own 45 deg report bar are
+  banded along the CHAIN's direction through the cloud's centroid
+  (`cloudBandLine`) - stations land in the statement frame (no
+  bandRange transfer), radii stay cloud-parallel (no sqrt(r2+d2) inflation,
+  no offset= double-count); at-or-under-bar bones band bit-identically
+  (pinned). Mechanism correction on record: at ~90 deg the cloud AXIS
+  projects to a point, so the whole flesh footprint rode the radius - the
+  prosthetic's 9 bands (4 from>to) collapsed to [0.196, 0.233]. Task 2
+  (dispatch/framefix-task-2, 5f34bb0): the face block rides headRise/headLead
+  measured against a real build; horn-inflated-headRadius hypothesis REFUTED
+  (neck-carry angle, both characters). **Task 3 re-draft: prosthetic shin.r
+  5 bands, 0 inverted, full span (was 4 inverted in a 0.04 sliver); depth
+  side mean 142 -> 95.4 mm (unflagged, beats round 1's flagged 193.7), front
+  88 -> 70.3 mm (still pose-flagged); chain properties hold at the artifact's
+  formatting noise.** The eye: the grey ball at one knee is GONE - the leg
+  reads as a connected limb with grey on its upper half; round 1 still owns
+  the plate read (sub-band scale, fenced off). Third honest NO on likeness
+  (T-pose + identity), but the plan's owed deliverable - a leg, not a ball -
+  is delivered. Face band still worst side band (-272.7 mm): it measures
+  T-pose ARM mass (Task 2 measured -4 mm of it on genuine face pixels); the
+  Done-when gate is miscalibrated until the reference is posed. NOTE: Task 1
+  was recorded done by dispatch with ZERO commits - implemented here;
+  reports are not commits. Mutations 4/4 killed. Full verdict + numbers +
+  matrix: [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
+
+
+- `P1.chain-drift` [x] **`blob:draft` chain closes — ALL 4 TASKS DONE; verdict on the re-draft: still NO vs hand-authoring, for NEW reasons** — plan
+  [2026-09-02-blob-draft-chain-drift](docs/superpowers/plans/2026-09-02-blob-draft-chain-drift.md),
+  suite 2170 -> **2182** green (112 files), tsc clean. len=/dir= now come
+  from the RIG chain (joint-to-joint × one global scale; the >45° cloud
+  steering demoted to a REPORTED check — schoolgirl builds connected without
+  it), a branch rule extends a mapped bone up to its .blob parent's tail
+  joint so the rig TREE chains into .blob's chain (the Hips stubs were the
+  residual +0.25 m sole error), and offsets carry the surface. Task 3 made
+  the three acceptance properties TESTS (soles on floor; height line; every
+  mapped len= == rig × scale — end to end on a synthetic rig through the
+  real pipeline) and the CLI prints the numbers on stderr + in the header.
+  The height property then caught the CROWN overshoot: +0.1006 m on a 1.9 m
+  fixture — the scale came from the VERTEX extent, but the built surface
+  adds the end bands' radii (grounding absorbed the sole side, so it all
+  showed at the crown; top prim = the skull band ball, radius 0.1199).
+  Fix: ONE corrective ratio, exact because every fit is linear in the scale
+  — `calibrated()` re-fits at g · height / builtExtent. Measured after:
+  minotaur +0.02%, schoolgirl +0.01%, minotaur@--height 1.9 −0.01%; soles
+  0.0000; worst len= dev ≤ 5e-5 m (print rounding). Also fixed en route:
+  the skull statement now names its true source (axisFromParent was set on
+  the assembler's Built record but dropped in assembly, so the fit comment
+  claimed a principal-axis fit).
+  **Task 4 (2026-09-03): both characters re-drafted and judged.** Minotaur
+  soles −0.0001 m / +0.02% / len= dev 4e-5; schoolgirl 0.0000 / +0.01% /
+  3e-5, and she builds connected with NO cloud steering (dress axes 80-87°
+  reported, not obeyed). Budget 72/80; prosthetic unmirrored (asym 0.627).
+  Depth: side mean 340 -> 142 mm, front 164 -> 88 mm, the +340 mm torso
+  drum bulge GONE. **Verdict: still round 1 for this character — but the
+  old failures (0.3 m float, 8% tall) no longer exist.** New defects, both
+  different: `bandRange`'s frame transfer collapses an oblique cloud's
+  bands (prosthetic shin.r, 76° off-axis -> 0.19-0.23 slivers, some
+  from>to, mid-shin gap); the TS-authored face block is the worst
+  side-view band (−367 mm) now the drum is gone. Also fixed: the emitted
+  header still claimed the pre-fix source story. Full verdict + numbers:
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md). Next for the
+  toolchain, unchanged: LBS-pose the reference, `--apply`, and now the two
+  new placement defects.
+
+- `P1.blobforge-2026-09` [x] **Blobforge session: `blob:depth` ships, `blob:draft`
+  is parked** — merged to main. Suite **2137** green (109 files), tsc clean.
+  **SHIPPED:** `blob:depth` (front/side depth-map diff — the instrument that
+  sees INSIDE the outline); `side=l|r` single-sided limb prims; the `box`
+  primitive; `face.ts` `headRise`/`headLead` (defaults 0, existing characters
+  untouched).
+  **`blob:depth` earned it.** On the rejected round-1 minotaur its worst three
+  side bands were all TORSO lines (340/312/253 mm) against a schoolgirl control
+  of 56.5 mm — while `blob:measure` blamed the ARMS and `blob:rings` reported a
+  size, not a shape. That blindness is structural: a radial average and a
+  silhouette both score a smooth drum and a muscled torso identically.
+  **`blob:draft` PARKED** after three fix rounds, code removed from main (lives
+  at 8d75076). Each round fixed a real defect and exposed the next flaw in the
+  spec: chain drift -> frame transfer -> unbounded prim aspect. The owner
+  rejected it in the lab as worse-FORMED than the hand-authored r1 — 65:1 prim
+  aspect against a shipped norm of 1.8, and half bonewalker's blend.
+  **OPEN, and worth doing:** nothing in the toolchain measures **prim
+  degeneracy** — `validateBody` returned 0 errors and `blob:render-check`
+  exited 0 on a body full of 65:1 fins. Also open: `parseBlob` accepts
+  arbitrary garbage as leading trivia; and the vault roadmap's pose-the-
+  reference and `--apply` items.
+  [notes](docs/dev-notes/2026-09-02-blobforge-depth/notes.md)
+
+- `M?.minotaur` [x] **Minotaur — DONE ENOUGH, not a great character.** Owner
+  2026-09-03: *"not particularly good result from this. but i guess that is
+  okay, part of the process."* It is a working, correctly formed, correctly
+  proportioned mid-tier enemy and it does NOT need more rounds. What it never
+  got was muscle definition, and that is now known to be an ENGINE limit
+  rather than an authoring failure (`X4`, `X5`). Closed deliberately.
+  Original entry follows.
+
+- `M?.minotaur-log` [x] **Author the minotaur from r1, by hand** — `minotaur.blob`
+  is r1's content. **Round 4 done** (`6190370`): horns raised from ear height
+  (y 1.702, 34% up the cranium) to the crown (roots 1.873, tips 2.021, clearing
+  the cranium's own 1.959 — they had been dying 0.11 BELOW it); flesh
+  retargeted from the reference texture's measured brown to the zombie's
+  `henenlotter-latex` pink, which also revealed abs and pecs the brown was
+  hiding; plate gloss 0.70 → 0.90-0.95 with the albedo brought down ~35%.
+  Owner: much better, but **the plates still don't read metallic and the
+  pitting hurts** → `X2.hard-surface-material`.
+  **Round 5 — cross-section** (`feb53d7`): the relief map showed every height
+  band as the same arch, proud at the centreline and behind at the flanks —
+  a dome where the mesh is a broad slab. chest `wide` 1.40→1.700, waist `deep`
+  1.35→1.210 (an INVERTED taper), traps `offset` x 0.052→0.162 (they had
+  overlapped into one mass filling the throat, the worst cell on the map).
+  21.6mm → 15.3mm.
+  **Round 6 — muscle** (`ebf23a8`, `89e102e`): pec pair, sternum groove,
+  lower-pec shelf, ab bar, linea alba, cross-lines, obliques. 15.3mm →
+  12.8mm and **rejected on sight** — owner: *"i dont see any muscles just
+  the mass and the normal bumpy texture."* Diagnosed rather than re-tuned;
+  see `X4.body-sheet`. The masses were kept (a real improvement to the form);
+  the creases stay narrow rather than wide, because 12.3mm was available with
+  200mm-wide "lines" and that score comes from shaving proud material.
+  Still owed: the prosthetic must FUSE at the hip and read as a limb
+  (**call `daylightOf` — it exists and no round has called it**; ~2% of
+  standing height is where separation reads), torso muscle relief, and a face
+  re-bake + re-solve (owner wants sharp teeth, cybernetic plating, wires and
+  glowing red eyes — the last is blocked on `glow=`, see below).
+  **`blob:depth` in the loop.** [ref](docs/dev-notes/refs/minotaur-mesh/minotaur.glb)
+
+- `X2.hard-surface-material` [~] **Teach the SHADER about hard surfaces** —
+  four dispatch tasks QUEUED (`status: pending`, so task 1 has a Run button) at
+  `~/.claude/dispatch/plans/2026-09-03-hardsurf-task-{1..4}.md`, serial chain,
+  `glm-5.3-flash` on `pi`, base `claude/blob-side-grammar`. **Task 1 DONE
+  2026-09-03** (branch `dispatch/hardsurf-task-1`, f2368cb): `gloss` now scales
+  BOTH flesh-noise paths by `(1 - gloss)` at the point of application —
+  micro-detail folded into its amplitude guard (`detailAmp`, so full-gloss
+  prims skip the six fbm lookups outright) and `marchCfg.z` into calcNormal's
+  noiseAmp; the `ROW_PRIM_COLOR` read hoisted above calcNormal (ONE load, not
+  two) with the albedo OVERWRITE kept after the face pass. 2271 tests green
+  (4 new, all mutation-verified); render A/B: cyclops lens pitting visibly
+  gone (improved), minotaur plates smoother, mouse is a NO-OP (its preset has
+  both noise amps at 0 — nothing to suppress), flesh byte-identical.
+  **Tasks 2-4 DONE 2026-09-03 on the dispatch chain** (task 2 `9a39bc2`+`d0b584a`
+  metal: diffuse to a rendered 0.45 floor, spec tinted by the prim's albedo
+  renormalised to iron F0 0.56 — raw-albedo tint went BLACK first try; task 3
+  `b85e792`+`25f5577`+`ea96278` glow= in primClip.w on both pack branches, with
+  the minotaur's glowing eyes as the acceptance case; task 4 `211e454` verdict).
+  **Task 4 verdict
+  (docs/dev-notes/2026-09-03-hard-surface-material/notes.md): plates GONE
+  pitted and GONE chrome-plastic blowout, but they read as BLACKENED metal, not
+  milled steel — root cause is the round-4 darkened plate ALBEDO, not the
+  shader (the 0.45 diffuse floor is as low as stays readable); owner call:
+  accept blackened-iron or raise the five plate colours.** Glow eyes work —
+  cybernetic head unblocked. Nothing else got worse: cyclops lens cleaner,
+  mouse and schoolgirl-alt frame-identical (72 frames read), 2301/118 green,
+  render-check 0 holes, budgets 61/128 prims and **6/6 clusters — at the hard
+  ceiling, no seventh added**. Watch: the plan's "48/128" was stale; and the
+  base `claude/blob-side-grammar` boots the lab with a meltCfg TSL error
+  (fixed by ea96278) — before-shots in any A/B off it FAIL the shot gate while
+  rendering fine.
+  `box` taught the FIELD about hard surfaces; nothing taught the shader, so a
+  machined plate is textured and wobbled as though it were skin.
+  (A) `gloss` suppresses `surfaceNoiseAmp`/`silhouetteNoiseAmp` — both are
+  body-wide and applied ~260 lines before the shader knows a prim is painted;
+  (B) a `metal` modifier (`prof` bit 4) — there is NO metalness in the shader
+  at all, so a painted prim gets full diffuse + untinted white highlight, i.e.
+  polished plastic, which is why raising gloss produced shinier plastic;
+  (C) per-prim `glow=0..1` — nothing on a character can glow today, since
+  `faceGlow` is × `(1 - decal)` at `march.wgsl.ts:2179` and the minotaur uses
+  `decal 1`. **(C) is what blocks the cybernetic head.**
+  Loudest trap, in the plan: `pack.ts`'s cluster/group `shaped` flags gate
+  whether the shader reads `ROW_PRIM_SHAPE` at all, so a metal-ONLY prim would
+  have its bit silently dropped — the exact bug found in those same two lines
+  this session (omitted `p.shell`, schoolgirl-alt's cape a solid blob for
+  weeks).
+  [design](docs/superpowers/specs/2026-09-03-hard-surface-material-design.md) · [plan](docs/superpowers/plans/2026-09-03-hard-surface-material.md)
+
+- `X4.body-sheet` [~] **Paint muscle onto the field** — four dispatch tasks
+  QUEUED at `~/.claude/dispatch/plans/2026-09-03-bodysheet-task-{1..4}.md`
+  (priority 2, behind hardsurf); **task 1 was running at session end**.
+  Three rounds of measured, rejected torso work converge on one conclusion:
+  the DISPLACEMENT mechanism is right and only its CONTENT is wrong.
+  Geometry cannot carry muscle (AO is a single tap at 0.06m, self-shadowing
+  was cut, so authored grooves scored 12.8mm and were invisible at every
+  yaw); procedural structure cannot either (ridged/anisotropic noise makes
+  convincing TEXTURE, but creases land in RANDOM places and a pec split has
+  to be where the pec split is); but displacement DOES read. So: an authored
+  greyscale plate, projected, displacing the field.
+  **The plate may not need painting** — `blob:relief` already computes
+  reference-minus-body front-wall depth per cell, which IS a displacement
+  map; `--emit-map` is task 1.
+  **CORRECTION carried into this from `X5`:** it must go in the SHELL block,
+  not `mapBody` — a sheet in `mapBody` alone is a normal map with extra
+  steps. The spec predates that finding; fix it before task 3.
+  [design](docs/superpowers/specs/2026-09-03-body-sheet-design.md) · [plan](docs/superpowers/plans/2026-09-03-body-sheet.md) · [evidence](docs/dev-notes/2026-09-03-torso-relief/notes.md)
+
+- `M?.mancubus` [ ] **NEXT CHARACTER — start fresh here.** Owner is shifting
+  from the minotaur to a **mancubus-style** enemy (Doom): bloated, sagging,
+  huge low belly, narrow shoulders, arm cannons.
+  **Why this fits, in the engine's own terms** — every failure mode this
+  toolchain showed on the minotaur is a mancubus asset:
+  * smooth-min blended masses want to be a centre-heavy dome. That IS a
+    mancubus body; the minotaur's cross-section pass spent itself fighting it
+  * `silhouetteNoiseAmp` lumps are the ONE thing that reads clearly on any
+    character (real geometry, breaks the silhouette). They failed as muscle
+    and are exactly right as sagging, uneven flesh
+  * the mottle competed with muscle relief; on a bloated thing it reads as hide
+  * **no crisp relief needed** — the wall of `X4`/`X5` (creases cannot read
+    without a cavity-AO term) simply does not apply to a body with no muscle
+    definition to show
+  * the arm cannons are hard-surface: `box` + `metal` + `glow`, all three
+    shipped this session, `glow` with a dark A/B behind it
+  **Carry over:** the round-5 cross-section method (fit against
+  `blob:relief`, bounded by judgement, then LOOK). It worked — 21.6 → 15.3mm
+  and the render agreed — and a mancubus silhouette is the easy direction for
+  it, unlike the V-taper the engine resisted.
+  **RUN IT DIFFERENTLY, and this is the lesson worth more than the tooling:**
+  this session went to instruments and engine work over and over instead of
+  authoring, and THREE separate times a score improved while the render did
+  not. Lead with frames. Use measurement only to catch gross proportion
+  errors, never as the thing being optimised. Accept cruder measurement and
+  spend the hours on shape.
+  Needs: a reference mesh in `docs/dev-notes/refs/mancubus-mesh/`.
+
+- `X7.origin-merge` [x] **DONE (`aec25e0`)** — origin/main merged; the melt
+  spike from this branch removed in favour of the shipped zombie melt.
+  Local main is now **87 ahead, 0 behind** origin and safe to push.
+  The lesson worth keeping: **both sides had independently named a uniform
+  `meltCfg` and a setter `setMelt`, so git merged the two shader files with
+  NO conflict marker** and produced two params, two uniforms, two bindings —
+  and a `noiseCfg` line that fed the zombie melt's PROGRESS into the spike's
+  displacement AMPLITUDE. A clean merge output means nothing when two
+  branches name the same thing differently; check for duplicates by hand.
+  Suite 3091 green / 186 files.
+
+- `X8.collapse-noiseCfg` [ ] **Tidy-up: collapse `noiseCfg` back to `f32`** —
+  it is a vec4 whose y/z/w are literal zeros since `aec25e0`. It survives as
+  a vec4 only because hard-surface's gloss/metal kill is written against it
+  (`vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0)`).
+  ~15 shader edits plus the exact-string test pins in `march.wgsl.test.ts`.
+  Not urgent, but three permanently-dead lanes on a shared struct is exactly
+  how `primClip.w`'s "spare" comment went stale and got packed over.
+
+- `X6b.bodysheet-merge` [ ] **Merge `dispatch/bodysheet-task-4` — a real 3-way
+  integration, not a resolve.** The hardsurf chain and main are IN main as of
+  `bb6a55b`; the body sheet is the one thing left out, deliberately. It
+  conflicts with hardsurf on the SAME `calcNormal` call site, and both edits
+  are needed:
+  * hardsurf wraps the amp — `vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), noiseCfg.y, noiseCfg.z, noiseCfg.w)`
+  * bodysheet adds three params — `..., noiseShift, bodyTex, sheetCfg, sheetProj, volumeTex, ...`
+  The merged form needs both, plus the same reconciliation in
+  `march.wgsl.test.ts` (which pins the call site as an exact string) and in
+  `zombie-gpu.ts`. Budget real time; the exact-string test pins will catch a
+  sloppy resolve, which is the good news.
+  **Worth remembering it is the LOWEST-value of the three** — live and
+  provably in the right place, but faint, and blocked behind the gradient
+  budget until that is priced.
+
+- `X6.merge-dispatch` [x] **DONE — hardsurf chain and main merged — DO THIS FIRST NEXT
+  SESSION** — both branched off `121ef37` and both are LINEAR, so two merges
+  take everything: `dispatch/bodysheet-task-4` (14 commits, contains tasks
+  1-4) and `dispatch/hardsurf-task-4` (11+ and still running at session end).
+  **They will conflict.** They overlap on ten files including
+  `march.wgsl.ts`, `pack.ts`, `types.ts`, `blob-parse.ts` and
+  `minotaur.blob`; both added a `prof` bit and both touched the noise
+  config, which the melt work also widened to `noiseCfg: vec4`. Merge one,
+  run the suite, then the other — the suite is the gate, not the diff.
+  **Both returned honest verdicts:**
+  `glow=` WORKS — a dark A/B with two red glowing eyes and a `glow=0.0`
+  control where they vanish (`/tmp/minotaur-dark-{glow,noglow}-crop.png`).
+  The BODY SHEET is live but FAINT: the diff heatmap shows "a vertical
+  sternum-groove band down the centre-chest, window edges clean, head and
+  arms untouched — the mechanism puts structure exactly where anatomy is,
+  but faintly". And when it tried the design's own amp 0.018 to give the
+  effect its best chance, **the budget guard refused the capture**
+  (`displacement product 0.419 violates budget 0.200`).
+  **That is the same wall `X5` hit**, and it is the finding to carry: the
+  amplitude that READS needs more gradient than the budget allows, so it has
+  to be BOUGHT with `stepMultiplier` rather than tuned around. Both are
+  transient effects, so that is affordable — but nobody has priced it yet,
+  and that price is now the real lever for both.
+
+- `X5.melt` [~] **Melting-flesh effect — PICK UP HERE NEXT SESSION** — owner's
+  brief: *"when shot the whole zombie melts, the flesh basically turns into a
+  pile of goo and bones."* Plumbing is IN and tested (`c52b05b`, suite 2286
+  green) and **NOT visible yet — do not assume it works.**
+  Shipped so far: a `meltCfg` uniform; `mapBody`'s `noiseAmp: f32` widened to
+  a `noiseCfg: vec4` (silhouette amp, melt amp, melt freq, melt time) because
+  the two are one mechanism differing in content; a ridged displacement term
+  at both the normal site and the shell site; `setMelt` lowering
+  `stepMultiplier` 0.6→0.28 as amplitude rises; lab keys `m` / `M`; console
+  seams `__sdfLab.melt / meltOff / setMeltTuning / meltDirect / meltState`;
+  and `scripts/melt-capture.mjs` for frame-by-frame capture.
+  **State:** at amplitude 0.20 — far past sane — captured frames are
+  UNCHANGED. The uniform is confirmed set JS-side (`meltCfg` reads
+  `[0.2,3,0,0]`, `marchCfg.y` drops to 0.28), so the break is between the
+  uniform and the shader.
+  **THE NEXT DIAGNOSTIC, not yet run — do this first, before any tuning:**
+  turn the shell on (`__sdfLab.setShellDisplace(true)`) and capture with melt
+  at ZERO. If the silhouette noise visibly changes the body, the shell path
+  works and the melt branch inside it is at fault; if it does not, the shell
+  path is inert in this configuration and that is the bug. One test separates
+  the two.
+  **Why it matters beyond the effect:** finding this corrected two claims made
+  earlier the same day — the "Lipschitz overshoot" diagnosis (the march never
+  saw those spikes' displacement; the artefacts were `calcNormal`'s
+  tetrahedron differences) and "gain × maxFreq × amp is the march's budget"
+  (the march marches the SMOOTH field and pays nothing). Both are corrected in
+  the note. Melt remains a transient EFFECT, not a look: it needs gradient the
+  budget does not cover, bought with `stepMultiplier`.
+  [notes](docs/dev-notes/2026-09-03-torso-relief/notes.md)
+
+- `X3.metal-damage` [ ] **Wounds and gibs on metal** — the OTHER half of the
+  owner's "hard surface parts shouldn't deform like the flesh". Shooting the
+  prosthetic today opens a wet red crater in it and severing tears it like
+  meat. Lives in `damage.ts` / `gib-chunks.ts` / `humanoid-sever.ts` rather
+  than in shading, so it is deliberately NOT in `X2`. Not spec'd.
+
 - `X1.box-prim` [~] **Hard surface in `.blob` — the `box` primitive** — branch
   `claude/enemy-characters-blobforge-b45932`, **NOT merged**. Every primitive was
   a capsule or round cone, so the format could not make a FLAT FACE; the next
@@ -1005,19 +1474,23 @@ adaptive + tile fold both on.
   controller had resized the layer. Fixed in `a04caf0` — **preserve both
   invariants if you touch `tileAB()`**.
 
-**QUEUED (2026-08-25, ox-alpha, serial):** `2026-08-25-crowd-alive` then
-`2026-08-25-tile-all-bodies`. Crowd bodies are static fill *by design*
-(`lab-main.ts:21`), so the per-body cost that scales to 15 characters — rig
-solve, wound repack, data-texture upload — is currently **not measured at all**.
-crowd-alive gives every body its own actor record, animation and wounds, while
-keeping `freezeCosmetics()`/`setMotionEnabled(false)` freezing *every* body and
-the crowd clock deterministic (the frozen noise floor 0.814 -> 0.0278 is the
-only reason the relax question ever closed). tile-all-bodies then profiles 15
-live bodies and **stops if the frame is CPU-bound**, extending tile lists across
-bodies only if fragment work dominates. NOTE: each body already draws a *tight
-proxy box* (`zombie-gpu.ts:964`), not a full-screen quad — "15 bodies = 15
-full-screen marches" is false; the real costs are misses inside the box,
-overlap, and per-body CPU work.
+**`2026-08-25-tile-all-bodies` DELETED (2026-09-04) — replaced by
+`2026-09-04-merged-march`, PARKED.** crowd-alive shipped (merged to main); the
+tile follow-up never ran and its whole premise expired. Four reasons: the owner
+restated the real problem as one body **filling the screen**, not a crowd, and
+named tile binning "measured nil — not the cost"; the perf r2 chain harvested
+~40% of march steps and landed on **hit-pixel fill** as the remainder, which
+tiles (a per-step prim-fold cut) do not touch; r2 task 8 killed the per-body-CPU
+worry (0.06 ms/frame for ten bodies); and its `base_branch: dispatch/crowd-alive`
+no longer exists. Its cost table (58 ms @15 bodies, ~21 ms non-pixel floor)
+predates the chain and is void. **The one surviving idea** is a single **merged
+march pass** over all bodies (prim data reached via the entry stream's
+`bodyIndex`, a field designed for this and never exercised) — the only form of
+the overlap fix r2 did *not* test, and precisely the form that removes the
+per-draw pass structure that made task 5b's exact-and-biting depth gate cost
++4.6 ms at 3–4 bodies. Brief at `~/.claude/dispatch/plans/2026-09-04-merged-march.md`,
+`status: queued`, priority 4: **do not trigger** until the close-up work is done
+and only if its Phase 0 shows per-pass overhead growing with body count.
 
 **SHELL PRIM + SCHOOLGIRL COLLAR (merged 2026-08-25, `07addaa`):** added a `shell` prim to the `.blob` language (thin sheet off a closed field, `abs(d)-thickness`, clipped against a plane with a rounded rim — iq's cloth construction). Rebuilt the sailor collar from shells (was 7 blob masses, now a 3-prim cloth cape+V+knot; owner's "epaulette plates"/"blob mass" read addressed — the collar now drapes over the shoulders with a V), made the skirt a thin shell cone with a rounded hem (was a solid cone), and deleted the shoe sole. Schoolgirl 62→57 prims. tsc 0, 1559 lab tests, render-check schoolgirl/zombie/cyclops/mouse all green. Collar reworked to a V/sailor read after owner review. (The dispatch could not commit — sandbox denied writes to the main repo's `.git` — so the work was auto-committed on the branch and merged from there.)
 
@@ -1661,6 +2134,33 @@ Key reference docs (open these before touching their area):
   wounds exposed hull spheres inside craters (fixed by wound exclusion in
   `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
   march to the clamp through interpenetrating fields; fold into `X1.10`.
+- `X1.29` [x] **Near-wound step multiplier — MEASURED, DELIBERATELY LEFT AT
+  0.6.** Owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
+  could not tell them apart, so the frame budget won. Everything below is why
+  it is a decision now rather than an oversight, so it can be re-taken without
+  re-deriving. The wounded field is not a distance bound and nobody had
+  measured how badly: max |grad| is 2.06 for ONE stock blast (sound
+  multiplier 0.48) and 3.92 for a blast + six-pellet spread (0.26), against a
+  0.6 inherited from the shell's fbm under-relaxation. What 0.6 looks like,
+  counted over every pixel of a real frame on a shotgunned torso: **4.32% of
+  that body's hit pixels at 1.5 m** (2.16% at 2.5 m, 0.97% at 4 m) shaded from
+  inside the meat — contiguous patches, not speckle, 686 of them at 2.5 m with
+  normals >45° wrong, tissue-ramp depth up to 13.7 mm too deep. STABLE across
+  camera motion (2892 of 2903 pixels persist over 0.23°), which is why it read
+  as gore rather than as a bug. A single wound is clean at any value — this is
+  a STACKING artifact. 0.4 removes every >45° error and 92% of the pixels for
+  **+23% / +18% / +16% march steps at 2 / 4 / 8 m** on a wounded body (0.3
+  removes the sub-threshold remainder for +45/+36/+32%); unwounded bodies and
+  hit counts unchanged. Re-take it live with `__sdfGame.setWoundStep(0.4)` /
+  `__sdfLab.setWoundStep(0.4)` (perfCfg.z; 0 = the compiled constant), one
+  constant to make it permanent. Characterised by
+  `webgpu/march-step-soundness.test.ts` — the measured gradient, and one
+  recorded ray pinned BOTH ways (shades 11 mm inside at 0.6, stops in front of
+  the wall at 0.4), so the file stays honest whichever value ships. Related,
+  NOT
+  fixed: `coneMarch` steps `(d - r) * marchCfg.y` with no wound term at all,
+  so an enabled cone pre-pass can certify a crater's interior as empty (cone
+  ships OFF).
 - `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
   and the surrounding articles/code. Deferred, not urgent.
 

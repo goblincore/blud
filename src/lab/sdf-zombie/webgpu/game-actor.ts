@@ -19,7 +19,7 @@
 
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
-import { stepRig } from '../rig';
+import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
@@ -39,7 +39,7 @@ import {
 } from '../motion';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import {
-  makeBrain, stepBrain, type Brain, type BrainPlayer,
+  makeBrain, staggerNow, stepBrain, type Brain, type BrainPlayer,
 } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
@@ -348,7 +348,7 @@ export function createZombieActor(opts: {
   // travel ≈ v0/k). Actor-owned on purpose: a wander.pos delta already
   // expresses it, so the shared motion modules and the lab's wiring — which
   // must stay bit-identical — are untouched. The walk STOP is not here: a
-  // blast sets pendingBlast and the brain's stagger state gates cfg.wander
+  // blast calls staggerNow() and the brain's stagger state gates cfg.wander
   // for blastHoldSec — locomotion is gated in exactly one place.
   let knockV = 0;
   let knockDir: Vec3 = [0, 0, 0];
@@ -365,8 +365,6 @@ export function createZombieActor(opts: {
   let ringToken = false;
   let ringDrift: -1 | 0 | 1 = 0;
   let forcedSwing: { phase: number; side: 'L' | 'R'; variant: SwingVariant } | null = null;
-  /** A blast-profile hit landed since the last step — one-shot into the brain. */
-  let pendingBlast = false;
   let lastEngaged = false;
   let lastCommitted = false;
   // Committed avoid side while the direct chase line is blocked (0 = direct,
@@ -441,7 +439,7 @@ export function createZombieActor(opts: {
     if (keep.length === next.rig.points.length) {
       next = {
         ...next,
-        rig: { ...next.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...next.rig, bodyYaw, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
@@ -563,12 +561,10 @@ export function createZombieActor(opts: {
         alerted: brainAlerted,
         hasToken: ringToken,
         drift: ringDrift,
-        blasted: pendingBlast,
         roll: swingRng(),
       });
       brain = think.brain;
       brainAlerted = false;   // one-shot: the first sub-step consumes it
-      pendingBlast = false;   // likewise
       lastEngaged = think.engaged;
       lastCommitted = think.committed;
       if (think.target) {
@@ -646,7 +642,7 @@ export function createZombieActor(opts: {
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
       let points = stepRig(
-        { ...bound.rig, restPose: f.restPose }, sdt,
+        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,
@@ -660,7 +656,8 @@ export function createZombieActor(opts: {
       }
       bound = {
         ...bound,
-        rig: { points, constraints: bound.rig.constraints, restPose: f.restPose },
+        rig: constrainRigBends({ ...bound.rig, points, restPose: f.restPose, bodyYaw: f.bodyYaw },
+          f.collapsed ? joints.groundY - MOTION_TUNING.floorPad : undefined),
       };
     }
     // Drain the frame's one-shot signals (values are read back by the motion
@@ -755,7 +752,9 @@ export function createZombieActor(opts: {
       // Heavy-hit choreography: the flag is one-shot into the brain, whose
       // stagger state stops the walk for blastHoldSec. The ROOT knock stays
       // here — moving the root is a different thing from gating locomotion.
-      pendingBlast = true;
+      // Lurch on the frame the slug lands, not the next one — see
+      // brain.ts's staggerNow for what the one-step deferral cost.
+      brain = staggerNow(brain);
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
       if (l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;

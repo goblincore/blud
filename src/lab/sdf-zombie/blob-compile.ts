@@ -323,6 +323,7 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.chamfer ? { blendProfile: 'chamfer' as const } : {}),
       limb: p.limb,
       ...(p.mirror ? { mirror: true } : {}),
+      ...(p.side ? { side: p.side } : {}),
       ...(p.kind === 'carve' ? { op: 'sub' as const } : {}),
       ...(p.kind === 'groove'
         ? { op: 'groove' as const, grooveDepth: p.grooveDepth, grooveWidth: p.grooveWidth }
@@ -333,6 +334,8 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.bend ? { bend: p.bend as Vec3 } : {}),
       ...(p.color ? { color: p.color as Vec3 } : {}),
       ...(p.gloss === null ? {} : { gloss: p.gloss }),
+      ...(p.glow === null ? {} : { glow: p.glow }),
+      ...(p.metal ? { metal: true } : {}),
       ...(p.core ? { core: true } : {}),
       ...(p.kind === 'shell'
         ? {

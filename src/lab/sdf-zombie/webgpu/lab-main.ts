@@ -50,6 +50,10 @@ import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
 import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 import dragonBlobSrc from '../characters/dragon.blob?raw';
 import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
+// The blob:draft first pass and the round-1 hand-authored scaffold it is
+// judged against (dispatch/blobforge-task-10 A/B; minotaur-r1 is untracked
+// and may come and go with the comparison).
+import minotaurBlobSrc from '../characters/minotaur.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -71,6 +75,7 @@ const CHARACTERS: Record<string, string> = {
   bonewalker: bonewalkerBlobSrc,
   dragon: dragonBlobSrc,
   'box-fixture': boxFixtureBlobSrc,
+  minotaur: minotaurBlobSrc,
 };
 
 /**
@@ -1222,7 +1227,8 @@ async function main() {
     if (keep && keep.length === heroMotion.bound.rig.points.length) {
       heroMotion.bound = {
         ...heroMotion.bound,
-        rig: { ...heroMotion.bound.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...heroMotion.bound.rig, bodyYaw: heroMotion.lastBodyYaw,
+          points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
   }
@@ -1243,6 +1249,11 @@ async function main() {
     pendingWounds.length = 0;
     pendingSevered.length = 0;
     forcedCollapse = false;
+    // Clear any melt on reset. stopMelt() owns the full teardown (progress,
+    // held flag, released bone chunks and the shader uniform) — the melt
+    // spike this replaced cleared three of its own variables by hand here,
+    // which would now miss the chunks.
+    stopMelt();
   }
 
   /** Full-limb severance map from cluster alive flags (mid-limb distal cuts
@@ -1552,8 +1563,8 @@ async function main() {
       p => sdBody(p, lastPosed));
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
-    // The shot feeds stagger (profile + direction) and, for torso blasts,
-    // the wound clutch — both consumed by the next motion step.
+    // The shot feeds stagger (profile + direction) and localized hit recoil,
+    // both consumed by the next motion step.
     pendingShot = {
       type,
       dirWorld: [d.x, d.y, d.z],
@@ -2668,8 +2679,7 @@ async function main() {
         if (motionReadEl) {
           motionReadEl.textContent =
             `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
-            (f.staggerKind ? ` · ${f.staggerKind}` : '') +
-            (f.clutchArm ? ` · clutch ${f.clutchArm}` : '');
+            (f.staggerKind ? ` · ${f.staggerKind}` : '');
         }
         // Keep the shambler framed: the orbit target drifts after the body
         // (fast enough to follow a walk, slow enough to leave the orbit feel).
@@ -3607,6 +3617,7 @@ async function main() {
         ...heroMotion.bound,
         rig: {
           ...heroMotion.bound.rig,
+          bodyYaw: 0,
           restPose: heroMotion.motionJoints.base.map(
             v => [v[0] + heroMotion.lastRootShift[0], v[1], v[2] + heroMotion.lastRootShift[2]] as Vec3),
         },
@@ -4069,7 +4080,6 @@ async function main() {
         hop: ms.collapse.phase === 'standing'
           && (missingLimbs().legL !== missingLimbs().legR),
         stagger: ms.stagger.kind,
-        clutch: ms.clutch.arm,
         heading: ms.wander.heading,
         bodyYaw: ms.bodyYaw,
         armStyle,
@@ -4247,6 +4257,13 @@ async function main() {
     setSilhouetteNoise(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.z = v; },
     /** Over-relaxation factor; <= 1 disables the relaxed tracer. */
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
+    /** Near-wound step multiplier (perfCfg.z); 0 = the compiled
+     *  WOUND_STEP_MUL, 0.6 = the value that shipped before 2026-09-04. The
+     *  twin of `__sdfGame.setWoundStep` — see WOUND_STEP_MUL in march.wgsl.ts. */
+    setWoundStep(v: number) {
+      const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
+      for (const x of [view, ...crowd]) x.uniforms.perfCfg.value.z = n;
+    },
     /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
     /** Dynamic resolution: drives the SDF scale to hold the frame budget. */

@@ -3,6 +3,11 @@ import { describe, it, expect } from 'vitest';
 import { resolveBones, placePrims } from './resolve';
 import type { BoneDef } from './types';
 import type { ExpandedPrim } from './mirror';
+import { parseBlob } from './blob-parse';
+import { compileBlob } from './blob-compile';
+import { buildBody } from './build-body';
+import { sdBody, type Body } from './validate';
+import type { Vec3 } from './types';
 
 const bones: BoneDef[] = [
   { name: 'pelvis', parent: null, dir: [0, 1, 0], length: 0.3 },
@@ -109,5 +114,54 @@ describe('placePrims with offset and op', () => {
     }] as ExpandedPrim[], skull as never)[0]!;
     expect(mk().op).toBe('add');
     expect(mk('sub').op).toBe('sub');
+  });
+});
+
+describe('groove channel geometry survives placement', () => {
+  // THE BUG THIS PINS. `placePrims` builds its output as an explicit object
+  // literal, and it copied `op` while dropping `grooveDepth`/`grooveWidth`.
+  // A groove then reached both fields as `op: 'groove'` with no channel, and
+  // `sdGroove(d, sd, 0, 0)` computes `inBand = 0 - |b|` — never positive — so
+  // it returns the field UNTOUCHED. Every authored groove in every character
+  // was a silent no-op, in the CPU field and, through pack.ts reading the
+  // same two fields, in the shader.
+  //
+  // It survived because `sdGroove` itself is well tested and the only test
+  // that ever named these fields hand-built a `Primitive` (taper.test.ts),
+  // skipping placement entirely. So this test asserts the SEAM, not the
+  // operator: a groove authored in `.blob` text, compiled and placed, must
+  // arrive with a channel that can cut.
+  it('carries depth and width from the authored line to the placed prim', () => {
+    const src = [
+      'model t', '  height 1.0', '', 'skeleton', '  root pelvis at 0.5 len=0.2',
+      '  bone skull parent=pelvis dir=up len=0.16', '',
+      'body',
+      '  blob torso on pelvis at=0.5 r=0.2 blend=0.01 core',
+      '  groove torso on pelvis at=0.5 offset=(0,0,0.15) r=0.1 wide=1.0 tall=0.05 depth=0.011 width=0.007',
+      '',
+    ].join('\n');
+    const built = buildBody(compileBlob(parseBlob(src)));
+    const g = built.prims.filter((p) => p.op === 'groove');
+    expect(g).toHaveLength(1);
+    expect(g[0]!.grooveDepth).toBe(0.011);
+    expect(g[0]!.grooveWidth).toBe(0.007);
+  });
+
+  it('and that channel actually moves the field', () => {
+    // The property test above would still pass if `sdGroove` ignored them, so
+    // this one asserts the CONSEQUENCE: two depths, one field, different
+    // answers. It is the assertion whose absence let the bug live.
+    const mk = (depth: number) => buildBody(compileBlob(parseBlob([
+      'model t', '  height 1.0', '', 'skeleton', '  root pelvis at 0.5 len=0.2',
+      '  bone skull parent=pelvis dir=up len=0.16', '',
+      'body',
+      '  blob torso on pelvis at=0.5 r=0.2 blend=0.01 core',
+      `  groove torso on pelvis at=0.5 offset=(0,0,0.12) r=0.1 wide=1.0 tall=0.05 depth=${depth} width=0.02`,
+      '',
+    ].join('\n'))));
+    const probe: Vec3 = [0, 0.6, 0.2];
+    const shallow = sdBody(probe, mk(0.005) as unknown as Body);
+    const deep = sdBody(probe, mk(0.040) as unknown as Body);
+    expect(deep).toBeGreaterThan(shallow + 0.01);
   });
 });

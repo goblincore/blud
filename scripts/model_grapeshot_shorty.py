@@ -102,7 +102,8 @@ def autosmooth(obj, deg=38.0):
     return obj
 
 
-def put(me,name,mat,loc=(0,0,0),rot=(0,0,0),bevel=0.003,segs=3,smooth=False):
+def put(me,name,mat,loc=(0,0,0),rot=(0,0,0),bevel=0.003,segs=3,smooth=False,
+        mat_inner=None):
     o=bpy.data.objects.new(name,me); col.objects.link(o)
     o.location=loc; o.rotation_euler=rot
     bpy.context.view_layer.objects.active=o
@@ -111,6 +112,16 @@ def put(me,name,mat,loc=(0,0,0),rot=(0,0,0),bevel=0.003,segs=3,smooth=False):
         b.limit_method='ANGLE'; b.angle_limit=math.radians(32); b.miter_outer='MITER_ARC'
         bpy.ops.object.modifier_apply(modifier='bv')
     o.data.materials.append(MATS[mat])
+    if mat_inner:
+        # Second slot for a tube's INNER wall: faces whose normal points at
+        # the local axis. A chrome chamber bore mirrors the room, and from the
+        # open breech that reads as angular junk inside the tube (owner,
+        # 2026-09-04); a real chamber is dark and matte.
+        o.data.materials.append(MATS[mat_inner])
+        for pg in o.data.polygons:
+            c=pg.center; n=pg.normal
+            if abs(n.z) < 0.5 and (n.x*c.x + n.y*c.y) < 0:
+                pg.material_index=1
     if smooth is True:
         for p in o.data.polygons: p.use_smooth=True
     elif smooth == 'auto':
@@ -275,6 +286,8 @@ RCH  = RI * 1.10             # chamber bore, wider than the barrel bore
 CY1  = -0.031                # THE BREECH FACE. Everything breech-y lives here.
 CHAMBER_DEPTH = 0.070        # set by our shell length, not by realism
 CY0  = CY1 - CHAMBER_DEPTH   # -0.101, chamber floor
+HOLLOW_DEPTH = 0.027         # how far down the bore is OPEN to view (see bore plug)
+HOLLOW_BACK  = CY1 - HOLLOW_DEPTH   # -0.058, 12 mm behind the hinge pin
 CONE_LEN  = 0.008
 BY_BACK   = CY0 - CONE_LEN   # -0.109, barrel tube's rear end
 BY_MUZZLE = -0.318           # unchanged: game-main's MUZZLE_LOCAL depends on it
@@ -290,11 +303,27 @@ for i,x in enumerate((-XSEP,XSEP)):
     # Dark plug. Starts at the cone's front so the open breech reads as DEPTH
     # rather than a lit tube wall, and stops short of the muzzle so looking down
     # the bores from the front still has somewhere to look into.
-    put(cyl(RI*0.99,0.121),f'bore{i}','Bore',loc=(x,-0.1695,0),rot=(RY,0,0),bevel=0,smooth=True)
+    # The plug now starts HOLLOW_DEPTH behind the breech face, not at the cone.
+    # The hinge (y -0.070) sits inside the chamber's 70 mm, so an open chamber
+    # swings its forward half DOWN through the action flats -- and a hollow
+    # tube shows whatever solid crosses it (owner: "the barrels clip into the
+    # bottom plate... you see it in the empty barrels"). Ending the visible
+    # hollow just short of the hinge, where the swung tube is still above the
+    # ramped flats, means nothing solid is ever in view down the bore. The
+    # cone and shell hulls beyond this point sit inside the plug and are hidden.
+    PLUG_FRONT = -0.230                             # unchanged: short of the muzzle, so
+    plug_len = HOLLOW_BACK - PLUG_FRONT             # the front bores still have depth
+    put(cyl(RI*0.99,plug_len),f'bore{i}','Bore',loc=(x,HOLLOW_BACK-plug_len/2,0),rot=(RY,0,0),bevel=0,smooth=True)
 # The rib runs the full barrel assembly, breech to muzzle.
-put(box(XSEP*2.0,(CY1-BY_MUZZLE)*0.94,0.010),'rib_top','Blue',
-    loc=(0,(BY_MUZZLE+CY1)/2,RO*0.62),bevel=0.0016,segs=2)
-put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,RO*0.62+0.006),bevel=0,smooth=True)
+# The rib is a narrow STRIP in the valley between the tubes, not a slab across
+# their tops. The 47 mm x 10 mm box at z 0.014 reached 9 mm from each bore
+# axis -- inside the 18 mm chamber interior -- and showed through the open
+# mouths as a rectangle (owner, 2026-09-04: "the bar that runs between both
+# barrels"). 10 mm wide with its floor at z 0.006, the nearest point to an
+# axis is 18.1 mm: outside the hollow, and its top is flush with the tubes.
+put(box(0.010,(CY1-BY_MUZZLE)*0.94,0.018),'rib_top','Blue',
+    loc=(0,(BY_MUZZLE+CY1)/2,0.015),bevel=0.0016,segs=2)
+put(cyl(0.0042,0.0075,14),'bead','Brass',loc=(0,BY_MUZZLE+0.010,0.024+0.0037),bevel=0,smooth=True)
 
 # --------- THE LOFTED BODY: breech -> top strap -> rounded back -> grip --------
 # Half-width taper. Wide enough at the breech to carry both barrels, narrowing
@@ -307,6 +336,15 @@ def HW(y):
     # barrels seat AGAINST this face) and the reason the open action read as
     # misaligned even though every part is centred on 0.00000 exactly.
     # 0.050 clears the cluster by 2.5 mm. The grip end is untouched.
+    if y <= -0.033:
+        # THE ACTION FLATS are narrower than the chamber cluster along their
+        # whole length. At 0.050 (then tapering from 0.050) the tray's edge
+        # stood proud of the tubes near the breech face, and from the FPV
+        # angle its ramped side face read as a triangular shelf on the near
+        # side of the receiver (owner, 2026-09-04). At 0.040 it is under the
+        # tubes' bulge (edge at +-0.047 at this height) when shut and a slim
+        # bar when open. The standing breech behind stays 0.050 to carry them.
+        return 0.040
     if y <= -0.020: return 0.050
     if y >=  0.058: return 0.026
     t = (y + 0.020) / 0.078
@@ -333,27 +371,56 @@ _grip = [
     (0.053,-0.1220), (0.052,-0.0980), (0.053,-0.0760),       # front strap
     (0.054,-0.0540), (0.054,-0.0360),
 ]
+# THE ACTION FLATS. Forward of the breech face the receiver is a low bar the
+# barrels sit ON, not a block they are buried IN. The first builds ran the
+# top strap straight forward over the chambers (z 0.0235 from y -0.078), so a
+# closed gun hid its chamber tubes inside the receiver -- and an OPEN one put
+# each chamber mouth exactly level with the receiver's top surface. A case
+# extracted along the bore from there has its lower half inside the receiver
+# for the first ~35 mm of travel: the owner's "the ejected shells clip the
+# receiver". At -0.004 the tray still swallows the lower 20 mm of the chamber
+# tubes (the lumps of a real action bar) but a mouth at 45 deg open clears it
+# (mouth centre z 0.023, case radius 0.017 -> bottom -0.001), and the case
+# rises from there.
+# ...and the flats RAMP down toward the hinge knuckle. Flat at -0.004 they
+# still cut through the open chamber between the breech face and the hinge
+# (tube bottom at y -0.050 is z -0.0076 when open; -0.004 is inside it).
+# Sloping to -0.022 at the knuckle keeps the tray under the swung tube along
+# the whole HOLLOW_DEPTH; forward of that the bore is plugged and solid-in-
+# solid is invisible.
 body = [
-    (-0.078, 0.0235), (0.040, 0.0250),                       # top strap
+    (-0.078,-0.0220), (-0.033,-0.0040),                     # action flats, ramped
+    (-0.031, 0.0235), (0.040, 0.0250),                       # standing breech face, top strap
     (0.054, 0.0215), (0.065, 0.0130), (0.072, 0.0010),       # rounded back end
     (0.076,-0.0140),
 ] + rake(_grip, GRIP_RAKE_DEG, GRIP_PIVOT) + [
     (0.052,-0.0262), (-0.078,-0.0262),                       # belly, forward
 ]
-put(loft(body, HW, round_frac=0.30, sections=16, name='body'), 'body', 'Steel',
+# sections 16 -> 14: the flats step added two outline points, which put the
+# build 190 tris over the 14000 cap; two fewer rings buys that back and the
+# body reads identically at this size.
+put(loft(body, HW, round_frac=0.30, sections=14, name='body'), 'body', 'Steel',
     bevel=0.0016, segs=2, smooth='auto')
 
 # THE BREECH FACE, at y = CY1. The previous build put the mouths and the
 # extractor at y ~ -0.066 -- the chamber's FRONT, 35 mm away, buried inside the
 # frame beside the hinge pin, where they were never once visible.
 for i,x in enumerate((-XSEP,XSEP)):
-    put(tube(RO*1.07,RCH,CHAMBER_DEPTH),f'chamber{i}','Steel',
-        loc=(x,(CY0+CY1)/2,0),rot=(RY,0,0),bevel=0.0022,smooth=True)
+    # segs 28, not 32: the flats taper + matte bore split put the build 42 tris
+    # over the 14000 cap; a 24 mm tube reads round at 28.
+    put(tube(RO*1.07,RCH,CHAMBER_DEPTH,segs=28),f'chamber{i}','Steel',
+        loc=(x,(CY0+CY1)/2,0),rot=(RY,0,0),bevel=0.0022,smooth=True,mat_inner='Bore')
     # A machined rim at the mouth. Steel, not 'Bore': the darkness now comes
     # from the real hole behind it rather than from painting a disc black.
     put(tube(RO*1.07,RCH,0.004),f'mouth{i}','Steel',
         loc=(x,CY1-0.002,0),rot=(RY,0,0),bevel=0,smooth=True)
-put(box(0.052,0.007,0.016),'extractor','Steel',loc=(0,CY1+0.0035,0),bevel=0.0018)
+# The extractor is a plate UNDER the rims, not a bar across the bores. The
+# first build put a 52 x 16 mm box on the bore axis at the breech face, which
+# on the open gun read as a bar blocking both chamber mouths (owner's
+# screenshot, 2026-09-04). Real doubles carry it at the bottom of the breech
+# face between the barrels; here it sits just under the chamber tubes, hidden
+# in the action flats when shut, riding out with the cases when open.
+put(box(0.050,0.006,0.006),'extractor','Steel',loc=(0,CY1+0.003,-RO*1.07-0.001),bevel=0.0012)
 for sx in (-1,1):
     put(cyl(0.0092,0.009,20),'hinge','Brass',loc=(sx*0.040,-0.070,-0.016),rot=(0,RY,0),
         bevel=0.0014,smooth=True)
@@ -693,7 +760,9 @@ def verify_bores_hollow():
         hit, loc, _n, _idx, obj, _m = bpy.context.scene.ray_cast(
             dg, origin, Vector((0.0, -1.0, 0.0)))
         dist = (loc - origin).length if hit else float('inf')
-        if dist < CHAMBER_DEPTH:
+        # HOLLOW_DEPTH, not CHAMBER_DEPTH: the plug now caps the bore 27 mm in
+        # (see the bore plug note). A capped mouth still fails here at ~5 mm.
+        if dist < HOLLOW_DEPTH - 0.002:
             bad.append((x, round(dist, 5), obj.name if obj else None))
     for o, v in hidden:
         o.hide_viewport = v

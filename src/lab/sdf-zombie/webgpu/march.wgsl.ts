@@ -53,7 +53,8 @@ import { MAX_PRIMS } from '../validate';
 //   row 15 clusterGps   x = first group, y = group count
 //   row 16 primShell    x = half-thickness, y = rim, z = clip offset,
 //                       w = hasClip (shell-fold prims only)
-//   row 17 primClip     xyz = clip plane normal (shell-fold prims only)
+//   row 17 primClip     xyz = clip plane normal (shell-fold prims only),
+//                       w = per-prim glow 0..1 (hard-surface task 3)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -122,7 +123,10 @@ export const ROW_CLUSTER_GROUPS = 15;
  *  z = clip offset, w = hasClip (0/1). Read only by prims with a shell fold
  *  (profile bit 2 set — see ROW_PRIM_SHAPE's `prof`). */
 export const ROW_PRIM_SHELL = 16;
-/** `shell` clip plane: xyz = unit normal, w spare. See ROW_PRIM_SHELL. */
+/** `shell` clip plane: xyz = unit normal; w = per-prim emissive `glow=`
+ *  0..1 (hard-surface task 3), packed on BOTH the shell and plain branches —
+ *  the glow COLOUR is the prim's own ROW_PRIM_COLOR albedo, so the lane is
+ *  inert (w = 0) unless the author writes `glow=`. See ROW_PRIM_SHELL. */
 export const ROW_PRIM_CLIP = 17;
 
 
@@ -963,7 +967,11 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
-    // bit 2 (value 4). "& 7 == 1" means "bit 0 set, bits 1 and 2 clear" —
+    // bit 2 (value 4); box is bit 3 (value 8); METAL is bit 4 (value 16),
+    // packed by pack.ts and read ONLY in the shading block (it is a
+    // material, not a shape — the fold must treat a metal prim exactly like
+    // the same prim without it, and every mask here does: 16 & 7 == 0 and
+    // 16 & 8 == 0). "& 7 == 1" means "bit 0 set, bits 1 and 2 clear" —
     // exactly chamfer-and-nothing-else, which is what the OLD bounded-window
     // test (prof strictly between one half and one and a half) meant back
     // when prof topped out at 6.
@@ -1075,7 +1083,7 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
   return d;
 }`;
 
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec4<f32> {
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
   // Argmin tracking now lives in private globals shared with foldGroup
   // (above); reset per call — calcNormal calls mapBody four times and each
@@ -1187,7 +1195,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // The guard stays and now matters more than ever, since the march relies on
   // this call costing nothing: fbm is two 3D value-noise lookups, sixteen
   // hash13 calls, and without the branch a zero amplitude still pays in full.
-  if (noiseAmp <= 0.0) { return vec4<f32>(dmg, bestIdx, nearWound, carved); }
+  if (noiseCfg.x <= 0.0) { return vec4<f32>(dmg, bestIdx, nearWound, carved); }
   // NOISE ANCHOR (motion-polish task 6): the fbm samples the DOMINANT prim's
   // REST frame — the texture is baked into the model, so gait bob, arm raises
   // and jiggle carry their skin instead of sliding through the world-frame
@@ -1196,20 +1204,20 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));
   // Hoisted so the return carries no nested parens — the ramp test lexes the
   // return site for the word 'carved' and a paren would truncate the match.
-  let detail = fbm(anchor * 3.0) * noiseAmp;
+  let detail = fbm(anchor * 3.0) * noiseCfg.x;
   return vec4<f32>(dmg + detail, bestIdx, nearWound, carved);
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseAmp: f32, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec3<f32> {
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>) -> vec3<f32> {
   let e = vec2<f32>(1.0, -1.0) * 0.0015;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
-    e.yyx * mapBody(p + e.yyx, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
-    e.yxy * mapBody(p + e.yxy, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, counts2, noiseAmp, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x);
+    e.xyy * mapBody(p + e.xyy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.yyx * mapBody(p + e.yyx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.yxy * mapBody(p + e.yxy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x +
+    e.xxx * mapBody(p + e.xxx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x);
 }`;
 
 // Nearest-neighbour fetch by uv.
@@ -1316,7 +1324,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // the zero vector keeps this pass independent of the motion plumbing.
     // The volume block rides along for the same reason (X1.26): a cone that
     // ignored an enabled volume would certify empty space inside the hand.
-    let d = mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    let d = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -1468,6 +1476,66 @@ export const MELT_SKIN_KEEP = 1.30;
  * had no pink left at all).
  */
 export const MELT_SKIN_CONTRAST = 2.8;
+
+/**
+ * Sphere-trace step multiplier inside applyWounds' nearWound zone.
+ *
+ * The wounded field is NOT a distance bound — the smax fillet overstates, the
+ * lip understates, and `rimLocal` ties the lip's amplitude to the pre-wound
+ * field so the two move together — and a step of `mul * d` only stays outside
+ * the surface while `mul <= 1 / max|grad d|`. Measured (march-step-soundness
+ * test, planar flesh, shipped rim constants): a single stock blast wound
+ * reaches |grad| 2.06 and a single pellet 2.09, so the largest sound
+ * multiplier is ~0.48 — for ONE wound. Overlapping craters compound through
+ * the sequential per-wound loop: a blast plus a six-pellet spread measured
+ * 3.92, i.e. 0.26.
+ *
+ * IT STAYS AT 0.6, WHICH IS ABOVE THAT BOUND, AND THAT IS A DECISION — not an
+ * oversight, which is what it was until 2026-09-04, when it shared the literal
+ * with the shell's under-relaxation and had never been checked against a
+ * crater. The owner A/B'd 0.6 against 0.4 on screen (`setWoundStep`, below)
+ * and could not tell them apart, so the frame budget wins. Everything below is
+ * what that costs, so the next person can re-take the decision with the
+ * numbers instead of re-deriving them.
+ *
+ * WHAT 0.6 LOOKS LIKE, counted over every pixel of a real frame on a torso
+ * carrying a blast + a six-pellet spread (game settings: omega 1.0, AA 1.0,
+ * outer-hull start, cone off):
+ *
+ *            mis-shaded px   of hits   normals > 45 deg wrong
+ *   1.5 m        10731        4.32%
+ *   2.5 m         2903        2.16%            686
+ *   4.0 m          649        0.97%
+ *
+ * "Mis-shaded" = the march accepted a sample further behind the first
+ * crossing than the hit epsilon, so the pixel takes its normal from inside
+ * the carve blend and its tissue-ramp depth from up to 13.7 mm too deep —
+ * far enough to shift a patch a whole band down fat -> muscle -> clot. They
+ * are CONTIGUOUS (99% have an affected 4-neighbour), and STABLE: turning the
+ * camera 0.23 degrees keeps 2892 of 2903. A stable wrong patch inside a
+ * crater reads as "that is what the crater looks like", which is why this sat
+ * unreported for as long as it did.
+ *
+ * ONE WOUND IS FINE at any of these values — a single stock blast produced
+ * zero mis-shaded pixels at every range. This is a STACKING artifact; it
+ * needs a body someone emptied a shotgun into.
+ *
+ * WHAT FIXING IT WOULD COST. The zone is large (r < 2 * wound radius), so the
+ * ray pays over its whole approach, not just at the lip. Marched pixels only,
+ * on that same shotgunned body, against 0.6:
+ *
+ *          extra march steps (2 m / 4 m / 8 m)   what it removes
+ *   0.4          +23% / +18% / +16%              every > 45 deg error, 92% of the pixels
+ *   0.3          +45% / +36% / +32%              all of them, at both ranges measured
+ *
+ * Unwounded bodies are untouched at any value — nothing raises nearWound —
+ * and hit counts are unchanged, so nothing drops out of the image. Flip it
+ * live with `__sdfGame.setWoundStep(0.4)` / `__sdfLab.setWoundStep(0.4)`
+ * (perfCfg.z, see the marchBody loop; 0 = this constant). If it is ever worth
+ * paying for, the cheap direction is a SMALLER zone or a per-sample count of
+ * overlapping wounds — not a longer step.
+ */
+export const WOUND_STEP_MUL = 0.6;
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -1785,6 +1853,22 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // survives ONLY as restPoint's fallback for bodies without rest rows and
   // for the no-live-prim case. Zero = the pre-motion behaviour there.
   let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);
+  // ONLY .x CARRIES MEANING: the silhouette-noise amplitude. y/z/w are dead.
+  //
+  // They were a parked melt spike's amp/frequency/time (c52b05b), removed in
+  // the 2026-09-04 merge because the shipped zombie melt supersedes it. Note
+  // what this line read immediately after that merge:
+  //   vec4<f32>(marchCfg.z, meltCfg.x, meltCfg.y, meltCfg.z)
+  // Both sides had independently named a uniform meltCfg, so git merged the
+  // two files with NO conflict marker and quietly fed the zombie melt's
+  // PROGRESS into the spike's displacement amplitude — a body that ridges as
+  // it melts, from a merge that reported success.
+  //
+  // The vec4 survives only because hard-surface's gloss/metal kill is written
+  // against it (see calcNormal below). Collapsing it back to a plain f32 is a
+  // tidy-up worth doing; three permanently-dead lanes on a shared struct is
+  // precisely how primClip.w's "spare" comment went stale.
+  let noiseCfg = vec4<f32>(marchCfg.z, 0.0, 0.0, 0.0);
 
   // RELAXED SPHERE TRACING (Keinert et al. 2014; Balint & Valasek 2018).
   //
@@ -1830,6 +1914,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // smooth field until it is inside a thin shell of the surface, and only
   // there does the fbm displace the stepped distance — see the loop body.
   var omega = select(marchCfg.y, woundCfg2.y, relax);
+  // Near-wound step multiplier, with a live override on perfCfg.z for A/B
+  // (__sdfGame.setWoundStep). ZERO IS THE IDENTITY: every view that never
+  // writes the lane gets the compiled constant, bit for bit. The lane is on
+  // perfCfg and not counts2 because counts2 is re-set on every pack — an
+  // override parked there would evaporate on the next body rebuild.
+  let woundMul = select(${WOUND_STEP_MUL}, perfCfg.z, perfCfg.z > 0.0);
   // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
   // never push the ray straight out the back of the proxy box.
@@ -1866,7 +1956,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    let dres = mapBody(camPos + rd * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+    let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
     let distort = max(gFoldBestDistort, 1.0);
     var d = dres.x;
     hitBest = i32(dres.y);
@@ -1950,7 +2040,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
           break;
         }
       } else {
-        stepLen = d * select(omega, 0.6, conservative || nearWound);
+        // TWO INDEPENDENT REASONS TO UNDER-RELAX, and the stricter one wins.
+        // The shell's 0.6 pays for the fbm; the wound zone's own multiplier
+        // pays for a field that is not a distance bound (WOUND_STEP_MUL).
+        // They used to share the 0.6 literal, which is how the wound side
+        // went unexamined for as long as it did — the shell's figure was
+        // never measured against a crater.
+        //
+        // At WOUND_STEP_MUL 0.6 this is the old select() exactly, for every
+        // omega the pages ship (all >= 0.6). It differs only BELOW 0.6, where
+        // the old form LENGTHENED the step to 0.6 in the very zones that
+        // wanted it shortest; min() keeps omega there instead.
+        stepLen = d * min(select(omega, 0.6, conservative), select(omega, woundMul, nearWound));
       }
     }
     prevRadius = radius;
@@ -2015,6 +2116,30 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     return vec4<f32>(gDebugBones, select(0.0, 1.0, hit), 1.0, t);
   }
   if (!hit) { discard; }
+  // FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). Returns the
+  // body's base albedo AT THE HIT and skips the entire post-hit chain —
+  // calcNormal (4 field evals), the anchor, the micro-detail fbm, wound/char
+  // masks, the tissue ramp, organ/mottle/gore/face albedo, the analytic
+  // flashlight, spec/fresnel, the scatter and AO probes, the wound soft
+  // shadow, the level shadow and the ambient compose. Nothing about the WALK
+  // changes: the loop above ran to the same t with the same stepping, and
+  // hitBest/hitNearWound/hitField were still maintained because the tracer
+  // itself consumes them.
+  //
+  // debugCfg.y is the seam's gate because debugCfg.y was the one spare
+  // channel on a uniform every march variant already binds — a new input in
+  // MARCH_BODY's signature would have to be threaded through the entry
+  // literal AND every variant literal in signature order (the meltCfg
+  // incident), for a diagnostic that must stay inert. Default 0 = the
+  // guarded return never fires and the fragment below is bit-identical to
+  // the pre-seam shader; a test pins this file to exactly one debugCfg.y
+  // occurrence, placed here.
+  //
+  // Precedence note: with debugCfg.x ALSO in a heatmap mode (1/2/3) the flat
+  // return wins — those modes returned after shading, and this seam exists to
+  // skip shading. Modes 4/5 (occupancy/bone counters) still win over it:
+  // they return above, before the hit test.
+  if (debugCfg.y > 0.5) { return vec4<f32>(baseColor, t); }
   // Snapshot the counters BEFORE the post-hit probes: calcNormal folds
   // four more mapBody calls and the wound shadow up to fourteen, and the
   // heatmap is about RAY cost, not shading cost.
@@ -2022,7 +2147,55 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
-  var n = calcNormal(p, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+  // PER-PRIMITIVE MATERIAL READ — hoisted above the noise (hard-surface
+  // task 1). gloss must be known BEFORE the shading normal exists: both
+  // flesh-noise paths below scale by (1 - gloss), because a polished prim
+  // has no pores. This is the SAME single texel the per-prim colour block
+  // below used to read (hitBest row, ROW_PRIM_COLOR) — hoisted, not
+  // repeated, so no hit pixel pays for it twice. hitBest is -1 on the
+  // baked-volume path; there gloss stays 0 and every noise term runs at
+  // full flesh amplitude exactly as before.
+  // METAL (task 2) rides the same hoist: prof bit 4 (16), read off
+  // ROW_PRIM_SHAPE only inside the painted branch (metal is parse-gated on
+  // color=, so an unpainted pixel can never change the answer — one extra
+  // texel load on painted hit pixels only). metal implies the same noise
+  // suppression with no gloss set: a machined surface has no pores either,
+  // so both sites below take (1 - max(gloss, metal)).
+  var gloss = 0.0;
+  var painted = 0.0;
+  var metal = 0.0;
+  var primGlow = 0.0;
+  var primAlbedo = vec3<f32>(0.0);
+  if (hitBest >= 0) {
+    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
+    if (PC.w > 0.0) {
+      primAlbedo = PC.xyz;
+      gloss = clamp(PC.w - 1.0, 0.0, 1.0);
+      painted = 1.0;
+      let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0);
+      if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
+      // GLOW (hard-surface task 3): primClip.w, the lane that was documented
+      // spare until now. Loaded ONLY inside the painted branch — glow is
+      // parse-gated on color=, so an unpainted pixel can never author one,
+      // and this is the third texel a painted hit pixel pays for (colour,
+      // shape, clip) and the last.
+      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0).w, 0.0, 1.0);
+    }
+  }
+  // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
+  // the point of application: a polished or machined prim has no pits. The
+  // AO and scatter probes below keep the FULL marchCfg.z — they probe the
+  // real displaced field (fbm at frequency 3, features ~0.2 m), not surface
+  // detail, and the march loop runs the field smooth regardless. At
+  // gloss 0 / metal 0 this argument is exactly what it always was.
+  // MERGE (hard-surface task 3, resolving main's melt): calcNormal's amp is
+  // now a vec4 — x silhouette, y/z/w the MELT components. Only x carries the
+  // gloss/metal kill; melt amplitude is a transient effect the owner drives
+  // deliberately, not flesh pore detail, and task 1's contract was noise
+  // suppression of the flesh's own texture, so meltCfg passes through
+  // untouched. At gloss 0 / metal 0 / melt 0 the vec4 is byte-identical to
+  // the pre-both-changes call.
+  var n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
@@ -2031,10 +2204,16 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
   // Micro-detail perturbs the normal only — costs no march safety. Three more
   // fbm calls though, so it is guarded: once per hit pixel rather than per
-  // step, but still six noise lookups a body does not always need.
-  if (surfCfg2.y > 0.0) {
+  // step, but still six noise lookups a body does not always need. The
+  // guard wraps the CALL (entrails post-mortem: skip the work, not just the
+  // output) and now also folds the gloss/metal kill — a full-gloss or metal
+  // prim skips the six lookups outright instead of computing them and
+  // multiplying to 0. At gloss 0 / metal 0 the product is exactly
+  // surfCfg2.y, so flesh shades bit-for-bit as before.
+  let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
+  if (detailAmp > 0.0) {
     n = normalize(n + vec3<f32>(
-      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * surfCfg2.y);
+      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * detailAmp);
   }
 
   let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
@@ -2294,19 +2473,26 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
   // the hit (hitBest, the noise anchor); a painted one replaces the flesh
   // albedo outright, mottle and face sheet included — a lens is not tinted
-  // skin. Char still wins below, because burnt is burnt. The eye glow is
+  // skin. The gloss/painted VALUES were resolved — and the row read, once —
+  // up above calcNormal, where the noise suppression needs them; the
+  // OVERWRITE itself stays HERE, after the face pass, because a painted
+  // prim replaces everything the flesh passes laid down. Char still wins
+  // below, because burnt is burnt.
+  //
+  // GLOW PRECEDENCE (hard-surface task 3): the eye-glow kill two lines down
+  // applies to the FACE glow only — the baked sheet's own emission, which is
   // zeroed on paint for the same reason the sheet is: the painted eyes sit
-  // exactly where a pair of sunglasses goes, and they must not shine
-  // through the lenses.
-  var gloss = 0.0;
-  var painted = 0.0;
-  if (hitBest >= 0) {
-    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
-    if (PC.w > 0.0) {
-      albedo = PC.xyz;
-      gloss = clamp(PC.w - 1.0, 0.0, 1.0);
-      painted = 1.0;
-    }
+  // exactly where a pair of sunglasses goes, and they must not shine through
+  // the lenses. Per-prim glow (primGlow, primClip.w) is AUTHORED emission on
+  // the prim itself, packed per prim, and deliberately SURVIVES this kill:
+  // the whole point of glow= is a prim that emits — the minotaur's red eyes
+  // — and those prims are painted (glow= is parse-gated on color=). The face
+  // sheet under a painted prim contributes exactly what it always did here
+  // (zero); the prim's own authored emission is a separate additive term at
+  // the composite. Nothing in that kill reads primGlow, so the sunglasses
+  // rule is intact BY CONSTRUCTION, not by a second kill that could drift.
+  if (painted > 0.0) {
+    albedo = primAlbedo;
   }
   faceGlow = faceGlow * (1.0 - painted);
 
@@ -2444,7 +2630,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -2455,7 +2641,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, counts2, marchCfg.z, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x / 0.06, 0.35, 1.0);
   }
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
@@ -2507,8 +2693,54 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   //
   // Gated on the beam existing at all, so the lab and every stock preset keep
   // their old arithmetic bit-for-bit.
-  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao
-               + keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+  //
+  // METAL (hard-surface task 2), at metal 1:
+  //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
+  //    0.45 floor — bounce IS diffuse, and leaving it full would keep the
+  //    plate reading as paint. NOT zero: with no environment map the lab
+  //    has one key, and a true-zero diffuse goes black wherever the
+  //    highlight is not. Rendered curve, 2026-09-03 (12-frame turntable,
+  //    front and plate-bearing yaws): 0.25 went BLACK at the front yaw;
+  //    0.35 kept the slab forms but the front still read near-black; 0.45
+  //    keeps the greave's specular gradient AND a readable front face. 0.45
+  //    ships; the owner can pull it darker now that the word exists.
+  //  - the specular AND the fresnel rim are tinted by the prim's own
+  //    albedo instead of shining the light's colour — the single change
+  //    that makes steel differ from white plastic under the same light.
+  //    The tint is the albedo's HUE with its luminance renormalised to
+  //    steel's F0: multiplying by the RAW albedo (this line's first
+  //    version) rendered the minotaur's plates BLACK — 0.17 linear
+  //    luminance times the highlight is no highlight (frame-00 A/B,
+  //    2026-09-03). Polished steel reflects ~56% at normal incidence
+  //    however dark its paint reads (iron F0 = 0.56, standard metals
+  //    table), so the scale renormalises luminance, and the min() caps the
+  //    blow-up on near-black paint (dark chrome should stay dark).
+  //  - wet, scatter and the wound terms are untouched: scope discipline,
+  //    and the floor above keeps the plate readable without them.
+  // At metal 0 both factors are exactly 1.0 — bit-identical to the old sum
+  // (multiplication by 1.0 is exact), so every non-metal character shades
+  // byte-for-byte as before.
+  // (Task 3's merge removed a STALE duplicate of this block left by task 2's
+  // tuning pass — it claimed the 0.25 floor this curve superseded.)
+  //
+  // THE mix() IS LEAD, NOT TRIM (regression fixed 2026-09-04). The sentence
+  // above was the INTENT; for one merge the tint below did not implement it.
+  // It shipped as the bare min(), and primAlbedo is vec3(0) on every
+  // UNPAINTED pixel — flesh never enters the 'PC.w > 0.0' branch that fills
+  // it. So metalTintLum sat on its 1e-3 floor, the tint evaluated to vec3(0),
+  // and it multiplied the ENTIRE specular + fresnel line to nothing: every
+  // zombie lost its highlight and its rim at once, in the lab and in the
+  // game. The diagnostic tell is that the specular slider went dead — surfCfg.x
+  // lives inside those parentheses, so nothing it does survives a zero
+  // common factor.
+  //
+  // Gate it the same way the diffuse floor beside it is gated. A PAINTED
+  // non-metal wants the untinted white highlight too (polished plastic, not
+  // coloured chrome), which 'metal' - not 'painted' - is exactly the flag for.
+  let metalTintLum = max(dot(primAlbedo, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
+  let metalTint = mix(vec3<f32>(1.0), min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5)), metal);
+  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
+               + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
@@ -2539,8 +2771,24 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // always claimed — "an eye should not be lit by the key light at all" — a
   // statement the code never actually implemented.
   let glow = faceGlowColor * faceGlow * faceCfg2.w
-           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm);
-  var lit = fleshLit * (1.0 - faceGlow) + glow;
+           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm)
+           // PER-PRIM GLOW (hard-surface task 3): the same two lines keyed
+           // off the prim row instead of the face texture. The colour is the
+           // prim's OWN albedo (design C — a prim with color=ff2200 glow=0.9
+           // glows red because it IS red), the strength is the authored
+           // 0..1 from primClip.w. No faceCfg2.w global (the authored value
+           // IS the strength) and no flicker (that is the face sheet's
+           // heartbeat). Char kills it exactly as it kills the face glow:
+           // burnt is burnt.
+           + primAlbedo * primGlow * (1.0 - cm);
+  // Each emission source fades the lit term by its own amount, mirroring the
+  // face path's fleshLit * (1 - faceGlow): a surface that IS the light
+  // should not ALSO carry the key's full diffuse on top — that add-then-clamp
+  // is exactly how the face glow used to render pale cream (comment above).
+  // At primGlow 0 the factor is exactly 1.0 — bit-identical to the old line
+  // (multiplication by 1.0 is exact), so every non-glowing pixel everywhere
+  // shades byte-for-byte as before.
+  var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;
 
   // Legacy display look (lodCfg.y). Every flesh preset was hand-tuned in the
   // WebGL lab, which displayed the lit LINEAR value raw — no output sRGB
@@ -2636,7 +2884,7 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   var res = 1.0;
   var t = 0.02;
   for (var i = 0; i < 14; i = i + 1) {
-    let h = mapBody(p + L * t, data, counts, counts2, 0.0, woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    let h = mapBody(p + L * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
     res = min(res, k * h / t);
     if (res < 0.02 || t > 0.4) { break; }
     t = t + clamp(h, 0.01, 0.06);

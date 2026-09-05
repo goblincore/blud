@@ -1,10 +1,16 @@
 // src/lab/sdf-zombie/webgpu/game-viewmodel.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  CHAMBER_DEPTH_M, RECOIL, RELOAD, ejectedShell, extractStage, extractorOffset,
-  fireRecoil, flashEnvelope, hingeOpenFraction, loadShellTravel, magazineAfterFire,
-  reloadPhaseAt, reloadPose, supportHandPose, topLeverAngle,
+  CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
+  extractStage, extractorOffset, fireRecoil, flashEnvelope, hingeOpenFraction,
+  insertStage, loadCarry, loadHold, magazineAfterFire, reloadPhaseAt, reloadPose,
+  stagedShellCenter, supportHandPose, topLeverAngle,
 } from './game-viewmodel';
+
+/** A bore frame for the eject tests: the breech faces the camera (+Z) and the
+ *  chambers sit side by side along +X. Simpler than the real open gun's, and
+ *  every assertion below is about the SHAPE of the arc, not its exact tilt. */
+const FRAME = { out: [0, 0, 1] as const, side: [1, 0, 0] as const };
 
 describe('flashEnvelope', () => {
   it('is zero before the shot and after the window', () => {
@@ -96,9 +102,19 @@ describe('reloadPose', () => {
     const atPresentEnd = reloadPose(RELOAD.presentSec);
     const peak = Math.min(...[0, 0.05, 0.1, 0.14, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
       .map((t) => reloadPose(t).roll));
-    expect(atPresentEnd.roll).toBeLessThan(-10);
+    expect(atPresentEnd.roll).toBeLessThan(-8);
     // the deepest roll must NOT be at mid-reload
     expect(reloadPose(0.475).roll).toBeGreaterThan(peak - 1e-6);
+  });
+
+  it('keeps the open action LOW in the frame, not centred', () => {
+    // Owner: the raised present (dy 0.115, roll -30) blocked the view. A
+    // true drop puts the reload off the bottom edge (the breech rests there),
+    // so the bound is a small lift and a shallow roll at every open beat.
+    for (const t of [RELOAD.breakEndSec, RELOAD.ejectEndSec, RELOAD.loadStageSec, RELOAD.loadSeatSec]) {
+      expect(reloadPose(t).dy).toBeLessThan(0.06);
+      expect(reloadPose(t).roll).toBeGreaterThan(-20);
+    }
   });
 
   it('holds the hinge fully open across eject and load', () => {
@@ -132,51 +148,134 @@ describe('reloadPose', () => {
 
 describe('ejectedShell', () => {
   it('throws nothing before the eject beat — a shut gun cannot eject', () => {
-    expect(ejectedShell(0, 0)).toBeNull();
-    expect(ejectedShell(RELOAD.ejectAtSec - 0.01, 0)).toBeNull();
+    expect(ejectedShell(0, 0, FRAME)).toBeNull();
+    expect(ejectedShell(RELOAD.ejectAtSec - 0.01, 0, FRAME)).toBeNull();
   });
-  it('leaves the breech going UP and toward the camera', () => {
-    const s = ejectedShell(RELOAD.ejectAtSec + 0.05, 0);
-    expect(s).not.toBeNull();
-    expect(s!.y).toBeGreaterThan(0);
-    expect(s!.z).toBeGreaterThan(0);
+  it('starts EXACTLY at the hand-off origin, whatever the seed', () => {
+    // The shorty gate pins lastEjectOrigin against the live breech at this
+    // beat; the seed may bend the arc but must never move where it begins.
+    for (const seed of [0, 1, 7, 12345]) {
+      const s = ejectedShell(RELOAD.ejectAtSec, 0, FRAME, seed)!;
+      expect(Math.hypot(s.x, s.y, s.z)).toBeLessThan(1e-9);
+      expect(s.spin).toBeCloseTo(0, 9);
+    }
   });
-  it('arcs — rises then falls back below the breech', () => {
-    const ys = [0.05, 0.15, 0.25, 0.45, 0.7].map((d) => ejectedShell(RELOAD.ejectAtSec + d, 0)!.y);
-    expect(Math.max(...ys)).toBeGreaterThan(ys[0]!);
-    expect(ys[ys.length - 1]!).toBeLessThan(Math.max(...ys));
+  it('leaves the breech going UP and out along the bore', () => {
+    const s = ejectedShell(RELOAD.ejectAtSec + 0.05, 0, FRAME)!;
+    expect(s.y).toBeGreaterThan(0);
+    expect(s.z).toBeGreaterThan(0);          // FRAME.out is +Z
+  });
+  it('keeps moving OUT of the bore for the first tenth of a second, so a case cannot fall back into the tube', () => {
+    let prev = 0;
+    for (let d = 0.01; d <= 0.10; d += 0.01) {
+      const s = ejectedShell(RELOAD.ejectAtSec + d, 1, FRAME, 3)!;
+      expect(s.z).toBeGreaterThan(prev);
+      prev = s.z;
+    }
+  });
+  it('climbs well clear of the frame before it is dropped', () => {
+    let peak = 0;
+    for (let d = 0; d <= 1; d += 0.01) {
+      const s = ejectedShell(RELOAD.ejectAtSec + d, 0, FRAME);
+      if (s) peak = Math.max(peak, s.y);
+    }
+    // Doom's cases go over the shoulder and never come back. 16 cm was the old
+    // apex, which put them barely past the top edge and then falling back in.
+    expect(peak).toBeGreaterThan(0.25);
+  });
+  it('is never drawn falling back through the frame', () => {
+    // Once past the apex and back near breech height it must be gone: at this
+    // range a 7 cm case dropping past the camera fills a quarter of the screen.
+    let peak = -1, past = false;
+    for (let d = 0; d <= 1.5; d += 0.005) {
+      const s = ejectedShell(RELOAD.ejectAtSec + d, 0, FRAME);
+      if (!s) continue;
+      if (s.y < peak) past = true;
+      peak = Math.max(peak, s.y);
+      if (past) expect(s.y).toBeGreaterThan(0.08);
+    }
+    expect(past).toBe(true);   // it was drawn on the way down at all
+    expect(ejectedShell(RELOAD.ejectAtSec + 1.2, 0, FRAME)).toBeNull();
   });
   it('throws the two cases apart, not on top of each other', () => {
-    const a = ejectedShell(RELOAD.ejectAtSec + 0.1, 0)!;
-    const b = ejectedShell(RELOAD.ejectAtSec + 0.1, 1)!;
+    const a = ejectedShell(RELOAD.ejectAtSec + 0.1, 0, FRAME)!;
+    const b = ejectedShell(RELOAD.ejectAtSec + 0.1, 1, FRAME)!;
     expect(Math.abs(a.x - b.x)).toBeGreaterThan(0.02);
     expect(a.spin).not.toBeCloseTo(b.spin, 3);
   });
-  it('stops being drawn eventually', () => {
-    expect(ejectedShell(RELOAD.ejectAtSec + 1.2, 0)).toBeNull();
+  it('varies with the seed, and seed 0 is the reference arc', () => {
+    const t = RELOAD.ejectAtSec + 0.15;
+    const ref = ejectedShell(t, 0, FRAME)!;
+    expect(ejectedShell(t, 0, FRAME, 0)).toEqual(ref);
+    const a = ejectedShell(t, 0, FRAME, 11)!;
+    const b = ejectedShell(t, 0, FRAME, 12)!;
+    expect(Math.hypot(a.x - ref.x, a.y - ref.y, a.z - ref.z)).toBeGreaterThan(0.005);
+    expect(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)).toBeGreaterThan(0.002);
+    // Bounded: a seed may bend the arc, never send a case at the camera.
+    for (let seed = 1; seed < 200; seed++) {
+      const s = ejectedShell(t, 1, FRAME, seed)!;
+      expect(s.y).toBeGreaterThan(ref.y * 0.6);
+      expect(s.z).toBeLessThan(ref.z * 1.6 + 0.01);
+    }
+  });
+  it('is the same arc for the same seed', () => {
+    const t = RELOAD.ejectAtSec + 0.2;
+    expect(ejectedShell(t, 1, FRAME, 42)).toEqual(ejectedShell(t, 1, FRAME, 42));
   });
 });
 
-describe('loadShellTravel', () => {
-  it('is absent outside the load window', () => {
-    expect(loadShellTravel(0)).toBeNull();
-    expect(loadShellTravel(RELOAD.loadStartSec - 0.01)).toBeNull();
-    expect(loadShellTravel(RELOAD.totalSec)).toBeNull();
-  });
-  it('runs 0 -> 1 and is seated before the gun snaps shut', () => {
-    expect(loadShellTravel(RELOAD.loadStartSec)).toBeCloseTo(0, 5);
-    expect(loadShellTravel(RELOAD.loadSeatSec)).toBe(1);
-    // seated strictly before the snap finishes, or the gun closes on a case
-    // that is still visibly outside it
+describe('the load beat', () => {
+  it('orders carry before insert before the snap', () => {
+    expect(RELOAD.loadStartSec).toBeLessThan(RELOAD.loadStageSec);
+    expect(RELOAD.loadStageSec).toBeLessThan(RELOAD.loadSeatSec);
     expect(RELOAD.loadSeatSec).toBeLessThan(RELOAD.snapEndSec);
   });
-  it('advances monotonically', () => {
+  it('carry is absent outside its window and runs 0 -> 1 monotonically', () => {
+    expect(loadCarry(0)).toBeNull();
+    expect(loadCarry(RELOAD.loadStartSec - 0.01)).toBeNull();
+    expect(loadCarry(RELOAD.loadStageSec + 0.01)).toBeNull();
+    expect(loadCarry(RELOAD.loadStartSec)).toBeCloseTo(0, 6);
+    expect(loadCarry(RELOAD.loadStageSec)).toBeCloseTo(1, 6);
     let prev = -1;
-    for (let t = RELOAD.loadStartSec; t <= RELOAD.loadSeatSec; t += 0.01) {
-      const v = loadShellTravel(t)!;
+    for (let t = RELOAD.loadStartSec; t <= RELOAD.loadStageSec; t += 0.005) {
+      const v = loadCarry(t)!;
       expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
       prev = v;
     }
+  });
+  it('insert takes over the instant the carry ends, and seats before the snap', () => {
+    expect(insertStage(RELOAD.loadStageSec - 0.01)).toBeNull();
+    expect(insertStage(RELOAD.loadStageSec)).toBeCloseTo(0, 6);
+    expect(insertStage(RELOAD.loadSeatSec)).toBeCloseTo(1, 6);
+    expect(insertStage(RELOAD.loadSeatSec + 0.01)).toBeNull();
+    let prev = -1;
+    for (let t = RELOAD.loadStageSec; t <= RELOAD.loadSeatSec; t += 0.005) {
+      const v = insertStage(t)!;
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+  });
+  it('stages a case with its tip a small gap BEHIND the mouth, on the bore axis', () => {
+    const c = stagedShellCenter([1, 2, 3], [0, 0, 1]);
+    expect(c[0]).toBeCloseTo(1, 9);
+    expect(c[1]).toBeCloseTo(2, 9);
+    expect(c[2]).toBeCloseTo(3 + SHELL_LEN_M / 2 + LOAD_STAGE_GAP_M, 9);
+    expect(LOAD_STAGE_GAP_M).toBeGreaterThan(0);
+    expect(SHELL_LEN_M).toBe(CHAMBER_DEPTH_M);
+  });
+  it('holds the cases in a fist behind their heads and lets it follow them in, stopping short of the mouth', () => {
+    const r = 0.046;
+    const mouth: [number, number, number] = [0, 0, 0];
+    const h = loadHold(mouth, [0, 0, 1], [1, 0, 0], r);
+    const staged = stagedShellCenter(mouth, [0, 0, 1]);
+    // stage: centred on the pair (no side offset), just behind the heads
+    expect(h.stage[0]).toBeCloseTo(0, 9);
+    expect(h.stage[1]).toBeCloseTo(0, 9);
+    expect(h.stage[2]).toBeGreaterThan(staged[2] + SHELL_LEN_M / 2);
+    expect(h.stage[2]).toBeLessThan(staged[2] + SHELL_LEN_M / 2 + r);
+    // seat: closer to the mouth than stage, but the orb never enters the mouth
+    expect(h.seat[2]).toBeLessThan(h.stage[2]);
+    expect(h.seat[2]).toBeGreaterThan(r * 0.9);
   });
 });
 
@@ -250,6 +349,33 @@ describe('supportHandPose', () => {
   it('arrives at the breech by the time the cases seat', () => {
     const seat = supportHandPose(RELOAD.loadSeatSec);
     expect(seat.dy).toBeGreaterThan(-0.02);
+  });
+  it('lands EXACTLY on the live hold points when given them', () => {
+    // The 1110 ms capture showed the authored key stopping at the bottom of
+    // the frame while the cases seated on their own. The hold is derived from
+    // the breech each frame, so the hand has to hit it, not approximate it.
+    const hold = { stage: { dx: 0.11, dy: 0.13, dz: 0.17 }, seat: { dx: 0.09, dy: 0.10, dz: 0.12 } };
+    const s = supportHandPose(RELOAD.loadStageSec, hold);
+    expect([s.dx, s.dy, s.dz]).toEqual([0.11, 0.13, 0.17]);
+    const e = supportHandPose(RELOAD.loadSeatSec, hold);
+    expect([e.dx, e.dy, e.dz]).toEqual([0.09, 0.10, 0.12]);
+  });
+  it('moves continuously from the hold into the withdraw', () => {
+    const hold = { stage: { dx: 0.11, dy: 0.13, dz: 0.17 }, seat: { dx: 0.09, dy: 0.10, dz: 0.12 } };
+    let prev = supportHandPose(RELOAD.loadStartSec, hold);
+    for (let t = RELOAD.loadStartSec + 0.004; t <= RELOAD.totalSec; t += 0.004) {
+      const p = supportHandPose(t, hold);
+      const step = Math.hypot(p.dx - prev.dx, p.dy - prev.dy, p.dz - prev.dz);
+      // A teleport is a 15-20 cm step; the 50 ms snap-away peaks near 5 m/s.
+      expect(step).toBeLessThan(0.03);
+      prev = p;
+    }
+  });
+  it('is unchanged everywhere outside the load beat when a hold is given', () => {
+    const hold = { stage: { dx: 0.11, dy: 0.13, dz: 0.17 }, seat: { dx: 0.09, dy: 0.10, dz: 0.12 } };
+    for (const t of [0, 0.1, 0.3, RELOAD.breakEndSec, RELOAD.loadStartSec, RELOAD.snapEndSec, RELOAD.totalSec]) {
+      expect(supportHandPose(t, hold)).toEqual(supportHandPose(t));
+    }
   });
 });
 

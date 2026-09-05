@@ -185,3 +185,48 @@ describe('mirror reflects a prim\'s own x components onto the .r bone', () => {
     expect(r.bend).toEqual([-0.01, 0, 0.02]);
   });
 });
+
+describe('single-sided prims (side=l|r)', () => {
+  // The minotaur's machined right leg is why this exists: every limb prim
+  // before `side=` was forced bilateral, so a one-sided prosthetic could not
+  // be authored at all.
+  const sided: BodyDef = {
+    name: 'sided',
+    root: [0, 1, 0],
+    bones: [
+      { name: 'pelvis', parent: null, dir: [0, 1, 0], length: 0.2 },
+      { name: 'thigh', parent: 'pelvis', dir: [0, -1, 0], length: 0.4, side: 0.09, mirror: true },
+    ],
+    prims: [
+      { bone: 'thigh', at: 0.1, capTo: 0.9, radius: 0.09, scale: [1, 1, 1], blendK: 0.06, limb: 'leg', mirror: true },
+      { bone: 'thigh', at: 0.3, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'leg', side: 'r' },
+    ],
+  };
+  const out = expandMirror(sided);
+
+  it('expands to ONE prim on the named side — concrete bone, concrete limb, not marked mirrored', () => {
+    const copies = out.prims.filter(p => p.at === 0.3);
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.bone).toBe('thigh.r');
+    expect(copies[0]!.limb).toBe('legR');
+    expect(copies[0]!.mirrored).toBeUndefined();
+  });
+
+  it('leaves the bilateral prims around it expanding as before', () => {
+    expect(out.prims.filter(p => p.at === 0.1)).toHaveLength(2);
+  });
+
+  it('rejects side= together with mirror (TS-authored prims bypass the parser check)', () => {
+    expect(() => expandMirror({
+      ...sided,
+      prims: [{ bone: 'thigh', at: 0.3, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'leg', mirror: true, side: 'r' }],
+    })).toThrow(/already decide sides/);
+  });
+
+  it('rejects side= on a bone that is not mirrored', () => {
+    expect(() => expandMirror({
+      ...sided,
+      prims: [{ bone: 'pelvis', at: 0.3, radius: 0.1, scale: [1, 1, 1], blendK: 0.05, limb: 'leg', side: 'l' }],
+    })).toThrow(/not a mirrored bone/);
+  });
+});

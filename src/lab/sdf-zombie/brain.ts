@@ -65,8 +65,6 @@ export interface BrainInput {
   hasToken: boolean;
   /** Tangential shuffle direction while waiting (melee-ring.ts). */
   drift: -1 | 0 | 1;
-  /** A blast-profile hit landed this frame. Outranks every other transition. */
-  blasted: boolean;
   /** A fresh 0..1 value each frame from the actor's own RNG. Consumed ONLY on
    *  the frame a swing starts, to roll its variant. It lives in the input
    *  rather than as an injected generator so this module stays a pure
@@ -134,6 +132,25 @@ export function makeBrain(): Brain {
   };
 }
 
+/**
+ * Force the stagger state NOW — called by the wiring the instant a
+ * blast-profile hit lands, before any step.
+ *
+ * IT IS SYNCHRONOUS ON PURPOSE. This was first built as a `blasted` flag on
+ * BrainInput, consumed by the next stepBrain call, which delays the lurch by
+ * one frame. Sixteen milliseconds is imperceptible on its own, but it shifts
+ * the whole recovery downstream: `game-actor-torso-slug.test.ts` measures root
+ * displacement a second after the hit, by which point the body has resumed
+ * walking, and the deferral moved it far enough through that walk-back to
+ * change the answer. A body lurches on the frame it is shot.
+ *
+ * Drops the token and cancels any swing: a staggering body must not hold a
+ * melee slot it cannot use, and the lurch is the bigger read.
+ */
+export function staggerNow(brain: Brain, tuning: BrainTuning = BRAIN_TUNING): Brain {
+  return { ...brain, state: 'stagger', swingT: 0, holdSecs: tuning.blastHoldSec };
+}
+
 /** A point `radius` from the player, on `bearing`. */
 function ringPoint(player: BrainPlayer, bearing: number, radius: number): Vec3 {
   return [player.x + Math.sin(bearing) * radius, 0, player.z + Math.cos(bearing) * radius];
@@ -175,15 +192,9 @@ export function stepBrain(
   });
 
   // --- stagger outranks everything ----------------------------------------
-  // A blast-profile hit forces it from any state and DROPS the token: a
-  // staggering body must not hold a melee slot it cannot use. The swing is
-  // cancelled outright — the lurch is the bigger read.
-  if (input.blasted) {
-    return {
-      brain: { state: 'stagger', alert, lostFor, swingT: 0, cooldown, holdSecs: tuning.blastHoldSec, swing },
-      target: null, halt: true, attack: null, engaged: false, committed: false,
-    };
-  }
+  // Entered by staggerNow() AT THE MOMENT OF THE HIT, not by a flag consumed
+  // on the next step: a body must lurch on the frame it is shot. See that
+  // function's note for what a one-step deferral actually cost.
   if (state === 'stagger') {
     if (holdSecs > 0) {
       return {

@@ -400,3 +400,93 @@ describe('box', () => {
     expect(d.parts[0]!.round).toBeCloseTo(0.08, 6);
   });
 });
+
+describe('side=l|r — the single-sided prim marker', () => {
+  const doc = (body: string) => parseBlob(
+    `model t\nskeleton\n  root pelvis at 1.0\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+
+  it('parses side=r on a limb prim', () => {
+    const d = doc('  bar leg on spine from=0.1 to=0.9 r=0.05 side=r');
+    expect(d.parts[0]!.side).toBe('r');
+  });
+
+  it('defaults to null on an ordinary prim', () => {
+    const d = doc('  bar leg on spine from=0.1 to=0.9 r=0.05');
+    expect(d.parts[0]!.side).toBe(null);
+  });
+
+  it('rejects a value that is not l or r', () => {
+    expect(() => doc('  bar leg on spine from=0.1 to=0.9 r=0.05 side=middle')).toThrow(BlobError);
+  });
+
+  it('rejects side= combined with mirror — both decide sides', () => {
+    expect(() => doc('  bar leg on spine from=0.1 to=0.9 r=0.05 side=r mirror')).toThrow(/pick one/);
+  });
+
+  it('rejects side= on a head/torso limb — those are not mirrored', () => {
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 side=r')).toThrow(/arm\|leg/);
+  });
+});
+
+describe('metal — the bare word on a painted prim (hard-surface task 2)', () => {
+  const doc = (body: string) => parseBlob(
+    `model t\nskeleton\n  root pelvis at 1.0\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+
+  it('reads the bare word `metal` into part.metal, default false', () => {
+    // On a bar as well as a blob — the plates this exists for are bars.
+    expect(doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=8d9299 metal').parts[0]!.metal).toBe(true);
+    expect(doc('  blob torso on spine at=0.5 r=0.05 color=8d9299 metal').parts[0]!.metal).toBe(true);
+    expect(doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=8d9299').parts[0]!.metal).toBe(false);
+  });
+
+  it('is a parse error without color=, in the house voice (same gate as gloss)', () => {
+    // Copy of the gloss gate: on flesh it would shade nothing, and silently
+    // doing nothing is how an author loses an hour.
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 metal'))
+      .toThrow(/metal only means something on a coloured primitive/);
+  });
+
+  it('does not leak into unpainted sibling parts', () => {
+    const d = doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=8d9299 metal\n  blob head on spine at=0.95 r=0.05');
+    expect(d.parts[0]!.metal).toBe(true);
+    expect(d.parts[1]!.metal).toBe(false);
+  });
+});
+
+describe('glow= — per-prim emissive, gated on paint (hard-surface task 3)', () => {
+  const doc = (body: string) => parseBlob(
+    `model t\nskeleton\n  root pelvis at 1.0\n  bone spine parent=pelvis dir=up len=0.3\nbody\n${body}\n`);
+
+  it('reads glow= into part.glow, null when absent', () => {
+    expect(doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 glow=0.9').parts[0]!.glow).toBeCloseTo(0.9, 6);
+    expect(doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200').parts[0]!.glow).toBeNull();
+  });
+
+  it('keeps glow in 0..1, naming the value', () => {
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 glow=1.5'))
+      .toThrow(/glow= is 0\.\.1, got 1\.5/);
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 glow=-0.1'))
+      .toThrow(/glow= is 0\.\.1/);
+  });
+
+  it('is a parse error without color=, in the house voice (same gate as gloss/metal)', () => {
+    // The glow COLOUR is the prim's own albedo (design C: no new colour
+    // field), so on flesh it would have nothing to emit — same gate, same
+    // reasoning as gloss: silently doing nothing loses an author an hour.
+    expect(() => doc('  bar torso on spine from=0.1 to=0.9 r=0.05 glow=0.9'))
+      .toThrow(/glow= only means something on a coloured primitive/);
+  });
+
+  it('coexists with gloss and metal on one line', () => {
+    const p = doc('  bar torso on spine from=0.1 to=0.9 r=0.05 color=ff2200 metal gloss=0.9 glow=0.9').parts[0]!;
+    expect(p.metal).toBe(true);
+    expect(p.gloss).toBeCloseTo(0.9, 6);
+    expect(p.glow).toBeCloseTo(0.9, 6);
+  });
+
+  it('does not leak into sibling parts', () => {
+    const d = doc('  blob head on spine at=0.95 r=0.05 color=ff2200 glow=0.9\n  bar torso on spine from=0.1 to=0.9 r=0.05');
+    expect(d.parts[0]!.glow).toBeCloseTo(0.9, 6);
+    expect(d.parts[1]!.glow).toBeNull();
+  });
+});

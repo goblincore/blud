@@ -80,6 +80,20 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     if (mirror && mirrorOffset)
       throw new Error(`prim on bone "${p.bone}" sets both mirror and mirrorOffset`);
 
+    // SINGLE-SIDED (`side=l|r`): ONE copy, retargeted onto that side of the
+    // mirrored pair. The bone must be mirrored — a side of a pair that does
+    // not exist is a typo, and silently placing it unmirrored would author a
+    // centreline prim. Not flagged `mirrored`: one authored number placed
+    // once, nothing x-negated, so a downstream fit may write back freely.
+    if (p.side) {
+      if (mirror || mirrorOffset)
+        throw new Error(`prim on bone "${p.bone}" sets side=${p.side}; mirror/both already decide sides`);
+      if (!mirroredBoneNames.has(p.bone))
+        throw new Error(`prim on bone "${p.bone}" sets side=${p.side} but "${p.bone}" is not a mirrored bone`);
+      prims.push({ ...rest, bone: `${p.bone}.${p.side}`, limb: limbFor(limb, p.side) });
+      continue;
+    }
+
     // Bilateral by OFFSET: one bone, two prims either side of its axis. This is
     // how a face gets two eye sockets — `skull` is not a mirrored bone, so
     // `mirror: true` would throw on it.
