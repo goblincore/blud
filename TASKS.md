@@ -20,6 +20,15 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SOLDIER AUTHORED FROM DESCRIPTION — AWAITING OWNER TURNTABLE VERDICT
+(2026-09-04, branch dispatch/soldier-described).** `characters/soldier.blob`
+(~30 prims): green flat-top box cap, pauldron yoke, belt+pouches, grey-green
+cuirass with muted-red front plate, two-block olive fatigues, red boots,
+baked face decal (`blob:face-bake -- soldier`). Registered in lab-main
+CHARACTERS. Gates: render-check exit 0, vitest 2510 green, tsc clean.
+Lesson of record: big plates take `color=`+`gloss`, NOT `metal` (reads black
+under the single key); box prims take no `r2=`/`tip=`.
+
 **FISHEYE LENS — SHIPPED ON sdf-game, AWAITING PLAY VERDICT (2026-09-03).**
 The game view now renders WIDER than the player sees and the canvas blit
 squeezes it back: `renderFovDeg` 90 (up from 75), `centerFovDeg` 60, and the
