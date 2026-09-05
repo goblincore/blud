@@ -133,3 +133,17 @@ describe('helpers', () => {
     expect(wrapPi(-1.5)).toBeCloseTo(-1.5, 10);
   });
 });
+
+describe('stepWander cruise override', () => {
+  it('a higher cruise reaches a higher speed on a long leg', () => {
+    const bounds = { minX: -8, maxX: 8, minZ: -8, maxZ: 8 };
+    const go = (cruise?: number) => {
+      let st: WanderState = { pos: [-7, 0, -7] as Vec3, heading: 0, speed: 0, target: [7, 0, 7] as Vec3, idle: 0 };
+      let top = 0;
+      for (let i = 0; i < 120; i++) { st = stepWander(st, makeRng(1), 1 / 60, bounds, cruise); top = Math.max(top, st.speed); }
+      return top;
+    };
+    expect(go()).toBeCloseTo(go(WANDER_TUNING.speed), 12);
+    expect(go(3.4)).toBeGreaterThan(go() * 2);
+  });
+});
