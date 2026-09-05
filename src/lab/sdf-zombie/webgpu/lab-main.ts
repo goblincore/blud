@@ -3291,7 +3291,10 @@ async function main() {
   // A/B of the blend and not a swap to a different texture. Whatever you
   // settle on is the `decal` line in the character's sheet block: 1 = replace,
   // 0 = multiply.
-  const blendBtn = addButton(faceBox, 'face blend: replace', () => {
+  // The label starts from the ACTUAL mode. It used to be hardcoded to
+  // 'replace', so a character wearing decal 0 showed a button claiming the
+  // opposite of what it was doing.
+  const blendBtn = addButton(faceBox, `face blend: ${u.faceCfg.value.x > 1.5 ? 'replace' : 'multiply'}`, () => {
     const mult = u.faceCfg.value.x > 1.5;
     u.faceCfg.value.x = mult ? 1 : 2;
     blendBtn.textContent = `face blend: ${mult ? 'multiply' : 'replace'}`;
@@ -3773,6 +3776,35 @@ async function main() {
   });
   addButton(actionBox, 'copy override JSON', () => {
     void navigator.clipboard.writeText(serializeOverride(override));
+  });
+  // COPY THE TUNED FACE AS .blob LINES. The panel cannot write the character
+  // file from a browser, but it can hand back exactly what to paste -- and
+  // that only became honest on 2026-09-04, when the last panel-only controls
+  // (texRelief, texStrength, eyeGlowAmp, eyeGlowCut, projSpherical,
+  // faceForward) grew real sheet parameters. Before that this button would
+  // have emitted a face that could not be reproduced from its own file.
+  //
+  // Emitted in the .blob's own key order and indentation so it can replace the
+  // face and sheet blocks wholesale.
+  addButton(actionBox, 'copy face+sheet as .blob', () => {
+    const n = (v: number, dp = 3) => v.toFixed(dp).replace(/\.?0+$/, '') || '0';
+    const pad = (k: string) => k.padEnd(11);
+    const faceLines = (Object.keys(DEFAULT_FACE) as (keyof FaceParams)[])
+      .map(k => `  ${pad(k)} ${n(face[k], 4)}`);
+    const p = u.faceProj.value;
+    const sheetLines = [
+      ['decal', u.faceCfg.value.x > 1.5 ? 1 : 0],
+      ['projScaleX', p.x], ['projScaleY', p.y],
+      ['projCentreX', p.z], ['projCentreY', p.w],
+      ['eyeGlowAmp', u.faceCfg2.value.w], ['eyeGlowCut', u.faceCfg2.value.z],
+      ['texRelief', u.faceCfg.value.w], ['texStrength', u.faceCfg.value.y],
+      ['projSpherical', u.faceCfg2.value.x], ['faceForward', u.faceCfg.value.z],
+    ].map(([k, v]) => `  ${pad(String(k))} ${n(v as number, 3)}`);
+    void navigator.clipboard.writeText(
+      `# ${activeCharacterName()} — copied from the lab panel\nface\n`
+      + faceLines.join('\n')
+      + `\n\nsheet\n  image       <keep the existing image line>\n`
+      + sheetLines.join('\n') + '\n');
   });
   addButton(actionBox, 'reset overrides', () => {
     clearOverride(activeCharacterName());
