@@ -905,6 +905,9 @@ async function main() {
   const actors: ZombieActor[] = [];
   const errors: string[] = [];
   let nextId = 1;
+  /** Requested state of the wound union-reach cull (ships ON) — tracked
+   *  because the uniform alone cannot say it (see the woundCull getter). */
+  let woundCullRequested = true;
 
   // The wound panel's tuning state (wound-panel.ts). Lives HERE — before the
   // boot loop — because one of its eight keys, boneRatio, shapes buildBody's
@@ -3713,6 +3716,29 @@ async function main() {
       for (const c of chunkViews) { const v = c.uniforms.woundShadowCfg.value; v.y = (on ? -1 : 1) * Math.abs(v.y); }
     },
     get woundStepDiag() { return (actors[0]?.view.uniforms.woundShadowCfg.value.y ?? 1) < 0; },
+    /** Wound union-reach cull (close-up wound-cull task, 2026-09-05) —
+     *  applyWounds' one-sphere test before the wound loop. SHIPS ON; a value
+     *  no-op by construction, so ON vs OFF is a pixel-parity gate, and the
+     *  bench's cullOff leg prices what the loop cost. Bodies only: chunk
+     *  torn-end wounds ride writeWounds directly and keep the 1e9 no-cull
+     *  identity (a chunk's proxy box is already tight). */
+    setWoundCull(on: boolean) {
+      woundCullRequested = on;
+      for (const a of actors) a.view.setWoundCull(on);
+    },
+    // Tracks the REQUESTED state, not the uniform: an unwounded body never
+    // uploads wounds, so its bound radius stays at the 1e9 identity even
+    // with the cull on, and reading the uniform back would lie.
+    get woundCull() { return woundCullRequested; },
+    /** Diagnostic read: every actor's wound bound [x, y, z, radius]. Proves
+     *  the wire end-to-end — a radius in (0, 1e8) is a COMPUTED bound; 1e9
+     *  is the no-cull identity; 0 means no wounds uploaded. */
+    woundBound() {
+      return actors.map(a => {
+        const v = a.view.uniforms.woundBound.value;
+        return [v.x, v.y, v.z, v.w];
+      });
+    },
     get normalThresh() { return actors[0]?.view.uniforms.perfCfg.value.w ?? 0; },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {

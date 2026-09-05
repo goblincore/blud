@@ -35,9 +35,14 @@ const url = `http://localhost:${VITE}/sdf-game.html?frozen=1`;
 console.log(`closeup-wounds-bench ${url}  (repeats=${REPEATS}, deriv thresh=${THRESH})`);
 
 const LEGS = {
-  ship:      { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(false);` },
-  stepFull:  { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(true);` },
-  unwounded: { wounds: false, legJs: `__sdfGame.setWoundStepDiag(false);` },
+  ship:      { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(false); __sdfGame.setWoundCull(true);` },
+  // cullOff (close-up wound-cull task, 2026-09-05): the wound union-reach
+  // bound parked at its 1e9 no-cull identity — ship minus cull. The gap
+  // (ship − cullOff) is what the one-sphere test buys; (cullOff − unwounded)
+  // is what the 0.6x stepping and the in-reach carve maths still cost.
+  cullOff:   { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(false); __sdfGame.setWoundCull(false);` },
+  stepFull:  { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(true); __sdfGame.setWoundCull(true);` },
+  unwounded: { wounds: false, legJs: `__sdfGame.setWoundStepDiag(false); __sdfGame.setWoundCull(true);` },
 };
 
 let out;

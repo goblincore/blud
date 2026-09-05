@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
-  defaultUniforms, blankFaceTexture,
+  defaultUniforms, blankFaceTexture, woundReachBound,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
@@ -312,6 +312,60 @@ describe('bone tubes plumbing', () => {
     view.setPackBones(true);
     view.update(chunk);
     expect(view.uniforms.counts2.value.x).toBe(1);
+    view.dispose();
+  });
+});
+
+describe('wound union-reach bound (close-up wound-cull task, 2026-09-05)', () => {
+  // applyWounds tests ONE sphere before its wound loop; the sphere must
+  // contain every wound's reach, or the cull stops being a value no-op.
+  // reach = radius * max(2, 2*rimOffset + 3*rimWidth) + 4*blendK + 0.25 —
+  // the shader's own per-wound early-out formula, read off the uniforms.
+  const wounds: [number, number, number][] = [
+    [0.10, 1.20, 0.05], [0.24, 1.26, 0.11], [0.17, 1.12, 0.03],
+    [0.03, 1.30, 0.09], [-0.06, 1.16, 0.06],
+  ];
+  const radii = [0.13, 0.13, 0.04, 0.04, 0.04];
+  // defaultUniforms values: blendK 0.015, rimOffset 1.15, rimWidth 0.42.
+  const blendK = 0.015, rimOffset = 1.15, rimWidth = 0.42;
+  const reachOf = (r: number) =>
+    r * Math.max(2, 2 * rimOffset + 3 * rimWidth) + 4 * blendK + 0.25;
+
+  it('encloses every wound reach sphere — and a shrunken radius FAILS the check', () => {
+    const [cx, cy, cz, R] = woundReachBound(wounds, radii, wounds.length, blendK, rimOffset, rimWidth);
+    expect(R).toBeGreaterThan(0);
+    const encloses = (r: number) => wounds.every((w, i) =>
+      Math.hypot(w[0] - cx, w[1] - cy, w[2] - cz) + reachOf(radii[i]!) <= r + 1e-9);
+    expect(encloses(R)).toBe(true);
+    // Mutation verify: any shrink that matters must go red. 1% smaller than
+    // the true bound must fail to enclose — if this assertion ever passes on
+    // a shrunken R, the bound was never tight and the test proves nothing.
+    expect(encloses(R * 0.99)).toBe(false);
+  });
+
+  it('zero wounds yield radius 0 (the loop never runs, as before)', () => {
+    expect(woundReachBound([], [], 0, blendK, rimOffset, rimWidth)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('setWounds writes the computed bound; the seam gates on the radius only', () => {
+    const view = createZombieGpuView(body, {});
+    // Fresh view: the no-cull identity, so a body that never uploads wounds
+    // (and the chunk torn-end path, which never computes a bound) marches
+    // exactly the pre-cull field.
+    expect(view.uniforms.woundBound.value.w).toBe(1e9);
+    const types = wounds.map(() => 1);
+    const ages = wounds.map(() => 0);
+    view.setWounds(wounds, radii, types, ages);
+    const [cx, cy, cz, R] = woundReachBound(wounds, radii, wounds.length, blendK, rimOffset, rimWidth);
+    const v = view.uniforms.woundBound.value;
+    expect([v.x, v.y, v.z, v.w]).toEqual([cx, cy, cz, R]); // ships ON
+    // The A/B seam flips the radius to the no-cull identity and back —
+    // centre untouched, computed radius restored without a re-upload.
+    view.setWoundCull(false);
+    expect(view.uniforms.woundBound.value.w).toBe(1e9);
+    expect(view.uniforms.woundBound.value.x).toBe(cx);
+    view.setWoundCull(true);
+    expect(view.uniforms.woundBound.value.w).toBe(R);
     view.dispose();
   });
 });

@@ -66,6 +66,12 @@ export interface ZombieGpuView {
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
     splayScales?: number[], offsetScales?: number[],
     caps?: readonly ({ n: Vec3; depth: number } | null)[]): void;
+  /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
+   *  Ships ON — the cull is a value no-op (outside the bound every per-wound
+   *  reach test would `continue`). false parks the bound's radius at 1e9 (the
+   *  no-cull identity) for the bench A/B; the computed radius is kept, so
+   *  true restores it without a re-upload. */
+  setWoundCull(on: boolean): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** The rigid head rotation (rig-bind headQuatOf); identity resets it. */
@@ -421,6 +427,16 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  early-out, zw spare. All zero = the pre-plan shader, which is what the
      *  lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** Wound union-reach bound (close-up wound-cull task, 2026-09-05): xyz
+     *  centre, w radius — one sphere covering every wound's reach, computed
+     *  by setWounds from the live woundCfg/woundCfg2 (woundReachBound below).
+     *  applyWounds tests it BEFORE the wound loop; outside it, every loop
+     *  iteration would early-out anyway, so the skip is a value no-op.
+     *  Default w = 1e9 is the NO-CULL identity: views whose wounds are
+     *  written without a bound (chunk torn ends, the hands view) pay the
+     *  loop exactly as before. __sdfGame.setWoundCull flips w between the
+     *  computed radius and 1e9 for the A/B bench. */
+    woundBound: uniform(new THREE.Vector4(0, 0, 0, 1e9)),
     /** Half extents of the view's proxy box, world space (perf round 2 task
      *  5): the accumulated-depth gate's conservative per-body ray entry —
      *  box ⊇ hull ⊇ flesh, so nothing of this body is nearer than the
@@ -889,6 +905,11 @@ export function createMarchMaterial(
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
+    // Wound union-reach cull (close-up wound-cull task, 2026-09-05). Bound
+    // POSITIONALLY last — MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg,
+    // levelShadow*, woundBound, in this order (see the ORDER MATTERS note
+    // above).
+    woundBound: u.woundBound,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1105,6 +1126,51 @@ export function writeWounds(
   return n;
 }
 
+/**
+ * Bounding sphere of every wound's REACH (close-up wound-cull task,
+ * 2026-09-05). For each wound i the reach sphere is (centre worldPositions[i],
+ * radius reach_i), where reach_i is EXACTLY the formula applyWounds' per-wound
+ * early-out uses (march.wgsl.ts, pinned by test):
+ *
+ *   reach = radius * max(2, 2*rimOffset + 3*rimWidth) + 4*blendK + 0.25
+ *
+ * read here off the LIVE uniforms (woundCfg.y blendK, woundCfg.w rimOffset,
+ * woundCfg2.x rimWidth) rather than hardcoded. The union bound is C = the
+ * wound centroid and R = max_i(|w_i - C| + reach_i); containment is the
+ * triangle inequality, exact for any centre, so this is a value no-op cull —
+ * a sample outside it is outside every per-wound reach and the loop would
+ * have `continue`d on all of them (d unchanged, near 0). Zero wounds return
+ * radius 0 (the loop never runs, as before).
+ *
+ * CAVEAT: computed at upload time. A live wound-panel edit of blendK /
+ * rimOffset / rimWidth WITHOUT a re-upload leaves the bound stale (too tight
+ * if the knob grew) — re-stamp or nudge wounds to refresh. The game's wound
+ * settings are boot constants, so this never bites in play.
+ */
+export function woundReachBound(
+  worldPositions: Vec3[], radii: number[], count: number,
+  blendK: number, rimOffset: number, rimWidth: number,
+): [number, number, number, number] {
+  const n = Math.min(count, worldPositions.length, radii.length);
+  if (n <= 0) return [0, 0, 0, 0];
+  const f = Math.max(2, 2 * rimOffset + 3 * rimWidth);
+  const margin = 4 * blendK + 0.25;
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < n; i++) {
+    const p = worldPositions[i]!;
+    cx += p[0]; cy += p[1]; cz += p[2];
+  }
+  cx /= n; cy /= n; cz /= n;
+  let r = 0;
+  for (let i = 0; i < n; i++) {
+    const p = worldPositions[i]!;
+    const reach = radii[i]! * f + margin;
+    const d = Math.hypot(p[0] - cx, p[1] - cy, p[2] - cz) + reach;
+    if (d > r) r = d;
+  }
+  return [cx, cy, cz, r];
+}
+
 export interface GpuViewOpts {
   /** Coarse cone pre-pass to start the march from. Omit to march from the camera. */
   cone?: ConeSource;
@@ -1196,6 +1262,15 @@ export function createZombieGpuView(
   // the gate's "bones are contained in flesh" proof is exactly what the melt
   // violates.
   let bareBones = false;
+
+  // Wound union-reach cull (close-up wound-cull task, 2026-09-05). SHIPS ON:
+  // setWounds computes the bound from the live uniforms and writes it to
+  // u.woundBound; the seam flips only the radius (1e9 = no-cull identity) so
+  // the bench can A/B without re-uploading. woundBoundR starts at the
+  // no-cull identity — before the first setWounds there are no wound rows to
+  // cull anyway (woundCfg.x = 0).
+  let woundCullOn = true;
+  let woundBoundR = 1e9;
 
   function upload(next: BuildResult, rest?: BuildResult) {
     const p = packBody(next, rest, { packBones });
@@ -1292,6 +1367,10 @@ export function createZombieGpuView(
     // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
     // same seams the march does.
     perfCfg: u.perfCfg,
+    // Wound union-reach cull (close-up wound-cull task) — the cone marches
+    // the same field, so it takes the same bound; positionally last, after
+    // perfCfg, matching CONE_MARCH's signature.
+    woundBound: u.woundBound,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -1367,7 +1446,19 @@ export function createZombieGpuView(
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps) {
       u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps);
+      // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
+      // reach formula reads (blendK, rimOffset, rimWidth) — see
+      // woundReachBound. Stale only under a live panel edit without a
+      // re-upload; the game's values are boot constants.
+      const b = woundReachBound(worldPositions, radii, worldPositions.length,
+        u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x);
+      woundBoundR = b[3];
+      u.woundBound.value.set(b[0], b[1], b[2], woundCullOn ? b[3] : 1e9);
       dataTex.needsUpdate = true;
+    },
+    setWoundCull(on) {
+      woundCullOn = on;
+      u.woundBound.value.w = on ? woundBoundR : 1e9;
     },
     setHeadShape(centre, axes) {
       u.headCentre.value.set(...centre);

@@ -24,6 +24,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
+  CALC_NORMAL,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
@@ -227,6 +228,33 @@ describe('ported features reach the entry point', () => {
       'let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;');
   });
 
+  it('tests the union-reach bound BEFORE the wound loop (close-up wound-cull task)', () => {
+    // The whole economics argument: a sample outside every wound's reach
+    // sphere must return (dIn, 0) — bit-identical to a loop whose every
+    // iteration would `continue` past the reach early-out — WITHOUT paying a
+    // single wound-row textureLoad. The bound is the CPU-computed bounding
+    // sphere of the per-wound reach spheres (zombie-gpu.ts woundReachBound);
+    // w = 1e9 is the no-cull identity (chunk torn ends, hands view).
+    expect(APPLY_WOUNDS).toContain('woundBound: vec4<f32>');
+    const iBound = APPLY_WOUNDS.indexOf('if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
+    const iLoop = APPLY_WOUNDS.indexOf('for (var i = 0; i < 16; i = i + 1)');
+    const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
+    expect(iBound).toBeGreaterThan(-1);
+    expect(iLoop).toBeGreaterThan(iBound);
+    expect(iFirstLoad).toBeGreaterThan(iLoop);
+    // Threading: mapBody hands it to applyWounds, and every entry point
+    // that can reach a wounded field declares and forwards it.
+    expect(MAP_BODY).toContain('applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound)');
+    for (const src of [MAP_BODY, CALC_NORMAL, CONE_MARCH, WOUND_SHADOW, MARCH_BODY]) {
+      expect(src).toContain('woundBound: vec4<f32>');
+    }
+    expect(MARCH_BODY).toContain('woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound)');
+    // MARCH_BODY's binding is positional — woundBound sits LAST, after the
+    // level-shadow slots (the parser-count test above pins the full order).
+    const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('levelShadowCfg: vec4<f32>'));
+    expect(tail.indexOf('woundBound: vec4<f32>')).toBeGreaterThan(tail.indexOf('levelShadowCfg: vec4<f32>'));
+  });
+
   // Line-for-line TS transcription of the fixed carve term (the inside-positive
   // SDF of {inside sphere} ∩ {shallower than cap}), so the semantics of the
   // pinned string are proven, not just its spelling. The REGRESSION this
@@ -349,7 +377,7 @@ describe('ported features reach the entry point', () => {
     // carries anything: y/z/w were the parked melt spike's lanes and are
     // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
     // kill this pins is unchanged.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -378,7 +406,7 @@ describe('ported features reach the entry point', () => {
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x');
+      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound).x');
   });
 
   it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
@@ -586,7 +614,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
-      'woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x');
+      'woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound), woundShadowCfg.x');
   });
 });
 
@@ -636,9 +664,10 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // (kept) and the parked melt spike's amp/freq/time slot (removed) — so
     // this count is +1, not +2. That collision is exactly what this pin is
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
-    // the phantom-input bug.
-    expect(names.length).toBe(75);
-    expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
+    // the phantom-input bug. (+1 again 2026-09-05: woundBound, the close-up
+    // wound-cull task's union-reach sphere — appended LAST.)
+    expect(names.length).toBe(76);
+    expect(names.slice(-4)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'woundBound']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).
@@ -1455,8 +1484,9 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
     // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg
-    // pass-through behind it (perf round 2 task 3).
-    expect((calcNormal.match(/volumeWarp, volumeClip, perfCfg\)/g) ?? []).length).toBe(4);
+    // and woundBound pass-throughs behind it (perf round 2 task 3, close-up
+    // wound-cull task).
+    expect((calcNormal.match(/volumeWarp, volumeClip, perfCfg, woundBound\)/g) ?? []).length).toBe(4);
   });
 });
 
@@ -2154,8 +2184,9 @@ describe('shading normal modes (close-up task 2)', () => {
     // the strongest text-level proof is that the off branch IS the old
     // call — amp inlined, same argument order, no refactor. (Only the
     // declaration moved out of the branch — a pure rename, pinned by the
-    // anchor-hoist test below.)
-    const legacy = 'n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);';
+    // anchor-hoist test below. The trailing woundBound is the close-up
+    // wound-cull task's pass-through, present on every mode.)
+    const legacy = 'n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound);';
     const mode0 = code.indexOf('if (perfCfg.z < 0.5)');
     expect(mode0).toBeGreaterThan(-1);
     const branch = code.slice(mode0, code.indexOf('} else if', mode0));
