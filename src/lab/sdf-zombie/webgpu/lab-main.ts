@@ -93,6 +93,7 @@ const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
   clown: '/assets/lab/clown-kit.gltf',
   'clown-alt': '/assets/lab/clown-alt-kit.gltf',
+  soldier: '/assets/lab/soldier-kit.gltf',
   // No mouse: its whole outfit is painted SDF geometry (color= on prims).
 };
 
