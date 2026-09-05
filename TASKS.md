@@ -20,6 +20,51 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[x] A-soldier — SOLDIER SHIPPED (2026-09-05), and the method changed on the
+way.** `characters/soldier.blob` (15 prims, body only) + `soldier-kit.wam`
+compiled to `public/assets/lab/soldier-kit.gltf` (pauldrons, cuirass, belt +
+pouches, knee plates, boots) in the goblin's iron. Bare weightlifter arms, orb
+hands, trousers and hips as paint, baked face decal with glowing eyes.
+
+**THE RESULT WORTH KEEPING: describe-and-judge beat measure-and-fit.** The
+mesh-fitting route ran a 10-task chain plus a day and produced a pot-bellied
+egg with an unreadable face — while `blob:rings` reported clean, 2524 tests
+passed and `render-check` exited 0. The measurements passed things that looked
+wrong, because the bones that mattered were SKIPPED and a skipped bone is
+indistinguishable from a converged one. Re-authored from a written description
+with NO measurement step, it took **22 minutes and 24 prims**. Brief:
+[plan](docs/superpowers/plans/2026-09-04-soldier-described.md); the abandoned
+attempt is preserved at tag `blobforge-experiment-2026-09-04`. The lesson is
+not "prose drifts" — it is that UNBOUNDED prose drifts. A spec that pins the
+three beats carrying the read and frees everything else works fine.
+
+**Five renderer/lab bugs found by shipping one character**, all fixed:
+* `headShape()` anchored the face projection to the largest head prim, so hair
+  or a hat could steal it — by definition a covering prim out-sizes what it
+  covers, so there was no tuning escape.
+* TWO silent catches around the sheet block, both claiming "reported by the
+  body compile path" (it is not — the body compiles fine with a bad sheet).
+  One invalid key put the ZOMBIE'S face and head on the character with nothing
+  said anywhere. Both are loud now.
+* Six face-panel controls had no `.blob` home (`texRelief`, `texStrength`,
+  `eyeGlowAmp`, `eyeGlowCut`, `projSpherical`, `faceForward`), and
+  `texStrength` was worse — a hardcoded assignment ran AFTER the sheet and
+  overrode it. A `copy face+sheet as .blob` button closes the loop.
+* The face-texture sliders read backwards AND could not reach their own
+  character's values (floor 0.4, soldier ships at 0.18).
+* The decal is gated by surface NORMAL, not distance — `face.ts`'s "juts past
+  the projection plane" framing is wrong.
+
+**Method note that cost four rounds:** headless `blob:shot` captures are
+reliable for SILHOUETTE and useless for anything lighting-dependent. The
+turntable exposes darker than the lab, so glow and tone read differently —
+judge look in the lab, use captures for shape.
+
+**NOT DONE, handed off:** walk cycle, carrying/firing animations, and the
+shotgun. He is intended as the first non-zombie enemy that shoots back.
+
+
+
 **SOLDIER AUTHORED FROM DESCRIPTION — AWAITING OWNER TURNTABLE VERDICT
 (2026-09-04, branch dispatch/soldier-described).** `characters/soldier.blob`
 (~30 prims): green flat-top box cap, pauldron yoke, belt+pouches, grey-green
