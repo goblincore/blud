@@ -133,6 +133,61 @@ describe('shell warp — the field stays a bound', () => {
   });
 });
 
+describe('shell warp — bad input fails loudly, naming the line', () => {
+  // Every one of these would otherwise be SILENT: the parser reads the
+  // argument, the emitter echoes it back, and the author gets flat cloth or
+  // a stalled march with nothing to read. The house rule is that the compile
+  // error names the line rather than the value being clamped.
+  const wrap = (shellLine: string) => `model t
+  height 1.70
+  stance humanoid
+
+skeleton
+  root pelvis at 0.85 len=0.10
+  bone spine1 parent=pelvis dir=up pitch=0 len=0.15
+  bone chest  parent=spine1 dir=up pitch=0 len=0.15
+  bone spine2 parent=chest  dir=up pitch=0 len=0.06
+  bone neck   parent=spine2 dir=up pitch=0 len=0.08
+  bone skull  parent=neck   dir=up pitch=2 len=0.22
+
+body
+  blob torso on pelvis at=0.45 r=0.098
+  ${shellLine}
+`;
+  const SHELL = 'shell torso on spine1 at=0.50 r=0.10 thick=0.006 clip=(0,-1,0) clipd=-0.74 rim=0.007';
+  const build = (line: string) => {
+    const doc = parseBlob(wrap(line));
+    return buildBody(compileBlob(doc, compileFace(doc)));
+  };
+
+  it('accepts a well-formed warp', () => {
+    const body = build(`${SHELL} warp=0.010 warpFreq=40`);
+    const sh = body.prims.find(p => p.shell)!.shell!;
+    expect(sh.warpAmp).toBe(0.010);
+    expect(sh.warpFreq).toBe(40);
+  });
+
+  it('rejects an amplitude with no frequency — the silent-flat-cloth case', () => {
+    expect(() => build(`${SHELL} warp=0.012`)).toThrow(/warpFreq/);
+  });
+
+  it('rejects a frequency with no amplitude', () => {
+    expect(() => build(`${SHELL} warpFreq=40`)).toThrow(/does nothing/);
+  });
+
+  it('rejects a warp on anything that is not a shell', () => {
+    expect(() => build('blob torso on spine1 at=0.50 r=0.10 warp=0.01 warpFreq=40'))
+      .toThrow(/only supported on a shell/);
+  });
+
+  it('rejects deep AND fine — the combination that pinches the sheet', () => {
+    // sqrt(3) * 0.02 * 40 = 1.39. Same amplitude at a drape frequency is fine,
+    // which is the point of capping the product rather than either factor.
+    expect(() => build(`${SHELL} warp=0.020 warpFreq=40`)).toThrow(/pinches/);
+    expect(() => build(`${SHELL} warp=0.020 warpFreq=12`)).not.toThrow();
+  });
+});
+
 describe('shell warp — the bounds grow with it', () => {
   it('shellReach adds the amplitude on top of the thickness', () => {
     expect(shellReach({})).toBe(0);

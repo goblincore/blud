@@ -283,6 +283,49 @@ function partToPrim(p: BlobPart): PrimDef {
     // mismatch, not an argument mismatch, and `box` is the thing to drop —
     // if the bend= check ran first it would tell the author to drop `bend`,
     // which does not fix anything.
+    // WRINKLES are gated on BOTH parameters being non-zero — that is what
+    // keeps an unwarped shell bit-identical — so half a pair is a silent
+    // no-op: the author writes `warp=0.012`, the emitter echoes it back, and
+    // the cloth comes out flat. Fail with the line instead. This is the same
+    // class as `chamfer` on a shell, and it is caught here rather than
+    // clamped because there is no sensible frequency to guess.
+    if ((p.warpAmp ?? 0) !== 0 && (p.warpFreq ?? 0) === 0)
+      throw new BlobError(
+        'warp= needs a warpFreq= to go with it — amplitude alone is a silent '
+        + 'no-op. Wrinkles are metres of displacement at radians per metre; '
+        + 'try warpFreq=40 for a fine weave, 15 for a heavy drape',
+        p.src.line, p.src.indent + 1);
+    if ((p.warpFreq ?? 0) !== 0 && (p.warpAmp ?? 0) === 0)
+      throw new BlobError(
+        'warpFreq= without warp= does nothing — set warp= to the wrinkle '
+        + 'amplitude in metres', p.src.line, p.src.indent + 1);
+    // Wrinkles live on the SHEET. On anything else the parser still reads the
+    // arguments and the compiler would drop them, which is the silent-echo
+    // failure again.
+    if (((p.warpAmp ?? 0) !== 0 || (p.warpFreq ?? 0) !== 0) && p.kind !== 'shell')
+      throw new BlobError(
+        `warp= is only supported on a shell — a ${p.kind} is a solid mass, not `
+        + 'cloth. Author the garment as a shell, or drop warp=',
+        p.src.line, p.src.indent + 1);
+    // THE CAP IS ON THE PRODUCT, not on either factor. The sheet is the level
+    // set of `base + warp`, and a displaced level set does not tear however
+    // large the displacement — what breaks it is the warp's GRADIENT growing
+    // enough to cancel the base's. The warp's gradient is bounded by
+    // sqrt(3)*|A|*|F|, so at sqrt(3)*|A|*|F| >= 1 the combined gradient can
+    // reach zero: the surface pinches, and the Lipschitz divisor the field is
+    // scaled by hits 2 and the march halves its step everywhere the cloth is
+    // on screen. Both are the same number, which is why one check covers them.
+    //
+    // Wide amplitude at low frequency is a heavy drape and is fine; the
+    // combination this rejects is deep AND fine, which is not a fabric.
+    const warpLip = Math.sqrt(3) * Math.abs(p.warpAmp ?? 0) * Math.abs(p.warpFreq ?? 0);
+    if (warpLip >= 1)
+      throw new BlobError(
+        `warp=${p.warpAmp} at warpFreq=${p.warpFreq} gives a warp gradient of `
+        + `${warpLip.toFixed(2)}, which can cancel the surface's own: the sheet `
+        + 'pinches and the march halves its step. Keep sqrt(3)*warp*warpFreq '
+        + 'under 1 — deep wrinkles want a LOW frequency',
+        p.src.line, p.src.indent + 1);
     if (p.box && p.kind === 'shell')
       throw new BlobError(
         'box is not supported on a shell — a shell thins a closed capsule; '
