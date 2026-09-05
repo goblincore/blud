@@ -1170,7 +1170,16 @@ async function main() {
   let bakedChunkMat: BakedChunkMaterial | null = null;
   let bakedChunkSeed: ((m: BakedChunkMaterial) => void) | null = null;
   let totalBakes = 0;
+  /** TEMPORARY gate instrumentation (chunk-bake hittability): counts pellet
+   *  loop passes with baked pieces present, and the last segment tested. */
+  let bakeCheckCount = 0;
+  let lastBakeCheck: unknown = null;
+  let lastDeath: unknown = null;
+  let bakeCheckMin = 1e9;
+  let bakeCheckHits = 0;
+  const bakeCheckLog: unknown[] = [];
   let lastBakeMs = 0;
+  let lastBakeInfo: Record<string, number> | null = null;
   // Bone tubes (task 5): the instancer owns its own light set — seed it once
   // from body 1's view, which just took the LIGHT_PRESETS apply above, so
   // the tube pass cannot drift from the march's key.
@@ -2033,6 +2042,14 @@ async function main() {
     });
     totalBakes++;
     lastBakeMs = baked.bakeMs;
+    lastBakeInfo = {
+      id: entry.id, verts: baked.verts, tris: baked.tris,
+      bakeMs: baked.bakeMs, overflow: baked.overflow ? 1 : 0,
+      droppedQuads: baked.droppedQuads,
+      extent: data.extent, flesh: data.flesh.length, bones: data.bones.length,
+      torn: data.torn.length, gore: data.gore,
+      radius: baked.radius,
+    };
     if (baked.overflow || baked.droppedQuads > 0) {
       console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
     }
@@ -3052,14 +3069,68 @@ async function main() {
       for (let i = pellets.length - 1; i >= 0; i--) {
         const p = pellets[i]!;
         const from = prevs[i]!;
-        let dead = expired(p) || p.pos[1] <= 0.02;
+        let dead = expired(p);
+        let deathWhy = expired(p) ? 'expired' : null;
+        if (!dead && bakedChunks.length > 0) {
+          // ORDER, second time's the charm: this MUST precede the floor kill
+          // below — a settled piece rests AT the y = 0.02 plane, so the slug
+          // that reaches it is always past y 0.02 by segment end, and a
+          // floor-first pre-check eats every such shot before the test runs
+          // (measured: the bake-check log held first-segment entries only).
+          bakeCheckCount++;
+          lastBakeCheck = {
+            from: [...from] as [number, number, number],
+            to: [...p.pos] as [number, number, number],
+            pelletR: p.radius,
+            pieces: bakedChunks.map(b => ({ c: [...b.centre] as [number, number, number], r: b.radius, id: b.id })),
+          };
+          // A BAKED piece is still hittable (close-up task 5 gate): the
+          // pre-bake page tested NOTHING against chunks, so the bake would
+          // have shipped floor pieces that silently ate slugs. A segment
+          // passing inside the piece's baked bounding sphere GIBS it —
+          // option 2 from the design: spawn fresh chunks and delete the
+          // mesh, no reverse path, no dual-representation invariant.
+          // ORDER: this runs BEFORE the floor kill below — a settled piece
+          // rests AT the y = 0.02 plane, so a slug that reaches it is always
+          // "at the floor" by segment end, and the old pre-check would have
+          // eaten every such shot before the test could run.
+          const segX = p.pos[0] - from[0], segY = p.pos[1] - from[1], segZ = p.pos[2] - from[2];
+          const segLen2 = segX * segX + segY * segY + segZ * segZ || 1;
+          for (let bi = bakedChunks.length - 1; bi >= 0; bi--) {
+            const b = bakedChunks[bi]!;
+            const t = Math.max(0, Math.min(1,
+              ((b.centre[0] - from[0]) * segX + (b.centre[1] - from[1]) * segY + (b.centre[2] - from[2]) * segZ) / segLen2));
+            const qx = from[0] + segX * t - b.centre[0];
+            const qy = from[1] + segY * t - b.centre[1];
+            const qz = from[2] + segZ * t - b.centre[2];
+            // Summed radii: the projectile is itself a ball (SLUG/GRAPEHOT
+            // radius), so the segment-sphere test uses piece + pellet. A
+            // point-probe would let a 5.5 cm slug overlap a piece without
+            // hitting it — wrong at these scales.
+            const hitR = b.radius + p.radius;
+            const dd = Math.sqrt(qx * qx + qy * qy + qz * qz);
+            if (bakeCheckLog.length > 64) bakeCheckLog.shift();
+            bakeCheckLog.push({ dd: +dd.toFixed(4), hitR: +hitR.toFixed(4), piece: b.id,
+              seg: [[...from] as [number, number, number], [...p.pos] as [number, number, number]] });
+            if (dd < bakeCheckMin) {
+              bakeCheckMin = dd;
+            }
+            if (dd > hitR) continue;
+            bakeCheckHits++;
+            gibBakedPiece(b, p.pos);
+            dead = true; deathWhy = 'bake';
+            break;
+          }
+        }
+        if (!dead && p.pos[1] <= 0.02) dead = true;
+        if (!dead && p.pos[1] <= 0.02) { dead = true; deathWhy = 'floor'; }
         if (!dead) {
           // Level geometry: a point-in-AABB test is enough — pellets are
           // small and the substepped trace already bounds their travel.
           for (const b of colliders) {
             if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
               && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
-              && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
+              && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; deathWhy = 'collider'; break; }
           }
         }
         if (!dead) {
@@ -3097,32 +3168,13 @@ async function main() {
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
             if (stamped) registerBleed(hitActor, stamped, p.kind);
-            dead = true;
+            dead = true; deathWhy = 'actor';
           }
         }
-        if (!dead && bakedChunks.length > 0) {
-          // A BAKED piece is still hittable (close-up task 5 gate): the
-          // pre-bake page tested NOTHING against chunks, so the bake would
-          // have shipped floor pieces that silently ate slugs. A segment
-          // passing inside the piece's baked bounding sphere GIBS it —
-          // option 2 from the design: spawn fresh chunks and delete the
-          // mesh, no reverse path, no dual-representation invariant.
-          const segX = p.pos[0] - from[0], segY = p.pos[1] - from[1], segZ = p.pos[2] - from[2];
-          const segLen2 = segX * segX + segY * segY + segZ * segZ || 1;
-          for (let bi = bakedChunks.length - 1; bi >= 0; bi--) {
-            const b = bakedChunks[bi]!;
-            const t = Math.max(0, Math.min(1,
-              ((b.centre[0] - from[0]) * segX + (b.centre[1] - from[1]) * segY + (b.centre[2] - from[2]) * segZ) / segLen2));
-            const qx = from[0] + segX * t - b.centre[0];
-            const qy = from[1] + segY * t - b.centre[1];
-            const qz = from[2] + segZ * t - b.centre[2];
-            if (qx * qx + qy * qy + qz * qz > b.radius * b.radius) continue;
-            gibBakedPiece(b, p.pos);
-            dead = true;
-            break;
-          }
+        if (dead) {
+          lastDeath = { why: deathWhy, at: [...p.pos] as [number, number, number], kind: p.kind };
+          pellets.splice(i, 1);
         }
-        if (dead) pellets.splice(i, 1);
       }
       for (const a of hitThisFrame) a.endHits();
       // Sync the mesh pool to the sim list — growing it on demand (the
@@ -3627,6 +3679,23 @@ async function main() {
     }),
     /** Where the last case was when it was handed to the tumble. */
     get lastEjectOrigin() { return lastEjectOrigin; },
+    /** The muzzle locators in world space right now (chunk-bake gate: lets a
+     *  driver SOLVE for the player stance that puts the slug's spawn point
+     *  where it wants — the muzzle offset is ~0.6 m of view-space rig, which
+     *  no hand-derived stance reproduces). Read-only. */
+    muzzleWorld: () => muzzleWorld(),
+    /** Live projectile debug (chunk-bake gate): kind, position, age. */
+    pelletsDebug: () => pellets.map(p => ({ kind: p.kind, pos: [...p.pos] as [number, number, number], age: p.ageSec })),
+    bakeCheckDebug: () => ({ count: bakeCheckCount, min: bakeCheckMin, hits: bakeCheckHits, log: bakeCheckLog, lastDeath }),
+    /** The EXACT ray a slug fired right now would take (chunk-bake gate):
+     *  origin = muzzleWorld(), dir = convergedDir(muzzleWorld()) — the same
+     *  two calls fire() makes. A driver can measure a ray-to-target miss
+     *  BEFORE spending the shot. Read-only. */
+    slugRay: () => {
+      const o = muzzleWorld();
+      const d = convergedDir(o);
+      return { origin: o, dir: d };
+    },
     /** The arms, for the gate: both present, skin has no emissive, the watch
      *  screen exists. `watchScreen` is the drawable canvas for a later pass. */
     get arms() {
@@ -5021,6 +5090,34 @@ async function main() {
       ageSec: p.ageSec,
     })),
     get chunkCount() { return liveChunks.length; },
+    /** Dev seam (chunk-bake gate/look/bench): spawn one synthetic meat-ball
+     *  chunk at a world position through the REAL spawn path — the same
+     *  view, sim, settle, bake and gib machinery a severed limb uses, with
+     *  a controlled size so drivers get a target whose radius they know.
+     *  A severed hand-gob's 4.6 cm bounding sphere is a sniper target; this
+     *  is the same machinery at a testable size. */
+    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12) => {
+      const prims: Primitive[] = [];
+      const rng = mulberry32(nextSeed++);
+      for (let i = 0; i < 6; i++) {
+        const th = rng() * Math.PI * 2;
+        const ph = Math.acos(2 * rng() - 1);
+        const dx = Math.sin(ph) * Math.cos(th) * radius * 0.5;
+        const dy = Math.cos(ph) * radius * 0.5;
+        const dz = Math.sin(ph) * Math.sin(th) * radius * 0.5;
+        prims.push({
+          limb: 'torso', cluster: 0, op: 'add',
+          a: [x + dx - 0.02, y + dy, z + dz] as Vec3,
+          b: [x + dx + 0.02, y + dy, z + dz] as Vec3,
+          radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
+        } as unknown as Primitive);
+      }
+      spawnChunkPiece(
+        { limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [] },
+        { uniforms: actors[0]!.view.uniforms, volumeTexture: actors[0]!.view.volumeTexture },
+      );
+      return prims.length;
+    },
     /** Settled-chunk bake (close-up task 5). OFF at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE
      *  settles — baked pieces stay baked until shot or recycled. */
@@ -5037,6 +5134,7 @@ async function main() {
       views: chunkViews.length,
       totalBakes,
       lastBakeMs,
+      lastBakeInfo,
       pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius })),
     }),
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
