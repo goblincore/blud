@@ -140,10 +140,19 @@ body
   # (thigh / shin), not pattern noise. Knee plates and boots break the leg
   # into plate / cloth / plate.
   # ============================================================
+  # A BARE FLESH FOOT, because removing the boots removed his feet entirely and
+  # left the legs ending at the ankle. Feet are body; boots are the kit's, and
+  # they go OVER this. Rounded rather than boxed -- a bare foot has no machined
+  # edges, and the boot that wraps it will supply the hard silhouette.
+  blob leg on foot at=0.40 offset=(0.004,-0.094,0.020) r=0.042 wide=0.95 tall=0.72 deep=1.60 blend=0.008 mirror
+
+  # LEGS ARE BODY NOW. The knee plates, the boots and the boot-shaft paint on
+  # the shin all left for the kit (owner, 2026-09-04) -- webbing, plate and
+  # footwear are mesh. The trousers stay as PAINT for the moment: they are
+  # cloth on the leg rather than a separate object, so they cost nothing here.
   blob leg on thigh at=0.00 r=0.075 deep=1.05 blend=0.008 mirror core color=5c5d41
   bar  leg on thigh from=0.02 to=1.00 r=0.072 r2=0.058 deep=1.05 blend=0.007 mirror color=5c5d41
   # Knee plate — hard box proud of the knee.
-  blob leg on shin at=0.04 offset=(0,0,0.042) r=0.048 wide=0.95 tall=0.80 deep=0.55 box round=0.20 blend=0.006 mirror color=77806b gloss=0.55
   bar  leg on shin from=0.08 to=0.68 r=0.056 r2=0.050 blend=0.006 mirror color=676549
 
   # ============================================================
@@ -151,13 +160,10 @@ body
   # The boot SHAFT covers the lower shin, so the trouser block above ends
   # at 0.68 and the red starts there.
   # ============================================================
-  bar  leg on shin from=0.62 to=1.00 r=0.056 r2=0.054 blend=0.006 mirror color=7e3430
   # Foot mass: heel behind the ankle, toe well forward (the schoolgirl
   # shoe's authored-as-world-displacement pattern).
   # (a box takes no tip= — the foot's length is all in deep= and offset z.)
-  blob leg on foot at=0.00 r=0.048 wide=1.30 tall=1.20 deep=1.75 box round=0.25 blend=0.008 offset=(0.004,-0.082,0.028) mirror color=7e3430
   # Sole — a flat dark slab under the foot.
-  blob leg on foot at=0.00 r=0.048 wide=1.35 tall=0.28 deep=1.45 box round=0.30 blend=0.006 offset=(0.004,-0.118,0.020) mirror color=26221e
 
   # Neck: skin, thick — a grunt's neck, not the schoolgirl's 0.028.
   bar head on neck from=0.05 to=0.95 r=0.036 deep=1.10 blend=0.004
