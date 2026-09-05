@@ -16,12 +16,16 @@ import type { BlobDoc, BlobLine } from './blob-ast';
 export interface EmitOverride {
   /** Face parameters to substitute, by name. Omitted keys keep their source line. */
   face?: Record<string, number>;
+  /** Palette parameters to substitute, by name — 1 or 3 numbers, matching the
+   *  line's own arity. Omitted keys keep their source line. */
+  palette?: Record<string, number[]>;
 }
 
 /** One line paired with the face-parameter key it owns, if any. */
 interface Owned {
   l: BlobLine;
   faceKey?: string;
+  paletteKey?: string;
 }
 
 /**
@@ -58,6 +62,28 @@ function spliceFaceValue(l: BlobLine, oldText: string, newValue: number): string
     );
   }
   return l.raw.slice(0, valueStart) + String(newValue) + l.raw.slice(valueStart + oldText.length);
+}
+
+/** Splices every numeric word of a palette line in place, left to right,
+ *  keeping indent, padding and any trailing comment. */
+function splicePaletteValues(l: BlobLine, values: number[]): string {
+  const words = l.words.slice(1);
+  if (words.length !== values.length) {
+    throw new Error(
+      `blob-emit: palette line ${l.line} "${l.words[0]}" has ${words.length} values, override has ${values.length}; ` +
+        `an override must carry ${words.length === 1 ? '1 value' : '3 values'}`,
+    );
+  }
+  let raw = l.raw;
+  let cursor = l.indent + (l.words[0]?.length ?? 0);
+  for (let i = 0; i < words.length; i++) {
+    const at = raw.indexOf(words[i]!, cursor);
+    if (at === -1) throw new Error(`blob-emit: palette line ${l.line} — could not find "${words[i]}" in "${l.raw}"`);
+    const rep = String(values[i]);
+    raw = raw.slice(0, at) + rep + raw.slice(at + words[i]!.length);
+    cursor = at + rep.length;
+  }
+  return raw;
 }
 
 /**
@@ -111,18 +137,27 @@ export function emitBlob(doc: BlobDoc, override: EmitOverride = {}): string {
     // before pushing one that doesn't have both, so `words[0]` is always
     // present here even though its type is `string | undefined`.
     ...doc.faceTrivia.map((l): Owned => ({ l, faceKey: l.words[0]! })),
-    // `sheet` and `palette` lines are replayed verbatim — `override` only
-    // carries face values today (the panel's live face sliders are the only
-    // tuned-on-screen numbers there is a path to write back), so these need no
-    // key and take the raw branch below.
+    // `sheet` lines are replayed verbatim — `override` carries no sheet
+    // values today (the panel's live face sliders and material colours are
+    // the only tuned-on-screen numbers there is a path to write back), so
+    // these need no key and take the raw branch below. `palette` lines ride
+    // their key so a material override can splice their value words in place.
     ...doc.sheetTrivia.map((l): Owned => ({ l })),
-    ...doc.paletteTrivia.map((l): Owned => ({ l })),
+    ...doc.paletteTrivia.map((l): Owned => ({ l, paletteKey: l.words[0] })),
   ].sort((a, b) => a.l.line - b.l.line);
 
+  if (override.palette !== undefined && doc.palette === null) {
+    throw new Error('blob-emit: palette override for a character with no palette block — declare one first');
+  }
+
   const out: string[] = [];
-  for (const { l, faceKey } of owned) {
+  for (const { l, faceKey, paletteKey } of owned) {
     out.push(...l.leading);
     const overrideValue = faceKey === undefined ? undefined : override.face?.[faceKey];
+    if (paletteKey !== undefined && override.palette?.[paletteKey]) {
+      out.push(splicePaletteValues(l, override.palette[paletteKey]!));
+      continue;
+    }
     out.push(
       overrideValue === undefined
         // Same guarantee as `faceKey` above: a `faceTrivia` line always has
