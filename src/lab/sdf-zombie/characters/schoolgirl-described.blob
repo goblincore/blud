@@ -205,16 +205,16 @@ face
   headRadius 0.072
   headWidth  0.94
   headHeight 1.28
-  headDepth  1.12
+  headDepth  1.258
   jawWidth   0.78
   jawHeight  0.74
   jawDrop    0.058
-  jawJut     0.036
-  noseLength 0.003
-  noseWidth  0.30
-  noseDrop   0.024
-  browHeavy  0.002
-  browRise   0.024
+  jawJut     0.017
+  noseLength 0.037
+  noseWidth  0.936
+  noseDrop   0.054
+  browHeavy  0.0
+  browRise   0.0
   headBlend  0.005
 
 # Her face, baked flat off the mesh's head (blob:face-bake; the script
@@ -230,13 +230,15 @@ sheet
   image       schoolgirl-described-face.png
   decal       0
   projScaleX  0.34
-  projScaleY  0.40
+  projScaleY  0.44
   projCentreX 0.50
-  projCentreY 0.49
+  projCentreY 0.57
   # Below the bake's max luma or nothing glows (the soldier lesson: his
   # bake tops at 0.855 and the default 0.88 cut gave him dead eyes).
-  eyeGlowCut  0.70
-  eyeGlowAmp  0.40
+  eyeGlowCut  0.7
+  texRelief   1.400
+  texStrength 1.000
+  eyeGlowAmp  0.4
 
 # Skin e9c9ae = sRGB (233,201,174) -> linear (0.815, 0.586, 0.432): warm
 # and light, a touch more sun than the widow's porcelain, none of the

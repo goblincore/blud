@@ -2415,7 +2415,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // shell, centred well above the face -- the schoolgirl's mouth sat at
     // |hs| 1.55 and faded out at every projection setting. The decal's own
     // alpha and the facing fade bound it instead.
-    let decal = select(0.0, 1.0, faceCfg.x > 1.5);
+    // FACE MODE, faceCfg.x: 1 = sheet (MULTIPLY the rgb), 2 = decal (REPLACE
+    // the albedo), 3 = LUMA multiply. Mode 3 exists because multiplying two
+    // COLOURED values compounds their hue -- a skin-toned bake times skin-toned
+    // flesh reads more saturated than either, which the owner spotted as the
+    // face looking "more saturated from the surrounding skin". Using the
+    // decal's LUMINANCE as a scalar modulates brightness and leaves hue alone.
+    // Modes 1 and 2 are untouched and bit-identical.
+    let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
+    let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
     let reach = 1.0 + 0.5 * decal;
     facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
@@ -2438,7 +2446,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       // baked lighting, so pasting it in as albedo and lighting it again
       // double-shades. Dividing by its measured mean keeps the pattern and
       // throws away level.
-      let detail = tex.rgb / max(faceCfg2.y, 1e-3);
+      // Luma mode divides by the same mean, so an average texel still
+      // multiplies by ~1 and the level is unchanged -- only the hue shift goes.
+      let detailSrc = select(tex.rgb, vec3<f32>(dot(tex.rgb, W)), lumaOnly);
+      let detail = detailSrc / max(faceCfg2.y, 1e-3);
       // Skip the multiply where it glows: an eye is not tinted flesh, and the
       // emissive term below supplies its colour outright.
       albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),

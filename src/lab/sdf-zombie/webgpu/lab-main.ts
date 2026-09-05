@@ -831,7 +831,8 @@ async function main() {
    * than poked into the uniform because applyLod rewrites faceCfg.x every
    * frame from this.
    */
-  let faceMode: 1 | 2 = 1;
+  // 1 = sheet/multiply rgb, 2 = decal/replace, 3 = multiply by LUMA.
+  let faceMode: 1 | 2 | 3 = 1;
 
   function loadFaceTexture(name: FaceTexName) {
     faceMode = 1;
@@ -945,7 +946,7 @@ async function main() {
       tex.flipY = true;                      // as the PNG registry path
       faceSheet?.tex.dispose();
       faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
-      faceMode = params.decal > 0.5 ? 2 : 1;
+      faceMode = params.decal > 0.5 ? 2 : (params.blendLuma > 0.5 ? 3 : 1);
       // Mean 1 until the image decodes, then applyMean re-uploads with the
       // measured value. One frame of the old level is not worth blocking on.
       for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
@@ -3298,10 +3299,17 @@ async function main() {
   // The label starts from the ACTUAL mode. It used to be hardcoded to
   // 'replace', so a character wearing decal 0 showed a button claiming the
   // opposite of what it was doing.
-  const blendBtn = addButton(faceBox, `face blend: ${u.faceCfg.value.x > 1.5 ? 'replace' : 'multiply'}`, () => {
-    const mult = u.faceCfg.value.x > 1.5;
-    u.faceCfg.value.x = mult ? 1 : 2;
-    blendBtn.textContent = `face blend: ${mult ? 'multiply' : 'replace'}`;
+  // Cycles REPLACE -> MULTIPLY -> MULTIPLY (LUMA). The third exists because
+  // multiplying two coloured values compounds hue: a skin bake over skin
+  // flesh reads more saturated than either. Luma keeps the shading and drops
+  // the tint. Whatever you settle on is `decal` plus `blendLuma` in the
+  // character's sheet block.
+  const MODE_NAME: Record<number, string> = { 1: 'multiply', 2: 'replace', 3: 'multiply (luma)' };
+  const blendBtn = addButton(faceBox, `face blend: ${MODE_NAME[Math.round(u.faceCfg.value.x)] ?? 'off'}`, () => {
+    const cur = Math.round(u.faceCfg.value.x);
+    const next = cur === 2 ? 1 : (cur === 1 ? 3 : 2);
+    u.faceCfg.value.x = next;
+    blendBtn.textContent = `face blend: ${MODE_NAME[next]}`;
   });
 
   const projBtn = addButton(faceBox, 'proj: planar', () => {
