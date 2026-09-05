@@ -171,6 +171,102 @@ maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
 
 **ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
 
+**Post-dispatch verification found three defects, all fixed (2026-09-05):**
+the ring's arm-gap measure excluded `encircle`, so the pair actually
+interpenetrating (an attacker and a WAITER, -0.051 m) was invisible to a gate
+that reported everything clear; `ENGAGED_RADIUS` was 0.55, which settles two
+bodies 1.10 m apart against a 1.20 m arm span (the 90-degree ring spacing was
+derived from the arm reach, this number was not); and raising it to 0.70 then
+put `meleeRadius` 1.0 INSIDE the separation equilibrium (0.70 + the player's
+0.32 anchor = 1.02 m), so a body stood in `engage` for ten seconds without
+swinging. Now 0.70 / 1.25, waiters included, gate window 12 s instead of 3 s
+and refusing to report if it never saw an `attack`. Gate: room-4 arm gap
++0.435 m shipped, -0.020 m with waiters put back on the walking circle.
+**Known and NOT fixed:** idle wanderers in other rooms still clip (they use the
+base 0.35 m circle; raising it spreads every crowd — owner's call), and one
+token-holder stays pinned by furniture at 2.85 m, so two nominal attackers are
+really one until navigation lands.
+
+**SWING VARIANTS — LANDED (2026-09-05), awaiting owner look.** The owner read
+the one-arm hook as "a swimmer's motion", correctly: every arm angle was
+`attackDrive × magnitude`, and that scalar runs 0 → −1 → +1 → 0, so pitch is
+FORCED negative at the wind-up and positive at the strike — the arm must travel
+from behind the body to in front of it, and a hook needs it raised at both
+ends. The body keeps the signed drive (its weight shift was never wrong); the
+arm now rides `armArc`, interpolating between explicit per-variant angles.
+Two swings: a hook whose pitch CLIMBS 0.35 → 0.95 while yaw sweeps across, and
+an overhead that is 2.1 rad of near-pure pitch. The off arm holds a raised
+guard instead of counter-swinging — two arms in opposition through a
+near-horizontal plane is the crawl. Variant is rolled at swing start from a
+SECOND per-body RNG (sharing the wander generator would shift every subsequent
+wander decision); the arm keeps alternating underneath, so a pack shows four
+silhouettes. Guard: `flatArcRatio` 0.6, pinned by a test the shipped swing
+fails, plus a gate assertion that both variants actually fire. Frames:
+[docs/dev-notes/2026-09-05-swing-variants/](docs/dev-notes/2026-09-05-swing-variants/notes.md).
+[spec](docs/superpowers/specs/2026-09-05-zombie-swing-variants-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-zombie-swing-variants.md)
+
+**ZOMBIE COMBAT CHOREOGRAPHY — LANDED (2026-09-05), awaiting owner look.**
+The owner's play-test of the crowd/brain build: arms clip when several
+surround you, and the two-arm slam is "merely… okay". `melee-ring.ts` caps the
+swingers at two and requires 90° of bearing separation between them — angles
+are the claimants' CURRENT bearings, NOT fixed slots, which would orbit the
+ring as the player turns. The arithmetic: separation's 0.35 m circles touch at
+0.70 m while an arm reaches 0.6 m, so the circles are satisfied and the arms
+always overlap; two holders 90° apart at 1.0 m are 1.41 m apart, clear with
+0.2 m to spare (75° gives 1.22 m, which clears by 2 cm — not clearing).
+`brain.ts` is now seven named states and absorbed the blast hold that used to
+be a private timer in `game-actor.ts`. `attack.ts` is an alternating one-arm
+hook; `motion.ts`'s reach pivot gained a world-up sweep to carry it, with the
+lab's bit-identity pin untouched. Gate: `minHandGap()` — the owner's
+screenshot as a number — plus the token cap and the spacing, all proven to
+fail. Notes + frames:
+[docs/dev-notes/2026-09-05-zombie-choreography/](docs/dev-notes/2026-09-05-zombie-choreography/notes.md).
+**Still open:** getting stuck on furniture — navigation is its own spec and is
+NOT in this change.
+[spec](docs/superpowers/specs/2026-09-05-zombie-combat-choreography-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-zombie-combat-choreography.md)
+
+**ZOMBIE CROWD + BRAIN — LANDED (2026-09-04), awaiting owner look.** The two
+reports from the same session: bodies clipped through each other constantly,
+and nothing in the level cared where the player was. Three pure modules —
+`crowd.ts` (soft ground-plane circle separation, the player entering the set as
+an immobile anchor), `brain.ts` (same-room + 70° facing-cone aggro that locks on
+with a 4 s grace; a gunshot bypasses the cone), `attack.ts` (wind-up / strike /
+hold / recovery off ONE signed scalar, so the lunge and the arms cannot peak on
+different frames). `MotionConfig` gains one optional `attack` field that
+BRANCHES rather than adding a zero — `x + 0` turns `-0` into `+0` — so the lab's
+motion is bit-identical, pinned by a 30-frame exact-pose test.
+**Two spec defects the gate found end-to-end, both invisible to unit tests:**
+(1) a chaser aiming at the brain's standoff point could NEVER engage —
+`arriveRadius` 0.4 stops it 1.4 m out, outside `attackRange` 1.0 — so the walk
+goal is now the player himself and the engage latch halts it on the way in;
+(2) the furniture rejection deadlocks a chaser (a wanderer picks a new leg, a
+chaser re-aims into the same crate forever), so the rejection now pushes out
+along the shallowest axis and a blocked line arcs around one COMMITTED side.
+`brain.ts` stayed pure geometry through both. Gate:
+`scripts/sdf-game-crowd-gate.mjs` — probe pair settles at 0.700 m wired,
+0.437 m with the nudge removed (proven to FAIL). Notes + 6 frames:
+[docs/dev-notes/2026-09-04-zombie-crowd/](docs/dev-notes/2026-09-04-zombie-crowd/notes.md).
+**Deliberate gaps:** the swing does NO damage (owner's call — rhythm first, no
+player health this round); chasers stop at their room's doorway because
+`stepWander` clamps to room bounds, so cross-room pursuit needs navigation.
+[spec](docs/superpowers/specs/2026-09-04-zombie-crowd-and-brain-design.md) ·
+[plan](docs/superpowers/plans/2026-09-04-zombie-crowd-and-brain.md)
+
+**[ ] F-eject.1 — spent cases clip through the frame, and every reload throws
+them identically.** Owner, 2026-09-03, after the breech merge: "the shells
+eject but seem to clip through the gun frame so there needs to be some tweaking
+there. also they always eject the same animation would be better to have some
+randomness but not a blocker." Two separate things. The clip is a collision the
+hand-off does not test for — `ejectedShell()` is a pure ballistic arc from the
+breech with no awareness of the receiver it passes over, and the gate only
+checks where a case STARTS (within 5 cm of a chamber mouth), not where it
+travels. The sameness is `ejectedShell()` being deterministic by design
+(`game-viewmodel.ts`: "same reload, same arc, every time") — which was the right
+call for gating and the wrong one for feel. Randomising it means the eject gate
+needs a seed it can pin, or it becomes flaky.
+
 **SHELLS: EJECT CLIP + LOAD INSERTION — DONE (2026-09-04), F-eject.1 and
 F-eject.2** — [notes + before/after strip](docs/dev-notes/2026-09-04-shell-reload/notes.md).
 Owner: "the shells eject but seem to clip through the gun frame", "new shells

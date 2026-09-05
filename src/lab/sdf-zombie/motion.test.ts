@@ -17,6 +17,7 @@ import { applyRig, bindRig } from './rig-bind';
 import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
+import { attackPose, ATTACK_TUNING } from './attack';
 import { len, sub, dot } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
@@ -45,6 +46,17 @@ const NO_SIGNALS = (): MotionSignals => ({
 });
 
 const INTACT: MotionSignals['missing'] = { legL: false, legR: false, armL: false, armR: false };
+
+const CALM_SIGNALS = {
+  dt: 1 / 60,
+  shot: null,
+  wounded: { armL: false, armR: false, legL: false, legR: false },
+  severed: [],
+  missing: { legL: false, legR: false, armL: false, armR: false },
+  headAlive: true,
+  forcedCollapse: false,
+  freshWounds: [],
+} as const;
 
 /** A stub rig that perfectly tracks its targets (infinite rest pull). */
 function stubPoints(joints: MotionJoints): RigPoint[] {
@@ -575,5 +587,117 @@ describe('one-frame pipeline with a stub rig (end-to-end)', () => {
     const c = bound.rig.constraints[0]!;
     const d = len(sub(bound.rig.points[c.a]!.pos, bound.rig.points[c.b]!.pos));
     expect(Math.abs(d - c.rest)).toBeLessThan(0.05);
+  });
+});
+
+describe('stepMotion — the attack seam', () => {
+  /** Runs a fixed seed for `frames` and returns every rest pose. */
+  function poses(cfg: MotionConfig, frames: number) {
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    let state = makeMotionState(4242, [0, 0, 0]);
+    const rng = makeRng(4242);
+    const bounds = { minX: -4, maxX: 4, minZ: -4, maxZ: 4 };
+    const out: Vec3[][] = [];
+    for (let i = 0; i < frames; i++) {
+      const r = stepMotion(state, joints, cfg, CALM_SIGNALS, bound.rig.points, bounds, rng);
+      state = r.state;
+      out.push(r.frame.restPose.map(p => [...p] as Vec3));
+    }
+    return out;
+  }
+
+  const STRIKE = (ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2;
+
+  it('is bit-identical to today when cfg.attack is absent', () => {
+    // The lab's wiring never sets `attack`. An object that merely CARRIES the
+    // key as undefined must be indistinguishable from one that does not.
+    const a = poses({ enabled: true, wander: true }, 30);
+    const b = poses({ enabled: true, wander: true, attack: undefined }, 30);
+    expect(b).toEqual(a);
+  });
+
+  it('moves the pose once cfg.attack is set', () => {
+    const calm = poses({ enabled: true, wander: true }, 1);
+    const swung = poses({ enabled: true, wander: true, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1);
+    expect(swung).not.toEqual(calm);
+  });
+
+  it('phase 0 leaves the pose exactly where no attack leaves it', () => {
+    const calm = poses({ enabled: true, wander: true }, 5);
+    const zero = poses({ enabled: true, wander: true, attack: { phase: 0, side: 'R', variant: 'hook' } }, 5);
+    expect(zero).toEqual(calm);
+  });
+
+  it('drives the pelvis forward at the strike peak', () => {
+    const calm = poses({ enabled: true, wander: false }, 1)[0]!;
+    const swung = poses(
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1,
+    )[0]!;
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    const iPelvis = joints.index.pelvis;
+    const moved = Math.hypot(
+      swung[iPelvis]![0] - calm[iPelvis]![0],
+      swung[iPelvis]![2] - calm[iPelvis]![2],
+    );
+    expect(moved).toBeCloseTo(attackPose(STRIKE, 'R', 'hook').rootOffset[2], 6);
+  });
+
+  it('a right-side swing moves the right hand further than the left', () => {
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    const calm = poses({ enabled: true, wander: false }, 1)[0]!;
+    const dist = (side: 'L' | 'R', j: 'handL' | 'handR') => {
+      const swung = poses(
+        { enabled: true, wander: false, attack: { phase: STRIKE, side, variant: 'hook' } }, 1,
+      )[0]!;
+      const i = joints.index[j];
+      return Math.hypot(
+        swung[i]![0] - calm[i]![0], swung[i]![1] - calm[i]![1], swung[i]![2] - calm[i]![2],
+      );
+    };
+    expect(dist('R', 'handR')).toBeGreaterThan(dist('R', 'handL'));
+    expect(dist('L', 'handL')).toBeGreaterThan(dist('L', 'handR'));
+  });
+
+  it('the sweep moves the hand SIDEWAYS, not only forward — it is a hook', () => {
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    const calm = poses({ enabled: true, wander: false }, 1)[0]!;
+    const swung = poses(
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1,
+    )[0]!;
+    const i = joints.index.handR;
+    // Body yaw is ~0 in this fixture, so body-local x is world x.
+    expect(Math.abs(swung[i]![0] - calm[i]![0])).toBeGreaterThan(0.05);
+  });
+
+  it('the two variants produce different poses through the same seam', () => {
+    const hook = poses(
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1,
+    );
+    const over = poses(
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'overhead' } }, 1,
+    );
+    expect(over).not.toEqual(hook);
+  });
+
+  it('the overhead lifts the hand higher than the hook does', () => {
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    const i = joints.index.handR;
+    const yAt = (variant: 'hook' | 'overhead', phase: number) => poses(
+      { enabled: true, wander: false, attack: { phase, side: 'R', variant } }, 1,
+    )[0]![i]![1];
+    // At the wind-up peak the overhead's arm is up past the head (pitch 1.35)
+    // while the hook is only cocked (0.35).
+    expect(yAt('overhead', ATTACK_TUNING.windupEnd))
+      .toBeGreaterThan(yAt('hook', ATTACK_TUNING.windupEnd));
   });
 });
