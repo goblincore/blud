@@ -74,7 +74,12 @@ body
   # sleeveless top; unpainted they take the palette's skin, so the shirt, the
   # belt, its pouches and its buckle all leave the .blob and become the kit's
   # job. What is left here is body.
-  blob torso on pelvis at=0.40 r=0.115 wide=1.00 tall=0.90 deep=0.78 blend=0.010
+  # THE HIPS WEAR THE TROUSERS (owner, 2026-09-05: "fix the hole in his pants
+  # so his crotch isn't showing flesh"). This mass lost its paint when the
+  # shirt came off, and unpainted means flesh -- so bare skin showed at the
+  # crotch between two olive thighs. Same hex as the thighs, so the trouser
+  # line runs unbroken from waist to knee. The chest and belly above stay bare.
+  blob torso on pelvis at=0.40 r=0.115 wide=1.00 tall=0.90 deep=0.78 blend=0.010 color=5c5d41
   # Waist: trouser top rising to the belt line.
   bar  torso on spine1 from=0.40 to=1.00 r=0.108 r2=0.105 deep=0.75 blend=0.008
   # Chest: the sleeveless top under the plate — only a dark crescent shows
@@ -133,7 +138,13 @@ body
   bar  arm on forearm  from=0.05 to=0.95 r=0.072 r2=0.048 blend=0.008 mirror
   # Fist — a blunt mitt, no fingers (house rule: the goblin's grabby hand is
   # the only articulated one in the cast).
-  blob arm on hand at=0.50 offset=(0,0,0.010) r=0.044 wide=0.90 tall=1.00 deep=1.20 blend=0.006 mirror
+  # ORB HANDS (owner, 2026-09-05). Deliberately a SPHERE -- wide/tall/deep all
+  # 1.00, where this was a flattened 0.90/1.00/1.20 paddle. A paddle at the end
+  # of a hanging arm reads as a smear at crotch height; an orb reads as a fist,
+  # which is also what the shotgun will need something to grip with. Slightly
+  # larger (0.044 -> 0.052) to carry against the bulked forearm, and blended
+  # tighter so the wrist stays a wrist.
+  blob arm on hand at=0.55 offset=(0,0,0.008) r=0.052 wide=1.00 tall=1.00 deep=1.00 blend=0.005 mirror
 
   # ============================================================
   # LEGS — camo fatigues. Camo is done the house way: TWO bold olive blocks
