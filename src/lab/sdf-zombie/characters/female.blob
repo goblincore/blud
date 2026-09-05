@@ -184,11 +184,20 @@ face
 # from the turntable frames — the frames win over arithmetic.
 sheet
   image       female-face.png
-  decal       1
-  projScaleX  0.33
-  projScaleY  0.29
+  decal       0
+  projScaleX  0.19
+  projScaleY  0.23
   projCentreX 0.50
-  projCentreY 0.50
+  projCentreY 0.45
+  # Owner-tuned in the lab, 2026-09-05. eyeGlowAmp 0.25 against a 1.6 default
+  # and eyeGlowCut 0.69 against 0.88: her glow is a COLD catchlight in a pale
+  # face, not the soldier's burning red -- amp near the floor keeps it a
+  # highlight rather than an emitter, and the low cut is what lets the bake's
+  # own eye texels clear the mask at all.
+  eyeGlowAmp  0.25
+  eyeGlowCut  0.69
+  texRelief   1.400
+  texStrength 1.000
 
 # PALE skin — the widow has not seen the sun. sRGB ~(232,205,190) -> linear.
 # Dry, matte, almost no mottle: she is porcelain, not latex. Wounds stay
