@@ -77,6 +77,25 @@ base 0.35 m circle; raising it spreads every crowd — owner's call), and one
 token-holder stays pinned by furniture at 2.85 m, so two nominal attackers are
 really one until navigation lands.
 
+**SWING VARIANTS — LANDED (2026-09-05), awaiting owner look.** The owner read
+the one-arm hook as "a swimmer's motion", correctly: every arm angle was
+`attackDrive × magnitude`, and that scalar runs 0 → −1 → +1 → 0, so pitch is
+FORCED negative at the wind-up and positive at the strike — the arm must travel
+from behind the body to in front of it, and a hook needs it raised at both
+ends. The body keeps the signed drive (its weight shift was never wrong); the
+arm now rides `armArc`, interpolating between explicit per-variant angles.
+Two swings: a hook whose pitch CLIMBS 0.35 → 0.95 while yaw sweeps across, and
+an overhead that is 2.1 rad of near-pure pitch. The off arm holds a raised
+guard instead of counter-swinging — two arms in opposition through a
+near-horizontal plane is the crawl. Variant is rolled at swing start from a
+SECOND per-body RNG (sharing the wander generator would shift every subsequent
+wander decision); the arm keeps alternating underneath, so a pack shows four
+silhouettes. Guard: `flatArcRatio` 0.6, pinned by a test the shipped swing
+fails, plus a gate assertion that both variants actually fire. Frames:
+[docs/dev-notes/2026-09-05-swing-variants/](docs/dev-notes/2026-09-05-swing-variants/notes.md).
+[spec](docs/superpowers/specs/2026-09-05-zombie-swing-variants-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-zombie-swing-variants.md)
+
 **ZOMBIE COMBAT CHOREOGRAPHY — LANDED (2026-09-05), awaiting owner look.**
 The owner's play-test of the crowd/brain build: arms clip when several
 surround you, and the two-arm slam is "merely… okay". `melee-ring.ts` caps the

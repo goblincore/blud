@@ -63,6 +63,7 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
+import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { buildFirefight, validateScenario } from './game-bench-scenario';
 import { runBench, type BenchDeps } from './game-bench';
 import { sdBody } from '../validate';
@@ -2990,6 +2991,16 @@ async function main() {
     /** Ring tuning, so a capture driver asserts against the real numbers
      *  rather than duplicating them. */
     ringTuning: () => ({ ...RING_TUNING }),
+    /** attack.ts's beat boundaries, so a capture driver derives its phases
+     *  from the real numbers instead of duplicating them. */
+    attackTuning: () => ({ ...ATTACK_TUNING }),
+    /** CAPTURE SEAM: force one actor into a specific swing pose and step it,
+     *  so a strip can photograph the same body at chosen phases. Not a
+     *  simulation input — it drives the actor's motion config directly for
+     *  one frame and the brain overwrites it on the next step. */
+    poseSwing: (id: number, phase: number, side: 'L' | 'R', variant: string) => {
+      actors.find(a => a.id === id)?.forceSwing(phase, side, variant as SwingVariant);
+    },
     /** Smallest centre-to-centre distance between any two zombies (m).
      *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
     crowdMinDist: () => minPairDistance(actors.map(a => {

@@ -78,9 +78,16 @@ export const ATTACK_TUNING = {
 export type SwingVariant = 'hook' | 'overhead';
 
 /** Per-variant arm angles (rad). Pitch keeps the reach convention (positive =
- *  forward/raised); yaw is written for the RIGHT arm, where positive is cocked
- *  OUT away from the body's centre line and negative is swept ACROSS it — the
+ *  forward/raised); yaw is written for the RIGHT arm, where NEGATIVE is cocked
+ *  OUT away from the body's centre line and positive is swept ACROSS it — the
  *  left arm negates it, which is what makes the two sides exact mirrors.
+ *  THE SIGN IS MEASURED, NOT ASSUMED (2026-09-05): the reach pivot applies
+ *  yaw as a world-up rotation, and a POSITIVE rotation about up carries a
+ *  forward-pointing arm toward the body's LEFT. The first table here had it
+ *  the other way round (windup +0.85 out, strike −0.90 across); in-engine it
+ *  photographed as a BACKHAND — fist across the chest at the wind-up, flung
+ *  out and up at contact (armR yaw −0.73 → +0.93, live body yaw, settled
+ *  pin) — the mirror of the hook the spec describes.
  *
  *  THE HOOK'S PITCH IS POSITIVE AT BOTH ENDS AND RISES INTO THE STRIKE. That
  *  is the whole fix: the shipped swing fell from 0.85 to 0.55 while yaw swept
@@ -96,8 +103,8 @@ export const SWING_ARCS: Record<SwingVariant, {
   windupYaw: number;
   strikeYaw: number;
 }> = {
-  hook: { windupPitch: 0.35, strikePitch: 0.95, windupYaw: 0.85, strikeYaw: -0.90 },
-  overhead: { windupPitch: 1.35, strikePitch: -0.75, windupYaw: 0.15, strikeYaw: -0.10 },
+  hook: { windupPitch: 0.35, strikePitch: 0.95, windupYaw: -0.85, strikeYaw: 0.90 },
+  overhead: { windupPitch: 1.35, strikePitch: -0.75, windupYaw: -0.15, strikeYaw: 0.10 },
 };
 
 export type AttackTuning = typeof ATTACK_TUNING;

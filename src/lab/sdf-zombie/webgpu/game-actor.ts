@@ -41,6 +41,7 @@ import { makeRng, type Rng, type WanderBounds } from '../wander';
 import {
   makeBrain, stepBrain, type Brain, type BrainPlayer,
 } from '../brain';
+import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import type { Aabb } from './game-level';
@@ -241,6 +242,9 @@ export interface ZombieActor {
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
+  /** CAPTURE SEAM: pin the next step()'s swing pose. Overwritten by the brain
+   *  on the following step; null clears it. Never used by the game itself. */
+  forceSwing(phase: number, side: 'L' | 'R', variant: SwingVariant): void;
   /** Choreography + motion diagnostics from the LAST step() — the heavy-hit
    *  tuning seam (is the hold engaged? did the knock decay? did the meter
    *  cross?) and the capture driver's oracle. Not a simulation input. */
@@ -360,6 +364,7 @@ export function createZombieActor(opts: {
   let brainAlerted = false;
   let ringToken = false;
   let ringDrift: -1 | 0 | 1 = 0;
+  let forcedSwing: { phase: number; side: 'L' | 'R'; variant: SwingVariant } | null = null;
   /** A blast-profile hit landed since the last step — one-shot into the brain. */
   let pendingBlast = false;
   let lastEngaged = false;
@@ -501,6 +506,13 @@ export function createZombieActor(opts: {
 
   function step(dt: number) {
     let firstSub = true;
+    // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
+    // sub-step of THIS step() carries the forced pose, and the brain's own
+    // swing config resumes on the next step(). (Read-then-clear, not clear
+    // per sub-step — a mid-frame clear would let later sub-steps compose the
+    // pose without the attack, and the photographed frame would not show it.)
+    const swingPin = forcedSwing;
+    forcedSwing = null;
     for (const sdt of planSubSteps(dt)) {
       // Heavy-hit choreography (see the state block): knock the ROOT before
       // the motion step so this sub-step's targets ride the moved root.
@@ -601,7 +613,11 @@ export function createZombieActor(opts: {
           wander: !think.halt,
           // Spread, not `attack: think.attack ?? undefined`: motion.ts's
           // bit-identity contract is about the key being ABSENT.
-          ...(think.attack !== null ? { attack: think.attack } : {}),
+          // swingPin is forceSwing()'s one-frame capture pin (see step());
+          // null on every frame the game itself runs.
+          ...(swingPin !== null
+            ? { attack: swingPin }
+            : think.attack !== null ? { attack: think.attack } : {}),
         },
         signals,
         bound.rig.points, opts.bounds, rng,
@@ -784,6 +800,9 @@ export function createZombieActor(opts: {
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;
+    },
+    forceSwing: (phase: number, side: 'L' | 'R', variant: SwingVariant) => {
+      forcedSwing = { phase, side, variant };
     },
     engagedForCrowd: () => lastEngaged,
     committed: () => lastCommitted,

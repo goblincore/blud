@@ -339,6 +339,7 @@ const RING_GAP = `(() => {
 // lands in the approach, before anyone is holding station at melee radius.
 // 60 x 12 frames is 12 s, which covers several full swing+cooldown cycles.
 let everAttacked = false;
+const seenVariants = new Set();
 for (let i = 0; i < 60; i++) {
   await evaluate('__sdfGame.step(12, 1 / 60)');
   const bs = await evaluate('__sdfGame.brains()');
@@ -348,6 +349,7 @@ for (let i = 0; i < 60; i++) {
   const swinging = bs.filter((b) => ATTACK_STATES.includes(b.state));
   if (swinging.length > maxSwinging) maxSwinging = swinging.length;
   if (bs.some((b) => b.state === 'attack')) everAttacked = true;
+  for (const b of bs) if (b.state === 'attack') seenVariants.add(b.variant);
 
   // Every pair of token holders must clear minSlotAngle.
   const holders = bs.filter((b) => b.hasToken);
@@ -374,6 +376,15 @@ if (!everAttacked) {
   fail('the ring window never saw a body in the attack state, so its arm-gap, ' +
        'cap and spacing numbers mean nothing');
 }
+
+// BOTH VARIANTS MUST FIRE. A variant that never appears is a selection bug
+// that every unit test passes: the roll is consumed at swing start, so a
+// broken threshold or a stuck stored value shows up only over many swings.
+if (seenVariants.size < 2) {
+  fail(`only ${[...seenVariants].join(', ') || 'no'} swing variant(s) fired across the ` +
+       'melee window; the per-swing roll is not reaching the brain');
+}
+console.log(`ring: both swing variants fired (${[...seenVariants].sort().join(', ')})`);
 
 // 5a. THE OWNER'S DEFECT, AS A NUMBER. Arms on different bodies must not
 //     interpenetrate. The measure is conservative (endpoint-to-endpoint minus
