@@ -3706,6 +3706,13 @@ async function main() {
       }
     },
     get normalMode() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
+    /** DIAGNOSTIC: near-wound stepping at full omega (sign of woundShadowCfg.y,
+     *  march.wgsl.ts). Prices the 0.6x conservative zone; not a ship knob. */
+    setWoundStepDiag(on: boolean) {
+      for (const a of actors) { const v = a.view.uniforms.woundShadowCfg.value; v.y = (on ? -1 : 1) * Math.abs(v.y); }
+      for (const c of chunkViews) { const v = c.uniforms.woundShadowCfg.value; v.y = (on ? -1 : 1) * Math.abs(v.y); }
+    },
+    get woundStepDiag() { return (actors[0]?.view.uniforms.woundShadowCfg.value.y ?? 1) < 0; },
     get normalThresh() { return actors[0]?.view.uniforms.perfCfg.value.w ?? 0; },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {

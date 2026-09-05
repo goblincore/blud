@@ -1974,7 +1974,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
           break;
         }
       } else {
-        stepLen = d * select(omega, 0.6, conservative || nearWound);
+        // DIAGNOSTIC (close-up wound bench, 2026-09-05): a NEGATIVE
+        // woundShadowCfg.y walks the near-wound zone at full omega instead
+        // of 0.6x, so the bench can price the conservative stepping alone.
+        // The shadow reads abs(woundShadowCfg.y), so the sign is free.
+        stepLen = d * select(omega, 0.6, conservative || (nearWound && woundShadowCfg.y >= 0.0));
       }
     }
     prevRadius = radius;
@@ -2663,7 +2667,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // fill, ambient and scatter stay untouched or craters go pitch black.
   var wShadow = 1.0;
   if (woundShadowCfg.x > 0.0 && hitNearWound) {
-    wShadow = mix(1.0, woundShadow(p, L, woundShadowCfg.y, data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x);
+    wShadow = mix(1.0, woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg), woundShadowCfg.x);
   }
 
   // LEVEL SHADOW (perf round 2 task 7). One texture load per hit pixel, ZERO

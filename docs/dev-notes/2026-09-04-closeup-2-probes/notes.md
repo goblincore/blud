@@ -147,3 +147,27 @@ would be worth ~3.5 ms and is no-ship on look. The post-hit probes were ~1 of th
 ~50 ms wounded at dist 0.6 vs ~24 ms unwounded at 2.5 m — **the wounds double the
 close-up cost** (conservative 0.6× stepping near craters, the up-to-14-eval wound
 shadow). That, not the flesh probes, is the next thing to measure on this scene.
+
+## Wounds bench (2026-09-05 08:59, `scripts/closeup-wounds-bench.mjs`, load 5–14 on kept reps)
+
+Legs on the wounded fill-screen staging (dist 0.6, 5 wounds, cov 16%): `ship`;
+`stepFull` = near-wound stepping at full omega instead of 0.6× (diagnostic: sign of
+`woundShadowCfg.y`, `__sdfGame.setWoundStepDiag`); `unwounded` = same staging, no
+wounds. The wound SHADOW is already off in the game (`woundShadowCfg.x` ships 0), so
+it is not a lever. Kept 4/4/4, loadRejected 6, makeupReps 3.
+
+| rep (load) | ship | stepFull | unwounded |
+| --- | --- | --- | --- |
+| 1 | 41.6 | 29.0 (−30%) | 17.3 (−58%) |
+| 4 (5–10) | 54.0 | 47.6 (−12%) | 41.5 (−23%) |
+| 5 (6–7) | 53.6 | 50.6 (−6%) | — |
+| medians | 53.6 | 47.6 (−11%) | 31.8 (−41%) |
+
+**Read:** the wounds cost 25–55% of the close-up frame. The 0.6× conservative stepping
+near craters is a third to a half of that (−6…−30% of the frame); the remainder is the
+carve loop every `mapBody` evaluation runs over the wound list (`applyCarves`, up to
+64 rows × textureLoads per eval, paid on EVERY step of EVERY ray on a wounded body).
+Two levers, both untried: (1) a less conservative near-wound factor (0.6 was chosen
+against wound halos at ω 1.4; the game ships ω 1.0 — re-gate the halo look at 0.8);
+(2) cull the carve loop per cluster/group bounds so an eval far from every crater
+pays nothing — the same shape as the group-sphere cull the prim fold already has.
