@@ -225,8 +225,13 @@ sheet
   # lets the bake's own painted red eyes light up, with no mask, no punched
   # texels and no second image. decal 0 (multiply) is what lets them read as
   # light rather than paint.
+  # eyeGlow is the GENERATED sheet's painted-eye brightness and does nothing
+  # for a baked face; eyeGlowAmp is the shader-side multiplier that does.
   eyeGlow     0.500
+  eyeGlowAmp  0.500
   eyeGlowCut  0.670
+  texRelief   1.400
+  texStrength 1.000
 
 # Skin around #cb956a as briefed (sRGB -> linear). Drier than the zombie
 # (wetness 0.15 vs latex-wet), warmer mottle. Wounds stay red.
