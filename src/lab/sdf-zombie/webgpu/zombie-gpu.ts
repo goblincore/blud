@@ -733,14 +733,20 @@ export interface ConeSource {
  */
 export function createDepthPreUniforms() {
   return {
-    /** Whether the coarse pass runs and the march starts from it. */
-    enabled: uniform(0),
-    /** The coarse BLOCK footprint — radius per unit distance for the 4x4
-     *  SDF-pixel half-diagonal (2·√2 SDF pixels). Consumed twice, on
-     *  purpose, by two different passes: the coarse march's cone radius
-     *  (the proof's own radius) and the full march's start backoff
-     *  (insurance beyond the proof). One number, one source of truth. */
-    k: uniform(0.02),
+    /** ONE vec4 — x enabled, y the coarse block footprint — and NOT two
+     *  scalar uniforms composed with vec4(a, b, 0, 0) in the material
+     *  literal: a JoinNode over uniform SCALARS breaks three's WGSL
+     *  generation (WGSLNodeBuilder.getTypeFromLength null deref), the
+     *  console error is easy to miss, and the material falls back to a
+     *  pipeline with NO working uniforms — bodies render unlit-black and
+     *  every uniform write goes dead (2026-09-05, boot-screenshot bisect).
+     *  A vec4 uniform passed WHOLE is the house pattern in this file, and
+     *  it is load-bearing. x 0 is the full identity — the pass does not
+     *  run and the march's fetch hands back 0, folding away inside the ray
+     *  start's max(). y is consumed twice on purpose: the coarse march's
+     *  cone radius (the proof's own radius) and the full march's start
+     *  backoff (insurance beyond the proof). One number, one source. */
+    cfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
   };
 }
 export type DepthPreUniforms = ReturnType<typeof createDepthPreUniforms>;
@@ -760,6 +766,7 @@ export interface DepthPreSource {
  * "no start" identity rather than garbage.
  */
 let fallbackDepthPre: THREE.DataTexture | null = null;
+let fallbackDepthPreCfg: { value: THREE.Vector4 } | null = null;
 function fallbackDepthPreTexture() {
   if (!fallbackDepthPre) {
     const t = new THREE.DataTexture(new Float32Array([0]), 1, 1, THREE.RedFormat, THREE.FloatType);
@@ -767,6 +774,13 @@ function fallbackDepthPreTexture() {
     fallbackDepthPre = t;
   }
   return fallbackDepthPre;
+}
+/** The no-source cfg identity — a shared all-zero vec4 UNIFORM, not a
+ *  composed constant node (see createDepthPreUniforms for the JoinNode
+ *  trap that forces this shape). */
+function fallbackDepthPreUniform() {
+  if (!fallbackDepthPreCfg) fallbackDepthPreCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  return fallbackDepthPreCfg;
 }
 
 /** Hull-refine (phase 0): per-fragment ray overrides so the SHIPPED march
@@ -979,9 +993,7 @@ export function createMarchMaterial(
     // bit-identical, and cfg.y (the block footprint) is only read after the
     // enabled test in DEPTH_PRE_FETCH's consumer.
     depthPreTex: texture(depthPre ? depthPre.texture : fallbackDepthPreTexture()),
-    depthPreCfg: depthPre
-      ? vec4(depthPre.uniforms.enabled, depthPre.uniforms.k, 0.0, 0.0)
-      : vec4(0.0, 0.0, 0.0, 0.0),
+    depthPreCfg: (depthPre ? depthPre.uniforms.cfg : fallbackDepthPreUniform()) as never,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1475,7 +1487,7 @@ export function createZombieGpuView(
       marchCfg: u.marchCfg,
       woundCfg: u.woundCfg,
       woundCfg2: u.woundCfg2,
-      blockK: opts.depthPre.uniforms.k,
+      depthPreCfg: opts.depthPre.uniforms.cfg,
       // Bound POSITIONALLY last, matching DEPTH_PREPASS_MARCH's WGSL
       // signature (the ORDER MATTERS note in createMarchMaterial).
       perfCfg: u.perfCfg,

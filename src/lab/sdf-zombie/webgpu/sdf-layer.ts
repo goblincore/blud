@@ -754,7 +754,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // would read as "a surface 10 cm from the camera" on every block —
       // here every ray would start at 10 cm minus a footprint, INSIDE the
       // body at close range. Zero is the "no start" sentinel.
-      if (depthPreUniforms.enabled.value > 0.5) {
+      if (depthPreUniforms.cfg.value.x > 0.5) {
         camera.layers.set(DEPTH_PREPASS_LAYER);
         renderer.setRenderTarget(depthPre);
         const prevClear = renderer.getClearColor(clearColorScratch).getHex();
@@ -840,15 +840,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // same SDF pass height the AA epsilon does. Called from sizeSdfLayer on
       // every resize AND every adaptive-rung move, so k can never go stale
       // while the coarse grid (resize above) moves under it.
-      depthPreUniforms.k.value = coneKFor(DEPTH_PREPASS_BLOCK_PX);
+      depthPreUniforms.cfg.value.y = coneKFor(DEPTH_PREPASS_BLOCK_PX);
     },
     setConeFineTile(px) { coneFineTile = Math.max(0, Math.round(px)); resize(); },
     get coneFineTile() { return coneFineTile; },
     setConeEnabled(on) { coneUniforms.enabled.value = on ? 1 : 0; },
     occluder: { texture: occluder.texture, uniforms: occluderUniforms },
     depthPre: { texture: depthPre.texture, uniforms: depthPreUniforms },
-    setDepthPreEnabled(on) { depthPreUniforms.enabled.value = on ? 1 : 0; },
-    get depthPreEnabled() { return depthPreUniforms.enabled.value > 0.5; },
+    setDepthPreEnabled(on) { depthPreUniforms.cfg.value.x = on ? 1 : 0; },
+    get depthPreEnabled() { return depthPreUniforms.cfg.value.x > 0.5; },
     shellEntry: { texture: shellEntry.texture, uniforms: shellUniforms },
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },
     setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },

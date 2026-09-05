@@ -1725,7 +1725,7 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
-  blockK: f32,
+  depthPreCfg: vec4<f32>,
   perfCfg: vec4<f32>,
   windDrift: vec3<f32>
 ) -> f32 {
@@ -1742,7 +1742,7 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
     // sub-field too.
     let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
     let d = dres.x;
-    let r = t * blockK;
+    let r = t * depthPreCfg.y;
     if (d < r + 0.0012 + woundCfg2.z) { return t; }
     // Near a wound the field is not a distance bound (the smax fillet
     // overstates), so the coarse walk uses the SAME step multiplier the full
