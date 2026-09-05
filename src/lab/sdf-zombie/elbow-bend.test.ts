@@ -5,7 +5,7 @@ import { compileBlob, compileFace } from './blob-compile';
 import zombieSource from './characters/zombie.blob?raw';
 import { bindRig, impulseAt } from './rig-bind';
 import { constrainRigBends, makeRig, stepRig } from './rig';
-import { add, cross, dot, len, normalize, scale, sub } from './vec';
+import { add, cross, dot, len, normalize, qFromTo, qRotate, scale, sub } from './vec';
 import { rotateYaw } from './gait';
 import { severDistal } from './sever';
 import type { Vec3 } from './types';
@@ -24,7 +24,15 @@ function joints(body: BuildResult, rig: RigState, side: 'l' | 'r') {
 }
 function signedBend(rig: RigState, ids: number[], normal: Vec3) {
   const [s, e, w] = ids.map(i => rig.points[i]!.pos);
-  return dot(cross(sub(e!, s!), sub(w!, e!)), normal);
+  const restUpper = sub(rig.restPose[ids[1]!]!, rig.restPose[ids[0]!]!);
+  const movingNormal = qRotate(qFromTo(normalize(restUpper), normalize(sub(e!, s!))), normal);
+  return dot(cross(sub(e!, s!), sub(w!, e!)), movingNormal);
+}
+
+
+function forwardFlex(upper: Vec3, yaw = 0): Vec3 {
+  const forward = rotateYaw([0, 0, 1], yaw);
+  return normalize(sub(forward, scale(upper, dot(forward, upper))));
 }
 
 describe('intact elbow bend direction', () => {
@@ -41,7 +49,7 @@ describe('intact elbow bend direction', () => {
       const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
       const u = normalize(sub(e!, s!));
       const fore = sub(w!, e!);
-      const flex = normalize(sub(fore, scale(u, dot(fore, u))));
+      const flex = forwardFlex(u, yaw);
       const normal = normalize(cross(u, flex));
       const before = JSON.stringify(bound);
       const hit = impulseAt(bound, w!, scale(flex, -0.18));
@@ -60,7 +68,7 @@ describe('intact elbow bend direction', () => {
     const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
     const u = normalize(sub(e!, s!));
     const fore = sub(w!, e!);
-    const flex = normalize(sub(fore, scale(u, dot(fore, u))));
+    const flex = forwardFlex(u);
     const delta = scale(flex, 0.07);
     const hit = impulseAt(bound, w!, delta);
     expect(hit.rig.points[ids[2]!]!.pos).toEqual(add(w!, delta));
@@ -72,7 +80,7 @@ describe('intact elbow bend direction', () => {
     const ids = joints(body, bound.rig, 'l');
     const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
     const u = normalize(sub(e!, s!)), fore = sub(w!, e!);
-    const flex = normalize(sub(fore, scale(u, dot(fore, u))));
+    const flex = forwardFlex(u);
     const normal = normalize(cross(u, flex));
     let rig = { ...bound.rig, points: bound.rig.points.map((p, i) => i === ids[2]
       ? { ...p, prev: add(p.pos, scale(flex, 0.18)) } : p) };
@@ -88,7 +96,7 @@ describe('intact elbow bend direction', () => {
     const ids = joints(body, bound.rig, 'l');
     const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
     const u = normalize(sub(e!, s!)), fore = sub(w!, e!);
-    const flex = normalize(sub(fore, scale(u, dot(fore, u))));
+    const flex = forwardFlex(u);
     const normal = normalize(cross(u, flex));
     let rig = { ...bound.rig, restPose: bound.rig.restPose.map((p, i) => i === ids[2]
       ? add(p, scale(flex, -0.4)) : p) };
@@ -108,11 +116,23 @@ describe('intact elbow bend direction', () => {
       points: bound.rig.points.map(p => ({ ...p, pos: world(p.pos), prev: world(p.prev) })) };
     const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
     const u = normalize(sub(e!, s!)), fore = sub(w!, e!);
-    const flex = normalize(sub(fore, scale(u, dot(fore, u))));
+    const flex = forwardFlex(u, yaw);
     const hit = impulseAt(bound, w!, scale(flex, -0.18));
     expect(signedBend(hit.rig, ids, normalize(cross(u, flex)))).toBeGreaterThanOrEqual(-1e-8);
     const v = sub(hit.rig.points[ids[2]!]!.pos, hit.rig.points[ids[2]!]!.prev);
     expect(dot(v, flex)).toBeGreaterThanOrEqual(-1e-8);
+  });
+
+  it('stops a slug-sized fold before the forearm doubles back onto the upper arm', () => {
+    const body = zombie(), bound = bindRig(body);
+    const ids = joints(body, bound.rig, 'r');
+    const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
+    const upper = normalize(sub(e!, s!));
+    const folded = add(e!, scale(upper, -0.3));
+    const hit = impulseAt(bound, w!, sub(folded, w!));
+    const fore = normalize(sub(hit.rig.points[ids[2]!]!.pos, e!));
+    expect(dot(upper, fore)).toBeGreaterThanOrEqual(Math.cos(150 * Math.PI / 180) - 1e-8);
+    expect(dot(fore, forwardFlex(upper))).toBeGreaterThan(0);
   });
 
   it('respects a pinned wrist and preserves allowed tangential velocity', () => {
@@ -126,6 +146,18 @@ describe('intact elbow bend direction', () => {
     expect(velocity[2]).toBeGreaterThanOrEqual(-1e-8);
     rig.points[2]!.pinned = true;
     expect(constrainRigBends(rig).points[2]).toEqual(rig.points[2]);
+  });
+
+  it('does not clip recoil against a flexion limit the wrist has not reached', () => {
+    const rig = makeRig([{pos: [0, 1.3, 0], pinned: false},
+      {pos: [0, 1, 0], pinned: false}, {pos: [0, 0.7, -0.1], pinned: false}], []);
+    rig.bends = [{root: 0, mid: 1, end: 2, restUpper: [0, -1, 0],
+      restPole: [0, 0, 1], maxFlex: 150 * Math.PI / 180}];
+    rig.points[2]!.prev = [0, 0.68, -0.1];
+    const solved = constrainRigBends(rig);
+    const velocity = sub(solved.points[2]!.pos, solved.points[2]!.prev);
+    expect(velocity[1]).toBeCloseTo(0.02, 8);
+    expect(velocity[2]).toBeCloseTo(0, 8);
   });
 
   it('cannot undo floor contact when stopping a collapsed arm', () => {
@@ -148,7 +180,7 @@ describe('intact elbow bend direction', () => {
     const ids = joints(severed, bound.rig, 'l');
     const [s, e, w] = ids.map(i => bound.rig.points[i]!.pos);
     const u = normalize(sub(e!, s!)), fore = sub(w!, e!);
-    const flex = normalize(sub(fore, scale(u, dot(fore, u))));
+    const flex = forwardFlex(u);
     const delta = scale(flex, -0.18);
     expect(impulseAt(bound, w!, delta).rig.points[ids[2]!]!.pos).toEqual(add(w!, delta));
   });

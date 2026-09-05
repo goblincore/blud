@@ -22,6 +22,10 @@ describe('projectile elbow upload', () => {
       hit: [-0.6466685295430288, 1.2574807391188823, 0.11720865180014345], dir: [0, 0, 1] },
     { side: 'r', kind: 'slug', warm: 30,
       hit: [-0.7196685295430283, 1.2574807391188823, 0.17820865180014306], dir: [1, 0, 0] },
+    { side: 'l', kind: 'slug', warm: 30,
+      hit: [-0.3413607557779469, 1.2057104940372008, 0.6768538584807906], dir: [0, 1, 0] },
+    { side: 'r', kind: 'slug', warm: 30,
+      hit: [-0.715432988648778, 1.1670090291863195, 0.229596871651776], dir: [0, 1, 0] },
   ] as const;
   for (const c of cases) for (const dt of [1 / 30, 1 / 60, 1 / 144]) {
     it(`${c.kind} ${c.side}, warm=${c.warm}, dt=${dt}: every upload respects the moving elbow frame`, () => {
@@ -37,10 +41,14 @@ describe('projectile elbow upload', () => {
       });
       const upper = body.prims.findIndex(p => p.bone === `upperArm.${c.side}`);
       const fore = body.prims.findIndex(p => p.bone === `foreArm.${c.side}` && len(sub(p.b, p.a)) > 0.01);
+      // The zombie faces +Z. Rest-arm sideways splay is NOT elbow flexion.
+      // This oracle deliberately does not read the solver's stored pole.
       const normal = normalize(cross(sub(body.prims[upper]!.b, body.prims[upper]!.a),
-        sub(body.prims[fore]!.b, body.prims[fore]!.a)));
+        [0, 0, 1]));
       const check = () => {
         const a = latest.prims[upper]!, b = latest.prims[fore]!;
+        expect(dot(normalize(sub(a.b, a.a)), normalize(sub(b.b, b.a))))
+          .toBeGreaterThanOrEqual(Math.cos(150 * Math.PI / 180) - 1e-6);
         const yaw = actor.pose().yaw;
         const restUpper = normalize(sub(body.prims[upper]!.b, body.prims[upper]!.a));
         const swing = qFromTo(rotateYaw(restUpper, yaw), normalize(sub(a.b, a.a)));

@@ -5,13 +5,15 @@ import { add, cross, dot, len, lerp, normalize, qFromAxisAngle, qFromTo, qRotate
 export interface RigPoint { pos: Vec3; prev: Vec3; pinned: boolean }
 export interface RigConstraint { a: number; b: number; rest: number; stiffness: number }
 
-/** A one-sided elbow stop, expressed in its authored upper-arm frame. */
+/** Elbow limits expressed in the authored upper-arm frame. */
 export interface RigBendConstraint {
   root: number;
   mid: number;
   end: number;
   restUpper: Vec3;
   restPole: Vec3;
+  /** Optional forward-fold limit in radians, in [π/2, π); 150° for zombies. */
+  maxFlex?: number;
 }
 
 export interface RigState {
@@ -25,10 +27,9 @@ export interface RigState {
 }
 
 /**
- * Remove forbidden extension while retaining forearm length and permitted
- * recoil. Unlike a pole reflection, a stop does not flip an already large
- * backward bend into a large forward bend. The wrist slides to the boundary
- * of the allowed hemisphere; shoulder and elbow remain where physics put them.
+ * Stop forbidden extension and excessive flexion while retaining forearm
+ * length and permitted recoil. The wrist slides to the allowed boundaries;
+ * shoulder and elbow remain where physics put them.
  * Pure so both the impulse path and post-integration callers can use it.
  */
 export function constrainRigBends(state: RigState, floorY?: number): RigState {
@@ -46,10 +47,20 @@ export function constrainRigBends(state: RigState, floorY?: number): RigState {
     const restUpper = qRotate(yaw, bend.restUpper);
     const restPole = qRotate(yaw, bend.restPole);
     const pole = normalize(qRotate(qFromTo(restUpper, normalize(upper)), restPole));
-    const forbidden = dot(fore, pole);
-    if (forbidden >= -1e-9) continue;
-    const tangent = sub(fore, scale(pole, forbidden));
-    let dir = len(tangent) < 1e-8 ? normalize(upper) : normalize(tangent);
+    const normals = [pole];
+    if (bend.maxFlex !== undefined) normals.push(sub(scale(normalize(upper), Math.sin(bend.maxFlex)),
+      scale(pole, Math.cos(bend.maxFlex))));
+    if (normals.every(n => dot(fore, n) >= -1e-9)) continue;
+    let dir = normalize(fore);
+    // Project onto extension first, then maximum flexion. For our 150°
+    // flexion limit the inward normals have positive dot product, so the
+    // second projection cannot undo the first. Sideways carry is retained.
+    for (const normal of normals) {
+      const forbidden = dot(dir, normal);
+      if (forbidden >= 0) continue;
+      const tangent = sub(dir, scale(normal, forbidden));
+      dir = len(tangent) < 1e-8 ? normalize(upper) : normalize(tangent);
+    }
     let pos = add(mid.pos, scale(dir, foreLength));
     if (floorY !== undefined && pos[1] < floorY && mid.pos[1] >= floorY) {
       // Floor contact already positioned the elbow above ground. A horizontal
@@ -62,14 +73,28 @@ export function constrainRigBends(state: RigState, floorY?: number): RigState {
         horizontal = sub(horizontal, scale(horizontalPole, dot(horizontal, horizontalPole) / h2));
       if (len(horizontal) < 1e-8) horizontal = cross([0, 1, 0], horizontalPole);
       if (len(horizontal) < 1e-8) horizontal = [1, 0, 0];
+      if (normals.some(n => dot(horizontal, n) < -1e-9)) {
+        // The horizontal floor fallback must satisfy the flexion stop too.
+        // A feasible horizontal wedge has a boundary perpendicular to one
+        // of these normals. Pick its closest valid boundary direction.
+        const candidates = normals.flatMap(n => {
+          const v = normalize(cross([0, 1, 0], n));
+          return [v, scale(v, -1)];
+        }).filter(v => len(v) > 1e-8 && normals.every(n => dot(v, n) >= -1e-9));
+        candidates.sort((a, b) => dot(b, dir) - dot(a, dir));
+        if (candidates[0]) horizontal = candidates[0];
+      }
       dir = normalize(horizontal);
       pos = add(mid.pos, scale(dir, foreLength));
     }
     // Moving pos without prev would inject another impulse. Keep allowed
     // velocity, remove only the relative velocity driving through the stop.
     let velocity = sub(end.pos, end.prev);
-    const intoStop = dot(sub(velocity, sub(mid.pos, mid.prev)), pole);
-    if (intoStop < 0) velocity = sub(velocity, scale(pole, intoStop));
+    for (const normal of normals) {
+      if (dot(dir, normal) > 1e-7) continue; // this limit is not in contact
+      const intoStop = dot(sub(velocity, sub(mid.pos, mid.prev)), normal);
+      if (intoStop < 0) velocity = sub(velocity, scale(normal, intoStop));
+    }
     if (points === state.points) points = points.slice();
     points[bend.end] = { ...end, pos, prev: sub(pos, velocity) };
   }
