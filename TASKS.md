@@ -2033,6 +2033,29 @@ Key reference docs (open these before touching their area):
 
 ## Side quests (off the critical path)
 
+- `X-wind` [ ]  **Hair that SWINGS in the wind, not just ripples** — deferred
+  by the owner 2026-09-05 after confirming the ripple ("subtle but it's
+  there").
+  Today `STRAND_WIND_RIPPLE` advances the strand bundle's wobble PHASE with
+  the accumulated wind drift, so waves travel down each strand. That was
+  chosen because it is **free**: a constant added to a phase changes neither
+  the wobble's amplitude nor its slope along `t`, so `strandReach` and
+  `strandLipschitz` are untouched and no bound site moves.
+  The convincing effect — a lock blowing downwind — is a genuinely bigger
+  change and the cost is known in advance:
+  - the bundle must displace toward the TIP, weighted by `t`, so
+    `strandReach` grows. That is a MULTIPLIER of the parent radius, so the
+    sway wants expressing in units of `cell` (as `wave` already is) rather
+    than in metres, or it does not fit the shape all eight outer-bound sites
+    use.
+  - `strandLipschitz` grows by the wind slope, which joins the wobble
+    slope's budget — so deep sway and fast wobble start competing, the way
+    `warp`/`warpFreq` do under the shell pinch cap.
+  - the displacement must be a BOUNDED function of the drift (the drift
+    accumulates forever), i.e. oscillating rather than monotonic, or the
+    hair flies off.
+  Same wind uniform (`__sdfLab.setWind`), same body anchor.
+
 - `X1` [x]  **SDF zombie lab** — raymarched SDF-volume character in a standalone
   sandbox, firewalled from `src/sim` and `src/game`. Smooth-min flesh with
   seamless joints, verlet jiggle, wounds as field subtraction with everted
