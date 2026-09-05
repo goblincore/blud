@@ -6,7 +6,7 @@
 // the per-frame pipeline — stepMotion never touches the renderer.
 import { describe, it, expect } from 'vitest';
 import {
-  applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
+  applyFloorContact, FIRE, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion, SUBSTEP_TUNING,
   type MotionConfig, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
@@ -42,6 +42,7 @@ function realJoints(): MotionJoints {
 const NO_SIGNALS = (): MotionSignals => ({
   dt: DT,
   shot: null,
+  fire: false,
   wounded: { armL: false, armR: false, legL: false, legR: false },
   severed: [],
   missing: { legL: false, legR: false, armL: false, armR: false },
@@ -658,5 +659,51 @@ describe('one-frame pipeline with a stub rig (end-to-end)', () => {
     const c = bound.rig.constraints[0]!;
     const d = len(sub(bound.rig.points[c.a]!.pos, bound.rig.points[c.b]!.pos));
     expect(Math.abs(d - c.rest)).toBeLessThan(0.05);
+  });
+});
+
+describe('fire signal', () => {
+  const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 3.4 };
+  const fireAt = (n: number) => (i: number): MotionSignals => ({ ...NO_SIGNALS(), fire: i === n });
+
+  it('switches to the hip carry for fireHoldSec, then releases to the run carry', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(3, [0, 0, 0]);
+    let points = stubPoints(j);
+    const carries: string[] = [];
+    for (let i = 0; i < 90; i++) {
+      const s = stepMotion(state, j, CFG, fireAt(10)(i), points, BOUNDS, makeRng(1));
+      state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      carries.push(s.frame.carry ?? '-');
+    }
+    expect(carries[9]).toBe('chest');
+    expect(carries[10]).toBe('hip');
+    expect(carries[10 + Math.round(FIRE.holdSec * 60) - 2]).toBe('hip');
+    expect(carries[10 + Math.round(FIRE.holdSec * 60) + 2]).toBe('chest');
+  });
+
+  it('emits hand and shoulder kicks backward along body forward on the fire frame only', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 20, fireAt(19));
+    const fwd = headingDir(frame.bodyYaw);
+    expect(frame.kicks.map(k => k.joint).sort()).toEqual(['handL', 'handR', 'shoulderR']);
+    for (const k of frame.kicks) expect(dot(k.delta, fwd)).toBeLessThan(0);
+    const calm = run(j, makeMotionState(3, [0, 0, 0]), CFG, 20, fireAt(5));
+    expect(calm.frame.kicks).toEqual([]);
+  });
+
+  it('cuts the stride while holding', () => {
+    const j = soldierJoints();
+    const lift = (fire: boolean) => {
+      let best = 0;
+      let state = makeMotionState(3, [0, 0, 0]); let points = stubPoints(j);
+      for (let i = 0; i < 60; i++) {
+        const s = stepMotion(state, j, CFG, { ...NO_SIGNALS(), fire: fire && i === 0 }, points, BOUNDS, makeRng(1));
+        state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+        if (i > 30) best = Math.max(best, s.frame.restPose[j.index.footL]![1] - j.groundY);
+      }
+      return best;
+    };
+    expect(lift(true)).toBeLessThan(lift(false) * 0.6);
   });
 });

@@ -45,6 +45,7 @@ import type { Aabb } from './game-level';
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
   shot: null,
+  fire: false,
   wounded: { armL: false, armR: false, legL: false, legR: false },
   severed: [],
   missing: { legL: false, legR: false, armL: false, armR: false },

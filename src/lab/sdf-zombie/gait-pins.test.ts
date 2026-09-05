@@ -66,7 +66,7 @@ describe('zombie output pins (pre-refactor)', () => {
     if (!joints) throw new Error('stock zombie has no motion joints');
     const cfg: MotionConfig = { enabled: true, wander: true };
     const sig = (): MotionSignals => ({
-      dt: DT, shot: null,
+      dt: DT, shot: null, fire: false,
       wounded: { armL: false, armR: false, legL: false, legR: false },
       severed: [], missing: { legL: false, legR: false, armL: false, armR: false },
       headAlive: true, forcedCollapse: false, freshWounds: [],

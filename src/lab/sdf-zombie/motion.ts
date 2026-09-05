@@ -127,6 +127,22 @@ export const MOTION_TUNING = {
   restCutoff: 0.35 / 60,
 } as const;
 
+/** Hip-fire knobs. */
+export const FIRE = {
+  /** How long the fire carry holds after the last shot (s). The plan said
+   *  0.6, but measured against the run gait's phase (strideFreq 2.4 → the
+   *  first full-amplitude swing after a frame-0 shot starts at frame 36,
+   *  exactly when a 0.6 s hold expires) that left the prescribed stride-cut
+   *  gate unsatisfiable — the swing it measures must still be held. 0.85 s
+   *  (51 frames) covers that whole swing; a pure feel knob otherwise. */
+  holdSec: 0.85,
+  /** Stride amplitude while holding (a burst on the move shortens the step). */
+  strideScale: 0.4,
+  /** Point shoves (m) backward along body forward on the fire frame. */
+  handKick: 0.06,
+  shoulderKick: 0.025,
+} as const;
+
 /** Standing rig options, as the lab runs them today — the frame reports the
  *  per-frame deltas (gravity, restPull) against these. */
 export const STANDING_RIG = {
@@ -342,6 +358,8 @@ export interface MotionSignals {
    *  the lab's tuned amplitudes — the lab wiring never sets it, so its
    *  reactions are bit-identical to a build without the knob). */
   shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean; gain?: number } | null;
+  /** The body fired its weapon this frame (drained by the wiring). */
+  fire: boolean;
   /** Present-but-hurt limbs (carries ≥1 live wound) — the gait limp skew. */
   wounded: { armL: boolean; armR: boolean; legL: boolean; legR: boolean };
   /** Limbs severed since the last frame (meter + hop skew bookkeeping). */
@@ -387,6 +405,8 @@ export interface MotionFrame {
   gaitName: string;
   /** The held gun's pose this frame, world; null when the profile has no carries. */
   gun: GunPose | null;
+  /** The carry in effect, or null. */
+  carry: CarryName | null;
   /** World-space point shoves for the wiring to apply with impulseAt this frame. */
   kicks: { joint: GaitJointName; delta: Vec3 }[];
 }
@@ -518,6 +538,12 @@ export function stepMotion(
   const gaitProfile = profile.gait.walk === profile.gait.run
     ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
+  // --- fire hold ------------------------------------------------------------
+  const firedNow = !!sig.fire && !collapsed && !!profile.carries;
+  const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
+  const sinceFire = firedNow ? 0 : state.sinceFire + dt;
+  const strideScale = fireHold > 0 ? FIRE.strideScale : 1;
+
   // --- the gait clock; a blast's knock is baked in (periodic ⇒ invisible) --
   const skew = {
     damageMeter: collapse.state.meter,
@@ -556,7 +582,7 @@ export function stepMotion(
     const name = joints.names[i]!;
     const gaitOff = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
     const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
-    const s = ARM_JOINTS.has(name) ? armPresence : blend;
+    const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
     const local = add(scale(gaitOff, s), stagOff);
     const leanShare = LEAN_SHARE[name] ?? 0;
     const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
@@ -648,10 +674,12 @@ export function stepMotion(
 
   // --- carry-style arms: the right arm authored, the left hand IK'd --------
   let gun: GunPose | null = null;
+  let carryUsed: CarryName | null = null;
   const carries = profile.carries;
   if (armStyle === 'carry' && carries && !collapsed) {
     const carryName: CarryName = cfg.carryOverride
-      ?? (state.fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
+      ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
+    carryUsed = carryName;
     const carry = CARRIES[carryName];
     const right = rotateYaw([1, 0, 0], bodyYaw);
     const pelvisX = joints.base[idx.pelvis!]![0];
@@ -676,6 +704,17 @@ export function stepMotion(
       const elbow = poleReflect(chain[0]!, chain[1]!, chain[2]!, pole);
       targets[iE] = add(elbow, rotateYaw(stagger.offsets.elbowL ?? Z, bodyYaw));
       targets[iH] = add(chain[2]!, rotateYaw(stagger.offsets.handL ?? Z, bodyYaw));
+    }
+  }
+
+  // --- fire kicks: the wiring shoves these points with impulseAt -----------
+  const kicks: MotionFrame['kicks'] = [];
+  if (firedNow && armStyle === 'carry') {
+    const back = scale(headingDir(bodyYaw), -1);
+    if (!sig.missing.armL) kicks.push({ joint: 'handL', delta: scale(back, FIRE.handKick) });
+    if (!sig.missing.armR) {
+      kicks.push({ joint: 'handR', delta: scale(back, FIRE.handKick) });
+      kicks.push({ joint: 'shoulderR', delta: scale(back, FIRE.shoulderKick) });
     }
   }
 
@@ -813,8 +852,8 @@ export function stepMotion(
     wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
     plantL, plantR, aim, recoil, bodyYaw, blend,
     runWeight: rw,
-    fireHold: state.fireHold,
-    sinceFire: state.sinceFire,
+    fireHold,
+    sinceFire,
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };
@@ -841,7 +880,8 @@ export function stepMotion(
       blend: collapsed ? 0 : blend,
       gaitName: gaitProfile.name,
       gun,
-      kicks: [],
+      carry: carryUsed,
+      kicks,
     },
   };
 }

@@ -1301,6 +1301,7 @@ async function main() {
    *  the live arrays so the in-place drain reaches them. */
   const heroSignals: ActorSignals = {
     shot: null,
+    fire: false,
     wounded: { armL: false, armR: false, legL: false, legR: false },
     severed: pendingSevered,
     missing: { legL: false, legR: false, armL: false, armR: false },

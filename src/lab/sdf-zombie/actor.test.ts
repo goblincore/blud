@@ -14,7 +14,11 @@ import { makeZombie } from './body';
 import { DEFAULT_FACE } from './face';
 import { applyRig } from './rig-bind';
 import { translateBody } from './translate';
-import type { WanderBounds } from './wander';
+import { makeRng, type WanderBounds } from './wander';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import soldierSrc from './characters/soldier.blob?raw';
+import { SOLDIER_PROFILE } from './motion-profile';
 
 const BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
 const BASE_SEED = 1337;
@@ -75,5 +79,25 @@ describe('crowd actor determinism', () => {
     // self-consistent while different seeds produce different yaw histories.
     expect(crowdSeed(1, BASE_SEED)).not.toBe(crowdSeed(2, BASE_SEED));
     expect(a.prims.length).toBe(b.prims.length);
+  });
+});
+
+describe('actor: fire kicks reach the rig', () => {
+  it('the hand points move backward on the fire frame', () => {
+    const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const m = makeActorMotion(body, { seed: 5 });
+    const input = () => ({
+      current: body, dt: 1 / 60, wander: false, armStyle: 'carry' as const,
+      headingFollow: 1, gazeFollow: 1, bounds: { minX: -2, maxX: 2, minZ: -2, maxZ: 2 },
+      rng: makeRng(5), signals: emptyActorSignals(), profile: SOLDIER_PROFILE, forceSpeed: 0,
+    });
+    for (let i = 0; i < 60; i++) stepActorMotion(m, input());
+    const iH = m.motionJoints!.index.handR;
+    const before = m.bound.rig.points[iH]!.pos[2];
+    const sig = emptyActorSignals(); sig.fire = true;
+    const f = stepActorMotion(m, { ...input(), signals: sig });
+    expect(f!.kicks.length).toBe(3);
+    expect(sig.fire).toBe(false); // drained
+    expect(m.bound.rig.points[iH]!.pos[2]).toBeLessThan(before);
   });
 });
