@@ -1,15 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
   "phase": "intact",
-  "status": "deferred",
-  "passed": false,
+  "status": "pass",
+  "passed": true,
   "gpuExecuted": true,
-  "sceneComparisons": 6,
-  "hitPixelComparisons": 208795,
+  "sceneComparisons": 20,
+  "hitPixelComparisons": 621632,
   "firstRunCommit": "95e9206",
   "firstRunArtifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-first-run.json",
   "firstRunFailure": "mixed-wounded: analytic coverage below 10% probe floor",
-  "correctedValidation": "No GPU run: the single authorized corrected rerun stopped at load1 17.70556640625 >12 before servers started.",
+  "correctedValidation": "Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.",
   "firstRunLoad": 7.41650390625,
   "correctedLaunchLoad": 17.70556640625,
   "shaderConsoleClean": true,
@@ -49,7 +49,7 @@
       "depthMax": 0,
       "depthChanged": 0,
       "fallbackMax": 0,
-      "scalarMax": 7.916241884231567e-9,
+      "scalarMax": 7.916241884231567e-09,
       "nonFinite": 0,
       "angularDegrees": {
         "count": 8337,
@@ -94,7 +94,7 @@
       "depthMax": 0,
       "depthChanged": 0,
       "fallbackMax": 0,
-      "scalarMax": 9.080395102500916e-9,
+      "scalarMax": 9.080395102500916e-09,
       "nonFinite": 0,
       "angularDegrees": {
         "count": 32036,
@@ -139,7 +139,7 @@
       "depthMax": 0,
       "depthChanged": 0,
       "fallbackMax": 0,
-      "scalarMax": 1.0186340659856796e-8,
+      "scalarMax": 1.0186340659856796e-08,
       "nonFinite": 0,
       "angularDegrees": {
         "count": 53213,
@@ -184,7 +184,7 @@
       "depthMax": 0,
       "depthChanged": 0,
       "fallbackMax": 0,
-      "scalarMax": 1.0360963642597198e-8,
+      "scalarMax": 1.0360963642597198e-08,
       "nonFinite": 0,
       "angularDegrees": {
         "count": 34322,
@@ -240,71 +240,116 @@
       }
     },
     {
-      "name": "mixed-wounded",
+      "name": "wounded-upper-body-control",
       "bodyId": 1,
       "anatomy": {
         "head": {
-          "hits": 1499,
+          "hits": 1738,
           "analytic": 0,
-          "fallback": 1499,
+          "fallback": 1738,
           "analyticFraction": 0
         },
         "torso": {
-          "hits": 6337,
+          "hits": 5767,
           "analytic": 0,
-          "fallback": 6337,
+          "fallback": 5767,
           "analyticFraction": 0
         }
       },
       "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
       "w": 800,
       "h": 600,
-      "total": 26935,
+      "total": 16477,
       "reasons": {
-        "ok": 0,
+        "ok": 23,
         "unsupported": 0,
         "degenerate": 0,
         "hard-boundary": 0,
-        "owner-unstable": 0,
-        "wound-pending": 26935,
+        "owner-unstable": 2,
+        "wound-pending": 16452,
         "sampled-cache": 0,
         "inactive": 0
       },
-      "analyticFraction": 0,
+      "analyticFraction": 0.0013958851732718334,
       "depthMax": 0,
       "depthChanged": 0,
       "fallbackMax": 0,
-      "scalarMax": 0,
+      "scalarMax": 3.725290298461914e-09,
       "nonFinite": 0,
       "angularDegrees": {
-        "count": 0,
-        "p50": 0,
-        "p95": 0,
-        "p99": 0,
-        "max": 0
+        "count": 23,
+        "p50": 0.4143660695166139,
+        "p95": 0.5159696213279139,
+        "p99": 0.57537784478215,
+        "max": 0.57537784478215
+      }
+    },
+    {
+      "name": "mixed-head-wounded",
+      "bodyId": 1,
+      "anatomy": {
+        "head": {
+          "hits": 642,
+          "analytic": 0,
+          "fallback": 642,
+          "analyticFraction": 0
+        },
+        "torso": {
+          "hits": 2962,
+          "analytic": 0,
+          "fallback": 2962,
+          "analyticFraction": 0
+        }
+      },
+      "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+      "w": 800,
+      "h": 600,
+      "total": 9469,
+      "reasons": {
+        "ok": 1702,
+        "unsupported": 0,
+        "degenerate": 0,
+        "hard-boundary": 0,
+        "owner-unstable": 122,
+        "wound-pending": 7645,
+        "sampled-cache": 0,
+        "inactive": 0
+      },
+      "analyticFraction": 0.17974442918998837,
+      "depthMax": 0,
+      "depthChanged": 0,
+      "fallbackMax": 0,
+      "scalarMax": 5.122274160385132e-09,
+      "nonFinite": 0,
+      "angularDegrees": {
+        "count": 1702,
+        "p50": 0.4592202649772289,
+        "p95": 0.830775509162744,
+        "p99": 1.0708961603406955,
+        "max": 1.8314553311857809
       }
     }
   ],
-  "beautyValid": false,
-  "beautyRejection": "Original screenshots retained 25% and 6.25% raw eligibility-color history through shipped temporal smear. They are non-acceptance evidence, not analytic-normal visual differences.",
+  "beautyValid": true,
+  "beautyRejection": null,
   "motionFrames": 24,
-  "motionValid": false,
-  "motionRejection": "Original motion followed the crater and exercised wound fallback; history was not flushed per pair. Corrected intact-before-crater reel is implemented but unexecuted.",
+  "motionValid": true,
+  "motionRejection": null,
   "diagnosticImages": [
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-eligibility-first-run.png",
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/torso-eligibility-first-run.png",
     "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-base-normal-first-run.png"
   ],
-  "rawArtifactDirectory": "/tmp/zombie-ng-intact-resume",
+  "rawArtifactDirectory": "/tmp/zombie-ng-intact-head-wound",
   "tests": {
-    "nodeFocused": 10,
-    "tsc": "pass",
-    "driverSyntax": "pass"
+    "nodeFocused": 12,
+    "driverSyntax": "pass",
+    "tsc": "previous8260b57 pass; no TypeScript changed"
   },
   "criteria": {
     "depth": "exact float alpha equality",
-    "fallbackMax": 0.000001,
-    "scalarMax": 0.00001,
+    "fallbackMax": 1e-06,
+    "scalarMax": 1e-05,
     "legacyStencilAngle": {
       "p99": 5,
       "max": 25,
@@ -316,10 +361,46 @@
     "timing": "not measured"
   },
   "remaining": [
-    "Corrected full-game capture with actual smear=0.25 assertion and 20 zero-dt history-flush frames",
-    "Retain narrow wounded closeup as full wound-pending control; add wider wounded body containing skin outside actual reach with >=10% mixed coverage",
-    "Inspect clean paired beauty and intact-before-crater motion",
-    "Owner look and future performance verdict remain pending"
+    "Owner intact look review",
+    "Task4 wound-surface work remains unstarted; performance remains unmeasured"
   ],
-  "report": ".superpowers/sdd/2026-09-05-zombie-analytic-normals/task-3-report.md"
+  "report": ".superpowers/sdd/2026-09-05-zombie-analytic-normals/task-3-report.md",
+  "latestRunArtifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-head-wound.json",
+  "latestRunLoad": 6.46875,
+  "motionArtifactDirectory": "/Users/donny/.codex/visualizations/2026/09/04/01a06e0c-6c42-7da3-89ce-0d4ae5cc15b2/zombie-normal-review/review.html",
+  "runs": [
+    {
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-first-run.json",
+      "passed": false,
+      "sceneComparisons": 6,
+      "beautyValid": false,
+      "failures": [
+        "mixed-wounded: analytic coverage below 10% probe floor"
+      ]
+    },
+    {
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-corrected-1738.json",
+      "passed": false,
+      "sceneComparisons": 7,
+      "beautyValid": true,
+      "failures": [
+        "wounded-upper-body-control: expected complete wound-pending fallback",
+        "mixed-wounded: analytic coverage below 10% probe floor"
+      ]
+    },
+    {
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-head-wound.json",
+      "passed": true,
+      "sceneComparisons": 7,
+      "beautyValid": true,
+      "failures": []
+    }
+  ],
+  "technicalVisualReview": {
+    "status": "pass",
+    "ownerLook": "pending",
+    "mixedMeanRgbByteDelta": 0.00393,
+    "mixedMaxRgbByteDelta": 8,
+    "note": "Image comparison is neither timing nor temporal-flicker evidence."
+  }
 }

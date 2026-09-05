@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames } from './normal-gradient-intact.mjs';
+import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames, normalCoverageFailure } from './normal-gradient-intact.mjs';
 
 test('anatomy has independent head/torso denominators and excludes foreign-body sentinel, background, arms and unknown owners', () => {
   const pixels = new Float32Array([
@@ -68,4 +68,14 @@ test('shipped temporal history is flushed below diagnostic-color contamination b
   const frames=normalBeautyFrames(.25);
   assert.ok(128 * .25 ** frames < 1e-6);
   assert.throws(()=>normalBeautyFrames(.6),/shipped smear/);
+});
+
+
+test('wounded control requires actual fallback while mixed fixture retains both coverage floors', () => {
+  const result={name:'control',total:16477,reasons:{ok:23,'wound-pending':16452},analyticFraction:23/16477};
+  assert.equal(normalCoverageFailure(result,{woundControl:true}),null);
+  assert.match(normalCoverageFailure({...result,reasons:{ok:16477,'wound-pending':0}},{woundControl:true}),/no wound fallback/);
+  assert.match(normalCoverageFailure(result),/10% probe floor/);
+  assert.match(normalCoverageFailure({...result,total:200,reasons:{ok:99},analyticFraction:.495}),/10% probe floor/);
+  assert.equal(normalCoverageFailure({...result,total:1000,reasons:{ok:100},analyticFraction:.1}),null);
 });

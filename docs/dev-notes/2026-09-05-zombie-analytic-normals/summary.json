@@ -1,9 +1,9 @@
 {
-  "commit": "95e9206",
+  "commit": "8260b57",
   "gates": {
     "reference": "pass",
     "gpuKernel": "pass",
-    "intact": "deferred",
+    "intact": "pass",
     "wounds": "skipped-by-gate",
     "visualEvidence": "skipped-by-gate",
     "timing": "skipped-by-gate",
@@ -12,28 +12,28 @@
   "scenes": [
     {
       "name": "intact-head-and-torso",
-      "status": "partial",
-      "reason": "Real GPU compile, raw depth/normal and anatomical coverage results exist; beauty was contaminated and corrected validation has not run."
+      "status": "pass",
+      "reason": "Real GPU compile, raw depth/normal and anatomical coverage results exist. Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Beauty valid: true."
     },
     {
       "name": "wounded-head-and-torso",
       "status": "skipped-by-gate",
-      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+      "reason": "Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration."
     },
     {
       "name": "two-body-close-up-with-surrounding-actors",
       "status": "skipped-by-gate",
-      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+      "reason": "Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration."
     },
     {
       "name": "walking-and-flashlight-motion",
-      "status": "non-acceptance-evidence",
-      "reason": "24 original frames exist but use wound fallback and contaminated history; corrected intact reel has not run."
+      "status": "technical-visual-evidence",
+      "reason": "24 frames; matched intact motion valid: true. Historical rejected captures remain recorded separately."
     },
     {
       "name": "impact-stagger-sever-sequence",
       "status": "skipped-by-gate",
-      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+      "reason": "Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration."
     },
     {
       "name": "unsupported-control",
@@ -275,52 +275,97 @@
         }
       },
       {
-        "name": "mixed-wounded",
+        "name": "wounded-upper-body-control",
         "bodyId": 1,
         "anatomy": {
           "head": {
-            "hits": 1499,
+            "hits": 1738,
             "analytic": 0,
-            "fallback": 1499,
+            "fallback": 1738,
             "analyticFraction": 0
           },
           "torso": {
-            "hits": 6337,
+            "hits": 5767,
             "analytic": 0,
-            "fallback": 6337,
+            "fallback": 5767,
             "analyticFraction": 0
           }
         },
         "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
         "w": 800,
         "h": 600,
-        "total": 26935,
+        "total": 16477,
         "reasons": {
-          "ok": 0,
+          "ok": 23,
           "unsupported": 0,
           "degenerate": 0,
           "hard-boundary": 0,
-          "owner-unstable": 0,
-          "wound-pending": 26935,
+          "owner-unstable": 2,
+          "wound-pending": 16452,
           "sampled-cache": 0,
           "inactive": 0
         },
-        "analyticFraction": 0,
+        "analyticFraction": 0.0013958851732718334,
         "depthMax": 0,
         "depthChanged": 0,
         "fallbackMax": 0,
-        "scalarMax": 0,
+        "scalarMax": 3.725290298461914e-9,
         "nonFinite": 0,
         "angularDegrees": {
-          "count": 0,
-          "p50": 0,
-          "p95": 0,
-          "p99": 0,
-          "max": 0
+          "count": 23,
+          "p50": 0.4143660695166139,
+          "p95": 0.5159696213279139,
+          "p99": 0.57537784478215,
+          "max": 0.57537784478215
+        }
+      },
+      {
+        "name": "mixed-head-wounded",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 642,
+            "analytic": 0,
+            "fallback": 642,
+            "analyticFraction": 0
+          },
+          "torso": {
+            "hits": 2962,
+            "analytic": 0,
+            "fallback": 2962,
+            "analyticFraction": 0
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 9469,
+        "reasons": {
+          "ok": 1702,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 122,
+          "wound-pending": 7645,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.17974442918998837,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 5.122274160385132e-9,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 1702,
+          "p50": 0.4592202649772289,
+          "p95": 0.830775509162744,
+          "p99": 1.0708961603406955,
+          "max": 1.8314553311857809
         }
       }
     ],
-    "reason": "First-run raw numerical/anatomical coverage is preserved; mixed-wounded fixture failed and corrected validation is pending."
+    "reason": "Historical raw numerical/anatomical coverage is preserved. Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.."
   },
   "artifacts": {
     "kernel": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
@@ -331,7 +376,35 @@
       "docs/dev-notes/2026-09-05-zombie-analytic-normals/torso-eligibility-first-run.png",
       "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-base-normal-first-run.png"
     ],
-    "reel": null
+    "reel": "/Users/donny/.codex/visualizations/2026/09/04/01a06e0c-6c42-7da3-89ce-0d4ae5cc15b2/zombie-normal-review/review.html",
+    "runs": [
+      {
+        "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-first-run.json",
+        "passed": false,
+        "sceneComparisons": 6,
+        "beautyValid": false,
+        "failures": [
+          "mixed-wounded: analytic coverage below 10% probe floor"
+        ]
+      },
+      {
+        "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-corrected-1738.json",
+        "passed": false,
+        "sceneComparisons": 7,
+        "beautyValid": true,
+        "failures": [
+          "wounded-upper-body-control: expected complete wound-pending fallback",
+          "mixed-wounded: analytic coverage below 10% probe floor"
+        ]
+      },
+      {
+        "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-head-wound.json",
+        "passed": true,
+        "sceneComparisons": 7,
+        "beautyValid": true,
+        "failures": []
+      }
+    ]
   },
   "conclusion": "incomplete"
 }

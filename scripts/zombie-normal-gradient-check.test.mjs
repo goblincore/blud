@@ -82,3 +82,22 @@ test('offline verdict preserves partial real GPU evidence without claiming zero 
   assert.equal(summary.artifacts.reel,null);
   assert.equal(summary.conclusion,'incomplete');
 });
+
+test('offline verdict preserves historical failure and corrected valid images without stale unexecuted claims', () => {
+  const fixture=mkdtempSync(join(tmpdir(),'zombie-ng-corrected-'));
+  const evidenceDir=join(fixture,'docs/dev-notes/2026-09-05-zombie-analytic-normals'),outDir=join(fixture,'out');
+  mkdirSync(evidenceDir,{recursive:true});
+  writeFileSync(join(evidenceDir,'gates.json'),JSON.stringify({version:1,reference:'pass',gpuKernel:'pass',intact:'pass',wounds:'skipped-by-gate',evidence:[]}));
+  const runs=[{artifact:'first.json',passed:false,beautyValid:false},{artifact:'corrected.json',passed:false,beautyValid:true}];
+  writeFileSync(join(evidenceDir,'intact.json'),JSON.stringify({gpuExecuted:true,sceneComparisons:13,numericResults:[{name:'mixed-wounded'}],firstRunFailure:'mixed closeup coverage failed',correctedValidation:'7 corrected comparisons ran; mixed coverage failed',beautyValid:true,motionValid:true,motionFrames:24,motionArtifactDirectory:'owner-review',runs}));
+  const result=spawnSync(process.execPath,[driver,'--phase','verdict','--out',outDir,'--cdp','1'],{cwd:fixture,encoding:'utf8'});
+  assert.equal(result.status,1);
+  const summary=JSON.parse(readFileSync(join(outDir,'summary.json'),'utf8'));
+  assert.doesNotMatch(JSON.stringify(summary),/corrected validation has not run|corrected intact reel has not run|beauty was contaminated/);
+  assert.deepEqual(summary.artifacts.runs,runs);
+  assert.equal(summary.scenes.find(s=>s.name==='walking-and-flashlight-motion').status,'technical-visual-evidence');
+  assert.equal(summary.artifacts.reel,'owner-review');
+  assert.equal(summary.gates.ownerLook,'pending');
+  assert.equal(summary.scenes.find(s=>s.name==='intact-head-and-torso').status,'pass');
+  assert.doesNotMatch(JSON.stringify(summary),/intact validation is deferred/);
+});

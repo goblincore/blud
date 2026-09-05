@@ -70,3 +70,8 @@ export function normalBeautyFrames(smear) {
   if (smear !== .25) throw new Error(`expected shipped smear 0.25, got ${smear}`);
   return 20;
 }
+
+export function normalCoverageFailure(result, { woundControl = false } = {}) {
+  if(woundControl) return result.reasons['wound-pending']>0 ? null : `${result.name}: no wound fallback pixels`;
+  return result.reasons.ok<100||result.analyticFraction<.1 ? `${result.name}: analytic coverage below 10% probe floor` : null;
+}

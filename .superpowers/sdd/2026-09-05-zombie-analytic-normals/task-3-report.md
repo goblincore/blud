@@ -128,3 +128,46 @@ node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-not
 ```
 
 Remaining: scoped review of these latest capture fixes; an authorized load-guarded corrected GPU run; actual narrow-control/wider-mixed checks; clean paired beauty and intact-motion inspection. No default enablement, Task4 implementation, performance run, merge, push or external memory save occurred.
+
+## Resumed corrected gameplay validation and final fixture — 2026-09-05
+
+User resumed after laptop pause at clean8260b57. Fresh preflight load1=7.3642578, ownedports5251/9251free. Corrected driver ran at `/tmp/zombie-ng-intact-corrected-1738`, exit1 with exactly two failures: `wounded-upper-body-control: expected complete wound-pending fallback` and `mixed-wounded: analytic coverage below 10% probe floor`. Seven cases compiled/executed cleanly. All depth/fallback comparisons exact; intact head/torso/motion clean. Exact JSON preserved as `docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-corrected-1738.json`; historical first-run JSON is untouched.
+
+The torso scene had23analytic,2owner-unstable,16452wound-pending/16477hits; pulling back produced7analytic,1owner-unstable,6686wound-pending/6694hits. Controller geometry review identified actual centerY1.020 and conservativeproductionreach0.8796 as almostwholebody exclusion. Camera distance alone could not satisfy mixedcoverage. The100%control expectation was also unjustified after the prior motion. These were fixture assumptions, not shader defects. Controller temporarily reported missing actor/weapon in woundedhybrid screenshots, then retracted it: identical SHA256 and fresh individual views confirmed actor+weapon in both. No capture lifecycle, delay, shader or productionsetting change was made for that claim.
+
+Approved bounded correction: torso control requires actual wound-pending pixels plus unchanged numericparity, with measured negligibleanalytic share; separate fresh page reboots same game, reapplies shippeddefaults, asserts no priorwounds, stages aimY1.7,d1.45, stamps single shippedslug. ActualdebugWoundsanchor, primIdx, anatomy and posedgeometry are recorded. Require anchorY>=1.5/headowner and lowerleg endpoints beyond expandedbound before wholebody aimY.95,d2.4 comparison. Existing>=10%and>=100analytic floor remains unchanged. No wound-surface acceleration claim.
+
+TDD: coverage test failed against old completefallback behavior (6pass/1fail); updated predicate passed7tests, including rejection for absentwoundfallback and each unchangedmixedfloor. Offline processregression failed on stale `corrected validation has not run`, then passed after schema consumed actualvisualstatus and preserved historicalruns. Further RED on stale `partial` with intactpass was fixed; final focused tests:
+
+```text
+node --test --test-concurrency=1 scripts/lib/normal-gradient-intact.test.mjs scripts/lib/normal-gradient-gates.test.mjs scripts/zombie-normal-gradient-check.test.mjs
+#12pass,0fail
+node --check scripts/zombie-normal-gradient-check.mjs
+node --check scripts/lib/normal-gradient-intact.mjs
+#exit0
+```
+
+No TypeScript or shader changed in this correction; previous tscpass applies. No fullsuite or parallelGPU ran.
+
+The single authorized fixture rerun used this exact guarded command in the worktree:
+
+```bash
+set -e
+export LAB_VITE_PORT=5251 LAB_CDP_PORT=9251
+if lsof -nP -iTCP:5251 -iTCP:9251 -sTCP:LISTEN; then exit 2; fi
+node -e 'const n=require("os").loadavg()[0]; console.log("load1",n); if(n>12) process.exit(2)'
+source scripts/lab-servers.sh
+trap lab_servers_down EXIT
+lab_servers_up
+node scripts/zombie-normal-gradient-check.mjs --phase intact --out /tmp/zombie-ng-intact-head-wound --vite 5251 --cdp 9251
+```
+
+Guardload6.46875; actualoutput `INTACT PASS: 7 named cases; evidence /tmp/zombie-ng-intact-head-wound`, exit0, emptyfailures, onlyVitedebugconsole. Cleanuptrap completed; independent lsofverified bothportsfree. Exact result is tracked `intact-head-wound.json`.
+
+Latest real coverage: wholebody8337/9376=88.92%; anatomicaltorso10840/12516=86.61%; anatomicalhead7270/8698=83.58%; animated34322/37440=91.67%; barebones37440/37440unsupported; torso control23/16477analytic with16452woundpending and2ownerunstable; freshheadwound1702/9469=17.9744%analytic,7645woundpending,122ownerunstable. **Wounded head642/642 and torso2962/2962 remain fallback.** Mixed supportedskin is lowerbody. Everycase depthChanged/depthMax/fallbackMax/nonFinite=0; largestscalar1.0361e-8; p99<1.50°,max6.5903°animated versuslegacyfinitestencil. Headwoundactualworldanchor(-4.7335875178,1.5806371699,-4.6493816204),primIdx2/limbhead, radius.16; boundradius.8796; belowreachY.6984390937; sixlegendpointrows beyondverticalreach. Raw geometry/stamp settings accompany JSON.
+
+Controller technically approved correctedbeauty head/torso, motionpairs0/6/11, torso-wound and freshhead-woundbeauty+eligibility. FreshmixedRGBbyteROI meanabsdelta.00393,max8; noobviousregression. These are imagecomparison observations, not performance or temporalflickergates. Durable originalPNGviewer lives in SDD `owner-review/review.html` (controller-managed). Actualsmear.25;20zero-dtflushframes; pairedstatechecks allpass. Historical contaminated firstbeauty remains nonacceptance; corrected1738cleanbeauty is valid despite its coveragefailure.
+
+Updated `intact.json` version2 links allthree rawruns and preserves all20repeatedscenecomparisons. Offlineverdict now reports actual correctedbeauty/motion, latestnumericresults, historicalfailures and intactpass truthfully. Command `node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1` still exits1 **as expected** because wounds remains skipped and timing/ownerlook are unfulfilled; it opens no browser.
+
+Final technicalstatus: Task3 intactpass subject to scoped finalreport/testreview; ownerLookpending. Task4 and performance remain unstarted this turn. Chunk-containingeligibility captures remainrejected; future zonedcacheintegration mustforcefulllegacy ifzonedCfg.xactive. No defaultenablement, geometrychange, foreignprocess, subagent, memorysave, merge or push. Nextuserstep is intactownerlook.

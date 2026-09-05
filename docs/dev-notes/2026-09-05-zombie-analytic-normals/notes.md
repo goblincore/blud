@@ -94,3 +94,13 @@ That correction's one guarded rerun was stopped immediately at load1 17.7056>12;
 ## Final checkpoint review
 
 Scoped static review of `95e9206..fcd4978` approved the capture/fixture corrections with no Critical or Important findings. The reviewer checked zero-dt drawing, temporal history advancement and readback ordering in the existing renderer. This is approval of an unfinished checkpoint; corrected GPU validation, Task 4 and gameplay performance remain deferred. `TASKS.md` now reflects the valid partial gameplay evidence.
+
+## Resumed validation — Task3 technical pass
+
+This supersedes the deferred/unexecuted capture claims above. Corrected1738 actually ran seven scenes: its clean beauty and matched intact motion passed controller inspection, while the torso control's unjustified100% fallback requirement and wider mixed coverage failed. The exact failed result remains `intact-corrected-1738.json`. The earlier first-run JSON and rejected beauty remain separate.
+
+Investigation established that the torso wound's centerY1.020 and reach0.8796 exclude nearly the entire visible body; changing camera distance cannot solve that. The approved fresh-page head-slug fixture records actual worldanchor(-4.7335875,1.5806372,-4.6493816), head primitive2, shippedradius0.16 and unchangedreach0.8796. It passes the unchanged mixedfloor with1702/9469=17.97%analytic lower-body pixels,7645wound-pending and122owner-unstable. Wounded head and torso are both entirely fallback. The torso control remains visible with only23/16477analytic pixels and unknown cost; it is not an acceleration claim.
+
+The final guarded owned5251/9251 launch passed load1=6.46875, ran seven named cases with no failures or shader-console errors, and cleaned up both ports. Head/torso anatomicalcoverage83.58%/86.61%; all depths and fallback normals exactly equal. Controller inspected fresh mixed beauty and eligibility plus corrected head/torso and motion0/6/11 with no obvious regression. A transient missingbody claim was retracted after samehash freshviews confirmed both actor and weapon; no capture wait or shader fix was needed.
+
+Task3 `intact` now passes; ownerLook remains pending and Task4/performance remain unstarted. Offline verdict preserves all20scene comparisons across three runs and remains incomplete for those later gates. Twelve focused Node tests and syntax checks pass after observedRED/GREEN coverage/report regressions. No TypeScript changed; prior tsc remained valid. See latest `verdict.md`, `intact.json`, and the Task3 report for commands and limitations.

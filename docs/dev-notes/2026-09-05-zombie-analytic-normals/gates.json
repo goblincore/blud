@@ -2,7 +2,7 @@
   "version": 1,
   "reference": "pass",
   "gpuKernel": "pass",
-  "intact": "deferred",
+  "intact": "pass",
   "wounds": "skipped-by-gate",
   "visualEvidence": "skipped-by-gate",
   "timing": "skipped-by-gate",
@@ -49,6 +49,30 @@
       "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
       "reason": "intact gate is deferred; wounds gate is skipped-by-gate. 6 real gameplay scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: No GPU run: the single authorized corrected rerun stopped at load1 17.70556640625 >12 before servers started.. Raw numbers remain valid; original beauty/motion are not acceptance evidence. No paired timing records exist."
+    },
+    {
+      "commit": "verdict based on 8260b57",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "intact gate is deferred; wounds gate is skipped-by-gate. 20 real gameplay scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: Corrected1738 ran7cases with valid beauty/motion but failed the torso wound control and mixed coverage. Fresh-head-wound fixture rerun passed7numeric cases; root mixed visual inspection pending.. Corrected beauty is valid technical evidence; owner review remains pending. No paired timing records exist."
+    },
+    {
+      "commit": "Task3 final fixture based on8260b57",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase intact --out /tmp/zombie-ng-intact-head-wound --vite 5251 --cdp 9251",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-head-wound.json",
+      "reason": "7 real gameplay cases pass; anatomical head83.58%,torso86.61%; fresh head-wound mixed17.97%; exact depth/fallback. Controller technical visual inspection passed; ownerLook pending, no Task4 or timing."
+    },
+    {
+      "commit": "verdict based on 8260b57",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "wounds gate is skipped-by-gate. 20 real gameplay scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Corrected beauty is valid technical evidence; owner review remains pending. No paired timing records exist."
+    },
+    {
+      "commit": "verdict based on 8260b57",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "wounds gate is skipped-by-gate. 20 real gameplay scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Corrected beauty is valid technical evidence; owner review remains pending. No paired timing records exist."
     }
   ]
 }
