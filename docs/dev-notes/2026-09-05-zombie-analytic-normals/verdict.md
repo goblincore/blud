@@ -27,3 +27,7 @@ The durable owner viewer is `.superpowers/sdd/2026-09-05-zombie-analytic-normals
 Twelve focused Node tests and both driver/helper syntax checks pass. Fixture and offline-report regressions were observed RED then GREEN. No TypeScript or shader changed in this correction; prior TypeScript checks passed. The final GPU launch passed load1=6.46875, used owned5251/9251 and exited0; trap cleanup completed and both ports were verified free.
 
 Chunk-containing eligibility captures remain rejected until piece identity/masks are extended. A future combined zoned-cache build must force full legacy normals while `zonedCfg.x` is active; that uniform is absent here. No Task4, performance run, merge, push or default enablement occurred. Next step is owner intact-look review.
+
+## Owner feedback after intact review
+
+The owner inspected the A/B viewer and said it looks good, like exactly the same, and explicitly does not require such close visual parity. Intact appearance is accepted; small benign appearance differences are acceptable while preserving the wet skin and wound read. This is not acceptance of the unimplemented wound-gradient stage. The full ownerLook gate remains pending for that later result. Next implementation step is Task 4 after scoped review completes.

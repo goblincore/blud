@@ -1,6 +1,6 @@
 # Zombie analytic normals — approved design
 
-Date: 2026-09-05. Status: owner approved the design ("yes lgtm"), including **zombie first, with fallback**. Tasks 1–2 passed; a default-off intact/detail implementation exists at checkpoint `8637914`, but required gameplay GPU validation is deferred, Task 4 wounds was skipped by gate, and the Task 5 verdict is incomplete. Planning inspection baseline: main `b268695`; resumed execution must inspect current main and active wound-cache work again.
+Date: 2026-09-05. Status: owner approved the design ("yes lgtm"), including **zombie first, with fallback**. Tasks 1–3 technical checks passed after corrected gameplay validation at `6c39b8e`; the owner approved the intact comparison and accepts small benign appearance differences. Task 4 wound gradients and Task 5 performance remain pending; the overall verdict is incomplete and the feature stays default off. Planning inspection baseline: main `b268695`; resumed execution must inspect current main and active wound-cache work again.
 
 ## Objective
 
@@ -75,6 +75,8 @@ Preserve burn depth/amplitude cases, bounded wound reach, analytic fallback woun
 
 The zombie's curved ribs and organs make complete internal-surface differentiation more involved. Retain the full legacy normal wherever an unsupported operation can affect the result. Support can expand after measured fallback coverage demonstrates its value. Do not assume only the single winning primitive matters inside a blend.
 
+Owner clarification, 2026-09-05: internal skeleton elements such as ribs primarily serve visual effect and impact; reduced anatomical accuracy and fidelity are acceptable. Future internal-bone optimization may use simpler geometry or shading if the exposed-bone impression remains convincing. The current prototype keeps unsupported internals on legacy fallback; this clarification does not relax flesh/wound-rim correctness or claim an untested approximation is already supported.
+
 Fallback must produce the existing full normal, including detail, not partially mix an invalid gradient with a legacy unit normal. Record failure categories: unsupported operation, degenerate gradient, hard boundary, unstable detail owner, sampled-cache mode, and other explicitly identified cases.
 
 ## Stage 3 — visual and performance verdict
@@ -89,7 +91,7 @@ The toggle-off path must preserve the current result. Compare hit positions/dept
 
 Reject a candidate that loses the wet surface read, causes shimmering/ownership seams, mostly falls back in the target scene, or adds more GPU cost than it removes. One gradient fold has extra arithmetic and live values, so four-to-one field evaluations is not a four-times rendering promise. Measure register/compile costs where tools expose them; a larger shader can regress even when counters improve.
 
-No fixed millisecond promise is made. Require a repeatable net win beyond paired-run variation and no material regression in the supported gameplay cases. Owner visual acceptance remains necessary before default enablement.
+No fixed millisecond promise is made. Require a repeatable net win beyond paired-run variation and no material regression in the supported gameplay cases. Owner approved the intact appearance on 2026-09-05 and explicitly accepts small benign appearance differences; do not optimize for pixel-identical beauty at the expense of useful performance. Wounded-surface visual acceptance remains necessary before default enablement.
 
 ## Stage 4 — optional wound-cache integration
 
