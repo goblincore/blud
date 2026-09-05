@@ -242,103 +242,106 @@ body
   });
 });
 
-describe('shell warp — the wrinkles are WORLD-anchored, and that is a limit', () => {
-  it('shifts the fold pattern when the body turns under it', () => {
-    // NOT a bug being pinned as correct — a LIMITATION being recorded so it
-    // is not rediscovered. The warp is evaluated at the world-space sample
-    // point, so the sine lattice is fixed in the world and the character
-    // turns underneath it: the folds swim across the cloth as she walks.
-    //
-    // This is exactly why `noiseLocal` exists for the body's surface noise —
-    // its own comment says it undoes the body's yaw "so the noise field wraps
-    // the character and turns with it instead of the body rotating under a
-    // world-fixed texture". A warped garment needs the same treatment, and
-    // that machinery (the rest-space anchor, ROW_REST_A/B) is a separate
-    // sub-project. Until it exists, warped shells are for characters that do
-    // not turn much, or for amplitudes small enough that the swim is not
-    // legible.
-    const amp = 0.026; const freq: Vec3 = [17, 0, 17];
-    // A sphere on the body axis: a yaw about Y maps its base field exactly
-    // onto itself, so any difference is the WARP moving, nothing else.
-    const base = (q: Vec3) => Math.hypot(q[0], q[1] - 0.9, q[2]) - 0.15;
-    const f = (q: Vec3) => sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq);
-    const rotY = (q: Vec3, a: number): Vec3 =>
-      [q[0] * Math.cos(a) - q[2] * Math.sin(a), q[1], q[0] * Math.sin(a) + q[2] * Math.cos(a)];
-    let worst = 0;
-    for (let i = 0; i < 3000; i++) {
-      const th = (i / 3000) * Math.PI * 2;
-      const ph = (((i * 7) % 100) / 100) * Math.PI;
-      const q: Vec3 = [0.16 * Math.sin(ph) * Math.cos(th), 0.9 + 0.16 * Math.cos(ph), 0.16 * Math.sin(ph) * Math.sin(th)];
-      worst = Math.max(worst, Math.abs(f(q) - f(rotY(q, Math.PI / 4))));
-    }
-    // 21 mm at a 45 degree yaw, on cloth 6 mm thick: the pattern is not
-    // shifted, it is replaced. If this ever drops to ~0, the rest-space
-    // anchoring landed and this test should become the assertion that it did.
-    expect(worst).toBeGreaterThan(0.015);
-  });
-});
+describe('shell warp — the wrinkles TURN WITH HER', () => {
+  // This used to be a limitation pinned as a test: the warp was evaluated at
+  // the raw world point, so the lattice was fixed in the world and the body
+  // turned underneath it — at a 45 degree yaw the pattern shifted 21 mm on
+  // cloth 6 mm thick, which is not a shift but a replacement, and the folds
+  // swam across the garment as she walked.
+  //
+  // The fix is the anchor the body's surface noise has always used:
+  // noiseLocal undoes the root shift and the body yaw before the field is
+  // sampled, so the pattern is attached to her.
+  const amp = 0.026; const freq: Vec3 = [17, 0, 17];
+  // A sphere on the body axis: a yaw about Y maps its base field exactly
+  // onto itself, so any difference is the WARP moving and nothing else.
+  const base = (q: Vec3) => Math.hypot(q[0], q[1] - 0.9, q[2]) - 0.15;
+  const rotY = (q: Vec3, a: number): Vec3 =>
+    [q[0] * Math.cos(a) - q[2] * Math.sin(a), q[1], q[0] * Math.sin(a) + q[2] * Math.cos(a)];
+  // HANDEDNESS MATTERS AND IS EASY TO GET BACKWARDS. The engine yaws a body
+  // with gait.ts's rotateYaw(v, yaw) = [x*c + z*s, y, -x*s + z*c], which is
+  // rotY by MINUS the angle — and that is exactly why noiseLocal, which
+  // rotates by PLUS ns.y, undoes it. Modelling the turn with rotY(+a) here
+  // and passing anchor yaw +a would ROTATE TWICE and report the fix as
+  // broken by about the same 20 mm the bug produced.
+  const turnBody = (q: Vec3, yaw: number): Vec3 => rotY(q, -yaw);
+  const sample = (n: number, i: number): Vec3 => {
+    const th = (i / n) * Math.PI * 2;
+    const ph = (((i * 7) % 100) / 100) * Math.PI;
+    return [0.16 * Math.sin(ph) * Math.cos(th), 0.9 + 0.16 * Math.cos(ph), 0.16 * Math.sin(ph) * Math.sin(th)];
+  };
 
-describe('shell warp — WIND drifts the folds without costing the bound', () => {
-  const amp = 0.016; const freq: Vec3 = [20, 0, 20];
-  const base = (q: Vec3) => Math.hypot(q[0], q[1], q[2]) - 0.2;
-  const f = (q: Vec3, drift: Vec3) =>
-    sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq, drift);
-
-  it('moves the fold pattern and leaves the sheet where it was', () => {
-    // The drift belongs to the WRINKLES, not the garment: the sheet's own
-    // surface stays put, only the folds travel across it. Sampled well away
-    // from the sines' nodes so a real difference is visible.
-    let moved = 0;
-    for (let i = 0; i < 2000; i++) {
-      const th = (i / 2000) * Math.PI * 2;
-      const q: Vec3 = [0.2 * Math.cos(th), 0.05 * Math.sin(th * 3), 0.2 * Math.sin(th)];
-      moved = Math.max(moved, Math.abs(f(q, [0, 0, 0]) - f(q, [0.05, 0, 0.02])));
-    }
-    // Comparable to the amplitude: the folds have genuinely travelled, not
-    // wobbled a hair.
-    expect(moved).toBeGreaterThan(amp * 0.5);
-  });
-
-  it('is periodic in the drift, so a breeze never runs out of runway', () => {
-    // Drifting by a full wavelength on every axis returns the same field.
-    // Nothing accumulates and nothing drifts out of range, however long the
-    // lab is left running — the offset is a phase, not a displacement.
-    const lambda: Vec3 = [(2 * Math.PI) / freq[0], 0, (2 * Math.PI) / freq[2]];
-    for (let i = 0; i < 500; i++) {
-      const th = (i / 500) * Math.PI * 2;
-      const q: Vec3 = [0.2 * Math.cos(th), 0.05 * Math.sin(th * 5), 0.2 * Math.sin(th)];
-      expect(f(q, lambda)).toBeCloseTo(f(q, [0, 0, 0]), 9);
-    }
-  });
-
-  it('costs the Lipschitz bound NOTHING, at any drift', () => {
-    // The reason sway is free: d/dx of sin(F*(x - c)) is F*cos(...), so a
-    // constant offset cannot change the SPATIAL gradient. Wind therefore does
-    // not buy into the pinch cap and does not shorten the march step — only
-    // amplitude and frequency do. If this ever fails, the drift has been
-    // wired somewhere it scales the field rather than shifting it.
-    const h = 1e-4;
-    for (const drift of [[0, 0, 0], [0.05, 0, 0.02], [3.7, 1.1, -2.4]] as Vec3[]) {
+  it('holds the pattern still on the cloth when the body yaws', () => {
+    // The body turns by `a`, so every point on it turns by `a` AND the
+    // anchor's yaw becomes `a`. If the pattern rides the body, the field at
+    // a given BODY-RELATIVE point is unchanged.
+    for (const deg of [15, 45, 90, 180]) {
+      const a = (deg * Math.PI) / 180;
       let worst = 0;
-      for (let i = 0; i < 1500; i++) {
-        const s2 = (n: number) => ((Math.sin(n * 12.9898 + i * 78.233) * 43758.5453) % 1 + 1) % 1;
-        const q: Vec3 = [s2(1) * 0.9 - 0.45, s2(2) * 0.9 - 0.45, s2(3) * 0.9 - 0.45];
-        const bump = (ax: number, d: number): Vec3 =>
-          [q[0] + (ax === 0 ? d : 0), q[1] + (ax === 1 ? d : 0), q[2] + (ax === 2 ? d : 0)];
-        const g = [0, 1, 2].map(ax => (f(bump(ax, h), drift) - f(bump(ax, -h), drift)) / (2 * h));
-        worst = Math.max(worst, Math.hypot(g[0]!, g[1]!, g[2]!));
+      for (let i = 0; i < 3000; i++) {
+        const q = sample(3000, i);
+        const still = sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq);
+        const turnedQ = turnBody(q, a);
+        const turned = sdShellWrap(
+          base(turnedQ), turnedQ, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq, [0, 0, 0], [0, a, 0]);
+        worst = Math.max(worst, Math.abs(still - turned));
       }
-      expect(worst).toBeLessThanOrEqual(1 + 1e-3);
+      // Was 21 mm at 45 degrees. Float round-trip through two trig pairs is
+      // the only thing left.
+      expect(worst).toBeLessThan(1e-9);
     }
   });
 
-  it('is a bit-exact no-op at zero drift', () => {
-    // The default. Subtracting a zero vector must not perturb a single bit,
-    // or every character in the cast moves the day wind is merged.
+  it('holds it still when she WALKS as well as turns', () => {
+    // The root shift is the other half of the anchor. A character crossing
+    // the arena would otherwise drag the lattice through her skirt.
+    const shift: Vec3 = [3.4, 0, -1.7];
+    let worst = 0;
+    for (let i = 0; i < 2000; i++) {
+      const q = sample(2000, i);
+      const still = sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq);
+      const movedQ: Vec3 = [q[0] + shift[0], q[1], q[2] + shift[2]];
+      const moved = sdShellWrap(
+        base([movedQ[0] - shift[0], movedQ[1], movedQ[2] - shift[2]]), movedQ,
+        0.006, CLIP, CLIP_FAR, 0.008, amp, freq, [0, 0, 0], shift);
+      worst = Math.max(worst, Math.abs(still - moved));
+    }
+    expect(worst).toBeLessThan(1e-9);
+  });
+
+  it('still lets the WIND blow in world directions, not hers', () => {
+    // The drift is subtracted BEFORE the transform, so it is rotated into
+    // her frame for free. Subtracting after would nail the breeze to her
+    // hips: turn around and the wind would turn with you.
+    //
+    // Concretely: a body yawed by `a` in a wind drifting along +x must see
+    // the SAME field as an unturned body in a wind drifting along that
+    // direction rotated by -a.
+    const a = Math.PI / 3;
+    const drift: Vec3 = [0.05, 0, 0.02];
+    // noiseLocal is affine: local(p - d) = local(p) - rotY(d, a). So a body
+    // yawed by `a` in a world wind `d` sees exactly what an unturned body
+    // sees in a wind rotY(d, a).
+    const driftInHerFrame: Vec3 = rotY(drift, a);
+    let worst = 0;
+    for (let i = 0; i < 2000; i++) {
+      const q = sample(2000, i);
+      const turnedQ = turnBody(q, a);
+      const turned = sdShellWrap(
+        base(turnedQ), turnedQ, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq, drift, [0, a, 0]);
+      const equivalent = sdShellWrap(
+        base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq, driftInHerFrame, [0, 0, 0]);
+      worst = Math.max(worst, Math.abs(turned - equivalent));
+    }
+    expect(worst).toBeLessThan(1e-9);
+  });
+
+  it('is a bit-exact no-op at a zero anchor', () => {
+    // Zero anchor is world-anchored, the pre-fix behaviour, and what a
+    // statue gets (lab-main calls setRootShift(0, 0) for exactly that).
     for (let i = 0; i < 500; i++) {
-      const th = (i / 500) * Math.PI * 2;
-      const q: Vec3 = [0.21 * Math.cos(th), 0.07 * Math.sin(th * 4), 0.21 * Math.sin(th)];
-      const withArg = f(q, [0, 0, 0]);
+      const q = sample(500, i);
+      const withArg = sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq, [0, 0, 0], [0, 0, 0]);
       const without = sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq);
       expect(Object.is(withArg, without)).toBe(true);
     }

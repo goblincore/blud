@@ -405,6 +405,21 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * vector is a no-op when it is on.
      */
     windDrift: uniform(new THREE.Vector3(0, 0, 0)),
+    /**
+     * THE BODY'S NOISE FRAME as (rootShiftX, bodyYaw, rootShiftZ) — the same
+     * triple `noiseLocal` takes, and written by the same `setRootShift` that
+     * already feeds faceCfg3.zw and lodCfg.z.
+     *
+     * It exists as its own uniform because the CONE PRE-PASS needs it and
+     * has neither faceCfg3 nor lodCfg. Rebuilding the triple independently in
+     * each entry point is how the two would drift apart, and a cone anchored
+     * to a different frame than the march certifies emptiness against a
+     * surface the march does not have.
+     *
+     * Zero is world-anchored, which is the pre-2026-09-05 behaviour and what
+     * a statue wants.
+     */
+    bodyAnchor: uniform(new THREE.Vector3(0, 0, 0)),
     bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 1)),
     boxMin: uniform(new THREE.Vector3(-2, 0, -2)),
     boxMax: uniform(new THREE.Vector3(2, 3.2, 2)),
@@ -906,10 +921,12 @@ export function createMarchMaterial(
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
-    // Wind drift, POSITIONALLY LAST — appended after the level-shadow slots
-    // in MARCH_BODY's signature too. Bound in the same commit as the WGSL
-    // input, which is the rule the meltCfg note above exists to enforce.
+    // Wind drift and the body frame, POSITIONALLY LAST and in this order —
+    // appended after the level-shadow slots in MARCH_BODY's signature too.
+    // Bound in the same commit as the WGSL inputs, which is the rule the
+    // meltCfg note above exists to enforce.
     windDrift: u.windDrift,
+    bodyAnchor: u.bodyAnchor,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1315,11 +1332,12 @@ export function createZombieGpuView(
     // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
     // same seams the march does.
     perfCfg: u.perfCfg,
-    // ...and the same WIND. Unlike the noise, which the cone deliberately
-    // passes as 0 because it lives on the normal, wind moves the FIELD: a
-    // cone marching the no-wind surface would certify space the drifted
-    // cloth occupies.
+    // ...and the same WIND and BODY FRAME. Unlike the noise, which the cone
+    // deliberately passes as 0 because it lives on the normal, both of these
+    // move the FIELD: a cone marching the no-wind, world-anchored surface
+    // would certify space the real cloth occupies.
     windDrift: u.windDrift,
+    bodyAnchor: u.bodyAnchor,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -1407,6 +1425,10 @@ export function createZombieGpuView(
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
       u.lodCfg.value.z = bodyYaw;
+      // The same frame, as one vec3, for the shell warp and the cone
+      // pre-pass. Written HERE so there is a single place that decides what
+      // "the body's frame" is — see bodyAnchor's declaration.
+      u.bodyAnchor.value.set(x, bodyYaw, z);
     },
     setFaceTexture(tex, atlas, mean) {
       u.faceTex.value = tex;

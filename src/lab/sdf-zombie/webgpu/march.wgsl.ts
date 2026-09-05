@@ -668,6 +668,9 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // and no plain-step flag is required. Mirrors sdShellWrap in validate.ts —
 // the two must agree or the CPU checks pass a body the GPU tears.
 //
+// The wrinkles are anchored to the BODY, not the world — see the noiseLocal
+// call below and gBodyAnchor's declaration.
+//
 // WIND. `drift` is a world-space offset in metres the fold lattice has
 // travelled — the host accumulates wind velocity times time, so the shader
 // needs no clock and every path (march, cone pre-pass, normals, AO) reads the
@@ -686,7 +689,15 @@ export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: 
   var lip = 1.0;
   let fLen = length(warpF);
   if (warpA != 0.0 && fLen != 0.0) {
-    let q = p - drift;
+    // BODY-ANCHORED, via the same noiseLocal the body's surface noise uses:
+    // at the raw world point the fold lattice is fixed in the world and she
+    // turns underneath it, so the folds swim across the cloth as she walks.
+    //
+    // The drift is subtracted BEFORE the transform. noiseLocal is affine, so
+    // local(p - drift) = local(p) - R(-yaw)*drift: the wind gets rotated into
+    // her frame for free and a breeze keeps blowing in WORLD directions.
+    // Subtracting after would nail the wind to her hips.
+    let q = noiseLocal(p - drift, gBodyAnchor);
     base = base + warpA * sin(warpF.x * q.x) * sin(warpF.y * q.y + 1.3) * sin(warpF.z * q.z + 2.6);
     lip = 1.0 + abs(warpA) * fLen;
   }
@@ -1269,6 +1280,12 @@ var<private> gFoldBestDistort: f32 = 1.0;
 // surface the march then walks. A path that forgot to set it would see 0,
 // which is the no-wind field — wrong, but never a tear.
 var<private> gWindDrift: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
+// THE BODY'S NOISE FRAME: (rootShiftX, bodyYaw, rootShiftZ), exactly the
+// triple noiseLocal takes. Set from ONE uniform at both entry points rather
+// than rebuilt from faceCfg3/lodCfg in each, so the march and the cone
+// pre-pass cannot end up anchoring to different frames — a divergence there
+// certifies emptiness against a surface the march does not have.
+var<private> gBodyAnchor: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
@@ -1569,7 +1586,8 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   coneK: f32,
   startT: f32,
   perfCfg: vec4<f32>,
-  windDrift: vec3<f32>
+  windDrift: vec3<f32>,
+  bodyAnchor: vec3<f32>
 ) -> f32 {
   // The cone pre-pass certifies "empty up to t" for the march that follows.
   // It passes noiseCfg 0 deliberately (the noise lives on the normal), but
@@ -1577,6 +1595,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   // no-wind surface would certify space the drifted cloth actually occupies
   // and the march would start inside it. Same uniform, same surface.
   gWindDrift = windDrift;
+  gBodyAnchor = bodyAnchor;
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
   // Chained levels: this cone begins where the coarser one stopped. Safe
@@ -1890,7 +1909,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   levelShadowTex: texture_depth_2d,
   levelShadowMatrix: mat4x4<f32>,
   levelShadowCfg: vec4<f32>,
-  windDrift: vec3<f32>
+  windDrift: vec3<f32>,
+  bodyAnchor: vec3<f32>
 ) -> vec4<f32> {
   // FIRST STATEMENT, before anything folds. gWindDrift is read inside
   // sdShell, which is reached from foldGroup on every mapBody call in this
@@ -1898,6 +1918,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // it late and the normal would be taken against a different surface than
   // the one the march hit.
   gWindDrift = windDrift;
+  gBodyAnchor = bodyAnchor;
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
@@ -3229,8 +3250,12 @@ export const HELPERS = [
   // unit test and dies at pipeline creation with a bare WGSL parse error.
   STRAND_HASH4, STRAND_LIPSCHITZ, CONE_STRAND,
   SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
-  SD_SHELL,
+  // NOISE_LOCAL ahead of SD_SHELL: the shell's warp is evaluated in the
+  // body frame and calls noiseLocal, and WGSL has no forward declarations at
+  // module scope — a helper used before it is declared is a bare parse error
+  // at pipeline creation, which is the failure this list's header warns of.
   HASH13, NOISE3, FBM, NOISE_LOCAL,
+  SD_SHELL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,

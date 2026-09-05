@@ -191,7 +191,7 @@ const ZERO3: Vec3 = [0, 0, 0];
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
-  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3,
+  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3, bodyAnchor: Vec3 = ZERO3,
 ): number {
   // WRINKLES. Three sines with offset phases so the pattern does not repeat
   // visibly along any axis, added to the BASE distance before the sheet is
@@ -221,7 +221,22 @@ export function sdShellWrap(
     // F*cos(...), so a constant offset cannot change the spatial gradient.
     // Sway is therefore free of the pinch cap — only amplitude and frequency
     // buy into that.
-    const qx = p[0] - warpDrift[0], qy = p[1] - warpDrift[1], qz = p[2] - warpDrift[2];
+    // BODY-ANCHORED. `bodyAnchor` is (rootShiftX, bodyYaw, rootShiftZ) — the
+    // same triple noiseLocal takes for the body's surface noise, and for the
+    // same reason: evaluated at the raw world point, the fold lattice is
+    // fixed in the world and the character turns UNDERNEATH it, so the folds
+    // swim across the cloth as she walks. Undoing the root shift and the body
+    // yaw first attaches the pattern to her.
+    //
+    // The wind drift is subtracted BEFORE the transform, not after, which is
+    // what keeps a breeze blowing in WORLD directions: noiseLocal is affine,
+    // so local(p - drift) = local(p) - R(-yaw)*drift, and the drift gets
+    // rotated into her frame for free. Subtracting it afterwards would nail
+    // the wind to her hips and turn the breeze with her.
+    const dx = p[0] - warpDrift[0], dy = p[1] - warpDrift[1], dz = p[2] - warpDrift[2];
+    const lx = dx - bodyAnchor[0], lz = dz - bodyAnchor[2];
+    const ch = Math.cos(bodyAnchor[1]), sh = Math.sin(bodyAnchor[1]);
+    const qx = lx * ch - lz * sh, qy = dy, qz = lx * sh + lz * ch;
     base += warpAmp
       * Math.sin(warpFreq[0] * qx)
       * Math.sin(warpFreq[1] * qy + 1.3)

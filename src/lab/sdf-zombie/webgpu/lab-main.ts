@@ -4464,6 +4464,17 @@ async function main() {
         for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(0, 0, 0);
       }
     },
+    /**
+     * THE BODY'S NOISE FRAME as (rootShiftX, bodyYaw, rootShiftZ), the frame
+     * a warped shell's folds are anchored to. Normally driven by the motion
+     * system through `view.setRootShift`; exposed here so a capture can hold
+     * the body still and turn only the FRAME, which is how you see that the
+     * folds ride the body rather than the world (they should rotate on the
+     * cloth, and by exactly the yaw given).
+     */
+    setBodyAnchor(x: number, yaw: number, z: number) {
+      for (const v of [view, ...crowd]) v.uniforms.bodyAnchor.value.set(x, yaw, z);
+    },
     /** The accumulated wind offset in metres, for a test or a capture that
      *  wants a specific instant of the sway rather than whatever the clock
      *  had reached. */

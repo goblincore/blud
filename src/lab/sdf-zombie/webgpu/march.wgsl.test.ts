@@ -22,7 +22,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, APPLY_WOUNDS, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
+  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, NOISE_LOCAL, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
@@ -639,11 +639,12 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // (kept) and the parked melt spike's amp/freq/time slot (removed) — so
     // this count is +1, not +2. That collision is exactly what this pin is
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
-    // the phantom-input bug. +1 for windDrift (shell cloth sway, 2026-09-05),
-    // appended after the level-shadow tail rather than inserted anywhere.
-    expect(names.length).toBe(76);
-    expect(names.slice(-4)).toEqual(
-      ['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'windDrift']);
+    // the phantom-input bug. +1 for windDrift and +1 for bodyAnchor (shell
+    // cloth sway and its body anchoring, 2026-09-05), both appended after
+    // the level-shadow tail rather than inserted anywhere.
+    expect(names.length).toBe(77);
+    expect(names.slice(-5)).toEqual(
+      ['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'windDrift', 'bodyAnchor']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).
@@ -1474,6 +1475,18 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     expect(CONE_MARCH).toContain('windDrift: vec3<f32>');
     expect(CONE_MARCH).toContain('gWindDrift = windDrift;');
     expect(MARCH_BODY).toContain('gWindDrift = windDrift;');
+    // BODY FRAME PARITY, for the same reason and with a sharper failure: a
+    // cone anchored to the world while the march is anchored to a turning
+    // body certifies emptiness against a surface that has rotated away.
+    // Both must read the same uniform — NOT rebuild the triple from
+    // faceCfg3/lodCfg, which only MARCH_BODY has.
+    expect(CONE_MARCH).toContain('bodyAnchor: vec3<f32>');
+    expect(CONE_MARCH).toContain('gBodyAnchor = bodyAnchor;');
+    expect(MARCH_BODY).toContain('bodyAnchor: vec3<f32>');
+    expect(MARCH_BODY).toContain('gBodyAnchor = bodyAnchor;');
+    // sdShell must actually USE it, and noiseLocal must be declared first.
+    expect(SD_SHELL).toContain('noiseLocal(p - drift, gBodyAnchor)');
+    expect(HELPERS.indexOf(NOISE_LOCAL)).toBeLessThan(HELPERS.indexOf(SD_SHELL));
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
     // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg

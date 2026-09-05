@@ -290,12 +290,23 @@ const frameStats = [];
 // Each frame advances by the vector, so frame i sits at i * BLOB_WIND metres.
 const WIND = (process.env.BLOB_WIND ?? '').split(',').map(Number).filter(n => Number.isFinite(n));
 const WIND_SWEEP = WIND.length === 3 && WIND.some(n => n !== 0);
+// BODY-FRAME SWEEP. BLOB_ANCHOR=<degrees> holds the camera AND the body
+// still and turns only the anchor, frame by frame. If the folds are anchored
+// to the body they rotate on the cloth with it; if they are world-anchored
+// the frames are identical. That is the only still-image way to tell the two
+// apart, because a turntable orbits the camera and a statue never yaws.
+const ANCHOR_DEG = Number(process.env.BLOB_ANCHOR ?? 0);
+const ANCHOR_SWEEP = Number.isFinite(ANCHOR_DEG) && ANCHOR_DEG !== 0;
 
 for (let i = 0; i < FRAMES; i++) {
-  const yaw = WIND_SWEEP ? 0 : (i / FRAMES) * Math.PI * 2;
+  const yaw = (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
   await evaluate(`(() => { window.__sdfLab.setCam(${yaw}, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
   if (WIND_SWEEP) {
     await evaluate(`(() => { window.__sdfLab.setWindOffset(${WIND[0] * i}, ${WIND[1] * i}, ${WIND[2] * i}); return true; })()`);
+  }
+  if (ANCHOR_SWEEP) {
+    const rad = (ANCHOR_DEG * Math.PI / 180) * i;
+    await evaluate(`(() => { window.__sdfLab.setBodyAnchor(0, ${rad}, 0); return true; })()`);
   }
   await sleep(500); // let the marcher settle before grabbing the frame
   const shot = await send('Page.captureScreenshot', { format: 'png' });
