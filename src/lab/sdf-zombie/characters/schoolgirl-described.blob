@@ -1,0 +1,258 @@
+# Schoolgirl-DESCRIBED — the same subject as schoolgirl.blob, authored the
+# opposite way: the plate (docs/dev-notes/refs/schoolgirl-views-ref.png) was
+# read once for the brief — sailor uniform, bare midriff, navy pleated skirt,
+# white slouch calf boots, dark bob — and PUT DOWN. No blob:rings, no
+# blob:measure, no head-profile pass: fitting is the thing this run is
+# compared against. The mesh was used ONLY to bake the face decal
+# (blob:face-bake off a temporary symlink to refs/schoolgirl-mesh/
+# schoolgirl.glb — the same face, since she IS the same character).
+#
+# WHO SHE IS. The cast is a bestiary — a scheming goblin, an ordinary grunt,
+# a gothic widow, a clown, a flesh-zombie — and every one of them belongs to
+# the Weird West. She doesn't. She is the EXCHANGE STUDENT FROM THE WRONG
+# GENRE: crisp navy/white/red colour blocking and toy-clean surfaces dropped
+# into a world of mud, leather and dried blood, and completely unbothered by
+# it. That is the brainrot read of "schoolgirl in the Weird West" and it is
+# why she earns her slot: everyone else is OF the setting, she is IN it.
+#
+# THE THREE BEATS that carry her silhouette:
+#   1. THE BOB — an oversized glossy dark bell, wider than her shoulders are
+#      broad, the one mass you can pick out at arena distance. The measured
+#      schoolgirl's hair hugs the skull (it was fitted); this one is a
+#      HELMET, deliberately.
+#   2. THE RED NECKERCHIEF — the single saturated accent (the widow has her
+#      cameo; the exchange student has her scarf), a real knot and real
+#      hanging tails, not paint.
+#   3. THE SLOUCH BOOTS — white leather collapsed around the calf, wider than
+#      the leg inside them, black toe caps. The measured version wears socks
+#      and mary-janes (that is what the mesh wears); the plate's white boots
+#      are louder and they are hers.
+#
+# HOW SHE DIFFERS FROM THE MEASURED TWO. They fit her to bands and the torso
+# still read as stacked discs until it was rebuilt smooth; this one starts
+# smooth — a few tapered bars, heavy overlaps, clothing as paint where paint
+# suffices and as cloth shells where the silhouette needs air (skirt,
+# collar). Proportions are the brief's anchors (1.70 m, head about 1/8) held
+# to ±10% and no closer.
+
+model schoolgirl-described
+  height 1.70
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # The female/soldier vertical budget: root at 0.85 so the leg chain
+  # (0.42 + 0.415 below the pelvis tail at 0.95) lands the ankle at 0.115,
+  # legs exactly half the standing height — she is ordinary-human scale like
+  # the soldier and the widow.
+  root pelvis at 0.85 len=0.10
+
+  # Dead upright. The zombie owns the stoop, the goblin the hunch; she
+  # stands like the bell just rang.
+  bone spine1 parent=pelvis dir=up pitch=0 len=0.15
+  bone chest  parent=spine1 dir=up pitch=0 len=0.15
+  bone spine2 parent=chest  dir=up pitch=0 len=0.06
+  bone neck   parent=spine2 dir=up pitch=0 len=0.08
+  # Carries the face block: at=0.55 puts the cranium centre at ~1.51, chin
+  # ~1.44, flesh crown ~1.60; the bob tops at ~1.69 against the 1.70 pin.
+  bone skull  parent=neck   dir=up pitch=2 len=0.22
+
+  mirror
+    # Shoulder socket at x ~0.123, y ~1.33. The goblin lesson: shoulder
+    # reach is a function of chest width — the blouse yoke here is
+    # half-width ~0.095, so 0.028/0.095 lands the socket just proud of it.
+    bone clavicle parent=spine2  side=0.028 dir=side  len=0.095
+    # Arms hang DOWN and slightly OUT (tilt 9/6) — the schoolgirl measured
+    # the <=6 deg fog line where arm and waist melt, and her skirt flares
+    # to ~0.17 half-width at the hem; the hands must land outside it.
+    bone upperarm parent=clavicle dir=down tilt=9 pitch=2  len=0.24
+    bone forearm  parent=upperarm dir=down tilt=6 pitch=10 len=0.21
+    bone hand     parent=forearm  dir=down pitch=8         len=0.09
+    # Legs: dead straight with a whisper of outward slant, the soldier's
+    # at-ease stand scaled down. No knee-together shyness — that was a
+    # measured fact about the mesh's stance, not a choice.
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.058 len=0.42
+    bone shin     parent=thigh  dir=down tilt=2            len=0.415
+    # The foot bone only positions the boot prims (the house pattern).
+    bone foot     parent=shin   dir=fwd                    len=0.12
+  end
+
+body
+  # ============================================================
+  # TORSO — the uniform is PAINT on the sculpt for the masses (white blouse,
+  # skin midriff) and CLOTH SHELLS where the silhouette needs air (skirt,
+  # collar). Few large tapered bars, heavy overlaps — the smooth-start the
+  # measured one's disc-stack rebuild proved. Skin warm pale (dec face
+  # below), blouse white f2f2f5, navy 0b1278, scarf red b01018.
+  # ============================================================
+  # Hips under the skirt — skin; never seen, keeps the legs fused.
+  blob torso on pelvis at=0.45 r=0.098 wide=1.00 tall=0.95 deep=0.84 blend=0.008 color=e9c9ae
+  # Waist: bar up spine1 (y 1.00 -> 1.10), cinched to 0.060 at the top —
+  # she is slim; the bare midriff band runs 1.05-1.14 between the
+  # waistband and the blouse hem.
+  bar  torso on spine1 from=0.35 to=1.00 r=0.084 r2=0.060 deep=0.78 blend=0.006 color=e9c9ae
+  # The top of the midriff, where the blouse hem will cross it.
+  bar  torso on chest  from=0.00 to=0.25 r=0.060 r2=0.066 deep=0.85 blend=0.006 color=e9c9ae
+  # THE BLOUSE: one tapered bar from the midriff overlap up to the bust.
+  # The paint boundary with the midriff bar lands ~1.13 — the crop hem is
+  # a colour change on a smooth surface, not a ledge.
+  bar  torso on chest  from=0.18 to=0.85 r=0.064 r2=0.096 deep=0.95 blend=0.008 color=f2f2f5
+  # Bust mounds, front — the side-view read of the blouse, as geometry.
+  blob torso on chest  at=0.60 offset=(0.042,0,0.050) r=0.052 deep=1.00 blend=0.006 both color=f2f2f5
+  # Yoke: chest top to the neck, thin front-to-back — the collar cape
+  # drapes over this.
+  bar  torso on spine2 from=0.00 to=0.90 r=0.078 r2=0.046 deep=0.80 blend=0.006 color=f2f2f5
+
+  # ============================================================
+  # THE SKIRT — one flared shell cone, navy, hem at mid-thigh. Cloth, not
+  # mass (the house pattern): a thin onioned surface, clipped at the hem
+  # with a rounded rim so the edge reads as folded cloth. Waistband 0.072
+  # half at y 1.05 flaring to 0.175 at the hem (y 0.74) — a stronger A-line
+  # than the measured version's, because the flare is doing the pleats'
+  # job: no grooves, no pleat fragments, colour and silhouette only.
+  # ============================================================
+  shell torso on spine1 at=0.580 r=0.072 r2=0.175 tip=(0,-0.300,0) wide=1.06 tall=0.38 deep=0.80 thick=0.006 clip=(0,-1,0) clipd=-0.740 rim=0.008 blend=0.006 color=0b1278
+
+  # ============================================================
+  # SAILOR COLLAR — cloth, not mass: a thin navy cape lying on the
+  # shoulders and back (the front clipped open so the blouse shows), plus
+  # the two front points riding the bust down-inward to the scarf knot.
+  # ============================================================
+  shell torso on chest at=0.78 offset=(0,0.035,-0.015) r=0.088 wide=1.00 tall=0.95 deep=1.05 thick=0.006 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=0b1278
+  shell torso on chest at=0.92 offset=(0.050,0.020,0.035) tip=(0.005,-0.120,0.100) r=0.015 r2=0.006 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.15 rim=0.004 blend=0.005 both color=0b1278
+
+  # ============================================================
+  # THE RED NECKERCHIEF (beat 2) — a real knot at the V and real tails
+  # hanging down the blouse front, proud of the chest. The mesh's scarf is
+  # red (the measured control's was navy — its own test calls that out);
+  # red is also the one accent the cast's colour grammar understands.
+  # ============================================================
+  blob torso on chest at=0.72 offset=(0,-0.005,0.100) r=0.018 wide=1.70 tall=0.70 deep=0.60 blend=0.004 color=b01018
+  blob torso on chest at=0.70 offset=(0,-0.008,0.095) tip=(0,-0.045,0.010) r=0.012 r2=0.007 wide=1.30 blend=0.004 color=b01018
+
+  # Neck: slim, skin, between the collar and the jaw.
+  bar head on neck from=0.10 to=0.90 r=0.030 deep=1.15 blend=0.004 color=e9c9ae
+
+  # ============================================================
+  # THE BOB (beat 1) — five prims, and yes, that is the same hair budget
+  # the measured schoolgirl spent: a bob IS a mass haircut and the masses
+  # are the honest way to build it. The dome is deliberately oversized —
+  # a helmet of hair, wider than the skull under it (the face block is
+  # 0.072 half-wide; the lobes reach 0.108).
+  #   dome  — crown + back, tops at ~1.69 against the 1.70 pin.
+  #   lobes — the bell flare below the crown, framing the cheeks open.
+  #   fringe — the brow rim; the DECAL paints the true hairline and the
+  #            widow's peak, so geometry stays at the temple line (the
+  #            measured one's double-hairline lesson).
+  #   nape  — closes the bob's underside at the neck.
+  #   locks — two pointed side locks in front of the ears, the plate's
+  #           face-framing strands. These are the ONE place strands would
+  #           beat masses; see the report re: hairlock.
+  # ============================================================
+  blob head on skull at=0.55 offset=(0,0.070,-0.022) r=0.100 wide=1.06 tall=0.94 deep=1.00 blend=0.006 color=2a1a10 gloss=0.25
+  blob head on skull at=0.55 offset=(0.072,-0.045,-0.025) r=0.036 wide=1.00 tall=1.50 deep=2.00 blend=0.006 both color=2a1a10 gloss=0.30
+  blob head on skull at=0.55 offset=(0,0.054,0.044) r=0.048 wide=1.35 tall=0.72 deep=0.90 blend=0.004 color=2a1a10 gloss=0.22
+  blob head on skull at=0.55 offset=(0,-0.058,-0.058) r=0.045 wide=1.05 tall=0.95 deep=1.00 blend=0.005 color=2a1a10 gloss=0.30
+  blob head on skull at=0.55 offset=(0.055,-0.005,0.050) tip=(0.004,-0.095,0.004) r=0.014 r2=0.004 blend=0.003 chamfer both color=2a1a10 gloss=0.22
+  # Chin: a small definite point, blended soft so it reads as the jaw's
+  # tip, not a bead.
+  blob head on skull at=0.55 offset=(0,-0.105,0.062) r=0.020 wide=1.15 tall=0.60 deep=0.90 blend=0.004 color=e9c9ae
+
+  # ============================================================
+  # ARMS — slim rubber-hose, no ball joints. Short PUFFED white sleeve to
+  # mid-upper-arm (the sleeve reads as a cuff of blouse, not a shoulder
+  # ball — its top stays below the yoke line), skin below, skin mitt hand.
+  # ============================================================
+  blob arm on clavicle at=1.00 offset=(0,-0.020,0) r=0.026 tall=0.85 blend=0.005 mirror core color=f2f2f5
+  bar  arm on upperarm from=0.12 to=0.42 r=0.028 r2=0.025 blend=0.005 mirror color=f2f2f5
+  bar  arm on upperarm from=0.40 to=0.98 r=0.026 r2=0.022 blend=0.0045 mirror color=e9c9ae
+  blob arm on forearm  at=0.00 r=0.022 blend=0.0045 mirror color=e9c9ae
+  bar  arm on forearm  from=0.05 to=0.95 r=0.021 r2=0.018 blend=0.004 mirror color=e9c9ae
+  blob arm on hand at=0.50 offset=(0,0,0.015) r=0.024 wide=0.85 tall=1.10 deep=1.20 blend=0.004 mirror color=e9c9ae
+
+  # ============================================================
+  # LEGS — bare skin from the skirt hem to the boot tops; slim (the plate
+  # carries no calf bulge, the boot does the bulging).
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.058 deep=1.05 blend=0.006 mirror core color=e9c9ae
+  bar  leg on thigh from=0.02 to=1.00 r=0.060 r2=0.042 deep=1.05 blend=0.005 mirror color=e9c9ae
+  blob leg on shin  at=0.00 r=0.042 deep=1.05 blend=0.005 mirror color=e9c9ae
+  bar  leg on shin  from=0.02 to=0.38 r=0.042 r2=0.036 deep=0.95 blend=0.005 mirror color=e9c9ae
+
+  # ============================================================
+  # THE SLOUCH BOOTS (beat 3) — WHITE leather, collapsed: the shaft stands
+  # 15 mm clear of the calf inside it and swells as it slouches downward,
+  # with a cuff bulge at the top where the leather folds over. Black toe
+  # caps and tread. This is where she parts from the measured version's
+  # socks-and-mary-janes: the boot is the bigger, dumber, more readable
+  # shape, and white boots at the bottom answer the white blouse at the
+  # top with the navy skirt between — the whole outfit in three blocks.
+  # ============================================================
+  bar  leg on shin  from=0.35 to=0.98 r=0.056 r2=0.062 deep=0.85 blend=0.005 mirror color=f2f2f5 gloss=0.12
+  blob leg on shin  at=0.38 r=0.064 deep=0.82 blend=0.006 mirror color=f2f2f5 gloss=0.12
+  # Boot foot + heel wrap, world-displacement off the foot bone (the house
+  # pattern); its tread reaches the floor (centre y 0.06, half-tall 0.058).
+  blob leg on foot at=0.00 r=0.048 wide=1.25 tall=1.20 deep=1.30 blend=0.006 offset=(0,-0.055,0.010) mirror color=f2f2f5 gloss=0.12
+  # Black toe cap: toe yawed out a whisper, tread at y ~0.003.
+  blob leg on foot at=0.00 r=0.030 r2=0.025 wide=1.60 tall=1.00 deep=1.10 blend=0.006 offset=(0.008,-0.082,-0.035) tip=(0.012,0.000,0.100) mirror color=17110c gloss=0.20
+
+# ============================================================
+# FACE BLOCK — a small oval skull under the bob: narrow jaw, light brow,
+# a button nose. The face ITSELF is the baked decal below; painted-prim
+# features have read as a visor band on three dispatches, so none here.
+# ============================================================
+face
+  headRadius 0.072
+  headWidth  0.94
+  headHeight 1.28
+  headDepth  1.12
+  jawWidth   0.78
+  jawHeight  0.74
+  jawDrop    0.058
+  jawJut     0.036
+  noseLength 0.003
+  noseWidth  0.30
+  noseDrop   0.024
+  browHeavy  0.002
+  browRise   0.024
+  headBlend  0.005
+
+# Her face, baked flat off the mesh's head (blob:face-bake; the script
+# resolves refs/<name>-mesh/<name>.glb, which for this character was a
+# temporary symlink to schoolgirl.glb — she IS the same character, so she
+# wears the same face). 0.34/0.40, NOT the bake's printed 0.19/0.237: the
+# print is generic, and this bake is IDENTICAL to the schoolgirl's (same
+# mesh, same head band), whose tuned solve converged at 0.38/0.42 — this
+# skull is ~8% narrower, so the image sits a touch larger. projScale is a
+# FREQUENCY, lower = bigger; the 0.45/0.58 defaults are for the GENERATED
+# sheet. decal 0 = multiply, so the face takes the body's light.
+sheet
+  image       schoolgirl-described-face.png
+  decal       0
+  projScaleX  0.34
+  projScaleY  0.40
+  projCentreX 0.50
+  projCentreY 0.49
+  # Below the bake's max luma or nothing glows (the soldier lesson: his
+  # bake tops at 0.855 and the default 0.88 cut gave him dead eyes).
+  eyeGlowCut  0.70
+  eyeGlowAmp  0.40
+
+# Skin e9c9ae = sRGB (233,201,174) -> linear (0.815, 0.586, 0.432): warm
+# and light, a touch more sun than the widow's porcelain, none of the
+# measured version's orange. Toy-clean: no mottle to speak of, moderate
+# gloss. Wounds stay red.
+palette
+  baseColor     0.815 0.586 0.432
+  deepColor     0.50 0.08 0.08
+  charColor     0.22 0.13 0.10
+  specIntensity 0.42
+  specRoughness 0.38
+  fresnelBoost  0.28
+  translucency  0.22
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  wetness       0.10
+  mottleAmp     0.02
+  mottleScale   1.2
+  mottleColor   0.55 0.38 0.24
