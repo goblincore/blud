@@ -92,9 +92,9 @@ palette
   # table carries the "dull" half (mid metalness, high roughness, weak env);
   # this hex carries the hue. Started one notch bright for the lab's single
   # harsh key (the clown lesson) — verify against the render, not the hex.
-  plate   #5b7f72
+  plate   #43635a
   # Issued webbing: dark olive-brown, near-black in shadow. Belt and pouches.
-  webbing #4a4132
+  webbing #3c3327
 
 skeleton
   # .blob's `root pelvis at 0.87 len=0.10` is a BONE from crotch to hip line;
@@ -136,20 +136,28 @@ parts
     # (1.448). `cap start=flat` is what makes the top a table; it is the one
     # cap that faces no flesh.
     #
-    # Ring widths do NOT follow the orb — a plate keeps its width while the
-    # flesh under it falls away. side=0.0088 shifts every ring 15 mm outward
-    # to keep the forced inner-rim tuck (see the header) from running deeper
-    # than anatomy requires.
-    loft pauldron bone=upperarm at=0.0 offset=(-0.0074,0.0529,-0.0019) dir=down pitch=-2 tilt=8 len=0.1765 material=plate
-      ring 0.00 w=0.147 d=0.138 side=0.0088
-      ring 0.10 w=0.147 d=0.141 side=0.0088
-      ring 0.20 w=0.144 d=0.138 side=0.0088
-      ring 0.30 w=0.135 d=0.135 side=0.0088
-      ring 0.45 w=0.126 d=0.124 side=0.0088
-      ring 0.60 w=0.115 d=0.112 side=0.0088
-      ring 0.75 w=0.106 d=0.103 side=0.0088
-      ring 0.90 w=0.100 d=0.097 side=0.0088
-      ring 1.00 w=0.097 d=0.094 side=0.0088
+    # SHORT AND WIDE, not long and narrow. The first version ran the skirt
+    # 30 cm down the arm at 25 cm across, and from the front each pauldron
+    # read as a tall WING standing beside the neck — the opposite of a yoke.
+    # A yoke is a horizontal read: the flat top is the widest ring (0.27 m,
+    # 4 cm proud of the deltoid's outer edge), the skirt falls only to just
+    # past the orb's equator, and the width comes off fast below it.
+    #
+    # LEVEL, not arm-angled. Aiming the ray down the arm (tilt=8) made both
+    # flat tops tilt down-and-out like a chevron, and a chevron is two wings,
+    # not one bar. tilt=3 puts both caps within 3 degrees of horizontal, so
+    # from the front the two top edges read as a single line broken only by
+    # the neck. side=0.0118 then pushes every ring 20 mm outward to hold the
+    # forced inner-rim tuck (see the header) inside anatomy's bound — the
+    # levelled ray pulls the rim further into the chest and this buys it back.
+    loft pauldron bone=upperarm at=0.0 offset=(-0.0074,0.0529,-0.0019) dir=down pitch=-2 tilt=3 len=0.1324 material=plate
+      ring 0.00 w=0.159 d=0.141 side=0.0118
+      ring 0.15 w=0.156 d=0.144 side=0.0118
+      ring 0.30 w=0.150 d=0.141 side=0.0118
+      ring 0.45 w=0.147 d=0.138 side=0.0118
+      ring 0.60 w=0.135 d=0.130 side=0.0118
+      ring 0.80 w=0.121 d=0.118 side=0.0118
+      ring 1.00 w=0.112 d=0.109 side=0.0118
       cap start=flat end=none
 
     # KNEE PLATE — a hard box-section shell over the knee, proud at the front
@@ -158,9 +166,9 @@ parts
     # hard edges; the chain is straight (thigh and shin both tilt 2), so no
     # bend-reach fight.
     loft knee bones=thigh..shin material=plate shape=box
-      ring 0.44 w=0.0776 dtop=0.0871 dbot=0.0765
-      ring 0.50 w=0.0788 dtop=0.0882 dbot=0.0753
-      ring 0.56 w=0.0741 dtop=0.0824 dbot=0.0694
+      ring 0.44 w=0.0776 dtop=0.0900 dbot=0.0724
+      ring 0.50 w=0.0788 dtop=0.0918 dbot=0.0712
+      ring 0.56 w=0.0741 dtop=0.0859 dbot=0.0653
       cap start=none end=none
 
     # BOOT SHAFT — continues the shin's line past the ankle to y=0.06, over
@@ -222,14 +230,16 @@ parts
   # centre. Checked by the fit test, not by eye.
   attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0588) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
 
-  # BELT — a wide webbing slab breaking the torso's line. Sized to be WIDER
-  # than the flesh both above it (0.133 at y1.13) and below it (0.135 at
-  # y0.92): a belt narrower than the belly reads as a stripe painted on it
-  # (the goblin note). squarish — issued webbing has edges.
+  # BELT — a wide webbing slab breaking the torso's line. Sized WIDER than
+  # the flesh both above it (0.133 at y1.13) and below it (0.135 at y0.92),
+  # and 2 cm wider again than that: at torso width the hanging arms occluded
+  # it completely from the front — the first version's belt was invisible
+  # behind the forearms. At 0.27 m it pokes past the torso's silhouette on
+  # both sides. squarish — issued webbing has edges.
   loft belt bones=hips..spine1 material=webbing frame=fwd shape=squarish
-    ring 0.40 w=0.1471 d=0.1176
-    ring 0.58 w=0.1471 d=0.1176
-    ring 0.76 w=0.1471 d=0.1176
+    ring 0.36 w=0.1588 d=0.1235
+    ring 0.58 w=0.1588 d=0.1235
+    ring 0.80 w=0.1588 d=0.1235
     cap start=none end=none
 
   # POUCHES — issued webbing is RECTANGULAR: boxes, not lozenges. Two on the
@@ -242,23 +252,25 @@ parts
   # x=±0.135, z=0.01, and the hanging forearm (flesh x 0.116..0.246 at belt
   # height) swallowed 29 mm of a 35 mm pouch — the fit test caught it as the
   # deepest webbing vertex. The arm owns the whole flank, so the pouch pair
-  # slid forward to the belt's front corner (x=±0.085, z=0.085), where the
-  # belt's ellipse puts its surface at z=0.073 and the forearm never reaches.
-  attach pouchFL bone=spine1 kind=box at=0.32 offset=(0.0294,0,0.0647) size=0.0412 w=0.0294 h=0.0412 d=0.0206 material=webbing
-  attach pouchFR bone=spine1 kind=box at=0.32 offset=(-0.0294,0,0.0647) size=0.0412 w=0.0294 h=0.0412 d=0.0206 material=webbing
-  attach pouchL  bone=spine1 kind=box at=0.32 offset=(0.0500,0,0.0500) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
-  attach pouchR  bone=spine1 kind=box at=0.32 offset=(-0.0500,0,0.0500) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
+  # slid forward to the belt's front corner (x=±0.10), where the belt's
+  # ellipse puts its surface at z=0.071 and the forearm never reaches.
+  attach pouchFL bone=spine1 kind=box at=0.32 offset=(0.0294,0,0.0632) size=0.0412 w=0.0294 h=0.0412 d=0.0206 material=webbing
+  attach pouchFR bone=spine1 kind=box at=0.32 offset=(-0.0294,0,0.0632) size=0.0412 w=0.0294 h=0.0412 d=0.0206 material=webbing
+  attach pouchL  bone=spine1 kind=box at=0.32 offset=(0.0588,0,0.0485) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
+  attach pouchR  bone=spine1 kind=box at=0.32 offset=(-0.0588,0,0.0485) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
 
 textures
   # Plate: worn, not hammered — issued kit that has seen use. A quiet painted
   # top-light, fine noise, and ao doing the crevice work. The METAL half of
-  # the read lives in kit-overlay.ts's LOOK table, not here.
-  texture plate base=#5b7f72
-    gradient axis=v from=-0.08 to=0.12
+  # the read lives in kit-overlay.ts's LOOK table, not here. Kept DARK on
+  # purpose: the lab's key plus the env sheen lifted the first pass to a
+  # bright mint — the owner asked for dull.
+  texture plate base=#43635a
+    gradient axis=v from=-0.06 to=0.08
     noise scale=0.12 amount=0.05
     ao amount=0.16
   # Webbing: a woven grain AROUND the belt, matte and thirsty for shadow.
-  texture webbing base=#4a4132
+  texture webbing base=#3c3327
     streaks along=u amount=0.10
     noise scale=0.18 amount=0.06
     ao amount=0.20
