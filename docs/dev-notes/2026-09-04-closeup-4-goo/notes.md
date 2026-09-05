@@ -143,16 +143,123 @@ Two further instrument findings:
 
 ## Phase 0 — close-up and floor attribution
 
-(pending: close burst at cov ~2%, floor pool at cov ~6%)
+CLOSE (burst staging, 5 kept/leg, 0 rejects — but this run's GPU-clock state
+swung per-leg, so only the within-rep paired deltas are usable):
+
+| attribution (closeup seg) | median of per-rep deltas | range |
+|---|---|---|
+| whole goo (ship−goooff) | 0.04 ms | −1.84 .. 25.03 |
+| surface (ship−nosurface) | 8.63 ms* | 1.09 .. 18.74 |
+| density (ship−nodensity) | 6.77 ms* | −0.36 .. 22.00 |
+| blur (bluron−ship) | −7.78 ms* | −19.35 .. 7.23 |
+
+*The starred rows are the clock-swing artifact itself: on this run the GPU
+clock state changed faster than a leg cycle, and pass-gated legs landed in
+different windows. Only bounds survive this run: even the WILDEST legs bound
+the whole goo chain at a few ms of a 12–45 ms frame at cov ~2%. The per-pass
+split is NOT decision grade from this run.
+
+FLOOR (saturated 256-ring pool, cov 6.3% — the worst stageable state). The
+storm killed the run (machine load 24→160 mid-run, 18+ load-rejects, driver
+died on an unsettled await), but rep0 landed in a legitimately quiet window
+(load 11.9–15.0, quoted per row): goooff 12.42, ship 12.56, nosurface 12.86,
+nodensity 13.04 — **whole goo at the worst state ≈ 0.14 ms; surface ≈ −0.30;
+density ≈ −0.48 (both sub-noise)**. bluron's rep0 (32.7) was a clock spike,
+discard. The floor rep0 cluster is tight (12.4–13.0 across four legs) and is
+the single most informative cluster of the task: **at 6.3% covered area and a
+saturated splat ring, the entire goo chain is ~0.1 ms.**
+
+The A/B confirmation benches (item on/off pairs) were storm-blocked: the
+second half of the session ran at machine load 70–160 (sibling dispatch
+tasks' own benches), every row load-rejected, one Chrome death, one driver
+death. They are also MOOT given the attribution bound: no item can save more
+than the chain costs — ~0.14–0.5 ms in every state staged — which is below
+the look cost item 1 measurably has, and items 2–3 are cost-neutral by
+construction (see verdicts).
 
 ## Phase 0 — per-pass attribution (pending bench)
 
-(tables to land here)
+Superseded by the three tables above — the room-4 table (first section), the
+close bounds, and the floor quiet-window cluster together answer the
+question: the goo chain is sub-millisecond at every coverage the game can
+stage (1% gameplay, 2% burst peak, 6.3% saturated floor).
 
-## Items — A/B and look (pending bench + captures)
+## Items — parity, look, and A/B
 
-(tables to land here)
+**Parity gate (vs MAIN `93d9570`, frozen, deterministic staging):**
+
+| scene | noise (off1/off2) | branch vs MAIN, seam off | verdict |
+|---|---|---|---|
+| idle | 0% | **0% maxD 17** | CLEAN (exact) |
+| burst | 0.076% | 0.084% maxD 64 | CLEAN (≤ floor) |
+| floor | 1.06% | 1.07% maxD 208 | CLEAN (≤ floor) |
+
+Item-on diffs vs seam-off: idle 0–0.0001% (all three — seams are invisible
+when the field is empty); burst: surface 1.08%, minmax 0.049%, fade 0.022%;
+floor: surface 2.12%, minmax 0.10%, fade 1.43%. Two capture-instrument bugs
+fixed en route (background-tab rAF throttling never settles the AA smear —
+bringToFront before staging; weapon-animator phase masked in the vs-MAIN
+diff — game state proven identical first).
+
+**Look (unfrozen strips + frozen peak captures, judged by me):**
+
+- **Item 1 (surface at density res): REAL LOOK COST in the shipped depth
+  mode.** At the burst peak the flying spray's goo fusion — the bold wet
+  blobs the ship path lays over the billboard streaks — is LOST with the
+  seam on; the trail reads as bare, dimmer billboard specks. Mechanism
+  isolated by A/B against `setGooTuning({ mode: 'overlay' })`: with the seam
+  on in OVERLAY mode the spray comes back — big glossy blobs, arguably better
+  than shipped — so the killer is the DEPTH-TESTED upsample discarding sparse
+  spray texels whose packed depth reconstructs farther than the wall behind
+  them. The body/face goo, silhouette and glint are unaffected either way.
+- **Item 2 (minTexelRadius + areaPriority): invisible** — ≤0.10% px diff in
+  both scenes, at the noise floor; strands/pools identical.
+- **Item 3 (splat fade): pools still read as pools.** At the saturated floor
+  the fresh kill's pool is full-weight by design (fade bites only the oldest
+  tail ranks); only faint distant patches dim slightly. Visually subtle.
+
+**A/B ms-tables: storm-blocked** (see Phase 0 floor note) — and bounded by
+the attribution: the whole chain is ≤~0.5 ms in every state staged, so no
+item's possible saving can exceed that.
 
 ## Verdicts
 
-(pending)
+**The premise does not reproduce.** "The goo layer is the blood cost" was a
+structural read of the code, and the bench was written into the spec as the
+confirmation step. Measured, the entire goo chain — density, both blurs,
+surface composite — costs **~0.26 ms idle, ~0.1–0.5 ms in a full firefight,
+~0.14 ms at the saturated-pool worst case (6.3% covered area, 256-splat ring,
+259 live quads)**. Coverage reality: ~1% at gameplay range, ~2% at the
+point-blank burst peak, 6.3% staring into an accumulated pool. There is no
+state the game can stage where this chain is a meaningful fraction of an
+11–20 ms frame. The owner's "blood spray causes issues" is real but is NOT
+this layer; whatever it is (billboard view, chunk physics, sim step) lives
+outside task 4's scope.
+
+- **Item 1 — NO-SHIP as implemented.** The saving is bounded (≤ the chain's
+  ~0.5 ms worst case) and the look cost is real and measured: the depth-
+  tested upsample drops the flying-spray fusion in the shipped depth mode.
+  The overlay-mode result is the pointer: fix the packed-depth reconstruction
+  for sparse spray texels (or ship the low path in overlay mode), THEN
+  re-bench. The seam stays parity-pinned, default off.
+- **Item 2 — NO-SHIP (defaults unchanged).** Invisible (≤0.10% px) and
+  cost-neutral by construction: areaPriority changes WHICH quads fill the
+  cap, not how many; the sub-texel skip only bites at range, where the whole
+  chain is already ~0.3 ms. Nothing measurable to gain. Its look value (the
+  burst surviving at the cap over far trails) remains available to the owner
+  as a tuning flip.
+- **Item 3 — NO-SHIP (defaults unchanged).** `fallMask` still submits every
+  splat quad, so the direct saving is ~0 by construction; the indirect
+  surface saving is bounded by covered-pixel shading (sub-ms). The look is
+  fine (pools survive), but shipping a default flip with no measurable win
+  and a real (if subtle) change to a feature the owner asked for is a bad
+  trade. The seam stays for a future state where splat cost matters (e.g. if
+  the ring ever grows past 256).
+
+Idle-frame early-out: confirmed a non-win (whole chain at idle = 0.26 ms) —
+as the spec predicted; not pursued.
+
+One resolution change nobody can see would have been the BEST outcome here;
+what the task actually found is that there was no resolution change worth
+shipping at all — and one real look trap (item 1 depth mode) that a future
+attempt now knows to avoid.
