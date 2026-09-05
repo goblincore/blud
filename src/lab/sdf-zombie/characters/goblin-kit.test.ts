@@ -102,8 +102,22 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
     // became a plate fauld.
-    expect([...groups.keys()].sort()).toEqual(['brass', 'glass', 'iron', 'leather']);
-    for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThan(8);
+    expect([...groups.keys()].sort()).toEqual(['band', 'brass', 'glass', 'iron', 'leather', 'screen']);
+    // >=, not >: WAM's `kind=box` emits exactly 8 corner vertices
+    // (mesh.py:1170-1176), which is what the watch body/screen are.
+    for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThanOrEqual(8);
+  });
+
+  // THE WATCH IS ON THE LEFT WRIST ONLY — the FPV asset's left arm wears it,
+  // and the kit must agree. +X is the character's left (SPEC.md: "side=+X=
+  // left"), so every band and screen vertex sits at x > 0, and no mirrored
+  // copy exists.
+  it('wears the smartwatch on the left forearm only', () => {
+    for (const name of ['band', 'screen']) {
+      const vs = groups.get(name)!;
+      expect(vs.length, name).toBeGreaterThanOrEqual(8);  // kind=box = exactly 8 corners
+      for (const v of vs) expect(v[0], `${name} vertex x`).toBeGreaterThan(0);
+    }
   });
 
   // NO PLATE MAY PASS CLEAN THROUGH THE GOBLIN.

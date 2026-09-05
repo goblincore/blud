@@ -29,7 +29,7 @@
 //              treadmill-stepping in place); a blast's phaseKnock is baked
 //              into gait state.time — the clock is periodic, so a permanent
 //              small offset is indistinguishable from a decaying one
-//   ik ──────► three rest-target overrides, applied in this order:
+//   ik ──────► two rest-target overrides, applied in this order:
 //              1. FOOT PLANT — stance feet lock to their captured floor
 //                 contact; solvePlantedLeg re-solves knee/foot so the pull
 //                 DRAGS the foot toward the plant, not away from it (no
@@ -37,8 +37,6 @@
 //                 overrides live in the TARGETS rather than post-step)
 //              2. HEAD AIM — neck+head targets laid out along the damped,
 //                 clamped look direction (tracks the wander heading/target)
-//              3. WOUND CLUTCH — the clutching arm's elbow/hand targets
-//                 solved toward the wound by FABRIK
 //
 // ONE FRAME, COLLAPSED (spec §5): everything above stops; the rest pose is
 // the authored pose shifted by the root position FROZEN at the fall; the
@@ -47,14 +45,6 @@
 // corpse keeps taking wounds/severs/gibs because none of that depends on the
 // motion pipeline — it reads the posed prims.
 //
-// DEVIATION FROM ik.ts's stepClutch CONTRACT, deliberate: a blast triggers
-// BOTH the lurch (stagger) and the wound clutch, and stepClutch interrupts
-// an active clutch whenever `staggered` is true — fed naively, every blast
-// would kill its own clutch within one frame and the feature could never
-// fire. This module feeds `staggered` as "a reaction that started AFTER the
-// clutch did": the clutch's own initiating lurch coexists with the reach,
-// while any LATER hit (flinch, shudder, or a fresh lurch) knocks the arm off
-// the wound — the composability the spec asks for.
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -64,10 +54,10 @@ import type { GaitJointName } from './gait';
 import { GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
 import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, WANDER_TUNING, wrapPi, type Rng } from './wander';
-import type { ArmSide, ClutchArm, ClutchState, PlantState, AimState } from './ik';
+import type { PlantState, AimState } from './ik';
 import {
-  IK_TUNING, makeAim, makeClutch, makePlant, poleReflect, solveChain, solvePlantedLeg,
-  stepAim, stepClutch, stepPlant,
+  IK_TUNING, makeAim, makePlant, solvePlantedLeg,
+  stepAim, stepPlant,
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
@@ -273,7 +263,6 @@ export interface MotionState {
   plantL: PlantState;
   plantR: PlantState;
   aim: AimState;
-  clutch: ClutchState;
   recoil: RecoilState;
   /** The body's APPLIED yaw (rad) — follows wander.heading at the damped
    *  headingFollowRate × headingFollow gain. Every body-local thing (rest
@@ -299,7 +288,6 @@ export function makeMotionState(seed: number, start: Vec3): MotionState {
     plantL: makePlant(),
     plantR: makePlant(),
     aim: makeAim([0, 0, 1]),
-    clutch: makeClutch(),
     recoil: { joint: null, dirWorld: [0, 0, 0], amp: 0, age: 0 },
     bodyYaw: 0,
     blend: 0,
@@ -328,7 +316,7 @@ export interface MotionConfig {
 export interface MotionSignals {
   dt: number;
   /** The shot that landed, if any: profile + WORLD-space ray direction +
-   *  WORLD-space wound position + whether it struck the torso (clutch gate).
+   *  WORLD-space wound position + whether it struck the torso.
    *  gain is an optional stagger/recoil amplitude multiplier (default 1 =
    *  the lab's tuned amplitudes — the lab wiring never sets it, so its
    *  reactions are bit-identical to a build without the knob). */
@@ -371,7 +359,6 @@ export interface MotionFrame {
   hop: boolean;
   stance: { legL: boolean; legR: boolean };
   staggerKind: StaggerKind | null;
-  clutchArm: ArmSide | null;
   /** Diagnostics for the handle/panel. */
   speed: number;
   blend: number;
@@ -418,8 +405,7 @@ function clamp(n: number, lo: number, hi: number): number {
 /**
  * One motion step — pure and deterministic apart from the injected RNG.
  * `points` is the rig's CURRENT point array (world space): stance edges
- * capture their plant from where the foot actually IS, and the clutch picks
- * its arm by real shoulder positions. Pass a stub rig in tests.
+ * capture their plant from where the foot actually IS. Pass a stub rig in tests.
  */
 export function stepMotion(
   state: MotionState,
@@ -663,53 +649,11 @@ export function stepMotion(
     targets[idx.head!] = add(targets[idx.head!]!, sub(stepped.points[1]!, restHead));
   }
 
-  // --- IK override 3: wound clutch ------------------------------------------
-  // stepClutch's `staggered` contract is fed as "a reaction that started
-  // AFTER the clutch did" — see the header note. The clocks make the split
-  // exact: the clutch's own initiating lurch satisfies
-  // stagger.age + clutch.remaining == clutchBeat + dt (both started the same
-  // frame), so anything strictly below that is a later hit knocking the arm
-  // off the wound.
-  const interrupting =
-    stagger.staggered && state.clutch.arm !== null &&
-    stagger.state.age + state.clutch.remaining < IK_TUNING.clutchBeat + dt * 0.5;
-  let clutch = state.clutch;
-  if (!collapsed) {
-    const arms: ClutchArm[] = [];
-    if (havePoints) {
-      if (!sig.missing.armL) arms.push({ side: 'armL', shoulder: points[idx.shoulderL!]!.pos, hand: points[idx.handL!]!.pos });
-      if (!sig.missing.armR) arms.push({ side: 'armR', shoulder: points[idx.shoulderR!]!.pos, hand: points[idx.handR!]!.pos });
-    }
-    clutch = stepClutch(clutch, {
-      blast: !!sig.shot && sig.shot.type === 'blast' && sig.shot.torso && arms.length > 0,
-      wound: sig.shot ? sig.shot.woundWorld : Z,
-      arms,
-      staggered: interrupting,
-    }, dt);
-    if (clutch.arm !== null) {
-      const L = clutch.arm === 'armL';
-      const lens = L ? joints.arm.L : joints.arm.R;
-      const iShoulder = idx[L ? 'shoulderL' : 'shoulderR']!;
-      const iElbow = idx[L ? 'elbowL' : 'elbowR']!;
-      const iHand = idx[L ? 'handL' : 'handR']!;
-      const chain = solveChain(
-        [targets[iShoulder]!, targets[iElbow]!, targets[iHand]!], lens, clutch.target, SOLVE,
-      );
-      // Elbow pole: elbows bow DOWN (the opposite rule to knees) — an
-      // inverted elbow reads as a broken arm. Reflection preserves both
-      // segment lengths and the hand on the wound.
-      targets[iElbow] = poleReflect(targets[iShoulder]!, chain[1]!, chain[2]!, [0, -1, 0]);
-      targets[iHand] = chain[2]!;
-    }
-  } else {
-    clutch = makeClutch(); // a corpse has no flourishes
-  }
-
   // --- localized hit recoil -------------------------------------------------
   // The rig point NEAREST the hit takes a world-space shove along the shot
   // ray, attack-decaying over ~0.45 s; the verlet constraints drag the
   // connected chain (shoulder/torso) after it. Applied LAST of the target
-  // overrides so the plants/aim/clutch can't stomp it, and composed on top
+  // overrides so the plants/aim can't stomp it, and composed on top
   // of the whole-body stagger. A fresh hit re-targets the recoil.
   let recoil = state.recoil;
   if (sig.shot && !collapsed) {
@@ -743,7 +687,7 @@ export function stepMotion(
 
   const nextState: MotionState = {
     wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
-    plantL, plantR, aim, clutch, recoil, bodyYaw, blend,
+    plantL, plantR, aim, recoil, bodyYaw, blend,
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };
@@ -766,7 +710,6 @@ export function stepMotion(
       hop: collapse.hop,
       stance: collapsed ? { legL: false, legR: false } : gait.pose.stance,
       staggerKind: collapsed ? null : stagger.state.kind,
-      clutchArm: collapsed ? null : clutch.arm,
       speed: collapsed ? 0 : wander.speed,
       blend: collapsed ? 0 : blend,
     },

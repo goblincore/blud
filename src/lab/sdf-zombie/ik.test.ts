@@ -3,17 +3,13 @@ import { describe, it, expect } from 'vitest';
 import {
   IK_TUNING,
   makeAim,
-  makeClutch,
   makePlant,
   poleReflect,
   solveChain,
   solvePlantedLeg,
   stepAim,
-  stepClutch,
   stepPlant,
   type AimOpts,
-  type ClutchArm,
-  type ClutchSignal,
   type SolveOpts,
 } from './ik';
 import { cross, dot, len, sub } from './vec';
@@ -325,73 +321,6 @@ describe('head look-at — stepAim', () => {
         st = stepAim(st, NECK, REST, [100, 0.3, 1], TWO, AIM, DT).state;
       }
       return st;
-    };
-    expect(run()).toEqual(run());
-  });
-});
-
-describe('wound clutch — stepClutch', () => {
-  const ARMS: ClutchArm[] = [
-    { side: 'armL', shoulder: [0, 1.05, 0], hand: [0, 0.9, 0.2] },
-    { side: 'armR', shoulder: [0.35, 1.05, 0], hand: [0.35, 0.9, 0.2] },
-  ];
-  const BLAST: ClutchSignal = { blast: true, wound: [0.3, 0.9, 0.05], arms: ARMS, staggered: false };
-  const PELLET: ClutchSignal = { ...BLAST, blast: false };
-
-  it('gates on blast size — blast starts a clutch, pellet never does', () => {
-    expect(stepClutch(makeClutch(), PELLET, DT).arm).toBeNull();
-    const c = stepClutch(makeClutch(), BLAST, DT);
-    expect(c.arm).not.toBeNull();
-    expect(c.remaining).toBe(IK_TUNING.clutchBeat);
-  });
-
-  it('picks the nearest surviving arm', () => {
-    const c = stepClutch(makeClutch(), BLAST, DT);
-    // Wound [0.3, 0.9, 0.05] is closer to the right shoulder (0.35, 1.05, 0)
-    // than the left (0, 1.05, 0).
-    expect(c.arm).toBe('armR');
-    expect(close(c.target, [0.3, 0.9, 0.05], 1e-12)).toBe(true);
-  });
-
-  it('does nothing without a surviving arm', () => {
-    expect(stepClutch(makeClutch(), { ...BLAST, arms: [] }, DT).arm).toBeNull();
-  });
-
-  it('enforces one clutch at a time — new requests are ignored while active', () => {
-    let c = stepClutch(makeClutch(), BLAST, DT);
-    // A new blast nearer the LEFT arm — must be ignored while armR clutches.
-    c = stepClutch(c, { blast: true, wound: [0, 1.0, 0], arms: ARMS, staggered: false }, DT);
-    expect(c.arm).toBe('armR');
-    expect(close(c.target, [0.3, 0.9, 0.05], 1e-12)).toBe(true);
-  });
-
-  it('counts down the beat and releases at zero', () => {
-    let c = stepClutch(makeClutch(), BLAST, DT);
-    c = stepClutch(c, BLAST, IK_TUNING.clutchBeat); // one full beat of dt
-    expect(c.arm).toBeNull();
-  });
-
-  it('releases mid-way when the beat runs out', () => {
-    let c = stepClutch(makeClutch(), BLAST, DT);
-    c = stepClutch(c, BLAST, IK_TUNING.clutchBeat / 2);
-    expect(c.arm).toBe('armR');
-    c = stepClutch(c, BLAST, IK_TUNING.clutchBeat / 2 + 0.01);
-    expect(c.arm).toBeNull();
-  });
-
-  it('interrupts on stagger', () => {
-    let c = stepClutch(makeClutch(), BLAST, DT);
-    c = stepClutch(c, { ...BLAST, staggered: true }, DT);
-    expect(c.arm).toBeNull();
-  });
-
-  it('is deterministic — identical inputs give identical states', () => {
-    const run = () => {
-      let c = makeClutch();
-      c = stepClutch(c, BLAST, DT);
-      c = stepClutch(c, BLAST, IK_TUNING.clutchBeat / 3);
-      c = stepClutch(c, { ...BLAST, staggered: true }, DT);
-      return stepClutch(c, BLAST, DT);
     };
     expect(run()).toEqual(run());
   });

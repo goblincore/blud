@@ -17,7 +17,6 @@ import { applyRig, bindRig } from './rig-bind';
 import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
-import { IK_TUNING } from './ik';
 import { len, sub, dot } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
@@ -213,7 +212,7 @@ describe('stepMotion — standing', () => {
   });
 });
 
-describe('stepMotion — stagger + clutch', () => {
+describe('stepMotion — hit reactions', () => {
   it('a pellet shot flinches the shoulders and flags staggered', () => {
     const j = realJoints();
     const shot = { type: 'pellet' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0.1, 1.2, 0.1] as Vec3, torso: false };
@@ -238,52 +237,15 @@ describe('stepMotion — stagger + clutch', () => {
     expect(state.gait.time - 90 * DT).toBeGreaterThan(0.015);
   });
 
-  it('a torso blast triggers the wound clutch on the nearest surviving arm', () => {
+  it('torso blasts keep the normal lurch without adding a wound-reaching arm target', () => {
     const j = realJoints();
-    const woundWorld: Vec3 = [0.12, 1.25, 0.15];
-    const shot = { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld, torso: true };
-    const { frame } = run(j, makeMotionState(6, [0, 0, 0]), CFG_ON, 1,
-      () => ({ ...NO_SIGNALS(), shot }));
-    expect(frame.clutchArm).not.toBeNull();
-    const handIdx = frame.clutchArm === 'armL' ? j.index.handL : j.index.handR;
-    const idle = run(j, makeMotionState(6, [0, 0, 0]), CFG_ON, 1).frame.restPose;
-    const dClutch = len(sub(frame.restPose[handIdx]!, woundWorld));
-    const dIdle = len(sub(idle[handIdx]!, woundWorld));
-    expect(dClutch).toBeLessThan(dIdle - 0.05);
-  });
-
-  it('pellets and non-torso blasts never clutch; a later hit interrupts one', () => {
-    const j = realJoints();
-    const blast = (torso: boolean) => ({
-      type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3,
-      woundWorld: [0.12, 1.25, 0.15] as Vec3, torso,
-    });
-    // Non-torso blast: no clutch.
-    expect(run(j, makeMotionState(6, [0, 0, 0]), CFG_ON, 1, () => ({ ...NO_SIGNALS(), shot: blast(false) }))
-      .frame.clutchArm).toBeNull();
-    // Pellet: no clutch.
-    expect(run(j, makeMotionState(6, [0, 0, 0]), CFG_ON, 1,
-      () => ({ ...NO_SIGNALS(), shot: { ...blast(true), type: 'pellet' as const } }))
-      .frame.clutchArm).toBeNull();
-    // Torso blast clutches and survives its OWN lurch (started together)…
-    const st = makeMotionState(6, [0, 0, 0]);
-    const clutching = stepMotion(st, j, CFG_ON, { ...NO_SIGNALS(), shot: blast(true) }, stubPoints(j), BOUNDS, makeRng(1));
-    expect(clutching.frame.clutchArm).not.toBeNull();
-    const holding = stepMotion(clutching.state, j, CFG_ON, NO_SIGNALS(), stubPoints(j), BOUNDS, makeRng(1));
-    expect(holding.frame.clutchArm).not.toBeNull();
-    // …but a second blast a beat later knocks the arm off the wound.
-    const knocked = stepMotion(holding.state, j, CFG_ON,
-      { ...NO_SIGNALS(), shot: blast(true) }, stubPoints(j), BOUNDS, makeRng(1));
-    expect(knocked.frame.clutchArm).toBeNull();
-  });
-
-  it('the clutch releases after its beat', () => {
-    const j = realJoints();
-    const shot = { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0.12, 1.25, 0.15] as Vec3, torso: true };
-    const { frame } = run(j, makeMotionState(6, [0, 0, 0]), CFG_ON,
-      Math.ceil(IK_TUNING.clutchBeat / DT) + 5,
-      (i) => ({ ...NO_SIGNALS(), shot: i === 0 ? shot : null }));
-    expect(frame.clutchArm).toBeNull();
+    const shot = { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3,
+      woundWorld: [0.12, 1.25, 0.15] as Vec3, torso: true };
+    const react = (torso: boolean) => run(j, makeMotionState(6, [0, 0, 0]), CFG_ON, 30,
+      i => ({ ...NO_SIGNALS(), shot: i === 0 ? { ...shot, torso } : null }));
+    const torsoHit = react(true), otherHit = react(false);
+    expect(torsoHit.frame.restPose).toEqual(otherHit.frame.restPose);
+    expect(torsoHit.frame.staggerKind).toBe('lurch');
   });
 });
 

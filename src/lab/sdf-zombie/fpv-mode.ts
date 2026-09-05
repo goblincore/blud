@@ -81,7 +81,7 @@ export interface FpvGorePort {
   spawnBurst(visual: BurstVisual): void;
   /** Hand-splash wounds for the hands' own wound ring. */
   stampHandWounds(wounds: readonly Wound[]): void;
-  /** Feeds the blast into the motion reaction path (stagger/clutch) with the
+  /** Feeds the blast into the motion reaction path (stagger/recoil) with the
    *  SAME signal shape a blast click-shoot produces — blast maps to 'lurch'. */
   pushShot(shot: NonNullable<MotionSignals['shot']>): void;
 }
