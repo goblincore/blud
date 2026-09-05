@@ -147,7 +147,7 @@ nodes, `armIk` to shoulder anchors behind the camera — the one-piece stick
 showed its end at extreme pitch), skin re-toned to the character's face
 (saturated, wet, fine dark speckle via a fleck lattice; NOT the matte
 darkening tried first), chrome spike studs on the bracer, warts moved off the
-fist. 3177 tests, tsc, gate green. **Awaiting the owner's second look before
+fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. **Awaiting the owner's second look before
 merge.** Follow-up **F-arm.2 — the watch
 as an in-game device** (shells / health / timer drawn on the screen canvas).
 Owner, 2026-09-04: "the arm itself probably needs some work to more

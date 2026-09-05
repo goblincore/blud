@@ -170,9 +170,8 @@ def build_arm(sx, tag, watch):
     # SKIN. Ball joints on purpose (the blob's stylisation: "a shaft alone
     # reads as a pipe"), radii up from the blob's 0.028 shaft per the owner.
     put(sphere(HAND_R, 24, 16), f'hand_{tag}', 'Skin', root, uv=True)
-    # Three knuckle nubs on the back of the fist (dorsal = -Y).
-    for i, (x, y, z) in enumerate(((-0.018, -0.036, 0.012), (0.0, -0.040, 0.016), (0.018, -0.036, 0.012))):
-        put(sphere(0.011, 12, 8), f'knuckle{i}_{tag}', 'Skin', root, loc=P(x, y, z), uv=True)
+    # No knuckle nubs: three lumps on the back of the fist read as warts, not
+    # knuckles (owner, 2026-09-05), so the fist is the plain orb the blob has.
     put(sphere(WRIST_R, 16, 12), f'wrist_{tag}', 'Skin', root, loc=(0, 0, WRIST_Z), uv=True)
     put(frustum(FORE_R0, FORE_R1, ELBOW_Z - WRIST_Z, 24), f'forearm_{tag}', 'Skin', root,
         loc=(0, 0, (WRIST_Z + ELBOW_Z) / 2), uv=True)
