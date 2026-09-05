@@ -281,3 +281,35 @@ uniforms. A wound-panel edit of blendK / rimOffset / rimWidth without a
 re-upload leaves the bound stale (too tight if the knob grew → cull eats a
 carve). Game values are boot constants so this never bites in play; in the lab,
 re-stamp after dragging those three.
+
+## Five-leg wounds bench on the merged tree (2026-09-05, load 4–9, kept 4/4/4/4/4, 0 rejected)
+
+Merged tree = main + hit batching + wound step 1.0 shipped + wound cull ON. Same wounded
+fill-screen staging (dist 0.6, 5 wounds, cov 16%). Medians of 4 reps, quiet window:
+
+| leg | p50 | vs ship |
+| --- | --- | --- |
+| **ship** (step 1.0, cull ON, bones in field) | **25.6 ms** | — |
+| step06 (the old 0.6 zone) | 32.2 | +6.7 (+26%) |
+| cullOff | 25.8 | +0.2 (+1%) |
+| bones (tubes ON = bone fold out of the field; measurement only, tubes do not ship) | 21.4 | −4.2 (−16%) |
+| unwounded | 15.1 | −10.4 (−41%) |
+
+Per-rep pairs agree in direction on every leg (rep0 ran while load was still draining and
+is lower across the board).
+
+**Implications.**
+1. The wound-zone step at 1.0 was the lever that mattered: 6.7 ms, 26% of the frame,
+   already shipped on the owner's look verdict. On a QUIET machine the wounded
+   fill-screen frame is now ~26 ms — under the 33 ms budget. The 50 ms readings earlier
+   today were this scene under load 15–45.
+2. Of the remaining 10.4 ms wound gap, the in-crater bone fold (`applyBones`, bone
+   capsules per eval where nearWound) is 4.2 ms — 40% of it. A baked bone field or bone
+   meshes (the planned tube replacement) would collect that; the tubes themselves stay
+   off (look, pelvis).
+3. The wound union-reach cull is worth ~0. It ships ON as a no-op-by-construction and
+   costs nothing, but it is not a lever; the remaining ~6 ms is the carve/rim maths
+   inside reach — the wound being drawn.
+4. Next measurement, not a build: the owner's own close-up scene (two wounded bodies,
+   7 in frustum, `docs`… shortspike.mov) on an idle machine, to see whether it still
+   leaves 30 fps at all without the load.
