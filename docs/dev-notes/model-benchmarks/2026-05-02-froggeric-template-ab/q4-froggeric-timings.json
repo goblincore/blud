@@ -1,7 +1,0 @@
-{
-  "label": "q4-froggeric",
-  "tasks": {
-    "task1": {"name": "SeededRng", "elapsed_s": 722, "files": 5, "stdout_bytes": 1414},
-    "task5": {"name": "LRU cache", "elapsed_s": 490, "files": 5, "stdout_bytes": 1078}
-  }
-}

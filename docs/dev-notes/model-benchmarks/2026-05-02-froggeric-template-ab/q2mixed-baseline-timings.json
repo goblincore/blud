@@ -1,7 +1,0 @@
-{
-  "label": "q2mixed-baseline",
-  "tasks": {
-    "task1": {"name": "SeededRng", "elapsed_s": 67, "files": 0, "stdout_bytes": 3208},
-    "task5": {"name": "LRU cache", "elapsed_s": 897, "files": 6, "stdout_bytes": 0}
-  }
-}

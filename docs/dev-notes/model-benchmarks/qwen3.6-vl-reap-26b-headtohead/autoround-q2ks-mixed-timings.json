@@ -1,7 +1,0 @@
-{
-  "label": "autoround-q2ks-mixed",
-  "tasks": {
-    "task1": {"name": "SeededRng", "elapsed_s": 1200, "files": 4, "stdout_bytes": 0},
-    "task5": {"name": "LRU cache", "elapsed_s": 1200, "files": 3, "stdout_bytes": 0}
-  }
-}

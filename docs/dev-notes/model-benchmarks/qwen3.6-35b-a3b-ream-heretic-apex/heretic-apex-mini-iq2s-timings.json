@@ -1,7 +1,0 @@
-{
-  "label": "heretic-apex-mini-iq2s",
-  "tasks": {
-    "task1": {"name": "SeededRng", "elapsed_s": 509, "files": 5, "stdout_bytes": 318},
-    "task5": {"name": "LRU cache", "elapsed_s": 164, "files": 4, "stdout_bytes": 779}
-  }
-}

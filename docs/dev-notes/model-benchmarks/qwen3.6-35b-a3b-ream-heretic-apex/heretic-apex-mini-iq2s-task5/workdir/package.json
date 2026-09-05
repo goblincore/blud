@@ -1,8 +1,0 @@
-{
-  "name": "lru-cache-test",
-  "version": "1.0.0",
-  "type": "module",
-  "devDependencies": {
-    "vitest": "^3.0.0"
-  }
-}
