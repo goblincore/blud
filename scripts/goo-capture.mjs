@@ -135,25 +135,20 @@ const STAGE = {
     __sdfGame.teleport(1);
     const z = __sdfGame.zombies().find(q => q.room === 1);
     if (!z) return { error: 'no body in room 1' };
-    const ex = z.pos[0], ez = z.pos[2] + 2.2;
-    __sdfGame.setPose(ex, ez, 0, -0.15, 0);
-    __sdfGame.step(5);
-    const base = __sdfGame.pose();
-    let stamped = 0;
-    for (let k = 0; k < 12; k++) {
-      const yaw = base.yaw + (k - 5.5) * 0.045;
-      __sdfGame.setPose(base.pos[0], base.pos[2], yaw, base.pitch, 0);
-      const p = __sdfGame.predictSlugHit();
-      if (p.actorId < 0 || !p.hit) continue;
-      if (__sdfGame.stampWoundAt(p.origin[0], p.origin[1], p.origin[2],
-        p.dir[0], p.dir[1], p.dir[2], 'slug', p.actorId)) stamped++;
-      __sdfGame.step(30);
-    }
-    __sdfGame.step(2400);
-    const bleed = __sdfGame.bleed;
-    __sdfGame.setPose(base.pos[0], base.pos[2], base.yaw, -0.35, 0);
+    __sdfGame.setPose(z.pos[0], z.pos[2] + 1.6, 0, 0.05, 0);
+    __sdfGame.step(10);
+    __sdfGame.setBleed(true);
+    __sdfGame.setGoo(true);
+    // Slug SEVERS feed the bleed ledger (the gushing emitter); stampWoundAt
+    // only carves — its wounds never emit, so a stamp-built floor never
+    // saturates (measured: 8 stamps + 2400 steps → droplets 0, splats 0).
+    for (let i = 0; i < 3; i++) { __sdfGame.fireSlug(); __sdfGame.step(150); }
+    let guard = 0;
+    while (__sdfGame.bleed.splats < 240 && guard++ < 12) __sdfGame.step(120);
+    __sdfGame.setPose(z.pos[0], z.pos[2] + 1.6, 0, -0.35, 0);
     __sdfGame.step(3);
-    return { scene: 'floor', stamped, splats: bleed.splats, droplets: bleed.droplets };`,
+    const bleed = __sdfGame.bleed;
+    return { scene: 'floor', splats: bleed.splats, droplets: bleed.droplets };`,
 };
 
 const seamOff = '';
