@@ -255,6 +255,26 @@ function parseVec3Arg(
 }
 
 /**
+ * `warpFreq=` accepts a scalar or a `(fx,fy,fz)` triple, and a scalar means
+ * the isotropic triple. Both spellings exist because the two cases are
+ * genuinely different jobs: a scalar is "roughen this evenly", which is what
+ * an author reaches for first, and the triple is how a PLEAT is specified —
+ * zero the axis the folds should run along. Forcing the triple on the easy
+ * case would make every rough surface read as a deliberate anisotropy
+ * decision; offering only the scalar would make pleats impossible, which is
+ * what the first draft of this did.
+ */
+function parseWarpFreq(l: BlobLine): readonly [number, number, number] | null {
+  const raw = strArg(l, 'warpFreq');
+  if (raw === null) return null;
+  if (!raw.includes(',')) {
+    const n = numArg(l, 'warpFreq', 0);
+    return [n, n, n];
+  }
+  return parseVec3Arg(l, 'warpFreq', raw);
+}
+
+/**
  * Mutable state threaded through the per-section line handlers below.
  * `doc` accumulates the parse result; `known`/`inMirror`/`mirrorOpenedAt`
  * are skeleton-specific bookkeeping that only `parseSkeletonLine` reads or
@@ -433,11 +453,13 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // clipd= and rim=; the required-arg contract is judged here (and again in
     // blob-compile.ts) so a shell missing one fails loudly with the line.
     thickness: numArg(l, 'thick', 0),
-    // WRINKLES, off by default. Two scalars rather than a vector because
-    // BlobLine has no vector helper and they are unrelated quantities:
-    // `warp=` is amplitude in metres, `warpFreq=` is radians per metre.
+    // WRINKLES, off by default. `warp=` is the amplitude in metres;
+    // `warpFreq=` is radians per metre and takes EITHER a scalar (isotropic)
+    // or a `(fx,fy,fz)` triple. The triple is what makes pleats: zeroing an
+    // axis freezes that sine to a constant, so the folds run along it. See
+    // ShellParams.
     warpAmp: numArg(l, 'warp', 0),
-    warpFreq: numArg(l, 'warpFreq', 0),
+    warpFreq: parseWarpFreq(l),
     clipNormal: parseVec3Arg(l, 'clip', strArg(l, 'clip')),
     clipOffset: numArg(l, 'clipd', 0),
     rim: numArg(l, 'rim', 0),

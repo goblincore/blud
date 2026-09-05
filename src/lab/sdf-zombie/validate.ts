@@ -171,28 +171,36 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
  * within the careful margin — the author's job is to cut the sheet close to
  * perpendicular, which is how cloth is actually cut.
  */
+const ZERO3: Vec3 = [0, 0, 0];
+
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
-  warpAmp = 0, warpFreq = 0,
+  warpAmp = 0, warpFreq: Vec3 = ZERO3,
 ): number {
   // WRINKLES. Three sines with offset phases so the pattern does not repeat
   // visibly along any axis, added to the BASE distance before the sheet is
   // taken -- warping the base makes the whole sheet undulate, where warping
   // the sheet would only roughen its faces.
   //
-  // Each partial derivative is at most warpAmp*warpFreq, so the gradient grows
-  // by up to sqrt(3)*A*F and the result is divided by that to stay a
-  // conservative bound. At warpAmp 0 the multiplier is exactly 1 and every
-  // term vanishes, so an unwarped shell is bit-identical.
+  // The frequency is PER AXIS. Zeroing one freezes that sine to a constant,
+  // which is how a pleat is made: a skirt varies around the body and not down
+  // it, and a single scalar frequency can only ever produce an egg-carton.
+  //
+  // Each partial derivative is at most |A|*|F_axis|, so the gradient grows by
+  // up to |A| * length(F) and the result is divided by that to stay a
+  // conservative bound. Isotropic (f,f,f) recovers the sqrt(3)*A*f this
+  // started as. At warpAmp 0 the multiplier is exactly 1 and every term
+  // vanishes, so an unwarped shell is bit-identical.
   let base = dBase;
   let lip = 1;
-  if (warpAmp !== 0 && warpFreq !== 0) {
+  const fLen = Math.hypot(warpFreq[0], warpFreq[1], warpFreq[2]);
+  if (warpAmp !== 0 && fLen !== 0) {
     base += warpAmp
-      * Math.sin(warpFreq * p[0])
-      * Math.sin(warpFreq * p[1] + 1.3)
-      * Math.sin(warpFreq * p[2] + 2.6);
-    lip = 1 + Math.sqrt(3) * Math.abs(warpAmp) * Math.abs(warpFreq);
+      * Math.sin(warpFreq[0] * p[0])
+      * Math.sin(warpFreq[1] * p[1] + 1.3)
+      * Math.sin(warpFreq[2] * p[2] + 2.6);
+    lip = 1 + Math.abs(warpAmp) * fLen;
   }
   const d = Math.abs(base) - thickness;
   const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;

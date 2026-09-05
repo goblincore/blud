@@ -2,6 +2,9 @@
 import { type BlobDoc, type BlobPart, BlobError } from './blob-ast';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
+
+/** No wrinkles. Typed so the ?? fallbacks below stay a Vec3, not a number[]. */
+const ZERO_FREQ: Vec3 = [0, 0, 0];
 import { DEFAULT_SHEET, type FaceSheetParams } from './blob-face-sheet';
 import { FLESH_PRESETS, type FleshMaterial } from './material';
 
@@ -289,20 +292,24 @@ function partToPrim(p: BlobPart): PrimDef {
     // the cloth comes out flat. Fail with the line instead. This is the same
     // class as `chamfer` on a shell, and it is caught here rather than
     // clamped because there is no sensible frequency to guess.
-    if ((p.warpAmp ?? 0) !== 0 && (p.warpFreq ?? 0) === 0)
+    const wf = p.warpFreq ?? ZERO_FREQ;
+    const wfLen = Math.hypot(wf[0]!, wf[1]!, wf[2]!);
+    const wa = p.warpAmp ?? 0;
+    if (wa !== 0 && wfLen === 0)
       throw new BlobError(
         'warp= needs a warpFreq= to go with it — amplitude alone is a silent '
         + 'no-op. Wrinkles are metres of displacement at radians per metre; '
-        + 'try warpFreq=40 for a fine weave, 15 for a heavy drape',
+        + 'try warpFreq=40 for a fine weave, 15 for a heavy drape, or '
+        + 'warpFreq=(20,0,20) for pleats that run vertically',
         p.src.line, p.src.indent + 1);
-    if ((p.warpFreq ?? 0) !== 0 && (p.warpAmp ?? 0) === 0)
+    if (wfLen !== 0 && wa === 0)
       throw new BlobError(
         'warpFreq= without warp= does nothing — set warp= to the wrinkle '
         + 'amplitude in metres', p.src.line, p.src.indent + 1);
     // Wrinkles live on the SHEET. On anything else the parser still reads the
     // arguments and the compiler would drop them, which is the silent-echo
     // failure again.
-    if (((p.warpAmp ?? 0) !== 0 || (p.warpFreq ?? 0) !== 0) && p.kind !== 'shell')
+    if ((wa !== 0 || wfLen !== 0) && p.kind !== 'shell')
       throw new BlobError(
         `warp= is only supported on a shell — a ${p.kind} is a solid mass, not `
         + 'cloth. Author the garment as a shell, or drop warp=',
@@ -310,21 +317,21 @@ function partToPrim(p: BlobPart): PrimDef {
     // THE CAP IS ON THE PRODUCT, not on either factor. The sheet is the level
     // set of `base + warp`, and a displaced level set does not tear however
     // large the displacement — what breaks it is the warp's GRADIENT growing
-    // enough to cancel the base's. The warp's gradient is bounded by
-    // sqrt(3)*|A|*|F|, so at sqrt(3)*|A|*|F| >= 1 the combined gradient can
-    // reach zero: the surface pinches, and the Lipschitz divisor the field is
-    // scaled by hits 2 and the march halves its step everywhere the cloth is
-    // on screen. Both are the same number, which is why one check covers them.
+    // enough to cancel the base's. That gradient is bounded by |A| * |F|, so
+    // at |A| * |F| >= 1 the combined gradient can reach zero: the surface
+    // pinches, and the Lipschitz divisor the field is scaled by hits 2 and
+    // the march halves its step everywhere the cloth is on screen. Both are
+    // the same number, which is why one check covers them.
     //
     // Wide amplitude at low frequency is a heavy drape and is fine; the
     // combination this rejects is deep AND fine, which is not a fabric.
-    const warpLip = Math.sqrt(3) * Math.abs(p.warpAmp ?? 0) * Math.abs(p.warpFreq ?? 0);
+    const warpLip = Math.abs(wa) * wfLen;
     if (warpLip >= 1)
       throw new BlobError(
-        `warp=${p.warpAmp} at warpFreq=${p.warpFreq} gives a warp gradient of `
-        + `${warpLip.toFixed(2)}, which can cancel the surface's own: the sheet `
-        + 'pinches and the march halves its step. Keep sqrt(3)*warp*warpFreq '
-        + 'under 1 — deep wrinkles want a LOW frequency',
+        `warp=${wa} at warpFreq length ${wfLen.toFixed(1)} gives a warp gradient `
+        + `of ${warpLip.toFixed(2)}, which can cancel the surface's own: the `
+        + 'sheet pinches and the march halves its step. Keep warp * '
+        + 'length(warpFreq) under 1 — deep wrinkles want a LOW frequency',
         p.src.line, p.src.indent + 1);
     if (p.box && p.kind === 'shell')
       throw new BlobError(
@@ -388,7 +395,7 @@ function partToPrim(p: BlobPart): PrimDef {
               clipOffset: p.clipOffset,
               rim: p.rim,
               warpAmp: p.warpAmp ?? 0,
-              warpFreq: p.warpFreq ?? 0,
+              warpFreq: p.warpFreq ?? ZERO_FREQ,
             },
           }
         : {}),

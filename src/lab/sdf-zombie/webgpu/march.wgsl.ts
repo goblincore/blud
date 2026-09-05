@@ -55,8 +55,8 @@ import { MAX_PRIMS } from '../validate';
 //                       w = hasClip (shell-fold prims only)
 //   row 17 primClip     xyz = clip plane normal (shell-fold prims only),
 //                       w = per-prim glow 0..1 (hard-surface task 3)
-//   row 20 primWarp     x = wrinkle amplitude (m), y = wrinkle frequency
-//                       (rad/m), zw spare (shell-fold prims only)
+//   row 20 primWarp     x = wrinkle amplitude (m), yzw = per-axis wrinkle
+//                       frequency (rad/m) (shell-fold prims only)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -131,8 +131,9 @@ export const ROW_PRIM_SHELL = 16;
  *  inert (w = 0) unless the author writes `glow=`. See ROW_PRIM_SHELL. */
 export const ROW_PRIM_CLIP = 17;
 /** WRINKLES (shell cloth spike): x = warp amplitude in metres, y = warp
- *  frequency in radians per metre, zw spare. Read only by prims with a shell
- *  fold, and only when x and y are both non-zero — a shell authored without
+ *  yzw = per-axis frequency in radians per metre. Read only by prims with a
+ *  shell fold, and only when the amplitude and the frequency are both
+ *  non-zero — a shell authored without
  *  `warp=` packs zeros here and takes the untouched branch in sdShell, which
  *  is why every existing character is bit-identical across this row's
  *  arrival.
@@ -459,9 +460,14 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // BASE distance before the sheet is taken, so the whole sheet undulates like
 // hanging cloth rather than its two faces getting independently roughened.
 //
+// The frequency is PER AXIS: zeroing one freezes that sine to a constant, so
+// the folds run along it. That is how a pleat is made — a skirt varies around
+// the body and not down it — and a scalar frequency can only ever produce an
+// egg-carton.
+//
 // This costs the exactness of the field. Each partial derivative of the warp
-// term is at most warpA*warpF, so the gradient magnitude grows to at most
-// 1 + sqrt(3)*|A|*|F| and the result is divided by exactly that: the field
+// term is at most |A|*|F_axis|, so the gradient magnitude grows to at most
+// 1 + |A|*length(F) and the result is divided by exactly that: the field
 // stays a conservative distance BOUND, which is all a sphere tracer needs,
 // and no plain-step flag is required. Mirrors sdShellWrap in validate.ts —
 // the two must agree or the CPU checks pass a body the GPU tears.
@@ -469,12 +475,13 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // With warpA or warpF zero the branch is skipped, `lip` is exactly 1.0, and
 // division by 1.0 is exact in IEEE — an unwarped shell is bit-identical to
 // before this existed, which shell-warp.test.ts pins.
-export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: f32) -> f32 {
+export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: vec3<f32>) -> f32 {
   var base = dBase;
   var lip = 1.0;
-  if (warpA != 0.0 && warpF != 0.0) {
-    base = base + warpA * sin(warpF * p.x) * sin(warpF * p.y + 1.3) * sin(warpF * p.z + 2.6);
-    lip = 1.0 + 1.7320508 * abs(warpA) * abs(warpF);
+  let fLen = length(warpF);
+  if (warpA != 0.0 && fLen != 0.0) {
+    base = base + warpA * sin(warpF.x * p.x) * sin(warpF.y * p.y + 1.3) * sin(warpF.z * p.z + 2.6);
+    lip = 1.0 + abs(warpA) * fLen;
   }
   let d = abs(base) - thick;
   if (hasClip < 0.5) { return d / lip; }
@@ -1001,7 +1008,7 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
       let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
-      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.y);
+      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw);
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is

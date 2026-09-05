@@ -92,7 +92,7 @@ export interface BlobPart {
   thickness: number;
   /** Wrinkle amplitude (metres) and frequency (rad/m); 0 = smooth. */
   warpAmp?: number;
-  warpFreq?: number;
+  warpFreq?: readonly [number, number, number] | null;
   clipNormal: readonly [number, number, number] | null;
   clipOffset: number;
   rim: number;

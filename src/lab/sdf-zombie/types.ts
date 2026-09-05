@@ -31,8 +31,14 @@ export interface ShellParams {
    * punches holes.
    */
   warpAmp?: number;
-  /** Wrinkle frequency, radians per metre. Ignored when warpAmp is 0. */
-  warpFreq?: number;
+  /** Wrinkle frequency PER AXIS, radians per metre. Ignored when warpAmp is 0.
+   *
+   *  Per-axis rather than scalar because a single frequency can only make an
+   *  egg-carton, and cloth is not isotropic: a pleated skirt varies AROUND
+   *  the body and not DOWN it. Zeroing an axis freezes the sine on that axis
+   *  to a constant, which turns the lumps into vertical folds — that one
+   *  degree of freedom is the difference between cloth and a lumpy shell. */
+  warpFreq?: Vec3;
 }
 
 /**

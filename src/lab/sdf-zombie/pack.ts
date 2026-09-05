@@ -55,7 +55,7 @@ export interface PackedBody {
    *  see the primClip.set call below). Kept in step with ROW_PRIM_CLIP's
    *  docstring in march.wgsl.ts, which is the row table this mirrors. */
   primClip: Float32Array;
-  /** x = wrinkle amplitude (m), y = wrinkle frequency (rad/m), zw spare.
+  /** x = wrinkle amplitude (m), yzw = per-axis wrinkle frequency (rad/m).
    *  All-zero for every prim that is not a warped shell, which is what makes
    *  this row's arrival invisible to every existing character. */
   primWarp: Float32Array;
@@ -239,8 +239,9 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // unless the author wrote `warp=`, and the shader's warp branch is gated
     // on both being non-zero, so an unwarped shell takes the exact same code
     // path it took before this row existed.
+    const wf = sh?.warpFreq ?? [0, 0, 0];
     primWarp.set(sh
-      ? [sh.warpAmp ?? 0, sh.warpFreq ?? 0, 0, 0]
+      ? [sh.warpAmp ?? 0, wf[0]!, wf[1]!, wf[2]!]
       : [0, 0, 0, 0], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,

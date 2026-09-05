@@ -48,8 +48,8 @@ describe('shell warp — the no-op', () => {
         for (const thick of [0.006, 0.02]) {
           for (const rim of [0, 0.007]) {
             const off = sdShellWrap(dBase, p, thick, CLIP, -0.72, rim);
-            const zeroAmp = sdShellWrap(dBase, p, thick, CLIP, -0.72, rim, 0, 40);
-            const zeroFreq = sdShellWrap(dBase, p, thick, CLIP, -0.72, rim, 0.01, 0);
+            const zeroAmp = sdShellWrap(dBase, p, thick, CLIP, -0.72, rim, 0, [40, 40, 40]);
+            const zeroFreq = sdShellWrap(dBase, p, thick, CLIP, -0.72, rim, 0.01, [0, 0, 0]);
             expect(Object.is(zeroAmp, off)).toBe(true);
             expect(Object.is(zeroFreq, off)).toBe(true);
           }
@@ -69,6 +69,7 @@ describe('shell warp — the no-op', () => {
       expect(shells.length).toBeGreaterThan(0);
       for (const sh of shells) {
         expect(sh.shell!.warpAmp ?? 0).toBe(0);
+        expect(sh.shell!.warpFreq ?? [0, 0, 0]).toEqual([0, 0, 0]);
         expect(shellReach(sh)).toBe(sh.shell!.thickness);
       }
     }
@@ -86,7 +87,13 @@ describe('shell warp — the field stays a bound', () => {
     // 6 mm wrinkles at 40 rad/m is a fine weave, 25 mm at 12 rad/m is a
     // heavy drape.
     const h = 1e-4;
-    for (const [amp, freq] of [[0.006, 40], [0.025, 12], [0.05, 60], [-0.02, 25]]) {
+    const cases: [number, Vec3][] = [
+      [0.006, [40, 40, 40]],   // fine weave, isotropic
+      [0.025, [12, 12, 12]],   // heavy drape
+      [0.012, [26, 0, 26]],    // PLEATS — the y axis frozen, folds run down
+      [-0.02, [25, 8, 25]],    // signed amplitude, anisotropic
+    ];
+    for (const [amp, freq] of cases) {
       let worst = 0;
       // A plain sphere of radius 0.2 as the base — the warp is what is under
       // test, not the base primitive, and a sphere's own field is exact.
@@ -110,7 +117,7 @@ describe('shell warp — the field stays a bound', () => {
     // A bound test rather than a gradient one: from a point outside, march
     // the reported distance and confirm the surface was not passed. This is
     // the property a sphere tracer actually consumes.
-    const amp = 0.02, freq = 25;
+    const amp = 0.02; const freq: Vec3 = [25, 25, 25];
     const base = (q: Vec3) => Math.hypot(q[0], q[1], q[2]) - 0.2;
     const f = (q: Vec3) => sdShellWrap(base(q), q, 0.008, CLIP, CLIP_FAR, 0.007, amp, freq);
     for (let i = 0; i < 200; i++) {
@@ -160,11 +167,19 @@ body
     return buildBody(compileBlob(doc, compileFace(doc)));
   };
 
-  it('accepts a well-formed warp', () => {
+  it('accepts a well-formed warp, scalar frequency meaning isotropic', () => {
     const body = build(`${SHELL} warp=0.010 warpFreq=40`);
     const sh = body.prims.find(p => p.shell)!.shell!;
     expect(sh.warpAmp).toBe(0.010);
-    expect(sh.warpFreq).toBe(40);
+    expect(sh.warpFreq).toEqual([40, 40, 40]);
+  });
+
+  it('accepts a per-axis frequency triple — the pleat spelling', () => {
+    // A zero on an axis is LEGAL and is the whole point: it freezes that
+    // sine to a constant so the folds run along it. The all-zero triple is
+    // the one that is rejected, by the amplitude-without-frequency check.
+    const body = build(`${SHELL} warp=0.012 warpFreq=(26,0,26)`);
+    expect(body.prims.find(p => p.shell)!.shell!.warpFreq).toEqual([26, 0, 26]);
   });
 
   it('rejects an amplitude with no frequency — the silent-flat-cloth case', () => {
@@ -193,11 +208,11 @@ describe('shell warp — the bounds grow with it', () => {
     expect(shellReach({})).toBe(0);
     expect(shellReach({ shell: { thickness: 0.006, rim: 0, clipNormal: [0, -1, 0], clipOffset: 0 } })).toBe(0.006);
     expect(shellReach({
-      shell: { thickness: 0.006, rim: 0, clipNormal: [0, -1, 0], clipOffset: 0, warpAmp: 0.02, warpFreq: 25 },
+      shell: { thickness: 0.006, rim: 0, clipNormal: [0, -1, 0], clipOffset: 0, warpAmp: 0.02, warpFreq: [25, 25, 25] },
     })).toBeCloseTo(0.026, 12);
     // A NEGATIVE amplitude reaches just as far — the sine triple is signed.
     expect(shellReach({
-      shell: { thickness: 0.006, rim: 0, clipNormal: [0, -1, 0], clipOffset: 0, warpAmp: -0.02, warpFreq: 25 },
+      shell: { thickness: 0.006, rim: 0, clipNormal: [0, -1, 0], clipOffset: 0, warpAmp: -0.02, warpFreq: [25, 25, 25] },
     })).toBeCloseTo(0.026, 12);
   });
 });

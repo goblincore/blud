@@ -1107,7 +1107,7 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0)`);
     expect(fold).toContain('if ((i32(prof) & 4) != 0) {');
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0)`);
-    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.y);');
+    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw);');
     const profGate = fold.indexOf('if ((i32(prof) & 4) != 0) {');
     const bendGate = fold.indexOf('if ((i32(prof) & 2) != 0) {');
     // The shell wrap must come AFTER the base field is computed (sdPrim) and
