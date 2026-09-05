@@ -119,3 +119,31 @@ First bench attempt launched at loadavg 83 (iCloud `fileproviderd`/`bird`
 sync storm) — my error; the hygiene rule says check `uptime` first. The
  poisoned run was killed, its tabs closed, and the bench re-run is gated on
 load1 < ~12. [bench results to be appended]
+
+## Bench, run by hand after the timeout (2026-09-05 08:12, load 1-min 6–30, 15-min ~53)
+
+`BENCH_REPEATS=4 node scripts/closeup-probes-bench.mjs 5399 9399` from the preserved
+worktree. Kept 4/4/4, loadRejected 6, makeupReps 3. Rows (p50 ms, load start→end):
+
+| rep | stencil | forward | deriv |
+| --- | --- | --- | --- |
+| 0 | 66.3 (14→10) | — | 73.7 (21→16) |
+| 2 | 93.6 (30→12) | 43.9 (12→12) | — |
+| 3 | **50.1 (12→8)** | **49.0 (8→6)** | **46.6 (6→6)** |
+| 4 | 50.7 (6→5) | — | 45.7 (15→17) |
+| 5 | — | 42.4 (17→11) | 40.4 (11→10) |
+| 6 | — | 47.2 (10→11) | — |
+
+The aggregate medians (stencil 66.3, forward 47.2, −29%) are load artefacts: the
+stencil rows at 66 and 94 ran at load 14–30, the forward rows at 8–17. **Judge on
+the one fully quiet rep (rep 3, load 6–12, all three legs): stencil 50.1 → forward
+49.0 (−2%) → deriv 46.6 (−7%).** Reps 4/5 agree in direction (stencil ~50 vs
+deriv ~41–46).
+
+**Verdict:** the 3-tap forward-difference normal (the shippable one — look gate
+passed) is worth ~1 ms of a ~50 ms wounded fill-screen frame. The derivative normal
+would be worth ~3.5 ms and is no-ship on look. The post-hit probes were ~1 of the
+~20 evals per pixel the plan counted, and the frame says so. Note what the frame IS:
+~50 ms wounded at dist 0.6 vs ~24 ms unwounded at 2.5 m — **the wounds double the
+close-up cost** (conservative 0.6× stepping near craters, the up-to-14-eval wound
+shadow). That, not the flesh probes, is the next thing to measure on this scene.
