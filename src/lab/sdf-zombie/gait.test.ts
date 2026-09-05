@@ -12,10 +12,13 @@ import {
   makeGaitState,
   rotateYaw,
   stepGait,
+  type GaitLimbs,
   type GaitPose,
   type GaitProfile,
   type GaitSkew,
 } from './gait';
+import { SOLDIER_WALK } from './gait-curves/soldier-walk';
+import { SOLDIER_RUN } from './gait-curves/soldier-run';
 import { bindRig } from './rig-bind';
 import { buildBody } from './build-body';
 import { makeZombie } from './body';
@@ -25,7 +28,7 @@ import { makeMotionJoints } from './motion';
 import soldierSrc from './characters/soldier.blob?raw';
 import goblinSrc from './characters/goblin.blob?raw';
 import zombieSrc from './characters/zombie.blob?raw';
-import { len, sub } from './vec';
+import { add, len, normalize, sub } from './vec';
 import type { Vec3 } from './types';
 
 const NONE: GaitSkew = { damageMeter: 0, missing: {}, wounded: {} };
@@ -430,5 +433,55 @@ describe('gait profiles', () => {
   it('the pose reports the profile lean; shamble reports 0', () => {
     expect(stepGait(makeGaitState(1), NONE, 0.1, 'swing').pose.lean).toBe(0);
     expect(stepGait(makeGaitState(1), NONE, 0.1, 'swing', RUN).pose.lean).toBeCloseTo(RUN.torsoLean * Math.PI / 180, 9);
+  });
+});
+
+describe('curve-mode gait', () => {
+  // The soldier's rest legs: dead straight, 0.42 + 0.42, tilt 2°.
+  const LIMBS: GaitLimbs = {
+    L: { thigh: [0.0147, -0.4197, 0], shin: [0.0147, -0.4197, 0] },
+    R: { thigh: [-0.0147, -0.4197, 0], shin: [-0.0147, -0.4197, 0] },
+  };
+  const walk: GaitProfile = { ...MARCH, curves: SOLDIER_WALK, strideFreq: SOLDIER_WALK.freq };
+  const runP: GaitProfile = { ...RUN, curves: SOLDIER_RUN, strideFreq: SOLDIER_RUN.freq };
+  const cycle = (p: GaitProfile, limbs?: GaitLimbs) => {
+    let st = makeGaitState(9); const out: GaitPose[] = [];
+    const n = Math.round(1 / p.strideFreq / DT) + 1;
+    for (let i = 0; i < n; i++) { const s = stepGait(st, NONE, DT, 'carry', p, limbs); st = s.state; out.push(s.pose); }
+    return out;
+  };
+  const kneeOffLine = (pose: GaitPose, limbs: GaitLimbs) => {
+    // Distance of the posed knee from the posed hip→ankle line, left leg.
+    const hip: Vec3 = [0, 0, 0];
+    const knee = add(limbs.L.thigh, pose.offsets.kneeL);
+    const ankle = add(add(limbs.L.thigh, limbs.L.shin), pose.offsets.footL);
+    const d = normalize(sub(ankle, hip));
+    const v = sub(knee, hip);
+    const along = d[0] * v[0] + d[1] * v[1] + d[2] * v[2];
+    return len(sub(v, [d[0] * along, d[1] * along, d[2] * along]));
+  };
+  it('the knee leaves the hip→ankle line by more than 8 cm at peak swing', () => {
+    expect(Math.max(...cycle(walk, LIMBS).map(p => kneeOffLine(p, LIMBS)))).toBeGreaterThan(0.08);
+  });
+  it('segment lengths are preserved by construction', () => {
+    for (const p of cycle(runP, LIMBS)) {
+      const knee = add(LIMBS.L.thigh, p.offsets.kneeL);
+      const ankle = add(add(LIMBS.L.thigh, LIMBS.L.shin), p.offsets.footL);
+      expect(len(knee)).toBeCloseTo(len(LIMBS.L.thigh), 6);
+      expect(len(sub(ankle, knee))).toBeCloseTo(len(LIMBS.L.shin), 6);
+    }
+  });
+  it('walk never has both feet in the air; run has a flight phase', () => {
+    expect(cycle(walk, LIMBS).some(p => !p.stance.legL && !p.stance.legR)).toBe(false);
+    expect(cycle(runP, LIMBS).some(p => !p.stance.legL && !p.stance.legR)).toBe(true);
+  });
+  it('without limbs the profile falls back to the sinusoid path', () => {
+    const a = cycle(walk)[10]!, b = cycle({ ...walk, curves: undefined })[10]!;
+    expect(a.offsets.kneeL).toEqual(b.offsets.kneeL);
+  });
+  it('blendProfiles blends the curves sample-wise', () => {
+    const half = blendProfiles(walk, runP, 0.5);
+    expect(half.curves!.L.knee[3]).toBeCloseTo((SOLDIER_WALK.L.knee[3]! + SOLDIER_RUN.L.knee[3]!) / 2, 9);
+    expect(blendProfiles(walk, runP, 0).curves).toBe(SOLDIER_WALK);
   });
 });

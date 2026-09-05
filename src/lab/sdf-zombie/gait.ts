@@ -20,6 +20,8 @@
 // it reads hand-posed rather than sinusoidal.
 import type { Vec3 } from './types';
 import type { BuildResult } from './build-body';
+import { add, len, sub } from './vec';
+import { blendCurves, sampleCurve, sampleStance, type GaitCurves } from './gait-curves';
 
 const TAU = Math.PI * 2;
 const Z: Vec3 = [0, 0, 0];
@@ -166,10 +168,17 @@ export const GAIT_TUNING = {
   damageLurchFreq: 0.7,
 } as const;
 
+/** The body's REST leg segment vectors, body-local — what curve mode needs
+ *  to turn clip angles back into positions with THIS body's lengths. */
+export interface GaitLimbs {
+  L: { thigh: Vec3; shin: Vec3 };
+  R: { thigh: Vec3; shin: Vec3 };
+}
+
 export type GaitProfile = {
   -readonly [K in keyof typeof GAIT_TUNING]: (typeof GAIT_TUNING)[K] extends number ? number
     : (typeof GAIT_TUNING)[K] extends string ? string : (typeof GAIT_TUNING)[K];
-} & { armStyle: ArmStyle };
+} & { armStyle: ArmStyle; curves?: GaitCurves };
 
 export const SHAMBLE: GaitProfile = GAIT_TUNING as unknown as GaitProfile;
 
@@ -233,6 +242,8 @@ export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitPr
     const av = a[k], bv = b[k];
     if (typeof av === 'number' && typeof bv === 'number') out[k] = av + (bv - av) * t;
   }
+  if (a.curves && b.curves) out.curves = blendCurves(a.curves, b.curves, t);
+  else out.curves = (t < 0.5 ? a : b).curves;
   return out as GaitProfile;
 }
 
@@ -377,6 +388,7 @@ export function stepGait(
   state: GaitState, skew: GaitSkew, dt: number,
   armStyle: ArmStyle = GAIT_TUNING.armStyle,
   profile: GaitProfile = SHAMBLE,
+  limbs?: GaitLimbs,
 ): GaitStep {
   const time = state.time + Math.max(dt, 0);
   const s = state.seed;
@@ -393,6 +405,7 @@ export function stepGait(
   // Exactly one leg missing ⇒ hop-limp. Both or neither ⇒ regular gait.
   const hop = missingL !== missingR;
   const damage = clamp01(skew.damageMeter);
+  const curves = !hop && limbs ? T.curves : undefined;
 
   // Master clock. Legs alternate π apart; sway/bob/rock derive from the same
   // phase so they never beat against the steps.
@@ -417,7 +430,10 @@ export function stepGait(
   const survivor = missingL ? phiR : phiL;
   const bobCurve = hop ? (1 + Math.cos(survivor)) / 2 : (1 + Math.cos(T.bobPerStride * phiL)) / 2;
   const sway = swayAmp * Math.sin(swayPhase);
-  const bob = -bobAmp * (hop ? T.hopBobScale : 1) * bobCurve;
+  const legLen = limbs ? len(limbs.L.thigh) + len(limbs.L.shin) : 0;
+  const bob = curves
+    ? sampleCurve(curves.hipsY, ((phiL % TAU) + TAU) % TAU / TAU) * legLen * (1 - damage * T.damageBobScale)
+    : -bobAmp * (hop ? T.hopBobScale : 1) * bobCurve;
   const rock = T.rockAmp * bobCurve;
   const lurch =
     damage * T.damageLurchAmp * Math.sin(time * T.damageLurchFreq * TAU + asym(s, 'lurch') * Math.PI);
@@ -441,6 +457,32 @@ export function stepGait(
     const missing = side === 'L' ? missingL : missingR;
     if (missing) return { foot: Z, knee: Z, stance: false };
     const wounded = side === 'L' ? woundedL : woundedR;
+    if (curves) {
+      const c = side === 'L' ? curves.L : curves.R;
+      const rest = side === 'L' ? limbs!.L : limbs!.R;
+      const p = ((phiL % TAU) + TAU) % TAU / TAU; // the LEFT clock; the R curves are already half a cycle off
+      const scaleA = (side === 'L' ? aL : aR) * (wounded ? T.woundedSwingScale : 1);
+      const thigh = sampleCurve(c.thigh, p) * scaleA;
+      const flex = Math.max(0, sampleCurve(c.knee, p) * scaleA);
+      // Pitch the REST segment about x (the sagittal plane): x keeps the
+      // body's lateral tilt, and the segment length is preserved exactly —
+      // the plan's `[x, -L*cos, L*sin]` form overshoots by x²/L (~0.26 mm
+      // here), which the length-preservation test rejects at 1e-6.
+      const pitch = (v: Vec3, a: number): Vec3 => [
+        v[0],
+        v[1] * Math.cos(a) + v[2] * Math.sin(a),
+        v[2] * Math.cos(a) - v[1] * Math.sin(a),
+      ];
+      const knee = pitch(rest.thigh, thigh);
+      const shin = pitch(rest.shin, thigh - flex);
+      const ankle = add(knee, shin);
+      const restAnkle = add(rest.thigh, rest.shin);
+      return {
+        foot: sub(ankle, restAnkle),
+        knee: sub(knee, rest.thigh),
+        stance: sampleStance(c.stance, p),
+      };
+    }
     const sideScale =
       (side === 'L' ? aL : aR) *
       (wounded ? T.woundedSwingScale : 1) *
