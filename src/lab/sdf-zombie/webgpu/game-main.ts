@@ -2761,6 +2761,9 @@ async function main() {
     {
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
+      // Hit batching: every actor hit this frame flushes its rig/repack/
+      // wound-row tail ONCE after the loop (ZombieActor.beginHits).
+      const hitThisFrame = new Set<ZombieActor>();
       for (let i = pellets.length - 1; i >= 0; i--) {
         const p = pellets[i]!;
         const from = prevs[i]!;
@@ -2804,6 +2807,7 @@ async function main() {
             // hit/hitSlug RETURN the wound this impact stamped (pre-sever),
             // so the bleed emitter binds the exact wound instead of sniffing
             // the ring tail (a hit that also severs puts a stump there).
+            if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
@@ -2813,6 +2817,7 @@ async function main() {
         }
         if (dead) pellets.splice(i, 1);
       }
+      for (const a of hitThisFrame) a.endHits();
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).

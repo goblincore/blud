@@ -538,3 +538,63 @@ describe('wounds ride the body yaw (billboarding regression)', () => {
     expect(severs, `arm still attached after ${fired} pellets at yaw ${actor.pose().yaw.toFixed(2)}`).toContain('armL');
   });
 });
+
+describe('hit batching (beginHits/endHits)', () => {
+  function makeCounted(id: number) {
+    const doc = parseBlob(zombieBlobSrc);
+    const face = compileFace(doc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const built = buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS, {});
+    const placed = translateBody(built, start);
+    const view = stubView() as unknown as { update?: (...a: unknown[]) => void; setWounds?: (...a: unknown[]) => void };
+    const counts = { update: 0, setWounds: 0 };
+    // The stub has no setWounds (refreshWounds no-ops without one); count
+    // both the repack (update) and the wound-row rewrite (setWounds).
+    const baseUpdate = view.update?.bind(view);
+    view.update = (...a) => { counts.update++; baseUpdate?.(...a); };
+    view.setWounds = () => { counts.setWounds++; };
+    const actor = createZombieActor({
+      id, room: room.id, body: placed, view: view as never,
+      start, seed: 1337 + (id + 1) * 101,
+      bounds: wanderBounds(room), furniture: [], onSever: () => {},
+    });
+    for (let f = 0; f < 60; f++) actor.step(1 / 60);
+    return { actor, counts };
+  }
+  function torsoHits(actor: ReturnType<typeof makeCounted>['actor'], n: number): Vec3[] {
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    const out: Vec3[] = [];
+    for (let k = 0; k < n; k++) {
+      const dx = (k % 4 - 1.5) * 0.03, dy = (Math.floor(k / 4) - 1.5) * 0.03;
+      let t = 0; let hit: Vec3 | null = null;
+      for (let i = 0; i < 128 && t < 20; i++) {
+        const p: Vec3 = [torso[0] + dx, torso[1] + dy, torso[2] + 4 - t];
+        const d = sdBody(p, actor.posed());
+        if (d < 0.002) { hit = p; break; }
+        t += Math.max(d, 0.002);
+      }
+      if (hit) out.push(hit);
+    }
+    return out;
+  }
+  it('16 pellets in one batch = ONE repack/upload and ONE wound-row rewrite; unbatched = one per pellet', () => {
+    const a = makeCounted(1);
+    const hits = torsoHits(a.actor, 16);
+    expect(hits.length).toBeGreaterThanOrEqual(8);
+    const u0 = a.counts.update, w0 = a.counts.setWounds;
+    a.actor.beginHits();
+    for (const h of hits) a.actor.hit(h, [0, 0, -1]);
+    expect(a.counts.update - u0).toBe(0);
+    expect(a.counts.setWounds - w0).toBe(0);
+    a.actor.endHits();
+    expect(a.counts.update - u0).toBe(1);
+    expect(a.counts.setWounds - w0).toBe(1);
+    expect(a.actor.wounds().length).toBe(hits.length);
+    const b = makeCounted(2);
+    const hb = torsoHits(b.actor, 4);
+    const u1 = b.counts.update;
+    for (const h of hb) b.actor.hit(h, [0, 0, -1]);
+    expect(b.counts.update - u1).toBe(hb.length);
+  });
+});
