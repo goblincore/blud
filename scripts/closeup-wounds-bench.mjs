@@ -35,9 +35,14 @@ const url = `http://localhost:${VITE}/sdf-game.html?frozen=1`;
 console.log(`closeup-wounds-bench ${url}  (repeats=${REPEATS}, deriv thresh=${THRESH})`);
 
 const LEGS = {
-  ship:      { wounds: true,  legJs: `__sdfGame.setWoundStep(0);` },
-  stepFull:  { wounds: true,  legJs: `__sdfGame.setWoundStep(1.0);` },
-  unwounded: { wounds: false, legJs: `__sdfGame.setWoundStep(0);` },
+  // ship = the game's boot state: wound step 1.0 (owner look verdict), cull ON.
+  ship:      { wounds: true,  legJs: `__sdfGame.setWoundStep(1.0); __sdfGame.setWoundCull(true); __sdfGame.setBoneMesh(false);` },
+  step06:    { wounds: true,  legJs: `__sdfGame.setWoundStep(0.6); __sdfGame.setWoundCull(true); __sdfGame.setBoneMesh(false);` },
+  cullOff:   { wounds: true,  legJs: `__sdfGame.setWoundStep(1.0); __sdfGame.setWoundCull(false); __sdfGame.setBoneMesh(false);` },
+  // bones: bone tubes ON = bones leave the field, so the near-wound
+  // applyBones fold (bone capsules per eval inside craters) is gone.
+  bones:     { wounds: true,  legJs: `__sdfGame.setWoundStep(1.0); __sdfGame.setWoundCull(true); __sdfGame.setBoneMesh(true);` },
+  unwounded: { wounds: false, legJs: `__sdfGame.setWoundStep(1.0); __sdfGame.setWoundCull(true); __sdfGame.setBoneMesh(false);` },
 };
 
 let out;

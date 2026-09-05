@@ -203,3 +203,81 @@ What is left in the landing frame is the per-pellet CPU field probe
 (`woundFromPellet` → `probeFlesh` → `sdBody`/`sdPrimitive`, ~6 ms per 16 pellets) —
 the next lever if the shot still registers, plus the one-time 131 ms first-shot
 pipeline compile (prewarm).
+
+## Wound union-reach cull (2026-09-05, dispatch/2026-09-05-closeup-wound-cull)
+
+**Step 1 built and shipped ON.** One bounding sphere per body covering every
+wound's REACH, computed by `woundReachBound` (zombie-gpu.ts) inside `setWounds`
+from the LIVE uniforms (blendK, rimOffset, rimWidth — the same channels the
+shader's per-wound reach formula reads; not a hardcoded copy), carried as a new
+`woundBound` uniform (vec4: xyz centre = wound centroid, w radius = max_i
+(|w_i − C| + reach_i); containment is the triangle inequality, so the cull is a
+value no-op by construction). `applyWounds` tests it BEFORE the loop and returns
+`(dIn, 0)` — outside the bound every iteration would `continue` past the
+per-wound reach early-out anyway. Threaded: applyWounds ← mapBody ←
+calcNormal / MARCH_BODY (walk, both normal modes, thin/AO probes) / CONE_MARCH /
+woundShadow; MARCH_BODY takes it positionally LAST (parser pin re-based 75 → 76
+inputs). `w = 1e9` is the no-cull identity: chunk torn ends and the hands view
+never compute a bound and keep it. Seam `__sdfGame.setWoundCull(on)` flips the
+radius only (computed value kept, no re-upload); `__sdfGame.woundBound()`
+reports every actor's bound for liveness checks. **CPU mirror:** no change —
+validate.ts `sdBody` never included wounds (the raycast field is wound-free),
+and the cull returns identical values, so there is nothing to mirror.
+
+**Parity — the gate.** `scripts/closeup-woundcull-capture.mjs`, wounded
+fill-screen staging, cull ON vs OFF same boot, same staged frame: **0 changed
+pixels** (d > 0, HUD strip excluded, weapon masked) — also ON1/ON2 and both
+unwounded pairs, 0 each. Bound proven live in-page: r = 0.933 m around the
+5-wound cluster, so the parity is not vacuous. INSTRUMENT FINDING: the frozen
+scene still ticks the **fire flicker off `performance.now()`** (game-main.ts —
+not gated on frozen), which wobbles the level's point-light intensities ±14%
+and jitters ~19% of all pixels at d > 0 between same-state captures 2.5 s
+apart (measured: ON1 vs ON2 of the first run, maxD 84). The script pins
+`performance.now = () => 100000` for the capture; unpinned, a literal-zero
+pixel gate is impossible on this page.
+
+**Bench** (`BENCH_REPEATS=4`, cullOff leg added, 2026-09-05 ~10:00, load 5.6–10.5,
+kept 4/4/4/4, loadRejected 0, makeupReps 0 — a genuinely quiet window):
+
+| rep | ship (cull ON) | cullOff | Δ cull saves | stepFull | unwounded |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 56.4 | 59.4 | 3.0 | 47.4 | 25.1 |
+| 1 | 54.9 | 52.8 | −2.1 (inverted) | 46.8 | 31.1 |
+| 2 | 55.3 | 57.8 | 2.5 | 48.6 | 30.6 |
+| 3 | 56.9 | 57.4 | 0.5 | 49.6 | 32.8 |
+| med | 56.4 | 57.8 | **1.4 (2.5%)** | 48.7 (−13.8%) | 31.1 (−44.9%) |
+
+**Read.** The cull removes ~1.4 ms of the ~25.3 ms (ship − unwounded) wound gap
+— ~5%. Three of four within-rep pairs agree in direction (rep 1 inverted 2.1 ms,
+inside the rep-to-rep noise this scene shows). The small size is geometric, not
+a miss: the staging stamps all 5 wounds camera-facing on the torso (bound r
+0.93 m), and a fill-screen body at 0.6 m concentrates its march steps on the
+camera-facing surface — inside the bound. What the cull deletes is the
+16-row wound loop on FAR samples (limb edges, off-cluster probes, miss-side
+steps); on this scene that was ~1.4 ms. The gap's remaining columns are the
+0.6× conservative stepping (stepFull leg: 7.8 ms, 31% of the wound cost —
+lever 1, explicitly untouched here) and the in-reach carve/rim maths plus the
+near-flag bone/organ fold (~17.5 ms), which no cull can remove — it IS the
+wound being rendered.
+
+**Step 2 (per-cluster wound lists) — spec'd, NOT built, with the numbers for
+why.** Design condition was met literally (ship is +81% over unwounded, ≫ 10%),
+but the decomposition above shows step 2 cannot approach that bar: it would bin
+wound indices by the cluster their reach touches (new texture row: per-cluster
+`[start, count)` into a wound-index list, packed at upload beside
+clusterGroups; applyWounds walks the current cluster's list instead of 0..n),
+which only saves the ROW LOADS of off-cluster wounds for samples inside the
+union bound. On this staging all 5 wounds sit in one bound and the per-wound
+reach early-out already skips their maths after one load each — the step-2
+cullable set is ~3–4 textureLoads per in-bound eval, worth well under the
+~1.4 ms step 1 already removed, against a 25.3 ms gap that is 69% stepping +
+in-reach field work. The >10%-of-unwounded bar is unreachable by any wound-loop
+cull while craters are on screen: even lever 1 AND a free loop together leave
+~+52%. Next real lever is lever 1 (re-gate the 0.6 near-wound factor at ω 1.0,
+look-gated) — a separate change, deliberately not in this task.
+
+**Trap for the next editor:** the bound is computed AT UPLOAD from live
+uniforms. A wound-panel edit of blendK / rimOffset / rimWidth without a
+re-upload leaves the bound stale (too tight if the knob grew → cull eats a
+carve). Game values are boot constants so this never bites in play; in the lab,
+re-stamp after dragging those three.
