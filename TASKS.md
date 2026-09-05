@@ -38,6 +38,11 @@ authored base, so holdPose now freezes with `poseHeld` instead. Lab:
 turntable. Known pre-existing: a WebGPU "binding size is zero" validation
 error on lab boot, on the zombie page too — not from this work. Phase 2
 (shoot-back AI in sdf-game) and phase 3 (shouldered aim) are separate specs.
+Round 3: the march and run legs now follow per-phase curves sampled from the
+soldier's `Walking` clip and the Meshy zombie-biped `running` clip
+(`gait-curves/`, `scripts/gait-from-clip.ts`); the zombie stays on the
+sinusoid shamble, pinned
+([clip-gait spec](docs/superpowers/specs/2026-09-05-clip-driven-gait-design.md)).
 [spec](docs/superpowers/specs/2026-09-05-soldier-animation-design.md) ·
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)

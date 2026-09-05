@@ -60,3 +60,34 @@ bigger, cartoonishly").
   shin tilted with every stride). Rings ~1.45x wider, 25 mm taller, sole
   still on y=0; the shaft flares into the boot instead of narrowing.
 - Strips re-shot: `rest/`, `walk/`, `run/`. Kit fit test still green.
+
+## Round 3 — clip-driven curves
+
+Spec: `docs/superpowers/specs/2026-09-05-clip-driven-gait-design.md` · plan:
+`docs/superpowers/plans/2026-09-05-clip-driven-gait.md`. The march and run no
+longer draw their stride shape from hand-tuned sinusoids: each gait carries
+`GaitCurves` — per-phase sagittal angles (thigh pitch, knee flexion, hip bob,
+duty) sampled at 32 phases from a reference clip by
+`scripts/gait-from-clip.ts` and shipped as constants in `gait-curves/`.
+`stepGait` rebuilds knee and foot offsets from those angles with the body's
+own segment lengths; the zombie has no curves and stays bit-identical
+(`gait-pins.test.ts` still green).
+
+Reference clips:
+
+- **March** — `soldier.glb` clip `Walking` (32 keys, 1.07 s).
+- **Run** — `zombie-biped-running.glb` clip `Armature|running|baselayer`
+  (20 keys, 0.67 s, Meshy zombie biped).
+
+Implied speeds (from the sampled tables, for the soldier's 0.84 m leg):
+walk 0.937 Hz / duty 0.63 → **1.12 m/s**; run 1.500 Hz / duty 0.31 →
+**3.22 m/s**. Profile numbers chosen from those: `runBand` 1.32 → 3.02 m/s
+(the walk→run blend brackets the two clips' speeds), `cruise` 3.2 m/s (the
+run clip's implied speed rounded to 0.1).
+
+Strips re-shot (`walk/`, `run/`, 8 yaws each). Viewed the PNGs this round:
+the walk side-on frames show a split stride with the swing knee visibly
+bent and feet on the ground plane; the run frames show the swing leg
+folded up behind (deep knee flexion off the running clip) with the stance
+foot planted. No feet through the floor; the kit (vest, pauldrons, boots)
+and gun stay on the body through the stride in both strips.
