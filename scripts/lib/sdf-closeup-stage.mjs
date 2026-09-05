@@ -332,9 +332,11 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
     await applyShipDefaults(ev);
     if (L.exitBound !== undefined) await ev(`__sdfGame.setHullExitBound(${L.exitBound})`);
     // Default staging: the room-1 fill-screen closeup. A caller can replace
-    // it wholesale with stageJs (any eval returning {d?, cov?, body?, ...})
-    // — the A/B legs stage other scenes through it.
-    const staging = opts.stageJs ? await ev(opts.stageJs) : await stageCloseUp(ev, opts.stage, fail);
+    // it wholesale with stageJs — the BODY of an async function (wrapped
+    // here, so a bare `return {...}` is legal) returning the staging record.
+    const staging = opts.stageJs
+      ? await ev(`(async () => { ${opts.stageJs} })()`)
+      : await stageCloseUp(ev, opts.stage, fail);
     if (staging.error) fail(staging.error);
     stagingRecords.push({ rep, leg, ...staging });
     let woundInfo = null;
