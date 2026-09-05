@@ -122,10 +122,14 @@ function phase0Legs() {
     bigblobs:   { ...noStage, benchArgs: { ...BENCH, room: 2 }, legJs: '__sdfGame.setGooTuning({ sizeScale: 0.28 });' },
   };
 }
-// Close-range variants: NO benchArgs — the harness's closeup defaults apply
-// (freeze at frame 0, no actions; the staging already built the scene).
+// Close-range variants: benchArgs pin a SHORT warmup-free window — the
+// staged burst decays in ~1.5 s, and the default warmup 120 + closeupFrames
+// 240 measured only the decayed tail (first run: drop 2, cov 0.1% — the
+// spray was gone before sampling began). warmup 10 + 80 frames ≈ 1.3 s of
+// peak-to-early-decay spray; the floor stage is the STEADY heavy state.
+function closeBench() { return { kind: 'closeup', mode: 'throughput', warmup: 10, chunkFrames: 10, closeupFrames: 80 }; }
 function closeLegs() {
-  const base = () => ({ ...noStage });
+  const base = () => ({ ...noStage, benchArgs: closeBench() });
   if (MODE === 'ab') {
     const on = { ...base(), legJs: ITEM === 'surface' ? '__sdfGame.setGooPerf({ surfaceAtDensityRes: true });'
       : ITEM === 'minmax' ? '__sdfGame.setGooPerf({ minTexelRadius: 1, areaPriority: true });'
