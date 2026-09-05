@@ -317,8 +317,27 @@ severed something. Rotates the starting leg per rep against thermal ramp. Task
 1b extracts it to `scripts/lib/sdf-closeup-stage.mjs`; every later task imports
 it rather than re-deriving a scene. Chain is now fully serial (one bench at a
 time — concurrent benches are what spoiled the tile table and the r2 sweep):
-**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
-trigger.
+**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b and 4.
+
+**CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
+("the goo layer is the blood cost") does NOT reproduce. Measured with the
+item seams landed on `dispatch/2026-09-04-closeup-task-4-attempt1` (parity-
+pinned default-off, suite green): whole goo chain (density + blurs + surface
+composite) = **~0.26 ms idle, ~0.1–0.5 ms in a room-4 firefight (cov ~1%),
+~0.14 ms at the saturated-pool worst case (256-ring, 6.3% cov)**. Coverage
+caps at ~6% even staring into an accumulated pool at 1.6 m. All three items
+→ **no-ship, seams stay default-off**: item 1 has a real look cost in the
+shipped depth mode (depth-tested upsample drops the flying-spray fusion —
+recovered in overlay mode, so the fix path is known: packed-depth
+reconstruction for sparse texels); item 2 is invisible + cost-neutral by
+construction; item 3's `fallMask` still submits every splat (saving ~0 by
+construction) and the pools survive anyway. Parity vs MAIN: CLEAN all three
+scenes (idle exact 0%). Item A/B medians storm-blocked (sibling dispatch
+load 70–160 half the session) and moot given the bound. Notes + numbers:
+[docs/dev-notes/2026-09-04-closeup-4-goo/notes.md](docs/dev-notes/2026-09-04-closeup-4-goo/notes.md).
+If the owner's "blood spray causes issues" needs chasing, it is NOT this
+layer — candidate suspects outside task 4's scope: billboard blood view,
+chunk physics, sim step.
 
 **CLOSE-UP TASK 1B — DONE (2026-09-04).** Harness extracted to
 `scripts/lib/sdf-closeup-stage.mjs` (staging record byte-identical pre/post
