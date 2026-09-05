@@ -27,15 +27,24 @@ os.makedirs(NOTES_DIR, exist_ok=True)
 
 # ---- numbers ---------------------------------------------------------------
 HAND_R   = 0.046          # == GOBLIN_SKIN.handRadius; loadHold() depends on it
-WRIST_Z, ELBOW_Z, STUB_Z = 0.055, 0.235, 0.70
-WRIST_R, FORE_R0, FORE_R1, ELBOW_R, STUB_R = 0.034, 0.036, 0.042, 0.046, 0.040
+WRIST_Z, ELBOW_Z = 0.055, 0.235
+WRIST_R, FORE_R0, FORE_R1, ELBOW_R = 0.034, 0.036, 0.042, 0.046
+# THE UPPER ARM is its own node (Upper_L/R) rooted at the elbow and aimed by
+# the runtime at a shoulder anchor behind the camera -- a two-bone arm, like
+# every FPV rig (owner: "most FPV rigs are full upper arm / lower arm and
+# hand"). The one-piece stick it replaces showed its far end at extreme view
+# pitch. UPPER_IK_LEN is what the IK uses; the MESH overshoots it so that,
+# straight or bent, it always runs past the shoulder and out of frame.
+UPPER_IK_LEN, UPPER_MESH_LEN = 0.30, 0.46
+UPPER_R0, UPPER_R1, SHOULDER_R = 0.042, 0.052, 0.060
 BRACER_Z0, BRACER_Z1 = 0.075, 0.180
 STRAP_Z = (0.100, 0.155)
 TILE_M   = 0.060          # one tile of the generated skin maps per 60 mm of arm
 TRI_CAP  = 14000
 
 REQUIRED_NODES = ["Arm_L", "Arm_R", "Hand_L", "Hand_R", "Wrist_L", "Wrist_R",
-                  "Elbow_L", "Elbow_R", "Watch_Screen"]
+                  "Elbow_L", "Elbow_R", "Upper_L", "Upper_R", "Shoulder_L", "Shoulder_R",
+                  "Watch_Screen"]
 
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o, do_unlink=True)
@@ -168,15 +177,26 @@ def build_arm(sx, tag, watch):
     put(frustum(FORE_R0, FORE_R1, ELBOW_Z - WRIST_Z, 24), f'forearm_{tag}', 'Skin', root,
         loc=(0, 0, (WRIST_Z + ELBOW_Z) / 2), uv=True)
     put(sphere(ELBOW_R, 16, 12), f'elbow_{tag}', 'Skin', root, loc=(0, 0, ELBOW_Z), uv=True)
-    # Upper-arm stub: runs on past the elbow so the far end is never in frame
-    # on a hard look down (the aim rig pitches the view-model about the grip).
-    put(frustum(STUB_R, STUB_R, STUB_Z - ELBOW_Z, 16), f'upperarm_{tag}', 'Skin', root,
-        loc=(0, 0, (ELBOW_Z + STUB_Z) / 2), uv=True)
+    # UPPER ARM: a child node at the elbow, mesh along its local +Z, with a
+    # shoulder ball at the far end. The runtime aims this node at the
+    # shoulder anchor; the elbow ball above covers the joint at any bend.
+    upper = bpy.data.objects.new(f'Upper_{tag}', None); col.objects.link(upper)
+    upper.location = (0, 0, ELBOW_Z); upper.parent = root
+    put(frustum(UPPER_R0, UPPER_R1, UPPER_MESH_LEN, 20), f'upperarm_{tag}', 'Skin', upper,
+        loc=(0, 0, UPPER_MESH_LEN / 2), uv=True)
+    put(sphere(SHOULDER_R, 16, 12), f'shoulder_{tag}', 'Skin', upper, loc=(0, 0, UPPER_MESH_LEN), uv=True)
+    locator(f'Shoulder_{tag}', upper, (0, 0, UPPER_IK_LEN))
+    for i, (x, y, z, r) in enumerate(((-0.030, -0.036, 0.070, 0.0038), (0.026, -0.042, 0.150, 0.0034))):
+        put(sphere(r, 8, 6), f'uwart{i}_{tag}', 'Skin', upper, loc=P(x, y, z), uv=True)
     # Warts: on the hand, the wrist, and between bracer and elbow -- never
     # under the cuff, where they would be hidden geometry for nothing.
-    for i, (x, y, z, r) in enumerate(((0.030, -0.030, -0.010, 0.004), (-0.026, -0.024, 0.030, 0.003),
-                                      (0.022, -0.026, 0.062, 0.0035), (-0.030, 0.014, 0.198, 0.004),
-                                      (0.012, -0.041, 0.216, 0.0035))):
+    # WARTS -- on the ARM, not the fist (owner: "warts are cool but make more
+    # sense on the arm than the hand"): one above the band, three between
+    # bracer and elbow, and two on the upper arm (in the Upper node's frame,
+    # placed after it exists below).
+    for i, (x, y, z, r) in enumerate(((0.024, -0.026, 0.066, 0.0032),
+                                      (-0.031, 0.016, 0.192, 0.0040), (0.014, -0.043, 0.212, 0.0036),
+                                      (0.036, 0.020, 0.224, 0.0030))):
         put(sphere(r, 8, 6), f'wart{i}_{tag}', 'Skin', root, loc=P(x, y, z), uv=True)
 
     # BRACER: leather cuff, steel lip at the wrist end, two straps with brass
@@ -198,9 +218,19 @@ def build_arm(sx, tag, watch):
             bevel=0.0006, smooth=False)
         put(box(0.0045, 0.0015, 0.010), f'pin{k}_{tag}', 'Brass', root, loc=P(-(r + 0.006), 0, zs),
             bevel=0, smooth=False)
-    for k in range(6):
-        zs = 0.085 + k * 0.016
-        put(sphere(0.002, 8, 6), f'rivet{k}_{tag}', 'Brass', root, loc=(0, -(fore_r(zs) + 0.0085), zs))
+    # CHROME SPIKE STUDS (owner: "instead of small brass dots maybe chrome
+    # spikes"): three rows -- the dorsal ridge and +-32 deg either side --
+    # of four steel cones each, between the two straps, base on the cuff,
+    # tips 10 mm proud. A cone's local +Z is rotated onto the outward radial.
+    SPIKE_H, SPIKE_R = 0.010, 0.0035
+    for row, ang in enumerate((-32, 0, 32)):
+        t = math.radians(-90 + ang)          # -90 deg = dorsal (-Y)
+        ox, oy = math.cos(t), math.sin(t)    # outward unit radial in XY
+        for k, zs in enumerate((0.112, 0.124, 0.136, 0.148)):
+            rc = fore_r(zs) + 0.009 + SPIKE_H / 2
+            put(frustum(SPIKE_R, 0.0006, SPIKE_H, 10), f'spike{row}{k}_{tag}', 'Steel', root,
+                loc=P(ox * rc, oy * rc, zs), rot=(math.radians(90), 0, t + math.radians(90)),
+                bevel=0, smooth=True)
 
     # SMARTWATCH, left wrist only: silicone band round the wrist ball, a
     # rounded-square body on the dorsal side, the screen a separate quad with

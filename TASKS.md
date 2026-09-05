@@ -142,7 +142,13 @@ fixed by hand after the chain: wart darkening is a multiplicative shade, the
 mottle mix is linear (0..80%), the mean test budgets luminance at 8% and hue
 at 12% per channel. 3169 tests, tsc, gate all green. Evidence:
 [docs/dev-notes/2026-09-04-fpv-goblin-arms/](docs/dev-notes/2026-09-04-fpv-goblin-arms/notes.md).
-**Awaiting the owner's look before merge.** Follow-up **F-arm.2 — the watch
+Owner's first look (2026-09-05) drove three more: a TWO-BONE arm (Upper_L/R
+nodes, `armIk` to shoulder anchors behind the camera — the one-piece stick
+showed its end at extreme pitch), skin re-toned to the character's face
+(saturated, wet, fine dark speckle via a fleck lattice; NOT the matte
+darkening tried first), chrome spike studs on the bracer, warts moved off the
+fist. 3177 tests, tsc, gate green. **Awaiting the owner's second look before
+merge.** Follow-up **F-arm.2 — the watch
 as an in-game device** (shells / health / timer drawn on the screen canvas).
 Owner, 2026-09-04: "the arm itself probably needs some work to more
 accurately resemble the goblin SDF model (I guess that will be the main

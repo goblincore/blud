@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/goblin-skin.test.ts
 import { describe, expect, it } from 'vitest';
-import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinSkinSrgbHex, goblinWartField } from './goblin-skin';
+import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinFpvSkinSrgbHex, goblinFleckField, goblinSkinSrgbHex, goblinWartField } from './goblin-skin';
 
 describe('goblinSkinSrgbHex', () => {
   it('matches the goblin.blob palette, not the old orb colour', () => {
@@ -70,7 +70,7 @@ describe('goblinAlbedoPixels', () => {
     // than base); hue is held by a looser 12% per-channel bound, because
     // the base's blue is small (121) and the same absolute shift reads as a
     // larger fraction of it.
-    const base = goblinSkinSrgbHex();
+    const base = goblinFpvSkinSrgbHex();
     const want = [(base >> 16) & 255, (base >> 8) & 255, base & 255];
     const means = [0, 1, 2].map((c) => {
       let sum = 0;
@@ -79,35 +79,79 @@ describe('goblinAlbedoPixels', () => {
     });
     const lumWant = want[0]! + want[1]! + want[2]!;
     const lumMean = means[0]! + means[1]! + means[2]!;
-    expect(Math.abs(lumMean - lumWant) / lumWant, `luminance ${lumMean} vs ${lumWant}`).toBeLessThan(0.08);
+    // Mottle patches, flecks and wart shade all darken: the mean sits BELOW
+    // the toned base, within a 14% luminance budget, and the hue holds to
+    // 16% per channel (blue is small, so the same shift reads larger there).
+    expect(lumMean).toBeLessThan(lumWant);
+    expect(Math.abs(lumMean - lumWant) / lumWant, `luminance ${lumMean} vs ${lumWant}`).toBeLessThan(0.14);
     for (let c = 0; c < 3; c++) {
-      expect(Math.abs(means[c]! - want[c]!) / want[c]!, `channel ${c} mean ${means[c]} vs ${want[c]}`).toBeLessThan(0.12);
+      expect(Math.abs(means[c]! - want[c]!) / want[c]!, `channel ${c} mean ${means[c]} vs ${want[c]}`).toBeLessThan(0.16);
     }
   });
 
-  it('is not flat — every channel varies by more than 6 byte-steps of standard deviation', () => {
+  it('is not flat — every channel varies by more than 5% of its own mean', () => {
+    // Relative, because fpvExposure compresses the absolute range: a dark
+    // channel at sd 5 over a mean of 75 is as mottled as a bright one at 9.
     for (let c = 0; c < 3; c++) {
       let sum = 0, sq = 0;
       for (let i = c; i < px.length; i += 4) { sum += px[i]!; sq += px[i]! * px[i]!; }
       const n = size * size, mean = sum / n;
       const sd = Math.sqrt(sq / n - mean * mean);
-      expect(sd, `channel ${c} sd`).toBeGreaterThan(6);
+      expect(sd / mean, `channel ${c} sd ${sd} / mean ${mean}`).toBeGreaterThan(0.05);
     }
   });
 
-  it('tiles — opposite edge rows and columns agree within one step', () => {
+  it('tiles — every field is periodic, and smooth texels agree across the seam', () => {
+    // The lattices wrap by construction; pin that directly on the fields...
+    for (const [u, v] of [[0.13, 0.71], [0.5, 0.02], [0.97, 0.33]] as const) {
+      expect(goblinWartField(u + 1, v)).toBeCloseTo(goblinWartField(u, v), 9);
+      expect(goblinWartField(u, v + 1)).toBeCloseTo(goblinWartField(u, v), 9);
+      expect(goblinFleckField(u + 1, v)).toBeCloseTo(goblinFleckField(u, v), 9);
+      expect(goblinFleckField(u, v + 1)).toBeCloseTo(goblinFleckField(u, v), 9);
+    }
+    // ...and on the pixels, skipping texels on a fleck edge (a fleck is a
+    // sharp feature; two ADJACENT texels across it legitimately differ).
+    const isFleck = (x: number, y: number) =>
+      goblinFleckField(x / size, y / size) > GOBLIN_SKIN.fleckThreshold - 0.04;
     for (let y = 0; y < size; y++) {
+      if (isFleck(0, y) || isFleck(size - 1, y)) continue;
       for (let c = 0; c < 3; c++) {
         const l = px[(y * size + 0) * 4 + c]!, r = px[(y * size + size - 1) * 4 + c]!;
         expect(Math.abs(l - r), `row ${y} ch ${c}`).toBeLessThanOrEqual(6);
       }
     }
     for (let x = 0; x < size; x++) {
+      if (isFleck(x, 0) || isFleck(x, size - 1)) continue;
       for (let c = 0; c < 3; c++) {
         const t = px[(0 * size + x) * 4 + c]!, b = px[((size - 1) * size + x) * 4 + c]!;
         expect(Math.abs(t - b), `col ${x} ch ${c}`).toBeLessThanOrEqual(6);
       }
     }
+  });
+
+  it('carries the face\'s speckle — sparse fine flecks covering 5-15% of the skin', () => {
+    // A fleck is a texel far darker than its 3x3 neighbourhood. Coverage is
+    // measured against the fleck lattice directly: sparse, but present.
+    let flecks = 0;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (goblinFleckField(x / size, y / size) > GOBLIN_SKIN.fleckThreshold) flecks++;
+      }
+    }
+    const cover = flecks / (size * size);
+    expect(cover, `fleck coverage ${cover}`).toBeGreaterThan(0.05);
+    expect(cover).toBeLessThan(0.15);
+    // and a fleck texel is darker than the toned base
+    const base = goblinFpvSkinSrgbHex();
+    const baseLum = ((base >> 16) & 255) + ((base >> 8) & 255) + (base & 255);
+    let onSum = 0, onN = 0;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (goblinFleckField(x / size, y / size) > GOBLIN_SKIN.fleckThreshold + 0.05) {
+        const i = (y * size + x) * 4; onSum += px[i]! + px[i + 1]! + px[i + 2]!; onN++;
+      }
+    }
+    expect(onN).toBeGreaterThan(10);
+    expect(onSum / onN).toBeLessThan(baseLum * 0.8);
   });
 
   it('darkens where the normal map has a wart, so bumps and blotches agree', () => {

@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/game-arms-math.test.ts
 import { describe, expect, it } from 'vitest';
-import { ARM_NODES, armBasis, armMaterialKind, type V3 } from './game-arms-math';
+import { ARM_NODES, FORE_LEN_M, UPPER_LEN_M, armBasis, armIk, armMaterialKind, type V3 } from './game-arms-math';
 
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const len = (a: V3) => Math.hypot(a[0], a[1], a[2]);
@@ -62,10 +62,49 @@ describe('armMaterialKind', () => {
 });
 
 describe('ARM_NODES', () => {
-  it('names both arms, three locators each, and the screen', () => {
+  it('names both arms, four locators each, the upper-arm nodes, and the screen', () => {
     expect([...ARM_NODES].sort()).toEqual([
       'Arm_L', 'Arm_R', 'Elbow_L', 'Elbow_R', 'Hand_L', 'Hand_R',
-      'Watch_Screen', 'Wrist_L', 'Wrist_R',
+      'Shoulder_L', 'Shoulder_R', 'Upper_L', 'Upper_R', 'Watch_Screen', 'Wrist_L', 'Wrist_R',
     ]);
+  });
+});
+
+describe('armIk', () => {
+  const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const down: V3 = [-1, -0.6, 0];
+
+  it('keeps the forearm its own length whatever the reach', () => {
+    for (const shoulder of [[-0.22, -0.30, 0.10], [-0.05, -0.10, -0.30], [-0.9, -0.9, 0.9]] as V3[]) {
+      const hand: V3 = [-0.02, -0.18, -0.45];
+      const e = armIk(hand, shoulder, FORE_LEN_M, UPPER_LEN_M, down);
+      expect(len(sub(e, hand))).toBeCloseTo(FORE_LEN_M, 9);
+    }
+  });
+  it('meets the shoulder with the upper arm when in reach, bending toward the hint', () => {
+    const hand: V3 = [-0.05, -0.05, -0.18];
+    const shoulder: V3 = [-0.22, -0.30, 0.10];
+    expect(len(sub(shoulder, hand))).toBeLessThan(FORE_LEN_M + UPPER_LEN_M);
+    const e = armIk(hand, shoulder, FORE_LEN_M, UPPER_LEN_M, down);
+    expect(len(sub(e, shoulder))).toBeCloseTo(UPPER_LEN_M, 9);
+    // the elbow sits on the hint's side of the hand-shoulder line
+    const line = sub(shoulder, hand); const L = len(line);
+    const u: V3 = [line[0] / L, line[1] / L, line[2] / L];
+    const eh = sub(e, hand); const along = dot(eh, u);
+    const perp: V3 = [eh[0] - u[0] * along, eh[1] - u[1] * along, eh[2] - u[2] * along];
+    expect(dot(perp, down)).toBeGreaterThan(0);
+  });
+  it('goes straight when the shoulder is out of reach', () => {
+    const hand: V3 = [0, -0.18, -0.45];
+    const shoulder: V3 = [-0.9, -0.9, 0.9];
+    const e = armIk(hand, shoulder, FORE_LEN_M, UPPER_LEN_M, down);
+    const line = sub(shoulder, hand); const L = len(line);
+    expect(dot(sub(e, hand), [line[0] / L, line[1] / L, line[2] / L])).toBeCloseTo(FORE_LEN_M, 9);
+  });
+  it('does not blow up with the hint along the arm or the hand on the shoulder', () => {
+    const e1 = armIk([0, 0, 0], [0, 0, 0.4], FORE_LEN_M, UPPER_LEN_M, [0, 0, 1]);
+    expect(len(e1)).toBeCloseTo(FORE_LEN_M, 9);
+    const e2 = armIk([0, 0, 0], [0, 0, 0], FORE_LEN_M, UPPER_LEN_M, [0, -1, 0]);
+    expect(len(e2)).toBeCloseTo(FORE_LEN_M, 9);
   });
 });

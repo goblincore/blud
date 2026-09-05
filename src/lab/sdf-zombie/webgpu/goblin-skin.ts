@@ -31,6 +31,35 @@ export const GOBLIN_SKIN = {
   mottleAmp: 0.65,
   /** `mottleColor 0.21 0.19 0.06` -- the patch colour, LINEAR rgb. */
   mottleColorLinear: [0.21, 0.19, 0.06] as const,
+  /** `charColor 0.06 0.07 0.05` -- the darkest flesh tone; the FPV fleck
+   *  layer mixes toward it. */
+  charColorLinear: [0.06, 0.07, 0.05] as const,
+  /** FPV TONE. The marched goblin (its own shader: specIntensity 0.52,
+   *  wetness 0.55, a hard key) reads as a SATURATED, contrasty green with a
+   *  wet sheen; a PBR material handed the raw palette under the gun's room
+   *  environment read pale and washed (the owner's first look), and a plain
+   *  darkening read as matte olive (the second). So the FPV albedo is the
+   *  palette pushed AWAY from grey by fpvSaturation and scaled by
+   *  fpvExposure -- matched by eye to the character render, not derived. */
+  fpvExposure: 0.86,
+  fpvSaturation: 1.35,
+  /** FPV finish: close to the blob's specRoughness 0.42 -- the goblin is
+   *  wet-shiny, and that sheen is most of what "looks like the face" means.
+   *  (0.68 was tried for "rougher" and read as dull olive rubber.) */
+  fpvRoughness: 0.46,
+  /** Fraction of the gun's envMapIntensity the skin takes. At the gun's full
+   *  1.1 the sheen went white and flattened the colour. */
+  fpvEnvShare: 0.55,
+  /** Normal-map strength in FPV: pushed so warts and mottle read as texture
+   *  at arm's length. */
+  fpvNormalScale: 2.0,
+  /** THE SPECKLE the face has: sparse, fine dark flecks. Lattice cells per
+   *  tile (a fleck is about a cell wide: 60 mm / 24 = 2.5 mm), the noise
+   *  threshold above which a texel is a fleck, and how far a fleck mixes
+   *  toward charColor. Tuned so flecks cover ~8-12% of the skin. */
+  fleckCells: 24,
+  fleckThreshold: 0.80,
+  fleckMix: 0.70,
   /** How far the warts push the normal. Tuned so the silhouette stays smooth
    *  AND every texel's blue byte stays >= 160 with the seams agreeing -- the
    *  plan's contingency for the normal-map tests (lower until z dominates). */
@@ -45,6 +74,26 @@ function linearToSrgbByte(c: number): number {
 /** The goblin's skin as a packed sRGB hex, for a THREE material `color`. */
 export function goblinSkinSrgbHex(): number {
   const [r, g, b] = GOBLIN_SKIN.baseLinear;
+  return (linearToSrgbByte(r) << 16) | (linearToSrgbByte(g) << 8) | linearToSrgbByte(b);
+}
+
+/** The FPV tone curve applied to a LINEAR palette colour: saturation pushed
+ *  away from luminance, then exposure. Shared by the albedo generator and
+ *  the hex the albedo's mean is tested against. */
+export function fpvTone(c: readonly [number, number, number]): [number, number, number] {
+  const lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const s = GOBLIN_SKIN.fpvSaturation, e = GOBLIN_SKIN.fpvExposure;
+  return [
+    Math.max(0, (lum + (c[0] - lum) * s) * e),
+    Math.max(0, (lum + (c[1] - lum) * s) * e),
+    Math.max(0, (lum + (c[2] - lum) * s) * e),
+  ];
+}
+
+/** The FPV skin's base, sRGB hex: the palette under fpvTone. This is what
+ *  the albedo map averages to (see its test). */
+export function goblinFpvSkinSrgbHex(): number {
+  const [r, g, b] = fpvTone(GOBLIN_SKIN.baseLinear);
   return (linearToSrgbByte(r) << 16) | (linearToSrgbByte(g) << 8) | linearToSrgbByte(b);
 }
 
@@ -119,6 +168,13 @@ export function goblinNormalPixels(size: number): Uint8Array {
   return px;
 }
 
+/** The fleck lattice on its own, 0..1: a texel is a fleck above
+ *  GOBLIN_SKIN.fleckThreshold. Exported for the coverage test. */
+export function goblinFleckField(u: number, v: number): number {
+  const n = GOBLIN_SKIN.fleckCells;
+  return tileNoise(u * n, v * n, n, 11);
+}
+
 /** The wart layer of the height field on its own, 0..1, on the same lattice
  *  and seed `height()` uses -- so the colour map can darken exactly where the
  *  normal map bumps. Exported for the test that pins that agreement. */
@@ -139,37 +195,35 @@ export function goblinWartField(u: number, v: number): number {
  */
 export function goblinAlbedoPixels(size: number): Uint8Array {
   const px = new Uint8Array(size * size * 4);
-  const [br, bg, bb] = GOBLIN_SKIN.baseLinear;
-  const [mr, mg, mb] = GOBLIN_SKIN.mottleColorLinear;
+  const [br, bg, bb] = fpvTone(GOBLIN_SKIN.baseLinear);
+  const [mr, mg, mb] = fpvTone(GOBLIN_SKIN.mottleColorLinear);
+  const [cr, cg, cb] = fpvTone(GOBLIN_SKIN.charColorLinear);
   const base = 3;
+  const { fleckCells, fleckThreshold, fleckMix, mottleAmp } = GOBLIN_SKIN;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size, v = y / size;
-      // Mottle: two octaves, centred on 0 so the MEAN stays the base colour.
-      let m = tileNoise(u * base, v * base, base, 1) * 0.65
-            + tileNoise(u * base * 2, v * base * 2, base * 2, 2) * 0.35;
-      m = (m - 0.5) * 2 * GOBLIN_SKIN.mottleAmp;          // -amp .. +amp
-      // Only the dark half of the field mixes toward mottleColor, linearly
-      // up to 80% at the field's extreme -- patches with soft edges, not a
-      // saturated cliff. (The dispatched first pass used a x4.5 gain that
-      // clipped half the map to full mottle colour and dragged the mean off
-      // the base, which is what made its own mean test unsatisfiable.)
-      const mix = Math.min(1, Math.max(0, m) / GOBLIN_SKIN.mottleAmp) * 0.80;
-      // Warts: a soft SHADE, strongest at the wart's crown, multiplied on
-      // after the mottle so a wart is darker than its surroundings whether
-      // it sits on base green or on a full mottle patch. (Mixing it toward
-      // mottleColor instead let saturated patches out-darken every wart,
-      // which is what broke the bumps-and-blotches-agree test.)
+      // MOTTLE, the marched shader's recipe: two octaves summed 0.6/0.3,
+      // centred, then smoothstep-REMAPPED over the range the noise actually
+      // occupies (its tails are rare) so the result is patches with light
+      // flesh between them rather than a uniform half-tint. march.wgsl.ts's
+      // colour-mottle block explains why the obvious linear remap fails.
+      const f = (tileNoise(u * base, v * base, base, 1) - 0.5) * 0.6
+              + (tileNoise(u * base * 2, v * base * 2, base * 2, 2) - 0.5) * 0.3;
+      const t = Math.min(1, Math.max(0, (f + 0.22) / 0.44));
+      const mottle = t * t * (3 - 2 * t) * mottleAmp;
+      // SPECKLE, what the face has: sparse fine dark flecks on a fine lattice.
+      const fl = tileNoise(u * fleckCells, v * fleckCells, fleckCells, 11);
+      const fleck = fl > fleckThreshold ? Math.min(1, (fl - fleckThreshold) / 0.06) * fleckMix : 0;
+      // WARTS: a multiplicative shade, strongest at the crown, applied after
+      // the mixes so a wart is darker than its surroundings on any ground.
       const shade = 1 - 0.55 * Math.pow(Math.max(0, goblinWartField(u, v) - 0.55) / 0.45, 1.5);
-      const lin = [
-        (br + (mr - br) * mix + Math.min(0, m) * 0.10 * br) * shade,
-        (bg + (mg - bg) * mix + Math.min(0, m) * 0.10 * bg) * shade,
-        (bb + (mb - bb) * mix + Math.min(0, m) * 0.10 * bb) * shade,
-      ];
+      let r = br + (mr - br) * mottle, g = bg + (mg - bg) * mottle, b = bb + (mb - bb) * mottle;
+      r += (cr - r) * fleck; g += (cg - g) * fleck; b += (cb - b) * fleck;
       const i = (y * size + x) * 4;
-      px[i]     = linearToSrgbByte(lin[0]!);
-      px[i + 1] = linearToSrgbByte(lin[1]!);
-      px[i + 2] = linearToSrgbByte(lin[2]!);
+      px[i]     = linearToSrgbByte(r * shade);
+      px[i + 1] = linearToSrgbByte(g * shade);
+      px[i + 2] = linearToSrgbByte(b * shade);
       px[i + 3] = 255;
     }
   }

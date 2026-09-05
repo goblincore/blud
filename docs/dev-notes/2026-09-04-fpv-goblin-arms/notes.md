@@ -37,3 +37,26 @@ is darker than its surroundings on any ground, and the tests now assert
 crown texels are >7% darker on average than plain skin, luminance within 8%
 of base, hue within 12% per channel. Measured at 64px: plain 428.8, crown
 367.1 (summed sRGB bytes). Suite 3169, tsc clean, gate + arms check green.
+
+## Owner's first look (2026-09-05) — three changes
+
+1. **Two-bone arm.** "At extreme angles the arm can be seen detached... most
+   FPV rigs are full upper arm / lower arm and hand." The one-piece stick from
+   the hand to a fixed anchor showed its far end at extreme view pitch. Now:
+   `Upper_L/R` nodes rooted at the elbow carry the upper arm and a shoulder
+   ball; `armIk()` (game-arms-math.ts) places the elbow between the hand and a
+   fixed SHOULDER anchor behind the camera (`SHOULDER_L/R` in game-main), bent
+   down-and-out; `aimArm()` aims the root at the elbow and the Upper node at
+   the shoulder. The upper-arm mesh overshoots its IK length (0.46 vs 0.30) so
+   its end is behind the eye straight or bent. `pitch-up-aimup.png` /
+   `pitch-down-aimdown.png`: continuous arm, no end in frame. 9742 tris.
+2. **Skin like the face.** First look: "too pale and bright versus the goblin";
+   a plain darkening then read as matte olive; the reference render settled
+   it — saturated green, wet sheen, fine dark speckle. `goblinAlbedoPixels`
+   now follows the marched shader's recipe (smoothstep-remapped two-octave
+   mottle toward mottleColor) plus a fleck lattice (24 cells/tile, ~10%
+   coverage, toward charColor), under `fpvTone` (saturation 1.35, exposure
+   0.86); material roughness 0.46, env share 0.55, normal scale 2.0.
+   `fist-960.png`.
+3. **Bracer and warts.** Brass dots -> three rows of chrome spike studs
+   between the straps; warts off the fist, onto forearm and upper arm.

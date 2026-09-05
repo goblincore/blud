@@ -11,8 +11,16 @@ export type V3 = readonly [number, number, number];
  *  nothing and reads as a bug three tasks later. */
 export const ARM_NODES = [
   'Arm_L', 'Arm_R', 'Hand_L', 'Hand_R', 'Wrist_L', 'Wrist_R',
-  'Elbow_L', 'Elbow_R', 'Watch_Screen',
+  'Elbow_L', 'Elbow_R', 'Upper_L', 'Upper_R', 'Shoulder_L', 'Shoulder_R',
+  'Watch_Screen',
 ] as const;
+
+/** Forearm (hand -> elbow) and upper arm (elbow -> shoulder) lengths the IK
+ *  uses, metres. The forearm is the asset's ELBOW_Z; the upper arm is the
+ *  asset's UPPER_IK_LEN (its mesh overshoots so the far end stays behind the
+ *  camera whether the arm is straight or bent). */
+export const FORE_LEN_M = 0.235;
+export const UPPER_LEN_M = 0.30;
 export type ArmNode = typeof ARM_NODES[number];
 
 export type ArmMaterialKind =
@@ -59,4 +67,45 @@ export function armBasis(dir: V3, dorsalHint: V3): { x: V3; y: V3; z: V3 } {
   z = norm(z);
   const x = cross(y, z);
   return { x, y, z };
+}
+
+/**
+ * Two-bone IK: where the elbow is for a hand at `hand` and a shoulder at
+ * `shoulder`, given the two bone lengths and a direction the elbow should
+ * bend toward (down and outward for an arm holding a gun). Rig space.
+ *
+ * In reach: the law of cosines puts the elbow on the circle where both bones
+ * meet, on the side of the hand-shoulder line nearest `bendHint`. Out of
+ * reach: the arm is straight, the elbow exactly `lenFore` from the hand, and
+ * the upper arm falls short of the shoulder -- which is behind the camera,
+ * so nobody sees it. Too close (hand nearer the shoulder than the bones can
+ * fold): the elbow is pushed fully out along the hint.
+ */
+export function armIk(hand: V3, shoulder: V3, lenFore: number, lenUpper: number, bendHint: V3): V3 {
+  const dx = shoulder[0] - hand[0], dy = shoulder[1] - hand[1], dz = shoulder[2] - hand[2];
+  const d = Math.hypot(dx, dy, dz);
+  if (d < 1e-6) return [hand[0] + bendHint[0] * lenFore, hand[1] + bendHint[1] * lenFore, hand[2] + bendHint[2] * lenFore];
+  const ux = dx / d, uy = dy / d, uz = dz / d;
+  // Perpendicular part of the hint, so the bend plane contains the hint.
+  const along = bendHint[0] * ux + bendHint[1] * uy + bendHint[2] * uz;
+  let px = bendHint[0] - ux * along, py = bendHint[1] - uy * along, pz = bendHint[2] - uz * along;
+  let pl = Math.hypot(px, py, pz);
+  if (pl < 1e-6) {
+    // Hint parallel to the arm: pick any perpendicular.
+    px = -uy; py = ux; pz = 0; pl = Math.hypot(px, py, pz);
+    if (pl < 1e-6) { px = 0; py = -uz; pz = uy; pl = Math.hypot(px, py, pz); }
+  }
+  px /= pl; py /= pl; pz /= pl;
+  if (d >= lenFore + lenUpper) {
+    return [hand[0] + ux * lenFore, hand[1] + uy * lenFore, hand[2] + uz * lenFore];
+  }
+  // Distance from the hand to the elbow's foot on the line, and its height.
+  let a = (lenFore * lenFore - lenUpper * lenUpper + d * d) / (2 * d);
+  a = Math.max(-lenFore, Math.min(lenFore, a));
+  const h = Math.sqrt(Math.max(0, lenFore * lenFore - a * a));
+  return [
+    hand[0] + ux * a + px * h,
+    hand[1] + uy * a + py * h,
+    hand[2] + uz * a + pz * h,
+  ];
 }

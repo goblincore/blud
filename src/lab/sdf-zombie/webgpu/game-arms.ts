@@ -14,7 +14,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels } from './goblin-skin';
-import { ARM_NODES, armBasis, armMaterialKind, type V3 } from './game-arms-math';
+import { ARM_NODES, FORE_LEN_M, UPPER_LEN_M, armBasis, armIk, armMaterialKind, type V3 } from './game-arms-math';
 
 export const GOBLIN_ARM_GLB = '/assets/lab/goblin-arm.glb';
 export const WATCH_SCREEN_SIZE = { w: 128, h: 112 } as const;
@@ -44,15 +44,19 @@ export function makeSkinMaterial(env: THREE.Texture, envMapIntensity: number): T
   const normal = new THREE.DataTexture(goblinNormalPixels(256), 256, 256, THREE.RGBAFormat);
   normal.wrapS = normal.wrapT = THREE.RepeatWrapping;
   normal.needsUpdate = true;
+  // Darker, rougher, less env than the first build (owner: "too pale and
+  // bright versus the goblin character... better dark and rougher"): the
+  // albedo already carries fpvExposure; roughness and the env share are the
+  // other two levers, and the normal map is pushed so the texture reads.
   const m = new THREE.MeshStandardMaterial({
     color: 0xffffff,               // the map carries the colour
     map: albedo,
     normalMap: normal,
-    normalScale: new THREE.Vector2(1.2, 1.2),
-    roughness: GOBLIN_SKIN.roughness,
+    normalScale: new THREE.Vector2(GOBLIN_SKIN.fpvNormalScale, GOBLIN_SKIN.fpvNormalScale),
+    roughness: GOBLIN_SKIN.fpvRoughness,
     metalness: 0,
     envMap: env,
-    envMapIntensity,
+    envMapIntensity: envMapIntensity * GOBLIN_SKIN.fpvEnvShare,
   });
   m.emissiveIntensity = 0;
   return m;
@@ -106,16 +110,52 @@ function makeScreenMaterial(screen: WatchScreen): THREE.MeshStandardMaterial {
 const _dir = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
+const _elbow = new THREE.Vector3();
+const _qWorld = new THREE.Quaternion(), _qInv = new THREE.Quaternion();
 
-/** Aim an arm (origin = hand) so local +Y points at `elbow` and local +Z --
- *  the back of the hand, the watch -- faces rig +Z (the camera) as far as the
- *  arm allows. The hand never moves: only the arm swings behind it. */
-export function aimArm(arm: THREE.Object3D, elbow: THREE.Vector3): void {
-  _dir.copy(elbow).sub(arm.position);
-  const b = armBasis([_dir.x, _dir.y, _dir.z] as V3, [0, 0, 1]);
+function basisQuat(out: THREE.Quaternion, dir: THREE.Vector3): THREE.Quaternion {
+  const b = armBasis([dir.x, dir.y, dir.z] as V3, [0, 0, 1]);
   _x.set(b.x[0], b.x[1], b.x[2]); _y.set(b.y[0], b.y[1], b.y[2]); _z.set(b.z[0], b.z[1], b.z[2]);
   _m.makeBasis(_x, _y, _z);
-  arm.quaternion.setFromRotationMatrix(_m);
+  return out.setFromRotationMatrix(_m);
+}
+
+/** The Upper_L/Upper_R node under an arm root, cached on the root. */
+function upperOf(arm: THREE.Object3D): THREE.Object3D | null {
+  const cached = arm.userData['upperNode'] as THREE.Object3D | undefined;
+  if (cached) return cached;
+  let found: THREE.Object3D | null = null;
+  arm.traverse((o) => { if (!found && /^Upper_[LR]/.test(o.name)) found = o; });
+  if (found) arm.userData['upperNode'] = found;
+  return found;
+}
+
+/**
+ * Pose a two-bone arm. The arm root's origin is the hand and never moves;
+ * armIk() puts the elbow between it and `shoulder` (a fixed rig-space point
+ * behind the camera), bending toward `bendHint`. The root is aimed so its
+ * local +Y runs hand -> elbow with local +Z (the watch) toward the camera;
+ * the Upper node, whose origin is the elbow, is aimed elbow -> shoulder in
+ * the root's local frame. The shoulder ball at the far end of the upper arm
+ * always ends behind the camera, straight or bent -- which is what removes
+ * the detached-arm end the one-piece stick showed at extreme view pitch.
+ */
+export function aimArm(arm: THREE.Object3D, shoulder: THREE.Vector3, bendHint: THREE.Vector3): void {
+  const e = armIk(
+    [arm.position.x, arm.position.y, arm.position.z],
+    [shoulder.x, shoulder.y, shoulder.z],
+    FORE_LEN_M, UPPER_LEN_M,
+    [bendHint.x, bendHint.y, bendHint.z],
+  );
+  _elbow.set(e[0], e[1], e[2]);
+  _dir.copy(_elbow).sub(arm.position);
+  basisQuat(arm.quaternion, _dir);
+  const upper = upperOf(arm);
+  if (!upper) return;
+  _dir.copy(shoulder).sub(_elbow);
+  basisQuat(_qWorld, _dir);
+  _qInv.copy(arm.quaternion).invert();
+  upper.quaternion.copy(_qInv).multiply(_qWorld);
 }
 
 /**

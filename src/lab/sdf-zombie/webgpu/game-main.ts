@@ -1279,8 +1279,15 @@ async function main() {
   const Y_UP = new THREE.Vector3(0, 1, 0);
   const _tmpV = new THREE.Vector3();
   /** The two elbows, rig space. See aimArm. */
-  const ELBOW_L = new THREE.Vector3(-0.45, -0.60, 0.05);
-  const ELBOW_R = new THREE.Vector3(0.24, -0.67, 0.04);
+  /** The two SHOULDERS, rig space: behind and below the camera, either side
+   *  of the body. A two-bone arm runs from each hand to these (game-arms.ts
+   *  aimArm): forearm to an IK elbow, upper arm on to the shoulder, whose
+   *  ball ends behind the eye whatever the view pitch. The elbows bend down
+   *  and OUTWARD (the hints), the way arms holding a gun at the hip do. */
+  const SHOULDER_L = new THREE.Vector3(-0.24, -0.30, 0.12);
+  const SHOULDER_R = new THREE.Vector3(0.26, -0.32, 0.12);
+  const BEND_L = new THREE.Vector3(-1, -0.6, 0);
+  const BEND_R = new THREE.Vector3(1, -0.6, 0);
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -1487,8 +1494,8 @@ async function main() {
     foreHandGroup = arms.left;
     gripHandGroup.position.copy(GRIP_HAND_REST);
     foreHandGroup.position.copy(FORE_HAND_REST);
-    aimArm(gripHandGroup, ELBOW_R);
-    aimArm(foreHandGroup, ELBOW_L);
+    aimArm(gripHandGroup, SHOULDER_R, BEND_R);
+    aimArm(foreHandGroup, SHOULDER_L, BEND_L);
     (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
@@ -2582,7 +2589,7 @@ async function main() {
         FORE_HAND_REST.y + sh.dy,
         FORE_HAND_REST.z + sh.dz,
       );
-      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimArm(foreHandGroup, ELBOW_L); }
+      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimArm(foreHandGroup, SHOULDER_L, BEND_L); }
 
       // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
       // The seated cases are children of Barrels, so they are already carrying
@@ -2677,7 +2684,7 @@ async function main() {
           gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
           gunGroup.position.copy(GUN_REST.pos);
         }
-        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimArm(foreHandGroup, ELBOW_L); }
+        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimArm(foreHandGroup, SHOULDER_L, BEND_L); }
         for (const m of ejectedShells) m.visible = false;
         for (const m of loadShells) m.visible = false;
         updateHud();
