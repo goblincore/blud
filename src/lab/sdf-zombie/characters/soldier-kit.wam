@@ -182,9 +182,9 @@ parts
       ring 0.00 w=0.0671 d=0.0671
       ring 0.25 w=0.0647 d=0.0647
       ring 0.50 w=0.0635 d=0.0635
-      ring 0.75 w=0.0680 d=0.0680
+      ring 0.75 w=0.0760 d=0.0760
       # Flares into the (now bigger) boot instead of narrowing into it.
-      ring 1.00 w=0.0760 d=0.0760
+      ring 1.00 w=0.0900 d=0.0900
       cap start=none end=flat
 
     # BOOT FOOT — over the bare flesh foot that IS in the .blob; no foot is
@@ -206,14 +206,17 @@ parts
     # 25 mm taller, dropped a further 9 mm so the sole still sits on y=0.
     # The heel ring is wider than the shaft's bottom ring on purpose now —
     # the shaft tucks INTO the boot, the way a boot swallows a trouser leg.
-    loft foot bone=foot at=0.0 dir=fwd len=0.118 frame=up offset=(0,-0.0647,0) material=plate
-      ring 0.00 w=0.0888 d=0.0600
-      ring 0.15 w=0.0820 d=0.0600
-      ring 0.35 w=0.0853 d=0.0600
-      ring 0.55 w=0.0835 d=0.0600
-      ring 0.75 w=0.0760 d=0.0570
-      ring 0.90 w=0.0512 d=0.0550
-      ring 1.00 w=0.0426 d=0.0460
+    # Round 2 (owner: "feet still poke through, make boots chunkier"): rings
+    # another ~18% wider and 12 mm taller, and the shell now reaches 20 mm
+    # past the flesh toe (len 0.118 -> 0.135) so the toe cannot lead it.
+    loft foot bone=foot at=0.0 dir=fwd len=0.135 frame=up offset=(0,-0.0707,0) material=plate
+      ring 0.00 w=0.1050 d=0.0720
+      ring 0.15 w=0.0980 d=0.0720
+      ring 0.35 w=0.1010 d=0.0720
+      ring 0.55 w=0.0990 d=0.0720
+      ring 0.75 w=0.0900 d=0.0690
+      ring 0.90 w=0.0640 d=0.0650
+      ring 1.00 w=0.0540 d=0.0560
       cap start=flat end=flat
 
   # CUIRASS — machined plate over the bare chest, from just above the belt to
@@ -237,13 +240,15 @@ parts
   # and it keeps its width at the top so the shoulders read as a vest yoke
   # under the pauldrons rather than a cone tapering into the neck.
   loft cuirass bones=hips..spine2 material=plate frame=fwd shape=squarish
-    ring 0.30 w=0.1560 d=0.1300
-    ring 0.45 w=0.1600 d=0.1330
-    ring 0.55 w=0.1640 d=0.1370
-    ring 0.70 w=0.1620 d=0.1390
-    ring 0.82 w=0.1640 d=0.1420
-    ring 0.92 w=0.1620 d=0.1390
-    ring 1.00 w=0.1500 d=0.1250
+    # Round 2 (owner: "still some clipping, make it a little thicker or
+    # bigger"): another +15 mm on every ring, ~40 mm off the measured flesh.
+    ring 0.30 w=0.1710 d=0.1450
+    ring 0.45 w=0.1750 d=0.1480
+    ring 0.55 w=0.1790 d=0.1520
+    ring 0.70 w=0.1770 d=0.1540
+    ring 0.82 w=0.1790 d=0.1570
+    ring 0.92 w=0.1770 d=0.1540
+    ring 1.00 w=0.1650 d=0.1400
     cap start=none end=none
 
   # FRONT PLATE — the distinct raised plate on the cuirass's face. A box,
@@ -251,7 +256,7 @@ parts
   # body): narrow enough (0.12 m) that the cuirass's curvature only pulls its
   # side edges ~3 mm off the shell behind it, standing 12 mm proud at the
   # centre. Checked by the fit test, not by eye.
-  attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0790) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
+  attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0940) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
 
   # BELT — a wide webbing slab breaking the torso's line. Sized WIDER than
   # the flesh both above it (0.133 at y1.13) and below it (0.135 at y0.92),
