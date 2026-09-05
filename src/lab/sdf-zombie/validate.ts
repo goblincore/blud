@@ -176,7 +176,7 @@ const ZERO3: Vec3 = [0, 0, 0];
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
-  warpAmp = 0, warpFreq: Vec3 = ZERO3,
+  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3,
 ): number {
   // WRINKLES. Three sines with offset phases so the pattern does not repeat
   // visibly along any axis, added to the BASE distance before the sheet is
@@ -196,10 +196,21 @@ export function sdShellWrap(
   let lip = 1;
   const fLen = Math.hypot(warpFreq[0], warpFreq[1], warpFreq[2]);
   if (warpAmp !== 0 && fLen !== 0) {
+    // WIND. `warpDrift` is a world-space offset in metres that the fold
+    // lattice has travelled — the host accumulates wind velocity times time
+    // and hands the result over, so nothing here needs a clock. Subtracting
+    // it inside the sines drifts the WRINKLES through the world while the
+    // sheet and its clip plane stay where the author put them.
+    //
+    // It costs the Lipschitz bound NOTHING: d/dx of sin(F*(x - c)) is still
+    // F*cos(...), so a constant offset cannot change the spatial gradient.
+    // Sway is therefore free of the pinch cap — only amplitude and frequency
+    // buy into that.
+    const qx = p[0] - warpDrift[0], qy = p[1] - warpDrift[1], qz = p[2] - warpDrift[2];
     base += warpAmp
-      * Math.sin(warpFreq[0] * p[0])
-      * Math.sin(warpFreq[1] * p[1] + 1.3)
-      * Math.sin(warpFreq[2] * p[2] + 2.6);
+      * Math.sin(warpFreq[0] * qx)
+      * Math.sin(warpFreq[1] * qy + 1.3)
+      * Math.sin(warpFreq[2] * qz + 2.6);
     lip = 1 + Math.abs(warpAmp) * fLen;
   }
   const d = Math.abs(base) - thickness;

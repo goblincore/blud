@@ -639,9 +639,11 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // (kept) and the parked melt spike's amp/freq/time slot (removed) — so
     // this count is +1, not +2. That collision is exactly what this pin is
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
-    // the phantom-input bug.
-    expect(names.length).toBe(75);
-    expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
+    // the phantom-input bug. +1 for windDrift (shell cloth sway, 2026-09-05),
+    // appended after the level-shadow tail rather than inserted anywhere.
+    expect(names.length).toBe(76);
+    expect(names.slice(-4)).toEqual(
+      ['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'windDrift']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).
@@ -1107,7 +1109,7 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0)`);
     expect(fold).toContain('if ((i32(prof) & 4) != 0) {');
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0)`);
-    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw);');
+    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw, gWindDrift);');
     const profGate = fold.indexOf('if ((i32(prof) & 4) != 0) {');
     const bendGate = fold.indexOf('if ((i32(prof) & 2) != 0) {');
     // The shell wrap must come AFTER the base field is computed (sdPrim) and
@@ -1458,6 +1460,14 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
       'sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
     expect(MARCH_BODY).toContain('volumeClip: vec4<f32>');
     expect(CONE_MARCH).toContain('volumeClip: vec4<f32>');
+    // WIND PARITY. The cone certifies emptiness for the march that follows,
+    // so it must march the SAME surface. Unlike the noise (which the cone
+    // passes as 0 by design, because it lives on the normal), wind moves the
+    // field: a cone without this slot would certify space the drifted cloth
+    // occupies and the march would start inside it.
+    expect(CONE_MARCH).toContain('windDrift: vec3<f32>');
+    expect(CONE_MARCH).toContain('gWindDrift = windDrift;');
+    expect(MARCH_BODY).toContain('gWindDrift = windDrift;');
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
     // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg

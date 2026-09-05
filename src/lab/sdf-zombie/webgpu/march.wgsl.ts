@@ -472,15 +472,26 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // and no plain-step flag is required. Mirrors sdShellWrap in validate.ts —
 // the two must agree or the CPU checks pass a body the GPU tears.
 //
+// WIND. `drift` is a world-space offset in metres the fold lattice has
+// travelled — the host accumulates wind velocity times time, so the shader
+// needs no clock and every path (march, cone pre-pass, normals, AO) reads the
+// same uniform and therefore the same surface. Subtracting it inside the
+// sines moves the WRINKLES through the world while the sheet and its clip
+// plane stay put, which is what a breeze looks like on hanging cloth.
+//
+// It is free of the pinch cap: d/dx of sin(F*(x - c)) is F*cos(...), so a
+// constant offset cannot change the spatial gradient and `lip` is untouched.
+//
 // With warpA or warpF zero the branch is skipped, `lip` is exactly 1.0, and
 // division by 1.0 is exact in IEEE — an unwarped shell is bit-identical to
 // before this existed, which shell-warp.test.ts pins.
-export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: vec3<f32>) -> f32 {
+export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: vec3<f32>, drift: vec3<f32>) -> f32 {
   var base = dBase;
   var lip = 1.0;
   let fLen = length(warpF);
   if (warpA != 0.0 && fLen != 0.0) {
-    base = base + warpA * sin(warpF.x * p.x) * sin(warpF.y * p.y + 1.3) * sin(warpF.z * p.z + 2.6);
+    let q = p - drift;
+    base = base + warpA * sin(warpF.x * q.x) * sin(warpF.y * q.y + 1.3) * sin(warpF.z * q.z + 2.6);
     lip = 1.0 + abs(warpA) * fLen;
   }
   let d = abs(base) - thick;
@@ -1008,7 +1019,7 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
       let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
-      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw);
+      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw, gWindDrift);
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
@@ -1053,6 +1064,15 @@ var<private> gFoldBestIdx: f32 = -1.0;
 // straight after its mapBody call. 1.0 default: groups without distortion
 // and the volume branch (which never folds) are exact no-ops.
 var<private> gFoldBestDistort: f32 = 1.0;
+// WIND DRIFT, metres, world space. A private global rather than another
+// parameter on foldGroup because foldGroup is reached from mapBody, which has
+// TEN call sites — threading a uniform through all of them to serve one
+// primitive kind is the churn ROW_PRIM_WARP's own doc warns about. Both entry
+// points (marchBody and coneMarch) set it from the same uniform before they
+// fold anything, so the cone pre-pass certifies emptiness against exactly the
+// surface the march then walks. A path that forgot to set it would see 0,
+// which is the no-wind field — wrong, but never a tear.
+var<private> gWindDrift: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
@@ -1352,8 +1372,15 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   woundCfg2: vec4<f32>,
   coneK: f32,
   startT: f32,
-  perfCfg: vec4<f32>
+  perfCfg: vec4<f32>,
+  windDrift: vec3<f32>
 ) -> f32 {
+  // The cone pre-pass certifies "empty up to t" for the march that follows.
+  // It passes noiseCfg 0 deliberately (the noise lives on the normal), but
+  // wind is NOT like the noise: it moves the FIELD. A cone that marched the
+  // no-wind surface would certify space the drifted cloth actually occupies
+  // and the march would start inside it. Same uniform, same surface.
+  gWindDrift = windDrift;
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
   // Chained levels: this cone begins where the coarser one stopped. Safe
@@ -1666,8 +1693,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // binding by one slot and the pipeline dies on a type mismatch.
   levelShadowTex: texture_depth_2d,
   levelShadowMatrix: mat4x4<f32>,
-  levelShadowCfg: vec4<f32>
+  levelShadowCfg: vec4<f32>,
+  windDrift: vec3<f32>
 ) -> vec4<f32> {
+  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
+  // sdShell, which is reached from foldGroup on every mapBody call in this
+  // invocation — the march steps, calcNormal, the AO and scatter probes. Set
+  // it late and the normal would be taken against a different surface than
+  // the one the march hit.
+  gWindDrift = windDrift;
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the

@@ -278,6 +278,73 @@ describe('shell warp — the wrinkles are WORLD-anchored, and that is a limit', 
   });
 });
 
+describe('shell warp — WIND drifts the folds without costing the bound', () => {
+  const amp = 0.016; const freq: Vec3 = [20, 0, 20];
+  const base = (q: Vec3) => Math.hypot(q[0], q[1], q[2]) - 0.2;
+  const f = (q: Vec3, drift: Vec3) =>
+    sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq, drift);
+
+  it('moves the fold pattern and leaves the sheet where it was', () => {
+    // The drift belongs to the WRINKLES, not the garment: the sheet's own
+    // surface stays put, only the folds travel across it. Sampled well away
+    // from the sines' nodes so a real difference is visible.
+    let moved = 0;
+    for (let i = 0; i < 2000; i++) {
+      const th = (i / 2000) * Math.PI * 2;
+      const q: Vec3 = [0.2 * Math.cos(th), 0.05 * Math.sin(th * 3), 0.2 * Math.sin(th)];
+      moved = Math.max(moved, Math.abs(f(q, [0, 0, 0]) - f(q, [0.05, 0, 0.02])));
+    }
+    // Comparable to the amplitude: the folds have genuinely travelled, not
+    // wobbled a hair.
+    expect(moved).toBeGreaterThan(amp * 0.5);
+  });
+
+  it('is periodic in the drift, so a breeze never runs out of runway', () => {
+    // Drifting by a full wavelength on every axis returns the same field.
+    // Nothing accumulates and nothing drifts out of range, however long the
+    // lab is left running — the offset is a phase, not a displacement.
+    const lambda: Vec3 = [(2 * Math.PI) / freq[0], 0, (2 * Math.PI) / freq[2]];
+    for (let i = 0; i < 500; i++) {
+      const th = (i / 500) * Math.PI * 2;
+      const q: Vec3 = [0.2 * Math.cos(th), 0.05 * Math.sin(th * 5), 0.2 * Math.sin(th)];
+      expect(f(q, lambda)).toBeCloseTo(f(q, [0, 0, 0]), 9);
+    }
+  });
+
+  it('costs the Lipschitz bound NOTHING, at any drift', () => {
+    // The reason sway is free: d/dx of sin(F*(x - c)) is F*cos(...), so a
+    // constant offset cannot change the SPATIAL gradient. Wind therefore does
+    // not buy into the pinch cap and does not shorten the march step — only
+    // amplitude and frequency do. If this ever fails, the drift has been
+    // wired somewhere it scales the field rather than shifting it.
+    const h = 1e-4;
+    for (const drift of [[0, 0, 0], [0.05, 0, 0.02], [3.7, 1.1, -2.4]] as Vec3[]) {
+      let worst = 0;
+      for (let i = 0; i < 1500; i++) {
+        const s2 = (n: number) => ((Math.sin(n * 12.9898 + i * 78.233) * 43758.5453) % 1 + 1) % 1;
+        const q: Vec3 = [s2(1) * 0.9 - 0.45, s2(2) * 0.9 - 0.45, s2(3) * 0.9 - 0.45];
+        const bump = (ax: number, d: number): Vec3 =>
+          [q[0] + (ax === 0 ? d : 0), q[1] + (ax === 1 ? d : 0), q[2] + (ax === 2 ? d : 0)];
+        const g = [0, 1, 2].map(ax => (f(bump(ax, h), drift) - f(bump(ax, -h), drift)) / (2 * h));
+        worst = Math.max(worst, Math.hypot(g[0]!, g[1]!, g[2]!));
+      }
+      expect(worst).toBeLessThanOrEqual(1 + 1e-3);
+    }
+  });
+
+  it('is a bit-exact no-op at zero drift', () => {
+    // The default. Subtracting a zero vector must not perturb a single bit,
+    // or every character in the cast moves the day wind is merged.
+    for (let i = 0; i < 500; i++) {
+      const th = (i / 500) * Math.PI * 2;
+      const q: Vec3 = [0.21 * Math.cos(th), 0.07 * Math.sin(th * 4), 0.21 * Math.sin(th)];
+      const withArg = f(q, [0, 0, 0]);
+      const without = sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq);
+      expect(Object.is(withArg, without)).toBe(true);
+    }
+  });
+});
+
 describe('shell warp — the bounds grow with it', () => {
   it('shellReach adds the amplitude on top of the thickness', () => {
     expect(shellReach({})).toBe(0);

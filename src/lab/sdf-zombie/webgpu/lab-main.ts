@@ -2543,7 +2543,30 @@ async function main() {
     adaptiveState = next;
   }
 
+  // Wind velocity (m/s) and the offset it has accumulated (m). Plain arrays
+  // rather than THREE.Vector3 because they are written every frame and read
+  // straight into a uniform; see setWind.
+  const windVel: [number, number, number] = [0, 0, 0];
+  const windOffset: [number, number, number] = [0, 0, 0];
+
   handle.setRenderCallback((dt) => {
+    // WIND. Accumulated as a world-space OFFSET in metres rather than handing
+    // the shader a clock: the fold lattice of every warped shell drifts
+    // through the world at this velocity, so a breeze travels across hanging
+    // cloth. Accumulating on the host means the march and the cone pre-pass
+    // read one number and cannot disagree about where the surface is.
+    //
+    // NOT gated on motionEnabled: cloth moves in a breeze whether or not the
+    // character is walking, and the turntable and render-check both run with
+    // motion off. They leave wind at zero, which is the authored field
+    // exactly — see setWind.
+    if (windVel[0] !== 0 || windVel[1] !== 0 || windVel[2] !== 0) {
+      windOffset[0] += windVel[0] * dt;
+      windOffset[1] += windVel[1] * dt;
+      windOffset[2] += windVel[2] * dt;
+      for (const x of [view, ...crowd])
+        x.uniforms.windDrift.value.set(windOffset[0], windOffset[1], windOffset[2]);
+    }
     const now = performance.now();
     frames.push(now - lastStamp);
     lastStamp = now;
@@ -4420,6 +4443,31 @@ async function main() {
     setSilhouetteNoise(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.z = v; },
     /** Over-relaxation factor; <= 1 disables the relaxed tracer. */
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
+    /**
+     * WIND VELOCITY in metres per second, world space. Drives the fold
+     * lattice of every `warp=` shell across the world, so cloth sways.
+     * `setWind(0.35, 0, 0.12)` is a light breeze on the schoolgirl's skirt;
+     * anything past ~1 m/s reads as a strobe rather than a breeze, because
+     * the folds are only centimetres apart.
+     *
+     * Zero (the default) is the authored field EXACTLY — a zero offset
+     * subtracts to nothing — which is what keeps the turntable and
+     * blob:render-check comparing the same surface the CPU field describes.
+     */
+    setWind(x: number, y: number, z: number) {
+      windVel[0] = x; windVel[1] = y; windVel[2] = z;
+      if (x === 0 && y === 0 && z === 0) {
+        windOffset[0] = 0; windOffset[1] = 0; windOffset[2] = 0;
+        for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(0, 0, 0);
+      }
+    },
+    /** The accumulated wind offset in metres, for a test or a capture that
+     *  wants a specific instant of the sway rather than whatever the clock
+     *  had reached. */
+    setWindOffset(x: number, y: number, z: number) {
+      windOffset[0] = x; windOffset[1] = y; windOffset[2] = z;
+      for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(x, y, z);
+    },
     /** Near-wound step multiplier (perfCfg.z); 0 = the compiled
      *  WOUND_STEP_MUL, 0.6 = the value that shipped before 2026-09-04. The
      *  twin of `__sdfGame.setWoundStep` — see WOUND_STEP_MUL in march.wgsl.ts. */

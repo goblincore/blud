@@ -389,6 +389,22 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * Defaults describe the lab's Cornell box but contribute NOTHING until
      * probeWeight moves, so this whole block is inert on arrival.
      */
+    /**
+     * WIND (shell cloth). The world-space offset in METRES that a warped
+     * shell's fold lattice has drifted — the host accumulates wind velocity
+     * times elapsed time and writes the result, so the shader needs no clock
+     * and every pass reads one number.
+     *
+     * A NEW uniform rather than a packed spare, for the reason woundShadowCfg
+     * gives above: nothing in woundCfg/woundCfg2/surfCfg/lodCfg is free, and
+     * `woundCfg2.w` in particular is the volume hitEps override despite what
+     * an older comment in march.wgsl.ts called it.
+     *
+     * ZERO by default, which is exactly the field as authored: sdShell skips
+     * the drift entirely when the warp branch is off, and subtracting a zero
+     * vector is a no-op when it is on.
+     */
+    windDrift: uniform(new THREE.Vector3(0, 0, 0)),
     bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 1)),
     boxMin: uniform(new THREE.Vector3(-2, 0, -2)),
     boxMax: uniform(new THREE.Vector3(2, 3.2, 2)),
@@ -890,6 +906,10 @@ export function createMarchMaterial(
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
+    // Wind drift, POSITIONALLY LAST — appended after the level-shadow slots
+    // in MARCH_BODY's signature too. Bound in the same commit as the WGSL
+    // input, which is the rule the meltCfg note above exists to enforce.
+    windDrift: u.windDrift,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1294,6 +1314,11 @@ export function createZombieGpuView(
     // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
     // same seams the march does.
     perfCfg: u.perfCfg,
+    // ...and the same WIND. Unlike the noise, which the cone deliberately
+    // passes as 0 because it lives on the normal, wind moves the FIELD: a
+    // cone marching the no-wind surface would certify space the drifted
+    // cloth occupies.
+    windDrift: u.windDrift,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
