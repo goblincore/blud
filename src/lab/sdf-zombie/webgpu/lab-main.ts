@@ -1108,6 +1108,10 @@ async function main() {
   /** Carry pin for pose captures. */
   let carryOverride: CarryName | undefined;
   let pendingFire = false;
+  /** holdPose's freeze: the rig, kit and prop keep their last state and NOTHING
+   *  steps — unlike setMotionEnabled(false), which snaps the rest pose back
+   *  to the authored base (a turntable of a held pose showed the A-pose). */
+  let poseHeld = false;
   /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
   let sinceFire = Infinity;
   const cruiseFor = (band: 'walk' | 'run') =>
@@ -1366,6 +1370,7 @@ async function main() {
    *  (rebuild/respawn/gib) spawn a new shambler rather than springing an old
    *  pose across the arena. */
   function resetMotion() {
+    poseHeld = false;
     heroMotion.bound = bindRig(current);
     heroMotion.motionJoints = makeMotionJoints(current, heroMotion.bound.rig.restPose);
     if (heroMotion.motionJoints) {
@@ -2793,7 +2798,9 @@ async function main() {
     // keeps rendering through the same posed-prims path (still shootable,
     // severable, gibbable — it is just horizontal now).
     const rdt = Math.min(dt, 1 / 30);
-    if (motionEnabled && heroMotion.motionJoints) {
+    if (poseHeld) {
+      // Held for a capture: the last stepped pose stays put, verbatim.
+    } else if (motionEnabled && heroMotion.motionJoints) {
       // Sub-stepped integration (X1.22.1): consume the frame's real elapsed
       // time in ≤1/30-sized steps instead of the old flat 33 ms clamp, so a
       // stalled or hidden frame cannot stretch the fall into a death spiral.
@@ -2965,7 +2972,7 @@ async function main() {
     //    centred on each spawn, and a FIXED dt so poses are a pure function
     //    of frame count. motionEnabled gates EVERY actor — that is what makes
     //    setMotionEnabled(false) a real freeze for captures.
-    if (motionEnabled) {
+    if (motionEnabled && !poseHeld) {
       for (const a of crowdActors) {
         if (!a.motion.motionJoints) continue;
         stepActorMotion(a.motion, {
@@ -4449,7 +4456,7 @@ async function main() {
      */
     holdPose(preset: 'walk' | 'run' | 'hip' | 'rest', frames = 90) {
       setWander(false);
-      setMotionEnabled(true);
+      setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
       forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
       carryOverride = preset === 'hip' ? 'hip' : undefined;
       if (preset === 'hip') pendingFire = true;
@@ -4465,7 +4472,8 @@ async function main() {
         if (f) sinceFire = f.kicks.length ? 0 : sinceFire + 1 / 60;
       }
       sinceFire = Infinity; // a held pose is judged without the muzzle rise
-      setMotionEnabled(false);
+      poseHeld = true; // NOT setMotionEnabled(false): that rebinds to the authored rest
+      forceSpeed = undefined; carryOverride = undefined;
       return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
     },
     /**

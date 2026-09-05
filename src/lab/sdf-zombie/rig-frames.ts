@@ -76,3 +76,14 @@ export function boneFrames(body: BuildResult, bound: BoundRig, bodyYaw: number):
   }
   return out;
 }
+
+/**
+ * The name three's GLTFLoader gives a node: PropertyBinding.sanitizeNodeName
+ * strips `[ ] . : /`, so the blob bone `clavicle.l` arrives as `claviclel`.
+ * Anything matching kit bone nodes against blob bone names must go through
+ * this, or every mirrored bone silently misses its frame and rides its
+ * parent instead (the pauldrons stayed on the torso while the arms swung).
+ */
+export function kitBoneKey(name: string): string {
+  return name.replace(/[\[\]\.:\/]/g, '');
+}

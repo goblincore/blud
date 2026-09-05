@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/rig-frames.test.ts
 import { describe, it, expect } from 'vitest';
-import { boneFrames, segmentQuat } from './rig-frames';
+import { boneFrames, kitBoneKey, segmentQuat } from './rig-frames';
 import { buildBody } from './build-body';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
@@ -58,5 +58,14 @@ describe('rig-frames', () => {
     const q = segmentQuat(rest, normalize([0, 1, 1]), Math.PI / 2);
     // rest yawed by 90° is still +y; the residual tilts it toward +z.
     expect(near(qRotate(q, rest), normalize([0, 1, 1]), 1e-9)).toBe(true);
+  });
+});
+
+describe('kitBoneKey', () => {
+  it('matches three\'s node-name sanitiser: dots and brackets stripped', () => {
+    expect(kitBoneKey('clavicle.l')).toBe('claviclel');
+    expect(kitBoneKey('forearm.r')).toBe('forearmr');
+    expect(kitBoneKey('pelvis')).toBe('pelvis');
+    expect(kitBoneKey('a[0].b:c/d')).toBe('a0bcd');
   });
 });

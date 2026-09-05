@@ -20,6 +20,28 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**SOLDIER ANIMATION — BUILT, AWAITING OWNER LOOK (2026-09-05).** The soldier
+marches, runs, carries the shorty and hip-fires it in the lab; the skinned
+kit and the gun ride the rig (`rig-frames.ts` → `KitOverlay.pose`,
+`held-prop.ts`). Gait is now a PROFILE (`SHAMBLE` = the zombie verbatim,
+pinned bit-exact in `gait-pins.test.ts`; `MARCH`/`RUN` blended by speed);
+arms have a third style, `carry` (right arm authored rotations, left hand
+FABRIK'd onto the gun's fore-end — `carry.ts`). Found and fixed on the way:
+the goblin and soldier had NO motion at all (rig points the gait could not
+name → `makeMotionJoints` null); the joint schema grew eight secondary names
+and dedups by position. Two dispatch misses fixed by hand after the chain:
+three's GLTFLoader strips the dots from `clavicle.l`-style node names
+(`kitBoneKey`), and `setMotionEnabled(false)` snaps the rest pose to the
+authored base, so holdPose now freezes with `poseHeld` instead. Lab:
+`,`/`.` speed band (`1` is a sever key), `F` fire, `K` collapse;
+`__sdfLab.holdPose('walk'|'run'|'hip')` for captures; `BLOB_POSE=` on the
+turntable. Known pre-existing: a WebGPU "binding size is zero" validation
+error on lab boot, on the zombie page too — not from this work. Phase 2
+(shoot-back AI in sdf-game) and phase 3 (shouldered aim) are separate specs.
+[spec](docs/superpowers/specs/2026-09-05-soldier-animation-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
+[strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
+
 **[x] A-soldier — SOLDIER SHIPPED (2026-09-05), and the method changed on the
 way.** `characters/soldier.blob` (15 prims, body only) + `soldier-kit.wam`
 compiled to `public/assets/lab/soldier-kit.gltf` (pauldrons, cuirass, belt +

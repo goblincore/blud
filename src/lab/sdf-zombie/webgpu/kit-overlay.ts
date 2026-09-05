@@ -44,6 +44,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Vec3 } from '../types';
+import { kitBoneKey } from '../rig-frames';
 
 /**
  * How each WAM material should actually look in the lab.
@@ -268,9 +269,19 @@ export async function loadKit(
   object.updateMatrixWorld(true);
 
   const tmpPos = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+  // GLTFLoader sanitises node names (`clavicle.l` -> `claviclel`), so frames
+  // keyed by blob bone name are matched through kitBoneKey, never by b.name.
+  const byKey = new Map<string, THREE.Bone>();
+  for (const b of ordered) byKey.set(b.name, b);
+  const frameFor = new Map<THREE.Bone, { pos: Vec3; quat: readonly number[] }>();
   const pose: KitOverlay['pose'] = (frames) => {
+    frameFor.clear();
+    for (const [name, f] of frames) {
+      const b = byKey.get(kitBoneKey(name));
+      if (b) frameFor.set(b, f);
+    }
     for (const b of ordered) {
-      const f = frames.get(b.name);
+      const f = frameFor.get(b);
       if (f) {
         tmpPos.set(f.pos[0], f.pos[1], f.pos[2]);
         tmpQ.set(f.quat[0]!, f.quat[1]!, f.quat[2]!, f.quat[3]!);
