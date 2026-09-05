@@ -140,6 +140,45 @@ describe('shell warp — the field stays a bound', () => {
   });
 });
 
+describe('shell warp — an OVER-RELAXED tracer does not tunnel', () => {
+  it('survives relax 1.4, the setting that banded the cyclops craters', () => {
+    // THIS IS THE GATE, and it lives here rather than in blob:render-check
+    // because that check cannot see this failure: it compares the rendered
+    // SILHOUETTE against the CPU mask, and a ray that tunnels through a 6 mm
+    // skirt goes on to hit the hips behind it. The silhouette is identical.
+    // Verified, not assumed — with the GPU Lipschitz divisor deliberately
+    // removed, `BLOB_RELAX=1.4 blob:render-check -- schoolgirl-described`
+    // still reported "0 hole clusters". A garment over a body is invisible
+    // to a hole detector, so the tracer is modelled here instead.
+    const amp = 0.02; const freq: Vec3 = [26, 0, 26];
+    const base = (q: Vec3) => Math.hypot(q[0], q[1], q[2]) - 0.2;
+    const f = (q: Vec3) => sdShellWrap(base(q), q, 0.008, CLIP, CLIP_FAR, 0.007, amp, freq);
+    const RELAX = 1.4;
+    let tunnelled = 0;
+    for (let i = 0; i < 400; i++) {
+      const th = (i / 400) * Math.PI * 2;
+      const dir: Vec3 = [Math.cos(th), Math.sin(th * 2.3) * 0.6, Math.sin(th)];
+      const n = Math.hypot(dir[0], dir[1], dir[2]);
+      const u: Vec3 = [dir[0] / n, dir[1] / n, dir[2] / n];
+      const at = (t: number): Vec3 => [0.6 * u[0] - u[0] * t, 0.6 * u[1] - u[1] * t, 0.6 * u[2] - u[2] * t];
+      // iq's over-relaxed sphere tracing: step by relax*d, and when the next
+      // sphere does not contain the last one, fall back to the plain step.
+      let t = 0, prevR = 0, hit = false;
+      for (let s = 0; s < 400 && t < 1.2; s++) {
+        const d = f(at(t));
+        if (d < 1e-4) { hit = true; break; }
+        const stepped = RELAX * d;
+        if (prevR > 0 && stepped > d + prevR) { t += d; prevR = 0; continue; }
+        prevR = stepped; t += stepped;
+      }
+      // The ray starts outside and aims through the sphere's centre, so it
+      // MUST hit. A miss means the tracer stepped clean through the sheet.
+      if (!hit) tunnelled++;
+    }
+    expect(tunnelled).toBe(0);
+  });
+});
+
 describe('shell warp — bad input fails loudly, naming the line', () => {
   // Every one of these would otherwise be SILENT: the parser reads the
   // argument, the emitter echoes it back, and the author gets flat cloth or
@@ -200,6 +239,42 @@ body
     // which is the point of capping the product rather than either factor.
     expect(() => build(`${SHELL} warp=0.020 warpFreq=40`)).toThrow(/pinches/);
     expect(() => build(`${SHELL} warp=0.020 warpFreq=12`)).not.toThrow();
+  });
+});
+
+describe('shell warp — the wrinkles are WORLD-anchored, and that is a limit', () => {
+  it('shifts the fold pattern when the body turns under it', () => {
+    // NOT a bug being pinned as correct — a LIMITATION being recorded so it
+    // is not rediscovered. The warp is evaluated at the world-space sample
+    // point, so the sine lattice is fixed in the world and the character
+    // turns underneath it: the folds swim across the cloth as she walks.
+    //
+    // This is exactly why `noiseLocal` exists for the body's surface noise —
+    // its own comment says it undoes the body's yaw "so the noise field wraps
+    // the character and turns with it instead of the body rotating under a
+    // world-fixed texture". A warped garment needs the same treatment, and
+    // that machinery (the rest-space anchor, ROW_REST_A/B) is a separate
+    // sub-project. Until it exists, warped shells are for characters that do
+    // not turn much, or for amplitudes small enough that the swim is not
+    // legible.
+    const amp = 0.026; const freq: Vec3 = [17, 0, 17];
+    // A sphere on the body axis: a yaw about Y maps its base field exactly
+    // onto itself, so any difference is the WARP moving, nothing else.
+    const base = (q: Vec3) => Math.hypot(q[0], q[1] - 0.9, q[2]) - 0.15;
+    const f = (q: Vec3) => sdShellWrap(base(q), q, 0.006, CLIP, CLIP_FAR, 0.008, amp, freq);
+    const rotY = (q: Vec3, a: number): Vec3 =>
+      [q[0] * Math.cos(a) - q[2] * Math.sin(a), q[1], q[0] * Math.sin(a) + q[2] * Math.cos(a)];
+    let worst = 0;
+    for (let i = 0; i < 3000; i++) {
+      const th = (i / 3000) * Math.PI * 2;
+      const ph = (((i * 7) % 100) / 100) * Math.PI;
+      const q: Vec3 = [0.16 * Math.sin(ph) * Math.cos(th), 0.9 + 0.16 * Math.cos(ph), 0.16 * Math.sin(ph) * Math.sin(th)];
+      worst = Math.max(worst, Math.abs(f(q) - f(rotY(q, Math.PI / 4))));
+    }
+    // 21 mm at a 45 degree yaw, on cloth 6 mm thick: the pattern is not
+    // shifted, it is replaced. If this ever drops to ~0, the rest-space
+    // anchoring landed and this test should become the assertion that it did.
+    expect(worst).toBeGreaterThan(0.015);
   });
 });
 

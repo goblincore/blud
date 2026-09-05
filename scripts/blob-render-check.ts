@@ -140,6 +140,13 @@ import type { ClusterInfo, Primitive, Vec3 } from '../src/lab/sdf-zombie/types';
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9223);
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5233);
 const DIST = Number(process.env.BLOB_DIST ?? 2.4);
+// OVER-RELAXATION. The tracer's step multiplier: 1.0 is plain sphere tracing
+// and trusts the field only as far as it claims, above 1.0 it steps further
+// and back-tracks when it overshoots. A field that over-reports its distance
+// survives 1.0 and tears at 1.4 — that is the cyclops's crater banding, and
+// it is the gate any new non-exact primitive has to clear. Off by default so
+// the check keeps testing what ships; set BLOB_RELAX=1.4 to run the gate.
+const RELAX = Number(process.env.BLOB_RELAX ?? 0);
 /** Every 4th pixel in each axis. One sample therefore covers 16 px^2. */
 const STEP = 4;
 /** Erosion radius, in samples, applied to the CPU-inside mask. */
@@ -295,6 +302,7 @@ async function shoot(name: string): Promise<Shot> {
     // Turn both off so the two fields describe the same surface.
     window.__sdfLab.setSilhouetteNoise(0);
     window.__sdfLab.setShellDisplace(false);
+    ${RELAX > 0 ? `window.__sdfLab.setRelax(${RELAX});` : ''}
     window.__sdfLab.focusBody();
     return true;
   })()`);

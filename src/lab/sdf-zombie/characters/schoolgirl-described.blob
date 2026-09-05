@@ -111,14 +111,32 @@ body
   # than the measured version's, because the flare is doing the pleats'
   # job: no grooves, no pleat fragments, colour and silhouette only.
   # ============================================================
-  shell torso on spine1 at=0.580 r=0.072 r2=0.175 tip=(0,-0.300,0) wide=1.06 tall=0.38 deep=0.80 thick=0.006 clip=(0,-1,0) clipd=-0.740 rim=0.008 blend=0.006 color=0b1278
+  # CLOTH FOLDS, not pleats — and the distinction is the spike's finding.
+  # warp=0.016 at warpFreq=(20,0,20): the zero on Y freezes that sine to a
+  # constant so the folds run vertically rather than dimpling the skirt, and
+  # the hem picks up a soft scallop instead of reading as a cut cone.
+  #
+  # It is NOT a pleated skirt and cannot be made into one. The warp is a
+  # product of Cartesian sines, so it is periodic on a GRID, not around the
+  # body: it vanishes near the centre front and centre back (where sin(Fx*x)
+  # crosses zero) and is strongest on the diagonals. Real pleats are periodic
+  # in the ANGLE around the waist, which this function cannot express. Pushed
+  # to warp=0.026 the asymmetry stops reading as fabric weight and starts
+  # reading as a skirt someone slept in — tried, and backed off from.
+  #
+  # 0.016 * length(20,0,20) = 0.45, so the march takes 45% shorter steps
+  # wherever the skirt is on screen. Under the pinch cap of 1.
+  shell torso on spine1 at=0.580 r=0.072 r2=0.175 tip=(0,-0.300,0) wide=1.06 tall=0.38 deep=0.80 thick=0.006 warp=0.016 warpFreq=(20,0,20) clip=(0,-1,0) clipd=-0.740 rim=0.008 blend=0.006 color=0b1278
 
   # ============================================================
   # SAILOR COLLAR — cloth, not mass: a thin navy cape lying on the
   # shoulders and back (the front clipped open so the blouse shows), plus
   # the two front points riding the bust down-inward to the scarf knot.
   # ============================================================
-  shell torso on chest at=0.78 offset=(0,0.035,-0.015) r=0.088 wide=1.00 tall=0.95 deep=1.05 thick=0.006 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=0b1278
+  # The cape drapes rather than pleats — a soft isotropic sag at a LOW
+  # frequency, so the navy reads as a cloth lying on the shoulders instead of
+  # a painted shoulder plate. 0.005 * length(14,14,14) = 0.12.
+  shell torso on chest at=0.78 offset=(0,0.035,-0.015) r=0.088 wide=1.00 tall=0.95 deep=1.05 thick=0.006 warp=0.005 warpFreq=14 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=0b1278
   shell torso on chest at=0.92 offset=(0.050,0.020,0.035) tip=(0.005,-0.120,0.100) r=0.015 r2=0.006 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.15 rim=0.004 blend=0.005 both color=0b1278
 
   # ============================================================
