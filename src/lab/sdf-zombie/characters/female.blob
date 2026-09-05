@@ -78,15 +78,15 @@ body
   # 0.070, hips back out to 0.098.
   # ============================================================
   # Hips: the dress over the pelvis; the skirt shell flares below this.
-  blob torso on pelvis at=0.45 r=0.098 wide=0.95 tall=0.95 deep=0.82 blend=0.008 color=171219
-  # Waist: bar up spine1 (y 1.00 -> 1.10), cinched to 0.070 at the top — the
+  blob torso on pelvis at=0.45 r=0.104 wide=1.00 tall=0.95 deep=0.82 blend=0.008 color=171219
+  # Waist: bar up spine1 (y 1.00 -> 1.10), cinched to 0.066 at the top — the
   # wasp waist sits just under the bust, where the reference's does.
-  bar  torso on spine1 from=0.35 to=1.00 r=0.088 r2=0.070 deep=0.76 blend=0.006 color=171219
-  # Bust: swelling from the cinch (0.072 at y 1.13) out to 0.100 at the
-  # shoulder line (y 1.24), deep 0.88 for the side-profile read.
-  bar  torso on chest  from=0.20 to=0.92 r=0.072 r2=0.100 deep=0.88 blend=0.008 color=171219
+  bar  torso on spine1 from=0.35 to=1.00 r=0.088 r2=0.066 deep=0.76 blend=0.006 color=171219
+  # Bust: swelling from the cinch (0.072 at y 1.13) out to 0.102 at the
+  # shoulder line (y 1.24), deep 0.92 for the side-profile read.
+  bar  torso on chest  from=0.20 to=0.92 r=0.072 r2=0.102 deep=0.92 blend=0.008 color=171219
   # Bust mounds, front — the side-view bust of the reference, as geometry.
-  blob torso on chest  at=0.55 offset=(0.042,0,0.048) r=0.046 deep=1.00 blend=0.006 both color=171219
+  blob torso on chest  at=0.55 offset=(0.042,0,0.055) r=0.055 deep=1.00 blend=0.006 both color=171219
   # High mourning collar up spine2 to the neck.
   bar  torso on spine2 from=0.00 to=0.90 r=0.082 r2=0.048 deep=0.78 blend=0.006 color=171219
 
@@ -115,7 +115,7 @@ body
   blob head on skull at=0.50 offset=(0,0.030,-0.020) r=0.072 wide=1.00 tall=0.95 deep=0.95 blend=0.006 color=261b12 gloss=0.25
   blob head on skull at=0.55 offset=(0,0.100,-0.045) r=0.060 wide=1.00 tall=1.05 deep=1.00 blend=0.006 color=261b12 gloss=0.30
   # Swept fringe at the brow depth — the decal paints the hairline itself.
-  blob head on skull at=0.50 offset=(0,0.045,0.040) r=0.045 wide=1.25 tall=1.10 deep=0.90 blend=0.004 color=261b12 gloss=0.25
+  blob head on skull at=0.50 offset=(0,0.058,0.038) r=0.045 wide=1.25 tall=0.90 deep=0.90 blend=0.004 color=261b12 gloss=0.25
   # Nape closing to the neck at the back.
   blob head on skull at=0.50 offset=(0,-0.055,-0.060) r=0.045 wide=0.85 tall=1.00 deep=1.00 blend=0.005 color=261b12 gloss=0.30
   # Chin: a definite small point.
@@ -185,8 +185,8 @@ face
 sheet
   image       female-face.png
   decal       1
-  projScaleX  0.30
-  projScaleY  0.26
+  projScaleX  0.33
+  projScaleY  0.29
   projCentreX 0.50
   projCentreY 0.50
 
