@@ -24,7 +24,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
-  FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
+  FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 // Raw source import: the row-table docstrings are TS comments, invisible to
@@ -43,7 +43,7 @@ import type { Primitive, Vec3 } from '../types';
 // reserved-word and parse-contract checks are the only thing standing between
 // a one-word slip and a blank page whose only symptom is a CreateShaderModule
 // error buried under a dozen cascading ones.
-const ALL = [...HELPERS, MARCH_BODY, CONE_MARCH];
+const ALL = [...HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH];
 
 /** `fn name(` — the same shape three's ^-anchored declarationRegexp needs. */
 function declaredName(src: string): string | null {
@@ -497,8 +497,20 @@ describe('ported features reach the entry point', () => {
     // still walks its whole budget before being thrown away.
     expect(MARCH_BODY).toContain('if (shellOut <= 0.0) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
     // The ray may start at the hull's near face; max() with startT so the cone
-    // pre-pass is not thrown away when it reaches further.
-    expect(MARCH_BODY).toContain('var t = clamp(max(startT, shellIn), 0.0, tMax);');
+    // pre-pass is not thrown away when it reaches further. Close-up task 3
+    // adds a THIRD lower bound — the quarter-res depth prepass — nested as
+    // max(max(startT, shellIn), preStart): the max of lower bounds is the
+    // tightest of them and still a lower bound. preStart collapses to 0 when
+    // the pass is off, which is the identity inside the max.
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(startT, shellIn), preStart), 0.0, tMax);');
+    // The prepass inputs ride POSITIONALLY LAST (after windDrift), and the
+    // disabled identity is the fetch's 0 — never a missing binding (the
+    // meltCfg rule: a declared input without a binding shades as zero and
+    // only logs).
+    expect(MARCH_BODY.indexOf('windDrift: vec3<f32>')).toBeGreaterThan(-1);
+    expect(MARCH_BODY.indexOf('depthPreTex: texture_2d<f32>')).toBeGreaterThan(MARCH_BODY.indexOf('windDrift: vec3<f32>'));
+    expect(MARCH_BODY.indexOf('depthPreCfg: vec4<f32>')).toBeGreaterThan(MARCH_BODY.indexOf('depthPreTex: texture_2d<f32>'));
+    expect(MARCH_BODY).toContain('let preStart = select(0.0, max(preT - (preT * depthPreCfg.y + 0.0012 + woundCfg2.z), 0.0), preT > 0.0);');
     // Both parameters exist, so a material built without a shell source still
     // type-checks and takes the 0 / 1e9 identities.
     expect(MARCH_BODY).toContain('shellIn: f32');
@@ -513,6 +525,47 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let tMaxSel = select(tMaxBox, min(tMaxBox, shellOut), perfCfg.x > 0.5 && !relax);');
     expect(MARCH_BODY.indexOf('let relax = woundCfg2.y > 1.0;'))
       .toBeLessThan(MARCH_BODY.indexOf('let tMaxSel = select('));
+  });
+
+  it('quarter-res depth prepass — proof-shaped coarse march, inert when off', () => {
+    // The coarse march's cone radius is the BLOCK footprint (blockK), not a
+    // texel half-width — that is the whole correctness proof. Any full-res
+    // ray in the block lies within blockK * t of the coarse ray, so the first
+    // touch is a lower bound on every block ray's own first surface.
+    expect(DEPTH_PREPASS_MARCH).toContain('let r = t * blockK;');
+    // The step keeps the WHOLE cone outside the surface (d - r, cone rule).
+    expect(DEPTH_PREPASS_MARCH).toContain('t = t + max(d - r, 0.0005) * stepMul;');
+    // The touch test carries the same slack CONE_MARCH's does — the 1.2 mm
+    // eps floor and the shell displacement amp — so a bump standing proud of
+    // the smooth field can never sit nearer the camera than what the coarse
+    // pass certified as empty.
+    expect(DEPTH_PREPASS_MARCH).toContain('if (d < r + 0.0012 + woundCfg2.z) { return t; }');
+    // A miss contributes NOTHING: -1, which the consumer reads as <= 0 → no
+    // start. coneMarch's tMax convention would hand the full march a fake
+    // "start at the proxy box's far side".
+    expect(DEPTH_PREPASS_MARCH).toContain('return -1.0;');
+    // The coarse walk marches the FULL cluster field (no tile binning) —
+    // conservative relative to any tile-listed sub-field the full march
+    // might run, because culling a prim from a min-fold can only raise it.
+    expect(DEPTH_PREPASS_MARCH).toContain('let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2,');
+    // Same near-wound multiplier as the full march (WOUND_STEP_MUL via the
+    // perfCfg.z override) — the coarse walk shares the field's unsoundness
+    // near craters and must not step looser than the walk it feeds. The
+    // exported string is INTERPOLATED, so pin the constant's value in it.
+    expect(DEPTH_PREPASS_MARCH).toContain(`let woundMul = select(${WOUND_STEP_MUL}, perfCfg.z, perfCfg.z > 0.0);`);
+    expect(DEPTH_PREPASS_MARCH).toContain('let stepMul = select(marchCfg.y, woundMul, nearWound);');
+    // The fetch: disabled or non-positive → 0 (the identity in the max()).
+    expect(DEPTH_PRE_FETCH).toContain('if (cfg.x < 0.5) { return 0.0; }');
+    expect(DEPTH_PRE_FETCH).toContain('if (v <= 0.0) { return 0.0; }');
+    // Grid from textureDimensions — never a captured value (the adaptive
+    // controller resizes the layer under this fetch at runtime).
+    expect(DEPTH_PRE_FETCH).toContain('textureDimensions(tex, 0)');
+    // The fetch helper is wired into the HELPERS chain (buildMarchFn emits
+    // the whole chain ahead of the MARCH_BODY entry, so membership is the
+    // ordering guarantee).
+    const names = HELPERS.map(declaredName);
+    expect(names).toContain('depthPreFetch');
+    expect(names.indexOf('depthPreFetch')).toBe(names.length - 1);
   });
 
   it('discards on the accumulated-depth gate before marching and bounds tMax by it', () => {

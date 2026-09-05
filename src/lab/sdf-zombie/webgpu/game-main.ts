@@ -28,7 +28,7 @@ import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
 import { WOUND_STEP_MUL } from './march.wgsl';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
@@ -762,6 +762,21 @@ async function main() {
    *  the flip rests on exactness + counters, not on that timing. */
   const GAME_HULL_EXIT_BOUND = 1;
 
+  /** Close-up task 3: the quarter-resolution depth prepass — a coarse march
+   *  of the same field at one texel per 4x4 SDF-pixel block (~1/16 of the
+   *  marching work), whose first cone-touch distance the full-res ray starts
+   *  from. The start is a PROVABLE lower bound on every block ray's own
+   *  first surface (DEPTH_PREPASS_MARCH carries the proof), so too-aggressive
+   *  a start is not a tuning risk — but it is the failure mode that DELETES
+   *  geometry, silently and range-dependently, exactly like the exit bound's
+   *  historical body deletion. So this ships OFF until the task-3 census
+   *  (zero missing bodies at 0.5/3/9 m, zero missing thin geometry) and the
+   *  interleaved bench EARN the flip — a timing table alone is not evidence:
+   *  the exit bound once "won" 0.28 ms by deleting 4 of 9 bodies.
+   *  `__sdfGame.setDepthPrepass()` flips it live for A/B; OFF is bit-identical
+   *  to the pre-task-3 march (the fetch hands back 0 and the max() folds). */
+  const GAME_DEPTH_PREPASS = 0;
+
   /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
    *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
    *  see the march.wgsl.ts reach comment; `__sdfGame.setWoundEarlyOut()`
@@ -876,6 +891,7 @@ async function main() {
    *  live for A/B. */
   const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
+  sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -1030,6 +1046,14 @@ async function main() {
           uniforms: sdfLayer.shellEntry.uniforms,
         },
         prev: sdfLayer.prev,
+        // The quarter-res depth prepass (close-up task 3). Passed
+        // unconditionally like the shell bounds — the fetch identities make
+        // the march bit-identical while sdfLayer.depthPreEnabled is false,
+        // which is the ship default. Chunks get NO twin: a missing start is
+        // conservative (they march from today's start), and the shared chunk
+        // material's single-node-graph trick is not worth rethinking for a
+        // few dozen boxes.
+        depthPre: sdfLayer.depthPre,
         levelShadow: { light: flashlight.levelShadow },
       });
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
@@ -1068,6 +1092,10 @@ async function main() {
     view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
     view.object.layers.set(SDF_LAYER);
     view.coneObject.layers.set(CONE_LAYER);
+    if (view.depthPreObject) {
+      view.depthPreObject.layers.set(DEPTH_PREPASS_LAYER);
+      scene.add(view.depthPreObject);
+    }
     scene.add(view.object);
     scene.add(view.coneObject);
     const zombieId = nextId++;
@@ -3601,6 +3629,11 @@ async function main() {
      *  accumulated-depth gate. OFF restores the single-pass march. */
     setDepthGate(on: boolean) { sdfLayer.setDepthGate(on); },
     get depthGate() { return sdfLayer.depthGate; },
+    /** Close-up task 3: the quarter-res depth prepass and the march's
+     *  consumption of it. OFF (ship default) is bit-identical to the
+     *  pre-task-3 frame; the census and the bench decide the flip. */
+    setDepthPrepass(on: boolean) { sdfLayer.setDepthPreEnabled(on); },
+    get depthPrepass() { return sdfLayer.depthPreEnabled; },
     get shell() {
       return {
         enabled: sdfLayer.shellEnabled,

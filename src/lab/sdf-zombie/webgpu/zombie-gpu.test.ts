@@ -182,14 +182,33 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     // w=1 means the 1-cubed fallback slab; x=y=0, z=0 sample texel 0 of it.
   });
 
-  it('forwards volumeClip beside volumeWarp in BOTH march call sites', () => {
+  it('forwards volumeClip beside volumeWarp in ALL march call sites', () => {
     // Tripwire, not behaviour: the TSL call is named-arg matched against the
     // WGSL signature, so a missing entry is a silent uniform mismatch.
     const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
     const marchCalls = src.match(/volumeWarp: u\.volumeWarp,/g) ?? [];
-    expect(marchCalls.length).toBe(2); // createMarchMaterial + cone twin
+    // createMarchMaterial + cone twin + depth-prepass twin (close-up task 3).
+    expect(marchCalls.length).toBe(3);
     expect(src.match(/volumeWarp: u\.volumeWarp,\s*\n\s*volumeClip: u\.volumeClip,/g)?.length)
-      .toBe(2);
+      .toBe(3);
+  });
+
+  it('depth-prepass twin — fog off, positionally-last inputs, fallback identity', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
+    // THE FOG TRAP: this material renders through the main scene, and scene
+    // fog was smoothstep-mixing exactly such a written distance toward
+    // fogColor with range (8da0bdd). A fogged prepass would re-create the
+    // decay that killed the occluder pre-pass — starts drifting PAST surfaces
+    // at range, deleting geometry. fog = false is not optional.
+    expect(src).toMatch(/depthPreMaterial\.fog = false;/);
+    // MARCH_BODY's depthPre inputs are bound POSITIONALLY LAST in the entry
+    // literal — after windDrift, same commit as the WGSL inputs (meltCfg rule).
+    expect(src).toMatch(/windDrift: u\.windDrift,\s*\n\s*\/\/ Quarter-res depth prepass/);
+    expect(src).toMatch(/depthPreTex: texture\(depthPre \? depthPre\.texture : fallbackDepthPreTexture\(\)\)/);
+    // Without a source, cfg is the all-zero constant — the fetch's disabled
+    // identity. The 1x1 fallback texture carries value 0 so even a stray
+    // read is "no start".
+    expect(src).toMatch(/depthPreCfg: depthPre\n      \? vec4\(depthPre\.uniforms\.enabled, depthPre\.uniforms\.k, 0\.0, 0\.0\)\n      : vec4\(0\.0, 0\.0, 0\.0, 0\.0\)/);
   });
 });
 
