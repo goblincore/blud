@@ -119,6 +119,17 @@ const LOOK: Record<string, {
   grey:    { metalness: 0.10, roughness: 0.28, envIntensity: 1.1 },
   gold:    { metalness: 0.70, roughness: 0.22, envIntensity: 1.3 },
 
+  // ---- soldier ----
+  // Issued plate, and the owner's one colour instruction: a DULL metallic
+  // greenish-teal — not chrome, not bright. The hue is the .wam's job; the
+  // dullness lives here. Metalness stays mid (the house rule: full metal has
+  // no diffuse and goes black off-key), but where iron gets a tight 0.16
+  // roughness and a strong env to read as polished steel, worn plate gets a
+  // broad 0.42 and a weak one — a soft sheen, no mirror.
+  plate:   { metalness: 0.55, roughness: 0.42, envIntensity: 0.70 },
+  // Belt and pouches: olive webbing, matte and thirsty like the leathers.
+  webbing: { metalness: 0.05, roughness: 0.55, envIntensity: 0.50 },
+
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
   // entries exist mostly for the ENV MAP — without one, a rough dielectric's
   // shadow side falls to near-black under the lab's single key, and the
