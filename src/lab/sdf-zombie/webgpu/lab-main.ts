@@ -875,19 +875,57 @@ async function main() {
     if (params === null) return false;
     u.faceProj.value.set(params.projScaleX, params.projScaleY, params.projCentreX, params.projCentreY);
 
-    // DECAL: a baked colour image (npm run blob:face-bake), pasted on as
-    // albedo. The mean is irrelevant to the decal branch but set to 1 so the
-    // multiplier path, if the panel flips to it, does not blow the level out.
+    // A BAKED IMAGE (npm run blob:face-bake) IS LOADED WHATEVER `decal` SAYS.
+    //
+    // It used to be gated on `params.decal > 0.5`, which made `decal 0` mean
+    // something nobody wanted: the bake was silently dropped and the shader
+    // multiplied the GENERATED procedural sheet instead. That is not a blend
+    // mode, it is a different image, and it measured as featureless mud
+    // (face/arm 0.72x, contrast sd 20.8 against the arm's 35.8). `decal` now
+    // does only what the shader says it does — pick REPLACE (1) or MULTIPLY
+    // (0) in `mix(albedo * detail, tex.rgb, decal)`.
+    //
+    // THE MEAN IS MEASURED FROM THE IMAGE, not assumed to be 1. `detail` is
+    // `tex.rgb / faceCfg2.y`, so the divisor has to be the bake's own average
+    // or the multiply lands at the wrong level — a full-colour skin bake
+    // divided by 1 darkens everything it touches. Measuring it makes an
+    // average texel multiply by ~1, i.e. neutral, and the face then takes the
+    // body's lighting instead of replacing it. Transparent texels are skipped
+    // so the surrounding alpha does not drag the average down.
     const image = compileSheetImage(parseBlob(activeCharacterSrc()));
-    if (params.decal > 0.5 && image !== null) {
-      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`);
+    if (image !== null) {
+      const applyMean = (t: THREE.Texture) => {
+        let mean = 1;
+        try {
+          const img = t.image as HTMLImageElement;
+          const cv = document.createElement('canvas');
+          cv.width = img.width; cv.height = img.height;
+          const cx = cv.getContext('2d', { willReadFrequently: true });
+          if (cx !== null && cv.width > 0 && cv.height > 0) {
+            cx.drawImage(img, 0, 0);
+            const d = cx.getImageData(0, 0, cv.width, cv.height).data;
+            let sum = 0, n = 0;
+            for (let i = 0; i < d.length; i += 4) {
+              if (d[i + 3]! < 8) continue;
+              sum += (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) / 255;
+              n++;
+            }
+            if (n > 0) mean = Math.max(sum / n, 1e-3);
+          }
+        } catch { /* tainted or undecodable: fall back to 1, which is the old behaviour */ }
+        if (faceSheet !== null) faceSheet.mean = mean;
+        for (const v of [view, ...crowd]) v.setFaceTexture(t, faceSheet!.atlas, mean);
+      };
+      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMean);
       tex.magFilter = THREE.NearestFilter;   // PSX: texels, not a blur
       tex.minFilter = THREE.NearestFilter;
       tex.generateMipmaps = false;
       tex.flipY = true;                      // as the PNG registry path
       faceSheet?.tex.dispose();
       faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
-      faceMode = 2;
+      faceMode = params.decal > 0.5 ? 2 : 1;
+      // Mean 1 until the image decodes, then applyMean re-uploads with the
+      // measured value. One frame of the old level is not worth blocking on.
       for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
       return true;
     }
@@ -3208,6 +3246,18 @@ async function main() {
   // Spherical spreads longitude evenly round the skull, so it needs a wider
   // scale than planar to put the face in the same place — swap the scales with
   // the mode rather than making you retune by hand.
+  // REPLACE vs MULTIPLY, live. faceCfg.x is the face mode: 2 = decal
+  // (replace the albedo), 1 = sheet (multiply into it). Now that the baked
+  // image loads for BOTH modes with a measured mean, flipping this is a real
+  // A/B of the blend and not a swap to a different texture. Whatever you
+  // settle on is the `decal` line in the character's sheet block: 1 = replace,
+  // 0 = multiply.
+  const blendBtn = addButton(faceBox, 'face blend: replace', () => {
+    const mult = u.faceCfg.value.x > 1.5;
+    u.faceCfg.value.x = mult ? 1 : 2;
+    blendBtn.textContent = `face blend: ${mult ? 'multiply' : 'replace'}`;
+  });
+
   const projBtn = addButton(faceBox, 'proj: planar', () => {
     const spherical = u.faceCfg2.value.x < 0.5;
     u.faceCfg2.value.x = spherical ? 1 : 0;
