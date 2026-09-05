@@ -532,7 +532,7 @@ describe('ported features reach the entry point', () => {
     // texel half-width — that is the whole correctness proof. Any full-res
     // ray in the block lies within blockK * t of the coarse ray, so the first
     // touch is a lower bound on every block ray's own first surface.
-    expect(DEPTH_PREPASS_MARCH).toContain('let r = t * blockK;');
+    expect(DEPTH_PREPASS_MARCH).toContain('let r = t * depthPreCfg.y;');
     // The step keeps the WHOLE cone outside the surface (d - r, cone rule).
     expect(DEPTH_PREPASS_MARCH).toContain('t = t + max(d - r, 0.0005) * stepMul;');
     // The touch test carries the same slack CONE_MARCH's does — the 1.2 mm
@@ -694,9 +694,14 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
     // the phantom-input bug. +1 for windDrift (shell cloth sway, 2026-09-05),
     // appended after the level-shadow tail rather than inserted anywhere.
-    expect(names.length).toBe(76);
-    expect(names.slice(-4)).toEqual(
-      ['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'windDrift']);
+    expect(names.length).toBe(78);
+    // +2 for the quarter-res depth prepass (close-up task 3) — bound
+    // POSITIONALLY LAST after windDrift, in the same commit as the WGSL
+    // inputs (the meltCfg rule).
+    expect(names.slice(-6)).toEqual([
+      'levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'windDrift',
+      'depthPreTex', 'depthPreCfg',
+    ]);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).

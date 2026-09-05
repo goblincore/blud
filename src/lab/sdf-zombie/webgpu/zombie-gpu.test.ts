@@ -208,7 +208,13 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     // Without a source, cfg is the all-zero constant — the fetch's disabled
     // identity. The 1x1 fallback texture carries value 0 so even a stray
     // read is "no start".
-    expect(src).toMatch(/depthPreCfg: depthPre\n      \? vec4\(depthPre\.uniforms\.enabled, depthPre\.uniforms\.k, 0\.0, 0\.0\)\n      : vec4\(0\.0, 0\.0, 0\.0, 0\.0\)/);
+        // Without a source, cfg is the shared all-zero vec4 UNIFORM — the
+    // fetch's disabled identity. It is deliberately NOT a composed constant
+    // node: vec4-of-uniform-scalars breaks three's WGSL generation
+    // (JoinNode -> getTypeFromLength null), console-only error, dead
+    // uniforms, unlit-black bodies (2026-09-05).
+    expect(src).toMatch(/depthPreCfg: \(depthPre \? depthPre\.uniforms\.cfg : fallbackDepthPreUniform\(\)\) as never/);
+    expect(src).toMatch(/cfg: uniform\(new THREE\.Vector4\(0, 0, 0, 0\)\)/);
   });
 });
 
