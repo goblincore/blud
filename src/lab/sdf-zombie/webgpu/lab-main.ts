@@ -3186,11 +3186,19 @@ async function main() {
     get: () => u.faceCfg.value.y, set: (v) => { u.faceCfg.value.y = v; },
   });
   addSlider(faceBox, {
-    label: 'texScaleX', min: 0.4, max: 2.5, step: 0.01,
+    // texScale is uv-per-unit-head-space -- a FREQUENCY, not a size -- so
+    // DOWN makes the face bigger. The label says so because the slider reads
+    // backwards otherwise, and the range starts at 0.10 because the useful
+    // values live BELOW the old 0.4 floor: the soldier ships at 0.24 / 0.33,
+    // i.e. the old slider could not reach his own values, let alone anything
+    // larger than them. Every drag made the face smaller and there was no way
+    // back. The displayed number is deliberately still the raw faceProj value
+    // so it can be copied straight into a .blob's projScaleX/Y.
+    label: 'texScaleX (down = bigger)', min: 0.10, max: 2.5, step: 0.01,
     get: () => u.faceProj.value.x, set: (v) => { u.faceProj.value.x = v; },
   });
   addSlider(faceBox, {
-    label: 'texScaleY', min: 0.4, max: 2.5, step: 0.01,
+    label: 'texScaleY (down = bigger)', min: 0.10, max: 2.5, step: 0.01,
     get: () => u.faceProj.value.y, set: (v) => { u.faceProj.value.y = v; },
   });
   addSlider(faceBox, {
