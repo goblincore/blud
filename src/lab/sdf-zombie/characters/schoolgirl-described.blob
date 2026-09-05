@@ -30,10 +30,29 @@
 #
 # HOW SHE DIFFERS FROM THE MEASURED TWO. They fit her to bands and the torso
 # still read as stacked discs until it was rebuilt smooth; this one starts
-# smooth — a few tapered bars, heavy overlaps, clothing as paint where paint
-# suffices and as cloth shells where the silhouette needs air (skirt,
-# collar). Proportions are the brief's anchors (1.70 m, head about 1/8) held
-# to ±10% and no closer.
+# smooth — a few tapered bars, heavy overlaps. Proportions are the brief's
+# anchors (1.70 m, head about 1/8) held to ±10% and no closer.
+#
+# HER WHOLE OUTFIT IS CLOTH SHELLS (2026-09-05). Blouse, cap sleeves, skirt,
+# sailor collar, scarf and boot shafts are all thin onioned sheets standing
+# off the body, with real folded edges (rim=) and domain-warped fold shading
+# (warp=). Nothing is painted white or navy any more: the flesh underneath is
+# SKIN everywhere, and the garment you see is the sheet.
+#
+# WHAT THAT COST, and it is the lesson worth carrying to the next character:
+# PAINT IS BY NEAREST PRIM, so once a garment has real thickness, any small
+# accessory sitting UNDER it stops being geometry and becomes a wide painted
+# patch of the sheet above it. The scarf and collar points were authored flush
+# against a painted blouse; the moment the blouse became a 7 mm sheet they
+# read as a red-and-navy flag across her chest. Every one of them had to be
+# lifted PROUD of the new surface — and the chest surface is a ramp (z ~0.091
+# at the crop hem, ~0.112 at the bust), so "proud" is a different number at
+# every height. A tail that hung past the hem then approached the bare midriff,
+# which sits ~40 mm further back, and painted a red band across her stomach.
+#
+# The rule that falls out: on a shell garment you cannot paint detail, you can
+# only stand geometry on it, and a couple of millimetres of clearance is
+# enough — a centimetre reads as stuck on.
 
 model schoolgirl-described
   height 1.70
@@ -79,11 +98,11 @@ skeleton
 
 body
   # ============================================================
-  # TORSO — the uniform is PAINT on the sculpt for the masses (white blouse,
-  # skin midriff) and CLOTH SHELLS where the silhouette needs air (skirt,
-  # collar). Few large tapered bars, heavy overlaps — the smooth-start the
-  # measured one's disc-stack rebuild proved. Skin warm pale (dec face
-  # below), blouse white f2f2f5, navy 0b1278, scarf red b01018.
+  # TORSO — bare skin, all of it. Every mass here is her BODY; the uniform is
+  # cloth shells laid over it further down this file. Few large tapered bars,
+  # heavy overlaps — the smooth-start the measured one's disc-stack rebuild
+  # proved. Skin warm pale (see the face block), blouse white f2f2f5, navy
+  # 0b1278, scarf red b01018.
   # ============================================================
   # Hips under the skirt — skin; never seen, keeps the legs fused.
   blob torso on pelvis at=0.45 r=0.098 wide=1.00 tall=0.95 deep=0.84 blend=0.008 color=e9c9ae
@@ -96,12 +115,26 @@ body
   # THE BLOUSE: one tapered bar from the midriff overlap up to the bust.
   # The paint boundary with the midriff bar lands ~1.13 — the crop hem is
   # a colour change on a smooth surface, not a ledge.
-  bar  torso on chest  from=0.18 to=0.85 r=0.064 r2=0.096 deep=0.95 blend=0.008 color=f2f2f5
+  bar  torso on chest  from=0.18 to=0.85 r=0.064 r2=0.096 deep=0.95 blend=0.008 color=e9c9ae
   # Bust mounds, front — the side-view read of the blouse, as geometry.
-  blob torso on chest  at=0.60 offset=(0.042,0,0.050) r=0.052 deep=1.00 blend=0.006 both color=f2f2f5
+  blob torso on chest  at=0.60 offset=(0.042,0,0.050) r=0.052 deep=1.00 blend=0.006 both color=e9c9ae
   # Yoke: chest top to the neck, thin front-to-back — the collar cape
   # drapes over this.
-  bar  torso on spine2 from=0.00 to=0.90 r=0.078 r2=0.046 deep=0.80 blend=0.006 color=f2f2f5
+  bar  torso on spine2 from=0.00 to=0.90 r=0.078 r2=0.046 deep=0.80 blend=0.006 color=e9c9ae
+
+  # ============================================================
+  # THE MIDDY BLOUSE — cloth now, not paint. A sheet standing ~7 mm off the
+  # torso from the crop hem up to the shoulders, so the hem is a real folded
+  # edge (rim=) instead of a colour change on smooth skin, and the fabric
+  # carries fold shading of its own. The flesh under it is SKIN: the white
+  # you see is the shell, and nothing is painted white any more.
+  # ============================================================
+  shell torso on chest at=0.15 tip=(0,0.118,0) r=0.073 r2=0.103 wide=1.05 deep=1.06 thick=0.005 warp=0.007 warpFreq=(24,10,24) clip=(0,-1,0) clipd=-1.130 rim=0.006 blend=0.005 color=f2f2f5
+
+  # PUFFED CAP SLEEVES — the same trick on the arm: a short cone sheet cut at
+  # the cuff, so the sleeve ends in a folded edge standing clear of the bare
+  # arm inside it rather than a paint boundary running across it.
+  shell arm on upperarm at=0.06 tip=(0.010,-0.078,0) r=0.036 r2=0.031 wide=1.06 deep=1.06 thick=0.005 warp=0.004 warpFreq=(40,18,40) clip=(0,-1,0) clipd=-1.205 rim=0.005 blend=0.005 mirror color=f2f2f5
 
   # ============================================================
   # THE SKIRT — one flared shell cone, navy, hem at mid-thigh. Cloth, not
@@ -136,8 +169,8 @@ body
   # The cape drapes rather than pleats — a soft isotropic sag at a LOW
   # frequency, so the navy reads as a cloth lying on the shoulders instead of
   # a painted shoulder plate. 0.005 * length(14,14,14) = 0.12.
-  shell torso on chest at=0.78 offset=(0,0.035,-0.015) r=0.088 wide=1.00 tall=0.95 deep=1.05 thick=0.006 warp=0.005 warpFreq=14 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=0b1278
-  shell torso on chest at=0.92 offset=(0.050,0.020,0.035) tip=(0.005,-0.120,0.100) r=0.015 r2=0.006 wide=0.95 tall=0.55 deep=0.45 thick=0.005 clip=(0,0,1) clipd=0.15 rim=0.004 blend=0.005 both color=0b1278
+  shell torso on chest at=0.78 offset=(0,0.035,-0.015) r=0.112 wide=1.00 tall=0.95 deep=1.02 thick=0.006 warp=0.006 warpFreq=13 clip=(0,0,1) clipd=0.030 rim=0.005 blend=0.006 color=0b1278
+  shell torso on chest at=0.94 offset=(0.050,0.020,0.066) tip=(-0.019,-0.076,0.036) r=0.012 r2=0.004 wide=0.90 tall=0.75 deep=0.50 thick=0.004 clip=(0,0,1) clipd=0.300 rim=0.003 blend=0.0035 both color=0b1278
 
   # ============================================================
   # THE RED NECKERCHIEF (beat 2) — a real knot at the V and real tails
@@ -145,8 +178,8 @@ body
   # red (the measured control's was navy — its own test calls that out);
   # red is also the one accent the cast's colour grammar understands.
   # ============================================================
-  blob torso on chest at=0.72 offset=(0,-0.005,0.100) r=0.018 wide=1.70 tall=0.70 deep=0.60 blend=0.004 color=b01018
-  blob torso on chest at=0.70 offset=(0,-0.008,0.095) tip=(0,-0.045,0.010) r=0.012 r2=0.007 wide=1.30 blend=0.004 color=b01018
+  blob torso on chest at=0.78 offset=(0,-0.004,0.112) r=0.009 wide=1.25 tall=0.85 deep=0.55 blend=0.003 color=b01018
+  shell torso on chest at=0.76 offset=(0,-0.010,0.110) tip=(0.002,-0.050,-0.016) r=0.009 r2=0.005 wide=1.10 deep=0.38 thick=0.004 warp=0.004 warpFreq=(30,26,30) clip=(0,-1,0) clipd=-1.150 rim=0.003 blend=0.003 color=b01018
 
   # Neck: slim, skin, between the collar and the jaw.
   bar head on neck from=0.10 to=0.90 r=0.030 deep=1.15 blend=0.004 color=e9c9ae
@@ -177,13 +210,14 @@ body
   blob head on skull at=0.55 offset=(0,-0.105,0.062) r=0.020 wide=1.15 tall=0.60 deep=0.90 blend=0.004 color=e9c9ae
 
   # ============================================================
-  # ARMS — slim rubber-hose, no ball joints. Short PUFFED white sleeve to
-  # mid-upper-arm (the sleeve reads as a cuff of blouse, not a shoulder
-  # ball — its top stays below the yoke line), skin below, skin mitt hand.
+  # ARMS — slim rubber-hose, no ball joints, BARE the whole way: the puffed
+  # sleeve is a shell up with the blouse, so the arm under it runs unbroken
+  # from shoulder to mitt. It used to stop at 0.40 because the white sleeve
+  # bar WAS the upper arm; deleting the paint without extending this would
+  # have left her shoulders hollow inside a sheet.
   # ============================================================
-  blob arm on clavicle at=1.00 offset=(0,-0.020,0) r=0.026 tall=0.85 blend=0.005 mirror core color=f2f2f5
-  bar  arm on upperarm from=0.12 to=0.42 r=0.028 r2=0.025 blend=0.005 mirror color=f2f2f5
-  bar  arm on upperarm from=0.40 to=0.98 r=0.026 r2=0.022 blend=0.0045 mirror color=e9c9ae
+  blob arm on clavicle at=1.00 offset=(0,-0.020,0) r=0.026 tall=0.85 blend=0.005 mirror core color=e9c9ae
+  bar  arm on upperarm from=0.05 to=0.98 r=0.027 r2=0.022 blend=0.0045 mirror color=e9c9ae
   blob arm on forearm  at=0.00 r=0.022 blend=0.0045 mirror color=e9c9ae
   bar  arm on forearm  from=0.05 to=0.95 r=0.021 r2=0.018 blend=0.004 mirror color=e9c9ae
   blob arm on hand at=0.50 offset=(0,0,0.015) r=0.024 wide=0.85 tall=1.10 deep=1.20 blend=0.004 mirror color=e9c9ae
@@ -195,18 +229,21 @@ body
   blob leg on thigh at=0.00 r=0.058 deep=1.05 blend=0.006 mirror core color=e9c9ae
   bar  leg on thigh from=0.02 to=1.00 r=0.060 r2=0.042 deep=1.05 blend=0.005 mirror color=e9c9ae
   blob leg on shin  at=0.00 r=0.042 deep=1.05 blend=0.005 mirror color=e9c9ae
-  bar  leg on shin  from=0.02 to=0.38 r=0.042 r2=0.036 deep=0.95 blend=0.005 mirror color=e9c9ae
+  bar  leg on shin  from=0.02 to=0.99 r=0.042 r2=0.030 deep=0.95 blend=0.005 mirror color=e9c9ae
 
   # ============================================================
-  # THE SLOUCH BOOTS (beat 3) — WHITE leather, collapsed: the shaft stands
-  # 15 mm clear of the calf inside it and swells as it slouches downward,
-  # with a cuff bulge at the top where the leather folds over. Black toe
+  # THE SLOUCH BOOTS (beat 3) — the SHAFT is a shell now: a sheet standing
+  # clear of the bare calf, with a folded top edge, which is what a slouch
+  # boot actually is. The shin bar under it had to be extended to the ankle
+  # for the same reason the arm did — the old white bar WAS the lower leg.
+  # The cuff roll and the foot stay solid: a fold-over roll is a mass, and a
+  # foot is not cloth. Black toe
   # caps and tread. This is where she parts from the measured version's
   # socks-and-mary-janes: the boot is the bigger, dumber, more readable
   # shape, and white boots at the bottom answer the white blouse at the
   # top with the navy skirt between — the whole outfit in three blocks.
   # ============================================================
-  bar  leg on shin  from=0.35 to=0.98 r=0.056 r2=0.062 deep=0.85 blend=0.005 mirror color=f2f2f5 gloss=0.12
+  shell leg on shin at=0.33 tip=(0,-0.268,0) r=0.062 r2=0.052 wide=1.02 deep=0.88 thick=0.006 warp=0.005 warpFreq=(34,0,34) clip=(0,-1,0) clipd=-0.126 rim=0.006 blend=0.005 mirror color=f2f2f5 gloss=0.12
   blob leg on shin  at=0.38 r=0.064 deep=0.82 blend=0.006 mirror color=f2f2f5 gloss=0.12
   # Boot foot + heel wrap, world-displacement off the foot bone (the house
   # pattern); its tread reaches the floor (centre y 0.06, half-tall 0.058).
