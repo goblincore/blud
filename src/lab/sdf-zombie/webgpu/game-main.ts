@@ -29,7 +29,8 @@ import {
 } from '../adaptive-scale';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
-import { GOBLIN_SKIN, goblinNormalPixels, goblinSkinSrgbHex } from './goblin-skin';
+import { GOBLIN_SKIN } from './goblin-skin';
+import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
@@ -1260,6 +1261,8 @@ async function main() {
   let flashMaterial: THREE.MeshBasicMaterial | null = null;
   let flashLight: THREE.PointLight | null = null;
   let handMaterial: THREE.MeshStandardMaterial | null = null;
+  /** The loaded arms, for the gate's seam. */
+  let arms: GoblinArms | null = null;
   /** Gun body materials, kept so the finish is tunable at runtime. */
   const gunMaterials: THREE.MeshStandardMaterial[] = [];
   const FLASH_VARIANTS = 4;
@@ -1275,30 +1278,9 @@ async function main() {
   let lastEjectOrigin: Vec3 | null = null;
   const Y_UP = new THREE.Vector3(0, 1, 0);
   const _tmpV = new THREE.Vector3();
-  /** The two elbows, rig space. See makeHand / aimForearm. */
+  /** The two elbows, rig space. See aimArm. */
   const ELBOW_L = new THREE.Vector3(-0.45, -0.60, 0.05);
   const ELBOW_R = new THREE.Vector3(0.24, -0.67, 0.04);
-  /** Forearm capsule length. Runs well past the elbow, which sits behind
-   *  the camera, so the far end is never in frame. At 0.15 / 0.26 it was:
-   *  the rounded stump came into view on a hard look down (the aim rig
-   *  pitches the whole view-model about the grip, which swings anything
-   *  below and behind the hand UP) -- the owner's detached arm. */
-  const FOREARM_LEN = 0.90;
-  /** Point a hand's forearm from wherever the hand is NOW at its elbow. The
-   *  elbow is a fixed point in rig space -- the body does not move when the
-   *  hand does -- so a hand that rises to the breech gets a forearm that
-   *  runs down and away to the body, instead of one that keeps its resting
-   *  direction and, from a hand near the eye, points straight at the camera
-   *  and fills the frame. */
-  function aimForearm(g: THREE.Group, elbow: THREE.Vector3): void {
-    const arm = g.getObjectByName('forearm');
-    if (!arm) return;
-    const dir = _tmpV.copy(elbow).sub(g.position).normalize();
-    // CapsuleGeometry runs along +Y; swing it onto the arm direction.
-    arm.quaternion.setFromUnitVectors(Y_UP, dir);
-    arm.position.copy(dir).multiplyScalar(FOREARM_LEN * 0.5 + GOBLIN_SKIN.handRadius * 0.4);
-  }
-
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -1494,67 +1476,19 @@ async function main() {
       FORE_HAND_REST.x -= 0.042;
       FORE_HAND_REST.y -= 0.014;
     }
-    // HANDS ARE GREEN ORBS -- deliberate, per the owner: the player is the
-    // goblin and its hands were never detailed. Colour, radius and roughness
-    // now come from characters/goblin.blob instead of being picked by eye, and
-    // each orb gains a FOREARM because the reload swings the support arm into
-    // frame. Anchored in VIEW space so the GLB's axis convention cannot move
-    // them.
-    const skinTex = new THREE.DataTexture(
-      goblinNormalPixels(256), 256, 256, THREE.RGBAFormat,
-    );
-    skinTex.wrapS = skinTex.wrapT = THREE.RepeatWrapping;
-    skinTex.needsUpdate = true;
-    // HAND BRIGHTNESS. The goblin's own palette is a pale olive that is correct
-    // in daylight and nearly invisible under the dungeon rig at this exposure
-    // (the owner's report). Rather than lie about the creature's colour, the
-    // hands carry a small self-lit term so they read in the dark; it is a
-    // tuning knob, not a constant, because the right amount depends on the
-    // final lighting pass. setGunTuning() moves it live.
-    const orbMat = new THREE.MeshStandardMaterial({
-      color: goblinSkinSrgbHex(),
-      roughness: GOBLIN_SKIN.roughness,
-      normalMap: skinTex,
-      normalScale: new THREE.Vector2(0.8, 0.8),
-      emissive: new THREE.Color(goblinSkinSrgbHex()),
-      emissiveIntensity: 0.30,
-    });
-    handMaterial = orbMat;
-    const orbGeo = new THREE.SphereGeometry(GOBLIN_SKIN.handRadius, 20, 14);
-
-    /** One hand: an orb plus a forearm running back along `armDir` (view
-     *  space, pointing from the hand toward the elbow). */
-    function makeHand(hand: THREE.Vector3, elbow: THREE.Vector3): THREE.Group {
-      const g = new THREE.Group();
-      const orb = new THREE.Mesh(orbGeo, orbMat);
-      // SphereGeometry's UVs pinch at the poles, so aim the pole into the gun.
-      orb.rotation.x = Math.PI / 2;
-      const armGeo = new THREE.CapsuleGeometry(
-        GOBLIN_SKIN.forearmRadius, FOREARM_LEN, 4, 12,
-      );
-      const arm = new THREE.Mesh(armGeo, orbMat);
-      arm.name = 'forearm';
-      g.add(orb, arm);
-      g.position.copy(hand);
-      aimForearm(g, elbow);
-      return g;
-    }
-    // THE TWO HANDS SIT ON OPPOSITE SIDES OF THE BODY.
-    // The right hand is on the grip, low-right, mostly hidden behind the gun --
-    // correct, and the owner is happy with it. The support hand was 4.5 cm left
-    // of it, so both read as being side by side on the right of the screen. A
-    // support hand CROSSES THE BODY: it enters from far left with a good length
-    // of forearm in shot, which is also what makes the reload legible.
-    // The right hand sits on the grip; the left wraps the FORE-END, both taken
-    // from the model's own locators. The arms still run to opposite sides of
-    // the body -- right arm back and down-right, left arm crossing the body
-    // down-left -- so the support arm reads as an arm, not a floating lump.
-    // Elbows: fixed in rig space, below and behind the camera on opposite
-    // sides of the body. Chosen so the RESTING forearms keep the directions the
-    // owner approved -- right arm back and down-right, left arm crossing the
-    // body down-left -- and the load beat gets a forearm that follows.
-    gripHandGroup = makeHand(GRIP_HAND_REST.clone(), ELBOW_R);
-    foreHandGroup = makeHand(FORE_HAND_REST.clone(), ELBOW_L);
+    // THE ARMS. goblin-arm.glb, dressed by game-arms.ts: mottled skin with no
+    // glow, a bracer whose steel and brass match the gun, a smartwatch on the
+    // left wrist. Each group's origin is the HAND, so the rest positions read
+    // off the gun's locators go straight onto it, and aimArm() swings the arm
+    // behind the hand toward a fixed elbow without moving the hand.
+    arms = await loadGoblinArms(GOBLIN_ARM_GLB, { env, envMapIntensity: 1.1 });
+    handMaterial = arms.skin;
+    gripHandGroup = arms.right;
+    foreHandGroup = arms.left;
+    gripHandGroup.position.copy(GRIP_HAND_REST);
+    foreHandGroup.position.copy(FORE_HAND_REST);
+    aimArm(gripHandGroup, ELBOW_R);
+    aimArm(foreHandGroup, ELBOW_L);
     (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
@@ -2648,7 +2582,7 @@ async function main() {
         FORE_HAND_REST.y + sh.dy,
         FORE_HAND_REST.z + sh.dz,
       );
-      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimForearm(foreHandGroup, ELBOW_L); }
+      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimArm(foreHandGroup, ELBOW_L); }
 
       // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
       // The seated cases are children of Barrels, so they are already carrying
@@ -2743,7 +2677,7 @@ async function main() {
           gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
           gunGroup.position.copy(GUN_REST.pos);
         }
-        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimForearm(foreHandGroup, ELBOW_L); }
+        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimArm(foreHandGroup, ELBOW_L); }
         for (const m of ejectedShells) m.visible = false;
         for (const m of loadShells) m.visible = false;
         updateHud();
@@ -3148,11 +3082,11 @@ async function main() {
      *  exposure. Both are judgement calls that depend on the final lighting,
      *  so they are knobs rather than new constants:
      *    __sdfGame.setGunTuning({ roughness: 0.30, envMapIntensity: 0.85 })
-     *    __sdfGame.setGunTuning({ handEmissive: 0.45 })
+     *    __sdfGame.setGunTuning({ handNormalScale: 1.4 })
      */
     setGunTuning(t: {
       roughness?: number; envMapIntensity?: number; metalness?: number;
-      handEmissive?: number; handRoughness?: number;
+      handNormalScale?: number; handRoughness?: number;
     }) {
       for (const m of gunMaterials) {
         if (t.roughness !== undefined) m.roughness = t.roughness;
@@ -3161,7 +3095,7 @@ async function main() {
         m.needsUpdate = true;
       }
       if (handMaterial) {
-        if (t.handEmissive !== undefined) handMaterial.emissiveIntensity = t.handEmissive;
+        if (t.handNormalScale !== undefined) handMaterial.normalScale.setScalar(t.handNormalScale);
         if (t.handRoughness !== undefined) handMaterial.roughness = t.handRoughness;
         handMaterial.needsUpdate = true;
       }
@@ -3169,7 +3103,7 @@ async function main() {
         roughness: gunMaterials[0]?.roughness ?? null,
         envMapIntensity: gunMaterials[0]?.envMapIntensity ?? null,
         metalness: gunMaterials[0]?.metalness ?? null,
-        handEmissive: handMaterial?.emissiveIntensity ?? null,
+        handNormalScale: handMaterial?.normalScale.x ?? null,
       };
     },
     get shells() { return shells; },
@@ -3189,6 +3123,16 @@ async function main() {
     }),
     /** Where the last case was when it was handed to the tumble. */
     get lastEjectOrigin() { return lastEjectOrigin; },
+    /** The arms, for the gate: both present, skin has no emissive, the watch
+     *  screen exists. `watchScreen` is the drawable canvas for a later pass. */
+    get arms() {
+      return {
+        left: !!arms?.left.parent, right: !!arms?.right.parent,
+        skinEmissive: arms?.skin.emissiveIntensity ?? null,
+        watch: !!arms?.left.getObjectByName('Watch_Screen'),
+      };
+    },
+    get watchScreen() { return arms?.screen ?? null; },
     /** The eject arc's seed for the current/last reload; 0 = reference arc. */
     get reloadSeed() { return reloadSeed; },
     get reloadSpeed() { return reloadSpeed; },
