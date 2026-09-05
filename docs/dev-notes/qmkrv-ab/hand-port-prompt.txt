@@ -1,0 +1,40 @@
+Port the Cheeb's Hand enemy from NotBlood to Blud (this TS+Three.js+Rapier project). This is a real porting task — please read the source and the existing patterns carefully before writing code.
+
+INPUT
+- NotBlood source for the enemy AI: /Users/donny/Documents/Raze/NotBlood/source/blood/src/aihand.cpp (138 lines)
+- Header: /Users/donny/Documents/Raze/NotBlood/source/blood/src/aihand.h
+- Tuning constants live in NotBlood at /Users/donny/Documents/Raze/NotBlood/source/blood/src/dudeinfo.cpp (search for kDudeHand). Health, damage, speed, gib threshold are there.
+
+EXISTING PATTERNS TO FOLLOW (READ THESE FIRST)
+- src/game/enemy/axe-zombie.ts — concrete enemy class extending the base Enemy/Brain pattern
+- src/game/enemy/cultist-ai.ts — Brain FSM with states + tests next to it
+- src/game/enemy/cultist-ai.test.ts — test style
+- src/game/enemy/shotgun-cultist.ts — second concrete enemy, shows variation
+- src/game/gibs/tuning.ts — central tuning constants per enemy (HP, damage, gibThreshold, etc.)
+- src/game/gibs/index.ts — gib profile registration
+- src/game/encounter/encounters.ts — how new enemies wire into the encounter spawner
+- src/main.ts — debug spawn keys (T spawns cultist; pick a free key for hand, e.g. Y)
+
+DELIVERABLES (please match the file structure and style of the existing enemies)
+1. src/game/enemy/hand-ai.ts — Brain FSM + pure math helpers, mirroring cultist-ai.ts shape. Hand state machine should reflect aihand.cpp: idle, search, chase, jump-windup, jump-attack (in-air), recoil, dead. The leap is the Hand's signature: it crouches, then springs at the player's face (NotBlood: handJumpAttack uses a vertical+horizontal velocity burst).
+2. src/game/enemy/hand-ai.test.ts — vitest unit tests for the Brain FSM (state transitions, leap windup timing, damage application). Mirror cultist-ai.test.ts style.
+3. src/game/enemy/hand.ts — concrete Hand class extending the base Enemy. No new sprite assets; use a solid-color placeholder billboard (e.g. a small dark-red square ~0.4m). Add a clear TODO comment that real sprites need to be extracted via scripts/extract_seq.py in a follow-up.
+4. Add HAND constants to src/game/gibs/tuning.ts (HP, gibThreshold, leapWindupSec, leapDurationSec, leapVelocity, contactDamage, etc.) — read NotBlood dudeinfo.cpp for canonical values; convert tile/Build units to blud's meter-based scale (the existing constants in tuning.ts demonstrate the scale; copy that convention).
+5. Register a HAND_GIB_PROFILE in src/game/gibs/index.ts (no kickable head — Hand is just a hand, the head IS the body).
+6. Add a debug spawn for the Hand in src/main.ts under a new key. Use 'Y' if free; if taken, pick another unused single key and document it in the keymap comment.
+7. Optional but encouraged: add a brief block comment at the top of hand-ai.ts citing the NotBlood lines you ported from (file path + approximate line range), so future readers can verify the port.
+
+CONSTRAINTS
+- TypeScript strict mode. No new dependencies.
+- Use existing types — Vec3 from gibs/particles, etc.
+- DO NOT modify unrelated files.
+- DO NOT extract any sprite assets; placeholder billboard only.
+- Hand contact damage triggers on leap-attack landing (close range), not chase. Read aihand.cpp carefully for the trigger.
+
+VERIFY
+After implementation, run these commands in the worktree and fix any issues:
+- `npx tsc --noEmit`
+- `npx vitest run src/game/enemy/hand-ai.test.ts`
+- `npx vitest run` (full suite — must remain green)
+
+Report at the end: files changed (with line counts), the NotBlood line ranges you ported from, any tuning value conversions you made, and the test result.

@@ -1,0 +1,65 @@
+diff --git a/src/engine/rng.test.ts b/src/engine/rng.test.ts
+index 616178b..85e659e 100644
+--- a/src/engine/rng.test.ts
++++ b/src/engine/rng.test.ts
+@@ -83,6 +83,24 @@ describe('SeededRng', () => {
+     expect(original).toEqual([1, 2, 3, 4, 5, 6, 7, 8]); // input not mutated
+   });
+ 
++  it('nextGaussian returns normally-distributed values', () => {
++    const rng = new SeededRng(12345);
++    const n = 10000;
++    const samples: number[] = [];
++    for (let i = 0; i < n; i++) {
++      samples.push(rng.nextGaussian());
++    }
++
++    const sum = samples.reduce((a, b) => a + b, 0);
++    const mean = sum / n;
++
++    const sumSq = samples.reduce((a, b) => a + (b - mean) ** 2, 0);
++    const stddev = Math.sqrt(sumSq / n);
++
++    expect(mean).toBeCloseTo(0, 1); // within 0.1 of 0
++    expect(stddev).toBeCloseTo(1, 1); // within 0.1 of 1
++  });
++
+   it('fork produces independent instances from same state', () => {
+     const rng1 = new SeededRng(12345);
+     const rng2 = rng1.fork();
+diff --git a/src/engine/rng.ts b/src/engine/rng.ts
+index 737d432..2cc4f46 100644
+--- a/src/engine/rng.ts
++++ b/src/engine/rng.ts
+@@ -1,5 +1,7 @@
+ export class SeededRng {
+   private state: number;
++  private hasSpare: boolean = false;
++  private spare: number = 0;
+ 
+   constructor(seed: number) {
+     // Ensure seed is treated as unsigned 32-bit integer
+@@ -43,6 +45,23 @@ export class SeededRng {
+     return this.next() < probability;
+   }
+ 
++  nextGaussian(): number {
++    if (this.hasSpare) {
++      this.hasSpare = false;
++      return this.spare;
++    }
++    let u1: number, u2: number;
++    do {
++      u1 = this.next();
++      u2 = this.next();
++    } while (u1 === 0); // avoid ln(0)
++    const magnitude = Math.sqrt(-2 * Math.log(u1));
++    const angle = 2 * Math.PI * u2;
++    this.spare = magnitude * Math.sin(angle);
++    this.hasSpare = true;
++    return magnitude * Math.cos(angle);
++  }
++
+   pick<T>(arr: T[]): T {
+     if (arr.length === 0) {
+       throw new Error('Cannot pick from empty array');

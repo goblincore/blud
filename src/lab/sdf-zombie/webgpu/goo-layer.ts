@@ -181,6 +181,79 @@ export const GOO_TUNING = {
  */
 export const GOO_DENSITY_BLUE_IS_GUT_MASK = true;
 
+// -------------------------------------------------------------------------
+// PERF LEVERS (close-up task 4, 2026-09-04). Three sync-side seams plus one
+// composite-side seam, every one DEFAULT-OFF: the shipped path must be
+// pixel-identical, and the bench (scripts/goo-*.mjs) flips them per leg.
+// The decision code is exported PURE so the off-state equivalence and the
+// selection logic are testable without a GPU.
+// -------------------------------------------------------------------------
+
+/**
+ * Projected radius of a world-space half-extent, in texels of a target
+ * `targetH` texels tall, at view distance `viewDist`.
+ *
+ * This is the PROJECTED size test the sim's own size cannot make:
+ * `mistMaxSize` routes small droplets to the billboard view, but a quad's
+ * on-screen size also shrinks with DISTANCE — a trail droplet at 9 m is
+ * sub-texel in the half-res density buffer no matter what its sim size is.
+ * Below ~1 density texel a quad cannot fuse into a surface (the whole point
+ * of the density field is overlap), so under the minTexel lever it is
+ * skipped: fragment cost for nothing.
+ */
+export function projectedTexelRadius(
+  worldHalfExtent: number, viewDist: number, tanHalfFovY: number, targetH: number,
+): number {
+  if (!(viewDist > 1e-6) || targetH < 1) return Infinity;
+  const pxPerWorld = targetH / (2 * viewDist * tanHalfFovY);
+  return worldHalfExtent * pxPerWorld;
+}
+
+/**
+ * Splat fade weight for the DENSITY field (close-up task 4 item 3). Splats
+ * are persistent BY DESIGN (256 ring, `push`+`shift`), so their density
+ * contribution accumulates across a firefight forever. This fades the OLDEST
+ * `fadeTail` ranks, and ONLY once the ring has actually accumulated past
+ * them: while the ring holds no more than `fadeTail` splats nothing fades at
+ * all (a young pool must not thin — the pools are a feature; it is the
+ * ring-saturated ACCUMULATION that costs). The billboard splat itself is
+ * untouched — the floor still reads bloody; only the goo density thins.
+ * `fadeTail <= 0` = off, weight 1 everywhere (the shipped state).
+ *
+ * Ring POSITION stands in for age because `Splat` carries no timestamp and
+ * blood-sim.ts is not ours to change: `shift()` makes index 0 the oldest,
+ * so recency rank is derivable in the consumer for free.
+ */
+export function splatDensityWeight(
+  rankFromNewest: number, total: number, fadeTail: number,
+): number {
+  if (fadeTail <= 0 || total <= fadeTail) return 1;
+  const full = total - fadeTail; // newest ranks that stay full weight (> 0)
+  if (rankFromNewest <= full) return 1;
+  const t = (rankFromNewest - full) / fadeTail;
+  return 1 - t * t * (3 - 2 * t); // 1 - smoothstep(0,1,t)
+}
+
+/**
+ * Fill `out[0..count)` with candidate indices ordered by projected area,
+ * largest first (ties broken by index ascending, so a deterministic scene
+ * gives a deterministic frame). Returns `out`. This is the area-priority
+ * lever's core: at the `maxParticles` cap the current fill order is droplet
+ * insertion order, so a far-away trail can displace the burst in the
+ * player's face — ranking by projected area keeps what actually covers
+ * screen. Splats compete in the same pool, which also fixes their silent
+ * starvation at the cap (they were filled AFTER droplets, so a full droplet
+ * roster erased every pool from the density field).
+ */
+export function orderIndicesByAreaDesc(
+  areas: ArrayLike<number>, count: number, out: number[],
+): number[] {
+  out.length = count;
+  for (let i = 0; i < count; i++) out[i] = i;
+  // Array#sort is stable, so equal areas keep collection order (index asc).
+  return out.sort((a, b) => (areas[b]! - areas[a]!) || (a - b));
+}
+
 /**
  * The surface pass. Returns vec4(lit colour, depth-buffer value).
  *
@@ -447,6 +520,43 @@ export const GOO_BLUR_WGSL = /* wgsl */ `fn gooBlur(
   return sum / wsum;
 }`;
 
+/**
+ * ITEM 1's upsample (close-up task 4): the final composite that runs when
+ * setSurfaceAtDensityRes(true) — reads the density-resolution shaded target
+ * and writes it out at output resolution.
+ *
+ * NO flipY, unlike gooSurface/gooAlpha: this is a target-to-target/canvas
+ * blit and the inversion the uFlipY uniform compensates only appears at the
+ * canvas boundary — the shading pass ALREADY paid it when it read the density
+ * field (the blur passes carry the same no-flip rule; see their note).
+ *
+ * NEAREST on purpose (textureLoad, no sampler): the shipped full-resolution
+ * pass also reads the density field nearest-texel, so the upsampled frame
+ * carries the SAME field data — only the sub-texel ray variation (spec/rim
+ * gradients inside a 2×2 texel block) is gone with the shading now at texel
+ * centres. If a capture shows the silhouette or the glint paying for that,
+ * the LinearFilter variant is the fallback, not the default.
+ *
+ * The discard is the empty-texel sentinel: the low target clears to black
+ * with ALPHA 0 (its own explicit clear in render() — the same two reasons the
+ * density target clears this way: a non-zero red channel is density, a
+ * cleared alpha of 1 is a full-frame gut mask/depth of 1). A live texel's
+ * .a is the depth-mode depth value in [0,1] or the overlay soft edge in
+ * [0,1] — the only legitimately-zero value is goo exactly ON the near plane
+ * (depth 0), one half-res texel at a range the camera cannot reach.
+ */
+export const GOO_UPSAMPLE_WGSL = /* wgsl */ `fn gooUpsample(
+  lowTex: texture_2d<f32>,
+  texCoord: vec2<f32>
+) -> vec4<f32> {
+  let dims = vec2<f32>(textureDimensions(lowTex, 0));
+  let maxP = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let px = clamp(vec2<i32>(floor(texCoord * dims)), vec2<i32>(0, 0), maxP);
+  let c = textureLoad(lowTex, px, 0);
+  if (c.a < 9.99e-5) { discard; }
+  return vec4<f32>(c.rgb, c.a);
+}`;
+
 /** Uniform nodes the goo shares with the march, so one re-tune moves both. */
 export interface GooLightRig {
   lightDir: ReturnType<typeof uniform>;
@@ -505,7 +615,46 @@ export interface GooLayer {
    *  false = the original screen-space density-gradient normals. */
   setSurfaceNormals(on: boolean): void;
   /**
-   * 'overlay' (default) composites the goo over the finished frame with no
+   * ITEM 1 (close-up task 4): run the surface shading at DENSITY resolution
+   * into an intermediate target, then composite it with a cheap upsample.
+   * Every input the surface pass reads is at densityScale × the SDF scale
+   * (nearest-texel: four canvas pixels already repeat one texel), so the
+   * per-canvas-pixel shading pays 5 texture loads + Beer-Lambert + spec/rim
+   * to shade what is informationally a half-res field. Default OFF = the
+   * exact shipped full-resolution composite.
+   */
+  setSurfaceAtDensityRes(on: boolean): void;
+  readonly surfaceAtDensityRes: boolean;
+  /**
+   * ITEM 2a: skip density quads whose projected blob radius is under this
+   * many density texels (projectedTexelRadius). They cannot fuse into the
+   * surface — additive blending means every skipped fragment was pure
+   * overdraw. 0 = off (the shipped state).
+   */
+  setMinTexelRadius(v: number): void;
+  readonly minTexelRadius: number;
+  /**
+   * ITEM 2b: at the maxParticles cap, fill the density instancer by
+   * PROJECTED AREA (largest first, splats and droplets in one pool) instead
+   * of droplet-then-splat insertion order. Off = the shipped fill order.
+   */
+  setAreaPriority(on: boolean): void;
+  readonly areaPriority: boolean;
+  /**
+   * ITEM 3: fade the DENSITY contribution of the oldest `v` splat ranks
+   * (splatDensityWeight). 0 = off (the shipped state: every splat full
+   * weight forever). The billboard splats never fade.
+   */
+  setSplatFadeTail(v: number): void;
+  readonly splatFadeTail: number;
+  /**
+   * DIAGNOSTIC ONLY (Phase-0 attribution, never a ship lever): skip
+   * individual passes of the chain so a bench can time them apart. All-true
+   * by default; anything else produces a WRONG FRAME on purpose.
+   */
+  setPassGate(g: { density?: boolean; blur?: boolean; surface?: boolean }): void;
+  readonly passGate: { density: boolean; blur: boolean; surface: boolean };
+  /** 'overlay' (default) composites the goo over the finished frame with no
    * depth involvement. 'depth' restores the original reconstructed-depth
    * interleaving — kept as the escape hatch if the overlay reads wrong
    * against walls in play.
@@ -623,7 +772,15 @@ export function createGooLayer(
   // alpha term the same, so carrying a mask in .a cannot perturb the colour
   // channels. The gate for that: the density target must CLEAR its alpha to
   // 0 (three's setClearColor defaults to 1 — pinned in render()).
-  densMat.colorNode = vec4(fall, fall.mul(viewDepth), fall.mul(gutMask), 1);
+  // Per-instance density weight (close-up task 4 item 3): 1.0 on every
+  // droplet, splatDensityWeight() on floor splats. Multiplies ALL THREE
+  // accumulated channels equally, so the g/r depth ratio and the b/r gut
+  // ratio are untouched — the same invariant the blur's uniform weights
+  // preserve. The attribute rides ALWAYS: ×1.0 is IEEE-exact, so the seam-off
+  // state (every entry 1.0) is bit-identical to the pre-attribute shader.
+  const fallMask = attribute<'float'>('fallMask', 'float');
+  const weightedFall = fall.mul(fallMask);
+  densMat.colorNode = vec4(weightedFall, weightedFall.mul(viewDepth), weightedFall.mul(gutMask), 1);
   densMat.blending = THREE.AdditiveBlending;
   densMat.premultipliedAlpha = true;
   densMat.transparent = true;
@@ -643,6 +800,12 @@ export function createGooLayer(
   );
   quads.geometry.setAttribute('gutMask', gutAttr);
   const gutArr = gutAttr.array as Float32Array;
+  // The density weight's storage — same shape as the gut flag's.
+  const fallAttr = new THREE.InstancedBufferAttribute(
+    new Float32Array(GOO_TUNING.maxParticles), 1,
+  );
+  quads.geometry.setAttribute('fallMask', fallAttr);
+  const fallArr = fallAttr.array as Float32Array;
   const gooScene = new THREE.Scene();
   gooScene.add(quads);
 
@@ -724,6 +887,104 @@ export function createGooLayer(
     depth: { raw: makeDepthMat(target.texture), blur: makeDepthMat(blurB.texture) },
   };
   let mode: 'overlay' | 'depth' = 'overlay';
+
+  // ---------------------------------------------------------------
+  // ITEM 1 (close-up task 4): the density-resolution surface path.
+  // surfaceLow carries the SHADED result at density resolution; the
+  // composite then only upsamples. NO depth attachment: the shading pass
+  // must not depth-test (its own buffer would be empty — the scene depth
+  // lives on the output target and the hardware tests against it in the
+  // upsample, per full-res pixel, exactly as the shipped composite does).
+  // Half-float like the density targets; no blending runs into it.
+  //
+  // OVERLAY packs the soft edge in .a (the same alpha makeOverlayMat
+  // composites with); DEPTH packs the reconstructed depth buffer value in
+  // .a (which the shipped material instead routes through depthNode — that
+  // attachment does not exist here). Both live in [0,1] so cleared alpha 0
+  // is the empty sentinel the upsample discards on.
+  //
+  // The shading WGSL itself is UNCHANGED — shadeOf()/makeOverlayMat() are
+  // resolution-independent fullscreen-quad graphs; only the render target
+  // under them differs. Same uniform NODES, so slider state cannot drift
+  // between the two paths.
+  // ---------------------------------------------------------------
+  const surfaceLow = new THREE.RenderTarget(1, 1, {
+    depthBuffer: false,
+    type: THREE.HalfFloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+
+  /** DEPTH mode, low-res variant: depth packed into .a instead of depthNode,
+   *  and no depth test/write — see the surfaceLow note above. */
+  function makeLowDepthMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeOf(densTexture);
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(shaded.xyz as never, shaded.w as never);
+    m.depthWrite = false;
+    m.depthTest = false;
+    m.fog = false;
+    return m;
+  }
+
+  const lowMats = {
+    // Overlay's node graph is exactly makeOverlayMat's (colour + soft-edge
+    // alpha) — only the destination differs. Fresh materials, shared uniform
+    // nodes: a separate pipeline for the RGBA16F target, no cross-target
+    // reuse for the backend to re-specialise.
+    overlay: { raw: makeOverlayMat(target.texture), blur: makeOverlayMat(blurB.texture) },
+    depth: { raw: makeLowDepthMat(target.texture), blur: makeLowDepthMat(blurB.texture) },
+  };
+
+  const upsampleFn = wgslFn(GOO_UPSAMPLE_WGSL);
+  function makeUpsampleMat(depth: boolean): MeshBasicNodeMaterial {
+    const c = upsampleFn({
+      lowTex: texture(surfaceLow.texture),
+      texCoord: uv(),
+    }) as unknown as Swizzled;
+    const m = new MeshBasicNodeMaterial();
+    if (depth) {
+      m.colorNode = vec4(c.xyz as never, 1.0);
+      m.depthNode = c.w as never;
+      m.depthWrite = true;
+      m.depthTest = true;
+    } else {
+      m.colorNode = vec4(c.xyz as never, c.w as never);
+      m.depthWrite = false;
+      m.depthTest = false;
+      m.transparent = true;
+    }
+    m.fog = false;
+    return m;
+  }
+  const upMats = { overlay: makeUpsampleMat(false), depth: makeUpsampleMat(true) };
+
+  // The low-res shading quad: its own fullscreen scene, same pattern as the
+  // blur pair (swapping materials on a shared quad every frame would dirty
+  // three's render lists for nothing).
+  const lowQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), lowMats.overlay.raw);
+  lowQuad.frustumCulled = false;
+  const lowScene = new THREE.Scene();
+  lowScene.add(lowQuad);
+
+  // PERF SEAM STATE — all OFF/shipped by default; see the interface docs.
+  let surfaceAtDensityRes = false;
+  let minTexelRadius = 0;
+  let areaPriority = false;
+  let splatFadeTail = 0;
+  const passGate = { density: true, blur: true, surface: true };
+  // Area-priority scratch: candidate world positions/extents, collected once
+  // per sync, reused across frames (never reallocated in steady state).
+  const candCap = GOO_TUNING.maxParticles + 1024;
+  const candX = new Float32Array(candCap);
+  const candY = new Float32Array(candCap);
+  const candZ = new Float32Array(candCap);
+  const candHalfW = new Float32Array(candCap);
+  const candHalfH = new Float32Array(candCap);
+  const candRoll = new Float32Array(candCap);
+  const candGut = new Float32Array(candCap);
+  const candArea = new Float32Array(candCap);
+  const candOrder: number[] = [];
 
   // DIAGNOSTIC counters — see the note where they are assigned in sync().
   let stretchMax: number = GOO_TUNING.stretchMax;
@@ -823,13 +1084,15 @@ export function createGooLayer(
 
       if (targetsNeedInit) {
         targetsNeedInit = false;
-        // All three targets — the blur pair needs the same explicit first
-        // clear as the density target itself: setSize reallocates the
-        // backing texture, and a lazily-initialised texture inside the same
-        // encoder as the pass that samples it gets the whole submit rejected.
-        // The clear colour is irrelevant (see sdf-layer's note); what matters
-        // is that each texture exists before anything samples it.
-        for (const t of [target, blurA, blurB]) {
+        // All four targets — the blur pair AND the low-res surface target
+        // need the same explicit first clear as the density target itself:
+        // setSize reallocates the backing texture, and a lazily-initialised
+        // texture inside the same encoder as the pass that samples it gets
+        // the whole submit rejected. The clear colour is irrelevant here (see
+        // sdf-layer's note); what matters is that each texture exists before
+        // anything samples it. surfaceLow's PER-FRAME clear (alpha 0 sentinel)
+        // is explicit at its pass below.
+        for (const t of [target, blurA, blurB, surfaceLow]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -839,6 +1102,8 @@ export function createGooLayer(
       // scene background (0x1a1116), whose red channel would read as a
       // uniform 0.1 density across the whole screen and threshold into a
       // full-frame goo sheet. (Same trap as the occluder pass's clear.)
+      // passGate is DIAGNOSTIC ONLY — a skipped pass renders a wrong frame on
+      // purpose so a bench can time the chain apart (Phase 0 attribution).
       const restore = camera.layers.mask;
       const prevClear = renderer.getClearColor(clearColorScratch).getHex();
       // ALPHA 0, explicitly: setClearColor's alpha parameter defaults to 1,
@@ -846,7 +1111,7 @@ export function createGooLayer(
       // a/r would clamp to full gut across the whole layer (organs r3).
       renderer.setClearColor(0x000000);
       renderer.setRenderTarget(target);
-      void renderer.render(gooScene, camera);
+      if (passGate.density) void renderer.render(gooScene, camera);
       renderer.setClearColor(prevClear);
       camera.layers.mask = restore;
 
@@ -855,7 +1120,7 @@ export function createGooLayer(
       // ENTIRELY at blurPx = 0: not even a degenerate copy pass runs, and
       // the surface reads the raw density target below.
       const blurred = uBlurPx.value > 0;
-      if (blurred) {
+      if (blurred && passGate.blur) {
         renderer.setRenderTarget(blurA);
         void renderer.render(blurH.scene, quadCam);
         renderer.setRenderTarget(blurB);
@@ -874,6 +1139,36 @@ export function createGooLayer(
       // the quad already holds, so a steady frame mutates nothing while
       // setMode() still takes effect on the very next frame rather than
       // waiting for a blurPx = 0 crossing.
+      if (!passGate.surface) return;
+      if (surfaceAtDensityRes) {
+        // ITEM 1 path. Stage 1: the SAME shading graphs (makeOverlayMat /
+        // makeLowDepthMat over the same density texture and uniform nodes)
+        // render into surfaceLow at density resolution. The low target must
+        // clear to BLACK WITH ALPHA 0 every frame — cleared alpha is the
+        // upsample's empty sentinel (and would otherwise be a depth of 1 or a
+        // gut-masked, opaque sludge in every unshaded texel), and the restored
+        // scene clear is the background colour with alpha 1.
+        const wantLow = lowMats[mode][blurred ? 'blur' : 'raw'];
+        if (lowQuad.material !== wantLow) lowQuad.material = wantLow;
+        const prevClearAlpha = renderer.getClearAlpha();
+        renderer.setClearColor(0x000000, 0);
+        renderer.setRenderTarget(surfaceLow);
+        void renderer.render(lowScene, quadCam);
+        renderer.setClearColor(prevClear, prevClearAlpha);
+        // Stage 2: the upsample onto the output. Hardware depth test/write
+        // against the scene's depth happens HERE, per output pixel, from the
+        // value the shading pass packed into .a (depth mode) — the
+        // interleaving contract is unchanged; only the shading resolution
+        // moved.
+        const wantUp = upMats[mode];
+        if (quad.material !== wantUp) quad.material = wantUp;
+        renderer.setRenderTarget(outputTarget);
+        const prevAutoClear = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(quadScene, quadCam);
+        renderer.autoClear = prevAutoClear;
+        return;
+      }
       const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];
       if (quad.material !== wantMat) quad.material = wantMat;
       renderer.setRenderTarget(outputTarget);
@@ -885,60 +1180,157 @@ export function createGooLayer(
 
     sync(sim, camera) {
       camInv.copy(camera.quaternion).invert();
+      const perspCam = camera as THREE.PerspectiveCamera;
+      // ITEM 2a inputs: lens + density texel height turn a world half-extent
+      // and a view distance into a projected texel radius (projectedTexelRadius).
+      // sync() runs after the camera's updateMatrixWorld (game-main's comment
+      // on the call site), so camera.position is world-current.
+      const tanHalfFovY = Math.tan((perspCam.fov * Math.PI) / 360);
+      const densityH = target.height;
+      const camPos = camera.position;
+      // The sub-texel skip: a quad whose projected blob radius cannot reach
+      // one density texel can never fuse into the surface — under additive
+      // blending every fragment it would shade is pure overdraw. Seam-off
+      // (minTexelRadius 0) never skips.
+      const tooSmall = (worldHalfH: number, x: number, y: number, z: number): boolean => {
+        if (minTexelRadius <= 0) return false;
+        const dist = Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
+        return projectedTexelRadius(worldHalfH, dist, tanHalfFovY, densityH) < minTexelRadius;
+      };
       let n = 0;
-      for (let i = 0; i < sim.droplets.length && n < GOO_TUNING.maxParticles; i++) {
-        const d = sim.droplets[i]!;
-        // Mist cutoff: the fine beads stay in the billboard view; everything
-        // else feeds the density field. Scraps always go.
-        //
-        // The explicit 'mist' kind (bleeding-wounds, 2026-08-31) is haze by
-        // construction and NEVER feeds density, whatever its size — some
-        // stump mist rolls above mistMaxSize, and letting it in fogs the
-        // field instead of thickening the stream. No-op for the lab, which
-        // has no mist particles.
-        if (d.kind === 'mist') continue;
-        if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
-        p.set(d.pos[0], d.pos[1], d.pos[2]);
-        // Billboard, then roll in screen space so the stretch follows velocity.
-        vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
-        const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
-        const stretch = 1 + Math.min(speed * 0.18, stretchMax);
-        roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
-        q.copy(camera.quaternion).multiply(roll);
-        const gs = d.size * sizeScale;
-        s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
-        m.compose(p, q, s);
-        gutArr[n] = d.kind === 'gut' ? 1 : 0;
-        quads.setMatrixAt(n++, m);
-      }
-      // Floor pools: every splat becomes an elongated density blob at its
-      // floor point (see the splatGooScale note). BILLBOARDED, not laid
-      // flat: a flat quad viewed near edge-on covers only a few rows of the
-      // low-res density buffer and stripes. The blob is rolled in screen
-      // space by the stamp yaw so pools still smear directionally. Droplets
-      // take the budget first — they are the flying action — but the splat
-      // ring is capped at 256 so both fit.
-      for (let i = 0; i < sim.splats.length && n < GOO_TUNING.maxParticles; i++) {
-        const sp = sim.splats[i]!;
-        p.set(sp.pos[0], 0.02, sp.pos[2]);
-        roll.setFromAxisAngle(zAxis, sp.yaw);
-        q.copy((camera as THREE.PerspectiveCamera).quaternion).multiply(roll);
-        // Deterministic per-splat eccentricity hashed from the stamp yaw.
-        const h = Math.sin(sp.yaw * 78.233) * 43758.5453;
-        const ecc = 1.4 + (h - Math.floor(h)) * 1.2;
-        const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
-        s.set(gr * ecc, gr, 1);
-        m.compose(p, q, s);
-        gutArr[n] = 0; // floor pools are blood, never gut
-        quads.setMatrixAt(n++, m);
+      if (areaPriority) {
+        // ITEM 2b path: collect every qualifying candidate with its projected
+        // area, order by area (largest first), fill the cap. Splats compete
+        // in the SAME pool — at the cap they were previously filled AFTER
+        // droplets and could be erased entirely by a full droplet roster.
+        let count = 0;
+        for (let i = 0; i < sim.droplets.length; i++) {
+          const d = sim.droplets[i]!;
+          if (d.kind === 'mist') continue;
+          if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
+          if (count >= candCap) break;
+          const gs = d.size * sizeScale;
+          const halfH = (gs * GOO_TUNING.quadScale) / 2;
+          const x = d.pos[0], y = d.pos[1], z = d.pos[2];
+          if (tooSmall(halfH, x, y, z)) continue;
+          vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
+          const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
+          const stretch = 1 + Math.min(speed * 0.18, stretchMax);
+          candX[count] = x; candY[count] = y; candZ[count] = z;
+          const halfW = (gs * stretch * GOO_TUNING.quadScale) / 2;
+          candHalfW[count] = halfW;
+          candHalfH[count] = halfH;
+          candRoll[count] = Math.atan2(vCam.y, vCam.x);
+          candGut[count] = d.kind === 'gut' ? 1 : 0;
+          const dist = Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
+          const ax = projectedTexelRadius(halfW, dist, tanHalfFovY, densityH);
+          const ay = projectedTexelRadius(halfH, dist, tanHalfFovY, densityH);
+          candArea[count] = 4 * ax * ay;
+          count++;
+        }
+        const dropletCount = count;
+        for (let i = 0; i < sim.splats.length; i++) {
+          const sp = sim.splats[i]!;
+          if (count >= candCap) break;
+          const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
+          const halfH = gr / 2;
+          const x = sp.pos[0], y = 0.02, z = sp.pos[2];
+          if (tooSmall(halfH, x, y, z)) continue;
+          const h = Math.sin(sp.yaw * 78.233) * 43758.5453;
+          const ecc = 1.4 + (h - Math.floor(h)) * 1.2;
+          candX[count] = x; candY[count] = y; candZ[count] = z;
+          const halfW = (gr * ecc) / 2;
+          candHalfW[count] = halfW;
+          candHalfH[count] = halfH;
+          candRoll[count] = sp.yaw;
+          candGut[count] = 0; // floor pools are blood, never gut
+          const dist = Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
+          const ax = projectedTexelRadius(halfW, dist, tanHalfFovY, densityH);
+          const ay = projectedTexelRadius(halfH, dist, tanHalfFovY, densityH);
+          candArea[count] = 4 * ax * ay;
+          count++;
+        }
+        orderIndicesByAreaDesc(candArea, count, candOrder);
+        const fill = Math.min(count, GOO_TUNING.maxParticles);
+        for (let k = 0; k < fill; k++) {
+          const c = candOrder[k]!;
+          p.set(candX[c]!, candY[c]!, candZ[c]!);
+          roll.setFromAxisAngle(zAxis, candRoll[c]!);
+          q.copy(perspCam.quaternion).multiply(roll);
+          s.set(candHalfW[c]! * 2, candHalfH[c]! * 2, 1);
+          m.compose(p, q, s);
+          gutArr[n] = candGut[c]!;
+          fallArr[n] = c >= dropletCount
+            ? splatDensityWeight(sim.splats.length - 1 - (c - dropletCount), sim.splats.length, splatFadeTail)
+            : 1;
+          quads.setMatrixAt(n++, m);
+        }
+      } else {
+        for (let i = 0; i < sim.droplets.length && n < GOO_TUNING.maxParticles; i++) {
+          const d = sim.droplets[i]!;
+          // Mist cutoff: the fine beads stay in the billboard view; everything
+          // else feeds the density field. Scraps always go.
+          //
+          // The explicit 'mist' kind (bleeding-wounds, 2026-08-31) is haze by
+          // construction and NEVER feeds density, whatever its size — some
+          // stump mist rolls above mistMaxSize, and letting it in fogs the
+          // field instead of thickening the stream. No-op for the lab, which
+          // has no mist particles.
+          if (d.kind === 'mist') continue;
+          if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
+          // ITEM 2a: skip what distance has made sub-texel (see tooSmall).
+          const gs = d.size * sizeScale;
+          if (tooSmall((gs * GOO_TUNING.quadScale) / 2, d.pos[0], d.pos[1], d.pos[2])) continue;
+          p.set(d.pos[0], d.pos[1], d.pos[2]);
+          // Billboard, then roll in screen space so the stretch follows velocity.
+          vCam.set(d.vel[0], d.vel[1], d.vel[2]).applyQuaternion(camInv);
+          const speed = Math.hypot(d.vel[0], d.vel[1], d.vel[2]);
+          const stretch = 1 + Math.min(speed * 0.18, stretchMax);
+          roll.setFromAxisAngle(zAxis, Math.atan2(vCam.y, vCam.x));
+          q.copy(camera.quaternion).multiply(roll);
+          s.set(gs * stretch * GOO_TUNING.quadScale, gs * GOO_TUNING.quadScale, 1);
+          m.compose(p, q, s);
+          gutArr[n] = d.kind === 'gut' ? 1 : 0;
+          fallArr[n] = 1;
+          quads.setMatrixAt(n++, m);
+        }
+        // Floor pools: every splat becomes an elongated density blob at its
+        // floor point (see the splatGooScale note). BILLBOARDED, not laid
+        // flat: a flat quad viewed near edge-on covers only a few rows of the
+        // low-res density buffer and stripes. The blob is rolled in screen
+        // space by the stamp yaw so pools still smear directionally. Droplets
+        // take the budget first — they are the flying action — but the splat
+        // ring is capped at 256 so both fit.
+        for (let i = 0; i < sim.splats.length && n < GOO_TUNING.maxParticles; i++) {
+          const sp = sim.splats[i]!;
+          const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
+          if (tooSmall(gr / 2, sp.pos[0], 0.02, sp.pos[2])) continue;
+          p.set(sp.pos[0], 0.02, sp.pos[2]);
+          roll.setFromAxisAngle(zAxis, sp.yaw);
+          q.copy(perspCam.quaternion).multiply(roll);
+          // Deterministic per-splat eccentricity hashed from the stamp yaw.
+          const h = Math.sin(sp.yaw * 78.233) * 43758.5453;
+          const ecc = 1.4 + (h - Math.floor(h)) * 1.2;
+          s.set(gr * ecc, gr, 1);
+          m.compose(p, q, s);
+          gutArr[n] = 0; // floor pools are blood, never gut
+          // ITEM 3: the oldest ranks fade (ring position IS recency — Splat
+          // carries no timestamp and blood-sim.ts is not ours to change).
+          fallArr[n] = splatDensityWeight(
+            sim.splats.length - 1 - i, sim.splats.length, splatFadeTail,
+          );
+          quads.setMatrixAt(n++, m);
+        }
       }
       for (let i = n; i < GOO_TUNING.maxParticles; i++) {
         m.makeScale(0, 0, 0);
         quads.setMatrixAt(i, m);
         gutArr[i] = 0;
+        fallArr[i] = 1;
       }
       quads.instanceMatrix.needsUpdate = true;
       gutAttr.needsUpdate = true;
+      fallAttr.needsUpdate = true;
       // Draw only the live instances. At 0 the pass still runs (and clears),
       // which the first-clear discipline depends on.
       quads.count = n;
@@ -960,6 +1352,9 @@ export function createGooLayer(
       target.setSize(w, h);
       blurA.setSize(w, h);
       blurB.setSize(w, h);
+      // ITEM 1's target lives at the density resolution by definition — it is
+      // the surface pass running at density res.
+      surfaceLow.setSize(w, h);
       // setSize reallocates the backing texture — the lazy-init conflict
       // would return on the next frame without a fresh explicit clear.
       targetsNeedInit = true;
@@ -1006,6 +1401,16 @@ export function createGooLayer(
     setShadowRed(v) { uShadowRed.value = Math.max(0, Math.min(0.6, v)); },
     setSurfaceNormals(on) { uNormalMode.value = on ? 1 : 0; },
     setMode(m: 'overlay' | 'depth') { mode = m; },
+    // PERF SEAMS (close-up task 4) — every default is the shipped state.
+    setSurfaceAtDensityRes(on) { surfaceAtDensityRes = on; },
+    setMinTexelRadius(v) { minTexelRadius = Math.max(0, Math.min(16, v)); },
+    setAreaPriority(on) { areaPriority = on; },
+    setSplatFadeTail(v) { splatFadeTail = Math.max(0, Math.min(GOO_TUNING.maxParticles, Math.round(v))); },
+    setPassGate(g) {
+      if (g.density !== undefined) passGate.density = g.density;
+      if (g.blur !== undefined) passGate.blur = g.blur;
+      if (g.surface !== undefined) passGate.surface = g.surface;
+    },
     get mode() { return mode; },
     get debugTargets() { return { density: target, blurred: blurB }; },
     get liveCount() { return liveCount; },
@@ -1022,17 +1427,29 @@ export function createGooLayer(
     get stretch() { return stretchMax; },
     get shadowRed() { return uShadowRed.value; },
     get surfaceNormals() { return uNormalMode.value > 0.5; },
+    get surfaceAtDensityRes() { return surfaceAtDensityRes; },
+    get minTexelRadius() { return minTexelRadius; },
+    get areaPriority() { return areaPriority; },
+    get splatFadeTail() { return splatFadeTail; },
+    get passGate() { return { ...passGate }; },
     get targetSize() { return { width: target.width, height: target.height }; },
     dispose() {
       target.dispose();
       blurA.dispose();
       blurB.dispose();
+      surfaceLow.dispose();
       quads.geometry.dispose();
       densMat.dispose();
       quad.geometry.dispose();
+      lowQuad.geometry.dispose();
       for (const byMode of Object.values(surfMats)) {
         for (const m of Object.values(byMode)) m.dispose();
       }
+      for (const byMode of Object.values(lowMats)) {
+        for (const m of Object.values(byMode)) m.dispose();
+      }
+      upMats.overlay.dispose();
+      upMats.depth.dispose();
       blurH.quad.geometry.dispose();
       blurV.quad.geometry.dispose();
       blurHMat.dispose();

@@ -1,0 +1,145 @@
+import { describe, it, expect } from 'vitest';
+import { CultistBrain, CultistState } from './cultist-ai';
+import { CULTIST_TOMMY } from '../gibs/tuning';
+
+const INIT = { hp: CULTIST_TOMMY.hp, speed: CULTIST_TOMMY.speed };
+
+/** Simulates the wrapper calling update() — advances timers + state logic. */
+function advance(b: CultistBrain, dt: number): void {
+  b.update(dt, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+}
+
+describe('CultistBrain', () => {
+  it('starts in idle', () => {
+    const b = new CultistBrain(INIT);
+    expect(b.state).toBe(CultistState.Idle);
+  });
+
+  it('transitions idle → chase when player enters detection range', () => {
+    const b = new CultistBrain(INIT);
+    // Player at 15m (at detection boundary)
+    advance(b, 0.016);
+    expect(b.state).toBe(CultistState.Idle);
+    advance(b, 0.016);
+    expect(b.state).toBe(CultistState.Idle);
+
+    // Move player into range
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);
+    advance(b, 0.016);

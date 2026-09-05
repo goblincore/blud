@@ -1,0 +1,3 @@
+ src/vfx/post-fx/barrel-pass.ts         | 2 ++
+ src/vfx/post-fx/palette-dither-pass.ts | 2 ++
+ 2 files changed, 4 insertions(+)

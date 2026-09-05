@@ -1,0 +1,7 @@
+{
+  "label": "heretic-apex-q3kl",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 670, "files": 6, "stdout_bytes": 1006},
+    "task5": {"name": "LRU cache", "elapsed_s": 315, "files": 5, "stdout_bytes": 1171}
+  }
+}

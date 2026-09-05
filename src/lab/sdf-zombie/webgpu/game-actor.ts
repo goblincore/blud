@@ -146,6 +146,19 @@ export interface ZombieActor {
    */
   hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null;
   /**
+   * HIT BATCHING (2026-09-05). Between beginHits() and endHits(), hit() /
+   * hitSlug() stamp the wound and apply the shove but DEFER the expensive
+   * tail — sever checks, rig re-solve, the whole-body repack + upload, and
+   * the wound-row rewrite — to ONE flush in endHits(). A double-barrel burst
+   * at point blank lands ~16 pellets in one frame; unbatched that was 16
+   * repacks in one frame (12–18 ms CPU per landing frame, the owner's
+   * "50 ms spike when I shoot up close" — hit-profile.mjs, 2026-09-05).
+   * Callers that land ONE projectile need not batch: outside a batch the
+   * tail runs inline exactly as before.
+   */
+  beginHits(): void;
+  endHits(): void;
+  /**
    * Diagnostic blast: push a resolver-provided bundle of blast wounds
    * (resolveExplosion ran against this actor's POSED body) with no shove,
    * no flinch and no severing — geometry only, so a captured crater is not
@@ -477,6 +490,23 @@ export function createZombieActor(opts: {
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
    *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
    *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
+  let hitBatching = false;
+  let hitPending = false;
+  /** The expensive post-impact tail; once per pellet unbatched, once per
+   *  batch inside beginHits/endHits. */
+  function flushHitTail(): void {
+    runSeverChecks();
+    posed = applyRig(current, bound, bodyYaw);
+    view.update(posed, current);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    refreshWounds();
+  }
+  function beginHits(): void { hitBatching = true; hitPending = false; }
+  function endHits(): void {
+    hitBatching = false;
+    if (hitPending) { hitPending = false; flushHitTail(); }
+  }
+
   function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound {
     const field = posed;
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
@@ -512,11 +542,7 @@ export function createZombieActor(opts: {
     ]);
     // Sever checks BEFORE the pose re-apply so a severed limb is gone from
     // the very next rendered frame.
-    runSeverChecks();
-    posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    if (hitBatching) { hitPending = true; } else { flushHitTail(); }
     return wound;
   }
 
@@ -525,6 +551,8 @@ export function createZombieActor(opts: {
     room: opts.room,
     get body() { return current; },
     view,
+    beginHits,
+    endHits,
     posed: () => posed,
     boundRig: () => bound,
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),

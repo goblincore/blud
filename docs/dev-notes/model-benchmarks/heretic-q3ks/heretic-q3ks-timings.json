@@ -1,0 +1,7 @@
+{
+  "label": "heretic-q3ks",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 183, "files": 0, "stdout_bytes": 1303},
+    "task5": {"name": "LRU cache", "elapsed_s": 45, "files": 1, "stdout_bytes": 635}
+  }
+}

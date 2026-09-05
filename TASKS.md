@@ -502,8 +502,57 @@ severed something. Rotates the starting leg per rep against thermal ramp. Task
 1b extracts it to `scripts/lib/sdf-closeup-stage.mjs`; every later task imports
 it rather than re-deriving a scene. Chain is now fully serial (one bench at a
 time — concurrent benches are what spoiled the tile table and the r2 sweep):
-**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
-trigger.
+**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b and 4.
+
+**CLOSE-UP WOUND CULL — DONE, SHIPS ON (2026-09-05, `dispatch/2026-09-05-closeup-wound-cull`, commit 8c03342).** `applyWounds` now tests ONE bounding sphere of every wound's reach (`woundBound` uniform, computed by `woundReachBound` at `setWounds` from the live woundCfg/woundCfg2 — not a hardcoded copy) BEFORE its 16-slot loop; outside it the loop would early-out per wound anyway, so the cull is a value no-op by construction. Parity PROVEN, not hoped: 0 changed pixels, wounded ON/OFF + ON/ON + both unwounded pairs (`scripts/closeup-woundcull-capture.mjs` — note it pins `performance.now`, because the fire flicker ticks off wall-clock even frozen and jitters ~19% of pixels at d>0 between same-state captures). Bound proven live in-page (r 0.933 m on the 5-wound staging). Bench (BENCH_REPEATS=4, quiet machine, 0 rejects): cullOff − ship = **+1.4 ms median** (rep deltas 3.0 / −2.1 / 2.5 / 0.5 — one inversion inside rep noise) of the ~25.3 ms (ship − unwounded) wound gap; stepFull re-confirmed at −7.8 ms. The far-sample loop was ~5% of the wound cost on the fill-screen staging because the camera-facing wound cluster sits where the march steps concentrate. **Step 2 (per-cluster wound lists) spec'd in the notes and deliberately NOT built** — it attacks a sub-slice of the remaining in-bound loads (≪1.4 ms) while 69% of the gap is lever-1 stepping + intrinsic in-reach maths. Next real lever: re-gate the 0.6 near-wound factor at ω 1.0 (look-gated, separate task). Seam `__sdfGame.setWoundCull(on)` / `.woundCull` / `.woundBound()`. Suite 3141/3141, tsc clean.
+[notes](docs/dev-notes/2026-09-04-closeup-2-probes/notes.md#wound-union-reach-cull-2026-09-05-dispatch2026-09-05-closeup-wound-cull)
+
+**CLOSE-UP TASK 3 (depth prepass) — BUILT, CENSUS-CLEAN, DOES NOT SHIP
+(2026-09-05).** The quarter-res coarse march of the field exists and works:
+one texel per 4x4 SDF-pixel block, cone radius = the block's half-diagonal
+(the proof the start is a lower bound), per-body twins resolving to the
+NEAREST touch via frag_depth, consumed as a third max() term at the ray
+start. Census CLEAN at six views (0.5/3/9 m + head/thin + rooms 3/4): hits
+kept 99.99-100.02%, state-clean, pixel diffs at/below noise; meanStepsHit
+-5% to -45%. But Question A's walk share did not survive its own baseline:
+re-measured at today's 13.9 ms wounded fill-screen frame the walk is
+**15.9%** (normal 13.86 vs flat 11.65), so halving the walk buys ~1 ms while
+the pass costs ~0.5-2 ms (growing with bodies - the coarse rays march long
+distances at standoff). Bench: fill-screen +0.5 ms, room3 +0.95, room4 +1.94.
+**Verdict: ships OFF** (`GAME_DEPTH_PREPASS = 0`,
+`__sdfGame.setDepthPrepass`); the seam, the census
+(`scripts/sdf-depth-prepass-census.mjs`) and `depthPreStats()` stay. Three
+new shader-wiring traps found and pinned, all rendering as "every body
+unlit-black with every uniform dead": a PAREN in a WGSL-signature comment
+truncates three's parameter parse exactly like the known colon hazard;
+calling a helper by its CONST name instead of its source name is an
+unresolved call target; and `vec4(a, b, 0, 0)` composed from two SCALAR
+uniforms in a wgslFn literal breaks WGSL generation outright — pass ONE vec4
+uniform whole. Also: `createZombieGpuView`'s positional createMarchMaterial
+call silently dropped the new argument (the march sampled the 1x1 zero
+fallback while the twin wrote real starts) — positional call sites must be
+re-counted when a parameter is added.
+[notes](docs/dev-notes/2026-09-04-closeup-3-depth-prepass/notes.md).
+
+**CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
+("the goo layer is the blood cost") does NOT reproduce. Measured with the
+item seams landed on `dispatch/2026-09-04-closeup-task-4-attempt1` (parity-
+pinned default-off, suite green): whole goo chain (density + blurs + surface
+composite) = **~0.26 ms idle, ~0.1–0.5 ms in a room-4 firefight (cov ~1%),
+~0.14 ms at the saturated-pool worst case (256-ring, 6.3% cov)**. Coverage
+caps at ~6% even staring into an accumulated pool at 1.6 m. All three items
+→ **no-ship, seams stay default-off**: item 1 has a real look cost in the
+shipped depth mode (depth-tested upsample drops the flying-spray fusion —
+recovered in overlay mode, so the fix path is known: packed-depth
+reconstruction for sparse texels); item 2 is invisible + cost-neutral by
+construction; item 3's `fallMask` still submits every splat (saving ~0 by
+construction) and the pools survive anyway. Parity vs MAIN: CLEAN all three
+scenes (idle exact 0%). Item A/B medians storm-blocked (sibling dispatch
+load 70–160 half the session) and moot given the bound. Notes + numbers:
+[docs/dev-notes/2026-09-04-closeup-4-goo/notes.md](docs/dev-notes/2026-09-04-closeup-4-goo/notes.md).
+If the owner's "blood spray causes issues" needs chasing, it is NOT this
+layer — candidate suspects outside task 4's scope: billboard blood view,
+chunk physics, sim step.
 
 **CLOSE-UP TASK 1B — DONE (2026-09-04).** Harness extracted to
 `scripts/lib/sdf-closeup-stage.mjs` (staging record byte-identical pre/post
@@ -2399,3 +2448,7 @@ Key reference docs (open these before touching their area):
 - **Task rows are ≤2 lines.** If context needs more, put it in a linked dev-note / plan doc and leave a bare link on the row.
 - **Milestone rollup:** when a milestone lands, collapse per-task detail into a single line with the commit range; the plan file + git log hold the rest.
 - **Design questions:** re-read the design spec above before adjusting scope. **Real problem restated (owner, 2026-09-04): frame dips when a body FILLS the screen (and under heavy blood particles).** Next levers, pixel-scaling only: (1) post-hit probes → derivative normals + reduced-rate AO/thin (6 → ~1 evals/pixel), (2) quarter-res depth prepass to start rays near the skin without vertex cost. Adaptive resolution REJECTED for close-up (visible res drop). Tile binning measured nil — not the cost. Plan note: Obsidian `Claude Notes/Planning/2026-09-04-sdf-close-up-frame-rate-plan.md`.
+
+**Hit batching SHIPPED (2026-09-05):** pellet impacts batched per actor per frame (`beginHits/endHits`) — landing frame with 16 pellets 6.7 ms CPU (was 12–18 ms for 4 pellets; ~16 whole-body repacks on a point-blank double barrel). Left: per-pellet CPU flesh probes (~6 ms/16 pellets), first-shot 131 ms pipeline compile (prewarm). Notes: docs/dev-notes/2026-09-04-closeup-2-probes/notes.md.
+
+**Close-up wounded frame, quiet-machine verdict (2026-09-05):** ship 25.6 ms (step 1.0 + cull), step 0.6 = 32.2 (+26%), cull off = +1%, bones out of field = −16% (4.2 ms; the planned baked-bone replacement collects it), unwounded 15.1. Wound step 1.0 was THE lever and is shipped; the cull is a harmless no-op; the earlier 50 ms readings were machine load. Notes: docs/dev-notes/2026-09-04-closeup-2-probes/notes.md.

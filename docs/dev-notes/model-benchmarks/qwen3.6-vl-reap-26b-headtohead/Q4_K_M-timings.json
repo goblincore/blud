@@ -1,0 +1,7 @@
+{
+  "label": "Q4_K_M",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 322, "files": 2, "stdout_bytes": 1261},
+    "task5": {"name": "LRU cache", "elapsed_s": 284, "files": 5, "stdout_bytes": 1277}
+  }
+}

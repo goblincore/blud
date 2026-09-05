@@ -1,0 +1,7 @@
+{
+  "label": "q2mixed-froggeric",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 219, "files": 0, "stdout_bytes": 0},
+    "task5": {"name": "LRU cache", "elapsed_s": 217, "files": 0, "stdout_bytes": 0}
+  }
+}
