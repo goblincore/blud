@@ -63,3 +63,14 @@ of base, hue within 12% per channel. Measured at 64px: plain 428.8, crown
 4. **No knuckle nubs.** "Are those knuckles? I thought it was warts" — three
    lumps on the back of the fist read as warts, so the fist is the plain orb
    the blob has. 8734 tris.
+5. **Grain, not blobs.** Second look: "the reference is a rough speckly
+   texture like rough sandpaper that is shinier, or a finely pitted surface —
+   not random small green shapes". So the grain moved out of the albedo and
+   into RELIEF and SPECULAR: a dense pit field (`goblinPitField`, 8 px per
+   cell at any map size so the finite-difference normal stays sampled; 32
+   cells per 60 mm tile at 256 px) subtracted from the height field, and a
+   new ROUGHNESS map (`goblinRoughnessPixels`: ridges 0.30 wet-shiny, pit
+   floors 0.80 matte) with `roughness: 1`. The coarse mottle survives in
+   colour at a quarter share; pits darken floors 18%. Tests pin pit coverage
+   (25-55%), floors darker than ridges, coarse colour variation under 6%,
+   and the roughness map on the same field. `fist-960.png`.

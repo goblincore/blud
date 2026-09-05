@@ -13,7 +13,7 @@
 
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels } from './goblin-skin';
+import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinRoughnessPixels } from './goblin-skin';
 import { ARM_NODES, FORE_LEN_M, UPPER_LEN_M, armBasis, armIk, armMaterialKind, type V3 } from './game-arms-math';
 
 export const GOBLIN_ARM_GLB = '/assets/lab/goblin-arm.glb';
@@ -44,6 +44,12 @@ export function makeSkinMaterial(env: THREE.Texture, envMapIntensity: number): T
   const normal = new THREE.DataTexture(goblinNormalPixels(256), 256, 256, THREE.RGBAFormat);
   normal.wrapS = normal.wrapT = THREE.RepeatWrapping;
   normal.needsUpdate = true;
+  // The grain: ridges between the pits are wet-shiny, floors matte. Three
+  // multiplies `roughness` by the map's green channel, so roughness is 1 and
+  // the map carries ridgeRoughness..pitRoughness.
+  const rough = new THREE.DataTexture(goblinRoughnessPixels(256), 256, 256, THREE.RGBAFormat);
+  rough.wrapS = rough.wrapT = THREE.RepeatWrapping;
+  rough.needsUpdate = true;
   // Darker, rougher, less env than the first build (owner: "too pale and
   // bright versus the goblin character... better dark and rougher"): the
   // albedo already carries fpvExposure; roughness and the env share are the
@@ -53,7 +59,8 @@ export function makeSkinMaterial(env: THREE.Texture, envMapIntensity: number): T
     map: albedo,
     normalMap: normal,
     normalScale: new THREE.Vector2(GOBLIN_SKIN.fpvNormalScale, GOBLIN_SKIN.fpvNormalScale),
-    roughness: GOBLIN_SKIN.fpvRoughness,
+    roughness: 1,
+    roughnessMap: rough,
     metalness: 0,
     envMap: env,
     envMapIntensity: envMapIntensity * GOBLIN_SKIN.fpvEnvShare,

@@ -25,8 +25,11 @@ describe('makeSkinMaterial', () => {
     expect(m.envMap).toBe(env);
     expect(m.envMapIntensity).toBeCloseTo(1.1 * GOBLIN_SKIN.fpvEnvShare, 9);
     expect(m.envMapIntensity).toBeLessThan(1.1);
-    expect(m.roughness).toBeCloseTo(GOBLIN_SKIN.fpvRoughness, 6);
-    expect(Math.abs(m.roughness - GOBLIN_SKIN.roughness)).toBeLessThan(0.1);
+    // roughness lives in the map (ridges shiny, pit floors matte); the
+    // scalar is 1 so the map is the whole story
+    expect(m.roughness).toBe(1);
+    expect(m.roughnessMap).not.toBeNull();
+    expect(m.roughnessMap!.wrapS).toBe(THREE.RepeatWrapping);
     expect(m.normalScale.x).toBeGreaterThanOrEqual(1.5);
   });
 });

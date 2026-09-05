@@ -53,13 +53,24 @@ export const GOBLIN_SKIN = {
   /** Normal-map strength in FPV: pushed so warts and mottle read as texture
    *  at arm's length. */
   fpvNormalScale: 2.0,
-  /** THE SPECKLE the face has: sparse, fine dark flecks. Lattice cells per
-   *  tile (a fleck is about a cell wide: 60 mm / 24 = 2.5 mm), the noise
-   *  threshold above which a texel is a fleck, and how far a fleck mixes
-   *  toward charColor. Tuned so flecks cover ~8-12% of the skin. */
-  fleckCells: 24,
-  fleckThreshold: 0.80,
-  fleckMix: 0.70,
+  /** THE GRAIN the face has: a dense field of fine PITS -- relief and
+   *  specular breakup, not colour. Owner: "rough speckly texture like rough
+   *  sandpaper that is shinier, or a finely pitted surface -- not random
+   *  small green shapes". Pits are authored at PIT_PX_PER_CELL texels per
+   *  cell whatever the map size, so the finite-difference normal stays well
+   *  sampled (see height()); at the runtime 256 px map that is 32 cells per
+   *  60 mm tile, a pit every ~2 mm. Coverage is the fraction of skin that is
+   *  pit floor; the rest is ridge, which is what the roughness map polishes. */
+  pitPxPerCell: 8,
+  pitDepth: 0.45,
+  /** Albedo darkening at a pit floor, and how much of the coarse mottle
+   *  survives -- a whisper, so it stops reading as "random green shapes". */
+  pitDarken: 0.18,
+  fpvMottleShare: 0.24,
+  /** Roughness map: ridges between pits are wet-shiny, pit floors matte, so
+   *  the surface sparkles like wet sandpaper under the env map. */
+  ridgeRoughness: 0.30,
+  pitRoughness: 0.80,
   /** How far the warts push the normal. Tuned so the silhouette stays smooth
    *  AND every texel's blue byte stays >= 160 with the seams agreeing -- the
    *  plan's contingency for the normal-map tests (lower until z dominates). */
@@ -128,13 +139,16 @@ function tileNoise(x: number, y: number, period: number, seed: number): number {
  * octave >= 10 px/cell at 64, while 0.65+ wart amplitude keeps the warts
  * reading as warts (normals tilt up to ~60 deg, then z-softening caps them).
  */
-function height(u: number, v: number): number {
+function height(u: number, v: number, pitCells: number): number {
   const base = 3;                       // lattice cells across the texture
   let h = 0;
   h += tileNoise(u * base, v * base, base, 1) * 0.6;
   h += tileNoise(u * base * 2, v * base * 2, base * 2, 2) * 0.3;
   const wart = tileNoise(u * base * 2, v * base * 2, base * 2, 7);
   h += Math.pow(Math.max(0, wart - 0.55) / 0.45, 2) * 0.70;
+  // The fine pits: depressions, at a lattice pitched to the map size so the
+  // +-1 texel stencil below never undersamples them.
+  h -= goblinPitField(u, v, pitCells) * GOBLIN_SKIN.pitDepth;
   return h;
 }
 
@@ -148,11 +162,12 @@ function height(u: number, v: number): number {
 export function goblinNormalPixels(size: number): Uint8Array {
   const px = new Uint8Array(size * size * 4);
   const d = 1 / size;
+  const cells = pitCellsFor(size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size, v = y / size;
-      const hx = height(u + d, v) - height(u - d, v);
-      const hy = height(u, v + d) - height(u, v - d);
+      const hx = height(u + d, v, cells) - height(u - d, v, cells);
+      const hy = height(u, v + d, cells) - height(u, v - d, cells);
       let nx = -hx * GOBLIN_SKIN.bumpStrength * size * d * 8;
       let ny = -hy * GOBLIN_SKIN.bumpStrength * size * d * 8;
       const nz = 1;
@@ -168,11 +183,19 @@ export function goblinNormalPixels(size: number): Uint8Array {
   return px;
 }
 
-/** The fleck lattice on its own, 0..1: a texel is a fleck above
- *  GOBLIN_SKIN.fleckThreshold. Exported for the coverage test. */
-export function goblinFleckField(u: number, v: number): number {
-  const n = GOBLIN_SKIN.fleckCells;
-  return tileNoise(u * n, v * n, n, 11);
+/** Pit lattice cells for a map of `size` texels: PIT_PX_PER_CELL texels per
+ *  cell, at least 4 cells so the field exists at test sizes. */
+export function pitCellsFor(size: number): number {
+  return Math.max(4, Math.round(size / GOBLIN_SKIN.pitPxPerCell));
+}
+
+/** The pit field on its own, 0 = ridge .. 1 = pit floor, for a lattice of
+ *  `cells` per tile. Low noise = pit, with a smoothstep so floors are flat
+ *  and rims are soft. Exported for the coverage test. */
+export function goblinPitField(u: number, v: number, cells: number): number {
+  const n = 1 - tileNoise(u * cells, v * cells, cells, 13);
+  const t = Math.min(1, Math.max(0, (n - 0.47) / 0.34));
+  return t * t * (3 - 2 * t);
 }
 
 /** The wart layer of the height field on its own, 0..1, on the same lattice
@@ -199,7 +222,8 @@ export function goblinAlbedoPixels(size: number): Uint8Array {
   const [mr, mg, mb] = fpvTone(GOBLIN_SKIN.mottleColorLinear);
   const [cr, cg, cb] = fpvTone(GOBLIN_SKIN.charColorLinear);
   const base = 3;
-  const { fleckCells, fleckThreshold, fleckMix, mottleAmp } = GOBLIN_SKIN;
+  const { mottleAmp, fpvMottleShare, pitDarken } = GOBLIN_SKIN;
+  const cells = pitCellsFor(size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size, v = y / size;
@@ -211,20 +235,44 @@ export function goblinAlbedoPixels(size: number): Uint8Array {
       const f = (tileNoise(u * base, v * base, base, 1) - 0.5) * 0.6
               + (tileNoise(u * base * 2, v * base * 2, base * 2, 2) - 0.5) * 0.3;
       const t = Math.min(1, Math.max(0, (f + 0.22) / 0.44));
-      const mottle = t * t * (3 - 2 * t) * mottleAmp;
-      // SPECKLE, what the face has: sparse fine dark flecks on a fine lattice.
-      const fl = tileNoise(u * fleckCells, v * fleckCells, fleckCells, 11);
-      const fleck = fl > fleckThreshold ? Math.min(1, (fl - fleckThreshold) / 0.06) * fleckMix : 0;
+      // ...but only a SHARE of it in colour: the coarse patches read as
+      // "random green shapes" on a hand, where the marched face carries them
+      // mostly as relief. The fine pit field does the rest in the normal and
+      // roughness maps; here it only darkens the pit floors a little.
+      const mottle = t * t * (3 - 2 * t) * mottleAmp * fpvMottleShare;
+      const pit = goblinPitField(u, v, cells);
       // WARTS: a multiplicative shade, strongest at the crown, applied after
       // the mixes so a wart is darker than its surroundings on any ground.
       const shade = 1 - 0.55 * Math.pow(Math.max(0, goblinWartField(u, v) - 0.55) / 0.45, 1.5);
       let r = br + (mr - br) * mottle, g = bg + (mg - bg) * mottle, b = bb + (mb - bb) * mottle;
-      r += (cr - r) * fleck; g += (cg - g) * fleck; b += (cb - b) * fleck;
+      r += (cr - r) * pit * pitDarken; g += (cg - g) * pit * pitDarken; b += (cb - b) * pit * pitDarken;
       const i = (y * size + x) * 4;
       px[i]     = linearToSrgbByte(r * shade);
       px[i + 1] = linearToSrgbByte(g * shade);
       px[i + 2] = linearToSrgbByte(b * shade);
       px[i + 3] = 255;
+    }
+  }
+  return px;
+}
+
+/**
+ * A tiling ROUGHNESS map, RGBA, `size` x `size`, the pit field mapped from
+ * ridgeRoughness (ridges: wet-shiny) to pitRoughness (floors: matte). Three
+ * reads roughness from the GREEN channel; all three carry it. This is the
+ * "shinier, finely pitted" read: the sheen breaks up into sparkle between
+ * the pits instead of one broad highlight.
+ */
+export function goblinRoughnessPixels(size: number): Uint8Array {
+  const px = new Uint8Array(size * size * 4);
+  const cells = pitCellsFor(size);
+  const { ridgeRoughness, pitRoughness } = GOBLIN_SKIN;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const pit = goblinPitField(x / size, y / size, cells);
+      const r = Math.round((ridgeRoughness + (pitRoughness - ridgeRoughness) * pit) * 255);
+      const i = (y * size + x) * 4;
+      px[i] = r; px[i + 1] = r; px[i + 2] = r; px[i + 3] = 255;
     }
   }
   return px;

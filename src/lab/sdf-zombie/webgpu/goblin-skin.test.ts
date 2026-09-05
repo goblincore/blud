@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/goblin-skin.test.ts
 import { describe, expect, it } from 'vitest';
-import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinFpvSkinSrgbHex, goblinFleckField, goblinSkinSrgbHex, goblinWartField } from './goblin-skin';
+import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinFpvSkinSrgbHex, goblinPitField, goblinRoughnessPixels, pitCellsFor, goblinSkinSrgbHex, goblinWartField } from './goblin-skin';
 
 describe('goblinSkinSrgbHex', () => {
   it('matches the goblin.blob palette, not the old orb colour', () => {
@@ -44,10 +44,14 @@ describe('goblinNormalPixels', () => {
     expect(xs.size).toBeGreaterThan(20);
   });
   it('tiles — the left and right edge columns agree', () => {
+    // Adjacent texels across the seam. The fine pit field (8 px/cell) adds a
+    // legitimate per-texel step of up to ~26 on a pit rim, so the bound is
+    // 32 rather than the old smooth-only 24; periodicity itself is pinned by
+    // the pit-field lattice test in the albedo block.
     const n = 64, px = goblinNormalPixels(n);
     for (let y = 0; y < n; y++) {
       const l = (y * n) * 4, r = (y * n + n - 1) * 4;
-      expect(Math.abs(px[l]! - px[r]!)).toBeLessThan(24);
+      expect(Math.abs(px[l]! - px[r]!)).toBeLessThan(32);
     }
   });
 });
@@ -106,13 +110,17 @@ describe('goblinAlbedoPixels', () => {
     for (const [u, v] of [[0.13, 0.71], [0.5, 0.02], [0.97, 0.33]] as const) {
       expect(goblinWartField(u + 1, v)).toBeCloseTo(goblinWartField(u, v), 9);
       expect(goblinWartField(u, v + 1)).toBeCloseTo(goblinWartField(u, v), 9);
-      expect(goblinFleckField(u + 1, v)).toBeCloseTo(goblinFleckField(u, v), 9);
-      expect(goblinFleckField(u, v + 1)).toBeCloseTo(goblinFleckField(u, v), 9);
     }
     // ...and on the pixels, skipping texels on a fleck edge (a fleck is a
     // sharp feature; two ADJACENT texels across it legitimately differ).
-    const isFleck = (x: number, y: number) =>
-      goblinFleckField(x / size, y / size) > GOBLIN_SKIN.fleckThreshold - 0.04;
+    // Pits are smooth (smoothstep rims), so adjacent texels across the seam
+    // agree; no skipping needed -- the periodicity of the pit field is
+    // pinned above via the lattice.
+    const cells = pitCellsFor(size);
+    for (const [u, v] of [[0.13, 0.71], [0.5, 0.02]] as const) {
+      expect(goblinPitField(u + 1, v, cells)).toBeCloseTo(goblinPitField(u, v, cells), 9);
+    }
+    const isFleck = (_x: number, _y: number) => false;
     for (let y = 0; y < size; y++) {
       if (isFleck(0, y) || isFleck(size - 1, y)) continue;
       for (let c = 0; c < 3; c++) {
@@ -129,29 +137,38 @@ describe('goblinAlbedoPixels', () => {
     }
   });
 
-  it('carries the face\'s speckle — sparse fine flecks covering 5-15% of the skin', () => {
-    // A fleck is a texel far darker than its 3x3 neighbourhood. Coverage is
-    // measured against the fleck lattice directly: sparse, but present.
-    let flecks = 0;
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        if (goblinFleckField(x / size, y / size) > GOBLIN_SKIN.fleckThreshold) flecks++;
-      }
-    }
-    const cover = flecks / (size * size);
-    expect(cover, `fleck coverage ${cover}`).toBeGreaterThan(0.05);
-    expect(cover).toBeLessThan(0.15);
-    // and a fleck texel is darker than the toned base
-    const base = goblinFpvSkinSrgbHex();
-    const baseLum = ((base >> 16) & 255) + ((base >> 8) & 255) + (base & 255);
-    let onSum = 0, onN = 0;
+  it('carries the face\'s grain — a dense field of fine pits covering 25-55% of the skin, darker than the ridges', () => {
+    const cells = pitCellsFor(size);
+    let floor = 0, onSum = 0, onN = 0, offSum = 0, offN = 0;
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (goblinFleckField(x / size, y / size) > GOBLIN_SKIN.fleckThreshold + 0.05) {
-        const i = (y * size + x) * 4; onSum += px[i]! + px[i + 1]! + px[i + 2]!; onN++;
-      }
+      const pit = goblinPitField(x / size, y / size, cells);
+      const i = (y * size + x) * 4; const lum = px[i]! + px[i + 1]! + px[i + 2]!;
+      if (pit > 0.5) floor++;
+      if (pit > 0.9) { onSum += lum; onN++; } else if (pit < 0.1) { offSum += lum; offN++; }
     }
-    expect(onN).toBeGreaterThan(10);
-    expect(onSum / onN).toBeLessThan(baseLum * 0.8);
+    const cover = floor / (size * size);
+    expect(cover, `pit coverage ${cover}`).toBeGreaterThan(0.25);
+    expect(cover).toBeLessThan(0.55);
+    expect(onN).toBeGreaterThan(20); expect(offN).toBeGreaterThan(20);
+    expect(onSum / onN).toBeLessThan((offSum / offN) * 0.96);
+  });
+
+  it('keeps the coarse mottle to a whisper — no "random green shapes"', () => {
+    // Compare the map with and without the pit term: the residual coarse
+    // variation (mottle only) must be small next to the pits' contribution.
+    // Measured as the standard deviation of a 4x4-box-blurred map (pits
+    // average out at 8 px/cell; mottle at 21+ px/cell survives the blur).
+    const blur: number[] = [];
+    for (let y = 0; y < size; y += 4) for (let x = 0; x < size; x += 4) {
+      let sum = 0;
+      for (let dy = 0; dy < 4; dy++) for (let dx = 0; dx < 4; dx++) {
+        const i = ((y + dy) * size + (x + dx)) * 4; sum += px[i]! + px[i + 1]! + px[i + 2]!;
+      }
+      blur.push(sum / 16);
+    }
+    const mean = blur.reduce((a, b) => a + b, 0) / blur.length;
+    const sd = Math.sqrt(blur.reduce((a, b) => a + (b - mean) * (b - mean), 0) / blur.length);
+    expect(sd / mean, `coarse sd ${sd} / mean ${mean}`).toBeLessThan(0.06);
   });
 
   it('darkens where the normal map has a wart, so bumps and blotches agree', () => {
@@ -180,5 +197,27 @@ describe('GOBLIN_SKIN', () => {
   });
   it('sizes the hand from goblin.blob, not the old 0.055', () => {
     expect(GOBLIN_SKIN.handRadius).toBeCloseTo(0.046, 4);
+  });
+});
+
+describe('goblinRoughnessPixels', () => {
+  const size = 64;
+  const px = goblinRoughnessPixels(size);
+  it('runs from the ridge roughness to the pit roughness, in every channel', () => {
+    let lo = 255, hi = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      expect(px[i]).toBe(px[i + 1]); expect(px[i]).toBe(px[i + 2]); expect(px[i + 3]).toBe(255);
+      lo = Math.min(lo, px[i]!); hi = Math.max(hi, px[i]!);
+    }
+    expect(lo / 255).toBeCloseTo(GOBLIN_SKIN.ridgeRoughness, 1);
+    expect(hi / 255).toBeCloseTo(GOBLIN_SKIN.pitRoughness, 1);
+  });
+  it('is the same pit field the albedo and normal use', () => {
+    const cells = pitCellsFor(size);
+    for (const [x, y] of [[3, 9], [40, 17], [63, 63]] as const) {
+      const pit = goblinPitField(x / size, y / size, cells);
+      const want = Math.round((GOBLIN_SKIN.ridgeRoughness + (GOBLIN_SKIN.pitRoughness - GOBLIN_SKIN.ridgeRoughness) * pit) * 255);
+      expect(px[(y * size + x) * 4]).toBe(want);
+    }
   });
 });
